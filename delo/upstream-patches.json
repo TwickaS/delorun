@@ -1,0 +1,12 @@
+{
+  "$schema": "./upstream-patches.schema.json",
+  "upstream": {
+    "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+    "ref": "dsh-v0.2.2-rc.1",
+    "commit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db"
+  },
+  "forkOwned": [
+    "delo/"
+  ],
+  "patches": []
+}

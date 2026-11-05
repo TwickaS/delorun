@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Delo-Run/delo/blob/v5/delo/upstream-patches.schema.json",
+  "title": "Delo divergence ledger",
+  "description": "Every file outside Delo's own trees that differs from the upstream commit, with the reason and its class.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["upstream", "forkOwned", "patches"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "ref", "commit"],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "ref": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "forkOwned": {
+      "description": "Path prefixes or globs Delo owns outright; files under them are not upstream edits.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "patches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "class", "reason"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "class": {
+            "description": "delo-feature: serves a Delo feature; generic-fix: a fix upstream could take; security: moves an approval, a refusal or an escalation, and carries a lead verdict.",
+            "enum": ["delo-feature", "generic-fix", "security"]
+          },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
