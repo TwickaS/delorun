@@ -1447,6 +1447,9 @@ importers:
       '@delo/contract-operational-logs':
         specifier: workspace:*
         version: link:../contract-operational-logs
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~

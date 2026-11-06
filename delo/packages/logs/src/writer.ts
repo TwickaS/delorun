@@ -8,7 +8,7 @@
  */
 import { ROTATE_BYTES, type LogLevel, type LogRecord } from '@delo/contract-operational-logs'
 import { closeSync, fstatSync, readdirSync, renameSync, unlinkSync, writeSync } from 'node:fs'
-import { LogsError } from './errors.ts'
+import { isLogsFailure, LogsError, type LogsFailure } from './errors.ts'
 import { ensureSurfaceDirectory, LAST_ROTATED_INDEX, lstatOrMissing, openForAppend, rotatedFile, rotatedIndex, type SurfaceLocation } from './files.ts'
 import { serializeRecord, type LogKeys } from './record.ts'
 import { safeJson, type Redactor } from './redact.ts'
@@ -32,7 +32,7 @@ export interface SurfaceLogOptions {
    * Receives each failure to write a record, which is then dropped; the next record tries again. A writer never
    * throws from {@link SurfaceLog.write}, so a log failure never fails the operation that logged.
    */
-  readonly onFailure: (error: LogsError) => void
+  readonly onFailure: (error: LogsFailure) => void
   /** The clock, in milliseconds since the epoch. */
   readonly now: () => number
 }
@@ -116,7 +116,7 @@ export class SurfaceLog {
    * Open a surface's log: create its directory at 0700 and its active file at 0600, or check the existing ones.
    * @param options - the surface, the redactor and the writer's settings.
    * @returns the open log.
-   * @throws LogsError `HOME_MODE` or `SECRET_FILE_MODE` when C1's refusal rule refuses the directory or the file, so a
+   * @throws {HomeLayoutError} `HOME_MODE` or `SECRET_FILE_MODE` when C1's refusal rule refuses the directory or the file, so a
    *   surface fails at its start instead of running without its log.
    */
   static open(options: SurfaceLogOptions): SurfaceLog {
@@ -173,7 +173,7 @@ export class SurfaceLog {
     try {
       this.append(serializeRecord(this.record(entry)))
     } catch (error: unknown) {
-      const failure = error instanceof LogsError ? error : new LogsError('LOG_WRITE_FAILED', `a record could not be written to ${this.location.file}`, this.location.file, undefined, { cause: error })
+      const failure = isLogsFailure(error) ? error : new LogsError('LOG_WRITE_FAILED', `a record could not be written to ${this.location.file}`, this.location.file, { cause: error })
       this.options.onFailure(failure)
     } finally {
       this.writing = false

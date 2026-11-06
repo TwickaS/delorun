@@ -1,11 +1,12 @@
 /**
- * Where each C20 surface keeps its files, and C1's refusal rule applied to them: log directories are created at
- * mode 0700 and log files at 0600 through exclusive creation, and an existing directory or file that is a symbolic
- * link, belongs to another user or has a group or other permission bit is refused with the command that fixes it.
+ * Where each C20 surface keeps its files, and how they are created and opened: log directories at mode 0700 and log
+ * files at 0600 through exclusive creation. An existing directory or file passes `@delo/home`'s check of C1's
+ * refusal rule first, which refuses a symbolic link, another user's path or one with a group or other permission
+ * bit, with the command that fixes it.
  *
  * @module @delo/logs/files
  */
-import { FORBIDDEN_MODE_BITS } from '@delo/contract-home-layout'
+import { checkPrivateDirectorySync, checkProtectedFileSync, HomeLayoutError } from '@delo/home'
 import { KEPT_FILES, LOG_DIR_MODE, LOG_FILE_MODE, SURFACE_FILES, type SurfaceKind, type SurfaceName } from '@delo/contract-operational-logs'
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, type Stats } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
@@ -33,9 +34,6 @@ export interface SurfaceRequest {
 
 /** Profile names a surface directory may carry: a letter or digit, then letters, digits, `.`, `_` or `-`. */
 const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
-
-/** Whether the platform has POSIX modes and owners; Windows homes are checked through their DACL by C1's code. */
-const POSIX_MODES = process.platform !== 'win32'
 
 /**
  * Check a profile name before it becomes part of a path.
@@ -129,42 +127,25 @@ export function lstatOrMissing(path: string): Stats | undefined {
   }
 }
 
-function ownedByProcessUser(stats: Stats): boolean {
-  return process.getuid === undefined || stats.uid === process.getuid()
-}
-
 /**
- * Apply C1's refusal rule to an existing log directory.
- * @param path - the directory.
- * @param stats - its `lstat`.
- * @throws LogsError `HOME_MODE` with the fix `chmod 700 <path>`.
- */
-export function checkLogDirectory(path: string, stats: Stats): void {
-  if (!stats.isDirectory()) throw new LogsError('HOME_MODE', `${path} is not a directory${stats.isSymbolicLink() ? ' but a symbolic link' : ''}; remove it so the log directory can be created`, path, `rm ${path}`)
-  if (!POSIX_MODES) return
-  if (!ownedByProcessUser(stats) || (stats.mode & FORBIDDEN_MODE_BITS) !== 0) {
-    throw new LogsError('HOME_MODE', `${path} must belong to you and be readable only by you (mode 0700)`, path, `chmod 700 ${path}`)
-  }
-}
-
-/**
- * Apply C1's refusal rule to an existing log file.
+ * Check an existing log file with C1's refusal rule, or report that it does not exist.
  * @param path - the file.
- * @param stats - its `lstat`.
- * @throws LogsError `SECRET_FILE_MODE` with the fix `chmod 600 <path>`.
+ * @returns the `lstat` result the check passed, or `undefined` when the file does not exist.
+ * @throws {HomeLayoutError} `SECRET_FILE_MODE` when the file is refused.
  */
-export function checkLogFile(path: string, stats: Stats): void {
-  if (!stats.isFile()) throw new LogsError('SECRET_FILE_MODE', `${path} is not a regular file${stats.isSymbolicLink() ? ' but a symbolic link' : ''}; remove it`, path, `rm ${path}`)
-  if (!POSIX_MODES) return
-  if (!ownedByProcessUser(stats) || (stats.mode & FORBIDDEN_MODE_BITS) !== 0) {
-    throw new LogsError('SECRET_FILE_MODE', `${path} must belong to you and be readable only by you (mode 0600)`, path, `chmod 600 ${path}`)
+export function checkedLogFile(path: string): Stats | undefined {
+  try {
+    return checkProtectedFileSync(path)
+  } catch (error: unknown) {
+    if (isMissing(error)) return undefined
+    throw error
   }
 }
 
 /**
  * Create a surface's directory at mode 0700, with `logs/` and any missing parent at 0700, or check the existing one.
  * @param location - the surface.
- * @throws LogsError `HOME_MODE` when the existing directory is refused.
+ * @throws {HomeLayoutError} `HOME_MODE` when the existing directory is refused.
  */
 export function ensureSurfaceDirectory(location: SurfaceLocation): void {
   mkdirSync(dirname(location.dir), { recursive: true, mode: LOG_DIR_MODE })
@@ -174,8 +155,7 @@ export function ensureSurfaceDirectory(location: SurfaceLocation): void {
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
   }
-  // `mkdir` reported the path as present, so `lstat` finds it.
-  checkLogDirectory(location.dir, lstatOrMissing(location.dir)!)
+  checkPrivateDirectorySync(location.dir)
 }
 
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0
@@ -185,11 +165,11 @@ const NO_FOLLOW = constants.O_NOFOLLOW ?? 0
  * checking it, never following a symbolic link.
  * @param path - the file.
  * @returns the file descriptor.
- * @throws LogsError `SECRET_FILE_MODE` when the existing file is refused.
+ * @throws {HomeLayoutError} `SECRET_FILE_MODE` when the existing file is refused.
  */
 export function openForAppend(path: string): number {
   for (let attempt = 0; ; attempt += 1) {
-    const stats = lstatOrMissing(path)
+    const stats = checkedLogFile(path)
     if (stats === undefined) {
       try {
         return openSync(path, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_EXCL | NO_FOLLOW, LOG_FILE_MODE)
@@ -199,12 +179,11 @@ export function openForAppend(path: string): number {
         throw error
       }
     }
-    checkLogFile(path, stats)
     const fd = openSync(path, constants.O_WRONLY | constants.O_APPEND | NO_FOLLOW)
     const opened = fstatSync(fd)
     if (opened.ino === stats.ino && opened.dev === stats.dev) return fd
     closeSync(fd)
     // The path was replaced between the check and the open.
-    if (attempt > 0) throw new LogsError('SECRET_FILE_MODE', `${path} changed while it was opened`, path)
+    if (attempt > 0) throw new HomeLayoutError('SECRET_FILE_MODE', path, `${path} was replaced while it was being opened`)
   }
 }

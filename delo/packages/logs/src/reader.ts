@@ -7,7 +7,7 @@
  */
 import type { LogLevel, LogRecord } from '@delo/contract-operational-logs'
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs'
-import { checkLogFile, lstatOrMissing, type SurfaceLocation } from './files.ts'
+import { checkedLogFile, lstatOrMissing, type SurfaceLocation } from './files.ts'
 import { surfaceFiles } from './retention.ts'
 
 /** One stored line and its record, when the line is one. */
@@ -49,9 +49,7 @@ export function parseRecord(line: string): LogRecord | undefined {
 }
 
 function readWhole(path: string): string {
-  const stats = lstatOrMissing(path)
-  if (stats === undefined) return ''
-  checkLogFile(path, stats)
+  if (checkedLogFile(path) === undefined) return ''
   const fd = openSync(path, constants.O_RDONLY | NO_FOLLOW)
   try {
     const size = fstatSync(fd).size
@@ -80,7 +78,7 @@ function completeLines(text: string): string[] {
  * @param limit - how many lines at most.
  * @param keep - which lines to keep; a line that is not a record reaches it with `record` undefined.
  * @returns the lines.
- * @throws LogsError `HOME_MODE` or `SECRET_FILE_MODE` when C1's refusal rule refuses the directory or a file.
+ * @throws {HomeLayoutError} `HOME_MODE` or `SECRET_FILE_MODE` when C1's refusal rule refuses the directory or a file.
  */
 export function readLines(location: SurfaceLocation, limit: number, keep: (line: StoredLine) => boolean): StoredLine[] {
   const files = surfaceFiles(location)
@@ -117,16 +115,14 @@ export interface FollowOptions {
  * @param location - the surface.
  * @param options - the line sink, the signal and the interval.
  * @returns when the signal aborts.
- * @throws LogsError `SECRET_FILE_MODE` when C1's refusal rule refuses the active file.
+ * @throws {HomeLayoutError} `SECRET_FILE_MODE` when C1's refusal rule refuses the active file.
  */
 export async function followLines(location: SurfaceLocation, options: FollowOptions): Promise<void> {
   let fd: number | undefined
   let offset = 0
   let pending = ''
   const open = (fromEnd: boolean): void => {
-    const stats = lstatOrMissing(location.file)
-    if (stats === undefined) return
-    checkLogFile(location.file, stats)
+    if (checkedLogFile(location.file) === undefined) return
     fd = openSync(location.file, constants.O_RDONLY | NO_FOLLOW)
     offset = fromEnd ? fstatSync(fd).size : 0
   }

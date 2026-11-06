@@ -6,8 +6,8 @@
  * @module @delo/logs
  */
 export { LineCapture, captureStream, interceptStdio, type CapturedStream, type InterceptOptions } from './capture.ts'
-export { LogsError, type LogsErrorCode } from './errors.ts'
-export { checkLogDirectory, checkLogFile, checkProfile, resolveSurface, rotatedFile, surfaceOfDirectory, type SurfaceLocation, type SurfaceRequest } from './files.ts'
+export { isLogsFailure, LogsError, type LogsErrorCode, type LogsFailure } from './errors.ts'
+export { checkProfile, resolveSurface, rotatedFile, surfaceOfDirectory, type SurfaceLocation, type SurfaceRequest } from './files.ts'
 export { followLines, parseRecord, readLines, type FollowOptions, type StoredLine } from './reader.ts'
 export { serializeRecord, type LogKeys } from './record.ts'
 export { Redactor, REDACTED_VALUE, redactionMarker, type PatternKind, type RedactedError } from './redact.ts'

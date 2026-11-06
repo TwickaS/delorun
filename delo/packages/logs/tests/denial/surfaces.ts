@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { captureStream, LineCapture, Redactor, resolveSurface, SurfaceLog, type CapturedStream, type DeloLogDetails, type LogsError, type SurfaceLocation } from '../../src/index.ts'
+import { captureStream, LineCapture, Redactor, resolveSurface, SurfaceLog, type CapturedStream, type DeloLogDetails, type LogsFailure, type SurfaceLocation } from '../../src/index.ts'
 
 /** The repository root. */
 export const REPOSITORY = fileURLToPath(new URL('../../../../../', import.meta.url))
@@ -21,7 +21,7 @@ export interface RunningSurface {
   /** The surface's log files. */
   readonly location: SurfaceLocation
   /** Failures the surface's writer reported. */
-  readonly failures: readonly LogsError[]
+  readonly failures: readonly LogsFailure[]
   /** Hold a secret value as the surface holds what it loads, registered with its redactor. */
   register(value: string, kind: SecretKind): void
   /** Write one of Delo's own records through the surface's logger. */
@@ -99,7 +99,7 @@ process.stdin.on('end', async () => {
 export const REFERENCE_DRIVER: SurfaceDriver = {
   start: (home) => {
     const redactor = new Redactor()
-    const failures: LogsError[] = []
+    const failures: LogsFailure[] = []
     const log = SurfaceLog.open({
       location: resolveSurface({ kind: 'home', home, profile: 'default' }),
       redactor,

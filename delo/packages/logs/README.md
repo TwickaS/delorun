@@ -27,11 +27,11 @@ A surface owner does these steps as its process starts:
 
 1. Resolve the surface's location with `resolveSurface({ kind, home, profile })`. The relay's location is its container path and ignores the home.
 2. Create one `Redactor` for the process and register every secret value the process holds or reads as it loads it, with `register(value, kind)`, keeping the returned disposer for a value that is dropped.
-3. Open the log with `SurfaceLog.open({ location, redactor, pid, level, startId, onFailure, now })`. Opening creates the directory at 0700 and the active file at 0600 by exclusive creation, and throws `LogsError` with C1's `HOME_MODE` or `SECRET_FILE_MODE` and its `chmod` fix when an existing directory or file is a symbolic link, belongs to another user or has a group or other permission bit, so a surface fails at its start instead of running without its log.
-4. Run `startAgeChecks({ home, now, onReport })`, which prunes every local surface at once and every 3,600 seconds.
+3. Open the log with `SurfaceLog.open({ location, redactor, pid, level, startId, onFailure, now })`. Opening creates the directory at 0700 and the active file at 0600 by exclusive creation, and checks an existing directory or file with `@delo/home`'s `checkPrivateDirectorySync` and `checkProtectedFileSync`, the one implementation of C1's refusal rule: a symbolic link, another user's path or one with a group or other permission bit throws `HomeLayoutError` with `HOME_MODE` or `SECRET_FILE_MODE` and its `chmod` fix, so a surface fails at its start instead of running without its log.
+4. Run `startAgeChecks({ home, now, onReport })`, which prunes every local surface at once and every 3,600 seconds. `delorun` prunes once at each invocation's start through `pruneLocalSurfaces`; the home process's `startAgeChecks` arrives with the home process package, `delo/packages/home-process`.
 5. Write Delo's own records through `log.logger(name)`, attach the Cordis application with `attachCordisLogs(ctx, log)` from `@delo/logs/cordis`, and capture upstream code's output with `LineCapture`, `captureStream` or `interceptStdio`.
 
-`SurfaceLog.write` never throws: a record that cannot be written is dropped and its `LogsError` goes to `onFailure`, and the next record opens the file again. A surface that keeps upstream's console exporter and also captures its own standard output writes each Cordis message twice, so it keeps only one of the two.
+`SurfaceLog.write` never throws: a record that cannot be written is dropped and its `LogsError` or `HomeLayoutError` goes to `onFailure`, and the next record opens the file again. A surface that keeps upstream's console exporter and also captures its own standard output writes each Cordis message twice, so it keeps only one of the two.
 
 ## Records and keys
 

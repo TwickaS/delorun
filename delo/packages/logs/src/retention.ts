@@ -9,8 +9,9 @@
 import { AGE_CHECK_INTERVAL_MS, RECORD_MAX_BYTES, RETENTION_MS } from '@delo/contract-operational-logs'
 import { closeSync, constants, ftruncateSync, openSync, readdirSync, readSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { LogsError } from './errors.ts'
-import { checkLogDirectory, checkLogFile, lstatOrMissing, rotatedFile, rotatedIndex, surfaceOfDirectory, type SurfaceLocation } from './files.ts'
+import { checkPrivateDirectorySync } from '@delo/home'
+import { isLogsFailure, LogsError, type LogsFailure } from './errors.ts'
+import { checkedLogFile, lstatOrMissing, rotatedFile, rotatedIndex, surfaceOfDirectory, type SurfaceLocation } from './files.ts'
 import { rotateFiles } from './writer.ts'
 
 /** A surface's files that exist, newest first: the active file, then `.1` upward. */
@@ -28,25 +29,24 @@ export interface RetentionReport {
   /** Active files emptied in place. */
   readonly emptied: readonly string[]
   /** Surfaces or files that were refused or failed, which were left as they were. */
-  readonly failures: readonly LogsError[]
+  readonly failures: readonly LogsFailure[]
 }
 
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0
 
-function failureOf(error: unknown, path: string): LogsError {
-  return error instanceof LogsError ? error : new LogsError('LOG_WRITE_FAILED', `${path} could not be changed`, path, undefined, { cause: error })
+function failureOf(error: unknown, path: string): LogsFailure {
+  return isLogsFailure(error) ? error : new LogsError('LOG_WRITE_FAILED', `${path} could not be changed`, path, { cause: error })
 }
 
 /**
  * The files of a surface, after C1's refusal rule on its directory.
  * @param location - the surface.
  * @returns the files that exist; none when the directory does not exist.
- * @throws LogsError `HOME_MODE` when the directory is refused.
+ * @throws {HomeLayoutError} `HOME_MODE` when the directory is refused.
  */
 export function surfaceFiles(location: SurfaceLocation): SurfaceFiles {
-  const dir = lstatOrMissing(location.dir)
-  if (dir === undefined) return { rotated: [] }
-  checkLogDirectory(location.dir, dir)
+  if (lstatOrMissing(location.dir) === undefined) return { rotated: [] }
+  checkPrivateDirectorySync(location.dir)
   const rotated: { index: number; path: string }[] = []
   let active: string | undefined
   for (const name of readdirSync(location.dir)) {
@@ -63,12 +63,11 @@ export function surfaceFiles(location: SurfaceLocation): SurfaceFiles {
  * earlier of the file's birth and modification times stands in, so an unreadable file still ages.
  * @param path - the file.
  * @returns milliseconds since the epoch, or `undefined` for an empty file.
- * @throws LogsError `SECRET_FILE_MODE` when C1's refusal rule refuses the file.
+ * @throws {HomeLayoutError} `SECRET_FILE_MODE` when C1's refusal rule refuses the file.
  */
 export function oldestRecordTime(path: string): number | undefined {
-  const stats = lstatOrMissing(path)
+  const stats = checkedLogFile(path)
   if (stats === undefined) return undefined
-  checkLogFile(path, stats)
   if (stats.size === 0) return undefined
   const fd = openSync(path, constants.O_RDONLY | NO_FOLLOW)
   const buffer = Buffer.alloc(Math.min(stats.size, RECORD_MAX_BYTES))
@@ -112,7 +111,7 @@ function expired(path: string, now: number): boolean {
  */
 export function pruneSurface(location: SurfaceLocation, now: number): RetentionReport {
   const deleted: string[] = []
-  const failures: LogsError[] = []
+  const failures: LogsFailure[] = []
   let files: SurfaceFiles
   try {
     files = surfaceFiles(location)
@@ -212,7 +211,7 @@ export function startAgeChecks(options: AgeCheckOptions): () => void {
 export function clearSurface(location: SurfaceLocation): RetentionReport {
   const deleted: string[] = []
   const emptied: string[] = []
-  const failures: LogsError[] = []
+  const failures: LogsFailure[] = []
   let files: SurfaceFiles
   try {
     files = surfaceFiles(location)
@@ -231,9 +230,7 @@ export function clearSurface(location: SurfaceLocation): RetentionReport {
     const path = files.active
     try {
       // `surfaceFiles` listed it, so `lstat` finds it unless it was removed since; then there is nothing to empty.
-      const stats = lstatOrMissing(path)
-      if (stats !== undefined) {
-        checkLogFile(path, stats)
+      if (checkedLogFile(path) !== undefined) {
         const fd = openSync(path, constants.O_WRONLY | NO_FOLLOW)
         try {
           ftruncateSync(fd, 0)
@@ -271,7 +268,7 @@ export function startupReports(home: string): string[] {
  */
 export function clearStartupReports(home: string): RetentionReport {
   const deleted: string[] = []
-  const failures: LogsError[] = []
+  const failures: LogsFailure[] = []
   for (const path of startupReports(home)) {
     try {
       unlinkSync(path)

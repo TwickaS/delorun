@@ -8,7 +8,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Redactor, resolveSurface, SurfaceLog, type LogsError, type SurfaceLocation } from '../src/index.ts'
+import { Redactor, resolveSurface, SurfaceLog, type LogsFailure, type SurfaceLocation } from '../src/index.ts'
 
 /** A temporary Delo home and its removal. */
 export interface TempHome {
@@ -46,7 +46,7 @@ export interface OpenLog {
   readonly redactor: Redactor
   readonly clock: Clock
   readonly location: SurfaceLocation
-  readonly failures: LogsError[]
+  readonly failures: LogsFailure[]
 }
 
 /**
@@ -59,7 +59,7 @@ export function openLog(home: string, options: { readonly kind?: 'home' | 'super
   const redactor = options.redactor ?? new Redactor()
   const time = options.clock ?? clock()
   const location = resolveSurface({ kind: options.kind ?? 'home', home, profile: 'default' })
-  const failures: LogsError[] = []
+  const failures: LogsFailure[] = []
   const log = SurfaceLog.open({
     location,
     redactor,

@@ -7,7 +7,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { LogsError, resolveSurface, rotatedFile, SurfaceLog } from '../src/index.ts'
+import { isLogsFailure, resolveSurface, rotatedFile, SurfaceLog } from '../src/index.ts'
 import { canary, modeOf, openLog, recordsOf, tempHome, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
@@ -179,7 +179,7 @@ describe('modes and refusals', () => {
     mkdirSync(location.file)
     expect(() => { log.logger('x').info('lost') }).not.toThrow()
     expect(failures).toHaveLength(1)
-    expect(failures[0]).toBeInstanceOf(LogsError)
+    expect(isLogsFailure(failures[0])).toBe(true)
     expect(existsSync(join(location.file, 'lost'))).toBe(false)
   })
 
