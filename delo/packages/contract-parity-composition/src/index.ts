@@ -17,92 +17,209 @@ export const PARITY_BASE_TAG = 'dsh-v0.2.2-rc.1' as const
 /** Repository path of the Cordis overlay that sets every switch and default to its parity value. */
 export const PARITY_OVERLAY_PATH = 'delo/apps/tools/src/parity/composition/parity.overlay.yml' as const
 
+/** Environment variable through which the replay lane hands the overlay to every snapshot adapter. */
+export const PARITY_OVERLAY_ENV = 'DSH_SNAPSHOT_PATCH' as const
+
 /**
- * The registry: one entry per model-visible Delo change. `defaultValue` applies in
+ * The validated Config field that holds a built switch. Its JSDoc names the switch as `C16 switch \`<id>\``, and its
+ * schema default is the switch's parity value.
+ */
+export interface ParitySwitchField {
+  /** The module a `cordis.yml` row names to mount the plugin, such as `@deepseek-ai/dsh-plugin-manager/tools`. */
+  readonly module: string
+  /** Repository path of that module's source, which declares the `Config` interface and schema. */
+  readonly source: string
+  /** The Config key. */
+  readonly key: string
+}
+
+/** Fields every registry entry carries. */
+interface ParitySwitchBase {
+  /** Lower snake case, never reused. */
+  readonly id: string
+  /** The package or upstream edit that registers the switch. */
+  readonly registeredBy: string
+  /** The value in Delo's default composition; `true` leaves the change active. */
+  readonly defaultValue: boolean
+  /** The value in the parity composition. */
+  readonly parityValue: boolean
+  /**
+   * Whether the change reaches a model request: a tool, tool schema, tool description, tool result text, system
+   * prompt context or runtime context. A switch that does not is a feature switch and has no switch-on scenario.
+   */
+  readonly modelVisible: boolean
+  /** The switch-on scenario, `<profile>/delo-<id with hyphens>` under `snapshots/`, for a model-visible switch. */
+  readonly scenario?: string
+}
+
+/** A switch whose Config field exists in the tree. */
+export interface BuiltParitySwitch extends ParitySwitchBase {
+  readonly state: 'built'
+  readonly field: ParitySwitchField
+  /**
+   * Repository paths of the files whose model-visible contributions the switch turns off at its parity value. The
+   * `parity-switches` scan accepts a contribution only in one of these files.
+   */
+  readonly sources: readonly string[]
+}
+
+/** A switch C16 lists whose change and Config field are not in the tree yet; it has no field and covers no file. */
+export interface PlannedParitySwitch extends ParitySwitchBase {
+  readonly state: 'planned'
+  /** The work package that builds the change and turns the entry into a built one. */
+  readonly plannedBy: string
+}
+
+/** One registry entry. */
+export type ParitySwitchEntry = BuiltParitySwitch | PlannedParitySwitch
+
+/**
+ * The registry: one entry per model-visible Delo change, plus the doctor's feature switch. `defaultValue` applies in
  * Delo's default composition and `parityValue` applies in the parity composition.
- * `true` means the switch is on, which leaves the change active.
  */
 export const PARITY_SWITCHES = [
   {
     id: 'studio_additions',
+    state: 'planned',
+    plannedBy: 'WP2 studio packages',
     registeredBy: '@delo/bundle-studio and @delo/plugin-main-chat',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-studio-additions',
+    modelVisible: true,
+    scenario: 'web/delo-studio-additions',
   },
   {
     id: 'permission_defaults',
+    state: 'planned',
+    plannedBy: 'WP2.13',
     registeredBy: '@delo/plugin-permission-defaults',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-permission-defaults',
+    modelVisible: true,
+    scenario: 'session/delo-permission-defaults',
   },
   {
     id: 'fetch_guard',
+    state: 'planned',
+    plannedBy: 'the fetch guard package (A100)',
     registeredBy: '@delo/plugin-fetch-guard',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-fetch-guard',
+    modelVisible: true,
+    scenario: 'session/delo-fetch-guard',
   },
   {
     id: 'preset_inspect',
+    state: 'built',
     registeredBy: 'Delo edit of upstream preset tools',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-preset-inspect',
+    modelVisible: true,
+    scenario: 'web/delo-preset-inspect',
+    field: {
+      module: '@deepseek-ai/dsh-agent-preset-registry/tools',
+      source: 'packages/preset/agent-preset-registry/src/tools.ts',
+      key: 'presetInspect',
+    },
+    sources: ['packages/preset/agent-preset-registry/src/tools.ts'],
   },
   {
     id: 'doctor',
-    registeredBy: 'delo/apps/cli/src/doctor',
+    state: 'built',
+    registeredBy: 'Delo edit of upstream doctor app, @deepseek-ai/dsh-doctor/app',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-doctor',
+    modelVisible: false,
+    field: {
+      module: '@deepseek-ai/dsh-doctor/app',
+      source: 'packages/boot/doctor/src/app.ts',
+      key: 'doctor',
+    },
+    sources: [],
   },
   {
     id: 'plugin_manager_read_exemption',
+    state: 'built',
     registeredBy: 'Delo edit of upstream plugin_manager tool',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-plugin-manager-read-exemption',
+    modelVisible: true,
+    scenario: 'session/delo-plugin-manager-read-exemption',
+    field: {
+      module: '@deepseek-ai/dsh-plugin-manager/tools',
+      source: 'packages/boot/plugin-manager/src/tools.ts',
+      key: 'readActionsExempt',
+    },
+    sources: ['packages/boot/plugin-manager/src/tools.ts'],
   },
   {
     id: 'profile_history',
+    state: 'built',
     registeredBy: 'Delo edit of upstream plugin_manager tool',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-profile-history',
+    modelVisible: true,
+    scenario: 'session/delo-profile-history',
+    field: {
+      module: '@deepseek-ai/dsh-plugin-manager/tools',
+      source: 'packages/boot/plugin-manager/src/tools.ts',
+      key: 'profileHistory',
+    },
+    sources: ['packages/boot/plugin-manager/src/tools.ts'],
   },
   {
     id: 'scheduled_task_consent',
+    state: 'planned',
+    plannedBy: 'WP2.19',
     registeredBy: 'Delo edit of upstream schedule tools',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-scheduled-task-consent',
+    modelVisible: true,
+    scenario: 'session/delo-scheduled-task-consent',
   },
   {
     id: 'instruction_layer_consent',
+    state: 'planned',
+    plannedBy: 'the instruction-layer approval package (A101)',
     registeredBy: 'Delo approval for instruction-layer files',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-instruction-layer-consent',
+    modelVisible: true,
+    scenario: 'session/delo-instruction-layer-consent',
   },
   {
     id: 'mcp_add_consent',
+    state: 'planned',
+    plannedBy: 'the MCP add-time consent package (A101)',
     registeredBy: 'Delo MCP server add flow',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-mcp-add-consent',
+    modelVisible: true,
+    scenario: 'session/delo-mcp-add-consent',
   },
   {
     id: 'container_denial_marker',
+    state: 'built',
     registeredBy: 'Delo edit of upstream container denial reporting',
     defaultValue: true,
     parityValue: false,
-    scenario: 'delo-container-denial-marker',
+    modelVisible: true,
+    scenario: 'session/delo-container-denial-marker',
+    field: {
+      module: '@deepseek-ai/dsh-sandbox-policy',
+      source: 'packages/sandbox/sandbox-policy/src/index.ts',
+      key: 'containerDenialMarker',
+    },
+    sources: [
+      'packages/core/tool-executor-ptc/src/ptc.ts',
+      'packages/sandbox/sandbox-policy/src/index.ts',
+      'packages/shell/tool-bash/src/index.ts',
+      'packages/shell/tool-pwsh/src/index.ts',
+    ],
   },
-] as const
+] as const satisfies readonly ParitySwitchEntry[]
 
-/** One registry entry. */
+/** One registry entry, as declared. */
 export type ParitySwitch = (typeof PARITY_SWITCHES)[number]
 
 /** Identifier of a registry entry; the union of every `id` in {@link PARITY_SWITCHES}. */

@@ -12,9 +12,12 @@ description: "只含类型的包，保存 Delo 对等组合的开关注册表、
 
 ## 导出
 
-- `PARITY_SWITCHES`：注册表，每项对模型可见的 Delo 变更对应一条记录。
-- `ParitySwitch` 与 `ParitySwitchId`：记录类型，以及由注册表推导出的 id 联合类型。
-- `PARITY_REGISTRY_VERSION`、`PARITY_BASE_TAG` 与 `PARITY_OVERLAY_PATH`：注册表版本、上游基线标签与覆盖层路径。
+- `PARITY_SWITCHES`：注册表，每项对模型可见的 Delo 变更对应一条记录，另有一条记录对应 doctor 的功能开关。已构建的记录给出其 Config 字段，以及它所关闭的对模型可见贡献所在的源文件；计划中的记录给出构建它的工作包。
+- `ParitySwitchEntry`、`BuiltParitySwitch`、`PlannedParitySwitch` 与 `ParitySwitchField`：记录类型，以及已构建开关的字段。
+- `ParitySwitch` 与 `ParitySwitchId`：声明的记录类型，以及由注册表推导出的 id 联合类型。
+- `PARITY_REGISTRY_VERSION`、`PARITY_BASE_TAG`、`PARITY_OVERLAY_PATH` 与 `PARITY_OVERLAY_ENV`：注册表版本、上游基线标签、覆盖层路径，以及把覆盖层交给快照适配器的变量。
+
+`@delo/tools` 中的 `parity-switches` 检查把注册表与本仓库中的开关字段相核对；其规则见 [tools README](../../apps/tools/README.zh.md) 的对等组合一节。
 
 ## 限制
 

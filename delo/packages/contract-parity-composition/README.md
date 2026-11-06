@@ -12,9 +12,12 @@ This types-only package exports the switch registry of Delo's parity composition
 
 ## Exports
 
-- `PARITY_SWITCHES`: the registry, with one entry per model-visible Delo change.
-- `ParitySwitch` and `ParitySwitchId`: the entry type and the id union derived from the registry.
-- `PARITY_REGISTRY_VERSION`, `PARITY_BASE_TAG` and `PARITY_OVERLAY_PATH`: the registry version, the upstream base tag and the overlay path.
+- `PARITY_SWITCHES`: the registry, with one entry per model-visible Delo change and one for the doctor's feature switch. A built entry names its Config field and the source files whose model-visible contributions it turns off; a planned entry names the work package that builds it.
+- `ParitySwitchEntry`, `BuiltParitySwitch`, `PlannedParitySwitch` and `ParitySwitchField`: the entry types and the field of a built switch.
+- `ParitySwitch` and `ParitySwitchId`: the declared entry type and the id union derived from the registry.
+- `PARITY_REGISTRY_VERSION`, `PARITY_BASE_TAG`, `PARITY_OVERLAY_PATH` and `PARITY_OVERLAY_ENV`: the registry version, the upstream base tag, the overlay path and the variable that hands the overlay to the snapshot adapters.
+
+The `parity-switches` check in `@delo/tools` holds the registry against the switch fields in the tree; its rules are in the parity composition section of the [tools README](../../apps/tools/README.md).
 
 ## Limits
 
