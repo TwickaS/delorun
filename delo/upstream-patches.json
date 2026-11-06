@@ -170,6 +170,11 @@
       "path": "ROADMAP.md",
       "class": "delo-feature",
       "reason": "Adds the root pointer to Delo's roadmap in the Delo versus stock guide; upstream has no ROADMAP.md."
+    },
+    {
+      "path": "lefthook.yml",
+      "class": "delo-feature",
+      "reason": "Runs Delo's commit standard, delo/apps/tools/src/check-commits.ts, as the commit-msg hook."
     }
   ],
   "retired": []
