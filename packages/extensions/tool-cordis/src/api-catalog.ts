@@ -2183,6 +2183,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the effective preset name, or `custom` when nothing matches.',
       },
       {
+        signature: 'unset(session: Session): boolean',
+        description: 'Whether a session holds no permission choice yet: no preset, sandbox mode or approval policy recorded, and never seeded. A distribution that seeds its own defaults reads this before the session\'s first choice is pinned.',
+        parameters: [{ name: 'session', description: 'the session whose knob state is read.' }],
+        returns: 'whether nothing has been chosen or seeded.',
+      },
+      {
         signature: 'resolve(name: string): PresetSpec',
         description: 'Resolve an available preset\'s knob bundle.',
         parameters: [{ name: 'name', description: 'the preset name to resolve.' }],

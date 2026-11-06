@@ -344,6 +344,18 @@ export class PermissionPresetService extends TypertRemoteService {
     return this.derive(this.permissionState(session))
   }
 
+  /**
+   * Whether a session holds no permission choice yet: no preset, sandbox mode
+   * or approval policy recorded, and never seeded. A distribution that seeds
+   * its own defaults reads this before the session's first choice is pinned.
+   * @param session - the session whose knob state is read.
+   * @returns whether nothing has been chosen or seeded.
+   */
+  unset(session: Session): boolean {
+    const { preset, sandbox, approval, seeded } = this.permissionState(session)
+    return preset === null && sandbox === null && approval === null && !seeded
+  }
+
   /** Resolve the preset for one folded knob state (the shared mathematics of `current` and the projection unit). */
   private derive(state: KnobState): string {
     const sandbox = state.sandbox ?? this.ctx.shell.sandboxMode
@@ -428,14 +440,14 @@ export class PermissionPresetService extends TypertRemoteService {
    */
   private pinInitialPermission(session: Session): void {
     const state = this.permissionState(session)
-    const { preset, sandbox, approval, seeded } = state
+    const { preset, sandbox, approval } = state
     if (preset === AUTO_PRESET) {
       if (this.autoAdmit === undefined) {
         throw new Error('permission: cannot restore preset "auto" without its active integration')
       }
       this.autoAdmit()
     }
-    if (preset === null && sandbox === null && approval === null && !seeded) {
+    if (this.unset(session)) {
       const name = this.defaultPreset
       const spec = this.resolve(name)
       session.append('permission/preset', { preset: name })

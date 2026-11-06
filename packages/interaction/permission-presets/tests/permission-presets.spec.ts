@@ -356,6 +356,15 @@ describe('new-session default', () => {
     ])
   })
 
+  it('says a session is unset until it records a choice or ends a seed', async () => {
+    const ctx = await mountedStore()
+    const fresh = freshSession('unset-fresh')
+    expect(ctx.permissionPresets.unset(fresh)).toBe(true)
+    fresh.append('permission/preset', { preset: 'workspace-write' })
+    expect(ctx.permissionPresets.unset(fresh)).toBe(false)
+    expect(ctx.permissionPresets.unset(Session.create(SessionId('unset-seeded'), []))).toBe(false)
+  })
+
   it('preserves a seeded legacy session instead of applying the latest user default', async () => {
     const ctx = await mountedStore()
     await configurations.get(ctx)!.update({

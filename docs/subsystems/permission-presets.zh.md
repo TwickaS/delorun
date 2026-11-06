@@ -115,6 +115,15 @@ registerAuto(admit: () => void): () => Promise<void>
 current(session: Session): string
 
 /**
+ * Whether a session holds no permission choice yet: no preset, sandbox mode
+ * or approval policy recorded, and never seeded. A distribution that seeds
+ * its own defaults reads this before the session's first choice is pinned.
+ * @param session - the session whose knob state is read.
+ * @returns whether nothing has been chosen or seeded.
+ */
+unset(session: Session): boolean
+
+/**
  * Resolve an available preset's knob bundle.
  * @param name - the preset name to resolve.
  * @returns the configured bundle.
