@@ -7,6 +7,12 @@ packages:
   - native/system/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # Fork-owned Delo workspaces, kept outside the upstream release globs.
+  - delo/apps/*
+  - delo/packages/*
+  # The documentation site is its own workspace with its own lockfile: its React 19
+  # and Next.js would otherwise change the peers the harness's packages resolve.
+  - '!delo/apps/docs'
   # Private package owning repository-level benchmark dependencies.
   - benchmarks
   - website
@@ -16,6 +22,9 @@ packages:
 
 overrides:
   'extract-zip>yauzl': '3.4.0'
+  # One copy for the passkey library and the ASN.1 schemas it parses signatures with: a second copy keeps its own
+  # schema registry, and every ECDSA passkey check fails.
+  '@simplewebauthn/server>@peculiar/asn1-schema': '2.11.1'
   '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
   '@deepseek-ai/schemastery': 'link:vendor/schemastery'
 
@@ -39,6 +48,9 @@ allowBuilds:
   '@google/genai': false
   protobufjs: false
   node-addon-require-builtin: false
+  # Delo's bridge (@delo/bridge) uses ssh2's JavaScript crypto; its optional native binding and cpu-features stay unbuilt.
+  ssh2: false
+  cpu-features: false
   # JSONL durability calls MoveFileExW with write-through publication on Windows.
   # Consumers pin 3.1.1: Koffi 3.3.2's source build fails under GCC 13 when
   # optional prebuilts are omitted. Upgrade all consumers together after the
@@ -53,6 +65,10 @@ allowBuilds:
   electron-winstaller: false
   # Store-index rewriting only needs msgpackr's portable JavaScript codec.
   msgpackr-extract: false
+  # Fork-owned Workers tooling (delo/apps/*): wrangler resolves workerd's
+  # platform binary through its optional dependencies, so the fallback
+  # installer script is not needed.
+  workerd: false
 
 minimumReleaseAgeExclude:
   # Native Codex and Claude tests qualify this exact release with its local patches.

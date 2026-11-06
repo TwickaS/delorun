@@ -6,6 +6,7 @@ settings:
 
 overrides:
   extract-zip>yauzl: 3.4.0
+  '@simplewebauthn/server>@peculiar/asn1-schema': 2.11.1
   '@deepseek-ai/cosmokit': link:vendor/cosmokit
   '@deepseek-ai/schemastery': link:vendor/schemastery
 

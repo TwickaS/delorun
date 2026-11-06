@@ -109,6 +109,16 @@
       "path": ".github/pull_request_template.md",
       "class": "delo-feature",
       "reason": "Adds Delo's DCO, ledger and changelog checklist to upstream's pull request template."
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "class": "security",
+      "reason": "Adds Delo's workspace globs, the `!delo/apps/docs` exclusion, the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delo's packages. Upstream's lines are unchanged."
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "class": "delo-feature",
+      "reason": "Lockfile importers for Delo's workspace packages; regenerate with pnpm install on an upstream merge, never hand-merge."
     }
   ]
 }
