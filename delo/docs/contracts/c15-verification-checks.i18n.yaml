@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for c15-verification-checks.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/contracts/c15-verification-checks.md
+/:
+  en: 9f41689914e4482a
+  zh: a404691f2a84ae8f
+/contract-c15-verification-checks-and-report:
+  en: 91628a0922a762d6
+  zh: 7db04cdde9e8889d
+/contract-c15-verification-checks-and-report/summary:
+  en: 7a49de68dfc3c366
+  zh: ec5f097b07361ab9
+/contract-c15-verification-checks-and-report/contents:
+  en: 72d17fdf30aa3740
+  zh: fc32a8c0cc31b8dd
+/contract-c15-verification-checks-and-report/contract:
+  en: 942c84e93db80f37
+  zh: 17858544d76b7b83
+/contract-c15-verification-checks-and-report/contract/registry-entry:
+  en: 84bbe3efbd04806e
+  zh: 205e2d0a6c2b28df
+/contract-c15-verification-checks-and-report/contract/checks-and-stages:
+  en: 2e488af16619f66b
+  zh: 8f9c803b2207a4d9
+/contract-c15-verification-checks-and-report/contract/results:
+  en: ed3cf1152c47f087
+  zh: 9f5a1772e9492835
+/contract-c15-verification-checks-and-report/contract/modes:
+  en: a1e9f0f60dd2c088
+  zh: ca3e83e4ceb2ce41
+/contract-c15-verification-checks-and-report/contract/report:
+  en: 3501bde6f174616a
+  zh: 954f594a3c56719d
+/contract-c15-verification-checks-and-report/contract/badge:
+  en: 05fe376951875bf2
+  zh: f3e339f8a5570264
+/contract-c15-verification-checks-and-report/consumers:
+  en: 31df22f1c844ca84
+  zh: 38ec5d3f65ec06df
+/contract-c15-verification-checks-and-report/compatibility:
+  en: bb541ca9140ffc25
+  zh: f95fe05c81d06e0a
+/contract-c15-verification-checks-and-report/security:
+  en: f75ee8fbaf90ca63
+  zh: 8d22a8ff7f5b61df
+/contract-c15-verification-checks-and-report/decided-values:
+  en: 71446960164313ea
+  zh: c071ef06d5368123

@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/contract-verification-checks/README.md
+/:
+  en: 9c8b9cdd38b99302
+  zh: a31d845bf751f7eb
+/delo-contract-verification-checks:
+  en: 32bb0b813362ae6c
+  zh: e4bfcb108589c3a5
+/delo-contract-verification-checks/summary:
+  en: 512838af5ca894af
+  zh: 603ba9b20f9c5e34
+/delo-contract-verification-checks/exports:
+  en: dfd6c3fcc3471616
+  zh: b544ef4583577791
+/delo-contract-verification-checks/limits:
+  en: 6ddada49e2607ba3
+  zh: c56a33869f549d3c

@@ -1241,6 +1241,8 @@ importers:
 
   delo/packages/contract-setup-answers: {}
 
+  delo/packages/contract-verification-checks: {}
+
   native/system:
     devDependencies:
       '@deepseek-ai/node-addon-system':
