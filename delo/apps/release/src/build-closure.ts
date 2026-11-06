@@ -10,7 +10,8 @@
  * `SOURCE_DATE_EPOCH` (the commit's committer time) and `-ffile-prefix-map=<build root>=.`; and for each platform
  * deploys the closure's root package with production dependencies for that platform, substitutes the pinned prebuilt
  * native packages, adds the pinned Node and pnpm, checks every native file against `prebuilt-pins.json`, and writes
- * the deterministic archive and its unsigned runtime file list to `--out`. It refuses to run under a Node or pnpm
+ * the deterministic archive and its unsigned runtime file list to `--out`; when it built every platform, it also
+ * writes the release's SPDX SBOM derived from the archives. It refuses to run under a Node or pnpm
  * other than `toolchain.json` pins. `--write-pins` records the native files found instead of checking them, for a
  * reviewed change of `prebuilt-pins.json`. On the targets-key holder's machine, `--attestation-key` and
  * `--attestation` write an HMAC over the version, commit and every file in `--out`, keyed with the holder's secret,
@@ -35,6 +36,7 @@ import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { stageNode, stagePnpm, substitutePrebuilt } from './closure/sources.ts'
 import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
+import { writeReleaseSbom } from './sbom/release-sbom.ts'
 
 /** The marker that identifies a build root this command created, so it never removes another directory. */
 const BUILD_ROOT_MARKER = '.delo-release-build-root'
@@ -175,6 +177,7 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)
   }
+  if (RUNTIME_PLATFORMS.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.toolchain)}`)
   return results
 }
 

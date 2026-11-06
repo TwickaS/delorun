@@ -12,7 +12,9 @@
  * not reproduce the record's digests or lacks a runtime archive or file list, when the record's commit is not the
  * tag's or its recipe and toolchain are not those committed there, when the attestation does not verify with the
  * holder's `--attestation-key` over the rebuild's files, or when comparing the workflow's output with the rebuild
- * again finds a difference. It also refuses a draft whose runtime files are not the release's closure file names.
+ * again finds a difference, or when the dependency advisory check, run again against contract C2's feed with the
+ * acceptances committed at the release's commit, fails. It also refuses a draft whose runtime files are not the
+ * release's closure file names.
  * Otherwise it writes each signed runtime file list, the record as `delorun-<version>.rebuild.json` and
  * `delorun-<version>.manifest.json` under temporary names and renames them into place. The key is a PKCS #8 PEM file
  * with an Ed25519 private key and mode 0600; the guide in the package README states how the holder makes it and the
@@ -23,6 +25,7 @@
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { ADVISORY_FEED_URL } from '@delo/contract-release-manifest'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { readAttestationKey } from './rebuild/attestation.ts'
 import { readSigningKey } from './sign/envelope.ts'
@@ -45,6 +48,7 @@ async function main(argv: readonly string[]): Promise<number> {
       key: readSigningKey(resolve(values.key)),
       env: process.env,
       now: new Date(),
+      feed: ADVISORY_FEED_URL,
     })
     for (const item of signed.comparison.accepted) console.log(`sign-release: accepted ${item.file}: ${item.entry} (rebuild exception ${item.exception})`)
     console.log(`sign-release: signed ${signed.manifestName} for ${signed.manifest.version} on ${signed.manifest.channel}`)

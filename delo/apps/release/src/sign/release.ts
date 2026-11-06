@@ -25,10 +25,12 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
 import { fileDigest } from '../archive/sink.ts'
 import { sha256Hex } from '../brands.ts'
+import { releaseAdvisoryCheck } from '../advisory/release.ts'
 import { closureFileNames } from '../closure/tree.ts'
+import { sbomName } from '../sbom/release-sbom.ts'
 import { attestationProblem } from '../rebuild/attestation.ts'
 import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
-import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, type CommittedRecipe } from '../rebuild/record.ts'
+import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
 import { signEnvelope } from './envelope.ts'
 import { parseStrictJson, toJsonValue, type JsonValue } from './json.ts'
 import { ManifestSchema, readEnvelope, readRebuildRecord } from './schemas.ts'
@@ -67,6 +69,8 @@ export interface SigningRequest {
   readonly env: NodeJS.ProcessEnv
   /** The signing time. */
   readonly now: Date
+  /** The advisory feed the check runs against again; the command passes contract C2's feed. */
+  readonly feed: string
 }
 
 /** What signing wrote. */
@@ -112,11 +116,6 @@ async function realDirectory(path: string, what: string): Promise<string> {
     refuse(`${what} ${path} is not a directory on this machine: ${(error as Error).message}`)
   }
   return real
-}
-
-/** The runtime archive and file list of every platform, which every comparison must cover. */
-function requiredOutputs(version: string): string[] {
-  return RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform)))
 }
 
 async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Promise<{ record: RebuildRecord, recordBytes: Buffer, comparison: Comparison }> {
@@ -175,7 +174,7 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
   }
   const names = new Set(local.map(ref => ref.name))
   const missing = requiredOutputs(draft.version).filter(name => !names.has(name))
-  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every runtime archive and file list`)
+  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every runtime archive and file list and the SBOM`)
   let attestationPath: string
   let attestation: Buffer
   try {
@@ -187,7 +186,7 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
   if (isWithin(attestationPath, release) || isWithin(attestationPath, rebuild)) refuse(`the rebuild attestation ${attestationPath} lies in the release or rebuild directory`)
   const unattested = attestationProblem(request.attestationKey, attestation, { version: draft.version, commit: record.commit, outputs: local })
   if (unattested !== undefined) refuse(`the rebuild attestation does not cover the rebuild in ${rebuild}: ${unattested}. The rebuild directory must be the one build-closure.ts wrote on this machine`)
-  const comparison = await compareOutputs(release, rebuild, recipe.exceptions, names)
+  const comparison = await compareOutputs(release, rebuild, recipe, names)
   if (comparison.differences.length > 0) {
     const first = comparison.differences[0]!
     refuse(`compare-rebuild finds ${String(comparison.differences.length)} differences between the release workflow's output and the rebuild, first ${first.file}${first.entry === undefined ? '' : `: ${first.entry}`}: ${first.detail}`)
@@ -244,9 +243,16 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
       throw new SigningRefusal(`signing refuses: the draft names ${named.archive.name} and ${named.files.name} for ${platform}; a release's ${platform} runtime is ${expected.archive} and ${expected.files}`)
     }
   }
+  if (draft.sbom.name !== sbomName(draft.version)) throw new SigningRefusal(`signing refuses: the draft names ${draft.sbom.name} as the SBOM; a release's SBOM is ${sbomName(draft.version)}`)
   const { record, recordBytes, comparison } = await checkRebuild(request, draft)
   const recordName = rebuildRecordName(draft.version)
   const recordRef: FileRef = { name: recordName, length: recordBytes.byteLength, sha256: sha256Hex(createHash('sha256').update(recordBytes).digest('hex')) }
+  const advisories = await releaseAdvisoryCheck(request.repository, record.commit, request.release, draft.version, request.feed)
+  if (advisories.result !== 'pass') throw new SigningRefusal(`signing refuses: the dependency advisory check fails: ${advisories.problems.join('; ')}`)
+  const accepted = [...new Set(advisories.findings.map(finding => finding.advisory))].sort()
+  if (JSON.stringify(accepted) !== JSON.stringify([...draft.advisories.accepted].sort())) {
+    throw new SigningRefusal(`signing refuses: the draft's accepted advisories (${draft.advisories.accepted.join(', ') || 'none'}) are not the ones the check accepts (${accepted.join(', ') || 'none'})`)
+  }
   for (const { where, ref } of draftRefs(draft)) {
     if (!existsSync(join(request.release, ref.name))) throw new SigningRefusal(`signing refuses: ${where} names ${ref.name}, which is not in ${request.release}`)
     const actual = await refOf(request.release, ref.name)

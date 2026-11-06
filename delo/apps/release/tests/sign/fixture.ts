@@ -10,16 +10,20 @@ import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from 'no
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { devNull } from 'node:os'
 import { join } from 'node:path'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import type { TestContext } from 'vitest'
 import { DESKTOP_PLATFORMS, RELEASE_REPOSITORY_URL, RELEASE_SCHEMAS, RUNTIME_PLATFORMS, type FileRef, type ReleaseManifest, type RootMetadata, type UtcTimestamp } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { sha256Hex } from '../../src/brands.ts'
 import { RECIPE_DIR, RECIPE_FILES } from '../../src/closure/config.ts'
 import { attestationText } from '../../src/rebuild/attestation.ts'
-import { outputRefs } from '../../src/rebuild/record.ts'
+import { outputRefs, recipeAt } from '../../src/rebuild/record.ts'
+import { writeReleaseSbom } from '../../src/sbom/release-sbom.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
-import { publicKeyEntry, signEnvelope } from '../../src/sign/envelope.ts'
+import { publicKeyEntry, readSigningKey, signEnvelope } from '../../src/sign/envelope.ts'
 import { toJsonValue } from '../../src/sign/json.ts'
+import { signRelease, SigningRefusal } from '../../src/sign/release.ts'
 import { ManifestSchema } from '../../src/sign/schemas.ts'
 import { runEntry, scratch, writeTree, type RunResult } from '../support.ts'
 
@@ -27,6 +31,9 @@ import { runEntry, scratch, writeTree, type RunResult } from '../support.ts'
 export const VERSION = '0.1.0'
 
 const EPOCH = 1_793_981_656
+
+/** The closure lockfile every fixture archive holds: one registry package. */
+export const LOCKFILE = `lockfileVersion: '9.0'\n\npackages:\n\n  example-parser@1.2.3:\n    resolution: {integrity: sha512-${'A'.repeat(86)}==}\n`
 
 /** Throwaway keys of every role. */
 export interface Keys {
@@ -84,7 +91,7 @@ async function closures(directory: string, marker: string): Promise<void> {
   mkdirSync(directory, { recursive: true })
   for (const platform of RUNTIME_PLATFORMS) {
     const stage = join(directory, '..', `stage-${marker}-${platform}`)
-    writeTree(stage, { 'app/package.json': '{"name":"dsh-python-runtime-closure"}\n', 'app/lib/bin.js': `// ${platform}\n`, 'node/LICENSE': 'licence\n' })
+    writeTree(stage, { 'app/package.json': '{"name":"dsh-python-runtime-closure"}\n', 'app/pnpm-lock.yaml': LOCKFILE, 'app/lib/bin.js': `// ${platform}\n`, 'node/LICENSE': 'licence\n' })
     await archiveClosure({ stage, outDir: directory, version: VERSION, platform, epoch: EPOCH, pins: undefined })
   }
 }
@@ -112,8 +119,8 @@ export interface ReleaseFixture {
   readonly run: (entry: string, args: readonly string[], env?: NodeJS.ProcessEnv) => RunResult
   /** Record the rebuild with `record-rebuild.ts`. */
   readonly record: () => RunResult
-  /** Sign with `sign-release.ts`, optionally from another rebuild output, record or attestation. */
-  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string }) => RunResult
+  /** Sign with the signing library against an advisory feed stand-in that answers with `advisories`, optionally from another rebuild output, record or attestation. */
+  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object }) => Promise<RunResult>
 }
 
 /**
@@ -138,6 +145,8 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     }
     writeFileSync(join(repo, 'delo/apps/release', file), text)
   }
+  mkdirSync(join(repo, 'delo', 'release'), { recursive: true })
+  writeFileSync(join(repo, 'delo', 'release', 'advisory-acceptances.yaml'), 'acceptances: []\n')
   git(['add', '-A'])
   git(['commit', '-q', '-m', 'fixture'])
   git(['tag', `v${VERSION}`])
@@ -147,7 +156,10 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   const recordPath = join(directory, `delorun-${VERSION}.rebuild.json`)
   await closures(release, 'workflow')
   await closures(rebuild, 'holder')
-  const extra = ['delorun-0.1.0.spdx.json', 'delorun-0.1.0.advisories.json', 'install.sh', 'install.ps1']
+  const { toolchain } = recipeAt(repo, commit)
+  await writeReleaseSbom(release, VERSION, toolchain)
+  await writeReleaseSbom(rebuild, VERSION, toolchain)
+  const extra = ['delorun-0.1.0.advisories.json', 'install.sh', 'install.ps1']
   for (const name of extra) writeFileSync(join(release, name), `${name}\n`)
   const desktop: Record<string, unknown> = {}
   for (const platform of DESKTOP_PLATFORMS) {
@@ -198,7 +210,27 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     commit,
     run,
     record: () => run('record-rebuild.ts', ['--version', VERSION, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
-    sign: (signEnv = {}, args = {}) => run('sign-release.ts', ['--release', release, '--rebuild', args.rebuild ?? rebuild, '--record', args.record ?? recordPath, '--attestation', args.attestation ?? attestationPath, '--attestation-key', attestationKeyPath, '--key', keyPath], signEnv),
+    sign: async (signEnv = {}, args = {}) => {
+      const feed = await feedStandIn(test, args.advisories ?? {})
+      try {
+        const signed = await signRelease({
+          repository: repo,
+          release,
+          rebuild: args.rebuild ?? rebuild,
+          record: args.record ?? recordPath,
+          attestation: args.attestation ?? attestationPath,
+          attestationKey,
+          key: readSigningKey(keyPath),
+          env: { ...signEnv },
+          now: new Date('2026-11-06T12:00:00Z'),
+          feed,
+        })
+        return { status: 0, stdout: signed.manifestName, stderr: '' }
+      } catch (error) {
+        if (!(error instanceof SigningRefusal)) throw error
+        return { status: 1, stdout: '', stderr: error.message }
+      }
+    },
   }
 }
 
@@ -234,4 +266,23 @@ export function manifestContent(version: string, archive: Uint8Array): ReleaseMa
     rebuild: { record: ref, builders: [{ name: 'holder', ci: false }] },
     advisories: { report: ref, accepted: [] },
   })
+}
+
+/**
+ * A local stand-in of npm's bulk advisory API, closed when the test ends.
+ * @param test - the running test.
+ * @param answer - the response body for every request.
+ * @returns the stand-in's URL.
+ */
+export async function feedStandIn(test: TestContext, answer: object): Promise<string> {
+  const server = createServer((request, response) => {
+    request.resume()
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify(answer))
+    })
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  test.onTestFinished(() => new Promise<void>(resolve => server.close(() => resolve())))
+  return `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
 }

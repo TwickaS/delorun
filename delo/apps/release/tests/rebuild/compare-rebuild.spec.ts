@@ -176,7 +176,7 @@ describe('compare-rebuild', CHILD_PROCESS_TIMEOUT, () => {
   it('accepts no PE difference when the exceptions list none', async (test) => {
     const released = await output(test, 'win32-x64', tree(signPe(UNSIGNED, winCertificate(derSequence(Buffer.from('certificate'))), 1)))
     const rebuilt = await output(test, 'win32-x64', tree(UNSIGNED))
-    const comparison = await compareOutputs(released, rebuilt, { schema: 'delo.rebuild-exceptions/1', exceptions: [] })
+    const comparison = await compareOutputs(released, rebuilt, { exceptions: { schema: 'delo.rebuild-exceptions/1', exceptions: [] }, toolchain: readRecipe().toolchain })
     expect(comparison.differences.map(item => item.entry)).toEqual([HELPER])
     expect(comparison.accepted).toEqual([])
   })

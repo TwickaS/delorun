@@ -10,23 +10,21 @@
  * `--record`, outside `--release`, with the builder, `ci: false`, the recipe digest, the toolchain pinned at that
  * commit, the digest of every rebuilt file and the comparison's result. Signing reads the record from that path and
  * publishes it as `delorun-<version>.rebuild.json`. It refuses to run with `CI` or `GITHUB_ACTIONS` set, refuses a
- * rebuild that lacks a runtime archive or file list, and exits 1 when the comparison finds a difference, after
+ * rebuild that lacks a runtime archive, a file list or the SBOM, and exits 1 when the comparison finds a difference, after
  * writing the record that says so.
  *
  * @module @delo/release/record-rebuild
  */
-import { writeFile } from 'node:fs/promises'
-import { realpath } from 'node:fs/promises'
+import { realpath, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { RELEASE_SCHEMAS, RUNTIME_PLATFORMS, type RebuildRecord } from '@delo/contract-release-manifest'
+import { RELEASE_SCHEMAS, type RebuildRecord } from '@delo/contract-release-manifest'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { semanticVersion } from './brands.ts'
-import { closureFileNames } from './closure/tree.ts'
 import { comparisonReport } from './compare-rebuild.ts'
 import { compareOutputs } from './rebuild/compare.ts'
-import { ciMarkers, commitOf, isWithin, outputRefs, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE } from './rebuild/record.ts'
+import { ciMarkers, commitOf, isWithin, outputRefs, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs } from './rebuild/record.ts'
 
 async function main(argv: readonly string[]): Promise<number> {
   const { values } = parseArgs({
@@ -59,9 +57,9 @@ async function main(argv: readonly string[]): Promise<number> {
     if (isWithin(await realpath(dirname(path)), release)) throw new Error(`write the rebuild record outside the release directory ${release}`)
     const outputs = await outputRefs(rebuild)
     const names = new Set(outputs.map(output => output.name))
-    const missing = RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform))).filter(name => !names.has(name))
-    if (missing.length > 0) throw new Error(`${rebuild} lacks ${missing.join(', ')}; rebuild every platform's runtime`)
-    const comparison = await compareOutputs(release, rebuild, recipe.exceptions, names)
+    const missing = requiredOutputs(version).filter(name => !names.has(name))
+    if (missing.length > 0) throw new Error(`${rebuild} lacks ${missing.join(', ')}; rebuild every platform's runtime and the SBOM`)
+    const comparison = await compareOutputs(release, rebuild, recipe, names)
     for (const line of comparisonReport(comparison)) console.log(line)
     const record: RebuildRecord = {
       schema: RELEASE_SCHEMAS.rebuild,

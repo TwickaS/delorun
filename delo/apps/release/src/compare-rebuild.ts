@@ -10,7 +10,7 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { readRecipeFile, RebuildExceptions, RECIPE_DIR } from './closure/config.ts'
+import { readRecipeFile, RebuildExceptions, RECIPE_DIR, Toolchain } from './closure/config.ts'
 import { compareOutputs, type Comparison } from './rebuild/compare.ts'
 
 /**
@@ -42,7 +42,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
   let comparison: Comparison
   try {
-    comparison = await compareOutputs(positionals[0]!, positionals[1]!, exceptions)
+    comparison = await compareOutputs(positionals[0]!, positionals[1]!, { exceptions, toolchain: readRecipeFile(Toolchain, join(RECIPE_DIR, 'toolchain.json')) })
   } catch (error) {
     console.error(`compare-rebuild: ${error instanceof Error ? error.message : String(error)}`)
     return 2

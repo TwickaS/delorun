@@ -1,0 +1,4 @@
+# Accepted dependency advisories (contract C2, dependency advisory check). Each entry is reviewed and approved by a
+# maintainer who owns this directory; the release notes list every acceptance a release uses. Fields: advisory,
+# package, range, reason, approver, lapsesAfter. Unknown fields fail the check.
+acceptances: []

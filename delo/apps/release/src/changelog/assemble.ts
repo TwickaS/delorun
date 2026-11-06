@@ -1,7 +1,10 @@
 /**
  * Assembles a release's changelog fragments into the `CHANGELOG.md` block and the release notes, then moves the
  * consumed fragments into `delo/changelog/releases/<version>/`. Run from the repository root:
- * `node_modules/.bin/tsx delo/apps/release/src/changelog/assemble.ts --version <version> [--dry-run] [--first-public-release]`.
+ * `node_modules/.bin/tsx delo/apps/release/src/changelog/assemble.ts --version <version> [--dry-run] [--first-public-release]
+ * [--advisories <delorun-<version>.advisories.json>]`. With `--advisories`, the notes end with every advisory the
+ * release ships with under an acceptance: its id, package, range, reason, approver, the date its entry was committed
+ * and its lapse release.
  * `--dry-run` prints both documents and writes nothing. The command exits 1 with one line per refusal.
  *
  * The "From upstream" section names the upstream release in `delo/upstream-patches.json`, `upstream.ref`, and
@@ -16,6 +19,8 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { readManifest } from '@delo/tools/src/check-fork-boundary.ts'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
+import type { AdvisoryAcceptance } from '@delo/contract-release-manifest'
+import type { AdvisoryReport } from '../advisory/check.ts'
 import { fragmentPaths, parseFragment, SECTIONS, type Fragment, type Section } from './fragment.ts'
 import { versionErrors } from './version.ts'
 
@@ -66,16 +71,52 @@ function sectionLines(heading: string, fragments: readonly Fragment[], upstreamR
   })
 }
 
+/** One advisory the release ships with under an acceptance, as the advisory report records it. */
+export type AcceptedAdvisory = AdvisoryAcceptance & { readonly added: string }
+
+/**
+ * The release notes' section of accepted advisories.
+ * @param accepted - the accepted advisories.
+ * @returns the section's lines, each block followed by one blank line; empty when none is accepted.
+ */
+function advisoryLines(accepted: readonly AcceptedAdvisory[]): string[] {
+  if (accepted.length === 0) return []
+  const lines = ['## Accepted advisories', '', 'This release ships with these dependency advisories under a reviewed acceptance:', '']
+  for (const item of accepted) {
+    lines.push(`- ${item.advisory} in \`${item.package}\` \`${item.range}\`: ${item.reason} Approved by ${item.approver} on ${item.added}; the acceptance lapses after ${item.lapsesAfter}.`)
+  }
+  return [...lines, '']
+}
+
+/**
+ * The accepted advisories of an advisory report, for the notes of the release it checked.
+ * @param text - the report file's text.
+ * @param version - the release being assembled.
+ * @returns each accepted advisory once, by id and package.
+ * @throws Error when the report is for another release or did not pass.
+ */
+export function acceptedAdvisories(text: string, version: string): AcceptedAdvisory[] {
+  const report = JSON.parse(text) as Partial<AdvisoryReport>
+  if (report.schema !== 'delo.release-advisories/1' || report.version !== version) throw new Error(`the advisory report is not the report of release ${version}`)
+  if (report.result !== 'pass') throw new Error('the advisory report did not pass')
+  const accepted = new Map<string, AcceptedAdvisory>()
+  for (const finding of report.findings ?? []) {
+    if (finding.accepted !== undefined) accepted.set(`${finding.accepted.advisory} ${finding.accepted.package}`, finding.accepted)
+  }
+  return [...accepted.values()]
+}
+
 /**
  * Build a release's assembly from its version and fragments.
  * @param version - the release version, already validated.
  * @param upstreamRef - the upstream release the version is based on.
  * @param fragments - the parsed fragments the release consumes.
+ * @param accepted - the advisories the release ships with under an acceptance; the notes list each one.
  * @returns the CHANGELOG block, the notes text and the fragments.
  */
-export function renderAssembly(version: string, upstreamRef: string, fragments: readonly Fragment[]): Assembly {
+export function renderAssembly(version: string, upstreamRef: string, fragments: readonly Fragment[], accepted: readonly AcceptedAdvisory[] = []): Assembly {
   const block = [`## ${version}`, '', ...sectionLines('###', fragments, upstreamRef)].join('\n')
-  const notes = [`# Delo ${version}`, '', ...sectionLines('##', fragments, upstreamRef)].join('\n')
+  const notes = [`# Delo ${version}`, '', ...sectionLines('##', fragments, upstreamRef), ...advisoryLines(accepted)].join('\n')
   return { version, upstreamRef, block: `${block}\n`, notes: `${notes}\n`, fragments }
 }
 
@@ -83,12 +124,12 @@ export function renderAssembly(version: string, upstreamRef: string, fragments: 
  * Assemble a release from a repository's unreleased fragments.
  * @param root - the repository root.
  * @param version - the release version.
- * @param options - `firstPublicRelease` admits `1.0.0`.
+ * @param options - `firstPublicRelease` admits `1.0.0`; `accepted` lists the release's accepted advisories.
  * @returns the assembly; nothing is written.
  * @throws Error listing every refusal, when the version is not accepted, a fragment does not parse, the upstream ledger
  * does not read, or the release already has notes or a changelog block.
  */
-export function assembleRelease(root: string, version: string, options: { readonly firstPublicRelease: boolean }): Assembly {
+export function assembleRelease(root: string, version: string, options: { readonly firstPublicRelease: boolean, readonly accepted?: readonly AcceptedAdvisory[] }): Assembly {
   const errors = versionErrors(version, options.firstPublicRelease)
   const fragments: Fragment[] = []
   for (const path of fragmentPaths(root)) {
@@ -101,7 +142,7 @@ export function assembleRelease(root: string, version: string, options: { readon
   const changelog = existsSync(join(root, CHANGELOG_PATH)) ? readFileSync(join(root, CHANGELOG_PATH), 'utf8') : ''
   if (changelog.split('\n').includes(`## ${version}`)) errors.push(`${CHANGELOG_PATH} already has a \`## ${version}\` block`)
   if (errors.length > 0) throw new Error(errors.join('\n'))
-  return renderAssembly(version, readManifest(root).upstream.ref, fragments)
+  return renderAssembly(version, readManifest(root).upstream.ref, fragments, options.accepted)
 }
 
 /**
@@ -146,6 +187,7 @@ function main(argv: readonly string[]): number {
       version: { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
       'first-public-release': { type: 'boolean', default: false },
+      advisories: { type: 'string' },
     },
     strict: true,
   })
@@ -156,7 +198,8 @@ function main(argv: readonly string[]): number {
   const root = repositoryRoot(process.cwd())
   let assembly: Assembly
   try {
-    assembly = assembleRelease(root, values.version, { firstPublicRelease: values['first-public-release'] })
+    const accepted = values.advisories === undefined ? [] : acceptedAdvisories(readFileSync(values.advisories, 'utf8'), values.version)
+    assembly = assembleRelease(root, values.version, { firstPublicRelease: values['first-public-release'], accepted })
   } catch (error) {
     console.error(`assemble: ${error instanceof Error ? error.message : String(error)}`)
     return 1

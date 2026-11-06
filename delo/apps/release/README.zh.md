@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-`@delo/release` 是 Delo 的发布工具，一个位于 `delo/apps/release` 的私有包。它包含变更片段门禁、发布说明汇总工具、用于构建运行时发行包（runtime closure）的已发布构建配方、签名所需的两次构建的比较，以及发布元数据的签名与验证。[发布 manifest（release manifest）约定](../../docs/contracts/c02-release-manifest.zh.md)（C2）定义了本包所实现的发布文件、可复现范围与签名规则。
+`@delo/release` 是 Delo 的发布工具，一个位于 `delo/apps/release` 的私有包。它包含变更片段门禁、发布说明汇总工具、用于构建运行时发行包（runtime closure）的已发布构建配方、签名所需的两次构建的比较、发布的 SBOM（软件物料清单）、依赖安全公告检查，以及发布元数据的签名与验证。[发布 manifest（release manifest）约定](../../docs/contracts/c02-release-manifest.zh.md)（C2）定义了本包所实现的发布文件、可复现范围与签名规则。
 
 ## 模块
 
@@ -15,6 +15,7 @@
 - `src/archive/` 存放确定性 tar、gzip 与 ZIP 写入器、对应的读取器，以及用于检查归档是否为确定性形式的检查模块。
 - `src/compare-rebuild.ts` 是重建比较的命令；`src/rebuild/` 存放比较逻辑，以及其第一条例外所对应的 PE 规范化。
 - `src/record-rebuild.ts`、`src/sign-release.ts`、`src/sign-root.ts` 与 `src/sign-timestamp.ts` 是签名命令；`src/rebuild/record.ts` 存放重建记录的事实，`src/sign/` 存放签名信封、RFC 8785 序列化（canonical JSON）、各签名文件的读取器、时间戳元数据内容、签名与客户端验证。
+- `src/sbom/` 从运行时归档写入 SPDX SBOM；`src/check-advisories.ts` 与 `src/advisory/` 运行依赖安全公告检查。
 - `tests/` 存放规格。变更片段规格在临时 git 仓库上运行两个入口；归档、运行时发行包与重建规格则在临时目录中构建 fixture（测试前置数据）运行时发行包，并从本地 HTTP 替身提供固定的下载；签名规格用测试中生成的密钥签署 fixture 发布，因此都不需要网络，也不需要真实密钥。
 
 ## 门禁
@@ -40,7 +41,7 @@
 3. 对每个平台，以该平台的 `--os`、`--cpu` 与 `--libc` 对根包运行 `pnpm deploy --prod --ignore-scripts`，采用提升的 `node_modules` 并复制文件；将包链接替换为文件；像上游的可执行构建一样，让每个工作区包在其使用方之间共享；删除 pnpm 的 deploy 元数据以及根包的其他文件；并将 `prebuilt-pins.json` 在 `substitutes` 下列出的每个工作区包替换为其已发布的 tarball，替换前检查该 tarball 的完整性，并检查其版本与所部署源码的版本相等；
 4. 添加 `toolchain.json` 按 SHA-256 固定的分发归档中的 Node 可执行文件，以及按完整性固定的 tarball 中的 pnpm；两者各下载一次到缓存（默认为 `~/.cache/delo-release`），且仅在字节匹配时才被使用；
 5. 将 `node/` 之外的每个 ELF、Mach-O 与 PE 文件与 `prebuilt-pins.json` 中该平台的 `files` 条目核对：未列出的文件、摘要改变，或已列出却缺失的文件，都会使构建中止；
-6. 将 `delorun-<version>-<platform>.tar.gz`（`win32-x64` 为 `.zip`）及其未签名的运行时文件列表 `delorun-<version>-<platform>.files.json` 写入 `--out`，且从不替换已有文件。
+6. 将 `delorun-<version>-<platform>.tar.gz`（`win32-x64` 为 `.zip`）及其未签名的运行时文件列表 `delorun-<version>-<platform>.files.json` 写入 `--out`，且从不替换已有文件；在构建完每个平台之后，它还把 SBOM `delorun-<version>.spdx.json` 写入同一目录。
 
 `--write-pins` 将已构建平台的原生文件记录到 `prebuilt-pins.json` 中，而不做核对；所记录的变更与对配方的任何其他变更一样需要评审。
 
@@ -60,10 +61,20 @@
 `node_modules/.bin/tsx delo/apps/release/src/compare-rebuild.ts <first> <second>` 比较同一发布的两个输出目录，例如发布工作流的重建与目标密钥持有者的重建。当两者的文件名相同且每个文件都匹配时，它以 0 退出，并输出被 `rebuild-exceptions.json` 中某条目接受的每项差异及该条目的 id。出现任何其他差异时，它以 1 退出，并逐项输出这些差异；签名会拒绝这样的重建。用法错误、目录不可读，或例外文件未通过校验时，它以 2 退出。
 
 - 运行时归档在以下条件同时满足时匹配：两份副本都为确定性形式（重新编码其条目可复现归档的字节），包含相同路径且模式与 mtime 相同，并且每个条目的字节相同，或其差异被某个例外接受。
-- 运行时文件列表在每份副本都等于由其自身归档推导出的列表时匹配。
+- 运行时文件列表在每份副本都等于由其自身归档推导出的列表，且 SBOM 在每份副本都等于由同目录中归档推导出的 SBOM 时匹配。
 - 其他文件在字节完全相同时匹配。
 
 `rebuild-exceptions.json` 列出每项被接受的差异，包括其 id、所适用的比较（`pe` 为唯一一种）及其理由；出现未知字段时校验失败。其第一条为 `pe-authenticode`，仅适用于 Windows 归档：它在比较 PE 文件时去掉 Authenticode 证书表、安全数据目录项与头部校验和，并以零补齐至 8 字节，因为发布工作流会对 Windows 运行时发行包中的 PE 文件签名，而工作流之外的重建无法签名。证书表必须由修订版本 2.0、类型为 PKCS #7 SignedData 的 `WIN_CERTIFICATE` 条目组成，并一直填充到文件末尾；每个条目只含一个 DER SEQUENCE，其后至多跟随少于 8 个零字节，条目之间补齐到 8 字节的填充也只能是零字节；其他任何追加或隐藏的字节都算作差异。
+
+## SBOM
+
+`delorun-<version>.spdx.json` 是一份 SPDX 2.3 JSON 文档，仅由运行时归档与 `toolchain.json` 推导而来：每个归档对应一个包并附其 SHA-256；固定的 Node 与 pnpm 各对应一个包；在某个归档中以 `node_modules/<name>/package.json` 形式找到的每个已安装 npm 包版本，各对应一个包，并附其 `pkg:npm` purl、其声明的许可证（当它是许可证表达式时），以及运行时发行包锁文件为其记录的 SHA-512。`created` 取归档的 `SOURCE_DATE_EPOCH`，因此相同的归档总是得到相同的文档。它尚未描述 S2 与 S3 镜像。
+
+## 依赖安全公告检查
+
+`node_modules/.bin/tsx delo/apps/release/src/check-advisories.ts --version <version> --release <dir> [--commit <rev>] [--feed <url>]` 读取 `--release` 中每个运行时归档的 `app/pnpm-lock.yaml`，把每个来自注册表的锁定包版本（本地的 `file:` 与 `link:` 包是发布自身的源码，不在其列）发送给 npm 的批量安全公告 API `https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`，并写入 `delorun-<version>.advisories.json`。当锁定版本满足某条安全公告的受影响版本范围时，该安全公告影响此锁定版本。只有当每条影响锁定版本的安全公告，在 `--commit`（省略时为 `HEAD`；发布工作流中为该发布的标签，签名时为该发布的提交）处提交的 [`delo/release/advisory-acceptances.yaml`](../../release/advisory-acceptances.yaml) 中都有一条安全公告接受记录，且该记录的安全公告与包相同、其范围为锁定版本所满足、其 `lapsesAfter` 不低于本次发布的版本时，检查才通过。出现以下任一情况时检查失败，它以 1 退出：存在其他影响锁定版本的安全公告；某条安全公告接受记录已失效；安全公告接受记录文件含未知字段或重复键；或公告源无法访问、返回格式错误的响应。
+
+报告包含 `schema`（`delo.release-advisories/1`）、`version`、`feed`、`packages`（已检查的锁定版本数）、`findings`（每条受影响的安全公告，附其包、版本、严重级别、标题与受影响版本范围，以及覆盖它的安全公告接受记录与添加该条目的提交的日期，或该接受记录已失效的原因）、`result`（`pass` 或 `fail`）与 `problems`。`assemble.ts --advisories <report>` 会在发布说明中加入「Accepted advisories」一节，逐条列出每个已接受的安全公告及其包、范围、原因、批准者、日期与失效版本，并拒绝另一次发布的报告，或失败的报告。
 
 ## 签名
 
@@ -71,10 +82,10 @@
 
 1. 将草稿发布中发布工作流的文件（包括其 `manifest-draft.json`）下载到某个目录中，例如 `release/`。
 2. 在仓库中检出该标签，用同一配方构建它，并为输出生成证明：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`。
-3. 记录重建：`node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --builder <name> --compared-with <workflow run URL>`。它依据该标签处提交的 `rebuild-exceptions.json`，将每个重建文件与发布工作流中同名的文件比较，将记录写入 `release/` 之外的 `--record`，并在比较发现差异时以 1 退出。设置了 `CI` 或 `GITHUB_ACTIONS` 时，它拒绝运行；重建缺少任一平台的归档或文件列表时，它也拒绝。
+3. 记录重建：`node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --builder <name> --compared-with <workflow run URL>`。它依据该标签处提交的 `rebuild-exceptions.json`，将每个重建文件与发布工作流中同名的文件比较，将记录写入 `release/` 之外的 `--record`，并在比较发现差异时以 1 退出。设置了 `CI` 或 `GITHUB_ACTIONS` 时，它拒绝运行；重建缺少任一平台的归档或文件列表或 SBOM 时，它也拒绝。
 4. 签名：`node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --attestation rebuild.attestation.json --attestation-key ~/.config/delo/rebuild-attestation.key --key <targets.pem>`。
 
-`sign-release.ts` 会拒绝运行，并给出一条写明所需来源的消息，即 "a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe"。出现以下任一情况时，它都会拒绝：重建记录缺失或无法读取；`release/` 中已有 `delorun-<version>.rebuild.json`，或 `--record` 或 `--rebuild` 位于 `release/` 之中；记录写明 `ci: true` 或报告了差异；设置了 `CI` 或 `GITHUB_ACTIONS`；`--rebuild` 不是本机上的目录、其文件无法复现记录中的摘要，或缺少任一平台的运行时归档或文件列表；记录的提交不是标签所指的提交，或记录中的配方摘要或工具链（Node.js、pnpm、编译器与链接器）与该提交的配方不一致；证明缺失、位于 `release/` 或 `rebuild/` 之中，或无法用证明密钥对版本、提交以及 `rebuild/` 中的每个文件验证通过；或将发布工作流的文件与重建再次比较时发现差异。它还拒绝这样的草稿：其运行时条目不是对应平台自身的 `delorun-<version>-<platform>.tar.gz`（`win32-x64` 为 `.zip`）与 `delorun-<version>-<platform>.files.json`，或其文件未以草稿所列的长度与摘要出现在发布目录中。所有检查通过后，它会先以临时文件名在 `release/` 中写入每个已签名的运行时文件列表、以 `delorun-<version>.rebuild.json` 为名的记录，以及 `delorun-<version>.manifest.json`（该 manifest 的 `rebuild` 字段写明记录与持有者，并标注 `ci: false`），再将它们重命名到位，manifest 最后重命名；重命名之前的任何失败都不会改动 `release/`。
+`sign-release.ts` 会拒绝运行，并给出一条写明所需来源的消息，即 "a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe"。出现以下任一情况时，它都会拒绝：重建记录缺失或无法读取；`release/` 中已有 `delorun-<version>.rebuild.json`，或 `--record` 或 `--rebuild` 位于 `release/` 之中；记录写明 `ci: true` 或报告了差异；设置了 `CI` 或 `GITHUB_ACTIONS`；`--rebuild` 不是本机上的目录、其文件无法复现记录中的摘要，或缺少任一平台的运行时归档或文件列表或 SBOM；记录的提交不是标签所指的提交，或记录中的配方摘要或工具链（Node.js、pnpm、编译器与链接器）与该提交的配方不一致；证明缺失、位于 `release/` 或 `rebuild/` 之中，或无法用证明密钥对版本、提交以及 `rebuild/` 中的每个文件验证通过；或将发布工作流的文件与重建再次比较时发现差异。它还会依据该发布提交处已提交的接受记录，针对 npm 的公告源再次运行依赖安全公告检查，并在检查失败，或其接受的安全公告与草稿的 `advisories.accepted` 不同时拒绝。它还拒绝这样的草稿：其 SBOM 不是 `delorun-<version>.spdx.json`，其运行时条目不是对应平台自身的 `delorun-<version>-<platform>.tar.gz`（`win32-x64` 为 `.zip`）与 `delorun-<version>-<platform>.files.json`，或其文件未以草稿所列的长度与摘要出现在发布目录中。所有检查通过后，它会先以临时文件名在 `release/` 中写入每个已签名的运行时文件列表、以 `delorun-<version>.rebuild.json` 为名的记录，以及 `delorun-<version>.manifest.json`（该 manifest 的 `rebuild` 字段写明记录与持有者，并标注 `ci: false`），再将它们重命名到位，manifest 最后重命名；重命名之前的任何失败都不会改动 `release/`。
 
 ### targets 密钥
 

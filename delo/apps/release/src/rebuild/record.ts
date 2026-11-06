@@ -9,11 +9,13 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { lstat, readdir } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
-import type { FileRef, RebuildRecord, Sha256Hex } from '@delo/contract-release-manifest'
+import { RUNTIME_PLATFORMS, type FileRef, type RebuildRecord, type Sha256Hex } from '@delo/contract-release-manifest'
 import { compareEntryPaths } from '../archive/entry.ts'
 import { fileDigest } from '../archive/sink.ts'
 import { sha256Hex } from '../brands.ts'
 import { parseRecipeText, RebuildExceptions, Toolchain } from '../closure/config.ts'
+import { closureFileNames } from '../closure/tree.ts'
+import { sbomName } from '../sbom/release-sbom.ts'
 
 /** The source signing requires, named in every refusal of contract C2's rebuild rule. */
 export const REQUIRED_SOURCE = 'a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe'
@@ -77,6 +79,16 @@ export function recipeAt(repository: string, commit: string): CommittedRecipe {
  */
 export function recordToolchain(toolchain: Toolchain): RebuildRecord['toolchain'] {
   return { node: toolchain.node.version, pnpm: toolchain.pnpm.version, compiler: toolchain.native.compiler, linker: toolchain.native.linker }
+}
+
+/**
+ * The files every rebuild and every comparison must cover: each platform's runtime archive and file list, and the
+ * release SBOM.
+ * @param version - the release.
+ * @returns their names.
+ */
+export function requiredOutputs(version: string): string[] {
+  return [...RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform))), sbomName(version)]
 }
 
 /**

@@ -46,7 +46,8 @@ export interface ArchiveSummary {
   readonly problem?: string
 }
 
-interface RawEntry {
+/** One entry as an archive holds it. */
+export interface RawEntry {
   readonly path: string
   readonly mode: number
   readonly mtime: number
@@ -54,7 +55,13 @@ interface RawEntry {
   readonly data: Buffer
 }
 
-async function* rawEntries(path: string, format: ArchiveFormat): AsyncGenerator<RawEntry> {
+/**
+ * Read an archive's entries with their bytes, in archive order, refusing anything but regular files.
+ * @param path - the archive file.
+ * @param format - its format.
+ * @returns each entry's path, mode bits, mtime, whether its owner fields are empty and 0, and its bytes.
+ */
+export async function* archiveEntries(path: string, format: ArchiveFormat): AsyncGenerator<RawEntry> {
   if (format === 'zip') {
     for await (const entry of readZip(path, MAX_ARCHIVE_BYTES)) yield { ...entry, owner: true }
     return
@@ -87,7 +94,7 @@ export async function inspectArchive(path: string, format: ArchiveFormat): Promi
   const entries: EntrySummary[] = []
   let mtime: number | undefined
   let problem: string | undefined
-  const source = rawEntries(path, format)
+  const source = archiveEntries(path, format)
   async function* checked(first: RawEntry): AsyncGenerator<ArchiveEntry> {
     for (let entry: RawEntry | undefined = first; entry !== undefined;) {
       const mode = runtimeMode(entry.mode)

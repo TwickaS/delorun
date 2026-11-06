@@ -3,7 +3,8 @@
  * rebuild (contract C2, rebuild before signing). Two outputs match when they hold the same file names and every file
  * is byte-identical, except where an entry of the committed `rebuild-exceptions.json` accepts a difference. Runtime
  * archives are compared entry by entry, after checking that each is in the deterministic form; a runtime file list
- * must equal the list derived from its own archive, so its differences are exactly its archive's.
+ * and the SBOM must each equal the file derived from the archives beside it, so their differences are exactly the
+ * archives'.
  *
  * @module @delo/release/rebuild/compare
  */
@@ -13,7 +14,8 @@ import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delo/contract-release-
 import { compareEntryPaths, type ArchiveFormat } from '../archive/entry.ts'
 import { inspectArchive, type ArchiveSummary } from '../archive/inspect.ts'
 import { fileDigest } from '../archive/sink.ts'
-import type { RebuildExceptions } from '../closure/config.ts'
+import type { RebuildExceptions, Toolchain } from '../closure/config.ts'
+import { deriveSbomText } from '../sbom/release-sbom.ts'
 import { closureFileNames, runtimeFileList, unsignedEnvelopeText } from '../closure/tree.ts'
 
 /** One difference that no exception accepts. */
@@ -133,12 +135,13 @@ async function fileListMatches(directory: string, name: string, parsed: ClosureN
  * Compare two output directories.
  * @param first - one output directory.
  * @param second - the other output directory.
- * @param exceptions - the committed rebuild exceptions.
+ * @param recipe - the committed rebuild exceptions and the pinned toolchain, which the SBOM names.
  * @param only - when given, the file names to compare; other files in either directory are not compared, and a
  * named file missing from either directory is a difference.
  * @returns every difference and every accepted difference.
  */
-export async function compareOutputs(first: string, second: string, exceptions: RebuildExceptions, only?: ReadonlySet<string>): Promise<Comparison> {
+export async function compareOutputs(first: string, second: string, recipe: { readonly exceptions: RebuildExceptions, readonly toolchain: Toolchain }, only?: ReadonlySet<string>): Promise<Comparison> {
+  const { exceptions } = recipe
   const differences: Difference[] = []
   const accepted: AcceptedDifference[] = []
   const firstNames = await regularFiles(first, 'first', differences, only)
@@ -154,7 +157,9 @@ export async function compareOutputs(first: string, second: string, exceptions: 
     const parsed = closureName(name)
     if (parsed?.kind === 'archive') {
       const format: ArchiveFormat = parsed.platform === 'win32-x64' ? 'zip' : 'tar.gz'
-      const pair: [ArchiveSummary, ArchiveSummary] = [await inspectArchive(join(first, name), format), await inspectArchive(join(second, name), format)]
+      const identical = (await fileDigest(join(first, name))).sha256 === (await fileDigest(join(second, name))).sha256
+      const one = await inspectArchive(join(first, name), format)
+      const pair: [ArchiveSummary, ArchiveSummary] = [one, identical ? one : await inspectArchive(join(second, name), format)]
       summaries.set(name, pair)
       compareArchives(name, pair[0], pair[1], exceptions, differences, accepted)
     }
@@ -167,6 +172,15 @@ export async function compareOutputs(first: string, second: string, exceptions: 
       const pair = summaries.get(closureFileNames(parsed.version, parsed.platform).archive)
       for (const [index, directory] of [first, second].entries()) {
         const problem = await fileListMatches(directory, name, parsed, pair?.[index])
+        if (problem !== undefined) differences.push({ file: name, detail: `${index === 0 ? 'first' : 'second'}: ${problem}` })
+      }
+      continue
+    }
+    const sbom = /^delorun-(.+)\.spdx\.json$/u.exec(name)
+    if (sbom !== null) {
+      for (const [index, directory] of [first, second].entries()) {
+        const expected = await deriveSbomText(directory, sbom[1]!, recipe.toolchain)
+        const problem = expected === undefined ? 'its output lacks a platform archive the SBOM covers' : (await readFile(join(directory, name), 'utf8')) === expected ? undefined : 'it does not equal the SBOM derived from its archives'
         if (problem !== undefined) differences.push({ file: name, detail: `${index === 0 ? 'first' : 'second'}: ${problem}` })
       }
       continue
