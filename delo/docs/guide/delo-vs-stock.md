@@ -51,7 +51,7 @@ Delo's contract requires these rules everywhere:
 | Setup | First-run dialogs | A setup screen for your model provider and key, native or Docker workspaces, Delo's studio additions, and reach; `delorun setup --yes` for scripts |
 | Studio | DSH studio | Delo's theme, chat list with chat states (snooze and settle), main chat, settings layout and thinking view, or the stock look in one switch |
 | Updates | Incompatible plugins may be disabled at startup | A report of what would break before updating, a snapshot before it applies, a health check after, and rollback on every channel |
-| Your own changes | Profile layers | Profile layers plus profile history with undo, safe mode, plugin eject, and presets, skills, themes and Creator changes that survive updates |
+| Your own changes | Profile layers | The first release offers profile layers plus profile history with undo, safe mode, plugin eject, and presets, skills, themes and Creator changes that survive updates |
 | Isolation | Native, with the OS sandbox confining file writes | Native, with Delo's contract requiring the same sandbox to also keep commands from reading Delo's secrets or tokens, or connecting to its control sockets and the Docker socket, where your system can enforce it, which `delorun verify` reports; or Docker, with Delo's contract requiring either each workspace in its own container on Linux, or one shared container that isolates your computer but not projects from each other, with the limits that machine enforces listed in setup |
 | Permissions | One default for every workspace | Delo's contract requires that a new workspace start on stock's `workspace-write`, that full access ask once per workspace, and that a scheduled task name the session and preset it will run under before you approve it |
 | Web fetch | Reaches loopback and private-network hosts in every mode without asking | Delo's contract requires `web_fetch` to refuse loopback, link-local and private-network targets, cloud metadata addresses included, unless you turn the guard off. The guard covers the `web_fetch` tool; commands, and a proxy or remote fetch provider you configure, are outside it. |
@@ -60,7 +60,7 @@ Delo's contract requires these rules everywhere:
 | Logs | Process output in the terminal or the desktop console | Delo's contract requires operational logs per part of Delo, rotated, with secrets redacted, and `delorun logs` to find them |
 | Data sharing | Desktop analytics on | Delo has no telemetry of its own; Delo's contract requires DSH's desktop analytics and DeepSeek session-log upload to stay available but off unless you turn them on |
 | Plugins | Bring your own index | Delo's contract requires a community catalogue with "tested with Delo X" badges and revocation of known-bad versions; findings an author or reviewer lists are shown as their claims |
-| Diagnostics | — | `delorun doctor` checks your setup; `preset_inspect` shows what a preset composes |
+| Diagnostics | — | The first release's `delorun doctor` checks your setup; `preset_inspect` shows what a preset composes |
 | Workspaces | Local folders | Local folders, import by `git clone`, `AGENTS.md` editing, trash and export files |
 | Releases | DSH's signing | Delo's contract requires signed releases with an SBOM and a public log entry, matching a rebuild from the tagged source; npm releases carry a build attestation |
 | Documentation | DSH's docs | [docs.delorun.com](https://docs.delorun.com) in English and Chinese, each page also as Markdown with an `llms.txt` index for coding agents |
@@ -77,10 +77,10 @@ The first release changes a few of DSH's defaults on purpose, and the [parity ch
 - The first release's `web_fetch` refuses loopback, link-local and private-network targets.
 - The first release's commands cannot read Delo's secrets or reach its control sockets, where your system enforces it; `delorun verify` reports which.
 - The first release asks your consent before a scheduled task is created or edited, before a model-authored write to an instruction-layer file, and when an MCP server is added, naming the command it will run.
-- A container's denial of a file access carries an environment marker, and no escalation is offered for it.
+- The first release gives a container's denial of a file access an environment marker and offers no escalation for it.
 - The first release's main chat write tools always ask before they run.
-- The `plugin_manager` read actions run without the full-access escalation, and a switch turns that exemption off.
-- Delo adds one tool the model can see, `preset_inspect`, which is switchable in configuration. The doctor is a command you run, and no model sees it.
+- The first release runs the plugin manager's read actions without escalation.
+- The first release adds `preset_inspect` by default, which is switchable in configuration. The doctor is a command you run, and no model sees it.
 
 ## What Delo removes
 

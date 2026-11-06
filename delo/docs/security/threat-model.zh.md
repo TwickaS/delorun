@@ -40,10 +40,10 @@ Delo 的约定要求 Delo 在任何路径上都不比 stock DSH 更不安全，�
 | 指令层文件 | 模型对 skill、预设或 `AGENTS.md` 的写入，即使需要批准，也只作为文件写入批准 | Delo 的约定要求批准写明其效果，即该文本会作为指令加载到其范围内今后的每个 chat，并显示差异 | 更安全 |
 | MCP 服务器 | 每个服务器命令都作为可信代码在 agent（智能体）沙箱之外运行 | Delo 的约定要求添加服务器时在写明命令及其参数的界面上请求同意 | 更安全 |
 | 数据共享 | 桌面分析与 DeepSeek 会话日志上传默认开启 | Delo 的约定要求两者在本人开启之前都关闭；Delo 没有自己的遥测 | 更安全 |
-| 容器拒绝 | 没有 Docker 工作区 | 被容器只读根文件系统拒绝的文件操作带有标记，且没有提权提示 | 只适用于 Docker 工作区 |
+| 容器拒绝 | 没有 Docker 工作区 | 首个发布版本为被容器只读根文件系统拒绝的文件操作附加标记，且不附加提权提示 | 只适用于 Docker 工作区 |
 | studio 附加功能 | stock 外观，没有主 chat | 默认开启，包括主 chat；其中写入另一个工作区的指令、导入工作区或恢复工作区的工具每次都会询问，这是 Delo 的约定要求的 | 新增工具，每个持久效果都会询问 |
-| `plugin_manager` 的读取操作 | 每个操作都需要 `danger-full-access` 提权 | `list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 与 `read_config` 无需提权即可运行；`read_config` 遮盖密钥字段，并扣留非原生 schema 的 Config 的值；每个写入操作仍需提权 | 唯一一个去掉提权的默认值：范围窄、可关闭，并在对等组合中关闭 |
-| 入门模式与模型可见工具 | Standard 模式；没有 `preset_inspect` | 首个发布版本预选 PTC；增加 `preset_inspect`，可关闭；doctor 是命令，没有模型能看到它 | 不改变批准或限制 |
+| `plugin_manager` 的读取操作 | 每个操作都需要 `danger-full-access` 提权 | 首个发布版本无需提权即可运行插件管理器的读取操作：`list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 与 `read_config`；`read_config` 遮盖密钥字段，并扣留非原生 schema 的 Config 的值；每个写入操作仍需提权 | 首个发布版本唯一去掉提权的默认值：范围窄、可关闭 |
+| 入门模式与模型可见工具 | Standard 模式；没有 `preset_inspect` | 首个发布版本预选 PTC；首个发布版本默认增加 `preset_inspect`，且可关闭；doctor 是命令，没有模型能看到它 | 不改变批准或限制 |
 | home 目录 | `~/.dsh` | Delo 的约定要求 `~/.delo` 权限模式为 0700，且从不读取或写入 `~/.dsh` | 分开两个 home |
 
 <a id="assets"></a>
