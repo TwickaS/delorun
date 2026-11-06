@@ -1,7 +1,7 @@
 /**
- * The GitHub CLI calls that the issue generator makes: the maintainer check, the listing of issue titles, issue creation
- * and locking, and label creation. Each call runs `gh` with explicit arguments and throws with the command and its
- * error text when `gh` cannot run or exits nonzero, so a failed write stops the run.
+ * The GitHub CLI calls that the issue generator makes: the maintainer check, the listing of issues, issue creation,
+ * locking, the lock state of one issue, and label creation. Each call runs `gh` with explicit arguments and throws with
+ * the command and its error text when `gh` cannot run or exits nonzero, so a failed write stops the run.
  *
  * @module @delo/tools/issues/gh
  */
@@ -12,8 +12,19 @@ import type { LabelDefinition } from './labels.ts'
 /** The output buffer for one `gh` call. */
 const MAX_BUFFER = 64 * 1024 * 1024
 
-/** How many issues the title check reads. A listing that reaches this count could hide a duplicate, so it is refused. */
-export const TITLE_LIMIT = 1000
+/**
+ * How many issues the listing reads. A listing that reaches this count could hide an issue that carries a brief's
+ * title, so the run refuses it.
+ */
+export const LISTING_LIMIT = 1000
+
+/** One issue as the listing reports it. */
+export interface IssueSummary {
+  /** The issue number. */
+  readonly number: number
+  /** The issue title. */
+  readonly title: string
+}
 
 /**
  * Run `gh` and return its standard output.
@@ -45,19 +56,30 @@ export function maintainerRefusal(repository: string): string | undefined {
 }
 
 /**
- * The titles of the repository's issues in every state, each with its number.
+ * The repository's issues in every state, with their numbers and titles.
  * @param repository - the repository as `owner/name`.
- * @returns a map from each issue title to its number.
- * @throws Error when the listing reaches TITLE_LIMIT issues, because the title check could then miss a duplicate.
+ * @returns the issues that the listing reports.
+ * @throws Error when the listing reaches LISTING_LIMIT issues, because it could then hide an issue with a brief's title.
  */
-export function issueTitles(repository: string): Map<string, number> {
+export function issueListing(repository: string): IssueSummary[] {
   const issues = z.array(z.object({ number: z.number().int(), title: z.string() })).parse(JSON.parse(gh([
-    'issue', 'list', '--repo', repository, '--state', 'all', '--limit', String(TITLE_LIMIT), '--json', 'number,title',
+    'issue', 'list', '--repo', repository, '--state', 'all', '--limit', String(LISTING_LIMIT), '--json', 'number,title',
   ])))
-  if (issues.length >= TITLE_LIMIT) {
-    throw new Error(`${repository} has at least ${String(TITLE_LIMIT)} issues; the title check reads only that many`)
+  if (issues.length >= LISTING_LIMIT) {
+    throw new Error(`${repository} has at least ${String(LISTING_LIMIT)} issues; the title check reads only that many`)
   }
-  return new Map(issues.map(issue => [issue.title, issue.number]))
+  return issues
+}
+
+/**
+ * Whether an issue's conversation is locked.
+ * @param repository - the repository as `owner/name`.
+ * @param number - the issue number.
+ * @returns true when the issue is locked.
+ * @throws Error when `gh` fails, or the reply has no `locked` flag.
+ */
+export function issueLocked(repository: string, number: number): boolean {
+  return z.object({ locked: z.boolean() }).parse(JSON.parse(gh(['api', `repos/${repository}/issues/${String(number)}`]))).locked
 }
 
 /** The fields that an issue is created with. */

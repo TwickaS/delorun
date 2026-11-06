@@ -64,7 +64,7 @@ body:
     id: you-own
     attributes:
       label: You own
-      description: The paths the package changes. It changes nothing else; if it must, it stops and reports.
+      description: "The paths the package changes, as tracked files, or as new files and directories under a tracked directory. It changes nothing else; if it must, it stops and reports."
     validations:
       required: true
   - type: textarea

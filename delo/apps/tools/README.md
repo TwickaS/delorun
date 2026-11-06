@@ -109,7 +109,7 @@ The issue form [`brief.yml`](../../../.github/ISSUE_TEMPLATE/brief.yml) asks for
 Run the tool from the repository root in one of three modes:
 
 - `--input <briefs.json> --dry-run` validates the briefs and prints each issue body.
-- `--input <briefs.json> --create --repo <owner/name>` validates the briefs, checks that `gh` is signed in as a maintainer of the repository, skips each brief whose title an issue already has, and creates and locks the others.
+- `--input <briefs.json> --create --repo <owner/name>` validates the briefs and checks that `gh` is signed in as a maintainer of the repository. Then, for each brief, it creates the issue and locks it, or, when an issue with the same title exists, locks that issue if it is unlocked and skips it if it is locked.
 - `--sync-labels --repo <owner/name>` creates or updates each label in `labels.yml` with `gh label create --force`.
 
 ```sh
@@ -122,19 +122,22 @@ A brief has a problem when:
 - a field is missing, blank or unknown, or the file is not a non-empty JSON array of briefs;
 - `Model` is not one of Haiku at medium, high or max effort, or Opus at medium or high effort, so Opus at max effort is refused;
 - a link is neither an `https://` URL on github.com/Delo-Run/delo or docs.delorun.com nor a relative path that the repository tracks;
-- a backticked path, whose first segment is a top-level directory of the repository, names no tracked file or directory;
+- a backticked path, whose first segment is a top-level directory of the repository, names no tracked file or directory, except in `You own`, where a new file or directory is allowed when its nearest existing parent directory is tracked;
 - the text names `delo/docs/plans/`, the private plan directory, or a machine path such as one that starts with `/home/`, `/Users/` or `~/`;
 - a label is not defined in `labels.yml`, the labels omit `brief`, or the brief carries a `kind/*` label, which belongs to pull requests;
-- a field adds a Markdown heading to the body, or two briefs share a title.
+- a field adds a Markdown heading to the body, two briefs share a title, or two issues already share a brief's title.
 
-Paths are checked against `git ls-files`, so a file must be in the index before a brief names it.
+Paths are checked against `git ls-files`, so a file must be in the index before a brief names it outside `You own`.
+A new path in `You own` is refused when its nearest existing parent directory in the working tree is not tracked.
+The rendered body links each tracked path to its place on branch `v5` of the public repository: a file to its `blob` and a directory to its `tree`.
+Links that the brief already carries are rewritten the same way.
+Code spans that hold a command, and fenced code blocks, stay as written.
 Create the labels and the milestone in the repository before `--create`, because `gh issue create` fails on a label or milestone that the repository does not define.
 
 Known limits:
 
 - `gh` 2.45 has no flag for the native Issue Type, so an issue that `--create` makes carries no Issue Type.
-- A relative link does not resolve inside an issue body, so the body keeps the link as written.
-- A run that stops between creating an issue and locking it leaves that issue unlocked. The next run skips the title, so lock the issue by hand.
+- Links point at branch `v5`, so a path that exists only on the brief's own branch resolves after that branch merges.
 - The title check reads at most 1000 issues and refuses a listing that reaches that count.
 
 The specs in `tests/issues/` run the tool in scratch repositories with a fake `gh` first on `PATH`, and no spec reaches GitHub.

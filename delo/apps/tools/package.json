@@ -12,6 +12,10 @@
     "@secretlint/node": "13.0.7",
     "@secretlint/secretlint-rule-pattern": "13.0.7",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
+    "js-yaml": "^4.3.2",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
   }
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { referenceContext, referenceErrors, urlProblem } from '../../src/issues/references.ts'
+import { LINK_BRANCH, linkReferences, referenceContext, referenceErrors, urlProblem } from '../../src/issues/references.ts'
+
+/** The directories that exist in the working tree without tracked files. */
+const UNTRACKED_DIRECTORIES: ReadonlySet<string> = new Set(['scratch'])
 
 const context = referenceContext([
   'AGENTS.md',
@@ -8,7 +11,9 @@ const context = referenceContext([
   'delo/apps/tools/src/checks/gates/doc-times.ts',
   'delo/docs/plans/private-plan.md',
   'packages/example/index.ts',
-])
+], directory => UNTRACKED_DIRECTORIES.has(directory))
+
+const OWNED = { ownedPaths: true }
 
 describe('public URLs', () => {
   it('accepts https URLs on the public repository and the documentation host', () => {
@@ -106,6 +111,48 @@ describe('backticked paths', () => {
   })
 })
 
+describe('new paths in the owned-paths field', () => {
+  it('accepts a new file or directory whose nearest existing parent directory is tracked', () => {
+    expect(referenceErrors('`delo/apps/tools/src/issues/new-module.ts`', context, OWNED)).toEqual([])
+    expect(referenceErrors('`delo/apps/tools/src/issues/next/deeper.ts`', context, OWNED)).toEqual([])
+    expect(referenceErrors('`packages/new-package/`', context, OWNED)).toEqual([])
+  })
+
+  it('refuses a new path under a parent directory that exists in the working tree without tracked files', () => {
+    expect(referenceErrors('`scratch/notes/a.ts`', context, OWNED)).toEqual([
+      '"scratch/notes/a.ts" is new, and no tracked directory is its nearest existing parent',
+    ])
+    expect(referenceErrors('`scratch/`', context, OWNED)).toEqual([
+      '"scratch/" exists in the working tree but holds no tracked file',
+    ])
+  })
+
+  it('refuses a new path under a new top-level directory', () => {
+    expect(referenceErrors('`newroot/a.ts`', context, OWNED)).toEqual([
+      '"newroot/a.ts" is new, and no tracked directory is its nearest existing parent',
+    ])
+  })
+
+  it('keeps refusing a new path in every other field', () => {
+    expect(referenceErrors('`delo/apps/tools/src/issues/new-module.ts`', context)).toEqual([
+      '"delo/apps/tools/src/issues/new-module.ts" is not a tracked file or directory',
+    ])
+  })
+
+  it('keeps refusing the private plan directory, absolute paths and untracked link targets in the owned-paths field', () => {
+    expect(referenceErrors('`delo/docs/plans/x.md`', context, OWNED)).toEqual([
+      'names delo/docs/plans, a private plan page that no brief links',
+      '"delo/docs/plans/x.md" names delo/docs/plans, a private plan page',
+    ])
+    expect(referenceErrors('`/home/owner/x.ts`', context, OWNED)).toEqual([
+      '"/home/owner/x.ts" is an absolute or home path; a brief names repository paths only',
+    ])
+    expect(referenceErrors('[x](delo/apps/tools/src/issues/new-module.ts)', context, OWNED)).toEqual([
+      'link "delo/apps/tools/src/issues/new-module.ts" is not a tracked file or directory',
+    ])
+  })
+})
+
 describe('machine paths', () => {
   it('refuses an absolute or home path in code and a home path in plain text', () => {
     expect(referenceErrors('`/home/owner/worktree`', context)).toEqual([
@@ -124,5 +171,46 @@ describe('machine paths', () => {
 
   it('leaves plain slash-separated words alone', () => {
     expect(referenceErrors('Use and/or here, and v5/main as a label.', context)).toEqual([])
+  })
+})
+
+describe('linking a rendered brief', () => {
+  it('links a tracked file to its blob and a tracked directory to its tree on the v5 branch', () => {
+    expect(LINK_BRANCH).toBe('v5')
+    expect(linkReferences('See `AGENTS.md` and `delo/apps/tools/src/issues/`.', context)).toBe(
+      'See [`AGENTS.md`](https://github.com/Delo-Run/delo/blob/v5/AGENTS.md) and [`delo/apps/tools/src/issues/`](https://github.com/Delo-Run/delo/tree/v5/delo/apps/tools/src/issues).',
+    )
+  })
+
+  it('links a code span of a tracked path with a leading ./ to the path without it', () => {
+    expect(linkReferences('`./AGENTS.md`', context)).toBe('[`./AGENTS.md`](https://github.com/Delo-Run/delo/blob/v5/AGENTS.md)')
+  })
+
+  it('rewrites a relative link target and keeps its fragment, and does the same for reference definitions and attributes', () => {
+    expect(linkReferences('[brief](delo/apps/tools/src/issues/brief.ts#L1)', context)).toBe(
+      '[brief](https://github.com/Delo-Run/delo/blob/v5/delo/apps/tools/src/issues/brief.ts#L1)',
+    )
+    expect(linkReferences('[ref]: AGENTS.md', context)).toBe('[ref]: https://github.com/Delo-Run/delo/blob/v5/AGENTS.md')
+    expect(linkReferences('<img src="delo/docs/contracts/">', context)).toBe(
+      '<img src="https://github.com/Delo-Run/delo/tree/v5/delo/docs/contracts">',
+    )
+  })
+
+  it('rewrites the target of a link whose label holds a code span, without wrapping the label again', () => {
+    expect(linkReferences('[`AGENTS.md`](AGENTS.md)', context)).toBe(
+      '[`AGENTS.md`](https://github.com/Delo-Run/delo/blob/v5/AGENTS.md)',
+    )
+  })
+
+  it('leaves commands, new and untracked paths, URLs, anchors, absolute paths and fenced blocks as written', () => {
+    const text = [
+      '`node_modules/.bin/tsx delo/apps/tools/src/issues/brief.ts --dry-run`',
+      '`delo/apps/tools/src/issues/new-module.ts` and `scratch/notes/a.ts`',
+      '[site](https://docs.delorun.com/guide) and [top](#top) and `/home/owner/x`',
+      '```sh',
+      'cat `AGENTS.md`',
+      '```',
+    ].join('\n')
+    expect(linkReferences(text, context)).toBe(text)
   })
 })

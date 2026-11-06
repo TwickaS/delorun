@@ -16,8 +16,11 @@ const TRACKED = [
   '.github/labels.yml',
 ]
 
+/** The directories that exist in the working tree without tracked files. */
+const UNTRACKED_DIRECTORIES: ReadonlySet<string> = new Set(['scratch'])
+
 const CONTEXT: BriefContext = {
-  ...referenceContext(TRACKED),
+  ...referenceContext(TRACKED, directory => UNTRACKED_DIRECTORIES.has(directory)),
   labels: new Set(['brief', 'area/tools', 'area/cli', 'wave/0', 'kind/feature']),
 }
 
@@ -98,6 +101,19 @@ describe('a briefs file', () => {
     ])
   })
 
+  it('accepts a new file under a tracked directory in You own, and refuses the same file in Interfaces', () => {
+    expect(problemsOf(briefsWith({ 'You own': 'Create `delo/apps/tools/src/issues/new-module.ts`; change nothing else.' }))).toEqual([])
+    expect(problemsOf(briefsWith({ Interfaces: 'The new `delo/apps/tools/src/issues/new-module.ts`.' }))).toEqual([
+      'briefs[0]: Interfaces: "delo/apps/tools/src/issues/new-module.ts" is not a tracked file or directory',
+    ])
+  })
+
+  it('refuses a new file under a directory that exists in the working tree without tracked files, in You own', () => {
+    expect(problemsOf(briefsWith({ 'You own': 'Create `scratch/notes/a.ts`.' }))).toEqual([
+      'briefs[0]: You own: "scratch/notes/a.ts" is new, and no tracked directory is its nearest existing parent',
+    ])
+  })
+
   it('refuses an http link, a link into another repository and a machine path', () => {
     expect(problemsOf(briefsWith({ Report: 'See http://github.com/Delo-Run/delo/issues/1.' }))).toEqual([
       'briefs[0]: Report: link "http://github.com/Delo-Run/delo/issues/1" must be an https URL without credentials or a port',
@@ -148,10 +164,20 @@ describe('the rendered issue body', () => {
     const [brief] = parseBriefs(FIXTURE_TEXT).briefs
     expect(brief).toBeDefined()
     if (brief === undefined) return
-    const body = renderBody(brief)
+    const body = renderBody(brief, CONTEXT)
     const headings = body.split('\n').filter(line => line.startsWith('### ')).map(line => line.slice(4))
     expect(headings).toEqual([...BRIEF_FIELDS])
     expect(body).toContain('### Model\n\nHaiku at max effort\n')
     expect(body.endsWith('\n')).toBe(true)
+  })
+
+  it('links each tracked path of a field to its place on the v5 branch', () => {
+    const [brief] = parseBriefs(FIXTURE_TEXT).briefs
+    expect(brief).toBeDefined()
+    if (brief === undefined) return
+    const body = renderBody(brief, CONTEXT)
+    expect(body).toContain('The root [`AGENTS.md`](https://github.com/Delo-Run/delo/blob/v5/AGENTS.md)')
+    expect(body).toContain('[`delo/apps/tools/tests/issues/fixtures/`](https://github.com/Delo-Run/delo/tree/v5/delo/apps/tools/tests/issues/fixtures)')
+    expect(body).toContain('`node_modules/.bin/tsx delo/apps/tools/src/issues/issues.ts --input')
   })
 })

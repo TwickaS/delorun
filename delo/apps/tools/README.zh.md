@@ -108,7 +108,7 @@ Issue 表单 [`brief.yml`](../../../.github/ISSUE_TEMPLATE/brief.yml) 按相同�
 在仓库根目录以以下三种模式之一运行该工具：
 
 - `--input <briefs.json> --dry-run` 校验 briefs 并打印每个 Issue 的正文。
-- `--input <briefs.json> --create --repo <owner/name>` 校验 briefs，检查 `gh` 是否以该仓库维护者的身份登录，跳过标题已属于某个 Issue 的 brief，并创建其余 brief 的 Issue 并将其锁定。
+- `--input <briefs.json> --create --repo <owner/name>` 校验 briefs，并检查 `gh` 是否以该仓库维护者的身份登录。随后对每个 brief：创建 Issue 并将其锁定；若已存在同标题的 Issue，则在其未锁定时将其锁定，已锁定时跳过。
 - `--sync-labels --repo <owner/name>` 以 `gh label create --force` 创建或更新 `labels.yml` 中的每个标签。
 
 ```sh
@@ -121,19 +121,22 @@ brief 存在问题的情形如下：
 - 字段缺失、为空或未知，或文件不是非空的 brief JSON 数组；
 - `Model` 不是 Haiku 的 medium、high 或 max effort，也不是 Opus 的 medium 或 high effort，因此 Opus 的 max effort 会被拒绝；
 - 链接既不是 github.com/Delo-Run/delo 或 docs.delorun.com 上的 `https://` URL，也不是仓库已跟踪的相对路径；
-- 反引号中的路径（其首段为仓库的顶层目录）所指的文件或目录未被跟踪；
+- 反引号中的路径（其首段为仓库的顶层目录）所指的文件或目录未被跟踪，但 `You own` 字段除外：该字段允许新文件或新目录，前提是其最近的已存在父目录已被跟踪；
 - 文本提及私有计划目录 `delo/docs/plans/`，或提及以 `/home/`、`/Users/` 或 `~/` 开头的机器路径；
 - 标签未在 `labels.yml` 中定义，标签中缺少 `brief`，或该 brief 带有属于拉取请求的 `kind/*` 标签；
-- 字段向正文添加了 Markdown 标题，或两个 brief 共用同一标题。
+- 字段向正文添加了 Markdown 标题，两个 brief 共用同一标题，或两个已有 Issue 共用某个 brief 的标题。
 
-路径依据 `git ls-files` 检查，因此 brief 引用某个文件之前，该文件必须已加入 git 索引（暂存区）。
+除 `You own` 之外，路径依据 `git ls-files` 检查，因此 brief 引用某个文件之前，该文件必须已加入 git 索引（暂存区）。
+`You own` 中的新路径，若其在工作树中最近的已存在父目录未被跟踪，同样会被拒绝。
+渲染后的正文会把每个已跟踪路径链接到公开仓库 `v5` 分支上的对应位置：文件链接到 `blob`，目录链接到 `tree`。
+brief 中原有的链接也按同样方式改写。
+运行命令的代码片段与围栏代码块保持原样。
 在 `--create` 之前，先在仓库中创建标签与里程碑，因为 `gh issue create` 遇到仓库中未定义的标签或里程碑会失败。
 
 已知限制：
 
 - `gh` 2.45 没有设置 GitHub 内置 Issue Type 的参数，因此 `--create` 创建的 Issue 不带 Issue Type。
-- 相对链接在 Issue 正文中无法解析，因此正文保留链接的原样。
-- 若某次运行在创建 Issue 之后、锁定之前中止，该 Issue 会保持未锁定。下一次运行会跳过同一标题，因此需手动锁定该 Issue。
+- 链接指向 `v5` 分支，因此只存在于 brief 自身分支上的路径，要等该分支合并后才能解析。
 - 标题检查最多读取 1000 个 Issue，列表达到该数量时会拒绝运行。
 
 `tests/issues/` 下的测试规范在临时仓库中运行该工具，并将假的 `gh` 置于 `PATH` 之首；没有任何规范会访问 GitHub。

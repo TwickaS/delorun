@@ -9,7 +9,10 @@
  */
 import { z } from 'zod'
 import { LABELS_PATH } from './labels.ts'
-import { referenceErrors, type ReferenceContext } from './references.ts'
+import { linkReferences, referenceErrors, type ReferenceContext } from './references.ts'
+
+/** The field whose paths the package changes, so it may name files that the tree does not track yet. */
+const OWNED_FIELD: BriefField = 'You own'
 
 /** The fields of the brief template, in the order that the issue body and the issue form present them. */
 export const BRIEF_FIELDS = [
@@ -145,7 +148,7 @@ export function briefErrors(briefs: readonly Brief[], context: BriefContext): st
     for (const field of BRIEF_FIELDS) {
       const value = brief[field]
       if (/^#{1,6}[ \t]/mu.test(value)) errors.push(`${where}: ${field}: a line is a Markdown heading; a field cannot add a heading to the issue body`)
-      for (const problem of referenceErrors(value, context)) errors.push(`${where}: ${field}: ${problem}`)
+      for (const problem of referenceErrors(value, context, { ownedPaths: field === OWNED_FIELD })) errors.push(`${where}: ${field}: ${problem}`)
     }
     for (const problem of labelProblems(brief.labels, context.labels)) errors.push(`${where}: ${problem}`)
   })
@@ -154,10 +157,11 @@ export function briefErrors(briefs: readonly Brief[], context: BriefContext): st
 
 /**
  * The issue body that a GitHub issue form submission would produce for a brief: each field under a `###` heading, in
- * the template's order.
+ * the template's order, with the field's tracked references linked to the `v5` branch.
  * @param brief - a parsed brief.
+ * @param context - the tree's files and directories.
  * @returns the Markdown body, ending with one newline.
  */
-export function renderBody(brief: Brief): string {
-  return BRIEF_FIELDS.map(field => `### ${field}\n\n${brief[field]}\n`).join('\n')
+export function renderBody(brief: Brief, context: ReferenceContext): string {
+  return BRIEF_FIELDS.map(field => `### ${field}\n\n${linkReferences(brief[field], context)}\n`).join('\n')
 }

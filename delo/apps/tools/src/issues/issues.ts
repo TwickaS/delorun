@@ -1,6 +1,7 @@
 /**
- * Work-brief issues: it validates a briefs file and prints each issue body (`--dry-run`), creates and locks the issues
- * that the briefs describe (`--create`), or creates and updates the labels of `.github/labels.yml` (`--sync-labels`).
+ * Work-brief issues: it validates a briefs file and prints each issue body (`--dry-run`), creates the issues that the
+ * briefs describe and locks them (`--create`), or creates and updates the labels of `.github/labels.yml`
+ * (`--sync-labels`).
  *
  * Run from the repository root:
  *
@@ -9,21 +10,22 @@
  * - `node_modules/.bin/tsx delo/apps/tools/src/issues/issues.ts --sync-labels --repo <owner/name>`
  *
  * A problem prints one line to standard error and exits 1 before any GitHub call. `--create` and `--sync-labels` refuse
- * unless the signed-in gh user holds maintain or admin permission on the repository. `--create` skips a brief whose
- * title an issue already has, and it stops at the first failed call, so a re-run completes the remaining briefs.
+ * unless the signed-in gh user holds maintain or admin permission on the repository. For each brief, `--create` creates
+ * and locks its issue, or, when an issue already carries the brief's title, locks that issue if it is unlocked and skips
+ * it if it is locked. It stops at the first failed call, so a rerun completes an interrupted run.
  *
  * @module @delo/tools/issues/issues
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { git, repositoryRoot } from '../git.ts'
 import { briefErrors, parseBriefs, renderBody, type Brief, type BriefContext } from './brief.ts'
-import { createIssue, issueTitles, lockIssue, maintainerRefusal, syncLabel } from './gh.ts'
+import { createIssue, issueListing, issueLocked, lockIssue, maintainerRefusal, syncLabel, type IssueSummary } from './gh.ts'
 import { LABELS_PATH, parseLabels, type LabelDefinition } from './labels.ts'
-import { referenceContext } from './references.ts'
+import { referenceContext, type ReferenceContext } from './references.ts'
 
 const USAGE = [
   'usage: issues.ts --input <briefs.json> --dry-run',
@@ -39,6 +41,11 @@ type Mode =
   | { readonly kind: 'dry-run'; readonly input: string }
   | { readonly kind: 'create'; readonly input: string; readonly repository: string }
   | { readonly kind: 'sync-labels'; readonly repository: string }
+
+/** What `--create` does for one brief, decided before any write. */
+type Step =
+  | { readonly kind: 'create'; readonly brief: Brief; readonly index: number }
+  | { readonly kind: 'existing'; readonly brief: Brief; readonly issue: IssueSummary }
 
 /**
  * The repository argument, which must name `owner/name`.
@@ -81,6 +88,15 @@ function trackedPaths(root: string): string[] {
 }
 
 /**
+ * The test for a directory in the working tree, tracked or not, under the repository root.
+ * @param root - the repository root.
+ * @returns a function that reports whether a repository-relative directory exists as a directory.
+ */
+function workingTreeDirectories(root: string): (directory: string) => boolean {
+  return directory => existsSync(join(root, directory)) && statSync(join(root, directory)).isDirectory()
+}
+
+/**
  * Print the problems to standard error, and the outcome that the run did not reach.
  * @param errors - one message per problem.
  * @param outcome - what did not happen, such as "no issue was created".
@@ -95,40 +111,67 @@ function reportProblems(errors: readonly string[], outcome: string): number {
 /**
  * Print each brief's title, labels, milestone and issue body, separated by a blank line.
  * @param briefs - the validated briefs, in file order.
+ * @param context - the tree's files and directories, which link the body's references.
  */
-function printBodies(briefs: readonly Brief[]): void {
+function printBodies(briefs: readonly Brief[], context: ReferenceContext): void {
   for (const brief of briefs) {
     console.log(`== ${brief.title} ==`)
     console.log(`labels: ${brief.labels.join(', ')}`)
     console.log(`milestone: ${brief.milestone}`)
     console.log('')
-    console.log(renderBody(brief))
+    console.log(renderBody(brief, context))
   }
 }
 
 /**
- * Create each brief's issue and lock it, skipping a brief whose title an issue already has.
+ * Decide, for each brief, whether `--create` creates its issue or finds an issue with its title. The decisions come
+ * before any write, so a title that two issues share stops the run before it changes anything.
+ * @param briefs - the validated briefs, in file order.
+ * @param listing - the repository's issues.
+ * @returns one step per brief.
+ * @throws Error when two issues carry the title of one brief.
+ */
+function planSteps(briefs: readonly Brief[], listing: readonly IssueSummary[]): Step[] {
+  return briefs.map((brief, index): Step => {
+    const matches = listing.filter(issue => issue.title === brief.title)
+    if (matches.length > 1) {
+      const numbers = matches.map(issue => `#${String(issue.number)}`).join(' and ')
+      throw new Error(`"${brief.title}" is the title of issues ${numbers}; the run cannot tell which one is the brief`)
+    }
+    const [issue] = matches
+    return issue === undefined ? { kind: 'create', brief, index } : { kind: 'existing', brief, issue }
+  })
+}
+
+/**
+ * Create the issues of the briefs that have none, lock each one, and lock the existing issues that are unlocked.
  * @param repository - the repository as `owner/name`.
  * @param briefs - the validated briefs, in file order.
- * @returns the exit status: 0 when every brief is created, skipped or locked; a failed call throws instead.
- * @throws Error when the signed-in user may not file briefs, or when a `gh` call fails.
+ * @param context - the tree's files and directories, which link the bodies' references.
+ * @returns the exit status: 0 when every brief is handled; a failed call throws instead.
+ * @throws Error when the signed-in user may not file briefs, when two issues share a brief's title, or when a `gh` call fails.
  */
-function createBriefs(repository: string, briefs: readonly Brief[]): number {
+function createBriefs(repository: string, briefs: readonly Brief[], context: ReferenceContext): number {
   const refusal = maintainerRefusal(repository)
   if (refusal !== undefined) throw new Error(refusal)
-  const existing = issueTitles(repository)
+  const steps = planSteps(briefs, issueListing(repository))
   const directory = mkdtempSync(join(tmpdir(), 'delo-briefs-'))
   try {
-    for (const [index, brief] of briefs.entries()) {
-      const number = existing.get(brief.title)
-      if (number !== undefined) {
-        console.log(`skipped: "${brief.title}" already exists as #${String(number)}`)
+    for (const step of steps) {
+      if (step.kind === 'existing') {
+        const { issue, brief } = step
+        if (issueLocked(repository, issue.number)) {
+          console.log(`skipped: "${brief.title}" already exists as #${String(issue.number)} and is locked`)
+        } else {
+          lockIssue(repository, issue.number)
+          console.log(`locked: #${String(issue.number)} "${brief.title}" already existed`)
+        }
         continue
       }
-      const bodyFile = join(directory, `brief-${String(index)}.md`)
-      writeFileSync(bodyFile, renderBody(brief))
-      const created = createIssue(repository, { title: brief.title, labels: brief.labels, milestone: brief.milestone, bodyFile })
-      console.log(`created: #${String(created)} "${brief.title}"`)
+      const bodyFile = join(directory, `brief-${String(step.index)}.md`)
+      writeFileSync(bodyFile, renderBody(step.brief, context))
+      const created = createIssue(repository, { title: step.brief.title, labels: step.brief.labels, milestone: step.brief.milestone, bodyFile })
+      console.log(`created: #${String(created)} "${step.brief.title}"`)
       lockIssue(repository, created)
       console.log(`locked: #${String(created)}`)
     }
@@ -189,16 +232,16 @@ function run(argv: readonly string[], cwd: string): number {
   const briefFile = parseBriefs(readFileSync(resolve(cwd, mode.input), 'utf8'))
   const outcome = mode.kind === 'create' ? 'no issue was created' : 'no body was printed'
   const context: BriefContext = {
-    ...referenceContext(trackedPaths(root)),
+    ...referenceContext(trackedPaths(root), workingTreeDirectories(root)),
     labels: new Set(labelFile.labels.map(label => label.name)),
   }
   const errors = briefFile.errors.length > 0 ? briefFile.errors : briefErrors(briefFile.briefs, context)
   if (errors.length > 0) return reportProblems(errors, outcome)
   if (mode.kind === 'dry-run') {
-    printBodies(briefFile.briefs)
+    printBodies(briefFile.briefs, context)
     return 0
   }
-  return createBriefs(mode.repository, briefFile.briefs)
+  return createBriefs(mode.repository, briefFile.briefs, context)
 }
 
 /**
