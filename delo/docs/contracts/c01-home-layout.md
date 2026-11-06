@@ -224,14 +224,15 @@ Upstream's sandbox dialects confine file writes only. Delo's sandbox profiles ad
 
 ## Consumers
 
-- `delo/apps/cli`: the `delorun` command, home resolution, the modes and the CLI profile.
+- `delo/apps/cli`: the `delorun` command and the CLI profile, through `delo/packages/home`.
+- `delo/packages/home`: home resolution, the home tree and its modes, reading and writing protected files under the refusal rule, and the home lock.
 - `delo/packages/integrity`: the `delorun verify` checks of modes and of each confinement rule.
 - Upstream's `packages/sandbox/sandbox-local` and `packages/sandbox/sandbox`: the per-dialect profiles and the writable-root refusal.
 - `delo/apps/install` and `delo/apps/npm-launcher`: the download, verification and the launcher copy.
 - `delo/packages/runtime-store`: the store, the pointer files, install, switch and retention.
-- `delo/packages/home-process`: the lock, the start token, the update channel's socket and the probes ([C19](c19-home-process.md)).
+- `delo/packages/home-process`: holding the lock through `delo/packages/home`, the start token, the update channel's socket and the probes ([C19](c19-home-process.md)).
 - `delo/packages/supervisor`: the supervisor's socket and its token check ([C9](c09-runtime-supervisor.md)).
-- `delo/packages/home-auth`: the secret files under `secrets/home-auth/`.
+- `delo/packages/home-auth`: the secret files under `secrets/home-auth/`, read and written through `delo/packages/home`.
 
 ## Compatibility
 

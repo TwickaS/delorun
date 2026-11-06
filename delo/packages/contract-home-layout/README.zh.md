@@ -25,7 +25,7 @@ description: "Delo home 布局与运行时仓库约定（C1）的类型与常量
 import { PRIVATE_DIR_MODE, RUN_ENTRIES, type ConfinementReport } from '@delo/contract-home-layout'
 ```
 
-本包是 `delo/apps/cli`、`delo/packages/runtime-store`、`delo/packages/home-process`、`delo/packages/supervisor` 与 `delo/packages/integrity` 的依赖，也是共用其令牌与版本类型的其他约定包的依赖。
+本包是 `delo/apps/cli`、`delo/packages/home`、`delo/packages/runtime-store`、`delo/packages/home-process`、`delo/packages/supervisor` 与 `delo/packages/integrity` 的依赖，也是共用其令牌与版本类型的其他约定包的依赖。
 
 <a id="exports"></a>
 

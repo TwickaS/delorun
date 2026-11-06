@@ -252,14 +252,15 @@ runtimes/
 
 ## 使用方
 
-- `delo/apps/cli`：`delorun` 命令、home 解析、权限模式与 CLI profile。
+- `delo/apps/cli`：`delorun` 命令与 CLI profile，经由 `delo/packages/home`。
+- `delo/packages/home`：home 解析、home 目录树及其权限模式、按拒绝规则读写受保护文件，以及 home 锁。
 - `delo/packages/integrity`：`delorun verify` 对权限模式与每条限制规则的检查。
 - 上游的 `packages/sandbox/sandbox-local` 与 `packages/sandbox/sandbox`：各方言的 profile 与对可写根目录的拒绝。
 - `delo/apps/install` 与 `delo/apps/npm-launcher`：下载、校验与启动器副本。
 - `delo/packages/runtime-store`：仓库、指针文件、安装、切换与保留。
-- `delo/packages/home-process`：锁、启动令牌、更新通道的套接字与探测（[C19](c19-home-process.zh.md)）。
+- `delo/packages/home-process`：经由 `delo/packages/home` 持有锁，以及启动令牌、更新通道的套接字与探测（[C19](c19-home-process.zh.md)）。
 - `delo/packages/supervisor`：监管器的套接字及其令牌检查（[C9](c09-runtime-supervisor.zh.md)）。
-- `delo/packages/home-auth`：`secrets/home-auth/` 下的密钥文件。
+- `delo/packages/home-auth`：`secrets/home-auth/` 下的密钥文件，经由 `delo/packages/home` 读写。
 
 <a id="compatibility"></a>
 
