@@ -2,7 +2,7 @@ import { memo, useCallback, useMemo, type KeyboardEvent, type MouseEvent, type R
 import clsx from 'clsx'
 import {
   CodeBlock, DiffBlock, DisclosureRow, IconInspectOutlineRegular, ReadBlock, SearchBlock,
-  TerminalBlock, TextShimmer, WebBlock,
+  DEFAULT_TERMINAL_MAX_LINES, TerminalBlock, TextShimmer, WebBlock,
   diffTotals,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ContextMenuTriggerProps } from '@deepseek-ai/dsh-client-ui-context-menu/client'
@@ -27,6 +27,7 @@ import type { WebCardModelProps } from '../models/web-card-model.ts'
 import { AskQuestionCard } from './AskQuestionCard.tsx'
 import { ToolDetails, type ToolDetailsModel } from './ToolDetails.tsx'
 import { ExitCodeBadge } from './ExitCodeBadge.tsx'
+import { useTerminalDisclosure } from './terminal-disclosure.ts'
 import css from './ToolRow.module.css'
 
 export interface ToolRowProps {
@@ -59,6 +60,8 @@ export interface ToolRowProps {
   errorSummary?: string | null | undefined
   /** Terminal card; card fields are mutually exclusive and replace text sections. */
   terminal?: TerminalCardModel | null | undefined
+  /** The terminal card starts open, its output capped to the head and tail, and the disclosure closes it. */
+  terminalOpen?: boolean | undefined
   /** Diff card with inline totals colored on header hover and while expanded. */
   diff?: DiffCardModel | null | undefined
   read?: ReadCardModel | null | undefined
@@ -139,6 +142,7 @@ export const ToolRow = memo(function ToolRow({
   askQuestion,
   errorSummary,
   terminal,
+  terminalOpen = false,
   diff,
   read,
   image,
@@ -156,7 +160,7 @@ export const ToolRow = memo(function ToolRow({
   inspect,
   useDisclosure,
 }: ToolRowProps) {
-  const { expanded, toggle: toggleExpand } = useDisclosure()
+  const disclosure = useDisclosure()
   const terminalLabels = useMemo(() => terminalBlockLabels(t), [t])
   const diffLabels = useMemo(() => diffBlockLabels(t), [t])
   const readLabels = useMemo(() => readBlockLabels(t), [t])
@@ -178,6 +182,8 @@ export const ToolRow = memo(function ToolRow({
   const outputText = output ?? null
   const card = askQuestionBody ?? terminalBody ?? diffBody ?? readBody ?? imageBody ?? searchBody ?? webBody ?? detailsBody
   const expandable = state !== 'preparing' && (inputRaw !== null || outputText !== null || card !== null)
+  const startsOpen = terminalOpen && terminalBody !== null
+  const { expanded, toggle: toggleExpand } = useTerminalDisclosure(disclosure, startsOpen)
   const open = expanded && expandable
   const bodyText = useMemo(
     () => open && card === null && inputRaw !== null ? formatToolBody(variant, inputRaw) : null,
@@ -277,7 +283,7 @@ export const ToolRow = memo(function ToolRow({
           ? (
             <TerminalBlock
               {...terminalBody.card}
-              maxLines={Infinity}
+              maxLines={startsOpen ? DEFAULT_TERMINAL_MAX_LINES : Infinity}
               labels={terminalLabels}
               className={css.terminalBody}
             />
@@ -392,7 +398,7 @@ export const ToolRow = memo(function ToolRow({
       )}
     </div>
   ) : undefined, [
-    open, detailsBody, askQuestionBody, terminalBody, terminalLabels, diffBody, diffLabels, readBody, readLabels,
+    open, startsOpen, detailsBody, askQuestionBody, terminalBody, terminalLabels, diffBody, diffLabels, readBody, readLabels,
     imageBody, renderSlot, loadImage, searchBody, searchLabels, webBody, webLabels, inspect, t, onOpenFile,
     variant, bodyText, cardBody, outputText, state,
   ])

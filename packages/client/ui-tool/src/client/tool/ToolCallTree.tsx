@@ -18,13 +18,14 @@ function callName(call: ToolCallPhaseProps): string {
 
 /** One atomic call dispatched through the Tool-owned keyed slot. */
 const ToolCall = memo(function ToolCall({
-  renderSlot, callId, toolName, call, openFile, renderFallback, cwd, home, inspectCall, loadImage, useDisclosure, children,
+  renderSlot, callId, toolName, call, openFile, renderFallback, cwd, home, inspectCall, loadImage, useDisclosure, terminalOpen, children,
 }: Pick<ToolTreeProps, 'renderSlot' | 'openFile' | 'cwd' | 'inspectCall' | 'loadImage' | 'useDisclosure'> & {
   renderFallback: (owner: ToolCallOwnerProps) => ReactNode
   callId: string
   toolName: string
   call: ToolCallPhaseProps
   home?: string | undefined
+  terminalOpen: boolean
   children?: ReactNode
 }) {
   const owner: ToolCallOwnerProps = useMemo(() => ({
@@ -36,8 +37,9 @@ const ToolCall = memo(function ToolCall({
     home,
     loadImage,
     useDisclosure,
+    terminalOpen,
     inspect: inspectCall === undefined ? undefined : () => { inspectCall(callId) },
-  }), [callId, toolName, call, openFile, cwd, home, loadImage, inspectCall, useDisclosure])
+  }), [callId, toolName, call, openFile, cwd, home, loadImage, inspectCall, useDisclosure, terminalOpen])
   const autoReviewDenied = useMemo(
     () => call.phase === 'result' && toolRowModel(toolName, call.block).autoReviewDenial !== null,
     [toolName, call],
@@ -60,11 +62,12 @@ const ToolCall = memo(function ToolCall({
 })
 
 const ToolCallBranch = memo(function ToolCallBranch({
-  renderSlot, block, cwd, home, openFile, renderFallback, inspectCall, loadImage, useDisclosure,
+  renderSlot, block, cwd, home, openFile, renderFallback, inspectCall, loadImage, useDisclosure, terminalOpen,
 }: Pick<ToolTreeProps, 'renderSlot' | 'cwd' | 'openFile' | 'inspectCall' | 'loadImage' | 'useDisclosure'> & {
   renderFallback: (owner: ToolCallOwnerProps) => ReactNode
   block: ToolCallBlock
   home?: string | undefined
+  terminalOpen: boolean
 }) {
   const call = useMemo(() => toolCallPhase(block), [block])
   return (
@@ -79,6 +82,7 @@ const ToolCallBranch = memo(function ToolCallBranch({
       home={home}
       inspectCall={inspectCall}
       useDisclosure={useDisclosure}
+      terminalOpen={terminalOpen}
       loadImage={loadImage}
     >
       {call.phase !== 'preparing' && call.block.subCalls.length > 0 ? (
@@ -94,6 +98,7 @@ const ToolCallBranch = memo(function ToolCallBranch({
               renderFallback={renderFallback}
               inspectCall={inspectCall}
               useDisclosure={useDisclosure}
+              terminalOpen={terminalOpen}
               loadImage={loadImage}
             />
           ))}
@@ -110,7 +115,8 @@ const ToolCallBranch = memo(function ToolCallBranch({
  * @returns the Tool call tree.
  */
 export function ToolCallTree({
-  renderSlot, node, cwd, openFile, inspectCall, loadImage, useDisclosure, useHostInfo, t, useContextMenu, sessionId, resolveFilePath,
+  renderSlot, node, cwd, openFile, inspectCall, loadImage, useDisclosure, usePresentation, useHostInfo, t, useContextMenu,
+  sessionId, resolveFilePath,
 }: ToolTreeProps) {
   const { getTriggerProps } = useContextMenu()
   const getFileTriggerProps = useCallback((path: string) => getTriggerProps(() => ({
@@ -119,6 +125,7 @@ export function ToolCallTree({
   const renderFallback = useCallback((owner: ToolCallOwnerProps) =>
     <GenericToolCard {...owner} t={t} getFileTriggerProps={getFileTriggerProps} />, [t, getFileTriggerProps])
   const home = useHostInfo(info => info.home)
+  const terminalOpen = usePresentation(policy => policy.openTerminalCards)
   return (
     <ToolCallBranch
       renderSlot={renderSlot}
@@ -129,6 +136,7 @@ export function ToolCallTree({
       renderFallback={renderFallback}
       inspectCall={inspectCall}
       useDisclosure={useDisclosure}
+      terminalOpen={terminalOpen}
       loadImage={loadImage}
     />
   )

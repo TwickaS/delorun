@@ -117,7 +117,8 @@ it.each([
             await inputSection.evaluate((element) => { element.scrollTop = 0 })
             await row.focus()
             await page.keyboard.press('Tab')
-            const focusTarget = background ? inputSection : card.getByRole('button', { name: 'Copy', exact: true })
+            // The command's copy control is the card's first tab stop, so a scrolling header is not one itself.
+            const focusTarget = card.getByRole('button', { name: 'Copy command', exact: true })
             expect(await focusTarget.evaluate(element => document.activeElement === element)).toBe(true)
             await page.keyboard.press('End')
             await expect.poll(() => inputSection.evaluate(element =>

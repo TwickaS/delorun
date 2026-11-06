@@ -7,6 +7,8 @@ import { Pill } from './Pill.tsx'
 import { StateDot, type StateDotState } from './StateDot.tsx'
 import css from './TerminalBlock.module.css'
 import { CommandText } from './CommandText.tsx'
+import { IconCheckOutlineRegular, IconCopyOutlineRegular } from './icons/index.tsx'
+import { Tooltip } from './Tooltip.tsx'
 
 /** Output lines shown before the height cap collapses the middle. */
 export const DEFAULT_TERMINAL_MAX_LINES = 16
@@ -32,8 +34,12 @@ export interface TerminalBlockLabels {
   done: string
   /** Copy-button idle label. */
   copy: string
+  /** Idle label of the control that copies the command itself; absent, the block renders no such control. */
+  copyCommand?: string | undefined
   /** Copy-button label during the post-copy confirmation window. */
   copied: string
+  /** A settled call's duration, given in milliseconds; absent, the block shows no duration. */
+  duration?: ((ms: number) => string) | undefined
   /** Placeholder when a settled command produced no visible output. */
   noOutput: string
   /** Collapse-toggle aria label while expanded. */
@@ -59,6 +65,8 @@ export interface TerminalBlockProps {
   exitCode?: number | null | undefined
   /** Settled terminating signal name; any value renders the status pill, taking precedence over the exit code. */
   signal?: string | undefined
+  /** How long the settled call took, in milliseconds; absent while it runs or when the view does not know. */
+  durationMs?: number | undefined
   /**
    * The command is still running: with no `output` the block shows the prompt
    * line alone; with output it renders the live text under the running state.
@@ -177,6 +185,7 @@ export function TerminalBlock({
   output,
   exitCode,
   signal,
+  durationMs,
   running = false,
   background = false,
   maxLines = DEFAULT_TERMINAL_MAX_LINES,
@@ -205,6 +214,7 @@ export function TerminalBlock({
   // The raw output (or the caller's override), never the rendered tree: the
   // prompt line and the status pill are chrome the user did not run.
   const { copied, onCopy } = useClipboardCopy(copyText ?? text)
+  const { copied: commandCopied, onCopy: onCopyCommand } = useClipboardCopy(command)
 
   const onToggle = useCallback(() => { setExpanded(value => !value) }, [])
 
@@ -260,6 +270,16 @@ export function TerminalBlock({
           ))}
         </div>
         {status !== undefined && <Pill className={css.status}>{status}</Pill>}
+        {durationMs !== undefined && !running && !background && copy.duration !== undefined && (
+          <span className={css.duration}>{copy.duration(durationMs)}</span>
+        )}
+        {copy.copyCommand !== undefined && (
+          <Tooltip label={commandCopied ? copy.copied : copy.copyCommand} side="top" portal>
+            <button type="button" className={css.commandCopy} aria-label={commandCopied ? copy.copied : copy.copyCommand} onClick={onCopyCommand}>
+              {commandCopied ? <IconCheckOutlineRegular size={14} /> : <IconCopyOutlineRegular size={14} />}
+            </button>
+          </Tooltip>
+        )}
         {(copyText !== undefined || (!background && !running && !empty)) && (
           <button type="button" className={css.copyButton} onClick={onCopy}>
             {copied ? copy.copied : copy.copy}

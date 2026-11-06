@@ -129,6 +129,46 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+.duration {
+  flex: none;
+  position: sticky;
+  top: 0;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xs-13);
+  line-height: var(--dsl-terminal-line-height);
+  font-variant-numeric: tabular-nums;
+}
+
+.commandCopy {
+  flex: none;
+  position: sticky;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: var(--dsl-terminal-line-height);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  /* Card surface, as the copy control's, so scrolled command text does not show through. */
+  background-color: var(--dsw-alias-markdown-code-block);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .commandCopy:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.commandCopy:focus-visible {
+  outline: 1px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
 .copyButton {
   flex: none;
   position: sticky;

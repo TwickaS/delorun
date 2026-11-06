@@ -149,7 +149,11 @@ function terminalLabels(t: TranslateNS<typeof NS>): TerminalBlockLabels {
     failed: t('terminal.failed'),
     done: t('terminal.done'),
     copy: t('terminal.copy'),
+    copyCommand: t('terminal.copyCommand'),
     copied: t('terminal.copied'),
+    // The panel passes no duration, so TerminalBlock never invokes this.
+    /* v8 ignore next */
+    duration: ms => t('terminal.durationSeconds', { n: Math.round(ms / 1000) }),
     noOutput: t('terminal.noOutput'),
     collapseAria: t('terminal.collapseAria'),
     collapse: t('terminal.collapse'),
@@ -307,7 +311,6 @@ function JobItem({ job, view, expanded, now, onToggle, kill, t }: {
               command={job.label}
               output={view.text}
               running={live}
-              copyText={job.label}
               // The row above the panel already carries the state dot.
               runStateDot={false}
               // The panel scrolls its output (a stylesheet height cap) instead

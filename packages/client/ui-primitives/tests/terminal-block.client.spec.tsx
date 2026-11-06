@@ -102,7 +102,7 @@ describe('TerminalBlock states', () => {
     expect(view.queryByText('launch acknowledgement')).toBeNull()
     expect(view.queryByText('无输出')).toBeNull()
     expect(view.queryByText('信号 SIGTERM')).toBeNull()
-    expect(view.queryByRole('button')).toBeNull()
+    expect(view.queryByRole('button', { name: '复制' })).toBeNull()
     expect(view.container.firstElementChild?.hasAttribute('data-running')).toBe(false)
     expect(view.container.firstElementChild?.hasAttribute('data-body')).toBe(false)
   })
@@ -115,7 +115,7 @@ describe('TerminalBlock states', () => {
     expect(view.container.querySelector('[data-command-text]')).toBe(command)
     expect(runStateOf(view.container)).toEqual({ state: null, label: undefined })
     expect(view.queryByText('无输出')).toBeNull()
-    expect(view.queryByRole('button')).toBeNull()
+    expect(view.queryByRole('button', { name: '复制' })).toBeNull()
   })
 
   it('keeps an explicit copyText override available in background mode', () => {
@@ -125,15 +125,31 @@ describe('TerminalBlock states', () => {
     expect(runStateOf(view.container)).toEqual({ state: null, label: undefined })
   })
 
-  it('running with no output shows the command line only: no output box, no placeholder, no copy', () => {
+  it('running with no output shows the command line only: no output box, no placeholder, no output copy', () => {
     const view = render(<TerminalBlock command="sleep 5" running />)
     expect(view.getByText('sleep 5')).toBeTruthy()
     expect(outputLines(view.container)).toEqual([])
     expect(view.queryByText('无输出')).toBeNull()
-    expect(view.queryByRole('button')).toBeNull()
+    expect(view.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['复制命令'])
     expect(view.container.firstElementChild?.getAttribute('data-running')).toBe('')
     // Banner-only: no body, so no banner divider either.
     expect(view.container.firstElementChild?.getAttribute('data-body')).toBeNull()
+  })
+
+  it('copies the command itself from its own control, while the command still runs', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const view = render(<TerminalBlock command={'cd app\npnpm test'} running />)
+    await act(async () => { fireEvent.click(view.getByRole('button', { name: '复制命令' })) })
+    expect(writeText).toHaveBeenCalledWith('cd app\npnpm test')
+  })
+
+  it('shows how long a settled call took, and no duration while it runs or launches background work', () => {
+    expect(render(<TerminalBlock command="make" output="ok\n" exitCode={0} durationMs={1500} />).getByText('1.5 秒')).toBeTruthy()
+    cleanup()
+    expect(render(<TerminalBlock command="make" running durationMs={1500} />).queryByText('1.5 秒')).toBeNull()
+    cleanup()
+    expect(render(<TerminalBlock command="worker" background durationMs={1500} />).queryByText('1.5 秒')).toBeNull()
   })
 
   it('copyText overrides the copy payload and keeps the control before any output', async () => {
@@ -166,7 +182,7 @@ describe('TerminalBlock states', () => {
     const view = render(<TerminalBlock command="tail -f log" running output="" />)
     expect(outputLines(view.container)).toEqual([])
     expect(view.queryByText('无输出')).toBeNull()
-    expect(view.queryByRole('button')).toBeNull()
+    expect(view.queryByRole('button', { name: '复制' })).toBeNull()
   })
 
   it('running still shows a settled-looking status pill when one is supplied', () => {

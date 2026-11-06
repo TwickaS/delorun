@@ -1,10 +1,10 @@
 import { memo, useCallback, useMemo } from 'react'
 import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ChatFileMentions, ChatNodeViewProps, PresentationInjected, TurnTailOwnerProps } from '../contract/slots.ts'
+import type { ChatFileMentions, ChatNodeViewProps, TurnTailOwnerProps } from '../contract/slots.ts'
 import { AssistantMarkdown } from './AssistantMarkdown.tsx'
 
 /** Business readers owned by the assistant renderer's existing Slot registration. */
-export interface AssistantNodeInjected extends PresentationInjected {
+export interface AssistantNodeInjected {
   /** Resolve against the live Session directory. @param path - Recorded path. @returns Host path. */
   resolveFilePath: (path: string) => string
   /** Resolve closing-Turn mentions with the supplied ordinary file gesture callback. */

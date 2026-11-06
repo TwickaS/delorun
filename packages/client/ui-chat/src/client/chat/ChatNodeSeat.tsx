@@ -122,7 +122,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
   const [disclosureReset] = useState(() => createSnapshotStore(0))
   const turnData = turnDataOf(routedNode)
   const hookContext = useMemo<ChatNodeHookContext>(
-    () => ({ turnData, disclosureReset, useGroupAction }), [turnData, disclosureReset, useGroupAction],
+    () => ({ turnData, disclosureReset, useGroupAction, usePresentation }), [turnData, disclosureReset, useGroupAction, usePresentation],
   )
   useEffect(() => {
     if (processMember && processHidden && wrapperRef.current !== null && hiddenOrCollapsing(wrapperRef.current)) {

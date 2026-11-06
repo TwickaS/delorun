@@ -209,6 +209,7 @@ export interface ChatNodeHookContext {
   readonly turnData: ConversationLocationDataStore<ConversationTurnDataMap> | undefined
   readonly disclosureReset: ObservableSnapshot<number>
   readonly useGroupAction: UseGroupAction
+  readonly usePresentation: UsePresentation
 }
 
 /** Slot-level Hook factories for keyed Chat renderers. */
@@ -217,6 +218,8 @@ export interface ChatNodeInjected {
     turnData: SlotHookFactory<'conversation.chat.node', UseChatNodeTurnData>
     disclosure: SlotHookFactory<'conversation.chat.node', UseDisclosure>
     groupAction: SlotHookFactory<'conversation.chat.node', UseGroupAction>
+    /** The live work-details policy, which a renderer such as the tool-call tree reads for what it shows. */
+    presentation: SlotHookFactory<'conversation.chat.node', UsePresentation>
   }
 }
 
@@ -279,14 +282,6 @@ export interface TurnProcessOwnerProps {
   readonly foldable: boolean
   readonly open: boolean
   setOpen(open: boolean): void
-}
-
-/** Shared presentation policy source for renderers that depend on the work-details mode. */
-export interface PresentationInjected {
-  hooks: {
-    /** Live presentation policy derived from the accepted work-details mode. */
-    presentation: ObservableSnapshot<ChatPresentationPolicy>
-  }
 }
 
 /** Full props of one keyed Chat renderer. */

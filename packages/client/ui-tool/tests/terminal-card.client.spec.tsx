@@ -12,8 +12,9 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import {
-  localizeTerminalCardModel, terminalCardModel, terminalFailed, terminalExitLabel,
+  formatCommandDuration, localizeTerminalCardModel, terminalCardModel, terminalFailed, terminalExitLabel,
 } from '../src/client/tool/models/terminal-card-model.ts'
+import { DEFAULT_TERMINAL_MAX_LINES } from '@deepseek-ai/dsh-client-ui-primitives'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { BashRow } from '../src/client/tool/toolviews/bash-sample.tsx'
 import { en, zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
@@ -65,6 +66,10 @@ const settled = (over?: Partial<ToolResultNode>): ToolResultNode => {
     subCalls: [], ...over,
   }
 }
+
+// A command whose output is longer than a terminal card shows before it cuts the middle.
+const LONG_LINES = DEFAULT_TERMINAL_MAX_LINES + 20
+const longRun = (): ToolResultNode => settled({ content: [{ type: 'text', text: `${Array.from({ length: LONG_LINES }, (_, index) => `line ${String(index + 1)}`).join('\n')}\n` }] })
 
 describe('terminalCardModel', () => {
   it.each([1, -1])('preserves signed exit code %s in the localized capsule', (code) => {
@@ -119,12 +124,22 @@ describe('terminalCardModel', () => {
       copy: { kind: 'shell', command: 'ls -la', description: 'List files' },
       card: {
         cwd: '/projects/app', output: 'boom',
-        exitCode: 2, signal: undefined, running: false,
+        exitCode: 2, signal: undefined, durationMs: 1_000, running: false,
       },
     })
     expect(terminalCardModel(settled({
       content: [{ type: 'text', text: 'gone\n[killed by signal: SIGTERM]' }],
     }))?.card).toMatchObject({ output: 'gone', signal: 'SIGTERM' })
+  })
+
+  it('gives a settled card its call\'s duration only while the call is in the loaded window', () => {
+    expect(terminalCardModel(settled({ time: 4_250 }))?.card.durationMs).toBe(3_250)
+    expect(terminalCardModel(settled({ callTime: null }))?.card.durationMs).toBeUndefined()
+  })
+
+  it('formats a duration in tenths below ten seconds, then seconds, minutes and hours', () => {
+    expect([450, 9_990, 42_500, 125_000, 3_725_000].map(ms => formatCommandDuration(ms, enT))).toEqual(['0.4 s', '9.9 s', '42 s', '2 min 5 s', '1 h 2 min'])
+    expect(formatCommandDuration(125_000, t)).toBe('2 分 5 秒')
   })
 
   it('flags a failing exit as terminalFailed; clean exits and running cards are not', () => {
@@ -391,6 +406,15 @@ describe('chat row terminal body', () => {
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
   }
 
+  it('starts a terminal card open in the Verbose view, cut to its head and tail, and the row closes it', () => {
+    const view = render(<GenericToolCard {...ownerProps(longRun())} terminalOpen />)
+    expect(view.getByText('line 1', RAW)).toBeTruthy()
+    expect(view.getByText(`line ${String(LONG_LINES)}`, RAW)).toBeTruthy()
+    expect(view.queryByText(`line ${String(Math.floor(LONG_LINES / 2))}`, RAW)).toBeNull()
+    toggleRow(view)
+    expect(view.queryByText('line 1', RAW)).toBeNull()
+  })
+
   it('the expanded body is the command output inside the row scroll container', () => {
     const view = render(<GenericToolCard {...ownerProps(settled())} />)
     // Collapsed: the one-line summary row only, no output.
@@ -509,6 +533,22 @@ describe('BashRow terminal card', () => {
     sessionId: SID, useSessions: bindSnapshotSelector(list()),
     t,
   } as BashRowProps)
+
+  it('starts open in the Verbose view with long output cut to its head and tail, and the row closes it', () => {
+    const view = render(<BashRow {...rowProps(longRun())} terminalOpen />)
+    expect(view.getByText('ls -la')).toBeTruthy()
+    expect(view.getByText('line 1', RAW)).toBeTruthy()
+    expect(view.getByText(`line ${String(LONG_LINES)}`, RAW)).toBeTruthy()
+    expect(view.queryByText(`line ${String(Math.floor(LONG_LINES / 2))}`, RAW)).toBeNull()
+    fireEvent.click(view.container.querySelector('[data-expandable]')!)
+    expect(view.queryByText('line 1', RAW)).toBeNull()
+    // Opened by hand in another view, the card shows every line.
+    cleanup()
+    const other = render(<BashRow {...rowProps(longRun())} />)
+    expect(other.queryByText('line 1', RAW)).toBeNull()
+    fireEvent.click(other.container.querySelector('[data-expandable]')!)
+    expect(other.getByText(`line ${String(Math.floor(LONG_LINES / 2))}`, RAW)).toBeTruthy()
+  })
 
   it('collapses to the summary row; the whole row toggles the command output', () => {
     const view = render(<BashRow {...rowProps(settled())} />)

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { bindDisclosure, useDisclosure } from '@deepseek-ai/dsh-client-ui-chat/src/client/chat/use-disclosure.ts'
+import { presentationPolicyFor } from '@deepseek-ai/dsh-client-ui-chat/src/client/presentation-policy.ts'
+import type { TranscriptViewMode } from '@deepseek-ai/dsh-client-ui-chat/src/chat-settings.ts'
 import type { SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { contextMenuHook, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
@@ -27,6 +29,7 @@ function props(
   block: ToolCallBlock,
   home?: string,
   owners?: ToolCallOwnerProps[],
+  mode: TranscriptViewMode = 'standard',
 ): ToolTreeProps {
   const snapshot = {} as SessionSnapshot
   const useSession = ((selector: (value: SessionSnapshot) => unknown) => selector(snapshot)) as ToolTreeProps['useSession']
@@ -36,6 +39,7 @@ function props(
   }) as unknown as ToolTreeProps['renderSlot']
   const fixture: Partial<ToolTreeProps> = {
     useDisclosure,
+    usePresentation: selector => selector(presentationPolicyFor(mode)),
     useTurnData: () => undefined,
     useSession,
     renderSlot,
@@ -180,6 +184,16 @@ describe('ToolCallTree', () => {
     const owners: ToolCallOwnerProps[] = []
     render(<ToolCallTree {...props(root('a', null), undefined, owners)} inspectCall={undefined} />)
     expect(owners[0]?.inspect).toBeUndefined()
+  })
+
+  it('tells every call, nested ones too, to start its terminal card open only in the Verbose view', () => {
+    const block = { ...root('parent', { name: 'agent', argsRaw: '{}' }), subCalls: [root('child', { name: 'bash', argsRaw: '{"command":"pwd"}' })] }
+    for (const [mode, open] of [['verbose', true], ['detailed', false], ['standard', false], ['compact', false]] as const) {
+      const owners: ToolCallOwnerProps[] = []
+      const view = render(<ToolCallTree {...props(block, undefined, owners, mode)} />)
+      expect(owners.map(owner => [owner.callId, owner.terminalOpen])).toEqual([['parent', open], ['child', open]])
+      view.unmount()
+    }
   })
 
   it('dispatches a running call by its wire name and forwards inspect', () => {

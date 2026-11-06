@@ -352,7 +352,7 @@ describe('Chat apply wiring', () => {
     const useChat = vi.fn(() => { throw new Error('Turn data must not read the Chat snapshot') })
     const useTurnData = spec.inject.hooks.turnData(
       { useChat } as unknown as Parameters<typeof spec.inject.hooks.turnData>[0],
-      { turnData: data, disclosureReset: createSnapshotStore(0), useGroupAction: () => { throw new Error('unused group action') } },
+      { turnData: data, disclosureReset: createSnapshotStore(0), useGroupAction: () => { throw new Error('unused group action') }, usePresentation: () => { throw new Error('unused presentation') } },
     )
     const Probe = ({ useData }: { useData: UseChatNodeTurnData }) => (
       <output>{useData('metric') ?? 'missing'}</output>
@@ -370,7 +370,7 @@ describe('Chat apply wiring', () => {
 
     view.rerender(<Probe useData={spec.inject.hooks.turnData(
       { useChat } as unknown as Parameters<typeof spec.inject.hooks.turnData>[0],
-      { turnData: undefined, disclosureReset: createSnapshotStore(0), useGroupAction: () => { throw new Error('unused group action') } },
+      { turnData: undefined, disclosureReset: createSnapshotStore(0), useGroupAction: () => { throw new Error('unused group action') }, usePresentation: () => { throw new Error('unused presentation') } },
     )} />)
     expect(view.getByText('missing')).toBeTruthy()
     expect(useChat).not.toHaveBeenCalled()
@@ -398,9 +398,14 @@ describe('Chat apply wiring', () => {
     const useSecond = spec.inject.hooks.groupAction(standard, { motion: second })
     const useFirstHeader = spec.inject.hooks.groupHeaderAction(standard, { motion: first })
     const useSecondHeader = spec.inject.hooks.groupHeaderAction(standard, { motion: second })
+    const usePresentation = () => { throw new Error('unused presentation') }
     expect(nodeSpec.inject.hooks.groupAction(standard, {
-      turnData: undefined, disclosureReset: createSnapshotStore(0), useGroupAction: useFirst,
+      turnData: undefined, disclosureReset: createSnapshotStore(0), useGroupAction: useFirst, usePresentation,
     })).toBe(useFirst)
+    // Every keyed Chat renderer reads the work-details policy through the seat's own Hook.
+    expect(nodeSpec.inject.hooks.presentation(standard, {
+      turnData: undefined, disclosureReset: createSnapshotStore(0), useGroupAction: useFirst, usePresentation,
+    })).toBe(usePresentation)
     const reveal = vi.fn()
     function Probe({ useHidden, hidden, label }: { useHidden: UseGroupAction; hidden: boolean; label: string }) {
       const ref = useHidden(hidden, reveal)
@@ -487,7 +492,7 @@ describe('Chat apply wiring', () => {
       const reset = createSnapshotStore(0)
       const useDisclosure = spec.inject.hooks.disclosure(
         {} as Parameters<typeof spec.inject.hooks.disclosure>[0],
-        { turnData: undefined, disclosureReset: reset, useGroupAction: () => { throw new Error('unused group action') } },
+        { turnData: undefined, disclosureReset: reset, useGroupAction: () => { throw new Error('unused group action') }, usePresentation: () => { throw new Error('unused presentation') } },
       )
       function Probe({ useDisclosure }: { useDisclosure: UseDisclosure }) {
         const { expanded, toggle } = useDisclosure()

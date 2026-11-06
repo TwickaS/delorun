@@ -34,7 +34,7 @@ export type GenericToolCardProps = ToolCallOwnerProps & {
 
 /** @param props - current tool stage and locale. @returns its preparation or dispatched card. */
 export function GenericToolCard({
-  toolName, block, cwd, home, openFile, getFileTriggerProps, inspect, useDisclosure, t,
+  toolName, block, cwd, home, openFile, getFileTriggerProps, inspect, useDisclosure, terminalOpen, t,
 }: GenericToolCardProps) {
   const model = toolRowModel(toolName, block, cwd, home)
   const autoReview = model.autoReviewDenial === null
@@ -68,6 +68,7 @@ export function GenericToolCard({
       output={autoReview?.output ?? model.output}
       errorSummary={autoReview?.summary ?? model.errorSummary}
       terminal={terminal}
+      terminalOpen={terminalOpen}
       diff={diff}
       read={read}
       search={search}

@@ -25,13 +25,32 @@ export function terminalBlockLabels(t: TranslateNS<'conversation'>): TerminalBlo
     failed: t('terminal.failed'),
     done: t('terminal.done'),
     copy: t('copy'),
+    copyCommand: t('terminal.copyCommand'),
     copied: t('copied'),
+    duration: ms => formatCommandDuration(ms, t),
     noOutput: t('terminal.noOutput'),
     collapseAria: t('terminal.collapseAria'),
     collapse: t('collapse'),
     expandAria: hidden => t('terminal.expandAria', { n: hidden }),
     expand: hidden => t('terminal.expandRest', { n: hidden }),
   }
+}
+
+/**
+ * A command's duration as the card shows it: tenths of a second below ten
+ * seconds, whole seconds below a minute, then minutes and seconds, and hours
+ * and minutes from an hour.
+ * @param ms - the call's duration in milliseconds.
+ * @param t - the render site's conversation locale seat.
+ * @returns the localized duration.
+ */
+export function formatCommandDuration(ms: number, t: TranslateNS<'conversation'>): string {
+  const seconds = Math.max(0, ms) / 1000
+  if (seconds < 10) return t('terminal.durationSeconds', { n: (Math.floor(seconds * 10) / 10).toFixed(1) })
+  const whole = Math.floor(seconds)
+  if (whole < 60) return t('terminal.durationSeconds', { n: whole })
+  if (whole < 3600) return t('terminal.durationMinutes', { m: Math.floor(whole / 60), s: whole % 60 })
+  return t('terminal.durationHours', { h: Math.floor(whole / 3600), m: Math.floor(whole / 60) % 60 })
 }
 
 /**
@@ -44,7 +63,7 @@ export interface TerminalCardModel {
    * The locale-neutral props {@link TerminalBlock} draws. The render site adds
    * `command` after resolving {@link copy} through its locale seat.
    */
-  card: Pick<TerminalBlockProps, 'cwd' | 'output' | 'exitCode' | 'signal' | 'running' | 'background'>
+  card: Pick<TerminalBlockProps, 'cwd' | 'output' | 'exitCode' | 'signal' | 'durationMs' | 'running' | 'background'>
   /**
    * Verbatim Tool data or semantic `terminal_send` data. Product copy stays
    * unresolved until a render site supplies its locale seat.
@@ -55,7 +74,7 @@ export interface TerminalCardModel {
 }
 
 interface LocalizedTerminalCardModel {
-  readonly card: Pick<TerminalBlockProps, 'command' | 'cwd' | 'output' | 'exitCode' | 'signal' | 'running' | 'background'>
+  readonly card: Pick<TerminalBlockProps, 'command' | 'cwd' | 'output' | 'exitCode' | 'signal' | 'durationMs' | 'running' | 'background'>
   readonly description: string | undefined
 }
 
@@ -354,6 +373,7 @@ export function terminalCardModel(
       output: status.output,
       exitCode: status.exitCode,
       signal: status.signal,
+      durationMs: block.callTime === null ? undefined : Math.max(0, block.time - block.callTime),
       running: false,
     },
   }

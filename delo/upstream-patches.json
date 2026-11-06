@@ -442,6 +442,146 @@
       "reason": "Documents the Custom work-details mode and its parts."
     },
     {
+      "path": "packages/client/ui-chat/src/client/apply.ts",
+      "class": "delo-feature",
+      "reason": "Passes the Chat Node presentation Hook into the node hooks and the Custom display setting into the presentation policy, so the Verbose view can open terminal cards; the other views are unchanged."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx",
+      "class": "delo-feature",
+      "reason": "Passes the seat's presentation Hook into the Hook context its renderers bind to, so every keyed Chat renderer reads the live work-details policy."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/register-node-renderers.ts",
+      "class": "delo-feature",
+      "reason": "Registers the Chat Node renderers without the presentation policy: each renderer reads it through the seat's presentation Hook, so the assistant-step renderer no longer takes it at registration."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/contract/slots.ts",
+      "class": "delo-feature",
+      "reason": "Adds the presentation Hook to the Chat Node hook context and the keyed seat's injected Hooks, so every keyed Chat renderer, the tool-call tree among them, reads the live work-details policy through the seat."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/AssistantNodeView.tsx",
+      "class": "delo-feature",
+      "reason": "Removes the separate presentation source from the assistant renderer's injected face, which now reads the policy through the seat's presentation Hook."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Removes the PresentationInjected type export, which no consumer uses once the assistant renderer reads the policy through the seat's Hook."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/chat-apply.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Builds the Chat Node Hook contexts with a presentation Hook and checks that the seat supplies its own presentation Hook to every keyed renderer."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/reasoning-render-fixture.tsx",
+      "class": "delo-feature",
+      "reason": "Registers the reasoning renderers without the presentation policy, which the seat now supplies."
+    },
+    {
+      "path": "packages/client/ui-tool/src/client/contract/slots.ts",
+      "class": "delo-feature",
+      "reason": "Adds an optional terminalOpen to the Tool owner currency: a shell command's terminal card starts open, capped to its head and tail, and its disclosure closes it."
+    },
+    {
+      "path": "packages/client/ui-tool/src/client/tool/ToolCallTree.tsx",
+      "class": "delo-feature",
+      "reason": "Reads the openTerminalCards policy through the seat's presentation Hook and passes it to every call, nested ones included, as terminalOpen."
+    },
+    {
+      "path": "packages/client/ui-tool/src/client/tool/components/ToolRow.tsx",
+      "class": "delo-feature",
+      "reason": "With terminalOpen, a row's terminal card starts open with the default head-and-tail cap and the disclosure closes it; other rows and views are unchanged."
+    },
+    {
+      "path": "packages/client/ui-tool/src/client/tool/toolviews/GenericToolCard.tsx",
+      "class": "delo-feature",
+      "reason": "Passes terminalOpen to the row, so generic shell rows also open their terminal card in the Verbose view."
+    },
+    {
+      "path": "packages/client/ui-tool/src/client/tool/toolviews/bash-sample.tsx",
+      "class": "delo-feature",
+      "reason": "With terminalOpen, the Bash row's terminal card starts open with the default head-and-tail cap, and the row closes it."
+    },
+    {
+      "path": "packages/client/ui-tool/tests/terminal-card.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the Verbose view's open terminal cards for the Bash row and a generic row: the head-and-tail cap, closing on the row, and every line shown once the card is opened by hand."
+    },
+    {
+      "path": "packages/client/ui-tool/tests/tool-call-tree.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the terminalOpen value the tree passes to every call, nested ones included, in each work-details view."
+    },
+    {
+      "path": "packages/client/ui-workflow-run/tests/workflow-run.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Supplies the presentation Hook to the workflow panel's Chat Node props."
+    },
+    {
+      "path": "packages/client/ui-tool/src/client/tool/components/terminal-disclosure.ts",
+      "class": "delo-feature",
+      "reason": "Gives a row whose terminal card starts open its own closed flag, so closing the card in the Verbose view and opening the row in another view never change each other."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/locales.ts",
+      "class": "delo-feature",
+      "reason": "Adds the terminal card's copy-command label and the duration strings to every locale of the conversation package."
+    },
+    {
+      "path": "packages/client/ui-jobs/src/client/JobListAction.tsx",
+      "class": "delo-feature",
+      "reason": "The jobs panel's terminal card gets the shared command-copy control, so it copies the command the same way a tool card does."
+    },
+    {
+      "path": "packages/client/ui-jobs/src/client/locales.ts",
+      "class": "delo-feature",
+      "reason": "Adds the jobs panel's copy-command label and the duration strings its terminal card shows."
+    },
+    {
+      "path": "packages/client/ui-jobs/tests/job-list-action.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the jobs panel's command-copy control."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/TerminalBlock.module.css",
+      "class": "delo-feature",
+      "reason": "Styles the command-copy control and the settled duration of a terminal card as sticky header items that stay visible while the command text scrolls."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/TerminalBlock.tsx",
+      "class": "delo-feature",
+      "reason": "Adds a command-copy control and the settled duration to the terminal card. Both render only when the consumer supplies their labels, so a consumer that does not supply them keeps its output."
+    },
+    {
+      "path": "packages/client/ui-primitives/tests/labels.client.ts",
+      "class": "delo-feature",
+      "reason": "Supplies the command-copy and duration labels to the primitive's test labels."
+    },
+    {
+      "path": "packages/client/ui-primitives/tests/terminal-block.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the terminal block's command-copy control and settled duration."
+    },
+    {
+      "path": "packages/client/ui-tool/src/client/tool/models/terminal-card-model.ts",
+      "class": "delo-feature",
+      "reason": "Supplies the command-copy and duration labels of a tool's terminal card and formats a settled call's duration from its event times."
+    },
+    {
+      "path": "apps/web/tests/shell-command-details.e2e.ts",
+      "class": "delo-feature",
+      "reason": "Upstream's Web test follows the fork's terminal card, whose command copy control is its first tab stop."
+    },
+    {
+      "path": "apps/web/tests/shipped-composition.e2e.ts",
+      "class": "delo-feature",
+      "reason": "Upstream's Web test follows the fork's Standard composition, which lists preset_inspect."
+    },
+    {
       "path": "packages/client/modules/README.zh.md",
       "class": "delo-feature",
       "reason": "Chinese counterpart of the modules README; its package-assets paragraph documents the .woff2 extension with the English text."
@@ -480,6 +620,26 @@
       "path": "packages/client/ui-model-selection/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Consistency record re-recorded after the model selection README's effort-caption sentence and its Chinese counterpart changed."
+    },
+    {
+      "path": "apps/web/tests/expected/shell-command-details/background.expected.md",
+      "class": "delo-feature",
+      "reason": "Expected accessibility output of the background command card, refreshed for the command-copy control that the terminal card shows in the default composition."
+    },
+    {
+      "path": "apps/web/tests/expected/shell-command-details/background-long-token.expected.md",
+      "class": "delo-feature",
+      "reason": "Expected accessibility output of the long-token background command card, refreshed for the command-copy control that the terminal card shows in the default composition."
+    },
+    {
+      "path": "apps/web/tests/expected/shell-command-details/foreground-multiline.expected.md",
+      "class": "delo-feature",
+      "reason": "Expected accessibility output of the multiline foreground command card, refreshed for the command-copy control that the terminal card shows in the default composition."
+    },
+    {
+      "path": "packages/extensions/cordis-client-runner/src/client/slot-catalog.ts",
+      "class": "delo-feature",
+      "reason": "Generated client slot catalogue, regenerated for the Chat presentation Hook, the removed assistant presentation source and the new headline slot, which move the source lines of the Chat slot declarations."
     }
   ],
   "retired": []

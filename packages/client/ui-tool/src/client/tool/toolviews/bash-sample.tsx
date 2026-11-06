@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import clsx from 'clsx'
 import {
   IconApiOutlineRegular, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconInspectOutlineRegular,
-  CommandText, TerminalBlock, TextShimmer,
+  CommandText, DEFAULT_TERMINAL_MAX_LINES, TerminalBlock, TextShimmer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
@@ -20,6 +20,7 @@ import {
 import { formatToolBody, toolRowModel, type ToolRowState } from '../models/tool-call-model.ts'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
 import { ExitCodeBadge } from '../components/ExitCodeBadge.tsx'
+import { useTerminalDisclosure } from '../components/terminal-disclosure.ts'
 import css from './bash-sample.module.css'
 
 type BashRowProps = ToolCallViewProps & PropsLocale<'conversation'>
@@ -43,7 +44,9 @@ function stateStatus(state: ToolRowState, t: BashRowProps['t']): string | null {
  * @param props - tool call, Session sources, locale, and inspection callback.
  * @returns the Bash output row.
  */
-export const BashRow = memo(function BashRow({ toolName, block, sessionId, useSessions, inspect, useDisclosure, t }: BashRowProps) {
+export const BashRow = memo(function BashRow({
+  toolName, block, sessionId, useSessions, inspect, useDisclosure, terminalOpen, t,
+}: BashRowProps) {
   const model = useMemo(() => toolRowModel(toolName, block), [toolName, block])
   // An omitted shell workdir is the session workspace; relative values resolve
   // against it before reaching the terminal primitive.
@@ -56,7 +59,7 @@ export const BashRow = memo(function BashRow({ toolName, block, sessionId, useSe
     ? 'error'
     : model.state
   const status = stateStatus(state, t)
-  const { expanded, toggle: toggleExpand } = useDisclosure()
+  const disclosure = useDisclosure()
   const background = isBackgroundShellCall(block)
   // Failed or interrupted background launches retain raw input/output, as do
   // other execution failures, persistent results, and spill previews.
@@ -64,6 +67,9 @@ export const BashRow = memo(function BashRow({ toolName, block, sessionId, useSe
     && (model.state === 'error' || isSettledPersistentShellCall(block) || isSpilledShellCall(block) || background)
     && (model.bodyRaw !== null || model.output !== null)
   const expandable = terminal !== null || genericBody
+  // In the Verbose view the terminal card starts open, and the row closes it.
+  const startsOpen = terminalOpen === true && terminal !== null
+  const { expanded, toggle: toggleExpand } = useTerminalDisclosure(disclosure, startsOpen)
   const open = expanded && expandable
   const body = useMemo(
     () => open && genericBody && model.bodyRaw !== null
@@ -127,7 +133,7 @@ export const BashRow = memo(function BashRow({ toolName, block, sessionId, useSe
             ? (
               <TerminalBlock
                 {...terminal.card}
-                maxLines={Infinity}
+                maxLines={startsOpen ? DEFAULT_TERMINAL_MAX_LINES : Infinity}
                 labels={labels}
                 className={css.terminal}
               />

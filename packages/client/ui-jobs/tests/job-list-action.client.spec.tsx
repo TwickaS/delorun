@@ -282,8 +282,8 @@ describe('JobListAction observation', () => {
     expect(screen.queryByRole('button', { name: zh['terminal.expandAria'].replace('{n}', '8') })).toBeNull()
     // The panel draws no state dot or label of its own — the row carries it.
     expect(screen.queryByText(zh['terminal.done'])).toBeNull()
-    // The copy control carries the command, not the output.
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: zh['terminal.copy'] })) })
+    // The command's own copy control carries the command.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: zh['terminal.copyCommand'] })) })
     expect(writeText).toHaveBeenCalledWith('pnpm run build')
   })
 

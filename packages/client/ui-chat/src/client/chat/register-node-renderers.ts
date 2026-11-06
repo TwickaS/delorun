@@ -1,7 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { PerformanceUsageMode } from '../../chat-settings.ts'
-import type { ChatPresentationPolicy } from '../presentation-policy.ts'
 import { NS } from '../locale.ts'
 import { AssistantNodeView, type AssistantNodeInjected } from './AssistantNodeView.tsx'
 import { sessionFilePath } from '../file-path.ts'
@@ -18,16 +17,14 @@ import { TurnTriggerNodeView } from './TurnTriggerNodeView.tsx'
 
 /**
  * Register this package's business renderers behind the keyed Chat Node seat.
- * Renderers whose output depends on the work-details mode receive the policy
- * through their own registration; the seat and the other renderers do not.
+ * Every renderer the seat dispatches reads the work-details policy through the
+ * seat's `presentation` Hook.
  * @param ctx - owning UI Conversation context.
  * @param performanceUsage - live statistics detail preference.
- * @param presentation - live presentation policy.
  */
 export function registerChatNodeRenderers(
   ctx: Context,
   performanceUsage: ObservableSnapshot<PerformanceUsageMode>,
-  presentation: ObservableSnapshot<ChatPresentationPolicy>,
 ): void {
   ctx.effect(() => ctx.slots.registerFactory({
     name: 'conversation.chat.reasoning.content',
@@ -62,7 +59,6 @@ export function registerChatNodeRenderers(
       'conversation.chat.message.images': { kind: 'single', scope: 'session' },
     },
     inject: (sessionId): AssistantNodeInjected => ({
-      hooks: { presentation },
       resolveFilePath: sessionFilePath(ctx, sessionId),
       fileMentions: (owner, getFileTriggerProps) => ctx.get('chatFileMentions')?.forClosing(owner, sessionId, getFileTriggerProps),
     }),

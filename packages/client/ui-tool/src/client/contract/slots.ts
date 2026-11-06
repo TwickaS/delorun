@@ -56,6 +56,8 @@ export interface ToolImagesOwnerProps {
 export interface ToolCallCommonProps {
   /** Stable Hook; each invocation owns its open state and subscribes to enclosing-Turn resets. */
   useDisclosure: UseDisclosure
+  /** Start a terminal card open, capped to its head and tail, as the Verbose view asks; absent, closed. */
+  terminalOpen?: boolean | undefined
   /** Call identity, stable across all stages. */
   callId: string
   /** Wire Tool name and keyed dispatch value. */
