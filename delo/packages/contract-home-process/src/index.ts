@@ -1,0 +1,221 @@
+/**
+ * Types and constants of contract C19, the home process and update handshake
+ * (`delo/docs/contracts/c19-home-process.md`): the home process's states, the
+ * update channel's requests and responses, the handshake's phases and
+ * outcomes, the update journal and every limit. The package holds no runtime
+ * behaviour; the contract page is the authority for every value here.
+ *
+ * @module @delo/contract-home-process
+ */
+
+import type { RuntimeVersion, StartId, StartToken } from '@delo/contract-home-layout'
+
+/** The update channel's protocol version. */
+export const UPDATE_PROTOCOL_VERSION = 1
+
+/** Home processes per CLI profile. */
+export const HOME_PROCESSES_PER_PROFILE = 1
+
+/** Longest wait of `delorun start` for `running`, in milliseconds. */
+export const START_WAIT_MS = 120_000
+
+/** Largest request line, in bytes. */
+export const REQUEST_MAX_BYTES = 16_384
+
+/** Time from connect to the request line, in milliseconds. */
+export const REQUEST_DEADLINE_MS = 5_000
+
+/** Open connections on the update channel. */
+export const MAX_CONNECTIONS = 8
+
+/** Refused-authentication log lines per second. */
+export const AUTH_FAILURE_LOG_LINES_PER_SECOND = 1
+
+/** Lifetime of an update report returned by `update.prepare`, in milliseconds. */
+export const REPORT_LIFETIME_MS = 600_000
+
+/** Smallest `drainTimeoutS`, in seconds. */
+export const DRAIN_TIMEOUT_MIN_S = 60
+
+/** Largest `drainTimeoutS`, in seconds. */
+export const DRAIN_TIMEOUT_MAX_S = 86_400
+
+/** Default `drainTimeoutS`, and the drain of `delorun stop`, in seconds. */
+export const DRAIN_TIMEOUT_DEFAULT_S = 1_800
+
+/** Time for a successor to report `ready` and pass its health check, in milliseconds. */
+export const HEALTH_CHECK_TIMEOUT_MS = 120_000
+
+/** File descriptor of the handover pipe a successor inherits. */
+export const HANDOVER_FD = 3
+
+/** Restarts a login item makes after failures within {@link LOGIN_RESTART_WINDOW_MS}. */
+export const LOGIN_RESTART_LIMIT = 3
+
+/** Window of {@link LOGIN_RESTART_LIMIT}, in milliseconds. */
+export const LOGIN_RESTART_WINDOW_MS = 300_000
+
+/** Exit code of `delorun status` when no home process runs. */
+export const STATUS_EXIT_NOT_RUNNING = 3
+
+/** A state of the home process. */
+export type HomeProcessState = 'starting' | 'running' | 'waiting' | 'switching' | 'stopping' | 'standby'
+
+/** A phase of the update handshake, in order. */
+export type UpdatePhase = 'checking' | 'installing' | 'reporting' | 'snapshot' | 'waiting' | 'switching' | 'health-check' | 'committed'
+
+/** The final outcome of an update or rollback. */
+export type UpdateOutcome = 'committed' | 'rolled-back' | 'aborted'
+
+/** How the waiting phase treats running chats. */
+export type DrainPolicy = 'drain' | 'abort-if-busy' | 'cancel'
+
+/** How `stop` treats running chats. */
+export type StopMode = 'drain' | 'cancel'
+
+/** Fields every update-channel request carries. */
+interface RequestBase {
+  /** The protocol version. */
+  readonly v: typeof UPDATE_PROTOCOL_VERSION
+  /** The current start's token. */
+  readonly token: StartToken
+}
+
+/** The `status` request. */
+export interface StatusRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'status'
+}
+
+/** The `update.prepare` request. */
+export interface UpdatePrepareRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'update.prepare'
+  /** Arguments. */
+  readonly args: {
+    /** The target version; omitted for the newest release on the person's channel. */
+    readonly target?: RuntimeVersion
+  }
+}
+
+/** Arguments of a handshake that drains running chats. */
+export interface DrainArgs {
+  /** How running chats are treated. */
+  readonly wait: DrainPolicy
+  /** Longest wait for running chats, from {@link DRAIN_TIMEOUT_MIN_S} to {@link DRAIN_TIMEOUT_MAX_S}. */
+  readonly drainTimeoutS?: number
+}
+
+/** The `update.apply` request. */
+export interface UpdateApplyRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'update.apply'
+  /** Arguments. */
+  readonly args: DrainArgs & {
+    /** The report `update.prepare` returned. */
+    readonly reportId: string
+  }
+}
+
+/** The `update.cancel` request. */
+export interface UpdateCancelRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'update.cancel'
+}
+
+/** The `rollback` request, whose target is `previous`. */
+export interface RollbackRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'rollback'
+  /** Arguments. */
+  readonly args: DrainArgs
+}
+
+/** The `stop` request. */
+export interface StopRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'stop'
+  /** Arguments. */
+  readonly args: {
+    /** How running chats are treated. */
+    readonly mode: StopMode
+  }
+}
+
+/** Every request the update channel accepts; no request carries a path, an archive, a URL or a command. */
+export type UpdateChannelRequest =
+  | StatusRequest
+  | UpdatePrepareRequest
+  | UpdateApplyRequest
+  | UpdateCancelRequest
+  | RollbackRequest
+  | StopRequest
+
+/** Error codes of this contract. */
+export type HomeProcessErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'SCHEMA_VIOLATION'
+  | 'REQUEST_TIMEOUT'
+  | 'REQUEST_TOO_LARGE'
+  | 'BUSY'
+  | 'UPDATE_IN_PROGRESS'
+  | 'REPORT_EXPIRED'
+  | 'UPDATE_PENDING'
+  | 'CHATS_RUNNING'
+  | 'DRAIN_TIMEOUT'
+  | 'HEALTH_CHECK_FAILED'
+  | 'VERIFY_FAILED'
+  | 'NO_PREVIOUS'
+
+/** The body of a `status` response line. */
+export interface HomeStatus {
+  /** The home process's state. */
+  readonly state: HomeProcessState
+  /** Its process id. */
+  readonly pid: number
+  /** Its start id. */
+  readonly startId: StartId
+  /** Runtime versions. */
+  readonly runtime: {
+    /** The version `current` names. */
+    readonly current: RuntimeVersion
+    /** The version `previous` names, when it exists. */
+    readonly previous?: RuntimeVersion
+    /** The version this process runs. */
+    readonly running: RuntimeVersion
+  }
+  /** Running chats on this Host. */
+  readonly chats: number
+  /** The update in progress, when one runs. */
+  readonly update?: {
+    /** Its phase. */
+    readonly phase: UpdatePhase
+    /** Its target version. */
+    readonly target: RuntimeVersion
+  }
+}
+
+/** One response line; the final line of a handshake carries `outcome`. */
+export type UpdateChannelResponse =
+  | { readonly ok: true, readonly status: HomeStatus }
+  | { readonly ok: true, readonly phase: UpdatePhase }
+  | { readonly ok: true, readonly reportId: string, readonly report: unknown }
+  | { readonly ok: true, readonly outcome: UpdateOutcome, readonly reason?: HomeProcessErrorCode }
+  | { readonly ok: false, readonly error: HomeProcessErrorCode }
+
+/** Contents of `run/<profile>/update.json`, written at each phase from `snapshot` on. */
+export interface UpdateJournal {
+  /** Record version. */
+  readonly v: 1
+  /** The version that ran before the update. */
+  readonly from: RuntimeVersion
+  /** The target version. */
+  readonly to: RuntimeVersion
+  /** The phase that started last. */
+  readonly phase: UpdatePhase
+  /** RFC 3339 UTC time the update started. */
+  readonly startedAt: string
+}
+
+/** A message on the handover pipe from successor to predecessor. */
+export type HandoverMessage = { readonly type: 'ready' } | { readonly type: 'failed', readonly reason: HomeProcessErrorCode }
