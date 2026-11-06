@@ -127,7 +127,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 ## 构建 Delo
 
 - **上游**（upstream）：DeepSeek Harness 由其维护者发布的版本。**差异台账**（divergence ledger）：`delo/upstream-patches.json`，记录每个被修改的上游文件及其原因与类别。**[差异记录](divergence/README.zh.md)**（divergence record）：说明对某个上游插件的重大修改，以及如何合并下一个上游版本的页面。<a id="upstream"></a>
-- **对等清单**（parity checklist，`delo/docs/reference/parity.md`，本树不包含该页）：上游记录版本中每项 stock 功能及其证据，以及每项刻意的差异。**对等组合**（parity composition）：关闭了 studio 组合包与每项对模型可见的 Delo 修改的 Delo 运行时。**对等回放**（parity replay）：上游记录的场景原样运行于对等组合之上。<a id="parity"></a>
+- **对等清单**（parity checklist，[`parity.zh.md`](parity.zh.md)）：上游记录版本中每项 stock 功能及其证据，以及每项刻意的差异。**对等组合**（parity composition）：关闭了 studio 组合包与每项对模型可见的 Delo 修改的 Delo 运行时。**对等回放**（parity replay）：上游记录的场景原样运行于对等组合之上。<a id="parity"></a>
 - **对等开关**（parity switch）：对等组合中一个已注册的开关，即一项对模型可见的 Delo 变更，带有其默认取值与对等取值。代码中为 `@delo/contract-parity-composition` 中的注册表 `PARITY_SWITCHES`。<a id="parity-switch"></a>
 - **开关扫描**（switch sweep）：分别开启每个开关、用其自身的 Delo 场景回放的检查，以及在 `delo/` 之下找出没有注册开关的对模型可见输入的静态扫描。<a id="switch-sweep"></a>
 - **扩展点优先规则**（extension-point-first rule）：Delo 的行为位于 `delo/` 之下，并运行在上游的扩展点上；对上游的修改只增加扩展点，不增加行为。**差异预算**（divergence budget）：每个类别中，一次发布在 1.0 基线之外可新增的非生成台账条目与差异块，上限为 max(20 条目, 10%) 与 max(150 差异块, 10%)；上游已吸收的条目计入抵扣。**预演合并**（rehearsal merge）：每次 Delo 发布前，对上游最新标签进行的一次试验性合并。当存在冲突的差异块超过 15%，或在没有负责人决定的情况下出现冲突的 `security` 文件时，它失败。<a id="extension-point-first"></a>

@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for parity.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/reference/parity.md
+/parity-checklist:
+  en: 1370171566a57bfe
+  zh: d4e28e8d5c25f958
+/parity-checklist/how-rows-are-judged:
+  en: 9ffdc4da357d38a5
+  zh: 38aa36e28c362ec3
+/parity-checklist/liveshare:
+  en: 9742c746060246f8
+  zh: e1833b965e525633
+/parity-checklist/desktop-app-payload:
+  en: 5a167aefd4b0ec7c
+  zh: 6a820f3ec0332377
+/parity-checklist/sdk-runtime-selection:
+  en: 3bcaca63900ed400
+  zh: cece03a67a9f2386
+/parity-checklist/deliberate-differences:
+  en: 5a4618a03fc47f08
+  zh: 3035568e06dad08c
+/parity-checklist/deliberate-differences/home-and-account:
+  en: ad6980106310aa23
+  zh: 2a3473f13291e9f4
+/parity-checklist/deliberate-differences/permissions:
+  en: 5ab056ba3a81131a
+  zh: 49dcbb917a579a2b
+/parity-checklist/deliberate-differences/model-visible-tools:
+  en: 986b1dd33d60b28b
+  zh: 33051f54fe449c00
+/parity-checklist/deliberate-differences/data-sharing:
+  en: cbee038f17804962
+  zh: 2b270d386a292acc
+/parity-checklist/deliberate-differences/web-fetch:
+  en: 24410c323f556b23
+  zh: e8165f1f97e7593d
+/parity-checklist/deliberate-differences/consents:
+  en: efc3603de87a39ed
+  zh: 163ef3f74386e6a9
+/parity-checklist/deliberate-differences/confinement-and-containers:
+  en: 45d97a55c5cf8efa
+  zh: e02b57221c6fc3e8
+/parity-checklist/deliberate-differences/studio-and-other-c16-switches:
+  en: f7ca6f90bf09552a
+  zh: 27162a2795374090
