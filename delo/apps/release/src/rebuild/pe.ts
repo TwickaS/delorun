@@ -48,17 +48,47 @@ export function isPeFile(data: Buffer): boolean {
   return layout(data) !== undefined
 }
 
+/** `WIN_CERTIFICATE.wRevision` of the attribute certificate table's current format. */
+const WIN_CERT_REVISION_2_0 = 0x0200
+
+/** `WIN_CERTIFICATE.wCertificateType` of an Authenticode PKCS #7 SignedData signature. */
+const WIN_CERT_TYPE_PKCS_SIGNED_DATA = 0x0002
+
+/**
+ * Whether a certificate table holds only Authenticode `WIN_CERTIFICATE` entries that fill it exactly: each entry's
+ * `dwLength` covers its 8-byte header, its revision is 2.0 and its type PKCS #7 SignedData, and the entries, each
+ * padded to 8 bytes except the last, end where the table ends.
+ * @param data - the file's bytes.
+ * @param offset - the table's file offset.
+ * @param length - the table's length.
+ * @returns true for a well-formed table of at least one entry.
+ */
+function certificateTableIsAuthenticode(data: Buffer, offset: number, length: number): boolean {
+  const end = offset + length
+  let cursor = offset
+  while (cursor < end) {
+    if (cursor + 8 > end) return false
+    const entryLength = data.readUInt32LE(cursor)
+    if (entryLength < 8 || cursor + entryLength > end) return false
+    if (data.readUInt16LE(cursor + 4) !== WIN_CERT_REVISION_2_0 || data.readUInt16LE(cursor + 6) !== WIN_CERT_TYPE_PKCS_SIGNED_DATA) return false
+    cursor += Math.ceil(entryLength / 8) * 8
+  }
+  // The last entry may end the table without its padding.
+  return cursor > offset && cursor - end < 8
+}
+
 /**
  * The bytes of a PE file without its Authenticode signature and checksum.
  * @param data - the file's bytes.
- * @returns the normalised bytes, or `undefined` when the file is not a PE image, or its certificate table does not
- * end the file, which no signing tool produces.
+ * @returns the normalised bytes, or `undefined` when the file is not a PE image, or its certificate table is not a
+ * table of Authenticode entries that ends the file, which no signing tool produces.
  */
 export function stripAuthenticode(data: Buffer): Buffer | undefined {
   const pe = layout(data)
   if (pe === undefined) return undefined
   const signed = pe.certificateLength > 0
-  if (signed && (pe.certificateOffset < pe.securityEntryOffset + 8 || pe.certificateOffset + pe.certificateLength !== data.byteLength)) return undefined
+  if (signed && (pe.certificateOffset % 8 !== 0 || pe.certificateOffset < pe.securityEntryOffset + 8 || pe.certificateOffset + pe.certificateLength !== data.byteLength
+    || !certificateTableIsAuthenticode(data, pe.certificateOffset, pe.certificateLength))) return undefined
   const kept = signed ? pe.certificateOffset : data.byteLength
   const normalised = Buffer.alloc(Math.ceil(kept / 8) * 8)
   data.copy(normalised, 0, 0, kept)

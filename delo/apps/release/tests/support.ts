@@ -67,10 +67,26 @@ export function peImage(body: Buffer): Buffer {
 }
 
 /**
+ * One `WIN_CERTIFICATE` entry: its length, revision 2.0, type PKCS #7 SignedData, and the signature bytes.
+ * @param signature - the stand-in for the PKCS #7 blob.
+ * @param revision - the revision to write; 0x0200 for a valid entry.
+ * @param type - the certificate type to write; 0x0002 for a valid entry.
+ * @returns the entry, padded to 8 bytes.
+ */
+export function winCertificate(signature: Buffer, revision = 0x0200, type = 0x0002): Buffer {
+  const header = Buffer.alloc(8)
+  header.writeUInt32LE(8 + signature.byteLength, 0)
+  header.writeUInt16LE(revision, 4)
+  header.writeUInt16LE(type, 6)
+  const entry = Buffer.concat([header, signature])
+  return Buffer.concat([entry, Buffer.alloc((8 - (entry.byteLength % 8)) % 8)])
+}
+
+/**
  * Sign a PE image the way signing tools lay it out: pad to 8 bytes, append a certificate table, point the security
  * directory at it and set a checksum.
  * @param image - the unsigned image.
- * @param certificate - the table's bytes.
+ * @param certificate - the table's bytes, such as one {@link winCertificate} entry.
  * @param checksum - the header checksum to write.
  * @returns the signed image.
  */

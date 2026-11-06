@@ -87,7 +87,8 @@ function compareArchives(name: string, first: ArchiveSummary, second: ArchiveSum
   if (first.problem !== undefined || second.problem !== undefined) return
   if (first.sha256 === second.sha256 && first.length === second.length) return
   if (first.mtime !== second.mtime) differences.push({ file: name, detail: `entry mtime ${String(first.mtime)} differs from ${String(second.mtime)}` })
-  const pe = exceptions.exceptions.find(exception => exception.applies === 'pe')
+  // Only the Windows closure's PE files carry the release workflow's Authenticode signatures (contract C2, R11).
+  const pe = closureName(name)?.platform === 'win32-x64' ? exceptions.exceptions.find(exception => exception.applies === 'pe') : undefined
   let left = 0
   let right = 0
   while (left < first.entries.length || right < second.entries.length) {
