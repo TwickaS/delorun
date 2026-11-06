@@ -9,7 +9,7 @@ English | [中文](c16-parity-composition.zh.md)
 <a id="summary"></a>
 ## Summary
 
-The parity composition is the configuration under which Delo replays upstream's recorded scenarios at the base tag `dsh-v0.2.2-rc.1` and reproduces their expected output byte for byte. It is Delo's runtime with the studio bundle installed, every model-visible Delo change switched off, and each listed Delo default set to its upstream value wherever the replay exercises it. Delo's default composition is not held to this contract; Delo's own recorded scenarios prove it. This page defines the composition, the switch registry that makes each model-visible change switchable, how the replay lane selects the composition, the pass rule and the switch sweep.
+The parity composition is the configuration under which Delo replays upstream's recorded scenarios at the base tag `dsh-v0.2.2-rc.1` and reproduces their expected output byte for byte. It is Delo's runtime with the studio bundle, which the studio packages deliver, switched off, every model-visible Delo change switched off, and each listed Delo default set to its upstream value wherever the replay exercises it. Delo's default composition is not held to this contract; Delo's own recorded scenarios prove it. This page defines the composition, the switch registry that makes each model-visible change switchable, how the replay lane selects the composition, the pass rule and the switch sweep.
 
 <a id="contents"></a>
 ## Contents
