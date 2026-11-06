@@ -1,0 +1,14 @@
+# C16 switch studio_additions on. A Web scenario runs through an e2e driver
+# under apps/web/tests, which mounts the main chat with studioAdditions: true
+# beside a workspaces provider; the studio bundle that sets the switch in
+# Delo's default composition is not in this tree yet.
+version: 1
+scenario: delo-studio-additions
+profile: web
+composition: web-default
+recording: live
+header:
+  class: delo-studio-additions
+  pin: true
+input:
+  task: List my workspaces and the chats in each.

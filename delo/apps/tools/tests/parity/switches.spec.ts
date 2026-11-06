@@ -175,7 +175,7 @@ describe('the parity overlay', () => {
     const rows = parseOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
-    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'preset_inspect'])
+    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'preset_inspect', 'studio_additions'])
   })
 
   it('fails a switch left on, a key that is no switch, and a row that sets more than config', () => {

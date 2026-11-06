@@ -187,7 +187,7 @@ Each check has a budget, its resident memory at the peak and its CPUs, which the
 | `typecheck:upstream` | Upstream's incremental typecheck (`pnpm run typecheck`), whose declarations the fork's programs read | 2.5 GiB, 2 CPUs | `changed`, `full` |
 | `typecheck:delo:<program>` | `tsc -p` over each Delo tsconfig, one check per program; `--only typecheck:delo` selects them all | 1 GiB, 1 CPU each | `changed`, `full` |
 | `build:artifacts` | Upstream's runtime bundles, built only when one is missing or older than its sources (`pnpm run build:artifacts`) | 4 GiB, 4 CPUs | `changed`, `full`, when stale |
-| `tests:fork` | Every spec under `delo/apps/*/tests` and `delo/packages/*/tests` ([`vitest.config.ts`](../../vitest.config.ts)) | 0.5 GiB per worker | `changed`, `full` |
+| `tests:fork` | Every spec under `delo/apps/*/tests` and `delo/packages/*/tests` ([`vitest.config.ts`](../../vitest.config.ts)); client component specs (`.spec.tsx`) run in jsdom with upstream packages resolved to their sources | 0.5 GiB per worker | `changed`, `full` |
 | `tests:snapshots` | Upstream's keyless recorded-session replay (`pnpm run test:snapshot`) | 0.6 GiB per worker, 5 CPUs, alone | `changed`, `full` |
 | `tests:upstream-changed` | The specs of each changed upstream package and, within 150 spec files, of its direct dependents ([upstream's `vitest.config.ts`](../../../vitest.config.ts)) | 0.6 GiB per worker, up to 8 workers | `changed` |
 | `tests:web-changed` | The reached Chromium e2e specs under `apps/web/tests`, run on the official client build, up to 12 specs ([`checks/web.ts`](src/checks/web.ts)) | 5 GiB, 8 CPUs, alone, 1200 s | `changed` |
@@ -240,8 +240,9 @@ A patch row replaces its entry's whole `config` and reaches only entries of the 
 | `preset_inspect` | Config default `false`. The row sits in each Web preset's plugin list, which a patch reaches only by replacing the whole preset row. |
 | `container_denial_marker` | Config default `false`. The bundles and the root configurations set `sandbox-policy`'s mode and workspace root, which an overlay row would erase. |
 | `doctor` | Config default `false`. Only the `doctor` profile mounts the app, and the replay starts no doctor process. |
+| `studio_additions` | Config default `false` of `@delo/plugin-main-chat`'s `studioAdditions`. No shipped profile or bundle mounts the main chat yet. |
 
-None of C16's changed defaults is changed in this tree. The studio bundle, the permission defaults and the fetch guard are planned, and the preset default (`standard`), the session-log upload (on) and desktop analytics (off) keep upstream's values, so the overlay restores none of them.
+None of C16's changed defaults is changed in this tree. The studio bundle, the permission defaults and the fetch guard are planned; of the studio additions only the main chat is in the tree, off by its own default, and the preset default (`standard`), the session-log upload (on) and desktop analytics (off) keep upstream's values, so the overlay restores none of them.
 
 ### The registry
 
@@ -249,7 +250,7 @@ None of C16's changed defaults is changed in this tree. The studio bundle, the p
 
 | Switch | State | Field | Default | Parity | Model-visible |
 | --- | --- | --- | --- | --- | --- |
-| `studio_additions` | planned | none | on | off | yes |
+| `studio_additions` | built | `@delo/plugin-main-chat` `studioAdditions` | on | off | yes |
 | `permission_defaults` | planned | none | on | off | yes |
 | `fetch_guard` | planned | none | on | off | yes |
 | `preset_inspect` | built | `@deepseek-ai/dsh-agent-preset-registry/tools` `presetInspect` | on | off | yes |
@@ -295,6 +296,7 @@ Pending recording:
 - `session/delo-profile-history`: the plugin-manager composition with `profileHistory: true`.
 - `session/delo-container-denial-marker`: the PTC composition with `containerDenialMarker: true`, so `run_code` declares bash's `sandbox.deniedBy`.
 - `web/delo-preset-inspect`: the Standard preset with `preset_inspect` on; its driver is written with the recording.
+- `web/delo-studio-additions`: the main chat mounted with `studioAdditions: true` beside a workspaces provider; its driver is written with the recording.
 
 To record one, move its directory to `snapshots/<profile>/`, run upstream's record command for that scenario without `DSH_SNAPSHOT_PATCH`, review the outputs, and remove `input.task` once the Session fixture carries the task.
 

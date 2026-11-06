@@ -1,0 +1,11 @@
+.icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.unread {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  display: inline-flex;
+}

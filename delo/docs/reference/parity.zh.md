@@ -101,7 +101,7 @@ Delo 保留上游的 SDK 及其文档化的运行时选择。
 
 | 项目 | `dsh-v0.2.2-rc.1` 与本树 | 状态 | 证据 |
 | --- | --- | --- | --- |
-| Studio 附加功能 | `dsh-v0.2.2-rc.1`：stock 外观，没有 Delo 的 studio 包；本树既没有 `@delo/bundle-studio`，也没有 `@delo/plugin-main-chat` | 计划中：`studio_additions`（WP2 studio 包） | `parity-switches` |
+| Studio 附加功能 | `dsh-v0.2.2-rc.1`：stock 外观，没有 Delo 的 studio 包；本树有 `@delo/plugin-main-chat`，其 `studioAdditions` 开关默认关闭，且没有任何 bundle 挂载它，同时没有 `@delo/bundle-studio` | 已为主对话构建：`studio_additions`（开关开启场景待录制）；其他 studio 包仍为计划中 | `parity-switches` |
 | 入门预设 | `dsh-v0.2.2-rc.1` 与本树：`standard` 是默认预设（`packages/bundle/web-app/cordis.patch.yml` 第 593 行）。计划中：`ptc`，即 C16 的变更默认值 `agent-preset-registry.config.default` | 计划中：C16 变更默认值；没有开关 ID 或工作包 | 人工检查：第 593 行设定 `standard`，且 C16 变更默认值表列出了计划值。 |
 | `plugin_manager` 读取豁免 | `dsh-v0.2.2-rc.1`：`plugin_manager` 的每个操作都需要 `danger-full-access` 提权；本树的 `readActionsExempt` 开关默认关闭 | 已构建：`plugin_manager_read_exemption`（开关开启场景待录制） | `packages/boot/plugin-manager/tests/tools.spec.ts` |
 | `profile_history` | `dsh-v0.2.2-rc.1`：没有 `history`、`read_config`、`configure`、`undo` 或 `restore` 操作；本树的 `profileHistory` 开关默认关闭 | 已构建：`profile_history`（开关开启场景待录制） | `packages/boot/plugin-manager/tests/tools.spec.ts` |

@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/plugin-main-chat/README.md
+/:
+  en: 2fe8b291ce97852f
+  zh: 3dcc9ab144741be9
+/delo-plugin-main-chat:
+  en: 2f04810ca0510fbf
+  zh: 13df6f2e7cca9dc7
+/delo-plugin-main-chat/summary:
+  en: 7952eeec8f6acace
+  zh: 265f3922d86dc299
+/delo-plugin-main-chat/contents:
+  en: febb7a96fef039ed
+  zh: 30f06a7bbad7171f
+/delo-plugin-main-chat/contract:
+  en: 5e67add2b7a98f89
+  zh: c8ff95cc9a87d7af
+/delo-plugin-main-chat/approvals:
+  en: 68af9643f9851b96
+  zh: 191e31dea7cb7cf2
+/delo-plugin-main-chat/configuration:
+  en: 688be5310faa8689
+  zh: 31cad1be897be67d
+/delo-plugin-main-chat/carry-forward-review:
+  en: b257b77b0a4586dd
+  zh: a7a3de2bd597864a
+/delo-plugin-main-chat/tests:
+  en: 0e688b38bffa456a
+  zh: a3569ef99dfbdab9

@@ -28,6 +28,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 - **stock DSH** — DeepSeek Harness as upstream releases it. **stock look** — Delo with its studio additions turned off. <a id="stock"></a>
 - **studio** — the harness's web interface, the same in a browser and in the desktop app. Code: upstream's Web client. <a id="studio"></a>
 - **studio additions** — Delo's theme, sidebar, chat states, main chat, settings layout, thinking view and onboarding tour; the first release turns them on by default. Code: `@delo/bundle-studio`. <a id="studio-additions"></a>
+- **main chat** — one chat outside every workspace, from which the person asks about and steers their other chats and starts work in a workspace; it asks the person before every change that outlasts a turn. Code: `@delo/plugin-main-chat`. <a id="main-chat"></a>
 - **augmentation** — an opt-in addition beyond the stock workflow, such as reach, Docker isolation or extra machines. <a id="augmentation"></a>
 - **the person** — the one owner of a home. Maintainer docs say "the person"; interface text says "you". Not "user", which upstream uses for the model conversation's user role. <a id="the-person"></a>
 

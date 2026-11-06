@@ -101,7 +101,7 @@ Each difference below is one that Delo's documents name or that C16 lists. The r
 
 | Item | Baseline and this tree | Status | Evidence |
 | --- | --- | --- | --- |
-| Studio additions | `dsh-v0.2.2-rc.1`: the stock look, with no Delo studio package; this tree has neither `@delo/bundle-studio` nor `@delo/plugin-main-chat` | planned: `studio_additions` (WP2 studio packages) | `parity-switches` |
+| Studio additions | `dsh-v0.2.2-rc.1`: the stock look, with no Delo studio package; this tree has `@delo/plugin-main-chat`, whose `studioAdditions` switch is off by default and which no bundle mounts, and no `@delo/bundle-studio` | built for the main chat: `studio_additions` (switch-on scenario pending recording); planned for the other studio packages | `parity-switches` |
 | Onboarding preset | `dsh-v0.2.2-rc.1` and this tree: `standard` is the default preset (`packages/bundle/web-app/cordis.patch.yml` at line 593). Planned: `ptc`, as C16's changed default `agent-preset-registry.config.default` | planned: C16 changed default; no switch ID or work package | Manual check: line 593 sets `standard`, and C16's changed-defaults table names the planned value. |
 | `plugin_manager` read exemption | `dsh-v0.2.2-rc.1`: every `plugin_manager` action needs the `danger-full-access` escalation; this tree's `readActionsExempt` switch is off by default | built: `plugin_manager_read_exemption` (switch-on scenario pending recording) | `packages/boot/plugin-manager/tests/tools.spec.ts` |
 | `profile_history` | `dsh-v0.2.2-rc.1`: no `history`, `read_config`, `configure`, `undo` or `restore` action; this tree's `profileHistory` switch is off by default | built: `profile_history` (switch-on scenario pending recording) | `packages/boot/plugin-manager/tests/tools.spec.ts` |

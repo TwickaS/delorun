@@ -187,7 +187,7 @@ brief 中原有的链接也按同样方式改写。
 | `typecheck:upstream` | 上游的增量类型检查（`pnpm run typecheck`），fork 的程序所读取的声明由它提供 | 2.5 GiB，2 个 CPU | `changed`、`full` |
 | `typecheck:delo:<program>` | 对每个 Delo tsconfig 运行 `tsc -p`，每个程序一个检查；`--only typecheck:delo` 选中全部 | 每个 1 GiB，1 个 CPU | `changed`、`full` |
 | `build:artifacts` | 上游的运行时产物，仅当某个产物缺失或早于其源码时构建（`pnpm run build:artifacts`） | 4 GiB，4 个 CPU | `changed`、`full`，且仅在过期时 |
-| `tests:fork` | `delo/apps/*/tests` 与 `delo/packages/*/tests` 下的每个规范（[`vitest.config.ts`](../../vitest.config.ts)） | 每个 worker 0.5 GiB | `changed`、`full` |
+| `tests:fork` | `delo/apps/*/tests` 与 `delo/packages/*/tests` 下的每个规范（[`vitest.config.ts`](../../vitest.config.ts)）；客户端组件规范（`.spec.tsx`）在 jsdom 中运行，上游包解析为其源码 | 每个 worker 0.5 GiB | `changed`、`full` |
 | `tests:snapshots` | 上游的无密钥录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，独占 | `changed`、`full` |
 | `tests:upstream-changed` | 每个有变更的上游包的规范，以及在 150 个规范文件之内其直接依赖的规范（[上游的 `vitest.config.ts`](../../../vitest.config.ts)） | 每个 worker 0.6 GiB，至多 8 个 worker | `changed` |
 | `tests:web-changed` | 基于官方客户端构建运行的、变更所涉及的 `apps/web/tests` 下的 Chromium 端到端规范，至多 12 个规范（[`checks/web.ts`](src/checks/web.ts)） | 5 GiB，8 个 CPU，独占，1200 秒 | `changed` |
@@ -240,8 +240,9 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:web-changed
 | `preset_inspect` | Config 默认值 `false`。该行位于每个 Web preset 的插件列表中，patch 只有替换整个 preset 行才能到达它。 |
 | `container_denial_marker` | Config 默认值 `false`。bundle 与根配置设置了 `sandbox-policy` 的模式与工作区根目录，覆盖层的一行会抹掉它们。 |
 | `doctor` | Config 默认值 `false`。只有 `doctor` profile 挂载该应用，回放不启动 doctor 进程。 |
+| `studio_additions` | Config 默认值 `false`，属于 `@delo/plugin-main-chat` 的 `studioAdditions`。尚无已发布的 profile 或 bundle 挂载主对话。 |
 
-C16 所列的变更默认值在本仓库中都未改动。studio bundle、权限默认值与 fetch 防护尚在计划中；preset 默认值（`standard`）、会话日志上传（开启）与桌面端分析（关闭）保持上游的取值，因此覆盖层不恢复其中任何一项。
+C16 所列的变更默认值在本仓库中都未改动。studio bundle、权限默认值与 fetch 防护尚在计划中；studio 附加功能中只有主对话在本树中，且默认关闭；preset 默认值（`standard`）、会话日志上传（开启）与桌面端分析（关闭）保持上游的取值，因此覆盖层不恢复其中任何一项。
 
 ### 注册表
 
@@ -249,7 +250,7 @@ C16 所列的变更默认值在本仓库中都未改动。studio bundle、权限
 
 | 开关 | 状态 | 字段 | 默认 | 对等 | 对模型可见 |
 | --- | --- | --- | --- | --- | --- |
-| `studio_additions` | 计划中 | 无 | 开 | 关 | 是 |
+| `studio_additions` | 已构建 | `@delo/plugin-main-chat` `studioAdditions` | 开 | 关 | 是 |
 | `permission_defaults` | 计划中 | 无 | 开 | 关 | 是 |
 | `fetch_guard` | 计划中 | 无 | 开 | 关 | 是 |
 | `preset_inspect` | 已构建 | `@deepseek-ai/dsh-agent-preset-registry/tools` `presetInspect` | 开 | 关 | 是 |
@@ -295,6 +296,7 @@ C16 所列的变更默认值在本仓库中都未改动。studio bundle、权限
 - `session/delo-profile-history`：plugin-manager 组合，`profileHistory: true`。
 - `session/delo-container-denial-marker`：PTC 组合，`containerDenialMarker: true`，因此 `run_code` 声明 bash 的 `sandbox.deniedBy`。
 - `web/delo-preset-inspect`：开启 `preset_inspect` 的 Standard preset；其驱动随录制一同编写。
+- `web/delo-studio-additions`：主对话在 `studioAdditions: true` 下挂载，并与工作区提供方并列；其驱动随录制一同编写。
 
 录制其中一个时，把其目录移到 `snapshots/<profile>/`，在不设 `DSH_SNAPSHOT_PATCH` 的情况下为该场景运行上游的录制命令，审阅输出，并在 Session 夹具携带任务之后删除 `input.task`。
 

@@ -1,0 +1,54 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "include": [
+    "src/client",
+    "src/wire.ts",
+    "src/css-modules.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../packages/client/locale/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/api/session-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/api/workspace-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-conversation/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-layout"
+    },
+    {
+      "path": "../../../packages/client/ui-primitives"
+    },
+    {
+      "path": "../../../packages/client/ui-sidebar"
+    },
+    {
+      "path": "../../../packages/client/ui-renderer"
+    },
+    {
+      "path": "../../../packages/client/ui-slots"
+    },
+    {
+      "path": "../../../packages/client/ui-workspace"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/util/brand"
+    }
+  ]
+}

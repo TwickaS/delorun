@@ -1,0 +1,56 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "tests",
+    "src/workspaces.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../packages/core/agent"
+    },
+    {
+      "path": "../../../packages/test-support/agent-loop-testkit"
+    },
+    {
+      "path": "../../../packages/preset/agent-preset-registry"
+    },
+    {
+      "path": "../../../packages/api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/session-query/session-query"
+    },
+    {
+      "path": "../../../packages/core/tools"
+    },
+    {
+      "path": "../../../packages/workspace/workspace"
+    },
+    {
+      "path": "../../../packages/interaction/user-approval"
+    }
+  ],
+  "exclude": [
+    "tests/**/*.client.spec.tsx"
+  ]
+}

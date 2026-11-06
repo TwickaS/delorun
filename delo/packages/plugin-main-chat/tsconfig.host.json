@@ -1,0 +1,61 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
+  },
+  "files": [
+    "src/index.ts",
+    "src/account-tools.ts",
+    "src/owner-notes.ts",
+    "src/tools.ts",
+    "src/chat-text.ts",
+    "src/folders.ts",
+    "src/guard.ts",
+    "src/reports.ts",
+    "src/wire.ts",
+    "src/workspaces.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../packages/core/agent"
+    },
+    {
+      "path": "../../../packages/preset/agent-preset-registry"
+    },
+    {
+      "path": "../../../packages/api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/util/brand"
+    },
+    {
+      "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/session-query/session-query"
+    },
+    {
+      "path": "../../../packages/interaction/user-approval"
+    },
+    {
+      "path": "../../../packages/core/tools"
+    },
+    {
+      "path": "../../../packages/workspace/workspace"
+    }
+  ]
+}

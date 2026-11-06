@@ -1,0 +1,7 @@
+# This plugin as a bundle of its own, so upstream's plugin manager installs it
+# into a stock harness. The row needs `root` and `preset` in its config, and
+# registers nothing until `studioAdditions` is true; Delo's studio bundle
+# mounts it with that configuration.
+- insert:
+    - id: delo-main-chat
+      name: '@delo/plugin-main-chat'

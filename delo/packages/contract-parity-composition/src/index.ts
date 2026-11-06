@@ -80,13 +80,23 @@ export type ParitySwitchEntry = BuiltParitySwitch | PlannedParitySwitch
 export const PARITY_SWITCHES = [
   {
     id: 'studio_additions',
-    state: 'planned',
-    plannedBy: 'WP2 studio packages',
+    state: 'built',
     registeredBy: '@delo/bundle-studio and @delo/plugin-main-chat',
     defaultValue: true,
     parityValue: false,
     modelVisible: true,
     scenario: 'web/delo-studio-additions',
+    field: {
+      module: '@delo/plugin-main-chat',
+      source: 'delo/packages/plugin-main-chat/src/index.ts',
+      key: 'studioAdditions',
+    },
+    sources: [
+      'delo/packages/plugin-main-chat/src/account-tools.ts',
+      'delo/packages/plugin-main-chat/src/guard.ts',
+      'delo/packages/plugin-main-chat/src/index.ts',
+      'delo/packages/plugin-main-chat/src/tools.ts',
+    ],
   },
   {
     id: 'permission_defaults',

@@ -1,0 +1,20 @@
+/* The panel while the main chat opens: empty, or the failure notice centred. */
+.page {
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 24vh 24px 24px;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 22px;
+  text-align: center;
+}
