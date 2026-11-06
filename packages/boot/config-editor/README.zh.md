@@ -30,7 +30,7 @@ kind: "package-reference"
   name: '@deepseek-ai/dsh-config-editor'
 ```
 
-使用 [settings](../../settings/settings/README.zh.md) 提供只编辑即时字段的表单。编辑完整配置的调用方可使用 `ctx.configEditor.edit()`；普通字段保留 Loader 的正常生命周期。
+使用 [settings](../../settings/settings/README.zh.md) 提供只编辑即时字段的表单。编辑完整配置的调用方可使用 `ctx.configEditor.edit()`；普通字段保留 Loader 的正常生命周期。每次保存的编辑都会在 profile 的锁释放之后、在调用方的异步上下文中，以条目的 patch id 发出 `config-editor/edited`，因此[插件管理](../plugin-manager/README.zh.md)可以把它保存为一个版本，并以做出编辑者的名义命名。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现

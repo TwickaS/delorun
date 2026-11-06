@@ -16,6 +16,21 @@ declare module '@deepseek-ai/cordis' {
     /** Persistent edits to the active profile's plugin configuration. */
     configEditor: ConfigEditor
   }
+  interface Events {
+    /**
+     * An edit was saved to the profile patch and applied: emitted after the profile's lock is released, in the
+     * caller's asynchronous context, so a listener can name who made it.
+     * @mode emit
+     * @param edit - the profile patch id of the entry whose configuration changed.
+     */
+    'config-editor/edited'(edit: ConfigEdit): void
+  }
+}
+
+/** What {@link ConfigEditor.edit} saved. */
+export interface ConfigEdit {
+  /** The profile patch id of the entry whose configuration changed. */
+  readonly entryId: string
 }
 
 function flatten(rows: EntryOptions[]): EntryOptions[] {
@@ -79,7 +94,8 @@ export class ConfigEditor extends Service {
     return structuredClone((row?.config ?? {}) as Record<string, unknown>)
   }
 
-  /** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules.
+  /** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules. A saved
+   * edit is announced as `config-editor/edited`.
    * @param entry Current Loader entry, also used to detect replacement during the write.
    * @param change Derive a raw config from the current entry and its inherited layer.
    * @returns Fulfillment after Loader reconciliation completes.
@@ -150,6 +166,7 @@ export class ConfigEditor extends Service {
     }
     const hmr = this.ownerContext.get('hmr')
     await (hmr === undefined ? run() : hmr.runExclusive(run))
+    this.ownerContext.emit('config-editor/edited', { entryId: entry.options.id })
   }
 }
 

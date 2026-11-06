@@ -780,6 +780,41 @@
       "path": "packages/util/native-command/tests/file-applications-linux-native.spec.ts",
       "class": "generic-fix",
       "reason": "The test injected the host's kernel release, so it failed on every WSL host; it now injects a non-WSL Linux release. Offer upstream."
+    },
+    {
+      "path": "packages/boot/config-editor/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Settings by chat (C4): `ConfigEditor.edit()` emits `config-editor/edited` with the entry's patch id after a saved edit, once the profile's lock is released and in the caller's asynchronous context, so the plugin manager can save the edit as a profile version named by whoever made it. Who may edit a configuration, and when an edit asks, are unchanged."
+    },
+    {
+      "path": "packages/boot/config-editor/README.md",
+      "class": "delo-feature",
+      "reason": "Settings by chat (C4): states that each saved edit emits `config-editor/edited`, which the plugin manager saves as a profile version."
+    },
+    {
+      "path": "packages/boot/config-editor/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Settings by chat (C4): the Chinese counterpart of the `config-editor/edited` sentence added to README.md."
+    },
+    {
+      "path": "packages/boot/config-editor/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Settings by chat (C4): the consistency record re-recorded after the `config-editor/edited` sentence was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/settings/settings/package.json",
+      "class": "delo-feature",
+      "reason": "Settings by chat (C4): exports the existing `redact` module as `./redact`, so the `plugin_manager` tool's `read_config` and `configure` leave `role('secret')` fields out of what the model reads. Upstream's other exports are unchanged."
+    },
+    {
+      "path": "packages/settings/settings/tests/configuration.spec.ts",
+      "class": "delo-feature",
+      "reason": "Settings by chat (C4): the configuration editor's spec asserts that only a saved edit emits `config-editor/edited`, with the entry's patch id."
+    },
+    {
+      "path": "tsconfig.base.json",
+      "class": "delo-feature",
+      "reason": "Source-plane path aliases for the subpath exports Delo adds: `@deepseek-ai/dsh-settings/redact` (settings by chat, C4) and `@deepseek-ai/dsh-plugin-manager/history` (profile history and safe mode). Upstream's aliases are unchanged."
     }
   ],
   "retired": []

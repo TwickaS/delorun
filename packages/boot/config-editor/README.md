@@ -30,7 +30,7 @@ Mount this service in a profile application with Loader and `profileContext`. It
   name: '@deepseek-ai/dsh-config-editor'
 ```
 
-Use [settings](../../settings/settings/README.md) for forms restricted to live fields. Callers that edit complete configuration can use `ctx.configEditor.edit()`; ordinary fields retain Loader’s normal lifecycle.
+Use [settings](../../settings/settings/README.md) for forms restricted to live fields. Callers that edit complete configuration can use `ctx.configEditor.edit()`; ordinary fields retain Loader’s normal lifecycle. Each saved edit emits `config-editor/edited` with the entry's patch id once the profile's lock is released, in the caller's asynchronous context, so the [plugin manager](../plugin-manager/README.md) can save it as a version named by whoever made it.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
