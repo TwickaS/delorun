@@ -1,0 +1,15 @@
+{
+  "name": "@delo/contract-device-approval",
+  "description": "Key types, approval messages, the match code, alert kinds, error codes and limits of device approval, as specified by contract C5.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delo/contract-admission": "workspace:*"
+  }
+}

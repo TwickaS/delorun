@@ -1,0 +1,79 @@
+# Bilingual-pair consistency record for c05-device-approval.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/contracts/c05-device-approval.md
+/:
+  en: dda214082df87c16
+  zh: f1749d5955ea1451
+/contract-c5-device-approval:
+  en: fbd3ca76614d540d
+  zh: 05446b1e2abc685d
+/contract-c5-device-approval/summary:
+  en: 5bb9938e84c122a9
+  zh: d23290cb4f4c02a6
+/contract-c5-device-approval/contents:
+  en: 4901a555090a5349
+  zh: 347f205ff67c59a0
+/contract-c5-device-approval/contract:
+  en: f01b7dcd9a443524
+  zh: 612df9cabb1d68ca
+/contract-c5-device-approval/contract/keys-and-storage:
+  en: f4e702d68ac6374c
+  zh: cc277c728c2bfcdc
+/contract-c5-device-approval/contract/binding-to-an-address:
+  en: 8c43eca07fd5f33a
+  zh: 2420e41e6af35dcc
+/contract-c5-device-approval/contract/owner-claim:
+  en: 3f25d5b1c634c94d
+  zh: d0f1e8cad3339f51
+/contract-c5-device-approval/contract/approval-request:
+  en: 28b79819dac176ab
+  zh: c194c8b7353cae5d
+/contract-c5-device-approval/contract/match-code:
+  en: 7e8c5e0c86acf1bd
+  zh: a88b7b3010c75251
+/contract-c5-device-approval/contract/approval:
+  en: f1409ccd9f4e8f7f
+  zh: f000b767f4b6ec03
+/contract-c5-device-approval/contract/approval-prompt:
+  en: cfe54fee4619907c
+  zh: 39492b6b921fc482
+/contract-c5-device-approval/contract/sign-in:
+  en: 3b1dfbcd69629a40
+  zh: a4c055b5a917c1b2
+/contract-c5-device-approval/contract/removal:
+  en: f7e3148e391a47cc
+  zh: aa0b1e3da5130202
+/contract-c5-device-approval/contract/reset:
+  en: 54ba339d36c15f38
+  zh: 00dceeeb70d14326
+/contract-c5-device-approval/contract/recovery-kit:
+  en: 1ac987fbc3c568ca
+  zh: 78062175be8b92c9
+/contract-c5-device-approval/contract/desktop-app-on-another-home:
+  en: 033c365caf37c5a0
+  zh: ed6216e0a1b14d83
+/contract-c5-device-approval/contract/alerts:
+  en: e3fec4632a292784
+  zh: b7c4e1f31f88ad83
+/contract-c5-device-approval/contract/limits:
+  en: c25755676dd829dd
+  zh: 4a177a69de2279f2
+/contract-c5-device-approval/contract/errors:
+  en: 0d3fc76fec01c8f6
+  zh: ed60e0e4f56adeee
+/contract-c5-device-approval/contract/delo-run-mailbox:
+  en: 8ebd7d1c762a9d68
+  zh: 2d9ecb87740577e5
+/contract-c5-device-approval/consumers:
+  en: 88b5bd7381b08529
+  zh: 2ab77a831b0df15d
+/contract-c5-device-approval/compatibility:
+  en: 8d2343f85e895f37
+  zh: 1e1f4211fbe61251
+/contract-c5-device-approval/security:
+  en: f6b7709a9122f3ad
+  zh: eb8707f0d4a014c3
+/contract-c5-device-approval/decided-values:
+  en: bfe3467bb77d0a6c
+  zh: bed697fee31c5a39

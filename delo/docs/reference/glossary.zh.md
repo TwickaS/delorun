@@ -64,7 +64,8 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 
 ## 登录
 
-- **所有者验证码**（owner code）：home 在其终端中打印的一次性代码，供第一台设备认领；仅在 home 所在计算机（回环地址）或 tailnet 私有路径上接受。<a id="owner-code"></a>
+- **所有者验证码**（owner code）：home 在其终端中打印的一次性代码，供第一台设备认领；仅在 home 所在计算机（回环地址，包括 SSH 端口转发）上接受，只有在远程访问约定信任 Tailscale 身份请求头的情况下，才也在 tailnet 私有路径上接受。<a id="owner-code"></a>
+- **home 密钥**（home key）：home 自己的签名密钥，它向 home 的设备与中继标识该 home，为其告警签名，并在设备重置后保留。**匹配码**（match code）：设备批准期间新设备与受信任设备都显示的 8 位数字，由两台设备各自看到的密钥推导而来；本人在受信任设备上输入新设备显示的匹配码。<a id="home-key"></a>
 - **受信任设备**（trusted device）：home 已为某个 studio 地址批准的浏览器或桌面应用。它持有绑定到该地址来源的设备密钥，因此新地址会再次批准它。**设备批准**（device approval）：在一个实时会话中，由受信任设备批准新设备，方法是输入新设备显示的代码。<a id="trusted-device"></a>
 - **身份因子**（identity factor）：为远程访问证明本人身份的登录方式：通行密钥、本人自己的 OpenID Connect 提供方，或在使用 Delo 中继时的 Delo Run 账户；开启远程访问时，须为每个 studio 地址注册。仅本地的 home 不需要它；公开远程访问必须具备它，tailnet 私有远程访问则可改用 tailnet 身份。它从不替代设备批准。<a id="identity-factor"></a>
 - **恢复套件**（recovery kit）：所有受信任设备丢失时，用于恢复批准权限的已保存密钥。使用它需要身份因子，并会换成一个新套件。home 自己的终端（`delorun devices reset`）是另一条恢复途径；在没有身份因子的情况下，它是唯一途径。<a id="recovery-kit"></a>
