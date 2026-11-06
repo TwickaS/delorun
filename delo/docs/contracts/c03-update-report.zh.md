@@ -33,10 +33,10 @@ description: "契约 C3：Delo 更新应用之前显示的更新报告，其条�
 
 | 安装 | Id | 更新途径 |
 | --- | --- | --- |
-| CLI home：运行时仓库（runtime store）与 home 进程（home process） | `cli-home` | `delorun update` 与 studio 的「Update now」，经由更新通道（[C19](c19-home-process.md)） |
+| CLI home：运行时仓库（runtime store）与 home 进程（home process） | `cli-home` | `delorun update` 与 studio 的「Update now」，经由更新通道（[C19](c19-home-process.zh.md)） |
 | 桌面应用及其 Host | `desktop-host` | Delo 更新源上的桌面更新程序（[C2](c02-release-manifest.zh.md#desktop-updates-and-rollback)） |
 
-每套安装都有自己的 profile，以及自己的 Delo 与 DSH 版本；更新其中一套从不切换另一套。每套安装都在 [C1](c01-home-layout.md) 指定的路径写入自己的状态记录（安装 id、Delo 版本、DSH 版本、通道、更新状态、目标版本、时间），每份报告都会读取另一套安装的记录。记录缺失或无法读取时，该安装显示为 `unknown`。
+每套安装都有自己的 profile，以及自己的 Delo 与 DSH 版本；更新其中一套从不切换另一套。每套安装都在 [C1](c01-home-layout.zh.md) 指定的路径写入自己的状态记录（安装 id、Delo 版本、DSH 版本、通道、更新状态、目标版本、时间），每份报告都会读取另一套安装的记录。记录缺失或无法读取时，该安装显示为 `unknown`。
 
 | 状态 | 含义 |
 | --- | --- |
@@ -127,7 +127,7 @@ description: "契约 C3：Delo 更新应用之前显示的更新报告，其条�
 
 1. 本人确认报告；`delorun update` 会打印报告并询问，`delorun update --yes` 会确认一份既没有 `disabled` 或 `removed` 条目、也没有未验证条目的报告。
 2. 写入快照：一个名为「Before update to Delo <to.delo>」的 profile 历史版本，包含 profile patch、home patch、组合包列表、两个豁免文件、该 profile 的 `pnpm-workspace.yaml` 以及报告。
-3. 运行中的 chat 结束，或由本人停止；CLI 的切换经由 home 进程的更新握手进行，该握手从不在 chat 运行时切换（[C19](c19-home-process.md)），桌面应用则在其重启前步骤中完成这一步。
+3. 运行中的 chat 结束，或由本人停止；CLI 的切换经由 home 进程的更新握手进行，该握手从不在 chat 运行时切换（[C19](c19-home-process.zh.md)），桌面应用则在其重启前步骤中完成这一步。
 4. 目标启动，健康检查开始运行。
 
 <a id="health-check"></a>
@@ -154,7 +154,7 @@ description: "契约 C3：Delo 更新应用之前显示的更新报告，其条�
 
 应本人请求，本人之后可以随时从 studio 的更新界面、`delorun recover` 或桌面应用的回滚功能进行回滚。
 
-回滚会恢复快照中的文件，并将安装切换回被替换的发布：对于 `cli-home`，是运行时仓库保留的运行时（[C1](c01-home-layout.md)）；对于 `desktop-host`，是缓存的上一个发布（[C2](c02-release-manifest.zh.md#desktop-updates-and-rollback)）。回滚不改变 profile 与运行时仓库之外的任何 chat、工作区或文件。自动回滚之后，studio 会写明未满足的标准，失败的发布只有在显示该失败的情况下才会再次提供。失败的回滚会使状态保持为 `failed`，并提供安全模式与 `delorun recover`。
+回滚会恢复快照中的文件，并将安装切换回被替换的发布：对于 `cli-home`，是运行时仓库保留的运行时（[C1](c01-home-layout.zh.md)）；对于 `desktop-host`，是缓存的上一个发布（[C2](c02-release-manifest.zh.md#desktop-updates-and-rollback)）。回滚不改变 profile 与运行时仓库之外的任何 chat、工作区或文件。自动回滚之后，studio 会写明未满足的标准，失败的发布只有在显示该失败的情况下才会再次提供。失败的回滚会使状态保持为 `failed`，并提供安全模式与 `delorun recover`。
 
 <a id="undo-and-restore"></a>
 

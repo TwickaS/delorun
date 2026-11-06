@@ -15,20 +15,20 @@
   en: 564b7780fa1155f0
   zh: 009e523b93e57345
 /c9-runtime-and-supervisor-interface/the-runtime-provider:
-  en: b5403f9093713f6d
-  zh: 2ca68f859cd9ff4c
+  en: fe1f067edc22f073
+  zh: 1e05c25f2241c221
 /c9-runtime-and-supervisor-interface/the-capability-report:
-  en: fc679fc5d78d2036
-  zh: fbb09318468355bf
+  en: 8973c15b41576f2f
+  zh: fa07d0bb65489d0c
 /c9-runtime-and-supervisor-interface/docker-shapes:
-  en: 38a9460e01a1fc97
-  zh: a4f428a62de8f02a
+  en: 4c5373d630a53c77
+  zh: 4429e0c12c5a4a7d
 /c9-runtime-and-supervisor-interface/sandbox-backend-per-shape:
-  en: e923f6bb43d06a57
-  zh: 76ebbeac7ae5b196
+  en: 9b775ff93ef6ca8e
+  zh: 7c0bb24def1e4146
 /c9-runtime-and-supervisor-interface/containers:
-  en: 2cef9a556e180b3f
-  zh: 01d8e19628603cae
+  en: 4a5e80aa1bc87972
+  zh: 8808bf1406948e2f
 /c9-runtime-and-supervisor-interface/networks-and-egress:
   en: 8076d5ba0bd85686
   zh: f9b1daf7e8cdf36e
@@ -36,26 +36,26 @@
   en: 4e23e944823304ea
   zh: 9a2bcdd23dbbc1a5
 /c9-runtime-and-supervisor-interface/credential-forwarding:
-  en: f6f7de29184a0d34
-  zh: db12daa68585f07f
+  en: 81d5cadd2696da8d
+  zh: 52d3af3b233785d3
 /c9-runtime-and-supervisor-interface/the-docker-supervisor:
-  en: 55b3dc7fa451159d
-  zh: 2a87e1ed2446e6c2
+  en: a197a1f8f617500d
+  zh: 085458c4e115cc06
 /c9-runtime-and-supervisor-interface/the-supervisor-api:
   en: d888e3b8925ae251
   zh: e51dac802099aa4f
 /c9-runtime-and-supervisor-interface/supervisor-roots:
-  en: 34523e7fe84c0946
-  zh: bb335f59de7946c4
+  en: fd3b9b5a18e7ad50
+  zh: f4520bd75190cb04
 /c9-runtime-and-supervisor-interface/the-s2-helper-channel:
   en: c5aa4bc6962309ef
   zh: 2dfec94f545a1563
 /c9-runtime-and-supervisor-interface/images:
-  en: 8e8f9c07aec30aad
-  zh: 5d1664f923fb8491
+  en: 1f62ba1022069bb9
+  zh: 80828dbc0ffcf50a
 /c9-runtime-and-supervisor-interface/the-container-denial-marker:
-  en: 9dc77377180dabb1
-  zh: 4955edfe6aaf4253
+  en: 4ba5bfb8db42f65f
+  zh: 012df69688b7bbd2
 /c9-runtime-and-supervisor-interface/limits:
   en: 9e650573f4027231
   zh: 672c78d9f250c864
@@ -63,8 +63,8 @@
   en: 87f9b6e54d968f5b
   zh: b85e842e274ae42e
 /c9-runtime-and-supervisor-interface/consumers:
-  en: ffbc1905be5fa96a
-  zh: 42bfa7b7134e561a
+  en: d72a5e8f5ebc81f5
+  zh: a888f14c0d2adbe2
 /c9-runtime-and-supervisor-interface/compatibility:
   en: 1bb1dc07a5dc6d49
   zh: c8076c6b4b00bbb0
@@ -72,11 +72,14 @@
   en: 52543dba9bf0d349
   zh: e612a6c5b83e9afc
 /c9-runtime-and-supervisor-interface/security/requirements:
-  en: 05a82777b6adb78b
-  zh: f255f96046bdabdb
+  en: 30992d1ddc627013
+  zh: 86661bbf2df9ed9d
 /c9-runtime-and-supervisor-interface/security/denial-tests:
-  en: c1e6bc434a860c31
-  zh: 2e05d41c9e1fba49
+  en: 294b2ad132711cb1
+  zh: 837e0e35e2fff5de
+/c9-runtime-and-supervisor-interface/security/what-this-does-not-prove:
+  en: 9dc0f4799c71702f
+  zh: ba221ec3a91e68bf
 /c9-runtime-and-supervisor-interface/enforcement-per-platform-and-dialect:
-  en: 4ab1c002d1c19992
-  zh: 8b0d597fc64bd533
+  en: 495e3b0a9a57b6b7
+  zh: 4a668b29d7a09700

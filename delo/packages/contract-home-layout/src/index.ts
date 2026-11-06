@@ -36,6 +36,14 @@ export const DESKTOP_PROFILE = 'desktop'
 export const DELO_HOME_ENTRIES = {
   /** The runtime store. */
   runtimes: 'runtimes',
+  /** Runtime installs in progress, outside the store on the same filesystem. */
+  staging: 'staging',
+  /** The verified release root, timestamp and log checkpoint (C2, C18). */
+  trust: 'trust',
+  /** Each installation's update status record (C3). */
+  status: 'status',
+  /** The verified catalogue index and revocation list (C13). */
+  catalogue: 'catalogue',
   /** Secret files, one directory per owning contract. */
   secrets: 'secrets',
   /** Per-profile run directories (`run/<profile>/`). */
@@ -110,8 +118,37 @@ export const STORE_ENTRIES = {
   previous: 'previous',
   /** Lock taken by install, switch and removal. */
   lock: 'store.lock',
-  /** Prefix of an install in progress; 16 hexadecimal digits follow. */
-  stagingPrefix: '.staging-',
+} as const
+
+/** Hexadecimal digits of the random name of one directory under `staging/`. */
+export const STAGING_NAME_HEX_DIGITS = 16
+
+/** Files under `trust/`; each is replaced atomically and never with an older version. */
+export const TRUST_FILES = {
+  /** The newest root that verified (C2). */
+  root: 'root.json',
+  /** The newest timestamp that verified; its `version` is the highest stored (C2). */
+  timestamp: 'timestamp.json',
+  /** The latest log checkpoint that verified (C18). */
+  checkpoint: 'checkpoint.json',
+} as const
+
+/** Files under `status/`, one per installation (C3). */
+export const STATUS_FILES = {
+  /** Written by the CLI home. */
+  cliHome: 'cli-home.json',
+  /** Written by the desktop app. */
+  desktopHost: 'desktop-host.json',
+} as const
+
+/** Files under `catalogue/` (C13). */
+export const CATALOGUE_FILES = {
+  /** The newest catalogue index that verified. */
+  index: 'index.json',
+  /** The newest revocation list that verified. */
+  revocations: 'revocations.json',
+  /** Each file's `sequence` and fetch time. */
+  state: 'state.json',
 } as const
 
 /** The store layout number this contract defines. */
@@ -150,8 +187,8 @@ export const DOWNLOAD_CONNECT_TIMEOUT_MS = 30_000
 /** Time a download may deliver no byte before it fails, in milliseconds. */
 export const DOWNLOAD_STALL_TIMEOUT_MS = 60_000
 
-/** The only hosts a release download may reach, redirects included. */
-export const RELEASE_DOWNLOAD_HOSTS = ['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'] as const
+/** The only hosts a release-file download may reach, redirects included; the release-log check reaches the hosts C18 names. */
+export const RELEASE_DOWNLOAD_HOSTS = ['releases.delorun.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'] as const
 
 /** A Delo release version naming one directory of the runtime store. */
 export type RuntimeVersion = Branded<'DeloRuntimeVersion'>

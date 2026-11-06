@@ -59,6 +59,10 @@ Delo 在 home 顶层添加标为 Delo 的条目。其他每个条目都属于上
   sessions/, attachments/, cache/, storages/, dsh-runtimes/, ...   upstream data
   logs/                                upstream startup reports and the operational logs of C20
   runtimes/                      0700  Delo: the runtime store
+  staging/                       0700  Delo: runtime installs in progress
+  trust/                         0700  Delo: the verified release root, timestamp and log checkpoint (C2, C18)
+  status/                        0700  Delo: each installation's update status record (C3)
+  catalogue/                     0700  Delo: the verified catalogue index and revocation list (C13)
   secrets/                       0700  Delo: secret files, 0600 each
   run/<profile>/                 0700  Delo: home lock, start token, sockets, update journal
   supervisor/                    0700  Delo: the Docker supervisor's roots file (C9)
@@ -66,7 +70,11 @@ Delo 在 home 顶层添加标为 Delo 的条目。其他每个条目都属于上
   alerts/                        0700  Delo: signed certificate-alert files (C5)
 ```
 
-C20 定义的运行日志位于上游 `logs/` 下的各入口子目录中，与上游的 `startup-*.log` 报告并列。
+[C20](c20-operational-logs.zh.md) 定义的运行日志位于上游 `logs/` 下的各入口子目录中，与上游的 `startup-*.log` 报告并列。
+
+- **`trust/`。** `root.json` 是最新通过校验的根，`timestamp.json` 是最新通过校验的时间戳，其 `version` 即所保存的最高版本（[C2](c02-release-manifest.zh.md)），`checkpoint.json` 是最新通过校验的日志检查点（[C18](c18-release-log.zh.md)）。每个文件都以原子方式替换，且从不替换为更旧的版本；CLI 启动器与桌面更新器共用它们。
+- **`status/`。** `cli-home.json` 与 `desktop-host.json` 是 [C3](c03-update-report.zh.md) 的状态记录；每个安装只写自己的记录，并读取另一个的记录。
+- **`catalogue/`。** `index.json` 与 `revocations.json` 是最新通过校验的插件索引与撤销列表，`state.json` 保存二者各自的 `sequence` 与获取时间（[C13](c13-catalogue-revocation.zh.md)）。
 
 <a id="modes-and-the-refusal-rule"></a>
 
@@ -74,7 +82,7 @@ C20 定义的运行日志位于上游 `logs/` 下的各入口子目录中，与�
 
 在 Linux 与 macOS 上，home 及 Delo 在其下创建的每个目录的权限模式为 0700，每个受保护文件为 0600。Delo 以独占创建方式按这些模式创建它们，因此进程 umask 只能使其更严。
 
-- **受保护文件。** `secrets/` 下的每个文件、`run/<profile>/start-token`、`supervisor/roots.json` 以及 C20 的日志文件。上游的 `.credentials.yaml` 与 `.env` 遵循上游自己的检查：其他用户可读的文件会被拒绝。
+- **受保护文件。** `secrets/`、`trust/`、`status/` 与 `catalogue/` 下的每个文件、`run/<profile>/start-token`、`supervisor/roots.json` 以及 [C20](c20-operational-logs.zh.md) 的日志文件。上游的 `.credentials.yaml` 与 `.env` 遵循上游自己的检查：其他用户可读的文件会被拒绝。
 - **拒绝规则。** 组件读取受保护文件前先用 `lstat` 检查它。路径是符号链接或不是普通文件、所有者不是本进程的用户，或设置了任一组或其他用户权限位（`0o077`）时，组件以 `SECRET_FILE_MODE` 拒绝该文件。错误给出路径与修复命令 `chmod 600 <path>`。
 - **目录。** home、`secrets/` 或 `run/<profile>/` 设置了组或其他用户权限位、是符号链接或属于其他用户时，home 进程以 `HOME_MODE` 拒绝启动。错误给出路径与修复命令 `chmod 700 <path>`。
 - **Windows。** Windows 没有权限位。等价的检查读取路径的 DACL：每个允许项都必须指向本人自己的 SID、`SYSTEM` 或 `BUILTIN\Administrators`。DACL 允许其他任何 SID 的受保护文件或目录以相同代码被拒绝，修复命令是移除继承并只授权这三者的 `icacls` 命令。
@@ -94,7 +102,7 @@ Delo 的密钥是 C4 至 C7 定义的 home-auth 密钥、中继与 TLS 密钥以
 
 ## 套接字与启动令牌
 
-Docker 监管器（C9）与更新通道（C19）是拒绝受限命令的两个通道。二者都在 home 下监听，且只接受携带当前启动令牌的请求。
+Docker 监管器（[C9](c09-runtime-supervisor.zh.md)）与更新通道（[C19](c19-home-process.zh.md)）是拒绝受限命令的两个通道。二者都在 home 下监听，且只接受携带当前启动令牌的请求。
 
 - **套接字路径。** 在 Linux 与 macOS 上，更新通道是 Unix 套接字 `run/<profile>/update.sock`，监管器是 `run/<profile>/supervisor.sock`。二者都是路径名套接字；Delo 从不在抽象命名空间套接字上监听。套接字在启动令牌写入之后创建，绑定后设为 0600。
 - **路径长度。** 套接字路径最多 103 字节。路径更长时，启动以 `SOCKET_PATH_TOO_LONG` 停止，错误给出该路径并要求使用更短的 `DELO_HOME`。
@@ -107,9 +115,9 @@ Docker 监管器（C9）与更新通道（C19）是拒绝受限命令的两个�
 
 ## home 锁
 
-每个 profile 只有一个 home 进程，它在整个生命周期内持有 `run/<profile>/home.lock`（C19）。没有 home 进程运行时，`delorun update` 与 `delorun recover` 在修改仓库期间持有该锁。
+每个 profile 只有一个 home 进程，它在整个生命周期内持有 `run/<profile>/home.lock`（[C19](c19-home-process.zh.md)）。没有 home 进程运行时，`delorun update` 与 `delorun recover` 在修改仓库期间持有该锁。
 
-- **创建。** 锁以独占创建方式、权限 0600 创建。它包含一个 JSON 对象：`{"v":1,"pid":<integer>,"startId":"<32 lowercase hexadecimal digits>","runtime":"<version>","startedAt":"<RFC 3339 UTC time>"}`。`startId` 是随机值，在 C19 的协议与 C20 的记录中标识一次启动；它不是密钥。
+- **创建。** 锁以独占创建方式、权限 0600 创建。它包含一个 JSON 对象：`{"v":1,"pid":<integer>,"startId":"<32 lowercase hexadecimal digits>","runtime":"<version>","startedAt":"<RFC 3339 UTC time>"}`。`startId` 是随机值，在 [C19](c19-home-process.zh.md) 的协议与 [C20](c20-operational-logs.zh.md) 的记录中标识一次启动；它不是密钥。
 - **失效的锁。** 只有记录的进程已不存在（`ESRCH`）时，竞争者才替换该锁。
 - **无响应的持有者。** 记录的进程存在、但其更新通道在 2 秒内没有回答 `status` 时，竞争者以 `HOME_UNRESPONSIVE` 停止并给出进程 id。它从不接管该锁。
 - **范围。** 锁按 profile 划分。桌面应用的上游锁 `profiles/desktop/lock` 是另一个文件，Delo 从不获取、写入或等待它。
@@ -135,7 +143,9 @@ runtimes/
   previous                the version kept for rollback and one newline; absent before the first switch
   store.lock              taken by install, switch and removal
   <version>/              one complete, verified runtime closure
-  .staging-<16 hex>/      an install in progress
+  delorun-<version>.manifest.json            the verified release manifest, beside its installation
+  delorun-<version>-<platform>.files.json    the verified runtime file list
+  delorun-<version>.manifest.log.json        the release-log bundle
 ```
 
 - **版本名。** 目录名是 Delo 的发布版本：不带构建元数据的 SemVer 2.0，匹配 `^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`，最多 64 个字符。
@@ -143,11 +153,11 @@ runtimes/
 - **Windows 重命名。** 重命名报告 `EPERM`、`EBUSY` 或 `EACCES` 时，以退避方式重试，总计最多 2,000 毫秒。仍然失败的重命名以 `POINTER_REPLACE_FAILED` 停止，旧指针保持不变。
 - **读取指针。** 读取方读取整个文件。缺失、为空、超长或格式错误的指针，或所指版本没有已安装目录的指针，都是 `NO_ACTIVE_RUNTIME`；此时启动器提供重新安装或回滚，从不自行挑选目录。
 - **切换顺序。** 切换先把旧版本写入 `previous`，再把新版本写入 `current`，因此在两次写入之间被杀死的进程会让 `current` 仍指向完整的旧版本。
-- **谁切换 `current`。** 只有四种事件切换它：不存在 `current` 时的首次安装；经由 C19 握手的更新；本人通过 C19 或 `delorun recover` 请求的回滚；以及 C19 在健康检查失败后的自动回滚。启动器从不自行切换 `current`，无论它比活动运行时新还是旧。
-- **安装。** 安装获取 `store.lock`，最多等待 30 秒，之后以 `STORE_BUSY` 停止。它下载到 `.staging-<16 hex>/`，校验归档摘要、manifest 的签名与新鲜度（C2）以及 manifest 在日志中的收录（C18），并带路径检查地解压：不允许绝对路径、`..` 段、指向暂存目录之外的链接或设备文件。然后它按 manifest 的哈希校验每个文件，并把暂存目录重命名为 `<version>/`。在全部检查通过之前，`<version>/` 下不出现任何内容；失败的安装删除其暂存目录，不改动其他任何内容。
-- **已安装文件。** 重命名之后，`<version>/` 下的目录权限为 0555，文件为 0444，可执行文件为 0555；在 Windows 上它们带只读属性。每次启动时启动器的哈希检查（C2）才是完整性控制；这些权限模式只防止意外写入。
-- **保留。** 切换提交之后，仓库保留 `current` 与 `previous` 所指的版本，删除其他每个 `<version>/` 以及没有安装占用的每个 `.staging-*` 目录。失败的删除（例如 Windows 上仍在使用的目录）在下次启动时重试。同一时间最多存在两个版本和一个暂存目录。
-- **回滚范围。** 运行时回滚不改动 `runtimes/` 之外的任何文件。从 profile 历史恢复 profile 是 C3 的步骤。
+- **谁切换 `current`。** 只有四种事件切换它：不存在 `current` 时的首次安装；经由 [C19](c19-home-process.zh.md) 握手的更新；本人通过 [C19](c19-home-process.zh.md) 或 `delorun recover` 请求的回滚；以及 [C19](c19-home-process.zh.md) 在健康检查失败后的自动回滚。启动器从不自行切换 `current`，无论它比活动运行时新还是旧。
+- **安装。** 安装获取 `store.lock`，最多等待 30 秒，之后以 `STORE_BUSY` 停止。它下载到 `~/.delo/staging/<16 hex>/`，该目录位于 `runtimes/` 之外、同一文件系统上，并执行 [C2](c02-release-manifest.zh.md) 的客户端校验：根与时间戳的遍历、manifest 的签名与新鲜度、发布日志 bundle 与在线检查（[C18](c18-release-log.zh.md)），以及归档与文件列表的摘要。它带路径检查地解压（不允许绝对路径、`..` 段、链接、设备文件以及文件列表之外的条目），按文件列表检查每个文件，然后把暂存目录重命名为 `runtimes/<version>/`，并把 manifest、文件列表与 bundle 放在其旁边。在全部检查通过之前，`runtimes/` 下不出现任何内容；失败的安装删除其暂存目录，不改动其他任何内容。
+- **已安装文件。** 重命名之后，`<version>/` 下的目录权限为 0555，文件为 0444，可执行文件为 0555；在 Windows 上它们带只读属性。每次启动时启动器的哈希检查（[C2](c02-release-manifest.zh.md)）才是完整性控制；这些权限模式只防止意外写入。
+- **保留。** 切换提交之后，仓库保留 `current` 与 `previous` 所指的版本及其发布文件，删除其他每个 `<version>/` 及其发布文件，以及 `staging/` 下没有安装占用的每个目录。失败的删除（例如 Windows 上仍在使用的目录）在下次启动时重试。同一时间最多存在两个版本和一个暂存目录。
+- **回滚范围。** 运行时回滚不改动 `runtimes/` 之外的任何文件。从 profile 历史恢复 profile 是 [C3](c03-update-report.zh.md) 的步骤。
 
 <a id="launcher-and-store-compatibility"></a>
 
@@ -156,7 +166,7 @@ runtimes/
 只有当启动器既理解仓库、又理解运行时的启动接口时，它才运行活动运行时。
 
 - `store.json` 记录仓库布局编号，当前为 1。只有仓库的某个条目移动或改变含义时，布局编号才改变。
-- 每个运行时的已签名 manifest（C2）记录其启动协议编号，当前为 1。启动协议规定运行时的入口文件、启动器传入的参数以及它设置的环境变量（`DSH_HOME`、`DELO_HOME`、`DELO_PROFILE`）。
+- 每个运行时的已签名 manifest（[C2](c02-release-manifest.zh.md)）记录其启动协议编号，当前为 1。启动协议规定运行时的入口文件、启动器传入的参数以及它设置的环境变量（`DSH_HOME`、`DELO_HOME`、`DELO_PROFILE`）。
 - 启动器支持仓库的布局编号和运行时的启动协议编号时，才运行 `current`。否则它以 `RUNTIME_INCOMPATIBLE` 停止，给出两个编号；运行时较旧时提供更新流程，启动器较旧时提供启动器更新。它既不改动 `current`，也不改动仓库的任何其他文件。
 
 <a id="the-npm-launcher-and-the-install-script"></a>
@@ -164,12 +174,12 @@ runtimes/
 ## npm 启动器与安装脚本
 
 - **包中不含运行时。** npm 包 `delorun` 只是启动器。它没有运行时依赖，也不携带运行时发行包。
-- **下载。** 安装某个版本时，启动器只通过 HTTPS，从 Delo 公开仓库的 GitHub Releases 下载 C2 指定的对应平台归档与已签名 manifest。它只跟随指向 `github.com`、`objects.githubusercontent.com` 与 `release-assets.githubusercontent.com` 的重定向，对其他任何主机以 `DOWNLOAD_REFUSED` 拒绝。
+- **下载。** 安装某个版本时，启动器只通过 HTTPS 下载 [C2](c02-release-manifest.zh.md) 指定的发布文件：从 `releases.delorun.com` 下载根与时间戳，从 Delo 公开仓库的 GitHub Releases 下载 manifest、其 bundle、文件列表与对应平台的归档（`.tar.gz`，Windows 上为 `.zip`）。它只跟随指向 `github.com`、`objects.githubusercontent.com` 与 `release-assets.githubusercontent.com` 的重定向，对其他任何主机以 `DOWNLOAD_REFUSED` 拒绝。发布日志检查访问 [C18](c18-release-log.zh.md) 指定的主机。
 - **下载限额。** 归档最多 1,073,741,824 字节（1 GiB），manifest 最多 4,194,304 字节（4 MiB）。30 秒内未建立的连接，或 60 秒内未传送任何字节的连接，会使下载失败。
-- **安装前校验。** 如[运行时仓库](#the-runtime-store)所述，启动器在 `runtimes/<version>/` 下出现任何文件之前，按已签名 manifest（C2）与该 manifest 在发布日志中的条目（C18）校验归档。
+- **安装前校验。** 启动器按已签名 manifest（[C2](c02-release-manifest.zh.md)）与该 manifest 在发布日志中的条目（[C18](c18-release-log.zh.md)）校验归档，且在 `runtimes/<version>/` 下出现任何文件之前完成，如[运行时仓库](#the-runtime-store)所述。
 - **无网络时。** 启动器在离线哈希检查后运行已安装的 `current`。安装始终需要网络和日志收录证明。
-- **信任锚。** `npx delorun` 在任何 Delo 检查能够运行之前，就运行 npm 提供的启动器，因此该启动器通过 npm 为其发布的构建证明获得信任，该证明把包与公开仓库的发布工作流关联起来（C2）。安装脚本通过其公布的哈希获得信任。
-- **启动器副本。** 安装脚本把启动器写入 `bin/delorun`（Windows 上另有 `bin/delorun.cmd`），并把 `bin/` 加入本人的命令路径。`delorun start --at-login` 在安装登录项（C19）之前把正在运行的启动器复制到 `bin/`，因此登录项从不依赖 npm。
+- **信任锚。** `npx delorun` 在任何 Delo 检查能够运行之前，就运行 npm 提供的启动器，因此该启动器通过 npm 为其发布的构建证明获得信任，该证明把包与公开仓库的发布工作流关联起来（[C2](c02-release-manifest.zh.md)）。安装脚本通过其公布的哈希获得信任。
+- **启动器副本。** 安装脚本把启动器写入 `bin/delorun`（Windows 上另有 `bin/delorun.cmd`），并把 `bin/` 加入本人的命令路径。`delorun start --at-login` 在安装登录项（[C19](c19-home-process.zh.md)）之前把正在运行的启动器复制到 `bin/`，因此登录项从不依赖 npm。
 
 <a id="confinement-rules"></a>
 
@@ -189,8 +199,10 @@ runtimes/
 - **可写根目录。** home 从不位于可写根目录之内。工作区根目录或附加可写根目录在解析符号链接后等于 home、位于其内或包含它时，`workspace-write` 以 `HOME_IN_WRITABLE_ROOT` 被拒绝。根目录包含 home 的工作区（例如 `~`）仍可运行 `read-only` 命令。
 - **Docker 套接字。** 该套接字位于 home 之外。Delo 从当前 Docker context 解析其路径：rootful 引擎为 `/var/run/docker.sock`，rootless 引擎为 `$XDG_RUNTIME_DIR/docker.sock`，或 Docker Desktop 的 context 所指的路径。该规则同时覆盖 context 的路径及其解析后的真实路径。端点为 TCP 或 SSH 的 context 使用网络，而没有方言限制网络，因此对它不强制执行 `docker-connect`。
 - **其他套接字。** 其他 `AF_UNIX` 套接字（例如 ssh-agent 套接字、D-Bus 与显示服务器）以及网络，对受限命令仍可访问。
-- **探测。** 每次启动时，home 进程针对 `run/<profile>/probe/` 中的固定样例、它在那里打开的一个套接字以及 Docker 套接字路径，为每条规则运行一个受限探测命令，并记录结果。只有当方言能表达某条规则、且本次启动时其探测被拒绝，`delorun verify` 才把该规则报告为 `enforced`。其他状态是 `not-enforced`（方言无法表达该规则、端点是网络端点，或该平台没有证明它的测试）、`unconfined`（没有沙箱运行，或模式为 `danger-full-access`）和 `unknown`（探测未运行，或因其他原因失败）。
+- **探测。** 每次启动时，home 进程针对 `run/<profile>/probe/` 中的固定样例、它在那里打开的一个套接字以及 Docker 套接字路径，为每条规则运行一个受限探测命令，并记录结果。`delorun verify` 通过 [C15](c15-verification-checks.zh.md) 的 `confinement-rule` 检查报告每条规则；只有当方言能表达某条规则、且本次启动时其探测被拒绝，才把该规则报告为 `enforced`。其他状态是 `not-enforced`（方言无法表达该规则、端点是网络端点，或该平台没有证明它的测试）、`unconfined`（没有沙箱运行，或模式为 `danger-full-access`）和 `unknown`（探测未运行，或因其他原因失败）。
 - **标注 Docker 模式。** `docker-connect` 不是 `enforced` 时，`delorun verify` 会报告它，setup 的 Docker 模式选项附带这一说明：在此系统上，原生工作区中的命令可以连接 Docker，而 Docker 可以启动挂载此计算机文件的容器。
+- **Landlock 与 rootful 引擎。** 方言为 Landlock、且当前 context 的端点是 rootful 引擎的套接字时，`delorun verify` 把 `docker-connect` 报告为 `not-enforced`，原因为 `dialect-cannot-express`，并给出该套接字的路径。setup（[C11](c11-setup-answers.zh.md)）给出同一路径，说明受限命令可以连接它、这在本机上等同于 root，并提供设置 Docker 的 rootless 引擎并把当前 context 切换到它的选项。
+- **提权提示。** `danger-full-access` 提权的批准提示（无论是命令请求它，还是本人设置该模式）在本人批准之前说明：「完全访问让该命令可以读取 Delo 的 home（包括其中的密钥与令牌），并访问 Docker 监管器与更新通道。」该提示展示给本人，对模型不可见。
 
 <a id="limits"></a>
 
@@ -245,8 +257,8 @@ runtimes/
 - 上游的 `packages/sandbox/sandbox-local` 与 `packages/sandbox/sandbox`：各方言的 profile 与对可写根目录的拒绝。
 - `delo/apps/install` 与 `delo/apps/npm-launcher`：下载、校验与启动器副本。
 - `delo/packages/runtime-store`：仓库、指针文件、安装、切换与保留。
-- `delo/packages/home-process`：锁、启动令牌、更新通道的套接字与探测（C19）。
-- `delo/packages/supervisor`：监管器的套接字及其令牌检查（C9）。
+- `delo/packages/home-process`：锁、启动令牌、更新通道的套接字与探测（[C19](c19-home-process.zh.md)）。
+- `delo/packages/supervisor`：监管器的套接字及其令牌检查（[C9](c09-runtime-supervisor.zh.md)）。
 - `delo/packages/home-auth`：`secrets/home-auth/` 下的密钥文件。
 
 <a id="compatibility"></a>
@@ -272,10 +284,11 @@ runtimes/
 5. 在 Landlock 下，对 home 的读取拒绝使启动令牌不可读，因此受限命令可以连接任一通道，但其请求认证失败，`delorun verify` 会报告这一状态。
 6. 两个通道只接受携带当前 home 进程启动令牌的请求；缺失的令牌、错误的令牌与之前某次启动的令牌一律被拒绝。令牌是来自操作系统随机源的 256 位值，从不记录到日志，也不通过命令行或环境传递，并以恒定时间比较。
 7. 该保护依赖于对 agent 命令的限制。在沙箱外运行的本人用户进程可以读取令牌，也本来就可以自行运行 `delorun` 与 `docker`，本约定不声称能防范它。不存在 root 所有的辅助程序。
-8. `danger-full-access` 下的命令不受限制；上述规则都不适用于它，`delorun verify` 对处于该模式的工作区报告 `unconfined`。
+8. `danger-full-access` 下的命令不受限制；上述规则都不适用于它，`delorun verify` 对处于该模式的工作区报告 `unconfined`。该模式的批准提示说明，完全访问可以触及 Delo 的 home、其令牌、Docker 监管器与更新通道。
 9. home 从不位于可写根目录之内；根目录等于 home、位于其内或包含它时，`workspace-write` 被拒绝。
 10. 启动器从不自行切换 `current`。安装在 `runtimes/<version>/` 下出现任何文件之前，校验归档、manifest 的签名与新鲜度、其日志收录以及每个文件的哈希；指针只通过原子重命名替换。
 11. Delo 从不读取或写入上游的 `~/.dsh`。
+12. 在只有 Landlock、且 Docker 套接字为 rootful 的系统上，`delorun verify` 把该套接字报告为未强制执行，setup 给出它并提供 rootless 引擎。
 
 ### 拒绝测试
 
@@ -299,6 +312,17 @@ runtimes/
 | `windows-dacl-refused` | 在 Windows 上，DACL 允许 `Everyone` 的受保护文件以 `SECRET_FILE_MODE` 被拒绝，`delorun verify` 打印 `icacls` 修复命令 |
 | `windows-pipe-connect-denied` | 在 Windows 的 windows-acl 下，受限命令无法以写方式打开任一通道的管道，也无法打开 Docker Desktop 的引擎管道 |
 | `windows-home-read-label` | 在 Windows 的 windows-acl 下，home 带有 no-read-up 标签时，受限命令无法读取密钥样例与启动令牌，但能读取 `runtimes/` 下的文件；只有在这一拒绝成立的机器上，`delorun verify` 才把 `home-read` 报告为 `enforced` |
+| `escalation-prompt-names-home` | 为一个 `danger-full-access` 提权样例渲染的批准提示包含如下说明：完全访问可以触及 Delo 的 home、其密钥与令牌、Docker 监管器与更新通道；提示被拒绝时命令仍受限制，其读取启动令牌的操作失败 |
+| `landlock-rootful-docker-reported` | 在带 rootful Docker 套接字的 Landlock 样例上，`delorun verify` 把 `docker-connect` 报告为 `not-enforced` 并给出该套接字的路径，setup 的 Docker 步骤给出该路径并提供 rootless 引擎 |
+
+### 本约定不能证明的内容
+
+- **Landlock 与套接字。** Landlock 无法拒绝对路径名套接字的连接。在只有 Landlock 的系统上，受限命令能访问 rootful Docker 套接字，这等同于 root；`delorun verify` 会报告它，但在那里没有 Delo 机制能阻止它。home 的通道之所以仍然关闭，只是因为启动令牌不可读。
+- **Windows 上的读取。** windows-acl 不限制读取。home 上的 no-read-up 标签只在 `windows-home-read-label` 通过时才报告为 `enforced`；该标签不成立时，Windows 上的 `home-read` 与 `token-read` 不被强制执行，通道只依靠 `windows-pipe-connect-denied` 所证明的命名管道写拒绝。
+- **Windows 上的通道。** 在 Windows 上，通道是位于 home 文件系统目录树之外的命名管道；保护它们的只有其 DACL 与令牌。
+- **经网络的 Docker。** 端点为 TCP 或 SSH 的 Docker context，在每种方言上都可被任何有网络访问的命令访问。
+- **完全访问。** `danger-full-access` 下的命令可以读取 home 下的每个密钥与启动令牌，并能访问两个通道；提权提示会说明这一点，任何规则都不适用。
+- **本人自己的进程。** 沙箱之外的本人用户进程可以读取和修改 home 下的一切；权限模式防范的是其他用户，而不是它。
 
 <a id="enforcement-per-platform-and-dialect"></a>
 

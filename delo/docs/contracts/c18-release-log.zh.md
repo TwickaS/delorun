@@ -100,7 +100,7 @@ targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.z
 | `unchecked` | 由于日志或分发服务无法访问，在线检查尚未通过；bundle 如存在，则通过验证。 |
 | `failed` | bundle 或在线检查以可验证的方式失败。 |
 
-状态按已安装的发布版本分别存储在 [C1](c01-home-layout.md) 指定的路径下，`delorun verify`、`delorun status` 与 studio 的验证面板会连同发布版本号一起显示它（[C15](c15-verification-checks.zh.md)）。
+状态按已安装的发布版本分别存储在 [C1](c01-home-layout.zh.md) 指定的路径下，`delorun verify`、`delorun status` 与 studio 的验证面板会连同发布版本号一起显示它（[C15](c15-verification-checks.zh.md)）。
 
 <a id="behaviour-per-client"></a>
 
@@ -111,7 +111,7 @@ targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.z
 | npm 启动器与安装脚本 | 需要经过验证的 bundle 与通过的在线检查；否则不安装任何内容。 | — |
 | `delorun update` 与 studio 的 "Update now" | 需要目标版本经过验证的 bundle 与通过的在线检查；否则更新被拒绝，并给出原因。 | — |
 | CLI（命令行界面）启动器，每次启动时 | — | 离线验证已存储的 bundle。有网络时，运行在线检查。没有网络时，带着警告 "Release <version> has not been checked against the release log; Delo checks it at the next connection." 启动，并记录 `unchecked`。为 `failed` 时，在每种验证模式下都停止，并提供回滚。 |
-| 无界面 home | — | 与 CLI 启动器相同；警告输出到终端、运行日志（[C20](c20-operational-logs.md)）与 `delorun status`。 |
+| 无界面 home | — | 与 CLI 启动器相同；警告输出到终端、运行日志（[C20](c20-operational-logs.zh.md)）与 `delorun status`。 |
 | 运行中的 home 进程（home process） | — | 状态为 `unchecked` 期间，每 15 分钟以及每次启动时重试在线检查，直到通过或失败。 |
 | 桌面更新器 | 在 `quitAndInstall` 之前，以及对请求的回滚目标，需要经过验证的 bundle 与通过的在线检查。 | 启动时，若已存储其发布版本的 bundle 则验证它，并运行在线检查；没有网络时，在应用中显示同一条警告，并每 15 分钟重试。 |
 | `delorun verify` | — | 报告当前生效发布版本的 `verified`、`unchecked` 或 `failed`，并在 `failed` 或缺少 bundle 时失败。 |

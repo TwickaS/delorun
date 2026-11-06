@@ -42,7 +42,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 - **种类。** 工作区以 `native`、`docker-s2` 或 `docker-s3` 运行。Docker 形态是在 setup 中选择的机器设置。在 S2 下，原生或 Docker 是工作区设置。在 S3 下，每个工作区都在那一个容器内运行，不提供按工作区的选择。
 - **操作。** `report()` 返回[能力报告](#the-capability-report)。`resolve(request)` 把工作区请求转换为完整的规格：它显式地用默认值填充预设、出站模式与凭据选项，并拒绝能力报告无法满足的请求。`start(spec)`、`stop(workspaceId, mode)` 与 `state(workspaceId)` 管理工作区的运行时。Docker 种类的每个 Docker 操作都调用监管器，从不自行调用 Docker。
 - **默认值。** 未指定预设的请求解析为 Balanced，未指定出站模式的解析为 `allowlist`，未指定凭据选项的解析为不转发。
-- **原生工作区。** `native` 种类以本人自己的访问权限在机器上运行命令，受上游沙箱与 C1 限制规则约束，并报告 C1 各规则的状态。
+- **原生工作区。** `native` 种类以本人自己的访问权限在机器上运行命令，受上游沙箱与 [C1](c01-home-layout.zh.md) 限制规则约束，并报告 [C1](c01-home-layout.zh.md) 各规则的状态。
 - **路由。** 上游的 `fs`、`subprocess`、`sandbox`、`terminals`、`lsp` 与 `ptcRuntime` 服务都是单槽位的。S2 包通过它在上游添加的 seam，把 Docker 工作区的调用路由到其容器；本约定规定提供方的操作及其报告的事实，不规定该 seam。
 
 <a id="the-capability-report"></a>
@@ -51,11 +51,11 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 该报告说明本机运行和强制执行什么。监管器在每次启动时，以及每次带 `refresh` 调用 `capabilities` 时，通过检查构建其中的 Docker 部分。
 
-- **字段。** `v`（1）、`checkedAt`、`machine`（`os`、`arch`）、`confinement`（C1 对原生工作区的各规则状态）、`docker`（没有引擎应答时缺省）以及 `shapes`（`s2` 与 `s3`，各自带 `available`，不可用时带原因代码）。
+- **字段。** `v`（1）、`checkedAt`、`machine`（`os`、`arch`）、`confinement`（[C1](c01-home-layout.zh.md) 对原生工作区的各规则状态）、`docker`（没有引擎应答时缺省）以及 `shapes`（`s2` 与 `s3`，各自带 `available`，不可用时带原因代码）。
 - **Docker 部分。** `engine`（`docker-engine`、`docker-desktop` 或 `other`）、`version`、`rootless`、`context`（当前 context 的名称）、`endpoint`（`unix`、`npipe`、`tcp` 或 `ssh`，带其路径）、`storageDriver` 与 `limits`。
 - **限制项。** `limits` 的每个条目都有 `status`（`enforced`、`not-enforced` 或 `unknown`）和 `evidence` 字符串，后者给出所检查的字段及其值。条目为 `cpu`、`memory`、`pids`、`disk`、`cap-drop`、`no-new-privileges`、`read-only-root`、`seccomp`、`user-namespace`、`network-isolation`、`host-gateway-block`、`host-loopback-block` 与 `egress-allowlist`。
 - **检查。** 监管器以 Small 预设从 S2 工作区镜像创建一个探测容器，读取其 `docker inspect` 记录，并在其中运行探测命令：连接监管器在网络网关地址上打开的监听器，连接主机回环上的监听器，向允许列表之外的主机发出请求，以及向允许列表中的主机发出请求。只有当检查记录显示某项限制，并且对于网络条目，探测中被禁止的连接失败而被允许的连接成功时，该项才是 `enforced`。之后删除探测容器。
-- **提供形态的条件。** 本人选择形态之前，setup 列出每项限制在本机的状态。只有当 `cap-drop`、`no-new-privileges`、`seccomp`、`network-isolation`、`memory` 与 `pids` 都为 `enforced` 时，才提供 S2 与 S3。其他任何不为 `enforced` 的条目，在 setup 与工作区设置中显示为在本机仅作建议。
+- **提供形态的条件。** 本人选择形态之前，setup（[C11](c11-setup-answers.zh.md)）列出每项限制在本机的状态。只有当 `cap-drop`、`no-new-privileges`、`seccomp`、`network-isolation`、`memory` 与 `pids` 都为 `enforced` 时，才提供 S2 与 S3。其他任何不为 `enforced` 的条目，在 setup 与工作区设置中显示为在本机仅作建议。
 - **形态原因。** `docker-unavailable`、`docker-endpoint-network`（context 的端点是 TCP 或 SSH）、`s2-transport-unsupported`（macOS 与 Windows 上的 Docker Desktop）、`image-unverified`（镜像摘要与已校验的 manifest 不符）以及 `limits-missing`。
 
 <a id="docker-shapes"></a>
@@ -76,7 +76,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 - **S3 的 harness 用户。** harness 与 home 进程在容器内以用户 `delo-harness`（uid 1001）运行。容器的根文件系统只读，因此容器内没有用户能修改 harness 代码。Delo home 位于一个归 `delo-harness` 所有、权限为 0700 的卷上。工作区命令以用户 `delo`（uid 1000）运行，因此无法读取或修改 home 的密钥。
 - **S3 的权限。** harness 只保留 `CAP_SETUID` 与 `CAP_SETGID`，用于以 `delo` 身份启动命令；它启动的每条命令都以空能力集和 `no-new-privileges` 运行。
 - **S3 的 studio。** 在容器内，studio 在容器运行目录中的一个 Unix 套接字上监听，该目录从机器的 `~/.delo/run/<profile>/s3/` 绑定挂载。机器上的 home 进程把其回环监听器转发到该套接字，因此容器不发布任何端口。
-- **S3 的主机侧。** 在机器上，home 进程持有 C1 的锁与令牌，并运行监管器与回环转发；Host 在容器内运行。
+- **S3 的主机侧。** 在机器上，home 进程持有 [C1](c01-home-layout.zh.md) 的锁与令牌，并运行监管器与回环转发；Host 在容器内运行。
 - **文件监视。** 能力报告按形态给出本引擎的 `fileWatching`，取值为 `supported` 或 `unsupported`；不支持时，studio 的文件视图按请求刷新。
 
 <a id="sandbox-backend-per-shape"></a>
@@ -85,7 +85,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 | 运行时 | 命令运行于 | 限制机制 | `workspace-write` | `read-only` | `danger-full-access` |
 | --- | --- | --- | --- | --- | --- |
-| 原生 | 机器上 | 上游方言加 C1 的规则 | 方言的写授权 | 方言 | 不受限制 |
+| 原生 | 机器上 | 上游方言加 [C1](c01-home-layout.zh.md) 的规则 | 方言的写授权 | 方言 | 不受限制 |
 | S2 Docker 工作区 | 其容器中 | 容器 | 容器的可写集合：工作区根目录与 `/tmp` | 探测可用时由容器内的 Landlock 执行；否则为 `partial` 强制执行 | 在容器内不受限制，容器仍限制它 |
 | S3 | 那一个容器中 | 容器，以及探测可用时容器内的上游方言 | 方言，否则为容器的可写集合 | 探测可用时由方言执行；否则为 `partial` 强制执行 | 在容器内不受限制，容器仍限制它 |
 
@@ -100,14 +100,14 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 - 丢弃全部能力（`--cap-drop ALL`），S3 为其 harness 保留的 `CAP_SETUID` 与 `CAP_SETGID` 除外；
 - `no-new-privileges`；
-- 发布所附带、并由 C2 的 manifest 按摘要列出的 seccomp profile，它派生自 Docker 的默认 profile；
+- 发布所附带、并由 [C2](c02-release-manifest.zh.md) 的 manifest 按摘要列出的 seccomp profile，它派生自 Docker 的默认 profile；
 - 只读的根文件系统，以及大小按预设的 tmpfs `/tmp`；
 - 预设的 CPU、内存与 PID 限制，swap 等于内存；
 - 存储驱动支持时，通过 `--storage-opt size` 施加预设的磁盘限制，否则报告为 `not-enforced`；
 - 没有 Docker 套接字，没有 `--privileged`，没有设备，也不使用主机的网络、PID、IPC 或用户命名空间；
 - [S2 辅助通道](#the-s2-helper-channel)规定的用户，从不是主机的 root；
 - 一个 init 进程，没有重启策略；
-- 名称 `delo-ws-<12 hex>`（工作区 id 的 SHA-256 摘要的前 12 位十六进制数字）或 `delo-s3-<profile>`，以及标签 `run.delo.home`（C1 的 `homeId`）、`run.delo.profile`、`run.delo.workspace` 与 `run.delo.shape`。
+- 名称 `delo-ws-<12 hex>`（工作区 id 的 SHA-256 摘要的前 12 位十六进制数字）或 `delo-s3-<profile>`，以及标签 `run.delo.home`（[C1](c01-home-layout.zh.md) 的 `homeId`）、`run.delo.profile`、`run.delo.workspace` 与 `run.delo.shape`。
 
 <a id="networks-and-egress"></a>
 
@@ -150,7 +150,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 - **Agent。** 对于 `deploy-key` 与 `agent-confirm`，监管器在机器上为每个工作区启动一个 ssh agent，其套接字位于 `~/.delo/run/<profile>/agents/<12 hex>/`，并只把该套接字挂载到该工作区容器的 `/run/delo-agent/agent.sock`，同时设置 `SSH_AUTH_SOCK`。其他工作区的容器从不得到它。本人自己的 agent 从不被转发。
 - **确认。** `agent-confirm` 需要机器上有 askpass 程序来显示每次确认；没有时不提供该选项。
-- **存储。** 部署密钥与令牌以 0600 存放在 C1 的 `secrets/workspaces/<12 hex>/` 下。二者都不写入日志、命令行、工作区根目录或镜像。
+- **存储。** 部署密钥与令牌以 0600 存放在 [C1](c01-home-layout.zh.md) 的 `secrets/workspaces/<12 hex>/` 下。二者都不写入日志、命令行、工作区根目录或镜像。
 
 <a id="the-docker-supervisor"></a>
 
@@ -159,9 +159,9 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 监管器是唯一调用 Docker 的 Delo 组件。它以本人用户的独立进程运行，从不以 root 运行，所用运行时发行包与 home 进程相同。
 
 - **生命周期。** 机器设置了 Docker 时，home 进程启动它，并通过继承的管道把启动令牌传给它。它随这次 home 进程启动一起停止，后继 home 进程以新令牌启动新的监管器。容器在监管器重启后继续运行。
-- **套接字。** 它在 C1 的 `run/<profile>/supervisor.sock` 上监听，Windows 上则在 C1 命名的命名管道上监听。
-- **调用方。** 它只接受携带当前启动令牌的请求，并以恒定时间比较；缺失、错误或属于之前某次启动的令牌收到 `UNAUTHENTICATED`，不附任何其他信息。它唯一的调用方是 home 进程。凡 C1 的 `home-connect` 规则得到强制执行之处，工作区命令都无法抵达它；在 Landlock 下，工作区命令可以连接，但无法读取令牌。
-- **日志。** 它写入 C20 的入口 `supervisor-<profile>`。它记录每个请求的操作、工作区 id 与结果，从不记录请求正文、凭据或环境变量的值。
+- **套接字。** 它在 [C1](c01-home-layout.zh.md) 的 `run/<profile>/supervisor.sock` 上监听，Windows 上则在 [C1](c01-home-layout.zh.md) 命名的命名管道上监听。
+- **调用方。** 它只接受携带当前启动令牌的请求，并以恒定时间比较；缺失、错误或属于之前某次启动的令牌收到 `UNAUTHENTICATED`，不附任何其他信息。它唯一的调用方是 home 进程。凡 [C1](c01-home-layout.zh.md) 的 `home-connect` 规则得到强制执行之处，工作区命令都无法抵达它；在 Landlock 下，工作区命令可以连接，但无法读取令牌。
+- **日志。** 它写入 [C20](c20-operational-logs.zh.md) 的入口 `supervisor-<profile>`。它记录每个请求的操作、工作区 id 与结果，从不记录请求正文、凭据或环境变量的值。
 - **它管理的容器。** 它只管理带有其 home 与 profile 标签的容器；对其他任何容器的操作以 `NOT_FOUND` 失败。
 
 <a id="the-supervisor-api"></a>
@@ -191,11 +191,11 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 ## 监管器根目录
 
-- **根目录文件。** `supervisor/roots.json`（C1，权限 0600）保存 `{"v":1,"parents":["<absolute path>", ...]}`，最多 16 个父目录。只有 `delorun setup` 在本人的终端中写入它；没有 Host API、工具或配置行写入它。监管器在启动时读取它。
+- **根目录文件。** `supervisor/roots.json`（[C1](c01-home-layout.zh.md)，权限 0600）保存 `{"v":1,"parents":["<absolute path>", ...]}`，最多 16 个父目录。只有 `delorun setup` 在本人的终端中写入它；没有 Host API、工具或配置行写入它。监管器在启动时读取它。
 - **父目录。** 每个父目录以其规范绝对路径保存。setup 拒绝 `/`、操作系统 home 目录、Delo home、任何包含 Delo home 的路径以及任何位于其内的路径。
 - **工作区根目录。** 在 `workspace.create` 时，监管器自行用 `realpath` 解析 `root`。根目录为 `/`、操作系统 home 目录或 Delo home，包含 Delo home 或位于其内，或不是本人所有的目录时，以 `ROOT_REFUSED` 拒绝；根目录不严格位于某个父目录之内时，以 `ROOT_NOT_UNDER_PARENT` 拒绝。
 - **挂载。** S2 容器的绑定挂载是解析后的工作区根目录、该工作区的辅助程序套接字目录，以及工作区转发 agent 时该 agent 的套接字。S3 容器的挂载是解析后的各工作区根目录、保存其 Delo home 的卷以及机器的 `~/.delo/run/<profile>/s3/`。不挂载其他任何主机路径。创建容器后，监管器把检查到的挂载来源与解析后的路径比较，有任何差异就以 `ROOT_REFUSED` 删除该容器。
-- **谁能修改根目录。** 凡 C1 的 `home-write` 规则成立之处，受限命令都无法写入该文件；上游的进程内文件工具限于可写根目录，而可写根目录从不包括 home。在 `danger-full-access` 下运行的命令或工具可以写入它。
+- **谁能修改根目录。** 凡 [C1](c01-home-layout.zh.md) 的 `home-write` 规则成立之处，受限命令都无法写入该文件；上游的进程内文件工具限于可写根目录，而可写根目录从不包括 home。在 `danger-full-access` 下运行的命令或工具可以写入它。
 
 <a id="the-s2-helper-channel"></a>
 
@@ -219,8 +219,8 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 | S2 工作区 | `ghcr.io/delo-run/delo-workspace-s2` | `docker.io/library/debian:bookworm-slim`，按摘要 | 辅助程序、工作区命令与出站代理 |
 | S3 harness | `ghcr.io/delo-run/delo-harness-s3` | `docker.io/library/debian:bookworm-slim`，按摘要 | 带运行时发行包的 harness、工作区命令与出站代理 |
 
-- **构建。** 每个镜像都在 C2 的可复现重建范围内，从按摘要固定的基础镜像构建。
-- **签名与摘要。** 发布 manifest（C2）列出每个镜像的摘要，manifest 的 Ed25519 签名即该镜像的签名；不信任任何镜像仓库侧的签名。
+- **构建。** 每个镜像都在 [C2](c02-release-manifest.zh.md) 的可复现重建范围内，从按摘要固定的基础镜像构建。
+- **签名与摘要。** 发布 manifest（[C2](c02-release-manifest.zh.md)）列出每个镜像的摘要，manifest 的 Ed25519 签名即该镜像的签名；不信任任何镜像仓库侧的签名。
 - **拉取。** 监管器只拉取 `<name>@sha256:<digest>`，摘要取自正在运行的运行时的已校验 manifest，从不按标签拉取，并检查拉取到的镜像的摘要。拉取只访问 `ghcr.io` 与 `pkg-containers.githubusercontent.com`。
 - **拒绝。** 监管器以 `IMAGE_NOT_IN_MANIFEST` 拒绝从已校验 manifest 未列出的摘要创建容器。
 
@@ -235,7 +235,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 - **标记。** 环境拒绝的结果恰好携带一行 `[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]`（来自 `environmentDenialMarker()`），不带提权提示；`denialMarkers` 只返回这一行。
 - **执行器。** bash 与 PowerShell 沙箱执行器应用这一分类与标记。
 - **PTC。** PTC 执行器同样应用它：Node PTC 运行时的 worker 用两组特征对失败的程序分类，`run_code` 的结果携带 `sandbox.deniedBy: 'environment'`，其渲染附加环境标记，取代策略语句及其提权指引。
-- **原生与对等。** 原生运行时不声明环境特征，因此原生工作区与对等组合的输出不变。
+- **原生与对等。** 原生运行时不声明环境特征，因此原生工作区与对等组合（[C16](c16-parity-composition.zh.md)）的输出不变。
 
 <a id="limits"></a>
 
@@ -284,7 +284,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 - `delo/packages/supervisor`：监管器、其 API、能力报告、根目录与镜像检查。
 - `delo/packages/runtime-docker`：S2 形态、S3 形态、凭据转发与 Docker 拒绝测试套件。
 - studio 的工作区插件：创建工作区时的运行时选择与预设。
-- `delo/apps/release`：S2 与 S3 镜像及其在 manifest 中的摘要（C2）。
+- `delo/apps/release`：S2 与 S3 镜像及其在 manifest 中的摘要（[C2](c02-release-manifest.zh.md)）。
 - `delo/packages/integrity`：`delorun verify` 的隔离与 Docker 限制检查。
 - 上游的 `packages/sandbox/sandbox`、`packages/shell/bash-sandbox`、`packages/shell/pwsh-sandbox`、`packages/ptc-runtime/ptc-runtime-node` 与 `packages/core/tool-executor-ptc`：容器拒绝标记。
 
@@ -305,8 +305,8 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 ### 要求
 
 1. 监管器的 API 是固定结构，从不透传 Docker：没有请求字段指定镜像、参数、挂载、环境变量、命令、设备、能力或网络。
-2. 监管器套接字位于 home 之下，只凭当前启动令牌（C1）接受 home 进程。该保护依赖于 C1 对 agent 命令的限制；方言无法强制执行时，`delorun verify` 会报告，setup 会标注 Docker 模式。本约定不声称能防范沙箱之外的本人用户进程，只要本人能使用 Docker，这类进程就能直接驱动 Docker。不存在 root 所有的辅助程序。
-3. 凡方言强制执行 C1 的 `docker-connect` 之处，原生沙箱 profile 都拒绝访问位于真实路径的 Docker 套接字。
+2. 监管器套接字位于 home 之下，只凭当前启动令牌（[C1](c01-home-layout.zh.md)）接受 home 进程。该保护依赖于 [C1](c01-home-layout.zh.md) 对 agent 命令的限制；方言无法强制执行时，`delorun verify` 会报告，setup 会标注 Docker 模式。本约定不声称能防范沙箱之外的本人用户进程，只要本人能使用 Docker，这类进程就能直接驱动 Docker。不存在 root 所有的辅助程序。
+3. 凡方言强制执行 [C1](c01-home-layout.zh.md) 的 `docker-connect` 之处，原生沙箱 profile 都拒绝访问位于真实路径的 Docker 套接字。
 4. 工作区根目录位于 setup 时选择的父目录之下，这些父目录保存在只有 `delorun setup` 写入的文件中。监管器自行解析每个路径，拒绝 `/`、`$HOME` 与 `~/.delo`，并只挂载[监管器根目录](#supervisor-roots)列出的路径。
 5. 每个工作区都有不与其他工作区共享的内部网络，工作区网络没有通往机器的路由，出站流量只经工作区的代理并按默认允许列表离开；`open` 出站只能由本人选择设置。
 6. 凭据转发默认关闭，按工作区选择，且限于部署密钥、需确认的 agent 或限定仓库的令牌；被转发的 agent 只能抵达其自身工作区的容器。
@@ -316,16 +316,17 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 10. S2 辅助程序以容器的工作区用户运行，只接受证明持有通道密钥的对端。
 11. 监管器只运行已校验发布 manifest 列出其摘要的 S2 与 S3 镜像，并按摘要从 `ghcr.io` 拉取。
 12. 无论在 shell 执行器还是 PTC 执行器中，容器内的环境拒绝从不附带提权指引。
+13. 在只有 Landlock、且当前 Docker context 为 rootful 引擎套接字的系统上，`delorun verify` 通过 [C15](c15-verification-checks.zh.md) 的 `workspace-isolation` 与 `confinement-rule` 检查把 `docker-connect` 报告为未强制执行；setup 给出该套接字的路径，说明受限的原生命令能访问它、这等同于 root，并提供 Docker 的 rootless 引擎。
 
 ### 拒绝测试
 
 | 测试 | 证明 |
 | --- | --- |
-| `docker-from-native-denied` | 在每种强制执行 C1 `docker-connect` 的方言上，受限原生工作区命令执行 `docker ps` 失败 |
-| `supervisor-connect-denied` | 在每种强制执行 C1 `home-connect` 的方言上，受限原生工作区命令连接监管器套接字失败，且无法读取启动令牌 |
+| `docker-from-native-denied` | 在每种强制执行 [C1](c01-home-layout.zh.md) `docker-connect` 的方言上，受限原生工作区命令执行 `docker ps` 失败 |
+| `supervisor-connect-denied` | 在每种强制执行 [C1](c01-home-layout.zh.md) `home-connect` 的方言上，受限原生工作区命令连接监管器套接字失败，且无法读取启动令牌 |
 | `supervisor-token-required` | 不带令牌、带错误令牌以及带之前启动令牌的请求，都收到 `UNAUTHENTICATED` |
 | `supervisor-landlock` | 在 Landlock 下，受限原生工作区命令连接监管器套接字成功，但因无法读取令牌，其请求以 `UNAUTHENTICATED` 失败，`delorun verify` 会报告这一状态 |
-| `supervisor-not-enforced-labelled` | 在无法强制执行 C1 规则的方言样例上，`delorun verify` 报告它们，setup 的 Docker 模式选项附带标注 |
+| `supervisor-not-enforced-labelled` | 在无法强制执行 [C1](c01-home-layout.zh.md) 规则的方言样例上，`delorun verify` 报告它们，setup 的 Docker 模式选项附带标注 |
 | `supervisor-schema-closed` | 带镜像引用、挂载、环境变量、命令或未知 `op` 的请求以 `SCHEMA_VIOLATION` 被拒绝，且不创建任何容器 |
 | `supervisor-roots-refused` | 根目录 `/`、`$HOME`、`~/.delo`、包含 `~/.delo` 的路径、解析到所有父目录之外的符号链接，以及位于所有父目录之外的路径，都被拒绝 |
 | `supervisor-image-unlisted` | 从已校验 manifest 未列出的摘要创建容器以 `IMAGE_NOT_IN_MANIFEST` 被拒绝 |
@@ -337,6 +338,18 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 | `helper-peer-refused` | 未用通道密钥回答挑战的 S2 辅助程序套接字连接被关闭 |
 | `s3-harness-readonly` | 在 S3 下，工作区命令无法写入 harness 目录树，无法读取或写入 home 的密钥，远程访问拒绝开启 |
 | `environment-denial-no-escalation` | 在 S2 下，写入容器只读根文件系统时，无论通过 bash 还是通过 `run_code`，都返回环境标记且不带提权提示 |
+| `landlock-rootful-docker-named` | 在带 rootful Docker 套接字的 Landlock 样例上，`delorun verify` 把 `docker-connect` 报告为 `not-enforced` 并给出该套接字的路径；在可以选择 Docker 模式之前，setup 的 Docker 步骤给出该路径、说明等同 root，并提供 rootless 引擎 |
+
+### 本约定不能证明的内容
+
+- **Landlock 与 rootful 引擎。** Landlock 无法拒绝原生命令连接 Docker 套接字，因此在只有 Landlock 且使用 rootful 引擎的系统上，任何受限原生命令都能启动挂载机器文件的容器。Delo 会报告它并提供 rootless 引擎；在那里无法阻止它。
+- **经网络的 Docker。** 端点为 TCP 或 SSH 的 context 可被任何有网络访问的命令访问，而没有方言限制网络；报告将其标为 `docker-endpoint-network`，并且不在其上提供 Docker 形态。
+- **主机网关与回环。** 工作区网络能否访问机器取决于引擎；探测报告它在本机上的发现，rootful 引擎的内部网桥可能让网关地址仍可访问。
+- **磁盘限制。** 大多数存储驱动、所有 rootless 引擎与 Docker Desktop 都不强制执行容器的磁盘大小；在那里预设的磁盘值仅作建议。
+- **辅助程序密钥。** 它不保护 S2 辅助程序免受其自身容器中命令的影响，这些命令以同一用户运行。
+- **S3。** S3 不隔离各工作区之间。
+- **完全访问下的根目录文件。** 在 `danger-full-access` 下运行的命令或工具可以修改 `supervisor/roots.json`。
+- **Docker Desktop。** 容器运行在 Docker Desktop 的虚拟机内，该虚拟机对容器本身而言不是用户命名空间。
 
 <a id="enforcement-per-platform-and-dialect"></a>
 
@@ -353,7 +366,6 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 | `disk` | 只在支持 `size` 的存储驱动上 enforced，例如带项目配额的 XFS 上的 overlay2 | not-enforced | not-enforced | not-enforced |
 | `user-namespace` | 除非引擎使用 `userns-remap`，否则 not-enforced | enforced | 对容器本身 not-enforced；容器运行在 Docker Desktop 的虚拟机内 | 对容器本身 not-enforced；容器运行在 Docker Desktop 的虚拟机内 |
 | `host-gateway-block`、`host-loopback-block` | 以探测结果为准 | 以探测结果为准 | 以探测结果为准 | 以探测结果为准 |
-| 原生命令的套接字拒绝 | 见 C1 的表格 | 见 C1 的表格 | 见 C1 的表格 | 见 C1 的表格 |
+| 原生命令的套接字拒绝 | 见 [C1](c01-home-layout.zh.md) 的表格 | 见 [C1](c01-home-layout.zh.md) 的表格 | 见 [C1](c01-home-layout.zh.md) 的表格 | 见 [C1](c01-home-layout.zh.md) 的表格 |
 
 - **等同 root。** 在 rootful 引擎上，任何能抵达 Docker 套接字的进程都能启动挂载机器文件的容器，因此 `docker` 组的成员身份等同于 root。rootless 引擎以本人自己的权限运行容器。
-- **经网络的 Docker。** 端点为 TCP 或 SSH 的 context 可被任何有网络访问的命令访问，而没有方言限制网络；报告将其标为 `docker-endpoint-network`，并且不在其上提供 Docker 形态。

@@ -8,7 +8,7 @@ English | [中文](c20-operational-logs.zh.md)
 
 ## Summary
 
-This contract defines the files where Delo's own processes record how they behaved, so a person or their agent can find out why something failed without a studio. The CLI home process, the desktop Host, the Docker supervisor and the self-hosted relay each write their own log at a fixed location, as JSON lines that carry upstream's session and turn ids where a record belongs to a chat. Logs rotate at 10 MiB, keep 5 files and are deleted after 14 days, which also bounds how long fragments of a purged chat can stay in them. Every record passes a redaction step, so no secret, token, key, owner code or cookie reaches a log. `delorun logs` shows each log and its location. Session logs are a different thing: they record chats and stay permanent. The types package [`@delo/contract-operational-logs`](../../packages/contract-operational-logs/README.md) carries the record type, surfaces and limits.
+This contract defines the files where Delo's own processes record how they behaved, so a person or their agent can find out why something failed without a studio. The CLI home process, the desktop Host, the Docker supervisor and the self-hosted relay each write their own log at a fixed location, as JSON lines that carry upstream's session and turn ids where a record belongs to a chat. Logs rotate at 10 MiB, keep 5 files and, while Delo runs, are deleted after 14 days, which also bounds how long fragments of a purged chat can stay in them. Every record passes a redaction step, so no secret, token, key, owner code or cookie reaches a log. `delorun logs` shows each log and its location. Session logs are a different thing: they record chats and stay permanent. The types package [`@delo/contract-operational-logs`](../../packages/contract-operational-logs/README.md) carries the record type, surfaces and limits.
 
 ## Contents
 
@@ -27,12 +27,12 @@ This contract defines the files where Delo's own processes record how they behav
 
 ## Surfaces and destinations
 
-Each surface writes one log through Delo's logger, `@delo/logs`. Paths are relative to the Delo home (C1) unless the row says otherwise.
+Each surface writes one log through Delo's logger, `@delo/logs`. Paths are relative to the Delo home ([C1](c01-home-layout.md)) unless the row says otherwise.
 
 | Surface | Name | Active file | Writer |
 | --- | --- | --- | --- |
-| CLI home process | `home-<profile>` | `logs/home-<profile>/home.log` | the home process (C19), including its Host and its standard output and standard error |
-| Docker supervisor | `supervisor-<profile>` | `logs/supervisor-<profile>/supervisor.log` | the supervisor (C9) |
+| CLI home process | `home-<profile>` | `logs/home-<profile>/home.log` | the home process ([C19](c19-home-process.md)), including its Host and its standard output and standard error |
+| Docker supervisor | `supervisor-<profile>` | `logs/supervisor-<profile>/supervisor.log` | the supervisor ([C9](c09-runtime-supervisor.md)) |
 | Desktop Host | `desktop-host` | `logs/desktop-host/desktop-host.log` | the desktop app's main process, from the Host child's standard output and standard error |
 | Self-hosted relay | `relay` | `/var/log/delo-relay/relay.log` inside the relay container, on the volume the relay's guide names | the relay data plane |
 
@@ -56,7 +56,7 @@ A log file is UTF-8 JSON Lines: one JSON object per line, each line at most 16,3
 | `level` | `error`, `warn`, `info` or `debug` | always |
 | `surface` | the surface name | always |
 | `pid` | the writing process id | always |
-| `startId` | C1's start id of the home process | on the `home-<profile>` and `supervisor-<profile>` surfaces |
+| `startId` | [C1](c01-home-layout.md)'s start id of the home process | on the `home-<profile>` and `supervisor-<profile>` surfaces |
 | `logger` | the Cordis logger name, or `stdout` or `stderr` for captured output | always |
 | `source` | `delo` or `captured` | always |
 | `msg` | the redacted message | always |
@@ -77,11 +77,11 @@ A log file is UTF-8 JSON Lines: one JSON object per line, each line at most 16,3
 | Rotation size | 10 MiB (10,485,760 bytes) |
 | Files kept per surface | 5: the active file and 4 rotated files |
 | Deletion age | 14 days (1,209,600 seconds) |
-| Age check | at each start of a Delo process on the machine, then every 3,600 seconds while it runs |
+| Age check | at each start of any Delo process on the machine, every 3,600 seconds while one runs, and on `delorun logs --prune` |
 
 - **Rotation.** Before a write that would take the active file past 10 MiB, the writer renames `<name>.log.3` to `<name>.log.4`, then each lower number up, the active file to `<name>.log.1`, and opens a new active file. A rotated file beyond `.4` is deleted. Each surface therefore holds at most 50 MiB.
-- **Age.** At each age check, every file of a surface whose oldest record is older than 14 days is deleted; when that file is the active file, it is rotated first. Every `delorun` invocation runs the age check for every local surface it can reach, so logs of a stopped home process are also checked.
-- **The bound.** A record is deleted at the first age check after it is 14 days old. On a machine where no Delo process runs, no check runs, and records stay until the next start of a Delo process.
+- **Age.** At each age check, every file of a surface whose oldest record is older than 14 days is deleted; when that file is the active file, it is rotated first. Any Delo process that starts prunes the expired files of every local surface it can reach, so the logs of a stopped home process are pruned too, and `delorun logs --prune` prunes them on demand.
+- **The bound, while Delo runs.** While a Delo process runs on the machine, a record is deleted at the first age check after it is 14 days old, at most 3,600 seconds later. While no Delo process runs, expired records stay until a Delo process starts or `delorun logs --prune` runs.
 - **Session logs** are never rotated or deleted by these rules.
 
 ## Redaction
@@ -105,15 +105,16 @@ Every record passes the redactor before it is written, both Delo's own records a
 | `--json` | the records as stored |
 | `--path` | only the active file's path |
 | `--clear [<surface>]` | after confirmation, deletes the surface's rotated files and empties its active file; without a surface, every local surface and upstream's `startup-*.log` files |
+| `--prune` | deletes every expired file of every local surface now, as the age check does, and prints each deleted file |
 
 - **Surface names.** `home` (the active profile's home process, or `--profile <name>`), `supervisor`, `desktop-host` and `startup`. `relay` is not local: `delorun logs relay` prints the location inside the relay container and the relay guide's command for reading it.
 - **Human output.** `<ts> <level> <surface> [<sessionId>/<turn>] <msg>`.
 
 ## Purge and process logs
 
-Purge (C8) removes a chat from every store Delo controls. Process logs can still hold fragments of it, in captured output or in an error line.
+Purge ([C8](c08-archive-and-trash.md)) removes a chat from every store Delo controls. Process logs can still hold fragments of it, in captured output or in an error line.
 
-- **The statement.** Purge states that fragments of purged content may remain in process logs until this contract's retention deletes them, at most 14 days after they were written, as [rotation and retention](#rotation-and-retention) bounds it.
+- **The statement.** Purge states that fragments of purged content may remain in process logs until this contract's retention deletes them: while Delo runs, at most 14 days after they were written, as [rotation and retention](#rotation-and-retention) bounds it.
 - **The offer.** Purge offers to clear the process logs at once. The affected logs are every local surface's files and upstream's `startup-*.log` files, because captured records do not always carry a session id. Choosing it runs the effect of `delorun logs --clear` for those files.
 - **Running writers.** Clearing empties each active file in place and deletes each rotated file, so a running writer continues in the emptied file.
 
@@ -139,7 +140,7 @@ Purge (C8) removes a chat from every store Delo controls. Process logs can still
 - `delo/apps/cli`: `delorun logs` and purge's offer.
 - `delo/packages/home-process`, `delo/packages/supervisor` and `delo/apps/relay`: their surfaces.
 - Upstream's `apps/desktop`: the desktop Host's log file.
-- Purge and the trash (C8): the statement and the offer.
+- Purge and the trash ([C8](c08-archive-and-trash.md)): the statement and the offer.
 
 ## Compatibility
 
@@ -155,10 +156,10 @@ Purge (C8) removes a chat from every store Delo controls. Process logs can still
 
 1. No secret, token, key, owner code or cookie reaches a process log. Redaction covers Delo's own logger and the captured output of upstream code, and runs before truncation.
 2. Delo's own records hold no chat text, prompt, model output, tool argument or result, or file content.
-3. Log directories have mode 0700 and log files 0600, so only the person can read them, and they lie under the Delo home, where every sandbox dialect denies confined commands writes and, where C1's `home-read` is enforced, reads.
+3. Log directories have mode 0700 and log files 0600, so only the person can read them, and they lie under the Delo home, where every sandbox dialect denies confined commands writes and, where [C1](c01-home-layout.md)'s `home-read` is enforced, reads.
 4. A record's `sessionId`, `turn`, `workspaceId` and `startId` are ids that carry no secret.
 5. The supervisor never logs a request body, a credential or an environment value; the update channel logs refused authentications without the presented value.
-6. Process logs are deleted after 14 days, and purge states that bound and offers to clear them at once.
+6. While Delo runs, process logs are deleted 14 days after they were written; any Delo process start and `delorun logs --prune` prune expired logs, and purge states that bound and offers to clear the logs at once.
 7. `delorun` never writes upstream's raw startup reports.
 
 ### Denial tests
@@ -169,19 +170,23 @@ Purge (C8) removes a chat from every store Delo controls. Process logs can still
 | `log-canary-split` | A canary secret split across two writes of captured output, and one in a line longer than 65,536 bytes, never appears in a log file |
 | `log-canary-patterns` | A planted `Authorization` header, URL user information, PEM key and owner-code-shaped value in captured output are redacted |
 | `log-desktop-host-file` | The desktop Host's output reaches `logs/desktop-host/desktop-host.log` |
-| `log-rotation` | Writing past 10 MiB rotates the file, at most 5 files exist, files whose oldest record is older than 14 days are deleted at the next age check, and session logs are untouched |
+| `log-rotation` | Writing past 10 MiB rotates the file, at most 5 files exist, files whose oldest record is older than 14 days are deleted at the next age check, at the next start of a Delo process and by `delorun logs --prune`, and session logs are untouched |
 | `log-modes` | Log directories are created at 0700 and files at 0600 |
 | `log-session-keys` | The records of a turn carry its `sessionId` and `turn`, and the parity replay shows no session-log event with a new field |
 | `log-purge-clear` | After a purge with the clear offer chosen, no canary residue of the purged chat remains in any log file |
-| `log-confined-write-denied` | On every dialect, a confined command cannot write a log file (C1's `home-write`) |
+| `log-confined-write-denied` | On every dialect, a confined command cannot write a log file ([C1](c01-home-layout.md)'s `home-write`) |
+
+### What this does not prove
+
+- **Retention while Delo is stopped.** The 14-day bound holds while Delo runs. No operating-system timer deletes logs, so on a machine where no Delo process starts, expired records stay until one starts or the person runs `delorun logs --prune`.
+- **What redaction cannot catch.** Steps 1 and 3 catch registered values and listed forms. A secret that Delo never loaded and that matches no listed form, printed by upstream code, can pass; the denial suite proves the listed kinds, and the bound and purge's offer cover what remains.
+- **Captured content.** Captured upstream output can hold text from chats, commands and files; redaction removes secrets from it, not that text, which stays until retention or purge's clear removes it.
 
 ## Enforcement per platform and dialect
 
 | Requirement | Linux | macOS | Windows | Relay container |
 | --- | --- | --- | --- | --- |
-| Owner-only access | modes 0700 and 0600 | modes 0700 and 0600 | the DACL that C1 checks | modes 0700 and 0600 inside the container, owned by the relay's user |
-| Confined commands cannot write logs | every dialect (C1's `home-write`) | Seatbelt (C1's `home-write`) | windows-acl (C1's `home-write`) | no agent commands run there |
-| Confined commands cannot read logs | where C1's `home-read` is enforced: bwrap and Landlock | Seatbelt | where `windows-home-read-label` passes | no agent commands run there |
-| Age check without a running Delo process | none | none | none | none while the container is stopped |
-
-- **What redaction cannot catch.** Steps 1 and 3 catch registered values and listed forms. A secret that Delo never loaded and that matches no listed form, printed by upstream code, can pass; the denial suite proves the listed kinds, and the bound and purge's offer cover what remains.
+| Owner-only access | modes 0700 and 0600 | modes 0700 and 0600 | the DACL that [C1](c01-home-layout.md) checks | modes 0700 and 0600 inside the container, owned by the relay's user |
+| Confined commands cannot write logs | every dialect ([C1](c01-home-layout.md)'s `home-write`) | Seatbelt ([C1](c01-home-layout.md)'s `home-write`) | windows-acl ([C1](c01-home-layout.md)'s `home-write`) | no agent commands run there |
+| Confined commands cannot read logs | where [C1](c01-home-layout.md)'s `home-read` is enforced: bwrap and Landlock | Seatbelt | where `windows-home-read-label` passes | no agent commands run there |
+| Pruning while no Delo process runs | at the next Delo start or `delorun logs --prune` | at the next Delo start or `delorun logs --prune` | at the next Delo start or `delorun logs --prune` | at the next relay start |

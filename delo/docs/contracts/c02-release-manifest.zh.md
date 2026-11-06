@@ -138,7 +138,7 @@ npm 启动器、安装脚本与桌面应用各自内嵌其构建时最新的根�
 | `published` | 时间戳 | targets 密钥签名它的时间。 |
 | `runtime` | 由平台映射到 `{ "archive": FileRef, "files": FileRef }` 的映射 | 每个运行时归档及其文件列表。 |
 | `desktop` | 由 `mac-arm64`、`mac-x64`、`win-x64` 映射到 `{ "installer": DesktopFileRef, "update": DesktopFileRef, "blockmap": FileRef }` 的映射 | 桌面文件；`DesktopFileRef` 增加 `sha512`，即 electron-updater 比较的标准 base64 SHA-512。在 Windows 上，安装程序同时也是更新文件。 |
-| `images` | `{ "s2": ImageRef, "s3": ImageRef }` | [C9](c09-runtime-supervisor.md) 运行的 Docker 镜像。`ImageRef` 为 `{ "repository", "index": "sha256:<hex>", "platforms": { "linux/amd64": "sha256:<hex>", "linux/arm64": "sha256:<hex>" } }`。 |
+| `images` | `{ "s2": ImageRef, "s3": ImageRef }` | [C9](c09-runtime-supervisor.zh.md) 运行的 Docker 镜像。`ImageRef` 为 `{ "repository", "index": "sha256:<hex>", "platforms": { "linux/amd64": "sha256:<hex>", "linux/arm64": "sha256:<hex>" } }`。 |
 | `sbom` | 带 `"format": "SPDX-2.3+json"` 的 `FileRef` | 发布的 SBOM。 |
 | `npm` | `{ "name", "version", "integrity" }` 的列表 | 发布中的每个 npm 包（`delorun`、`create-delorun`）及其 tarball 的 `sha512-` integrity 字符串。 |
 | `install` | `{ "sh": FileRef, "ps1": FileRef }` | 安装脚本；发布说明与 Trust 页面会打印相同的摘要。 |
@@ -158,7 +158,7 @@ manifest 不带过期时间：新鲜度由时间戳负责，因此只要其签�
 | `version`、`platform` | 字符串 | 发布与平台。 |
 | `files` | `{ "path", "length", "sha256", "mode" }` 的列表 | 解压后归档中的每个常规文件；`path` 为相对路径、以 `/` 分隔且已规范化，`mode` 为 `0644` 或 `0755`。 |
 
-归档中不包含符号链接、硬链接、设备文件或位于其根之外的路径，其条目与列表中的文件完全一致。已安装的列表位于安装旁边、[C1](c01-home-layout.md) 指明的路径下。
+归档中不包含符号链接、硬链接、设备文件或位于其根之外的路径，其条目与列表中的文件完全一致。已安装的列表位于安装旁边、[C1](c01-home-layout.zh.md) 指明的路径下。
 
 <a id="client-verification"></a>
 
@@ -171,11 +171,11 @@ manifest 不带过期时间：新鲜度由时间戳负责，因此只要其签�
 3. 获取该通道的 manifest；对照时间戳检查其长度与 SHA-256；验证 targets 签名。
 4. 获取并验证发布日志 bundle，并运行在线日志检查（[C18](c18-release-log.zh.md)）；没有经过验证的包含证明，安装绝不继续。
 5. 获取该平台的归档与文件列表；解压之前对照 manifest 检查每项的长度与 SHA-256；验证文件列表的 targets 签名。
-6. 解压到 `~/.delo/runtimes/` 之外的暂存目录，对照文件列表检查每个条目，然后按 [C1](c01-home-layout.md) 所述发布该安装。在步骤 1 至 5 通过之前，没有任何文件落入 `~/.delo/runtimes/` 之下。
+6. 解压到 `~/.delo/runtimes/` 之外的暂存目录，对照文件列表检查每个条目，然后按 [C1](c01-home-layout.zh.md) 所述发布该安装。在步骤 1 至 5 通过之前，没有任何文件落入 `~/.delo/runtimes/` 之下。
 
 CLI 运行时的每次启动，在每种验证模式（`warn`、`enforce`、`off`）下，启动器都会用已存储的根验证已存储的 manifest 与文件列表的签名，然后对照列表验证每个已安装文件的长度与 SHA-256。缺失、被改动或多出的常规文件会停止启动，并提供重新安装或回滚。该检查不需要网络，且位于 `@delo/integrity` 之外。
 
-`delorun verify` 运行相同的检查并报告每项结果（[C15](c15-verification-checks.zh.md)）。S2 与 S3 镜像只按已验证 manifest 中的摘要运行（[C9](c09-runtime-supervisor.md)）。
+`delorun verify` 运行相同的检查并报告每项结果（[C15](c15-verification-checks.zh.md)）。S2 与 S3 镜像只按已验证 manifest 中的摘要运行（[C9](c09-runtime-supervisor.zh.md)）。
 
 <a id="freshness-and-rollback-protection"></a>
 
@@ -184,7 +184,7 @@ CLI 运行时的每次启动，在每种验证模式（`warn`、`enforce`、`off
 - 客户端存储它验证过的最高时间戳 `version`，并拒绝更低的版本；相同的 `version` 必须具有完全相同的字节。
 - 超过 `expires` 的时间戳会被拒绝。不适用任何时钟容差；拒绝消息会写明过期时间与本地时间，因此错误的时钟可以被看出。
 - 更新提议只来自新鲜的时间戳：摘要与时间戳中该通道条目不同的 manifest，不会作为该通道的发布提供。
-- 任何客户端都不会自行转到更低的 Delo 版本。本人（the person）请求的回滚可以安装更早的发布，前提是其 manifest 能以对该发布有效的 targets 密钥通过验证，且其日志条目通过验证（[C18](c18-release-log.zh.md)）；CLI 回滚切换到运行时仓库（runtime store）保留的运行时（[C1](c01-home-layout.md)、[C19](c19-home-process.md)），桌面回滚遵循[桌面更新与回滚](#desktop-updates-and-rollback)。
+- 任何客户端都不会自行转到更低的 Delo 版本。本人（the person）请求的回滚可以安装更早的发布，前提是其 manifest 能以对该发布有效的 targets 密钥通过验证，且其日志条目通过验证（[C18](c18-release-log.zh.md)）；CLI 回滚切换到运行时仓库（runtime store）保留的运行时（[C1](c01-home-layout.zh.md)、[C19](c19-home-process.zh.md)），桌面回滚遵循[桌面更新与回滚](#desktop-updates-and-rollback)。
 - 陈旧或缺失的时间戳绝不会停止启动；它会阻止安装与更新，并由 `delorun verify` 报告。
 
 <a id="key-rotation"></a>
@@ -291,7 +291,7 @@ acceptances:
 - `delo/apps/install/` 与 `delo/apps/npm-launcher/`（WP3.2）：验证并安装。
 - `delo/packages/runtime-store/`（WP3.3）：启动检查、切换与回滚。
 - 桌面更新器（WP6.3）：经验证的更新与回滚。
-- `@delo/integrity` 与 `delorun verify`（[C15](c15-verification-checks.zh.md)）、Docker 监管器（Docker supervisor）的镜像检查（[C9](c09-runtime-supervisor.md)），以及插件索引的密钥（[C13](c13-catalogue-revocation.zh.md)）。
+- `@delo/integrity` 与 `delorun verify`（[C15](c15-verification-checks.zh.md)）、Docker 监管器（Docker supervisor）的镜像检查（[C9](c09-runtime-supervisor.zh.md)），以及插件索引的密钥（[C13](c13-catalogue-revocation.zh.md)）。
 
 <a id="compatibility"></a>
 

@@ -40,18 +40,18 @@ The runtime provider is a Service Definition that the Delo runtime packages regi
 - **Kinds.** A workspace runs as `native`, `docker-s2` or `docker-s3`. The Docker shape is a machine setting chosen in setup. Under S2, native or Docker is a workspace setting. Under S3, every workspace runs inside the one container, and the per-workspace choice is not offered.
 - **Operations.** `report()` returns the [capability report](#the-capability-report). `resolve(request)` turns a workspace request into a complete specification: it fills the preset, the egress mode and the credential options from their defaults, explicitly, and rejects a request the report cannot satisfy. `start(spec)`, `stop(workspaceId, mode)` and `state(workspaceId)` manage the workspace's runtime. A Docker kind calls the supervisor for every Docker operation and never calls Docker itself.
 - **Defaults.** A request without a preset resolves to Balanced, without an egress mode to `allowlist`, and without credential options to no forwarding.
-- **Native workspaces.** The `native` kind runs commands on the machine with the person's own access, under upstream's sandbox and C1's confinement rules, and reports C1's rule states.
+- **Native workspaces.** The `native` kind runs commands on the machine with the person's own access, under upstream's sandbox and [C1](c01-home-layout.md)'s confinement rules, and reports [C1](c01-home-layout.md)'s rule states.
 - **Routing.** Upstream's `fs`, `subprocess`, `sandbox`, `terminals`, `lsp` and `ptcRuntime` services are single-slot. The S2 package routes a Docker workspace's calls to its container through the seam it adds upstream; this contract fixes the provider's operations and the facts it reports, not that seam.
 
 ## The capability report
 
 The report states what this machine runs and enforces. The supervisor builds the Docker part by inspection, at each supervisor start and whenever `capabilities` is called with `refresh`.
 
-- **Fields.** `v` (1), `checkedAt`, `machine` (`os`, `arch`), `confinement` (C1's rule states for native workspaces), `docker` (absent when no engine answers) and `shapes` (`s2` and `s3`, each `available` with a reason code when it is not).
+- **Fields.** `v` (1), `checkedAt`, `machine` (`os`, `arch`), `confinement` ([C1](c01-home-layout.md)'s rule states for native workspaces), `docker` (absent when no engine answers) and `shapes` (`s2` and `s3`, each `available` with a reason code when it is not).
 - **The Docker part.** `engine` (`docker-engine`, `docker-desktop` or `other`), `version`, `rootless`, `context` (the active context's name), `endpoint` (`unix`, `npipe`, `tcp` or `ssh`, with its path), `storageDriver` and `limits`.
 - **Limits.** Each entry of `limits` has a `status` (`enforced`, `not-enforced` or `unknown`) and an `evidence` string naming the inspected field and its value. The entries are `cpu`, `memory`, `pids`, `disk`, `cap-drop`, `no-new-privileges`, `read-only-root`, `seccomp`, `user-namespace`, `network-isolation`, `host-gateway-block`, `host-loopback-block` and `egress-allowlist`.
 - **Inspection.** The supervisor creates a probe container from the S2 workspace image with the Small preset, reads its `docker inspect` record and runs probe commands inside it: a connect to a listener the supervisor opens on the network's gateway address, a connect to a host loopback listener, a request to a host outside the allowlist and a request to an allowlisted host. A limit is `enforced` only when the inspected record shows it and, for the network entries, the probe's forbidden connections fail while the allowed one succeeds. The probe container is removed afterwards.
-- **Offering a shape.** Setup lists every limit with its state on this machine before the person chooses a shape. S2 and S3 are offered only when `cap-drop`, `no-new-privileges`, `seccomp`, `network-isolation`, `memory` and `pids` are `enforced`. Any other entry that is not `enforced` is shown in setup and in the workspace's settings as advisory on this machine.
+- **Offering a shape.** Setup ([C11](c11-setup-answers.md)) lists every limit with its state on this machine before the person chooses a shape. S2 and S3 are offered only when `cap-drop`, `no-new-privileges`, `seccomp`, `network-isolation`, `memory` and `pids` are `enforced`. Any other entry that is not `enforced` is shown in setup and in the workspace's settings as advisory on this machine.
 - **Shape reasons.** `docker-unavailable`, `docker-endpoint-network` (the context's endpoint is TCP or SSH), `s2-transport-unsupported` (Docker Desktop for macOS and Windows), `image-unverified` (the image digest does not match the verified manifest) and `limits-missing`.
 
 ## Docker shapes
@@ -70,14 +70,14 @@ The report states what this machine runs and enforces. The supervisor builds the
 - **S3's harness user.** The harness and the home process run as the user `delo-harness` (uid 1001) inside the container. The container's root filesystem is read-only, so no user in the container can change the harness code. The Delo home lies on a volume owned by `delo-harness` with mode 0700. Workspace commands run as the user `delo` (uid 1000), so they cannot read or change the home's secrets.
 - **S3's privileges.** The harness keeps only `CAP_SETUID` and `CAP_SETGID`, to start commands as `delo`, and every command it starts runs with an empty capability set and `no-new-privileges`.
 - **S3's studio.** Inside the container the studio listens on a Unix socket in the container's run directory, which is bind-mounted from the machine's `~/.delo/run/<profile>/s3/`. The machine's home process forwards its loopback listener to that socket, so the container publishes no port.
-- **S3's host side.** On the machine, the home process holds C1's lock and token and runs the supervisor and the loopback forwarding; the Host runs inside the container.
+- **S3's host side.** On the machine, the home process holds [C1](c01-home-layout.md)'s lock and token and runs the supervisor and the loopback forwarding; the Host runs inside the container.
 - **File watching.** The capability report states `fileWatching` per shape as `supported` or `unsupported` for this engine; where it is unsupported, the studio's file views refresh on request.
 
 ## Sandbox backend per shape
 
 | Runtime | Commands run | Confinement | `workspace-write` | `read-only` | `danger-full-access` |
 | --- | --- | --- | --- | --- | --- |
-| Native | on the machine | upstream's dialect with C1's rules | the dialect's write grant | the dialect | unconfined |
+| Native | on the machine | upstream's dialect with [C1](c01-home-layout.md)'s rules | the dialect's write grant | the dialect | unconfined |
 | S2 Docker workspace | in its container | the container | the container's writable set: the workspace root and `/tmp` | Landlock inside the container where it probes usable; otherwise `partial` enforcement | unconfined inside the container, which still confines it |
 | S3 | in the one container | the container, and upstream's dialect inside it where it probes usable | the dialect, else the container's writable set | the dialect where it probes usable; otherwise `partial` enforcement | unconfined inside the container, which still confines it |
 
@@ -90,14 +90,14 @@ Every workspace container and the S3 container run with these settings, and the 
 
 - every capability dropped (`--cap-drop ALL`), except S3's `CAP_SETUID` and `CAP_SETGID` for its harness;
 - `no-new-privileges`;
-- the seccomp profile that the release ships and C2's manifest lists by digest, derived from Docker's default profile;
+- the seccomp profile that the release ships and [C2](c02-release-manifest.md)'s manifest lists by digest, derived from Docker's default profile;
 - a read-only root filesystem, with a tmpfs `/tmp` of the preset's size;
 - the preset's CPU, memory and PID limits, with swap equal to memory;
 - the preset's disk limit through `--storage-opt size` where the storage driver supports it, otherwise reported `not-enforced`;
 - no Docker socket, no `--privileged`, no device, and none of the host's network, PID, IPC or user namespaces;
 - the user that [the S2 helper channel](#the-s2-helper-channel) states, never the host's root;
 - an init process, and no restart policy;
-- the name `delo-ws-<12 hex>` (the first 12 hexadecimal digits of the SHA-256 digest of the workspace id) or `delo-s3-<profile>`, and the labels `run.delo.home` (C1's `homeId`), `run.delo.profile`, `run.delo.workspace` and `run.delo.shape`.
+- the name `delo-ws-<12 hex>` (the first 12 hexadecimal digits of the SHA-256 digest of the workspace id) or `delo-s3-<profile>`, and the labels `run.delo.home` ([C1](c01-home-layout.md)'s `homeId`), `run.delo.profile`, `run.delo.workspace` and `run.delo.shape`.
 
 ## Networks and egress
 
@@ -134,16 +134,16 @@ Forwarding is off for every workspace by default and is chosen per workspace. Wh
 
 - **Agents.** For `deploy-key` and `agent-confirm` the supervisor starts one ssh agent per workspace on the machine, with its socket in `~/.delo/run/<profile>/agents/<12 hex>/`, and mounts that socket only into that workspace's container at `/run/delo-agent/agent.sock`, with `SSH_AUTH_SOCK` set. Another workspace's container never receives it. The person's own agent is never forwarded.
 - **Confirmation.** `agent-confirm` needs an askpass program on the machine to show each confirmation; where none exists, the option is not offered.
-- **Storage.** A deploy key and a token are stored under C1's `secrets/workspaces/<12 hex>/` with mode 0600. Neither is written to a log, a command line, the workspace root or the image.
+- **Storage.** A deploy key and a token are stored under [C1](c01-home-layout.md)'s `secrets/workspaces/<12 hex>/` with mode 0600. Neither is written to a log, a command line, the workspace root or the image.
 
 ## The Docker supervisor
 
 The supervisor is the only Delo component that calls Docker. It runs as a separate process of the person's user, never as root, from the runtime closure that the home process runs.
 
 - **Lifetime.** The home process starts it when the machine is set up for Docker and passes it the start token over an inherited pipe. It stops with that home-process start, and a successor home process starts a new supervisor with the new token. Containers keep running across a supervisor restart.
-- **Socket.** It listens on C1's `run/<profile>/supervisor.sock`, or the named pipe C1 names on Windows.
-- **Callers.** It accepts a request only with the current start's token, compared in constant time; a missing, wrong or previous start's token receives `UNAUTHENTICATED` and nothing else. Its only caller is the home process. A workspace command never reaches it wherever C1's `home-connect` rule is enforced, and under Landlock it can connect but cannot read the token.
-- **Logging.** It writes the C20 surface `supervisor-<profile>`. It logs the operation, the workspace id and the outcome of each request, never a request body, a credential or an environment value.
+- **Socket.** It listens on [C1](c01-home-layout.md)'s `run/<profile>/supervisor.sock`, or the named pipe [C1](c01-home-layout.md) names on Windows.
+- **Callers.** It accepts a request only with the current start's token, compared in constant time; a missing, wrong or previous start's token receives `UNAUTHENTICATED` and nothing else. Its only caller is the home process. A workspace command never reaches it wherever [C1](c01-home-layout.md)'s `home-connect` rule is enforced, and under Landlock it can connect but cannot read the token.
+- **Logging.** It writes the [C20](c20-operational-logs.md) surface `supervisor-<profile>`. It logs the operation, the workspace id and the outcome of each request, never a request body, a credential or an environment value.
 - **Containers it manages.** It manages only containers that carry its home's and profile's labels; an operation on any other container fails with `NOT_FOUND`.
 
 ## The supervisor API
@@ -169,11 +169,11 @@ The supervisor is the only Delo component that calls Docker. It runs as a separa
 
 ## Supervisor roots
 
-- **The roots file.** `supervisor/roots.json` (C1, mode 0600) holds `{"v":1,"parents":["<absolute path>", ...]}` with at most 16 parent directories. Only `delorun setup` writes it, in the person's terminal; no Host API, tool or configuration row writes it. The supervisor reads it at its start.
+- **The roots file.** `supervisor/roots.json` ([C1](c01-home-layout.md), mode 0600) holds `{"v":1,"parents":["<absolute path>", ...]}` with at most 16 parent directories. Only `delorun setup` writes it, in the person's terminal; no Host API, tool or configuration row writes it. The supervisor reads it at its start.
 - **Parents.** Each parent is stored as its canonical absolute path. Setup refuses `/`, the OS home directory, the Delo home, any path that contains the Delo home and any path inside it.
 - **Workspace roots.** On `workspace.create` the supervisor resolves `root` with `realpath` itself. It refuses with `ROOT_REFUSED` a root that is `/`, the OS home directory or the Delo home, that contains or lies inside the Delo home, or that is not a directory owned by the person, and with `ROOT_NOT_UNDER_PARENT` a root that is not strictly inside one of the parents.
 - **Mounts.** An S2 container's bind mounts are the resolved workspace root, the workspace's helper socket directory and, when the workspace forwards an agent, that agent's socket. The S3 container's mounts are the resolved workspace roots, the volume that holds its Delo home and the machine's `~/.delo/run/<profile>/s3/`. No other host path is mounted. After creating the container, the supervisor compares the inspected mount sources with the resolved paths and removes the container with `ROOT_REFUSED` on any difference.
-- **Who can change the roots.** Confined commands cannot write the file wherever C1's `home-write` rule holds, and upstream's in-process file tools are limited to writable roots, which never include the home. A command or tool that runs under `danger-full-access` can write it.
+- **Who can change the roots.** Confined commands cannot write the file wherever [C1](c01-home-layout.md)'s `home-write` rule holds, and upstream's in-process file tools are limited to writable roots, which never include the home. A command or tool that runs under `danger-full-access` can write it.
 
 ## The S2 helper channel
 
@@ -193,8 +193,8 @@ Under S2, upstream's SSH helper inside each workspace container carries the work
 | S2 workspace | `ghcr.io/delo-run/delo-workspace-s2` | `docker.io/library/debian:bookworm-slim`, by digest | the helper, workspace commands and the egress proxy |
 | S3 harness | `ghcr.io/delo-run/delo-harness-s3` | `docker.io/library/debian:bookworm-slim`, by digest | the harness with the runtime closure, workspace commands and the egress proxy |
 
-- **Build.** Each image is built from its digest-pinned base within C2's reproducible-rebuild scope.
-- **Signature and digest.** The release manifest (C2) lists each image's digest, and the manifest's Ed25519 signature is the image's signature; no registry-side signature is trusted.
+- **Build.** Each image is built from its digest-pinned base within [C2](c02-release-manifest.md)'s reproducible-rebuild scope.
+- **Signature and digest.** The release manifest ([C2](c02-release-manifest.md)) lists each image's digest, and the manifest's Ed25519 signature is the image's signature; no registry-side signature is trusted.
 - **Pull.** The supervisor pulls only `<name>@sha256:<digest>` with the digest from the verified manifest of the running runtime, never a tag, and checks the pulled image's digest. The pull reaches only `ghcr.io` and `pkg-containers.githubusercontent.com`.
 - **Refusal.** The supervisor refuses to create a container from a digest that the verified manifest does not list, with `IMAGE_NOT_IN_MANIFEST`.
 
@@ -207,7 +207,7 @@ A file operation that a container's read-only root refuses is denied by the envi
 - **The marker.** The result of an environment denial carries exactly the line `[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]`, from `environmentDenialMarker()`, and no escalation hint; `denialMarkers` returns that line alone.
 - **Executors.** The bash and PowerShell sandbox executors apply this classification and marker.
 - **PTC.** The PTC executor applies it too: the Node PTC runtime's worker classifies a failed program against both signature sets, `run_code`'s result carries `sandbox.deniedBy: 'environment'`, and its rendering appends the environment marker in place of the policy sentence and its escalation guidance.
-- **Native and parity.** Native runtimes declare no environment signatures, so the output of a native workspace and of the parity composition does not change.
+- **Native and parity.** Native runtimes declare no environment signatures, so the output of a native workspace and of the parity composition ([C16](c16-parity-composition.md)) does not change.
 
 ## Limits
 
@@ -250,7 +250,7 @@ A file operation that a container's read-only root refuses is denied by the envi
 - `delo/packages/supervisor`: the supervisor, its API, the capability report, roots and image checks.
 - `delo/packages/runtime-docker`: the S2 shape, the S3 shape, credential forwarding and the Docker denial suite.
 - The studio's workspace plugin: the runtime choice and the presets at workspace creation.
-- `delo/apps/release`: the S2 and S3 images and their digests in the manifest (C2).
+- `delo/apps/release`: the S2 and S3 images and their digests in the manifest ([C2](c02-release-manifest.md)).
 - `delo/packages/integrity`: `delorun verify`'s isolation and Docker limit checks.
 - Upstream's `packages/sandbox/sandbox`, `packages/shell/bash-sandbox`, `packages/shell/pwsh-sandbox`, `packages/ptc-runtime/ptc-runtime-node` and `packages/core/tool-executor-ptc`: the container denial marker.
 
@@ -267,8 +267,8 @@ A file operation that a container's read-only root refuses is denied by the envi
 ### Requirements
 
 1. The supervisor's API has a fixed schema and is never a Docker passthrough: no request field names an image, flag, mount, environment variable, command, device, capability or network.
-2. The supervisor socket lies under the home and accepts only the home process, by the current start's token (C1). The protection rests on C1's confinement of the agent's commands; where a dialect cannot enforce it, `delorun verify` reports it and setup labels Docker mode. This contract claims no protection against a process of the person's user outside the sandbox, which can drive Docker directly when the person can. No root-owned helper exists.
-3. Native sandbox profiles deny the Docker socket at its real path wherever the dialect enforces C1's `docker-connect`.
+2. The supervisor socket lies under the home and accepts only the home process, by the current start's token ([C1](c01-home-layout.md)). The protection rests on [C1](c01-home-layout.md)'s confinement of the agent's commands; where a dialect cannot enforce it, `delorun verify` reports it and setup labels Docker mode. This contract claims no protection against a process of the person's user outside the sandbox, which can drive Docker directly when the person can. No root-owned helper exists.
+3. Native sandbox profiles deny the Docker socket at its real path wherever the dialect enforces [C1](c01-home-layout.md)'s `docker-connect`.
 4. Workspace roots lie under parents chosen at setup and stored in a file that only `delorun setup` writes. The supervisor resolves every path itself, refuses `/`, `$HOME` and `~/.delo`, and mounts only the paths that [supervisor roots](#supervisor-roots) lists.
 5. Each workspace has its own internal network shared with no other workspace, workspace networks have no route to the machine, and egress leaves only through the workspace's proxy with the default allowlist; `open` egress is set only by the person's choice.
 6. Credential forwarding is off by default, chosen per workspace and limited to a deploy key, a confirming agent or a repository-scoped token; a forwarded agent reaches only its own workspace's container.
@@ -278,16 +278,17 @@ A file operation that a container's read-only root refuses is denied by the envi
 10. The S2 helper runs as the container's workspace user and accepts only peers that prove the channel key.
 11. The supervisor runs only S2 and S3 images whose digests the verified release manifest lists, pulled by digest from `ghcr.io`.
 12. An environment denial inside a container is never answered with escalation guidance, in the shell executors and in the PTC executor.
+13. On a Landlock-only system whose active Docker context is a rootful engine's socket, `delorun verify` reports `docker-connect` as not enforced through the `workspace-isolation` and `confinement-rule` checks of [C15](c15-verification-checks.md), and setup names the socket's path, states that confined native commands can reach it and that this is equivalent to root, and offers Docker's rootless engine.
 
 ### Denial tests
 
 | Test | Proves |
 | --- | --- |
-| `docker-from-native-denied` | On each dialect that enforces C1's `docker-connect`, `docker ps` from a confined native workspace command fails |
-| `supervisor-connect-denied` | On each dialect that enforces C1's `home-connect`, a confined native workspace command's connect to the supervisor socket fails and it cannot read the start token |
+| `docker-from-native-denied` | On each dialect that enforces [C1](c01-home-layout.md)'s `docker-connect`, `docker ps` from a confined native workspace command fails |
+| `supervisor-connect-denied` | On each dialect that enforces [C1](c01-home-layout.md)'s `home-connect`, a confined native workspace command's connect to the supervisor socket fails and it cannot read the start token |
 | `supervisor-token-required` | A request without a token, with a wrong token and with the previous start's token each receives `UNAUTHENTICATED` |
 | `supervisor-landlock` | Under Landlock, a confined native workspace command's connect to the supervisor socket succeeds and its request fails with `UNAUTHENTICATED`, because it cannot read the token, and `delorun verify` reports that state |
-| `supervisor-not-enforced-labelled` | On a fixture dialect that cannot enforce C1's rules, `delorun verify` reports them and setup's Docker mode option carries the label |
+| `supervisor-not-enforced-labelled` | On a fixture dialect that cannot enforce [C1](c01-home-layout.md)'s rules, `delorun verify` reports them and setup's Docker mode option carries the label |
 | `supervisor-schema-closed` | Requests with an image reference, a mount, an environment variable, a command or an unknown `op` are refused with `SCHEMA_VIOLATION`, and no container is created |
 | `supervisor-roots-refused` | Roots `/`, `$HOME`, `~/.delo`, a path containing `~/.delo`, a symbolic link resolving outside every parent and a path outside every parent are refused |
 | `supervisor-image-unlisted` | A container from a digest the verified manifest does not list is refused with `IMAGE_NOT_IN_MANIFEST` |
@@ -299,6 +300,18 @@ A file operation that a container's read-only root refuses is denied by the envi
 | `helper-peer-refused` | A connection to the S2 helper's socket that does not answer the challenge with the channel key is closed |
 | `s3-harness-readonly` | Under S3, a workspace command cannot write the harness tree or read or write the home's secrets, and reach refuses to turn on |
 | `environment-denial-no-escalation` | Under S2, a write to the container's read-only root returns the environment marker and no escalation hint, through bash and through `run_code` |
+| `landlock-rootful-docker-named` | On a Landlock fixture with a rootful Docker socket, `delorun verify` reports `docker-connect` as `not-enforced` with the socket's path, and setup's Docker step names that path, states the root equivalence and offers the rootless engine before Docker mode can be chosen |
+
+### What this does not prove
+
+- **Landlock with a rootful engine.** Landlock cannot deny a native command's connect to the Docker socket, so on a Landlock-only system with a rootful engine any confined native command can start a container with the machine's files mounted. Delo reports it and offers the rootless engine; it cannot close it there.
+- **Docker over the network.** A context whose endpoint is TCP or SSH is reachable by any command with network access, which no dialect confines; the report marks it `docker-endpoint-network`, and Docker shapes are not offered on it.
+- **Host gateway and loopback.** Whether a workspace network reaches the machine depends on the engine; the probe reports what it found on this machine, and a rootful engine's internal bridge may leave the gateway address reachable.
+- **Disk limits.** Most storage drivers, every rootless engine and Docker Desktop do not enforce a container's disk size; the preset's disk value is advisory there.
+- **The helper key.** It does not protect the S2 helper from commands in its own container, which run as the same user.
+- **S3.** S3 does not isolate workspaces from each other.
+- **The roots file under full access.** A command or tool running under `danger-full-access` can change `supervisor/roots.json`.
+- **Docker Desktop.** Containers run inside Docker Desktop's VM, which is not a user namespace for the container itself.
 
 ## Enforcement per platform and dialect
 
@@ -313,7 +326,6 @@ The capability report states each limit as inspected on the machine; this table 
 | `disk` | enforced only with a storage driver that supports `size`, such as overlay2 on XFS with project quotas | not-enforced | not-enforced | not-enforced |
 | `user-namespace` | not-enforced unless the engine uses `userns-remap` | enforced | not-enforced for the container; containers run inside Docker Desktop's VM | not-enforced for the container; containers run inside Docker Desktop's VM |
 | `host-gateway-block`, `host-loopback-block` | as the probe finds | as the probe finds | as the probe finds | as the probe finds |
-| Socket denial for native commands | C1's table | C1's table | C1's table | C1's table |
+| Socket denial for native commands | [C1](c01-home-layout.md)'s table | [C1](c01-home-layout.md)'s table | [C1](c01-home-layout.md)'s table | [C1](c01-home-layout.md)'s table |
 
 - **Root equivalence.** On a rootful engine, any process that reaches the Docker socket can start a container with the machine's files mounted, so membership of the `docker` group is equivalent to root. A rootless engine runs containers with the person's own rights.
-- **Docker over the network.** A context whose endpoint is TCP or SSH is reachable by any command with network access, which no dialect confines; the report marks it `docker-endpoint-network`, and Docker shapes are not offered on it.

@@ -30,17 +30,17 @@
   en: aa288887ce5d7c90
   zh: eae842988dd43834
 /c2-release-manifest-and-signature/release-manifest:
-  en: b20659893fbf1f27
-  zh: ce5045a8079b62f7
+  en: b92f5a4a0045d05f
+  zh: 8128e72127f90ce5
 /c2-release-manifest-and-signature/runtime-file-list:
-  en: e950f26600a53ac9
-  zh: 8db82c1fe79b2630
+  en: 3a4513931e3cd47c
+  zh: 19dfd04bec1864d4
 /c2-release-manifest-and-signature/client-verification:
-  en: 58e93577773f1d02
-  zh: 44b4ec9a374c1397
+  en: 3f35c24d848de272
+  zh: f270cbbff5234f9e
 /c2-release-manifest-and-signature/freshness-and-rollback-protection:
-  en: 282433057cf93b8e
-  zh: 416df0ebe1b35055
+  en: accddea0c1aa72a3
+  zh: 8ccb878c9d9da468
 /c2-release-manifest-and-signature/key-rotation:
   en: 31aa1927437e0264
   zh: d91e762aeeea8835
@@ -60,8 +60,8 @@
   en: a3d56a780db8e261
   zh: 49f7800dff68844e
 /c2-release-manifest-and-signature/consumers:
-  en: 64ccbad49e7e3df1
-  zh: 09c33ba30c21620f
+  en: 3994c46360d399bd
+  zh: 0a75e468c4588227
 /c2-release-manifest-and-signature/compatibility:
   en: 126ff96804d92ba3
   zh: 847da80dbf03cce5

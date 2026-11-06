@@ -9,38 +9,38 @@
   en: 2b4ccf8ac5eb1920
   zh: 76f7d9805b94ba58
 /c20-operational-logs/summary:
-  en: 39e0cf1fa090b699
-  zh: b15d0b8dcadd9f85
+  en: 221e05a2f726ec37
+  zh: 3a7045fc5d804834
 /c20-operational-logs/contents:
   en: 7a65d7ba9f01f19c
   zh: c6a0ce41b607c992
 /c20-operational-logs/surfaces-and-destinations:
-  en: 4288cd7740e929bf
-  zh: 0caf14770c428dde
+  en: 9dc0e47a5893e75e
+  zh: 522ece6c5943e383
 /c20-operational-logs/what-a-log-holds:
   en: e230de40f5c1a1de
   zh: 2519a543053fd132
 /c20-operational-logs/record-format:
-  en: 0a83e99a1ddbb2d2
-  zh: 826c06b0c6502efa
+  en: f75f3d29b80d7b1f
+  zh: 0fa16a163a62ce59
 /c20-operational-logs/rotation-and-retention:
-  en: b259d51fd83407c0
-  zh: 5ba4f1829efcb8e2
+  en: 1b712e10b603fa78
+  zh: 590f247285c144fc
 /c20-operational-logs/redaction:
   en: 3498b54a415b2a17
   zh: 50a445fb177a0a6e
 /c20-operational-logs/delorun-logs:
-  en: 13fb4e0329c5151a
-  zh: 42b12b5731902535
+  en: b9afdc74b10aabe8
+  zh: 4fc6b11095666857
 /c20-operational-logs/purge-and-process-logs:
-  en: f6288af45a8f7197
-  zh: 6852c26b0891cb1c
+  en: a2a7c4705f242ca3
+  zh: 708aa9980612dc3a
 /c20-operational-logs/limits:
   en: c174897059ed9e8e
   zh: 84a221235187f6db
 /c20-operational-logs/consumers:
-  en: 46947300a34e8bc1
-  zh: 5c4ead8452e96ef5
+  en: e96e4ecab75991d2
+  zh: 3a4f5ef628614342
 /c20-operational-logs/compatibility:
   en: 40d5f923fd1fb829
   zh: 5ed609b8163c1c8f
@@ -48,11 +48,14 @@
   en: 52543dba9bf0d349
   zh: e612a6c5b83e9afc
 /c20-operational-logs/security/requirements:
-  en: 00bb8ec9faa4441c
-  zh: 20309678f58919cc
+  en: bac476eca757ad4a
+  zh: 86c80e55a6edd0dc
 /c20-operational-logs/security/denial-tests:
-  en: d1be09cd75ea748a
-  zh: 826d18f32412cec4
+  en: 2900b9c55578fda4
+  zh: f453ccb817a8008b
+/c20-operational-logs/security/what-this-does-not-prove:
+  en: 4ce07aff8a291ac8
+  zh: 73737acdbc825d91
 /c20-operational-logs/enforcement-per-platform-and-dialect:
-  en: ad6c82904766cdbd
-  zh: d95b8362fd8a6d9e
+  en: 45ca225e3410134c
+  zh: 40f12287c8ba2306
