@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/apps/release/README.md
 /delo-release-tooling:
-  en: 0f0a40acab500050
-  zh: 62b710423fed7878
+  en: 3fd9b702c8b52d02
+  zh: 4fa1c63010d72591
 /delo-release-tooling/modules:
-  en: bcfd11461a07912d
-  zh: 723f956282bffe6c
+  en: 628a22f9e9e8b90c
+  zh: 2ce5d4433f1a3fd4
 /delo-release-tooling/the-gate:
   en: 2291e5ca1bbe97c7
   zh: 2d7664c91c232c43
@@ -24,14 +24,14 @@
   en: 755aef7566a6439f
   zh: ec5d3fc7f037c6a8
 /delo-release-tooling/sbom:
-  en: f29222cd040c7ee9
-  zh: bbf955e86fa5899c
+  en: b178b177467d8778
+  zh: 86b49932f0b136c9
 /delo-release-tooling/dependency-advisory-check:
   en: f0aff0c6b0305cf4
   zh: 660bc46a5f1c13b1
 /delo-release-tooling/signing:
-  en: 411c46cb282d6378
-  zh: a0159beaafde3144
+  en: 7c25805cbbbd29cf
+  zh: 055b819ea3a06e74
 /delo-release-tooling/signing/the-targets-key:
   en: 7f3ce2e4d30c2ea4
   zh: e379b60ddf0a540b
@@ -44,6 +44,12 @@
 /delo-release-tooling/verification:
   en: a7f1e334f1ec809e
   zh: 0ff7172c0a3d97db
+/delo-release-tooling/images:
+  en: 81204703b337f74a
+  zh: 55467394391dac95
+/delo-release-tooling/release-log:
+  en: 0f035bf1177548c2
+  zh: 1c51bb862e0c5146
 /delo-release-tooling/open-items:
   en: 5d81faffe3d73496
   zh: a2a5f28e7b32f840

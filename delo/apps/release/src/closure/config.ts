@@ -16,7 +16,7 @@ import { z } from 'zod'
 export const RECIPE_DIR = join(import.meta.dirname, '..', '..')
 
 /** The recipe files, relative to {@link RECIPE_DIR}. */
-export const RECIPE_FILES = ['toolchain.json', 'prebuilt-pins.json', 'closure.json', 'rebuild-exceptions.json'] as const
+export const RECIPE_FILES = ['toolchain.json', 'prebuilt-pins.json', 'closure.json', 'rebuild-exceptions.json', 'images.json'] as const
 
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u, 'a lowercase hex SHA-256')
 const integrity = z.string().regex(/^sha512-[A-Za-z0-9+/]{86}==$/u, 'an npm sha512 integrity string')

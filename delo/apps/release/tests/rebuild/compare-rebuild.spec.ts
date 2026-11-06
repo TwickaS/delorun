@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { describe, expect, it, type TestContext } from 'vitest'
 import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
+import { readImagesRecipe } from '../../src/images/build.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { compareOutputs } from '../../src/rebuild/compare.ts'
 import { derSequence, peImage, runEntry, scratch, signPe, winCertificate, writeTree, type StagedContent } from '../support.ts'
@@ -176,7 +177,7 @@ describe('compare-rebuild', CHILD_PROCESS_TIMEOUT, () => {
   it('accepts no PE difference when the exceptions list none', async (test) => {
     const released = await output(test, 'win32-x64', tree(signPe(UNSIGNED, winCertificate(derSequence(Buffer.from('certificate'))), 1)))
     const rebuilt = await output(test, 'win32-x64', tree(UNSIGNED))
-    const comparison = await compareOutputs(released, rebuilt, { exceptions: { schema: 'delo.rebuild-exceptions/1', exceptions: [] }, toolchain: readRecipe().toolchain })
+    const comparison = await compareOutputs(released, rebuilt, { exceptions: { schema: 'delo.rebuild-exceptions/1', exceptions: [] }, toolchain: readRecipe().toolchain, images: readImagesRecipe() })
     expect(comparison.differences.map(item => item.entry)).toEqual([HELPER])
     expect(comparison.accepted).toEqual([])
   })

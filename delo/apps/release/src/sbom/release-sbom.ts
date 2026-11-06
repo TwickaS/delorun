@@ -5,14 +5,15 @@
  *
  * @module @delo/release/sbom/release-sbom
  */
-import { readdir, writeFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
 import { archiveEntries } from '../archive/inspect.ts'
 import { fileDigest } from '../archive/sink.ts'
 import type { Toolchain } from '../closure/config.ts'
 import { closureFileNames } from '../closure/tree.ts'
-import { isPackageManifest, spdxDocument, type ArchiveContents, type NpmPackageEntry } from './spdx.ts'
+import { imagesName, type ReleaseImages } from '../images/build.ts'
+import { isPackageManifest, spdxDocument, type ArchiveContents, type ImageContents, type NpmPackageEntry } from './spdx.ts'
 
 /** The closure lockfile's path inside a runtime archive. */
 export const CLOSURE_LOCKFILE = 'app/pnpm-lock.yaml'
@@ -59,9 +60,11 @@ export async function readArchiveContents(path: string, format: 'tar.gz' | 'zip'
  * @param directory - the output directory.
  * @param version - the release.
  * @param toolchain - the pinned toolchain.
- * @returns the document's text, or `undefined` when an archive is missing.
+ * @param base - the images' base by digest, from the `images.json` that built them.
+ * @returns the document's text, or `undefined` when an archive is missing. When the output holds
+ * `delorun-<version>.images.json`, the document describes both images too.
  */
-export async function deriveSbomText(directory: string, version: string, toolchain: Toolchain): Promise<string | undefined> {
+export async function deriveSbomText(directory: string, version: string, toolchain: Toolchain, base: string): Promise<string | undefined> {
   const present = new Set(await readdir(directory))
   const archives: ArchiveContents[] = []
   let epoch = 0
@@ -72,7 +75,8 @@ export async function deriveSbomText(directory: string, version: string, toolcha
     epoch = contents.mtime
     archives.push({ platform, name, sha256: (await fileDigest(join(directory, name))).sha256, packages: contents.packages, lockfile: contents.lockfile })
   }
-  const document = spdxDocument(version, epoch, { node: { version: toolchain.node.version, origin: toolchain.node.origin }, pnpm: { version: toolchain.pnpm.version, integrity: toolchain.pnpm.integrity } }, archives)
+  const images = present.has(imagesName(version)) ? imageContents(JSON.parse(await readFile(join(directory, imagesName(version)), 'utf8')) as ReleaseImages, base) : undefined
+  const document = spdxDocument(version, epoch, { node: { version: toolchain.node.version, origin: toolchain.node.origin }, pnpm: { version: toolchain.pnpm.version, integrity: toolchain.pnpm.integrity } }, archives, images)
   return `${JSON.stringify(document, undefined, 2)}\n`
 }
 
@@ -81,12 +85,17 @@ export async function deriveSbomText(directory: string, version: string, toolcha
  * @param directory - the output directory, holding every platform's archive.
  * @param version - the release.
  * @param toolchain - the pinned toolchain.
+ * @param base - the images' base by digest, from `images.json`.
  * @returns the file's name.
- * @throws Error when an archive is missing or the file exists.
+ * @throws Error when an archive is missing. An existing SBOM is replaced, so the image build can extend it.
  */
-export async function writeReleaseSbom(directory: string, version: string, toolchain: Toolchain): Promise<string> {
-  const text = await deriveSbomText(directory, version, toolchain)
+export async function writeReleaseSbom(directory: string, version: string, toolchain: Toolchain, base: string): Promise<string> {
+  const text = await deriveSbomText(directory, version, toolchain, base)
   if (text === undefined) throw new Error(`the SBOM covers every platform, and ${directory} lacks an archive`)
-  await writeFile(join(directory, sbomName(version)), text, { flag: 'wx', mode: 0o644 })
+  await writeFile(join(directory, sbomName(version)), text, { mode: 0o644 })
   return sbomName(version)
+}
+
+function imageContents(images: ReleaseImages, base: string): ImageContents {
+  return { base, images: { s2: { repository: images.s2.repository, index: images.s2.index }, s3: { repository: images.s3.repository, index: images.s3.index } } }
 }

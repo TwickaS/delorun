@@ -9,11 +9,14 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, 
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
+import { sha256Hex } from '../../src/brands.ts'
+import { logEntryName, verifyBundle } from '../../src/log/bundle.ts'
 import { attestationText } from '../../src/rebuild/attestation.ts'
 import { outputRefs, REQUIRED_SOURCE } from '../../src/rebuild/record.ts'
+import { LogStandIn, WitnessStandIn } from '../log/standin.ts'
 import { checkFileRef, verifyFileList, verifySignedManifest } from '../../src/sign/verify.ts'
 import { writeTree } from '../support.ts'
-import { COMMITTED_COMPILER, releaseFixture, rootFile, VERSION, type ReleaseFixture } from './fixture.ts'
+import { COMMITTED_BASE_DIGEST, COMMITTED_COMPILER, releaseFixture, rootFile, VERSION, type ReleaseFixture } from './fixture.ts'
 
 const MANIFEST = `delorun-${VERSION}.manifest.json`
 const RECORD = `delorun-${VERSION}.rebuild.json`
@@ -324,5 +327,42 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     draft.advisories.accepted = ['GHSA-2222-3333-4444']
     writeFileSync(draftPath, JSON.stringify(draft))
     refusedWithoutWriting(fixture, await fixture.sign(), 'the draft\'s accepted advisories (GHSA-2222-3333-4444) are not the ones the check accepts (none)')
+  })
+
+  it('writes the manifest\'s log entry, which a witnessed checkpoint of the log stand-in includes and the client verifies', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    expect((await fixture.sign()).status).toBe(0)
+    const log = new LogStandIn()
+    const witness = new WitnessStandIn()
+    const root = rootFile(fixture.keys, { log: { origin: log.origin, vkey: log.vkey }, witnesses: { keys: [{ name: witness.name, vkey: witness.vkey }], threshold: 1 } }).metadata
+    const manifest = readFileSync(join(fixture.release, MANIFEST))
+    const index = log.append(readFileSync(join(fixture.release, logEntryName(VERSION))))
+    const bundle = log.bundle(index, { name: MANIFEST, sha256: sha256Hex(createHash('sha256').update(manifest).digest('hex')) }, witness.cosign(log.checkpoint(), 1_793_981_700))
+    expect(verifyBundle(root, manifest, VERSION, bundle).treeSize).toBe(1)
+  })
+
+  it('refuses a rebuild without the images file, and a draft whose images are not the compared ones', async (test) => {
+    const fixture = await releaseFixture(test)
+    const images = join(fixture.rebuild, `delorun-${VERSION}.images.json`)
+    const aside = join(fixture.rebuild, '..', 'aside.images.json')
+    renameSync(images, aside)
+    const partial = fixture.record()
+    expect(partial.stderr).toContain(`lacks delorun-${VERSION}.images.json`)
+    expect(partial.status).toBe(2)
+    renameSync(aside, images)
+    expect(fixture.record().status).toBe(0)
+    const path = join(fixture.release, 'manifest-draft.json')
+    const draft = JSON.parse(readFileSync(path, 'utf8')) as { images: { s3: { index: string } } }
+    draft.images.s3.index = `sha256:${'c'.repeat(64)}`
+    writeFileSync(path, JSON.stringify(draft))
+    refusedWithoutWriting(fixture, await fixture.sign(), `the draft's images are not the images delorun-${VERSION}.images.json records`)
+  })
+
+  it('describes the images in the SBOM with the base committed at the release', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(readFileSync(join(fixture.release, `delorun-${VERSION}.spdx.json`), 'utf8')).toContain(COMMITTED_BASE_DIGEST)
+    expect(fixture.record().status).toBe(0)
+    expect((await fixture.sign()).status).toBe(0)
   })
 })

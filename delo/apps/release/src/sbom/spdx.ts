@@ -29,6 +29,14 @@ export interface ArchiveContents {
   readonly lockfile: string
 }
 
+/** The S2 and S3 images and the base they are built from. */
+export interface ImageContents {
+  /** The base image reference, by digest. */
+  readonly base: string
+  /** Each image by repository and index digest. */
+  readonly images: Readonly<Record<'s2' | 's3', { readonly repository: string, readonly index: string }>>
+}
+
 /** The pinned toolchain parts each closure carries. */
 export interface ToolchainParts {
   readonly node: { readonly version: string, readonly origin: string }
@@ -97,9 +105,10 @@ function license(value: string | undefined): string {
  * @param epoch - the release's `SOURCE_DATE_EPOCH`.
  * @param toolchain - the pinned Node and pnpm.
  * @param archives - each archive's contents.
+ * @param images - the S2 and S3 images, when the build output holds them.
  * @returns the SPDX document, ready for `JSON.stringify`.
  */
-export function spdxDocument(version: string, epoch: number, toolchain: ToolchainParts, archives: readonly ArchiveContents[]): Record<string, unknown> {
+export function spdxDocument(version: string, epoch: number, toolchain: ToolchainParts, archives: readonly ArchiveContents[], images?: ImageContents): Record<string, unknown> {
   const packages = new Map<string, Record<string, unknown>>()
   const relationships: Array<{ spdxElementId: string, relationshipType: string, relatedSpdxElement: string }> = []
   const node = spdxId('generic', 'node', toolchain.node.version)
@@ -128,6 +137,20 @@ export function spdxDocument(version: string, epoch: number, toolchain: Toolchai
           externalRefs: [{ referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: purl(entry.name, entry.version) }],
       })
       relationships.push({ spdxElementId: archiveId, relationshipType: 'CONTAINS', relatedSpdxElement: id })
+    }
+  }
+  if (images !== undefined) {
+    const [baseName, baseDigest] = images.base.split('@') as [string, string]
+    const baseId = spdxId('oci', 'debian-bookworm-slim', baseDigest.slice('sha256:'.length, 'sha256:'.length + 12))
+    packages.set(baseId, { SPDXID: baseId, name: baseName, versionInfo: baseDigest, downloadLocation: `https://${baseName.split(':')[0]!}`, filesAnalyzed: false, licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION', checksums: [{ algorithm: 'SHA256', checksumValue: baseDigest.slice('sha256:'.length) }] })
+    for (const [name, image] of Object.entries(images.images)) {
+      const id = spdxId('image', name, version)
+      const repository = image.repository.slice(image.repository.lastIndexOf('/') + 1)
+      packages.set(id, { SPDXID: id, name: image.repository, versionInfo: image.index, downloadLocation: `https://${image.repository}`, filesAnalyzed: false, primaryPackagePurpose: 'CONTAINER', licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION', checksums: [{ algorithm: 'SHA256', checksumValue: image.index.slice('sha256:'.length) }], externalRefs: [{ referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: `pkg:oci/${repository}@${encodeURIComponent(image.index)}?repository_url=${encodeURIComponent(image.repository.slice(0, image.repository.lastIndexOf('/')))}` }] })
+      relationships.push({ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: id }, { spdxElementId: id, relationshipType: 'DESCENDANT_OF', relatedSpdxElement: baseId })
+      if (name === 's3') {
+        for (const archive of archives.filter(item => item.platform === 'linux-x64' || item.platform === 'linux-arm64')) relationships.push({ spdxElementId: id, relationshipType: 'CONTAINS', relatedSpdxElement: spdxId('archive', archive.platform, version) })
+      }
     }
   }
   const unique = [...new Map(relationships.map(item => [`${item.spdxElementId} ${item.relationshipType} ${item.relatedSpdxElement}`, item])).values()]

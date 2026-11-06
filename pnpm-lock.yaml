@@ -1288,6 +1288,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@delo/contract-release-log':
+        specifier: workspace:*
+        version: link:../../packages/contract-release-log
       '@delo/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest

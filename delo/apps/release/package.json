@@ -7,6 +7,7 @@
   "type": "module",
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delo/contract-release-log": "workspace:*",
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/tools": "workspace:*",
     "extract-zip": "^2.0.1",

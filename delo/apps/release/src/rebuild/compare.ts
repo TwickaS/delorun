@@ -15,6 +15,7 @@ import { compareEntryPaths, type ArchiveFormat } from '../archive/entry.ts'
 import { inspectArchive, type ArchiveSummary } from '../archive/inspect.ts'
 import { fileDigest } from '../archive/sink.ts'
 import type { RebuildExceptions, Toolchain } from '../closure/config.ts'
+import type { ImagesRecipe } from '../images/build.ts'
 import { deriveSbomText } from '../sbom/release-sbom.ts'
 import { closureFileNames, runtimeFileList, unsignedEnvelopeText } from '../closure/tree.ts'
 
@@ -135,12 +136,12 @@ async function fileListMatches(directory: string, name: string, parsed: ClosureN
  * Compare two output directories.
  * @param first - one output directory.
  * @param second - the other output directory.
- * @param recipe - the committed rebuild exceptions and the pinned toolchain, which the SBOM names.
+ * @param recipe - the committed rebuild exceptions, and the pinned toolchain and image recipe, which the SBOM names.
  * @param only - when given, the file names to compare; other files in either directory are not compared, and a
  * named file missing from either directory is a difference.
  * @returns every difference and every accepted difference.
  */
-export async function compareOutputs(first: string, second: string, recipe: { readonly exceptions: RebuildExceptions, readonly toolchain: Toolchain }, only?: ReadonlySet<string>): Promise<Comparison> {
+export async function compareOutputs(first: string, second: string, recipe: { readonly exceptions: RebuildExceptions, readonly toolchain: Toolchain, readonly images: ImagesRecipe }, only?: ReadonlySet<string>): Promise<Comparison> {
   const { exceptions } = recipe
   const differences: Difference[] = []
   const accepted: AcceptedDifference[] = []
@@ -179,7 +180,7 @@ export async function compareOutputs(first: string, second: string, recipe: { re
     const sbom = /^delorun-(.+)\.spdx\.json$/u.exec(name)
     if (sbom !== null) {
       for (const [index, directory] of [first, second].entries()) {
-        const expected = await deriveSbomText(directory, sbom[1]!, recipe.toolchain)
+        const expected = await deriveSbomText(directory, sbom[1]!, recipe.toolchain, recipe.images.base)
         const problem = expected === undefined ? 'its output lacks a platform archive the SBOM covers' : (await readFile(join(directory, name), 'utf8')) === expected ? undefined : 'it does not equal the SBOM derived from its archives'
         if (problem !== undefined) differences.push({ file: name, detail: `${index === 0 ? 'first' : 'second'}: ${problem}` })
       }

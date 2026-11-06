@@ -15,6 +15,7 @@ import { fileDigest } from '../archive/sink.ts'
 import { sha256Hex } from '../brands.ts'
 import { parseRecipeText, RebuildExceptions, Toolchain } from '../closure/config.ts'
 import { closureFileNames } from '../closure/tree.ts'
+import { ImagesRecipe, imagesName } from '../images/build.ts'
 import { sbomName } from '../sbom/release-sbom.ts'
 
 /** The source signing requires, named in every refusal of contract C2's rebuild rule. */
@@ -55,10 +56,13 @@ export interface CommittedRecipe {
   readonly toolchain: Toolchain
   /** The rebuild exceptions. */
   readonly exceptions: RebuildExceptions
+  /** The image recipe, whose base the SBOM names. */
+  readonly images: ImagesRecipe
 }
 
 /**
- * Read the toolchain and rebuild exceptions as committed at a commit, not as the running checkout holds them.
+ * Read the toolchain, rebuild exceptions and image recipe as committed at a commit, not as the running checkout
+ * holds them.
  * @param repository - the repository.
  * @param commit - the commit.
  * @returns the parsed files.
@@ -69,6 +73,7 @@ export function recipeAt(repository: string, commit: string): CommittedRecipe {
   return {
     toolchain: parseRecipeText(Toolchain, read('toolchain.json'), `${RECIPE_PATH}/toolchain.json at ${commit}`),
     exceptions: parseRecipeText(RebuildExceptions, read('rebuild-exceptions.json'), `${RECIPE_PATH}/rebuild-exceptions.json at ${commit}`),
+    images: parseRecipeText(ImagesRecipe, read('images.json'), `${RECIPE_PATH}/images.json at ${commit}`),
   }
 }
 
@@ -82,13 +87,13 @@ export function recordToolchain(toolchain: Toolchain): RebuildRecord['toolchain'
 }
 
 /**
- * The files every rebuild and every comparison must cover: each platform's runtime archive and file list, and the
- * release SBOM.
+ * The files every rebuild and every comparison must cover: each platform's runtime archive and file list, the
+ * release SBOM and the images file.
  * @param version - the release.
  * @returns their names.
  */
 export function requiredOutputs(version: string): string[] {
-  return [...RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform))), sbomName(version)]
+  return [...RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform))), sbomName(version), imagesName(version)]
 }
 
 /**

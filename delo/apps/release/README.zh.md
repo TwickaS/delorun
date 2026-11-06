@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-`@delo/release` 是 Delo 的发布工具，一个位于 `delo/apps/release` 的私有包。它包含变更片段门禁、发布说明汇总工具、用于构建运行时发行包（runtime closure）的已发布构建配方、签名所需的两次构建的比较、发布的 SBOM（软件物料清单）、依赖安全公告检查，以及发布元数据的签名与验证。[发布 manifest（release manifest）约定](../../docs/contracts/c02-release-manifest.zh.md)（C2）定义了本包所实现的发布文件、可复现范围与签名规则。
+`@delo/release` 是 Delo 的发布工具，一个位于 `delo/apps/release` 的私有包。它包含变更片段门禁、发布说明汇总工具、用于构建运行时发行包（runtime closure）的已发布构建配方、签名所需的两次构建的比较、发布的 SBOM（软件物料清单）、依赖安全公告检查、发布元数据的签名与验证、发布日志（release log），以及 S2 与 S3 镜像。[发布 manifest（release manifest）约定](../../docs/contracts/c02-release-manifest.zh.md)（C2）定义了本包所实现的发布文件、可复现范围与签名规则。
 
 ## 模块
 
@@ -16,7 +16,8 @@
 - `src/compare-rebuild.ts` 是重建比较的命令；`src/rebuild/` 存放比较逻辑，以及其第一条例外所对应的 PE 规范化。
 - `src/record-rebuild.ts`、`src/sign-release.ts`、`src/sign-root.ts` 与 `src/sign-timestamp.ts` 是签名命令；`src/rebuild/record.ts` 存放重建记录的事实，`src/sign/` 存放签名信封、RFC 8785 序列化（canonical JSON）、各签名文件的读取器、时间戳元数据内容、签名与客户端验证。
 - `src/sbom/` 从运行时归档写入 SPDX SBOM；`src/check-advisories.ts` 与 `src/advisory/` 运行依赖安全公告检查。
-- `tests/` 存放规格。变更片段规格在临时 git 仓库上运行两个入口；归档、运行时发行包与重建规格则在临时目录中构建 fixture（测试前置数据）运行时发行包，并从本地 HTTP 替身提供固定的下载；签名规格用测试中生成的密钥签署 fixture 发布，因此都不需要网络，也不需要真实密钥。
+- `src/build-images.ts` 与 `src/images/` 从 `images.json` 与 `images/` 构建 S2 与 S3 镜像；`src/log-release.ts` 与 `src/log/` 写入并验证发布日志 bundle。
+- `tests/` 存放规格。变更片段规格在临时 git 仓库上运行两个入口；归档、运行时发行包与重建规格则在临时目录中构建 fixture（测试前置数据）运行时发行包，并从本地 HTTP 替身提供固定的下载；签名规格用测试中生成的密钥签署 fixture 发布，发布日志规格则运行本地日志与见证者（witness）替身，因此都不需要网络，也不需要真实密钥。`tests/images/images.docker.spec.ts` 将两个镜像各构建两次，仅在设置 `DELO_DOCKER_SPECS=1` 时运行，因为检查运行器（check runner）没有 Docker 通道。
 
 ## 门禁
 
@@ -68,7 +69,7 @@
 
 ## SBOM
 
-`delorun-<version>.spdx.json` 是一份 SPDX 2.3 JSON 文档，仅由运行时归档与 `toolchain.json` 推导而来：每个归档对应一个包并附其 SHA-256；固定的 Node 与 pnpm 各对应一个包；在某个归档中以 `node_modules/<name>/package.json` 形式找到的每个已安装 npm 包版本，各对应一个包，并附其 `pkg:npm` purl、其声明的许可证（当它是许可证表达式时），以及运行时发行包锁文件为其记录的 SHA-512。每个包的 SPDX id 由其类型以及其类型、名称与版本的 SHA-256 的前 128 位组成，因此仅在 SPDX id 无法容纳的字符上不同的名称仍彼此区分；两个包会共用的 id 使构建失败。`created` 取归档的 `SOURCE_DATE_EPOCH`，因此相同的归档总是得到相同的文档。它尚未描述 S2 与 S3 镜像。
+`delorun-<version>.spdx.json` 是一份 SPDX 2.3 JSON 文档，仅由运行时归档与 `toolchain.json` 推导而来：每个归档对应一个包并附其 SHA-256；固定的 Node 与 pnpm 各对应一个包；在某个归档中以 `node_modules/<name>/package.json` 形式找到的每个已安装 npm 包版本，各对应一个包，并附其 `pkg:npm` purl、其声明的许可证（当它是许可证表达式时），以及运行时发行包锁文件为其记录的 SHA-512。每个包的 SPDX id 由其类型以及其类型、名称与版本的 SHA-256 的前 128 位组成，因此仅在 SPDX id 无法容纳的字符上不同的名称仍彼此区分；两个包会共用的 id 使构建失败。`created` 取归档的 `SOURCE_DATE_EPOCH`，因此相同的归档总是得到相同的文档。当输出中包含 `delorun-<version>.images.json` 时，该文档还会按索引摘要描述 S2 与 S3 镜像，每个镜像都派生自按摘要固定的基础镜像，其中 S3 镜像包含 Linux 运行时发行包；它不列出基础镜像内的 Debian 软件包。
 
 ## 依赖安全公告检查
 
@@ -81,7 +82,7 @@
 签名在目标密钥持有者的机器上、CI 之外进行，发生于发布工作流已从标签 `v<version>` 构建发布、且持有者已完成重建之后：
 
 1. 将草稿发布中发布工作流的文件（包括其 `manifest-draft.json`）下载到某个目录中，例如 `release/`。
-2. 在仓库中检出该标签，用同一配方构建它，并为输出生成证明：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`。
+2. 在仓库中检出该标签，用同一配方构建它，并为输出生成证明：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`，然后对同一输出构建镜像：`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --commit v<version> --out rebuild/ --oci rebuild-oci/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`，它会重写证明，使其也覆盖镜像文件与重写后的 SBOM。
 3. 记录重建：`node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --builder <name> --compared-with <workflow run URL>`。它依据该标签处提交的 `rebuild-exceptions.json`，将每个重建文件与发布工作流中同名的文件比较，将记录写入 `release/` 之外的 `--record`，并在比较发现差异时以 1 退出。设置了 `CI` 或 `GITHUB_ACTIONS` 时，它拒绝运行；重建缺少任一平台的归档或文件列表或 SBOM 时，它也拒绝。
 4. 签名：`node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --attestation rebuild.attestation.json --attestation-key ~/.config/delo/rebuild-attestation.key --key <targets.pem>`。
 
@@ -124,6 +125,21 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 ## 验证
 
 `src/sign/verify.ts` 实施 C2 的客户端验证：`trustRootChain` 从调用方持有的根开始遍历各根版本，每个版本都须由上一版本根密钥的阈值及其自身根密钥的阈值签名，签发时间早于过期时间，有效期至多 365 天，且最新版本尚未过期；把同一密钥分配给两个角色、或 `active` 的 targets 密钥不恰好为一个的根读取失败；`verifyTimestamp` 检查时间戳角色的签名、3 天有效期、签发时间不晚于本地时间、不设时钟容差的过期检查（其拒绝消息写明过期时间与本地时间）、已存储的版本，以及其所指明的根版本与根文件摘要；`verifyChannelManifest` 只接受新鲜的时间戳为该通道指明的 manifest 文件，其发布与通道须与时间戳所指明的一致（beta 通道也指明 stable 发布），且该文件须由对该发布有效的 targets 密钥签名（`active` 密钥，或 `lastRelease` 不低于该发布的 `retired` 密钥；绝不接受 `revoked` 密钥）；`verifyFileList` 与 `checkFileRef` 依据 manifest 检查每个文件的长度与 SHA-256。每个签名文件都先按其大小上限读取，再进行解析；重复的 JSON 键、未知字段或未知的 `schema` 都会使读取失败。`src/sign/json.ts` 存放签名所覆盖的 RFC 8785 序列化。
+
+## 镜像
+
+`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--commit <rev>] [--attestation-key <file> --attestation <file>]` 紧接在 `build-closure.ts` 之后，对同一输出运行。它为 `images.json` 所列的每个镜像构建 `linux/amd64` 与 `linux/arm64` 两个平台，各自以其按摘要固定的 Debian 基础镜像为基础；构建时使用 BuildKit 的 `rewrite-timestamp`，时间戳取运行时发行包的 `SOURCE_DATE_EPOCH`，不使用缓存，也不生成 provenance 或 SBOM attestation，因为二者的构建时间与调用 id 会使各次构建不同。Dockerfile 按摘要固定其 frontend。
+
+- S2 工作区镜像（`images/s2/`）添加空的辅助套接字目录 `/run/delo-helper`。S2 辅助程序与出站代理（egress proxy）尚未包含在其中。
+- S3 harness 镜像（`images/s3/`）添加用户 `delo`（uid 1000）与 `delo-harness`（uid 1001），以及各架构的 Linux 运行时发行包（只读，位于 `/opt/delo/runtime`），并以 `delo-harness` 身份运行。
+
+该命令把各镜像的 OCI 布局写入 `--oci`，并把 `delorun-<version>.images.json` 写入 `--out`。该文件记录每个镜像的仓库，以及其索引与各平台 manifest 的摘要；重建比较会逐字节比较它。当 `--out` 中包含所有平台的运行时发行包时，命令还会重写 SBOM，使其同时描述两个镜像。发布工作流按摘要推送各 OCI 布局，发布 manifest 的 `images` 复制该文件。镜像文件是每次重建与签名比较都必须覆盖的文件之一；草稿的 `images` 与之不同时，签名会拒绝；签名时，SBOM 中的镜像条目依据该发布提交处 `images.json` 所列的基础镜像推导。
+
+## 发布日志
+
+`sign-release.ts` 还会写入 `delorun-<version>.manifest.entry.json`，即 C18 约定中的 `hashedrekord` 条目主体：其中包含 manifest 文件的 SHA-256、targets 密钥对 manifest 文件字节的 Ed25519 签名，以及 PKIX PEM 格式的 targets 公钥。`node_modules/.bin/tsx delo/apps/release/src/log-release.ts --root <file> --manifest <file> --entry <file> --submit <url> --checkpoint <url> --proof <url> --out <bundle>` 在发布工作流中运行：它提交该条目，每 30 秒轮询一次、至多 60 次，等待某个检查点获得根元数据所列见证者的共同签名，且该检查点覆盖该条目；只有当 bundle 验证通过时，它才写入 `delorun-<version>.manifest.log.json`；否则它以 1 退出，该发布版本不会发布。
+
+`src/log/bundle.ts` 按 C18 的五个步骤离线验证 bundle：manifest 摘要、条目的 targets 签名、RFC 6962 包含证明、检查点的 origin、大小、根哈希与日志签名，以及来自所列见证者的共同签名，其数量至少达到根元数据的阈值。没有此类共同签名的检查点会验证失败，无论其日志签名如何，且每次失败都带有 C18 所定义的原因码。`src/log/note.ts` 读取 C2SP signed-note，并使用 Ed25519 note 密钥与 `cosignature/v1` 见证者密钥；`src/log/merkle.ts` 验证包含证明与一致性证明。
 
 ## 待完成事项
 

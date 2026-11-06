@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-`@delo/release` is Delo's release tooling, a private package in `delo/apps/release`. It holds the changelog gate, the release-notes assembly, the published recipe that builds the runtime closures, the comparison of two builds that signing requires, the release's SBOM, the dependency advisory check, and the signing and verification of release metadata. The [release manifest contract](../../docs/contracts/c02-release-manifest.md) (C2) defines the release files, the reproducibility scope and the signing rules this package implements.
+`@delo/release` is Delo's release tooling, a private package in `delo/apps/release`. It holds the changelog gate, the release-notes assembly, the published recipe that builds the runtime closures, the comparison of two builds that signing requires, the release's SBOM, the dependency advisory check, the signing and verification of release metadata, the release log, and the S2 and S3 images. The [release manifest contract](../../docs/contracts/c02-release-manifest.md) (C2) defines the release files, the reproducibility scope and the signing rules this package implements.
 
 ## Modules
 
@@ -16,7 +16,8 @@ English | [中文](README.zh.md)
 - `src/compare-rebuild.ts` is the rebuild comparison's command; `src/rebuild/` holds the comparison and the PE normalisation of its first exception.
 - `src/record-rebuild.ts`, `src/sign-release.ts`, `src/sign-root.ts` and `src/sign-timestamp.ts` are the signing commands; `src/rebuild/record.ts` holds the rebuild record's facts and `src/sign/` the signature envelope, the canonical JSON, the readers of each signed file, the timestamp content, signing and client verification.
 - `src/sbom/` writes the SPDX SBOM from the runtime archives; `src/check-advisories.ts` and `src/advisory/` run the dependency advisory check.
-- `tests/` holds the specs. The changelog specs run both entry points on temporary git repositories; the archive, closure and rebuild specs build fixture closures in temporary directories and serve pinned downloads from a local HTTP stand-in, and the signing specs sign fixture releases with keys generated in the test, so none needs the network or a real key.
+- `src/build-images.ts` and `src/images/` build the S2 and S3 images from `images.json` and `images/`; `src/log-release.ts` and `src/log/` write and verify the release-log bundle.
+- `tests/` holds the specs. The changelog specs run both entry points on temporary git repositories; the archive, closure and rebuild specs build fixture closures in temporary directories and serve pinned downloads from a local HTTP stand-in, the signing specs sign fixture releases with keys generated in the test, and the release-log specs run a local log and witness stand-in, so none needs the network or a real key. `tests/images/images.docker.spec.ts` builds both images twice and runs only with `DELO_DOCKER_SPECS=1`, because the check runner has no Docker lane.
 
 ## The gate
 
@@ -68,7 +69,7 @@ An archive is at most 1 GiB, the download limit of [C1](../../docs/contracts/c01
 
 ## SBOM
 
-`delorun-<version>.spdx.json` is an SPDX 2.3 JSON document derived only from the runtime archives and `toolchain.json`: one package per archive with its SHA-256, the pinned Node and pnpm, and one package per installed npm package version found as `node_modules/<name>/package.json` in an archive, with its `pkg:npm` purl, its declared licence when that is a licence expression, and the SHA-512 the closure's lockfile records for it. Each package's SPDX id is its kind and the first 128 bits of the SHA-256 of its kind, name and version, so names that differ only in characters an SPDX id cannot hold stay distinct, and an id that two packages would share fails the build. `created` is the archives' `SOURCE_DATE_EPOCH`, so the same archives always give the same document. It does not yet describe the S2 and S3 images.
+`delorun-<version>.spdx.json` is an SPDX 2.3 JSON document derived only from the runtime archives and `toolchain.json`: one package per archive with its SHA-256, the pinned Node and pnpm, and one package per installed npm package version found as `node_modules/<name>/package.json` in an archive, with its `pkg:npm` purl, its declared licence when that is a licence expression, and the SHA-512 the closure's lockfile records for it. Each package's SPDX id is its kind and the first 128 bits of the SHA-256 of its kind, name and version, so names that differ only in characters an SPDX id cannot hold stay distinct, and an id that two packages would share fails the build. `created` is the archives' `SOURCE_DATE_EPOCH`, so the same archives always give the same document. When the output holds `delorun-<version>.images.json`, the document also describes the S2 and S3 images by index digest, each descended from the digest-pinned base, with the S3 image containing the Linux closures; it does not list the Debian packages inside the base.
 
 ## Dependency advisory check
 
@@ -81,7 +82,7 @@ The report holds `schema` (`delo.release-advisories/1`), `version`, `feed`, `pac
 Signing happens on the targets-key holder's machine, outside CI, after the release workflow has built the release from the tag `v<version>` and the holder has rebuilt it:
 
 1. Download the release workflow's files of the draft release, including its `manifest-draft.json`, into a directory, such as `release/`.
-2. Check out the tag in the repository and build it with the same recipe, attesting the output: `node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`.
+2. Check out the tag in the repository and build it with the same recipe, attesting the output: `node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`, then the images over the same output: `node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --commit v<version> --out rebuild/ --oci rebuild-oci/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`, which rewrites the attestation to cover the images file and the rewritten SBOM.
 3. Record the rebuild: `node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --builder <name> --compared-with <workflow run URL>`. It compares every rebuilt file with the workflow's file of the same name under `rebuild-exceptions.json` as committed at the tag, writes the record to `--record` outside `release/`, and exits 1 when the comparison finds a difference. It refuses to run with `CI` or `GITHUB_ACTIONS` set, and refuses a rebuild that lacks any platform's archive or file list or the SBOM.
 4. Sign: `node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --attestation rebuild.attestation.json --attestation-key ~/.config/delo/rebuild-attestation.key --key <targets.pem>`.
 
@@ -124,6 +125,21 @@ The state file (`delo.release-timestamp-state/1`) holds the root the signer trus
 ## Verification
 
 `src/sign/verify.ts` applies C2's client verification: `trustRootChain` walks root versions from the root the caller holds, each signed by the previous root threshold and its own, issued before it expires, living at most 365 days, and with the newest not past its expiry; a root that gives one key two roles or does not have exactly one `active` targets key fails to read; `verifyTimestamp` checks the timestamp role's signature, the 3-day lifetime, an issue time not after the local clock, expiry with no clock tolerance (its refusal names the expiry and the local clock), the stored version, and the root version and file digest it names; `verifyChannelManifest` accepts only the manifest file the fresh timestamp names for the channel, at the release and on the channel the timestamp names (the beta channel also names stable releases), signed by a targets key valid for the release (an `active` key, or a `retired` key whose `lastRelease` is at or above it; never a `revoked` one); `verifyFileList` and `checkFileRef` check each file's length and SHA-256 against the manifest. Every signed file is read with its size limit before parsing, and a duplicate JSON key, an unknown field or an unknown `schema` fails the read. `src/sign/json.ts` holds the RFC 8785 serialization that signatures cover.
+
+## Images
+
+`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--commit <rev>] [--attestation-key <file> --attestation <file>]` runs after `build-closure.ts` on the same output. It builds the images `images.json` names, each for `linux/amd64` and `linux/arm64` from the Debian base it pins by digest, with BuildKit's `rewrite-timestamp` at the closures' `SOURCE_DATE_EPOCH`, no cache and no provenance or SBOM attestation, whose build times and invocation ids would differ between builds. The Dockerfiles pin their frontend by digest.
+
+- The S2 workspace image (`images/s2/`) adds the empty helper socket directory `/run/delo-helper`. The S2 helper and the egress proxy are not in it yet.
+- The S3 harness image (`images/s3/`) adds the users `delo` (uid 1000) and `delo-harness` (uid 1001) and each architecture's Linux runtime closure, read-only, at `/opt/delo/runtime`, and runs as `delo-harness`.
+
+The command writes the OCI layout of each image to `--oci` and `delorun-<version>.images.json`, each image's repository with its index and per-platform manifest digests, to `--out`, where the rebuild comparison compares it byte for byte; when `--out` holds every platform's closure, it rewrites the SBOM to describe both images. The release workflow pushes the layouts by digest, and the manifest's `images` copies the file. The images file is one of the files every rebuild and signing comparison must cover, signing refuses a draft whose `images` differ from it, and signing derives the SBOM's image entries with the base that `images.json` names at the release's commit.
+
+## Release log
+
+`sign-release.ts` also writes `delorun-<version>.manifest.entry.json`, the `hashedrekord` entry body of contract C18: the manifest file's SHA-256, the targets key's Ed25519 signature over the manifest file's bytes and the targets public key in PKIX PEM. `node_modules/.bin/tsx delo/apps/release/src/log-release.ts --root <file> --manifest <file> --entry <file> --submit <url> --checkpoint <url> --proof <url> --out <bundle>` runs in the release workflow: it submits the entry, polls every 30 seconds, at most 60 times, for a checkpoint that a witness the root lists has cosigned and that covers the entry, and writes `delorun-<version>.manifest.log.json` only when the bundle verifies; otherwise it exits 1 and the release is not published.
+
+`src/log/bundle.ts` verifies a bundle offline in C18's five steps: the manifest digest, the entry's targets signature, the RFC 6962 inclusion proof, the checkpoint's origin, size, root hash and log signature, and cosignatures from at least the root's threshold of listed witnesses. A checkpoint without such a cosignature fails, whatever its log signature says, and each failure carries C18's reason code. `src/log/note.ts` reads C2SP signed notes with Ed25519 note keys and `cosignature/v1` witness keys, and `src/log/merkle.ts` verifies inclusion and consistency proofs.
 
 ## Open items
 

@@ -20,6 +20,7 @@ import { semanticVersion, sha256Hex } from '../../src/brands.ts'
 import { RECIPE_DIR, RECIPE_FILES } from '../../src/closure/config.ts'
 import { attestationText } from '../../src/rebuild/attestation.ts'
 import { outputRefs, recipeAt } from '../../src/rebuild/record.ts'
+import { imagesName } from '../../src/images/build.ts'
 import { writeReleaseSbom } from '../../src/sbom/release-sbom.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { publicKeyEntry, readSigningKey, signEnvelope } from '../../src/sign/envelope.ts'
@@ -97,6 +98,9 @@ async function closures(directory: string, marker: string): Promise<void> {
   }
 }
 
+/** The base image digest the fixture repository's committed `images.json` names, which the checkout's does not. */
+export const COMMITTED_BASE_DIGEST = 'b'.repeat(64)
+
 /** The native compiler the fixture repository's committed toolchain names, which the checkout's does not. */
 export const COMMITTED_COMPILER = 'fixture compiler, committed at the release tag only'
 
@@ -144,6 +148,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
       const toolchain = JSON.parse(text) as { native: Record<string, string> }
       text = `${JSON.stringify({ ...toolchain, native: { ...toolchain.native, compiler: COMMITTED_COMPILER } }, undefined, 2)}\n`
     }
+    if (file === 'images.json') text = text.replace(/@sha256:[0-9a-f]{64}/u, `@sha256:${COMMITTED_BASE_DIGEST}`)
     writeFileSync(join(repo, 'delo/apps/release', file), text)
   }
   mkdirSync(join(repo, 'delo', 'release'), { recursive: true })
@@ -159,9 +164,13 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   const recordPath = join(directory, `delorun-${VERSION}.rebuild.json`)
   await closures(release, 'workflow')
   await closures(rebuild, 'holder')
-  const { toolchain } = recipeAt(repo, commit)
-  await writeReleaseSbom(release, VERSION, toolchain)
-  await writeReleaseSbom(rebuild, VERSION, toolchain)
+  const digest = `sha256:${'a'.repeat(64)}`
+  const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
+  const recipe = recipeAt(repo, commit)
+  for (const directory of [release, rebuild]) {
+    writeFileSync(join(directory, imagesName(VERSION)), `${JSON.stringify({ s2: image, s3: image }, undefined, 2)}\n`)
+    await writeReleaseSbom(directory, VERSION, recipe.toolchain, recipe.images.base)
+  }
   const feed = await feedStandIn(test, {})
   const report = await releaseAdvisoryCheck(repo, commit, release, semanticVersion(VERSION), feed.url)
   writeFileSync(join(release, 'delorun-0.1.0.advisories.json'), `${JSON.stringify(report, undefined, 2)}\n`)
@@ -173,8 +182,6 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     const sha512 = (name: string): string => createHash('sha512').update(readFileSync(join(release, name))).digest('base64')
     desktop[platform] = { installer: { ...ref(release, names.installer), sha512: sha512(names.installer) }, update: { ...ref(release, names.update), sha512: sha512(names.update) }, blockmap: ref(release, names.blockmap) }
   }
-  const digest = `sha256:${'a'.repeat(64)}`
-  const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
   const draft = {
     schema: RELEASE_SCHEMAS.manifest,
     version: VERSION,

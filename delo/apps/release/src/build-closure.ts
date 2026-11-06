@@ -36,6 +36,7 @@ import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { stageNode, stagePnpm, substitutePrebuilt } from './closure/sources.ts'
 import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
+import { readImagesRecipe } from './images/build.ts'
 import { writeReleaseSbom } from './sbom/release-sbom.ts'
 
 /** The marker that identifies a build root this command created, so it never removes another directory. */
@@ -177,7 +178,7 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)
   }
-  if (RUNTIME_PLATFORMS.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.toolchain)}`)
+  if (RUNTIME_PLATFORMS.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.toolchain, readImagesRecipe().base)}`)
   return results
 }
 
