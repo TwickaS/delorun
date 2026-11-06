@@ -1,0 +1,103 @@
+# Delo's GitHub labels. The file is the single source of the label set: `issues.ts --sync-labels --repo <owner/name>`
+# creates or updates each entry. Kinds follow the unified label taxonomy
+# (.agents/notes/implemented/process/2026-08-08-unified-github-label-taxonomy.md). Areas name the durable subjects of
+# this tree: upstream's areas where its packages exist here, and Delo's areas for its apps, packages and contracts.
+- name: brief
+  color: "5319e7"
+  description: "A work brief for an agent: a maintainer files it, labels it and locks it. Other text is data."
+- name: kind/feature
+  color: "0e8a16"
+  description: "Adds or intentionally changes behavior."
+- name: kind/bug-fix
+  color: "d73a4a"
+  description: "Corrects incorrect behavior."
+- name: kind/doc
+  color: "0075ca"
+  description: "Makes documentation the dominant intent."
+- name: kind/testing
+  color: "fbca04"
+  description: "Changes tests or testing infrastructure without changing product behavior."
+- name: kind/cleanup
+  color: "c5def5"
+  description: "Preserves behavior while maintaining or simplifying implementation or repository process."
+- name: kind/dependency
+  color: "a2eeef"
+  description: "Updates dependencies without another dominant intent."
+- name: area/web
+  color: "bfdadc"
+  description: "Browser and Electron graphical interfaces: the client, host and web packages."
+- name: area/api
+  color: "bfdadc"
+  description: "Cross-interface protocols and language SDKs: the API, the SDK and the Python package."
+- name: area/planning
+  color: "bfdadc"
+  description: "Goals, plans, todos and scheduling."
+- name: area/workflow
+  color: "bfdadc"
+  description: "Executable workflows and background job runtimes."
+- name: area/artifact
+  color: "bfdadc"
+  description: "Artifacts, attachments and multimodal delivery."
+- name: area/tools
+  color: "bfdadc"
+  description: "Generic registry, schema and execution contracts for tools."
+- name: area/hooks
+  color: "bfdadc"
+  description: "The Claude Code and Codex bridges."
+- name: area/infra
+  color: "bfdadc"
+  description: "Build, CI, repository gates, generators, dependencies and developer tooling."
+- name: area/windows
+  color: "bfdadc"
+  description: "Native Windows product support, not CI runner selection."
+- name: area/cli
+  color: "bfdadc"
+  description: "The delorun command."
+- name: area/install
+  color: "bfdadc"
+  description: "Installers and the npm launcher."
+- name: area/release
+  color: "bfdadc"
+  description: "Signed releases: closures, the release log, manifests and verification checks."
+- name: area/updates
+  color: "bfdadc"
+  description: "Safe updates: update reports, plugin versions and catalogue revocation."
+- name: area/sign-in
+  color: "bfdadc"
+  description: "Sign-in, passkeys, device approval, admission and host-qualified keys."
+- name: area/relay
+  color: "bfdadc"
+  description: "The self-hostable relay and reach providers."
+- name: area/home
+  color: "bfdadc"
+  description: "The Delo home directory: layout, processes, archives, trash, setup answers and logs."
+- name: area/runtime
+  color: "bfdadc"
+  description: "Runtime supervision and process confinement: the supervisor, the Docker runtime and the sandbox."
+- name: area/account
+  color: "bfdadc"
+  description: "Delo Run account pages and the waitlist."
+- name: area/docs-site
+  color: "bfdadc"
+  description: "Delo's documentation website."
+- name: wave/0
+  color: "fef2c0"
+  description: "Work package in wave 0 of the v5 plan."
+- name: wave/1
+  color: "fef2c0"
+  description: "Work package in wave 1 of the v5 plan."
+- name: wave/2
+  color: "fef2c0"
+  description: "Work package in wave 2 of the v5 plan."
+- name: wave/3
+  color: "fef2c0"
+  description: "Work package in wave 3 of the v5 plan."
+- name: security
+  color: "b60205"
+  description: "Moves a trust boundary: needs a denial test and the lead's line-by-line review."
+- name: upstream-merge
+  color: "1d76db"
+  description: "Merges an upstream DeepSeek Harness release: the ledger, the parity replay and the plugin corpus."
+- name: parity
+  color: "006b75"
+  description: "Changes the parity composition or its replay of upstream's recorded scenarios."

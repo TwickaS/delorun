@@ -112,6 +112,16 @@
       "reason": "Adds Delo's DCO, ledger and changelog checklist to upstream's pull request template."
     },
     {
+      "path": ".github/ISSUE_TEMPLATE/brief.yml",
+      "class": "delo-feature",
+      "reason": "Delo's work-brief issue form: the fields of the brief template in order, a Model dropdown of the allowed effort values, and a note that only maintainers file briefs. Upstream's issue templates stay unchanged."
+    },
+    {
+      "path": ".github/labels.yml",
+      "class": "delo-feature",
+      "reason": "Delo's label set: the taxonomy's kind and area labels adapted to Delo's packages and contracts, plus the brief, wave, security, upstream-merge and parity labels that issues.ts reads and syncs."
+    },
+    {
       "path": "pnpm-workspace.yaml",
       "class": "security",
       "reason": "Adds Delo's workspace globs, the `!delo/apps/docs` exclusion, the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delo's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock."
