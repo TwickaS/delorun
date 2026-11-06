@@ -2,7 +2,8 @@ name: Gates
 
 # Delo's check gates (delo/apps/tools/src/checks/gates), run on pull requests and on pushes to v5 and main. Each step is
 # one gate command. The range gates compare against the pull request's base or the push's previous tip. The
-# personal-data step reads commit metadata against the committed hashes only: no local patterns file exists in CI.
+# personal-data step checks the lines the range adds and the commit metadata against the committed hashes only: no local
+# patterns file exists in CI.
 on:
   pull_request:
   push:

@@ -1,12 +1,18 @@
 /**
  * Personal-data gate. Plain patterns (names, email addresses, phone numbers) live only in a local file outside the
  * repository, `~/.config/delo/personal-data.txt`. The repository stores each pattern as a salted SHA-256 hash in
- * `personal-data.hashes.json`, with the salt beside the hashes. The gate normalises the tokens of the paths it scans,
- * of each commit's Author, Committer and Signed-off-by lines when a base is given, and fails on a hash match. It also
- * refuses a postal address anywhere in those paths and in commit messages, detected by shape without storing any
- * address. A failure names the location and never prints the pattern. Run from anywhere inside the repository:
+ * `personal-data.hashes.json`, with the salt beside the hashes. The gate fails on a hash match in the lines a change
+ * adds, and it refuses a postal address by shape in those lines and in commit messages, without storing any address.
+ * A line that upstream holds word for word is not an added line, so a range or staged check does not read it. A failure
+ * names the location and never prints the pattern. Run from anywhere inside the repository:
  *
- * - `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/personal-data.ts [--base <rev>] [paths...]` checks;
+ * - `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/personal-data.ts --base <rev> [paths...]` reads the lines
+ *   that `<rev>...HEAD` adds, the Author, Committer and Signed-off-by lines and messages of its commits, and the lines
+ *   the staged changes add to the paths;
+ * - `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/personal-data.ts [paths...]` reads the lines the staged
+ *   changes add to the paths, which the runner passes at pre-commit;
+ * - `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/personal-data.ts` with neither reads every whole file that
+ *   differs from the pinned upstream commit;
  * - `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/personal-data.ts --rehash` regenerates the hashes file
  *   from the local patterns file, and exits 1 when that file does not exist.
  *
@@ -19,10 +25,10 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { z } from 'zod'
-import { repositoryRoot } from '../../git.ts'
-import { rangeCommits, type RangeCommit } from './commit-range.ts'
-import { postalAddressLines } from './postal-address.ts'
+import { git, repositoryRoot } from '../../git.ts'
+import { rangeCommits, type Identity, type RangeCommit } from './commit-range.ts'
 import { regularFiles, scanTarget } from './paths.ts'
+import { startsPostalAddress } from './postal-address.ts'
 
 /** The committed hashes file, relative to the repository root. */
 export const HASHES_PATH = 'delo/apps/tools/src/checks/gates/personal-data.hashes.json'
@@ -130,22 +136,22 @@ export function readHashes(path: string): HashesFile {
 }
 
 /**
- * The personal-data violations of a set of lines: a line whose tokens match a hashed pattern, and a line that carries a
- * postal address.
+ * The personal-data violations in runs of consecutive lines: a line whose tokens match a hashed pattern, and a line that
+ * starts a postal address shape, which may continue on the next line of its run.
  * @param hashes - the salt and the hashed patterns.
- * @param sources - the lines to check.
+ * @param runs - runs of consecutive lines, each in file or message order.
  * @returns one message per violation, naming the location; empty when the lines are clean.
  */
-export function personalDataErrors(hashes: HashesFile, sources: readonly Source[]): string[] {
+export function personalDataErrors(hashes: HashesFile, runs: readonly (readonly Source[])[]): string[] {
   const known = new Set(hashes.hashes)
-  return sources.flatMap((source) => {
+  return runs.flatMap(run => run.flatMap((source, index) => {
     const errors: string[] = []
     if (source.patterns && known.size > 0 && lineCandidates(source.text).some(candidate => known.has(hashCanonical(hashes.salt, candidate)))) {
       errors.push(`${source.where}: matches a personal-data pattern (the pattern is not printed)`)
     }
-    if (postalAddressLines(source.text).length > 0) errors.push(`${source.where}: carries a postal address`)
+    if (startsPostalAddress(source.text, run[index + 1]?.text)) errors.push(`${source.where}: carries a postal address`)
     return errors
-  })
+  }))
 }
 
 /**
@@ -186,35 +192,109 @@ export function rehash(patternsPath: string, hashesPath: string, salt: string): 
 }
 
 /**
- * The lines of one file, or none when the file is binary.
- * @param root - the repository root.
- * @param path - a repository-relative path.
- * @returns one source per line, each named `path:line`.
+ * The added lines of a `git diff --unified=0 --no-prefix` output, grouped into runs. A run is the `+` lines of one hunk,
+ * which are consecutive in the new file. Headers are read only before a hunk, so an added line whose text begins with
+ * `++` is still an added line.
+ * @param diff - the diff's text.
+ * @returns one run per hunk that adds lines, each line named `path:line` and carrying the text it adds.
  */
-function fileSources(root: string, path: string): Source[] {
-  const text = readFileSync(join(root, path), 'utf8')
-  if (text.includes('\0')) return []
-  return text.split('\n').map((line, index) => ({ where: `${path}:${String(index + 1)}`, text: line, patterns: true }))
+export function addedRuns(diff: string): Source[][] {
+  const runs: Source[][] = []
+  let path = ''
+  let line = 0
+  let inHunk = false
+  let run: Source[] | undefined
+  for (const text of diff.split('\n')) {
+    if (text.startsWith('diff ')) {
+      inHunk = false
+      run = undefined
+    } else if (text.startsWith('@@')) {
+      inHunk = true
+      line = hunkStart(text)
+      run = undefined
+    } else if (!inHunk) {
+      if (text.startsWith('+++ ')) path = text.slice('+++ '.length)
+    } else if (text.startsWith('+')) {
+      if (run === undefined) {
+        run = []
+        runs.push(run)
+      }
+      run.push({ where: `${path}:${String(line)}`, text: text.slice(1), patterns: true })
+      line += 1
+    }
+  }
+  return runs
 }
 
 /**
- * The lines a commit contributes: its Author and Committer identities, its Signed-off-by lines, and its message for
- * the postal-address check.
- * @param commit - a commit of the range.
- * @returns the sources of that commit.
+ * The first line of a hunk in the new file.
+ * @param header - a `@@ -a,b +c,d @@` header line.
+ * @returns c, the new file's first line of the hunk.
  */
-function commitSources(commit: RangeCommit): Source[] {
+function hunkStart(header: string): number {
+  return Number(/^@@ -\d+(?:,\d+)? \+(\d+)/u.exec(header)?.[1] ?? '0')
+}
+
+/**
+ * The output of `git diff --unified=0` with the options the gate reads. The options keep the output independent of the
+ * user's diff configuration: no external diff, no textconv, no colour and no path prefixes.
+ * @param root - the repository root.
+ * @param args - the arguments after `diff`, such as `--cached` or a revision range.
+ * @returns the diff's text.
+ */
+function diffText(root: string, args: readonly string[]): string {
+  return git(root, ['-c', 'core.quotePath=false', 'diff', '--unified=0', '--no-color', '--no-ext-diff', '--no-textconv', '--no-prefix', ...args])
+}
+
+/**
+ * The lines of one whole file, as one run, or none when the file is binary.
+ * @param root - the repository root.
+ * @param path - a repository-relative path.
+ * @returns the file's lines, each named `path:line`; empty for a binary file.
+ */
+function wholeFileRuns(root: string, path: string): Source[][] {
+  const text = readFileSync(join(root, path), 'utf8')
+  if (text.includes('\0')) return []
+  return [text.split('\n').map((line, index) => ({ where: `${path}:${String(index + 1)}`, text: line, patterns: true }))]
+}
+
+/**
+ * The runs a commit contributes: its Author and Committer identities, each as a run of one line, and its message as one
+ * run for the postal-address check. A Signed-off-by line of the message also takes the pattern check.
+ * @param commit - a commit of the range.
+ * @returns the runs of that commit.
+ */
+function commitRuns(commit: RangeCommit): Source[][] {
   const short = commit.sha.slice(0, 10)
-  const identities: Source[] = [
-    { where: `commit ${short} author`, text: `${commit.author.name} <${commit.author.email}>`, patterns: true },
-    { where: `commit ${short} committer`, text: `${commit.committer.name} <${commit.committer.email}>`, patterns: true },
-  ]
-  const messageLines = commit.message.split('\n')
-  const signOffs = messageLines.flatMap(line => line.startsWith('Signed-off-by:')
-    ? [{ where: `commit ${short} Signed-off-by`, text: line, patterns: true }]
-    : [])
-  const message = messageLines.map((line, index) => ({ where: `commit ${short} message:${String(index + 1)}`, text: line, patterns: false }))
-  return [...identities, ...signOffs, ...message]
+  const identity = (role: string, who: Identity): Source[] => [{ where: `commit ${short} ${role}`, text: `${who.name} <${who.email}>`, patterns: true }]
+  const message: Source[] = commit.message.split('\n').map((text, index) => ({
+    where: `commit ${short} message:${String(index + 1)}`,
+    text,
+    patterns: text.startsWith('Signed-off-by:'),
+  }))
+  return [identity('author', commit.author), identity('committer', commit.committer), message]
+}
+
+/**
+ * The runs a check reads. With paths or a base, these are the lines the staged changes add to the paths, the lines the
+ * range adds and the commit lines of the range. With neither, they are the whole files that differ from the pinned
+ * upstream commit.
+ * @param root - the repository root.
+ * @param paths - the staged paths the runner passed; empty when none were given.
+ * @param base - the revision the range starts after, or undefined when no range is given.
+ * @returns the runs of lines to check.
+ */
+function scanRuns(root: string, paths: readonly string[], base: string | undefined): Source[][] {
+  if (paths.length === 0 && base === undefined) {
+    return regularFiles(root, scanTarget(root, []).paths).flatMap(path => wholeFileRuns(root, path))
+  }
+  const runs: Source[][] = []
+  if (paths.length > 0) runs.push(...addedRuns(diffText(root, ['--cached', '--', ...paths])))
+  if (base !== undefined) {
+    runs.push(...addedRuns(diffText(root, [`${base}...HEAD`, '--'])))
+    for (const commit of rangeCommits(root, base)) runs.push(...commitRuns(commit))
+  }
+  return runs
 }
 
 /**
@@ -252,18 +332,15 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0
   }
   const hashes = readHashes(join(root, HASHES_PATH))
-  const { paths } = scanTarget(root, positionals)
-  const sources = regularFiles(root, paths).flatMap(path => fileSources(root, path))
-  if (values.base !== undefined) {
-    for (const commit of rangeCommits(root, values.base)) sources.push(...commitSources(commit))
-  }
-  const errors = personalDataErrors(hashes, sources)
+  const runs = scanRuns(root, positionals, values.base)
+  const errors = personalDataErrors(hashes, runs)
   for (const error of errors) console.error(`gates:personal-data: ${error}`)
   if (errors.length > 0) {
     console.error('gates:personal-data: refused; remove the value, or rewrite the line without the address or name')
     return 1
   }
-  console.log(`gates:personal-data: no personal data in the ${String(sources.length)} line(s) checked`)
+  const checked = runs.reduce((count, run) => count + run.length, 0)
+  console.log(`gates:personal-data: no personal data in the ${String(checked)} line(s) checked`)
   return 0
 }
 

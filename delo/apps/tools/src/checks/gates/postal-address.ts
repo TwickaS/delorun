@@ -1,27 +1,36 @@
 /**
- * Structural detector for postal addresses. A line holds an address when it carries a UK postcode or a US ZIP code
- * together with a street word. The detector matches shapes only: it stores no address and no list of places.
+ * Structural detector for postal addresses. A street part is a house number, up to four words and a street word, all on
+ * one line. An address shape is a street part followed by a full UK postcode, or by a US state abbreviation and ZIP code:
+ * on the same line after the street word, or anywhere on the next line. The two-letter abbreviations of street words
+ * count only inside that shape. The detector matches shapes only: it stores no address and no list of places.
  *
  * @module @delo/tools/checks/gates/postal-address
  */
 
-/** A UK postcode, in the outward and inward forms the Royal Mail publishes, with the GIR 0AA exception. */
-const UK_POSTCODE = /\b(?:GIR ?0AA|[A-PR-UWYZ][A-HK-Y]?\d[A-Z\d]? ?\d[ABD-HJLNP-UW-Z]{2})\b/u
+/**
+ * A house number, up to four words and a street word, in that order on one line. Full street words and their
+ * abbreviations match alike; {@link startsPostalAddress} accepts a street part only with the postcode or ZIP code that
+ * completes the shape.
+ */
+const STREET_PART = /\b\d{1,5}[A-Za-z]?\b(?:\s+\S+){0,4}?\s+(?:Street|St|Road|Rd|Lane|Ln|Avenue|Ave|Close|Drive|Dr|Way|Court|Ct|Terrace|Crescent|Place|Pl|Square|Boulevard|Blvd|Gardens|Mews|Parade)\b/giu
 
-/** A US ZIP code, with its optional four-digit extension. */
-const US_ZIP = /\b\d{5}(?:-\d{4})?\b/u
+/** A full UK postcode: the outward and inward parts separated by one space, with the GIR 0AA exception. */
+const UK_POSTCODE = /\b(?:GIR 0AA|[A-PR-UWYZ][A-HK-Y]?\d[A-Z\d]? \d[ABD-HJLNP-UW-Z]{2})\b/u
 
-/** Street words that end a UK or US street name. */
-const STREET_WORD = /\b(?:Street|St|Road|Rd|Lane|Ln|Avenue|Ave|Close|Drive|Dr|Way|Court|Ct|Terrace|Crescent|Place|Pl|Square|Boulevard|Blvd|Gardens|Mews|Parade)\b/iu
+/** A US state abbreviation, one space, then a ZIP code with its optional four-digit extension. */
+const US_STATE_ZIP = /\b[A-Z]{2} \d{5}(?:-\d{4})?\b/u
 
 /**
- * The lines that carry a postal address shape: a UK postcode or a US ZIP code on the same line as a street word.
- * @param text - the text to scan.
- * @returns the 1-based numbers of the lines that match, in order.
+ * Whether a line starts a postal address shape.
+ * @param line - the line to check.
+ * @param nextLine - the line after it in the same run of lines, or empty when it is the last line of the run.
+ * @returns true when a street part on the line is followed by a UK postcode, or by a US state abbreviation and ZIP
+ *   code, after the street word on the line or anywhere on `nextLine`.
  */
-export function postalAddressLines(text: string): number[] {
-  return text.split('\n').flatMap((line, index) => {
-    const postcode = UK_POSTCODE.test(line) || US_ZIP.test(line)
-    return postcode && STREET_WORD.test(line) ? [index + 1] : []
-  })
+export function startsPostalAddress(line: string, nextLine = ''): boolean {
+  for (const street of line.matchAll(STREET_PART)) {
+    const rest = line.slice(street.index + street[0].length)
+    if ([UK_POSTCODE, US_STATE_ZIP].some(tail => tail.test(rest) || tail.test(nextLine))) return true
+  }
+  return false
 }

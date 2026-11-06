@@ -45,7 +45,7 @@ The checker fails when:
 |---|---|---|
 | `gates:licence` | no | Every package under `delo/` declares MIT, and the root `LICENSE` is the MIT licence. |
 | `gates:secrets` | yes | Token-shaped strings, private keys and secrets-file names, with secretlint's recommended preset and DeepSeek's key shape. A finding on a line that upstream holds word for word passes. |
-| `gates:personal-data` | yes | The salted hashes of the personal-data patterns, in the staged paths and in the Author, Committer and Signed-off-by lines of the range, and postal addresses by shape in those paths and in commit messages. The plain patterns live only in `~/.config/delo/personal-data.txt`; `--rehash` regenerates [`personal-data.hashes.json`](src/checks/gates/personal-data.hashes.json) from that file and exits 1 when it is absent. |
+| `gates:personal-data` | yes | The salted hashes of the personal-data patterns, in the lines that the staged changes and the range add, and in the Author, Committer and Signed-off-by lines of the range; postal addresses by shape in those lines and in commit messages. A postal address is a house number and a street word on one line, with a full UK postcode, or a US state abbreviation and ZIP code, after the street word on that line or anywhere on the next line. The plain patterns live only in `~/.config/delo/personal-data.txt`; `--rehash` regenerates [`personal-data.hashes.json`](src/checks/gates/personal-data.hashes.json) from that file and exits 1 when it is absent. |
 | `gates:infrastructure` | yes | IPv4 addresses outside loopback, the unspecified and broadcast addresses, the RFC 5737 documentation ranges, the cloud metadata address `169.254.169.254` and the base addresses of the reserved IPv4 blocks (`10.0.0.0`, `100.64.0.0`, `169.254.0.0`, `172.16.0.0`, `192.168.0.0`, `224.0.0.0`); IPv6 addresses in the globally routable or unique-local blocks, outside the RFC 3849 documentation range, the cloud metadata address `fd00:ec2::254` and the base address `fc00::`; tailnet names other than `example.ts.net`; and cloud account IDs. Documented exceptions are listed by path and value in [`infrastructure.allowlist.json`](src/checks/gates/infrastructure.allowlist.json). |
 | `gates:dco` | no | Every non-merge commit of the range has a `Signed-off-by` line whose name and email are the author's. |
 | `gates:commits` | no | The commit standard over the range, with the changelog rule. |
@@ -53,7 +53,7 @@ The checker fails when:
 | `gates:doc-times` | no | A line the range adds to a Markdown file under `delo/` carries no deadline, quarter, schedule estimate or promise of timing. |
 | `gates:docs` | no | Upstream's bilingual-pair, word-budget, hard-wrap, relative-link and TypeScript-fence checks over `delo/docs/`. |
 
-The [gates workflow](../../../.github/workflows/gates.yml) runs each gate on pull requests and on pushes to `v5` and `main`, and passes each pull request's base or each push's previous tip as the range. Its personal-data step reads commit metadata against the committed hashes only.
+The [gates workflow](../../../.github/workflows/gates.yml) runs each gate on pull requests and on pushes to `v5` and `main`, and passes each pull request's base or each push's previous tip as the range. Its personal-data step checks the lines the range adds and the commit metadata against the committed hashes only.
 
 ## Workflows
 
