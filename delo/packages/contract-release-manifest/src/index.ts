@@ -273,7 +273,7 @@ export interface ReleaseManifest {
   readonly channel: ReleaseChannel
   /** The tagged source. */
   readonly source: {
-    /** The public repository URL. */
+    /** The public repository URL, {@link RELEASE_REPOSITORY_URL}. */
     readonly repository: string
     /** `v<version>`. */
     readonly tag: string
@@ -376,6 +376,9 @@ export const ADVISORY_ACCEPTANCES_PATH = 'delo/release/advisory-acceptances.yaml
 
 /** The advisory feed: npm's bulk advisory API over the GitHub Advisory Database. */
 export const ADVISORY_FEED_URL = 'https://registry.npmjs.org/-/npm/v1/security/advisories/bulk'
+
+/** Delo's public repository: its `v<version>` tags and GitHub releases are the releases, and its release workflow publishes to npm. */
+export const RELEASE_REPOSITORY_URL = 'https://github.com/Delo-Run/delo'
 
 /** Host of the release metadata (`root/<n>.root.json`, `timestamp.json`). */
 export const RELEASE_METADATA_ORIGIN = 'https://releases.delorun.com'

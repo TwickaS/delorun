@@ -35,7 +35,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 
 ## 发布文件
 
-版本为 `<version>`（Delo 的语义化版本，不带前导 `v`）的发布，是 Delo 公开仓库的 git 标签 `v<version>`，以及该标签的 GitHub release。平台标识符是以连字符连接的 Node `process.platform` 与 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-x64`、`darwin-arm64` 与 `win32-x64`。
+版本为 `<version>`（Delo 的语义化版本，不带前导 `v`）的发布，是 Delo 公开仓库 `https://github.com/Delo-Run/delo` 的 git 标签 `v<version>`，以及该标签的 GitHub release。平台标识符是以连字符连接的 Node `process.platform` 与 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-x64`、`darwin-arm64` 与 `win32-x64`。
 
 | 文件 | 内容 |
 | --- | --- |
@@ -134,7 +134,7 @@ npm 启动器、安装脚本与桌面应用各自内嵌其构建时最新的根�
 | `version` | 语义化版本 | 本发布的 Delo 版本。 |
 | `dsh` | 语义化版本 | 发布中 `@deepseek-ai/dsh-app-boot` 的 `version`，即上游的版本（[C17](c17-plugin-versions.zh.md)）。 |
 | `channel` | `stable` 或 `beta` | 发布所在的通道。 |
-| `source` | `{ "repository", "tag", "commit" }` | 公开仓库的 URL、`v<version>`，以及该标签指向的 40 位十六进制提交。 |
+| `source` | `{ "repository", "tag", "commit" }` | 公开仓库的 URL（`https://github.com/Delo-Run/delo`）、`v<version>`，以及该标签指向的 40 位十六进制提交。 |
 | `published` | 时间戳 | targets 密钥签名它的时间。 |
 | `runtime` | 由平台映射到 `{ "archive": FileRef, "files": FileRef }` 的映射 | 每个运行时归档及其文件列表。 |
 | `desktop` | 由 `mac-arm64`、`mac-x64`、`win-x64` 映射到 `{ "installer": DesktopFileRef, "update": DesktopFileRef, "blockmap": FileRef }` 的映射 | 桌面文件；`DesktopFileRef` 增加 `sha512`，即 electron-updater 比较的标准 base64 SHA-512。在 Windows 上，安装程序同时也是更新文件。 |
@@ -175,7 +175,7 @@ manifest 不带过期时间：新鲜度由时间戳负责，因此只要其签�
 
 CLI 运行时的每次启动，在每种验证模式（`warn`、`enforce`、`off`）下，启动器都会用已存储的根验证已存储的 manifest 与文件列表的签名，然后对照列表验证每个已安装文件的长度与 SHA-256。缺失、被改动或多出的常规文件会停止启动，并提供重新安装或回滚。该检查不需要网络，且位于 `@delo/integrity` 之外。
 
-`delorun verify` 运行相同的检查并报告每项结果（[C15](c15-verification-checks.md)）。S2 与 S3 镜像只按已验证 manifest 中的摘要运行（[C9](c09-runtime-supervisor.md)）。
+`delorun verify` 运行相同的检查并报告每项结果（[C15](c15-verification-checks.zh.md)）。S2 与 S3 镜像只按已验证 manifest 中的摘要运行（[C9](c09-runtime-supervisor.md)）。
 
 <a id="freshness-and-rollback-protection"></a>
 
@@ -255,7 +255,7 @@ acceptances:
 
 ## npm 发布
 
-`delorun` 与 `create-delorun` 通过 npm 可信发布，从公开仓库的发布工作流发布：发布作业请求一个 OIDC 令牌（`permissions: id-token: write`），不持有 npm 令牌，npm 会附上一份经 Sigstore 签名的 SLSA 构建证明，写明仓库、工作流文件与提交。manifest 记录每个 tarball 的 integrity。启动器没有运行时依赖；`npx` 会在任何 Delo 检查运行之前运行 npm 提供的启动器，因此 npm 启动器是安装前的信任锚点，Trust 页面也这样说明。
+`delorun` 与 `create-delorun` 通过 npm 可信发布，从 `https://github.com/Delo-Run/delo` 的发布工作流发布：发布作业请求一个 OIDC 令牌（`permissions: id-token: write`），不持有 npm 令牌，npm 会附上一份经 Sigstore 签名的 SLSA 构建证明，写明仓库、工作流文件与提交。manifest 记录每个 tarball 的 integrity。启动器没有运行时依赖；`npx` 会在任何 Delo 检查运行之前运行 npm 提供的启动器，因此 npm 启动器是安装前的信任锚点，Trust 页面也这样说明。
 
 <a id="desktop-updates-and-rollback"></a>
 
@@ -291,7 +291,7 @@ acceptances:
 - `delo/apps/install/` 与 `delo/apps/npm-launcher/`（WP3.2）：验证并安装。
 - `delo/packages/runtime-store/`（WP3.3）：启动检查、切换与回滚。
 - 桌面更新器（WP6.3）：经验证的更新与回滚。
-- `@delo/integrity` 与 `delorun verify`（[C15](c15-verification-checks.md)）、Docker 监管器（Docker supervisor）的镜像检查（[C9](c09-runtime-supervisor.md)），以及插件索引的密钥（[C13](c13-catalogue-revocation.zh.md)）。
+- `@delo/integrity` 与 `delorun verify`（[C15](c15-verification-checks.zh.md)）、Docker 监管器（Docker supervisor）的镜像检查（[C9](c09-runtime-supervisor.md)），以及插件索引的密钥（[C13](c13-catalogue-revocation.zh.md)）。
 
 <a id="compatibility"></a>
 
@@ -347,3 +347,12 @@ acceptances:
 | `c02-advisory-feed-unreachable-fails` | WP3.1 | 拒绝连接的公告源替身会使检查失败。 |
 | `c02-npm-publish-has-no-token` | WP3.2 | 当 npm 发布作业引用 npm 令牌或缺少 `id-token: write` 时，工作流 lint 失败。 |
 | `c02-pe-files-signed` | WP3.1 | `signtool verify /pa` 在 Windows 运行时发行包中的每个 PE 文件上都通过。 |
+
+<a id="what-this-does-not-prove"></a>
+
+### 这些检查不能证明什么
+
+- **CI 之外的重建。** 签名命令验证：重建记录存在且写明 `ci: false`；签名运行时没有设置 `CI` 或 `GITHUB_ACTIONS` 变量；它在签名机器上根据重建输出重新计算的摘要与记录一致。它无法证明这台机器独立于发布工作流，也无法证明其工具链未被攻破；这取决于 targets 密钥持有人在自己控制的机器上进行重建。
+- **安全公告的覆盖范围。** 安全公告检查覆盖运行时发行包 lockfile 中的 npm 包，以及 GitHub Advisory Database 为它们发布的安全公告。它不覆盖锁定的 Node 二进制文件、原生插件的编译器与链接器、S2 与 S3 镜像的系统软件包，也不覆盖桌面应用携带的 Python 与 Office 组件；对于尚无公开安全公告的漏洞，它也无法报告。
+- **对时钟的依赖。** 过期检查以客户端的时钟为准。时钟被调慢时，会接受实际已过期的时间戳，因此只要时钟有误，扣留发布的主机就不会被发现；时钟被调快时，会拒绝新的元数据，拒绝信息会写明过期时间与本地时间。
+- **启动时的哈希检查。** 启动器能发现已安装运行时中被修改、缺失或多出的文件。以本人自己的权限运行的进程也可以修改启动器、已存储的 root 或已存储的 manifest，此时检查会通过；该检查只能发现没有同时修改启动器的篡改，`delorun verify` 也说明了同样的限制（[C15](c15-verification-checks.zh.md)）。

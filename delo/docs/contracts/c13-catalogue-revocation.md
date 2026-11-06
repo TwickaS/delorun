@@ -220,3 +220,10 @@ Each file's `schema` names its major version, and readers refuse unknown fields,
 | `c13-no-audited-wording` | WP7.4 | Installing a fixture plugin renders no "audited", "safe" or "no findings" wording and does not call the plugin verified, and says that Delo does not audit plugins. |
 | `c13-findings-labelled-as-claims` | WP7.4 | A fixture entry's findings render with their author's role and name and the "not verified by Delo" label. |
 | `c13-missing-ledger-asks-again` | WP7.4 | With the acceptance ledger missing or malformed, the findings ask again before install. |
+
+### What this does not prove
+
+- **Revocation takes effect at the next load.** A newly revoked version keeps running until the Host loads it again; the list cannot stop plugin code that is already running. Between a revocation and its effect lie up to 6 hours until the next refresh, plus the time until the person restarts.
+- **Badge writes.** That only the publish job writes badges is enforced by the CI configuration of `Delo-Run/delo-plugins`: the corpus job holds no write token, a separate job publishes, and a workflow lint refuses `pull_request_target`. A client verifies only the catalogue key's signature, so a compromised publish job or catalogue key could sign any badge; the denial tests for badge writes run in that repository, not in this one.
+- **Listed findings.** Delo does not verify listed findings. A finding states what its author claims, and the absence of findings says nothing about a plugin.
+- **Clock dependence.** The maximum cache age, the list's expiry and the index's expiry use the client's clock; a clock set back can keep a list in use past its real expiry.

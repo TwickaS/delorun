@@ -153,3 +153,10 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 | `c18-inconsistent-log-fails-start` | WP2.11 | A latest checkpoint whose consistency proof from the stored checkpoint does not verify records `failed` and stops the start in every verification mode. |
 | `c18-checkpoint-rollback-refused` | WP2.11 | A witnessed checkpoint with a smaller tree size than the stored one records `failed`. |
 | `c18-desktop-refuses-unlogged-update` | WP6.3 | A desktop update whose bundle fails is refused before `quitAndInstall`. |
+
+### What this does not prove
+
+- **Witness independence.** A client verifies that a witness key listed in the root metadata cosigned the checkpoint. It cannot verify that the witness is operated independently of the log or of Delo; that rests on which witnesses the root metadata lists.
+- **An offline home.** A home that never reaches the log and the distributor stays `unchecked` and keeps starting with the warning. It never completes the consistency check, so a different view of the log shown to it is not detected until it connects; installing or updating still requires the check.
+- **Clock dependence.** The 24-hour limit on the latest witnessed checkpoint's age uses the client's clock; a wrong clock can accept an older checkpoint or record `unchecked` for a current one.
+- **What a log entry means.** A verified entry shows that the manifest was published in a log every client can check; it does not show that the release is free of defects or vulnerabilities.

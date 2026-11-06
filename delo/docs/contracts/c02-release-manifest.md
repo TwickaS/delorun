@@ -33,7 +33,7 @@ Every Delo release is a set of files on GitHub Releases described by one release
 
 ## Release files
 
-A release with version `<version>` (Delo's semantic version, without a leading `v`) is the git tag `v<version>` of Delo's public repository and the GitHub release of that tag. Platform identifiers are Node's `process.platform` and `process.arch` joined by a hyphen: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64` and `win32-x64`.
+A release with version `<version>` (Delo's semantic version, without a leading `v`) is the git tag `v<version>` of Delo's public repository, `https://github.com/Delo-Run/delo`, and the GitHub release of that tag. Platform identifiers are Node's `process.platform` and `process.arch` joined by a hyphen: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64` and `win32-x64`.
 
 | File | Content |
 | --- | --- |
@@ -122,7 +122,7 @@ A scheduled job of the release workflow re-signs it every 24 hours, and the rele
 | `version` | semantic version | Delo's version of this release. |
 | `dsh` | semantic version | The `version` of `@deepseek-ai/dsh-app-boot` in the release, upstream's version ([C17](c17-plugin-versions.md)). |
 | `channel` | `stable` or `beta` | The channel the release is published on. |
-| `source` | `{ "repository", "tag", "commit" }` | The public repository URL, `v<version>` and the 40-hex commit the tag names. |
+| `source` | `{ "repository", "tag", "commit" }` | The public repository URL (`https://github.com/Delo-Run/delo`), `v<version>` and the 40-hex commit the tag names. |
 | `published` | timestamp | When the targets key signed it. |
 | `runtime` | map of platform to `{ "archive": FileRef, "files": FileRef }` | Each runtime archive and its file list. |
 | `desktop` | map of `mac-arm64`, `mac-x64`, `win-x64` to `{ "installer": DesktopFileRef, "update": DesktopFileRef, "blockmap": FileRef }` | Desktop files; `DesktopFileRef` adds `sha512`, the standard base64 SHA-512 electron-updater compares. On Windows the installer is also the update file. |
@@ -229,7 +229,7 @@ An acceptance covers an advisory when the id and package match, the locked versi
 
 ## npm publication
 
-`delorun` and `create-delorun` publish through npm trusted publishing from the public repository's release workflow: the publish job requests an OIDC token (`permissions: id-token: write`), holds no npm token, and npm attaches a Sigstore-signed SLSA build attestation naming the repository, the workflow file and the commit. The manifest records each tarball's integrity. The launcher has no runtime dependencies; `npx` runs the launcher npm serves before any Delo check runs, so the npm launcher is the pre-install trust anchor, and the Trust page says so.
+`delorun` and `create-delorun` publish through npm trusted publishing from the release workflow of `https://github.com/Delo-Run/delo`: the publish job requests an OIDC token (`permissions: id-token: write`), holds no npm token, and npm attaches a Sigstore-signed SLSA build attestation naming the repository, the workflow file and the commit. The manifest records each tarball's integrity. The launcher has no runtime dependencies; `npx` runs the launcher npm serves before any Delo check runs, so the npm launcher is the pre-install trust anchor, and the Trust page says so.
 
 ## Desktop updates and rollback
 
@@ -307,3 +307,10 @@ Each file's `schema` names its major version; a change that an older reader woul
 | `c02-advisory-feed-unreachable-fails` | WP3.1 | A feed stand-in that refuses connections fails the check. |
 | `c02-npm-publish-has-no-token` | WP3.2 | A workflow lint fails when the npm publish job references an npm token or lacks `id-token: write`. |
 | `c02-pe-files-signed` | WP3.1 | `signtool verify /pa` passes on every PE file in the Windows closure. |
+
+### What this does not prove
+
+- **Rebuild outside CI.** The signing command verifies that a rebuild record exists and says `ci: false`, that the signing run has no `CI` or `GITHUB_ACTIONS` variable set, and that the digests it recomputes from the rebuild output on the signing machine match the record. It cannot show that the machine is independent of the release workflow or that its toolchain is uncompromised; that rests on the targets-key holder rebuilding on a machine they control.
+- **Advisory coverage.** The advisory check covers the npm packages in the runtime closure's lockfile and the advisories the GitHub Advisory Database publishes for them. It does not cover the pinned Node binary, the native addon's compiler and linker, the system packages of the S2 and S3 images, or the Python and Office payloads the desktop app carries, and it cannot report a vulnerability that has no published advisory.
+- **Clock dependence.** Expiry checks compare against the client's clock. A clock set back accepts a timestamp past its real expiry, so a host that withholds releases goes unnoticed for as long as the clock is wrong; a clock set forward refuses fresh metadata, and the refusal names the expiry and the local time.
+- **Start hash check.** The launcher detects a changed, missing or extra file in the installed runtime. A process that runs with the person's own access can also change the launcher, the stored root or the stored manifest, and then the check passes; the check detects tampering that does not also alter the launcher, and `delorun verify` states the same limit ([C15](c15-verification-checks.md)).

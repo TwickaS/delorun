@@ -15,8 +15,8 @@
   en: e3d38cacb599727a
   zh: e2db1295b853bbc0
 /c2-release-manifest-and-signature/release-files:
-  en: 553830f468bfa2d0
-  zh: f5c1f7863a38dc2f
+  en: 1c12960e9d0c2dc5
+  zh: 7decfe9e82fdca54
 /c2-release-manifest-and-signature/signature-envelope:
   en: e17643cc81e51889
   zh: 0a23f8304e65981c
@@ -30,14 +30,14 @@
   en: aa288887ce5d7c90
   zh: eae842988dd43834
 /c2-release-manifest-and-signature/release-manifest:
-  en: 1fac9cce8cbfefd5
-  zh: 18c379e9a28d32ab
+  en: b20659893fbf1f27
+  zh: ce5045a8079b62f7
 /c2-release-manifest-and-signature/runtime-file-list:
   en: e950f26600a53ac9
   zh: 8db82c1fe79b2630
 /c2-release-manifest-and-signature/client-verification:
-  en: b95e609670c5b256
-  zh: bd6280a0cbbc4814
+  en: 58e93577773f1d02
+  zh: 44b4ec9a374c1397
 /c2-release-manifest-and-signature/freshness-and-rollback-protection:
   en: 282433057cf93b8e
   zh: 416df0ebe1b35055
@@ -51,8 +51,8 @@
   en: 28eb7d5408170f76
   zh: c78b4cb738d63771
 /c2-release-manifest-and-signature/npm-publication:
-  en: f9b39d0ba2876907
-  zh: b4df6af9991f4885
+  en: 12ae6917d8b1dbd4
+  zh: 68e90402e2fbd393
 /c2-release-manifest-and-signature/desktop-updates-and-rollback:
   en: b6223e5ce3662023
   zh: c0bd0a114542c94b
@@ -60,8 +60,8 @@
   en: a3d56a780db8e261
   zh: 49f7800dff68844e
 /c2-release-manifest-and-signature/consumers:
-  en: 3de8f07639d0f316
-  zh: 5bc9540bab49bfa4
+  en: 64ccbad49e7e3df1
+  zh: 09c33ba30c21620f
 /c2-release-manifest-and-signature/compatibility:
   en: 126ff96804d92ba3
   zh: 847da80dbf03cce5
@@ -73,4 +73,7 @@
   zh: e1a5426ebeddbdae
 /c2-release-manifest-and-signature/security/denial-tests:
   en: e925f820636d5e2f
-  zh: abe0612381e8f043
+  zh: e033765178d68353
+/c2-release-manifest-and-signature/security/what-this-does-not-prove:
+  en: 7aa2d6d8cb9f7534
+  zh: 25cc104ad823218e

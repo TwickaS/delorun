@@ -145,7 +145,7 @@ DSH 0.2.2
 
 ## 兼容性
 
-上游的轴、它的对等依赖规则、`compatibility.json` 与 `dsh plugin allow-version` 保持不变，因此 stock DSH 插件在 Delo 上的安装与加载与在 stock DSH 上完全相同。stock DSH 忽略 `engines.delo`，因此声明了它的插件仍可安装在 stock DSH 上，那里只检查其上游要求。在对等组合（[C16](c16-parity-composition.md)）中，Delo 轴保持开启，因为它不改变任何模型可见的输入。
+上游的轴、它的对等依赖规则、`compatibility.json` 与 `dsh plugin allow-version` 保持不变，因此 stock DSH 插件在 Delo 上的安装与加载与在 stock DSH 上完全相同。stock DSH 忽略 `engines.delo`，因此声明了它的插件仍可安装在 stock DSH 上，那里只检查其上游要求。在对等组合（[C16](c16-parity-composition.zh.md)）中，Delo 轴保持开启，因为它不改变任何模型可见的输入。
 
 <a id="security"></a>
 

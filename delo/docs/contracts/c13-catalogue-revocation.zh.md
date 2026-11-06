@@ -166,7 +166,7 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 - 已安装的插件继续加载，上一份已验证列表所撤销的版本保持停用；
 - Host 每 15 分钟重试一次，陈旧状态在第一份通过验证的列表出现时结束。
 
-`delorun verify` 会报告陈旧状态（[C15](c15-verification-checks.md)）。
+`delorun verify` 会报告陈旧状态（[C15](c15-verification-checks.zh.md)）。
 
 <a id="disabling-a-revoked-plugin"></a>
 
@@ -208,7 +208,7 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 - `Delo-Run/delo-plugins`（WP7.1、WP7.2）：索引文件、其 schema 检查、语料库与发布任务。
 - `delo/packages/catalogue/src/revocation/`（WP7.3）：获取、陈旧状态与加载时停用。
 - Discover 的配置与 studio 插件（WP7.4）：列出条目、徽章、发现与安装。
-- `delorun verify`（[C15](c15-verification-checks.md)）与更新报告（[C3](c03-update-report.zh.md)）。
+- `delorun verify`（[C15](c15-verification-checks.zh.md)）与更新报告（[C3](c03-update-report.zh.md)）。
 
 <a id="compatibility"></a>
 
@@ -252,3 +252,12 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 | `c13-no-audited-wording` | WP7.4 | 安装一个 fixture 插件时，不渲染任何「audited」、「safe」或「no findings」字样，不称该插件已经核实，并说明 Delo 不审计插件。 |
 | `c13-findings-labelled-as-claims` | WP7.4 | fixture 条目的发现在渲染时带有其作者的角色与姓名，以及「not verified by Delo」标签。 |
 | `c13-missing-ledger-asks-again` | WP7.4 | 当接受台账缺失或格式错误时，这些发现会在安装前再次征询。 |
+
+<a id="what-this-does-not-prove"></a>
+
+### 这些检查不能证明什么
+
+- **撤销在下次加载时生效。** 新近被撤销的版本会一直运行，直到 Host 再次加载它；撤销列表无法停止已经在运行的插件代码。从撤销到生效之间，最多有 6 小时等待下一次刷新，另加本人重启之前的时间。
+- **徽章的写入。** 只有发布作业才能写入徽章，这一点由 `Delo-Run/delo-plugins` 的 CI 配置保证：语料作业不持有写入令牌，由单独的作业发布，工作流 lint 拒绝 `pull_request_target`。客户端只验证插件索引密钥的签名，因此被攻破的发布作业或插件索引密钥可以签署任何徽章；徽章写入的拒绝测试在那个仓库中运行，而不在本仓库中。
+- **列出的发现。** Delo 不核实列出的发现。一条发现陈述的是其作者的主张；没有列出发现，并不说明插件的任何情况。
+- **对时钟的依赖。** 最大缓存时长、撤销列表的过期时间与索引的过期时间都以客户端的时钟为准；时钟被调慢时，撤销列表可能在实际过期后仍被使用。

@@ -36,8 +36,8 @@
   en: b9d7b430932bae47
   zh: 24accff1bf59feb6
 /c13-catalogue-index-and-revocation-list/stale-state:
-  en: 44388d1520b5e76d
-  zh: d4e2dcdaa1a0a896
+  en: c452f9457e9751ad
+  zh: 2a2d399854e0463c
 /c13-catalogue-index-and-revocation-list/disabling-a-revoked-plugin:
   en: 5a3e66f552148c77
   zh: f31656411d1b1a30
@@ -48,8 +48,8 @@
   en: d85b42995219b4bb
   zh: c9b786e52f83278b
 /c13-catalogue-index-and-revocation-list/consumers:
-  en: cee2a9697774ed9b
-  zh: 493b0c96a5b052de
+  en: b4950f1f733fa6b8
+  zh: 4d3c334f7c8e4b38
 /c13-catalogue-index-and-revocation-list/compatibility:
   en: c1910cdf4f1b75e4
   zh: 15938b861928fa46
@@ -61,4 +61,7 @@
   zh: 7915fee3c3c2311b
 /c13-catalogue-index-and-revocation-list/security/denial-tests:
   en: b05ebba3f6307867
-  zh: a27424bf607faa3c
+  zh: 9495eb1b6a4c40d0
+/c13-catalogue-index-and-revocation-list/security/what-this-does-not-prove:
+  en: 4410879758cc8423
+  zh: e922ad6782f3ab15

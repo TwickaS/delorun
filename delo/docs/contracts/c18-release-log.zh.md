@@ -100,7 +100,7 @@ targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.z
 | `unchecked` | 由于日志或分发服务无法访问，在线检查尚未通过；bundle 如存在，则通过验证。 |
 | `failed` | bundle 或在线检查以可验证的方式失败。 |
 
-状态按已安装的发布版本分别存储在 [C1](c01-home-layout.md) 指定的路径下，`delorun verify`、`delorun status` 与 studio 的验证面板会连同发布版本号一起显示它（[C15](c15-verification-checks.md)）。
+状态按已安装的发布版本分别存储在 [C1](c01-home-layout.md) 指定的路径下，`delorun verify`、`delorun status` 与 studio 的验证面板会连同发布版本号一起显示它（[C15](c15-verification-checks.zh.md)）。
 
 <a id="behaviour-per-client"></a>
 
@@ -139,7 +139,7 @@ targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.z
 - `delo/apps/install/` 与 `delo/apps/npm-launcher/`（WP3.2）：在安装之前要求 bundle 与在线检查。
 - CLI 启动器与 home 进程（WP2.11、WP3.9）：启动检查、警告与重试。
 - 桌面更新器（WP6.3）。
-- `delorun verify` 与验证面板（[C15](c15-verification-checks.md)）。
+- `delorun verify` 与验证面板（[C15](c15-verification-checks.zh.md)）。
 
 <a id="compatibility"></a>
 
@@ -179,3 +179,12 @@ bundle 的 `schema` 指明其主版本。日志的 origin 与密钥以及见证�
 | `c18-inconsistent-log-fails-start` | WP2.11 | 最新检查点从已存储检查点出发的一致性证明无法通过验证时，记录 `failed`，并在每种验证模式下停止启动。 |
 | `c18-checkpoint-rollback-refused` | WP2.11 | 树大小小于已存储检查点的经见证检查点记录 `failed`。 |
 | `c18-desktop-refuses-unlogged-update` | WP6.3 | bundle 验证失败的桌面更新在 `quitAndInstall` 之前被拒绝。 |
+
+<a id="what-this-does-not-prove"></a>
+
+### 这些检查不能证明什么
+
+- **见证者的独立性。** 客户端验证的是 root 元数据所列出的某个见证者密钥对检查点进行了联署。它无法验证该见证者的运营独立于日志或 Delo；这取决于 root 元数据列出哪些见证者。
+- **离线的 home。** 始终无法连接日志与分发服务的 home 会保持 `unchecked`，并在每次启动时显示警告。它永远无法完成一致性检查，因此在它连接之前，向它展示的不同日志视图不会被发现；安装或更新仍然需要该检查。
+- **对时钟的依赖。** 对最新已见证检查点不超过 24 小时的限制以客户端的时钟为准；时钟有误时，可能接受较旧的检查点，或者对当前的检查点记录 `unchecked`。
+- **日志条目的含义。** 一条已验证的条目说明 manifest 已发布在每个客户端都能检查的日志中；它并不说明该发布没有缺陷或漏洞。

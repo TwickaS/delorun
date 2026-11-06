@@ -30,8 +30,8 @@
   en: d7bf2f8ff2316ed8
   zh: 7e9b33b228fbddfa
 /c18-release-log-and-witness/check-states:
-  en: 2bba9f04cf44f154
-  zh: 0ba16daa74869f8b
+  en: ea3b5f62bc535b42
+  zh: ffa8f4889c128d55
 /c18-release-log-and-witness/behaviour-per-client:
   en: abd01f993b53b773
   zh: a78bca01f76d52c7
@@ -39,8 +39,8 @@
   en: 5cecac0ea428cf20
   zh: 31cc9b8a7a95b585
 /c18-release-log-and-witness/consumers:
-  en: b3b9dec42ac1c93e
-  zh: 346b054f8b9250d2
+  en: 1c7f8bfe6a949b71
+  zh: 2dd5adac60d238f1
 /c18-release-log-and-witness/compatibility:
   en: 19e53c26d006fe14
   zh: 9a88141721e218a4
@@ -52,4 +52,7 @@
   zh: 6d40cdd609185b8a
 /c18-release-log-and-witness/security/denial-tests:
   en: 815605ae5a09fb59
-  zh: 9db811961d9a1d5d
+  zh: 220a4e8604c0f534
+/c18-release-log-and-witness/security/what-this-does-not-prove:
+  en: a8c259fd655c2585
+  zh: d4a9bbaec9a65660
