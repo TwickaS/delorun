@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "tests"],
+  "references": [
+    { "path": "../../../apps/cli" },
+    { "path": "../../../packages/boot/app-boot" },
+    { "path": "../../../packages/util/brand" },
+    { "path": "../../../packages/util/home-paths" },
+    { "path": "../../../packages/util/launch-environment" }
+  ]
+}

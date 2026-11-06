@@ -1234,6 +1234,28 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  delo/apps/cli:
+    dependencies:
+      '@deepseek-ai/dsh':
+        specifier: workspace:*
+        version: link:../../../apps/cli
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../../packages/contract-home-layout
+    devDependencies:
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:*
+        version: link:../../../packages/util/launch-environment
+
   delo/apps/release:
     dependencies:
       '@delo/tools':

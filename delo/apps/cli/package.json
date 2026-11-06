@@ -1,0 +1,21 @@
+{
+  "name": "@delo/cli",
+  "description": "The delorun command: the Delo home at ~/.delo, its CLI profile and its lock, setup's entry, and upstream's profile commands",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "delorun": "tsx src/bin.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "workspace:*",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-home-paths": "workspace:*",
+    "@delo/contract-home-layout": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-launch-environment": "workspace:*"
+  }
+}

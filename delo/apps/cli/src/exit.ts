@@ -1,0 +1,33 @@
+/**
+ * The `delorun` command's exit codes, which scripts can rely on, and the error
+ * that carries one to the entry point.
+ *
+ * @module @delo/cli/exit
+ */
+
+/** Every exit code `delorun` uses. */
+export const EXIT = {
+  /** The command did what it was asked, or found it already done. */
+  ok: 0,
+  /** The command failed; standard error says why. */
+  failed: 1,
+  /** The command line is wrong: an unknown command, option or value. */
+  usage: 2,
+  /** The command needs a running home process, and none runs for the profile. */
+  notRunning: 3,
+} as const
+
+/** One of {@link EXIT}'s codes. */
+export type ExitCode = (typeof EXIT)[keyof typeof EXIT]
+
+/** A failure the entry point reports on standard error and exits with. */
+export class CliError extends Error {
+  /**
+   * @param exit - the code to exit with.
+   * @param message - what went wrong and what to do.
+   */
+  constructor(readonly exit: ExitCode, message: string) {
+    super(message)
+    this.name = 'CliError'
+  }
+}
