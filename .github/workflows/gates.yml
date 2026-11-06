@@ -1,0 +1,72 @@
+name: Gates
+
+# Delo's check gates (delo/apps/tools/src/checks/gates), run on pull requests and on pushes to v5 and main. Each step is
+# one gate command. The range gates compare against the pull request's base or the push's previous tip. The
+# personal-data step reads commit metadata against the committed hashes only: no local patterns file exists in CI.
+on:
+  pull_request:
+  push:
+    branches: [v5, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+
+jobs:
+  gates:
+    name: Delo gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v5.0.0
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Licence
+        run: node_modules/.bin/tsx delo/apps/tools/src/checks/gates/licence.ts
+
+      - name: Secrets in the fork diff
+        run: node_modules/.bin/tsx delo/apps/tools/src/checks/gates/secrets.ts
+
+      - name: Infrastructure identifiers in the fork diff
+        run: node_modules/.bin/tsx delo/apps/tools/src/checks/gates/infrastructure.ts
+
+      - name: Personal data in the pushed commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node_modules/.bin/tsx delo/apps/tools/src/checks/gates/personal-data.ts --base "$BASE"
+
+      - name: DCO sign-offs in the pushed commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node_modules/.bin/tsx delo/apps/tools/src/checks/gates/dco.ts --base "$BASE"
+
+      - name: Commit standard in the pushed commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node_modules/.bin/tsx delo/apps/tools/src/check-commits.ts --base "$BASE"
+
+      - name: Calendar planning in added documentation
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node_modules/.bin/tsx delo/apps/tools/src/checks/gates/doc-times.ts --base "$BASE"
+
+      - name: Documentation checks
+        run: node_modules/.bin/tsx delo/apps/tools/src/checks/gates/docs.ts
