@@ -11,7 +11,7 @@ The check runner that orders and runs the gates, the local stack and the other f
 
 - `src/fork-boundary.ts` holds the ledger schema, the matcher for fork-owned paths and globs, the boundary errors and the divergence total.
 - `src/check-fork-boundary.ts` is the command-line gate. It reads the ledger, checks the repository against it, and prints the count with `--count`.
-- `src/check-commits.ts` is the commit standard: a Conventional Commits subject, a DCO sign-off, and a changelog fragment or a `Changelog: none (<reason>)` trailer. It is also the `commit-msg` hook, run with `--message <file>`.
+- `src/check-commits.ts` is the commit standard: a Conventional Commits subject, a DCO sign-off, and a changelog fragment or a `Changelog: none (<reason>)` trailer. It checks one message with `--message <file>`, the form a `commit-msg` hook passes.
 - `src/checks/types.ts` and `src/checks/gates/index.ts` describe each gate as one command that the check runner executes.
 - `src/checks/gates/` holds the gate modules and their data: licence, secrets, personal data, infrastructure, DCO, documentation times and the documentation checks.
 - `src/git.ts` runs git for the modules and reports exit statuses.
@@ -56,7 +56,7 @@ The [gates workflow](../../../.github/workflows/gates.yml) runs each gate on pul
 
 ## Workflows
 
-Upstream's workflows are in [`.github/workflows`](../../../.github/workflows). Each row names a workflow's triggers, what it needs from DeepSeek, and Delo's disposition. **Keep** means the workflow runs in this repository as upstream wrote it. **Guard** means its jobs carry `if: github.repository == 'deepseek-ai/deepseek-harness'`, so they run only in upstream's repository; each guarded file has a `delo-feature` entry in the ledger. Delo's own workflow is [`gates.yml`](../../../.github/workflows/gates.yml).
+Upstream's workflows are in [`.github/workflows`](../../../.github/workflows). Each row names a workflow's triggers, what it needs from DeepSeek, and Delo's disposition. **Keep** means the workflow runs in this repository, with any runner routing its ledger entry names. **Guard** means its jobs carry `if: github.repository == 'deepseek-ai/deepseek-harness'`, so they run only in upstream's repository; each guarded file has a `delo-feature` entry in the ledger. Delo's own workflow is [`gates.yml`](../../../.github/workflows/gates.yml).
 
 | Workflow | Triggers | Needs DeepSeek secrets or infrastructure | Disposition |
 |---|---|---|---|
@@ -65,8 +65,8 @@ Upstream's workflows are in [`.github/workflows`](../../../.github/workflows). E
 | `build-preview-cloudflare.yml` | `pull_request` | Cloudflare Pages and Access secrets (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`) | Guard |
 | `ci-master.yml` | `push` to `master`, `workflow_dispatch` | Secret `DEEPSEEK_API_KEY_EXTERNAL`; self-hosted runners `dsh-win-ci` and `vm-backup` | Guard |
 | `ci-python.yml` | `pull_request` | Secret `DEEPSEEK_API_KEY_EXTERNAL` for the installed-wheel test | Guard |
-| `ci-windows.yml` | `pull_request` | None needed. Its default runner, `dsh-windows-2025-16core`, is a DeepSeek larger-runner label (see the note below) | Keep |
-| `ci.yml` | `pull_request` | None needed. Its default runner, `dsh-ubuntu-24-04-16core`, is a DeepSeek larger-runner label (see the note below) | Keep |
+| `ci-windows.yml` | `pull_request` | None needed. Upstream's runner labels apply only in upstream's repository (see the note below) | Keep, routed |
+| `ci.yml` | `pull_request` | None needed. Upstream's runner labels apply only in upstream's repository (see the note below) | Keep, routed |
 | `cua-helper-package.yml` | `workflow_dispatch`, `workflow_call` | Self-hosted runner `dsh-mac-package-trial` with the signing configuration | Guard |
 | `desktop-publish.yml` | `workflow_dispatch` | Self-hosted runner routing through `DESKTOP_PUBLISH_RUNNERS`; environments `desktop-test` and `desktop-production` | Guard |
 | `docs-pages.yml` | `workflow_dispatch` | GitHub Pages environment `github-pages` and a Blacksmith runner | Guard |
@@ -93,7 +93,7 @@ Upstream's workflows are in [`.github/workflows`](../../../.github/workflows). E
 | `weighted-approval.yml` | `pull_request_target`, `issue_comment`, `workflow_run` | GitHub App secret `DSH_APPROVAL_APP_PRIVATE_KEY`; variables `DSH_APPROVAL_APP_CLIENT_ID` and `DSH_APPROVAL_APP_SLUG` | Guard |
 | `windows-package.yml` | `workflow_dispatch` | Self-hosted runner `dsh-win-package-trial` with the signing configuration | Guard |
 
-Two keep rows need a decision before they can run in this repository. `ci.yml` and `ci-windows.yml` need no secret, so they are kept as written, but their default runner labels are DeepSeek's larger-runner labels. Delo's repository has no such runners, so their jobs would wait for one. Routing those jobs to GitHub-hosted runners, or to Delo's own runners, is open.
+`ci.yml` and `ci-windows.yml` need no secret, so they are kept. Each job keeps upstream's runner expression as the branch that applies in upstream's repository, where DeepSeek's runner labels such as `dsh-ubuntu-24-04-16core` and `dsh-windows-2025-16core` stay in use. Every other repository runs the job on `ubuntu-latest` or `windows-latest`, so this repository never waits for a DeepSeek runner. Each file has a `delo-feature` ledger entry for this routing.
 
 The self-hosted route in `release.yml` and `release-vendor.yml` is guarded by `github.repository == 'deepseek-harness/deepseek-harness'`, which names a different organisation from the upstream repository in the ledger. The route applies only when the failover variable is set, so Delo does not reach it; the guard's organisation name is left as upstream wrote it.
 

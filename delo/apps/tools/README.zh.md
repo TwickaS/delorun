@@ -11,7 +11,7 @@
 
 - `src/fork-boundary.ts` 包含台账的 schema、fork 自有路径与 glob 的匹配器、边界错误以及差异汇总。
 - `src/check-fork-boundary.ts` 是命令行门禁。它读取台账，依据台账检查本仓库，并在传入 `--count` 时打印差异数量。
-- `src/check-commits.ts` 是提交标准：Conventional Commits 主题行、DCO 签名，以及一个变更片段或一行 `Changelog: none (<reason>)` 尾注。它同时也是 `commit-msg` 钩子，以 `--message <file>` 方式运行。
+- `src/check-commits.ts` 是提交标准：Conventional Commits 主题行、DCO 签名，以及一个变更片段或一行 `Changelog: none (<reason>)` 尾注。它以 `--message <file>` 检查单条消息，`commit-msg` 钩子即以这种方式调用它。
 - `src/checks/types.ts` 与 `src/checks/gates/index.ts` 将每个门禁描述为检查运行器执行的一条命令。
 - `src/checks/gates/` 包含门禁模块及其数据：许可证、密钥、个人数据、基础设施、DCO、文档时间以及文档检查。
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
@@ -56,7 +56,7 @@
 
 ## 工作流
 
-上游的工作流位于 [`.github/workflows`](../../../.github/workflows)。下表的每一行给出工作流的触发条件、其所需的 DeepSeek 资源，以及 Delo 的处置。**保留**表示该工作流按上游的写法在本仓库中运行。**守卫**表示其作业带有 `if: github.repository == 'deepseek-ai/deepseek-harness'`，因而仅在上游仓库中运行；每个被守卫的文件在台账中都有一条 `delo-feature` 条目。Delo 自有的工作流是 [`gates.yml`](../../../.github/workflows/gates.yml)。
+上游的工作流位于 [`.github/workflows`](../../../.github/workflows)。下表的每一行给出工作流的触发条件、其所需的 DeepSeek 资源，以及 Delo 的处置。**保留**表示该工作流在本仓库中运行，其中任何运行器路由都记录在台账条目中。**守卫**表示其作业带有 `if: github.repository == 'deepseek-ai/deepseek-harness'`，因而仅在上游仓库中运行；每个被守卫的文件在台账中都有一条 `delo-feature` 条目。Delo 自有的工作流是 [`gates.yml`](../../../.github/workflows/gates.yml)。
 
 | 工作流 | 触发条件 | 需要 DeepSeek 的密钥或基础设施 | 处置 |
 |---|---|---|---|
@@ -65,8 +65,8 @@
 | `build-preview-cloudflare.yml` | `pull_request` | Cloudflare Pages 与 Access 密钥（`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET`） | 守卫 |
 | `ci-master.yml` | 向 `master` 推送、`workflow_dispatch` | 密钥 `DEEPSEEK_API_KEY_EXTERNAL`；自托管运行器 `dsh-win-ci` 与 `vm-backup` | 守卫 |
 | `ci-python.yml` | `pull_request` | 已安装 wheel 测试所用的密钥 `DEEPSEEK_API_KEY_EXTERNAL` | 守卫 |
-| `ci-windows.yml` | `pull_request` | 无需要；其默认运行器 `dsh-windows-2025-16core` 是 DeepSeek 的大型运行器标签（见下文说明） | 保留 |
-| `ci.yml` | `pull_request` | 无需要；其默认运行器 `dsh-ubuntu-24-04-16core` 是 DeepSeek 的大型运行器标签（见下文说明） | 保留 |
+| `ci-windows.yml` | `pull_request` | 无需要；上游的运行器标签仅在上游仓库中适用（见下文说明） | 保留，已路由 |
+| `ci.yml` | `pull_request` | 无需要；上游的运行器标签仅在上游仓库中适用（见下文说明） | 保留，已路由 |
 | `cua-helper-package.yml` | `workflow_dispatch`、`workflow_call` | 带签名配置的自托管运行器 `dsh-mac-package-trial` | 守卫 |
 | `desktop-publish.yml` | `workflow_dispatch` | 经 `DESKTOP_PUBLISH_RUNNERS` 的自托管运行器路由；环境 `desktop-test` 与 `desktop-production` | 守卫 |
 | `docs-pages.yml` | `workflow_dispatch` | GitHub Pages 环境 `github-pages` 与 Blacksmith 运行器 | 守卫 |
@@ -93,7 +93,7 @@
 | `weighted-approval.yml` | `pull_request_target`、`issue_comment`、`workflow_run` | GitHub App 密钥 `DSH_APPROVAL_APP_PRIVATE_KEY`；变量 `DSH_APPROVAL_APP_CLIENT_ID` 与 `DSH_APPROVAL_APP_SLUG` | 守卫 |
 | `windows-package.yml` | `workflow_dispatch` | 带签名配置的自托管运行器 `dsh-win-package-trial` | 守卫 |
 
-有两个保留行需要先作决定才能在本仓库中运行。`ci.yml` 与 `ci-windows.yml` 不需要密钥，因此按原样保留；但它们的默认运行器标签是 DeepSeek 的大型运行器标签。Delo 的仓库没有这些运行器，其作业会一直等待。将这些作业路由到 GitHub 托管的运行器，或路由到 Delo 自己的运行器，仍待决定。
+`ci.yml` 与 `ci-windows.yml` 不需要密钥，因此予以保留。每个作业都把上游的运行器表达式作为仅在上游仓库中适用的分支，那里仍使用 `dsh-ubuntu-24-04-16core` 与 `dsh-windows-2025-16core` 等 DeepSeek 运行器标签。其他仓库一律在 `ubuntu-latest` 或 `windows-latest` 上运行该作业，因此本仓库从不等待 DeepSeek 的运行器。两个文件各有一条 `delo-feature` 台账条目记录此路由。
 
 `release.yml` 与 `release-vendor.yml` 中的自托管路由由 `github.repository == 'deepseek-harness/deepseek-harness'` 守卫，该名称所指的组织与台账中的上游仓库不同。该路由仅在故障切换变量被设置时才适用，Delo 不会进入该路由；守卫中的组织名称保持上游原有的写法。
 

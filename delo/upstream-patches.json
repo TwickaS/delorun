@@ -192,11 +192,6 @@
       "reason": "Compiles the TypeScript fences in Delo's documentation under delo/docs/ with upstream's documentation typecheck."
     },
     {
-      "path": "lefthook.yml",
-      "class": "delo-feature",
-      "reason": "Runs Delo's commit standard, delo/apps/tools/src/check-commits.ts, as the commit-msg hook."
-    },
-    {
       "path": ".github/workflows/gates.yml",
       "class": "delo-feature",
       "reason": "Delo's gate workflow: runs each Delo check gate on pull requests and on pushes to v5 and main."
@@ -315,6 +310,16 @@
       "path": ".github/workflows/windows-package.yml",
       "class": "delo-feature",
       "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "class": "delo-feature",
+      "reason": "Runs on GitHub-hosted runners outside upstream's repository."
+    },
+    {
+      "path": ".github/workflows/ci-windows.yml",
+      "class": "delo-feature",
+      "reason": "Runs on GitHub-hosted runners outside upstream's repository."
     }
   ],
   "retired": []
