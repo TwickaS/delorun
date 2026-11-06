@@ -288,17 +288,11 @@ C16 所列的变更默认值在本仓库中都未改动。studio bundle、权限
 
 ### 开关清点
 
-每个对模型可见的已构建开关都有一个开关开启场景 `snapshots/<profile>/delo-<id>`，其 `runtime.cordis.yml` 把这一个开关设为非对等取值。录制之后，`parity-replay` 在覆盖层下把它与语料库的其余部分一同回放，因此被测开关是与对等组合的唯一差异。上游的语料库门禁拒绝没有 Session 夹具的场景目录，因此未录制的场景把其 `snapshot.yml` 与 `runtime.cordis.yml` 保存在 [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/) 下，`parity-switches` 将其报告为 `pending recording`（待录制），而不是通过。Web 场景经由 `apps/web/tests` 下的 e2e 驱动运行，该驱动用 `launchWebScaffold` 的 `presetInspect` 选项开启 `preset_inspect`。
+每个对模型可见的已构建开关都有一个开关开启场景 `snapshots/<profile>/delo-<id>`，其 `runtime.cordis.yml` 只把这一个开关设为非对等取值，并加上一条场景本地的 `agent-default-model` 配置，用以固定语料库模型 `deepseek-v4-flash`。录制之后，`parity-replay` 在覆盖层下把它与语料库的其余部分一同回放，因此被测开关是与对等组合的唯一行为差异。Web 场景经由 `apps/web/tests` 下的 e2e 驱动运行，该驱动用 `launchWebScaffold` 的 `presetInspect` 选项开启 `preset_inspect`，并在回放时通过智能体默认模型选择同一模型。
 
-待录制：
+五个开关开启场景中有四个已录制：`session/delo-plugin-manager-read-exemption`、`session/delo-profile-history`、`session/delo-container-denial-marker` 与 `web/delo-preset-inspect`。它们的目录位于 `snapshots/` 下，并可在无密钥的情况下回放，有覆盖层与无覆盖层两种方式（Web 场景经由 `test:web:built` 回放）。第五个场景 `web/delo-studio-additions` 尚未录制：其 `snapshot.yml` 仍在 [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/) 下，其驱动尚未编写，`parity-switches` 将其报告为 `pending recording`（待录制）。
 
-- `session/delo-plugin-manager-read-exemption`：plugin-manager 组合，`readActionsExempt: true`，处于 `workspace-write`。
-- `session/delo-profile-history`：plugin-manager 组合，`profileHistory: true`。
-- `session/delo-container-denial-marker`：PTC 组合，`containerDenialMarker: true`，因此 `run_code` 声明 bash 的 `sandbox.deniedBy`。
-- `web/delo-preset-inspect`：开启 `preset_inspect` 的 Standard preset；其驱动随录制一同编写。
-- `web/delo-studio-additions`：主对话在 `studioAdditions: true` 下挂载，并与工作区提供方并列；其驱动随录制一同编写。
-
-录制其中一个时，把其目录移到 `snapshots/<profile>/`，在不设 `DSH_SNAPSHOT_PATCH` 的情况下为该场景运行上游的录制命令，审阅输出，并在 Session 夹具携带任务之后删除 `input.task`。
+录制其中一个时，把其目录移到 `snapshots/<profile>/`，在不设 `DSH_SNAPSHOT_PATCH` 的情况下为该场景运行上游的录制命令，审阅输出，并在 Session 夹具携带任务之后删除 `input.task`。录制时若场景目录中已有 Session 夹具，则从该夹具读取任务，因此在改动 `input.task` 后录制之前，须先把较早的夹具移出。
 
 ### 命令
 

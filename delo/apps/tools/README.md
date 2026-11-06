@@ -288,17 +288,11 @@ It also accepts any contribution in a listed source file, so a second, unswitche
 
 ### The switch sweep
 
-Each model-visible built switch has a switch-on scenario `snapshots/<profile>/delo-<id>` whose `runtime.cordis.yml` sets that one switch to its non-parity value. Once recorded, `parity-replay` replays it with the rest of the corpus under the overlay, so the switch under test is the only difference from the parity composition. Upstream's corpus gate refuses a scenario directory without a Session fixture, so an unrecorded scenario keeps its `snapshot.yml` and `runtime.cordis.yml` under [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/), and `parity-switches` reports it as `pending recording`, not as passing. A Web scenario runs through an e2e driver under `apps/web/tests`, which turns `preset_inspect` on with `launchWebScaffold`'s `presetInspect` option.
+Each model-visible built switch has a switch-on scenario `snapshots/<profile>/delo-<id>` whose `runtime.cordis.yml` sets only that one switch to its non-parity value, plus the scenario-local `agent-default-model` pin that selects the corpus model `deepseek-v4-flash`. Once recorded, `parity-replay` replays it with the rest of the corpus under the overlay, so the switch under test is the only behavioural difference from the parity composition. A Web scenario runs through an e2e driver under `apps/web/tests`, which turns `preset_inspect` on with `launchWebScaffold`'s `presetInspect` option and, on replay, selects the same model through the agent default model.
 
-Pending recording:
+Four of the five switch-on scenarios are recorded: `session/delo-plugin-manager-read-exemption`, `session/delo-profile-history`, `session/delo-container-denial-marker` and `web/delo-preset-inspect`. Their directories are under `snapshots/`, and they replay keyless with and without the overlay (the Web scenario through `test:web:built`). The fifth, `web/delo-studio-additions`, is not recorded: its `snapshot.yml` stays under [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/), its driver is not yet written, and `parity-switches` reports it as `pending recording`.
 
-- `session/delo-plugin-manager-read-exemption`: the plugin-manager composition with `readActionsExempt: true`, in `workspace-write`.
-- `session/delo-profile-history`: the plugin-manager composition with `profileHistory: true`.
-- `session/delo-container-denial-marker`: the PTC composition with `containerDenialMarker: true`, so `run_code` declares bash's `sandbox.deniedBy`.
-- `web/delo-preset-inspect`: the Standard preset with `preset_inspect` on; its driver is written with the recording.
-- `web/delo-studio-additions`: the main chat mounted with `studioAdditions: true` beside a workspaces provider; its driver is written with the recording.
-
-To record one, move its directory to `snapshots/<profile>/`, run upstream's record command for that scenario without `DSH_SNAPSHOT_PATCH`, review the outputs, and remove `input.task` once the Session fixture carries the task.
+To record one, move its directory to `snapshots/<profile>/`, run upstream's record command for that scenario without `DSH_SNAPSHOT_PATCH`, review the outputs, and remove `input.task` once the Session fixture carries the task. A recording reads its task from a Session fixture already in the scenario directory when one exists, so move any earlier fixture out before recording with a changed `input.task`.
 
 ### Commands
 
