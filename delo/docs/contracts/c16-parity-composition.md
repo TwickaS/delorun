@@ -55,12 +55,12 @@ Delo changes the following upstream defaults on purpose. The parity composition 
 | DeepSeek session-log upload (`session-log-deepseek.config.enabled`) | `false` | `true`, upstream's value | Recorded scenarios ran with the upload on unless their replay layer sets it to `false`; the overlay precedes those layers. |
 | `web_fetch` guard (`fetch_guard`) | On | Off | Recorded fetch scenarios call loopback fixtures, which the guard refuses. |
 | `preset_inspect` (`preset_inspect`) | On, and switchable | Off | The tool is model-visible and absent from the base tag. |
-| Doctor (`doctor`) | On, and switchable | Off | The doctor is model-visible and absent from the base tag. |
+| Doctor (`doctor`) | On, and switchable | Off | The doctor is a command the person runs, not a model-visible tool; it is absent from the base tag. |
 
 <a id="switch-registry"></a>
 ### Switch registry
 
-Each model-visible Delo change registers exactly one entry in the switch registry. An entry names the switch `id`, the package or upstream edit that registers it, its default value, its parity value, the scenario that proves it, and the model-visible contributions it switches. The registry is the constant `PARITY_SWITCHES` in `@delo/contract-parity-composition`, and its version is `PARITY_REGISTRY_VERSION`. A switch id is lower snake case and never reused.
+Each model-visible Delo change and each feature switch registers exactly one entry in the switch registry. An entry names the switch `id`, the package or upstream edit that registers it, its default value, its parity value, the scenario that proves it, and the model-visible contributions it switches. A feature switch, marked `featureSwitch: true`, switches no model-visible contribution; the doctor is one. The registry is the constant `PARITY_SWITCHES` in `@delo/contract-parity-composition`, and its version is `PARITY_REGISTRY_VERSION`. A switch id is lower snake case and never reused.
 
 The registry has these entries.
 
@@ -70,7 +70,7 @@ The registry has these entries.
 | `permission_defaults` | `@delo/plugin-permission-defaults` | On | Off | The workspace default preset and the one-consent requirement for full access. |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | On | Off | Refusal of loopback, link-local and private targets by `web_fetch` and the HTTP fetch provider, with a typed reason. |
 | `preset_inspect` | Delo's edit of upstream's preset tools | On | Off | The `preset_inspect` tool. |
-| `doctor` | `delo/apps/cli/src/doctor/` | On | Off | The doctor. |
+| `doctor` | `delo/apps/cli/src/doctor/` | On | Off | None: a feature switch for the doctor command. |
 | `plugin_manager_read_exemption` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The escalation exemption for the read actions `list_plugins`, `list_bundles`, `list_version_exemptions`, `history` and `read_config`, and the tool description that states it. |
 | `profile_history` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The actions `history`, `read_config`, `undo` and `restore`, and the audit of plugins, builds and exemptions that `undo` and `restore` bring back. |
 | `scheduled_task_consent` | Delo's edit of upstream's schedule tools | On | Off | The consent for `schedule_create` and `schedule_edit`, which names the recurrence, the target session and its permission preset. |

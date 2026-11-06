@@ -55,12 +55,12 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 | DeepSeek 会话日志上传（`session-log-deepseek.config.enabled`） | `false` | `true`，即上游的取值 | 录制的场景在上传开启时运行，除非其回放层将其设为 `false`；覆盖层位于这些回放层之前。 |
 | `web_fetch` 防护（`fetch_guard`） | 开启 | 关闭 | 录制的抓取场景会调用回环夹具，而防护会拒绝这些目标。 |
 | `preset_inspect`（`preset_inspect`） | 开启，且可切换 | 关闭 | 该工具对模型可见，并且不存在于基线标签中。 |
-| doctor（`doctor`） | 开启，且可切换 | 关闭 | doctor 对模型可见，并且不存在于基线标签中。 |
+| doctor（`doctor`） | 开启，且可切换 | 关闭 | doctor 是由人运行的命令，而非对模型可见的工具；它不存在于基线标签中。 |
 
 <a id="switch-registry"></a>
 ### 开关注册表
 
-每一项对模型可见的 Delo 变更，在开关注册表中恰好注册一条记录。记录给出开关的 `id`、注册它的包或上游编辑、其默认取值、对等取值、证明它的场景，以及它所开关的、对模型可见的内容。注册表是 `@delo/contract-parity-composition` 中的常量 `PARITY_SWITCHES`，其版本为 `PARITY_REGISTRY_VERSION`。开关 id 使用小写蛇形命名，且永不复用。
+每一项对模型可见的 Delo 变更以及每一项功能开关，在开关注册表中恰好注册一条记录。记录给出开关的 `id`、注册它的包或上游编辑、其默认取值、对等取值、证明它的场景，以及它所开关的、对模型可见的内容。带有 `featureSwitch: true` 的功能开关不开关任何对模型可见的内容；doctor 即是其一。注册表是 `@delo/contract-parity-composition` 中的常量 `PARITY_SWITCHES`，其版本为 `PARITY_REGISTRY_VERSION`。开关 id 使用小写蛇形命名，且永不复用。
 
 注册表包含以下条目。
 
@@ -70,7 +70,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 | `permission_defaults` | `@delo/plugin-permission-defaults` | 开 | 关 | 工作区默认预设，以及完全访问的一次性同意要求。 |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | 开 | 关 | `web_fetch` 与 HTTP 抓取提供方对回环、链路本地与私有网络目标的拒绝，附带带类型的原因。 |
 | `preset_inspect` | Delo 对上游预设工具的编辑 | 开 | 关 | `preset_inspect` 工具。 |
-| `doctor` | `delo/apps/cli/src/doctor/` | 开 | 关 | doctor 命令。 |
+| `doctor` | `delo/apps/cli/src/doctor/` | 开 | 关 | 无：doctor 命令的功能开关。 |
 | `plugin_manager_read_exemption` | Delo 对上游 `plugin_manager` 工具的编辑 | 开 | 关 | 只读动作 `list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 与 `read_config` 的提权豁免，以及说明该豁免的工具描述。 |
 | `profile_history` | Delo 对上游 `plugin_manager` 工具的编辑 | 开 | 关 | 动作 `history`、`read_config`、`undo` 与 `restore`，以及 `undo` 与 `restore` 带回的插件、构建与豁免的审计。 |
 | `scheduled_task_consent` | Delo 对上游 schedule 工具的编辑 | 开 | 关 | `schedule_create` 与 `schedule_edit` 的同意，它写明重复规则、目标会话及其权限预设。 |

@@ -6,7 +6,7 @@ English | [中文](2026-11-06-delo-model-visible-switches.zh.md)
 
 ## Problem
 
-Delo adds tools, tool descriptions and prompt text that a model can see, such as the `preset_inspect` tool and the doctor tool. Each addition changes the requests a model receives, so a recorded upstream scenario stops matching once an addition is on. A person also cannot see which additions shape the model's behaviour unless each one can be found and turned off.
+Delo adds tools, tool descriptions and prompt text that a model can see, such as the `preset_inspect` tool. Each addition changes the requests a model receives, so a recorded upstream scenario stops matching once an addition is on. A person also cannot see which additions shape the model's behaviour unless each one can be found and turned off.
 
 ## Proposal
 

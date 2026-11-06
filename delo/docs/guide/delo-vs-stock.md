@@ -78,7 +78,7 @@ Delo changes a few of DSH's defaults on purpose, and the parity checklist (`delo
 - A container's denial of a file access carries an environment marker, and no escalation is offered for it.
 - The main chat's write tools always ask before they run.
 - The `plugin_manager` read actions run without the full-access escalation, and a switch turns that exemption off.
-- Delo adds two tools the model can see, `preset_inspect` and the doctor, each switchable in configuration.
+- Delo adds one tool the model can see, `preset_inspect`, which is switchable in configuration. The doctor is a command you run, and no model sees it.
 
 ## What Delo removes
 

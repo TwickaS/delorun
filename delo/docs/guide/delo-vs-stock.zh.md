@@ -86,7 +86,7 @@ Delo 有意更改了 DSH 的一些默认值，对等清单（`delo/docs/referenc
 - 容器内对文件访问的拒绝会带有环境标记，且不会为其提供提权选项。
 - 主 chat 的写入类工具运行前总会询问。
 - `plugin_manager` 的读取操作无需完全访问提权即可运行，一个开关可将此豁免关闭。
-- Delo 新增了两个模型可见的工具：`preset_inspect` 与 doctor，二者均可在配置中切换。
+- Delo 新增了一个模型可见的工具 `preset_inspect`，可在配置中切换。doctor 是你运行的命令，没有模型能看到它。
 
 <a id="what-delo-removes"></a>
 

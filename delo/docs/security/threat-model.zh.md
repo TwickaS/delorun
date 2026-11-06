@@ -41,7 +41,7 @@ Delo 改变了以下默认值。对等清单（`delo/docs/reference/parity.md`�
 | 容器拒绝 | 没有 Docker 工作区 | 被容器只读根文件系统拒绝的文件操作带有标记，且没有提权提示 | 只适用于 Docker 工作区 |
 | studio 附加功能 | stock 外观，没有主 chat | 开启，包括主 chat；其中写入另一个工作区的指令、导入工作区或恢复工作区的工具每次都会询问 | 新增工具，每个持久效果都会询问 |
 | `plugin_manager` 的读取操作 | 每个操作都需要 `danger-full-access` 提权 | `list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 与 `read_config` 无需提权即可运行；`read_config` 遮盖密钥字段，并扣留非原生 schema 的 Config 的值；每个写入操作仍需提权 | 唯一一个去掉提权的默认值：范围窄、可关闭，并在对等组合中关闭 |
-| 入门模式与模型可见工具 | Standard 模式；没有 `preset_inspect` 或 doctor | 预选 PTC；增加 `preset_inspect` 与 doctor，每个都可关闭 | 不改变批准或限制 |
+| 入门模式与模型可见工具 | Standard 模式；没有 `preset_inspect` | 预选 PTC；增加 `preset_inspect`，可关闭；doctor 是命令，没有模型能看到它 | 不改变批准或限制 |
 | home 目录 | `~/.dsh` | `~/.delo`，权限模式 0700；从不读取或写入 `~/.dsh` | 分开两个 home |
 
 <a id="assets"></a>

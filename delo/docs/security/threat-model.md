@@ -39,7 +39,7 @@ Delo changes these defaults. The parity checklist (`delo/docs/reference/parity.m
 | Container denials | No Docker workspaces | A file operation that a container's read-only root refuses carries a marker and no escalation hint | Applies only in Docker workspaces |
 | Studio additions | Stock look, no main chat | On, including the main chat, whose tools that write another workspace's instructions, import a workspace or restore one ask every time | New tools, each standing effect asks |
 | `plugin_manager` read actions | Every action needs a `danger-full-access` escalation | `list_plugins`, `list_bundles`, `list_version_exemptions`, `history` and `read_config` run without it; `read_config` redacts secret fields and withholds the values of a Config that is not a native schema; every write action still escalates | The one default that removes an escalation: narrow, switchable and off in the parity composition |
-| Onboarding mode and model-visible tools | Standard mode; no `preset_inspect` or doctor | PTC preselected; `preset_inspect` and the doctor added, each switchable | No change to approvals or confinement |
+| Onboarding mode and model-visible tools | Standard mode; no `preset_inspect` | PTC preselected; `preset_inspect` added and switchable; the doctor is a command, which no model sees | No change to approvals or confinement |
 | Home directory | `~/.dsh` | `~/.delo` at mode 0700; `~/.dsh` is never read or written | Separates the two homes |
 
 ## Assets
