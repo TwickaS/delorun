@@ -26,10 +26,10 @@ DSH is an excellent harness, and its maintainers do not accept outside contribut
 
 Delo is built on a few rules it keeps everywhere:
 
-- **Stock first.** A fresh install follows the stock DSH workflow: local, no account, a command that opens the studio. Everything that touches a network is opt-in and explained before it applies.
+- **Stock first.** A fresh install follows the stock DSH workflow: local, no account, a command that opens the studio. Delo's own integrity checks run by default: the release-log check at start and the plugin revocation list. They send no personal data, and `integrity.mode: off` turns both network checks off. Every other network feature is opt-in and explained before it applies.
 - **Yours to change.** Configuration, plugins, presets, skills, themes and the studio are yours. Delo never hides a layer that overrides them.
 - **Updates never take your work away.** Before an update you see what it would break; your profile is snapshotted; one action goes back.
-- **Delo cannot get in on its own.** Your studio runs on your computer and every new device needs approval from one you already trust.
+- **Delo cannot get in on its own.** Your studio runs on your computer and every new device needs approval from one you already trust. Releases and the plugin revocation list are signed, and a revocation disables a plugin at its next load, which you can override.
 - **Honest claims.** A limit is called enforced only when it is enforced, and `delorun verify` shows what is.
 
 ## What stays the same
@@ -51,8 +51,8 @@ Delo is built on a few rules it keeps everywhere:
 | Updates | Incompatible plugins may be disabled at startup | A report of what would break before updating, a snapshot before it applies, a health check after, and rollback on every channel |
 | Your own changes | Profile layers | Profile layers plus profile history with undo, safe mode, plugin eject, and presets, skills, themes and Creator changes that survive updates |
 | Isolation | Native, with the OS sandbox confining file writes | Native, with the same sandbox also keeping commands from reading Delo's secrets or tokens, or connecting to its control sockets and the Docker socket, where your system can enforce it, which `delorun verify` reports; or Docker, with each workspace in its own container on Linux, or one shared container that isolates your computer but not projects from each other, with the limits that machine enforces listed in setup |
-| Permissions | One default for every workspace | Each workspace starts on a safer preset; full access asks once per workspace; a scheduled task names the session and preset it will run under before you approve it |
-| Web fetch | Reaches loopback and private-network hosts in every mode without asking | Refuses loopback, link-local and private-network targets, cloud metadata addresses included, unless you turn the guard off |
+| Permissions | One default for every workspace | A new workspace starts on stock's `workspace-write`; full access asks once per workspace; a scheduled task names the session and preset it will run under before you approve it |
+| Web fetch | Reaches loopback and private-network hosts in every mode without asking | Refuses loopback, link-local and private-network targets, cloud metadata addresses included, unless you turn the guard off. The guard covers the `web_fetch` tool; commands, and a proxy or remote fetch provider you configure, are outside it. |
 | Reach from other devices | Your own certificate on a LAN address, or experimental Liveshare | Your tailnet (Tailscale private or Funnel) or your own relay on your own domain, with a passkey or your own sign-in provider and approval of each new device from a trusted one |
 | Verification | None | `delorun verify` checks the release, files, isolation, exposure, sign-in, plugins and data sharing, and says what your system cannot enforce |
 | Logs | Process output in the terminal or the desktop console | Operational logs per part of Delo, rotated, with secrets redacted, and `delorun logs` to find them |
@@ -70,9 +70,14 @@ Delo changes a few of DSH's defaults on purpose, and its [parity checks](../refe
 
 - Delo's studio additions are on; the stock look is one switch away.
 - PTC is preselected when you choose a mode in onboarding.
-- Each workspace starts on a safer permission preset, and full access asks once per workspace.
+- A new workspace starts on stock's `workspace-write`; the difference is that full access asks once per workspace.
 - DSH's desktop analytics and DeepSeek session-log upload are off until you turn them on.
 - `web_fetch` refuses loopback, link-local and private-network targets.
+- Commands cannot read Delo's secrets or reach its control sockets, where your system enforces it; `delorun verify` reports which.
+- Delo asks your consent before a scheduled task is created or edited, before a model-authored write to an instruction-layer file, and when an MCP server is added, naming the command it will run.
+- A container's denial of a file access carries an environment marker, and no escalation is offered for it.
+- The main chat's write tools always ask before they run.
+- The `plugin_manager` read actions run without the full-access escalation, and a switch turns that exemption off.
 - Delo adds two tools the model can see, `preset_inspect` and the doctor, each switchable in configuration.
 
 ## What Delo removes

@@ -137,6 +137,7 @@ A list with any malformed revocation is refused as a whole; the client keeps the
 ## Fetching and caching
 
 - The Host fetches the revocation list at every start and every 6 hours while it runs, and the index when Discover opens and every 24 hours.
+- Under `integrity.mode: off` ([C15](c15-verification-checks.md#modes)) the Host fetches no revocation list, so the list becomes stale under the rule below.
 - The client stores the newest verified list and its `sequence` and fetch time at the path [C1](c01-home-layout.md) names.
 - A list with a lower `sequence` than the stored one is refused; an equal `sequence` must have identical bytes.
 - The list's cache age is the time since the client last fetched and verified a list. The maximum cache age is 24 hours.
@@ -149,6 +150,8 @@ The revocation list is stale when the cache age exceeds 24 hours, when the store
 - new catalogue installs and catalogue updates are refused;
 - installed plugins keep loading, and versions the last verified list revoked stay disabled;
 - the Host retries every 15 minutes, and the stale state ends at the first verified list.
+
+Installing a plugin from a file or directly from npm does not use the catalogue, so the stale state does not affect it.
 
 `delorun verify` reports the stale state ([C15](c15-verification-checks.md)).
 

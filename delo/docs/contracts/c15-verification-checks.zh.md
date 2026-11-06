@@ -38,7 +38,7 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 | 字段 | 类型 | 规则 |
 | --- | --- | --- |
 | `id` | 小写 kebab-case 字符串。 | 在注册表中唯一，且永不复用。 |
-| `blocks` | `none`、`start` 或 `reach`。 | 指明该检查在 `enforce` 模式下唯一可产生的效果。 |
+| `blocks` | `none`、`start`、`reach` 或 `start-always`。 | 指明该检查在 `enforce` 模式下唯一可产生的效果；`start-always` 则在每种模式下适用。 |
 | `subject` | 字符串。 | 以定义该检查的约定所用的术语，说明它检视的对象。 |
 
 <a id="checks-and-stages"></a>
@@ -50,7 +50,7 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 
 | `id` | `blocks` | 检视的对象 |
 | --- | --- | --- |
-| `release-signature` | `none` | 已安装发布版本的签名及其发布日志条目，依据发布约定。 |
+| `release-signature` | `start-always` | 已安装发布版本的签名及其发布日志条目，依据发布约定；经验证的失败在每种模式下都会阻止启动。 |
 | `runtime-files` | `start` | 运行时文件与已签名清单的比对，依据发布约定。文件被改动即为 `fail`。 |
 | `workspace-isolation` | `none` | 每个工作区实际生效的隔离，以及机器上 Docker 所实施的限制。 |
 | `confinement-rule` | `none` | 机器的沙箱方言是否使受限命令无法读取 Delo 的密钥与令牌，且无法连接其控制套接字与 Docker socket，依据运行时约定。无法实施该规则的方言结果为 `not-enforced`。 |
@@ -63,6 +63,8 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 | `home-modes` | `none` | `~/.delo` 及其密钥文件的模式。若模式含有组或其他用户的位，即为 `fail`，且详情写明修正它的 `chmod` 命令。 |
 
 启动器的运行时哈希检查不在注册表之内。它在每种模式下都会阻止被改动的运行时，因此修改 `@delo/integrity` 包不会使其失效。
+
+每条沙箱规则的状态都映射为一个验证检查结果：`enforced` 为 `pass`，`not-enforced` 为 `not-enforced`，`unconfined` 为 `fail`，`unknown` 为 `unknown`。 `confinement-rule` 检查对 [C1](c01-home-layout.zh.md#confinement-rules) 的每条规则应用该映射。
 
 <a id="results"></a>
 ### 结果
@@ -79,9 +81,10 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 
 模式为 `warn`、`enforce` 或 `off`。本人可在设置中以键 `integrity.mode` 设定它，也可用 `delorun verify --mode` 设定。
 
-- `warn`，即默认值：检查在各自的阶段运行，并报告每项结果。没有任何结果会阻止启动或远程访问。启动器的运行时哈希检查仍会阻止被改动的运行时。
+- `warn`，即默认值：检查在各自的阶段运行，并报告每项结果。除 `start-always` 的 `fail` 会阻止启动之外，没有任何结果会阻止启动或远程访问。启动器的运行时哈希检查仍会阻止被改动的运行时。
 - `enforce`：`blocks` 为 `start` 的检查若产生 `fail`，则阻止启动。`blocks` 为 `reach` 的检查若产生 `fail`，则阻止远程访问，直至结果通过。`blocks` 为 `none` 的检查若产生 `fail`，除报告与徽章外没有其他效果。
-- `off`：检查不在 `start`、`update` 或 `change` 时运行。`delorun verify` 与验证面板仍会按请求运行它们，并将模式显示为 `off`。
+- `start-always`，只用于 `release-signature`：`fail` 在每种模式下都会阻止启动，包括 `warn` 与 `off`。这种 `fail` 即经验证的发布签名或发布日志条目失败，对应 [C18](c18-release-log.zh.md) 的 `failed` 状态。`unknown` 结果永远不会阻止启动。
+- `off`：检查不在 `start`、`update` 或 `change` 时运行，但 `release-signature` 在每种模式下都会于 `start` 时进行离线验证。`integrity.mode: off` 同时停止自动运行的在线发布日志检查（[C18](c18-release-log.zh.md)）与撤销列表获取（[C13](c13-catalogue-revocation.zh.md)）。`delorun verify` 与验证面板仍会按请求运行检查，并将模式显示为 `off`。
 
 每个显示结果的界面都会同时显示模式。在任何模式下，`not-enforced` 与 `unknown` 结果都不会阻止任何操作。
 
@@ -149,6 +152,7 @@ home 报告不带签名。机器报告带有该机器密钥对报告的规范 JS
 - 只有当模式为 `enforce` 且每项检查都通过时，徽章才为绿色。
 - 启动器的运行时哈希检查与注册表相互独立，因此被修改的集成包仍会使启动器的检查失败。
 - `not-enforced` 与 `unknown` 结果永远不算作通过。
+- 经验证的发布签名或发布日志失败在每种模式下都会阻止启动；`unknown` 或 `not-enforced` 结果永远不会阻止启动。
 
 拒绝测试：
 
@@ -164,13 +168,15 @@ home 报告不带签名。机器报告带有该机器密钥对报告的规范 JS
 | `changed runtime file stops start in every mode` | 被改动的运行时文件，在 `warn` 与 `enforce` 下都会阻止启动器启动。 |
 | `enforce stops start on a runtime fail` | 在 `enforce` 下，`runtime-files` 的 `fail` 会阻止启动。 |
 | `enforce blocks reach on an exposure mismatch` | 在 `enforce` 下，`reach-binding` 的 `fail` 会阻止远程访问，直至结果通过。 |
-| `warn blocks nothing` | 在 `warn` 下，没有任何 `fail` 会阻止启动或远程访问。 |
+| `warn blocks nothing except a start-always fail` | 在 `warn` 下，除 `release-signature` 的 `fail` 外，没有任何 `fail` 会阻止启动或远程访问。 |
+| `verified release failure stops start in every mode` | `release-signature` 的 `fail` 在 `warn`、`enforce` 与 `off` 下都会阻止启动；离线检查的 `unknown` 不会阻止启动。 |
+| `off stops online checks and keeps the offline release check` | 在 `integrity.mode: off` 下，启动时启动器不发出在线发布日志请求，Host 也不发出撤销列表请求，且已存储发布版本的离线验证仍会在启动时运行。 |
 
 验收测试：
 
 - `each check fails on a planted fault in a fixture home`（每项检查在夹具 home 中植入的故障下都会失败）。
 - `every interface shows the mode with each result`（每个显示结果的界面都同时显示模式）。
-- `off mode runs no check at start, update or change`（`off` 模式在 `start`、`update` 或 `change` 时不运行任何检查）。
+- `off mode runs no online check at start, update or change; the offline release check still runs at start`（`off` 模式在 `start`、`update` 或 `change` 时不运行在线检查；离线发布检查仍在 `start` 时运行）。
 - `verify --json output states the notice and the mode`（`verify --json` 的输出写明说明与模式）。
 
 <a id="decided-values"></a>

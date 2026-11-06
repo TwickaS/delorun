@@ -38,7 +38,7 @@ Each check is one entry in the check registry of `@delo/integrity`. An entry has
 | Field | Type | Rule |
 | --- | --- | --- |
 | `id` | Lower kebab-case string. | Unique in the registry and never reused. |
-| `blocks` | `none`, `start` or `reach`. | Names the only effect the check may have in `enforce` mode. |
+| `blocks` | `none`, `start`, `reach` or `start-always`. | Names the only effect the check may have in `enforce` mode, except that `start-always` applies in every mode. |
 | `subject` | String. | Names what the check inspects, in the terms of the contract that defines it. |
 
 <a id="checks-and-stages"></a>
@@ -50,7 +50,7 @@ The registry contains these checks.
 
 | `id` | `blocks` | Inspects |
 | --- | --- | --- |
-| `release-signature` | `none` | The installed release's signature and its release-log entry, under the release contract. |
+| `release-signature` | `start-always` | The installed release's signature and its release-log entry, under the release contract. A verified failure stops the start in every mode. |
 | `runtime-files` | `start` | The runtime files against the signed manifest, under the release contract. A changed file is a `fail`. |
 | `workspace-isolation` | `none` | The isolation in effect for each workspace, and the limits that Docker enforces on the machine. |
 | `confinement-rule` | `none` | Whether the sandbox dialect of the machine keeps confined commands from reading Delo's secrets or tokens, and from connecting to its control sockets and the Docker socket, under the runtime contract. A dialect that cannot enforce it is a `not-enforced`. |
@@ -63,6 +63,8 @@ The registry contains these checks.
 | `home-modes` | `none` | The mode of `~/.delo` and of its secret files. A mode with group or other bits is a `fail`, and the detail names the `chmod` command that fixes it. |
 
 The launcher's runtime hash check is outside the registry. It stops a changed runtime in every mode, so a modified `@delo/integrity` package does not disable it.
+
+Each confinement rule state maps to a verification check result: `enforced` is `pass`, `not-enforced` is `not-enforced`, `unconfined` is `fail` and `unknown` is `unknown`. The `confinement-rule` check applies that mapping to each rule of [C1](c01-home-layout.md#confinement-rules).
 
 <a id="results"></a>
 ### Results
@@ -79,9 +81,10 @@ A check yields one of four results.
 
 The mode is `warn`, `enforce` or `off`. The person sets it in settings under the key `integrity.mode`, or with `delorun verify --mode`.
 
-- `warn`, the default: the checks run at their stages and report every result. No result stops a start or reach. The launcher's runtime hash check still stops a changed runtime.
+- `warn`, the default: the checks run at their stages and report every result. No result stops a start or reach, except a `start-always` `fail`. The launcher's runtime hash check still stops a changed runtime.
 - `enforce`: a `fail` from a check whose `blocks` is `start` stops the start. A `fail` from a check whose `blocks` is `reach` stops reach until the result passes. A `fail` from a check whose `blocks` is `none` has no effect beyond the report and the badge.
-- `off`: the checks do not run at `start`, `update` or `change`. `delorun verify` and the Verification panel still run them on request and show the mode as `off`.
+- `start-always`, used only by `release-signature`: a `fail` stops the start in every mode, including `warn` and `off`. Such a `fail` is a verified release-signature or release-log failure, the `failed` state of [C18](c18-release-log.md). An `unknown` result never blocks.
+- `off`: the checks do not run at `start`, `update` or `change`, except that `release-signature` runs its offline verification at `start` in every mode. `integrity.mode: off` also stops the automatic online release-log check ([C18](c18-release-log.md)) and the revocation-list fetch ([C13](c13-catalogue-revocation.md)). `delorun verify` and the Verification panel still run the checks on request and show the mode as `off`.
 
 Every interface that shows a result shows the mode with it. A `not-enforced` and an `unknown` result never block anything, in any mode.
 
@@ -149,6 +152,7 @@ Requirements:
 - The badge is green only in `enforce` with every check passing.
 - The launcher's runtime hash check and the registry are separate, so a modified integrity package still fails the launcher's check.
 - A `not-enforced` or an `unknown` result never counts as a pass.
+- A verified release-signature or release-log failure stops the start in every mode; an `unknown` or `not-enforced` result never does.
 
 Denial tests:
 
@@ -164,13 +168,15 @@ Denial tests:
 | `changed runtime file stops start in every mode` | A changed runtime file stops the launcher's start in `warn` and in `enforce`. |
 | `enforce stops start on a runtime fail` | In `enforce`, a `fail` from `runtime-files` stops the start. |
 | `enforce blocks reach on an exposure mismatch` | In `enforce`, a `fail` from `reach-binding` stops reach until the result passes. |
-| `warn blocks nothing` | In `warn`, no `fail` stops a start or reach. |
+| `warn blocks nothing except a start-always fail` | In `warn`, no `fail` stops a start or reach, except a `fail` from `release-signature`. |
+| `verified release failure stops start in every mode` | A `fail` from `release-signature` stops the start in `warn`, `enforce` and `off`, and an `unknown` from an offline check does not. |
+| `off stops online checks and keeps the offline release check` | With `integrity.mode: off`, the launcher sends no online release-log request and the Host sends no revocation-list request at start, and the stored bundle's offline verification still runs at start. |
 
 Acceptance tests:
 
 - `each check fails on a planted fault in a fixture home`.
 - `every interface shows the mode with each result`.
-- `off mode runs no check at start, update or change`.
+- `off mode runs no online check at start, update or change; the offline release check still runs at start`.
 - `verify --json output states the notice and the mode`.
 
 <a id="decided-values"></a>

@@ -102,6 +102,8 @@ targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.z
 
 状态按已安装的发布版本分别存储在 [C1](c01-home-layout.zh.md) 指定的路径下，`delorun verify`、`delorun status` 与 studio 的验证面板会连同发布版本号一起显示它（[C15](c15-verification-checks.zh.md)）。
 
+在 `integrity.mode: off`（[C15](c15-verification-checks.zh.md#modes)）下，在线检查不运行。仅能离线验证的发布版本因此保持 `unchecked`，启动警告与重试均不适用。每次启动时的离线验证仍会运行，其经验证的失败在每种模式下都会阻止启动，如 R5 所要求。
+
 <a id="behaviour-per-client"></a>
 
 ## 各客户端的行为

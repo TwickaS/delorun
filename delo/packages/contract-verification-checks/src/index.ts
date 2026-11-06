@@ -39,8 +39,11 @@ export const VERIFICATION_RESULTS = ['pass', 'fail', 'not-enforced', 'unknown'] 
 /** One result of {@link VERIFICATION_RESULTS}. */
 export type VerificationResult = (typeof VERIFICATION_RESULTS)[number]
 
-/** The only effect a check may have in `enforce` mode. */
-export const VERIFICATION_BLOCKS = ['none', 'start', 'reach'] as const
+/**
+ * Effects a check may have. `start` and `reach` apply in `enforce` mode. `start-always` applies in
+ * every mode and is used only by a verified release-signature failure.
+ */
+export const VERIFICATION_BLOCKS = ['none', 'start', 'reach', 'start-always'] as const
 
 /** One effect of {@link VERIFICATION_BLOCKS}. */
 export type VerificationBlocks = (typeof VERIFICATION_BLOCKS)[number]
@@ -63,7 +66,7 @@ export const VERIFICATION_CHECK_IDS = [
 /** One check identifier of {@link VERIFICATION_CHECK_IDS}. */
 export type VerificationCheckId = (typeof VERIFICATION_CHECK_IDS)[number]
 
-/** One registry entry: the check, the only effect it may have in `enforce` mode, and what it inspects. */
+/** One registry entry: the check, its effect (see {@link VERIFICATION_BLOCKS}), and what it inspects. */
 export interface VerificationCheckEntry {
   readonly id: VerificationCheckId
   readonly blocks: VerificationBlocks
@@ -72,7 +75,7 @@ export interface VerificationCheckEntry {
 
 /** The check registry. Every entry runs in every run. */
 export const VERIFICATION_CHECKS = [
-  { id: 'release-signature', blocks: 'none', subject: 'The installed release signature and its release-log entry.' },
+  { id: 'release-signature', blocks: 'start-always', subject: 'The installed release signature and its release-log entry; a verified failure stops the start in every mode.' },
   { id: 'runtime-files', blocks: 'start', subject: 'The runtime files against the signed manifest.' },
   { id: 'workspace-isolation', blocks: 'none', subject: 'The isolation in effect for each workspace and the Docker limits.' },
   { id: 'confinement-rule', blocks: 'none', subject: 'Whether the sandbox dialect denies confined commands the paths under the home and the Docker socket.' },

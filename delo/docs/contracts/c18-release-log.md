@@ -90,6 +90,8 @@ When the client cannot reach the distributor or the log, or the latest witnessed
 
 The state is stored per installed release at the path [C1](c01-home-layout.md) names, and `delorun verify`, `delorun status` and the studio's Verification panel show it with the release's version ([C15](c15-verification-checks.md)).
 
+Under `integrity.mode: off` ([C15](c15-verification-checks.md#modes)), the online check does not run. A release whose bundle verifies offline then stays `unchecked`, and the start warning and retries do not apply. The offline verification still runs at each start, and a verified failure of it stops the start in every mode, as R5 requires.
+
 ## Behaviour per client
 
 | Client | Install or update | Start |

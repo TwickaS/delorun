@@ -151,6 +151,7 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 ## 获取与缓存
 
 - Host 在每次启动时以及运行期间每 6 小时获取撤销列表，并在 Discover 打开时以及每 24 小时获取索引文件。
+- 在 `integrity.mode: off`（[C15](c15-verification-checks.zh.md#modes)）下，Host 不获取撤销列表，因此撤销列表按下述规则进入陈旧状态。
 - 客户端把最新的已验证列表及其 `sequence` 与获取时间存储在 [C1](c01-home-layout.zh.md) 指定的路径。
 - `sequence` 低于已存储值的列表会被拒绝；`sequence` 相等的列表必须具有完全相同的字节。
 - 列表的缓存时长是自客户端上一次获取并验证列表以来经过的时间。最长缓存时长为 24 小时。
@@ -165,6 +166,8 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 - 新的插件索引安装与插件索引更新会被拒绝；
 - 已安装的插件继续加载，上一份已验证列表所撤销的版本保持停用；
 - Host 每 15 分钟重试一次，陈旧状态在第一份通过验证的列表出现时结束。
+
+从文件安装插件或直接从 npm 安装插件不经过插件索引，因此不受陈旧状态影响。
 
 `delorun verify` 会报告陈旧状态（[C15](c15-verification-checks.zh.md)）。
 
