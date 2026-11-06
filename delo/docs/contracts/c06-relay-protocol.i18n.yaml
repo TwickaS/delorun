@@ -12,8 +12,8 @@
   en: 520603bab27a215e
   zh: a2d230274d0d6adf
 /contract-c6-relay-protocol/contents:
-  en: fcb9f87001f7273a
-  zh: 3224fa46351f4c66
+  en: 9b819cb8e9a4be68
+  zh: 286d66da363fb716
 /contract-c6-relay-protocol/contract:
   en: 96b2246f7b10179f
   zh: 845e6240c0e8aaea
@@ -66,8 +66,11 @@
   en: 78fe0b5de2efd15c
   zh: 82bbc837e6a1a356
 /contract-c6-relay-protocol/security:
-  en: ae1ed3478ef0490d
-  zh: 6c900c64900bc447
+  en: 1c132c28889854e4
+  zh: 24887abe5fdabbeb
+/contract-c6-relay-protocol/security/what-this-does-not-prove:
+  en: 95dd4cab0ae99733
+  zh: 824ac72c67ebfe8d
 /contract-c6-relay-protocol/decided-values:
   en: a45973ea64995eb6
   zh: ee23b9a2333f3d91

@@ -35,6 +35,7 @@ home 只把浏览器或桌面应用作为受信任设备（trusted device）接�
 - [消费方](#consumers)
 - [兼容性](#compatibility)
 - [安全](#security)
+  - [本约定不能证明的内容](#what-this-does-not-prove)
 - [决定的取值](#decided-values)
 
 <a id="contract"></a>
@@ -295,6 +296,14 @@ Delo Run 信箱经由 Delo Run 在设备之间传递由设备签名的批准；�
 | `a desktop refuses a substituted certificate and an unsigned re-pin` | 已固定的应用拒绝不同于已固定叶密钥的叶密钥，并拒绝未由 home 密钥签名的新固定。 |
 | `a relay-asserted address is marked unverified` | 经由中继到达、且中继声明了预置客户端地址的批准请求，会以未验证标签显示该地址，或将其省略。 |
 | `a headless alert reaches its channels` | 在没有屏幕的夹具 home 上发出的告警，会产生签名可用 home 密钥验证的告警文件、受信任设备下一次连接时的告警页面，以及在已配置时的一次命令运行与一次 webhook 投递。 |
+
+<a id="what-this-does-not-prove"></a>
+### 本约定不能证明的内容
+
+- **转发路径上的按来源限额。** 在中继、Funnel 与 Tailscale 路径上，请求的来源地址由中继、`tailscaled` 或转发请求头声称，而在回退方案下，本地进程可以伪造它。因此按来源的限额在这些路径上只是建议性的；在这些路径上成立的限额是每个 home 最多 5 个待处理请求。
+- **`attestation: "none"` 下的用户验证。** home 读取认证器设置的用户已验证标志，但不验证由哪个认证器作出断言，因此该标志的可信程度只取决于该认证器。
+- **被截获的中继路径上的告警页面。** 截获中继路径的一方可以提供自己的页面并丢弃告警页面；告警文件、home 自己的屏幕以及已配置的命令或 webhook 不依赖该路径。证书检测还要等到某个日志收录该证书之后（[C6](c06-relay-protocol.zh.md#certificate-monitoring)），在此之前不会发出告警。
+- **本人自己的进程。** 本人用户在沙箱之外的进程可以读取 home 密钥与设备记录，并可以批准设备；这些规则防范的是其他方，而不是这类进程（[C1](c01-home-layout.zh.md#security)）。
 
 <a id="decided-values"></a>
 ## 决定的取值

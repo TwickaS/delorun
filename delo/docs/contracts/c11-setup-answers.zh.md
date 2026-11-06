@@ -40,7 +40,7 @@ setup 按以下顺序提出这些问题。本人接受默认值时即采用该�
 | 运行时 | `native`，或 `docker` 加一种形态与一种资源预设。 | `native` |
 | studio 附加功能 | 开或关。关闭即 stock 外观。 | 开 |
 | 从任何地方远程访问 | 无、Tailscale 私有、Tailscale Funnel 或自托管中继。 | 无 |
-| 远程访问开启时的身份因子 | 通行密钥、OpenID Connect 登录，或用于 tailnet 私有远程访问的 tailnet 身份。 | 远程访问为无时为无。每个公开远程访问方式都必须有一个。 |
+| 远程访问开启时的身份因子 | 通行密钥、OpenID Connect 登录，或在 C7 的套接字变体生效时用于 tailnet 私有远程访问的 tailnet 身份。 | 远程访问为无时为无。每个公开远程访问方式都必须有一个。 |
 | 设置其他模型 | 是或否。选择是会设置 studio 新手引导标志，用于推荐提供方插件。 | 否 |
 | 上游桌面分析 | 开或关。 | 关 |
 | DeepSeek 会话日志上传 | 开或关。 | 关 |
@@ -75,7 +75,7 @@ Delo 中继不在 setup 的远程访问选项之列。setup 读取 stock home �
 | `studioAdditions` | 布尔值。 | `true` | `false` 选择 stock 外观。 |
 | `runtime` | `{ "kind": "native" }`，或 `{ "kind": "docker", "shape": "S2" 或 "S3", "preset": "small"、"balanced"、"large" 或 "advanced" }`。 | `{ "kind": "native" }` | Docker 形态与预设取自 Docker 运行时约定。 |
 | `reach.option` | `none`、`tailscale-private`、`tailscale-funnel` 或 `self-hosted-relay`。 | `none` | 非 `none` 的取值只在交互形式中接受。 |
-| `reach.identityFactor` | `passkey`、`oidc`、`tailnet` 或 `null`。 | `null` | 选项为 `none` 时为 `null`。`tailscale-funnel` 与 `self-hosted-relay` 只能为 `passkey` 或 `oidc`。`tailscale-private` 可为 `passkey`、`oidc` 或 `tailnet`。 |
+| `reach.identityFactor` | `passkey`、`oidc`、`tailnet` 或 `null`。 | `null` | 选项为 `none` 时为 `null`。`tailscale-funnel` 与 `self-hosted-relay` 只能为 `passkey` 或 `oidc`。`tailscale-private` 可为 `passkey`、`oidc` 或 `tailnet`。`tailnet` 只在 C7 的套接字变体下可用（[C7](c07-reach-providers.zh.md#tailscale-serve-target)），否则 setup 以 `TAILNET_IDENTITY_UNAVAILABLE` 拒绝它。`ts.net` 地址上的 `passkey` 只在 C14 使通行密钥在该处可用时才可用（[C14](c14-oidc-passkeys.zh.md#relying-party-ids)），否则 setup 以 `PASSKEY_UNAVAILABLE` 拒绝它。 |
 | `helpSetUpModels` | 布尔值。 | `false` | 设置新手引导标志。 |
 | `sessionLogUpload` | 布尔值。 | `false` | 对应上游的会话日志选择加入项。 |
 | `desktopAnalytics` | 布尔值。 | `false` | 对应上游的桌面分析选择加入项。 |

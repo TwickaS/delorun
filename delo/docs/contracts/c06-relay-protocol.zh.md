@@ -33,6 +33,7 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 - [消费方](#consumers)
 - [兼容性](#compatibility)
 - [安全](#security)
+  - [本约定不能证明的内容](#what-this-does-not-prove)
 - [决定的取值](#decided-values)
 
 <a id="contract"></a>
@@ -242,6 +243,14 @@ Delo 中继位于 `delo.run` 名称下，其中继控制面位于 Delo Run 上�
 | `oversized and malformed frames close the tunnel` | 超过 65,536 字节的 `DATA` 负载以 4413 关闭，未知帧类型以 4400 关闭。 |
 | `a wildcard certificate for the home's domain raises the alert` | 一张夹具 `*.example.com` 证书，以及一张列出 home 名称的多名称证书，在 home 的 ACME 账户未记录它们时，各自都会发起 `unrequested-certificate` 并关闭中继隧道。 |
 | `an unexplained certificate keeps the tunnel closed` | 在告警未说明期间，中继客户端不打开任何隧道；从回环监听器对其作出说明后，隧道打开。 |
+
+<a id="what-this-does-not-prove"></a>
+### 本约定不能证明的内容
+
+- **证书日志时间窗。** 监控只有在某个日志收录证书且下一次查询运行之后才能看到该证书，这一延迟由每个日志的收录策略界定。在这段延迟内隧道保持打开，持有该证书的截获方不会被检测到。
+- **被截获路径上的告警页面。** 提供自己页面的截获方会在该路径上丢弃 home 的告警页面；home 检测到该证书时会关闭隧道，告警则通过 [C5](c05-device-approval.zh.md#alerts) 中不经过中继的渠道送达本人。
+- **中继运营者。** 中继能看到每个连接的名称、客户端地址、时间与流量大小，可以拒绝或丢弃任何连接，并且在自托管中继上可以用 `forceRebind` 重新绑定名称。其运营者就是本人，因此本约定保护的是 studio 内容不被中继读取，而不是中继的服务。
+- **地址。** 中继的 `clientAddress` 是它自己的声称，home 上没有任何东西能核对它。
 
 <a id="decided-values"></a>
 ## 决定的取值

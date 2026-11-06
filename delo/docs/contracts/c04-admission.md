@@ -28,6 +28,7 @@ Admission decides, for every HTTP request and every upgrade that reaches a home'
 - [Consumers](#consumers)
 - [Compatibility](#compatibility)
 - [Security](#security)
+  - [What this does not prove](#what-this-does-not-prove)
 - [Decided values](#decided-values)
 
 <a id="contract"></a>
@@ -238,6 +239,14 @@ Denial tests:
 | `a script URL outside the allowlist does not load` | A script element whose `src` is a same-origin path not in the boot manifest, or another origin, is refused by the policy and never requested. |
 | `a community plugin's HTML loses its scripts` | A fixture client plugin that assigns HTML containing `<script>` and an `onerror` attribute renders the rest of the HTML with neither. |
 | `a remote image in chat is never requested` | A recorded fixture chat whose message holds a Markdown image with a remote URL renders a placeholder on a reach listener, and a network guard records no request to the remote host. |
+
+<a id="what-this-does-not-prove"></a>
+### What this does not prove
+
+- **Code on a trusted origin.** Admission decides who reaches the Host, not what admitted code does. A community client plugin, or script that defeats the sanitiser, runs on the studio's origin with the session's full authority; the Content Security Policy and Trusted Types limit how script and requests get in, not code the person installed.
+- **Every device is the owner.** Each trusted device's Peer acts as upstream's `owner` principal, so this contract gives no device less authority than another.
+- **The person's own processes.** A process of the person's user outside the sandbox can read the home's secrets, including the browser session secret, and can mint loopback credentials and edit the session store; the session limits protect against other parties, not against it ([C1](c01-home-layout.md#security)).
+- **Remote content outside chat rendering.** The placeholder rule covers images and media that the studio renders in chat content; other requests a client plugin makes are refused only by the Content Security Policy.
 
 <a id="decided-values"></a>
 ## Decided values

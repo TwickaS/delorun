@@ -40,7 +40,7 @@ Setup asks these questions, in this order. The default applies when the person a
 | Runtime | `native`, or `docker` with a shape and a resource preset. | `native` |
 | Studio additions | On or off. Off is the stock look. | On |
 | Reach from anywhere | None, Tailscale private, Tailscale Funnel or a self-hosted relay. | None |
-| Identity factor, when reach is on | A passkey, an OpenID Connect sign-in, or tailnet identity for tailnet-private reach. | None when reach is none. Required for each public reach option. |
+| Identity factor, when reach is on | A passkey, an OpenID Connect sign-in, or tailnet identity for tailnet-private reach where C7's socket variant is in force. | None when reach is none. Required for each public reach option. |
 | Set up other models | Yes or no. Yes sets the studio onboarding flag that recommends provider plugins. | No |
 | Upstream desktop analytics | On or off. | Off |
 | DeepSeek session-log upload | On or off. | Off |
@@ -75,7 +75,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 | `studioAdditions` | Boolean. | `true` | `false` selects the stock look. |
 | `runtime` | `{ "kind": "native" }`, or `{ "kind": "docker", "shape": "S2" or "S3", "preset": "small", "balanced", "large" or "advanced" }`. | `{ "kind": "native" }` | Docker shapes and presets are those of the Docker runtime contract. |
 | `reach.option` | `none`, `tailscale-private`, `tailscale-funnel` or `self-hosted-relay`. | `none` | Any value other than `none` is accepted only in the interactive form. |
-| `reach.identityFactor` | `passkey`, `oidc`, `tailnet` or `null`. | `null` | `null` when the option is `none`. `passkey` or `oidc` for `tailscale-funnel` and `self-hosted-relay`. `passkey`, `oidc` or `tailnet` for `tailscale-private`. |
+| `reach.identityFactor` | `passkey`, `oidc`, `tailnet` or `null`. | `null` | `null` when the option is `none`. `passkey` or `oidc` for `tailscale-funnel` and `self-hosted-relay`. `passkey`, `oidc` or `tailnet` for `tailscale-private`. `tailnet` is available only under C7's socket variant ([C7](c07-reach-providers.md#tailscale-serve-target)); otherwise setup refuses it with `TAILNET_IDENTITY_UNAVAILABLE`. `passkey` on a `ts.net` address is available only where C14 makes passkeys available there ([C14](c14-oidc-passkeys.md#relying-party-ids)); otherwise setup refuses it with `PASSKEY_UNAVAILABLE`. |
 | `helpSetUpModels` | Boolean. | `false` | Sets the onboarding flag. |
 | `sessionLogUpload` | Boolean. | `false` | Maps to upstream's session-log opt-in. |
 | `desktopAnalytics` | Boolean. | `false` | Maps to upstream's desktop analytics opt-in. |

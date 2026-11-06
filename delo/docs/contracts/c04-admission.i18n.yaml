@@ -12,8 +12,8 @@
   en: f41e8395a1daeae4
   zh: b4978ad880411986
 /contract-c4-admission-and-listeners/contents:
-  en: 4582ced9e7f2914c
-  zh: 5afe9f4645af3de0
+  en: d1059fdba7423979
+  zh: c175c55ed9390195
 /contract-c4-admission-and-listeners/contract:
   en: 39cadec1d5dc150e
   zh: add9ad7d3bf31526
@@ -51,8 +51,11 @@
   en: 7345dc83de8aacce
   zh: 1707bebc04a8d8e7
 /contract-c4-admission-and-listeners/security:
-  en: d460ef48e18255f8
-  zh: bbbc5fce53fedf27
+  en: 01e65d11fada6ae0
+  zh: 160cff090b816af0
+/contract-c4-admission-and-listeners/security/what-this-does-not-prove:
+  en: 8fe953058c0a12bd
+  zh: b486ff093af3cc93
 /contract-c4-admission-and-listeners/decided-values:
   en: 53fa99724f726790
   zh: 4a5ebba028768f50

@@ -35,6 +35,7 @@ A home admits a browser or desktop app only as a trusted device: a device whose 
 - [Consumers](#consumers)
 - [Compatibility](#compatibility)
 - [Security](#security)
+  - [What this does not prove](#what-this-does-not-prove)
 - [Decided values](#decided-values)
 
 <a id="contract"></a>
@@ -295,6 +296,14 @@ Denial tests:
 | `a desktop refuses a substituted certificate and an unsigned re-pin` | A pinned app refuses a leaf key other than the pinned one, and refuses a new pin not signed by the home key. |
 | `a relay-asserted address is marked unverified` | An approval request arriving through a relay that asserts a planted client address renders that address with the unverified label, or omits it. |
 | `a headless alert reaches its channels` | An alert on a fixture home with no screen produces an alert file whose signature verifies with the home key, the alert page on a trusted device's next connection, and one command run and one webhook delivery when configured. |
+
+<a id="what-this-does-not-prove"></a>
+### What this does not prove
+
+- **Per-source limits on forwarded paths.** On the relay, Funnel and Tailscale paths, the source address of a request is asserted by the relay, `tailscaled` or a forwarding header, and under the fallback a local process can forge it. The per-source limits are advisory there; the limit that holds is 5 pending requests per home.
+- **User verification under `attestation: "none"`.** The home reads the user-verified flag that the authenticator sets and does not verify which authenticator made the assertion, so the flag is only as trustworthy as that authenticator.
+- **The alert page on an intercepted relay path.** A party that intercepts a relay path can serve its own page and drop the alert page; the alert file, the home's own screen and the configured command or webhook do not depend on that path. Detection of a certificate also waits until a log includes it ([C6](c06-relay-protocol.md#certificate-monitoring)), and no alert is raised before that.
+- **The person's own processes.** A process of the person's user outside the sandbox can read the home key and the device records and can approve devices; these rules protect against other parties, not against it ([C1](c01-home-layout.md#security)).
 
 <a id="decided-values"></a>
 ## Decided values

@@ -12,8 +12,8 @@
   en: 3422bca140d69d65
   zh: d562d681166433b4
 /contract-c14-openid-connect-and-passkeys/contents:
-  en: dea6a2e4dfb61b80
-  zh: 8c59fce53cd64e26
+  en: 7c6f368f028fa9ca
+  zh: fa4c279df5c22264
 /contract-c14-openid-connect-and-passkeys/contract:
   en: 01be7ced4357bf93
   zh: d0b98165ff86d494
@@ -63,8 +63,11 @@
   en: 33920b0a42258627
   zh: 1dbaa430a41344f7
 /contract-c14-openid-connect-and-passkeys/security:
-  en: 7cc57f41c5706e60
-  zh: d376f4c56a86748b
+  en: 42cf4f706d8e7282
+  zh: 59880d9ccc48bd08
+/contract-c14-openid-connect-and-passkeys/security/what-this-does-not-prove:
+  en: 5e12e09959296356
+  zh: 49c4a4225c49faf7
 /contract-c14-openid-connect-and-passkeys/decided-values:
   en: 0963e19916032bcd
   zh: 899291ad0c5ad41d

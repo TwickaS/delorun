@@ -30,6 +30,7 @@ description: "约定 C7：远程访问提供方的 Service Definition 及其状�
 - [消费方](#consumers)
 - [兼容性](#compatibility)
 - [安全](#security)
+  - [本约定不能证明的内容](#what-this-does-not-prove)
 - [决定的取值](#decided-values)
 
 <a id="contract"></a>
@@ -226,6 +227,14 @@ Delo 中继（Delo relay）客户端是一项后续功能：Delo 1.0 不注册�
 | `with a relay in the path the home starts no off-home challenge` | 针对 ACME 替身，中继位于路径中时 home 发起的每个质询都是由 home 的远程访问监听器响应的 TLS-ALPN-01，且 home 不发起任何 HTTP-01 或 DNS-01 质询。 |
 | `a challenge delegated to Delo blocks the provider` | 指向 `delo.run` 的 `_acme-challenge` CNAME 使提供方以 `CHALLENGE_DELEGATED` 进入 `blocked`。 |
 | `Funnel and serve cannot share a port` | 以相同端口启用两种方式会以 `PORT_CONFLICT` 失败。 |
+
+<a id="what-this-does-not-prove"></a>
+### 本约定不能证明的内容
+
+- **CAA `validationmethods` 检查。** `own-domain-caa` 断言 `validationmethods=tls-alpn-01`，因为 Let's Encrypt 支持 RFC 8657 参数，远程访问工作包的证书测试会对照 Let's Encrypt 文档所述的行为确认这一点。该检查通过 home 的解析器读取记录；在签发时起作用的控制是证书颁发机构自己的查询。
+- **Windows。** Windows 没有针对 Unix 套接字的对端凭据检查，因此没有套接字变体：无论 spike 在其他平台上记录什么，Windows 上的约定都是回退方案。
+- **Tailscale。** 除非开启 Tailnet Lock，否则 Tailscale 的协调服务可以向 tailnet 添加设备，并且 Tailscale 获取 `ts.net` 证书；Delo 的任何检查都无法检测这两者。
+- **回退方案下的本地进程。** 在回退方案下，任何本地进程都可以连接 Tailscale 私有目标；它随后只会像远程设备那样获得准入，因此本约定不阻止它尝试登录。
 
 <a id="decided-values"></a>
 ## 决定的取值

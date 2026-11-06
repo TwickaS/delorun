@@ -12,8 +12,8 @@
   en: 75955425d852b11a
   zh: 9c45d4afb5858011
 /contract-c7-reach-providers/contents:
-  en: 06eb63cbd8f38e92
-  zh: ad9de4eb35ed8284
+  en: 5b11358485b626f4
+  zh: de157daf3d2ff3a5
 /contract-c7-reach-providers/contract:
   en: 10b83fa3a579072f
   zh: 8812008c5de02731
@@ -57,8 +57,11 @@
   en: a33c180e4a25c00e
   zh: d81dc90c4fee1c5e
 /contract-c7-reach-providers/security:
-  en: 79553623e4e4edd8
-  zh: 4eae33ce0a99420c
+  en: 929628105bb15816
+  zh: 615bcf9e37f82096
+/contract-c7-reach-providers/security/what-this-does-not-prove:
+  en: c6a84ba56440fffe
+  zh: 70c19480ba9c7215
 /contract-c7-reach-providers/decided-values:
   en: d3c1cbc678526afe
   zh: fca1c4e65299c8ec

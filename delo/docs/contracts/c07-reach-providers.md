@@ -30,6 +30,7 @@ A reach provider turns one reach option on or off: it connects a reach listener 
 - [Consumers](#consumers)
 - [Compatibility](#compatibility)
 - [Security](#security)
+  - [What this does not prove](#what-this-does-not-prove)
 - [Decided values](#decided-values)
 
 <a id="contract"></a>
@@ -226,6 +227,14 @@ Denial tests:
 | `with a relay in the path the home starts no off-home challenge` | Against the ACME stand-in, every challenge the home starts while the relay is in the path is TLS-ALPN-01 answered by the home's reach listener, and it starts no HTTP-01 or DNS-01 challenge. |
 | `a challenge delegated to Delo blocks the provider` | A `_acme-challenge` CNAME into `delo.run` puts the provider in `blocked` with `CHALLENGE_DELEGATED`. |
 | `Funnel and serve cannot share a port` | Enabling both options with the same port fails with `PORT_CONFLICT`. |
+
+<a id="what-this-does-not-prove"></a>
+### What this does not prove
+
+- **The CAA `validationmethods` check.** `own-domain-caa` asserts `validationmethods=tls-alpn-01` because Let's Encrypt supports the RFC 8657 parameters, which the certificates tests of the reach work package confirm against Let's Encrypt's documented behaviour. The check reads the record through the home's resolver; the certificate authority's own lookup is the control that applies at issuance.
+- **Windows.** Windows has no peer-credential check for a Unix socket, so it has no socket variant: the fallback is the contract there whatever a spike records on other platforms.
+- **Tailscale.** Tailscale's coordination service can add a device to the tailnet unless Tailnet Lock is on, and Tailscale obtains the `ts.net` certificate; no Delo check detects either.
+- **A local process under the fallback.** Under the fallback any local process can connect to the Tailscale private target; it is then admitted only as a remote device would be, so this contract does not keep it from trying to sign in.
 
 <a id="decided-values"></a>
 ## Decided values

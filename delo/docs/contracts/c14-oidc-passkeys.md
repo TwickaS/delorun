@@ -32,6 +32,7 @@ Reach asks for an identity factor in addition to device approval: a passkey, or 
 - [Consumers](#consumers)
 - [Compatibility](#compatibility)
 - [Security](#security)
+  - [What this does not prove](#what-this-does-not-prove)
 - [Decided values](#decided-values)
 
 <a id="contract"></a>
@@ -233,6 +234,13 @@ Denial tests:
 | `a regressed counter is refused` | An assertion whose counter is not greater than a non-zero stored counter is refused. |
 | `a passkey on a ts.net address is refused under the current contract` | Passkey registration and assertion options on a `ts.net` address answer `PASSKEY_UNAVAILABLE`. |
 | `a stale re-authentication is refused` | A `reauth` token with `auth_time` older than 120 seconds, or with a `nonce` other than the approval hash, does not approve. |
+
+<a id="what-this-does-not-prove"></a>
+### What this does not prove
+
+- **User verification under `attestation: "none"`.** The home reads the user-verified flag the authenticator sets and does not verify the authenticator, so the flag is only as trustworthy as the authenticator that made the assertion.
+- **The person's provider.** The OpenID Connect provider can sign a valid token for the pinned subject, and an attacker who controls the person's account there can sign in with it; device approval is the control that still applies.
+- **Shared relying-party IDs.** Where a spike result makes passkeys available on `ts.net`, a private address and a Funnel address of one machine share a relying-party ID; the per-address binding in the home, not the browser, keeps their passkeys apart.
 
 <a id="decided-values"></a>
 ## Decided values

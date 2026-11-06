@@ -32,6 +32,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 - [消费方](#consumers)
 - [兼容性](#compatibility)
 - [安全](#security)
+  - [本约定不能证明的内容](#what-this-does-not-prove)
 - [决定的取值](#decided-values)
 
 <a id="contract"></a>
@@ -233,6 +234,13 @@ Delo Run 签发方让本人可以用 Delo Run 账户登录，它是一项后续�
 | `a regressed counter is refused` | 计数器不大于非零已存储计数器的断言被拒绝。 |
 | `a passkey on a ts.net address is refused under the current contract` | `ts.net` 地址上的通行密钥注册选项与断言选项返回 `PASSKEY_UNAVAILABLE`。 |
 | `a stale re-authentication is refused` | `auth_time` 距今超过 120 秒，或 `nonce` 不是批准哈希的 `reauth` 令牌，不会批准。 |
+
+<a id="what-this-does-not-prove"></a>
+### 本约定不能证明的内容
+
+- **`attestation: "none"` 下的用户验证。** home 读取认证器设置的用户已验证标志，但不验证认证器本身，因此该标志的可信程度只取决于作出断言的认证器。
+- **本人的提供方。** OpenID Connect 提供方可以为被固定的主体签发有效令牌，控制本人在该处账户的攻击者也可以用它登录；此时仍然起作用的控制是设备批准。
+- **共享的依赖方 ID。** 在 spike 结果使 `ts.net` 上可以使用通行密钥的情况下，同一台机器的私有地址与 Funnel 地址共享一个依赖方 ID；把它们的通行密钥区分开的是 home 中按地址的绑定，而不是浏览器。
 
 <a id="decided-values"></a>
 ## 决定的取值

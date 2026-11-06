@@ -28,6 +28,7 @@ description: "约定 C4：上游连接中的准入 seam、回环与远程访问�
 - [消费方](#consumers)
 - [兼容性](#compatibility)
 - [安全](#security)
+  - [本约定不能证明的内容](#what-this-does-not-prove)
 - [决定的取值](#decided-values)
 
 <a id="contract"></a>
@@ -238,6 +239,14 @@ cookie 名称 `__Host-delo-session`、监听器 id、拒绝代码以及会话存
 | `a script URL outside the allowlist does not load` | `src` 为不在启动 manifest 中的同源路径、或为其他 origin 的 script 元素，被该策略拒绝，且从不被请求。 |
 | `a community plugin's HTML loses its scripts` | 一个赋值含 `<script>` 与 `onerror` 属性的 HTML 的 fixture 客户端插件，渲染出 HTML 的其余部分，且两者都不保留。 |
 | `a remote image in chat is never requested` | 一个录制的 fixture chat，其消息含有带远程 URL 的 Markdown 图片；它在远程访问监听器上渲染为占位符，且网络防护没有记录到对该远程主机的任何请求。 |
+
+<a id="what-this-does-not-prove"></a>
+### 本约定不能证明的内容
+
+- **受信任源上的代码。** 准入决定谁能访问 Host，而不决定已获准入的代码做什么。社区客户端插件，或绕过净化器的脚本，以会话的全部权限在 studio 的源上运行；内容安全策略与 Trusted Types 限制脚本和请求如何进入，而不限制本人安装的代码。
+- **每台设备都是所有者。** 每台受信任设备的 Peer 都以上游的 `owner` 主体行事，因此本约定不会让任何设备的权限低于另一台设备。
+- **本人自己的进程。** 本人用户在沙箱之外的进程可以读取 home 的机密（包括浏览器会话密钥），可以签发回环凭据并修改会话存储；会话限额防范的是其他方，而不是这类进程（[C1](c01-home-layout.zh.md#security)）。
+- **聊天渲染之外的远程内容。** 占位符规则覆盖 studio 在聊天内容中渲染的图片与媒体；客户端插件发出的其他请求只由内容安全策略拒绝。
 
 <a id="decided-values"></a>
 ## 决定的取值

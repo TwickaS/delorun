@@ -33,6 +33,7 @@ A relay lets a browser reach a home that accepts no inbound connection. The home
 - [Consumers](#consumers)
 - [Compatibility](#compatibility)
 - [Security](#security)
+  - [What this does not prove](#what-this-does-not-prove)
 - [Decided values](#decided-values)
 
 <a id="contract"></a>
@@ -242,6 +243,14 @@ Denial tests:
 | `oversized and malformed frames close the tunnel` | A `DATA` payload over 65,536 bytes closes with 4413, and an unknown frame type closes with 4400. |
 | `a wildcard certificate for the home's domain raises the alert` | A fixture `*.example.com` certificate, and a multi-name certificate listing the home's name, unrecorded by the home's ACME account, each raise `unrequested-certificate` and close the relay tunnel. |
 | `an unexplained certificate keeps the tunnel closed` | While the alert is unexplained, the relay client opens no tunnel; after it is explained from the loopback listener, the tunnel opens. |
+
+<a id="what-this-does-not-prove"></a>
+### What this does not prove
+
+- **The certificate log window.** Monitoring sees a certificate only after a log includes it and the next query runs, a delay that each log's inclusion policy bounds. During that delay the tunnel stays open, and an interceptor holding that certificate is not detected.
+- **The alert page on an intercepted path.** An interceptor that serves its own page drops the home's alert page on that path; the home closes the tunnel when it detects the certificate, and the alert reaches the person through the channels of [C5](c05-device-approval.md#alerts) that do not use the relay.
+- **The relay operator.** The relay sees each connection's name, client address, timing and volume, can refuse or drop any connection, and, on the self-hosted relay, can rebind a name with `forceRebind`. Its operator is the person, so this contract protects the studio's content from the relay, not the relay's service.
+- **Addresses.** The relay's `clientAddress` is its own assertion, and nothing on the home can check it.
 
 <a id="decided-values"></a>
 ## Decided values

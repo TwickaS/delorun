@@ -12,8 +12,8 @@
   en: 5bb9938e84c122a9
   zh: d23290cb4f4c02a6
 /contract-c5-device-approval/contents:
-  en: 4901a555090a5349
-  zh: 347f205ff67c59a0
+  en: e356f5bdfd74bf46
+  zh: 4597fae68e13e2b6
 /contract-c5-device-approval/contract:
   en: f01b7dcd9a443524
   zh: 612df9cabb1d68ca
@@ -72,8 +72,11 @@
   en: bc38a28d4da65407
   zh: 05b69b92e20f6d83
 /contract-c5-device-approval/security:
-  en: f6b7709a9122f3ad
-  zh: eb8707f0d4a014c3
+  en: e88a33ca935cbdcb
+  zh: 95c92e50cdd1b7c4
+/contract-c5-device-approval/security/what-this-does-not-prove:
+  en: ee4c600be10d6545
+  zh: 7edffe2f2a53b6d3
 /contract-c5-device-approval/decided-values:
   en: bfe3467bb77d0a6c
   zh: bed697fee31c5a39
