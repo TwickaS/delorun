@@ -324,12 +324,12 @@
     {
       "path": "packages/client/modules/src/assets.ts",
       "class": "security",
-      "reason": "Adds `.woff2` to the client package-asset media types, so a client plugin can ship its own fonts through the package-asset route as it ships images. Delo's theme serves its typefaces this way."
+      "reason": "Adds `.woff2` to the client package-asset media types, so a client plugin can ship its own fonts through the package-asset route as it ships images. Delo's theme serves its typefaces this way. Lead verdict: kept; adds one passive font media type (font/woff2) to the asset allowlist."
     },
     {
       "path": "packages/experimental/webworker-runtime/src/package-assets.ts",
       "class": "security",
-      "reason": "Adds `.woff2` to the WebWorker preview's own media-type table, which its spec holds equal to the client-modules table, so the preview serves a client package's fonts as it serves its images."
+      "reason": "Adds `.woff2` to the WebWorker preview's own media-type table, which its spec holds equal to the client-modules table, so the preview serves a client package's fonts as it serves its images. Lead verdict: kept; adds one passive font media type (font/woff2) to the asset allowlist."
     },
     {
       "path": "packages/client/AGENTS.md",
@@ -459,17 +459,12 @@
     {
       "path": "packages/client/ui-chat/src/client/contract/slots.ts",
       "class": "delo-feature",
-      "reason": "Adds the presentation Hook to the Chat Node hook context and the keyed seat's injected Hooks, so every keyed Chat renderer, the tool-call tree among them, reads the live work-details policy through the seat."
+      "reason": "Adds the presentation Hook to the Chat Node hook context and the keyed seat's injected Hooks, so every keyed Chat renderer, the tool-call tree among them, reads the live work-details policy through the seat. The deprecated PresentationInjected type stays exported so stock imports still typecheck."
     },
     {
       "path": "packages/client/ui-chat/src/client/chat/AssistantNodeView.tsx",
       "class": "delo-feature",
       "reason": "Removes the separate presentation source from the assistant renderer's injected face, which now reads the policy through the seat's presentation Hook."
-    },
-    {
-      "path": "packages/client/ui-chat/src/client/index.ts",
-      "class": "delo-feature",
-      "reason": "Removes the PresentationInjected type export, which no consumer uses once the assistant renderer reads the policy through the seat's Hook."
     },
     {
       "path": "packages/client/ui-chat/tests/chat-apply.client.spec.tsx",
@@ -575,11 +570,6 @@
       "path": "apps/web/tests/shell-command-details.e2e.ts",
       "class": "delo-feature",
       "reason": "Upstream's Web test follows the fork's terminal card, whose command copy control is its first tab stop."
-    },
-    {
-      "path": "apps/web/tests/shipped-composition.e2e.ts",
-      "class": "delo-feature",
-      "reason": "Upstream's Web test follows the fork's Standard composition, which lists preset_inspect."
     },
     {
       "path": "packages/client/modules/README.zh.md",
@@ -730,6 +720,16 @@
       "path": "docs/config-catalog.zh.md",
       "class": "delo-feature",
       "reason": "Chinese counterpart of the generated config catalogue, regenerated with it for the welcomeNotice option."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/presentation-injected.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the deprecated PresentationInjected export: a stock-style face that extends it typechecks and reads the policy it supplies."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Re-exports the deprecated PresentationInjected type, with a lint exemption comment, so stock plugins that import it still typecheck."
     }
   ],
   "retired": []

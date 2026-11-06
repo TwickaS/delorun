@@ -284,6 +284,18 @@ export interface TurnProcessOwnerProps {
   setOpen(open: boolean): void
 }
 
+/**
+ * Shared presentation policy source for renderers that depend on the work-details mode.
+ * @deprecated Keyed Chat nodes read the live policy through the seat's `usePresentation`, which takes precedence
+ * over this source; new code reads `usePresentation`. Kept so stock imports still typecheck.
+ */
+export interface PresentationInjected {
+  hooks: {
+    /** Live presentation policy derived from the accepted work-details mode. */
+    presentation: ObservableSnapshot<ChatPresentationPolicy>
+  }
+}
+
 /** Full props of one keyed Chat renderer. */
 export type ChatNodeViewProps<Kind extends ChatNodeKind = ChatNodeKind> =
   PropsRuntime<'conversation.chat.node', Kind> & PropsLocale<'chat'> & PropsRenderFactories

@@ -487,7 +487,6 @@ const EXPECTED_TOOLS = [
   'list_subagent_models',
   'plugin_manager',
   'present',
-  'preset_inspect',
   'read',
   'read_image',
   'schedule_create',
