@@ -1,0 +1,73 @@
+# Bilingual-pair consistency record for c01-home-layout.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/contracts/c01-home-layout.md
+/:
+  en: 215e27b1b4c8bc5f
+  zh: 0b6d958a132098e2
+/c1-home-layout-and-runtime-store:
+  en: 5834d5134c634715
+  zh: 8f7865ea830eab88
+/c1-home-layout-and-runtime-store/summary:
+  en: 013451bc0d70511e
+  zh: 0f1a8182fa8033c3
+/c1-home-layout-and-runtime-store/contents:
+  en: fcf7ac228bad9c32
+  zh: 92af8ae7af9b3e83
+/c1-home-layout-and-runtime-store/the-home-directory:
+  en: bf1237899f0f31f1
+  zh: abeddc78605239b1
+/c1-home-layout-and-runtime-store/the-home-tree:
+  en: 740349436b6f9ccb
+  zh: 8e412307485fb3f8
+/c1-home-layout-and-runtime-store/modes-and-the-refusal-rule:
+  en: bc96f0ae50cdc577
+  zh: 2d21da7e9725b727
+/c1-home-layout-and-runtime-store/secrets:
+  en: 1aefc17da983483f
+  zh: 16ce18ca7e7eb741
+/c1-home-layout-and-runtime-store/sockets-and-the-start-token:
+  en: fa5e6d50e0baa7e8
+  zh: 989a92ff3185c069
+/c1-home-layout-and-runtime-store/the-home-lock:
+  en: f7ada9cc7f653884
+  zh: bcfa5367339d7812
+/c1-home-layout-and-runtime-store/profiles:
+  en: 9283f758d298b72e
+  zh: 701f31f1fc5e0151
+/c1-home-layout-and-runtime-store/the-runtime-store:
+  en: e0437c9bbabfacf0
+  zh: d60ca84280b3c605
+/c1-home-layout-and-runtime-store/launcher-and-store-compatibility:
+  en: 3aa5efb89e0d5175
+  zh: a505725459a5402a
+/c1-home-layout-and-runtime-store/the-npm-launcher-and-the-install-script:
+  en: d45ba4ace93bab48
+  zh: ad986a7b0088e7a7
+/c1-home-layout-and-runtime-store/confinement-rules:
+  en: d22752b5dc047fad
+  zh: 709e9e2ab6b05d53
+/c1-home-layout-and-runtime-store/limits:
+  en: 35d8c59894dd4258
+  zh: 5ef44708b4dfdb6c
+/c1-home-layout-and-runtime-store/errors:
+  en: c5a8c05be8b13033
+  zh: c8884dcbcd92d754
+/c1-home-layout-and-runtime-store/consumers:
+  en: 49ea4340df1c30eb
+  zh: cfcc0ba38d53f2f9
+/c1-home-layout-and-runtime-store/compatibility:
+  en: 166d284886fa6b65
+  zh: 0f6e2efae401ead3
+/c1-home-layout-and-runtime-store/security:
+  en: 52543dba9bf0d349
+  zh: e612a6c5b83e9afc
+/c1-home-layout-and-runtime-store/security/requirements:
+  en: de096422e976acd0
+  zh: 57c757a3191e8984
+/c1-home-layout-and-runtime-store/security/denial-tests:
+  en: dbacb35424d8e0fe
+  zh: bdf32c8d2642118f
+/c1-home-layout-and-runtime-store/enforcement-per-platform-and-dialect:
+  en: 2eea2099ed131e4e
+  zh: ea4d8dee46eac6b2

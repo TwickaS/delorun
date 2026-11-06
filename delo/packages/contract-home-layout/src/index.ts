@@ -1,0 +1,264 @@
+/**
+ * Types and constants of contract C1, the home layout and runtime store
+ * (`delo/docs/contracts/c01-home-layout.md`): the Delo home tree, the modes of
+ * its directories and protected files, the per-start token, the home lock, the
+ * runtime store's pointer files, the launcher's download limits and the
+ * confinement rules `delorun verify` reports. The package holds no runtime
+ * behaviour; the contract page is the authority for every value here.
+ *
+ * @module @delo/contract-home-layout
+ */
+
+import type { Branded } from '@deepseek-ai/dsh-brand'
+
+/** Directory name of the default Delo home under the OS home directory (`~/.delo`). */
+export const DELO_HOME_DIR_NAME = '.delo'
+
+/** Environment variable that selects the Delo home; blank counts as unset. */
+export const DELO_HOME_ENV = 'DELO_HOME'
+
+/** Environment variable that selects the CLI profile. */
+export const DELO_PROFILE_ENV = 'DELO_PROFILE'
+
+/** Upstream's harness-home variable, set to the resolved Delo home for every runtime process. */
+export const DSH_HOME_ENV = 'DSH_HOME'
+
+/** Upstream's default harness-home directory name; Delo never reads or writes `~/.dsh`. */
+export const UPSTREAM_HOME_DIR_NAME = '.dsh'
+
+/** The CLI profile's name. */
+export const CLI_PROFILE = 'default'
+
+/** The desktop app's upstream profile, which `delorun` refuses to run or manage. */
+export const DESKTOP_PROFILE = 'desktop'
+
+/** Top-level entries Delo adds to the home; every other entry is upstream's. */
+export const DELO_HOME_ENTRIES = {
+  /** The runtime store. */
+  runtimes: 'runtimes',
+  /** Secret files, one directory per owning contract. */
+  secrets: 'secrets',
+  /** Per-profile run directories (`run/<profile>/`). */
+  run: 'run',
+  /** The Docker supervisor's roots file (C9). */
+  supervisor: 'supervisor',
+  /** The launcher copy used by the install script and login items. */
+  bin: 'bin',
+  /** Signed certificate-alert files (C5). */
+  alerts: 'alerts',
+} as const
+
+/**
+ * Paths below the home that confined commands may read and execute. None
+ * holds a secret, and no component writes a secret under one.
+ */
+export const READ_EXEMPTIONS = ['runtimes', 'skills', 'dsh-runtimes'] as const
+
+/** Entries of `run/<profile>/`. */
+export const RUN_ENTRIES = {
+  /** The home lock, held by one home process per profile. */
+  lock: 'home.lock',
+  /** The start token written by each home-process start. */
+  startToken: 'start-token',
+  /** The update channel's Unix socket (C19). */
+  updateSocket: 'update.sock',
+  /** The Docker supervisor's Unix socket (C9). */
+  supervisorSocket: 'supervisor.sock',
+  /** The update journal (C19). */
+  updateJournal: 'update.json',
+  /** Fixtures of the confinement probes run at each start. */
+  probe: 'probe',
+} as const
+
+/** The supervisor's roots file, relative to the home (C9). */
+export const SUPERVISOR_ROOTS_FILE = 'supervisor/roots.json'
+
+/** Mode of the home and of every directory Delo creates under it. */
+export const PRIVATE_DIR_MODE = 0o700
+
+/** Mode of every protected file. */
+export const PROTECTED_FILE_MODE = 0o600
+
+/** Group and other permission bits; any of them makes a protected path laxer than its contract. */
+export const FORBIDDEN_MODE_BITS = 0o077
+
+/** Longest channel socket path, in bytes. */
+export const SOCKET_PATH_MAX_BYTES = 103
+
+/** Prefix of the Windows named pipes; the full name is `<prefix><homeId>-<profile>-<channel>`. */
+export const WINDOWS_PIPE_PREFIX = '\\\\.\\pipe\\delo-'
+
+/** Number of lowercase hexadecimal digits of the home path's SHA-256 digest in `homeId`. */
+export const HOME_ID_HEX_DIGITS = 16
+
+/** Random bytes in one start token. */
+export const START_TOKEN_BYTES = 32
+
+/** Characters of one start token in base64url without padding. */
+export const START_TOKEN_LENGTH = 43
+
+/** Time a contender waits for the lock holder's `status` answer before reporting `HOME_UNRESPONSIVE`, in milliseconds. */
+export const HOME_STATUS_TIMEOUT_MS = 2_000
+
+/** Entries of the runtime store under `runtimes/`. */
+export const STORE_ENTRIES = {
+  /** The store's layout record, `{"layout":1}`. */
+  layout: 'store.json',
+  /** Pointer to the active version. */
+  current: 'current',
+  /** Pointer to the version kept for rollback. */
+  previous: 'previous',
+  /** Lock taken by install, switch and removal. */
+  lock: 'store.lock',
+  /** Prefix of an install in progress; 16 hexadecimal digits follow. */
+  stagingPrefix: '.staging-',
+} as const
+
+/** The store layout number this contract defines. */
+export const STORE_LAYOUT = 1
+
+/** The launch protocol number this contract defines. */
+export const LAUNCH_PROTOCOL = 1
+
+/** Source of the regular expression a runtime version name matches. */
+export const RUNTIME_VERSION_PATTERN = '^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+
+/** Longest runtime version name, in characters. */
+export const RUNTIME_VERSION_MAX_LENGTH = 64
+
+/** Largest pointer file, in bytes: one version and one newline. */
+export const POINTER_FILE_MAX_BYTES = 65
+
+/** Installed runtime versions the store keeps: `current` and `previous`. */
+export const RETAINED_RUNTIME_VERSIONS = 2
+
+/** Longest wait for `store.lock`, in milliseconds. */
+export const STORE_LOCK_WAIT_MS = 30_000
+
+/** Longest total retry time of a Windows pointer rename, in milliseconds. */
+export const POINTER_RENAME_RETRY_MS = 2_000
+
+/** Largest runtime archive the launcher downloads, in bytes (1 GiB). */
+export const ARCHIVE_MAX_BYTES = 1_073_741_824
+
+/** Largest signed manifest the launcher downloads, in bytes (4 MiB). */
+export const MANIFEST_MAX_BYTES = 4_194_304
+
+/** Time for a download connection to open, in milliseconds. */
+export const DOWNLOAD_CONNECT_TIMEOUT_MS = 30_000
+
+/** Time a download may deliver no byte before it fails, in milliseconds. */
+export const DOWNLOAD_STALL_TIMEOUT_MS = 60_000
+
+/** The only hosts a release download may reach, redirects included. */
+export const RELEASE_DOWNLOAD_HOSTS = ['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'] as const
+
+/** A Delo release version naming one directory of the runtime store. */
+export type RuntimeVersion = Branded<'DeloRuntimeVersion'>
+
+/** The random id of one home-process start: 32 lowercase hexadecimal digits; not a secret. */
+export type StartId = Branded<'DeloStartId'>
+
+/** One start token: 43 base64url characters; a secret that is never logged. */
+export type StartToken = Branded<'DeloStartToken'>
+
+/** Contents of `runtimes/store.json`. */
+export interface StoreLayoutRecord {
+  /** The store layout number. */
+  readonly layout: typeof STORE_LAYOUT
+}
+
+/** Contents of `run/<profile>/home.lock`. */
+export interface HomeLockRecord {
+  /** Record version. */
+  readonly v: 1
+  /** Process id of the holder. */
+  readonly pid: number
+  /** The holder's start id. */
+  readonly startId: StartId
+  /** The runtime version the holder runs. */
+  readonly runtime: RuntimeVersion
+  /** RFC 3339 UTC time the holder took the lock. */
+  readonly startedAt: string
+}
+
+/** A confinement rule that Delo's sandbox profiles add to upstream's dialects. */
+export type ConfinementRule = 'home-write' | 'home-read' | 'token-read' | 'home-connect' | 'docker-connect'
+
+/** The confinement rules, in the contract's order. */
+export const CONFINEMENT_RULES: readonly ConfinementRule[] = ['home-write', 'home-read', 'token-read', 'home-connect', 'docker-connect']
+
+/** A sandbox dialect, or `none` when commands run without one. */
+export type SandboxDialect = 'bwrap' | 'landlock' | 'seatbelt' | 'windows-acl' | 'none'
+
+/** How one rule holds on this machine at this start. */
+export type RuleStatus = 'enforced' | 'not-enforced' | 'unconfined' | 'unknown'
+
+/** Why a rule is not `enforced`. */
+export type RuleReason =
+  | 'dialect-cannot-express'
+  | 'docker-endpoint-network'
+  | 'not-proven-on-platform'
+  | 'probe-failed'
+  | 'probe-not-run'
+  | 'no-sandbox'
+  | 'full-access'
+
+/** The state of one rule as `delorun verify` reports it. */
+export interface RuleFinding {
+  /** The rule's state. */
+  readonly status: RuleStatus
+  /** Present unless the status is `enforced`. */
+  readonly reason?: RuleReason
+}
+
+/** The Docker endpoint of the active context, as the confinement probes resolved it. */
+export interface DockerEndpoint {
+  /** Transport of the endpoint. */
+  readonly kind: 'unix' | 'npipe' | 'tcp' | 'ssh'
+  /** The context's socket or pipe path, for `unix` and `npipe`. */
+  readonly path?: string
+  /** The socket's resolved real path, for `unix`. */
+  readonly realPath?: string
+}
+
+/** The confinement rules' states recorded at one home-process start. */
+export interface ConfinementReport {
+  /** The dialect upstream's sandbox provider selected. */
+  readonly dialect: SandboxDialect
+  /** One finding per rule. */
+  readonly rules: Readonly<Record<ConfinementRule, RuleFinding>>
+  /** The Docker endpoint, when a Docker context exists. */
+  readonly dockerEndpoint?: DockerEndpoint
+}
+
+/** A path whose mode or DACL is laxer than this contract allows, with its fix. */
+export interface ModeFinding {
+  /** Absolute path. */
+  readonly path: string
+  /** Whether the path is a directory or a protected file. */
+  readonly kind: 'directory' | 'file'
+  /** The mode found, on Linux and macOS. */
+  readonly found?: number
+  /** The mode required, on Linux and macOS. */
+  readonly required?: typeof PRIVATE_DIR_MODE | typeof PROTECTED_FILE_MODE
+  /** The command that fixes it: `chmod` on Linux and macOS, `icacls` on Windows. */
+  readonly fix: string
+}
+
+/** Error codes of this contract. */
+export type HomeLayoutErrorCode =
+  | 'HOME_INVALID'
+  | 'HOME_IS_DSH_HOME'
+  | 'HOME_MODE'
+  | 'SECRET_FILE_MODE'
+  | 'SOCKET_PATH_TOO_LONG'
+  | 'HOME_IN_WRITABLE_ROOT'
+  | 'HOME_RUNNING'
+  | 'HOME_UNRESPONSIVE'
+  | 'STORE_BUSY'
+  | 'NO_ACTIVE_RUNTIME'
+  | 'POINTER_REPLACE_FAILED'
+  | 'RUNTIME_INCOMPATIBLE'
+  | 'INSTALL_VERIFY_FAILED'
+  | 'DOWNLOAD_REFUSED'

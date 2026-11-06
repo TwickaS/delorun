@@ -1,0 +1,14 @@
+{
+  "name": "@delo/contract-home-layout",
+  "description": "Delo's home layout and runtime store contract (C1): the ~/.delo tree, modes, start token, confinement rules and runtime store, as types and constants",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*"
+  }
+}

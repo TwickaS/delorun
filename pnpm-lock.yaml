@@ -1248,6 +1248,12 @@ importers:
         specifier: workspace:*
         version: link:../contract-release-manifest
 
+  delo/packages/contract-home-layout:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+
   delo/packages/contract-host-qualified-keys:
     dependencies:
       '@deepseek-ai/dsh-brand':
