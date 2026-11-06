@@ -1239,6 +1239,15 @@ importers:
 
   delo/packages/contract-archive-and-trash: {}
 
+  delo/packages/contract-catalogue-revocation:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+
   delo/packages/contract-host-qualified-keys:
     dependencies:
       '@deepseek-ai/dsh-brand':

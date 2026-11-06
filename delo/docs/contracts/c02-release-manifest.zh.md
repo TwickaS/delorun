@@ -60,7 +60,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 
 ## 签名信封
 
-每个签名文件（根、时间戳、manifest、运行时文件列表、[C13](c13-catalogue-revocation.md) 的插件索引文件）都是如下形式的 UTF-8 JSON：
+每个签名文件（根、时间戳、manifest、运行时文件列表、[C13](c13-catalogue-revocation.zh.md) 的插件索引文件）都是如下形式的 UTF-8 JSON：
 
 ```json
 {
@@ -86,7 +86,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 | `root` | 离线，由所有者持有 | 根元数据：每个角色的密钥与阈值、[C18](c18-release-log.zh.md) 的见证者密钥，以及每次轮换 | 1；维护者持有根密钥后为 N 个中的 2 个 |
 | `targets` | 离线，由 targets 密钥持有者持有 | 每份发布 manifest 及其运行时文件列表 | 1 |
 | `timestamp` | 在线，位于发布工作流的受保护环境中 | 仅时间戳元数据；它证明新鲜度并按摘要指明 manifest，无法改变 manifest 列出的内容 | 1 |
-| `catalogue` | 在线，位于插件索引仓库的发布环境中 | [C13](c13-catalogue-revocation.md) 的插件索引与撤销列表 | 1 |
+| `catalogue` | 在线，位于插件索引仓库的发布环境中 | [C13](c13-catalogue-revocation.zh.md) 的插件索引与撤销列表 | 1 |
 
 根私钥与 targets 私钥绝不进入 CI、云服务或发布工作流能够访问的机器。Windows Authenticode、macOS Developer ID 与公证（notarisation）是文件本身的平台签名；manifest 记录已签名文件的摘要，平台签名流程不在本约定范围内。
 
@@ -291,7 +291,7 @@ acceptances:
 - `delo/apps/install/` 与 `delo/apps/npm-launcher/`（WP3.2）：验证并安装。
 - `delo/packages/runtime-store/`（WP3.3）：启动检查、切换与回滚。
 - 桌面更新器（WP6.3）：经验证的更新与回滚。
-- `@delo/integrity` 与 `delorun verify`（[C15](c15-verification-checks.md)）、Docker 监管器（Docker supervisor）的镜像检查（[C9](c09-runtime-supervisor.md)），以及插件索引的密钥（[C13](c13-catalogue-revocation.md)）。
+- `@delo/integrity` 与 `delorun verify`（[C15](c15-verification-checks.md)）、Docker 监管器（Docker supervisor）的镜像检查（[C9](c09-runtime-supervisor.md)），以及插件索引的密钥（[C13](c13-catalogue-revocation.zh.md)）。
 
 <a id="compatibility"></a>
 
@@ -307,7 +307,7 @@ acceptances:
 
 ### 要求
 
-- R1. 根密钥与 targets 密钥离线；时间戳密钥在线，且只签名新鲜度；插件索引密钥只签名 [C13](c13-catalogue-revocation.md) 的文件。
+- R1. 根密钥与 targets 密钥离线；时间戳密钥在线，且只签名新鲜度；插件索引密钥只签名 [C13](c13-catalogue-revocation.zh.md) 的文件。
 - R2. 时间戳元数据在签发 3 天后过期，并每 24 小时重新签名；客户端拒绝已过期或更旧的时间戳，时间戳未为该通道指明的 manifest 不会被提供。
 - R3. 任何客户端都不会自行降级；本人请求的回滚只能到达已签名、已记录日志的发布。
 - R4. 轮换通过根版本进行，由旧根与新根的阈值签名；被吊销的 targets 密钥不验证任何内容。

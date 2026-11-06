@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/contract-catalogue-revocation/README.md
+/:
+  en: 83b7bd105ec6250f
+  zh: 2bf54eded01cb619
+/delo-contract-catalogue-revocation:
+  en: f8f11324f7c10896
+  zh: 46518a1ded6503e4
+/delo-contract-catalogue-revocation/summary:
+  en: 6c2924d33dbf7707
+  zh: bcfc13fbf0924733
+/delo-contract-catalogue-revocation/contents:
+  en: 79a0dce5a8733cd5
+  zh: a5f8c7025c5338d0
+/delo-contract-catalogue-revocation/use-this-package:
+  en: a68fb84f135283a7
+  zh: fc85ddbf83e775da
+/delo-contract-catalogue-revocation/known-limitations-and-deferred-work:
+  en: 352e9642afc607dd
+  zh: 021419a4b3784f71
