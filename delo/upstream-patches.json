@@ -342,6 +342,46 @@
       "reason": "Documents `.woff2` among the asset extensions the `/plugins` route serves, matching the media-type table; the route answers 404 for any other extension."
     },
     {
+      "path": "packages/client/ui-chat/src/client/chat/ChatView.module.css",
+      "class": "delo-feature",
+      "reason": "Scales the transcript's flow gaps by `--dsh-density`, which a theme's density setting defines; unset, the scale is 1, so the gaps keep upstream's values."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/ChatGroupSeat.module.css",
+      "class": "delo-feature",
+      "reason": "Scales the group body's flow gap by `--dsh-density`, which a theme's density setting defines; unset, the scale is 1 and the gap keeps upstream's value."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/turn-tail-spacing.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Expects the density-scaled flow gaps that the two stylesheets above declare, so the spacing spec asserts the values the stylesheets now set."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/InputBar.module.css",
+      "class": "delo-feature",
+      "reason": "The Send circle reads `--dsh-composer-send-fill`, `--dsh-composer-send-hover` and `--dsh-composer-send-glyph`, falling back to upstream's info fill, hover and white arrow, so a theme can restyle the circle and the default is unchanged."
+    },
+    {
+      "path": "packages/client/ui-conversation/README.md",
+      "class": "delo-feature",
+      "reason": "Documents the three Send-circle custom properties that the input bar reads and their fallbacks."
+    },
+    {
+      "path": "packages/client/ui-model-selection/src/client/ModelSelect.tsx",
+      "class": "delo-feature",
+      "reason": "The trigger's effort caption carries `data-effort-level` and `data-effort-levels`, the chosen level's place among the model's levels and their count, so a theme can draw the effort as bars."
+    },
+    {
+      "path": "packages/client/ui-model-selection/tests/model-select.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the effort caption's level attributes."
+    },
+    {
+      "path": "packages/client/ui-model-selection/README.md",
+      "class": "delo-feature",
+      "reason": "Documents the effort caption's level attributes and what a stylesheet can draw from them."
+    },
+    {
       "path": "packages/client/modules/README.zh.md",
       "class": "delo-feature",
       "reason": "Chinese counterpart of the modules README; its package-assets paragraph documents the .woff2 extension with the English text."
@@ -350,6 +390,26 @@
       "path": "packages/client/modules/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Consistency record re-recorded after the modules README's package-assets paragraph and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-conversation/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the conversation README; it documents the Send circle's custom properties."
+    },
+    {
+      "path": "packages/client/ui-conversation/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the conversation README's Send-circle paragraph and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-model-selection/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the model selection README; it documents the effort caption's level attributes."
+    },
+    {
+      "path": "packages/client/ui-model-selection/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the model selection README's effort-caption sentence and its Chinese counterpart changed."
     }
   ],
   "retired": []

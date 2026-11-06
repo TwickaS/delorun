@@ -76,6 +76,8 @@ The composer uses a minimum 16px draft font on coarse-pointer devices to avoid f
 
 The composer measures its expanded control groups after size, content, visibility, or font-loading changes. If they cannot share a line, the row sets `--dsh-composer-model-text-display: none` and `--dsh-composer-model-icon-display: block` for the model seat; their defaults are `block` and `none`. The model seat is measured at its content width, capped at 360px, rather than at a share of the row, so a long name stays visible in the measurement. Wrapping remains available if even the icon cannot fit.
 
+A theme restyles the Send circle through `--dsh-composer-send-fill`, `--dsh-composer-send-hover` and `--dsh-composer-send-glyph`; unset, the circle uses the info button fill and hover with a white arrow.
+
 The context meter follows the [statistics-control radius](../../../docs/ui-radius.md#radius-scale).
 
 The composer uses the shared [text-input focus policy](../ui-primitives/README.md#use-this-package) on mount, Session switching, and unlock. Identified phones and tablets require tapping the input; desktop devices retain automatic focus. On these mobile devices, a submission that empties the focused draft moves focus to the non-text composer card, dismissing the keyboard while retaining its navigation position. Rejected submissions, retained newer draft text, and another control already holding focus preserve focus. The [Lexical patch](../../../patches/lexical@0.49.0.patch) keeps caret scrolling in the same coordinate system as DOM geometry when a mobile keyboard pans the page.

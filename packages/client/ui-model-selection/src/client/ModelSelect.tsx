@@ -145,6 +145,9 @@ export function ModelSelect(
       : effectiveEffort === undefined
         ? t('effort.providerDefault')
         : reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
+  // The chosen level's place among the model's levels, 1-based, for a distribution that draws the effort as bars.
+  const effortIndex = reasoning?.efforts.findIndex(level => level.id === effectiveEffort) ?? -1
+  const effortPlace = reasoning === undefined || effortIndex < 0 ? undefined : { level: effortIndex + 1, levels: reasoning.efforts.length }
   const effortChoices = useMemo<readonly EffortChoice[]>(() => reasoning === undefined
     ? []
     : [
@@ -472,7 +475,11 @@ export function ModelSelect(
         <span className={css.triggerLabel}>
           {currentChoice === undefined ? modelLabel : renderModelLabel(currentChoice.group.provider, currentChoice.model, 'trigger', true)}
         </span>
-        {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
+        {effortLabel !== undefined && (
+          <span className={css.triggerEffort} {...effortPlace === undefined ? {} : { 'data-effort-level': effortPlace.level, 'data-effort-levels': effortPlace.levels }}>
+            {effortLabel}
+          </span>
+        )}
         {busy
           ? <StateDot state="ongoing" />
           : <IconChevronDownOutlineRegular className={clsx(css.chevron, open && css.chevronOpen)} />}

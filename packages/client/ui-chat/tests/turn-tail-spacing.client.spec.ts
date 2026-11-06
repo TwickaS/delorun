@@ -21,7 +21,7 @@ describe('Turn tail slot spacing', () => {
 
   it('keeps process rows inside and outside a group on the same gap', () => {
     const group = read('ChatGroupSeat.module.css')
-    expect(group).toMatch(/\.body \{[^}]*--dsh-chat-flow-gap: 4px;/s)
+    expect(group).toMatch(/\.body \{[^}]*--dsh-chat-flow-gap: calc\(4px \* var\(--dsh-density, 1\)\);/s)
     expect(group).toMatch(/margin-top:\s*var\(--dsh-chat-flow-gap, 4px\)/)
   })
 
@@ -29,8 +29,8 @@ describe('Turn tail slot spacing', () => {
     const view = read('ChatView.module.css')
     const marked = String.raw`:has\(> \[data-slot="conversation\.chat\.node"\] > \[data-chat-steering-batch`
     expect(view).toMatch(new RegExp(String.raw`\.flowItem${marked}="start"\]\)\s*\{\s*--dsh-chat-flow-gap:\s*calc\(44px \+ var\(--dsh-content-font-delta, 0px\)\);`))
-    expect(view).toMatch(new RegExp(String.raw`:not\(\.running\):not\(${marked}\]\)\)\s*\{\s*--dsh-chat-flow-gap:\s*12px;`))
-    expect(view).toMatch(new RegExp(String.raw`:not\(\.running\):not\(\[data-submission-echo\], \[data-pending-steering\]\):not\(${marked}\]\)\)\s*\{\s*--dsh-chat-flow-gap:\s*16px;`))
+    expect(view).toMatch(new RegExp(String.raw`:not\(\.running\):not\(${marked}\]\)\)\s*\{\s*--dsh-chat-flow-gap:\s*calc\(12px \* var\(--dsh-density, 1\)\);`))
+    expect(view).toMatch(new RegExp(String.raw`:not\(\.running\):not\(\[data-submission-echo\], \[data-pending-steering\]\):not\(${marked}\]\)\)\s*\{\s*--dsh-chat-flow-gap:\s*calc\(16px \* var\(--dsh-density, 1\)\);`))
   })
 
   it('keeps echoes after a running Turn\'s empty control at the input gap', () => {

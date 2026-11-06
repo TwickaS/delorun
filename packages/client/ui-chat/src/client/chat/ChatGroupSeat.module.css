@@ -100,7 +100,7 @@
 }
 
 .body {
-  --dsh-chat-flow-gap: 4px;
+  --dsh-chat-flow-gap: calc(4px * var(--dsh-density, 1));
   max-height: min(400px, 50vh);
   overflow-y: auto;
   overscroll-behavior-y: auto;

@@ -404,10 +404,11 @@
   border: none;
   border-radius: 999px;
   corner-shape: round;
-  background: var(--dsw-alias-button-info-fill);
+  /* A theme may restyle the circle through --dsh-composer-send-fill, -hover and -glyph. */
+  background: var(--dsh-composer-send-fill, var(--dsw-alias-button-info-fill));
   /* Static white, not the foreground token: the arrow stays white on the blue
      fill in both themes (design 34:10465). */
-  color: #fff;
+  color: var(--dsh-composer-send-glyph, #fff);
   cursor: pointer;
   transition: background-color 100ms ease;
   /* Opts out of the row's 2px downward shift (.row top pad): the send circle
@@ -418,7 +419,7 @@
 
 @media (hover: hover) {
   .primary:hover:not(:disabled) {
-    background: var(--dsw-alias-button-info-hover);
+    background: var(--dsh-composer-send-hover, var(--dsw-alias-button-info-hover));
   }
 }
 

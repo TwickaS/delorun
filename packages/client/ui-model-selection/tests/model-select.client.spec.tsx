@@ -239,6 +239,8 @@ describe('ModelSelect reasoning effort', () => {
       expect(trigger.getAttribute('aria-label')).toBe('选择模型，当前 DeepSeek-V4-Flash，推理等级 Max')
       expect(document.activeElement).toBe(trigger)
     })
+    const caption = trigger.querySelector('[data-effort-level]')
+    expect([caption?.getAttribute('data-effort-level'), caption?.getAttribute('data-effort-levels')]).toEqual(['3', '3'])
   })
 
   it('offers provider default only when the adapter does not configure a model default', () => {

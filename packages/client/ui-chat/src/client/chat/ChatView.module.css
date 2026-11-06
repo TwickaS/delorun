@@ -84,12 +84,12 @@
 /* Process rows sit 4px apart; an Assistant response is separated from its
    neighbours by 12px. */
 .flowItem[data-chat-group-part="response"] {
-  --dsh-chat-flow-gap: 12px;
+  --dsh-chat-flow-gap: calc(12px * var(--dsh-density, 1));
 }
 
 :is(.column, :global([data-slot="conversation.chat.flow"])) > [data-chat-group-part="response"]:not([hidden]):not(:empty)
   + :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty))):not(.running):not(:has(> [data-slot="conversation.chat.node"] > [data-chat-steering-batch])) {
-  --dsh-chat-flow-gap: 12px;
+  --dsh-chat-flow-gap: calc(12px * var(--dsh-density, 1));
 }
 
 /* Settled-flow identity boundary. It is neutral until it becomes the natural
@@ -135,7 +135,7 @@
 .flowItem[data-chat-flow-kind="turn-process"],
 :is(.column, :global([data-slot="conversation.chat.flow"])) > [data-chat-flow-kind="turn-process"]:not(:empty, :has(> [data-slot="conversation.chat.node"]:empty)) + :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty))):not(.running):not(:has(> [data-slot="conversation.chat.node"] > [data-chat-steering-batch])),
 :is(.column, :global([data-slot="conversation.chat.flow"])) > [data-chat-flow-kind="turn-process"] + :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty))):not(.running):not([data-submission-echo], [data-pending-steering]):not(:has(> [data-slot="conversation.chat.node"] > [data-chat-steering-batch])) {
-  --dsh-chat-flow-gap: 16px;
+  --dsh-chat-flow-gap: calc(16px * var(--dsh-density, 1));
 }
 
 /* Tail slot: the running status and a completed Turn's actions row both take
@@ -215,7 +215,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  --dsh-chat-flow-gap: 12px;
+  --dsh-chat-flow-gap: calc(12px * var(--dsh-density, 1));
   --dsw-alias-label-shimmer: var(--dsw-alias-label-deep-diving-shimmer);
   color: var(--dsw-alias-label-deep-diving);
   font-size: calc(var(--dsh-content-font-size, 14px) - 2px);
