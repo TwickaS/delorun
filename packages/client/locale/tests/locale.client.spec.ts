@@ -69,6 +69,28 @@ describe('LocaleRuntime', () => {
     expect(t('missing.key')).toBe('missing.key')
   })
 
+  it('consults overrides, latest first, before each locale\'s dictionary, and restores the text when one is disposed', () => {
+    const { svc } = make()
+    svc.register('ns', 'zh', { hello: '你好' })
+    svc.register('ns', 'en', { hello: 'Hello', bye: 'Bye' })
+    const t = svc.bind('ns')
+    const listener = vi.fn()
+    svc.subscribe(listener)
+    const first = svc.override('ns', 'en', { bye: 'See you', unknown: 'Nobody reads this' })
+    const second = svc.override('ns', 'en', { bye: 'Later' })
+    expect(listener).toHaveBeenCalledTimes(2)
+    // zh keeps its own text; only the en step of the chain is overridden.
+    expect(t('hello')).toBe('你好')
+    expect(t('bye')).toBe('Later')
+    second()
+    second()
+    expect(t('bye')).toBe('See you')
+    first()
+    expect(t('bye')).toBe('Bye')
+    expect(listener).toHaveBeenCalledTimes(4)
+    expect(() => svc.override('ns', 'not a tag', {})).toThrow(/BCP 47/)
+  })
+
   it('falls through to the common vocabulary after the namespace misses (production keys)', () => {
     const { svc } = make()
     // The shipped common pair is registered by apply; the bench registers it

@@ -657,6 +657,31 @@
       "reason": "Covers the headline slot's fallback and an occupant replacing it."
     },
     {
+      "path": "packages/client/locale/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Adds ctx.locale.override, so a product can replace some shipped texts in one locale, such as its own vocabulary, without owning the dictionary."
+    },
+    {
+      "path": "packages/client/locale/tests/locale.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers ctx.locale.override: overrides apply latest first, fall back to the dictionary, and restore its text when disposed."
+    },
+    {
+      "path": "packages/client/locale/README.md",
+      "class": "delo-feature",
+      "reason": "Documents ctx.locale.override and how lookup consults it."
+    },
+    {
+      "path": "packages/client/locale/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the locale README; it documents ctx.locale.override."
+    },
+    {
+      "path": "packages/client/locale/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the locale README's override section and its Chinese counterpart changed."
+    },
+    {
       "path": "packages/extensions/cordis-client-runner/src/client/slot-catalog.ts",
       "class": "delo-feature",
       "reason": "Generated client slot catalogue, regenerated for the Chat presentation Hook, the removed assistant presentation source and the new headline slot, which move the source lines of the Chat slot declarations."

@@ -165,6 +165,7 @@ function syncDocumentLanguage(snapshot: LocaleSnapshot): void {
  */
 export class LocaleRuntime {
   private dicts = new Map<string, Map<string, LocaleDict>>()
+  private overrides: { readonly ns: string; readonly locale: string; readonly entries: LocaleDict }[] = []
   private bound = new Map<string, Translate>()
   private catalog = new Map<string, LocaleDefinition>()
   private fallbackChains = new Map<string, readonly LocaleId[]>()
@@ -441,6 +442,30 @@ export class LocaleRuntime {
   }
 
   /**
+   * Replace some of a namespace's texts in one locale, such as a product's own
+   * vocabulary over a plugin's copy. An override is consulted before the
+   * namespace's dictionary at each step of the fallback chain, the latest
+   * registration first; a key it does not name keeps the dictionary's text,
+   * and an override for a namespace or key nobody registers changes nothing.
+   * @param ns - namespace whose texts it replaces.
+   * @param locale - locale tag the texts are in.
+   * @param entries - replacement texts by key.
+   * @returns disposer removing this override (idempotent).
+   * @throws when locale is not a BCP 47-style tag.
+   */
+  override(ns: string, locale: string, entries: LocaleDict): () => void {
+    if (!LOCALE_ID_PATTERN.test(locale)) throw new Error(`locale id "${locale}" is not a BCP 47-style tag`)
+    const layer = { ns, locale: localeKey(locale), entries }
+    this.overrides = [layer, ...this.overrides]
+    this.publish(this.snapshot.active, false)
+    return () => {
+      if (!this.overrides.includes(layer)) return
+      this.overrides = this.overrides.filter(other => other !== layer)
+      this.publish(this.snapshot.active, false)
+    }
+  }
+
+  /**
    * Bind a declared namespace to a translate function typed to its
    * dictionary key union (plus the shared common vocabulary) — the same key
    * domain the framework-injected `t` seat carries. The returned reference
@@ -480,6 +505,9 @@ export class LocaleRuntime {
   private lookup(ns: string, key: string, chain: readonly LocaleId[]): string | undefined {
     const locales = this.dicts.get(ns)
     for (const locale of chain) {
+      const replaced = this.overrides.find(layer =>
+        layer.ns === ns && layer.locale === localeKey(locale) && layer.entries[key] !== undefined)
+      if (replaced !== undefined) return replaced.entries[key]
       const value = locales?.get(localeKey(locale))?.[key]
       if (value !== undefined) return value
     }
