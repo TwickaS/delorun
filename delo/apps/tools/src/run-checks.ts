@@ -43,7 +43,7 @@ import { z } from 'zod'
 import { createPassCache, passCacheEnabled, type PassCache } from './checks/cache.ts'
 import { GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
-import { catalog, criticalPath, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type ForkTree, type Planned, type Program, type UpstreamPackage } from './checks/plan.ts'
+import { catalog, criticalPath, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { git, repositoryRoot } from './git.ts'
 
@@ -450,6 +450,9 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const tree = readTree(root)
   const budgets: Budgets = BudgetsFile.parse(JSON.parse(readFileSync(new URL('./checks/budgets.json', import.meta.url), 'utf8')))
   const checks = catalog(tree, { workers: { ...workers, fork: forkWorkers }, cacheDir: CACHE_DIR, budgets, staleRuntime: staleRuntime(root, tree.upstream), gates: GATES })
+  // A name that selects or skips nothing would turn a typo into a pass, so the run stops before any check starts.
+  const unknown = unknownSelectors(checks, [...list(values.only), ...list(values.skip)])
+  if (unknown.length > 0) throw new Error(`--only and --skip name no check: ${unknown.join(', ')}; the catalogue is printed by --list`)
   const scoped = env[IN_SCOPE] !== undefined
   const header = `${String(cpus)} CPUs, fork suite ${String(forkWorkers)} workers, ${(memory / GIB).toFixed(1)} GiB budget${scoped ? ' enforced without swap' : ' scheduled (no systemd user scope to enforce it)'}`
 
@@ -543,5 +546,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = await main(process.argv.slice(2))
+  process.exitCode = await main(process.argv.slice(2)).catch((error: unknown) => {
+    console.error(`delo checks: ${error instanceof Error ? error.message : String(error)}`)
+    return 1
+  })
 }

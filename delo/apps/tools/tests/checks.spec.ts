@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
-import { affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
+import { affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
@@ -89,6 +89,11 @@ describe('the catalog', () => {
     const grouped = catalog(TREE, { ...HOST, gates: [gate('secrets')] })
     expect(grouped.find(check => check.id === 'secrets')?.budget).toEqual({ memoryGiB: 0.5 })
     expect(() => catalog(TREE, { ...HOST, budgets: { tiers: {}, checks: {} } })).toThrow('budgets.json gives boundary no memory')
+  })
+
+  it('refuses two checks under one id, which the scheduler would conflate, and names the directory to rename', () => {
+    const tree: ForkTree = { ...TREE, programs: [{ config: 'delo/apps/a/tsconfig.json' }, { config: 'delo/packages/a/tsconfig.json' }] }
+    expect(() => catalog(tree, HOST)).toThrow('two checks are named typecheck:delo:a')
   })
 
   it('offers no Docker, built-package, documentation-site, workflow or cordis check', () => {
@@ -175,6 +180,10 @@ describe('selection', () => {
     expect(skipped.find(check => check.id === 'typecheck:delo:cell')?.needs).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['typecheck:delo'] })).filter(id => id.startsWith('typecheck:delo'))).toHaveLength(7)
     expect(ids(select(CHECKS, TREE, { ...NONE, skip: ['tests'] })).some(id => id.startsWith('tests:'))).toBe(false)
+  })
+
+  it('names the --only and --skip selectors that match no check, so a typo cannot select nothing and pass', () => {
+    expect(unknownSelectors(CHECKS, ['tests:fork', 'tests', 'typecheck:delo', 'tests:forkk', 'nope'])).toEqual(['tests:forkk', 'nope'])
   })
 
   it('follows dependents transitively', () => {

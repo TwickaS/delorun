@@ -193,10 +193,10 @@ type Draft = Omit<Check, 'budget' | 'memoryBytes'>
  * @param tree - the fork's packages and programs.
  * @param host - the test runners' CPUs, the compiler cache, the budgets and the repository gates.
  * @returns the checks, in catalog order.
- * @throws Error when a check has no budget in `budgets.json`, by its id, its id family or its group.
+ * @throws Error when a check has no budget in `budgets.json`, by its id, its id family or its group, or when two checks share an id.
  */
 export function catalog(tree: ForkTree, host: Host): Check[] {
-  return draft(tree, host).map(check => {
+  const checks = draft(tree, host).map(check => {
     const budget = budgetFor(check.id, check.group, host.budgets)
     if (budget === undefined) throw new Error(`delo checks: budgets.json gives ${check.id} no memory; add it or its family`)
     return {
@@ -206,6 +206,13 @@ export function catalog(tree: ForkTree, host: Host): Check[] {
       ...budget.exclusive === true ? { exclusive: true } : {},
     }
   })
+  // The scheduler keys results by id, so two checks under one id would silently replace each other.
+  const ids = new Set<string>()
+  for (const check of checks) {
+    if (ids.has(check.id)) throw new Error(`delo checks: two checks are named ${check.id}; a program's check takes its directory's name, so rename one directory or config`)
+    ids.add(check.id)
+  }
+  return checks
 }
 
 // The most specific budget: the id's own entry, then each enclosing family's, such as `typecheck:delo:tools` → `typecheck:delo` → `typecheck`, then the group's.
@@ -306,6 +313,17 @@ function draft(tree: ForkTree, host: Host): Draft[] {
 
 function matches(check: Check, names: readonly string[]): boolean {
   return names.some(name => check.id === name || check.group === name || check.id.startsWith(`${name}:`))
+}
+
+/**
+ * The `--only` or `--skip` names that match no check, by id, group or id family. A name that matches none would
+ * select nothing or skip nothing, so the runner refuses the run rather than report it as a pass.
+ * @param checks - the catalogue.
+ * @param names - the names given on the command line or in `DELO_PUSH_SKIP`.
+ * @returns the names that match no check, in the order given.
+ */
+export function unknownSelectors(checks: readonly Check[], names: readonly string[]): string[] {
+  return names.filter(name => !checks.some(check => matches(check, [name])))
 }
 
 /**
