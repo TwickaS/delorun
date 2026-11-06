@@ -90,7 +90,7 @@ The check `parity-replay` runs `pnpm run test:snapshot` with that variable set, 
 <a id="switch-sweep-and-pass-rule"></a>
 ### Switch sweep and pass rule
 
-Each registry entry has one switch-on scenario in Delo's snapshot tree. Its directory is `snapshots/<profile>/delo-<id>`, where `<id>` is the switch id with underscores replaced by hyphens, and its `runtime.cordis.yml` sets that one switch to its non-parity value. The sweep runs each switch-on scenario under the parity overlay, within the coverage that the [replay lane](#replay-lane) defines, so the switch under test is the only difference from the parity composition.
+Each registry entry has one switch-on scenario in Delo's snapshot tree. Its directory is `snapshots/<profile>/delo-<id>`, where `<id>` is the switch id with underscores replaced by hyphens, and its `runtime.cordis.yml` sets only that one switch to its non-parity value, plus the scenario-local `agent-default-model` pin that selects the corpus model `deepseek-v4-flash`. A Web switch-on scenario has no `runtime.cordis.yml`; its e2e driver under `apps/web/tests` turns the switch on with `launchWebScaffold`'s option and, on replay, selects the same model through the agent default model. The sweep runs each switch-on scenario under the parity overlay, within the coverage that the [replay lane](#replay-lane) defines, so the switch under test is the only behavioural difference from the parity composition.
 
 The check `parity-switches` runs two parts. The static part scans `delo/` for `systemPrompt.context` contributions and for tool registrations and tool schema changes. A match that belongs to no registry entry fails the check. The replay part runs the switch-on scenarios described above.
 

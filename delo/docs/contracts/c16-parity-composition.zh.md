@@ -90,7 +90,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 <a id="switch-sweep-and-pass-rule"></a>
 ### 开关扫描与通过规则
 
-每条注册表记录在 Delo 的 snapshot 树中都有一个开关开启场景。其目录为 `snapshots/<profile>/delo-<id>`，其中 `<id>` 是把下划线替换为连字符后的开关 id；该场景的 `runtime.cordis.yml` 把该开关设为非对等取值。扫描在对等覆盖层下运行每个开关开启场景，其覆盖范围由[回放通道](#replay-lane)定义，因此被测开关是对等组合中唯一的差异。
+每条注册表记录在 Delo 的 snapshot 树中都有一个开关开启场景。其目录为 `snapshots/<profile>/delo-<id>`，其中 `<id>` 是把下划线替换为连字符后的开关 id；该场景的 `runtime.cordis.yml` 只把该开关设为非对等取值，并加上一条场景本地的 `agent-default-model` 配置，用以固定语料库模型 `deepseek-v4-flash`。Web 开关开启场景没有 `runtime.cordis.yml`；其 `apps/web/tests` 下的 e2e 驱动用 `launchWebScaffold` 的选项开启该开关，并在回放时通过智能体默认模型选择同一模型。扫描在对等覆盖层下运行每个开关开启场景，其覆盖范围由[回放通道](#replay-lane)定义，因此被测开关是对等组合中唯一的行为差异。
 
 检查 `parity-switches` 分两部分运行。静态部分扫描 `delo/`，查找 `systemPrompt.context` 的贡献、工具注册与工具 schema 的变更。匹配项若不属于任何注册表记录，则检查失败。回放部分运行上述的开关开启场景。
 
