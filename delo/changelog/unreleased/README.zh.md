@@ -37,4 +37,4 @@ section: Fixed
 Changelog: none (tests only)
 ```
 
-只改动 Markdown 文件，或只改动 `delo/docs/`、`docs/`、`.agents/`、`delo/apps/tools/`、`delo/apps/release/`、`.github/` 或本文件夹下文件的提交，既无需片段，也无需尾注。
+只改动 Markdown 文件、双语配对记录（`*.i18n.yaml`），或只改动 `delo/docs/`、`docs/`、`.agents/`、`delo/apps/tools/`、`delo/apps/release/`、`.github/` 或本文件夹下文件的提交，既无需片段，也无需尾注。

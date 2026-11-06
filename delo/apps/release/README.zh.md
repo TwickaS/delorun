@@ -15,7 +15,7 @@
 
 ## 门禁
 
-`node_modules/.bin/tsx delo/apps/release/src/changelog/check.ts --base <rev>` 检查 `<rev>` 之后的每个提交。改动产品文件的提交，须在 `delo/changelog/unreleased/` 下添加片段，或带有 `Changelog: none (<reason>)` 尾注。产品文件指文档、工具、发布、工作流和变更日志目录之外的路径；这些目录中的非 Markdown 文件不属于产品文件。门禁还拒绝没有理由的尾注，以及无法解析的片段。它为每项违规输出一行，并以退出码 1 结束。
+`node_modules/.bin/tsx delo/apps/release/src/changelog/check.ts --base <rev>` 检查 `<rev>` 之后的每个提交。改动产品文件的提交，须在 `delo/changelog/unreleased/` 下添加片段，或带有 `Changelog: none (<reason>)` 尾注。产品文件指文档、工具、发布、工作流和变更日志目录之外的路径，但 Markdown 文件和双语配对记录（`*.i18n.yaml`）在任何位置都属于文档，不是产品文件。门禁还拒绝没有理由的尾注，以及无法解析的片段。它为每项违规输出一行，并以退出码 1 结束。
 
 ## 汇总
 

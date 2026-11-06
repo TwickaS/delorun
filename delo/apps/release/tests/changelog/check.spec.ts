@@ -59,6 +59,13 @@ describe('the changelog gate', () => {
     expect(gate(repo, base)).toMatchObject({ status: 0 })
   })
 
+  it('passes a commit that changes only a bilingual pairing record', (test) => {
+    const repo = scratchRepo(test)
+    const base = repo.commit({ 'packages/app/README.md': '# App\n', 'packages/app/README.i18n.yaml': 'old: 1\n' })
+    repo.commit({ 'packages/app/README.i18n.yaml': 'new: 2\n' }, `docs(app): re-record\n\n${SIGNED}`)
+    expect(gate(repo, base)).toMatchObject({ status: 0 })
+  })
+
   it('passes a product change that adds a valid fragment in the same commit', (test) => {
     const repo = scratchRepo(test)
     const base = repo.commit({ 'packages/app/index.ts': 'export const a = 0\n' })

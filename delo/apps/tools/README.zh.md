@@ -49,6 +49,7 @@
 | `gates:infrastructure` | 是 | 环回、未指定与广播地址、RFC 5737 文档地址段、云元数据地址 `169.254.169.254`，以及保留 IPv4 地址块的基地址（`10.0.0.0`、`100.64.0.0`、`169.254.0.0`、`172.16.0.0`、`192.168.0.0`、`224.0.0.0`）之外的 IPv4 地址；全局可路由或唯一本地地址块中，RFC 3849 文档地址段、云元数据地址 `fd00:ec2::254` 与基地址 `fc00::` 之外的 IPv6 地址；`example.ts.net` 之外的 tailnet 名称；以及云账户 ID。文档化的例外按路径与值列于 [`infrastructure.allowlist.json`](src/checks/gates/infrastructure.allowlist.json)。 |
 | `gates:dco` | 否 | 范围内每个非合并提交都有一行 `Signed-off-by`，其姓名与邮箱即作者的姓名与邮箱。 |
 | `gates:commits` | 否 | 对范围内的提交执行提交标准，包括变更片段规则。 |
+| `gates:changelog` | 否 | 范围内改动产品文件的每个提交，都须在 `delo/changelog/unreleased/` 下添加变更片段，或带有附理由的 `Changelog: none` 尾注；其中每个片段都须能解析。 |
 | `gates:doc-times` | 否 | 范围新增的 `delo/` 下 Markdown 文件中，任何一行都不得含有截止日期、季度、排期估计或时间承诺。 |
 | `gates:docs` | 否 | 对 `delo/docs/` 执行上游的双语配对、字数预算、硬换行、相对链接与 TypeScript 代码块检查。 |
 

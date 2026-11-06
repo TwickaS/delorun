@@ -37,4 +37,4 @@ A change people cannot perceive ends each of its commits with a trailer that giv
 Changelog: none (tests only)
 ```
 
-A commit that changes only Markdown files, or files under `delo/docs/`, `docs/`, `.agents/`, `delo/apps/tools/`, `delo/apps/release/`, `.github/` or this folder, needs neither a fragment nor a trailer.
+A commit that changes only Markdown files, bilingual pairing records (`*.i18n.yaml`), or files under `delo/docs/`, `docs/`, `.agents/`, `delo/apps/tools/`, `delo/apps/release/`, `.github/` or this folder, needs neither a fragment nor a trailer.

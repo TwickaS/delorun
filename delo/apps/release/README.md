@@ -15,7 +15,7 @@ English | [中文](README.zh.md)
 
 ## The gate
 
-`node_modules/.bin/tsx delo/apps/release/src/changelog/check.ts --base <rev>` checks each commit after `<rev>`. A commit that changes a product file adds a fragment under `delo/changelog/unreleased/` or carries a `Changelog: none (<reason>)` trailer. Product files are every path outside the documentation, tooling, release, workflow and changelog trees, and every non-Markdown file in those trees is not product. The gate also refuses a reason-less trailer and every fragment that does not parse. It prints one line per violation and exits 1.
+`node_modules/.bin/tsx delo/apps/release/src/changelog/check.ts --base <rev>` checks each commit after `<rev>`. A commit that changes a product file adds a fragment under `delo/changelog/unreleased/` or carries a `Changelog: none (<reason>)` trailer. Product files are every path outside the documentation, tooling, release, workflow and changelog trees, except Markdown files and bilingual pairing records (`*.i18n.yaml`), which are documentation wherever they are. The gate also refuses a reason-less trailer and every fragment that does not parse. It prints one line per violation and exits 1.
 
 ## Assembly
 
