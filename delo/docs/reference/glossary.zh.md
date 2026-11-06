@@ -113,7 +113,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **抓取防护**（fetch guard）：Delo 插件，使 `web_fetch` 与 HTTP 抓取提供方拒绝回环、链路本地（包括云元数据地址）与私有网络目标，并返回带类型的原因；Delo 的约定要求它默认开启，在对等组合中关闭，且可以切换。<a id="fetch-guard"></a>
 - **指令层文件**（instruction-layer file）：skill、预设（preset）或 `AGENTS.md`：作为指令加载到其作用域内每个后续 chat 中的文本，因此 Delo 的约定要求模型对它的写入先征询本人并显示差异。<a id="instruction-layer"></a>
 - **运行日志**（operational log）：Delo 各进程（CLI home 进程、桌面 Host、Docker 监管器、自托管中继）记录其运行情况的文件。Delo 的约定要求它轮转、从不保存密钥，并可通过 `delorun logs` 查看。它不同于记录 chat 且永久保留的会话日志。代码与维护者文档中为运行日志约定。<a id="operational-log"></a>
-- **会话与轮次键**（session and turn keys）：上游的会话与轮次 id。每条运行日志记录都携带它们，使一个 chat 的轮次能追溯到背后的进程故障；会话日志事件不携带额外的 id。<a id="log-keys"></a>
+- **会话与轮次键**（session and turn keys）：上游的会话与轮次 id。属于某个会话与轮次的运行日志记录携带它们，使一个 chat 的轮次能追溯到背后的进程故障；会话日志事件不携带额外的 id。<a id="log-keys"></a>
 - **活动历史**（activity history）：一个只读视图，基于会话日志展示每个 chat 做过的事，通过 `delorun history` 查看。未提供此功能，界面文本不使用该术语。**系统状态面板**（system-stats panel）：每台机器上的实时 CPU、内存与进程占用，位于活动历史旁边。未提供此功能。<a id="activity-history"></a>
 - **遥测**（telemetry）：Delo 会发送到 Delo Run、不含内容的使用数据。Delo 不发送自有遥测；Delo 新增的任何遥测都需经本人选择开启，默认为「否」，并显示其确切负载。上游的产品分析与 DeepSeek 会话日志上传是独立的；Delo 的约定要求它们保持可用，除非本人选择开启，否则保持关闭。<a id="telemetry"></a>
 
