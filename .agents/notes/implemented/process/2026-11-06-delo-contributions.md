@@ -6,7 +6,7 @@ English | [中文](2026-11-06-delo-contributions.zh.md)
 
 ## Problem
 
-Delo is a community fork and invites contributions to every part of it. Upstream's [CONTRIBUTING.md](../../../../CONTRIBUTING.md) does not accept external pull requests. Without a contribution rule, commits arrive without a licence sign-off, changes arrive without the record that a release needs, and issue text reaches agents as instructions, although anyone can write issue text.
+Delo is a community fork and invites contributions to every part of it. Upstream DeepSeek Harness does not accept external pull requests. Without a contribution rule, commits arrive without a licence sign-off, changes arrive without the record that a release needs, and issue text reaches agents as instructions, although anyone can write issue text.
 
 ## Decision
 
@@ -24,7 +24,7 @@ Review checks each commit's sign-off, subject and changelog trailer against this
 
 The [label taxonomy decision](../process/2026-08-08-unified-github-label-taxonomy.md) defines the `kind/*` and `area/*` labels that Delo uses. Delo adds the `brief` label to that set.
 
-Upstream's [CONTRIBUTING.md](../../../../CONTRIBUTING.md) does not accept external pull requests. This decision departs from that document for Delo. The upstream file is unchanged by this decision.
+Upstream DeepSeek Harness does not accept external pull requests. This decision departs from that policy: Delo's [CONTRIBUTING.md](../../../../CONTRIBUTING.md), edited in place from upstream's and recorded in the divergence ledger, states Delo's welcome and rules.
 
 ## Alternatives considered
 

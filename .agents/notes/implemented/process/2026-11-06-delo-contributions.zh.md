@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-Delo 是社区 fork，欢迎对其各部分的贡献。上游的 [CONTRIBUTING.md](../../../../CONTRIBUTING.zh.md) 不接受外部拉取请求。若没有贡献规则，提交会缺少许可签署，改动会缺少发布所需的记录，而 issue 文本（任何人都能撰写）会以指令的形式到达 agent。
+Delo 是社区 fork，欢迎对其各部分的贡献。上游 DeepSeek Harness 不接受外部拉取请求。若没有贡献规则，提交会缺少许可签署，改动会缺少发布所需的记录，而 issue 文本（任何人都能撰写）会以指令的形式到达 agent。
 
 ## 决策
 
@@ -24,7 +24,7 @@ Delo 的各部分都以 MIT 许可接受贡献，每个提交都附有 Developer
 
 [标签分类体系决策](../process/2026-08-08-unified-github-label-taxonomy.zh.md) 定义了 Delo 所用的 `kind/*` 与 `area/*` 标签。Delo 在该集合上增加了 `brief` 标签。
 
-上游的 [CONTRIBUTING.md](../../../../CONTRIBUTING.zh.md) 不接受外部拉取请求。本决策对 Delo 偏离该文件。本决策不改变上游文件。
+上游 DeepSeek Harness 不接受外部拉取请求。本决策偏离这一政策：Delo 的 [CONTRIBUTING.md](../../../../CONTRIBUTING.zh.md) 由上游文件原地编辑而来，并记录在差异台账中，说明 Delo 的欢迎与规则。
 
 ## 曾考虑的替代方案
 
