@@ -1239,6 +1239,8 @@ importers:
 
   delo/packages/contract-parity-composition: {}
 
+  delo/packages/contract-setup-answers: {}
+
   native/system:
     devDependencies:
       '@deepseek-ai/node-addon-system':
