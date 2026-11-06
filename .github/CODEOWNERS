@@ -1,0 +1,13 @@
+# Code owners receive review requests for the paths they own.
+* @VadimAlexeev0
+
+# Security-sensitive paths.
+packages/sandbox/ @VadimAlexeev0
+packages/shell/ @VadimAlexeev0
+packages/interaction/ @VadimAlexeev0
+packages/credentials/ @VadimAlexeev0
+packages/boot/plugin-manager/ @VadimAlexeev0
+delo/upstream-patches.json @VadimAlexeev0
+.github/ @VadimAlexeev0
+scripts/ @VadimAlexeev0
+SECURITY.md @VadimAlexeev0
