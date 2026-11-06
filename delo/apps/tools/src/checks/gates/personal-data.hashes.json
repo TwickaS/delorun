@@ -1,0 +1,6 @@
+{
+  "$comment": "Salted SHA-256 hashes of the personal-data patterns; regenerate with --rehash.",
+  "algorithm": "sha256",
+  "salt": "35bc28cae8c234067a447f17832bc683",
+  "hashes": []
+}
