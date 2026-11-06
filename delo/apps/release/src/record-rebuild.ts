@@ -3,27 +3,30 @@
  * outside CI, after building the release's commit with `build-closure.ts` into a local directory:
  *
  * `node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release <dir> --rebuild <dir>
- * --builder <name> --compared-with <workflow run URL> [--commit <rev>]`
+ * --record <file> --builder <name> --compared-with <workflow run URL> [--commit <rev>]`
  *
  * It compares every file of `--rebuild` with the file of the same name in `--release`, the release workflow's
- * output, under the committed `rebuild-exceptions.json`, and writes `delorun-<version>.rebuild.json` into
- * `--release` with the builder, `ci: false`, the recipe digest, the toolchain, the digest of every rebuilt file and
- * the comparison's result. It refuses to run with `CI` or `GITHUB_ACTIONS` set, and exits 1 when the comparison finds
- * a difference, after writing the record that says so.
+ * output, under `rebuild-exceptions.json` as committed at the release's commit, and writes the rebuild record to
+ * `--record`, outside `--release`, with the builder, `ci: false`, the recipe digest, the toolchain pinned at that
+ * commit, the digest of every rebuilt file and the comparison's result. Signing reads the record from that path and
+ * publishes it as `delorun-<version>.rebuild.json`. It refuses to run with `CI` or `GITHUB_ACTIONS` set, refuses a
+ * rebuild that lacks a runtime archive or file list, and exits 1 when the comparison finds a difference, after
+ * writing the record that says so.
  *
  * @module @delo/release/record-rebuild
  */
 import { writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { realpath } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { RELEASE_SCHEMAS, type RebuildRecord } from '@delo/contract-release-manifest'
+import { RELEASE_SCHEMAS, RUNTIME_PLATFORMS, type RebuildRecord } from '@delo/contract-release-manifest'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { semanticVersion } from './brands.ts'
-import { readRecipe } from './closure/config.ts'
+import { closureFileNames } from './closure/tree.ts'
 import { comparisonReport } from './compare-rebuild.ts'
 import { compareOutputs } from './rebuild/compare.ts'
-import { ciMarkers, commitOf, outputRefs, rebuildRecordName, recipeDigest, REQUIRED_SOURCE } from './rebuild/record.ts'
+import { ciMarkers, commitOf, isWithin, outputRefs, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE } from './rebuild/record.ts'
 
 async function main(argv: readonly string[]): Promise<number> {
   const { values } = parseArgs({
@@ -33,6 +36,7 @@ async function main(argv: readonly string[]): Promise<number> {
       version: { type: 'string' },
       release: { type: 'string' },
       rebuild: { type: 'string' },
+      record: { type: 'string' },
       builder: { type: 'string' },
       'compared-with': { type: 'string' },
       commit: { type: 'string' },
@@ -41,18 +45,23 @@ async function main(argv: readonly string[]): Promise<number> {
   try {
     const markers = ciMarkers(process.env)
     if (markers.length > 0) throw new Error(`${markers.join(' and ')} is set; the rebuild record must come from ${REQUIRED_SOURCE}`)
-    if (values.version === undefined || values.release === undefined || values.rebuild === undefined || values.builder === undefined || values['compared-with'] === undefined) {
-      throw new Error('pass --version, --release, --rebuild, --builder and --compared-with')
+    if (values.version === undefined || values.release === undefined || values.rebuild === undefined || values.record === undefined || values.builder === undefined || values['compared-with'] === undefined) {
+      throw new Error('pass --version, --release, --rebuild, --record, --builder and --compared-with')
     }
     const version = semanticVersion(values.version)
     const repository = repositoryRoot(process.cwd())
     const commit = commitOf(repository, values.commit ?? `v${version}`)
-    const recipe = readRecipe()
-    const release = resolve(values.release)
-    const rebuild = resolve(values.rebuild)
+    const recipe = recipeAt(repository, commit)
+    const release = await realpath(resolve(values.release))
+    const rebuild = await realpath(resolve(values.rebuild))
+    const path = resolve(values.record)
+    if (isWithin(rebuild, release)) throw new Error(`the rebuild output ${rebuild} is the release directory or inside it`)
+    if (isWithin(await realpath(dirname(path)), release)) throw new Error(`write the rebuild record outside the release directory ${release}`)
     const outputs = await outputRefs(rebuild)
-    if (outputs.length === 0) throw new Error(`${rebuild} holds no rebuilt files`)
-    const comparison = await compareOutputs(release, rebuild, recipe.exceptions, new Set(outputs.map(output => output.name)))
+    const names = new Set(outputs.map(output => output.name))
+    const missing = RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform))).filter(name => !names.has(name))
+    if (missing.length > 0) throw new Error(`${rebuild} lacks ${missing.join(', ')}; rebuild every platform's runtime`)
+    const comparison = await compareOutputs(release, rebuild, recipe.exceptions, names)
     for (const line of comparisonReport(comparison)) console.log(line)
     const record: RebuildRecord = {
       schema: RELEASE_SCHEMAS.rebuild,
@@ -60,12 +69,11 @@ async function main(argv: readonly string[]): Promise<number> {
       commit,
       recipe: recipeDigest(repository, commit),
       builder: { name: values.builder, ci: false },
-      toolchain: { node: recipe.toolchain.node.version, pnpm: recipe.toolchain.pnpm.version, compiler: recipe.toolchain.native.compiler, linker: recipe.toolchain.native.linker },
+      toolchain: recordToolchain(recipe.toolchain),
       outputs,
       comparedWith: values['compared-with'],
       comparison: comparison.differences.length === 0 ? 'match' : 'difference',
     }
-    const path = join(release, rebuildRecordName(version))
     await writeFile(path, `${JSON.stringify(record, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
     console.log(`record-rebuild: wrote ${path} (${record.comparison})`)
     return record.comparison === 'match' ? 0 : 1

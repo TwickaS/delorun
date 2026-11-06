@@ -85,7 +85,10 @@ export interface SignedEnvelope<T> {
 
 /** A file named by its bytes. */
 export interface FileRef {
-  /** The file name on the release or metadata host. */
+  /**
+   * The file name on the release or metadata host: one path segment of letters, digits, `.`, `_`, `+` and `-`, never
+   * `.` or `..`, matching `^[A-Za-z0-9._+-]+$`, so a reference names a file in the release directory and no other.
+   */
   readonly name: string
   /** Length in bytes. */
   readonly length: number

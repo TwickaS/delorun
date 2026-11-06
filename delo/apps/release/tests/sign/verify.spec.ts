@@ -1,44 +1,55 @@
 /**
  * Client verification of signed release files (contract C2's `c02-refuses-expired-timestamp` and
- * `c02-refuses-replayed-manifest`, with the tampered archive, replayed timestamp, key-role, rotation and file-format
- * refusals around them), over throwaway keys generated in the test.
+ * `c02-refuses-replayed-manifest`, with the tampered archive, replayed timestamp, root lifetime, key-role, rotation,
+ * channel and file-format refusals around them), and the timestamp signer's checks of what it carries forward, over
+ * throwaway keys generated in the test.
  */
-import { generateKeyPairSync } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import type { RootMetadata, TimestampMetadata } from '@delo/contract-release-manifest'
-import { semanticVersion } from '../../src/brands.ts'
-import { publicKeyEntry, signEnvelope } from '../../src/sign/envelope.ts'
+import { RELEASE_SCHEMAS, type ReleaseChannel, type ReleaseManifest, type TimestampMetadata, type UtcTimestamp } from '@delo/contract-release-manifest'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import { semanticVersion, sha256Hex } from '../../src/brands.ts'
+import { publicKeyEntry, signEnvelope, signedBytes } from '../../src/sign/envelope.ts'
 import { canonicalJson, parseStrictJson, toJsonValue } from '../../src/sign/json.ts'
-import { nextTimestamp } from '../../src/sign/timestamp.ts'
-import { adoptNextRoot, checkFileRef, readTrustedRoot, verifyChannelManifest, verifySignedManifest, verifyTimestamp } from '../../src/sign/verify.ts'
+import { nextTimestamp, type ManifestFile } from '../../src/sign/timestamp.ts'
+import { adoptNextRoot, checkFileRef, readTrustedRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifySignedManifest, verifyTimestamp, type TrustedRoot } from '../../src/sign/verify.ts'
 import { manifestContent, rootFile, throwawayKeys, type Keys } from './fixture.ts'
 
 const ISSUED = Date.parse('2026-11-06T12:00:00Z') / 1000
+const DAY = 86_400
 
 function envelopeBytes(signed: object, keys: Parameters<typeof signEnvelope>[1]): Buffer {
   return Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(signed), signatures: [] }, keys), undefined, 2)}\n`)
 }
 
+function utc(seconds: number): UtcTimestamp {
+  return brandString<UtcTimestamp>(`${new Date(seconds * 1000).toISOString().slice(0, 19)}Z`)
+}
+
+function manifestFile(keys: Keys, version: string, channel: ReleaseChannel = 'stable', archive = Buffer.from(`runtime archive ${version}`)): ManifestFile & { readonly bytes: Buffer } {
+  return { name: `delorun-${version}.manifest.json`, bytes: envelopeBytes({ ...manifestContent(version, archive), channel }, [keys.targets]) }
+}
+
 interface Published {
   readonly keys: Keys
-  readonly root: { metadata: RootMetadata, bytes: Buffer }
+  readonly root: TrustedRoot
   readonly archive: Buffer
   readonly manifestBytes: Buffer
   readonly timestamp: { metadata: TimestampMetadata, bytes: Buffer }
 }
 
 function publish(version = '0.1.0', keys: Keys = throwawayKeys()): Published {
-  const root = rootFile(keys)
+  const root = readTrustedRoot(rootFile(keys).bytes)
   const archive = Buffer.from(`runtime archive ${version}`)
-  const manifestBytes = envelopeBytes(manifestContent(version, archive), [keys.targets])
-  const metadata = nextTimestamp(root, undefined, { channel: 'stable', name: `delorun-${version}.manifest.json`, bytes: manifestBytes }, ISSUED)
-  return { keys, root, archive, manifestBytes, timestamp: { metadata, bytes: envelopeBytes(metadata, [keys.timestamp]) } }
+  const manifest = manifestFile(keys, version, 'stable', archive)
+  const metadata = nextTimestamp([root], undefined, { stable: manifest, beta: manifest }, ISSUED)
+  return { keys, root, archive, manifestBytes: manifest.bytes, timestamp: { metadata, bytes: envelopeBytes(metadata, [keys.timestamp]) } }
 }
 
 describe('release verification', () => {
   it('verifies the channel manifest with the targets key and each file against it', () => {
     const release = publish()
-    const timestamp = verifyTimestamp(release.root.metadata, release.timestamp.bytes, ISSUED + 60)
+    const timestamp = verifyTimestamp(release.root, release.timestamp.bytes, ISSUED + 60)
     const verified = verifyChannelManifest(release.root.metadata, timestamp, 'stable', release.manifestBytes)
     expect(verified.version).toBe('0.1.0')
     expect(() => checkFileRef(verified.runtime['linux-x64'].archive, release.archive)).not.toThrow()
@@ -56,40 +67,100 @@ describe('release verification', () => {
   it('refuses timestamp metadata one second past its expiry, naming the expiry and the local clock', () => {
     const release = publish()
     const expires = Date.parse(release.timestamp.metadata.expires) / 1000
-    expect(() => verifyTimestamp(release.root.metadata, release.timestamp.bytes, expires)).not.toThrow()
-    expect(() => verifyTimestamp(release.root.metadata, release.timestamp.bytes, expires + 1))
+    expect(() => verifyTimestamp(release.root, release.timestamp.bytes, expires)).not.toThrow()
+    expect(() => verifyTimestamp(release.root, release.timestamp.bytes, expires + 1))
       .toThrow(`timestamp 1 expired at ${release.timestamp.metadata.expires}; this machine's clock reads ${new Date((expires + 1) * 1000).toISOString().replace('.000Z', 'Z')}`)
+  })
+
+  it('refuses timestamp metadata issued after the local clock, or living other than 3 days', () => {
+    const release = publish()
+    expect(() => verifyTimestamp(release.root, release.timestamp.bytes, ISSUED - 1)).toThrow(/was issued at 2026-11-06T12:00:00Z, after this machine's clock/u)
+    const longer = envelopeBytes({ ...release.timestamp.metadata, expires: utc(ISSUED + 4 * DAY) }, [release.keys.timestamp])
+    expect(() => verifyTimestamp(release.root, longer, ISSUED + 60)).toThrow(/does not expire exactly 259200 seconds after it was issued/u)
+  })
+
+  it('refuses timestamp metadata that names another root version, or another file of the trusted root version', () => {
+    const release = publish()
+    const newer = envelopeBytes({ ...release.timestamp.metadata, root: { version: 2, sha256: release.root.sha256 } }, [release.keys.timestamp])
+    expect(() => verifyTimestamp(release.root, newer, ISSUED + 60)).toThrow(/names root 2, but root 1 is trusted; adopt the newer root first/u)
+    const other = sha256Hex('0'.repeat(64))
+    const forged = envelopeBytes({ ...release.timestamp.metadata, root: { version: 1, sha256: other } }, [release.keys.timestamp])
+    expect(() => verifyTimestamp(release.root, forged, ISSUED + 60)).toThrow(`timestamp names root 1 with SHA-256 ${other}, not the trusted root file's ${release.root.sha256}`)
   })
 
   it('refuses a validly signed older manifest that the fresh timestamp does not name', () => {
     const keys = throwawayKeys()
     const older = publish('0.1.0', keys)
     const newer = publish('0.2.0', keys)
-    const timestamp = verifyTimestamp(newer.root.metadata, newer.timestamp.bytes, ISSUED + 60)
+    const timestamp = verifyTimestamp(newer.root, newer.timestamp.bytes, ISSUED + 60)
     expect(verifySignedManifest(newer.root.metadata, older.manifestBytes).version).toBe('0.1.0')
     expect(() => verifyChannelManifest(newer.root.metadata, timestamp, 'stable', older.manifestBytes)).toThrow(/is not the stable channel's current manifest/u)
   })
 
+  it('refuses a manifest whose release or channel differs from the timestamp entry naming it, and offers a stable release on beta', () => {
+    const release = publish()
+    const pointer = release.timestamp.metadata.channels.stable
+    const renamed: TimestampMetadata = { ...release.timestamp.metadata, channels: { stable: { ...pointer, release: semanticVersion('0.2.0') }, beta: pointer } }
+    expect(() => verifyChannelManifest(release.root.metadata, renamed, 'stable', release.manifestBytes)).toThrow('the manifest is release 0.1.0 on stable, not 0.2.0 on stable')
+    const beta = manifestFile(release.keys, '0.1.0', 'beta')
+    const betaPointer = { release: semanticVersion('0.1.0'), manifest: { name: beta.name, length: beta.bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(beta.bytes).digest('hex')) } }
+    const onStable: TimestampMetadata = { ...release.timestamp.metadata, channels: { stable: betaPointer, beta: betaPointer } }
+    expect(() => verifyChannelManifest(release.root.metadata, onStable, 'stable', beta.bytes)).toThrow('the manifest is release 0.1.0 on beta, not 0.1.0 on stable')
+    expect(verifyChannelManifest(release.root.metadata, onStable, 'beta', beta.bytes).channel).toBe('beta')
+    expect(verifyChannelManifest(release.root.metadata, release.timestamp.metadata, 'beta', release.manifestBytes).channel).toBe('stable')
+  })
+
+  it('refuses a file list for another platform or release, though the targets key signed it', () => {
+    const release = publish()
+    const list = (version: string, platform: string): Buffer => envelopeBytes({ schema: RELEASE_SCHEMAS.files, version, platform, files: [] }, [release.keys.targets])
+    const withList = (bytes: Buffer): ReleaseManifest => {
+      const content = manifestContent('0.1.0', release.archive)
+      const files = { name: 'delorun-0.1.0-linux-x64.files.json', length: bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
+      return { ...content, runtime: { ...content.runtime, 'linux-x64': { ...content.runtime['linux-x64'], files } } }
+    }
+    const own = list('0.1.0', 'linux-x64')
+    expect(verifyFileList(release.root.metadata, withList(own), 'linux-x64', own).platform).toBe('linux-x64')
+    const arm = list('0.1.0', 'linux-arm64')
+    expect(() => verifyFileList(release.root.metadata, withList(arm), 'linux-x64', arm)).toThrow('the file list is for 0.1.0 linux-arm64, not 0.1.0 linux-x64')
+    const older = list('0.0.9', 'linux-x64')
+    expect(() => verifyFileList(release.root.metadata, withList(older), 'linux-x64', older)).toThrow('the file list is for 0.0.9 linux-x64, not 0.1.0 linux-x64')
+  })
+
   it('refuses a replayed timestamp with a lower version, and a different file with the stored version', () => {
     const release = publish()
-    const second = nextTimestamp(release.root, release.timestamp.metadata, undefined, ISSUED + 86_400)
+    const manifest = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
+    const second = nextTimestamp([release.root], release.timestamp.bytes, { stable: manifest, beta: manifest }, ISSUED + DAY)
     const secondBytes = envelopeBytes(second, [release.keys.timestamp])
-    expect(() => verifyTimestamp(release.root.metadata, release.timestamp.bytes, ISSUED + 90_000, { version: 2, bytes: secondBytes })).toThrow(/version 1 is lower than the stored version 2/u)
-    const resigned = envelopeBytes({ ...second, issued: second.issued }, [release.keys.timestamp, generateKeyPairSync('ed25519').privateKey])
-    expect(() => verifyTimestamp(release.root.metadata, resigned, ISSUED + 90_000, { version: 2, bytes: secondBytes })).toThrow(/differs from the stored file/u)
+    expect(() => verifyTimestamp(release.root, release.timestamp.bytes, ISSUED + DAY + 60, { version: 2, bytes: secondBytes })).toThrow(/version 1 is lower than the stored version 2/u)
+    const resigned = envelopeBytes(second, [release.keys.timestamp, generateKeyPairSync('ed25519').privateKey])
+    expect(() => verifyTimestamp(release.root, resigned, ISSUED + DAY + 60, { version: 2, bytes: secondBytes })).toThrow(/differs from the stored file/u)
   })
 
   it('refuses a manifest signed by a key outside the targets role, a timestamp signed by the targets key, and a revoked targets key', () => {
     const release = publish()
     const outsider = envelopeBytes(manifestContent('0.1.0', release.archive), [release.keys.timestamp])
     expect(() => verifySignedManifest(release.root.metadata, outsider)).toThrow(/0 valid signatures/u)
-    expect(() => verifyTimestamp(release.root.metadata, envelopeBytes(release.timestamp.metadata, [release.keys.targets]), ISSUED)).toThrow(/0 valid signatures/u)
+    expect(() => verifyTimestamp(release.root, envelopeBytes(release.timestamp.metadata, [release.keys.targets]), ISSUED)).toThrow(/0 valid signatures/u)
     const targetsId = publicKeyEntry(release.keys.targets).keyid
-    const revoked = rootFile(release.keys, { roles: { ...release.root.metadata.roles, targets: { keys: [{ keyid: targetsId, status: 'revoked' }], threshold: 1 } } }).metadata
+    const successor = publicKeyEntry(generateKeyPairSync('ed25519').privateKey)
+    const revoked = rootFile(release.keys, {
+      keys: { ...release.root.metadata.keys, [successor.keyid]: successor.entry },
+      roles: { ...release.root.metadata.roles, targets: { keys: [{ keyid: targetsId, status: 'revoked' }, { keyid: successor.keyid, status: 'active' }], threshold: 1 } },
+    }).metadata
     expect(() => verifySignedManifest(revoked, release.manifestBytes)).toThrow(/0 valid signatures/u)
     const retired = rootFile(release.keys, { roles: { ...release.root.metadata.roles, targets: { keys: [{ keyid: targetsId, status: 'retired', lastRelease: semanticVersion('0.1.0') }], threshold: 1 } } }).metadata
     expect(verifySignedManifest(retired, release.manifestBytes).version).toBe('0.1.0')
     expect(() => verifySignedManifest(retired, envelopeBytes(manifestContent('0.1.1', release.archive), [release.keys.targets]))).toThrow(/0 valid signatures/u)
+  })
+
+  it('refuses a key that root metadata lists under an id other than its public key\'s SHA-256', () => {
+    const keys = throwawayKeys()
+    const { metadata } = rootFile(keys)
+    const targetsId = publicKeyEntry(keys.targets).keyid
+    const swapped = { ...metadata, keys: { ...metadata.keys, [targetsId]: publicKeyEntry(keys.timestamp).entry } }
+    const content = toJsonValue(manifestContent('0.1.0', Buffer.from('archive')))
+    const forged = Buffer.from(JSON.stringify({ signed: content, signatures: [{ keyid: targetsId, sig: sign(null, signedBytes(content), keys.timestamp).toString('base64') }] }))
+    expect(() => verifySignedManifest(swapped, forged)).toThrow(`key ${targetsId} is listed under an id that is not the SHA-256 of its public key`)
   })
 
   it('adopts the next root only when both the previous and its own root keys sign it', () => {
@@ -99,10 +170,37 @@ describe('release verification', () => {
     const newRoot = generateKeyPairSync('ed25519').privateKey
     const rotated: Keys = { ...keys, root: newRoot }
     const both = rootFile(rotated, { version: 2 }, [keys.root, newRoot])
-    expect(adoptNextRoot(trusted, both.bytes).version).toBe(2)
+    expect(adoptNextRoot(trusted, both.bytes).metadata.version).toBe(2)
     expect(() => adoptNextRoot(trusted, rootFile(rotated, { version: 2 }, [newRoot]).bytes)).toThrow(/previous root's keys/u)
     expect(() => adoptNextRoot(trusted, rootFile(rotated, { version: 2 }, [keys.root]).bytes)).toThrow(/root 2 has 0 valid signatures/u)
     expect(() => adoptNextRoot(trusted, rootFile(rotated, { version: 3 }, [keys.root, newRoot]).bytes)).toThrow(/does not follow/u)
+  })
+
+  it('refuses a root past its expiry, one expiring before it was issued, and one living longer than 365 days', () => {
+    const keys = throwawayKeys()
+    const { bytes, metadata } = rootFile(keys)
+    const expires = Date.parse(metadata.expires) / 1000
+    expect(readTrustedRoot(bytes, expires).metadata.version).toBe(1)
+    expect(() => readTrustedRoot(bytes, expires + 1)).toThrow(`root 1 expired at ${metadata.expires}; this machine's clock reads ${utc(expires + 1)}. A newer root must verify before installs and updates`)
+    expect(() => trustRootChain([bytes], expires + 1)).toThrow(/root 1 expired/u)
+    expect(trustRootChain([bytes, rootFile(keys, { version: 2, expires: utc(expires + DAY) }).bytes], expires + 1).map(root => root.metadata.version)).toEqual([1, 2])
+    expect(() => readTrustedRoot(rootFile(keys, { expires: metadata.issued }).bytes)).toThrow(`root 1 expires at ${metadata.issued}, not after it was issued at ${metadata.issued}`)
+    const issued = Date.parse(metadata.issued) / 1000
+    expect(readTrustedRoot(rootFile(keys, { expires: utc(issued + 365 * DAY) }).bytes).metadata.version).toBe(1)
+    expect(() => readTrustedRoot(rootFile(keys, { expires: utc(issued + 365 * DAY + 1) }).bytes)).toThrow('root 1 expires more than 365 days after it was issued')
+  })
+
+  it('refuses a root that gives one key two roles, or does not have exactly one active targets key', () => {
+    const keys = throwawayKeys()
+    const { metadata } = rootFile(keys)
+    const targetsId = publicKeyEntry(keys.targets).keyid
+    const shared = rootFile(keys, { roles: { ...metadata.roles, timestamp: { keyids: [targetsId], threshold: 1 } } })
+    expect(() => readTrustedRoot(shared.bytes)).toThrow(`key ${targetsId} is already in role targets; each key holds one role`)
+    const extra = publicKeyEntry(generateKeyPairSync('ed25519').privateKey).keyid
+    const twoActive = rootFile(keys, { roles: { ...metadata.roles, targets: { keys: [{ keyid: targetsId, status: 'active' }, { keyid: extra, status: 'active' }], threshold: 1 } } })
+    expect(() => readTrustedRoot(twoActive.bytes)).toThrow('2 targets keys are active; exactly one must be')
+    const noneActive = rootFile(keys, { roles: { ...metadata.roles, targets: { keys: [{ keyid: targetsId, status: 'retired', lastRelease: semanticVersion('0.1.0') }], threshold: 1 } } })
+    expect(() => readTrustedRoot(noneActive.bytes)).toThrow('0 targets keys are active; exactly one must be')
   })
 
   it('refuses a signed file with a duplicate key, an unknown field or an unknown schema', () => {
@@ -111,6 +209,61 @@ describe('release verification', () => {
     expect(() => verifySignedManifest(release.root.metadata, Buffer.from(text.replace('"channel": "stable",', '"channel": "stable",\n    "channel": "beta",')))).toThrow(/duplicate key "channel"/u)
     expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...manifestContent('0.1.0', release.archive), extra: true }, [release.keys.targets]))).toThrow(/extra/u)
     expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...manifestContent('0.1.0', release.archive), schema: 'delo.release-manifest/2' }, [release.keys.targets]))).toThrow(/schema/u)
+  })
+
+  it.each(['../delorun-0.1.0-linux-x64.tar.gz', 'release/delorun.tar.gz', '..', '.', 'a\\b', ''])('refuses the file name %j, which is not one path segment', (name) => {
+    const release = publish()
+    const content = manifestContent('0.1.0', release.archive)
+    const escaping = { ...content, sbom: { ...content.sbom, name } }
+    expect(() => verifySignedManifest(release.root.metadata, envelopeBytes(escaping, [release.keys.targets]))).toThrow(/manifest file: .*sbom\.name/u)
+  })
+})
+
+describe('timestamp signing', () => {
+  const later = ISSUED + DAY
+
+  it('names the stable release on both channels at first, and refuses a beta release on the stable channel', () => {
+    const release = publish()
+    expect(release.timestamp.metadata.channels.beta).toEqual(release.timestamp.metadata.channels.stable)
+    const beta = manifestFile(release.keys, '0.2.0-beta.1', 'beta')
+    expect(() => nextTimestamp([release.root], release.timestamp.bytes, { stable: beta, beta }, later)).toThrow(`${beta.name} is a beta release, which the stable channel does not name`)
+    const stable = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
+    expect(nextTimestamp([release.root], release.timestamp.bytes, { stable, beta }, later).channels.beta.release).toBe('0.2.0-beta.1')
+  })
+
+  it('refuses a previous timestamp the timestamp key did not sign, or one naming another root file, and reads an expired one', () => {
+    const release = publish()
+    const stable = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
+    const manifests = { stable, beta: stable }
+    const forged = envelopeBytes({ ...release.timestamp.metadata, version: 41 }, [generateKeyPairSync('ed25519').privateKey])
+    expect(() => nextTimestamp([release.root], forged, manifests, later)).toThrow(/timestamp has 0 valid signatures/u)
+    const otherRoot = envelopeBytes({ ...release.timestamp.metadata, root: { version: 1, sha256: sha256Hex('1'.repeat(64)) } }, [release.keys.timestamp])
+    expect(() => nextTimestamp([release.root], otherRoot, manifests, later)).toThrow(/not the trusted root file's/u)
+    expect(nextTimestamp([release.root], release.timestamp.bytes, manifests, ISSUED + 30 * DAY).version).toBe(2)
+  })
+
+  it('reads a previous timestamp under the root it names after a rotation, and refuses one naming a root not passed', () => {
+    const keys = throwawayKeys()
+    const release = publish('0.1.0', keys)
+    const newTimestamp = generateKeyPairSync('ed25519').privateKey
+    const second = readTrustedRoot(rootFile({ ...keys, timestamp: newTimestamp }, { version: 2 }, [keys.root]).bytes)
+    const stable = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
+    const next = nextTimestamp([release.root, second], release.timestamp.bytes, { stable, beta: stable }, later)
+    expect(next.root).toEqual({ version: 2, sha256: second.sha256 })
+    expect(() => nextTimestamp([second], release.timestamp.bytes, { stable, beta: stable }, later)).toThrow('the previous timestamp names root 1, which is not among the roots passed')
+  })
+
+  it('refuses to move a channel back to a lower release, or to another manifest of the release it names', () => {
+    const keys = throwawayKeys()
+    const root = readTrustedRoot(rootFile(keys).bytes)
+    const newer = manifestFile(keys, '0.2.0')
+    const first = envelopeBytes(nextTimestamp([root], undefined, { stable: newer, beta: newer }, ISSUED), [keys.timestamp])
+    const older = manifestFile(keys, '0.1.0')
+    expect(() => nextTimestamp([root], first, { stable: older, beta: newer }, later)).toThrow('the stable channel would move back from 0.2.0 to 0.1.0')
+    expect(() => nextTimestamp([root], first, { stable: newer, beta: older }, later)).toThrow('the beta channel would move back from 0.2.0 to 0.1.0')
+    const resigned = manifestFile(keys, '0.2.0', 'stable', Buffer.from('another archive'))
+    expect(() => nextTimestamp([root], first, { stable: resigned, beta: newer }, later)).toThrow(/the stable channel names release 0\.2\.0 by delorun-0\.2\.0\.manifest\.json [0-9a-f]{64}; delorun-0\.2\.0\.manifest\.json is another manifest of that release/u)
+    expect(nextTimestamp([root], first, { stable: newer, beta: newer }, later).version).toBe(2)
   })
 })
 

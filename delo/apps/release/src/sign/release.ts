@@ -1,8 +1,9 @@
 /**
  * Signing a release with the targets key (contract C2): the checks that refuse to sign without the targets-key
- * holder's rebuild, then the signed runtime file lists and the signed manifest. Signing runs on the holder's machine
- * with the release workflow's files in a local directory; it checks every file the manifest names, compares the
- * workflow's build output with the holder's rebuild again, and writes nothing before every check passes.
+ * holder's rebuild, then the signed runtime file lists, the published rebuild record and the signed manifest. Signing
+ * runs on the holder's machine with the release workflow's files in a local directory and the holder's rebuild
+ * record and rebuild output outside it; it checks every file the manifest names, compares every runtime archive and
+ * file list of the workflow's output with the holder's rebuild again, and writes nothing before every check passes.
  *
  * @module @delo/release/sign/release
  */
@@ -24,9 +25,9 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
 import { fileDigest } from '../archive/sink.ts'
 import { sha256Hex } from '../brands.ts'
-import type { Recipe } from '../closure/config.ts'
+import { closureFileNames } from '../closure/tree.ts'
 import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
-import { ciMarkers, commitOf, outputRefs, rebuildRecordName, recipeDigest, REQUIRED_SOURCE } from '../rebuild/record.ts'
+import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, type CommittedRecipe } from '../rebuild/record.ts'
 import { signEnvelope } from './envelope.ts'
 import { parseStrictJson, toJsonValue, type JsonValue } from './json.ts'
 import { ManifestSchema, readEnvelope, readRebuildRecord } from './schemas.ts'
@@ -49,14 +50,14 @@ export const MANIFEST_DRAFT_NAME = 'manifest-draft.json'
 export interface SigningRequest {
   /** The repository checkout holding the release's tag. */
   readonly repository: string
-  /** The release workflow's files, which signing adds its signed files to. */
+  /** The release workflow's files, which signing adds its signed files and the rebuild record to. */
   readonly release: string
-  /** The holder's rebuild output on this machine. */
+  /** The holder's rebuild output on this machine, outside {@link SigningRequest.release}. */
   readonly rebuild: string
+  /** The holder's rebuild record, as `record-rebuild.ts` wrote it, outside {@link SigningRequest.release}. */
+  readonly record: string
   /** The targets private key. */
   readonly key: KeyObject
-  /** The committed recipe. */
-  readonly recipe: Recipe
   /** The process environment, checked for CI markers. */
   readonly env: NodeJS.ProcessEnv
   /** The signing time. */
@@ -97,14 +98,42 @@ function draftRefs(draft: ManifestDraft): Array<{ where: string, ref: FileRef }>
   return refs
 }
 
-async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Promise<{ record: RebuildRecord, recordRef: FileRef, comparison: Comparison }> {
+async function realDirectory(path: string, what: string): Promise<string> {
+  let real: string
+  try {
+    real = await realpath(path)
+    if (!(await lstat(real)).isDirectory()) throw new Error('not a directory')
+  } catch (error) {
+    refuse(`${what} ${path} is not a directory on this machine: ${(error as Error).message}`)
+  }
+  return real
+}
+
+/** The runtime archive and file list of every platform, which every comparison must cover. */
+function requiredOutputs(version: string): string[] {
+  return RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform)))
+}
+
+async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Promise<{ record: RebuildRecord, recordBytes: Buffer, comparison: Comparison }> {
   const markers = ciMarkers(request.env)
   if (markers.length > 0) refuse(`${markers.join(' and ')} is set, so this run is a CI run`)
   const recordName = rebuildRecordName(draft.version)
-  if (!existsSync(join(request.release, recordName))) refuse(`no rebuild record ${recordName} exists in ${request.release}`)
-  let record: RebuildRecord
+  const release = await realDirectory(request.release, 'the release directory')
+  if (existsSync(join(release, recordName))) refuse(`the release workflow's files hold ${recordName}; the rebuild record comes from the holder's own rebuild (--record), never from the files being signed`)
+  const rebuild = await realDirectory(request.rebuild, 'the rebuild output')
+  if (isWithin(rebuild, release)) refuse(`the rebuild output ${rebuild} is the release directory or inside it`)
+  let recordPath: string
   try {
-    record = readRebuildRecord(await readFile(join(request.release, recordName)))
+    recordPath = await realpath(request.record)
+  } catch (error) {
+    refuse(`no rebuild record exists at ${request.record}: ${(error as Error).message}`)
+  }
+  if (isWithin(recordPath, release)) refuse(`the rebuild record ${recordPath} lies in the release directory`)
+  let record: RebuildRecord
+  let recordBytes: Buffer
+  try {
+    recordBytes = await readFile(recordPath)
+    record = readRebuildRecord(recordBytes)
   } catch (error) {
     refuse(`the rebuild record does not read: ${(error as Error).message}`)
   }
@@ -119,16 +148,16 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
     refuse(`the tag ${draft.source.tag} names no commit in ${request.repository}: ${(error as Error).message}`)
   }
   if (tagged !== record.commit) refuse(`the rebuild record's commit ${record.commit} differs from the commit ${tagged} that tag ${draft.source.tag} names`)
-  if (record.recipe !== recipeDigest(request.repository, record.commit)) refuse(`the rebuild record's recipe digest is not the recipe at ${record.commit}`)
-  if (record.toolchain.node !== request.recipe.toolchain.node.version || record.toolchain.pnpm !== request.recipe.toolchain.pnpm.version) {
-    refuse(`the rebuild record's toolchain (Node ${record.toolchain.node}, pnpm ${record.toolchain.pnpm}) is not the pinned toolchain`)
-  }
-  let rebuild: string
+  let recipe: CommittedRecipe
   try {
-    rebuild = await realpath(request.rebuild)
-    if (!(await lstat(rebuild)).isDirectory()) throw new Error('not a directory')
+    recipe = recipeAt(request.repository, record.commit)
   } catch (error) {
-    refuse(`the rebuild output ${request.rebuild} is not a directory on this machine: ${(error as Error).message}`)
+    refuse(`the recipe at ${record.commit} does not read: ${(error as Error).message}`)
+  }
+  if (record.recipe !== recipeDigest(request.repository, record.commit)) refuse(`the rebuild record's recipe digest is not the recipe at ${record.commit}`)
+  const pinned = recordToolchain(recipe.toolchain)
+  if (JSON.stringify(record.toolchain) !== JSON.stringify(pinned)) {
+    refuse(`the rebuild record's toolchain ${JSON.stringify(record.toolchain)} is not the toolchain pinned at ${record.commit}, ${JSON.stringify(pinned)}`)
   }
   let local: FileRef[]
   try {
@@ -139,17 +168,20 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
   if (JSON.stringify(local) !== JSON.stringify(record.outputs)) {
     refuse(`the files in ${rebuild} do not reproduce the digests the rebuild record lists`)
   }
-  const comparison = await compareOutputs(request.release, rebuild, request.recipe.exceptions, new Set(local.map(ref => ref.name)))
+  const names = new Set(local.map(ref => ref.name))
+  const missing = requiredOutputs(draft.version).filter(name => !names.has(name))
+  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every runtime archive and file list`)
+  const comparison = await compareOutputs(release, rebuild, recipe.exceptions, names)
   if (comparison.differences.length > 0) {
     const first = comparison.differences[0]!
     refuse(`compare-rebuild finds ${String(comparison.differences.length)} differences between the release workflow's output and the rebuild, first ${first.file}${first.entry === undefined ? '' : `: ${first.entry}`}: ${first.detail}`)
   }
-  return { record, recordRef: await refOf(request.release, recordName), comparison }
+  return { record, recordBytes, comparison }
 }
 
 /**
  * Check a release and sign it: the runtime file lists in place, then the manifest.
- * @param request - the directories, key, recipe and environment.
+ * @param request - the directories, rebuild record, key and environment.
  * @returns the signed manifest and the comparison.
  * @throws SigningRefusal when any check fails; nothing is written then.
  */
@@ -165,7 +197,16 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   if (draft.source.repository !== RELEASE_REPOSITORY_URL || draft.source.tag !== `v${draft.version}`) {
     throw new SigningRefusal(`signing refuses: the draft's source must be ${RELEASE_REPOSITORY_URL} at tag v${draft.version}`)
   }
-  const { record, recordRef, comparison } = await checkRebuild(request, draft)
+  for (const platform of RUNTIME_PLATFORMS) {
+    const expected = closureFileNames(draft.version, platform)
+    const named = draft.runtime[platform]
+    if (named.archive.name !== expected.archive || named.files.name !== expected.files) {
+      throw new SigningRefusal(`signing refuses: the draft names ${named.archive.name} and ${named.files.name} for ${platform}; a release's ${platform} runtime is ${expected.archive} and ${expected.files}`)
+    }
+  }
+  const { record, recordBytes, comparison } = await checkRebuild(request, draft)
+  const recordName = rebuildRecordName(draft.version)
+  const recordRef: FileRef = { name: recordName, length: recordBytes.byteLength, sha256: sha256Hex(createHash('sha256').update(recordBytes).digest('hex')) }
   for (const { where, ref } of draftRefs(draft)) {
     if (!existsSync(join(request.release, ref.name))) throw new SigningRefusal(`signing refuses: ${where} names ${ref.name}, which is not in ${request.release}`)
     const actual = await refOf(request.release, ref.name)
@@ -202,6 +243,7 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
     await writeFile(join(request.release, `${name}.signed`), text, { flag: 'w', mode: 0o644 })
     await rename(join(request.release, `${name}.signed`), join(request.release, name))
   }
+  await writeFile(join(request.release, recordName), recordBytes, { flag: 'wx', mode: 0o644 })
   await writeFile(manifestPath, `${JSON.stringify(envelope, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
   return { manifest, manifestName, comparison }
 }

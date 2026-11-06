@@ -32,7 +32,7 @@ function main(argv: readonly string[]): number {
     const bytes = Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`)
     const root = values.previous === undefined ? readTrustedRoot(bytes) : adoptNextRoot(readTrustedRoot(readFileSync(resolve(values.previous))), bytes)
     writeFileSync(resolve(values.out), bytes, { flag: 'wx', mode: 0o644 })
-    console.log(`sign-root: wrote root version ${String(root.version)} to ${values.out}`)
+    console.log(`sign-root: wrote root version ${String(root.metadata.version)} to ${values.out}`)
     return 0
   } catch (error) {
     console.error(`sign-root: ${error instanceof Error ? error.message : String(error)}`)

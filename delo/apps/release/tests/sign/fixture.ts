@@ -1,8 +1,9 @@
 /**
- * A complete fixture release for the signing and verification specs: a git repository with the release's tag, the
- * release workflow's output with its manifest draft, the targets-key holder's rebuild of the same closures, a
- * throwaway targets key file, and root metadata over throwaway keys. Every key is generated in the test and removed
- * with its temporary directory.
+ * A complete fixture release for the signing and verification specs: a git repository with the release's tag and
+ * the recipe committed under `delo/apps/release`, the release workflow's output with its manifest draft, the
+ * targets-key holder's rebuild of the same closures and its rebuild record path outside the release, a throwaway
+ * targets key file, and root metadata over throwaway keys. Every key is generated in the test and removed with its
+ * temporary directory.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash, generateKeyPairSync, type KeyObject } from 'node:crypto'
@@ -13,6 +14,7 @@ import type { TestContext } from 'vitest'
 import { DESKTOP_PLATFORMS, RELEASE_REPOSITORY_URL, RELEASE_SCHEMAS, RUNTIME_PLATFORMS, type FileRef, type ReleaseManifest, type RootMetadata, type UtcTimestamp } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { sha256Hex } from '../../src/brands.ts'
+import { RECIPE_DIR, RECIPE_FILES } from '../../src/closure/config.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { publicKeyEntry, signEnvelope } from '../../src/sign/envelope.ts'
 import { toJsonValue } from '../../src/sign/json.ts'
@@ -85,11 +87,16 @@ async function closures(directory: string, marker: string): Promise<void> {
   }
 }
 
+/** The native compiler the fixture repository's committed toolchain names, which the checkout's does not. */
+export const COMMITTED_COMPILER = 'fixture compiler, committed at the release tag only'
+
 /** A fixture release on disk. */
 export interface ReleaseFixture {
   readonly repo: string
   readonly release: string
   readonly rebuild: string
+  /** The holder's rebuild record, outside the release directory. */
+  readonly recordPath: string
   readonly keyPath: string
   readonly keys: Keys
   readonly commit: string
@@ -97,8 +104,8 @@ export interface ReleaseFixture {
   readonly run: (entry: string, args: readonly string[], env?: NodeJS.ProcessEnv) => RunResult
   /** Record the rebuild with `record-rebuild.ts`. */
   readonly record: () => RunResult
-  /** Sign with `sign-release.ts`. */
-  readonly sign: (env?: NodeJS.ProcessEnv) => RunResult
+  /** Sign with `sign-release.ts`, optionally from another rebuild output or record. */
+  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string }) => RunResult
 }
 
 /**
@@ -114,12 +121,22 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   const git = (args: readonly string[]): string => execFileSync('git', args, { cwd: repo, env, encoding: 'utf8' }).trim()
   git(['init', '-q', '-b', 'main'])
   writeFileSync(join(repo, 'README.md'), 'fixture\n')
+  mkdirSync(join(repo, 'delo/apps/release'), { recursive: true })
+  for (const file of RECIPE_FILES) {
+    let text = readFileSync(join(RECIPE_DIR, file), 'utf8')
+    if (file === 'toolchain.json') {
+      const toolchain = JSON.parse(text) as { native: Record<string, string> }
+      text = `${JSON.stringify({ ...toolchain, native: { ...toolchain.native, compiler: COMMITTED_COMPILER } }, undefined, 2)}\n`
+    }
+    writeFileSync(join(repo, 'delo/apps/release', file), text)
+  }
   git(['add', '-A'])
   git(['commit', '-q', '-m', 'fixture'])
   git(['tag', `v${VERSION}`])
   const commit = git(['rev-parse', 'HEAD'])
   const release = join(directory, 'release')
   const rebuild = join(directory, 'rebuild')
+  const recordPath = join(directory, `delorun-${VERSION}.rebuild.json`)
   await closures(release, 'workflow')
   await closures(rebuild, 'holder')
   const extra = ['delorun-0.1.0.spdx.json', 'delorun-0.1.0.advisories.json', 'install.sh', 'install.ps1']
@@ -159,12 +176,13 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     repo,
     release,
     rebuild,
+    recordPath,
     keyPath,
     keys,
     commit,
     run,
-    record: () => run('record-rebuild.ts', ['--version', VERSION, '--release', release, '--rebuild', rebuild, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
-    sign: (signEnv = {}) => run('sign-release.ts', ['--release', release, '--rebuild', rebuild, '--key', keyPath], signEnv),
+    record: () => run('record-rebuild.ts', ['--version', VERSION, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
+    sign: (signEnv = {}, args = {}) => run('sign-release.ts', ['--release', release, '--rebuild', args.rebuild ?? rebuild, '--record', args.record ?? recordPath, '--key', keyPath], signEnv),
   }
 }
 

@@ -121,7 +121,7 @@ npm 启动器、安装脚本与桌面应用各自内嵌其构建时最新的根�
 | `root` | `{ "version", "sha256" }` | 最新的根版本及其文件摘要。 |
 | `channels.stable`、`channels.beta` | `{ "release": <version>, "manifest": FileRef }` | 每个通道当前的发布及其 manifest 文件。 |
 
-发布工作流的一个定时作业每 24 小时重新签名它，发布工作流在发布一个版本时也会再次签名它。`FileRef` 为 `{ "name", "length", "sha256" }`：文件名、以字节计的长度，以及其字节的小写十六进制 SHA-256。
+发布工作流的一个定时作业每 24 小时重新签名它，发布工作流在发布一个版本时也会再次签名它。`channels.stable` 指明一个 stable 发布；`channels.beta` 指明一个 beta 发布或一个 stable 发布。任何一次签名都不会让某个通道指向比上一个时间戳为它指明的版本更低的版本。`FileRef` 为 `{ "name", "length", "sha256" }`：文件名，即匹配 `^[A-Za-z0-9._+-]+$` 且不为 `.` 或 `..` 的单个路径段；以字节计的长度；以及其字节的小写十六进制 SHA-256。
 
 <a id="release-manifest"></a>
 

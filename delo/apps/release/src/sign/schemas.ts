@@ -35,7 +35,9 @@ const timestamp = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u).re
   .transform(value => brandString<UtcTimestamp>(value))
 const oci = z.string().regex(/^sha256:[0-9a-f]{64}$/u).transform(value => brandString<OciDigest>(value))
 const positive = z.number().int().min(1)
-const fileRef = z.strictObject({ name: z.string().min(1).max(255), length: z.number().int().min(0), sha256 })
+/** A file name in a release directory: one path segment, never `.` or `..`, so a reference cannot leave the directory. */
+const fileName = z.string().max(255).regex(/^[A-Za-z0-9._+-]+$/u).refine(name => name !== '.' && name !== '..', 'a file name, not . or ..')
+const fileRef = z.strictObject({ name: fileName, length: z.number().int().min(0), sha256 })
 const roleKeys = z.strictObject({ keyids: z.array(keyId), threshold: positive })
 
 /** The signed content of root metadata. */
@@ -56,6 +58,23 @@ export const RootSchema = z.strictObject({
   }),
   log: z.strictObject({ origin: z.string().min(1), vkey: z.string().min(1) }),
   witnesses: z.strictObject({ keys: z.array(z.strictObject({ name: z.string().min(1), vkey: z.string().min(1) })), threshold: positive }),
+}).superRefine((root, context) => {
+  const roles = new Map<string, string>()
+  const assigned: Array<[string, readonly string[]]> = [
+    ['root', root.roles.root.keyids],
+    ['targets', root.roles.targets.keys.map(key => key.keyid)],
+    ['timestamp', root.roles.timestamp.keyids],
+    ['catalogue', root.roles.catalogue.keyids],
+  ]
+  for (const [role, keyids] of assigned) {
+    for (const keyid of keyids) {
+      const other = roles.get(keyid)
+      if (other !== undefined) context.addIssue({ code: 'custom', path: ['roles', role], message: `key ${keyid} is already in role ${other}; each key holds one role` })
+      roles.set(keyid, role)
+    }
+  }
+  const active = root.roles.targets.keys.filter(key => key.status === 'active').length
+  if (active !== 1) context.addIssue({ code: 'custom', path: ['roles', 'targets', 'keys'], message: `${String(active)} targets keys are active; exactly one must be` })
 })
 
 const channelPointer = z.strictObject({ release: version, manifest: fileRef })

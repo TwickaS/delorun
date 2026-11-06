@@ -81,22 +81,40 @@ export const RebuildExceptions = z.strictObject({
 export type RebuildExceptions = z.output<typeof RebuildExceptions>
 
 /**
+ * Validate one recipe file's text.
+ * @param schema - the file's schema.
+ * @param text - the file's text.
+ * @param where - the file's path or revision, named in errors.
+ * @returns the parsed value.
+ * @throws Error naming `where` and every problem when the text does not parse or validate.
+ */
+export function parseRecipeText<T extends z.ZodType>(schema: T, text: string, where: string): z.output<T> {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch (error) {
+    throw new Error(`${where}: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+  }
+  const parsed = schema.safeParse(value)
+  if (!parsed.success) throw new Error(`${where}: ${z.prettifyError(parsed.error)}`)
+  return parsed.data
+}
+
+/**
  * Read and validate one recipe file.
  * @param schema - the file's schema.
  * @param path - the file.
  * @returns the parsed value.
- * @throws Error naming the file and every problem when it does not parse or validate.
+ * @throws Error naming the file and every problem when it does not read, parse or validate.
  */
 export function readRecipeFile<T extends z.ZodType>(schema: T, path: string): z.output<T> {
-  let value: unknown
+  let text: string
   try {
-    value = JSON.parse(readFileSync(path, 'utf8'))
+    text = readFileSync(path, 'utf8')
   } catch (error) {
     throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
   }
-  const parsed = schema.safeParse(value)
-  if (!parsed.success) throw new Error(`${path}: ${z.prettifyError(parsed.error)}`)
-  return parsed.data
+  return parseRecipeText(schema, text, path)
 }
 
 /** Every recipe file, parsed. */

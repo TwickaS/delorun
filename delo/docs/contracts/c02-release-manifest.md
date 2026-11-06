@@ -111,7 +111,7 @@ The npm launcher, the install script and the desktop app each embed the newest r
 | `root` | `{ "version", "sha256" }` | The newest root version and its file digest. |
 | `channels.stable`, `channels.beta` | `{ "release": <version>, "manifest": FileRef }` | Each channel's current release and its manifest file. |
 
-A scheduled job of the release workflow re-signs it every 24 hours, and the release workflow signs it again when it publishes a release. A `FileRef` is `{ "name", "length", "sha256" }`: the file name, its length in bytes and the lowercase hex SHA-256 of its bytes.
+A scheduled job of the release workflow re-signs it every 24 hours, and the release workflow signs it again when it publishes a release. `channels.stable` names a stable release; `channels.beta` names a beta release or a stable release. No signing moves a channel to a lower version than the previous timestamp names for it. A `FileRef` is `{ "name", "length", "sha256" }`: the file name, one path segment matching `^[A-Za-z0-9._+-]+$` other than `.` and `..`; its length in bytes; and the lowercase hex SHA-256 of its bytes.
 
 ## Release manifest
 

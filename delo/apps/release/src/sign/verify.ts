@@ -18,10 +18,12 @@ import {
   type RootMetadata,
   type RuntimeFileList,
   type RuntimePlatform,
+  type Sha256Hex,
   type SignedEnvelope,
   type TimestampMetadata,
 } from '@delo/contract-release-manifest'
 import semver from 'semver'
+import { sha256Hex } from '../brands.ts'
 import { validSigners, verifyingKey, type VerifyingKey } from './envelope.ts'
 import type { JsonValue } from './json.ts'
 import { readEnvelope, type ReadEnvelope } from './schemas.ts'
@@ -52,18 +54,39 @@ function asJson<T>(envelope: ReadEnvelope<T>): SignedEnvelope<JsonValue> {
   return { signed: envelope.signedJson, signatures: envelope.signatures }
 }
 
+/** A root the client trusts, with the SHA-256 of its file, which timestamp metadata names. */
+export interface TrustedRoot {
+  /** The root metadata. */
+  readonly metadata: RootMetadata
+  /** SHA-256 of the root file's bytes. */
+  readonly sha256: Sha256Hex
+}
+
+function utcText(now: number): string {
+  return new Date(now * 1000).toISOString().replace('.000Z', 'Z')
+}
+
 /**
  * Read and check a root file that the client holds as trusted, such as the root embedded at build time.
  * @param bytes - the root file.
- * @returns the root metadata, signed by its own root threshold and within its lifetime limit.
- * @throws VerificationError when the file does not read, verify or keep the lifetime limit.
+ * @param now - the client's clock in Unix seconds; when given, a root past its `expires` is refused, as installs and
+ * updates require. A walk through older root versions omits it for every version but the last.
+ * @returns the root and its file digest, signed by its own root threshold, issued before it expires and within the
+ * lifetime limit.
+ * @throws VerificationError when the file does not read or verify, its dates are out of order or beyond the lifetime
+ * limit, or it has expired.
  */
-export function readTrustedRoot(bytes: Uint8Array): RootMetadata {
+export function readTrustedRoot(bytes: Uint8Array, now?: number): TrustedRoot {
   const envelope = readEnvelope('root', bytes)
   const root = envelope.signed
-  if (seconds(root.expires) - seconds(root.issued) > ROOT_MAX_LIFETIME_DAYS * 86_400) throw new VerificationError(`root ${String(root.version)} expires more than ${String(ROOT_MAX_LIFETIME_DAYS)} days after it was issued`)
+  const lifetime = seconds(root.expires) - seconds(root.issued)
+  if (lifetime <= 0) throw new VerificationError(`root ${String(root.version)} expires at ${root.expires}, not after it was issued at ${root.issued}`)
+  if (lifetime > ROOT_MAX_LIFETIME_DAYS * 86_400) throw new VerificationError(`root ${String(root.version)} expires more than ${String(ROOT_MAX_LIFETIME_DAYS)} days after it was issued`)
   requireThreshold(`root ${String(root.version)}`, asJson(envelope), roleKeys(root, root.roles.root.keyids), root.roles.root.threshold)
-  return root
+  if (now !== undefined && now > seconds(root.expires) + CLOCK_TOLERANCE_SECONDS) {
+    throw new VerificationError(`root ${String(root.version)} expired at ${root.expires}; this machine's clock reads ${utcText(now)}. A newer root must verify before installs and updates`)
+  }
+  return { metadata: root, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
 }
 
 /**
@@ -71,15 +94,33 @@ export function readTrustedRoot(bytes: Uint8Array): RootMetadata {
  * threshold and with its own.
  * @param trusted - the newest root the client trusts.
  * @param bytes - the next root file.
+ * @param now - the client's clock, which the adopted root must not be past; omitted while walking intermediate
+ * versions.
  * @returns the new trusted root.
- * @throws VerificationError on a version gap, a missing threshold or a lifetime above the limit.
+ * @throws VerificationError on a version gap, a missing threshold, dates out of order or beyond the limit, or expiry.
  */
-export function adoptNextRoot(trusted: RootMetadata, bytes: Uint8Array): RootMetadata {
+export function adoptNextRoot(trusted: TrustedRoot, bytes: Uint8Array, now?: number): TrustedRoot {
   const envelope = readEnvelope('root', bytes)
   const next = envelope.signed
-  if (next.version !== trusted.version + 1) throw new VerificationError(`root ${String(next.version)} does not follow the trusted root ${String(trusted.version)}`)
-  requireThreshold(`root ${String(next.version)} (previous root's keys)`, asJson(envelope), roleKeys(trusted, trusted.roles.root.keyids), trusted.roles.root.threshold)
-  return readTrustedRoot(bytes)
+  const previous = trusted.metadata
+  if (next.version !== previous.version + 1) throw new VerificationError(`root ${String(next.version)} does not follow the trusted root ${String(previous.version)}`)
+  requireThreshold(`root ${String(next.version)} (previous root's keys)`, asJson(envelope), roleKeys(previous, previous.roles.root.keyids), previous.roles.root.threshold)
+  return readTrustedRoot(bytes, now)
+}
+
+/**
+ * Trust a chain of root files: the first as held, each later one as the next version, and the last checked against
+ * the clock.
+ * @param files - the root files, oldest first; the first is the root the caller already trusts.
+ * @param now - the clock in Unix seconds, which the newest root must not be past.
+ * @returns every root of the chain, oldest first.
+ * @throws VerificationError when a file does not verify, a version is skipped, or the newest root has expired.
+ */
+export function trustRootChain(files: readonly Uint8Array[], now: number): TrustedRoot[] {
+  if (files.length === 0) throw new VerificationError('no root file to trust')
+  const chain = [readTrustedRoot(files[0]!, files.length === 1 ? now : undefined)]
+  for (const [index, bytes] of files.slice(1).entries()) chain.push(adoptNextRoot(chain.at(-1)!, bytes, index === files.length - 2 ? now : undefined))
+  return chain
 }
 
 /** What a client stored from its last verified timestamp. */
@@ -92,27 +133,32 @@ export interface StoredTimestamp {
 
 /**
  * Verify timestamp metadata.
- * @param root - the trusted root, at the version the timestamp names.
+ * @param root - the trusted root, at the version and with the file digest the timestamp names.
  * @param bytes - the timestamp file.
  * @param now - the client's clock, in Unix seconds.
  * @param stored - the last verified timestamp, when the client has one.
+ * @param options - `allowExpired` admits a timestamp past its expiry, for the signer reading the previous timestamp;
+ * clients never set it.
  * @returns the timestamp metadata.
- * @throws VerificationError on a bad signature, an expired or replayed timestamp, a lifetime other than 3 days or a
- * root version the client has not adopted.
+ * @throws VerificationError on a bad signature, a lifetime other than 3 days, an issue time after `now`, an expired or
+ * replayed timestamp, or a root version or digest other than the trusted root's.
  */
-export function verifyTimestamp(root: RootMetadata, bytes: Uint8Array, now: number, stored?: StoredTimestamp): TimestampMetadata {
+export function verifyTimestamp(root: TrustedRoot, bytes: Uint8Array, now: number, stored?: StoredTimestamp, options: { readonly allowExpired?: boolean } = {}): TimestampMetadata {
   const envelope = readEnvelope('timestamp', bytes)
   const timestamp = envelope.signed
-  requireThreshold('timestamp', asJson(envelope), roleKeys(root, root.roles.timestamp.keyids), root.roles.timestamp.threshold)
+  const keys = root.metadata.roles.timestamp
+  requireThreshold('timestamp', asJson(envelope), roleKeys(root.metadata, keys.keyids), keys.threshold)
   if (seconds(timestamp.expires) - seconds(timestamp.issued) !== TIMESTAMP_LIFETIME_SECONDS) throw new VerificationError(`timestamp ${String(timestamp.version)} does not expire exactly ${String(TIMESTAMP_LIFETIME_SECONDS)} seconds after it was issued`)
-  if (now > seconds(timestamp.expires) + CLOCK_TOLERANCE_SECONDS) {
-    throw new VerificationError(`timestamp ${String(timestamp.version)} expired at ${timestamp.expires}; this machine's clock reads ${new Date(now * 1000).toISOString().replace('.000Z', 'Z')}`)
+  if (seconds(timestamp.issued) > now + CLOCK_TOLERANCE_SECONDS) throw new VerificationError(`timestamp ${String(timestamp.version)} was issued at ${timestamp.issued}, after this machine's clock, which reads ${utcText(now)}`)
+  if (options.allowExpired !== true && now > seconds(timestamp.expires) + CLOCK_TOLERANCE_SECONDS) {
+    throw new VerificationError(`timestamp ${String(timestamp.version)} expired at ${timestamp.expires}; this machine's clock reads ${utcText(now)}`)
   }
   if (stored !== undefined) {
     if (timestamp.version < stored.version) throw new VerificationError(`timestamp version ${String(timestamp.version)} is lower than the stored version ${String(stored.version)}`)
     if (timestamp.version === stored.version && !Buffer.from(bytes).equals(Buffer.from(stored.bytes))) throw new VerificationError(`timestamp version ${String(timestamp.version)} differs from the stored file of the same version`)
   }
-  if (timestamp.root.version !== root.version) throw new VerificationError(`timestamp names root ${String(timestamp.root.version)}, but root ${String(root.version)} is trusted; adopt the newer root first`)
+  if (timestamp.root.version !== root.metadata.version) throw new VerificationError(`timestamp names root ${String(timestamp.root.version)}, but root ${String(root.metadata.version)} is trusted; adopt the newer root first`)
+  if (timestamp.root.sha256 !== root.sha256) throw new VerificationError(`timestamp names root ${String(timestamp.root.version)} with SHA-256 ${timestamp.root.sha256}, not the trusted root file's ${root.sha256}`)
   return timestamp
 }
 
@@ -154,6 +200,17 @@ function requireTargets(root: RootMetadata, what: string, envelope: SignedEnvelo
 }
 
 /**
+ * Whether a timestamp channel may name a release published on a given channel: the stable channel names only stable
+ * releases, and the beta channel names beta and stable releases.
+ * @param channel - the timestamp's channel.
+ * @param published - the manifest's `channel`.
+ * @returns true when the channel may name the release.
+ */
+export function channelAccepts(channel: ReleaseChannel, published: ReleaseChannel): boolean {
+  return published === channel || (channel === 'beta' && published === 'stable')
+}
+
+/**
  * Verify the channel's current manifest: its bytes must be the file the fresh timestamp names, and the targets
  * threshold must sign it. A validly signed older manifest that the timestamp does not name is refused.
  * @param root - the trusted root.
@@ -172,7 +229,7 @@ export function verifyChannelManifest(root: RootMetadata, timestamp: TimestampMe
     throw new VerificationError(`the manifest is not the ${channel} channel's current manifest (${pointer.manifest.name}): ${(error as Error).message}`, { cause: error })
   }
   const manifest = verifySignedManifest(root, bytes)
-  if (manifest.version !== pointer.release || manifest.channel !== channel) throw new VerificationError(`the manifest is release ${manifest.version} on ${manifest.channel}, not ${pointer.release} on ${channel}`)
+  if (manifest.version !== pointer.release || !channelAccepts(channel, manifest.channel)) throw new VerificationError(`the manifest is release ${manifest.version} on ${manifest.channel}, not ${pointer.release} on ${channel}`)
   return manifest
 }
 

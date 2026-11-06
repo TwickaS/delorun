@@ -8,11 +8,12 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { lstat, readdir } from 'node:fs/promises'
-import { join } from 'node:path'
-import type { FileRef, Sha256Hex } from '@delo/contract-release-manifest'
+import { isAbsolute, join, relative, sep } from 'node:path'
+import type { FileRef, RebuildRecord, Sha256Hex } from '@delo/contract-release-manifest'
 import { compareEntryPaths } from '../archive/entry.ts'
 import { fileDigest } from '../archive/sink.ts'
 import { sha256Hex } from '../brands.ts'
+import { parseRecipeText, RebuildExceptions, Toolchain } from '../closure/config.ts'
 
 /** The source signing requires, named in every refusal of contract C2's rebuild rule. */
 export const REQUIRED_SOURCE = 'a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe'
@@ -44,6 +45,49 @@ export function recipeDigest(repository: string, commit: string): Sha256Hex {
     return `${createHash('sha256').update(blob).digest('hex')}  ${path}\n`
   })
   return sha256Hex(createHash('sha256').update(lines.join('')).digest('hex'))
+}
+
+/** The recipe files that signing and recording read at the release's commit. */
+export interface CommittedRecipe {
+  /** The pinned toolchain. */
+  readonly toolchain: Toolchain
+  /** The rebuild exceptions. */
+  readonly exceptions: RebuildExceptions
+}
+
+/**
+ * Read the toolchain and rebuild exceptions as committed at a commit, not as the running checkout holds them.
+ * @param repository - the repository.
+ * @param commit - the commit.
+ * @returns the parsed files.
+ * @throws Error when a file is missing at the commit or does not validate.
+ */
+export function recipeAt(repository: string, commit: string): CommittedRecipe {
+  const read = (file: string): string => execFileSync('git', ['show', `${commit}:${RECIPE_PATH}/${file}`], { cwd: repository, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  return {
+    toolchain: parseRecipeText(Toolchain, read('toolchain.json'), `${RECIPE_PATH}/toolchain.json at ${commit}`),
+    exceptions: parseRecipeText(RebuildExceptions, read('rebuild-exceptions.json'), `${RECIPE_PATH}/rebuild-exceptions.json at ${commit}`),
+  }
+}
+
+/**
+ * The toolchain fields of a rebuild record for a pinned toolchain.
+ * @param toolchain - the pinned toolchain.
+ * @returns the Node.js and pnpm versions and the native compiler and linker.
+ */
+export function recordToolchain(toolchain: Toolchain): RebuildRecord['toolchain'] {
+  return { node: toolchain.node.version, pnpm: toolchain.pnpm.version, compiler: toolchain.native.compiler, linker: toolchain.native.linker }
+}
+
+/**
+ * Whether one path is another or lies inside it, for real paths.
+ * @param path - the path to test.
+ * @param directory - the directory.
+ * @returns true when `path` is `directory` or inside it.
+ */
+export function isWithin(path: string, directory: string): boolean {
+  const relation = relative(directory, path)
+  return relation === '' || (relation !== '..' && !relation.startsWith(`..${sep}`) && !isAbsolute(relation))
 }
 
 /**
