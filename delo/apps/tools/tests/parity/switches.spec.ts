@@ -79,7 +79,8 @@ describe('the real tree', () => {
     expect(scan.markers.map(marker => marker.id).sort()).toEqual(built.map(entry => entry.id).sort())
     for (const entry of built) expect(scan.markers.find(marker => marker.id === entry.id)).toMatchObject({ path: entry.field.source, key: entry.field.key, defaultValue: entry.parityValue })
     expect(new Set(scan.contributions.map(contribution => contribution.path))).toEqual(new Set(built.flatMap(entry => [...entry.sources])))
-  })
+    // The scan walks every tracked file, so it takes several seconds under a loaded host.
+  }, 60_000)
 
   it('names each model-visible switch\'s scenario after its id, and gives the feature switch none', () => {
     for (const entry of PARITY_SWITCHES as readonly ParitySwitchEntry[]) {
