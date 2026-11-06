@@ -8,7 +8,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 
 ## 摘要
 
-每个 Delo 发布都是 GitHub Releases 上的一组文件，由一份发布 manifest（元数据清单）描述，并由离线的 targets 密钥签名。该 manifest 列出每个平台的运行时归档、桌面安装程序、S2 与 S3 镜像摘要、SPDX SBOM（软件物料清单）、npm 包与安装脚本，每项都附带其长度与 SHA-256 摘要。一个在线的时间戳密钥每天重新签名一个小型时间戳文件，该文件指明每个通道当前的 manifest，并在 3 天后过期，因此扣留某个发布的托管方会被察觉。同样离线的根密钥签名每个角色的密钥列表及其每次轮换。targets 密钥持有者只有在一台由自己控制的机器上、于 CI 之外依据带标签的源码重建该发布，且该发布的锁文件通过依赖安全公告检查之后，才进行签名。客户端（npm 启动器、安装脚本、每次启动时的 CLI 启动器、`delorun verify` 与桌面更新器）按本页所述验证这些文件，并且还要求具备 [C18](c18-release-log.md) 所定义的该发布的日志条目。类型位于 [`@delo/contract-release-manifest`](../../packages/contract-release-manifest/README.zh.md)。
+每个 Delo 发布都是 GitHub Releases 上的一组文件，由一份发布 manifest（元数据清单）描述，并由离线的 targets 密钥签名。该 manifest 列出每个平台的运行时归档、桌面安装程序、S2 与 S3 镜像摘要、SPDX SBOM（软件物料清单）、npm 包与安装脚本，每项都附带其长度与 SHA-256 摘要。一个在线的时间戳密钥每天重新签名一个小型时间戳文件，该文件指明每个通道当前的 manifest，并在 3 天后过期，因此扣留某个发布的托管方会被察觉。同样离线的根密钥签名每个角色的密钥列表及其每次轮换。targets 密钥持有者只有在一台由自己控制的机器上、于 CI 之外依据带标签的源码重建该发布，且该发布的锁文件通过依赖安全公告检查之后，才进行签名。客户端（npm 启动器、安装脚本、每次启动时的 CLI 启动器、`delorun verify` 与桌面更新器）按本页所述验证这些文件，并且还要求具备 [C18](c18-release-log.zh.md) 所定义的该发布的日志条目。类型位于 [`@delo/contract-release-manifest`](../../packages/contract-release-manifest/README.zh.md)。
 
 ## 目录
 
@@ -40,7 +40,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 | 文件 | 内容 |
 | --- | --- |
 | `delorun-<version>.manifest.json` | 位于签名信封中的发布 manifest。 |
-| `delorun-<version>.manifest.log.json` | 该 manifest 的发布日志 bundle（[C18](c18-release-log.md)）。 |
+| `delorun-<version>.manifest.log.json` | 该 manifest 的发布日志 bundle（[C18](c18-release-log.zh.md)）。 |
 | `delorun-<version>-<platform>.tar.gz` | Linux 或 macOS 平台的运行时发行包（runtime closure）。 |
 | `delorun-<version>-win32-x64.zip` | Windows 的运行时发行包。 |
 | `delorun-<version>-<platform>.files.json` | 该平台归档的运行时文件列表。 |
@@ -83,7 +83,7 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 
 | 角色 | 持有方式 | 签名内容 | 阈值 |
 | --- | --- | --- | --- |
-| `root` | 离线，由所有者持有 | 根元数据：每个角色的密钥与阈值、[C18](c18-release-log.md) 的见证者密钥，以及每次轮换 | 1；维护者持有根密钥后为 N 个中的 2 个 |
+| `root` | 离线，由所有者持有 | 根元数据：每个角色的密钥与阈值、[C18](c18-release-log.zh.md) 的见证者密钥，以及每次轮换 | 1；维护者持有根密钥后为 N 个中的 2 个 |
 | `targets` | 离线，由 targets 密钥持有者持有 | 每份发布 manifest 及其运行时文件列表 | 1 |
 | `timestamp` | 在线，位于发布工作流的受保护环境中 | 仅时间戳元数据；它证明新鲜度并按摘要指明 manifest，无法改变 manifest 列出的内容 | 1 |
 | `catalogue` | 在线，位于插件索引仓库的发布环境中 | [C13](c13-catalogue-revocation.md) 的插件索引与撤销列表 | 1 |
@@ -103,8 +103,8 @@ description: "约定 C2：Delo 发布的文件、已签名的发布 manifest 及
 | `keys` | 由 `keyid` 映射到 `{ "algorithm": "ed25519", "public": <base64 32 bytes> }` 的映射 | 任一角色所指明的每个密钥。 |
 | `roles.root`、`roles.timestamp`、`roles.catalogue` | `{ "keyids": [...], "threshold": n }` | 该角色的当前密钥。 |
 | `roles.targets` | `{ "keys": [{ "keyid", "status", "lastRelease"? }], "threshold": n }` | `status` 为 `active`、`retired` 或 `revoked`；`retired` 密钥携带 `lastRelease`，即它签名的最后一个 Delo 版本。 |
-| `log` | `{ "origin", "vkey" }` | 发布日志的检查点来源行与验证密钥（[C18](c18-release-log.md)）。 |
-| `witnesses` | `{ "keys": [{ "name", "vkey" }], "threshold": n }` | 见证者的验证密钥，以及必须联署的见证者数量（[C18](c18-release-log.md)）。 |
+| `log` | `{ "origin", "vkey" }` | 发布日志的检查点来源行与验证密钥（[C18](c18-release-log.zh.md)）。 |
+| `witnesses` | `{ "keys": [{ "name", "vkey" }], "threshold": n }` | 见证者的验证密钥，以及必须联署的见证者数量（[C18](c18-release-log.zh.md)）。 |
 
 npm 启动器、安装脚本与桌面应用各自内嵌其构建时最新的根版本。客户端只有从其信任的最新版本起依次走过 `n + 1, n + 2, …`，才会信任更新的根，其中每个新版本都须以上一版本根密钥的阈值以及其自身根密钥的阈值通过验证。客户端信任的根若已过期，会阻止每次安装与更新，直到更新的根通过验证；它不会阻止启动。根密钥持有者至少在当前版本过期前 30 天签名下一个版本。
 
@@ -169,7 +169,7 @@ manifest 不带过期时间：新鲜度由时间戳负责，因此只要其签�
 1. 读取受信任的根，并走到时间戳指明的根。
 2. 获取 `timestamp.json`；用时间戳角色验证其签名，检查其过期时间，并将其 `version` 与已存储的版本比对。
 3. 获取该通道的 manifest；对照时间戳检查其长度与 SHA-256；验证 targets 签名。
-4. 获取并验证发布日志 bundle，并运行在线日志检查（[C18](c18-release-log.md)）；没有经过验证的包含证明，安装绝不继续。
+4. 获取并验证发布日志 bundle，并运行在线日志检查（[C18](c18-release-log.zh.md)）；没有经过验证的包含证明，安装绝不继续。
 5. 获取该平台的归档与文件列表；解压之前对照 manifest 检查每项的长度与 SHA-256；验证文件列表的 targets 签名。
 6. 解压到 `~/.delo/runtimes/` 之外的暂存目录，对照文件列表检查每个条目，然后按 [C1](c01-home-layout.md) 所述发布该安装。在步骤 1 至 5 通过之前，没有任何文件落入 `~/.delo/runtimes/` 之下。
 
@@ -184,7 +184,7 @@ CLI 运行时的每次启动，在每种验证模式（`warn`、`enforce`、`off
 - 客户端存储它验证过的最高时间戳 `version`，并拒绝更低的版本；相同的 `version` 必须具有完全相同的字节。
 - 超过 `expires` 的时间戳会被拒绝。不适用任何时钟容差；拒绝消息会写明过期时间与本地时间，因此错误的时钟可以被看出。
 - 更新提议只来自新鲜的时间戳：摘要与时间戳中该通道条目不同的 manifest，不会作为该通道的发布提供。
-- 任何客户端都不会自行转到更低的 Delo 版本。本人（the person）请求的回滚可以安装更早的发布，前提是其 manifest 能以对该发布有效的 targets 密钥通过验证，且其日志条目通过验证（[C18](c18-release-log.md)）；CLI 回滚切换到运行时仓库（runtime store）保留的运行时（[C1](c01-home-layout.md)、[C19](c19-home-process.md)），桌面回滚遵循[桌面更新与回滚](#desktop-updates-and-rollback)。
+- 任何客户端都不会自行转到更低的 Delo 版本。本人（the person）请求的回滚可以安装更早的发布，前提是其 manifest 能以对该发布有效的 targets 密钥通过验证，且其日志条目通过验证（[C18](c18-release-log.zh.md)）；CLI 回滚切换到运行时仓库（runtime store）保留的运行时（[C1](c01-home-layout.md)、[C19](c19-home-process.md)），桌面回滚遵循[桌面更新与回滚](#desktop-updates-and-rollback)。
 - 陈旧或缺失的时间戳绝不会停止启动；它会阻止安装与更新，并由 `delorun verify` 报告。
 
 <a id="key-rotation"></a>
@@ -263,7 +263,7 @@ acceptances:
 
 桌面应用在 Delo 的更新源上保留上游的更新流程（`apps/desktop/src/update-coordinator.ts` 中的 `DesktopUpdateCoordinator`：下载与安装都在本人点击时进行，`allowDowngrade` 为 false），并增加以下内容：
 
-- 在 `install` 把下载内容交给 electron-updater 的 `quitAndInstall` 之前，应用会验证新鲜的时间戳、manifest 的签名、下载文件的 SHA-512 与 SHA-256 是否与 manifest 的 `desktop` 条目一致，以及 manifest 的日志条目（[C18](c18-release-log.md)）。任何一项失败都会拒绝安装，并使正在运行的版本保持不变。
+- 在 `install` 把下载内容交给 electron-updater 的 `quitAndInstall` 之前，应用会验证新鲜的时间戳、manifest 的签名、下载文件的 SHA-512 与 SHA-256 是否与 manifest 的 `desktop` 条目一致，以及 manifest 的日志条目（[C18](c18-release-log.zh.md)）。任何一项失败都会拒绝安装，并使正在运行的版本保持不变。
 - 更新应用之后，应用会在其更新缓存目录中保留被替换发布的安装程序或更新归档，并已对照该发布的 manifest 验证。缓存恰好保留一个之前的发布。
 - 更新源拒绝自动降级：所指明版本低于或等于正在运行版本的更新源不提供任何内容。
 - 本人请求的回滚会安装缓存中的上一个发布，或本人指定、从 GitHub Releases 下载的更早发布。目标必须验证为已签名（manifest 与文件摘要）且已记录日志（包含证明）；未签名、未记录日志或不一致的目标会被拒绝。安装之后，profile 会从历史中恢复（[C3](c03-update-report.md)）。
