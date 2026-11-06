@@ -1,0 +1,82 @@
+# Bilingual-pair consistency record for c09-runtime-supervisor.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/contracts/c09-runtime-supervisor.md
+/:
+  en: f7cdd065f3ff7fe3
+  zh: 4c6dc44f7f61cfed
+/c9-runtime-and-supervisor-interface:
+  en: 189d65069d2cbcce
+  zh: f05ba42c8a05516d
+/c9-runtime-and-supervisor-interface/summary:
+  en: f4fc9ac4b385287f
+  zh: eb8b426a32523b31
+/c9-runtime-and-supervisor-interface/contents:
+  en: 564b7780fa1155f0
+  zh: 009e523b93e57345
+/c9-runtime-and-supervisor-interface/the-runtime-provider:
+  en: b5403f9093713f6d
+  zh: 2ca68f859cd9ff4c
+/c9-runtime-and-supervisor-interface/the-capability-report:
+  en: fc679fc5d78d2036
+  zh: fbb09318468355bf
+/c9-runtime-and-supervisor-interface/docker-shapes:
+  en: 38a9460e01a1fc97
+  zh: a4f428a62de8f02a
+/c9-runtime-and-supervisor-interface/sandbox-backend-per-shape:
+  en: e923f6bb43d06a57
+  zh: 76ebbeac7ae5b196
+/c9-runtime-and-supervisor-interface/containers:
+  en: 2cef9a556e180b3f
+  zh: 01d8e19628603cae
+/c9-runtime-and-supervisor-interface/networks-and-egress:
+  en: 8076d5ba0bd85686
+  zh: f9b1daf7e8cdf36e
+/c9-runtime-and-supervisor-interface/resource-presets:
+  en: 4e23e944823304ea
+  zh: 9a2bcdd23dbbc1a5
+/c9-runtime-and-supervisor-interface/credential-forwarding:
+  en: f6f7de29184a0d34
+  zh: db12daa68585f07f
+/c9-runtime-and-supervisor-interface/the-docker-supervisor:
+  en: 55b3dc7fa451159d
+  zh: 2a87e1ed2446e6c2
+/c9-runtime-and-supervisor-interface/the-supervisor-api:
+  en: d888e3b8925ae251
+  zh: e51dac802099aa4f
+/c9-runtime-and-supervisor-interface/supervisor-roots:
+  en: 34523e7fe84c0946
+  zh: bb335f59de7946c4
+/c9-runtime-and-supervisor-interface/the-s2-helper-channel:
+  en: c5aa4bc6962309ef
+  zh: 2dfec94f545a1563
+/c9-runtime-and-supervisor-interface/images:
+  en: 8e8f9c07aec30aad
+  zh: 5d1664f923fb8491
+/c9-runtime-and-supervisor-interface/the-container-denial-marker:
+  en: 9dc77377180dabb1
+  zh: 4955edfe6aaf4253
+/c9-runtime-and-supervisor-interface/limits:
+  en: 9e650573f4027231
+  zh: 672c78d9f250c864
+/c9-runtime-and-supervisor-interface/errors:
+  en: 87f9b6e54d968f5b
+  zh: b85e842e274ae42e
+/c9-runtime-and-supervisor-interface/consumers:
+  en: ffbc1905be5fa96a
+  zh: 42bfa7b7134e561a
+/c9-runtime-and-supervisor-interface/compatibility:
+  en: 1bb1dc07a5dc6d49
+  zh: c8076c6b4b00bbb0
+/c9-runtime-and-supervisor-interface/security:
+  en: 52543dba9bf0d349
+  zh: e612a6c5b83e9afc
+/c9-runtime-and-supervisor-interface/security/requirements:
+  en: 05a82777b6adb78b
+  zh: f255f96046bdabdb
+/c9-runtime-and-supervisor-interface/security/denial-tests:
+  en: c1e6bc434a860c31
+  zh: 2e05d41c9e1fba49
+/c9-runtime-and-supervisor-interface/enforcement-per-platform-and-dialect:
+  en: 4ab1c002d1c19992
+  zh: 8b0d597fc64bd533
