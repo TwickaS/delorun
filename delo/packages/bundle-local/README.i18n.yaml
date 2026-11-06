@@ -3,26 +3,29 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/packages/bundle-local/README.md
 /:
-  en: 1c3ab75030e53812
-  zh: 750457f3aba5d155
+  en: 7fb666310faba694
+  zh: 5eefaec9037970ba
 /delo-bundle-local:
   en: 48a9b833af8c48c7
   zh: 3ed767c8ad998724
 /delo-bundle-local/summary:
-  en: 8e5562ce2725075d
-  zh: 3ffe8e9a60a9239d
+  en: 8d77cff4102c10d8
+  zh: cd217704e6c6ffd4
 /delo-bundle-local/contents:
-  en: 2d984666c78104cd
-  zh: e8d8c8ce4a434f21
+  en: a0038ed68f853c3a
+  zh: a304465340a64007
 /delo-bundle-local/use-this-bundle:
-  en: 0b9dcda9df89eb5b
-  zh: 822ff1750a1ae8d4
+  en: ab956b7901243ed7
+  zh: a991e6f548eaf555
 /delo-bundle-local/rows:
-  en: 303151811db07570
-  zh: 4a5b468f90e51683
+  en: b494a44e9e1c5a23
+  zh: fc6e3991e9ce83ce
+/delo-bundle-local/the-privacy-section:
+  en: 35d159c2499287cb
+  zh: 743e3ca9da724462
 /delo-bundle-local/tests:
-  en: 408d4823e1557b38
-  zh: 07854704a0db3635
+  en: ab0e83f4a81cc65b
+  zh: fb33d7e392066f22
 /delo-bundle-local/limits:
-  en: dcb6bf4f6ecbe921
-  zh: 241a37dc379c7cbf
+  en: 02d3173b085071df
+  zh: d5d55bbaf089449d

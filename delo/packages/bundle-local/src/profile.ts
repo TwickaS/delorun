@@ -33,4 +33,20 @@ export interface LocalRow {
 }
 
 /** Every row in which a Delo CLI profile's composition differs from upstream's web profile. */
-export const LOCAL_ROWS: readonly LocalRow[] = []
+export const LOCAL_ROWS: readonly LocalRow[] = [
+  {
+    id: 'session-log-deepseek',
+    kind: 'changed',
+    reason: 'DeepSeek\'s session-log upload is off until the person turns it on, as contract C11 requires; upstream turns it on.',
+  },
+  {
+    id: 'product-analytics',
+    kind: 'changed',
+    reason: 'The desktop app\'s analytics is off until the person turns it on, as contract C11 requires; upstream turns it on.',
+  },
+  {
+    id: 'delo-privacy',
+    kind: 'added',
+    reason: 'The Privacy section in Settings, where the person turns each of the two opt-ins on after consent, and off again.',
+  },
+]

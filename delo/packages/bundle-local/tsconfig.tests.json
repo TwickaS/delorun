@@ -1,0 +1,59 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "src/profile.ts",
+    "tests"
+  ],
+  "exclude": [
+    "tests/**/*.client.spec.tsx"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/include"
+    },
+    {
+      "path": "../../../packages/boot/app-boot"
+    },
+    {
+      "path": "../../../packages/util/official-bundles"
+    },
+    {
+      "path": "../../../packages/client/product-analytics/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/llm/deepseek-llm-api-extensions"
+    },
+    {
+      "path": "../../../packages/host/product-telemetry-otel"
+    },
+    {
+      "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/llm/llm-deepseek-api-key"
+    },
+    {
+      "path": "../../../packages/test-support/llm-mock-server"
+    },
+    {
+      "path": "../../../packages/telemetry/otel"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/session/session-log-deepseek"
+    }
+  ]
+}

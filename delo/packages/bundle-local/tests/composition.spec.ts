@@ -3,20 +3,13 @@
  * names the bundle that wrote it, and the composition differs from upstream's web profile only in {@link LOCAL_ROWS}.
  */
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import yaml from 'js-yaml'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
-import { composeEntries, initProfile, loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
+import { loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, LOCAL_ROWS, UPSTREAM_TEMPLATE } from '../src/profile.ts'
-
-const REPO = fileURLToPath(new URL('../../../../', import.meta.url))
-const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url))
-const INSTALL_ANCHOR = join(REPO, 'apps/cli/package.json')
-const DELO_PROFILE = 'default'
+import { createTestHome, DELO_PROFILE, INSTALL_ANCHOR, REPO, type TestHome } from './profiles.ts'
 
 /** One composed row and the `# ==` label the dump printed above it. */
 interface DumpedRow {
@@ -31,7 +24,7 @@ interface Dump {
   readonly stderr: string
 }
 
-let home: string
+let home: TestHome
 
 /**
  * Run upstream's CLI from source and split its dump at each `# ==` label.
@@ -40,7 +33,7 @@ let home: string
  */
 function dumpConfig(profile: string): Dump {
   const result = spawnSync(process.execPath, ['--import', 'tsx/esm', join(REPO, 'apps/cli/src/bin.ts'), '--profile', profile, '--dump-config'], {
-    cwd: REPO, env: { ...process.env, DSH_HOME: home }, encoding: 'utf8',
+    cwd: REPO, env: { ...process.env, DSH_HOME: home.dir }, encoding: 'utf8',
   })
   if (result.status !== 0) throw new Error(`dsh --profile ${profile} --dump-config exited ${String(result.status)}: ${result.stderr}`)
   const [preamble = '', ...sections] = result.stdout.split(/^# == /m)
@@ -65,17 +58,9 @@ function writers(label: string): string[] {
 
 const text = (row: DumpedRow['row']): string => yaml.dump(row, { schema: entryListSchema, noRefs: true })
 
-beforeAll(() => {
-  home = mkdtempSync(join(tmpdir(), 'delo-bundle-local-'))
-  const dir = join(home, 'profiles', DELO_PROFILE)
-  initProfile(dir, DELO_PROFILE_BUNDLES)
-  // `dsh plugin add` leaves a profile-installed bundle linked under the profile's node_modules.
-  const link = join(dir, 'node_modules', LOCAL_BUNDLE)
-  mkdirSync(dirname(link), { recursive: true })
-  symlinkSync(PACKAGE_DIR, link, 'junction')
-})
+beforeAll(() => { home = createTestHome() })
 
-afterAll(() => { rmSync(home, { recursive: true, force: true }) })
+afterAll(() => { home.remove() })
 
 describe('a Delo CLI profile', () => {
   it('lists upstream\'s web template followed by this bundle', () => {
@@ -84,7 +69,7 @@ describe('a Delo CLI profile', () => {
   })
 
   it('loads every bundle of the list, this one included, and skips none', () => {
-    const profile = loadProfileDirectory('dsh', join(home, 'profiles', DELO_PROFILE), INSTALL_ANCHOR)
+    const profile = loadProfileDirectory('dsh', join(home.dir, 'profiles', DELO_PROFILE), INSTALL_ANCHOR)
     expect(profile.skippedBundles).toEqual([])
     expect(profile.layers.map(layer => layer.packageName)).toEqual(DELO_PROFILE_BUNDLES)
   })
@@ -93,8 +78,7 @@ describe('a Delo CLI profile', () => {
     const dump = dumpConfig(DELO_PROFILE)
     expect(dump.stderr).toBe('')
     expect(dump.preamble).toBe('')
-    const profile = loadProfileDirectory('dsh', join(home, 'profiles', DELO_PROFILE), INSTALL_ANCHOR)
-    expect(dump.rows).toHaveLength(composeEntries(profile.layers.map(layer => layer.patches)).length)
+    expect(dump.rows).toHaveLength(home.rows(DELO_PROFILE).length)
     for (const { label, row } of dump.rows) {
       for (const writer of writers(label)) expect(DELO_PROFILE_BUNDLES, `${row.id ?? '(no id)'} under "${label}"`).toContain(writer)
     }

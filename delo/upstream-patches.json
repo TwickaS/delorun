@@ -2064,7 +2064,7 @@
     {
       "path": "tsconfig.host.json",
       "class": "delo-feature",
-      "reason": "Delo's project reference of the doctor package, and the include of the Delo switch-on web e2e driver delo-preset-inspect.e2e.ts beside the other scaffold-based drivers, so the host typecheck covers it."
+      "reason": "Delo's project reference of the doctor package, and the includes of Delo's scaffold-based web e2e drivers delo-preset-inspect.e2e.ts and delo-privacy-consent.e2e.ts beside the other scaffold-based drivers, so the host typecheck covers them."
     },
     {
       "path": "packages/boot/doctor/README.md",
@@ -2334,12 +2334,17 @@
     {
       "path": "apps/web/tsconfig.json",
       "class": "delo-feature",
-      "reason": "Excludes the Delo switch-on web e2e driver delo-preset-inspect.e2e.ts from the client program, beside the other scaffold-based drivers, so the client typecheck does not load the host Context merges that the scaffold reads."
+      "reason": "Excludes Delo's scaffold-based web e2e drivers delo-preset-inspect.e2e.ts and delo-privacy-consent.e2e.ts from the client program, beside the other scaffold-based drivers, so the client typecheck does not load the host Context merges that the scaffold reads."
     },
     {
       "path": "apps/cli/src/bin.ts",
       "class": "generic-fix",
       "reason": "runCli takes an optional argv, defaulting to process.argv.slice(2), so a launcher that runs the dsh command line in its own process, such as delorun's plugin and headless commands, passes the arguments explicitly instead of replacing process.argv. Offer upstream."
+    },
+    {
+      "path": "apps/web/tests/delo-privacy-consent.e2e.ts",
+      "class": "delo-feature",
+      "reason": "Web e2e driver of Delo's Privacy section: builds @delo/bundle-local, boots the scaffold with it as a profile bundle against a mock DeepSeek API, and turns each upstream opt-in on after consent and off again."
     }
   ],
   "retired": []

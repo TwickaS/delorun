@@ -1,9 +1,29 @@
 # The @delo/bundle-local patch: Delo's layer over upstream's web template in
 # Delo's CLI profiles (src/profile.ts lists the order). Rows here target
 # upstream rows by id, or insert Delo's local integration rows; the profile's
-# own cordis.patch.yml and any --patch overlays still come after it.
+# own cordis.patch.yml and any --patch overlays still come after it, so the
+# Privacy section's writes to the profile win over the values here.
 #
 # A patch replaces the targeted row's whole `config`, so a row here restates
 # every key it keeps. Each row is listed in LOCAL_ROWS (src/profile.ts), and
 # the package's composition spec fails on a row that is not.
-[]
+
+# DeepSeek's session-log upload is off until the person turns it on (C11).
+# The base bundle's row has no config, so `enabled` is the only key.
+- id: session-log-deepseek
+  config:
+    enabled: false
+
+# Desktop analytics is off until the person turns it on (C11). The row keeps
+# the web bundle's `disabled` condition, so it mounts only in the desktop
+# profile; `appVersion` restates the web bundle's value.
+- id: product-analytics
+  config:
+    enabled: false
+    appVersion: !!js process.env.DSH_CLIENT_VERSION
+
+# The Privacy section in Settings: the statements and the consent switches
+# for the two rows above.
+- insert:
+    - id: delo-privacy
+      name: '@delo/bundle-local'

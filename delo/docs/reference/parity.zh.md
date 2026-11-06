@@ -69,10 +69,10 @@ Delo 保留上游的 SDK 及其文档化的运行时选择。
 
 | 项目 | `dsh-v0.2.2-rc.1` 与本树 | 状态 | 证据 |
 | --- | --- | --- | --- |
-| 桌面分析，当前值 | `dsh-v0.2.2-rc.1` 与本树：默认开启。`packages/client/product-analytics/src/index.ts` 第 36 行中 `product-analytics` 配置的 `enabled` 默认为 `true`，桌面 profile 在 `packages/bundle/web-app/cordis.patch.yml` 第 53 行将其设为 `true`。桌面外壳自身的标志在 Host 策略到达之前为 `false`（`apps/desktop/src/main.ts` 第 480 行） | stock | 人工检查：三处行号均符合此描述，且这些文件都没有台账条目。 |
-| 桌面分析，计划默认值 | `dsh-v0.2.2-rc.1` 与本树：开启。计划中：在本人开启之前保持关闭，C16 的变更默认值 `product-analytics.config.enabled` 设为 `false` | 计划中：C16 变更默认值；没有开关 ID 或工作包 | 人工检查：C16 变更默认值表中关于桌面分析的行，以及[威胁模型](../security/threat-model.zh.md)的数据共享行。 |
-| 会话日志上传，当前值 | `dsh-v0.2.2-rc.1` 与本树：默认开启。`packages/session/session-log-deepseek/src/index.ts` 第 60 行中 `session-log-deepseek` 的 `enabled` 默认为 `true`，基础 bundle 在 `packages/bundle/base/cordis.patch.yml` 第 43 行挂载该插件 | stock | 人工检查：这两行均符合此描述，且两个文件都没有台账条目。 |
-| 会话日志上传，计划默认值 | `dsh-v0.2.2-rc.1` 与本树：开启。计划中：在本人开启之前保持关闭，C16 的变更默认值 `session-log-deepseek.config.enabled` 设为 `false` | 计划中：C16 变更默认值；没有开关 ID 或工作包 | 人工检查：C16 变更默认值表中关于会话日志上传的行，以及[威胁模型](../security/threat-model.zh.md)的数据共享行。 |
+| 桌面分析，上游默认值 | `dsh-v0.2.2-rc.1` 与本树的上游 profile：默认开启。`packages/client/product-analytics/src/index.ts` 第 36 行中 `product-analytics` 配置的 `enabled` 默认为 `true`，桌面 profile 在 `packages/bundle/web-app/cordis.patch.yml` 第 53 行将其设为 `true`。桌面外壳自身的标志在 Host 策略到达之前为 `false`（`apps/desktop/src/main.ts` 第 480 行） | stock | 人工检查：三处行号均符合此描述，且这些文件都没有台账条目。 |
+| 桌面分析，Delo 默认值 | `dsh-v0.2.2-rc.1`：开启。本树：在 Delo 的 CLI profile 中关闭，其中 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 将 C16 的变更默认值 `product-analytics.config.enabled` 设为 `false`，并通过其“隐私”分区在同意后开启；上游自身的 profile 保持 `true` | 已构建：C16 变更默认值，没有开关 ID | `delo/packages/bundle-local/tests/privacy-defaults.spec.ts` 与 `privacy-section.client.spec.tsx` |
+| 会话日志上传，上游默认值 | `dsh-v0.2.2-rc.1` 与本树的上游 profile：默认开启。`packages/session/session-log-deepseek/src/index.ts` 第 60 行中 `session-log-deepseek` 的 `enabled` 默认为 `true`，基础 bundle 在 `packages/bundle/base/cordis.patch.yml` 第 43 行挂载该插件 | stock | 人工检查：这两行均符合此描述，且两个文件都没有台账条目。 |
+| 会话日志上传，Delo 默认值 | `dsh-v0.2.2-rc.1`：开启。本树：在 Delo 的 CLI profile 中关闭，其中 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 将 C16 的变更默认值 `session-log-deepseek.config.enabled` 设为 `false`，并通过其“隐私”分区在同意后开启；上游自身的 profile（因而包括录制会话回放）保持插件的默认值 `true` | 已构建：C16 变更默认值，没有开关 ID | `delo/packages/bundle-local/tests/privacy-defaults.spec.ts`、`privacy-section.client.spec.tsx` 与 `apps/web/tests/delo-privacy-consent.e2e.ts` |
 | 基于反馈的 OTel 会话上传 | `dsh-v0.2.2-rc.1` 与本树：基础 bundle 包含一项基于反馈的 OTel 会话上传，适用于所有人与提供方（[CLI 参考](../../../apps/cli/reference/README.zh.md)）；本树对它没有 Delo 修改 | stock | 人工检查：CLI 参考中关于基础 bundle 的段落与其 OTel 段落（第 137 与 139 行），且 `packages/session/session-telemetry-otel` 没有台账条目。 |
 
 ### web_fetch
