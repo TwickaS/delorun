@@ -1359,7 +1359,7 @@ export function WorkspaceBrowser({
         searchShortcut,
         openSessionMenu,
       })}
-      {pickFlow}
+      {listBody && pickFlow}
       {!listBody && <div className={clsx(css.sectionHeader, wide && searchSpacingMotionEnabled && css.searchSpacingMotion)}>
         {wide && !searchField && (
           <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
@@ -1461,6 +1461,7 @@ export function WorkspaceBrowser({
             </Tooltip>
           )}
         </div>
+        {pickFlow}
       </div>}
 
       {/* The collapsed rail keeps search as its own 36px control. */}
