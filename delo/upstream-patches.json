@@ -1445,6 +1445,11 @@
       "path": "packages/client/ui-theme/src/styles/base.css",
       "class": "delo-feature",
       "reason": "Declares the settings section custom properties as unset in the body block, so the theme stylesheet spec finds them declared while each section keeps its fallback."
+    },
+    {
+      "path": "apps/web/tests/plugin-manager.e2e.ts",
+      "class": "delo-feature",
+      "reason": "Expects the plugin bar to show the History action beside upstream's three header buttons."
     }
   ],
   "retired": []
