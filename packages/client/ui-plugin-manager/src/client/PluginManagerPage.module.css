@@ -682,6 +682,15 @@
 }
 
 
+/* The History page's introduction above its versions. */
+.historyIntro {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
 .reason {
   margin: 0;
   font-size: 12px;
@@ -1339,6 +1348,44 @@ label.registryOption {
   color: var(--dsw-alias-label-secondary);
 }
 
+.auditList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.auditSeverity {
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.auditList code {
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.auditList li[data-severity='critical'] .auditSeverity {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.auditExcerpt {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-3);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .approvalList {
   display: flex;
   flex-wrap: wrap;
@@ -1639,6 +1686,13 @@ label.registryOption {
   line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
   overflow-wrap: anywhere;
+}
+
+/* A version's who and when, under its summary. */
+.historyMeta {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 /* A row with a configuration page: its name opens the page, the arrow says so. */

@@ -26,6 +26,10 @@
       "types": "./lib/types/registry.d.ts",
       "default": "./lib/types/registry.js"
     },
+    "./history": {
+      "types": "./lib/types/history.d.ts",
+      "default": "./lib/types/history.js"
+    },
     "./typert": {
       "types": "./lib/typert.host.d.ts",
       "default": "./lib/typert.host.js"
@@ -65,6 +69,7 @@
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-settings": "workspace:*",
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "@deepseek-ai/dsh-official-bundles": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
@@ -85,6 +90,7 @@
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-hmr": "workspace:*",
+    "@deepseek-ai/dsh-config-editor": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-sandbox-policy": "workspace:*",
     "@deepseek-ai/dsh-sandbox": "workspace:*",
@@ -92,6 +98,9 @@
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-hmr": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-config-editor": {
       "optional": true
     },
     "@deepseek-ai/dsh-user-approval": {
@@ -112,6 +121,7 @@
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-system-prompt": "workspace:*",
     "@deepseek-ai/dsh-hmr": "workspace:*",
+    "@deepseek-ai/dsh-config-editor": "workspace:*",
     "@deepseek-ai/cordis-plugin-timer": "workspace:~",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-sandbox-policy": "workspace:*",

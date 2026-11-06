@@ -21,6 +21,8 @@ import type { PluginEntryId, PluginOperation } from '../src/types.ts'
 import Hmr from '@deepseek-ai/dsh-hmr'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { PluginAuditResult, PluginAuditTarget, ProfileVersionId } from '../src/types.ts'
 import { Group } from '@deepseek-ai/cordis-plugin-loader'
 import * as operations from '../src/operations.ts'
 import * as githubConnection from '../src/github-connection.ts'
@@ -345,6 +347,7 @@ it.each(['github:acme/connected', 'https://github.com/acme/connected.git', 'git+
     expect(readProfileManifest('test', dir).dependencies).toHaveProperty(name)
     expect(requests).toContain('github.com:443')
   },
+  30_000,
 )
 
 it.each(['missing package', 'invalid manifest', 'not a bundle', 'missing patch', 'invalid patch'])(
@@ -480,6 +483,7 @@ it('names where each installed bundle comes from as a spec pnpm installs', async
     ssh: 'git@github.com:someone/dsh-plugin.git', deploy: 'deploy@git.corp:team/dsh-plugin.git',
     sshUrl: 'git+ssh://git@github.com/someone/dsh-plugin.git', email: 'git+http://user@example.com:secret@git.example.com/repo.git',
     tarball: 'https://cdn.example.com/dsh-x-1.0.0.tgz', token: 'https://ghp_secret@cdn.example.com/dsh-x-1.0.0.tgz',
+    // secretlint-disable-next-line @secretlint/secretlint-rule-basicauth -- placeholder credentials the test checks are redacted
     password: 'git+https://someone:secret@git.example.com/someone/dsh-plugin.git#main',
     relative: 'file:../plugins/relative', linked: 'link:/plugins/linked', home: 'file:~/plugins/home',
     aliasLocal: 'file:../plugins/original', shadowed: '1.0.0',
@@ -1800,6 +1804,65 @@ it.each([false, true])('rechecks installed bundle peers before accepting a disab
   expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toEqual(['core', 'extra'])
 })
 
+
+// A distribution's plugin audit: findings `digest` names, refused or awaiting the user's acceptance.
+function auditing(decision: 'needs-acceptance' | 'refused', calls: PluginAuditTarget[]) {
+  return (ctx: Context) => {
+    ctx.provide('pluginAudit', {
+      audit: (target: PluginAuditTarget): Promise<PluginAuditResult> => {
+        calls.push(target)
+        const findings = [{ rule: 'exfil.endpoint', title: 'Names a webhook', severity: decision === 'refused' ? 'critical' as const : 'warning' as const, path: 'plugin.mjs', line: 1, excerpt: 'fetch(hook)' }]
+        const accepted = decision === 'needs-acceptance' && target.accepted.includes('digest-1')
+        return Promise.resolve({ decision: accepted ? 'accepted' : decision, digest: 'digest-1', findings, truncated: false })
+      },
+    })
+  }
+}
+
+// A pnpm run that installs `audited`, a bundle of one row.
+function installsAudited(dir: string, bundle: (name: string, rows: unknown[]) => void) {
+  const install = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async () => {
+    bundle('audited', [])
+    const profile = readProfileManifest('test', dir)
+    profile.dependencies = { ...profile.dependencies, audited: '1.0.0' }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+    return { exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') }
+  })
+  onTestFinished(() => { install.mockRestore() })
+}
+
+it('refuses an installation the plugin audit finds against until the user accepts its findings, then remembers the acceptance', async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, bundle } = await fixture('live', false, auditing('needs-acceptance', calls))
+  installsAudited(dir, bundle)
+  const before = readFileSync(join(dir, 'package.json'), 'utf8')
+  // Audited although it is not enabled: the user reads the findings where they chose the package.
+  const refused = await manager.installBundle('audited', { enabled: false })
+  expect(refused).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-findings', audit: { decision: 'needs-acceptance', digest: 'digest-1' } } })
+  expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+  expect(calls).toEqual([{ name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [] }])
+  const accepted = await manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1' })
+  expect(accepted).toMatchObject({ application: 'applied', changed: true, audit: { decision: 'accepted', digest: 'digest-1' } })
+  expect(JSON.parse(readFileSync(join(dir, '.plugin-manager', 'audits.json'), 'utf8'))).toEqual({ audited: ['digest-1'] })
+  expect(lstatSync(join(dir, '.plugin-manager', 'audits.json')).mode & 0o777).toBe(0o600)
+  // Enabling it later asks the audit again, with the saved acceptance.
+  expect(await manager.setBundleEnabled('audited', true)).toMatchObject({ application: 'applied', changed: true })
+  expect(calls.at(-1)?.accepted).toEqual(['digest-1'])
+})
+
+it('refuses enabling a bundle whose findings the user never accepted, and a critical finding whatever was accepted', async () => {
+  const pending: PluginAuditTarget[] = []
+  const first = await fixture('live', false, auditing('needs-acceptance', pending))
+  expect(await first.manager.setBundleEnabled('extra', false)).toMatchObject({ application: 'applied' })
+  expect(await first.manager.setBundleEnabled('extra', true)).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-findings' } })
+  expect(readProfileManifest('test', first.dir).dsh?.profile?.bundles).toEqual(['core'])
+  const critical: PluginAuditTarget[] = []
+  const second = await fixture('live', false, auditing('refused', critical))
+  installsAudited(second.dir, second.bundle)
+  expect(await second.manager.installBundle('audited', { acceptedAudit: 'digest-1' })).toMatchObject({ application: 'failed', error: { code: 'audit-refused', audit: { decision: 'refused' } } })
+  expect(existsSync(join(second.dir, '.plugin-manager', 'audits.json'))).toBe(false)
+})
+
 it('lists absent Official entries offline without resolving their packages or consulting registries', async () => {
   const { manager } = await fixture()
   const resolve = vi.spyOn(operations, 'bundleManifest')
@@ -1996,6 +2059,327 @@ it.each(['absent', 'bundle', 'not-bundle', 'unreadable'])('keeps a missing sourc
   })
   expect((await manager.listBundles()).find(item => item.name === name)?.error?.diagnostic).toContain('restore the checkout')
   expect((await manager.listBundles()).find(item => item.name === name)?.installTarget).toBeUndefined()
+})
+
+it('undoes the latest change, putting its files back and applying them without pnpm, and the undo is itself a version', async () => {
+  const { manager, dir, ctx } = await fixture()
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+  onTestFinished(() => { pnpm.mockRestore() })
+  const patch = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')
+  const id = (await manager.listPlugins()).find(row => row.patchId === 'managed')!.entryId
+  await manager.setPluginEnabled(id, false)
+  expect(ctx.get('managedProbe')).toBeUndefined()
+  const changes: PluginChange[] = []
+  const dispose = ctx.on('plugin-manager/changed', (change) => { changes.push(change) })
+  onTestFinished(() => { dispose() })
+  const turnedOff = await manager.history(50)
+  expect(turnedOff).toMatchObject({ available: true, versions: [
+    { summary: `Turned off ${id}`, changedBy: { kind: 'person' } },
+    // The profile as the manager first found it, saved before its first change.
+    { summary: 'Changed outside plugin management', changedBy: { kind: 'outside' } },
+  ] })
+  const latest = turnedOff.available ? turnedOff.versions[0]! : undefined
+  expect(await manager.undo()).toMatchObject({ stage: 'undo', undone: { version: latest?.id, summary: `Turned off ${id}` }, changed: true, application: 'applied' })
+  expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')).toBe(patch)
+  expect((await manager.listPlugins()).find(row => row.entryId === id)?.enabled).toBe(true)
+  expect(ctx.get('managedProbe')).toBe(true)
+  expect(changes).toEqual([{ reason: 'undo' }])
+  expect(pnpm).not.toHaveBeenCalled()
+  expect((await manager.history(1))).toMatchObject({ versions: [{ summary: `Undid "Turned off ${id}"`, changedBy: { kind: 'person' } }] })
+  // Undoing the undo takes the profile forward again.
+  expect(await manager.undo()).toMatchObject({ application: 'applied', undone: { summary: `Undid "Turned off ${id}"` } })
+  expect((await manager.listPlugins()).find(row => row.entryId === id)?.enabled).toBe(false)
+})
+
+it('finds nothing to undo before a first change', async () => {
+  const { manager } = await fixture()
+  expect(await manager.undo()).toMatchObject({ stage: 'undo', changed: false, application: 'failed', error: { code: 'nothing-to-undo' } })
+})
+
+it('saves an edit made outside plugin management as its own version, which undo takes back alone', async () => {
+  const { manager, dir } = await fixture()
+  await manager.setBundleEnabled('extra', false)
+  const before = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')
+  writeFileSync(join(dir, 'cordis.patch.yml'), '# edited by hand\n')
+  expect(await manager.undo()).toMatchObject({ application: 'applied', undone: { summary: 'Changed outside plugin management' } })
+  expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')).toBe(before)
+  expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toEqual(['core'])
+})
+
+it('credits a change made in an Agent\'s tool call to that Agent\'s Session', async () => {
+  const { manager, ctx } = await fixture()
+  const agents = { currentInitiator: () => ({ session: { id: 'session-7' } }) }
+  ctx.provide('agents', agents as never)
+  await manager.setBundleEnabled('extra', false)
+  expect(await manager.history(1)).toMatchObject({ versions: [{ summary: 'Turned off extra', changedBy: { kind: 'agent', sessionId: 'session-7' } }] })
+})
+
+it('saves a settings edit the configuration editor announces as its own version, by whoever made it', async () => {
+  const { manager, ctx, dir } = await fixture()
+  ctx.provide('agents', { currentInitiator: () => ({ session: { id: 'session-8' } }) } as never)
+  const changed = new Promise<unknown>((resolve) => { ctx.on('plugin-manager/changed', resolve) })
+  writeFileSync(join(dir, 'cordis.patch.yml'), `${readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')}- id: extra-row\n  config:\n    limit: 9\n`)
+  ctx.emit('config-editor/edited', { entryId: 'extra-row' })
+  expect(await changed).toEqual({ reason: 'config' })
+  expect(await manager.history(1)).toMatchObject({ versions: [{ summary: 'Changed the settings of extra-row', changedBy: { kind: 'agent', sessionId: 'session-8' } }] })
+})
+
+it('leaves a settings edit saved when git cannot keep the history', async () => {
+  const { manager, ctx } = await fixture('live', false, undefined, { gitCommand: 'dsh-no-such-git' })
+  const changed = vi.fn()
+  ctx.on('plugin-manager/changed', changed)
+  ctx.emit('config-editor/edited', { entryId: 'extra-row' })
+  expect(await manager.history(1)).toMatchObject({ available: false })
+  expect(changed).not.toHaveBeenCalled()
+})
+
+it('restores a chosen version, installing its dependency set from its lockfile', async () => {
+  const { manager, dir } = await fixture()
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+  const first = await manager.history(1)
+  const version = first.available ? first.versions[0]!.id : undefined
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n# newer\n')
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockResolvedValue({ exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') })
+  onTestFinished(() => { pnpm.mockRestore() })
+  const result = await manager.restore(version!)
+  expect(result).toMatchObject({ stage: 'restore', target: version, application: 'applied', restored: { version, summary: 'Changed outside plugin management' }, packageResult: { exitCode: 0 } })
+  // Scripts wait for the audit: the dependency set is installed with none run, then the version's allowed builds run.
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['install', '--frozen-lockfile', '--ignore-scripts'], ['rebuild', '--pending']])
+  expect(readFileSync(join(dir, 'pnpm-lock.yaml'), 'utf8')).toBe('lockfileVersion: 9.0\n')
+  expect(await manager.history(1)).toMatchObject({ versions: [{ summary: 'Restored the version "Changed outside plugin management"' }] })
+})
+
+it('restores a version without a lockfile from its manifest, creating no lockfile', async () => {
+  const { manager, dir } = await fixture()
+  expect(existsSync(join(dir, 'pnpm-lock.yaml'))).toBe(false)
+  const first = await manager.history(1)
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockResolvedValue({ exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') })
+  onTestFinished(() => { pnpm.mockRestore() })
+  expect(await manager.restore(first.available ? first.versions[0]!.id : brandString<ProfileVersionId>(''))).toMatchObject({ application: 'applied' })
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['install', '--config.lockfile=false', '--ignore-scripts'], ['rebuild', '--pending']])
+  expect(existsSync(join(dir, 'pnpm-lock.yaml'))).toBe(false)
+})
+
+it('undoes an install with the registry it came from, so pnpm verifies the leaving package\'s lockfile entries there', async () => {
+  const { manager, dir, bundle } = await fixture()
+  const corp = 'https://npm.corp.example/'
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    if (args[0] === 'add') {
+      const name = String(args[1])
+      bundle(name, [{ id: name, name: './plugin.mjs', config: { service: name } }])
+      const manifest = readProfileManifest('test', dir)
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...manifest, dependencies: { ...manifest.dependencies, [name]: '1.0.0' } }))
+      writeFileSync(join(dir, 'pnpm-lock.yaml'), `lockfileVersion: 9.0\n# ${name}\n`)
+    }
+    return { exitCode: 0, output: '', truncated: false, logPath: join(dir, 'pnpm.log') }
+  })
+  onTestFinished(() => { pnpm.mockRestore() })
+  expect(await manager.installBundle('mirrored', { enabled: false, registry: corp })).toMatchObject({ application: 'applied' })
+  expect(await manager.undo()).toMatchObject({ application: 'applied' })
+  expect(pnpm.mock.calls.at(-2)?.[1]).toEqual(['install', '--config.lockfile=false', '--ignore-scripts', `--config.registry=${corp}`])
+  expect(readProfileManifest('test', dir).dependencies?.['mirrored']).toBeUndefined()
+})
+
+it('reports a failed reinstall of a restored lockfile, keeping the restored files as a version', async () => {
+  const { manager, dir } = await fixture()
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+  const first = await manager.history(1)
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n# newer\n')
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockResolvedValue({ exitCode: 1, output: 'ERR_PNPM_OUTDATED_LOCKFILE', truncated: false, logPath: join(dir, 'pnpm.log') })
+  onTestFinished(() => { pnpm.mockRestore() })
+  expect(await manager.restore(first.available ? first.versions[0]!.id : brandString<ProfileVersionId>(''))).toMatchObject({
+    changed: true, application: 'failed', error: { code: 'operation-error', diagnostic: 'ERR_PNPM_OUTDATED_LOCKFILE' }, packageResult: { exitCode: 1 },
+  })
+  expect(readFileSync(join(dir, 'pnpm-lock.yaml'), 'utf8')).toBe('lockfileVersion: 9.0\n')
+  expect(await manager.history(1)).toMatchObject({ versions: [{ summary: expect.stringMatching(/^Restored the version /) as string }] })
+})
+
+// A version that brings back the bundle `audited`, an allowed build script and a version exemption, next to the profile as it is now.
+async function versionBringingBack(manager: { history: (limit: number) => Promise<unknown> }, dir: string) {
+  const workspace = readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')
+  const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', audited: '1.0.0' } }))
+  writeFileSync(join(dir, 'pnpm-workspace.yaml'), `${workspace}allowBuilds:\n  audited: true\n`)
+  writeFileSync(join(dir, 'compatibility.json'), JSON.stringify({ 'audited@1.0.0': [getDshRuntimeVersion()] }))
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n# audited\n')
+  const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+  // The profile now: without the bundle, the build decision and the exemption.
+  writeFileSync(join(dir, 'package.json'), manifest)
+  writeFileSync(join(dir, 'pnpm-workspace.yaml'), workspace)
+  rmSync(join(dir, 'compatibility.json'))
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+  return held.versions[0]!.id
+}
+
+function profileFiles(dir: string): Record<string, string | null> {
+  return Object.fromEntries(['package.json', 'pnpm-lock.yaml', 'cordis.patch.yml', 'pnpm-workspace.yaml', 'compatibility.json']
+    .map(name => [name, existsSync(join(dir, name)) ? readFileSync(join(dir, name), 'utf8') : null]))
+}
+
+it('lists what a restore brings back before it runs, reading the history without saving a version', async () => {
+  const { manager, dir } = await fixture()
+  const version = await versionBringingBack(manager, dir)
+  const before = profileFiles(dir)
+  const versions = await manager.listHistory(50)
+  const preview = await manager.previewRestore(version)
+  expect(preview).toEqual({ ok: true, version: { version, summary: 'Changed outside plugin management' }, changes: {
+    plugins: [{ name: 'audited', change: 'added', to: '1.0.0' }],
+    bundles: [],
+    builds: [{ name: 'audited', to: 'allowed' }],
+    exemptions: [{ packageVersion: 'audited@1.0.0', runtimeVersion: getDshRuntimeVersion(), change: 'added' }],
+    patchChanged: false, unreadable: [],
+  } })
+  // The profile differs from its latest version, so undo would take that outside edit back to the same version.
+  expect(await manager.previewUndo()).toMatchObject({ ok: true, version: { version } })
+  expect(profileFiles(dir)).toEqual(before)
+  expect(await manager.listHistory(50)).toEqual(versions)
+  expect(await manager.previewRestore(brandString<ProfileVersionId>('0'.repeat(40)))).toEqual({ ok: false, error: { code: 'unknown-version' } })
+})
+
+it('lists versions and previews an undo without starting the history or saving an outside edit', async () => {
+  const { manager, dir } = await fixture()
+  expect(await manager.listHistory(50)).toEqual({ available: true, versions: [] })
+  expect(await manager.previewUndo()).toEqual({ ok: false, error: { code: 'nothing-to-undo' } })
+  expect(existsSync(join(dir, '.plugin-manager', 'history'))).toBe(false)
+  await manager.setBundleEnabled('extra', false)
+  writeFileSync(join(dir, 'cordis.patch.yml'), '# edited by hand\n')
+  const listed = await manager.listHistory(50)
+  expect(listed).toMatchObject({ available: true, versions: [{ summary: 'Turned off extra' }, { summary: 'Changed outside plugin management' }] })
+  expect(await manager.listHistory(50)).toEqual(listed)
+  await expect(manager.listHistory(0)).rejects.toThrow(RangeError)
+})
+
+it('audits what a restore brings back after installing it with every script held back, then runs the allowed builds', async () => {
+  const steps: string[] = []
+  const calls: PluginAuditTarget[] = []
+  const clear = (ctx: Context) => {
+    ctx.provide('pluginAudit', { audit: (target: PluginAuditTarget): Promise<PluginAuditResult> => {
+      calls.push(target)
+      steps.push('audit')
+      return Promise.resolve({ decision: 'clear', digest: 'digest-0', findings: [], truncated: false })
+    } })
+  }
+  const { manager, dir, bundle } = await fixture('live', false, clear)
+  const version = await versionBringingBack(manager, dir)
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    steps.push(args.join(' '))
+    if (args[0] === 'install') bundle('audited', [])
+    return { exitCode: 0, output: '', truncated: false, logPath: join(dir, 'pnpm.log') }
+  })
+  onTestFinished(() => { pnpm.mockRestore() })
+  const result = await manager.restore(version)
+  expect(result).toMatchObject({ application: 'applied', changed: true, changes: { plugins: [{ name: 'audited', change: 'added' }], builds: [{ name: 'audited', to: 'allowed' }] } })
+  expect(steps).toEqual(['install --frozen-lockfile --ignore-scripts', 'audit', 'rebuild --pending'])
+  expect(calls).toEqual([{ name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [] }])
+})
+
+it.each(['needs-acceptance', 'refused'] as const)('puts the profile back when the audit answers %s for a package a restore brings back, running none of its scripts', async (decision) => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, bundle } = await fixture('live', false, auditing(decision, calls))
+  const version = await versionBringingBack(manager, dir)
+  const before = profileFiles(dir)
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    if (args[0] === 'install') bundle('audited', [])
+    return { exitCode: 0, output: '', truncated: false, logPath: join(dir, 'pnpm.log') }
+  })
+  onTestFinished(() => { pnpm.mockRestore() })
+  const result = await manager.restore(version)
+  expect(result).toMatchObject({ application: 'failed', changed: false,
+    error: { code: decision === 'refused' ? 'audit-refused' : 'audit-findings', audit: { decision } },
+    changes: { plugins: [{ name: 'audited' }], builds: [{ name: 'audited' }], exemptions: [{ packageVersion: 'audited@1.0.0' }] } })
+  expect(calls.map(call => call.name)).toEqual(['audited'])
+  // The held-back install, then the reinstall of the files as they were; no build script ran.
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['install', '--frozen-lockfile', '--ignore-scripts'], ['install', '--frozen-lockfile']])
+  expect(profileFiles(dir)).toEqual(before)
+})
+
+it('audits a bundle an undo selects again before writing any file, and refuses it without the user\'s acceptance', async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir } = await fixture('live', false, auditing('needs-acceptance', calls))
+  expect(await manager.setBundleEnabled('extra', false)).toMatchObject({ application: 'applied' })
+  const before = profileFiles(dir)
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+  onTestFinished(() => { pnpm.mockRestore() })
+  expect(await manager.undo()).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-findings' },
+    changes: { bundles: [{ name: 'extra', selected: true }], patchChanged: false } })
+  expect(calls.map(call => call.name)).toEqual(['extra'])
+  expect(pnpm).not.toHaveBeenCalled()
+  expect(profileFiles(dir)).toEqual(before)
+})
+
+it('previews an undo of the latest change when nothing changed outside plugin management since', async () => {
+  const { manager, dir } = await fixture()
+  await manager.setBundleEnabled('extra', false)
+  const listed = await manager.listHistory(2)
+  const previous = listed.available ? listed.versions[1] : undefined
+  expect(await manager.previewUndo()).toEqual({ ok: true, version: { version: previous?.id, summary: 'Changed outside plugin management' },
+    changes: { plugins: [], bundles: [{ name: 'extra', selected: true }], builds: [], exemptions: [], patchChanged: false, unreadable: [] } })
+  expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toEqual(['core'])
+})
+
+it('reports a history git cannot read in its listing and previews, and fails loud on a profile file it cannot read', async () => {
+  const { manager, dir } = await fixture()
+  await manager.setBundleEnabled('extra', false)
+  writeFileSync(join(dir, '.plugin-manager', 'history', 'HEAD'), 'not a reference\n')
+  expect(await manager.listHistory(5)).toMatchObject({ available: false, reason: expect.stringMatching(/^git rev-parse failed/) as string })
+  expect(await manager.previewUndo()).toMatchObject({ ok: false, error: { code: 'history-unavailable', diagnostic: expect.stringMatching(/^git /) as string } })
+  mkdirSync(join(dir, 'compatibility.json'))
+  await expect(manager.previewRestore(brandString<ProfileVersionId>('0'.repeat(40)))).rejects.toMatchObject({ code: 'EISDIR' })
+})
+
+it('warns when the reinstall after an audit refusal fails, and fails a restore whose allowed builds fail', async () => {
+  const calls: PluginAuditTarget[] = []
+  const refusing = await fixture('live', false, auditing('refused', calls))
+  const version = await versionBringingBack(refusing.manager, refusing.dir)
+  const failingRepair = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    if (args.includes('--ignore-scripts')) {
+      refusing.bundle('audited', [])
+      return { exitCode: 0, output: '', truncated: false, logPath: join(refusing.dir, 'pnpm.log') }
+    }
+    return { exitCode: 1, output: 'ERR_PNPM_FETCH', truncated: false, logPath: join(refusing.dir, 'pnpm.log') }
+  })
+  const refused = await refusing.manager.restore(version)
+  failingRepair.mockRestore()
+  expect(refused).toMatchObject({ application: 'failed', error: { code: 'audit-refused' } })
+  expect(refused.warnings).toContainEqual(expect.stringMatching(/could not install their dependencies again/))
+  const building = await fixture()
+  const built = await versionBringingBack(building.manager, building.dir)
+  const failingBuild = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => ({
+    exitCode: args[0] === 'rebuild' ? 1 : 0, output: args[0] === 'rebuild' ? 'ELIFECYCLE build failed' : '', truncated: false, logPath: join(building.dir, 'pnpm.log'),
+  }))
+  onTestFinished(() => { failingBuild.mockRestore() })
+  expect(await building.manager.restore(built)).toMatchObject({ application: 'failed', error: { code: 'operation-error', diagnostic: 'ELIFECYCLE build failed' } })
+})
+
+it('audits a bundle a restore brings back whose manifest declares no version', async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir } = await fixture('live', false, auditing('needs-acceptance', calls))
+  expect(await manager.setBundleEnabled('extra', false)).toMatchObject({ application: 'applied' })
+  const path = join(dir, 'node_modules', 'extra', 'package.json')
+  const { version: _version, ...unversioned } = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+  writeFileSync(path, JSON.stringify(unversioned))
+  expect(await manager.undo()).toMatchObject({ error: { code: 'audit-findings' } })
+  expect(calls).toEqual([{ name: 'extra', dir: join(dir, 'node_modules', 'extra'), accepted: [] }])
+})
+
+it('refuses a version the history does not hold, and a history limit out of range', async () => {
+  const { manager } = await fixture()
+  expect(await manager.restore(brandString<ProfileVersionId>('0'.repeat(40)))).toMatchObject({ stage: 'restore', changed: false, application: 'failed', error: { code: 'unknown-version' } })
+  await expect(manager.history(0)).rejects.toThrow('limit must be an integer from 1 to 500')
+  await expect(manager.history(501)).rejects.toThrow(RangeError)
+})
+
+it('keeps changing the profile when git cannot keep its history, and says so', async () => {
+  const { manager } = await fixture('live', false, undefined, { gitCommand: 'dsh-no-such-git' })
+  const result = await manager.setBundleEnabled('extra', false)
+  expect(result).toMatchObject({ changed: true, application: 'applied' })
+  expect(result.warnings).toEqual([
+    expect.stringMatching(/^the profile's history could not save an earlier edit: git could not run/),
+    expect.stringMatching(/^the profile's history could not save this change: git could not run/),
+  ])
+  expect(await manager.history(50)).toMatchObject({ available: false, reason: expect.stringMatching(/^git could not run/) as string })
+  expect(await manager.undo()).toMatchObject({ application: 'failed', error: { code: 'history-unavailable', diagnostic: expect.stringMatching(/^git could not run/) as string } })
 })
 
 /** A `pnpm view` stand-in answering by spec and printed fields. */

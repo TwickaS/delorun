@@ -10,13 +10,14 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { PluginInstallFailureKind, Registry } from '@deepseek-ai/dsh-api-remotes/client'
+import type { PluginAuditResult, PluginInstallFailureKind, ProfileChangedBy, ProfileVersionId, Registry } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   Button, IconCheckCircleFillRegular, IconChevronDownOutlineRegular, IconChevronLeftOutlineMedium,
   IconChevronRightOutlineRegular, IconCloseOutlineMedium,
-  IconDownloadOutlineRegular, IconInfoOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular,
+  IconClockOutlineRegular, IconDownloadOutlineRegular, IconInfoOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular,
+  IconTrashOutlineRegular,
   IconWarningOutlineRegular, Input, Menu, MenuItemButton, Modal, pointerModality,
-  PluginArtworkDefault, PluginArtworkLoop, PluginArtworkSearch, PluginArtworkSubagent, PluginArtworkTerminal,
+  PluginArtworkDefault, PluginArtworkLoop, PluginArtworkSearch, PluginArtworkSubagent, PluginArtworkTerminal, relativeTime,
   SegmentedTabs, StateDot, Switch, Tag, TerminalBlock, Toast, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
   type IconProps, type StateDotState, type TerminalBlockLabels,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -27,8 +28,8 @@ import type { PluginHeaderLayoutFace } from './header-scroll.ts'
 import { rowConfigKey, type OfficialItem } from './config-ledger.ts'
 import { INSTALL_GIT_EXAMPLE, INSTALL_PATH_EXAMPLE, type PluginManagerLocaleKey } from './locales.ts'
 import {
-  bundleBusy, asksMirror, githubRecoveryRegistry, isInstallPending, offeredRegistries, rowKey, updateCandidate,
-  type InstallInputError, type InstallState, type InstallSubject, type PackageRow, type PackageView,
+  bundleBusy, asksMirror, githubRecoveryRegistry, isInstallPending, offeredRegistries, rowKey, updateCandidate, versionKey,
+  type HistoryState, type InstallInputError, type InstallState, type InstallSubject, type PackageRow, type PackageView,
   type PluginManagerFace, type PluginManagerState, type RegistryChoice, type VersionCheck,
 } from './manager-store.ts'
 import { managementText, noticeText, packageText, registryText, restartText, rowText, type Translate } from './presentation.ts'
@@ -484,6 +485,85 @@ function ListSkeleton({ label }: { readonly label: string }): ReactNode {
   )
 }
 
+/** Who made a version, as the History view names them. */
+const CHANGED_BY_KEYS = {
+  person: 'historyByPerson',
+  agent: 'historyByAgent',
+  outside: 'historyByOutside',
+} satisfies Record<ProfileChangedBy['kind'], PluginManagerLocaleKey>
+
+/** How long ago a version was made, in the History view's words. */
+function historyTimeText(at: number, now: number, t: Translate): string {
+  const { unit, n } = relativeTime(at, now)
+  return unit === 'now' ? t('historyTimeNow') : t('historyTimeAgo', { time: t(`historyTime.${unit}`, { n }) })
+}
+
+/**
+ * The profile's versions, newest first: what changed, who changed it and when, with Restore on every version but the
+ * profile as it stands. Its first render reads the history; the store reads it again after every change.
+ */
+function HistoryView({ history, t, busy, onLoad, onRestore }: {
+  readonly history: HistoryState
+  readonly t: Translate
+  /** The version a restore is running for, if any; every Restore waits while one runs. */
+  readonly busy: ProfileVersionId | undefined
+  readonly onLoad: () => void
+  readonly onRestore: (version: ProfileVersionId) => void
+}): ReactNode {
+  useEffect(() => { onLoad() }, [onLoad])
+  const [now] = useState(Date.now)
+  if (history.status === 'unavailable') {
+    return <p className={css.status} role="status">{t('historyUnavailable', { reason: history.reason })}</p>
+  }
+  if (history.versions.length === 0) {
+    if (history.status === 'ready') return <p className={css.empty}>{t('historyEmpty')}</p>
+    if (history.status !== 'error') return <ListSkeleton label={t('historyLoading')} />
+  }
+  return (
+    <section className={css.detailSection} data-profile-history>
+      <p className={css.historyIntro}>{t('historyIntro')}</p>
+      {history.versions.length === 0 ? null : (
+        <ul className={css.rows}>
+          {history.versions.map((version, index) => (
+            <li key={version.id} className={css.row} data-profile-version={version.id}>
+              <div className={css.rowLine}>
+                <div className={css.rowMain}>
+                  <span className={css.rowId}>{version.summary}</span>
+                  <span className={css.historyMeta}>
+                    {t(CHANGED_BY_KEYS[version.changedBy.kind])}{t('historyMetaSeparator')}{historyTimeText(version.at, now, t)}
+                  </span>
+                </div>
+                {index === 0
+                  ? <Tag className={css.statusTag}>{t('historyCurrent')}</Tag>
+                  : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={t('historyRestoreLabel', { summary: version.summary })}
+                      aria-busy={busy === version.id}
+                      disabled={busy !== undefined}
+                      onClick={() => { onRestore(version.id) }}
+                    >
+                      {t('historyRestore')}
+                    </Button>
+                  )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {history.status === 'error'
+        ? (
+          <div className={css.failure}>
+            <p className={css.statusWithDot} role="alert"><StateDot state="error" />{t('historyError')}</p>
+            <Button variant="outline" size="sm" onClick={onLoad}>{t('retry')}</Button>
+          </div>
+        )
+        : null}
+    </section>
+  )
+}
+
 /** The top every page shares: the crumb that leads back, then the icon with the page's actions at its right. */
 function DetailTop({ crumbLabel, crumbText, onBack, icon, actions }: {
   readonly crumbLabel: string
@@ -831,7 +911,10 @@ function terminalLabels(t: Translate): TerminalBlockLabels {
     failed: t('terminalFailed'),
     done: t('terminalDone'),
     copy: t('terminalCopy'),
+    copyCommand: t('terminalCopyCommand'),
     copied: t('terminalCopied'),
+    /* v8 ignore next -- an install run passes no duration; the label interface needs one */
+    duration: ms => t('terminalDuration', { n: String(Math.round(ms / 1000)) }),
     noOutput: t('terminalNoOutput'),
     collapseAria: t('terminalCollapseAria'),
     collapse: t('terminalCollapse'),
@@ -921,6 +1004,42 @@ function registryOption(registry: Registry, t: Translate, resolved: string | nul
   return name === host ? name : <>{name}{' '}<span className={css.registryHint}>{host}</span></>
 }
 
+/** The plugin audit's findings on the failed screen, with the person's acceptance when the refusal allows one. */
+function AuditFindings({ audit, acceptable, onAccept, t }: {
+  readonly audit: PluginAuditResult
+  readonly acceptable: boolean
+  readonly onAccept: () => void
+  readonly t: Translate
+}) {
+  const titleId = useId()
+  return (
+    <section className={css.approval} role="group" aria-labelledby={titleId} data-install-audit>
+      <h3 id={titleId} className={css.approvalTitle}>{t('installAuditTitle')}</h3>
+      <p className={css.approvalText}>{t(acceptable ? 'installAuditDescription' : 'installAuditRefusedDescription')}</p>
+      <ul className={css.auditList}>
+        {audit.findings.map(finding => (
+          <li key={`${finding.rule}:${finding.path}:${String(finding.line)}`} data-severity={finding.severity}>
+            <span className={css.auditSeverity}>{t(AUDIT_SEVERITY_KEYS[finding.severity])}</span> {finding.title} <code>{`${finding.path}:${String(finding.line)}`}</code>
+            {finding.excerpt === '' ? null : <pre className={css.auditExcerpt}>{finding.excerpt}</pre>}
+          </li>
+        ))}
+      </ul>
+      {audit.truncated ? <p className={css.approvalText}>{t('installAuditTruncated')}</p> : null}
+      {acceptable
+        ? (
+          <>
+            <p className={css.approvalCaution}>{t('installAuditCaution')}</p>
+            <Button variant="primary" className={css.wide} onClick={onAccept}>{t('installAuditAccept')}</Button>
+          </>
+        )
+        : null}
+    </section>
+  )
+}
+
+/** The words each finding's severity reads as. */
+const AUDIT_SEVERITY_KEYS = { critical: 'auditSeverityCritical', warning: 'auditSeverityWarning', notice: 'auditSeverityNotice' } as const satisfies Record<PluginAuditResult['findings'][number]['severity'], PluginManagerLocaleKey>
+
 /**
  * The failed screen's one line: a pnpm failure by its kind, a refusal by its
  * code, any other failure in the Host's words; the run's output stays behind the details.
@@ -934,6 +1053,8 @@ function failureText(failure: InstallState['failure'], t: Translate, install?: P
     const incompatible = failure.incompatible === undefined ? {} : { incompatible: failure.incompatible }
     return managementText({ code: failure.code, installing: true, ...incompatible }, t)
   }
+  // The audit's refusal is the package's own answer too; its findings follow below.
+  if (failure.code === 'audit-findings' || failure.code === 'audit-refused') return managementText({ code: failure.code }, t)
   // Blocked scripts the Host could not name leave the person to allow them in the profile's pnpm settings by hand.
   if (failure.kind === 'build-blocked' && !failure.pendingBuilds?.length) return t('installFailureBuildBlockedManual')
   const host = install?.subject?.host
@@ -1007,7 +1128,7 @@ function useInstallComposition(active: boolean) {
  * install scripts undecided shows them for approval in place of plain retry.
  */
 function InstallDialog({
-  install, t, onClose, onEditSpec, onRun, onCancel, onReconcile, onToggleDetails, onEnableNow, onApproveBuilds,
+  install, t, onClose, onEditSpec, onRun, onCancel, onReconcile, onToggleDetails, onEnableNow, onApproveBuilds, onAcceptAudit,
   onToggleRegistry, onChooseRegistry, onChangeRegistry, onUseGithubMirror,
 }: {
   readonly install: InstallState
@@ -1020,6 +1141,7 @@ function InstallDialog({
   readonly onToggleDetails: () => void
   readonly onEnableNow: () => void
   readonly onApproveBuilds: () => void
+  readonly onAcceptAudit: () => void
   readonly onToggleRegistry: () => void
   readonly onChooseRegistry: (choice: RegistryChoice) => void
   /** From the failed screen: back to the spec with the registry options unfolded. */
@@ -1418,6 +1540,12 @@ function InstallDialog({
               </section>
             )
             : null}
+          {phase === 'failed' && install.failure?.audit !== undefined
+            ? <AuditFindings audit={install.failure.audit} acceptable={install.failure.code === 'audit-findings'} onAccept={onAcceptAudit} t={t} />
+            : null}
+          {phase === 'done' && install.audit !== null && install.audit.findings.length > 0
+            ? <p className={css.result} role="status">{t(install.audit.decision === 'accepted' ? 'installDoneAuditAccepted' : 'installDoneAuditNotices', { count: String(install.audit.findings.length) })}</p>
+            : null}
           {phase === 'done' && install.installed === null
             ? <p className={css.result} role="status">{t('installDoneNothing')}</p>
             : null}
@@ -1592,7 +1720,8 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
   const openItem = view.kind === 'item' ? ledger.items.find(item => item.id === view.id) : undefined
   const openRow = view.kind === 'row' && openPkg !== undefined ? openPkg.rows.find(row => row.rowId === view.rowId) : undefined
   const onInstalled = tab === INSTALLED_TAB
-  const showsCards = !onInstalled || (openPkg === undefined && openItem === undefined)
+  const showsHistory = onInstalled && view.kind === 'history'
+  const showsCards = !onInstalled || (openPkg === undefined && openItem === undefined && !showsHistory)
   const detailFromMore = (view.kind === 'package' || view.kind === 'row')
     && (view.from === 'more' || (openPkg !== undefined && MORE_BUNDLES.includes(view.name) && !pinned.has(view.name)))
   const showsMoreList = onInstalled && showsCards && (view.kind === 'more' || detailFromMore)
@@ -1602,11 +1731,12 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
   const returnTab = view.kind === 'package' || view.kind === 'row' ? view.returnTab : undefined
   const backToMore = openPkgInMore && returnTab === undefined
   const pkgOrigin = returnTab !== undefined ? { returnTab } : backToMore ? { from: 'more' as const } : {}
-  // The Installed tab's panel, whatever it currently shows; the More list is not a tab panel.
-  const installedPanel = tabs.length === 0 || showsMoreList
+  // The Installed tab's panel, whatever it currently shows; the More list and the history are not tab panels.
+  const installedPanel = tabs.length === 0 || showsMoreList || showsHistory
     ? {}
     : { role: 'tabpanel', id: `${tabsId}-${INSTALLED_TAB}-panel`, 'aria-labelledby': `${tabsId}-${INSTALLED_TAB}` }
   const activated = listed.find(pkg => pkg.name === activation && pkg.enabled && !state.busy.includes(pkg.name))
+  const restoring = state.history.versions.find(version => state.busy.includes(versionKey(version.id)))?.id
   const setBundleEnabled = (name: string, enabled: boolean): void => {
     setActivation(enabled ? name : null)
     props.setEnabled(name, enabled)
@@ -1658,12 +1788,12 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
 
   return (
     <section className={css.page} data-plugin-panel aria-busy={state.status === 'loading' || refreshing}>
-      {showsMoreList ? (
+      {showsMoreList || showsHistory ? (
         <header className={css.moreHead} data-window-drag>
           <Button size="sm" className={css.moreBack} aria-label={t('backToList')} onClick={() => { setView({ kind: 'list' }) }}>
             <IconChevronLeftOutlineMedium size={20} aria-hidden="true" />
           </Button>
-          <h1 className={css.pageTitle}>{t('moreTitle')}</h1>
+          <h1 className={css.pageTitle}>{showsHistory ? t('historyTitle') : t('moreTitle')}</h1>
         </header>
       ) : null}
       <div className={css.pageBody} data-plugin-body>
@@ -1688,6 +1818,12 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
                 </div>
                 <div className={css.toolbar} data-plugin-toolbar data-plugin-header-part="toolbar" hidden={!onInstalled}>
                   {updates === undefined ? null : <span className={css.updatesNote} data-tone={updates.tone}>{updates.text}</span>}
+                  <Tooltip label={t('historyAction')} delayMs={500} focusDelayMs={500} side="bottom" portal disabled={!loaded}>
+                    <Button variant="outline" size="sm" className={css.addButton} aria-label={t('historyAction')} disabled={!loaded}
+                      onClick={() => { setView({ kind: 'history' }) }} icon={<IconClockOutlineRegular size={13} />}>
+                      <span className={css.toolbarLabel}>{t('historyAction')}</span>
+                    </Button>
+                  </Tooltip>
                   <Tooltip label={t('refresh')} delayMs={500} focusDelayMs={500} side="bottom" portal disabled={!loaded || refreshing}>
                     <Button variant="outline" size="sm" className={css.addButton} aria-label={t('refresh')} aria-busy={refreshing}
                       disabled={!loaded || refreshing} onClick={props.refresh}
@@ -1738,6 +1874,11 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
             </div>
           )
           : null}
+        {showsHistory ? (
+          <div className={css.installedPanel} {...installedPanel}>
+            <HistoryView history={state.history} t={t} busy={restoring} onLoad={props.loadHistory} onRestore={props.restoreVersion} />
+          </div>
+        ) : null}
         {installedCards && !loaded ? (
           <div className={css.installedPanel} {...installedPanel}>
             {state.status === 'loading' ? <ListSkeleton label={t('loading')} /> : null}
@@ -1759,7 +1900,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
               onDone={props.dismissNotice}
             />
           )}
-        {!showsCards && state.status === 'error' && !refreshing
+        {!showsCards && !showsHistory && state.status === 'error' && !refreshing
           ? (
             <div className={css.failure}>
               <p className={css.statusWithDot} role="alert">
@@ -1879,6 +2020,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
         onToggleDetails={props.toggleInstallDetails}
         onEnableNow={() => { setActivation(state.install.installed); props.enableInstalled() }}
         onApproveBuilds={props.approveBuildsAndRetry}
+        onAcceptAudit={props.acceptAuditAndRetry}
         onToggleRegistry={props.toggleRegistryOptions}
         onChooseRegistry={props.chooseRegistry}
         onChangeRegistry={props.changeRegistry}

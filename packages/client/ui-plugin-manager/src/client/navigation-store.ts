@@ -2,12 +2,14 @@
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 
 /**
- * The main or additional plugin list, or one bundle, official item, or bundle row of the Installed tab. A bundle or row
- * opened from a contributed tab names it in `returnTab`, and the bundle page's back returns to that tab's list.
+ * The main or additional plugin list, the profile's history, or one bundle, official item, or bundle row of the
+ * Installed tab. A bundle or row opened from a contributed tab names it in `returnTab`, and the bundle page's back
+ * returns to that tab's list.
  */
 type View =
   | { readonly kind: 'list' }
   | { readonly kind: 'more' }
+  | { readonly kind: 'history' }
   | { readonly kind: 'package'; readonly name: string; readonly from?: 'more'; readonly returnTab?: string }
   | { readonly kind: 'item'; readonly id: string }
   | { readonly kind: 'row'; readonly name: string; readonly rowId: string; readonly from?: 'more'; readonly returnTab?: string }

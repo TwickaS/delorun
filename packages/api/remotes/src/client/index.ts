@@ -34,10 +34,11 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 export type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 export type {
   BundleDetail, BundleInfo, BundleRowInfo, ChangeResult, IncompatiblePlugin, InspectOptions, InstallBundleOptions, InstallSpecKind,
-  ManagementError, PackageResult,
+  ManagementError, PackageResult, PluginAuditFinding, PluginAuditResult,
   PluginChange, PluginEntryId, PluginInfo, PluginInspectProblem, PluginInstallCancellation, PluginInstallFailureKind,
   PluginInstallLogChunk, PluginInstallProgress, PluginInstallRequestId, PluginRegistries, PluginSpecInspection,
   PluginUpdateProgress, PluginUpdateResult, PluginUpdateStep, PluginVersion, PluginVersionList, RegistryAttempt,
+  ProfileChangedBy, ProfileHistoryInfo, ProfileVersion, ProfileVersionId, ProfileVersionSummary,
   ReadOnlyReason, Registry, RestartReason,
 } from '@deepseek-ai/dsh-plugin-manager/types'
 export type {} from '@deepseek-ai/dsh-plugin-manager/remote'

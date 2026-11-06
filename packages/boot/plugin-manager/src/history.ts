@@ -1,0 +1,203 @@
+/**
+ * The profile's history: a git repository whose work tree is the profile
+ * directory and whose git directory is `.plugin-manager/history`, so it never
+ * meets a repository the person keeps in the profile. It tracks only the
+ * files plugin management writes; each version is one commit whose subject is
+ * the change's summary and whose `Changed-by` and `Session` trailers say who
+ * made it. git runs with no system or global configuration and no hooks.
+ */
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { devNull } from 'node:os'
+import { join } from 'node:path'
+import { execa } from 'execa'
+import { PROFILE_COMPATIBILITY_FILENAME } from '@deepseek-ai/dsh-app-boot'
+import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { ProfileChangedBy, ProfileVersion, ProfileVersionId } from './types.ts'
+
+export type { ProfileChangedBy, ProfileVersion, ProfileVersionId } from './types.ts'
+
+/** The profile files plugin management writes, relative to the profile directory: the files the history tracks. */
+export const PROFILE_FILES = ['package.json', 'pnpm-lock.yaml', 'cordis.patch.yml', 'pnpm-workspace.yaml', PROFILE_COMPATIBILITY_FILENAME] as const
+
+/** The lockfile, whose change means a restored version's dependency set must be installed again. */
+const LOCKFILE = 'pnpm-lock.yaml'
+
+/**
+ * Write one version's files into the profile, as {@link ProfileHistory.filesAt} read them: each held file replaced
+ * whole, at mode 0600, and each file the version does not hold removed. The dependency set is not installed.
+ * @param dir - the profile directory.
+ * @param files - the version's files, by name relative to `dir`.
+ * @returns whether the lockfile differs from the one it replaced, so `pnpm install --frozen-lockfile` must run.
+ */
+export async function writeProfileVersion(dir: string, files: ReadonlyMap<string, string | undefined>): Promise<boolean> {
+  const lockfile = join(dir, LOCKFILE)
+  const before = existsSync(lockfile) ? await readFile(lockfile, 'utf8') : undefined
+  for (const [name, content] of files) {
+    if (content === undefined) await rm(join(dir, name), { force: true })
+    else await writeFileAtomic(join(dir, name), content, { mode: 0o600 })
+  }
+  return files.get(LOCKFILE) !== before
+}
+
+/** The history's git directory, relative to the profile directory. */
+export const HISTORY_DIR = join('.plugin-manager', 'history')
+
+/** The most versions one {@link ProfileHistory.list} reads. */
+export const MAX_LIST = 2 ** 31 - 1
+
+/** The identity every version is committed under; who made a change is its `Changed-by` trailer. */
+const IDENTITY = { name: 'DSH plugin management', email: 'plugin-manager@dsh.invalid' }
+
+/** Separates `git log` fields and records; neither occurs in a summary git accepts. */
+const FIELD = '\u001f'
+const RECORD = '\u001e'
+
+/** One git run's exit code and output. */
+interface GitRun { exitCode: number; stdout: string }
+
+/** git is missing or failed in a way the history cannot work around. */
+export class HistoryUnavailableError extends Error {
+  /**
+   * @param message - what failed, for the person.
+   * @param options - the underlying error.
+   */
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'HistoryUnavailableError'
+  }
+}
+
+/** Reads and writes the versions of a profile's managed files; every failure is a {@link HistoryUnavailableError}. */
+export class ProfileHistory {
+  private readonly gitDir: string
+
+  /**
+   * @param dir - the profile directory, the history's work tree.
+   * @param files - the managed files the history tracks, relative to `dir`.
+   * @param gitCommand - the git executable name or path, resolved through `PATH`.
+   * @param timeoutMs - the bound on one git run.
+   */
+  constructor(
+    private readonly dir: string,
+    private readonly files: readonly string[],
+    private readonly gitCommand: string,
+    private readonly timeoutMs: number,
+  ) {
+    this.gitDir = join(dir, HISTORY_DIR)
+  }
+
+  /**
+   * Save the managed files as a new version when they differ from the latest one; the first call starts the history.
+   * @param summary - what changed, not blank; whitespace runs become one space.
+   * @param changedBy - who changed it.
+   * @returns the new version's id, or undefined when nothing changed.
+   * @throws HistoryUnavailableError when git cannot run or refuses.
+   */
+  async record(summary: string, changedBy: ProfileChangedBy): Promise<ProfileVersionId | undefined> {
+    await this.ensure()
+    await this.git(['add', '--all', '--', '.'])
+    if ((await this.git(['diff', '--cached', '--quiet'], [0, 1])).exitCode === 0) return undefined
+    const trailers = [`Changed-by: ${changedBy.kind}`, ...changedBy.kind === 'agent' ? [`Session: ${changedBy.sessionId}`] : []]
+    await this.git(['commit', '--quiet', '--no-verify', '-m', oneLine(summary), '-m', trailers.join('\n')])
+    return brandString<ProfileVersionId>((await this.git(['rev-parse', 'HEAD'])).stdout.trim())
+  }
+
+  /**
+   * The versions, newest first.
+   * @param limit - the most to read, from 1 to {@link MAX_LIST}.
+   * @returns each version with when, what and who; empty before the first.
+   * @throws HistoryUnavailableError when git cannot run or refuses.
+   */
+  async list(limit: number): Promise<ProfileVersion[]> {
+    // git reads `--max-count` as a 32-bit integer and refuses anything larger.
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST) throw new RangeError(`limit must be an integer from 1 to ${String(MAX_LIST)}`)
+    if (!existsSync(this.gitDir)) return []
+    if ((await this.git(['rev-parse', '--verify', '--quiet', 'HEAD'], [0, 1])).exitCode !== 0) return []
+    return this.log(['--max-count', String(limit)])
+  }
+
+  /**
+   * One version, by its id.
+   * @param id - the version.
+   * @returns the version, or undefined when the history does not hold it.
+   * @throws HistoryUnavailableError when git cannot run or refuses.
+   */
+  async version(id: ProfileVersionId): Promise<ProfileVersion | undefined> {
+    if (!(await this.holds(id))) return undefined
+    return (await this.log(['--max-count', '1', id]))[0]
+  }
+
+  // Whether the history holds a version with this id: a commit that its latest version reaches.
+  private async holds(id: string): Promise<boolean> {
+    if (!/^[0-9a-f]{40}$/.test(id) || !existsSync(join(this.gitDir, 'HEAD'))) return false
+    if ((await this.git(['cat-file', '-e', `${id}^{commit}`], [0, 1, 128])).exitCode !== 0) return false
+    return (await this.git(['merge-base', '--is-ancestor', id, 'HEAD'], [0, 1])).exitCode === 0
+  }
+
+  private async log(range: readonly string[]): Promise<ProfileVersion[]> {
+    const format = ['%H', '%ct', '%s', '%(trailers:key=Changed-by,valueonly,separator=)', '%(trailers:key=Session,valueonly,separator=)'].join(FIELD)
+    const { stdout } = await this.git(['log', ...range, `--format=${format}${RECORD}`])
+    return stdout.split(RECORD).map(record => record.trim()).filter(record => record !== '').map((record) => {
+      // The format writes exactly five fields per record.
+      const [id, at, summary, by, session] = record.split(FIELD) as [string, string, string, string, string]
+      return { id: brandString<ProfileVersionId>(id), at: Number(at) * 1000, summary, changedBy: changedByOf(by.trim(), session.trim()) }
+    })
+  }
+
+  /**
+   * The managed files as one version holds them.
+   * @param id - the version.
+   * @returns each tracked file's text, or undefined for a file the version does not hold.
+   * @throws HistoryUnavailableError when git cannot run or the version is not one of the history's.
+   */
+  async filesAt(id: ProfileVersionId): Promise<Map<string, string | undefined>> {
+    if (!(await this.holds(id))) throw new HistoryUnavailableError(`no profile version ${id}`)
+    const held = new Set((await this.git(['ls-tree', '--name-only', id])).stdout.split('\n'))
+    const files = new Map<string, string | undefined>()
+    for (const name of this.files) files.set(name, held.has(name) ? (await this.git(['show', `${id}:${name}`])).stdout : undefined)
+    return files
+  }
+
+  /** Create the git directory and its exclusions, which admit only the managed files, once. */
+  private async ensure(): Promise<void> {
+    if (existsSync(join(this.gitDir, 'HEAD'))) return
+    try {
+      await mkdir(join(this.gitDir, 'info'), { recursive: true, mode: 0o700 })
+      await writeFile(join(this.gitDir, 'info', 'exclude'), ['/*', ...this.files.map(name => `!/${name}`), ''].join('\n'))
+    } catch (error) {
+      throw new HistoryUnavailableError(`the history directory cannot be made: ${(error as Error).message}`, { cause: error })
+    }
+    // git init keeps the exclusions already written.
+    await this.git(['init', '--quiet'])
+  }
+
+  private async git(args: readonly [string, ...string[]], accepted: readonly number[] = [0]): Promise<GitRun> {
+    // With `reject: false`, a git that cannot start or is ended by the timeout resolves with no exit code.
+    const options = ['-c', `core.hooksPath=${devNull}`, '-c', 'commit.gpgSign=false', '-c', 'core.autocrlf=false']
+    const run = await execa(this.gitCommand, [...options, ...args], {
+      cwd: this.dir, reject: false, stripFinalNewline: false, timeout: this.timeoutMs,
+      env: {
+        GIT_DIR: this.gitDir, GIT_WORK_TREE: this.dir, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: devNull, GIT_TERMINAL_PROMPT: '0',
+        GIT_AUTHOR_NAME: IDENTITY.name, GIT_AUTHOR_EMAIL: IDENTITY.email,
+        GIT_COMMITTER_NAME: IDENTITY.name, GIT_COMMITTER_EMAIL: IDENTITY.email,
+      },
+    })
+    const { exitCode } = run
+    if (exitCode === undefined) throw new HistoryUnavailableError(`git could not run: ${run.shortMessage}`)
+    if (!accepted.includes(exitCode)) throw new HistoryUnavailableError(`git ${args[0]} failed with exit code ${String(exitCode)}: ${run.stderr.trim()}`)
+    return { exitCode, stdout: run.stdout }
+  }
+}
+
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function changedByOf(kind: string, session: string): ProfileChangedBy {
+  if (kind === 'agent' && session !== '') return { kind: 'agent', sessionId: session }
+  if (kind === 'person' || kind === 'outside') return { kind }
+  // A version committed by hand, outside plugin management, names no one the manager knows.
+  return { kind: 'outside' }
+}

@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import type { ChangeResult, PluginEntryId, PluginInstallRequestId, PluginUpdateResult, PluginVersion, RegistryAttempt } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ChangeResult, PluginAuditFinding, PluginAuditResult, PluginEntryId, PluginInstallRequestId, PluginUpdateResult, PluginVersion, ProfileVersionId, RegistryAttempt } from '@deepseek-ai/dsh-api-remotes/client'
 import { allowAllAccess, bindSnapshotSelector, stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ConfigForm, ConfigFormSnapshot, SettingsMirrorSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -19,7 +19,7 @@ import { PluginRefreshToast } from '../src/client/PluginRefreshToast.tsx'
 import type { PluginManagerPageProps } from '../src/client/index.ts'
 import type { PluginTab } from '../src/client/tab-ledger.ts'
 import type { ConfigLedger } from '../src/client/config-ledger.ts'
-import { rowKey, type InstallState, type PackageRow, type PackageView, type PluginManagerState, type UpdateState, type VersionCheck } from '../src/client/manager-store.ts'
+import { rowKey, versionKey, type InstallState, type PackageRow, type PackageView, type PluginManagerState, type UpdateState, type VersionCheck } from '../src/client/manager-store.ts'
 import { INSTALL_GIT_EXAMPLE, INSTALL_PATH_EXAMPLE, en, zh, type PluginManagerLocaleKey } from '../src/client/locales.ts'
 import type { PluginActivationOwnerProps, PluginAddActionsProps, PluginDetailProps, PluginTabProps, PluginsSubject } from '../src/client/slot-contract.ts'
 
@@ -72,7 +72,7 @@ const MIRROR_OPTION = `${en.registryNpmmirror} registry.npmmirror.com`
 const IDLE_INSTALL: InstallState = {
   open: false, spec: '', registries: null, registry: { kind: 'offered', registry: null }, registryOpen: false, registryError: false, attempts: null,
   phase: 'idle', inputError: null, subject: null, runs: [], detailsOpen: false, logPath: null,
-  installed: null, installedVersion: null, restartRequired: false, failure: null, approvedBuilds: [], enabling: false,
+  installed: null, installedVersion: null, restartRequired: false, failure: null, approvedBuilds: [], audit: null, enabling: false,
 }
 
 const READY: PluginManagerState = {
@@ -86,6 +86,7 @@ const READY: PluginManagerState = {
   update: null,
   confirm: null,
   highlight: null,
+  history: { status: 'idle', versions: [], reason: '' },
 }
 
 /**
@@ -132,6 +133,7 @@ function renderTab(
     changeRegistry: vi.fn(),
     useGithubMirror: vi.fn(),
     approveBuildsAndRetry: vi.fn(),
+    acceptAuditAndRetry: vi.fn(),
     enableInstalled: vi.fn(),
     clearHighlight: vi.fn(),
     setEnabled: vi.fn(),
@@ -139,6 +141,8 @@ function renderTab(
     confirm: vi.fn(),
     cancelConfirm: vi.fn(),
     setRowEnabled: vi.fn(),
+    loadHistory: vi.fn(),
+    restoreVersion: vi.fn(),
     dismissNotice: vi.fn(),
     checkVersions: vi.fn(),
     ensureVersions: vi.fn(),
@@ -558,6 +562,56 @@ describe('PluginManagerPage', () => {
     view.unmount()
     render(<PluginManagerPage {...b.props} />)
     expect(document.querySelector('[data-plugin-detail="dsh-better-sidebar"]')).not.toBeNull()
+  })
+
+  it('opens the profile\'s history from the toolbar: each version with who made it and when, and Restore on all but the current one', () => {
+    vi.useFakeTimers({ now: 10 * 60_000, toFake: ['Date'] })
+    onTestFinished(() => { vi.useRealTimers() })
+    const [current, earlier, first] = ['c', 'b', 'a'].map(letter => letter.repeat(40) as ProfileVersionId) as [ProfileVersionId, ProfileVersionId, ProfileVersionId]
+    const { actions, set } = renderTab()
+    fireEvent.click(screen.getByRole('button', { name: en.historyAction }))
+    expect(actions.loadHistory).toHaveBeenCalledOnce()
+    expect(screen.getByRole('heading', { name: en.historyTitle, level: 1 })).toBeTruthy()
+    expect(screen.getByRole('status', { name: en.historyLoading })).toBeTruthy()
+    set({ history: { status: 'ready', reason: '', versions: [
+      { id: current, at: 10 * 60_000 - 5_000, summary: 'Turned off include:sidebar', changedBy: { kind: 'agent', sessionId: 'session-1' } },
+      { id: earlier, at: 5 * 60_000, summary: 'Installed dsh-better-sidebar', changedBy: { kind: 'person' } },
+      { id: first, at: 0, summary: 'Changed outside plugin management', changedBy: { kind: 'outside' } },
+    ] } })
+    const rows = [...document.querySelectorAll('[data-profile-version]')]
+    expect(rows.map(row => row.textContent)).toEqual([
+      `Turned off include:sidebar${en.historyByAgent} · ${en.historyTimeNow}${en.historyCurrent}`,
+      `Installed dsh-better-sidebar${en.historyByPerson} · 5 min ago${en.historyRestore}`,
+      `Changed outside plugin management${en.historyByOutside} · 10 min ago${en.historyRestore}`,
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Restore "Installed dsh-better-sidebar"' }))
+    expect(actions.restoreVersion).toHaveBeenCalledExactlyOnceWith(earlier)
+    // While one restore runs, every Restore waits.
+    set({ busy: [versionKey(earlier)] })
+    expect(screen.getByRole('button', { name: 'Restore "Installed dsh-better-sidebar"' }).getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Restore "Changed outside plugin management"' }).hasAttribute('disabled')).toBe(true)
+    // A failed re-read keeps the versions, with the retry.
+    set({ busy: [], history: { ...READY.history, status: 'error', versions: [{ id: current, at: 0, summary: 'Turned off include:sidebar', changedBy: { kind: 'person' } }] } })
+    expect(screen.getByRole('alert').textContent).toBe(en.historyError)
+    fireEvent.click(screen.getByRole('button', { name: en.retry }))
+    expect(actions.loadHistory).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: en.backToList }))
+    expect(screen.getByRole('heading', { name: en.title, level: 1 })).toBeTruthy()
+  })
+
+  it('says the history is empty, unavailable or unread, and keeps it out of the tabs', () => {
+    const { navigation, set } = renderTab({ history: { status: 'ready', versions: [], reason: '' } }, {}, {}, {}, [{ id: 'discover', label: 'Discover' }])
+    act(() => { navigation.actions.setView({ kind: 'history' }) })
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.queryByRole('tabpanel')).toBeNull()
+    expect(screen.getByText(en.historyEmpty)).toBeTruthy()
+    set({ history: { status: 'unavailable', versions: [], reason: 'git could not run' } })
+    expect(screen.getByRole('status').textContent).toBe('History is unavailable: git could not run')
+    set({ history: { status: 'error', versions: [], reason: '' } })
+    expect(screen.getByRole('alert').textContent).toBe(en.historyError)
+    // The package list's read failure belongs to the list, not to the history.
+    set({ status: 'error' })
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
   it('asks the store once mounted and renders the loading, unavailable, error, and empty states', () => {
@@ -1992,6 +2046,31 @@ describe('PluginManagerPage', () => {
     // The installed screen says which scripts were allowed.
     set({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'done', subject, installed: 'dsh-x', approvedBuilds: ['native'] } })
     expect(screen.getByText(en.installDoneApproved.replace('{names}', 'native'))).toBeTruthy()
+  })
+
+  it('lists the plugin audit\'s findings, offers to install anyway only when they can be accepted, and says what was accepted', () => {
+    const subject = { spec: 'dsh-x', status: 'accepted', kind: 'registry', name: 'dsh-x', bundle: true, registry: null } as const
+    const finding: PluginAuditFinding = { rule: 'exfil.endpoint', title: 'Names a webhook, paste site or tunnel', severity: 'warning', path: 'lib/index.js', line: 2, excerpt: 'fetch("https://webhook.site/x")' }
+    const audit: PluginAuditResult = { decision: 'needs-acceptance', digest: 'digest-1', findings: [finding], truncated: true }
+    const { actions, set } = renderTab({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'failed', subject, failure: { reason: '', code: 'audit-findings', audit } } })
+    expect(screen.getByText(en.reasonAuditFindings)).toBeTruthy()
+    const group = screen.getByRole('group', { name: en.installAuditTitle })
+    expect(within(group).getByText('lib/index.js:2')).toBeTruthy()
+    expect(within(group).getByText('fetch("https://webhook.site/x")')).toBeTruthy()
+    expect(within(group).getByText(en.installAuditTruncated)).toBeTruthy()
+    fireEvent.click(within(group).getByRole('button', { name: en.installAuditAccept }))
+    expect(actions.acceptAuditAndRetry).toHaveBeenCalledTimes(1)
+    // A critical finding is refused: the findings show, and nothing accepts them.
+    set({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'failed', subject, failure: { reason: '', code: 'audit-refused', audit: { ...audit, decision: 'refused', truncated: false, findings: [{ ...finding, severity: 'critical' }] } } } })
+    expect(screen.getByText(en.reasonAuditRefused)).toBeTruthy()
+    expect(within(screen.getByRole('group', { name: en.installAuditTitle })).queryByRole('button', { name: en.installAuditAccept })).toBeNull()
+    set({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'done', subject, installed: 'dsh-x', audit: { ...audit, decision: 'accepted' } } })
+    expect(screen.getByText(en.installDoneAuditAccepted.replace('{count}', '1'))).toBeTruthy()
+    // Notices of a clear audit are said as notices; a finding without an excerpt shows no excerpt block.
+    set({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'done', subject, installed: 'dsh-x', audit: { ...audit, decision: 'clear', findings: [{ ...finding, severity: 'notice', excerpt: '' }] } } })
+    expect(screen.getByText(en.installDoneAuditNotices.replace('{count}', '1'))).toBeTruthy()
+    set({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'failed', subject, failure: { reason: '', code: 'audit-findings', audit: { ...audit, findings: [{ ...finding, excerpt: '' }] } } } })
+    expect(within(screen.getByRole('group', { name: en.installAuditTitle })).queryByText('fetch("https://webhook.site/x")')).toBeNull()
   })
 
   it('names the exact spec when pnpm installed another version than the one inspected', () => {

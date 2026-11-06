@@ -28,7 +28,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-基于 base 的 profile 提供管理服务。在 Web 中，侧边栏的**插件**页（[ui-plugin-manager](../../client/ui-plugin-manager/README.zh.md)）管理 profile 的组合包及其能唯一定位的行；设置页的插件列表保持只读。Agent 预设条目保持只读。`plugin_manager` 工具提供相同操作，在标准和 Creator 预设中启用。其他 Web 预设仍默认禁用。完整 SDK profile 在 profile 作用域为 native/PTC 模式启用此工具；没有 HMR 时，保存的变更返回 `restart-required` 和 `no-hmr`，在运行时重启后应用。每个工具操作都要求 `danger-full-access` 或本次调用的批准。在较低沙箱模式下，`ask` 会请求审批；`never`、拒绝、取消或审批渠道不可用时均不执行。批准不改变会话的权限模式。profile 变更跨会话持久化，已安装的 Host 代码在宿主进程内运行，不受工作区沙箱限制。依赖构建脚本仍需单独批准。
+基于 base 的 profile 提供管理服务。在 Web 中，侧边栏的**插件**页（[ui-plugin-manager](../../client/ui-plugin-manager/README.zh.md)）管理 profile 的组合包及其能唯一定位的行；设置页的插件列表保持只读。Agent 预设条目保持只读。`plugin_manager` 工具提供相同操作，在标准和 Creator 预设中启用。其他 Web 预设仍默认禁用。完整 SDK profile 在 profile 作用域为 native/PTC 模式启用此工具；没有 HMR 时，保存的变更返回 `restart-required` 和 `no-hmr`，在运行时重启后应用。每个工具操作都要求 `danger-full-access` 或本次调用的批准。工具的两个选项列在“配置”一节，默认关闭，此时保持上游的描述、操作和审批。`profileHistory` 增加 `read_config`、`configure`、`history`、`undo` 和 `restore`。`readActionsExempt` 让 `list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 和 `read_config` 无需询问即可运行；每个修改 profile 的操作，包括 `configure`、`undo` 和 `restore`，仍要求 `danger-full-access` 或批准。在较低沙箱模式下，`ask` 会请求审批；`never`、拒绝、取消或审批渠道不可用时均不执行。批准不改变会话的权限模式。profile 变更跨会话持久化，已安装的 Host 代码在宿主进程内运行，不受工作区沙箱限制。依赖构建脚本仍需单独批准。
 
 除完整 SDK profile 外，未使用 Agent 预设的部署在 profile patch 中启用工具；安装/移除包要求 PATH 中有 pnpm，或显式配置 `pnpmCommand`，启动器提供的包管理器优先；使用预设的会话由其预设中的 `tool-plugin-manager` 条目控制。
 
@@ -71,6 +71,8 @@ HTTP(S) Git URL 指向 pnpm 没有 HTTPS 到 SSH 回退的主机（即 `hosted-g
 
 pnpm 11 拦下依赖脚本时，失败的安装在 `pendingBuilds` 里报告 profile 中所有待决定的 `allowBuilds` 键，包括先前尝试留下的键、本次运行报告为已忽略的包名，以及 pnpm 为其拒绝准备的 git 托管包建议的键。git URL 携带凭据（密码，或 HTTP(S) 上的用户名）的键不会被记录，因此该安装只提供手动批准。pnpm 只在能够交互提示时才把这些条目写入 `pnpm-workspace.yaml`，因此由管理器自行记录本次运行报告的包名；失败的运行会恢复 `package.json` 与 `pnpm-lock.yaml`，但有意不恢复 `pnpm-workspace.yaml`。Web 插件页提供**允许这些脚本并重试**；工具可以在用户于对话中批准这些脚本后，通过 `install_bundle` 的 `approvedBuilds` 代为授权。服务只校验待决定的名字，不核实对话中的批准。授权按记录的键保存在当前 profile，该键会把 git 托管包固定到其提交，允许以宿主用户的权限执行命令，并在再次安装失败后保留。只能批准当前未决定的名字；已有的拒绝与通配规则不能通过此操作覆盖。`allowBuilds` 里出现 YAML 锚点或别名时拒绝授权。重试保留原来的启用选择。
 
+profile 保留一份历史：每次保存的改动是一个版本，即一个本地 git 仓库中的提交。该仓库的 git 目录是 `.plugin-manager/history`，工作树是 profile 目录，因此不会碰到用户在其中维护的仓库。它只跟踪 `package.json`、`pnpm-lock.yaml`、`cordis.patch.yml`、`pnpm-workspace.yaml` 和 `compatibility.json`；git 以 `gitCommand` 运行，不读系统或全局配置，不运行钩子，不签名，每次运行受 `historyTimeoutMs` 约束。版本的主题是改了什么，例如 `Turned off include:sidebar`，其 `Changed-by` trailer 说明是谁：改动在 Agent 的工具调用中运行时为 `agent` 并附 `Session` trailer，否则为 `person`；在插件管理之外所做的编辑为 `outside`，每次改动、`history`、`undo` 和 `restore` 都会先把这种编辑保存为单独的版本。`history(limit)` 按从新到旧列出最多 500 个版本，每个带 id、时间、摘要和 `changedBy`；git 无法维护历史时返回 `available: false` 和 git 的原话。工具的 `history` 调用的 `listHistory(limit)` 列出同样的版本，但不保存外部编辑，也不创建历史；`previewUndo()` 和 `previewRestore(version)` 读取撤销或恢复将改动的内容，不保存版本。`restore(version)` 把该版本的文件与 profile 当前文件比较，并在这些包的任何代码运行之前，就版本带回的每个包询问 `pluginAudit` 服务：版本新增或改为其他 spec 的每个依赖，以及它选入的每个组合包。恢复的锁文件不变时，这些包已经安装，在写入任何文件之前接受审计。否则管理器写入文件，运行 `pnpm install --frozen-lockfile --ignore-scripts`（pnpm 把每次依赖改动都记录在锁文件中），审计已安装的包，之后才运行 `pnpm rebuild --pending`，即恢复的 `allowBuilds` 允许的构建脚本。审计拒绝（`audit-findings` 或 `audit-refused`）时，profile 的文件恢复原样，并重新安装其依赖集。随后恢复操作发布恢复后的解析表；结果的 `restored` 指明该版本，`changes` 列出它改动的依赖、组合包、`allowBuilds` 决定和版本豁免，恢复本身也是一个版本。`undo` 恢复到最新版本之前的版本，并以 `undone` 指明最新版本，因此撤销可以被再次撤销。历史少于两个版本时拒绝并返回 `nothing-to-undo`，id 不在历史中时返回 `unknown-version`，git 无法维护历史时返回 `history-unavailable`。重新安装失败时，恢复的文件仍作为一个版本保留，在 profile 中运行 `pnpm install` 可补全其依赖集。无法保存版本的改动仍会保存，并带有警告。[配置编辑器](../config-editor/README.zh.md)保存的编辑，无论来自设置表单还是工具，同样是一个版本：管理器在 `config-editor/edited` 时以做出编辑者的名义记录 `Changed the settings of <id>`，并以原因 `config` 发出 `plugin-manager/changed`。
+
 <a id="version-compatibility-and-exemptions"></a>
 ### 版本兼容性与豁免
 
@@ -96,11 +98,20 @@ CLI 提供 `dsh plugin --profile <profile> version-exemptions`、`allow-version 
 | `lockWaitMs` | `120000` | 获取 profile 写锁的最长等待毫秒数。 |
 | `versionListLimit` | `20` | 版本列表读取并返回的、比已安装版本新的最新版本个数。 |
 | `versionLookupConcurrency` | `4` | 版本列表同时运行的单版本注册表查询个数。 |
+| `gitCommand` | `git` | 维护 profile 历史的 git 可执行文件名或路径，通过 `PATH` 解析。 |
+| `historyTimeoutMs` | `30000` | profile 历史的单次 git 运行允许的最长毫秒数。 |
 | `idleTimeoutMs` | `600000` | service 包操作允许持续无捕获输出的最长毫秒数，达到即被管理器终止；继承描述符运行的 `dsh plugin` 不受此上界约束。 |
 | `detailMaxBytes` | `1048576` | 组合包详细介绍文档的最大大小，以及为读取它而读取的 locale 文件的最大大小，单位字节。 |
 | `detailImageMaxBytes` | `5242880` | 与组合包详细介绍文档一同提供的图片的最大大小，单位字节。 |
 | `detailFetchTimeoutMs` | `15000` | 为读取当前安装提供、尚未安装的组合包的详细介绍文档而发出的单次 npm 文件 CDN 请求的时限。 |
 | `detailNpmFileSources` | `['jsdelivr', 'unpkg', 'npmmirror']` | 读取当前安装提供、尚未安装的组合包时按顺序使用的 npm 文件 CDN；一次读取的 `npmFileSources` 把其中列出的 CDN 移到最前。 |
+
+`plugin_manager` 工具（`@deepseek-ai/dsh-plugin-manager/tools`）有两个自己的选项。每个选项都是 Delo 合约 C16 中的一个开关，开关名写在其所在行，两者在 Delo 的 parity 组合中都关闭。
+
+| 字段 | 默认值 | 含义 |
+|---|---|---|
+| `profileHistory` | `false` | 提供 `read_config`、`configure`、`history`、`undo` 和 `restore`，以及说明它们的描述和参数；开关 `profile_history`。 |
+| `readActionsExempt` | `false` | `list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 和 `read_config` 无需 `danger-full-access` 提权即可运行，并在描述中说明；其他每个操作仍要求提权。开关 `plugin_manager_read_exemption`。 |
 
 <a id="bundle-detail-documents"></a>
 ### 组合包详细介绍文档
@@ -152,7 +163,7 @@ service 运行若在 `idleTimeoutMs` 内没有任何捕获输出即被终止，�
 
 #### 模型看到什么
 
-[`plugin_manager` 工具](../../../docs/tool-catalog.zh.md#deepseek-aidsh-plugin-manager) 列出插件条目和组合包，并执行影响整个 profile 的改动。结果包含保存状态变化、应用状态和包管理诊断。未直接应用的变更结果会增加 `nextStep`，这是一句根据应用状态、拒绝代码、包管理器失败类型或重启原因生成的说明，指出模型下一步做什么或告诉用户什么。管理操作不会向 Agent 注入消息。
+[`plugin_manager` 工具](../../../docs/tool-catalog.zh.md#deepseek-aidsh-plugin-manager) 列出插件条目和组合包，并执行影响整个 profile 的改动。结果包含保存状态变化、应用状态和包管理诊断。未直接应用的变更结果会增加 `nextStep`，这是一句根据应用状态、拒绝代码、包管理器失败类型或重启原因生成的说明，指出模型下一步做什么或告诉用户什么。管理操作不会向 Agent 注入消息。`profileHistory` 开启时，`read_config` 返回根树条目的设置、继承值、profile 是否覆盖它们，以及它们的 JSON Schema，`role('secret')` 字段被略去并列出。只有原生 schema 标记秘密字段，因此对于 Config 不是原生 schema 的条目，`read_config` 不返回任何值，并给出 `valuesWithheld: true`。`configure` 通过配置编辑器设置顶层字段，并把其他字段恢复为继承值；配置编辑器在保存前按插件的 schema 校验结果，结果列出每个改动字段的前后值，Config 不是原生 schema 时只列出改动的字段名。`history` 只列出版本，不保存版本。`undo` 或 `restore` 请求的批准会指明版本，并列出它改动的插件、组合包、构建决定和豁免，这些内容在提示之前读取，不保存版本；预览发现无可撤销、版本未知或没有历史时仍会请求批准，随后返回该拒绝而不运行。
 
 #### Token 影响
 
@@ -191,6 +202,8 @@ service 运行若在 `idleTimeoutMs` 内没有任何捕获输出即被终止，�
 | 启用：保存选择项或加载失败 | 保留已安装的依赖和已保存的选择项。报告启用失败，允许修正、停用或卸载。 |
 | 包操作成功后解析表发布失败 | 保留已完成的磁盘改动和上一张运行时表。报告 `application: 'failed'` 及发布诊断；pnpm 的零退出码不代表发布成功。 |
 | 卸载：任一步失败 | 停在失败步骤，保留已完成的改动和待重试删除的依赖，报告卸载失败。不重新启用组合包。 |
+| 撤销或恢复：frozen-lockfile 安装或 `pnpm rebuild --pending` 失败 | 保留恢复的文件并保存为一个版本；报告 `application: 'failed'` 及 pnpm 的输出。 |
+| 撤销或恢复：插件审计拒绝它带回的某个包 | 在该包的任何脚本或代码运行之前，把 profile 的文件恢复原样，并重新安装其依赖集；报告 `audit-findings` 或 `audit-refused` 及 `audit`，重新安装失败时附带警告。 |
 
 pnpm 执行和组合包校验成功即完成安装，后续发布或启用失败不撤销安装。卸载依次执行：从 `dsh.profile.bundles` 移除组合包、卸载运行时贡献、执行 `pnpm remove`，然后发布 runtime resolution，除非没有 HMR 且已取消选入的启动组合包仍在运行。`pnpm remove` 使用本管理器在当前进程中最近一次安装该包时所用的注册表，因为 pnpm 按默认注册表校验锁文件中的 tarball URL；进程启动前安装的包使用安装时首先询问的注册表删除。任一步失败都不继续执行后续步骤；删除后的发布失败不会恢复已删除的包。 profile 依赖和安装都不持有的已选名称（例如已下线的组合包）同样可卸载；其卸载在取消选择后结束，不运行 pnpm。
 

@@ -21,12 +21,13 @@ import {
   readPluginMeta, readProfileManifest, resolveBundleDir, loadOverlayPatches, composeEntries,
   readProfilePatches, bundlePatchPaths,
   evaluatePluginCompatibility, readProfileCompatibility, readProfileVersionExemptions,
-  setProfileVersionExemption, validatePluginVersionExemption, PROFILE_COMPATIBILITY_FILENAME,
+  setProfileVersionExemption, validatePluginVersionExemption,
   getDshRuntimeVersion, ResolutionRestartRequired,
   assertBundlePlatform, UnsupportedBundlePlatformError,
 } from '@deepseek-ai/dsh-app-boot'
 import { OPTIONAL_BUNDLES, OFFICIAL_ON_DEMAND_CATALOG, PROTECTED_PLUGINS } from '@deepseek-ai/dsh-official-bundles'
 import type {} from '@deepseek-ai/dsh-hmr'
+import type {} from '@deepseek-ai/dsh-config-editor'
 import type { ProfileContext, ProfileManifest } from '@deepseek-ai/dsh-app-boot'
 import { bundleManifest, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage } from './operations.ts'
 import { classifyInstallFailure } from './install-failure.ts'
@@ -37,13 +38,18 @@ import { flatten, writePluginEnabled } from './patch.ts'
 import { incompatiblePlugin, ManagementFailure } from './failure.ts'
 import { approveBuilds, recordPendingBuilds } from './build-approval.ts'
 import { checkGithubConnection, type GithubConnectionFailure } from './github-connection.ts'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
+import { acceptAudit, acceptedAudits } from './audit.ts'
+import { PROFILE_FILES, ProfileHistory, writeProfileVersion } from './history.ts'
+import { broughtBack, profileVersionChanges } from './version-changes.ts'
 import { chooseGitTransport, sshGitSpec } from './git-transport.ts'
 import { newerVersions, VERSION_FIELDS, VERSION_LIST_FIELDS, versionFacts } from './versions.ts'
 import type {
   BundleDetail, BundleInfo, BundleRowInfo, ChangeResult, InspectOptions, InstallBundleOptions, ListVersionsOptions, ManagementError,
   PackageResult, PluginChange, PluginEntryId, PluginInfo, PluginInstallCancellation, PluginInstallProgress, PluginInstallRequestId,
   PluginRegistries, PluginSpecInspection, PluginUpdateResult, PluginUpdateStep, PluginVersion, PluginVersionList, Registry,
-  RegistryAttempt, UpdateBundleOptions,
+  RegistryAttempt, UpdateBundleOptions, PluginAudit, PluginAuditResult, ProfileChangedBy, ProfileHistoryInfo, ProfileVersion,
+  ProfileVersionId, ProfileVersionPreview,
   PluginOperation, PluginOperationId,
 } from './types.ts'
 export type * from './types.ts'
@@ -74,6 +80,10 @@ export interface Config {
    * unless that is npm's own registry or one of these.
    */
   fallbackRegistries?: string[]
+  /** The git executable name or path the profile's history runs, resolved through `PATH`; without git there is no history. */
+  gitCommand?: string
+  /** Bound on one git run of the profile's history, in milliseconds. */
+  historyTimeoutMs?: number
   /** How many of the newest versions above the installed one a version listing reads and returns. */
   versionListLimit?: number
   /** How many single-version registry lookups a version listing runs at once. */
@@ -97,6 +107,12 @@ const REGISTRY_URL = /^https?:\/\/\S+$/
 /** The profile files an installation writes and a failed or cancelled one restores. */
 const RESTORED_FILES = ['package.json', 'pnpm-lock.yaml'] as const
 
+/** The lockfile, whose change means a restored version's dependency set must be installed again. */
+const LOCKFILE = 'pnpm-lock.yaml'
+
+/** The summary of a version that saves an edit made outside plugin management. */
+const OUTSIDE_SUMMARY = 'Changed outside plugin management'
+
 /** The manifest fields an inspection reads for a registry spec. */
 const INSPECT_FIELDS = ['name', 'version', 'description', 'dsh'] as const
 
@@ -110,7 +126,8 @@ function messageOf(error: unknown): string { return error instanceof Error ? err
 function managementError(error: unknown): ManagementError {
   if (error instanceof UnsupportedBundlePlatformError) return { code: 'unsupported-platform' }
   if (!(error instanceof ManagementFailure)) return { code: 'operation-error', diagnostic: messageOf(error) }
-  return { code: error.code, ...error.incompatible === undefined ? {} : { incompatible: error.incompatible } }
+  return { code: error.code, ...error.incompatible === undefined ? {} : { incompatible: error.incompatible },
+    ...error.diagnostic === undefined ? {} : { diagnostic: error.diagnostic }, ...error.audit === undefined ? {} : { audit: error.audit } }
 }
 
 /** The caller stopped an installation; its files are restored before this is thrown. */
@@ -305,6 +322,8 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Persistent management of the current profile's composition and packages. */
     pluginManager: PluginManager
+    /** The distribution's plugin audit, which the manager asks before it selects or enables a bundle; optional. */
+    pluginAudit: PluginAudit
   }
 }
 
@@ -321,6 +340,8 @@ export class PluginManager extends TypertRemoteService {
     idleTimeoutMs: z.number().step(1).min(1000).default(600000),
     registry: z.string().pattern(REGISTRY_URL),
     fallbackRegistries: z.array(z.string().pattern(REGISTRY_URL)).default([NPMMIRROR_REGISTRY]),
+    gitCommand: z.string().default('git'),
+    historyTimeoutMs: z.number().step(1).min(1000).default(30000),
     versionListLimit: z.number().step(1).min(1).default(20),
     versionLookupConcurrency: z.number().step(1).min(1).default(4),
     detailMaxBytes: z.natural().min(1).default(1024 * 1024),
@@ -344,6 +365,7 @@ export class PluginManager extends TypertRemoteService {
   private readonly githubConnectionTimeoutMs: number
   private readonly gitTransportTimeoutMs: number
   private readonly idleTimeoutMs: number
+  private readonly versions: ProfileHistory
   private readonly pnpmCommand: string
   private readonly versionListLimit: number
   private readonly versionLookupConcurrency: number
@@ -367,6 +389,8 @@ export class PluginManager extends TypertRemoteService {
     this.gitTransportTimeoutMs = (config as Required<Config>).gitTransportTimeoutMs
     this.idleTimeoutMs = (config as Required<Config>).idleTimeoutMs
     this.pnpmCommand = (config as Required<Config>).pnpmCommand
+    const { gitCommand, historyTimeoutMs } = config as Required<Config>
+    this.versions = new ProfileHistory(this.profile.dir, PROFILE_FILES, gitCommand, historyTimeoutMs)
     this.versionListLimit = (config as Required<Config>).versionListLimit
     this.versionLookupConcurrency = (config as Required<Config>).versionLookupConcurrency
     this.configuredRegistries = {
@@ -382,6 +406,12 @@ export class PluginManager extends TypertRemoteService {
       this.abort.abort()
       await Promise.allSettled([...this.packageOperations])
     }, 'plugin-manager: package cancellation')
+    // A configuration edit, from a settings form or the agent, is a version of its own, named by whoever made it.
+    ctx.on('config-editor/edited', ({ entryId }) => {
+      const task = this.recordEdit(entryId, this.changedBy())
+      this.packageOperations.add(task)
+      void task.finally(() => { this.packageOperations.delete(task) })
+    })
     ctx.inject(['connection'], (scope) => {
       scope.effect(() => scope.connection.fetch.register({
         path: DETAIL_FILE_PATH, methods: ['GET'], requestBody: 'buffered', fetch: request => this.serveDetailFile(request),
@@ -433,6 +463,19 @@ export class PluginManager extends TypertRemoteService {
     }
   }
 
+  // Saved under the profile's lock, which the editor released before announcing the edit.
+  private async recordEdit(entryId: string, changedBy: ProfileChangedBy): Promise<void> {
+    try {
+      await withFileLock(join(this.profile.dir, 'package.json'),
+        () => this.versions.record(`Changed the settings of ${entryId}`, changedBy), { waitMs: this.lockWaitMs })
+    } catch (error) {
+      // The edit is saved and applied; a version that cannot be written only means it cannot be undone or restored.
+      this.ownerContext.logger.warn(`the profile's history could not save the settings of ${entryId}: ${messageOf(error)}`)
+      return
+    }
+    this.ownerContext.emit('plugin-manager/changed', { reason: 'config' })
+  }
+
   /** Read exact plugin-version exemptions saved in this profile.
    * @returns Accepted package-name@version keys with the runtime versions they may run on, and any
    * record or file problem the reader rejected, which the caller reports instead of failing.
@@ -455,7 +498,220 @@ export class PluginManager extends TypertRemoteService {
     return this.change(result => this.configure(async () => {
       await setProfileVersionExemption(this.profile.dir, packageVersion, runtimeVersion, enabled, acceptRisk === true)
       Object.assign(result, await this.reload())
-    }), { stage: 'enable', target: packageVersion, enabled }, 'bundle', exemptionOperationIdentity(packageVersion, runtimeVersion))
+    }), { stage: 'enable', target: packageVersion, enabled }, 'bundle',
+    () => `${enabled ? 'Allowed' : 'Revoked'} ${packageVersion} on DSH ${runtimeVersion}`, exemptionOperationIdentity(packageVersion, runtimeVersion))
+  }
+
+  /**
+   * Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit
+   * made outside plugin management since the last change is saved as a version first, so it is that edit undo takes
+   * back. It installs and audits what it brings back as {@link restore} does. The undo is itself a version, so undoing
+   * it is another undo.
+   * @returns Saved and runtime outcomes, naming the version taken back as `undone` and listing what changed in
+   * `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
+   * git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
+   */
+  @Remote
+  undo(): Promise<ChangeResult> {
+    let summary = ''
+    return this.change(result => this.configure(async () => {
+      const [latest, previous] = await this.readHistory(() => this.versions.list(2))
+      if (latest === undefined || previous === undefined) throw new ManagementFailure('nothing-to-undo')
+      result.undone = { version: latest.id, summary: latest.summary }
+      summary = `Undid "${latest.summary}"`
+      await this.restoreVersion(previous.id, result)
+    }), { stage: 'undo', target: '' }, 'undo', () => summary)
+  }
+
+  /**
+   * Put the profile back as one version held it, and apply it: a restored dependency set is installed from the restored
+   * lockfile first, and every package the version brings back is audited before any of its code runs. An edit made
+   * outside plugin management is saved as a version first. The restore is itself a version.
+   * @param version - the version to restore, as {@link history} lists it.
+   * @returns Saved and runtime outcomes, naming the version as `restored` and listing what changed in `changes`. Fails
+   * with `unknown-version` when the history holds no such version, `history-unavailable` when git cannot keep it, and
+   * `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
+   */
+  @Remote
+  restore(version: ProfileVersionId): Promise<ChangeResult> {
+    let summary = ''
+    return this.change(result => this.configure(async () => {
+      const held = await this.readHistory(() => this.versions.version(version))
+      if (held === undefined) throw new ManagementFailure('unknown-version')
+      result.restored = { version: held.id, summary: held.summary }
+      summary = `Restored the version "${held.summary}"`
+      await this.restoreVersion(held.id, result)
+    }), { stage: 'restore', target: version }, 'restore', () => summary)
+  }
+
+  /**
+   * The profile's versions, newest first, after saving an edit made outside plugin management as a version.
+   * @param limit - the most to read, from 1 to 500.
+   * @returns the versions, or why the profile has no history.
+   */
+  @Remote
+  history(limit: number): Promise<ProfileHistoryInfo> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) return Promise.reject(new RangeError('limit must be an integer from 1 to 500'))
+    return withFileLock(join(this.profile.dir, 'package.json'), async (): Promise<ProfileHistoryInfo> => {
+      try {
+        await this.versions.record(OUTSIDE_SUMMARY, { kind: 'outside' })
+        return { available: true, versions: await this.versions.list(limit) }
+      } catch (error) {
+        // Every failure of the history is a HistoryUnavailableError.
+        return { available: false, reason: messageOf(error) }
+      }
+    }, { waitMs: this.lockWaitMs })
+  }
+
+  /**
+   * The profile's versions, newest first, as the history holds them. Unlike {@link history}, it saves no version for an
+   * edit made outside plugin management and never starts the history, so it writes nothing and runs only git reads.
+   * @param limit - the most to read, from 1 to 500.
+   * @returns the versions, empty before the history starts, or why git cannot read it.
+   */
+  async listHistory(limit: number): Promise<ProfileHistoryInfo> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new RangeError('limit must be an integer from 1 to 500')
+    try {
+      return { available: true, versions: await this.versions.list(limit) }
+    } catch (error) {
+      // Every failure of the history is a HistoryUnavailableError.
+      return { available: false, reason: messageOf(error) }
+    }
+  }
+
+  /**
+   * What {@link undo} would put back if it ran now, read without saving a version or starting the history: the version
+   * before the latest, or the latest itself when the managed files differ from it, since undo first saves that outside
+   * edit and then takes it back.
+   * @returns the version undo restores and what it changes, or the refusal undo would end with.
+   */
+  async previewUndo(): Promise<ProfileVersionPreview> {
+    const current = this.profileFiles()
+    return this.preview(current, async () => {
+      const [latest, previous] = await this.versions.list(2)
+      if (latest === undefined) return undefined
+      const atLatest = await this.versions.filesAt(latest.id)
+      const outside = PROFILE_FILES.some(name => current.get(name) !== atLatest.get(name))
+      return outside ? latest : previous
+    }, 'nothing-to-undo')
+  }
+
+  /**
+   * What {@link restore} would put back if it ran now, read without saving a version or starting the history.
+   * @param version - the version to restore, as {@link history} lists it.
+   * @returns the version and what it changes, or the refusal restore would end with.
+   */
+  async previewRestore(version: ProfileVersionId): Promise<ProfileVersionPreview> {
+    return this.preview(this.profileFiles(), () => this.versions.version(version), 'unknown-version')
+  }
+
+  /** Compare the files now with the target version's; only the history's reads become `history-unavailable`. */
+  private async preview(
+    current: ReadonlyMap<string, string | undefined>, target: () => Promise<ProfileVersion | undefined>,
+    missing: 'nothing-to-undo' | 'unknown-version',
+  ): Promise<ProfileVersionPreview> {
+    let held: ProfileVersion | undefined
+    let files: Map<string, string | undefined>
+    try {
+      held = await target()
+      if (held === undefined) return { ok: false, error: { code: missing } }
+      files = await this.versions.filesAt(held.id)
+    } catch (error) {
+      // Every failure of the history is a HistoryUnavailableError.
+      return { ok: false, error: { code: 'history-unavailable', diagnostic: messageOf(error) } }
+    }
+    return { ok: true, version: { version: held.id, summary: held.summary }, changes: profileVersionChanges(current, files) }
+  }
+
+  /** The managed files as they are now; an absent file reads as undefined. */
+  private profileFiles(): Map<string, string | undefined> {
+    return new Map(PROFILE_FILES.map((name) => {
+      try { return [name, readFileSync(join(this.profile.dir, name), 'utf8')] }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [name, undefined]
+        throw error
+      }
+    }))
+  }
+
+  /**
+   * Read the profile's history for an undo or a restore, which cannot proceed without it: the edit made outside plugin
+   * management is saved first, and a history git cannot keep is the `history-unavailable` refusal.
+   */
+  private async readHistory<T>(read: () => Promise<T>): Promise<T> {
+    try {
+      await this.versions.record(OUTSIDE_SUMMARY, { kind: 'outside' })
+      return await read()
+    } catch (error) {
+      // Every failure of the history is a HistoryUnavailableError.
+      throw new ManagementFailure('history-unavailable', undefined, messageOf(error))
+    }
+  }
+
+  /**
+   * Write one version's profile files and apply them as an installation would, reinstalling when its lockfile differs,
+   * and audit every package the version brings back before any of its code runs. With an unchanged lockfile, those
+   * packages are already installed and are audited before any file is written. Otherwise the version's dependency set
+   * is installed with every script held back, its packages are audited, and only then are the build scripts the
+   * version allows run; a refusal puts the profile's files back as they were and installs their dependency set again.
+   * A version without a lockfile, such as the profile before its first installation, is installed from its manifest
+   * without creating one, which removes what later versions added. pnpm verifies the lockfile's entries against its
+   * default registry, so the reinstall names the registry the packages entering or leaving the profile were installed
+   * from, as a removal does, when they share one; otherwise the registry an installation asks first.
+   */
+  private async restoreVersion(version: ProfileVersionId, result: ChangeResult): Promise<void> {
+    const current = this.profileFiles()
+    const files = await this.readHistory(() => this.versions.filesAt(version))
+    const changes = profileVersionChanges(current, files)
+    result.changes = changes
+    const audited = broughtBack(changes)
+    if (files.get(LOCKFILE) === current.get(LOCKFILE)) {
+      await this.auditRestored(audited)
+      await writeProfileVersion(this.profile.dir, files)
+      Object.assign(result, await this.publishAndReload())
+      return
+    }
+    await writeProfileVersion(this.profile.dir, files)
+    const moved = changes.plugins.map(plugin => plugin.name)
+    const used = new Set(moved.map(name => this.installedFrom.has(name)
+      ? this.installedFrom.get(name)
+      : this.configuredRegistries.registry))
+    const registry = used.size === 1 ? [...used][0] : this.configuredRegistries.registry
+    const registryArgs = typeof registry === 'string' ? [`--config.registry=${registry}`] : []
+    const lockfileOf = (held: ReadonlyMap<string, string | undefined>): string =>
+      held.get(LOCKFILE) === undefined ? '--config.lockfile=false' : '--frozen-lockfile'
+    const succeeded = (run: PackageResult): boolean => run.exitCode === 0 && run.timedOut !== true
+    result.packageResult = await this.runPnpm(['install', lockfileOf(files), '--ignore-scripts', ...registryArgs])
+    if (!succeeded(result.packageResult)) throw new Error(result.packageResult.output)
+    try {
+      await this.auditRestored(audited)
+    } catch (error) {
+      // No package the audit refused stays: the files go back as they were, and their installed set with them.
+      await writeProfileVersion(this.profile.dir, current)
+      const repair = await this.runPnpm(['install', lockfileOf(current), ...registryArgs])
+      if (!succeeded(repair)) {
+        result.warnings = [...result.warnings ?? [], 'the profile\'s files are back as they were, but pnpm could not install their dependencies again; run pnpm install in the profile']
+      }
+      throw error
+    }
+    result.packageResult = await this.runPnpm(['rebuild', '--pending'])
+    if (!succeeded(result.packageResult)) throw new Error(result.packageResult.output)
+    for (const plugin of changes.plugins) if (plugin.change === 'removed') this.installedFrom.delete(plugin.name)
+    Object.assign(result, await this.publishAndReload())
+  }
+
+  /**
+   * Ask the distribution's plugin audit about each package a restored version brings back, as an installation and an
+   * enablement would; a distribution without one audits nothing.
+   * @param names - the packages, as {@link broughtBack} names them.
+   * @throws ManagementFailure `audit-refused` or `audit-findings` when the audit refuses one.
+   */
+  private async auditRestored(names: readonly string[]): Promise<void> {
+    if (this.ownerContext.get('pluginAudit') === undefined) return
+    for (const name of names) {
+      const dir = resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir)
+      await this.auditBundle(name, dir, readProfileManifest('dsh', dir).version)
+    }
   }
 
   /** Read current plugins, including why a row cannot be changed through the profile patch.
@@ -839,7 +1095,7 @@ export class PluginManager extends TypertRemoteService {
       Object.assign(result, await this.reload(enabled ? [row.patchId] : []))
       const current = (await this.listPlugins()).find(item => item.entryId === id)
       return current?.enabled !== enabled && this.ownerContext.get('hmr') !== undefined ? 'overridden' : undefined
-    }), { stage: 'enable', target: id, enabled }, 'plugin')
+    }), { stage: 'enable', target: id, enabled }, 'plugin', () => `${enabled ? 'Turned on' : 'Turned off'} ${id}`)
   }
 
   /** Select or remove a bundle layer while retaining installed dependencies.
@@ -852,7 +1108,7 @@ export class PluginManager extends TypertRemoteService {
     return this.change(result => this.configure(async () => {
       await this.selectBundle(name, enabled)
       Object.assign(result, enabled ? await this.publishAndReload(this.bundleRows(name).map(row => row.id)) : await this.reload())
-    }), { stage: 'enable', target: name, enabled }, 'bundle')
+    }), { stage: 'enable', target: name, enabled }, 'bundle', () => `${enabled ? 'Turned on' : 'Turned off'} ${name}`)
   }
 
   /**
@@ -984,6 +1240,10 @@ export class PluginManager extends TypertRemoteService {
         if (manifest?.dsh?.bundle === undefined) throw new ManagementFailure('not-bundle')
         const compatibility = evaluatePluginCompatibility(manifest, readProfileVersionExemptions(this.profile.dir))
         if (compatibility !== undefined && !compatibility.exempted) throw new ManagementFailure('incompatible-version', [incompatiblePlugin(compatibility)])
+        // Every installation is audited, enabled or not, so the user reads the findings where they chose the package.
+        const audit = await this.auditBundle(name, dir, manifest.version, options?.acceptedAudit)
+        if (audit !== undefined && audit.findings.length > 0) result.audit = audit
+        if (audit?.decision === 'accepted' && options?.acceptedAudit === audit.digest) await acceptAudit(this.profile.dir, name, audit.digest)
         for (const file of bundlePatchPaths(dir, manifest.dsh.bundle)) loadOverlayPatches('dsh', file)
         version = manifest.version
         this.installedFrom.set(name, used)
@@ -1006,7 +1266,7 @@ export class PluginManager extends TypertRemoteService {
         const selected = bundleSelection(readProfileManifest('dsh', this.profile.dir)).includes(name)
         Object.assign(result, await this.publishAndReload(selected ? this.bundleRows(name).map(row => row.id) : []))
       })
-    }, { stage: 'install', target: spec, enabled: options?.enabled !== false }, 'install')
+    }, { stage: 'install', target: spec, enabled: options?.enabled !== false }, 'install', result => `Installed ${result.bundle ?? spec}`)
     control.result = result
     return result.finally(() => { if (requestId !== undefined) this.installs.delete(requestId) })
   }
@@ -1075,7 +1335,7 @@ export class PluginManager extends TypertRemoteService {
       }
       this.installedFrom.delete(name)
       Object.assign(result, await this.configure(() => this.publishAndReload()))
-    }, { stage: 'remove', target: name }, 'remove')
+    }, { stage: 'remove', target: name }, 'remove', () => `Removed ${name}`)
   }
 
   /** The rows a bundle's patch inserts and the existing rows it changes; an unreadable patch throws. */
@@ -1166,6 +1426,30 @@ export class PluginManager extends TypertRemoteService {
     }
   }
 
+  /**
+   * Ask the distribution's plugin audit about a bundle's package, with the digests the user accepted for it and the one
+   * this call accepts; a distribution without one audits nothing.
+   * @returns The audit, or undefined without one.
+   * @throws ManagementFailure `audit-refused` or `audit-findings` when the audit refuses the change.
+   */
+  private async auditBundle(
+    name: string, dir: string, version: string | undefined, accepting?: string,
+  ): Promise<PluginAuditResult | undefined> {
+    const audit = this.ownerContext.get('pluginAudit')
+    if (audit === undefined) return undefined
+    const accepted = [...await acceptedAudits(this.profile.dir, name), ...accepting === undefined ? [] : [accepting]]
+    const result = await audit.audit({ name, ...version === undefined ? {} : { version }, dir, accepted })
+    switch (result.decision) {
+      case 'clear':
+      case 'accepted':
+        return result
+      case 'refused': throw new ManagementFailure('audit-refused', undefined, undefined, result)
+      case 'needs-acceptance': throw new ManagementFailure('audit-findings', undefined, undefined, result)
+      /* v8 ignore next -- PluginAuditDecision is a closed union */
+      default: return assertNever(result.decision)
+    }
+  }
+
   private async selectBundle(name: string, enabled: boolean): Promise<void> {
     const manifest = readProfileManifest('dsh', this.profile.dir)
     const previous = bundleSelection(manifest)
@@ -1176,6 +1460,7 @@ export class PluginManager extends TypertRemoteService {
         assertBundlePlatform(metadata.dsh?.bundle?.platforms, process.platform)
         const compatibility = evaluatePluginCompatibility(metadata, readProfileVersionExemptions(this.profile.dir))
         if (compatibility !== undefined && !compatibility.exempted) throw new ManagementFailure('incompatible-version', [incompatiblePlugin(compatibility)])
+        await this.auditBundle(name, resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir), metadata.version)
         this.bundleRows(name)
       }
     }
@@ -1257,10 +1542,17 @@ export class PluginManager extends TypertRemoteService {
     return restart === undefined ? { warnings } : { warnings, restartReason: restart }
   }
 
+  /** Who is making a change: the Agent whose tool call it runs in, by its Session, or else the person. */
+  private changedBy(): ProfileChangedBy {
+    const agent = this.ctx.get('agents')?.currentInitiator()
+    return agent === undefined ? { kind: 'person' } : { kind: 'agent', sessionId: agent.session.id }
+  }
+
   private async change(
     operation: (result: ChangeResult) => Promise<ChangeResult['application'] | void>,
     request: Pick<ChangeResult, 'stage' | 'target' | 'enabled'>,
     reason: PluginChange['reason'],
+    summary: (result: ChangeResult) => string,
     identity?: Pick<PluginOperation, 'target' | 'version'>,
   ): Promise<ChangeResult> {
     const id = randomUUID() as PluginOperationId
@@ -1275,6 +1567,11 @@ export class PluginManager extends TypertRemoteService {
     try {
       settled = await withFileLock(join(this.profile.dir, 'package.json'), async () => {
         this.abort.signal.throwIfAborted()
+        // An edit made outside plugin management is its own version, so this change's version, and an undo, hold only it.
+        const warnings: string[] = []
+        await this.versions.record(OUTSIDE_SUMMARY, { kind: 'outside' }).catch((error: unknown) => {
+          warnings.push(`the profile's history could not save an earlier edit: ${messageOf(error)}`)
+        })
         const before = this.diskState()
         const result: ChangeResult = { ...request, changed: false,
           ...this.ownerContext.get('hmr') !== undefined ? { application: 'applied' } : { application: 'restart-required', restartReason: 'no-hmr' } }
@@ -1293,6 +1590,13 @@ export class PluginManager extends TypertRemoteService {
         }
         if (result.application !== 'restart-required') delete result.restartReason
         result.changed = before !== this.diskState()
+        if (result.changed) {
+          // The change itself is saved; a version that cannot be written only means it cannot be undone or restored.
+          await this.versions.record(summary(result), this.changedBy()).catch((error: unknown) => {
+            warnings.push(`the profile's history could not save this change: ${messageOf(error)}`)
+          })
+        }
+        if (warnings.length > 0) result.warnings = [...result.warnings ?? [], ...warnings]
         this.ownerContext.emit('plugin-manager/changed', { reason })
         return result
       }, { waitMs: this.lockWaitMs })
@@ -1344,7 +1648,7 @@ export class PluginManager extends TypertRemoteService {
   }
 
   private diskState(): string {
-    return ['package.json', 'cordis.patch.yml', 'pnpm-workspace.yaml', PROFILE_COMPATIBILITY_FILENAME].map((file) => {
+    return PROFILE_FILES.map((file) => {
       try { return readFileSync(join(this.profile.dir, file), 'utf8') }
       catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''

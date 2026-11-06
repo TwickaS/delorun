@@ -171,6 +171,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Shares profile package operations with the CLI and reports persisted and running state to Web and agent callers.',
   },
   {
+    key: 'pluginAudit',
+    pkg: 'plugin-manager',
+    title: 'Optional plugin audit before a bundle is selected or enabled',
+    mode: 'seam',
+    consumers: ['plugin-manager'],
+    note: 'A distribution provides it; without one nothing is audited. The manager refuses the change until the user accepts the findings, or for good on a refusal.',
+  },
+  {
     key: 'pluginMarket',
     pkg: 'plugin-market',
     title: 'Plugin market index reader',

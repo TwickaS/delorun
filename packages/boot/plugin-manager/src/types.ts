@@ -36,10 +36,66 @@ export interface IncompatiblePlugin {
 
 /** Localizable management failure and optional external diagnostic. */
 export interface ManagementError {
-  code: ReadOnlyReason | 'unknown-plugin' | 'invalid-spec' | 'already-installed' | 'ambiguous-install' | 'not-bundle' | 'not-removable' | 'stop-profile' | 'bundle-in-use' | 'stale-approval' | 'incompatible-version' | 'unsupported-platform' | 'operation-error'
+  code: ReadOnlyReason | 'unknown-plugin' | 'invalid-spec' | 'already-installed' | 'ambiguous-install' | 'not-bundle' | 'not-removable' | 'stop-profile' | 'bundle-in-use' | 'stale-approval' | 'incompatible-version' | 'unsupported-platform' | 'audit-findings' | 'audit-refused' | 'nothing-to-undo' | 'unknown-version' | 'history-unavailable' | 'operation-error'
   diagnostic?: string
   /** Present with `incompatible-version`: the packages the running DSH version rejects. */
   incompatible?: IncompatiblePlugin[]
+  /** Present with `audit-findings` and `audit-refused`: what the plugin audit found. */
+  audit?: PluginAuditResult
+}
+
+/** One match of a plugin audit's rule in a package's files. */
+export interface PluginAuditFinding {
+  rule: string
+  title: string
+  /** `critical` is refused under the distribution's strictest mode; `warning` needs the user's acceptance; `notice` is shown. */
+  severity: 'critical' | 'warning' | 'notice'
+  /** The file, relative to the package's directory. */
+  path: string
+  line: number
+  excerpt: string
+}
+
+/**
+ * What a plugin audit decided: `clear` lets the change go on, `accepted` lets it go on because the user accepted
+ * exactly these findings, `needs-acceptance` refuses it until the user accepts them, and `refused` refuses it whatever
+ * was accepted.
+ */
+export type PluginAuditDecision = 'clear' | 'accepted' | 'needs-acceptance' | 'refused'
+
+/** A plugin audit's answer. */
+export interface PluginAuditResult {
+  decision: PluginAuditDecision
+  /** Names exactly these findings; an acceptance holds for this digest alone. */
+  digest: string
+  findings: PluginAuditFinding[]
+  /** Whether the audit kept fewer findings than it found, or read fewer files than the package has. */
+  truncated: boolean
+}
+
+/** The package a plugin audit reads. */
+export interface PluginAuditTarget {
+  /** The package's name. */
+  name: string
+  version?: string
+  /** The package's installed directory. */
+  dir: string
+  /** The digests the user accepted for this package, the newest last. */
+  accepted: string[]
+}
+
+/**
+ * The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before
+ * it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as
+ * `pluginAudit`; without one, nothing is audited.
+ */
+export interface PluginAudit {
+  /**
+   * Audit a package.
+   * @param target The package, its directory and the digests the user accepted for it.
+   * @returns The findings, their digest and the decision.
+   */
+  audit(target: PluginAuditTarget): Promise<PluginAuditResult>
 }
 
 /**
@@ -163,14 +219,23 @@ export interface ChangeResult {
   application: 'applied' | 'restart-required' | 'overridden' | 'failed' | 'cancelled'
   /** Present with `restart-required`: why the change takes effect only at the next start. */
   restartReason?: RestartReason
-  /** Last attempted step; successful installation can proceed to enablement. */
-  stage: 'install' | 'enable' | 'remove'
+  /**
+   * Last attempted step; successful installation can proceed to enablement. `undo` puts the profile back as the version
+   * before the latest held it; `restore` puts it back as a chosen version held it.
+   */
+  stage: 'install' | 'enable' | 'remove' | 'undo' | 'restore'
   target: string
   enabled?: boolean
   error?: ManagementError
   /** Pre-existing inactive entries the operation left as they were. */
   warnings?: string[]
   packageResult?: PackageResult
+  /** Present with `undo` once the history is read: the latest version, whose change it takes back. */
+  undone?: ProfileVersionSummary
+  /** Present with `restore` once the history is read: the version it puts the profile back to. */
+  restored?: ProfileVersionSummary
+  /** Present with `undo` and `restore` once the version's files are read: the plugins, builds and exemptions they change. */
+  changes?: ProfileVersionChanges
   /** The bundle an installation added, once pnpm and the bundle check accepted it. */
   bundle?: string
   /** The installed bundle's manifest version, when declared; pnpm's `minimumReleaseAge` can make it older than the newest release. */
@@ -179,6 +244,8 @@ export interface ChangeResult {
   pendingBuilds?: string[]
   /** Package script permissions saved before this installation attempt. */
   approvedBuilds?: string[]
+  /** What the plugin audit found in a bundle it let the change go on with: notices, or findings the user accepted. */
+  audit?: PluginAuditResult
   /** The registries the installation asked, in order; `packageResult` is the last one's run. */
   registries?: Registry[]
   /**
@@ -201,6 +268,8 @@ export interface InstallBundleOptions {
   approvedBuilds?: string[]
   /** The registry asked first; absent, the configured one. The configured fallbacks follow while a registry is unreachable or stale. */
   registry?: Registry
+  /** The digest of the plugin audit's findings the user read and accepted; saved for the package once it installs. */
+  acceptedAudit?: string
 }
 
 /** Where an inspection asks. */
@@ -384,8 +453,93 @@ export type BundleDetail =
 /** What changed in the profile, for consumers that show it. */
 export interface PluginChange {
   /** The operation that changed it. */
-  readonly reason: 'plugin' | 'bundle' | 'install' | 'remove'
+  readonly reason: 'plugin' | 'bundle' | 'install' | 'remove' | 'undo' | 'restore' | 'config'
 }
+
+/** Identifies one version of the profile's managed files: its history commit. */
+export type ProfileVersionId = Branded<'ProfileVersionId'>
+
+/**
+ * Who made a version: the person, through the studio or another call with no initiating Agent; an Agent, through a
+ * tool, by its Session; or someone outside plugin management, whose edit the next change found and saved first.
+ */
+export type ProfileChangedBy =
+  | { readonly kind: 'person' }
+  | { readonly kind: 'agent'; readonly sessionId: string }
+  | { readonly kind: 'outside' }
+
+/** A version's id and summary, as an undo or a restore names it. */
+export interface ProfileVersionSummary {
+  readonly version: ProfileVersionId
+  readonly summary: string
+}
+
+/** One version of the profile's managed files. */
+export interface ProfileVersion {
+  readonly id: ProfileVersionId
+  /** When it was saved, in milliseconds since the epoch. */
+  readonly at: number
+  /** What changed, in one line. */
+  readonly summary: string
+  readonly changedBy: ProfileChangedBy
+}
+
+/**
+ * One dependency of the profile that a version puts back as another one: `added` with the spec the version holds,
+ * `removed` with the spec the profile has now, or `version` with both.
+ */
+export type ProfilePluginChange =
+  | { readonly name: string; readonly change: 'added'; readonly to: string }
+  | { readonly name: string; readonly change: 'removed'; readonly from: string }
+  | { readonly name: string; readonly change: 'version'; readonly from: string; readonly to: string }
+
+/** A pnpm `allowBuilds` entry's decision: the build script may run, may not, or awaits a decision. */
+export type ProfileBuildDecision = 'allowed' | 'denied' | 'pending'
+
+/** One `allowBuilds` entry that a version puts back with another decision; an absent side has no entry. */
+export interface ProfileBuildChange {
+  readonly name: string
+  readonly from?: ProfileBuildDecision
+  readonly to?: ProfileBuildDecision
+}
+
+/** One version exemption (`compatibility.json` grant) that a version adds or removes. */
+export interface ProfileExemptionChange {
+  /** The exact package-name@version the grant names. */
+  readonly packageVersion: string
+  /** The exact DSH version it may run on. */
+  readonly runtimeVersion: string
+  readonly change: 'added' | 'removed'
+}
+
+/**
+ * What putting the profile back as one version held it changes, compared with the profile's files now: the
+ * dependencies, the bundle selection, the pnpm build decisions and the version exemptions. `patchChanged` says
+ * whether the profile patch (`cordis.patch.yml`) differs; `unreadable` names the files on either side that could not
+ * be parsed, whose changes are not listed.
+ */
+export interface ProfileVersionChanges {
+  readonly plugins: readonly ProfilePluginChange[]
+  /** Bundles the version selects or deselects in `dsh.profile.bundles`. */
+  readonly bundles: ReadonlyArray<{ readonly name: string; readonly selected: boolean }>
+  readonly builds: readonly ProfileBuildChange[]
+  readonly exemptions: readonly ProfileExemptionChange[]
+  readonly patchChanged: boolean
+  readonly unreadable: readonly string[]
+}
+
+/**
+ * What an undo or a restore would do, read before it runs: the version it puts the profile back to and the changes,
+ * or the refusal it would end with, in which case it would change nothing.
+ */
+export type ProfileVersionPreview =
+  | { readonly ok: true; readonly version: ProfileVersionSummary; readonly changes: ProfileVersionChanges }
+  | { readonly ok: false; readonly error: ManagementError }
+
+/** The profile's history, newest version first, or why there is none. */
+export type ProfileHistoryInfo =
+  | { readonly available: true; readonly versions: readonly ProfileVersion[] }
+  | { readonly available: false; readonly reason: string }
 
 /** Identifies one manager invocation, including time spent waiting for its profile lock. */
 export type PluginOperationId = Branded<'PluginOperationId'>

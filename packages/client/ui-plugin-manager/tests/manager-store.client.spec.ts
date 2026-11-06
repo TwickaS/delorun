@@ -4,12 +4,14 @@
  */
 
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
-import type { BundleInfo, ChangeResult, ManagementError, PluginEntryId, PluginInfo, PluginInstallRequestId } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  BundleInfo, ChangeResult, ManagementError, PluginEntryId, PluginInfo, PluginInstallRequestId, ProfileVersion, ProfileVersionId,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginTab } from '../src/client/tab-ledger.ts'
 import type { ConfigLedger } from '../src/client/config-ledger.ts'
-import { installable, offeredRegistries, packageView, PluginManagerController, rowKey, sortPackages, updateCandidate } from '../src/client/manager-store.ts'
+import { installable, offeredRegistries, packageView, PluginManagerController, rowKey, sortPackages, updateCandidate, versionKey } from '../src/client/manager-store.ts'
 
 const INCOMPATIBLE = { name: 'dsh-late', version: '2.0.0', runtimeVersion: '0.1.0', requirements: { '@deepseek-ai/dsh': '^0.2.0' } }
 const ROW_ENTRY = 'include:sidebar' as PluginEntryId
@@ -44,6 +46,12 @@ const REGISTRIES = { registry: null, fallbackRegistries: [MIRROR], resolved: OFF
 
 /** What the check answers for a registry name. */
 const INSPECTED = { status: 'accepted' as const, kind: 'registry' as const, name: 'dsh-better-sidebar', version: '1.0.0', bundle: true, registry: null }
+
+/** The profile's versions, newest first, as the Host lists them. */
+const VERSIONS: ProfileVersion[] = [
+  { id: 'b'.repeat(40) as ProfileVersionId, at: 2_000, summary: 'Turned off include:sidebar', changedBy: { kind: 'agent', sessionId: 'session-1' } },
+  { id: 'a'.repeat(40) as ProfileVersionId, at: 1_000, summary: 'Installed dsh-better-sidebar', changedBy: { kind: 'person' } },
+]
 
 const APPLIED: ChangeResult = { changed: true, application: 'applied', stage: 'enable', target: 'dsh-better-sidebar' }
 
@@ -95,6 +103,8 @@ function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}
     removeBundle: vi.fn(() => Promise.resolve(ok(APPLIED))),
     setBundleEnabled: vi.fn(() => Promise.resolve(ok(APPLIED))),
     setPluginEnabled: vi.fn(() => Promise.resolve(ok(APPLIED))),
+    history: vi.fn(() => Promise.resolve(ok({ available: true, versions: VERSIONS }))),
+    restore: vi.fn(() => Promise.resolve(ok({ ...APPLIED, stage: 'restore', target: VERSIONS[1]!.id }))),
     ...overrides,
   }
   const probe = { fastest: overrides.fastest ?? vi.fn(() => Promise.resolve(ok(null))) }
@@ -574,6 +584,62 @@ describe('PluginManagerController', () => {
     face.uninstall(BUNDLE.name)
     face.confirm()
     await vi.waitFor(() => { expect(state().notice).toEqual({ kind: 'failed', action: 'uninstall', code: 'not-removable', reason: '', packageName: BUNDLE.name, seq: 1 }) })
+  })
+
+  it('reads the history once its view opens, then again after every change, keeping the versions when a read fails', async () => {
+    const { plugins, face, state, controller } = bench()
+    await controller.load()
+    expect(plugins.history).not.toHaveBeenCalled()
+    expect(state().history).toEqual({ status: 'idle', versions: [], reason: '' })
+    face.loadHistory()
+    expect(state().history.status).toBe('loading')
+    await vi.waitFor(() => { expect(state().history).toEqual({ status: 'ready', versions: VERSIONS, reason: '' }) })
+    expect(plugins.history).toHaveBeenCalledExactlyOnceWith(50)
+    plugins.history.mockResolvedValueOnce(refused('gateway/internal', 'offline') as never)
+    await controller.load()
+    await vi.waitFor(() => { expect(state().history).toEqual({ status: 'error', versions: VERSIONS, reason: '' }) })
+    plugins.history.mockRejectedValueOnce(new Error('socket closed'))
+    face.loadHistory()
+    await vi.waitFor(() => { expect(plugins.history).toHaveBeenCalledTimes(3) })
+    expect(state().history).toEqual({ status: 'error', versions: VERSIONS, reason: '' })
+    plugins.history.mockResolvedValueOnce(ok({ available: false, reason: 'git could not run' }) as never)
+    face.loadHistory()
+    await vi.waitFor(() => { expect(state().history).toEqual({ status: 'unavailable', versions: [], reason: 'git could not run' }) })
+  })
+
+  it('keeps the newest history read when an older one answers last', async () => {
+    const older = deferred<ReturnType<typeof ok<{ available: true; versions: ProfileVersion[] }>>>()
+    const { plugins, face, state } = bench()
+    plugins.history.mockReturnValueOnce(older.promise)
+    face.loadHistory()
+    face.loadHistory()
+    await vi.waitFor(() => { expect(state().history.status).toBe('ready') })
+    older.resolve(ok({ available: true, versions: [] }))
+    await Promise.resolve()
+    expect(state().history.versions).toEqual(VERSIONS)
+  })
+
+  it('restores one version at a time and names a failed restore', async () => {
+    const gate = deferred<ReturnType<typeof ok<ChangeResult>>>()
+    const { plugins, face, state, controller } = bench({
+      restore: vi.fn().mockReturnValueOnce(gate.promise).mockResolvedValueOnce(ok({ ...failed({ code: 'unknown-version' }), stage: 'restore' })),
+    })
+    await controller.load()
+    face.loadHistory()
+    await vi.waitFor(() => { expect(state().history.status).toBe('ready') })
+    const [latest, earlier] = VERSIONS as [ProfileVersion, ProfileVersion]
+    face.restoreVersion(earlier.id)
+    face.restoreVersion(latest.id)
+    await Promise.resolve()
+    expect(state().busy).toEqual([versionKey(earlier.id)])
+    expect(plugins.restore).toHaveBeenCalledExactlyOnceWith(earlier.id)
+    gate.resolve(ok({ ...APPLIED, stage: 'restore', application: 'restart-required', restartReason: 'no-hmr' }))
+    await vi.waitFor(() => { expect(state().busy).toEqual([]) })
+    expect(state().notice).toEqual({ kind: 'restart', packageName: earlier.summary, reason: 'no-hmr', seq: 1 })
+    // The re-read after the restore lists the history again.
+    await vi.waitFor(() => { expect(plugins.history).toHaveBeenCalledTimes(2) })
+    face.restoreVersion('c'.repeat(40) as ProfileVersionId)
+    await vi.waitFor(() => { expect(state().notice).toEqual({ kind: 'failed', action: 'restore', code: 'unknown-version', reason: '', seq: 2 }) })
   })
 
   it('switches rows under their own busy keys and reports what the Host said', async () => {
@@ -1240,6 +1306,88 @@ describe('PluginManagerController', () => {
     gates[1]!.resolve(ok({ ...APPLIED, bundle: 'dsh-better-sidebar', approvedBuilds: ['native'] }))
     await vi.waitFor(() => { expect(state().install.phase).toBe('done') })
     expect(state().install).toMatchObject({ installed: 'dsh-better-sidebar', approvedBuilds: ['native'] })
+    expect(plugins.installBundle).toHaveBeenCalledTimes(2)
+  })
+
+  it('accepts the plugin audit\'s findings from the failed screen and installs again with their digest', async () => {
+    const { plugins, face, state, controller } = bench({
+      installBundle: vi.fn()
+        .mockResolvedValueOnce(ok({ ...APPLIED, bundle: 'dsh-a' }))
+        .mockResolvedValueOnce(ok({ ...APPLIED, bundle: 'dsh-a' }))
+        .mockResolvedValueOnce(ok({ ...APPLIED, application: 'overridden' })),
+      setBundleEnabled: vi.fn()
+        .mockResolvedValueOnce(ok({ ...APPLIED, application: 'restart-required' }))
+        .mockResolvedValueOnce(ok(failed({ code: 'operation-error', diagnostic: 'the tree rejected it' }))),
+    })
+    await controller.load()
+    face.enableInstalled()
+    expect(plugins.setBundleEnabled).not.toHaveBeenCalled()
+    face.openInstall()
+    face.editInstallSpec('dsh-a')
+    face.runInstall()
+    await vi.waitFor(() => { expect(state().install.phase).toBe('done') })
+    face.enableInstalled()
+    face.enableInstalled()
+    expect(state().install.enabling).toBe(true)
+    await vi.waitFor(() => { expect(state().install.open).toBe(false) })
+    expect(plugins.setBundleEnabled).toHaveBeenCalledExactlyOnceWith('dsh-a', true)
+    // A restart it waits for is said in passing; the list marks it.
+    expect(state().notice).toEqual({ kind: 'restart', packageName: 'dsh-a', seq: 1 })
+    expect(state().highlight).toBe('dsh-a')
+    face.clearHighlight()
+    face.clearHighlight()
+    expect(state().highlight).toBeNull()
+
+    // A refusal toasts it and still closes.
+    face.openInstall()
+    face.editInstallSpec('dsh-a')
+    face.runInstall()
+    await vi.waitFor(() => { expect(state().install.phase).toBe('done') })
+    face.enableInstalled()
+    await vi.waitFor(() => { expect(state().install.open).toBe(false) })
+    expect(plugins.setBundleEnabled).toHaveBeenCalledTimes(2)
+    expect(state().notice).toEqual({ kind: 'failed', action: 'enable', code: 'operation-error', reason: 'the tree rejected it', packageName: 'dsh-a', seq: 2 })
+    expect(state().highlight).toBe('dsh-a')
+
+    // An install that named no bundle has nothing to enable or mark: the screen just closes.
+    face.openInstall()
+    face.editInstallSpec('lib')
+    face.runInstall()
+    await vi.waitFor(() => { expect(state().install.phase).toBe('done') })
+    expect(state().install.installed).toBeNull()
+    face.enableInstalled()
+    await vi.waitFor(() => { expect(state().install.open).toBe(false) })
+    expect(plugins.setBundleEnabled).toHaveBeenCalledTimes(2)
+    expect(state().highlight).toBeNull()
+  })
+
+  it.each([true, false])('offers the scripts a blocked run left pending, and retries with analytics enabled=%s', async (enabled) => {
+    const gates: ReturnType<typeof deferred<Awaited<ReturnType<typeof ok<ChangeResult>> | ReturnType<typeof refused>>>>[] = []
+    const { face, state, controller, plugins, started } = bench({
+      installBundle: vi.fn(() => {
+        const gate = deferred<Awaited<ReturnType<typeof ok<ChangeResult>> | ReturnType<typeof refused>>>()
+        gates.push(gate)
+        return gate.promise
+      }),
+    }, enabled)
+    await controller.load()
+    face.openInstall()
+    face.editInstallSpec('x')
+    // Before the failed screen offers anything, the action does nothing.
+    face.acceptAuditAndRetry()
+    face.runInstall()
+    const first = await started()
+    const audit = { decision: 'needs-acceptance' as const, digest: 'digest-1', findings: [{ rule: 'code.eval', title: 'Evaluates code', severity: 'warning' as const, path: 'a.js', line: 1, excerpt: 'eval(x)' }], truncated: false }
+    gates[0]!.resolve(ok(failed({ code: 'audit-findings', audit })))
+    await vi.waitFor(() => { expect(state().install.phase).toBe('failed') })
+    expect(state().install.failure).toEqual({ reason: '', code: 'audit-findings', audit, stage: 'install' })
+    face.acceptAuditAndRetry()
+    const second = await started()
+    expect(second).not.toBe(first)
+    expect(plugins.installBundle).toHaveBeenLastCalledWith('x', { enabled: false, requestId: second, registry: null, acceptedAudit: 'digest-1' })
+    gates[1]!.resolve(ok({ ...APPLIED, bundle: 'dsh-better-sidebar', audit: { ...audit, decision: 'accepted' } }))
+    await vi.waitFor(() => { expect(state().install.phase).toBe('done') })
+    expect(state().install.audit).toMatchObject({ decision: 'accepted', digest: 'digest-1' })
     expect(plugins.installBundle).toHaveBeenCalledTimes(2)
   })
 

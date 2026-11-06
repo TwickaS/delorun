@@ -14,6 +14,7 @@ import type {
   ChangeResult,
   IncompatiblePlugin,
   ManagementError,
+  PluginAuditResult,
   PluginEntryId,
   PluginInfo,
   PluginInspectProblem,
@@ -28,6 +29,8 @@ import type {
   PluginUpdateStep,
   PluginVersion,
   PluginVersionList,
+  ProfileVersion,
+  ProfileVersionId,
   ReadOnlyReason,
   Registry,
   RestartReason,
@@ -57,7 +60,31 @@ export function bundleBusy(state: PluginManagerState, packageName: string): bool
 }
 
 /** The action a failed notice names. */
-export type FailedAction = 'enable' | 'disable' | 'uninstall' | 'rowEnable' | 'rowDisable'
+export type FailedAction = 'enable' | 'disable' | 'uninstall' | 'rowEnable' | 'rowDisable' | 'restore'
+
+/** The profile's versions as the History view shows them, read when the view first opens and after every change. */
+export interface HistoryState {
+  /** `idle` before the first read; `unavailable` when the Host cannot keep the profile's history, with its words. */
+  readonly status: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
+  /** Newest first; the first is the profile as it stands. */
+  readonly versions: readonly ProfileVersion[]
+  /** Why the history is unavailable; empty otherwise. */
+  readonly reason: string
+}
+
+/** How many of the newest versions the History view lists. */
+const HISTORY_LIMIT = 50
+
+const IDLE_HISTORY: HistoryState = { status: 'idle', versions: [], reason: '' }
+
+/**
+ * The busy key of a restore, one at a time for the whole history.
+ * @param version - the version being restored.
+ * @returns its key in `busy`.
+ */
+export function versionKey(version: ProfileVersionId): string {
+  return `version:${version}`
+}
 
 /** What the last action left to say, shown as a toast; `seq` tells one showing from the next. */
 export type ManagerNotice =
@@ -287,10 +314,14 @@ export interface InstallState {
     /** What the last failed run could not reach, as the Host attributed it: the registry, or the spec's own host. */
     readonly failedAt?: 'registry' | 'spec-host'
     readonly pendingBuilds?: readonly string[]
+    /** What the plugin audit found, for an `audit-findings` or `audit-refused` refusal. */
+    readonly audit?: PluginAuditResult
     readonly uncertainty?: 'result' | 'cancellation' | 'acceptance'
   } | null
   /** The packages whose install scripts the finished run was allowed to execute, saved for this profile. */
   readonly approvedBuilds: readonly string[]
+  /** What the plugin audit found in the installed package, when it found anything: notices, or findings the person accepted. */
+  readonly audit: PluginAuditResult | null
   /** Enabling the newly installed bundle from the installed screen is crossing the wire. */
   readonly enabling: boolean
 }
@@ -398,6 +429,7 @@ export interface PluginManagerState {
   readonly confirm: ConfirmState | null
   /** The package the list scrolls to and marks, once an install enabled it. */
   readonly highlight: string | null
+  readonly history: HistoryState
   /** Version checks by package name; a package never checked has no entry. */
   readonly versions: Readonly<Record<string, VersionCheck>>
   readonly update: UpdateState | null
@@ -456,6 +488,8 @@ export interface PluginManagerFace {
   useGithubMirror: () => void
   /** Allow the install scripts the failed run left pending, saved for this profile, and run the same spec again. */
   approveBuildsAndRetry: () => void
+  /** Accept the plugin audit's findings the failed screen lists and run the same spec again. */
+  acceptAuditAndRetry: () => void
   /** Leave the check or the failed screen for the spec, or ask the Host to stop the run and wait for its cleanup. */
   cancelInstall: () => void
   /** Ask the Host for the result of an installation whose original reply was lost. */
@@ -475,6 +509,10 @@ export interface PluginManagerFace {
   cancelConfirm: () => void
   /** Switch one of a bundle's rows on or off in the profile's user layer. */
   setRowEnabled: (entryId: PluginEntryId, enabled: boolean) => void
+  /** Read the profile's versions for the History view; every later change reads them again. */
+  loadHistory: () => void
+  /** Put the profile back as one version held it; the restore is itself a version. */
+  restoreVersion: (version: ProfileVersionId) => void
   dismissNotice: () => void
   /** Ask the Host for an updatable package's newer versions, again when asked again. */
   checkVersions: (packageName: string) => void
@@ -514,6 +552,7 @@ function failureOf(
     reason: error?.diagnostic ?? '',
     ...error === undefined ? {} : { code: error.code },
     ...error?.incompatible === undefined ? {} : { incompatible: error.incompatible },
+    ...error?.audit === undefined ? {} : { audit: error.audit },
     ...kind === undefined ? {} : { kind },
     stage,
     ...enabled === undefined ? {} : { enabled },
@@ -600,7 +639,7 @@ export function sortPackages(packages: readonly PackageView[]): PackageView[] {
 const IDLE_INSTALL: InstallState = {
   open: false, spec: '', registries: null, registry: OFFICIAL_REGISTRY, registryOpen: false, registryError: false, attempts: null,
   phase: 'idle', inputError: null, subject: null, runs: [], detailsOpen: false, logPath: null,
-  installed: null, installedVersion: null, restartRequired: false, failure: null, approvedBuilds: [], enabling: false,
+  installed: null, installedVersion: null, restartRequired: false, failure: null, approvedBuilds: [], audit: null, enabling: false,
 }
 
 /** The dialog back at its spec: the run and its outcome forgotten, the spec and the registries kept. */
@@ -670,6 +709,7 @@ export class PluginManagerController {
   private inspectAbort: AbortController | undefined
   private request: InstallRequest | undefined
   private noticeSeq = 0
+  private historyGeneration = 0
   private analyticsAttempt: { input: string; started: number } | undefined
   private registryRead: RegistryRead | undefined
   /** A Discover entry chose the dialog's registry; that choice applies to this dialog only and is never remembered. */
@@ -690,7 +730,7 @@ export class PluginManagerController {
     this.details = new BundleDetailController(ctx, () => document.baseURI)
     this.store = createSnapshotStore<PluginManagerState>({
       status: 'idle', refreshStatus: 'idle', packages: [], busy: [], notice: null,
-      install: IDLE_INSTALL, confirm: null, highlight: null, versions: {}, update: null,
+      install: IDLE_INSTALL, confirm: null, highlight: null, versions: {}, update: null, history: IDLE_HISTORY,
     })
   }
 
@@ -805,6 +845,7 @@ export class PluginManagerController {
         this.patch({ install: { ...recovered, registry } })
       },
       approveBuildsAndRetry: () => { void this.approveBuildsAndRetry() },
+      acceptAuditAndRetry: () => { void this.acceptAuditAndRetry() },
       cancelInstall: () => { void this.cancelInstall() },
       reconcileInstall: () => { void this.reconcileInstall() },
       toggleInstallDetails: () => { this.patchInstall({ detailsOpen: !this.getSnapshot().install.detailsOpen }) },
@@ -859,6 +900,15 @@ export class PluginManagerController {
           if (result.ok && (result.value.application === 'applied' || result.value.application === 'restart-required')) this.trackToggle(entryId, enabled, true)
         })
       },
+      loadHistory: () => { void this.readHistory() },
+      restoreVersion: (version) => {
+        // One restore at a time: each one changes what the others would restore over.
+        if (this.getSnapshot().busy.some(key => key.startsWith('version:'))) return
+        const summary = this.getSnapshot().history.versions.find(item => item.id === version)?.summary ?? version
+        void this.run(versionKey(version), { action: 'restore' }, async () => {
+          this.applied(await this.ctx.remote.pluginManager.restore(version), summary)
+        })
+      },
       dismissNotice: () => { this.patch({ notice: null }) },
       checkVersions: (packageName) => { void this.checkVersions(packageName) },
       ensureVersions: (packageName) => {
@@ -878,6 +928,23 @@ export class PluginManagerController {
         if (update !== null) this.patch({ update: { ...update, outputOpen: !update.outputOpen } })
       },
     }
+  }
+
+  /** Read the profile's versions; a read started later wins over one still crossing the wire. */
+  private async readHistory(): Promise<void> {
+    const generation = ++this.historyGeneration
+    if (this.getSnapshot().history.status !== 'ready') this.patch({ history: { ...this.getSnapshot().history, status: 'loading' } })
+    let next: HistoryState
+    try {
+      const answer = await this.ctx.remote.pluginManager.history(HISTORY_LIMIT)
+      if (!answer.ok) next = { ...this.getSnapshot().history, status: 'error' }
+      else if (answer.value.available) next = { status: 'ready', versions: answer.value.versions, reason: '' }
+      else next = { status: 'unavailable', versions: [], reason: answer.value.reason }
+    } catch (_error) {
+      // A rejected transport request keeps the versions already shown, with the view's retry.
+      next = { ...this.getSnapshot().history, status: 'error' }
+    }
+    if (generation === this.historyGeneration) this.patch({ history: next })
   }
 
   /**
@@ -1041,6 +1108,7 @@ export class PluginManagerController {
   load(): Promise<void> {
     if (this.disposed) return Promise.resolve()
     void this.reconcileInstall()
+    if (this.getSnapshot().history.status !== 'idle') void this.readHistory()
     if (this.inFlight !== undefined) {
       this.rerun = true
       return this.inFlight
@@ -1224,7 +1292,7 @@ export class PluginManagerController {
     this.inspectAbort = controller
     this.patchInstall({
       phase: 'checking', inputError: null, subject: catalogSubject ?? null, runs: [], detailsOpen: false, attempts: null, registryOpen: false,
-      installed: null, installedVersion: null, restartRequired: false, failure: null, approvedBuilds: [], logPath: null,
+      installed: null, installedVersion: null, restartRequired: false, failure: null, approvedBuilds: [], logPath: null, audit: null,
     })
     const read = this.registryRead
     if (read !== undefined && choice === read.choice && read.done !== undefined) {
@@ -1262,14 +1330,14 @@ export class PluginManagerController {
    * `approvedBuilds` names the pending install scripts the person allowed;
    * the Host saves that permission for this profile before pnpm runs.
    */
-  private async startInstall(subject: InstallSubject, approvedBuilds?: readonly string[]): Promise<void> {
+  private async startInstall(subject: InstallSubject, approvedBuilds?: readonly string[], acceptedAudit?: string): Promise<void> {
     const { spec, registry } = subject
     const requestId = randomUUID() as PluginInstallRequestId
     const request: InstallRequest = { requestId, acknowledged: false, replyLost: false, recovering: false }
     this.request = request
     this.patchInstall({
       phase: 'starting', requestId, subject, runs: [], attempts: null, failure: null, installed: null, installedVersion: null,
-      approvedBuilds: [], logPath: null,
+      approvedBuilds: [], logPath: null, audit: null,
     })
     // The Host announces `plugin-manager/changed` while the run is still on
     // the wire, and every such event reads again; those reads must not cancel
@@ -1278,6 +1346,7 @@ export class PluginManagerController {
       enabled: subject.selection ?? false, requestId, registry,
       ...subject.saveExact === undefined ? {} : { saveExact: subject.saveExact },
       ...approvedBuilds === undefined ? {} : { approvedBuilds: [...approvedBuilds] },
+      ...acceptedAudit === undefined ? {} : { acceptedAudit },
     })
     if (this.disposed || this.request !== request) return
     if (!result.ok) {
@@ -1339,6 +1408,7 @@ export class PluginManagerController {
         ...result.restartReason === undefined ? {} : { restartReason: result.restartReason },
         logPath: result.packageResult?.logPath ?? null,
         approvedBuilds: result.approvedBuilds ?? [],
+        audit: result.audit ?? null,
         ...asked,
       })
     }
@@ -1371,6 +1441,19 @@ export class PluginManagerController {
     if (install.phase !== 'failed' || install.subject === null || pending === undefined || pending.length === 0) return
     if (this.ctx.get('productAnalytics')?.enabled) this.analyticsAttempt = { input: sanitizeInstallInput(install.subject.spec), started: Date.now() }
     await this.startInstall(install.subject, pending)
+  }
+
+  /**
+   * Accept the plugin audit's findings the failed screen lists and run the
+   * same spec again with their digest; the Host saves the acceptance for the
+   * package once it installs. Only an `audit-findings` refusal offers this.
+   */
+  private async acceptAuditAndRetry(): Promise<void> {
+    const install = this.getSnapshot().install
+    const audit = install.failure?.audit
+    if (install.phase !== 'failed' || install.subject === null || install.failure?.code !== 'audit-findings' || audit === undefined) return
+    if (this.ctx.get('productAnalytics')?.enabled) this.analyticsAttempt = { input: sanitizeInstallInput(install.subject.spec), started: Date.now() }
+    await this.startInstall(install.subject, undefined, audit.digest)
   }
 
   /**

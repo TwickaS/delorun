@@ -20,6 +20,12 @@
 
 `ChangeResult.changed` 报告磁盘修改，独立于 `application`：`applied`、`restart-required`、`overridden` 或 `failed`。可选的 `error` 包含可本地化的错误码和外部诊断。`packageResult` 记录运行的退出状态、有界输出、截断标志及完整诊断日志路径；当管理器终止了一个停止打印的运行，或 GitHub 连接检查到达期限，还记录 `timedOut`；被终止的运行记录强制填入的状态 1，因为它的进程没有返回任何状态。被终止的运行不论信号留下什么退出状态都归类为 `timeout`，因此安装与删除都报告失败而非成功，也不会再询问下一个注册表。`pendingBuilds` 列出整个 profile 尚未决定的包；`approvedBuilds` 记录本次操作授予权限的包名；`registries` 按顺序列出一次安装问过的注册表；`bundle` 与 `version` 给出完成的安装新增的包及其清单版本；`failedAt` 说明最后一次失败的运行连不上的是所问的注册表，还是 git 或 tarball spec 自身拉取的主机。
 
+`ProfileVersionId` 标识 profile 历史中的一个版本，即一个 git 提交 id；调用方从 `history` 获得它。`ProfileHistoryInfo` 要么是 `available: true` 并带 `versions`（从新到旧，每个带 `id`、以纪元毫秒表示的时间 `at`、单行 `summary` 和 `changedBy`：`person`、带 `sessionId` 的 `agent`，或 `outside`），要么是 `available: false` 并带 git 给出的 `reason`。`ChangeResult.undone` 与 `restored` 指明一次撤销取回的版本或一次恢复放回的版本，`changes` 列出它改动的内容。`ProfileVersionPreview` 是 `previewUndo` 与 `previewRestore` 在不保存版本的情况下读到的内容：要么是 `ok: true` 并带目标 `version` 及其 `changes`（新增、移除或改为其他 spec 的依赖，选入或取消选入的组合包，`allowBuilds` 决定，授予或撤销的版本豁免，`cordis.patch.yml` 是否不同，以及无法解析的文件），要么是 `ok: false` 并带该操作将以之结束的拒绝。撤销或恢复会在它带回的每个包的任何代码运行之前，用 `pluginAudit` 审计该包。
+
+`pluginAudit` 是发行版可选的插件审计，一个由管理器消费而不提供的 Service Definition：`audit(target)` 接收一个 `PluginAuditTarget`（包的 `name`、`version`、已安装的 `dir`，以及用户对它 `accepted` 的摘要），返回一个 `PluginAuditResult`（`decision` 为 `clear`、`accepted`、`needs-acceptance` 或 `refused`，发现项的 `digest`，`findings`，每项含规则、标题、严重程度、文件、行和摘录，以及是否 `truncated`）。管理器在每次安装时以及启用组合包之前询问它；`needs-acceptance` 以 `audit-findings` 拒绝，`refused` 以 `audit-refused` 拒绝，两种错误都带 `audit`。`InstallBundleOptions.acceptedAudit` 指明用户接受的摘要，审计接受之后管理器把它为该包保存在 `.plugin-manager/audits.json` 中；`ChangeResult.audit` 携带一次改动继续进行时所带的发现项。没有该服务时不审计任何内容。
+
+`ConfigEdit` 以 profile patch id 指明 `ConfigEditor.edit` 保存并应用了其配置的条目；`config-editor/edited` 在 profile 的锁释放后携带它，插件管理随即把这次编辑保存为一个版本。
+
 ## 市场记录
 
 [Plugin Market](../../packages/boot/plugin-market/README.zh.md) 读取第 1 版索引格式，校验由 [`dsh-plugin-market-index`](../../packages/util/plugin-market-index/README.zh.md) 完成。
@@ -133,7 +139,8 @@ entries(): Entry[]
  */
 configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>
 
-/** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules.
+/** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules. A saved
+ * edit is announced as `config-editor/edited`.
  * @param entry Current Loader entry, also used to detect replacement during the write.
  * @param change Derive a raw config from the current entry and its inherited layer.
  * @returns Fulfillment after Loader reconciliation completes.
@@ -195,6 +202,23 @@ async reconcileProfile(requiredIds: readonly string[] = []): Promise<ProfileReco
 
 Source: [`packages/boot/hmr/src/index.ts`](../../packages/boot/hmr/src/index.ts)
 
+<a id="ctxpluginaudit--pluginaudit"></a>
+
+### `ctx.pluginAudit` — `PluginAudit`
+
+The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as `pluginAudit`; without one, nothing is audited.
+
+```ts cordis-catalog
+/**
+ * Audit a package.
+ * @param target The package, its directory and the digests the user accepted for it.
+ * @returns The findings, their digest and the decision.
+ */
+audit(target: PluginAuditTarget): Promise<PluginAuditResult>
+```
+
+Source: [`packages/boot/plugin-manager/src/types.ts`](../../packages/boot/plugin-manager/src/types.ts)
+
 <a id="ctxpluginmanager--pluginmanager"></a>
 
 ### `ctx.pluginManager` — `PluginManager`
@@ -230,6 +254,58 @@ Manage profile files and apply their declared reload lifecycle.
  * @returns Saved and runtime outcomes. Startup-only profiles require restart.
  */
 @Remote setVersionExemption(packageVersion: string, runtimeVersion: string, enabled: boolean, acceptRisk?: boolean): Promise<ChangeResult>
+
+/**
+ * Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit
+ * made outside plugin management since the last change is saved as a version first, so it is that edit undo takes
+ * back. It installs and audits what it brings back as {@link restore} does. The undo is itself a version, so undoing
+ * it is another undo.
+ * @returns Saved and runtime outcomes, naming the version taken back as `undone` and listing what changed in
+ * `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
+ * git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
+ */
+@Remote undo(): Promise<ChangeResult>
+
+/**
+ * Put the profile back as one version held it, and apply it: a restored dependency set is installed from the restored
+ * lockfile first, and every package the version brings back is audited before any of its code runs. An edit made
+ * outside plugin management is saved as a version first. The restore is itself a version.
+ * @param version - the version to restore, as {@link history} lists it.
+ * @returns Saved and runtime outcomes, naming the version as `restored` and listing what changed in `changes`. Fails
+ * with `unknown-version` when the history holds no such version, `history-unavailable` when git cannot keep it, and
+ * `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
+ */
+@Remote restore(version: ProfileVersionId): Promise<ChangeResult>
+
+/**
+ * The profile's versions, newest first, after saving an edit made outside plugin management as a version.
+ * @param limit - the most to read, from 1 to 500.
+ * @returns the versions, or why the profile has no history.
+ */
+@Remote history(limit: number): Promise<ProfileHistoryInfo>
+
+/**
+ * The profile's versions, newest first, as the history holds them. Unlike {@link history}, it saves no version for an
+ * edit made outside plugin management and never starts the history, so it writes nothing and runs only git reads.
+ * @param limit - the most to read, from 1 to 500.
+ * @returns the versions, empty before the history starts, or why git cannot read it.
+ */
+async listHistory(limit: number): Promise<ProfileHistoryInfo>
+
+/**
+ * What {@link undo} would put back if it ran now, read without saving a version or starting the history: the version
+ * before the latest, or the latest itself when the managed files differ from it, since undo first saves that outside
+ * edit and then takes it back.
+ * @returns the version undo restores and what it changes, or the refusal undo would end with.
+ */
+async previewUndo(): Promise<ProfileVersionPreview>
+
+/**
+ * What {@link restore} would put back if it ran now, read without saving a version or starting the history.
+ * @param version - the version to restore, as {@link history} lists it.
+ * @returns the version and what it changes, or the refusal restore would end with.
+ */
+async previewRestore(version: ProfileVersionId): Promise<ProfileVersionPreview>
 
 /** Read current plugins, including why a row cannot be changed through the profile patch.
  * @returns Current runtime entries with persistent patch targets.
@@ -469,6 +545,28 @@ Profile patches were reconciled into the running Loader tree: every entry update
 ```
 
 Source: [`packages/boot/app-boot/src/index.ts`](../../packages/boot/app-boot/src/index.ts)
+
+<a id="config-editor-events"></a>
+
+### `config-editor/*` events
+
+<a id="config-editoredited--emit"></a>
+
+#### `config-editor/edited` — emit
+
+An edit was saved to the profile patch and applied: emitted after the profile's lock is released, in the caller's asynchronous context, so a listener can name who made it.
+
+```ts cordis-catalog
+/**
+ * An edit was saved to the profile patch and applied: emitted after the profile's lock is released, in the
+ * caller's asynchronous context, so a listener can name who made it.
+ * @mode emit
+ * @param edit - the profile patch id of the entry whose configuration changed.
+ */
+'config-editor/edited'(edit: ConfigEdit): void
+```
+
+Source: [`packages/boot/config-editor/src/index.ts`](../../packages/boot/config-editor/src/index.ts)
 
 <a id="hmr-events"></a>
 

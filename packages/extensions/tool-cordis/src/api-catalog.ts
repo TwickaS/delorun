@@ -776,7 +776,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async edit( entry: Entry, change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>, ): Promise<void>',
-        description: 'Validate, persist, and reconcile a plugin\'s next config; ordinary fields keep normal lifecycle rules.',
+        description: 'Validate, persist, and reconcile a plugin\'s next config; ordinary fields keep normal lifecycle rules. A saved edit is announced as `config-editor/edited`.',
         parameters: [{ name: 'entry', description: 'Current Loader entry, also used to detect replacement during the write.' }, { name: 'change', description: 'Derive a raw config from the current entry and its inherited layer.' }],
         returns: 'Fulfillment after Loader reconciliation completes.',
       },
@@ -2223,6 +2223,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'pluginAudit',
+    summary: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`.',
+    description: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as `pluginAudit`; without one, nothing is audited.',
+    methods: [
+      {
+        signature: 'audit(target: PluginAuditTarget): Promise<PluginAuditResult>',
+        description: 'Audit a package.',
+        parameters: [{ name: 'target', description: 'The package, its directory and the digests the user accepted for it.' }],
+        returns: 'The findings, their digest and the decision.',
+      },
+    ],
+  },
+  {
     key: 'pluginManager',
     summary: 'Manage profile files and apply their declared reload lifecycle.',
     description: 'Manage profile files and apply their declared reload lifecycle.',
@@ -2245,6 +2258,42 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Grant or revoke one exact plugin/runtime exemption and reevaluate live plugins.',
         parameters: [{ name: 'packageVersion', description: 'Exact manifest package name followed by @ and its version; never an installation spec or alias.' }, { name: 'runtimeVersion', description: 'Exact current DSH version for grants; revocation may name a previous runtime.' }, { name: 'enabled', description: 'Whether to grant rather than revoke the exemption.' }, { name: 'acceptRisk', description: 'Required true for grants after the user accepts possible crashes and data loss.' }],
         returns: 'Saved and runtime outcomes. Startup-only profiles require restart.',
+      },
+      {
+        signature: '@Remote undo(): Promise<ChangeResult>',
+        description: 'Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit made outside plugin management since the last change is saved as a version first, so it is that edit undo takes back. It installs and audits what it brings back as restore does. The undo is itself a version, so undoing it is another undo.',
+        parameters: [],
+        returns: 'Saved and runtime outcomes, naming the version taken back as `undone` and listing what changed in `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.',
+      },
+      {
+        signature: '@Remote restore(version: ProfileVersionId): Promise<ChangeResult>',
+        description: 'Put the profile back as one version held it, and apply it: a restored dependency set is installed from the restored lockfile first, and every package the version brings back is audited before any of its code runs. An edit made outside plugin management is saved as a version first. The restore is itself a version.',
+        parameters: [{ name: 'version', description: 'the version to restore, as {@link history} lists it.' }],
+        returns: 'Saved and runtime outcomes, naming the version as `restored` and listing what changed in `changes`. Fails with `unknown-version` when the history holds no such version, `history-unavailable` when git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.',
+      },
+      {
+        signature: '@Remote history(limit: number): Promise<ProfileHistoryInfo>',
+        description: 'The profile\'s versions, newest first, after saving an edit made outside plugin management as a version.',
+        parameters: [{ name: 'limit', description: 'the most to read, from 1 to 500.' }],
+        returns: 'the versions, or why the profile has no history.',
+      },
+      {
+        signature: 'async listHistory(limit: number): Promise<ProfileHistoryInfo>',
+        description: 'The profile\'s versions, newest first, as the history holds them. Unlike history, it saves no version for an edit made outside plugin management and never starts the history, so it writes nothing and runs only git reads.',
+        parameters: [{ name: 'limit', description: 'the most to read, from 1 to 500.' }],
+        returns: 'the versions, empty before the history starts, or why git cannot read it.',
+      },
+      {
+        signature: 'async previewUndo(): Promise<ProfileVersionPreview>',
+        description: 'What undo would put back if it ran now, read without saving a version or starting the history: the version before the latest, or the latest itself when the managed files differ from it, since undo first saves that outside edit and then takes it back.',
+        parameters: [],
+        returns: 'the version undo restores and what it changes, or the refusal undo would end with.',
+      },
+      {
+        signature: 'async previewRestore(version: ProfileVersionId): Promise<ProfileVersionPreview>',
+        description: 'What restore would put back if it ran now, read without saving a version or starting the history.',
+        parameters: [{ name: 'version', description: 'the version to restore, as {@link history} lists it.' }],
+        returns: 'the version and what it changes, or the refusal restore would end with.',
       },
       {
         signature: '@Remote async listPlugins(): Promise<PluginInfo[]>',
@@ -4876,6 +4925,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'payload', description: '.signal - optional compaction cancellation signal.' }, { name: 'next', description: 'delegate to the next recovery listener.' }],
   },
   {
+    name: 'config-editor/edited',
+    mode: 'emit',
+    signature: '\'config-editor/edited\'(edit: ConfigEdit): void',
+    summary: 'An edit was saved to the profile patch and applied: emitted after the profile\'s lock is released, in the caller\'s asynchronous context, so a listener can name who made it.',
+    description: 'An edit was saved to the profile patch and applied: emitted after the profile\'s lock is released, in the caller\'s asynchronous context, so a listener can name who made it.',
+    parameters: [{ name: 'edit', description: 'the profile patch id of the entry whose configuration changed.' }],
+  },
+  {
     name: 'connection/request',
     mode: 'waterfall',
     signature: '\'connection/request\'(request: IncomingMessage, response: ServerResponse, next: () => Promise<void>): Promise<void>',
@@ -5805,7 +5862,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ChangeResult',
-    declaration: 'export interface ChangeResult {\n    changed: boolean;\n    application: \'applied\' | \'restart-required\' | \'overridden\' | \'failed\' | \'cancelled\';\n    restartReason?: RestartReason;\n    stage: \'install\' | \'enable\' | \'remove\';\n    target: string;\n    enabled?: boolean;\n    error?: ManagementError;\n    warnings?: string[];\n    packageResult?: PackageResult;\n    bundle?: string;\n    version?: string;\n    pendingBuilds?: string[];\n    approvedBuilds?: string[];\n    registries?: Registry[];\n    failedAt?: \'registry\' | \'spec-host\';\n}',
+    declaration: 'export interface ChangeResult {\n    changed: boolean;\n    application: \'applied\' | \'restart-required\' | \'overridden\' | \'failed\' | \'cancelled\';\n    restartReason?: RestartReason;\n    stage: \'install\' | \'enable\' | \'remove\' | \'undo\' | \'restore\';\n    target: string;\n    enabled?: boolean;\n    error?: ManagementError;\n    warnings?: string[];\n    packageResult?: PackageResult;\n    undone?: ProfileVersionSummary;\n    restored?: ProfileVersionSummary;\n    changes?: ProfileVersionChanges;\n    bundle?: string;\n    version?: string;\n    pendingBuilds?: string[];\n    approvedBuilds?: string[];\n    audit?: PluginAuditResult;\n    registries?: Registry[];\n    failedAt?: \'registry\' | \'spec-host\';\n}',
   },
   {
     name: 'ChecksRollup',
@@ -5906,6 +5963,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ComputerUseProviderName',
     declaration: 'export type ComputerUseProviderName = Branded<\'ComputerUseProviderName\'>;',
+  },
+  {
+    name: 'ConfigEdit',
+    declaration: 'export interface ConfigEdit {\n    readonly entryId: string;\n}',
   },
   {
     name: 'ConfigureCall',
@@ -6721,7 +6782,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'InstallBundleOptions',
-    declaration: 'export interface InstallBundleOptions {\n    enabled?: boolean;\n    saveExact?: boolean;\n    requestId?: PluginInstallRequestId;\n    approvedBuilds?: string[];\n    registry?: Registry;\n}',
+    declaration: 'export interface InstallBundleOptions {\n    enabled?: boolean;\n    saveExact?: boolean;\n    requestId?: PluginInstallRequestId;\n    approvedBuilds?: string[];\n    registry?: Registry;\n    acceptedAudit?: string;\n}',
   },
   {
     name: 'InstallSpecKind',
@@ -7037,7 +7098,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ManagementError',
-    declaration: 'export interface ManagementError {\n    code: ReadOnlyReason | \'unknown-plugin\' | \'invalid-spec\' | \'already-installed\' | \'ambiguous-install\' | \'not-bundle\' | \'not-removable\' | \'stop-profile\' | \'bundle-in-use\' | \'stale-approval\' | \'incompatible-version\' | \'unsupported-platform\' | \'operation-error\';\n    diagnostic?: string;\n    incompatible?: IncompatiblePlugin[];\n}',
+    declaration: 'export interface ManagementError {\n    code: ReadOnlyReason | \'unknown-plugin\' | \'invalid-spec\' | \'already-installed\' | \'ambiguous-install\' | \'not-bundle\' | \'not-removable\' | \'stop-profile\' | \'bundle-in-use\' | \'stale-approval\' | \'incompatible-version\' | \'unsupported-platform\' | \'audit-findings\' | \'audit-refused\' | \'nothing-to-undo\' | \'unknown-version\' | \'history-unavailable\' | \'operation-error\';\n    diagnostic?: string;\n    incompatible?: IncompatiblePlugin[];\n    audit?: PluginAuditResult;\n}',
   },
   {
     name: 'ManualCompactAgentContext',
@@ -7440,8 +7501,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PlatformSession {\n    readonly origin: string;\n    readonly token: string;\n    readonly userId: AccountUserId | null;\n    readonly embeddedPageDist?: string;\n    readonly requestHeaders?: Readonly<Record<string, string>>;\n}',
   },
   {
+    name: 'PluginAuditDecision',
+    declaration: 'export type PluginAuditDecision = \'clear\' | \'accepted\' | \'needs-acceptance\' | \'refused\';',
+  },
+  {
+    name: 'PluginAuditFinding',
+    declaration: 'export interface PluginAuditFinding {\n    rule: string;\n    title: string;\n    severity: \'critical\' | \'warning\' | \'notice\';\n    path: string;\n    line: number;\n    excerpt: string;\n}',
+  },
+  {
+    name: 'PluginAuditResult',
+    declaration: 'export interface PluginAuditResult {\n    decision: PluginAuditDecision;\n    digest: string;\n    findings: PluginAuditFinding[];\n    truncated: boolean;\n}',
+  },
+  {
+    name: 'PluginAuditTarget',
+    declaration: 'export interface PluginAuditTarget {\n    name: string;\n    version?: string;\n    dir: string;\n    accepted: string[];\n}',
+  },
+  {
     name: 'PluginChange',
-    declaration: 'export interface PluginChange {\n    readonly reason: \'plugin\' | \'bundle\' | \'install\' | \'remove\';\n}',
+    declaration: 'export interface PluginChange {\n    readonly reason: \'plugin\' | \'bundle\' | \'install\' | \'remove\' | \'undo\' | \'restore\' | \'config\';\n}',
   },
   {
     name: 'PluginDetail',
@@ -7612,12 +7689,56 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ProductTelemetryRecord = OTelEventRecord;',
   },
   {
+    name: 'ProfileBuildChange',
+    declaration: 'export interface ProfileBuildChange {\n    readonly name: string;\n    readonly from?: ProfileBuildDecision;\n    readonly to?: ProfileBuildDecision;\n}',
+  },
+  {
+    name: 'ProfileBuildDecision',
+    declaration: 'export type ProfileBuildDecision = \'allowed\' | \'denied\' | \'pending\';',
+  },
+  {
+    name: 'ProfileChangedBy',
+    declaration: 'export type ProfileChangedBy = {\n    readonly kind: \'person\';\n} | {\n    readonly kind: \'agent\';\n    readonly sessionId: string;\n} | {\n    readonly kind: \'outside\';\n};',
+  },
+  {
+    name: 'ProfileExemptionChange',
+    declaration: 'export interface ProfileExemptionChange {\n    readonly packageVersion: string;\n    readonly runtimeVersion: string;\n    readonly change: \'added\' | \'removed\';\n}',
+  },
+  {
+    name: 'ProfileHistoryInfo',
+    declaration: 'export type ProfileHistoryInfo = {\n    readonly available: true;\n    readonly versions: readonly ProfileVersion[];\n} | {\n    readonly available: false;\n    readonly reason: string;\n};',
+  },
+  {
+    name: 'ProfilePluginChange',
+    declaration: 'export type ProfilePluginChange = {\n    readonly name: string;\n    readonly change: \'added\';\n    readonly to: string;\n} | {\n    readonly name: string;\n    readonly change: \'removed\';\n    readonly from: string;\n} | {\n    readonly name: string;\n    readonly change: \'version\';\n    readonly from: string;\n    readonly to: string;\n};',
+  },
+  {
     name: 'ProfilePnpmInvocation',
     declaration: 'export interface ProfilePnpmInvocation {\n    readonly command: string;\n    readonly args: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n}',
   },
   {
     name: 'ProfileReconciliation',
     declaration: 'export interface ProfileReconciliation {\n    warnings: string[];\n    pending: PendingModule[];\n    restartReason?: \'module-comparison\' | \'package-moved\';\n}',
+  },
+  {
+    name: 'ProfileVersion',
+    declaration: 'export interface ProfileVersion {\n    readonly id: ProfileVersionId;\n    readonly at: number;\n    readonly summary: string;\n    readonly changedBy: ProfileChangedBy;\n}',
+  },
+  {
+    name: 'ProfileVersionChanges',
+    declaration: 'export interface ProfileVersionChanges {\n    readonly plugins: readonly ProfilePluginChange[];\n    readonly bundles: ReadonlyArray<{\n        readonly name: string;\n        readonly selected: boolean;\n    }>;\n    readonly builds: readonly ProfileBuildChange[];\n    readonly exemptions: readonly ProfileExemptionChange[];\n    readonly patchChanged: boolean;\n    readonly unreadable: readonly string[];\n}',
+  },
+  {
+    name: 'ProfileVersionId',
+    declaration: 'export type ProfileVersionId = Branded<\'ProfileVersionId\'>;',
+  },
+  {
+    name: 'ProfileVersionPreview',
+    declaration: 'export type ProfileVersionPreview = {\n    readonly ok: true;\n    readonly version: ProfileVersionSummary;\n    readonly changes: ProfileVersionChanges;\n} | {\n    readonly ok: false;\n    readonly error: ManagementError;\n};',
+  },
+  {
+    name: 'ProfileVersionSummary',
+    declaration: 'export interface ProfileVersionSummary {\n    readonly version: ProfileVersionId;\n    readonly summary: string;\n}',
   },
   {
     name: 'ProjectionChangeListener',

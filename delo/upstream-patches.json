@@ -825,6 +825,191 @@
       "path": "packages/boot/plugin-manager/tests/audit.spec.ts",
       "class": "delo-feature",
       "reason": "Plugin audit on install: the acceptance store's spec, showing that a missing, non-JSON or malformed record accepts nothing, that at most eight digests are kept per package at mode 0600, and that an unreadable record fails loud."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/index.ts",
+      "class": "security",
+      "reason": "Profile history and safe mode: every change saves a version of the profile's managed files in a git history, and the manager gains `undo`, `restore` and `history` Remotes, the in-process `listHistory`, `previewUndo` and `previewRestore` reads that save no version, the `config-editor/edited` version, and the optional `pluginAudit` service asked at every installation and before a bundle is enabled. `undo` and `restore` audit every package they bring back before any of its scripts or code run: an unchanged lockfile is audited before any file is written; otherwise the version is installed with `--ignore-scripts`, audited, and only then built with `pnpm rebuild --pending`, and a refusal puts the files back. The lockedIncludes wiring (C1) is left out. Lead verdict: kept; undo and restore escalate through the tool like the other writes, are person-only as Remotes and owner-only under LiveShare, and A118 adds the plugin audit over what they bring back; the audit refusals are stricter than stock, and leaving out the lockedIncludes wiring under A75 returns stock's reasons."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/tools.ts",
+      "class": "security",
+      "reason": "Profile history and settings by chat: two Config switches, both off by default so the tool's description, parameters and approvals are upstream's. `profileHistory` (C16 `profile_history`) adds `read_config`, `configure`, `history`, `undo` and `restore`; `readActionsExempt` (C16 `plugin_manager_read_exemption`) runs `list_plugins`, `list_bundles`, `list_version_exemptions`, `history` and `read_config` without the escalation. `history` lists versions through `listHistory` and records none; `read_config` and `configure` withhold the values of a Config that is not a native schema; the approval of `undo` and `restore` lists the plugins, bundles, builds and exemptions they change. No upstream action, parameter or export is removed or renamed. Lead verdict: kept with change; bounded to the five read actions behind the `plugin_manager_read_exemption` switch, off in the parity composition, and every write action, `configure`, `undo` and `restore` included, still requires the `danger-full-access` escalation."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/version-changes.ts",
+      "class": "security",
+      "reason": "Profile history and safe mode: compares the profile's managed files with a history version's and lists the dependencies, bundle selection, `allowBuilds` decisions and version exemptions it changes, and names the packages it brings back, which the plugin audit reads before they run. It reads file text only. Lead verdict: kept per A118; undo and restore audit what they bring back before any of its scripts run and list the plugins, builds and exemptions that change in their approval, which is stricter than stock."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/types.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: adds the audit, undo, restore, history, version-change and preview types and the new refusal codes and stages. The lockedIncludes `locked` reason (C1) is left out."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/history.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the profile's history, a git repository whose git directory is `.plugin-manager/history` and whose work tree is the profile, run with no system or global configuration, no hooks and no signing, writing files at mode 0600."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/failure.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: `ManagementFailure` carries a diagnostic and the plugin audit's result for the codes that report them."
+    },
+    {
+      "path": "packages/boot/plugin-manager/package.json",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: adds the `./history` export for safe-mode recovery (C3) and the dsh-settings dependency and optional dsh-config-editor peer that settings by chat uses. Upstream's other fields are unchanged."
+    },
+    {
+      "path": "packages/boot/plugin-manager/tests/manager.spec.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the manager's audit, history, undo, restore, preview and settings-version cases, including a restore whose audit runs after the held-back install and before the builds, a refusal that puts the files back, and an undo that audits a bundle it selects before writing any file. The lockedIncludes case (C1) is left out."
+    },
+    {
+      "path": "packages/boot/plugin-manager/tests/history.spec.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the git history's spec."
+    },
+    {
+      "path": "packages/boot/plugin-manager/tests/version-changes.spec.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the version comparison's spec."
+    },
+    {
+      "path": "packages/boot/plugin-manager/tests/tools.spec.ts",
+      "class": "security",
+      "reason": "Profile history and settings by chat: upstream's every-action-escalates assertions stand unchanged for the switch-off composition; the switch-on cases show that only the five read actions run without the escalation while every write action, `configure`, `undo` and `restore` included, still requires it, that `history` records no version, that `read_config` withholds the values of a non-native Config, and that the approval of `undo` and `restore` lists what they change. Lead verdict: kept with change; stock's assertions over every action hold with the C16 switch off, and the exemption and the withheld values are asserted only with it on."
+    },
+    {
+      "path": "packages/boot/plugin-manager/README.md",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the history, undo, restore, audit, settings and switch text, the `gitCommand` and `historyTimeoutMs` rows, the tool's two options and two failure rows. The lockedIncludes paragraph and row (C1) are left out."
+    },
+    {
+      "path": "packages/boot/plugin-manager/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the Chinese counterpart of the sections changed in README.md."
+    },
+    {
+      "path": "packages/boot/plugin-manager/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the consistency record re-recorded after the sections changed in README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/api/remotes/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: re-exports the audit and profile-version types the Plugins page uses."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/locales.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the History view, restore, audit and install-terminal labels in every locale. The lockedIncludes `reasonLocked` labels (C1) are left out."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/presentation.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the audit-finding and restore messages. The `locked` mapping (C1) is left out."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/navigation-store.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the History view in the page's navigation."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/manager-store.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the History view's state, one restore at a time, and the audit acceptance the person gives on the failed install screen, re-placed onto upstream's log-path and failure-stage changes."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the History view and the audit findings on the install screens. The read-only note style and the distribution-layer listing (C1) are left out; the History introduction has its own style."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the audit-list, version and History-introduction styles. The `.readOnlyNote` block (C1) is left out."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/tests/components.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the History view and audit-finding component cases. The lockedIncludes listing and read-only note cases (C1) are left out."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/tests/manager-store.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the store's history, audit-acceptance and versionKey cases, with upstream's failure stage in the expected failure."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/README.md",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the History paragraph, the configuration-page sentence and the `openItem` navigation text. The distribution-layer clause and the lock sentence (C1) are left out."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the Chinese counterpart of the sections changed in README.md."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the consistency record re-recorded after the sections changed in README.md and its Chinese counterpart."
+    },
+    {
+      "path": "docs/subsystems/boot.md",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the version, preview, plugin audit and `ConfigEdit` paragraphs, and the catalog regions gen-cordis-catalog regenerates for the new service, methods and event."
+    },
+    {
+      "path": "docs/subsystems/boot.zh.md",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the Chinese counterpart of the paragraphs added to boot.md, and the regenerated catalog regions."
+    },
+    {
+      "path": "docs/subsystems/boot.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Profile history and safe mode: the consistency record re-recorded after the paragraphs were added to boot.md and its Chinese counterpart."
+    },
+    {
+      "path": "docs/capability-seams.md",
+      "class": "delo-feature",
+      "reason": "Plugin audit on install: gen-doc-graphs adds the `ctx.pluginAudit` seam."
+    },
+    {
+      "path": "docs/capability-seams.zh.md",
+      "class": "delo-feature",
+      "reason": "Plugin audit on install: the `ctx.pluginAudit` seam in the Chinese counterpart."
+    },
+    {
+      "path": "docs/capability-seams.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Plugin audit on install: the consistency record re-recorded after the `ctx.pluginAudit` row was added to both sides."
+    },
+    {
+      "path": "docs/event-producer-consumer.md",
+      "class": "delo-feature",
+      "reason": "Settings by chat and profile history: gen-doc-graphs adds `config-editor/edited` and moves the plugin-manager event line numbers."
+    },
+    {
+      "path": "docs/event-producer-consumer.zh.md",
+      "class": "delo-feature",
+      "reason": "Settings by chat and profile history: the same generated rows in the Chinese counterpart."
+    },
+    {
+      "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
+      "class": "delo-feature",
+      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event."
+    },
+    {
+      "path": "scripts/gen-cordis-catalog.ts",
+      "class": "delo-feature",
+      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. Upstream's rows are unchanged."
+    },
+    {
+      "path": "scripts/gen-doc-graphs.ts",
+      "class": "delo-feature",
+      "reason": "Plugin audit on install: the `pluginAudit` row of the capability-seam table, a Service Definition the plugin manager consumes and a distribution provides. Upstream's rows are unchanged."
     }
   ],
   "retired": []

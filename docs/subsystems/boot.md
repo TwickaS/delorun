@@ -20,6 +20,12 @@ The [boot package group](../../packages/boot/README.md) owns launcher-provided p
 
 `ChangeResult.changed` reports a disk edit independently of `application`: `applied`, `restart-required`, `overridden` or `failed`. Optional `error` carries a localizable code and external diagnostic. `packageResult` records the run's exit status, bounded output, truncation flag and complete diagnostic log path, plus `timedOut` when the manager terminated a run that stopped printing or the GitHub connection check hit its deadline; a terminated run records the coerced status 1 because its process returned none. A terminated run is classified `timeout` whatever exit status the signal left behind, so installation and removal report failure instead of success and no further registry is asked. `pendingBuilds` lists undecided packages across the profile; `approvedBuilds` records the names granted permission by this operation; `registries` lists the registries an installation asked, in order; `bundle` and `version` name the package a finished installation added and its manifest version; `failedAt` says whether the last failed run could not reach the registry it asked or the host a git or tarball spec is fetched from.
 
+`ProfileVersionId` identifies one version in a profile's history, a git commit id; callers obtain it from `history`. `ProfileHistoryInfo` is either `available: true` with `versions`, newest first, each with its `id`, time `at` in epoch milliseconds, one-line `summary` and `changedBy` (`person`, `agent` with its `sessionId`, or `outside`), or `available: false` with the `reason` git gave. `ChangeResult.undone` and `restored` name the version an undo took back or a restore put back, and `changes` lists what it changed. `ProfileVersionPreview` is what `previewUndo` and `previewRestore` read without saving a version: `ok: true` with the target `version` and its `changes` (the dependencies added, removed or at another spec, the bundles selected or deselected, the `allowBuilds` decisions, the version exemptions granted or revoked, whether `cordis.patch.yml` differs, and the files that could not be parsed), or `ok: false` with the refusal the operation would end with. An undo or a restore audits each package it brings back with `pluginAudit` before any of its code runs.
+
+`pluginAudit` is a distribution's optional plugin audit, a Service Definition the manager consumes and does not provide: `audit(target)` receives a `PluginAuditTarget` (the package's `name`, `version`, installed `dir` and the digests the user `accepted` for it) and answers a `PluginAuditResult` (a `decision` of `clear`, `accepted`, `needs-acceptance` or `refused`, the findings' `digest`, the `findings`, each a rule, title, severity, file, line and excerpt, and whether it was `truncated`). The manager asks it at every installation and before it enables a bundle; `needs-acceptance` refuses with `audit-findings` and `refused` with `audit-refused`, each error carrying `audit`. `InstallBundleOptions.acceptedAudit` names a digest the user accepted, which the manager saves for the package in `.plugin-manager/audits.json` once the audit accepts it, and `ChangeResult.audit` carries the findings a change went on with. Without the service nothing is audited.
+
+`ConfigEdit` names the entry, by its profile patch id, whose configuration `ConfigEditor.edit` saved and applied; `config-editor/edited` carries it once the profile's lock is released, and the plugin manager saves the edit as a version.
+
 ## Market records
 
 [Plugin Market](../../packages/boot/plugin-market/README.md) reads index format 1, validated by [`dsh-plugin-market-index`](../../packages/util/plugin-market-index/README.md).
@@ -133,7 +139,8 @@ entries(): Entry[]
  */
 configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>
 
-/** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules.
+/** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules. A saved
+ * edit is announced as `config-editor/edited`.
  * @param entry Current Loader entry, also used to detect replacement during the write.
  * @param change Derive a raw config from the current entry and its inherited layer.
  * @returns Fulfillment after Loader reconciliation completes.
@@ -195,6 +202,23 @@ async reconcileProfile(requiredIds: readonly string[] = []): Promise<ProfileReco
 
 Source: [`packages/boot/hmr/src/index.ts`](../../packages/boot/hmr/src/index.ts)
 
+<a id="ctxpluginaudit--pluginaudit"></a>
+
+### `ctx.pluginAudit` — `PluginAudit`
+
+The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as `pluginAudit`; without one, nothing is audited.
+
+```ts cordis-catalog
+/**
+ * Audit a package.
+ * @param target The package, its directory and the digests the user accepted for it.
+ * @returns The findings, their digest and the decision.
+ */
+audit(target: PluginAuditTarget): Promise<PluginAuditResult>
+```
+
+Source: [`packages/boot/plugin-manager/src/types.ts`](../../packages/boot/plugin-manager/src/types.ts)
+
 <a id="ctxpluginmanager--pluginmanager"></a>
 
 ### `ctx.pluginManager` — `PluginManager`
@@ -230,6 +254,58 @@ Manage profile files and apply their declared reload lifecycle.
  * @returns Saved and runtime outcomes. Startup-only profiles require restart.
  */
 @Remote setVersionExemption(packageVersion: string, runtimeVersion: string, enabled: boolean, acceptRisk?: boolean): Promise<ChangeResult>
+
+/**
+ * Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit
+ * made outside plugin management since the last change is saved as a version first, so it is that edit undo takes
+ * back. It installs and audits what it brings back as {@link restore} does. The undo is itself a version, so undoing
+ * it is another undo.
+ * @returns Saved and runtime outcomes, naming the version taken back as `undone` and listing what changed in
+ * `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
+ * git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
+ */
+@Remote undo(): Promise<ChangeResult>
+
+/**
+ * Put the profile back as one version held it, and apply it: a restored dependency set is installed from the restored
+ * lockfile first, and every package the version brings back is audited before any of its code runs. An edit made
+ * outside plugin management is saved as a version first. The restore is itself a version.
+ * @param version - the version to restore, as {@link history} lists it.
+ * @returns Saved and runtime outcomes, naming the version as `restored` and listing what changed in `changes`. Fails
+ * with `unknown-version` when the history holds no such version, `history-unavailable` when git cannot keep it, and
+ * `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
+ */
+@Remote restore(version: ProfileVersionId): Promise<ChangeResult>
+
+/**
+ * The profile's versions, newest first, after saving an edit made outside plugin management as a version.
+ * @param limit - the most to read, from 1 to 500.
+ * @returns the versions, or why the profile has no history.
+ */
+@Remote history(limit: number): Promise<ProfileHistoryInfo>
+
+/**
+ * The profile's versions, newest first, as the history holds them. Unlike {@link history}, it saves no version for an
+ * edit made outside plugin management and never starts the history, so it writes nothing and runs only git reads.
+ * @param limit - the most to read, from 1 to 500.
+ * @returns the versions, empty before the history starts, or why git cannot read it.
+ */
+async listHistory(limit: number): Promise<ProfileHistoryInfo>
+
+/**
+ * What {@link undo} would put back if it ran now, read without saving a version or starting the history: the version
+ * before the latest, or the latest itself when the managed files differ from it, since undo first saves that outside
+ * edit and then takes it back.
+ * @returns the version undo restores and what it changes, or the refusal undo would end with.
+ */
+async previewUndo(): Promise<ProfileVersionPreview>
+
+/**
+ * What {@link restore} would put back if it ran now, read without saving a version or starting the history.
+ * @param version - the version to restore, as {@link history} lists it.
+ * @returns the version and what it changes, or the refusal restore would end with.
+ */
+async previewRestore(version: ProfileVersionId): Promise<ProfileVersionPreview>
 
 /** Read current plugins, including why a row cannot be changed through the profile patch.
  * @returns Current runtime entries with persistent patch targets.
@@ -469,6 +545,28 @@ Profile patches were reconciled into the running Loader tree: every entry update
 ```
 
 Source: [`packages/boot/app-boot/src/index.ts`](../../packages/boot/app-boot/src/index.ts)
+
+<a id="config-editor-events"></a>
+
+### `config-editor/*` events
+
+<a id="config-editoredited--emit"></a>
+
+#### `config-editor/edited` — emit
+
+An edit was saved to the profile patch and applied: emitted after the profile's lock is released, in the caller's asynchronous context, so a listener can name who made it.
+
+```ts cordis-catalog
+/**
+ * An edit was saved to the profile patch and applied: emitted after the profile's lock is released, in the
+ * caller's asynchronous context, so a listener can name who made it.
+ * @mode emit
+ * @param edit - the profile patch id of the entry whose configuration changed.
+ */
+'config-editor/edited'(edit: ConfigEdit): void
+```
+
+Source: [`packages/boot/config-editor/src/index.ts`](../../packages/boot/config-editor/src/index.ts)
 
 <a id="hmr-events"></a>
 

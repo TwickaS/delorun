@@ -1,4 +1,7 @@
-/** Agent controls use the same manager methods as the Web and bound inventory reads. */
+/**
+ * Agent controls use the same manager methods as the Web and bound inventory reads. The cases outside the switch block
+ * run with both C16 switches off, as the parity composition does, and keep upstream's assertions.
+ */
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
@@ -6,25 +9,29 @@ import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
 import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import SessionProjections from '@deepseek-ai/dsh-session-projection'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
-import { expect, it, onTestFinished, vi } from 'vitest'
+import z from '@deepseek-ai/schemastery'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type PluginManager from '../src/index.ts'
-import type { BundleInfo } from '../src/types.ts'
+import type { BundleInfo, ProfileVersionId, ProfileVersionPreview } from '../src/types.ts'
 import * as tool from '../src/tools.ts'
+
+const NO_CHANGES = { plugins: [], bundles: [], builds: [], exemptions: [], patchChanged: false, unreadable: [] }
 
 function resultText(result: ToolExecutionResult): string {
   if (typeof result.value !== 'string') throw new Error('Expected a serialized manager result')
   return result.value
 }
 
-async function fixture(mode: 'read-only' | 'workspace-write' | 'danger-full-access' = 'danger-full-access', approval?: 'ask' | 'never') {
+async function fixture(mode: 'read-only' | 'workspace-write' | 'danger-full-access' = 'danger-full-access', approval?: 'ask' | 'never', config: tool.Config = {}) {
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
-  const manager = {
+  const stock = {
     listPlugins: vi.fn(async () => Array.from({ length: 30 }, (_, i) => ({ entryId: `include:${i}`, enabled: true }))),
     listBundles: vi.fn(async () => [{ name: 'bundle', enabled: true }]),
     setPluginEnabled: vi.fn(async () => ({ changed: true, application: 'applied' })),
@@ -34,6 +41,16 @@ async function fixture(mode: 'read-only' | 'workspace-write' | 'danger-full-acce
     listVersionExemptions: vi.fn(() => ({ exemptions: { 'example@1.2.3': ['0.1.7-alpha.1'] }, warnings: [] })),
     setVersionExemption: vi.fn(async () => ({ changed: true, application: 'applied' })),
   }
+  // The history methods only the switched-on tool calls.
+  const history = {
+    undo: vi.fn(async () => ({ changed: false, application: 'failed', error: { code: 'nothing-to-undo' } })),
+    restore: vi.fn(async () => ({ changed: false, application: 'failed', error: { code: 'unknown-version' } })),
+    history: vi.fn(async () => ({ available: true, versions: [] })),
+    listHistory: vi.fn(async () => ({ available: true, versions: [{ id: 'a'.repeat(40), at: 0, summary: 'Turned off include:1', changedBy: { kind: 'person' } }] })),
+    previewUndo: vi.fn(async (): Promise<ProfileVersionPreview> => ({ ok: true, version: { version: brandString<ProfileVersionId>('a'.repeat(40)), summary: 'Turned off include:1' }, changes: NO_CHANGES })),
+    previewRestore: vi.fn(async (): Promise<ProfileVersionPreview> => ({ ok: true, version: { version: brandString<ProfileVersionId>('b'.repeat(40)), summary: 'Installed bundle' }, changes: NO_CHANGES })),
+  }
+  const manager = { ...stock, ...history }
   ctx.provide('pluginManager', manager as unknown as PluginManager)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
@@ -41,11 +58,11 @@ async function fixture(mode: 'read-only' | 'workspace-write' | 'danger-full-acce
   await ctx.plugin(SessionProjections)
   await ctx.plugin(SandboxPolicy, { mode })
   if (approval !== undefined) await ctx.plugin(ApprovalService, { policy: approval })
-  const fiber = await ctx.plugin(tool)
+  const fiber = await ctx.plugin(tool, config)
   const call = (args: unknown, agent?: Agent, signal = new AbortController().signal) => executeToolFixture(ctx, { name: 'plugin_manager', arguments: args,
     ...agent === undefined ? {} : { agent },
     callId: ToolCallId('manager-call'), signal })
-  return { ctx, manager, call, fiber }
+  return { ctx, manager: stock, history, call, fiber }
 }
 
 it.each(['read-only', 'workspace-write'] as const)('denies every management action in %s before accessing the manager', async (mode) => {
@@ -308,4 +325,270 @@ it('tells the agent the next step for each change outcome it can act on', async 
   expect(await outcome({ changed: false, application: 'failed' })).toContain('Report the diagnostic')
   expect(await outcome({ changed: false, application: 'failed', error: { code: 'unsupported-platform' } }))
     .toBe('This bundle cannot run on the current Host platform; ask the user to use a supported Host.')
+})
+
+const STOCK_DESCRIPTION = 'List plugins or bundles in the current profile, enable or disable them, install a bundle, or remove an installed bundle. Every action requires danger-full-access permission or approval for this call. Approval does not change the session permission mode. Changes affect every session in this profile. List first to obtain exact identifiers. Package installation can execute allowed build scripts. Live profiles apply changes immediately, including upgrades of installed packages; a change result that is not applied carries nextStep, which says what to do or tell the user. Unmet DSH version requirements (engines.dsh, else DSH peer dependencies) block installation and activation. Version exemptions risk crashes and data loss: warn the user and obtain explicit permission for the exact plugin and runtime versions before granting one.'
+const STOCK_ACTIONS = ['list_plugins', 'list_bundles', 'set_plugin', 'set_bundle', 'install_bundle', 'remove_bundle', 'list_version_exemptions', 'set_version_exemption']
+const WRITE_ACTIONS = ['set_plugin', 'set_bundle', 'configure', 'install_bundle', 'remove_bundle', 'set_version_exemption', 'undo', 'restore']
+const READ_ACTIONS = ['list_plugins', 'list_bundles', 'list_version_exemptions', 'history', 'read_config']
+const SWITCHED_ON: tool.Config = { readActionsExempt: true, profileHistory: true }
+
+// A configuration editor with one entry whose Config is the given native schema, or none.
+const Settings = z.object({ enabled: z.boolean().default(true), limit: z.natural().default(5), token: z.string().role('secret') })
+type Fields = Record<string, unknown>
+function editor(config: Fields, inherited: Fields, override: Fields, native: unknown = Settings) {
+  const entry = { options: { id: 'delo-agent-context', name: '@delo/plugin-agent-context', config }, fiber: { runtime: { Config: native } } }
+  const saved: Array<Record<string, unknown>> = []
+  return {
+    saved,
+    configuration: vi.fn(() => [{ entry, inherited, override }]),
+    edit: vi.fn(async (_entry: unknown, change: (current: Fields, inherited: Fields) => Fields) => {
+      saved.push(change(structuredClone(config), inherited))
+    }),
+  }
+}
+
+it('keeps upstream\'s description, actions and parameters with both switches off', async () => {
+  const { ctx, call, history } = await fixture()
+  const definition = ctx.tools.get('plugin_manager')!
+  expect(definition.description).toBe(STOCK_DESCRIPTION)
+  const schema = definition.parameters as { properties: Record<string, { enum?: string[] }> }
+  expect(Object.keys(schema.properties)).toEqual(['action', 'target', 'enabled', 'runtimeVersion', 'acceptRisk', 'approvedBuilds', 'registry', 'offset', 'limit'])
+  expect(schema.properties['action']?.enum).toEqual(STOCK_ACTIONS)
+  for (const action of ['read_config', 'configure', 'undo', 'history', 'restore']) {
+    expect(JSON.stringify((await call({ action, target: 'b'.repeat(40) })).content)).toContain('invalid arguments')
+  }
+  for (const method of Object.values(history)) expect(method).not.toHaveBeenCalled()
+})
+
+it('states the read exemption in the description only with its switch on', async () => {
+  const exempt = await fixture('danger-full-access', undefined, { readActionsExempt: true })
+  expect(exempt.ctx.tools.get('plugin_manager')!.description).toBe(STOCK_DESCRIPTION.replace(
+    'Every action requires danger-full-access permission or approval for this call.',
+    'Every change requires danger-full-access permission or approval for this call; listing does not.'))
+  const both = await fixture('danger-full-access', undefined, SWITCHED_ON)
+  expect(both.ctx.tools.get('plugin_manager')!.description).toContain('Every change requires danger-full-access permission or approval for this call; listing, history and read_config do not.')
+  const history = await fixture('danger-full-access', undefined, { profileHistory: true })
+  expect(history.ctx.tools.get('plugin_manager')!.description).toContain('Every action requires danger-full-access permission or approval for this call.')
+})
+
+it.each(['read-only', 'workspace-write'] as const)('plugin_manager write actions keep the escalation under the read exemption in %s', async (mode) => {
+  const { ctx, call, manager, history } = await fixture(mode, undefined, SWITCHED_ON)
+  const settings = editor({ enabled: true }, {}, {})
+  ctx.provide('configEditor', settings as never)
+  for (const action of WRITE_ACTIONS) {
+    const result = await call({ action, target: action === 'restore' ? 'b'.repeat(40) : 'delo-agent-context', enabled: true, runtimeVersion: '0.1.0', config: { enabled: false } })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('requires approval, but no approval service is composed')
+  }
+  // No write reached the manager or the configuration editor; an undo or a restore read only what its approval lists.
+  for (const method of Object.values(manager)) expect(method).not.toHaveBeenCalled()
+  for (const method of [history.undo, history.restore, history.history, history.listHistory, settings.edit]) {
+    expect(method).not.toHaveBeenCalled()
+  }
+  for (const action of READ_ACTIONS) expect((await call({ action, target: 'delo-agent-context' })).isError).toBe(false)
+  const reads = [manager.listPlugins, manager.listBundles, manager.listVersionExemptions, history.listHistory]
+  expect(reads.map(method => method.mock.calls.length)).toEqual([1, 1, 1, 1])
+})
+
+it('escalates the history and settings reads with only the profile_history switch on', async () => {
+  const { ctx, call, history } = await fixture('workspace-write', undefined, { profileHistory: true })
+  ctx.provide('configEditor', editor({ enabled: true }, {}, {}) as never)
+  for (const action of [...READ_ACTIONS, ...WRITE_ACTIONS]) {
+    expect(JSON.stringify((await call({ action, target: 'b'.repeat(40), enabled: true, config: { enabled: false } })).content)).toContain('requires approval')
+  }
+  expect(history.listHistory).not.toHaveBeenCalled()
+})
+
+it.each(['read-only', 'workspace-write'] as const)('approves each change once in %s with the read exemption on, and asks nothing for a read', async (mode) => {
+  const { ctx, call, manager, history } = await fixture(mode, 'ask', SWITCHED_ON)
+  const settings = editor({ enabled: true }, {}, {})
+  ctx.provide('configEditor', settings as never)
+  const agent = activeAgent()
+  const prompted = vi.fn(async () => 'allowed-once' as const)
+  ctx.on('approval/request', prompted)
+  for (const action of [...READ_ACTIONS, ...WRITE_ACTIONS]) {
+    expect((await call({ action, target: action === 'read_config' || action === 'configure' ? 'delo-agent-context' : 'bundle@1.0.0', enabled: true, runtimeVersion: '0.1.7-alpha.1', acceptRisk: true, config: { limit: 6 } }, agent)).isError).toBe(false)
+  }
+  expect(prompted).toHaveBeenCalledTimes(WRITE_ACTIONS.length)
+  for (const method of Object.values(manager)) expect(method).toHaveBeenCalledTimes(1)
+  for (const method of [history.undo, history.restore, history.listHistory, settings.edit]) expect(method).toHaveBeenCalledTimes(1)
+  expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(mode)
+  const reasons = agent.session.snapshotEvents().flatMap(event => event.type === 'approval/asked' ? [event.data.reason] : [])
+  expect(reasons).toHaveLength(WRITE_ACTIONS.length)
+  WRITE_ACTIONS.forEach((action, index) => { expect(reasons[index]).toContain(`plugin_manager {"action":"${action}"`) })
+})
+
+it('plugin_manager history records no version', async () => {
+  const { call, history } = await fixture('read-only', undefined, SWITCHED_ON)
+  expect(JSON.parse(resultText(await call({ action: 'history' })))).toMatchObject({ available: true, versions: [{ summary: 'Turned off include:1' }] })
+  expect(history.listHistory).toHaveBeenLastCalledWith(25)
+  await call({ action: 'history', limit: 100 })
+  expect(history.listHistory).toHaveBeenLastCalledWith(100)
+  // The manager's history, which saves an outside edit as a version first, is never the tool's read.
+  expect(history.history).not.toHaveBeenCalled()
+  const escalated = await fixture('danger-full-access', undefined, { profileHistory: true })
+  await escalated.call({ action: 'history' })
+  expect(escalated.history.listHistory).toHaveBeenCalledTimes(1)
+  expect(escalated.history.history).not.toHaveBeenCalled()
+})
+
+it('lists the plugins, builds and exemptions an undo or a restore changes in its approval', async () => {
+  const { ctx, call, history } = await fixture('workspace-write', 'ask', SWITCHED_ON)
+  const agent = activeAgent()
+  ctx.on('approval/request', async () => 'allowed-once' as const)
+  history.previewRestore.mockResolvedValueOnce({ ok: true, version: { version: brandString<ProfileVersionId>('b'.repeat(40)), summary: 'Installed audited' }, changes: {
+    plugins: [{ name: 'audited', change: 'added', to: '1.0.0' }, { name: 'extra', change: 'version', from: '2.0.0', to: '1.0.0' }],
+    bundles: [{ name: 'audited', selected: true }],
+    builds: [{ name: 'audited', to: 'allowed' }, { name: 'native', from: 'allowed', to: 'denied' }],
+    exemptions: [{ packageVersion: 'audited@1.0.0', runtimeVersion: '0.2.2', change: 'added' }],
+    patchChanged: true, unreadable: [],
+  } })
+  expect((await call({ action: 'restore', target: 'b'.repeat(40) }, agent)).isError).toBe(false)
+  expect(history.previewRestore).toHaveBeenCalledWith('b'.repeat(40))
+  expect((await call({ action: 'undo' }, agent)).isError).toBe(false)
+  const reasons = agent.session.snapshotEvents().flatMap(event => event.type === 'approval/asked' ? [event.data.reason] : [])
+  expect(reasons[0]).toContain('It puts the profile back as version bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ("Installed audited") and changes plugins: adds audited 1.0.0, puts extra at 1.0.0 (now 2.0.0); bundles: selects audited; build scripts: audited allowed (now no decision), native denied (now allowed); version exemptions: grants audited@1.0.0 on DSH 0.2.2; the profile patch cordis.patch.yml.')
+  expect(reasons[1]).toContain('("Turned off include:1") and changes no plugins, builds or exemptions.')
+  expect(history.restore).toHaveBeenCalledTimes(1)
+  expect(history.undo).toHaveBeenCalledTimes(1)
+})
+
+it('asks before an undo whose preview refuses, then returns the refusal without undoing', async () => {
+  const { ctx, call, history } = await fixture('workspace-write', 'ask', SWITCHED_ON)
+  const agent = activeAgent()
+  const prompted = vi.fn(async () => 'allowed-once' as const)
+  ctx.on('approval/request', prompted)
+  history.previewUndo.mockResolvedValueOnce({ ok: false, error: { code: 'history-unavailable', diagnostic: 'git could not run' } })
+  const result = JSON.parse(resultText(await call({ action: 'undo' }, agent))) as Record<string, unknown>
+  expect(result).toMatchObject({ application: 'failed', changed: false, stage: 'undo', error: { code: 'history-unavailable' } })
+  expect(result['nextStep']).toContain('undo and restore are unavailable')
+  expect(prompted).toHaveBeenCalledTimes(1)
+  expect(agent.session.snapshotEvents().flatMap(event => event.type === 'approval/asked' ? [event.data.reason] : [])[0])
+    .toContain('It cannot run: history-unavailable (git could not run); nothing will change.')
+  expect(history.undo).not.toHaveBeenCalled()
+})
+
+it('reads no preview for an undo or a restore that full access runs without a prompt', async () => {
+  const { call, history } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+  await call({ action: 'undo' })
+  await call({ action: 'restore', target: 'b'.repeat(40) })
+  expect(history.previewUndo).not.toHaveBeenCalled()
+  expect(history.previewRestore).not.toHaveBeenCalled()
+  expect(history.undo).toHaveBeenCalledWith()
+  expect(history.restore).toHaveBeenCalledWith('b'.repeat(40))
+})
+
+it('describes each kind of change an undo or a restore makes', () => {
+  expect(tool.describeChanges({
+    plugins: [{ name: 'gone', change: 'removed', from: '1.0.0' }], bundles: [{ name: 'gone', selected: false }], builds: [],
+    exemptions: [{ packageVersion: 'gone@1.0.0', runtimeVersion: '0.2.2', change: 'removed' }], patchChanged: false, unreadable: ['package.json'],
+  })).toBe('plugins: removes gone 1.0.0; bundles: deselects gone; version exemptions: revokes gone@1.0.0 on DSH 0.2.2; files it cannot read, whose changes are not listed: package.json')
+})
+
+it('refuses a restore without a version before reading a preview or asking', async () => {
+  const { ctx, call, history } = await fixture('workspace-write', 'ask', SWITCHED_ON)
+  const prompted = vi.fn(async () => 'allowed-once' as const)
+  ctx.on('approval/request', prompted)
+  expect(JSON.stringify((await call({ action: 'restore' }, activeAgent())).content)).toContain('target version id from history is required')
+  expect(history.previewRestore).not.toHaveBeenCalled()
+  expect(prompted).not.toHaveBeenCalled()
+})
+
+it('names a refusal without a diagnostic in the approval of an undo it would end', async () => {
+  const { ctx, call, history } = await fixture('workspace-write', 'ask', SWITCHED_ON)
+  const agent = activeAgent()
+  ctx.on('approval/request', async () => 'allowed-once' as const)
+  history.previewUndo.mockResolvedValueOnce({ ok: false, error: { code: 'nothing-to-undo' } })
+  expect(JSON.parse(resultText(await call({ action: 'undo' }, agent)))).toMatchObject({ error: { code: 'nothing-to-undo' } })
+  expect(agent.session.snapshotEvents().flatMap(event => event.type === 'approval/asked' ? [event.data.reason] : [])[0]).toContain('It cannot run: nothing-to-undo; nothing will change.')
+})
+
+describe('with the profile_history and plugin_manager_read_exemption switches on', () => {
+  it('forwards the history actions and renders the returned outcome', async () => {
+    const { call, history } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    const undone = JSON.parse(resultText(await call({ action: 'undo' }))) as { nextStep?: string }
+    expect(undone.nextStep).toBe('The profile\'s history holds no earlier version to go back to.')
+    const restored = JSON.parse(resultText(await call({ action: 'restore', target: 'b'.repeat(40) }))) as { nextStep?: string }
+    expect(history.restore).toHaveBeenCalledWith('b'.repeat(40))
+    expect(restored.nextStep).toBe('Call history and retry with an id it lists.')
+  })
+
+  it.each([
+    { action: 'history', limit: 0 }, { action: 'history', limit: 101 }, { action: 'history', limit: 1.5 },
+    { action: 'restore' }, { action: 'read_config' }, { action: 'configure', target: 'delo-agent-context' },
+  ])('rejects incomplete or unbounded tool inputs: %j', async (args) => {
+    const { ctx, call } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    ctx.provide('configEditor', editor({}, {}, {}) as never)
+    expect((await call(args)).isError).toBe(true)
+  })
+
+  it('presents reads and changes distinctly', async () => {
+    const { ctx } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    const definition = ctx.tools.get('plugin_manager')!
+    expect(definition.presentCall?.({ action: 'history' })).toMatchObject({ kind: 'read' })
+    expect(definition.presentCall?.({ action: 'read_config', target: 'delo-agent-context' })).toMatchObject({ kind: 'read' })
+    expect(definition.presentCall?.({ action: 'restore', target: 'a'.repeat(40) })).toMatchObject({ kind: 'other' })
+    expect(definition.presentCall?.({ action: 'configure', target: 'delo-agent-context' })).toMatchObject({ kind: 'other' })
+  })
+
+  it('reads an entry\'s settings with secrets left out, what the bundles give it, and its schema', async () => {
+    const { ctx, call } = await fixture('read-only', undefined, SWITCHED_ON)
+    ctx.provide('configEditor', editor({ enabled: false, token: 't0ken' }, { enabled: true }, { enabled: false }) as never)
+    const read = JSON.parse(resultText(await call({ action: 'read_config', target: 'delo-agent-context' }))) as Record<string, unknown>
+    expect(read).toMatchObject({ patchId: 'delo-agent-context', name: '@delo/plugin-agent-context', config: { enabled: false }, inherited: { enabled: true }, overridden: true, secrets: [{ path: ['token'], set: true }] })
+    expect(JSON.stringify(read)).not.toContain('t0ken')
+    // The projection Config.listConfigs gives: each field also admits a loader expression.
+    expect(read.schema).toMatchObject({ $defs: { loaderExpression: { required: ['__jsExpr'] } } })
+    expect(JSON.stringify(read.schema)).toContain('"enabled":{"default":true,"anyOf":[{"type":["boolean","null"]}')
+  })
+
+  it.each([['no schema', null], ['a function', () => ({})], ['a plain object', { type: 'object' }]])('plugin_manager read_config withholds values of a non-native Config: %s', async (_name, native) => {
+    const { ctx, call } = await fixture('read-only', undefined, SWITCHED_ON)
+    ctx.provide('configEditor', editor({ apiKey: 's3cret', a: 1 }, { apiKey: 'inherited-s3cret' }, { a: 1 }, native) as never)
+    const read = JSON.parse(resultText(await call({ action: 'read_config', target: 'delo-agent-context' }))) as Record<string, unknown>
+    expect(read).toEqual({ patchId: 'delo-agent-context', name: '@delo/plugin-agent-context', overridden: true, valuesWithheld: true, schema: null })
+    expect(JSON.stringify(read)).not.toContain('s3cret')
+  })
+
+  it('reads an entry without settings whose Config is a native schema as an empty object', async () => {
+    const { ctx, call } = await fixture('read-only', undefined, SWITCHED_ON)
+    ctx.provide('configEditor', { configuration: () => [{ entry: { options: { id: 'bare', name: 'bare-plugin' }, fiber: { runtime: { Config: Settings } } }, inherited: {}, override: {} }] } as never)
+    expect(JSON.parse(resultText(await call({ action: 'read_config', target: 'bare' })))).toMatchObject({ config: {}, inherited: {}, overridden: false })
+  })
+
+  it('withholds an entry without settings whose Config is not a native schema', async () => {
+    const { ctx, call } = await fixture('read-only', undefined, SWITCHED_ON)
+    ctx.provide('configEditor', { configuration: () => [{ entry: { options: { id: 'bare', name: 'bare-plugin' } }, inherited: {}, override: {} }] } as never)
+    expect(JSON.parse(resultText(await call({ action: 'read_config', target: 'bare' })))).toEqual({ patchId: 'bare', name: 'bare-plugin', overridden: false, valuesWithheld: true, schema: null })
+  })
+
+  it('sets fields and puts others back through the configuration editor, listing each change without secrets', async () => {
+    const { ctx, call } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    const settings = editor({ enabled: true, limit: 9, old: 'x', token: 't0ken' }, { enabled: true, limit: 5 }, { limit: 9, old: 'x' })
+    ctx.provide('configEditor', settings as never)
+    const result: unknown = JSON.parse(resultText(await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false, extra: 1, token: 'n3w' }, reset: ['limit', 'old', 'unknown'] })))
+    expect(settings.saved).toEqual([{ enabled: false, limit: 5, extra: 1, token: 'n3w' }])
+    expect(result).toEqual({ patchId: 'delo-agent-context', changed: [
+      { field: 'old', before: 'x', after: null }, { field: 'enabled', before: true, after: false },
+      { field: 'limit', before: 9, after: 5 }, { field: 'extra', before: null, after: 1 },
+    ] })
+  })
+
+  it('names the fields a settings change made without their values when the Config is not a native schema', async () => {
+    const { ctx, call } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    ctx.provide('configEditor', editor({ apiKey: 's3cret', a: 1 }, { a: 2 }, { a: 1 }, null) as never)
+    const result: unknown = JSON.parse(resultText(await call({ action: 'configure', target: 'delo-agent-context', config: { apiKey: 'n3w' }, reset: ['a'] })))
+    expect(result).toEqual({ patchId: 'delo-agent-context', valuesWithheld: true, changed: [{ field: 'apiKey' }, { field: 'a' }] })
+  })
+
+  it('refuses without a configuration editor, an entry it does not address, or nothing to change', async () => {
+    const { ctx, call } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    const failure = async (args: object): Promise<string> => JSON.stringify((await call(args)).content)
+    expect(await failure({ action: 'read_config', target: 'delo-agent-context' })).toContain('no configuration editor')
+    ctx.provide('configEditor', editor({}, {}, {}) as never)
+    expect(await failure({ action: 'read_config' })).toContain('target entry patchId is required')
+    expect(await failure({ action: 'configure', target: 'other:row', config: { a: 1 } })).toContain('call list_plugins')
+    expect(await failure({ action: 'configure', target: 'delo-agent-context' })).toContain('needs config fields')
+  })
 })

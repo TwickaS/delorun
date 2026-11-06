@@ -60,6 +60,11 @@ const CODE_KEYS = {
   'stale-approval': 'reasonStaleApproval',
   'incompatible-version': 'reasonIncompatibleVersionUnnamed',
   'unsupported-platform': 'reasonUnsupportedPlatform',
+  'audit-findings': 'reasonAuditFindings',
+  'audit-refused': 'reasonAuditRefused',
+  'nothing-to-undo': 'reasonNothingToUndo',
+  'unknown-version': 'reasonUnknownVersion',
+  'history-unavailable': 'reasonHistoryUnavailable',
   'operation-error': 'reasonOperationError',
 } satisfies Record<ManagementError['code'], PluginManagerLocaleKey>
 
@@ -70,6 +75,7 @@ const FAILED_KEYS = {
   uninstall: 'failedUninstall',
   rowEnable: 'failedRowEnable',
   rowDisable: 'failedRowDisable',
+  restore: 'failedRestore',
 } satisfies Record<FailedAction, PluginManagerLocaleKey>
 
 /**
