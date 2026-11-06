@@ -12,6 +12,7 @@ import {
   isOwnerAuthorizedRuntime,
   isPermissive,
   type Manifest,
+  excludedManifestPatterns,
   manifestPatterns,
   parsePyprojectRequirements,
   parseVendoredRows,
@@ -495,6 +496,14 @@ describe('official Claude distribution authorization', () => {
         '@anthropic-ai/unrelated': '1.0.0',
       },
     })).toThrow('outside its authorized platform-payload identity')
+  })
+})
+
+describe('excludedManifestPatterns', () => {
+  it('leaves out the members pnpm excludes with !, and reads them as their manifests', () => {
+    const members = ['packages/*/*', 'delo/apps/*', '!delo/apps/docs']
+    expect(manifestPatterns(members)).toEqual(['package.json', 'packages/*/*/package.json', 'delo/apps/*/package.json'])
+    expect(excludedManifestPatterns(members)).toEqual(['delo/apps/docs/package.json'])
   })
 })
 

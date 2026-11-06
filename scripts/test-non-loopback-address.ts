@@ -40,14 +40,27 @@ async function probeBindableAddress(candidates: string[], description: string): 
  * First local non-loopback IPv4 address that really accepts a listen.
  *
  * IPv4 only: supported CI hosts need not own a non-loopback IPv6 address.
+ * Link-local addresses (`169.254.0.0/16`) are left out: a host autoconfigures
+ * them per link instead of being assigned one, and on a WSL host the mirrored
+ * network's link-local address accepts a listen while the Web profile's
+ * authenticated requests over it stall.
  * @returns the bindable address, or undefined when the scenario must skip.
  */
 export async function probeNonLoopbackIpv4(): Promise<string | undefined> {
   const candidates: string[] = []
   for (const entry of Object.values(networkInterfaces()).flat()) {
-    if (entry !== undefined && entry.family === 'IPv4' && !entry.internal) candidates.push(entry.address)
+    if (entry !== undefined && entry.family === 'IPv4' && !entry.internal && !entry.address.startsWith('169.254.')) candidates.push(entry.address)
   }
   return probeBindableAddress(candidates, 'non-loopback IPv4')
+}
+
+/**
+ * IPv6 loopback, when this host can listen on it; a host whose loopback has
+ * IPv6 turned off cannot.
+ * @returns `::1`, or undefined when the scenario must skip.
+ */
+export async function probeIpv6Loopback(): Promise<string | undefined> {
+  return probeBindableAddress(['::1'], 'IPv6 loopback')
 }
 
 /**

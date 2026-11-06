@@ -562,12 +562,18 @@ function loadCompilerOptions(scanRoot: string): ts.CompilerOptions {
  * throwing so tests assert on the list; the CLI entry turns a non-empty list
  * into exit 1.
  * @param scanRoot - the repo root to scan; tests pass a fixture dir.
+ * @param scope - which sources to read: glob patterns relative to `scanRoot`
+ * (default `packages/*\/*\/src/**\/*.ts`) and paths to leave out.
  * @returns every violation, in file order, one human-readable line each.
  */
-export function collectExportJsdocViolations(scanRoot: string = root): string[] {
+export function collectExportJsdocViolations(
+  scanRoot: string = root,
+  scope: { readonly patterns?: readonly string[]; readonly exclude?: (rel: string) => boolean } = {},
+): string[] {
   const violations: string[] = []
-  const rels = globSync('packages/*/*/src/**/*.ts', { cwd: scanRoot })
+  const rels = globSync([...scope.patterns ?? ['packages/*/*/src/**/*.ts']], { cwd: scanRoot })
     .map(path => path.split(sep).join('/'))
+    .filter(rel => scope.exclude?.(rel) !== true)
     .sort()
   const program = ts.createProgram(rels.map(rel => resolve(scanRoot, rel)), loadCompilerOptions(scanRoot))
   const checker = program.getTypeChecker()

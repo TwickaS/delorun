@@ -157,8 +157,17 @@ function readManifest(rel: string): Manifest {
 export function manifestPatterns(rootMembers: readonly string[]): string[] {
   return [
     'package.json',
-    ...rootMembers.map(member => `${member}/package.json`),
+    ...rootMembers.filter(member => !member.startsWith('!')).map(member => `${member}/package.json`),
   ]
+}
+
+/**
+ * The manifests of the members a workspace file excludes with `!`, which pnpm leaves out of the workspace.
+ * @param rootMembers - the declared member globs.
+ * @returns one glob per excluded member, repository-relative.
+ */
+export function excludedManifestPatterns(rootMembers: readonly string[]): string[] {
+  return rootMembers.filter(member => member.startsWith('!')).map(member => `${member.slice(1)}/package.json`)
 }
 
 /** The `packages:` member globs declared by one pnpm workspace file. */
@@ -178,12 +187,14 @@ function workspaceMembers(rel: string): string[] {
  * would silently push dev-area manifests into the runtime tier.
  */
 function loadWorkspaceManifests(): { manifests: Map<string, Manifest>; names: Set<string> } {
-  const patterns = manifestPatterns(workspaceMembers('pnpm-workspace.yaml'))
+  const members = workspaceMembers('pnpm-workspace.yaml')
+  const excluded = new Set(excludedManifestPatterns(members).flatMap(pattern => globSync(pattern, { cwd: root })).map(path => path.replaceAll('\\', '/')))
   const manifests = new Map<string, Manifest>()
   const names = new Set<string>()
-  for (const pattern of patterns) {
+  for (const pattern of manifestPatterns(members)) {
     for (const path of globSync(pattern, { cwd: root })) {
       const normalized = path.replaceAll('\\', '/')
+      if (excluded.has(normalized)) continue
       const manifest = readManifest(normalized)
       manifests.set(normalized, manifest)
       if (manifest.name !== undefined) names.add(manifest.name)

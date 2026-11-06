@@ -119,6 +119,46 @@
       "path": "pnpm-lock.yaml",
       "class": "delo-feature",
       "reason": "Lockfile importers for Delo's workspace packages; regenerate with pnpm install on an upstream merge, never hand-merge."
+    },
+    {
+      "path": "scripts/verify-export-jsdoc.ts",
+      "class": "delo-feature",
+      "reason": "Adds an optional scope to the export-JSDoc collector, so Delo's workspaces are checked by the same gate with their own source patterns."
+    },
+    {
+      "path": "scripts/gen-third-party-notices.ts",
+      "class": "delo-feature",
+      "reason": "Leaves out the workspace members that pnpm excludes with `!`, so the notices read the members pnpm installs."
+    },
+    {
+      "path": "scripts/gen-third-party-notices.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the `!`-member exclusion that the notices generator reads."
+    },
+    {
+      "path": "scripts/test-non-loopback-address.ts",
+      "class": "delo-feature",
+      "reason": "Leaves link-local IPv4 out of the non-loopback candidates, because a WSL host's link-local address accepts a listen but stalls Web requests, and adds an unzoned IPv6 loopback probe that tests can use to skip the IPv6 case."
+    },
+    {
+      "path": "scripts/test-non-loopback-address.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the link-local exclusion and the IPv6 loopback probe."
+    },
+    {
+      "path": "scripts/types/client-assets/index.d.ts",
+      "class": "delo-feature",
+      "reason": "Declares `*.woff2` font modules for Delo's studio theme fonts."
+    },
+    {
+      "path": "scripts/verify-repository-references.ts",
+      "class": "delo-feature",
+      "reason": "Exempts the pinned upstream commit field of the divergence ledger and generated pnpm lockfiles from the commit-reference scan, since both record commit identifiers or content hashes by design."
+    },
+    {
+      "path": "scripts/verify-repository-references.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the pinned-commit field exemption and the pnpm lockfile exclusion."
     }
   ]
 }

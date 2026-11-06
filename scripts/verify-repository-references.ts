@@ -14,6 +14,11 @@ const kitRepositoryUrl = new RegExp(`\\bgithub\\.com/${organization}/libreoffice
 // Decimal-only tokens collide with sizes, counts, and version components; see docs/AGENTS.md#repository-references.
 const commitCandidate = /(?<![a-z0-9])(?=[\da-f]{0,39}[a-f])[\da-f]{7,40}(?![a-z0-9])/gi
 const excludedPrefixes = ['vendor/', '.agents/notes/archived/']
+// Generated lockfiles hold content hashes whose hexadecimal runs can match a commit prefix by chance.
+const excludedNames = ['pnpm-lock.yaml']
+// The divergence ledger pins the upstream commit it is measured against. Only that field is exempt.
+const pinnedCommitFile = 'delo/upstream-patches.json'
+const pinnedCommitField = /"upstream"\s*:\s*\{[^}]*?"commit"\s*:\s*"([\da-f]{40})"/
 const gitOutputLimit = 64 * 1024 * 1024
 // One 41-byte line per object; 1.2 million objects produce about 49 MiB.
 const objectListingLimit = 1024 * 1024 * 1024
@@ -29,7 +34,20 @@ export interface RepositoryReference {
 }
 
 function isMaintained(file: string): boolean {
-  return !excludedPrefixes.some(prefix => file.startsWith(prefix))
+  return !excludedPrefixes.some(prefix => file.startsWith(prefix)) && !excludedNames.includes(file.split('/').at(-1) ?? '')
+}
+
+/**
+ * Locate the line that holds the divergence ledger's pinned upstream commit.
+ * @param file - Repository-relative path of the scanned file.
+ * @param source - File text.
+ * @returns the zero-based line index, or undefined when the file is not the ledger or pins no commit.
+ */
+function pinnedCommitLine(file: string, source: string): number | undefined {
+  if (file !== pinnedCommitFile) return undefined
+  const match = pinnedCommitField.exec(source)
+  if (match === null) return undefined
+  return source.slice(0, match.index + match[0].length).split('\n').length - 1
 }
 
 /**
@@ -46,12 +64,13 @@ export function findRepositoryReferences(
   commits: ReadonlySet<string>,
 ): RepositoryReference[] {
   if (!isMaintained(file)) return []
+  const pinnedLine = pinnedCommitLine(file, source)
   const references: RepositoryReference[] = []
   for (const [index, line] of source.split('\n').entries()) {
     if (organizationUrl.test(canonicalReferenceText(line).replace(kitRepositoryUrl, ''))) {
       references.push({ file, line: index + 1, kind: 'organization-url' })
     }
-    if ([...line.matchAll(commitCandidate)].some(match => commits.has(match[0].toLowerCase()))) {
+    if (index !== pinnedLine && [...line.matchAll(commitCandidate)].some(match => commits.has(match[0].toLowerCase()))) {
       references.push({ file, line: index + 1, kind: 'commit-hash' })
     }
   }

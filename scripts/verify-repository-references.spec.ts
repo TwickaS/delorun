@@ -142,6 +142,25 @@ describe('maintained repository reference policy', () => {
     }
   })
 
+  it('exempts only the pinned upstream commit field of the divergence ledger', () => {
+    const pinned = 'ab'.repeat(20)
+    const ledger = JSON.stringify({
+      upstream: { repository: 'https://example.invalid/upstream.git', ref: 'v1', commit: pinned },
+      patches: [{ path: 'a.ts', class: 'delo-feature', reason: `cites ${pinned}` }],
+    }, null, 2)
+    const reasonLine = ledger.split('\n').findIndex(line => line.includes('cites')) + 1
+    expect(findRepositoryReferences('delo/upstream-patches.json', ledger, new Set([pinned]))).toEqual([
+      { file: 'delo/upstream-patches.json', line: reasonLine, kind: 'commit-hash' },
+    ])
+    expect(findRepositoryReferences('delo/other.json', ledger, new Set([pinned]))).toHaveLength(2)
+  })
+
+  it('excludes generated pnpm lockfiles by name in any directory', () => {
+    const hash = `${numericCommit}a`
+    expect(findRepositoryReferences('pnpm-lock.yaml', `integrity ${hash}`, new Set([hash]))).toEqual([])
+    expect(findRepositoryReferences('packages/example/pnpm-lock.yaml', `integrity ${hash}`, new Set([hash]))).toEqual([])
+  })
+
   it('permits only the independent kit repository and its source URLs', () => {
     for (const suffix of ['', '.git', '/tree/main/packages/entry']) {
       expect(findRepositoryReferences('package.json', `${organizationUrl}/libreoffice-kit${suffix}`, new Set())).toEqual([])
