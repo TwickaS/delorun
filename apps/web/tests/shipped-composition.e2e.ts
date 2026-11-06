@@ -487,6 +487,7 @@ const EXPECTED_TOOLS = [
   'list_subagent_models',
   'plugin_manager',
   'present',
+  'preset_inspect',
   'read',
   'read_image',
   'schedule_create',
@@ -525,7 +526,9 @@ afterEach(async () => {
 })
 
 it('assembles the shipped Web transport, catalog, guidance, and defaults', async () => {
-  scaffold = await launchWebScaffold({ deepSeekMissingCredential: true })
+  // `preset_inspect` is switched off in the shipped composition; the Standard tool set below lists it, so this
+  // scenario turns its switch on.
+  scaffold = await launchWebScaffold({ deepSeekMissingCredential: true, presetInspect: true })
   const ctx = scaffold.ctx
   expect(ctx.llm.listProviders().some(provider => provider.id === 'deepseek-messages')).toBe(false)
   expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'deepseek-official', model: 'deepseek-flash' })

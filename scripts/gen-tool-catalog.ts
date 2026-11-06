@@ -75,6 +75,8 @@ import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import type PluginManager from '@deepseek-ai/dsh-plugin-manager'
 import * as PluginManagerTools from '@deepseek-ai/dsh-plugin-manager/tools'
+import type AgentPresetRegistry from '@deepseek-ai/dsh-agent-preset-registry'
+import * as PresetTools from '@deepseek-ai/dsh-agent-preset-registry/tools'
 import type PluginMarket from '@deepseek-ai/dsh-plugin-market'
 import * as PluginMarketTools from '@deepseek-ai/dsh-plugin-market/tools'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
@@ -189,6 +191,19 @@ export interface ToolPackage {
  * guard proves it is exhaustive against the on-disk glob.
  */
 const TOOL_PACKAGES: ToolPackage[] = [
+  {
+    pkg: '@deepseek-ai/dsh-agent-preset-registry',
+    dir: 'agent-preset-registry',
+    source: 'packages/preset/agent-preset-registry/src/tools.ts',
+    requires: ['ctx.tools', 'ctx.agentPresets', 'ctx.skills (optional)'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // Schema harvest never reads a roster or a composition. The switch is on so the catalogue documents the
+      // tool's schema; the parity composition, which leaves the switch off, registers no tool.
+      ctx.provide('agentPresets', {} as AgentPresetRegistry)
+      await ctx.plugin(PresetTools, { presetInspect: true })
+    },
+  },
   {
     pkg: '@deepseek-ai/dsh-plugin-manager',
     dir: 'plugin-manager',

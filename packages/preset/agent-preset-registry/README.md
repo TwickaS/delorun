@@ -47,6 +47,8 @@ The Web definitions come from the `dsh-web-app` bundle. Definitions are ordinary
 
 The registry writes no declarations. The `read` Remote renders one declaration’s child list back as entry-list YAML (`!!js` conditions included) so a client can show what a preset composes; nothing accepts YAML back. A new preset or an override of a shipped one is a bundle patch: an `insert` of a `@deepseek-ai/dsh-agent-preset` row, or a patch keyed by that row’s id, installed into the profile with `plugin_manager`; Creator mode authors such bundles in conversation.
 
+The `./tools` entry registers `preset_inspect` only when its `presetInspect` Config switch is on. The switch defaults to off, which is Delo's C16 parity value, so the module registers no tool and the model sees the stock tool list. The Web bundle mounts the module in the Standard, PTC and Cordis presets.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
@@ -91,6 +93,20 @@ None from this package; each mounted `plugins` row declares its own tools and se
 #### KV Cache effect
 
 Existing Agents retain their plugins and prompts. New Agents build their prefixes from the current definition.
+
+### preset_inspect
+
+#### What the model sees
+
+The tool's schema, with one optional `preset` string, and its result. With no arguments it lists every preset, one line each, marking the default and the calling Agent's own: `<id> (default, current) — <name>: <description>`. With `preset` it lists that preset's composition rows, `<entryId> <module>` with ` (disabled)` or ` (conditional)` where they apply, and, for the calling Agent's own preset, the skills it mounts as `<name> [<source>, <provider>] — <description>`. Another preset's skills load only in that preset, so its answer says so instead of listing them. An unknown id fails with a pointer to the roster. The tool reads and changes nothing.
+
+#### Token effect
+
+One small schema in each preset that mounts it; a result costs one line per preset, row or skill.
+
+#### KV Cache effect
+
+None beyond the schema in the tool list: results enter the conversation only when the model calls it.
 
 ## Known Limitations and Deferred Work
 

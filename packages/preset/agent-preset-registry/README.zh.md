@@ -47,6 +47,8 @@ Web 内置定义来自 `dsh-web-app` bundle。定义使用普通插件行；注�
 
 注册表不写入任何声明。`read` Remote 把一条声明的子插件列表按 entry-list YAML 方言（含 `!!js` 条件）渲染回来，供客户端展示 preset 的组成；没有任何接口接受 YAML 写回。新建 preset 或覆盖内置 preset 都是 bundle 补丁：插入一行 `@deepseek-ai/dsh-agent-preset`，或按该行 id 写覆盖补丁，再用 `plugin_manager` 安装到 profile；创造模式在对话中编写这类 bundle。
 
+`./tools` 入口只在其 `presetInspect` Config 开关开启时注册 `preset_inspect`。该开关默认关闭，即 Delo C16 的对等值，因此本模块不注册任何工具，模型看到的是原版工具列表。Web bundle 在 Standard、PTC 和 Cordis preset 中挂载本模块。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
@@ -91,6 +93,20 @@ preset 的服务提供方及其消费方必须共享同一个 `cordis:group` 隔
 #### KV Cache effect
 
 已有 Agent 保留插件和提示词。新 Agent 从当前定义构建前缀。
+
+### preset_inspect
+
+#### 模型看到的内容
+
+工具的 schema（包含一个可选的 `preset` 字符串），以及其结果。不带参数时，它每行列出一个 preset，并标出默认 preset 和调用方 Agent 自己的 preset：`<id> (default, current) — <name>: <description>`。带 `preset` 参数时，它列出该 preset 的组合行 `<entryId> <module>`，适用时附加 ` (disabled)` 或 ` (conditional)`；对于调用方 Agent 自己的 preset，还以 `<name> [<source>, <provider>] — <description>` 列出它挂载的技能。另一个 preset 的技能只在该 preset 中加载，因此其回答会说明这一点，而不是列出这些技能。未知 id 会失败，并指向 preset 列表。该工具只读，不改变任何内容。
+
+#### Token 影响
+
+每个挂载它的 preset 中有一个小型 schema；结果每个 preset、每行、每项技能各占一行。
+
+#### KV Cache effect
+
+除工具列表中的 schema 外没有影响：结果只有在模型调用时才进入对话。
 
 ## 已知限制与待办
 

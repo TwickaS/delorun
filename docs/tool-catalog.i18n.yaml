@@ -9,8 +9,14 @@
   en: 6cc2cd9ced70bb09
   zh: 1c0e6cb4ba2ed637
 /tool-schema-catalog/tool-package-map:
-  en: f790063d536da1bf
-  zh: 6933b54fc70cd470
+  en: bd65c37b08945c8e
+  zh: a2881afd3cf3ca9c
+/tool-schema-catalog/deepseek-ai-dsh-agent-preset-registry:
+  en: 4e9b521241c33ba0
+  zh: 4e9b521241c33ba0
+/tool-schema-catalog/deepseek-ai-dsh-agent-preset-registry/preset-inspect:
+  en: 00becc6686502013
+  zh: d1e9f385723447f9
 /tool-schema-catalog/deepseek-ai-dsh-plugin-manager:
   en: e0143916bb634762
   zh: e0143916bb634762

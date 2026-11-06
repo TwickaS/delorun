@@ -392,6 +392,11 @@ export interface LaunchOptions {
    * keyless first-run configuration lane; the default disables the adapter.
    */
   deepSeekMissingCredential?: boolean
+  /**
+   * Turn on the `presetInspect` switch of the Standard preset's `tool-preset-inspect` row (Delo's C16 switch
+   * `preset_inspect`, off in the shipped composition), so the Standard tool set includes `preset_inspect`.
+   */
+  presetInspect?: boolean
   /** Leave the current welcome notice pending; ordinary scenarios pre-acknowledge it before browser boot. */
   welcomeNoticePending?: boolean
   /** Leave first-use Workspace initialization eligible; ordinary scenarios start after the default was removed. */
@@ -714,16 +719,20 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     { id: 'llm-deepseek', disabled: mode !== 'record' && !maskDeepSeekCredential },
   ]
 
-  // Recorded standard sessions pin the optional patch tool in their request headers.
-  if (options.replayFixture !== undefined || options.compareReplaySession === true) {
+  // Recorded standard sessions pin the optional patch tool in their request headers. A scenario that asks for
+  // `preset_inspect` turns that switch on in the same Standard row; a patch replaces the row's complete config.
+  const recordedStandard = options.replayFixture !== undefined || options.compareReplaySession === true
+  if (recordedStandard || options.presetInspect === true) {
     const config = composedRows.find(row => row.id === 'preset-standard')!.config as PresetDefinition
     overlayPatches.push({
       id: 'preset-standard',
       config: {
         ...config,
-        plugins: config.plugins.map(plugin => plugin.id === 'tool-fs'
-          ? { ...plugin, config: { ...plugin.config, applyPatch: true } }
-          : plugin),
+        plugins: config.plugins.map((plugin) => {
+          if (recordedStandard && plugin.id === 'tool-fs') return { ...plugin, config: { ...plugin.config, applyPatch: true } }
+          if (options.presetInspect === true && plugin.id === 'tool-preset-inspect') return { ...plugin, config: { ...plugin.config, presetInspect: true } }
+          return plugin
+        }),
       },
     })
   }
