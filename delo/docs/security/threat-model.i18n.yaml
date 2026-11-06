@@ -1,0 +1,112 @@
+# Bilingual-pair consistency record for threat-model.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/security/threat-model.md
+/:
+  en: a8c3f89cfc0ece7e
+  zh: be11eb2234e602cd
+/delo-threat-model:
+  en: a86091ede7ea8375
+  zh: 4b3d1a30a1befb77
+/delo-threat-model/summary:
+  en: 4b18797e0663b797
+  zh: 1b6f7a5ccce1a637
+/delo-threat-model/contents:
+  en: 7836ffd3e3ac3bc2
+  zh: 9a5e9c9123f57331
+/delo-threat-model/goal:
+  en: d5e89bc9560308c6
+  zh: 5b2d1ad1f884d05e
+/delo-threat-model/assets:
+  en: 001c95fb2ca3217d
+  zh: 9cf37e4f3b0594bf
+/delo-threat-model/parties-and-trust:
+  en: c261a17929625605
+  zh: cd8592b6b91f7d1c
+/delo-threat-model/parties-and-trust/the-person:
+  en: 994ccf74157ff5e5
+  zh: e5482573b7d2579f
+/delo-threat-model/parties-and-trust/the-model-and-its-tool-calls:
+  en: b30e6cb296a7c88b
+  zh: 7f0c7f37596063c2
+/delo-threat-model/parties-and-trust/plugins:
+  en: df7b9c78c40999ce
+  zh: c83c42a6fa1ddd04
+/delo-threat-model/parties-and-trust/other-local-processes-under-the-same-user:
+  en: 83dd65f2c7a3f880
+  zh: 63cdcc27fa9b4963
+/delo-threat-model/parties-and-trust/other-users-on-the-machine:
+  en: 6b4bdb6a25519a8d
+  zh: edab6d0c8225b86c
+/delo-threat-model/parties-and-trust/the-network:
+  en: 3fab3fed6f66f603
+  zh: c8f9093b0a4c6583
+/delo-threat-model/parties-and-trust/tailscale-the-person-s-own-relay-and-oidc-provider:
+  en: 5d17ba69cf0e21c9
+  zh: 4f150eeae4bc1774
+/delo-threat-model/parties-and-trust/delo-run-the-project:
+  en: 504c0c54a79f9d6e
+  zh: 701c02621202f323
+/delo-threat-model/parties-and-trust/upstream-and-dependency-authors:
+  en: 47662dbfcd8885b9
+  zh: c100329e694a98c5
+/delo-threat-model/parties-and-trust/a-party-holding-a-stolen-device:
+  en: ecc9b0ecd27f29bf
+  zh: a63cdff28219c016
+/delo-threat-model/boundaries-and-their-defences:
+  en: 59868d4e1d99c745
+  zh: e387884da7e262b7
+/delo-threat-model/boundaries-and-their-defences/confinement-of-native-commands:
+  en: 6089a48401c8720d
+  zh: 571ddd73a3eec2d7
+/delo-threat-model/boundaries-and-their-defences/the-home-s-control-channels:
+  en: c2ff3f98496438ce
+  zh: 6a1789c05bb38953
+/delo-threat-model/boundaries-and-their-defences/container-isolation:
+  en: 9869b012c5e09696
+  zh: b0d62743564a0993
+/delo-threat-model/boundaries-and-their-defences/admission-and-listeners:
+  en: 6e3d049a766be9c8
+  zh: c74a2d819d97ae9f
+/delo-threat-model/boundaries-and-their-defences/device-approval:
+  en: 504872a596abfb2d
+  zh: 0fb567c99598b874
+/delo-threat-model/boundaries-and-their-defences/reach-providers:
+  en: 79a599aa4fc45318
+  zh: fe31031afbef4268
+/delo-threat-model/boundaries-and-their-defences/sign-in:
+  en: 72bbeb24b99f9a19
+  zh: b68acdd75b3b13a4
+/delo-threat-model/boundaries-and-their-defences/releases-the-log-and-the-rebuild:
+  en: c48dfb8948004047
+  zh: ae5275e70cd9ef19
+/delo-threat-model/boundaries-and-their-defences/the-catalogue-and-revocation:
+  en: 9a7dffe43389f699
+  zh: b6e02f407833a556
+/delo-threat-model/boundaries-and-their-defences/updates-and-rollback:
+  en: 68949ba851d1496e
+  zh: 74904aa2d88993dd
+/delo-threat-model/boundaries-and-their-defences/archives-and-untrusted-chats:
+  en: 45566f83da954136
+  zh: bf35c6e92483bd22
+/delo-threat-model/boundaries-and-their-defences/logs-and-redaction:
+  en: f23c84a3561edc58
+  zh: 3b1772e23bdb7ed6
+/delo-threat-model/boundaries-and-their-defences/verification:
+  en: e34b8d23ab1cf7a7
+  zh: 1d0b85d53ddd7e42
+/delo-threat-model/boundaries-and-their-defences/parity:
+  en: 2fbe097534f1de20
+  zh: fd40d1bb87ac0457
+/delo-threat-model/boundaries-and-their-defences/the-web-fetch-guard:
+  en: 4dff901b4bb2bd36
+  zh: 29b1b4bfe52386ad
+/delo-threat-model/boundaries-and-their-defences/data-sharing:
+  en: 31bd6a54283f3147
+  zh: bc24b60087f8a20e
+/delo-threat-model/what-delo-does-not-protect-against:
+  en: 643ad4e3e571f713
+  zh: 1e1849b42929a368
+/delo-threat-model/how-changes-keep-this-true:
+  en: 4edd79ec3e798d0b
+  zh: d40d983b10bb3db5
