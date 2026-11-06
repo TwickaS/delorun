@@ -43,7 +43,7 @@ kind: "package-reference"
 
 ### 工作区层级
 
-选择**添加工作区**并选取目录，即可注册工作区并打开 Session。**视图选项 → 分组方式**默认为**按工作区**，将工作区作为同级分组显示。选择**按工作区树**后，每个 Workspace 会位于最近的已注册祖先之下，之后添加的 Workspace 也会自动归入。每个 Workspace 保留自己的 Session 和行操作，子 Workspace 显示在父级自己的 Session 之前。祖先默认展开，已有的折叠偏好除外。保存的折叠状态也会隐藏当前 Session；如果后代 Workspace 包含当前 Session，祖先文件夹图标仍保持高亮。各层级的高亮和点击区域保持整行同宽，仅内容缩进。拖拽 Workspace 仅重排同级项目；落在后代行上时，由最近的兼容祖先接收，因此无需先折叠父级就能将其他工作区拖到其后。选择搜索结果会展开全部祖先。分组方式和展开状态保存在当前浏览器中；切换模式会保留各 Workspace 的展开偏好，单列表视图保持平铺。
+选择**添加工作区**并选取目录，即可注册工作区并打开 Session。**视图选项 → 分组方式**默认为**按工作区**，将工作区作为同级分组显示。选择**按工作区树**后，每个 Workspace 会位于最近的已注册祖先之下，之后添加的 Workspace 也会自动归入。每个 Workspace 保留自己的 Session 和行操作，子 Workspace 显示在父级自己的 Session 之前。祖先默认展开，已有的折叠偏好除外。保存的折叠状态也会隐藏当前 Session；如果后代 Workspace 包含当前 Session，祖先文件夹图标仍保持高亮。各层级的高亮和点击区域保持整行同宽，仅内容缩进。拖拽 Workspace 仅重排同级项目；落在后代行上时，由最近的兼容祖先接收，因此无需先折叠父级就能将其他工作区拖到其后。选择搜索结果会展开全部祖先。分组方式和展开状态保存在当前浏览器中；切换模式会保留各 Workspace 的展开偏好，单列表视图保持平铺，标题从行边缘开始，每个 Session 的状态点与工作区标题位于时间之前，工作区标题前带有该工作区颜色的圆点。在该视图中，运行中的 Session 标题会闪烁，等待用户处理的 Session 以一个药丸标签代替其状态点与时间，并注明等待的内容，已完成但尚未打开的 Session 标题加粗。主题可以为打开的 Session 行着色，并通过 `--dsh-sidebar-row-selected-fill`、`--dsh-sidebar-row-selected-edge`（条宽）与 `--dsh-sidebar-row-selected-edge-color` 用一条短条标记其前缘；未设置时，该行采用悬停填充色。。
 
 层级仅使用已注册的规范路径，不扫描项目，也不解析符号链接别名。嵌套不会改变 Session 的工作目录、日志或 Workspace 归属。删除父 Workspace 后，子 Workspace 仍保持注册，并归入下一个已注册祖先；没有祖先时显示在根层级。
 
@@ -87,6 +87,10 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 
 Session 行与 Workspace 行的可用操作来自浏览器根的访问 Hook：全局 `useRemoteAccess('session/create')` 门控所有新建会话入口，`useWorkspaceAccess` 门控 Workspace 的新建、重命名、删除与排序动作，`useSessionAccess` 门控 Session 行的重命名、分叉、拖拽、置顶、归档与取消归档动作，以及搜索结果的恢复控件。被拒绝的动作不渲染，但每个发往 Host 的请求仍以其授权为准。启动恢复会 retain 主 reference，不改变已选面板，也不取消后续导航。归档主 Session 会释放其 reference 并清除主选择。选择失败时保留当前全局面板。Session 行读取 `usePanelInfo`，在全局面板活跃时不显示 Session 选中样式；仅把焦点移到搜索框或目录选择器不会离开该面板。
 
+`hideSession(id)` 使 Session 不再出现在浏览器的行、分组与搜索中（包括本地与 Host 的匹配结果），直到其返回的每个 disposer 都已运行，供为该 Session 提供自有入口的插件使用；Session 仍可通过 `openSession` 打开。
+
+`registerShelf(shelf)` 为一览视图（Group by → In one list）添加一个分架：架上的 Session 各自附带放入架上的时间，折叠在其标题之下、位于其余行之下；当 Session 的最新提示词更新、或其被置顶、正在等待用户或正在运行时，它会离开该架。同一 id 的后续注册会替换先前的注册，直到其被释放。`setViewDefaults({ groupBy, sections, searchField })` 设置用户未在视图选项中选择时浏览器显示的分组方式；设置一览视图是否按每行最新提示词所在的浏览器日历日，将行划分为已置顶、工作中、等你处理，然后是今天、昨天、本周与更早，不含 New Session 按钮所代表的临时空白，且已置顶分区不显示置顶标记；以及宽侧栏是否把搜索显示为展开的字段，其中包含搜索快捷键，并代替分区标题与搜索图标；聚焦该字段时，它会在区头操作之上展开。最近一次调用生效，直到其 disposer 运行。两者都未设置时，浏览器按工作区分组且不显示标题。视图选项中选定的分组方式保留在浏览器中，并优先于默认值。
+
 导航和启动恢复通过所选 Session 的 `follow` 获取投影，不会另行刷新该 Session 或其父会话的投影；例外是恢复已保存的空白会话时先重新加载该 Session 的投影，因为列表中的值是缓存提示，Host 非正常退出后可能落后于其日志。
 
 新会话、重新打开工作区和显式准备草稿向 Host 请求 Session 时，指明列表中第一个符合条件的空白会话。指明 preset 的请求会跳过列出其他 preset 的空白会话，因此创造模式入口等 preset 流程不会接管其他 preset 的草稿；未指明 preset 的请求可以指明任何符合条件的空白会话，由 Host 切换到其默认 preset。被复用的空白会话可能沿用创建时的 preset 装配。启动恢复指明已保存的空白会话。Host 以请求的 preset 复用该空白会话，请求未指明 preset 时使用其默认 preset；若该空白会话已开始、已离开该工作区或写锁被其他写者占用，Host 改为新建 Session；导航打开 Host 返回的 Session，不再尝试其他空白会话。带草稿选项的 `startSession`、`openWorkspace` 和 `connectWorkspace` 接受 `{ agentPreset }`，供开始前已确定 preset 的流程使用，例如创造模式入口；一次连接仅在与该工作区最近一次进行中的连接请求相同 preset 时与之合并，因此最新的请求总会到达 Host。启动恢复传入已保存空白会话日志记录的 preset，使草稿保留该 preset；当 Host 报告该 preset 不存在（`agent-preset/not-found`）或无法激活（`agent-preset/invalid`）时，启动恢复改为不带 preset 再请求一次，草稿在 Host 默认 preset 下继续。其他错误会中止请求：显式新建会话或在 hero 中选择工作区时，失败以短暂提示展示，引用 Host 的错误码和消息（例如 preset 挂载失败），非 Host 拒绝的失败则显示其自身消息；已被后续导航或 owner 销毁取代的请求不弹提示，启动恢复仍只报告到控制台。已释放的空白会话被复用时保留 slash 命令状态。后续导航会取消尚未完成的启动选择，并阻止失败的恢复在后续列表更新时重试。
@@ -118,6 +122,8 @@ Session 行可通过 Tab 聚焦，使用不带修饰键的 Enter 或空格打开
 ### 目录流子 slot
 
 每个注册各自声明一个**目录流子 slot**（`single` kind：`conversation.hero.workspace.directoryFlow`／`sidebar.workspaces.directoryFlow`），由组合的选择器包 client half 填入其选取交互——`-native` 后端的无渲染 OS 选择器驱动，`-browse` 组合下则是应用内浏览对话框。平铺显示的**添加工作区…** 操作仅在当前界面的 slot 被占用时渲染；slot 为空意味着该组合没有目录选择能力。侧栏的添加工作区操作保留已有空白 Session 及其草稿。本包持有触发与接纳：占用方通过 slot 的属主交互约定（`open`/`busy`/`onPicked`/`onCancel`/`onError`）每次打开上报一个所选路径，owner 通过对象层接纳它，并等待 Workspace 列表投影刷新后才选中已提交的 Workspace。
+
+单个 `sidebar.workspaces.list` slot 替代宽浏览器的列表：当某个条目占用它时，浏览器隐藏自身的标题与行，由该条目渲染，并收到 `WorkspaceListOwnerProps`，其中包括不含隐藏 Session 的 Session 列表、Workspaces，以及只有浏览器能执行的动作：打开与启动 Session、锚定在占用方按钮上的添加工作区流程、重命名与删除对话框、带搜索快捷键与请求的消息搜索，以及 `openSessionMenu`，它在浏览器的菜单浮层中于给定位置打开某个 Session 的菜单，其中渲染 `sidebar.workspaces.session.menu.item` 条目。浏览器保留其对话框与目录流，收起的 rail 仍保留浏览器自己的列表。
 
 <a id="session-row-actions"></a>
 ### Session 行 action

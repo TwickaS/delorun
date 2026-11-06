@@ -19,7 +19,7 @@ import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { DraftInitializationOptions, SessionInputResolver } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { RowToast } from '../src/client/contract/slots.ts'
-import { DirectoryBrowseError, UiWorkspaceService } from '../src/client/navigation.ts'
+import { DEFAULT_VIEW, DirectoryBrowseError, UiWorkspaceService } from '../src/client/navigation.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
@@ -320,6 +320,56 @@ function lastOpening(open: MockInstance<UiWorkspaceService['openWorkspace']>): P
 }
 
 describe('UiWorkspaceService', () => {
+  it('hides a Session from the sidebar until every hide of it is disposed, each disposer counting once', () => {
+    const b = bench()
+    const first = b.uiWorkspace.hideSession(sid('main'))
+    const second = b.uiWorkspace.hideSession(sid('main'))
+    expect([...b.uiWorkspace.hidden.getSnapshot()]).toEqual([sid('main')])
+    first()
+    first()
+    expect([...b.uiWorkspace.hidden.getSnapshot()]).toEqual([sid('main')])
+    second()
+    expect([...b.uiWorkspace.hidden.getSnapshot()]).toEqual([])
+  })
+
+  it('publishes shelves in order with their members, the latest registration of an id winning, until disposed', () => {
+    const b = bench()
+    let settledMembers = new Map([[sid('main'), 1]])
+    const listeners = new Set<() => void>()
+    const members = (snapshot: () => ReadonlyMap<SessionId, number>) => ({
+      getSnapshot: snapshot,
+      subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    })
+    const view = () => b.uiWorkspace.shelves.getSnapshot().map(shelf => [shelf.id, shelf.label(), [...shelf.members.keys()]])
+    const settled = b.uiWorkspace.registerShelf({ id: 'settled', order: 2, label: () => 'Settled', members: members(() => settledMembers) })
+    const snoozed = b.uiWorkspace.registerShelf({ id: 'snoozed', order: 1, label: () => 'Snoozed', members: members(() => new Map()) })
+    const replacement = b.uiWorkspace.registerShelf({ id: 'settled', order: 2, label: () => 'Done', members: members(() => new Map()) })
+    expect(view()).toEqual([['snoozed', 'Snoozed', []], ['settled', 'Done', []]])
+    replacement()
+    replacement()
+    expect(view()).toEqual([['snoozed', 'Snoozed', []], ['settled', 'Settled', [sid('main')]]])
+    settledMembers = new Map()
+    for (const listener of listeners) listener()
+    expect(view()).toEqual([['snoozed', 'Snoozed', []], ['settled', 'Settled', []]])
+    settled()
+    snoozed()
+    expect(view()).toEqual([])
+    expect(listeners.size).toBe(0)
+  })
+
+  it('presents the latest view defaults until each is disposed, then upstream\'s', () => {
+    const b = bench()
+    expect(b.uiWorkspace.viewDefaults.getSnapshot()).toEqual(DEFAULT_VIEW)
+    const chats = b.uiWorkspace.setViewDefaults({ groupBy: 'flat', sections: true, searchField: true })
+    const tree = b.uiWorkspace.setViewDefaults({ groupBy: 'workspace-tree', sections: false, searchField: false })
+    expect(b.uiWorkspace.viewDefaults.getSnapshot()).toEqual({ groupBy: 'workspace-tree', sections: false, searchField: false })
+    chats()
+    chats()
+    expect(b.uiWorkspace.viewDefaults.getSnapshot()).toEqual({ groupBy: 'workspace-tree', sections: false, searchField: false })
+    tree()
+    expect(b.uiWorkspace.viewDefaults.getSnapshot()).toEqual(DEFAULT_VIEW)
+  })
+
   it('prepares and selects the default Workspace after both startup baselines', async () => {
     const b = bench({ configureWorkspaces: (workspaces) => {
       workspaces.initializeDefault.mockImplementation(async () => {

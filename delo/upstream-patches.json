@@ -1205,6 +1205,66 @@
       "path": "packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.module.css",
       "class": "delo-feature",
       "reason": "Styles the search shortcut hint and the one-list section headings and folded shelves."
+    },
+    {
+      "path": "packages/client/ui-sidebar/tests/__snapshots__/sidebar-snapshot.client.spec.tsx.snap",
+      "class": "delo-feature",
+      "reason": "Records the sidebar shell snapshots with the always-rendered backdrop box, which the stylesheet hides while no art occupies it."
+    },
+    {
+      "path": "packages/client/ui-workspace/README.md",
+      "class": "delo-feature",
+      "reason": "Documents the one-list view: its shelves, view defaults, hidden Sessions and the sidebar.workspaces.list occupant."
+    },
+    {
+      "path": "packages/client/ui-workspace/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the Workspace browser README, which documents the one-list view and the list occupant."
+    },
+    {
+      "path": "packages/client/ui-workspace/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the Workspace browser README one-list paragraphs and their Chinese counterparts changed."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/contract/slots.ts",
+      "class": "delo-feature",
+      "reason": "Declares the sidebar.workspaces.list slot and its owner props, the hiddenSessions, shelves, viewDefaults and listBody hooks, and the requestWorkspaceAction injected member."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Wires the one-list hooks, the list hole and requestWorkspaceAction into the Workspace browser, and exports the shelf and view-default types."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/navigation.ts",
+      "class": "delo-feature",
+      "reason": "Adds the shelf and view-default types, DEFAULT_VIEW, and the stores the one-list view reads for hidden Sessions, shelves and view defaults."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx",
+      "class": "delo-feature",
+      "reason": "Renders the one-list view: section headings, folded shelves, Workspace dot colours, the open search field, hidden-Session filtering, and the list seat with its rename and delete requests."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/stores.ts",
+      "class": "delo-feature",
+      "reason": "Makes the view grouping optional, so an absent value takes the distribution default from the view defaults."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/tree.ts",
+      "class": "delo-feature",
+      "reason": "Adds the section, shelf and hidden-Session helpers that the one-list view uses."
+    },
+    {
+      "path": "packages/client/ui-workspace/tests/tree.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the one-list section and shelf helpers and the hidden-Session filter."
+    },
+    {
+      "path": "packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the one-list view, the open search field, the per-Workspace dot colours and the list seat with its dialogs."
     }
   ],
   "retired": []

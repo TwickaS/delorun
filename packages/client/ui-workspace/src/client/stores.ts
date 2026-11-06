@@ -20,7 +20,8 @@ export type SessionOrderBy = 'manual' | 'updated'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 type WorkspaceViewState = {
-  groupBy: SessionGroupBy
+  /** The grouping the person picked in View options; absent, the browser shows the distribution's default. */
+  groupBy?: SessionGroupBy
   orderBy: SessionOrderBy
   /** Explicit group expansion keyed by Workspace identity, including descendants in tree mode. */
   groupExpansion: Record<string, boolean>
@@ -82,7 +83,6 @@ function copySessionOrders(
 export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState, WorkspaceViewActions> {
   return defineStore({
     init: (): WorkspaceViewState => ({
-      groupBy: 'workspace',
       orderBy: 'updated',
       groupExpansion: {},
       sessionOrderByAccount: {},

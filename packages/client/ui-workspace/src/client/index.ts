@@ -59,12 +59,14 @@ import { registerToasts } from './toast/register.ts'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
 import { en, ja, es, fr, de, ru, pt, zh, type WorkspaceKey } from './locales.ts'
 
-export type { StartSessionOptions, UiWorkspace } from './navigation.ts'
+export type { SessionShelf, SessionShelfView, StartSessionOptions, UiWorkspace, WorkspaceViewDefaults } from './navigation.ts'
+export { DEFAULT_VIEW } from './navigation.ts'
+export type { SessionGroupBy } from './stores.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
   MenuOpenState, RowToast, SessionRenameTarget, SessionRowOwnerProps, UseMenuOpenState, WorkspaceBrowserInjected,
   SessionRowScheduleOwnerProps,
-  WorkspaceBrowserProps,
+  WorkspaceBrowserProps, WorkspaceListOwnerProps,
   WorkspacePickerInjected, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
@@ -143,12 +145,15 @@ export function apply(ctx: Context): void {
   }
 
   // Stable per-surface occupancy sources (the renderer's hook cache keys by
-  // source identity): true while the surface's directory-flow hole is filled.
-  const flowSource = (hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
+  // source identity): true while the hole is filled.
+  const flowSource = (
+    hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow' | 'sidebar.workspaces.list',
+  ): HostObservable<boolean> => ({
     getSnapshot: () => ctx.slots.entries(hole).length > 0,
     subscribe: listener => ctx.slots.subscribe(hole, listener),
   })
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
+  const listBodySource = flowSource('sidebar.workspaces.list')
   const hostInfo: HostObservable<RemoteHostFacts> = {
     getSnapshot: () => ctx.remote.$host,
     subscribe: listener => ctx.on('connection/reset', listener),
@@ -288,6 +293,7 @@ export function apply(ctx: Context): void {
         run: () => { requestWorkspaceAction(workspaceId, displayTitle, 'delete') } }] : [],
   }), 'workspace: delete menu action')
   const browserInjected = (): WorkspaceBrowserInjected => ({
+    requestWorkspaceAction,
     openWorkspaceMenu: (workspaceId, path, displayTitle, point, mode) => {
       const target = ctx.contextMenus.active.getSnapshot()
       if (mode === 'toggle' && target?.kind === 'workspace' && target.value.workspaceId === workspaceId) ctx.contextMenus.close()
@@ -318,8 +324,14 @@ export function apply(ctx: Context): void {
     requestAddWorkspace: shortcutControls.add,
     closeAddWorkspace: shortcutControls.closeAdd,
     setDirectoryBusy: shortcutControls.directoryBusy,
-    hooks: { workspaceActionRequest, contextMenuTarget: ctx.contextMenus.active, directoryFlow: browserFlowSource, hostInfo,
-      workspaceShortcuts: shortcutControls.state, shortcuts: ctx.shortcuts.catalog },
+    hooks: {
+      workspaceActionRequest, contextMenuTarget: ctx.contextMenus.active, directoryFlow: browserFlowSource, hostInfo,
+      workspaceShortcuts: shortcutControls.state, shortcuts: ctx.shortcuts.catalog,
+      hiddenSessions: uiWorkspace.hidden,
+      shelves: uiWorkspace.shelves,
+      viewDefaults: uiWorkspace.viewDefaults,
+      listBody: listBodySource,
+    },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
@@ -332,6 +344,7 @@ export function apply(ctx: Context): void {
       name: 'sidebar.workspaces',
       children: {
         'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
+        'sidebar.workspaces.list': { kind: 'single', scope: 'root' },
         'sidebar.workspaces.session.row.action': { kind: 'list', scope: 'root' },
         'sidebar.session.row.leading': { kind: 'list', scope: 'root', inline: true },
         'sidebar.session.row.trailing': { kind: 'list', scope: 'root', inline: true },

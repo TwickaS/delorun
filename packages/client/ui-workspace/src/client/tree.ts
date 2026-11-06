@@ -410,6 +410,19 @@ function sessionNode(
 }
 
 /**
+ * The list without the Sessions a plugin hid from the sidebar (`UiWorkspace.hideSession`), so the browser's rows,
+ * groups and search, local and Host matches alike, leave them out. A hidden Session stays openable.
+ * @param list - session metadata authority.
+ * @param hidden - the hidden Session identities.
+ * @returns the list itself when nothing is hidden, otherwise a copy without the hidden rows.
+ */
+export function withoutHidden(list: SessionListState, hidden: ReadonlySet<SessionId>): SessionListState {
+  if (hidden.size === 0 || !list.ids.some(id => hidden.has(id))) return list
+  const byId = Object.fromEntries(Object.entries(list.byId).filter(([id]) => !hidden.has(id as SessionId))) as SessionListState['byId']
+  return { ...list, ids: list.ids.filter(id => !hidden.has(id)), byId }
+}
+
+/**
  * Derive the workspace browser groups with every session as a top-level row.
  *
  * Every group shows, except that the archived-only filter drops groups
@@ -517,6 +530,110 @@ export function deriveFlat(
     .map(session => sessionNode(session, list, statuses, pinned, archived))
 }
 
+/** A heading of the sectioned one-list view. */
+export type FlatSectionId = 'pinned' | 'working' | 'needs-you' | 'today' | 'yesterday' | 'week' | 'older' | 'recent'
+
+/** The one-list view's rows, headed: the sections in order, then the shelves. */
+export interface FlatSections {
+  /** The provisional blank, above every heading. */
+  readonly blank: readonly SessionNode[]
+  /** Non-empty sections in display order: Pinned, Working, Needs you, Today, Yesterday, This week, Older; unsectioned, one Recent. */
+  readonly sections: readonly { readonly id: FlatSectionId; readonly rows: readonly SessionNode[] }[]
+  /** Non-empty shelves in their order, each with its rows. */
+  readonly shelves: readonly { readonly id: string; readonly label: () => string; readonly rows: readonly SessionNode[] }[]
+}
+
+/** Section display order. */
+const FLAT_SECTION_ORDER: readonly FlatSectionId[] = ['pinned', 'working', 'needs-you', 'today', 'yesterday', 'week', 'older', 'recent']
+
+/** One day in milliseconds. */
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The time group of a prompt time: today, yesterday, the five days before, or older, by the browser's calendar days.
+ * @param updatedAt - the latest prompt time.
+ * @param now - the time now.
+ * @returns the group.
+ */
+export function timeGroup(updatedAt: number, now: number): 'today' | 'yesterday' | 'week' | 'older' {
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+  const start = today.getTime()
+  if (updatedAt >= start) return 'today'
+  if (updatedAt >= start - DAY_MS) return 'yesterday'
+  return updatedAt >= start - 6 * DAY_MS ? 'week' : 'older'
+}
+
+/**
+ * Head the one-list view's rows, keeping their order within each heading. A
+ * pinned row stays under Pinned; one waiting on the person under Needs you;
+ * a running one under Working; then a row whose Session sits on a shelf and
+ * has no prompt newer than its shelving goes to the first such shelf; the
+ * rest go under Today, Yesterday, This week or Older by their latest prompt. The provisional blank is kept apart, for the view to
+ * place or leave out. Without
+ * sections every other unshelved row is Recent.
+ * @param rows - the flat rows in display order.
+ * @param shelves - the registered shelves in order.
+ * @param sectioned - whether rows other than shelved ones get headings.
+ * @param now - the time now, for the time groups.
+ * @returns the sections and shelves that have rows.
+ */
+export function sectionFlat(
+  rows: readonly SessionNode[],
+  shelves: readonly { readonly id: string; readonly label: () => string; readonly members: ReadonlyMap<SessionId, number> }[],
+  sectioned: boolean,
+  now: number = Date.now(),
+): FlatSections {
+  const sections: Record<FlatSectionId, SessionNode[]> = {
+    'pinned': [], 'working': [], 'needs-you': [], 'today': [], 'yesterday': [], 'week': [], 'older': [], 'recent': [],
+  }
+  const shelved = shelves.map(shelf => ({ id: shelf.id, label: shelf.label, members: shelf.members, rows: [] as SessionNode[] }))
+  const blank: SessionNode[] = []
+  for (const row of rows) {
+    if (row.blank) {
+      blank.push(row)
+      continue
+    }
+    const busy = row.running || row.runningSubagentCount > 0
+    const sectionId: FlatSectionId | undefined = !sectioned
+      ? undefined
+      : row.pinned ? 'pinned' : row.pendingInteraction !== undefined ? 'needs-you' : busy ? 'working' : undefined
+    if (sectionId !== undefined) {
+      sections[sectionId].push(row)
+      continue
+    }
+    const shelf = row.pinned || row.pendingInteraction !== undefined || busy
+      ? undefined
+      : shelved.find((candidate) => {
+        const since = candidate.members.get(row.id)
+        return since !== undefined && row.updatedAt <= since
+      })
+    if (shelf !== undefined) shelf.rows.push(row)
+    else sections[sectioned ? timeGroup(row.updatedAt, now) : 'recent'].push(row)
+  }
+  return {
+    blank,
+    sections: FLAT_SECTION_ORDER.flatMap(id => (sections[id].length === 0 ? [] : [{ id, rows: sections[id] }])),
+    shelves: shelved.flatMap(({ id, label, rows: shelfRows }) => (shelfRows.length === 0 ? [] : [{ id, label, rows: shelfRows }])),
+  }
+}
+
+/**
+ * The title of the first Workspace that lists each Session, the name a row
+ * shows where no group heading gives it.
+ * @param workspaces - Workspaces with their display titles, in list order.
+ * @returns each listed Session's Workspace title.
+ */
+export function workspaceTitleBySession(workspaces: readonly WorkspaceView[]): Map<SessionId, string> {
+  const titles = new Map<SessionId, string>()
+  for (const workspace of workspaces) {
+    for (const sessionId of workspace.sessionIds) {
+      if (!titles.has(sessionId)) titles.set(sessionId, workspace.title)
+    }
+  }
+  return titles
+}
+
 /**
  * Merge immediate title/Workspace/Session id substring matches with ranked Host content
  * matches. Local rows lead newest-first, content-only rows retain backend
@@ -546,12 +663,7 @@ export function deriveSearchResults(
   const archived = new Set(archivedSessionIds)
   const current = mainSessionId(list)
 
-  const workspaceBySession = new Map<SessionId, string>()
-  for (const workspace of workspaces) {
-    for (const sessionId of workspace.sessionIds) {
-      if (!workspaceBySession.has(sessionId)) workspaceBySession.set(sessionId, workspace.title)
-    }
-  }
+  const workspaceBySession = workspaceTitleBySession(workspaces)
   const labelOf = (summary: SessionSummary): string =>
     workspaceBySession.get(summary.id) ?? workspaceLabel(summary.cwd)
   const contentBySession = new Map<SessionId, SessionSearchResultItem>()

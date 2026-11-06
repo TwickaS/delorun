@@ -43,13 +43,13 @@ import type {
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import type { SessionSearchResultItem } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionListState, SessionSearchResultItem } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionActivity, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { WorkspaceShortcutState } from '../shortcuts.ts'
-import type { StartSessionOptions } from '../navigation.ts'
+import type { SessionShelfView, StartSessionOptions, WorkspaceViewDefaults } from '../navigation.ts'
 import type {} from './toast.ts'
 import type { createWorkspaceViewStore } from '../stores.ts'
 
@@ -210,7 +210,54 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * contribute the action to the menu list as well for touch access.
      */
     'sidebar.workspaces.session.row.action': { kind: 'list'; scope: 'root'; owner: SessionRowOwnerProps }
+    /**
+     * The wide browsing region's body, declared by the WorkspaceBrowser entry. While an entry occupies it, the wide
+     * sidebar renders the occupant in place of the browser's own search, view options and list; the browser keeps the
+     * add-Workspace flow, the rename and delete dialogs and the rail, and hands the occupant what drives them.
+     */
+    'sidebar.workspaces.list': { kind: 'single'; scope: 'root'; owner: WorkspaceListOwnerProps }
   }
+}
+
+/**
+ * Owner share of `sidebar.workspaces.list`: the browser's data and the actions only the browser can take, so a
+ * replacement list keeps every plugin's Session menu entries and the browser's dialogs.
+ */
+export interface WorkspaceListOwnerProps {
+  /** The Session list without the Sessions plugins hid (`UiWorkspace.hideSession`). */
+  readonly list: SessionListState
+  /** The Workspaces in their stored order, each titled as the sidebar shows it. */
+  readonly workspaces: readonly WorkspaceView[]
+  /** Open a Session; an archived one explains that it cannot open instead. */
+  readonly open: (sessionId: SessionId) => void
+  /** Start a Session in a Workspace, or as `WorkspaceBrowserInjected.startSession` decides without one. */
+  readonly startSession: (workspaceId?: WorkspaceId) => void
+  /** Whether a directory flow occupies the browser's hole, so a Workspace can be added. */
+  readonly canAddWorkspace: boolean
+  /** The element the add-Workspace flow anchors on; the occupant's add button takes it as its `ref`. */
+  readonly addWorkspaceAnchor: (element: HTMLButtonElement | null) => void
+  /** Open the add-Workspace flow; the picked Workspace starts a Session. */
+  readonly addWorkspace: () => void
+  /** Open the Session rename dialog. */
+  readonly renameSession: (sessionId: SessionId, currentTitle: string) => void
+  /** Open the Workspace rename dialog, seeded with its shown title. */
+  readonly renameWorkspace: (workspaceId: WorkspaceId) => void
+  /** Open the Workspace delete confirmation. */
+  readonly deleteWorkspace: (workspaceId: WorkspaceId) => void
+  /** Search the Sessions' messages; see `WorkspaceBrowserInjected.searchSessions`. */
+  readonly searchSessions: WorkspaceBrowserInjected['searchSessions']
+  /** Grows with each search request, such as the search shortcut; the occupant focuses its search when it changes. */
+  readonly searchRequest: number
+  /** The search command's shortcut, when one is bound. */
+  readonly searchShortcut?: ShortcutCatalogEntry | undefined
+  /**
+   * Open one Session's menu at a point, as the rows' own menus do; its entries render in the menu overlay.
+   * @param sessionId - the Session the menu acts on.
+   * @param displayTitle - its title as shown.
+   * @param point - the viewport point the menu opens at.
+   * @param mode - `'toggle'` closes the menu when it is already open for this Session.
+   */
+  readonly openSessionMenu: WorkspaceBrowserInjected['openSessionMenu']
 }
 
 /** The two directory-flow holes; a flow package's client half registers its one component into both. */
@@ -245,6 +292,14 @@ export type WorkspaceBrowserInjected = {
   openWorkspaceMenu: (workspaceId: WorkspaceId, path: string, displayTitle: string, point: { x: number; y: number }, mode?: 'toggle') => void
   /** Dismiss the settled Workspace dialog. */
   settleWorkspaceAction: () => void
+  /**
+   * Request a Workspace's rename or delete confirmation, as its menu entries do. The request is refused when the access
+   * snapshot excludes the action, so a caller never opens a dialog for a verb the Host refuses.
+   * @param workspaceId - the Workspace the action acts on.
+   * @param displayTitle - its title as shown, which seeds the rename draft.
+   * @param action - the requested verb.
+   */
+  requestWorkspaceAction: (workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete') => void
   /** Open actions for the clicked Session without selecting it. */
   openSessionMenu: (sessionId: SessionId, displayTitle: string, point: { x: number; y: number }, mode?: 'toggle') => void
   hooks: DirectoryPickingInjected['hooks'] & {
@@ -259,6 +314,14 @@ export type WorkspaceBrowserInjected = {
     hostInfo: HostObservable<RemoteHostFacts>
     workspaceShortcuts: HostObservable<WorkspaceShortcutState>
     shortcuts: HostObservable<readonly ShortcutCatalogEntry[]>
+    /** The Sessions plugins hid from the list and search (`UiWorkspace.hideSession`). */
+    hiddenSessions: HostObservable<ReadonlySet<SessionId>>
+    /** The one-list view's shelves (`UiWorkspace.registerShelf`). */
+    shelves: HostObservable<readonly SessionShelfView[]>
+    /** The distribution's presentation (`UiWorkspace.setViewDefaults`). */
+    viewDefaults: HostObservable<WorkspaceViewDefaults>
+    /** True while an entry occupies `sidebar.workspaces.list`. */
+    listBody: HostObservable<boolean>
   }
   /** Open the browser search and focus its input. */
   requestSearch: () => void
@@ -500,6 +563,7 @@ export type WorkspaceBrowserProps =
   PropsRuntime<'sidebar.workspaces'>
   & PropsRenderSlots<
     | 'sidebar.workspaces.directoryFlow'
+    | 'sidebar.workspaces.list'
     | 'sidebar.workspaces.session.row.action'
     | 'sidebar.session.row.trailing'
     | 'sidebar.session.row.leading'

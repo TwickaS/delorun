@@ -23,7 +23,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { DraftInitializationOptions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { RowToast } from './contract/slots.ts'
 import { pinOrderAccounts, pinOrderSource } from './pin-order.ts'
-import type { WorkspaceViewStoreActions } from './stores.ts'
+import type { SessionGroupBy, WorkspaceViewStoreActions } from './stores.ts'
 
 interface MainSelection {
   readonly sessionId?: SessionId
@@ -36,8 +36,66 @@ export interface StartSessionOptions extends DraftInitializationOptions {
   readonly agentPreset?: string
 }
 
+/**
+ * A shelf of the sidebar's one-list view: Sessions a plugin set aside, listed
+ * folded below the other rows. A Session whose latest prompt is newer than the
+ * time it was shelved, or that is pinned, waiting on the person or running,
+ * stays in the list.
+ */
+export interface SessionShelf {
+  /** Stable id; a later registration with the same id replaces the earlier one until it is disposed. */
+  readonly id: string
+  /** Place among the shelves, ascending. */
+  readonly order: number
+  /** The shelf's heading in the active language. */
+  readonly label: () => string
+  /** Each shelved Session with the time it was shelved, in epoch milliseconds. */
+  readonly members: { getSnapshot(): ReadonlyMap<SessionId, number>; subscribe(listener: () => void): () => void }
+}
+
+/** One shelf as the browser reads it: the registration's facts and its current members. */
+export interface SessionShelfView {
+  readonly id: string
+  readonly order: number
+  readonly label: () => string
+  readonly members: ReadonlyMap<SessionId, number>
+}
+
+/** How a distribution presents the sidebar until the person picks otherwise. */
+export interface WorkspaceViewDefaults {
+  /** The grouping the browser shows while the person has not picked one in View options. */
+  readonly groupBy: SessionGroupBy
+  /** Whether the one-list view heads its rows as Pinned, Working, Needs you and Recent. */
+  readonly sections: boolean
+  /** Whether the wide sidebar shows search as an open field across its header, with its shortcut, in place of the title and search icon. */
+  readonly searchField: boolean
+}
+
+/** Upstream's presentation: Workspace groups, no sections, a search icon. */
+export const DEFAULT_VIEW: WorkspaceViewDefaults = { groupBy: 'workspace', sections: false, searchField: false }
+
 /** Workspace archive and directory operations consumed by Client UI domains. */
 export interface UiWorkspace {
+  /**
+   * Add a shelf to the sidebar's one-list view.
+   * @param shelf - the shelf and its members.
+   * @returns the disposer that removes it.
+   */
+  registerShelf(shelf: SessionShelf): () => void
+  /**
+   * Present the sidebar a distribution's way until the returned disposer runs; the latest call wins.
+   * @param defaults - the grouping and sections.
+   * @returns the disposer that restores the previous presentation.
+   */
+  setViewDefaults(defaults: WorkspaceViewDefaults): () => void
+  /**
+   * Leave a Session out of the sidebar's list and search until the returned disposer runs, as a plugin that offers
+   * its own entry to it does; the Session stays openable through {@link UiWorkspace.openSession}. Hides of one Session
+   * count, so it shows again once every disposer ran.
+   * @param sessionId - the Session to hide.
+   * @returns the disposer.
+   */
+  hideSession(sessionId: SessionId): () => void
   /**
    * Select a Session and show its Conversation as one UI navigation action.
    * @param target - known Session identity or durable direct-parent subagent address to display.
@@ -170,6 +228,15 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     readonly attempt: Promise<SessionId>
   }>()
   private readonly lifetime = new AbortController()
+  private readonly hides = new Map<SessionId, number>()
+  /** The Sessions {@link UiWorkspace.hideSession} hides, which the sidebar's browser reads. */
+  readonly hidden = createSnapshotStore<ReadonlySet<SessionId>>(new Set())
+  private readonly shelfRegistrations: { readonly shelf: SessionShelf; readonly unsubscribe: () => void }[] = []
+  /** The registered shelves with their members, in order, which the sidebar's browser reads. */
+  readonly shelves = createSnapshotStore<readonly SessionShelfView[]>([])
+  private readonly viewDefaultsStack: WorkspaceViewDefaults[] = []
+  /** The presentation the latest {@link UiWorkspace.setViewDefaults} asked for, or upstream's. */
+  readonly viewDefaults = createSnapshotStore<WorkspaceViewDefaults>(DEFAULT_VIEW)
   private readonly selection = createSnapshotStore<MainSelection>(
     {}, { persist: { name: 'dsh.sessions.current' } },
   )
@@ -287,6 +354,53 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       const code = sessionCreateErrorOf(error)?.rpcError.code
       if (code !== 'agent-preset/not-found' && code !== 'agent-preset/invalid') throw error
       return this.createNamed(request)
+    }
+  }
+
+  registerShelf(shelf: SessionShelf): () => void {
+    const registration = { shelf, unsubscribe: shelf.members.subscribe(() => { this.publishShelves() }) }
+    this.shelfRegistrations.push(registration)
+    this.publishShelves()
+    return () => {
+      const index = this.shelfRegistrations.indexOf(registration)
+      if (index === -1) return
+      this.shelfRegistrations.splice(index, 1)
+      registration.unsubscribe()
+      this.publishShelves()
+    }
+  }
+
+  /** Publish one view per shelf id, the latest registration's, in order. */
+  private publishShelves(): void {
+    const latest = new Map<string, SessionShelf>()
+    for (const { shelf } of this.shelfRegistrations) latest.set(shelf.id, shelf)
+    this.shelves.set([...latest.values()]
+      .sort((a, b) => a.order - b.order)
+      .map(shelf => ({ id: shelf.id, order: shelf.order, label: shelf.label, members: shelf.members.getSnapshot() })))
+  }
+
+  setViewDefaults(defaults: WorkspaceViewDefaults): () => void {
+    this.viewDefaultsStack.push(defaults)
+    this.viewDefaults.set(defaults)
+    return () => {
+      const index = this.viewDefaultsStack.lastIndexOf(defaults)
+      if (index === -1) return
+      this.viewDefaultsStack.splice(index, 1)
+      this.viewDefaults.set(this.viewDefaultsStack.at(-1) ?? DEFAULT_VIEW)
+    }
+  }
+
+  hideSession(sessionId: SessionId): () => void {
+    this.hides.set(sessionId, (this.hides.get(sessionId) ?? 0) + 1)
+    this.hidden.set(new Set(this.hides.keys()))
+    let shown = false
+    return () => {
+      if (shown) return
+      shown = true
+      const left = (this.hides.get(sessionId) ?? 1) - 1
+      if (left === 0) this.hides.delete(sessionId)
+      else this.hides.set(sessionId, left)
+      this.hidden.set(new Set(this.hides.keys()))
     }
   }
 

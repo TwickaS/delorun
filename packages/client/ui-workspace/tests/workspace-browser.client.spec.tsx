@@ -14,13 +14,17 @@ import type {
   SessionPendingInteraction, SessionStatus, SessionStatusSnapshot,
 } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { ShortcutCatalogEntry, ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import type { DirectoryFlowOwnerProps, WorkspaceActionRequest, WorkspaceBrowserProps } from '../src/client/contract/slots.ts'
+import type {
+  DirectoryFlowOwnerProps, WorkspaceActionRequest, WorkspaceBrowserProps, WorkspaceListOwnerProps,
+} from '../src/client/contract/slots.ts'
+import { DEFAULT_VIEW } from '../src/client/navigation.ts'
 import { createWorkspaceShortcutControls } from '../src/client/shortcuts.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
-import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
+import { WorkspaceBrowser, workspaceColors } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { zh } from '../src/client/locales.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
@@ -115,6 +119,11 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     openWorkspaceMenu: vi.fn(),
     useWorkspaceActionRequest: bindSnapshotSelector(request),
     settleWorkspaceAction: () => { request.set(null) },
+    // The Host action stores the request that WorkspaceDialogs renders, seeded with the stored title.
+    requestWorkspaceAction: vi.fn((workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete') => {
+      const storedTitle = props.useWorkspaces(state => state.items.find(row => row.workspaceId === workspaceId)?.title ?? displayTitle)
+      request.set({ action, workspaceId, displayTitle, storedTitle })
+    }),
     openSessionMenu: vi.fn(),
     useContextMenuTarget: selector => selector(null),
     useShortcuts: select => select([]),
@@ -127,6 +136,10 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     wide: true,
     expandSidebar: vi.fn(),
     useSessions: hook(sessionState([])),
+    useHiddenSessions: hook(new Set()),
+    useShelves: hook([]),
+    useViewDefaults: hook(DEFAULT_VIEW),
+    useListBody: hook(false),
     useSessionStatus: hook(noPendingInteraction),
     useSessionRetainInfo: () => undefined,
     usePanelInfo,
@@ -154,8 +167,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   }
   const view = render(<WorkspaceBrowser {...props} />)
   return { view, props, store, controls, openDialog: (workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete') => {
-    const storedTitle = props.useWorkspaces(state => state.items.find(row => row.workspaceId === workspaceId)?.title ?? displayTitle)
-    act(() => { request.set({ action, workspaceId, displayTitle, storedTitle }) })
+    act(() => { props.requestWorkspaceAction(workspaceId, displayTitle, action) })
   } }
 }
 
@@ -166,6 +178,22 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('leaves a hidden session out of its rows, and shows it again once nothing hides it', () => {
+    localStorage.clear()
+    const preferences = createWorkspaceViewStore().create()
+    preferences.actions.setGroupExpanded(UNGROUPED_KEY, true)
+    localStorage.setItem('dsh.workspace.view.v5', JSON.stringify(preferences.getSnapshot()))
+    const b = mount({
+      useSessions: hook(sessionState([summary('kept', 20), summary('main', 100)])),
+      useWorkspaces: hook(workspaceState([])),
+      useHiddenSessions: hook(new Set([sid('main')])),
+    })
+    const rows = () => [...document.querySelectorAll('[data-row-key^="session:"]')].map(row => row.getAttribute('data-row-key'))
+    expect(rows()).toEqual(['session:kept'])
+    rerender(b, { useHiddenSessions: hook(new Set()) })
+    expect(rows()).toEqual(['session:main', 'session:kept'])
+  })
+
   it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency independent of arrival order and saved manual positions', (mode) => {
     localStorage.clear()
     const preferences = createWorkspaceViewStore().create()
@@ -332,6 +360,20 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
+  it.each(['workspace', 'flat'] as const)('names a Session\'s Workspace on its row only in the %s list without group headings', (mode) => {
+    localStorage.clear()
+    const preferences = createWorkspaceViewStore().create()
+    preferences.actions.setGroupBy(mode)
+    preferences.actions.setGroupExpanded('alpha', true)
+    localStorage.setItem('dsh.workspace.view.v5', JSON.stringify(preferences.getSnapshot()))
+    mount({
+      useSessions: hook(sessionState([summary('located', 1, { cwd: '/home/u/Documents/project' })])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['located'])])),
+    })
+    const row = screen.getByText('located').closest('[role="treeitem"]') as HTMLElement
+    expect(within(row).queryByText('alpha') !== null).toBe(mode === 'flat')
+  })
+
   it('prunes deleted Workspace view state only after the Workspace baseline is ready', async () => {
     const pending = {
       ...workspaceState([]),
@@ -492,7 +534,8 @@ describe('WorkspaceBrowser', () => {
     // Store-driven flip: title changes, rows flatten newest-first, headers gone.
     expect(b.store.getSnapshot().groupBy).toBe('flat')
     expect(screen.getByText('会话')).toBeTruthy()
-    expect(screen.queryByText('alpha')).toBeNull()
+    // The Workspace's name stays only as each row's caption, with no group heading.
+    expect(screen.getAllByText('alpha').map(node => node.closest('[data-row-key]')?.getAttribute('data-row-key'))).toEqual(['session:alpha-s'])
     expect(screen.getByText('alpha-s')).toBeTruthy()
     expect(screen.getByText('beta-s')).toBeTruthy()
 
@@ -642,6 +685,67 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getByText('stored')).toBeTruthy()
   })
 
+  it('shows search as an open field with its shortcut when the distribution asks, widening over the header actions while in use', () => {
+    const search: ShortcutCatalogEntry = {
+      id: 'session.search' as ShortcutCommandId, label: 'Search', aliases: [], keys: ['Ctrl', 'K'], aria: 'Control+K',
+      binding: null, modified: false, conflicts: [], issue: null,
+    }
+    mount({
+      useSessions: hook(sessionState([summary('kept', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['kept'])])),
+      useViewDefaults: hook({ ...DEFAULT_VIEW, searchField: true }),
+      useShortcuts: select => select([search]),
+    })
+    expect(screen.queryByText(zh['section.workspaces'])).toBeNull()
+    const input = screen.getByPlaceholderText(zh['search.placeholder'])
+    expect(input.tabIndex).toBe(0)
+    expect(screen.getByText('K').tagName).toBe('KBD')
+    const actions = () => document.querySelector('[class*="headerActions"]')!.className
+    expect(actions()).not.toMatch(/headerActionsHidden/)
+    fireEvent.focus(input)
+    expect(actions()).toMatch(/headerActionsHidden/)
+    expect(screen.queryByText('K')).toBeNull()
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(actions()).not.toMatch(/headerActionsHidden/)
+    fireEvent.focus(input)
+    fireEvent.click(screen.getByRole('button', { name: zh['search.clear'] }))
+    expect(actions()).not.toMatch(/headerActionsHidden/)
+  })
+
+  it('gives the first five Workspaces their own dot colour in the Workspaces\' order, then starts the colours again', () => {
+    const colors = workspaceColors(['a', 'b', 'a', 'c', 'd', 'e', 'f'])
+    expect(new Set([...colors.values()].slice(0, 5)).size).toBe(5)
+    expect(colors.get('f')).toBe(colors.get('a'))
+  })
+
+  it('shows the distribution\'s grouping until the person picks one, heads the one list and folds its shelves', () => {
+    const settled = { getSnapshot: () => new Map([[sid('done'), 5]]), subscribe: () => () => {} }
+    const sessions = hook(sessionState([
+      summary('done', 4), summary('busy', 3, { running: true }), summary('later', 2), summary('fresh', 9), summary('kept', 1),
+    ]))
+    const b = mount({
+      useSessions: sessions,
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['done', 'busy', 'later', 'fresh', 'kept'])], [], [sid('kept')])),
+      useViewDefaults: hook({ groupBy: 'flat', sections: true, searchField: true }),
+      useShelves: hook([{ id: 'settled', order: 1, label: () => 'Settled', members: settled.getSnapshot() }]),
+    })
+    expect(b.store.getSnapshot().groupBy).toBeUndefined()
+    const keys = () => [...document.querySelectorAll('[data-row-key]')].map(node => node.getAttribute('data-row-key'))
+    // Working leads; the rest go under their prompt's day; the settled chat waits folded on its shelf.
+    expect(keys()).toEqual([
+      'section:pinned', 'session:kept', 'section:working', 'session:busy', 'section:older', 'session:fresh', 'session:later', 'shelf:settled',
+    ])
+    expect(screen.getByText(zh['section.flat.working'])).toBeTruthy()
+    // The Pinned heading says it, so the pinned row shows no pin mark.
+    expect(screen.queryByRole('img', { name: zh['row.pinned'] })).toBeNull()
+    const shelf = screen.getByRole('button', { name: /Settled/ })
+    expect(shelf.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(shelf)
+    expect(keys().at(-1)).toBe('session:done')
+    fireEvent.click(shelf)
+    expect(keys().at(-1)).toBe('shelf:settled')
+  })
+
   it('keeps Workspaces as siblings by default and restores the selected tree grouping', () => {
     const workspaces = hook(workspaceState([
       { ...workspace('root', [], 'Projects'), path: '/projects' },
@@ -654,7 +758,7 @@ describe('WorkspaceBrowser', () => {
       fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
       fireEvent.click(screen.getByRole('menuitem', { name }))
     }
-    expect(b.store.getSnapshot().groupBy).toBe('workspace')
+    expect(b.store.getSnapshot().groupBy).toBeUndefined()
     expect(screen.getByText('Child')).toBeTruthy()
     expect(within(parentSection()).queryByText('Child')).toBeNull()
     choose('按工作区树')
@@ -1730,7 +1834,7 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByRole('tree', { name: '搜索结果' })).toBeNull()
     const targetRow = screen.getByText('Needle session').closest('[role="treeitem"]')
     expect(targetRow).toBeTruthy()
-    expect(screen.queryByText('alpha')).toBeNull()
+    expect(screen.getAllByText('alpha').every(node => node.closest('[data-row-key]')?.getAttribute('data-row-key')?.startsWith('session:'))).toBe(true)
     expect(scrollIntoView.mock.instances.at(-1)).toBe(targetRow)
     expect(b.store.getSnapshot().groupExpansion).toEqual({})
   })
@@ -2796,5 +2900,77 @@ describe('Workspace tree grouping', () => {
     fireEvent.dragEnd(alpha)
     expect(b.props.insertWorkspaceBefore).toHaveBeenCalledOnce()
     expect(b.props.insertWorkspaceBefore).toHaveBeenCalledWith(wid('alpha'), wid('gamma'))
+  })
+})
+
+describe('WorkspaceBrowser — the list seat', () => {
+  // The directory flow's hole, for a renderSlot stand-in that also answers other seats.
+  const flowOnly = (name: string, given: object) =>
+    (name === 'sidebar.workspaces.directoryFlow' && (given as DirectoryFlowOwnerProps).open ? <div data-testid="directory-flow" /> : null)
+
+  it('hands the wide region to an occupied list seat, which drives the browser\'s actions and dialogs', () => {
+    let owner: WorkspaceListOwnerProps | undefined
+    const renderSlot = ((name: string, given: object) => {
+      if (name === 'sidebar.workspaces.list') {
+        owner = given as WorkspaceListOwnerProps
+        return <div data-testid="list-body" />
+      }
+      return flowOnly(name, given)
+    }) as WorkspaceBrowserProps['renderSlot']
+    const requestSessionRename = vi.fn()
+    const requestAddWorkspace = vi.fn()
+    const b = mount({
+      useListBody: hook(true),
+      requestAddWorkspace,
+      renderSlot,
+      requestSessionRename,
+      useSessions: hook(sessionState([summary('kept', 20), summary('gone', 10)])),
+      useWorkspaces: hook(workspaceState([workspace('api', ['kept'], 'API')], [sid('gone')])),
+    })
+    expect(screen.getByTestId('list-body')).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    if (owner === undefined) throw new Error('expected the list seat to render')
+    const seat = owner
+    expect(seat.workspaces.map(item => item.title)).toEqual(['API'])
+    expect(seat.list.ids).toEqual([sid('kept'), sid('gone')])
+    expect(seat.canAddWorkspace).toBe(true)
+    expect(seat.searchRequest).toBe(0)
+    act(() => { seat.open(sid('kept')) })
+    expect(b.props.open).toHaveBeenCalledWith(sid('kept'))
+    act(() => { seat.open(sid('gone')) })
+    expect(b.props.notifyArchivedNotOpenable).toHaveBeenCalledTimes(1)
+    act(() => { seat.startSession(wid('api')) })
+    expect(b.props.startSession).toHaveBeenCalledWith(wid('api'))
+    const anchor = document.createElement('button')
+    act(() => { seat.addWorkspaceAnchor(anchor) })
+    act(() => { seat.addWorkspace() })
+    expect(requestAddWorkspace).toHaveBeenCalledTimes(1)
+    act(() => { seat.renameSession(sid('kept'), 'Kept') })
+    expect(requestSessionRename).toHaveBeenCalledWith(sid('kept'), 'Kept')
+    act(() => { seat.renameWorkspace(wid('api')) })
+    expect(screen.getByLabelText<HTMLInputElement>(t('field.workspaceName')).value).toBe('API')
+    fireEvent.click(screen.getByRole('button', { name: t('cancel') }))
+    act(() => { seat.deleteWorkspace(wid('api')) })
+    expect(screen.getByRole('heading', { name: t('delete.workspace') })).toBeTruthy()
+    act(() => { seat.openSessionMenu(sid('kept'), 'Kept', { x: 1, y: 2 }) })
+    expect(b.props.openSessionMenu).toHaveBeenCalledWith(sid('kept'), 'Kept', { x: 1, y: 2 })
+  })
+
+  it('keeps its own rail while the sidebar is folded, even with the seat occupied', () => {
+    const renderSlot = ((name: string, given: object) => (name === 'sidebar.workspaces.list' ? <div data-testid="list-body" /> : flowOnly(name, given))) as WorkspaceBrowserProps['renderSlot']
+    mount({ wide: false, useListBody: hook(true), renderSlot })
+    expect(screen.queryByTestId('list-body')).toBeNull()
+    expect(screen.getByRole('button', { name: t('search.sessions.aria') })).toBeTruthy()
+  })
+
+  it('names a Workspace the list no longer has with an empty title', () => {
+    let owner: WorkspaceListOwnerProps | undefined
+    const renderSlot = ((name: string, given: object) => {
+      if (name === 'sidebar.workspaces.list') owner = given as WorkspaceListOwnerProps
+      return flowOnly(name, given)
+    }) as WorkspaceBrowserProps['renderSlot']
+    mount({ useListBody: hook(true), renderSlot })
+    act(() => { owner?.renameWorkspace(wid('missing')) })
+    expect(screen.getByLabelText<HTMLInputElement>(t('field.workspaceName')).value).toBe('')
   })
 })

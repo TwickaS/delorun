@@ -12,8 +12,10 @@ import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-con
 import {
   type ArchivedFilter,
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  pinCurrentBlank, reconcileManualOrder, sectionFlat, sessionMemberIds, timeGroup,
+  visibleSessionIds, withoutHidden, workspaceLabel, UNGROUPED_KEY,
 } from '../src/client/tree.ts'
+import type { SessionNode } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
 const sid = (id: string) => id as SessionId
@@ -629,6 +631,25 @@ describe('deriveFlat', () => {
   })
 })
 
+describe('withoutHidden', () => {
+  it('leaves a hidden session out of the rows and of search, Host matches included, and keeps the list when nothing is hidden', () => {
+    const shown = summary('shown', 2, '/projects/app')
+    shown.title = shown.displayTitle = 'Needle shown'
+    const main = summary('main', 3, '/projects')
+    main.title = main.displayTitle = 'Needle main'
+    const all = list(shown, main)
+    const hidden = new Set([sid('main')])
+    expect(withoutHidden(all, new Set())).toBe(all)
+    expect(withoutHidden(all, new Set([sid('absent')]))).toBe(all)
+    const visible = withoutHidden(all, hidden)
+    expect([visible.ids, Object.keys(visible.byId)]).toEqual([[sid('shown')], ['shown']])
+    const groups = deriveGroups(visible, [workspace('app', ['shown'])], rowState({}), noAttention, view(['app', UNGROUPED_KEY]))
+    expect(groups.flatMap(group => group.sessions.map(node => node.id))).toEqual([sid('shown')])
+    const found = deriveSearchResults(visible, [], 'needle', noArchive, 'default', noAttention, { items: [{ sessionId: main.id, snippet: 'needle' }], hasMore: false }, 10)
+    expect(found.items.map(item => item.id)).toEqual([sid('shown')])
+  })
+})
+
 describe('deriveSearchResults archive filtering', () => {
   it('archived sessions never match — not by title and not via a backend content hit', () => {
     const hit = summary('hit', 2)
@@ -834,7 +855,8 @@ describe('deriveSearchResults', () => {
 describe('createWorkspaceViewStore', () => {
   it('stores view preferences and selects Manual when saving a drag order', () => {
     const store = createWorkspaceViewStore().create()
-    expect(store.getSnapshot().groupBy).toBe('workspace')
+    // No grouping is stored until the person picks one; the browser shows the distribution's default.
+    expect(store.getSnapshot().groupBy).toBeUndefined()
     expect(store.getSnapshot().orderBy).toBe('updated')
     store.actions.setGroupBy('flat')
     store.actions.setOrderBy('updated', {})
@@ -961,4 +983,50 @@ it('leaves unnamed history titles empty for locale-owned row labels', () => {
   item.displayTitle = 'Default workspace'
   const sessions = list(item)
   expect(deriveFlat(sessions, [item.id], noRows, noAttention)[0]?.title).toBe('')
+})
+
+describe('sectionFlat', () => {
+  const node = (id: string, fields: Partial<SessionNode> = {}): SessionNode => ({
+    id: sid(id), title: id, blank: false, running: false, runningSubagentCount: 0, completed: false,
+    pinned: false, archived: false, updatedAt: 10, ...fields,
+  })
+  const shelf = (id: string, members: [string, number][]) => ({
+    id, label: () => id, members: new Map(members.map(([key, since]) => [sid(key), since])),
+  })
+
+  it('heads pinned, working, waiting and other rows, keeping their order, and shelves a row with no newer prompt', () => {
+    const rows = [
+      node('blank', { blank: true }), node('pin', { pinned: true }), node('ask', { pendingInteraction: 'question' }),
+      node('run', { running: true }), node('kids', { runningSubagentCount: 2 }), node('woke', { updatedAt: 20 }),
+      node('settled'), node('both'), node('plain'),
+    ]
+    const shelves = [shelf('snoozed', [['woke', 15], ['both', 10]]), shelf('settled', [['settled', 10], ['both', 10], ['pin', 10]])]
+    const result = sectionFlat(rows, shelves, true)
+    expect(result.sections.map(section => [section.id, section.rows.map(row => row.title)])).toEqual([
+      ['pinned', ['pin']], ['working', ['run', 'kids']], ['needs-you', ['ask']], ['older', ['woke', 'plain']],
+    ])
+    expect(result.blank.map(row => row.title)).toEqual(['blank'])
+    expect(result.shelves.map(entry => [entry.id, entry.rows.map(row => row.title)])).toEqual([['snoozed', ['both']], ['settled', ['settled']]])
+  })
+
+  it('heads the other rows by the day of their latest prompt', () => {
+    const now = new Date(2026, 10, 3, 9, 30).getTime()
+    // Day 0 of November is 31 October, so day -3 is 28 October, six days before 3 November.
+    const at = (day: number, hour = 12) => new Date(2026, 10, day, hour).getTime()
+    const rows = [
+      node('morning', { updatedAt: at(3, 0) }), node('evening', { updatedAt: at(2, 23) }), node('monday', { updatedAt: at(-3) }),
+      node('week-old', { updatedAt: at(-4, 23) }),
+    ]
+    expect(sectionFlat(rows, [], true, now).sections.map(section => [section.id, section.rows.map(row => row.title)])).toEqual([
+      ['today', ['morning']], ['yesterday', ['evening']], ['week', ['monday']], ['older', ['week-old']],
+    ])
+    expect([timeGroup(at(-3, 0), now), timeGroup(at(-4, 23), now)]).toEqual(['week', 'older'])
+  })
+
+  it('without sections keeps every unshelved row under Recent and leaves out empty shelves', () => {
+    const rows = [node('pin', { pinned: true }), node('run', { running: true }), node('quiet')]
+    const result = sectionFlat(rows, [shelf('settled', [['quiet', 10]]), shelf('empty', [])], false)
+    expect(result.sections.map(section => [section.id, section.rows.map(row => row.title)])).toEqual([['recent', ['pin', 'run']]])
+    expect(result.shelves.map(entry => entry.id)).toEqual(['settled'])
+  })
 })
