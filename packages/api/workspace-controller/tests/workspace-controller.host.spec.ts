@@ -51,7 +51,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve }
 }
 
-async function harness(options: { systemDocuments?: boolean } = {}) {
+async function harness(options: { systemDocuments?: boolean; defaultWorkspace?: boolean } = {}) {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-workspace-controller-')))
   tempDirs.push(root)
   const ctx = new Context()
@@ -71,7 +71,9 @@ async function harness(options: { systemDocuments?: boolean } = {}) {
     resources: { register: vi.fn(() => dispose) },
   } as never)
   new RemoteAccessService(ctx)
-  const controller = new WorkspaceController(ctx, options.systemDocuments === true ? {} : { documentsDirectory: root })
+  const controller = new WorkspaceController(ctx, options.systemDocuments === true ? {} : options.defaultWorkspace === true
+    ? { defaultWorkspaceDirectory: join(root, DEFAULT_WORKSPACE_DIRECTORY) }
+    : { documentsDirectory: root })
   return { controller, ctx, root, storageDomain }
 }
 
@@ -599,6 +601,13 @@ describe('first-use Remote', () => {
     expect(existsSync(result!.workspace.path)).toBe(true)
     expect(ctx.sessions.list()).toEqual([])
     expect(await controller.initializeDefault(signal)).toEqual(result)
+  })
+
+  it('places the first-use Workspace at a configured directory without the Documents folder or a lookup', async () => {
+    const { controller, root } = await harness({ defaultWorkspace: true })
+    const result = await controller.initializeDefault(new AbortController().signal)
+    expect(result!.workspace).toMatchObject({ path: join(root, DEFAULT_WORKSPACE_DIRECTORY), title: DEFAULT_WORKSPACE_DIRECTORY })
+    expect(existsSync(join(root, 'deepseek-harness'))).toBe(false)
   })
 
   it('skips ineligible first use and propagates preparation failures', async () => {

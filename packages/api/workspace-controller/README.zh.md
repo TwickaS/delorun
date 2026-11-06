@@ -40,6 +40,7 @@ Client 入口提供 `ClientWorkspaceModel` 和 `createWorkspaceStateStream()`。
 | 配置 | 默认值 | 用途 |
 | --- | --- | --- |
 | `documentsDirectory` | 系统 Documents 目录 | 完全限定的 Host 目录覆盖值 |
+| `defaultWorkspaceDirectory` | `<Documents>/deepseek-harness/default-workspace` | 完全限定的首次使用工作区目录，使用时不查询 Documents 目录；其最后一个路径片段作为初始标题 |
 | `documentsLookupTimeoutMs` | `10000` | 操作系统目录查询的正数最大时长，单位为毫秒 |
 
 Documents 查询占用注册表变更队列，因此其他 Workspace 变更（包括登记已选目录）最多可能等待 `documentsLookupTimeoutMs`。取消可以停止查询；解析成功后，取消不会回滚创建或登记。

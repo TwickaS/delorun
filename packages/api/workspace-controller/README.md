@@ -40,6 +40,7 @@ The [Workspace registry](../../workspace/workspace/README.md#first-use-workspace
 | Configuration | Default | Purpose |
 | --- | --- | --- |
 | `documentsDirectory` | System Documents directory | Fully qualified Host directory override |
+| `defaultWorkspaceDirectory` | `<Documents>/deepseek-harness/default-workspace` | Fully qualified first-use Workspace directory, used without a Documents lookup; its last segment is the initial title |
 | `documentsLookupTimeoutMs` | `10000` | Positive maximum duration of OS directory lookup, in milliseconds |
 
 Documents lookup holds the registry mutation queue, so other Workspace mutations, including registration of a picked directory, can wait up to `documentsLookupTimeoutMs`. Cancellation can stop the lookup; after resolution succeeds, it does not roll back creation or registration.

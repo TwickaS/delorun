@@ -724,12 +724,12 @@
     {
       "path": "docs/config-catalog.md",
       "class": "delo-feature",
-      "reason": "Generated config catalogue, regenerated for the welcomeNotice option beside credentialOnboarding."
+      "reason": "Generated config catalogue, regenerated for the welcomeNotice option beside credentialOnboarding, the workspace controller's `defaultWorkspaceDirectory` and the plugin manager's profile-history options."
     },
     {
       "path": "docs/config-catalog.zh.md",
       "class": "delo-feature",
-      "reason": "Chinese counterpart of the generated config catalogue, regenerated with it for the welcomeNotice option."
+      "reason": "Chinese counterpart of the generated config catalogue, regenerated with it for the welcomeNotice, `defaultWorkspaceDirectory` and profile-history options."
     },
     {
       "path": "packages/client/ui-chat/tests/presentation-injected.client.spec.ts",
@@ -1535,6 +1535,31 @@
       "path": "packages/api/session-controller/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Late session projection keys: the consistency record re-recorded after the late-key sentence was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/api/workspace-controller/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Default workspace directory: the optional `defaultWorkspaceDirectory` Config places the first-use Workspace at an operator-named absolute path, validated at load by the same `validateDocumentsDirectory` as `documentsDirectory`, with no Documents lookup. Without it the default stays upstream's `<Documents>/deepseek-harness/default-workspace`."
+    },
+    {
+      "path": "packages/api/workspace-controller/tests/workspace-controller.host.spec.ts",
+      "class": "delo-feature",
+      "reason": "Default workspace directory: covers a first-use Workspace at the configured directory, with no Documents folder created."
+    },
+    {
+      "path": "packages/api/workspace-controller/README.md",
+      "class": "delo-feature",
+      "reason": "Default workspace directory: the `defaultWorkspaceDirectory` row of the configuration table."
+    },
+    {
+      "path": "packages/api/workspace-controller/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Default workspace directory: the Chinese counterpart of the `defaultWorkspaceDirectory` row."
+    },
+    {
+      "path": "packages/api/workspace-controller/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Default workspace directory: the consistency record re-recorded after the `defaultWorkspaceDirectory` row was added to README.md and its Chinese counterpart."
     }
   ],
   "retired": []

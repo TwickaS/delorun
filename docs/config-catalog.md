@@ -331,6 +331,12 @@ export interface Config {
 export interface Config {
   /** Override the system Documents directory with a fully qualified path. */
   documentsDirectory?: string
+  /**
+   * Place the first-use Workspace at this fully qualified directory, in place of
+   * `<Documents>/deepseek-harness/default-workspace`; no Documents lookup runs. Its last segment is the initial title,
+   * which reads as the localized default name when it is `default-workspace`.
+   */
+  defaultWorkspaceDirectory?: string
   /** Maximum duration of the operating system's Documents lookup. */
   documentsLookupTimeoutMs?: number
 }
@@ -2626,7 +2632,7 @@ export interface PlanModeConfig {
 
 - `inject`: `loader` · `profileContext`
 - `refs`: [`NpmFileSource`](subsystems/boot.md)
-- `source`: [`packages/boot/plugin-manager/src/index.ts:54`](../packages/boot/plugin-manager/src/index.ts)
+- `source`: [`packages/boot/plugin-manager/src/index.ts:60`](../packages/boot/plugin-manager/src/index.ts)
 
 ```ts config-catalog
 /** The pnpm executable, registries, and limits for diagnostics, lookups and connection checks. */
@@ -2653,6 +2659,10 @@ export interface Config {
    * unless that is npm's own registry or one of these.
    */
   fallbackRegistries?: string[]
+  /** The git executable name or path the profile's history runs, resolved through `PATH`; without git there is no history. */
+  gitCommand?: string
+  /** Bound on one git run of the profile's history, in milliseconds. */
+  historyTimeoutMs?: number
   /** How many of the newest versions above the installed one a version listing reads and returns. */
   versionListLimit?: number
   /** How many single-version registry lookups a version listing runs at once. */

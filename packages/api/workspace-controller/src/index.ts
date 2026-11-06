@@ -37,6 +37,12 @@ export { DirectoryPickerController } from './directory-picker.ts'
 export interface Config {
   /** Override the system Documents directory with a fully qualified path. */
   documentsDirectory?: string
+  /**
+   * Place the first-use Workspace at this fully qualified directory, in place of
+   * `<Documents>/deepseek-harness/default-workspace`; no Documents lookup runs. Its last segment is the initial title,
+   * which reads as the localized default name when it is `default-workspace`.
+   */
+  defaultWorkspaceDirectory?: string
   /** Maximum duration of the operating system's Documents lookup. */
   documentsLookupTimeoutMs?: number
 }
@@ -57,6 +63,7 @@ export class WorkspaceController extends TypertRemoteService {
 
   static Config: z<Config, ResolvedConfig> = z.object({
     documentsDirectory: z.string(),
+    defaultWorkspaceDirectory: z.string(),
     documentsLookupTimeoutMs: z.natural().min(1).default(10_000),
   })
 
@@ -73,6 +80,7 @@ export class WorkspaceController extends TypertRemoteService {
     ctx.typert.resources.register('workspace', { field: 'workspaceId' })
     this.config = WorkspaceController.Config(config)
     if (this.config.documentsDirectory !== undefined) validateDocumentsDirectory(this.config.documentsDirectory)
+    if (this.config.defaultWorkspaceDirectory !== undefined) validateDocumentsDirectory(this.config.defaultWorkspaceDirectory)
     this.commands = new WorkspaceCommands(ctx)
     this.feed = new WorkspaceFeed(ctx)
     // This package is the Loader entry for both Remote owners it hosts: the
@@ -102,7 +110,9 @@ export class WorkspaceController extends TypertRemoteService {
    */
   @Remote('initializeDefault')
   async initializeDefault(signal: AbortSignal): Promise<WorkspaceValue | undefined> {
+    const configured = this.config.defaultWorkspaceDirectory
     const workspace = await this.ctx.workspaceRegistry.initializeDefault(async () => {
+      if (configured !== undefined) return validateDocumentsDirectory(configured)
       const timeout = AbortSignal.timeout(this.config.documentsLookupTimeoutMs)
       return await defaultWorkspaceDirectory(
         this.config.documentsDirectory, AbortSignal.any([signal, timeout]),
