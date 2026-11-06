@@ -44,6 +44,15 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **Docker 监管器**（Docker supervisor）：唯一调用 Docker 的 Delo 组件，通过 `~/.delo` 下一个套接字上的固定结构 API 提供服务。该套接字只接受持有令牌的调用方，而令牌在每次 home 进程启动时写入该处；因此在方言强制执行原生规则时，受限命令无法访问它。无法强制执行时，`delorun verify` 会报告，setup 会标注 Docker 模式。它运行按摘要固定的工作区镜像，并报告该机器上 Docker 强制执行了哪些限制。代码对应：`@delo/supervisor`。<a id="supervisor"></a>
 - **home 进程**（home process）：在 `~/.delo` 下持有 CLI profile 锁并运行其 Host 的后台进程。`delorun start` 与 `delorun stop` 启动和停止它；更新通过更新握手抵达它，该握手从不在运行中的 chat 之下切换运行时。**更新通道**（update channel）：`delorun update` 与 studio 的「Update now」所用的 `~/.delo` 下的套接字，与 Docker 监管器一样，由每次启动的令牌与原生规则保护。锁按 profile 划分：桌面 Host 既不获取该锁，也不加入其排空流程，各入口独立更新。<a id="home-process"></a>
 - **运行时发行包**（runtime closure）：`delorun` 命令所运行全部内容的一次已签名发布，安装在 `~/.delo/runtimes/<version>` 下。**运行时仓库**（runtime store）：这些安装，附带指向当前活动安装的指针，并保留上一个安装以便回滚。桌面应用在其已签名资源中携带自己的副本。<a id="runtime-closure"></a>
+- **启动令牌**（start token）：每次 home 进程启动时写入 `run/<profile>/start-token` 的 32 字节随机令牌；Docker 监管器与更新通道只在该次启动运行期间，接受携带它的请求。<a id="start-token"></a>
+- **能力报告**（capability report）：说明机器运行什么、强制执行什么的陈述，其中每项限制标为 `enforced`、`not-enforced` 或 `unknown` 并附证据；setup 在本人选择 Docker 形态之前显示它。代码对应：运行时提供方的 `report()`。<a id="capability-report"></a>
+- **读取豁免**（read exemption）：受限命令可以读取并执行的目录，即 `runtimes/`、`skills/` 与 `dsh-runtimes/`；任何密钥都不写入其中。<a id="read-exemption"></a>
+- **启动协议**（launch protocol）：运行时已签名 manifest 中的编号，它规定入口文件、启动器传入的参数与所设置的环境变量；启动器只在支持该编号时运行此运行时。<a id="launch-protocol"></a>
+- **出站代理**（egress proxy）：每个 Docker 工作区在其自有网络上运行的 HTTP 代理，它自行解析每个目标并拒绝非公共地址；它是工作区唯一的对外路由。<a id="egress-proxy"></a>
+- **出站允许列表**（egress allowlist）：Docker 工作区的默认出站模式，允许其 profile 中的模型提供商、默认列表中的包仓库与 Git 主机，以及该工作区自行添加的主机。<a id="egress-allowlist"></a>
+- **容器拒绝标记**（container denial marker）：Docker 工作区只读根目录拒绝文件访问时所带的那一行，它说明环境拒绝了该访问、任何沙箱模式都不允许它，因此不提供提权提示。<a id="container-denial-marker"></a>
+- **S2 辅助通道**（S2 helper channel）：每个 S2 工作区容器内的 SSH 辅助程序，承载该工作区的文件、进程、终端、LSP 与 PTC 调用。<a id="s2-helper-channel"></a>
+- **监管器根目录**（supervisor roots）：至多列出 16 个父目录的文件，Docker 监管器只在这些父目录之下创建工作区根目录；只有 `delorun setup` 写入它。<a id="supervisor-roots"></a>
 
 <a id="reaching-a-studio"></a>
 
@@ -58,6 +67,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **host id**：studio 与 home 的 Host 进程之间一个连接的标识符。它由浏览器生成，从不发送给 home。代码中为 `@delo/contract-host-qualified-keys` 中的 `hostId`。<a id="host-id"></a>
 - **host 限定键**（host-qualified key）：携带 host id 的已持久化浏览器键或客户端状态键；对于会话或工作区，还带有原样的上游 id。代码中的键形式见 `@delo/contract-host-qualified-keys`。<a id="host-qualified-key"></a>
 - **端到端加密远程访问**（end-to-end encrypted reach）：TLS 在本人的 home 上终止，因此中继或提供方无法读取 studio 流量的远程访问。界面文本会准确说明每个选项仍能看到什么。对 Delo 中继从不使用「零信任」一词；它只可描述不涉及 Delo 的选项（Tailscale、自托管中继），且优先直接陈述提供方能看到什么。<a id="end-to-end"></a>
+- **隧道令牌**（tunnel token）：中继协议中的短时令牌，授权针对某一名称与某一 home 密钥的一次隧道尝试。<a id="tunnel-token"></a>
 - **证书告警**（certificate alert）：当公开证书日志显示一张覆盖 home 名称（包括通配符）的证书、而 home 并未申请它时，正在运行的 home 会在自己的屏幕上、桌面应用中以及其他受信任设备上显示的阻断性警告。<a id="certificate-alert"></a>
 
 <a id="signing-in"></a>
@@ -69,6 +79,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **受信任设备**（trusted device）：home 已为某个 studio 地址批准的浏览器或桌面应用。它持有绑定到该地址来源的设备密钥，因此新地址会再次批准它。**设备批准**（device approval）：在一个实时会话中，由受信任设备批准新设备，方法是输入新设备显示的代码。<a id="trusted-device"></a>
 - **身份因子**（identity factor）：为远程访问证明本人身份的登录方式：通行密钥、本人自己的 OpenID Connect 提供方，或在使用 Delo 中继时的 Delo Run 账户；开启远程访问时，须为每个 studio 地址注册。仅本地的 home 不需要它；公开远程访问必须具备它，tailnet 私有远程访问则可改用 tailnet 身份。它从不替代设备批准。<a id="identity-factor"></a>
 - **恢复套件**（recovery kit）：所有受信任设备丢失时，用于恢复批准权限的已保存密钥。使用它需要身份因子，并会换成一个新套件。home 自己的终端（`delorun devices reset`）是另一条恢复途径；在没有身份因子的情况下，它是唯一途径。<a id="recovery-kit"></a>
+- **所有者认领**（owner claim）：尚无所有者的 home 的首台设备认领，须凭所有者验证码完成，且只在 home 的回环监听器上接受；home 有所有者之前，远程访问保持关闭。<a id="owner-claim"></a>
 
 <a id="changing-the-harness"></a>
 
@@ -79,6 +90,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **eject**：将插件源码复制到 profile 中，作为原插件的可编辑替代品。<a id="eject"></a>
 - **源码模式**（source mode）：从本人自己分叉的 git 检出版本运行 Delo，并通过合并已签名的发布标签进行更新。目前未提供此模式，界面文本不使用该术语。<a id="source-mode"></a>
 - **更新报告**（update report）：新版本会改变或破坏什么，在更新应用之前显示。<a id="update-report"></a>
+- **更新日志**（update journal）：文件 `run/<profile>/update.json`，home 进程从 `snapshot` 阶段起在每个更新阶段开始时写入它，下次启动读取它以完成被中断的更新。<a id="update-journal"></a>
 
 <a id="keeping-work-safe"></a>
 
@@ -88,6 +100,12 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **未受信任的 chat**（untrusted chat）：导入的 chat。它显示写明其来源的横幅，并在本人将其标记为受信任之前，让其历史保持在模型上下文之外。<a id="untrusted-chat"></a>
 - **导出文件**（export file）：工作区及其 chat 与定制内容的导出文件，不含密钥。导入时不覆盖任何内容，且只在显示其差异后才应用定制内容。代码与维护者文档中为 archive（`@delo/archive`）；界面文本使用「export file」，因为上游界面把 Archive 用作会话操作。<a id="archive"></a>
 - **验证状态**（verification status）：Delo 对 home 所做检查（发布版本、文件、隔离、暴露、登录、插件、数据共享）的结果，附带其模式：默认为 `warn`，另有 `enforce` 与 `off`。代码对应：`@delo/integrity`、`delorun verify`。<a id="verification"></a>
+- **发布 manifest**（release manifest）：描述一次 Delo 发布的已签名文件，列出其运行时归档、安装程序、镜像摘要、SBOM、npm 包与安装脚本，每项附长度与 SHA-256 摘要。代码对应：`delorun-<version>.manifest.json`。<a id="release-manifest"></a>
+- **根元数据**（root metadata）：已签名的文件，列出每个发布角色的密钥与阈值、发布日志的密钥、见证者密钥以及每次轮换。<a id="root-metadata"></a>
+- **密钥角色**（key roles）：一次发布的四个签名角色：`root`（离线，由所有者持有）、`targets`（离线，签署每份发布 manifest）、`timestamp`（在线，证明新鲜度）与 `catalogue`（在线，签署插件索引与撤销列表）。<a id="key-roles"></a>
+- **发布日志**（release log）：Sigstore 的公开 Rekor 日志，为每份已签名发布 manifest 保存一个条目；客户端依据经见证的检查点核对该条目。<a id="release-log"></a>
+- **见证者**（witness）：根元数据中的一个密钥，为发布日志的检查点共同签名；至少一个所列见证者联署后，该检查点即为经见证。<a id="witness"></a>
+- **安全公告接受记录**（advisory acceptance）：`delo/release/advisory-acceptances.yaml` 中经过评审的条目，使依赖安全公告检查对某一公告与某个锁定版本范围通过，直至其 `lapsesAfter` 所指的发布。<a id="advisory-acceptance"></a>
 - **快照**（snapshot）：在更新、迁移或恢复之前自动创建的 profile 历史版本。<a id="snapshot"></a>
 - **抓取防护**（fetch guard）：Delo 插件，使 `web_fetch` 与 HTTP 抓取提供方拒绝回环、链路本地（包括云元数据地址）与私有网络目标，并返回带类型的原因；默认开启，在对等组合中关闭，且可以切换。<a id="fetch-guard"></a>
 - **指令层文件**（instruction-layer file）：skill、预设（preset）或 `AGENTS.md`：作为指令加载到其作用域内每个后续 chat 中的文本，因此模型对它的写入会先征询本人，并显示差异。<a id="instruction-layer"></a>
@@ -100,7 +118,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 
 ## 社区
 
-- **插件索引**（catalogue）：Discover 首先列出的公开插件索引。**兼容徽章**（compatibility badge）：「tested with Delo X」，表示该插件在该发布版本上通过了兼容性语料库测试，并不构成背书。**撤销列表**（revocation list）：已签名的插件版本列表，Delo 会在其下次加载时将其停用，并显示可见的原因。**列出的发现**（listed findings）：插件目录条目为某插件列出的发现，显示为作者或评审者的主张，Delo 不予核实；Delo 不执行插件审计。**插件安全审查**（plugin security review）：本人在安装插件之前可以运行的一个可选 agent 预设；它可以把发现贡献给共享数据库，且并不完全可靠。未提供此功能，界面文本不使用该术语。<a id="catalogue"></a>
+- **插件索引**（catalogue）：Discover 首先列出的公开插件索引。**兼容徽章**（compatibility badge）：「tested with Delo X」，表示该插件在该发布版本上通过了兼容性语料库测试，并不构成背书。**撤销列表**（revocation list）：已签名的插件版本列表，Delo 会在其下次加载时将其停用，并显示可见的原因。**列出的发现**（listed findings）：插件索引条目为某插件列出的发现，显示为作者或评审者的主张，Delo 不予核实；Delo 不执行插件审计。**插件安全审查**（plugin security review）：本人在安装插件之前可以运行的一个可选 agent 预设；它可以把发现贡献给共享数据库，且并不完全可靠。未提供此功能，界面文本不使用该术语。<a id="catalogue"></a>
 - **候补名单**（waitlist）：在 delorun.com 上为托管 home、托管机器与备份报名，受隐私政策约束。<a id="waitlist"></a>
 - **文档网站**（documentation website）：`docs.delorun.com`，提供英文与中文的用户指南与参考资料。每个页面都注明其描述的 Delo 版本，并同时以 Markdown 形式发布；另提供 `llms.txt` 索引，供本人的编码 agent 使用。代码对应：`delo/apps/docs`。<a id="documentation-website"></a>
 
@@ -113,7 +131,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **对等开关**（parity switch）：对等组合中一个已注册的开关，即一项对模型可见的 Delo 变更，带有其默认取值与对等取值。代码中为 `@delo/contract-parity-composition` 中的注册表 `PARITY_SWITCHES`。<a id="parity-switch"></a>
 - **开关扫描**（switch sweep）：分别开启每个开关、用其自身的 Delo 场景回放的检查，以及在 `delo/` 之下找出没有注册开关的对模型可见输入的静态扫描。<a id="switch-sweep"></a>
 - **扩展点优先规则**（extension-point-first rule）：Delo 的行为位于 `delo/` 之下，并运行在上游的扩展点上；对上游的修改只增加扩展点，不增加行为。**差异预算**（divergence budget）：每个类别中，一次发布在 1.0 基线之外可新增的非生成台账条目与差异块，上限为 max(20 条目, 10%) 与 max(150 差异块, 10%)；上游已吸收的条目计入抵扣。**预演合并**（rehearsal merge）：每次 Delo 发布前，对上游最新标签进行的一次试验性合并。当存在冲突的差异块超过 15%，或在没有负责人决定的情况下出现冲突的 `security` 文件时，它失败。<a id="extension-point-first"></a>
-- **约定**（contract）：位于 [`delo/docs/contracts/`](../contracts/README.md) 下的规格页面，工作包按其原样使用。**工作包**（work package）：一个并行工作单元，具有其拥有的路径与验收证据。<a id="contract"></a>
+- **约定**（contract）：位于 [`delo/docs/contracts/`](../contracts/README.zh.md) 下的规格页面，工作包按其原样使用。**工作包**（work package）：一个并行工作单元，具有其拥有的路径与验收证据。<a id="contract"></a>
 - **拒绝测试**（denial test）：证明被禁止的操作会失败的测试。<a id="denial-test"></a>
 - **检查运行器**（check runner）：Delo 的命令，运行改动所涉及的检查（`pnpm check`），带有以每项检查已声明输入为键的本地通过缓存，并提供计划视图（`--plan`）。未缓存的完整运行（`pnpm check:full`）是正确性证据。<a id="check-runner"></a>
 - **changelog fragment**：`delo/changelog/unreleased/` 下的一个文件，描述一项人们能够察觉的改动；发布说明由这些片段汇总而成。<a id="changelog-fragment"></a>

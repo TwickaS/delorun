@@ -40,6 +40,15 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 - **Docker supervisor** — the only Delo component that calls Docker, through a fixed-schema API on a socket under `~/.delo` that accepts only callers holding the token each home-process start writes there, so confined commands cannot reach it where the dialect enforces the native rule; where it cannot, `delorun verify` reports it and setup labels Docker mode. It runs workspace images pinned by digest and reports which limits Docker enforces on that machine. Code: `@delo/supervisor`. <a id="supervisor"></a>
 - **home process** — the background process that holds the CLI profile's lock under `~/.delo` and runs its Host; `delorun start` and `delorun stop` start and stop it, and updates reach it through the update handshake, which never switches the runtime under a running chat. **update channel** — the socket under `~/.delo` that `delorun update` and the studio's "Update now" use, guarded like the Docker supervisor's by the per-start token and the native rule. The lock is per profile: the desktop Host neither takes it nor joins its drain, and each surface updates on its own. <a id="home-process"></a>
 - **runtime closure** — one signed release of everything the `delorun` command runs, installed under `~/.delo/runtimes/<version>`. **runtime store** — those installations, with a pointer to the active one and the previous one kept for rollback. The desktop app carries its own copy in its signed resources. <a id="runtime-closure"></a>
+- **start token** — the 32-byte random token that each home-process start writes to `run/<profile>/start-token`; the Docker supervisor and the update channel accept a request only with it, and only while that start runs. <a id="start-token"></a>
+- **capability report** — the statement of what a machine runs and enforces, with each limit `enforced`, `not-enforced` or `unknown` and its evidence; setup shows it before the person chooses a Docker shape. Code: the runtime provider's `report()`. <a id="capability-report"></a>
+- **read exemption** — a directory that confined commands may read and execute: `runtimes/`, `skills/` and `dsh-runtimes/`. No secret is written under one. <a id="read-exemption"></a>
+- **launch protocol** — the number in a runtime's signed manifest that fixes its entry file, the arguments the launcher passes and the environment variables it sets; the launcher runs a runtime only when it supports that number. <a id="launch-protocol"></a>
+- **egress proxy** — the HTTP proxy that each Docker workspace runs on its own network, which resolves each destination itself and refuses non-public addresses; it is the workspace's only route out. <a id="egress-proxy"></a>
+- **egress allowlist** — the default egress mode of a Docker workspace: the model providers in its profile, the package registries and Git hosts on the default list, and the workspace's own additions. <a id="egress-allowlist"></a>
+- **container denial marker** — the line that a file denial by a Docker workspace's read-only root carries, stating that the environment denies the access and that no sandbox mode allows it, so it offers no escalation. <a id="container-denial-marker"></a>
+- **S2 helper channel** — the SSH helper inside each S2 workspace container, which carries the workspace's file, process, terminal, LSP and PTC calls. <a id="s2-helper-channel"></a>
+- **supervisor roots** — the file listing at most 16 parent directories under which the Docker supervisor creates workspace roots; only `delorun setup` writes it. <a id="supervisor-roots"></a>
 
 ## Reaching a studio
 
@@ -52,6 +61,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 - **host id** — the studio's identifier of one connection to a home's Host process. The browser generates it and never sends it to a home. Code: `hostId` in `@delo/contract-host-qualified-keys`. <a id="host-id"></a>
 - **host-qualified key** — a persisted browser key or client state key that carries the host id and, for a session or workspace, the upstream id unchanged. Code: the key forms in `@delo/contract-host-qualified-keys`. <a id="host-qualified-key"></a>
 - **end-to-end encrypted reach** — reach where TLS ends on the person's home, so the relay or provider cannot read studio traffic. Interface text says exactly what each option can still see. "Zero-trust" is never used for the Delo relay; it may describe only options with no Delo involvement (Tailscale, a self-hosted relay), and the exact statement of what the provider can see is preferred. <a id="end-to-end"></a>
+- **tunnel token** — the short-lived token on the relay protocol that authorises one tunnel attempt for one name and one home key. <a id="tunnel-token"></a>
 - **certificate alert** — the blocking warning a running home raises, on its own screen, in the desktop app and on its other trusted devices, when a public certificate log shows a certificate covering its name, wildcards included, that it did not request. <a id="certificate-alert"></a>
 
 ## Signing in
@@ -61,6 +71,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 - **trusted device** — a browser or desktop app a home has approved for one studio address; it holds a device key bound to that address's origin, so a new address approves it again. **device approval** — approving a new device from a trusted one, in a live session, by typing the code the new device shows. <a id="trusted-device"></a>
 - **identity factor** — the sign-in that proves who the person is for reach: a passkey, the person's own OpenID Connect provider or, with the Delo relay, a Delo Run account, enrolled for each studio address when reach is turned on. A local-only home needs none; public reach requires one, and tailnet-private reach may use tailnet identity instead. It never replaces device approval. <a id="identity-factor"></a>
 - **recovery kit** — the saved key that restores approval rights when every trusted device is lost; using it needs the identity factor and replaces it with a new kit. The home's own terminal (`delorun devices reset`) is the other way back, and without an identity factor it is the only one. <a id="recovery-kit"></a>
+- **owner claim** — the first device's claim on a home that has no owner, made with the owner code and accepted only on the home's loopback listener; reach stays off until the home has an owner. <a id="owner-claim"></a>
 
 ## Changing the harness
 
@@ -69,6 +80,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 - **eject** — copying a plugin's source into the profile as an editable replacement for the original. <a id="eject"></a>
 - **source mode** — running Delo from a git checkout of the person's own fork, updated by merging signed release tags. This mode is not offered; interface text does not use the term. <a id="source-mode"></a>
 - **update report** — what a new release would change or break, shown before an update applies. <a id="update-report"></a>
+- **update journal** — the file `run/<profile>/update.json`, which the home process writes at the start of each update phase from `snapshot` on and which the next start reads to finish an interrupted update. <a id="update-journal"></a>
 
 ## Keeping work safe
 
@@ -76,6 +88,12 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 - **untrusted chat** — an imported chat. It shows a banner that names its source and keeps its history out of model context until the person marks it trusted. <a id="untrusted-chat"></a>
 - **export file** — an export of workspaces with their chats and customisation, secrets excluded, that imports without overwriting anything and applies customisation only after showing its diff. Code and maintainer docs: archive (`@delo/archive`); interface text says "export file", because upstream's interface uses Archive for a session action. <a id="archive"></a>
 - **verification status** — the result of Delo's checks on a home (release, files, isolation, exposure, sign-in, plugins, data sharing) with its mode: `warn` by default, `enforce` or `off`. Code: `@delo/integrity`, `delorun verify`. <a id="verification"></a>
+- **release manifest** — the signed file that describes one Delo release: its runtime archives, installers, image digests, SBOM, npm packages and install scripts, each with its length and SHA-256 digest. Code: `delorun-<version>.manifest.json`. <a id="release-manifest"></a>
+- **root metadata** — the signed file that names every release role's keys and thresholds, the release log's keys, the witness keys and each rotation. <a id="root-metadata"></a>
+- **key roles** — the four signing roles of a release: `root` (offline, held by the owner), `targets` (offline, signs each release manifest), `timestamp` (online, attests freshness) and `catalogue` (online, signs the catalogue index and revocation list). <a id="key-roles"></a>
+- **release log** — Sigstore's public Rekor log, which holds an entry for each signed release manifest; clients check an entry against a witnessed checkpoint. <a id="release-log"></a>
+- **witness** — a key in the root metadata that cosigns a release-log checkpoint; a checkpoint counts as witnessed when at least one listed witness has cosigned it. <a id="witness"></a>
+- **advisory acceptance** — a reviewed entry in `delo/release/advisory-acceptances.yaml` that lets the dependency advisory check pass for one advisory and one locked version range, until its `lapsesAfter` release. <a id="advisory-acceptance"></a>
 - **snapshot** — a profile history version made automatically before an update, migration or recovery. <a id="snapshot"></a>
 - **fetch guard** — the Delo plugin that makes `web_fetch` and the HTTP fetch provider refuse loopback, link-local (cloud metadata addresses included) and private-network targets with a typed reason; on by default, off in the parity composition, and switchable. <a id="fetch-guard"></a>
 - **instruction-layer file** — a skill, a preset or an `AGENTS.md`: text that loads as instructions in every future chat of its scope, so a model-authored write to one asks first with its diff. <a id="instruction-layer"></a>

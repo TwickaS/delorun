@@ -296,3 +296,21 @@
 | consistency record | 一致性记录 | | | `<page>.i18n.yaml`，按小节保存两侧哈希 |
 | zero-trust | 零信任 | | | 只在「应避免的用词」中出现，不用于描述 Delo 中继 |
 | nation of geniuses | 一个天才之国 | | | 「Delo 的目标」一句中的说法，以「」标出 |
+| start token | 启动令牌 | 启动令牌（start token） |  | home 进程每次启动写入的随机令牌 |
+| capability report | 能力报告 | 能力报告（capability report） |  | `report()` 返回的限制状态陈述 |
+| read exemption | 读取豁免 | 读取豁免（read exemption） |  | 受限命令可读取的目录 |
+| launch protocol | 启动协议 | 启动协议（launch protocol） |  | 运行时入口、参数与环境变量的编号 |
+| egress proxy | 出站代理 | 出站代理（egress proxy） |  | Docker 工作区的唯一对外路由 |
+| egress allowlist | 出站允许列表 | 出站允许列表（egress allowlist） |  | Docker 工作区的默认出站模式 |
+| container denial marker | 容器拒绝标记 | 容器拒绝标记（container denial marker） |  | 环境拒绝文件访问时的结果行 |
+| S2 helper channel | S2 辅助通道 | S2 辅助通道（S2 helper channel） |  | S2 工作区容器内的 SSH 辅助程序 |
+| supervisor roots | 监管器根目录 | 监管器根目录（supervisor roots） |  | Docker 监管器可创建工作区根目录的父目录 |
+| update journal | 更新日志 | 更新日志（update journal） |  | `run/<profile>/update.json` |
+| owner claim | 所有者认领 | 所有者认领（owner claim） |  | 首台设备对无所有者 home 的认领 |
+| tunnel token | 隧道令牌 | 隧道令牌（tunnel token） |  | 中继协议中授权一次隧道尝试的令牌 |
+| release manifest | 发布 manifest | 发布 manifest（release manifest） |  | 已签名的发布描述文件 |
+| root metadata | 根元数据 | 根元数据（root metadata） |  | 列出密钥、阈值与轮换的已签名文件 |
+| key roles | 密钥角色 | 密钥角色（key roles） |  | root、targets、timestamp 与 catalogue 四个签名角色 |
+| release log | 发布日志 | 发布日志（release log） |  | Sigstore 公开 Rekor 日志中的发布条目 |
+| witness | 见证者 | 见证者（witness） |  | 发布日志检查点的共同签名方 |
+| advisory acceptance | 安全公告接受记录 | 安全公告接受记录（advisory acceptance） |  | 依赖安全公告检查的评审条目 |
