@@ -256,6 +256,14 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* The search shortcut inside a distribution's always-open search field. */
+.searchHint {
+  flex: none;
+  margin-right: 4px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+}
+
 .clearButton {
   flex: none;
   display: inline-flex;
@@ -657,6 +665,84 @@
   .searchSlot,
   .searchInput,
   .headerActions {
+    transition: none;
+  }
+}
+
+/* The one-list view's headings (Pinned, Working, Needs you, Recent) and its
+   folded shelves: quiet captions whose text lines up with the rows' titles;
+   a shelf's count follows its name and its chevron sits where the times do. */
+.flatHeading {
+  padding: 14px var(--dsh-sidebar-row-padding) 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.flatList > .flatHeading:first-child {
+  padding-top: 4px;
+}
+
+.shelfToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 32px;
+  margin-top: 10px;
+  padding: 0 var(--dsh-sidebar-row-padding);
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shelfToggle + .shelfToggle {
+  margin-top: 0;
+}
+
+@media (hover: hover) {
+  .shelfToggle:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
+.shelfToggle:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.shelfChevron {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  margin-left: auto;
+}
+
+.shelfChevron > svg {
+  transition: transform 160ms var(--ds-ease-in-out);
+}
+
+.shelfChevronOpen {
+  transform: rotate(90deg);
+}
+
+.shelfCount {
+  color: var(--dsw-alias-label-caption, var(--dsw-alias-label-tertiary));
+  font-size: 11px;
+  font-weight: 400;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shelfChevron > svg {
     transition: none;
   }
 }

@@ -1195,6 +1195,16 @@
       "path": "packages/client/ui-workspace/tests/workspaces-service.client.spec.ts",
       "class": "delo-feature",
       "reason": "Adds setSidebarWidths to the layout double, which the layout actions now include."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/locales.ts",
+      "class": "delo-feature",
+      "reason": "Adds the one-list section headings (Pinned, Working, Needs you, Recent, Today, Yesterday, This week, Older) to every locale dictionary."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.module.css",
+      "class": "delo-feature",
+      "reason": "Styles the search shortcut hint and the one-list section headings and folded shelves."
     }
   ],
   "retired": []
