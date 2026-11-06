@@ -54,6 +54,21 @@
       "path": "docs/i18n/terminology.md",
       "class": "delo-feature",
       "reason": "Delo's product terms with their Chinese renderings."
+    },
+    {
+      "path": "docs/i18n/README.md",
+      "class": "delo-feature",
+      "reason": "States the translation-pairing scope with Delo's delo/docs/ tree included, matching scripts/translation-pairing.ts."
+    },
+    {
+      "path": "docs/i18n/README.zh.md",
+      "class": "delo-feature",
+      "reason": "States the translation-pairing scope with Delo's delo/docs/ tree included, matching scripts/translation-pairing.ts."
+    },
+    {
+      "path": "docs/i18n/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "States the translation-pairing scope with Delo's delo/docs/ tree included, matching scripts/translation-pairing.ts."
     }
   ]
 }
