@@ -54,6 +54,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **Delo 中继**（Delo relay）：Delo Run 的中继，位于 `delo.run` 名称下。**中继控制面**（relay control）：其 Cloudflare Workers 部分，负责名称、密钥绑定、隧道授权、限额与滥用处理。**中继数据面**（relay data plane）：无状态的直通服务器，转发它们无法读取的加密字节。<a id="delo-relay"></a>
 - **自托管中继**（self-hosted relay）：由本人在自己的服务器与域名上运行的同一中继数据面。端到端加密在以下条件下保持成立：该域名的 CAA 记录把证书签发绑定到 home 的 ACME 账户（`accounturi`），且 home 不通过中继响应任何证书质询。其运营者即其所有者，因此 Delo 中继的每账户限额不适用于它。<a id="self-hosted-relay"></a>
 - **studio 地址**（studio address）：能够访问 home 的 studio 的地址，例如 `k7x2p9.delo.run`、本人自己的域名或 `ts.net` 名称。<a id="studio-address"></a>
+- **远程访问监听器**（reach listener）：为一种远程访问方式提供服务的 Host 监听器。它绑定到 `127.0.0.1` 或一个 Unix 套接字，不允许覆盖主机地址；它在任何路由之前对每个请求与升级请求进行认证，并在登录之前只提供其登录前允许列表中的路由。回环监听器是上游自己的监听器。代码中为 `@delo/contract-admission` 中的监听器 id。<a id="reach-listener"></a>
 - **host id**：studio 与 home 的 Host 进程之间一个连接的标识符。它由浏览器生成，从不发送给 home。代码中为 `@delo/contract-host-qualified-keys` 中的 `hostId`。<a id="host-id"></a>
 - **host 限定键**（host-qualified key）：携带 host id 的已持久化浏览器键或客户端状态键；对于会话或工作区，还带有原样的上游 id。代码中的键形式见 `@delo/contract-host-qualified-keys`。<a id="host-qualified-key"></a>
 - **端到端加密远程访问**（end-to-end encrypted reach）：TLS 在本人的 home 上终止，因此中继或提供方无法读取 studio 流量的远程访问。界面文本会准确说明每个选项仍能看到什么。对 Delo 中继从不使用「零信任」一词；它只可描述不涉及 Delo 的选项（Tailscale、自托管中继），且优先直接陈述提供方能看到什么。<a id="end-to-end"></a>

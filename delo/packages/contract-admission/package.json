@@ -1,0 +1,14 @@
+{
+  "name": "@delo/contract-admission",
+  "description": "Listener ids, the Authenticator's admission results, refusal codes, the session cookie and the session limits of a home's admission, as specified by contract C4.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*"
+  }
+}

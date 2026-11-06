@@ -1252,6 +1252,12 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  delo/packages/contract-admission:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+
   delo/packages/contract-archive-and-trash: {}
 
   delo/packages/contract-catalogue-revocation:
