@@ -9,11 +9,17 @@
     "check": "tsx src/check-fork-boundary.ts"
   },
   "dependencies": {
+    "@delo/contract-oidc-passkeys": "workspace:*",
     "@delo/contract-parity-composition": "workspace:*",
+    "@delo/contract-reach-providers": "workspace:*",
+    "@delo/contract-relay-protocol": "workspace:*",
     "@secretlint/node": "13.0.7",
     "@secretlint/secretlint-rule-pattern": "13.0.7",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
+    "asn1js": "^3.0.10",
+    "jose": "^6.2.15",
     "js-yaml": "^4.3.2",
+    "pkijs": "^3.4.0",
     "typescript": "^6.0.3",
     "zod": "^4.4.3"
   },

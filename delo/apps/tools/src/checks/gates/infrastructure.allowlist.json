@@ -20,6 +20,11 @@
       "path": "scripts/test-non-loopback-address.ts",
       "value": "169.254.0.0",
       "reason": "The link-local range named in the probe's documentation comment, which the probe excludes."
+    },
+    {
+      "path": "delo/apps/tools/src/stack/certificates.ts",
+      "value": "2.5.4.3",
+      "reason": "The X.520 commonName object identifier in a certificate subject, not an address."
     }
   ]
 }

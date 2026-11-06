@@ -5,7 +5,7 @@
 `@delo/tools` 是 Delo 的 fork 工具，一个位于 `delo/apps/tools` 的私有包。
 它包含差异台账检查器：该检查器记录本树与其锁定的上游提交之间的每一处差异，并统计这些差异的数量。
 它还包含对每项变更进行检查的门禁、提交标准，以及上游工作流的清单。
-检查运行器 [`src/run-checks.ts`](src/run-checks.ts) 负责排序并运行这些门禁与下文所述的其他本地检查；本地 stack 以及其他 fork 工具将随后续工作包到达。
+检查运行器 [`src/run-checks.ts`](src/run-checks.ts) 负责排序并运行这些门禁与下文所述的其他本地检查；替身栈服务于远程访问与登录测试，其他 fork 工具将随后续工作包到达。
 
 ## 模块
 
@@ -24,7 +24,8 @@
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
 - `src/parity/composition/` 包含约定 C16 的对等覆盖层、`parity-switches` 检查（`check-parity-switches.ts`，以及 `switches.ts`、`contributions.ts`、`overlay.ts` 与 `sweep.ts`）和暂存的开关开启场景；下文的对等组合一节描述它们。
 - `src/issues/` 把维护者撰写的 brief 转为 GitHub Issue：`brief.ts` 包含字段、规则与 Issue 正文，`references.ts` 包含 brief 可以携带的链接与路径，`labels.ts` 包含标签文件，`gh.ts` 包含 `gh` 调用，`issues.ts` 为命令行。
-- `tests/` 包含测试规范。台账规则在临时 git 仓库中运行，`ledger-merge.spec.ts` 还在其中让分支经由合并驱动完成变基。`rehearse/` 在临时目录中构建一个上游仓库及其 fork，并在二者之间预演合并。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。`checks.spec.ts` 与 `checks-cache.spec.ts` 覆盖运行器的选择、层级、预算、通过缓存与 `--plan`。`parity/` 在真实仓库与植入违规的夹具上覆盖对等检查，并以植入的覆盖层运行上游的 headless 适配器。
+- `src/stack/` 包含远程访问与登录测试所用的替身栈：`certificates.ts`（测试授权机构、证书与请求）、`loopback.ts`（回环 HTTPS 服务器与客户端）、`network-guard.ts`、`oidc-provider.ts`、`acme.ts` 与 `caa.ts`、`certificate-transparency.ts`，以及 `index.ts`，后者把它们一并启动；下文的替身栈一节描述它们。
+- `tests/` 包含测试规范。台账规则在临时 git 仓库中运行，`ledger-merge.spec.ts` 还在其中让分支经由合并驱动完成变基。`rehearse/` 在临时目录中构建一个上游仓库及其 fork，并在二者之间预演合并。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。`checks.spec.ts` 与 `checks-cache.spec.ts` 覆盖运行器的选择、层级、预算、通过缓存与 `--plan`。`parity/` 在真实仓库与植入违规的夹具上覆盖对等检查，并以植入的覆盖层运行上游的 headless 适配器。`stack/` 像 home 那样驱动每个替身，并配有规范端的 ACME 客户端（`acme-client.ts`）与 C14 的依赖方检查（`c14-relying-party.ts`），还在网络守卫下运行整个栈。
 
 ## 差异台账
 
@@ -223,6 +224,27 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:web-changed
 账本检查单独运行为 `pnpm --filter @delo/tools check`。单个门禁用 `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/<name>.ts` 运行（如 `licence`），范围门禁接受 `--base <rev>`。规范用 `node_modules/.bin/vitest run --config delo/vitest.config.ts` 运行，本包的类型检查用 `node_modules/.bin/tsc -p delo/apps/tools/tsconfig.json --noEmit`。
 
 [delo-dev-workflow 技能](../../../.agents/skills/delo-dev-workflow/SKILL.md)说明了何时运行各项检查。
+
+## 替身栈
+
+[`src/stack/`](src/stack/index.ts) 包含远程访问与登录所联系的外部服务的本地替身，使其测试不接触任何在线提供方。`startStandInStack()` 在 `127.0.0.1` 上启动一个测试授权机构和四个替身，每个替身监听临时端口，并以该授权机构签发的证书通过 HTTPS 提供服务；客户端只信任 `authority.certificate.pem`，不信任其他任何证书。每个替身也可以单独启动。替身属于测试基础设施：它们模拟提供方有文档记载的行为，其钩子产生的响应正是约定的拒绝测试必须拒绝的那些。
+
+| 替身 | 替代对象 | 提供的内容 | 拒绝测试的钩子 |
+| --- | --- | --- | --- |
+| `startOidcStandIn`（[`oidc-provider.ts`](src/stack/oidc-provider.ts)）；栈启动两个，`issuerA` 与 `issuerB` | 本人自己的 OpenID Connect 提供方（[C14](../../docs/contracts/c14-oidc-passkeys.zh.md)） | 发现文档、密钥集、使用 S256 PKCE 的授权码流程、`nonce` 与 RFC 9207 的 `iss` 参数、令牌端点上的 `client_secret_basic`、RFC 7591 与 7592 动态注册。它没有登录页面：每次授权都以其配置的主体登录，`auth_time` 为当前时间。它使用 RS256、PS256、ES256 或 EdDSA 签名 | 下一个 ID 令牌中的声明被改动或缺失（另一个 `aud`、多个受众且无 `azp`、另一个 `iss`、`sub` 或 `nonce`、过旧的 `iat` 或 `auth_time`）；伪造的令牌（`alg: none`、以公钥为密钥的 HS256、未知密钥、无 `kid`、签名错误）；另一个或缺失的 `iss` 响应参数；密钥的发布、轮换与退役，以及用已退役的密钥签名；元数据被改动；任一端点的原始应答或无应答 |
+| `startAcmeStandIn`（[`acme.ts`](src/stack/acme.ts)、[`caa.ts`](src/stack/caa.ts)） | 所指名的证书授权机构的 ACME 服务器（[C7](../../docs/contracts/c07-reach-providers.zh.md#own-domain-reach)） | RFC 8555 目录、nonce、账户、订单、授权、挑战、定稿、下载与吊销，并验证每个请求的 JWS、nonce 与 URL。每个授权提供 `http-01`、`dns-01` 与 `tls-alpn-01`，通配符授权只提供 `dns-01`。TLS-ALPN-01（RFC 8737）连接到调用方为该标识符指定的回环目标；DNS-01 读取调用方提供的 TXT 记录。签发前，它以 CAA 标识为 `letsencrypt.org` 的证书授权机构身份，应用调用方提供的 CAA 记录及其 `accounturi` 与 `validationmethods` | 客户端启动的每个挑战都会被记录，因此规范可以证明 home 没有启动 HTTP-01 或 DNS-01 挑战；为另一账户签发的证书；CA 的吊销；以问题文档代替某端点的下一个应答 |
+| `startCtStandIn`（[`certificate-transparency.ts`](src/stack/certificate-transparency.ts)） | Cert Spotter 的签发搜索，即 [C6](../../docs/contracts/c06-relay-protocol.zh.md#certificate-monitoring) 的默认证书来源 | `GET /v1/issuances`，带有 `domain`、`include_subdomains`、`match_wildcards`、`after` 与 `expand` 参数，采用 Cert Spotter 的字段与错误格式；`sourceUrl` 为约定中的来源，其 origin 指向替身 | 规范登记的夹具，例如 `*.example.com` 或多名称证书；在日志收录之前暂不返回的证书；吊销；以 `rate_limited` 等错误代替下一个应答 |
+| `installNetworkGuard`（[`network-guard.ts`](src/stack/network-guard.ts)） | 无：它监视测试进程 | 在发出任何数据包之前，拒绝每个目标不是回环地址的 TCP 或 TLS 连接、UDP 发送或绑定、监听器与 DNS 查询，并记录每个到达其对端的连接 | 名称解析只解析 `localhost`，因此替身需以 IP 字面量寻址 |
+
+替身栈会把 ACME 替身签发的每张证书记入证书透明性替身，并标记其中被 ACME 替身吊销的证书。若某个规范必须证明没有流量离开回环，它需要在启动栈之前安装守卫，并在结束时读取 `guard.connections` 与 `guard.refusals`。守卫只在其自身进程中修补 `node:net`、`node:dgram` 与 `node:dns`：它看不到子进程、工作线程、自行打开套接字的原生插件，也看不到安装之前已打开的套接字。
+
+替身使用三个维护中的库，每个都在本包的清单中声明：
+
+- [`jose`](https://github.com/panva/jose) 签名并验证 JSON Web Token 与 JWS，导出 JSON Web Key 并计算指纹（thumbprint）。未使用同一作者的完整提供方库（如 `oidc-provider`），因为其令牌端点无法签发拒绝测试所需的伪造令牌、受众错误的令牌与混合签发方的令牌，且其交互流程需要由规范驱动的登录页面。
+- [`pkijs`](https://github.com/PeculiarVentures/PKI.js) 与 [`asn1js`](https://github.com/PeculiarVentures/ASN1.js) 通过 Node 的 Web Crypto 生成证书与 PKCS #10 请求，并读取其扩展，因此没有任何替身调用 `openssl`。它已经通过桌面构建进入锁文件。未使用 `@peculiar/x509`，因为它需要全局的 `reflect-metadata` polyfill。
+- ACME 服务器是替身自身的代码：参考测试服务器 Pebble 是 Go 二进制文件，无法在守卫之下于测试进程内运行。规范通过规范端客户端驱动它；未添加 `acme-client`，因为它的 `axios` 依赖会改变锁文件中上游网站依赖的解析结果。
+
+[`tests/stack/`](tests/stack/) 中的规范证明以下各点：OpenID Connect 替身的发现元数据与 ID 令牌（按每种允许的算法）通过每项 C14 检查，并且每个钩子产生的响应都是 C14 以其代码拒绝的响应；ACME 替身在回环上应答 TLS-ALPN-01 挑战后，为测试名称签发证书，并拒绝被篡改的请求，以及指名另一个账户、方法或 CA 的 CAA 记录；证书透明性替身能应答精确、通配符与多名称搜索；在安装守卫的情况下，一次登录、一次签发和一次搜索只打开到回环的连接，而任何会离开回环的连接、名称查询、监听器或 UDP 发送都被拒绝。
 
 ## 对等组合
 

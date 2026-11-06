@@ -1264,9 +1264,18 @@ importers:
 
   delo/apps/tools:
     dependencies:
+      '@delo/contract-oidc-passkeys':
+        specifier: workspace:*
+        version: link:../../packages/contract-oidc-passkeys
       '@delo/contract-parity-composition':
         specifier: workspace:*
         version: link:../../packages/contract-parity-composition
+      '@delo/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../../packages/contract-reach-providers
+      '@delo/contract-relay-protocol':
+        specifier: workspace:*
+        version: link:../../packages/contract-relay-protocol
       '@secretlint/node':
         specifier: 13.0.7
         version: 13.0.7(supports-color@10.2.2)
@@ -1276,9 +1285,18 @@ importers:
       '@secretlint/secretlint-rule-preset-recommend':
         specifier: 13.0.7
         version: 13.0.7
+      asn1js:
+        specifier: ^3.0.10
+        version: 3.0.10
+      jose:
+        specifier: ^6.2.15
+        version: 6.2.15
       js-yaml:
         specifier: ^4.3.2
         version: 4.3.2
+      pkijs:
+        specifier: ^3.4.0
+        version: 3.4.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -24212,6 +24230,9 @@ packages:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
 
+  jose@6.2.15:
+    resolution: {integrity: sha512-qdF6ewcZARtef63fJ9AKKZPgxw+t7USH6HLXYcD4CrdmSvDp79rpJSPFEKc90QBeGS63u1KQtN2MZQHC0yDIzA==}
+
   jose@6.2.3:
     resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
@@ -32282,6 +32303,8 @@ snapshots:
       picocolors: 1.1.1
 
   jiti@2.7.0: {}
+
+  jose@6.2.15: {}
 
   jose@6.2.3: {}
 
