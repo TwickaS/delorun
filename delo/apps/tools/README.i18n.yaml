@@ -3,17 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/apps/tools/README.md
 /delo-tools:
-  en: dafecdb357f4440b
-  zh: 29609e525a6d4994
+  en: 000e2d9105eb5662
+  zh: 54b056f3228daa6a
 /delo-tools/modules:
-  en: e0101d5a0653c49d
-  zh: cb35aefec4c35a7b
+  en: 62976d66b63292ef
+  zh: f3f036a35240ce1b
 /delo-tools/the-divergence-ledger:
   en: 66033ce958f26559
   zh: cc4cc9d0b058b557
+/delo-tools/the-gates:
+  en: 0c0bc199b121ebe3
+  zh: b830d601ea341f57
+/delo-tools/workflows:
+  en: 2e8012037c868bb0
+  zh: 670bd069e1db9555
 /delo-tools/local-checks:
-  en: 07199866b179f408
-  zh: 7709b6c6e4afd505
+  en: 90fb2d1f23f050c1
+  zh: c240621a978bcc8b
 /delo-tools/reconciliation-against-rc-1:
   en: 729b74aa034647ec
   zh: 82e076dc8074d4b8
