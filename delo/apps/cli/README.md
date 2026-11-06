@@ -15,6 +15,7 @@ This app is the `delorun` command. Before any upstream code runs, it resolves an
 - [Commands](#commands)
 - [The home](#the-home)
 - [Profiles](#profiles)
+- [Setup](#setup)
 - [The home lock](#the-home-lock)
 - [How delorun runs upstream](#how-delorun-runs-upstream)
 - [Extension points](#extension-points)
@@ -26,7 +27,7 @@ This app is the `delorun` command. Before any upstream code runs, it resolves an
 | Command | What it does |
 | --- | --- |
 | `delorun [--profile <name>]` | Runs setup on a home without the CLI profile; otherwise starts the home process in this terminal and opens the studio |
-| `delorun setup [--profile <name>]` | Setup's entry point: creates the CLI profile and leaves an existing one unchanged |
+| `delorun setup [--profile <name>] [--yes \| --config <file>]` | Setup: asks its questions in a terminal, or applies every default with `--yes`, or an answers document with `--config`; a finished setup is left unchanged |
 | `delorun start --foreground [--profile <name>]` | Starts the home process in this terminal without opening the studio |
 | `delorun status [--profile <name>]` | Prints the home, the profile, whether its home process runs, and an inherited `DSH_HOME` that `delorun` ignored |
 | `delorun plugin …` | Upstream's `dsh plugin …`, unchanged, against the Delo home |
@@ -47,6 +48,20 @@ The CLI profile is `default`, or the name `DELO_PROFILE` or `--profile` selects,
 
 A start loads the profile as upstream's boot does and refuses to boot it when a Delo bundle, any bundle in the `@delo/` scope, was skipped because it could not be resolved, read or accepted. Upstream would otherwise start with the remaining layers and its own defaults, which upload session logs to DeepSeek. The error names each skipped bundle with upstream's reason and its fix: in a source checkout, `delorun plugin --profile <name> add link:<directory>` for the bundle this `delorun` carries; otherwise reinstalling Delo or `delorun plugin --profile <name> install`. A skipped upstream bundle is reported as upstream reports it and does not stop the start.
 
+## Setup
+
+Setup ([`src/setup/`](src/setup/index.ts)) answers the questions of [contract C11](../../docs/contracts/c11-setup-answers.md) and writes the CLI profile. The three forms produce the same answers, and so the same writes:
+
+- **The questions** need a terminal. Setup states that Delo has no telemetry of its own and that both upstream opt-ins, desktop analytics and DeepSeek's session-log upload, are off unless the person turns them on; it shows what each sends before the question. The statements are [`@delo/bundle-local`](../../packages/bundle-local/README.md)'s, read from its `./statements` export.
+- **`--yes`** takes every default and reads the model key from `DEEPSEEK_API_KEY`, and stops with an error that names the variable when it is unset.
+- **`--config <file>`** reads an answers document. It refuses a document that enables reach or an upstream opt-in, that carries a credential value in any field, or that names a schema version other than 1; a refusal names the field and never echoes a value.
+
+Setup runs its steps in order: create the CLI profile, store a typed key in upstream's `.credentials.yaml` at mode 0600 (a key read from the environment is stored nowhere), write the session-log row to the profile's `cordis.patch.yml`, and record the desktop analytics answer. While a run is unfinished, `run/<profile>/setup-progress.json` holds the answers without any key and the steps that finished, so an interrupted run resumes at the first step that did not finish. When every step has finished, setup removes that file and writes the answers to `profiles/<profile>/setup-answers.json`, which the screens that apply them read. Reach and credential forwarding are recorded as off until their screens exist.
+
+The Docker runtime option carries C1's label on a system whose sandbox dialect cannot enforce `docker-connect`: Landlock, Windows and a system without a sandbox.
+
+Not written by setup yet: the desktop analytics row, which belongs to the desktop app's profile; the model selection; the studio additions, the onboarding flag and the runtime, whose targets arrive with their own packages. Setup records each of those answers in the answers record.
+
 ## The home lock
 
 A start takes `run/<profile>/home.lock` with `@delo/home`'s `acquireHomeLock` before it boots the profile, and releases it when the process exits. Of any number of starts, exactly one holds the lock, including over the lock of a holder that died. A live holder is never taken over, and a second start prints the running process and exits 0, as C19's `delorun start` does. A process killed with `SIGKILL` leaves the lock, and the next start replaces it. Until the update channel exists, a live holder cannot be asked for its status and counts as answering, so `HOME_UNRESPONSIVE` is not reported.
@@ -58,13 +73,13 @@ A start takes `run/<profile>/home.lock` with `@delo/home`'s `acquireHomeLock` be
 ## Extension points
 
 - **A command** is a module that exports one `CliCommand` (`src/command.ts`) and adds one row to `COMMANDS` in `src/main.ts`. `delorun doctor` belongs in `src/doctor/` and `delorun logs` in `src/logs/`, each through this row.
-- **Setup** is `runSetup` in `src/setup/index.ts`, which both `delorun setup` and a first run call. The setup screen replaces its body and keeps its signature.
+- **Setup** is `runSetup` in `src/setup/index.ts`, which both `delorun setup` and a first run call. Its questions are in `src/setup/interactive.ts` behind the `Prompter` interface of `src/setup/prompts.ts`, so a test runs them against a scripted prompter.
 - **The holder probe** is the `probe` of `StartDependencies` in `src/start.ts`; the home process's `status` request replaces the probe that counts a live holder as answering.
 
 ## Not yet implemented
 
 - `delorun start` without `--foreground`, `delorun stop`, and the parts of `delorun status` that come from the home process: the background home process, its update channel, start token and confinement probes.
-- Setup's questions: setup's entry point only creates the CLI profile.
+- Setup's reach question and the import of a stock DeepSeek Harness home. Setup records reach as off.
 - The Windows DACL check ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory and protected-file checks look only at the file type.
 - `delorun --version`, `verify`, `doctor`, `logs`, `update`, `recover`, `reach`, `devices`, `export`, `import` and `dev`.
 

@@ -15,6 +15,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 - [命令](#commands)
 - [home](#the-home)
 - [Profile](#profiles)
+- [Setup](#setup)
 - [home 锁](#the-home-lock)
 - [delorun 如何运行上游](#how-delorun-runs-upstream)
 - [扩展点](#extension-points)
@@ -28,7 +29,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 | 命令 | 作用 |
 | --- | --- |
 | `delorun [--profile <name>]` | 若 home 上还没有 CLI profile，则运行 setup；否则在此终端中启动 home 进程并打开 studio |
-| `delorun setup [--profile <name>]` | setup 的入口：创建 CLI profile，已存在的 profile 保持不变 |
+| `delorun setup [--profile <name>] [--yes \| --config <file>]` | setup：在终端中提问，或用 `--yes` 应用全部默认值，或用 `--config` 应用答案文档；已完成的 setup 保持不变 |
 | `delorun start --foreground [--profile <name>]` | 在此终端中启动 home 进程，但不打开 studio |
 | `delorun status [--profile <name>]` | 打印 home、profile、其 home 进程是否在运行，以及 `delorun` 忽略的、已继承的 `DSH_HOME` |
 | `delorun plugin …` | 上游的 `dsh plugin …`，不作改动，针对 Delo home 运行 |
@@ -53,6 +54,22 @@ CLI profile 为 `default`，或由 `DELO_PROFILE` 或 `--profile` 选定的名�
 
 启动时按上游启动的方式加载该 profile；若某个 Delo bundle（`@delo/` 作用域下的任何 bundle）因无法解析、读取或接受而被跳过，则拒绝启动它。否则上游会以其余各层及其自身默认值启动，而这些默认值会把会话日志上传给 DeepSeek。错误信息列出每个被跳过的 bundle、上游给出的原因及修复方法：在源码检出中，对本 `delorun` 自带的 bundle 运行 `delorun plugin --profile <name> add link:<directory>`；否则重新安装 Delo，或运行 `delorun plugin --profile <name> install`。被跳过的上游 bundle 按上游的方式报告，不会阻止启动。
 
+<a id="setup"></a>
+
+## Setup
+
+Setup（[`src/setup/`](src/setup/index.ts)）回答[约定 C11](../../docs/contracts/c11-setup-answers.zh.md)中的问题，并写入 CLI profile。三种形式给出相同的答案，因此产生相同的写入：
+
+- **提问**需要终端。setup 会说明 Delo 没有自己的遥测，并说明两个上游开关（桌面端分析与 DeepSeek 的会话日志上传）除非用户打开，否则保持关闭；在提问之前，它会说明每项会发送什么。这些声明来自 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 的 `./statements` 导出。
+- **`--yes`** 应用全部默认值，并从 `DEEPSEEK_API_KEY` 读取模型密钥；该变量未设置时，它以一条指出变量名的错误停止。
+- **`--config <file>`** 读取答案文档。若文档启用了 reach 或某个上游开关、在任何字段中携带了凭据值，或指定了非 1 的架构版本，它会拒绝该文档；拒绝信息指出字段，且从不回显任何值。
+
+Setup 按顺序执行各步骤：创建 CLI profile；把输入的密钥以 0600 模式存入上游的 `.credentials.yaml`（从环境变量读取的密钥则不存储）；把会话日志行写入 profile 的 `cordis.patch.yml`；并记录桌面端分析的答案。在运行未完成期间，`run/<profile>/setup-progress.json` 保存不含密钥的答案以及已完成的步骤，因此被中断的运行会从第一个未完成的步骤继续。所有步骤完成后，setup 会删除该文件，并把答案写入 `profiles/<profile>/setup-answers.json`，供应用这些答案的界面读取。在对应界面存在之前，reach 与凭据转发都记录为关闭。
+
+当系统的沙箱方言无法强制执行 `docker-connect` 时（Landlock、Windows，以及没有沙箱的系统），Docker 运行时选项带有 C1 的标签。
+
+尚未由 setup 写入的内容：桌面端分析行（它属于桌面应用的 profile）、模型选择、studio 附加功能、引导标志与运行时；它们的目标分别随各自的包到来。setup 把这些答案记录在答案记录中。
+
 <a id="the-home-lock"></a>
 
 ## home 锁
@@ -70,7 +87,7 @@ CLI profile 为 `default`，或由 `DELO_PROFILE` 或 `--profile` 选定的名�
 ## 扩展点
 
 - **命令**是导出一个 `CliCommand`（`src/command.ts`）的模块，并在 `src/main.ts` 的 `COMMANDS` 中添加一行。`delorun doctor` 属于 `src/doctor/`，`delorun logs` 属于 `src/logs/`，二者都通过这一行接入。
-- **Setup** 是 `src/setup/index.ts` 中的 `runSetup`，`delorun setup` 与首次运行都会调用它。setup 界面替换其函数体，并保留其签名。
+- **Setup** 是 `src/setup/index.ts` 中的 `runSetup`，`delorun setup` 与首次运行都会调用它。提问位于 `src/setup/interactive.ts`，经由 `src/setup/prompts.ts` 的 `Prompter` 接口，因此测试可用脚本化的提问器运行它们。
 - **持有者探测**是 `src/start.ts` 中 `StartDependencies` 的 `probe`；home 进程的 `status` 请求会替换把仍存活的持有者视为已响应的探测。
 
 <a id="not-yet-implemented"></a>
@@ -78,7 +95,7 @@ CLI profile 为 `default`，或由 `DELO_PROFILE` 或 `--profile` 选定的名�
 ## 尚未实现
 
 - 不带 `--foreground` 的 `delorun start`、`delorun stop`，以及 `delorun status` 中来自 home 进程的部分：后台 home 进程、其更新通道、启动令牌与限制探测。
-- setup 的问题：setup 的入口只创建 CLI profile。
+- setup 的 reach 问题，以及导入 DeepSeek Harness 的 stock home。setup 将 reach 记录为关闭。
 - Windows 的 DACL 检查（[#48](https://github.com/Delo-Run/delo/issues/48)）：在 Windows 上，目录与受保护文件的检查只查看文件类型。
 - `delorun --version`、`verify`、`doctor`、`logs`、`update`、`recover`、`reach`、`devices`、`export`、`import` 与 `dev`。
 

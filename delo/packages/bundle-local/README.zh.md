@@ -27,6 +27,7 @@ kind: "package-bundle"
 - **层顺序。**本组合包在每个上游组合包之后、profile 自身的 `cordis.patch.yml`、home patch 与 `--patch` overlay 之前生效，因此本人在 profile 中的设置仍然优先于此处的行（[上游的 profile 层](../../../apps/cli/README.zh.md#profiles)）。“隐私”分区写入 profile 的 `cordis.patch.yml`。
 - **读取组合结果。**`dsh --profile <name> --dump-config` 会在每个 `# ==` 行之下打印全部组合后的行。该标注写明插入此行的组合包，以及修补此行的每个组合包；本组合包写入的行，在该标注中写有 `@delo/bundle-local`。
 - **加载。**本组合包未声明 `engines.dsh` 范围，也没有上游的对等依赖，因此版本变更之后，上游的兼容性检查从不会跳过它；若 profile 的组合包列表中列出了它却无法解析，则会把该组合包报告为已跳过。
+- **声明文字。**`./statements` 导出即隐私分区的英文词典（[`src/client/locales.ts`](src/client/locales.ts)），`delorun` 的 setup 读取它，使提问与该分区陈述相同的句子。
 - **构建。**`pnpm --filter @delo/bundle-local run build` 写出 `lib/index.js`（即 `delo-privacy` 行的 Host 部分）与 `lib/client.js`（即“隐私”分区）。上游的 `pnpm run build:artifacts` 不构建 Delo 的包。
 
 <a id="rows"></a>

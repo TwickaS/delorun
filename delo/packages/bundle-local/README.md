@@ -26,6 +26,7 @@ English | [中文](README.zh.md)
 - **Layer order.** The bundle applies after every upstream bundle and before the profile's own `cordis.patch.yml`, the home patch and `--patch` overlays, so a person's setting in the profile still wins over a row here ([upstream's profile layers](../../../apps/cli/README.md#profiles)). The Privacy section writes to the profile's `cordis.patch.yml`.
 - **Reading the composition.** `dsh --profile <name> --dump-config` prints every composed row under a `# ==` line naming the bundle that inserted it and each bundle that patched it; a row this bundle writes names `@delo/bundle-local` there.
 - **Loading.** The bundle declares no `engines.dsh` range and no upstream peer, so upstream's compatibility check never skips it after a version change; a profile whose bundle list names it and cannot resolve it reports the bundle as skipped.
+- **Statements.** The `./statements` export is the Privacy section's English dictionary ([`src/client/locales.ts`](src/client/locales.ts)), which the CLI's setup reads so its questions and the section state the same sentences.
 - **Building.** `pnpm --filter @delo/bundle-local run build` writes `lib/index.js`, the Host half of the `delo-privacy` row, and `lib/client.js`, the Privacy section. Upstream's `pnpm run build:artifacts` does not build Delo's packages.
 
 ## Rows

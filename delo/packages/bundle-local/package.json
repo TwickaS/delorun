@@ -17,6 +17,7 @@
     },
     "./profile": "./src/profile.ts",
     "./rows": "./src/rows.ts",
+    "./statements": "./src/client/locales.ts",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -28,7 +29,8 @@
     "locale/*.json",
     "cordis.patch.yml",
     "src/profile.ts",
-    "src/rows.ts"
+    "src/rows.ts",
+    "src/client/locales.ts"
   ],
   "dsh": {
     "bundle": {

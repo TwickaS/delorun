@@ -9,14 +9,18 @@
     "delorun": "tsx src/bin.ts"
   },
   "dependencies": {
+    "@clack/prompts": "^1.8.1",
     "@deepseek-ai/dsh": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@delo/bundle-local": "workspace:*",
     "@delo/contract-home-layout": "workspace:*",
     "@delo/contract-operational-logs": "workspace:*",
+    "@delo/contract-setup-answers": "workspace:*",
     "@delo/home": "workspace:*",
-    "@delo/logs": "workspace:*"
+    "@delo/logs": "workspace:*",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-launch-environment": "workspace:*"

@@ -51,10 +51,10 @@ function snapshot(root: string): string[] {
  */
 function delorun(args: readonly string[], env: Record<string, string> = {}): { status: number | null, stdout: string, stderr: string } {
   // NODE_PATH, which pnpm's script shims set, would let upstream resolve workspace packages no installation carries.
-  const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DSH_|DELO_|NODE_PATH$)/.test(name)))
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DSH_|DELO_|NODE_PATH$|DEEPSEEK_API_KEY$)/.test(name)))
   const result = spawnSync(process.execPath, ['--import', TSX_LOADER, BIN, ...args], {
     cwd: osHome,
-    env: { ...inherited, HOME: osHome, USERPROFILE: osHome, DSH_HOME: dshHome, ...env },
+    env: { ...inherited, HOME: osHome, USERPROFILE: osHome, DSH_HOME: dshHome, DEEPSEEK_API_KEY: 'fixture-key', ...env },
     encoding: 'utf8',
     timeout: 60_000,
   })
@@ -81,7 +81,7 @@ afterEach(() => {
 
 describe('delorun', { timeout: 60_000 }, () => {
   it('runs setup on the first run against an empty home, and creates the home at mode 0700', () => {
-    const first = delorun([])
+    const first = delorun(['setup', '--yes'])
     expect(first.stderr).toBe('')
     expect(first.status).toBe(EXIT.ok)
     expect(first.stdout).toContain(`Set up the CLI profile default at ${join(deloHome, 'profiles', 'default')}`)
@@ -98,7 +98,7 @@ describe('delorun', { timeout: 60_000 }, () => {
 
   it('gives upstream the Delo home as DSH_HOME and leaves a fixture ~/.dsh byte-identical', () => {
     const before = snapshot(dshHome)
-    expect(delorun([]).status).toBe(EXIT.ok)
+    expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
     const plugin = delorun(['plugin', '--profile', 'probe', 'version-exemptions'])
     expect(plugin.stderr).toBe('')
     expect(plugin.status).toBe(0)
@@ -120,7 +120,7 @@ describe('delorun', { timeout: 60_000 }, () => {
     writeFileSync(join(desktopProfile, 'cordis.patch.yml'), '[]\n')
     writeFileSync(join(desktopProfile, 'lock'), '4242\n')
     const before = snapshot(desktopProfile)
-    expect(delorun([]).status).toBe(EXIT.ok)
+    expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
     for (const refused of [delorun(['--profile', 'desktop']), delorun(['start', '--foreground', '--profile', 'Desktop']), delorun(['setup'], { DELO_PROFILE: 'desktop' })]) {
       expect(refused.status).toBe(EXIT.usage)
       expect(refused.stderr).toContain('the desktop app\'s own profile')
@@ -134,7 +134,7 @@ describe('delorun', { timeout: 60_000 }, () => {
   })
 
   it('refuses to start a profile whose composition skipped @delo/bundle-local, and starts nothing', () => {
-    expect(delorun(['setup']).status).toBe(EXIT.ok)
+    expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
     const refused = delorun(['start', '--foreground'])
     expect(refused.status).toBe(EXIT.failed)
     expect(refused.stderr).toContain('delorun: the CLI profile default could not load Delo\'s bundle, so Delo did not start:')
@@ -184,7 +184,7 @@ describe('starting the home process', () => {
     vi.stubEnv('DSH_HOME', dshHome)
     vi.stubEnv('DELO_HOME', undefined)
     vi.stubEnv('DELO_PROFILE', undefined)
-    context = { env: { HOME: osHome, DSH_HOME: dshHome }, stdout: () => undefined, stderr: () => undefined }
+    context = { env: { HOME: osHome, DSH_HOME: dshHome, DEEPSEEK_API_KEY: 'fixture-key' }, stdout: () => undefined, stderr: () => undefined }
   })
 
   /**
@@ -228,7 +228,7 @@ describe('starting the home process', () => {
   }
 
   it('boots the CLI profile with DSH_HOME set to the Delo home, and a second start leaves one holder', async () => {
-    expect(await main(['setup'], context)).toBe(EXIT.ok)
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
     const prepared = await prepareHome(context, undefined)
     expect(prepared.home).toEqual({ path: deloHome, ignoredDshHome: dshHome })
@@ -254,7 +254,7 @@ describe('starting the home process', () => {
   it('releases the lock when the profile fails to boot, and refuses a home without the CLI profile', async () => {
     await prepareHome(context, undefined)
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording([]))).rejects.toThrow('run: delorun setup')
-    expect(await main(['setup'], context)).toBe(EXIT.ok)
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
     const failing: StartDependencies = { ...recording([]), runProfile: () => Promise.reject(new Error('boot failed')) }
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, failing)).rejects.toThrow('failed to start: boot failed')
@@ -262,7 +262,7 @@ describe('starting the home process', () => {
   })
 
   it('refuses a Delo bundle that resolves but fails to load, and still starts over a skipped upstream bundle', async () => {
-    expect(await main(['setup'], context)).toBe(EXIT.ok)
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
     const broken = join(osHome, 'bundle-broken')
     mkdirSync(broken)

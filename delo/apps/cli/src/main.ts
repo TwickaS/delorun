@@ -62,7 +62,7 @@ function usage(): string {
 async function bare(args: readonly string[], context: CommandContext): Promise<CommandResult> {
   const values = parseOptions('', args, { profile: { type: 'string' } })
   const { home, profile } = await prepareHome(context, values.profile)
-  if (!hasCliProfile(home.path, profile)) return runSetup({ home: home.path, profile, output: context })
+  if (!hasCliProfile(home.path, profile)) return runSetup({ home: home.path, profile, output: context, env: context.env, form: { kind: 'interactive' } })
   return startForeground({ home: home.path, profile, open: true, output: context })
 }
 
