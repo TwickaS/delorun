@@ -18,6 +18,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/check-jsdoc.ts` applies upstream's JSDoc rules to every `src` tree under `delo/`.
 - `src/run-checks.ts` is the check runner: the tiers, the selection, the report.
 - `src/checks/` holds the check catalogue (`plan.ts`), the scheduler (`run.ts`), the machine budget (`machine.ts`), the pass cache (`cache.ts`) and the budgets (`budgets.json`).
+- `src/setup-worktree.ts` sets up a checkout or worktree in one command: the hooks file, the install, the hooks, the ledger merge driver and a warning when Node differs from `.nvmrc`.
 - `src/git.ts` runs git for the modules and reports exit statuses.
 - `src/issues/` turns maintainer-written work briefs into GitHub issues: `brief.ts` holds the fields, the rules and the issue body, `references.ts` the links and paths a brief may carry, `labels.ts` the label file, `gh.ts` the `gh` calls, and `issues.ts` the command line.
 - `tests/` holds the specs. The ledger rules run against temporary git repositories, and `ledger-merge.spec.ts` also rebases branches through the merge driver in them. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees. `checks.spec.ts` and `checks-cache.spec.ts` cover the runner's selection, tiers, budgets, pass cache and `--plan`.

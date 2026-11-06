@@ -18,6 +18,7 @@
 - `src/check-jsdoc.ts` 将上游的 JSDoc 规则应用于 `delo/` 下的每个 `src` 树。
 - `src/run-checks.ts` 是检查运行器：层级、选择与报告。
 - `src/checks/` 包含检查目录（`plan.ts`）、调度器（`run.ts`）、机器预算（`machine.ts`）、通过缓存（`cache.ts`）与预算（`budgets.json`）。
+- `src/setup-worktree.ts` 用一条命令完成检出或工作树的设置：钩子文件、安装、钩子、台账合并驱动，以及在 Node 与 `.nvmrc` 不一致时给出警告。
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
 - `src/issues/` 把维护者撰写的 brief 转为 GitHub Issue：`brief.ts` 包含字段、规则与 Issue 正文，`references.ts` 包含 brief 可以携带的链接与路径，`labels.ts` 包含标签文件，`gh.ts` 包含 `gh` 调用，`issues.ts` 为命令行。
 - `tests/` 包含测试规范。台账规则在临时 git 仓库中运行，`ledger-merge.spec.ts` 还在其中让分支经由合并驱动完成变基。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。`checks.spec.ts` 与 `checks-cache.spec.ts` 覆盖运行器的选择、层级、预算、通过缓存与 `--plan`。
