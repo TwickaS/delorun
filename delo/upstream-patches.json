@@ -2195,6 +2195,11 @@
       "path": "snapshots/session/headless.snapshot.ts",
       "class": "delo-feature",
       "reason": "Parity replay lane (C16): reads the overlay when the module loads and places it after the root configuration of each headless process, before the composition, model and runtime layers."
+    },
+    {
+      "path": "scripts/rescope-vendor.ts",
+      "class": "generic-fix",
+      "reason": "The V17 postcondition matches the vendor README heading as it is now written, and the skip list keeps the Web `ptc` and `cordis` preset ids, which the rename would otherwise rewrite, in the tool catalog, its generator and the fs-observation-policy upgrade guide. Offer upstream."
     }
   ],
   "retired": []
