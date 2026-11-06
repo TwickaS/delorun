@@ -46,7 +46,7 @@
 | `gates:licence` | 否 | `delo/` 下的每个包都声明 MIT，且根目录 `LICENSE` 为 MIT 许可证。 |
 | `gates:secrets` | 是 | 形似令牌的字符串、私钥以及密钥文件名，依据 secretlint 的推荐预设与 DeepSeek 的密钥格式检查。上游逐字持有的行上的发现予以通过。 |
 | `gates:personal-data` | 是 | 暂存路径中个人数据模式的加盐哈希，以及范围内各提交的 Author、Committer 与 Signed-off-by 行中的同类哈希；并依据形态检查这些路径与提交信息中的邮政地址。明文模式仅存于 `~/.config/delo/personal-data.txt`；`--rehash` 依该文件重新生成 [`personal-data.hashes.json`](src/checks/gates/personal-data.hashes.json)，文件不存在时以 1 退出。 |
-| `gates:infrastructure` | 是 | 环回、未指定与广播地址，以及 RFC 5737 文档地址段之外的 IPv4 地址、`example.ts.net` 之外的 tailnet 名称，以及云账户 ID。文档化的例外按路径与值列于 [`infrastructure.allowlist.json`](src/checks/gates/infrastructure.allowlist.json)。 |
+| `gates:infrastructure` | 是 | 环回、未指定与广播地址、RFC 5737 文档地址段、云元数据地址 `169.254.169.254`，以及保留 IPv4 地址块的基地址（`10.0.0.0`、`100.64.0.0`、`169.254.0.0`、`172.16.0.0`、`192.168.0.0`、`224.0.0.0`）之外的 IPv4 地址；全局可路由或唯一本地地址块中，RFC 3849 文档地址段、云元数据地址 `fd00:ec2::254` 与基地址 `fc00::` 之外的 IPv6 地址；`example.ts.net` 之外的 tailnet 名称；以及云账户 ID。文档化的例外按路径与值列于 [`infrastructure.allowlist.json`](src/checks/gates/infrastructure.allowlist.json)。 |
 | `gates:dco` | 否 | 范围内每个非合并提交都有一行 `Signed-off-by`，其姓名与邮箱即作者的姓名与邮箱。 |
 | `gates:commits` | 否 | 对范围内的提交执行提交标准，包括变更片段规则。 |
 | `gates:doc-times` | 否 | 范围新增的 `delo/` 下 Markdown 文件中，任何一行都不得含有截止日期、季度、排期估计或时间承诺。 |

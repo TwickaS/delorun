@@ -26,6 +26,30 @@ describe('identifiers of a deployment', () => {
     }
   })
 
+  it('exempts the cloud metadata addresses as public constants, and still refuses another link-local IPv4 address', () => {
+    expect(lineFindings('metadata 169.254.169.254', 1)).toEqual([])
+    expect(lineFindings('metadata fd00:ec2::254', 1)).toEqual([])
+    const linkLocal = ip(169, 254, 1, 1)
+    expect(lineFindings(`link-local ${linkLocal}`, 1)).toEqual([{ kind: 'IPv4 address', value: linkLocal, line: 1 }])
+  })
+
+  it('refuses an IPv6 address in the globally routable or unique-local ranges, and passes loopback, link-local and documentation addresses', () => {
+    const unique = ['fd00', 'ec2', '', '255'].join(':')
+    const routable = ['2a0b', '1', '', '1'].join(':')
+    expect(lineFindings(`unique ${unique}`, 1)).toEqual([{ kind: 'IPv6 address', value: unique, line: 1 }])
+    expect(lineFindings(`routable ${routable}`, 1)).toEqual([{ kind: 'IPv6 address', value: routable, line: 1 }])
+    expect(lineFindings('loopback ::1, unspecified ::, link-local fe80::1, documentation 2001:db8::1', 1)).toEqual([])
+  })
+
+  it('passes the base addresses of the reserved blocks, and still refuses a host address inside a reserved block', () => {
+    expect(lineFindings('blocks 10.0.0.0, 100.64.0.0, 169.254.0.0, 172.16.0.0, 192.168.0.0, 224.0.0.0', 1)).toEqual([])
+    expect(lineFindings('unique block fc00::', 1)).toEqual([])
+    const host = ip(192, 168, 7, 9)
+    expect(lineFindings(`host ${host}`, 1)).toEqual([{ kind: 'IPv4 address', value: host, line: 1 }])
+    const uniqueHost = ['fc00', '1'].join('::')
+    expect(lineFindings(`unique host ${uniqueHost}`, 1)).toEqual([{ kind: 'IPv6 address', value: uniqueHost, line: 1 }])
+  })
+
   it('does not read a version number as an address', () => {
     expect(lineFindings(`release ${['1', '2', '3', '4', '5'].join('.')} and ${ip(10, 1, 5)}`, 1)).toEqual([])
   })
