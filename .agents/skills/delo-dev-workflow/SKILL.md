@@ -52,7 +52,7 @@ A new spec goes in its package's `tests/` directory, which `tests:fork` runs.
 
 1. A change people can perceive adds a fragment under [`delo/changelog/unreleased/`](../../../delo/changelog/unreleased/README.md).
 2. `git commit -s` with a Conventional Commits subject; a change nobody can perceive ends with `Changelog: none (<reason>)`.
-3. The `commit-msg` hook runs `check-commits.ts` once that script is on the branch; the pre-push gate checks what changed since the remote branch's tip.
+3. The `commit-msg` hook checks the message against the commit standard; the pre-push gate checks what changed since the remote branch's tip.
 4. Open the pull request with `dsh-pr-description`.
 
 ## Tools

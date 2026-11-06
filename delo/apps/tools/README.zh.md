@@ -181,7 +181,7 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts delo/apps/tools    # tar
 
 声明了输入的检查，每个键只通过一次。键由以下内容构成：其输入文件的 git blob id 排序列表的 sha256（已跟踪且未修改的文件取其 blob id；已修改、已删除或未跟踪的文件取其内容哈希）、锁文件的 blob id、Node 与 pnpm 版本、命令、其预算条目，以及其列出的环境变量的取值。键相同的已存储通过结果会报告为 `cached pass (<键前缀>)`，该检查不再运行。以下情况下缓存关闭：`--no-cache`、`pnpm check:full`、带 `DELO_FULL_GATE=1` 的推送，以及设置了 `CI` 时。未声明输入的检查总是运行：回放、产物构建、原生插件与暂存的空白检查。
 
-安装钩子时，在仓库根目录写入一行 `lefthook-local.yml`，内容为 `extends: [delo/lefthook.yml]`（Git 会忽略它），然后运行 `node scripts/install-lefthook.mjs`。`pre-commit` 钩子运行 `pre-commit` 层级。`pre-push` 钩子运行 `--pre-push`：自远程分支的最新提交以来的改动；对于新分支，则是自其与 `v5` 的合并基以来的改动。`DELO_PUSH_SKIP=<检查或分组>,… git push` 会跳过指定的检查，`DELO_FULL_GATE=1 git push` 运行完整门禁。`commit-msg` 钩子在 `check-commits.ts` 进入分支后运行它；在此之前该任务跳过。
+安装钩子时，在仓库根目录写入一行 `lefthook-local.yml`，内容为 `extends: [delo/lefthook.yml]`（Git 会忽略它），然后运行 `node scripts/install-lefthook.mjs`。`pre-commit` 钩子运行 `pre-commit` 层级。`pre-push` 钩子运行 `--pre-push`：自远程分支的最新提交以来的改动；对于新分支，则是自其与 `v5` 的合并基以来的改动。`DELO_PUSH_SKIP=<检查或分组>,… git push` 会跳过指定的检查，`DELO_FULL_GATE=1 git push` 运行完整门禁。`commit-msg` 钩子对每条提交消息运行 `check-commits.ts --message <file>`。
 
 报告与日志位于 `node_modules/.cache/delo-checks/` 下：`report.json` 记录每个检查的状态、是否由通过缓存提供、原因、日志、耗时与内存峰值；`logs/<check>.log` 保存完整输出；`pass/` 为通过缓存；`durations.json` 记录每个检查最近一次的耗时，用于安排下一次运行的顺序；`tsbuildinfo/` 保存增量类型检查的状态。机器范围的锁使第二次运行等待第一次结束。
 
