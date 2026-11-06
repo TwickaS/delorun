@@ -9,6 +9,9 @@
     "check": "tsx src/check-fork-boundary.ts"
   },
   "dependencies": {
+    "@secretlint/node": "13.0.7",
+    "@secretlint/secretlint-rule-pattern": "13.0.7",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
     "zod": "^4.4.3"
   }
 }
