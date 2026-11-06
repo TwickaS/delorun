@@ -7,7 +7,8 @@
   },
   "forkOwned": [
     "delo/",
-    ".agents/skills/delo-*/"
+    ".agents/skills/delo-*/",
+    ".agents/notes/**/*-delo-*"
   ],
   "patches": [
     {
@@ -159,6 +160,12 @@
       "path": "scripts/verify-repository-references.spec.ts",
       "class": "delo-feature",
       "reason": "Covers the pinned-commit field exemption and the pnpm lockfile exclusion."
+    },
+    {
+      "path": "ROADMAP.md",
+      "class": "delo-feature",
+      "reason": "Adds the root pointer to Delo's roadmap in the Delo versus stock guide; upstream has no ROADMAP.md."
     }
-  ]
+  ],
+  "retired": []
 }

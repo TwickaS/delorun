@@ -5,7 +5,7 @@
   "description": "Every file outside Delo's own trees that differs from the upstream commit, with the reason and its class.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["upstream", "forkOwned", "patches"],
+  "required": ["upstream", "forkOwned", "patches", "retired"],
   "properties": {
     "$schema": { "type": "string" },
     "upstream": {
@@ -37,6 +37,21 @@
             "enum": ["delo-feature", "generic-fix", "security"]
           },
           "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "retired": {
+      "description": "Entries whose change upstream absorbed. Each records the upstream commit that absorbed it and the hunks it had, so the divergence count credits it.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "reason", "upstreamCommit", "hunks"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "reason": { "const": "absorbed" },
+          "upstreamCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "hunks": { "type": "integer", "minimum": 0 }
         }
       }
     }

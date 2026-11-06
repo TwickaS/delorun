@@ -1231,6 +1231,12 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  delo/apps/tools:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   native/system:
     devDependencies:
       '@deepseek-ai/node-addon-system':

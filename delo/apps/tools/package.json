@@ -1,0 +1,14 @@
+{
+  "name": "@delo/tools",
+  "description": "Delo's fork tooling: the divergence-ledger checker and its divergence count",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsx src/check-fork-boundary.ts"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}
