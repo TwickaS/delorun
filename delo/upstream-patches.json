@@ -637,6 +637,26 @@
       "reason": "Expected accessibility output of the multiline foreground command card, refreshed for the command-copy control that the terminal card shows in the default composition."
     },
     {
+      "path": "packages/client/ui-conversation/src/client/contract/slots.ts",
+      "class": "delo-feature",
+      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/apply.ts",
+      "class": "delo-feature",
+      "reason": "Declares the conversation.hero.headline slot on the conversation.content factory, so the slot's children are registered with the content."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/EmptyHero.tsx",
+      "class": "delo-feature",
+      "reason": "Renders the New Session headline through conversation.hero.headline, with upstream's headline and badge as the fallback."
+    },
+    {
+      "path": "packages/client/ui-conversation/tests/skeleton.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the headline slot's fallback and an occupant replacing it."
+    },
+    {
       "path": "packages/extensions/cordis-client-runner/src/client/slot-catalog.ts",
       "class": "delo-feature",
       "reason": "Generated client slot catalogue, regenerated for the Chat presentation Hook, the removed assistant presentation source and the new headline slot, which move the source lines of the Chat slot declarations."
