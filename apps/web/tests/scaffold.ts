@@ -53,6 +53,7 @@ import {
   scrubSessionSnapshot,
   sessionFixtureFiles,
   sessionFixtureName,
+  snapshotPatchOverlay,
   stabilizeFixtureMessageIds,
   stabilizeRefreshLog,
   writesCurrentSessionFixtures,
@@ -137,6 +138,9 @@ export function webSnapshotMode(): WebSnapshotMode {
   if (value === 'record' || value === 'refresh') return value
   throw new Error(`DSH_SNAPSHOT must be replay, record, or refresh; got ${JSON.stringify(value)}`)
 }
+
+// The replay-only `DSH_SNAPSHOT_PATCH` overlay, refused in record and refresh before any scaffold boots.
+const SNAPSHOT_PATCH_OVERLAY = snapshotPatchOverlay(process.env.DSH_SNAPSHOT)
 
 /**
  * Compare a session-driven Web scenario's complete workspace with its committed independent expected state.
@@ -582,17 +586,20 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   // drifting).
   const basePatches = loadOverlayPatches('web e2e scaffold', BASE_PATCH_PATH)
   const surfacePatches = bundlePatchPaths(WEB_BUNDLE_DIR, WEB_BUNDLE_PATCH).flatMap(file => loadOverlayPatches('web e2e scaffold', file))
+  // The overlay follows the shipped bundle layers and precedes the scaffold's and the scenario's own layers.
+  const snapshotPatches = SNAPSHOT_PATCH_OVERLAY.flatMap(path => loadOverlayPatches('web e2e scaffold', path))
   const extraOverlayPatches = options.extraOverlayPath === undefined
     ? []
     : (typeof options.extraOverlayPath === 'string' ? [options.extraOverlayPath] : options.extraOverlayPath)
       .flatMap(path => loadOverlayPatches('web e2e scaffold', path))
-  const composedRows = composeEntries([basePatches, surfacePatches, extraOverlayPatches])
+  const composedRows = composeEntries([basePatches, surfacePatches, snapshotPatches, extraOverlayPatches])
   const webRuntimeConfig = composedRows.find(row => row.id === 'web-runtime')?.config as {
     surfaceContext?: boolean
   } | undefined
   const surfaceContext = webRuntimeConfig?.surfaceContext !== false
   // The scaffold's own overrides, above every bundle layer like `--patch` overlays.
   const overlayPatches: PatchOptions[] = [
+    ...snapshotPatches,
     // Without HMR the profile applies configuration changes at its next start.
     ...options.profile?.hmr === false ? [{ id: 'hmr', disabled: true }] : [],
     { id: 'session-log-deepseek', config: { enabled: false } },

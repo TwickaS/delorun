@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import {
   defineAcpSnapshotSuite,
   parseSnapshotManifest,
+  snapshotPatchOverlay,
   type Scenario,
   type SnapshotSuiteOptions,
 } from '@deepseek-ai/dsh-session-snapshot'
@@ -79,12 +80,15 @@ const scenarios: Scenario[] = controllerCases.map((controller) => {
   }
 })
 
+const overlayPatches = snapshotPatchOverlay(process.env.DSH_SNAPSHOT)
+
 defineAcpSnapshotSuite({
   agent: {
     binScript: fileURLToPath(new URL('../../apps/cli/src/bin.ts', import.meta.url)),
     configPath: fileURLToPath(new URL('./escalation-approved/cordis.yml', import.meta.url)),
     profile: 'acp',
     tsconfigPath: fileURLToPath(new URL('../../tsconfig.json', import.meta.url)),
+    overlayPatches,
   },
   snapshotsDir: corpusDir,
   scenarios,

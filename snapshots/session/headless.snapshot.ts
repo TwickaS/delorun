@@ -42,10 +42,12 @@ import {
   sessionFixtureNames,
   sessionHeaderVersion,
   writerSnapshotName,
+  snapshotPatchOverlay,
   snapshotSpillRoot,
   stabilizeFixtureMessageIds,
   stabilizeRefreshLog,
   tokenizeSessionFixtureCwd,
+  withSnapshotPatch,
   writesCurrentSessionFixtures,
   type HarvestedLog,
   type NormalizeContext,
@@ -79,6 +81,7 @@ function snapshotMode(value: string | undefined): SnapshotMode {
 }
 
 const mode = snapshotMode(process.env.DSH_SNAPSHOT)
+const overlayPatches = snapshotPatchOverlay(process.env.DSH_SNAPSHOT)
 const RUNTIME_WORKSPACE_ENTRIES = ['.agents', '.dsh', '.snapshot-patches'] as const
 
 interface JsonObject {
@@ -1306,12 +1309,12 @@ describe('headless recorded-session snapshots', () => {
       if (baseComposition === undefined) throw new Error('headless corpus has no default composition')
       const replaying = mode !== 'record'
       const compositionPatch = join(composition.dir, replaying ? 'cordis.snapshot.yml' : 'cordis.yml')
-      const patchSources = [
+      const patchSources = withSnapshotPatch([
         join(baseComposition.dir, 'cordis.yml'),
         ...composition === baseComposition && !replaying ? [] : [compositionPatch],
         ...model === undefined ? [] : [join(baseComposition.dir, 'model.cordis.yml')],
         ...existsSync(join(scenario.dir, 'runtime.cordis.yml')) ? [join(scenario.dir, 'runtime.cordis.yml')] : [],
-      ]
+      ], overlayPatches)
       const patchRoot = '.snapshot-patches'
       const patches = patchSources.map((source, index) => join(patchRoot, `${String(index)}-${basename(source)}`))
 

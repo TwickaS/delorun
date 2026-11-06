@@ -73,6 +73,11 @@ export {
   type SnapshotWorkspaceManifest,
 } from './manifest.ts'
 export {
+  SNAPSHOT_PATCH_ENV,
+  snapshotPatchOverlay,
+  withSnapshotPatch,
+} from './snapshot-patch.ts'
+export {
   assertPersistedSessionVersion,
   assertSessionFixtureVersion,
   latestPersistedSessionPaths,

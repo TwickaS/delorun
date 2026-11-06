@@ -47,6 +47,8 @@ import {
   tokenizeSessionFixtureCwd,
   writesCurrentSessionFixtures,
   materializeProfilePatch,
+  snapshotPatchOverlay,
+  withSnapshotPatch,
   formatSystemPromptSnapshot,
   formatToolSchemasSnapshot,
   latestPersistedSessionPaths,
@@ -80,6 +82,7 @@ const MINIMAL_BASH_DESCRIPTION = `Run commands in a bash shell
 * Please run long lived commands in the background, e.g. 'sleep 10 &' or start a server in the background.`
 
 const mode = process.env.DSH_SNAPSHOT ?? 'replay'
+const overlayPatches = snapshotPatchOverlay(process.env.DSH_SNAPSHOT)
 const recording = mode === 'record'
 const refreshing = mode === 'refresh'
 const sessionWriteMode = recording ? 'record' : refreshing ? 'refresh' : 'replay'
@@ -719,15 +722,15 @@ const legacySdkContextPatch = fileURLToPath(new URL('./legacy-context.patch.yml'
 function authoredPatches(scenario: CorpusScenario, replaying: boolean): string[] {
   const owner = compositionOwner(scenario)
   if (scenario.manifest.composition.startsWith('sdk-')) {
-    return [join(owner.dir, 'cordis.yml'), ...(replaying ? [join(owner.dir, 'cordis.snapshot.yml')] : [])]
+    return withSnapshotPatch([join(owner.dir, 'cordis.yml'), ...(replaying ? [join(owner.dir, 'cordis.snapshot.yml')] : [])], overlayPatches)
   }
   const base = compositionOwners.get('default')
   if (base === undefined) throw new Error('SDK corpus has no default transport-neutral composition')
-  return [
+  return withSnapshotPatch([
     join(base.dir, 'cordis.yml'),
     ...owner === base && !replaying ? [] : [join(owner.dir, replaying ? 'cordis.snapshot.yml' : 'cordis.yml')],
     join(base.dir, 'model.cordis.yml'),
-  ]
+  ], overlayPatches)
 }
 
 /** One SDK-controlled recorded scenario against a fresh SDK-profile subprocess. */
@@ -775,10 +778,11 @@ async function runScenario(scenario: CorpusScenario): Promise<{
     const childHome = join(cwd, '.child-dsh')
     const legacyChildPatch = materializeProfilePatch(legacySdkContextPatch, cwd, 'sdk', patchRoot, patches.length)
     const childPatch = materializeProfilePatch(assertions.dshSdkChild.config, cwd, 'sdk', patchRoot, patches.length + 1)
+    const childOverlay = overlayPatches.map((patch, index) => materializeProfilePatch(patch, cwd, 'sdk', patchRoot, patches.length + 2 + index))
     await mkdir(childHome, { recursive: true })
     childSessionsRoot = join(childHome, 'sessions')
     childEnvironment = {
-      DSH_TEST_CHILD_PATCHES: JSON.stringify([legacyChildPatch, childPatch]),
+      DSH_TEST_CHILD_PATCHES: JSON.stringify([legacyChildPatch, ...withSnapshotPatch([childPatch], childOverlay)]),
       DSH_TEST_CHILD_HOME: childHome,
     }
   }

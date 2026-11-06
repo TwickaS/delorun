@@ -39,6 +39,7 @@ import {
 } from '@agentclientprotocol/sdk'
 import { entryListSchema, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { resolveExampleLaunch } from '@deepseek-ai/dsh-loader-smoke'
+import { withSnapshotPatch } from './snapshot-patch.ts'
 
 const EXIT_MARKER_GRACE_MS = 250
 
@@ -61,6 +62,8 @@ export interface AgentUnderTest {
   profile?: string
   /** The repo tsconfig whose paths resolve unbuilt workspace imports. */
   tsconfigPath: string
+  /** Patches applied after the base patch and before the selected scenario patch, such as the `DSH_SNAPSHOT_PATCH` overlay. */
+  overlayPatches?: readonly string[]
 }
 
 /** Options for one ACP test subprocess. */
@@ -124,7 +127,7 @@ export function launchAcpTestAgent(options: AcpTestLaunchOptions): LaunchedAcpTe
     libBin: agent.libBinScript,
     configArgs: agent.profile === undefined
       ? ['--config', selectedConfig]
-      : profileArgs(agent.profile, agent.configPath, selectedConfig, options.env?.DSH_SNAPSHOT, cwd),
+      : profileArgs(agent.profile, agent.configPath, selectedConfig, options.env?.DSH_SNAPSHOT, cwd, agent.overlayPatches ?? []),
     tsconfigPath: agent.tsconfigPath,
     ...agent.profile === undefined ? {} : { sourceImport: 'tsx/esm' },
     env: {
@@ -347,14 +350,15 @@ function profileArgs(
   selectedPatch: string,
   snapshotMode: string | undefined,
   cwd: string,
+  overlayPatches: readonly string[],
 ): string[] {
   const base = resolve(cwd, basePatch)
   const selected = resolve(cwd, selectedPatch)
   // Replay siblings already contain the selected scenario's complete delta
   // over the base patch; live scenario patches are not also applied.
-  const patches = snapshotMode === 'replay'
+  const patches = withSnapshotPatch(snapshotMode === 'replay'
     ? [base, replayPatchPath(selected)]
-    : [...new Set([base, selected])]
+    : [...new Set([base, selected])], overlayPatches.map(file => resolve(cwd, file)))
   const materializedRoot = join(cwd, '.dsh-profile-patches')
   mkdirSync(materializedRoot, { recursive: true })
   const materializedDir = mkdtempSync(join(materializedRoot, 'launch-'))
