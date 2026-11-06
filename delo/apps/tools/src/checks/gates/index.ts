@@ -13,6 +13,10 @@ const GATE_DIR = 'delo/apps/tools/src/checks/gates'
 /** The integration branch that pull requests merge into; the range gates compare against it by default. */
 const RANGE_BASE = 'origin/v5'
 
+/**
+ * The repository gates the runner schedules, in catalogue order. A gate's command runs from the repository root and
+ * passes on exit 0; at pre-commit the runner appends the staged paths to the command of each staged gate.
+ */
 export const GATES: readonly GateCheck[] = [
   {
     id: 'gates:licence',
