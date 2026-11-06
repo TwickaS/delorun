@@ -70,7 +70,7 @@ The registry has these entries.
 | `permission_defaults` | `@delo/plugin-permission-defaults` | On | Off | The workspace default preset and the one-consent requirement for full access. |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | On | Off | Refusal of loopback, link-local and private targets by `web_fetch` and the HTTP fetch provider, with a typed reason. |
 | `preset_inspect` | Delo's edit of upstream's preset tools | On | Off | The `preset_inspect` tool. |
-| `doctor` | `delo/apps/cli/src/doctor/` | On | Off | None: a feature switch for the doctor command. |
+| `doctor` | `packages/boot/doctor`, launched by `apps/cli` | On | Off | None: a feature switch for the doctor command. |
 | `plugin_manager_read_exemption` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The escalation exemption for the read actions `list_plugins`, `list_bundles`, `list_version_exemptions`, `history` and `read_config`, and the tool description that states it. |
 | `profile_history` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The actions `history`, `read_config`, `undo` and `restore`, and the audit of plugins, builds and exemptions that `undo` and `restore` bring back. |
 | `scheduled_task_consent` | Delo's edit of upstream's schedule tools | On | Off | The consent for `schedule_create` and `schedule_edit`, which names the recurrence, the target session and its permission preset. |
@@ -85,16 +85,16 @@ A registry entry's `defaultValue` applies in Delo's default composition, and its
 
 The replay lane selects the parity composition with the environment variable `DSH_SNAPSHOT_PATCH`, whose value is the path of the parity overlay. Every snapshot adapter listed in `snapshotAdapters` in `scripts/session-snapshot-corpus.corpus.ts` reads the variable and passes the overlay as a `--patch` argument. The overlay follows the first patch of each process, which is the root configuration file, and precedes every scenario layer, so a scenario's own replay layer keeps the last word.
 
-The check `parity-replay` runs `pnpm run test:snapshot` with that variable set. The lane edits no `snapshot.yml`, no replay layer, no fixture and no expected output. An adapter that receives the variable in `DSH_SNAPSHOT=record` or `DSH_SNAPSHOT=refresh` mode fails before it starts a process.
+The check `parity-replay` runs `pnpm run test:snapshot` with that variable set, which covers the session, SDK and ACP replay and the corpus check of web scenarios. The full web replay is a separate run, `DSH_SNAPSHOT=replay DSH_SNAPSHOT_PATCH=delo/apps/tools/src/parity/composition/parity.overlay.yml pnpm run test:web:built`, which runs at each green-base exit and is not part of `parity-replay`. The lane edits no `snapshot.yml`, no replay layer, no fixture and no expected output. An adapter that receives the variable in `DSH_SNAPSHOT=record` or `DSH_SNAPSHOT=refresh` mode fails before it starts a process.
 
 <a id="switch-sweep-and-pass-rule"></a>
 ### Switch sweep and pass rule
 
-Each registry entry has one switch-on scenario in Delo's snapshot tree. Its directory is `snapshots/<profile>/delo-<id>`, where `<id>` is the switch id with underscores replaced by hyphens, and its `runtime.cordis.yml` sets that one switch to its non-parity value. The sweep replays each switch-on scenario under the parity overlay, so the switch under test is the only difference from the parity composition.
+Each registry entry has one switch-on scenario in Delo's snapshot tree. Its directory is `snapshots/<profile>/delo-<id>`, where `<id>` is the switch id with underscores replaced by hyphens, and its `runtime.cordis.yml` sets that one switch to its non-parity value. The sweep runs each switch-on scenario under the parity overlay, within the coverage that the [replay lane](#replay-lane) defines, so the switch under test is the only difference from the parity composition.
 
 The check `parity-switches` runs two parts. The static part scans `delo/` for `systemPrompt.context` contributions and for tool registrations and tool schema changes. A match that belongs to no registry entry fails the check. The replay part runs the switch-on scenarios described above.
 
-A parity run passes when `pnpm run test:snapshot` with the overlay exits 0 for every scenario in the base tag's corpus and `git diff --exit-code snapshots/` shows no change afterwards. Delo's default composition passes when Delo's own recorded scenarios pass with no overlay.
+A parity run passes when `pnpm run test:snapshot` with the overlay exits 0 for every session, SDK and ACP scenario in the base tag's corpus, the corpus check of web scenarios passes, and `git diff --exit-code snapshots/` shows no change afterwards. Delo's default composition passes when Delo's own recorded scenarios pass with no overlay.
 
 <a id="consumers"></a>
 ## Consumers
@@ -104,7 +104,7 @@ A parity run passes when `pnpm run test:snapshot` with the overlay exits 0 for e
 - `delo/apps/tools/src/run-checks.ts`: the `parity-replay` and `parity-switches` checks.
 - `delo/apps/tools/src/parity/release/`: the parity run on built release artifacts.
 - `@delo/bundle-studio`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`: the packages that register switches.
-- `delo/apps/cli/src/doctor/`: the doctor's registration.
+- `packages/boot/doctor`, launched by `apps/cli`: the doctor's registration.
 - Upstream's `vitest.snapshot.config.ts`, the snapshot adapters listed in `snapshotAdapters`, and the `snapshot.yml` and replay layer files of each scenario, which the lane reads without changing them.
 
 <a id="compatibility"></a>
@@ -112,7 +112,7 @@ A parity run passes when `pnpm run test:snapshot` with the overlay exits 0 for e
 
 The registry is additive. A change that adds a switch adds its entry, its parity value and its switch-on scenario in one change, and the switch sweep fails an entry without a scenario. Removing an entry, or reusing an id, is a registry change that increments `PARITY_REGISTRY_VERSION`.
 
-Changing a parity value changes what the replay asserts, so it is made together with the replay pass that proves it. Moving the base tag reruns the whole replay on the new base tag's scenarios, because upstream's expected output is the base tag's expected output.
+Changing a parity value changes what the replay asserts, so it is made together with the replay pass that proves it. Moving the base tag reruns `parity-replay` and the full web replay on the new base tag's scenarios, because upstream's expected output is the base tag's expected output.
 
 The parity composition is a test composition. Shipped profiles do not select it, and it has no compatibility promise to a person's configuration.
 

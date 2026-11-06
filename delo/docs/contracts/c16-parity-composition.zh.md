@@ -70,7 +70,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 | `permission_defaults` | `@delo/plugin-permission-defaults` | 开 | 关 | 工作区默认预设，以及完全访问的一次性同意要求。 |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | 开 | 关 | `web_fetch` 与 HTTP 抓取提供方对回环、链路本地与私有网络目标的拒绝，附带带类型的原因。 |
 | `preset_inspect` | Delo 对上游预设工具的编辑 | 开 | 关 | `preset_inspect` 工具。 |
-| `doctor` | `delo/apps/cli/src/doctor/` | 开 | 关 | 无：doctor 命令的功能开关。 |
+| `doctor` | `packages/boot/doctor`，由 `apps/cli` 启动 | 开 | 关 | 无：doctor 命令的功能开关。 |
 | `plugin_manager_read_exemption` | Delo 对上游 `plugin_manager` 工具的编辑 | 开 | 关 | 只读动作 `list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 与 `read_config` 的提权豁免，以及说明该豁免的工具描述。 |
 | `profile_history` | Delo 对上游 `plugin_manager` 工具的编辑 | 开 | 关 | 动作 `history`、`read_config`、`undo` 与 `restore`，以及 `undo` 与 `restore` 带回的插件、构建与豁免的审计。 |
 | `scheduled_task_consent` | Delo 对上游 schedule 工具的编辑 | 开 | 关 | `schedule_create` 与 `schedule_edit` 的同意，它写明重复规则、目标会话及其权限预设。 |
@@ -85,16 +85,16 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 
 回放通道通过环境变量 `DSH_SNAPSHOT_PATCH` 选择对等组合，该变量的值是对等覆盖层的路径。`scripts/session-snapshot-corpus.corpus.ts` 中 `snapshotAdapters` 列出的每个 snapshot 适配器都读取该变量，并将覆盖层作为 `--patch` 参数传入。覆盖层位于每个进程的第一个 patch（即根配置文件）之后，并位于每个场景层之前，因此场景自己的回放层保留最后的决定权。
 
-检查 `parity-replay` 在设置该变量的情况下运行 `pnpm run test:snapshot`。该通道不编辑任何 `snapshot.yml`、回放层、夹具或预期输出。若适配器在 `DSH_SNAPSHOT=record` 或 `DSH_SNAPSHOT=refresh` 模式下收到该变量，它在启动任何进程之前失败。
+检查 `parity-replay` 在设置该变量的情况下运行 `pnpm run test:snapshot`，其覆盖 session、SDK 与 ACP 的回放，以及 web 场景的语料检查。完整的 web 回放是另一项运行：`DSH_SNAPSHOT=replay DSH_SNAPSHOT_PATCH=delo/apps/tools/src/parity/composition/parity.overlay.yml pnpm run test:web:built`，它在每次 green-base 出口运行，且不属于 `parity-replay`。该通道不编辑任何 `snapshot.yml`、回放层、夹具或预期输出。若适配器在 `DSH_SNAPSHOT=record` 或 `DSH_SNAPSHOT=refresh` 模式下收到该变量，它在启动任何进程之前失败。
 
 <a id="switch-sweep-and-pass-rule"></a>
 ### 开关扫描与通过规则
 
-每条注册表记录在 Delo 的 snapshot 树中都有一个开关开启场景。其目录为 `snapshots/<profile>/delo-<id>`，其中 `<id>` 是把下划线替换为连字符后的开关 id；该场景的 `runtime.cordis.yml` 把该开关设为非对等取值。扫描在对等覆盖层下回放每个开关开启场景，因此被测开关是对等组合中唯一的差异。
+每条注册表记录在 Delo 的 snapshot 树中都有一个开关开启场景。其目录为 `snapshots/<profile>/delo-<id>`，其中 `<id>` 是把下划线替换为连字符后的开关 id；该场景的 `runtime.cordis.yml` 把该开关设为非对等取值。扫描在对等覆盖层下运行每个开关开启场景，其覆盖范围由[回放通道](#replay-lane)定义，因此被测开关是对等组合中唯一的差异。
 
 检查 `parity-switches` 分两部分运行。静态部分扫描 `delo/`，查找 `systemPrompt.context` 的贡献、工具注册与工具 schema 的变更。匹配项若不属于任何注册表记录，则检查失败。回放部分运行上述的开关开启场景。
 
-对等运行在以下两项都满足时通过：在覆盖层下，`pnpm run test:snapshot` 对基线标签语料中的每个场景退出码为 0；且之后 `git diff --exit-code snapshots/` 没有变化。Delo 的默认组合在 Delo 自己录制的场景无覆盖层通过时通过。
+对等运行在以下各项都满足时通过：在覆盖层下，`pnpm run test:snapshot` 对基线标签语料中的每个 session、SDK 与 ACP 场景退出码为 0；web 场景的语料检查通过；且之后 `git diff --exit-code snapshots/` 没有变化。Delo 的默认组合在 Delo 自己录制的场景无覆盖层通过时通过。
 
 <a id="consumers"></a>
 ## 消费方
@@ -104,7 +104,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 - `delo/apps/tools/src/run-checks.ts`：检查 `parity-replay` 与 `parity-switches`。
 - `delo/apps/tools/src/parity/release/`：对构建好的发布产物进行的对等运行。
 - `@delo/bundle-studio`、`@delo/plugin-main-chat`、`@delo/plugin-permission-defaults` 与 `@delo/plugin-fetch-guard`：注册开关的包。
-- `delo/apps/cli/src/doctor/`：doctor 命令的注册。
+- `packages/boot/doctor`，由 `apps/cli` 启动：doctor 命令的注册。
 - 上游的 `vitest.snapshot.config.ts`、`snapshotAdapters` 中列出的 snapshot 适配器，以及每个场景的 `snapshot.yml` 与回放层文件；回放通道读取它们，但不改动它们。
 
 <a id="compatibility"></a>
@@ -112,7 +112,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 
 注册表只增不减。新增开关的变更须在同一次改动中同时添加其记录、对等取值与开关开启场景；开关扫描会拒绝缺少场景的记录。删除记录或复用 id 属于注册表变更，须递增 `PARITY_REGISTRY_VERSION`。
 
-改变对等取值会改变回放所断言的内容，因此须与证明该改动的回放通过一并进行。移动基线标签时，整套回放要在新基线标签的场景上重新运行，因为上游的预期输出就是该基线标签的预期输出。
+改变对等取值会改变回放所断言的内容，因此须与证明该改动的回放通过一并进行。移动基线标签时，`parity-replay` 与完整的 web 回放都要在新基线标签的场景上重新运行，因为上游的预期输出就是该基线标签的预期输出。
 
 对等组合是测试组合。正式 profile 不选择它，它也不对人的配置承担兼容性承诺。
 
