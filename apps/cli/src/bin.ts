@@ -16,17 +16,19 @@ import type { RunProfileOptions } from './profile-boot.ts'
 export type RunCliOptions = Pick<RunProfileOptions, 'packageManager'> & {
   /** Permit plugin commands for Desktop's existing profile; reserved for its installed carrier. */
   manageDesktopProfile?: boolean
+  /** Arguments after the Node binary and script; defaults to `process.argv.slice(2)`. */
+  argv?: readonly string[]
 }
 
 /**
  * Run the public dsh command-line interface.
- * @param options - Package runtime and Desktop profile access supplied by the installation.
+ * @param options - Package runtime, Desktop profile access and the arguments supplied by the installation.
  * @returns a promise that settles when the selected command mode finishes.
  */
 export async function runCli(options: RunCliOptions = {}): Promise<void> {
   const version = getDshRuntimeVersion()
-  const { manageDesktopProfile, ...profileOptions } = options
-  const invocation = parseDshArgs(process.argv.slice(2), version, manageDesktopProfile)
+  const { manageDesktopProfile, argv = process.argv.slice(2), ...profileOptions } = options
+  const invocation = parseDshArgs(argv, version, manageDesktopProfile)
 
   switch (invocation.mode) {
     case 'profile': {
