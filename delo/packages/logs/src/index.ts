@@ -1,0 +1,29 @@
+/**
+ * Delo's operational logs (contract C20, `delo/docs/contracts/c20-operational-logs.md`): the logger every surface
+ * writes through, the redactor, rotation and retention, captured output, and the readers `delorun logs` uses. The
+ * Cordis logger exporter is the `@delo/logs/cordis` entry, so a surface without Cordis does not load it.
+ *
+ * @module @delo/logs
+ */
+export { LineCapture, captureStream, interceptStdio, type CapturedStream, type InterceptOptions } from './capture.ts'
+export { LogsError, type LogsErrorCode } from './errors.ts'
+export { checkLogDirectory, checkLogFile, checkProfile, resolveSurface, rotatedFile, surfaceOfDirectory, type SurfaceLocation, type SurfaceRequest } from './files.ts'
+export { followLines, parseRecord, readLines, type FollowOptions, type StoredLine } from './reader.ts'
+export { serializeRecord, type LogKeys } from './record.ts'
+export { Redactor, REDACTED_VALUE, redactionMarker, type PatternKind, type RedactedError } from './redact.ts'
+export {
+  clearLocalLogs,
+  clearStartupReports,
+  clearSurface,
+  localSurfaces,
+  oldestRecordTime,
+  pruneLocalSurfaces,
+  pruneSurface,
+  startAgeChecks,
+  startupReports,
+  surfaceFiles,
+  type AgeCheckOptions,
+  type RetentionReport,
+  type SurfaceFiles,
+} from './retention.ts'
+export { LEVEL_RANK, rotateFiles, SurfaceLog, type DeloLogDetails, type DeloLogger, type LogEntry, type SurfaceLogOptions } from './writer.ts'
