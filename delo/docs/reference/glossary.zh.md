@@ -126,7 +126,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 
 ## 构建 Delo
 
-- **上游**（upstream）：DeepSeek Harness 由其维护者发布的版本。**差异台账**（divergence ledger）：`delo/upstream-patches.json`，记录每个被修改的上游文件及其原因与类别。**[差异记录](divergence/README.md)**（divergence record）：说明对某个上游插件的重大修改，以及如何合并下一个上游版本的页面。<a id="upstream"></a>
+- **上游**（upstream）：DeepSeek Harness 由其维护者发布的版本。**差异台账**（divergence ledger）：`delo/upstream-patches.json`，记录每个被修改的上游文件及其原因与类别。**[差异记录](divergence/README.zh.md)**（divergence record）：说明对某个上游插件的重大修改，以及如何合并下一个上游版本的页面。<a id="upstream"></a>
 - **[对等清单](parity.md)**（parity checklist）：上游记录版本中每项 stock 功能及其证据，以及每项刻意的差异。**对等组合**（parity composition）：关闭了 studio 组合包与每项对模型可见的 Delo 修改的 Delo 运行时。**对等回放**（parity replay）：上游记录的场景原样运行于对等组合之上。<a id="parity"></a>
 - **对等开关**（parity switch）：对等组合中一个已注册的开关，即一项对模型可见的 Delo 变更，带有其默认取值与对等取值。代码中为 `@delo/contract-parity-composition` 中的注册表 `PARITY_SWITCHES`。<a id="parity-switch"></a>
 - **开关扫描**（switch sweep）：分别开启每个开关、用其自身的 Delo 场景回放的检查，以及在 `delo/` 之下找出没有注册开关的对模型可见输入的静态扫描。<a id="switch-sweep"></a>
