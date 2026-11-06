@@ -156,6 +156,8 @@ export interface SessionSummary {
   readonly formatStatus?: 'current' | 'migration-required'
   readonly sessionId: SessionId
   readonly updatedAt: number
+  /** When the Session was created, epoch milliseconds. */
+  readonly createdAt?: number
   readonly running: boolean
   readonly blank: boolean
   readonly parentSessionId?: SessionId

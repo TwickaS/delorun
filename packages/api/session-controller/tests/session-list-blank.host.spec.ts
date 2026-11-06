@@ -197,6 +197,9 @@ describe('resumed Session summaries', () => {
     expect(Object.keys(added[0]?.projections?.values ?? {})).toContain('sessionListMetadata')
     expect(Object.keys(added[0]?.projections?.values ?? {})).toEqual(expect.arrayContaining([...ctx.sessionProjections.summaryKeys()]))
     expect(listed?.updatedAt).toBe(promptAt)
+    // The live row carries the header's creation time, which precedes the prompt.
+    expect(listed?.createdAt).toBe(ctx.sessions.get(id)?.header.createdAt)
+    expect(listed?.createdAt).toBeLessThan(promptAt)
     expect(listed?.blank).toBe(false)
   })
 })

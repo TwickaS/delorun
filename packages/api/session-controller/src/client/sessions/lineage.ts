@@ -23,6 +23,8 @@ export interface SessionListEntry {
   sessionId: SessionId
   title?: string
   updatedAt: number
+  /** When the Session was created, epoch milliseconds, when the Host reports it. */
+  createdAt?: number
   running: boolean
   /**
    * New Session presentation and reuse eligibility, reconciled with

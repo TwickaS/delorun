@@ -49,6 +49,8 @@ export interface SessionSummary {
    */
   blank: boolean
   updatedAt: number
+  /** When the Session was created, epoch milliseconds, when the Host reports it. */
+  createdAt?: number
   /**
    * The row's summary projection values retained by the object layer, never the
    * full projection set. A connected Session's store may hold more values from
@@ -636,6 +638,7 @@ export class ClientSessions implements ISessions {
         retainedBy: this.retentionSnapshot(entry.sessionId).retainedBy,
         blank: entry.blank,
         updatedAt: entry.updatedAt,
+        ...(entry.createdAt === undefined ? {} : { createdAt: entry.createdAt }),
         formatStatus: entry.formatStatus,
         ...(entry.projectionValues === undefined
           ? {}

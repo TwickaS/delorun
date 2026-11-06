@@ -999,7 +999,7 @@
     {
       "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
       "class": "delo-feature",
-      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event. It also carries `onRegistered` and `ProjectionRegistrationListener` of the late session projection keys."
+      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event. It also carries `onRegistered` and `ProjectionRegistrationListener` of the late session projection keys. The Session created-at adds `createdAt` to the `SessionSummary` declaration."
     },
     {
       "path": "scripts/gen-cordis-catalog.ts",
@@ -1509,7 +1509,7 @@
     {
       "path": "packages/api/session-controller/src/types.ts",
       "class": "delo-feature",
-      "reason": "Late session projection keys: the `SessionProjectionUpdate` JSDoc states the frame sent when a key becomes live after the baseline and that a Session with no committed event receives none. The fields are unchanged."
+      "reason": "Late session projection keys: the `SessionProjectionUpdate` JSDoc states the frame sent when a key becomes live after the baseline and that a Session with no committed event receives none; the update's fields are unchanged. Session created-at: the optional `createdAt` wire field of `SessionSummary`, the header's epoch milliseconds, for the studio sidebar's created-order sort; the field is additive."
     },
     {
       "path": "packages/api/session-controller/src/client/sessions/manager.ts",
@@ -1560,6 +1560,31 @@
       "path": "packages/api/workspace-controller/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Default workspace directory: the consistency record re-recorded after the `defaultWorkspaceDirectory` row was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/api/session-controller/src/list.ts",
+      "class": "delo-feature",
+      "reason": "Session created-at: fills `createdAt` from `header.createdAt` in the live and cold list rows beside `updatedAt`."
+    },
+    {
+      "path": "packages/api/session-controller/src/client/sessions/service.ts",
+      "class": "delo-feature",
+      "reason": "Session created-at: the client `SessionSummary` carries `createdAt` when the Host reports it."
+    },
+    {
+      "path": "packages/api/session-controller/src/client/sessions/lineage.ts",
+      "class": "delo-feature",
+      "reason": "Session created-at: `SessionListEntry` declares the optional `createdAt` the list rows carry."
+    },
+    {
+      "path": "packages/api/session-controller/tests/session-cold.host.spec.ts",
+      "class": "delo-feature",
+      "reason": "Session created-at: asserts a cold row's `createdAt` is the header's creation time, apart from its prompt-driven `updatedAt`."
+    },
+    {
+      "path": "packages/api/session-controller/tests/session-list-blank.host.spec.ts",
+      "class": "delo-feature",
+      "reason": "Session created-at: asserts a live row's `createdAt` is the header's creation time."
     }
   ],
   "retired": []

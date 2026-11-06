@@ -128,6 +128,7 @@ export class ApiSessionList {
     return {
       sessionId: session.id,
       updatedAt: updatedAt(session.header, metadata),
+      createdAt: session.header.createdAt,
       agentAvailable: this.ctx.agents.get(session.id)?.session === session,
       formatStatus: 'current',
       running: this.ctx.agents.get(session.id)?.status === 'running',
@@ -183,6 +184,7 @@ export class ApiSessionList {
     return {
       sessionId: header.id,
       updatedAt: updatedAt(header, metadata),
+      createdAt: header.createdAt,
       agentAvailable: false,
       ...(formatStatus === undefined ? {} : { formatStatus }),
       running: false,

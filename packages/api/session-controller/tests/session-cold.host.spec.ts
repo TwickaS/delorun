@@ -218,7 +218,8 @@ describe('sessions.list cold merge', () => {
     if (!response.ok) throw new Error('unreachable')
     const byId = Object.fromEntries(response.value.items.map(item => [item.sessionId, item]))
     expect(byId['cached-blank']).toMatchObject({ blank: true, updatedAt: 100, running: false })
-    expect(byId['cached-conversation']).toMatchObject({ blank: false, updatedAt: 1000 })
+    // createdAt is the header's creation time, apart from the prompt-driven updatedAt.
+    expect(byId['cached-conversation']).toMatchObject({ blank: false, updatedAt: 1000, createdAt: 200 })
     // A cache miss leaves blankness unknown; the row stays visible without a body read.
     expect(byId['uncached']).toMatchObject({
       blank: false,
