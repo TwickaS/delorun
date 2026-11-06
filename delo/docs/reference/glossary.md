@@ -79,6 +79,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 ## Changing the harness
 
 - **profile** — upstream's profile; the `delorun` command and the desktop app each keep their own, as upstream's do, and share chats and workspaces. **layer** — a bundle, the profile patch, the home patch or an overlay. <a id="profile"></a>
+- **local bundle** — the bundle that Delo's CLI profiles add after upstream's web profile template, holding Delo's local integration rows; a profile's `--dump-config` names it beside each row it writes. Code: `@delo/bundle-local`. <a id="local-bundle"></a>
 - **profile history** — every saved version of the profile, naming what changed and who changed it. **undo** — restoring the version before the latest. **safe mode** — starting with the person's additions kept but not loaded. <a id="profile-history"></a>
 - **eject** — copying a plugin's source into the profile as an editable replacement for the original. <a id="eject"></a>
 - **source mode** — running Delo from a git checkout of the person's own fork, updated by merging signed release tags. This mode is not offered; interface text does not use the term. <a id="source-mode"></a>

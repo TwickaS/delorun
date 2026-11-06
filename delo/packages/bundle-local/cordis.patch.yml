@@ -1,0 +1,9 @@
+# The @delo/bundle-local patch: Delo's layer over upstream's web template in
+# Delo's CLI profiles (src/profile.ts lists the order). Rows here target
+# upstream rows by id, or insert Delo's local integration rows; the profile's
+# own cordis.patch.yml and any --patch overlays still come after it.
+#
+# A patch replaces the targeted row's whole `config`, so a row here restates
+# every key it keeps. Each row is listed in LOCAL_ROWS (src/profile.ts), and
+# the package's composition spec fails on a row that is not.
+[]

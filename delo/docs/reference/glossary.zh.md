@@ -89,6 +89,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 ## 修改 harness
 
 - **profile**：上游的 profile。`delorun` 命令与桌面应用各自保留一个，与上游一致，并共享 chat 与工作区。**层**（layer）：一个组合包、profile patch、home patch 或 overlay。<a id="profile"></a>
+- **本地组合包**（local bundle）：Delo 的 CLI profile 在上游 web profile 模板之后加入的组合包，承载 Delo 的本地集成行；profile 的 `--dump-config` 会在它写入的每一行旁标注该组合包。代码对应：`@delo/bundle-local`。<a id="local-bundle"></a>
 - **profile 历史**（profile history）：profile 的每个已保存版本，记录改动了什么以及由谁改动。**撤销**（undo）：恢复到最近一次之前的版本。**安全模式**（safe mode）：启动时保留本人的附加内容，但不加载它们。<a id="profile-history"></a>
 - **eject**：将插件源码复制到 profile 中，作为原插件的可编辑替代品。<a id="eject"></a>
 - **源码模式**（source mode）：从本人自己分叉的 git 检出版本运行 Delo，并通过合并已签名的发布标签进行更新。目前未提供此模式，界面文本不使用该术语。<a id="source-mode"></a>

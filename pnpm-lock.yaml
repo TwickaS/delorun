@@ -1314,6 +1314,22 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
 
+  delo/packages/bundle-local:
+    dependencies:
+      '@deepseek-ai/dsh-official-bundles':
+        specifier: workspace:*
+        version: link:../../../packages/util/official-bundles
+    devDependencies:
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: workspace:~
+        version: link:../../../vendor/include
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      js-yaml:
+        specifier: ^4.3.2
+        version: 4.3.2
+
   delo/packages/contract-admission:
     dependencies:
       '@deepseek-ai/dsh-brand':

@@ -1,0 +1,30 @@
+{
+  "name": "@delo/bundle-local",
+  "description": "Delo's local bundle: the layer that Delo's CLI profiles add over upstream's web template, holding Delo's local integration rows",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./profile": "./src/profile.ts",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "src/profile.ts"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-official-bundles": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis-plugin-include": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "js-yaml": "^4.3.2"
+  }
+}
