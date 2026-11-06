@@ -1,17 +1,19 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE } from '@delo/bundle-local/profile'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
-import { startForeground, type StartDependencies } from '../src/start.ts'
+import { startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
 
 const BIN = join(import.meta.dirname, '../src/bin.ts')
+const BUNDLE_LOCAL_DIR = new URL('.', import.meta.resolve('@delo/bundle-local/package.json')).pathname
 const TSX_LOADER = import.meta.resolve('tsx/esm')
 const POSIX = process.platform !== 'win32'
 
@@ -48,7 +50,8 @@ function snapshot(root: string): string[] {
  * @returns its exit status and output.
  */
 function delorun(args: readonly string[], env: Record<string, string> = {}): { status: number | null, stdout: string, stderr: string } {
-  const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DSH_|DELO_)/.test(name)))
+  // NODE_PATH, which pnpm's script shims set, would let upstream resolve workspace packages no installation carries.
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DSH_|DELO_|NODE_PATH$)/.test(name)))
   const result = spawnSync(process.execPath, ['--import', TSX_LOADER, BIN, ...args], {
     cwd: osHome,
     env: { ...inherited, HOME: osHome, USERPROFILE: osHome, DSH_HOME: dshHome, ...env },
@@ -83,7 +86,7 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(first.status).toBe(EXIT.ok)
     expect(first.stdout).toContain(`Set up the CLI profile default at ${join(deloHome, 'profiles', 'default')}`)
     const manifest = JSON.parse(readFileSync(join(deloHome, 'profiles', 'default', 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
-    expect(manifest.dsh.profile.bundles).toContain('@deepseek-ai/dsh-web-app')
+    expect(manifest.dsh.profile.bundles).toEqual(DELO_PROFILE_BUNDLES)
     if (POSIX) {
       expect(lstatSync(deloHome).mode & 0o777).toBe(0o700)
       expect(lstatSync(join(deloHome, 'secrets')).mode & 0o777).toBe(0o700)
@@ -128,6 +131,18 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(delorun(['status']).status).toBe(EXIT.notRunning)
     expect(snapshot(desktopProfile)).toEqual(before)
     expect(readdirSync(join(deloHome, 'run'))).toEqual(['default'])
+  })
+
+  it('refuses to start a profile whose composition skipped @delo/bundle-local, and starts nothing', () => {
+    expect(delorun(['setup']).status).toBe(EXIT.ok)
+    const refused = delorun(['start', '--foreground'])
+    expect(refused.status).toBe(EXIT.failed)
+    expect(refused.stderr).toContain('delorun: the CLI profile default could not load Delo\'s bundle, so Delo did not start:')
+    expect(refused.stderr).toContain(`  ${LOCAL_BUNDLE}: Error: dsh: cannot resolve profile bundle "${LOCAL_BUNDLE}"`)
+    expect(refused.stderr).toContain(`  To fix it, run: delorun plugin --profile default add link:${BUNDLE_LOCAL_DIR}`)
+    expect(refused.stderr).toContain('upload session logs to DeepSeek')
+    expect(refused.stdout).not.toContain('http://')
+    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
   })
 
   it('refuses a home inside ~/.dsh before creating anything', () => {
@@ -179,6 +194,7 @@ describe('starting the home process', () => {
    */
   function recording(seen: { options: RunProfileOptions, dshHome: string | undefined }[]): StartDependencies {
     return {
+      prepareProfile: upstreamDependencies().prepareProfile,
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
         return Promise.resolve()
@@ -189,14 +205,38 @@ describe('starting the home process', () => {
     }
   }
 
+  /**
+   * Link a package into the CLI profile's node_modules, as `delorun plugin add link:` leaves it.
+   * @param name - the package name.
+   * @param directory - the package directory.
+   */
+  function linkIntoProfile(name: string, directory: string): void {
+    const link = join(deloHome, 'profiles', 'default', 'node_modules', name)
+    mkdirSync(dirname(link), { recursive: true })
+    symlinkSync(directory, link, 'junction')
+  }
+
+  /**
+   * Add bundles to the CLI profile's bundle list.
+   * @param names - the package names to append.
+   */
+  function appendBundles(...names: string[]): void {
+    const path = join(deloHome, 'profiles', 'default', 'package.json')
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+    manifest.dsh.profile.bundles.push(...names)
+    writeFileSync(path, JSON.stringify(manifest))
+  }
+
   it('boots the CLI profile with DSH_HOME set to the Delo home, and a second start leaves one holder', async () => {
     expect(await main(['setup'], context)).toBe(EXIT.ok)
+    linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
     const prepared = await prepareHome(context, undefined)
     expect(prepared.home).toEqual({ path: deloHome, ignoredDshHome: dshHome })
     const seen: { options: RunProfileOptions, dshHome: string | undefined }[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: context }, recording(seen))).toBeUndefined()
     expect(seen).toHaveLength(1)
     expect(seen[0]).toMatchObject({ dshHome: deloHome, options: { profile: 'default', patchFiles: [], args: [] } })
+    expect(seen[0]!.options.resolvedProfile?.profile.layers.map(layer => layer.packageName)).toEqual(DELO_PROFILE_BUNDLES)
     expect(process.env.DELO_HOME).toBe(deloHome)
     expect(process.env.DELO_PROFILE).toBe('default')
     const lock = JSON.parse(readFileSync(join(deloHome, 'run', 'default', 'home.lock'), 'utf8')) as { pid: number }
@@ -215,8 +255,28 @@ describe('starting the home process', () => {
     await prepareHome(context, undefined)
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording([]))).rejects.toThrow('run: delorun setup')
     expect(await main(['setup'], context)).toBe(EXIT.ok)
+    linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
     const failing: StartDependencies = { ...recording([]), runProfile: () => Promise.reject(new Error('boot failed')) }
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, failing)).rejects.toThrow('failed to start: boot failed')
     expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
+  })
+
+  it('refuses a Delo bundle that resolves but fails to load, and still starts over a skipped upstream bundle', async () => {
+    expect(await main(['setup'], context)).toBe(EXIT.ok)
+    linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
+    const broken = join(osHome, 'bundle-broken')
+    mkdirSync(broken)
+    writeFileSync(join(broken, 'package.json'), '{"name":"@delo/bundle-broken","version":"0.0.0"}\n')
+    linkIntoProfile('@delo/bundle-broken', broken)
+    appendBundles('@delo/bundle-broken')
+    const seen: { options: RunProfileOptions, dshHome: string | undefined }[] = []
+    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording(seen)))
+      .rejects.toThrow(/@delo\/bundle-broken: Error: dsh: profile bundle "@delo\/bundle-broken" declares no dsh.bundle[^\n]*\n {2}To fix it, reinstall Delo, or run: delorun plugin --profile default install/)
+    expect(seen).toHaveLength(0)
+    const manifest = JSON.parse(readFileSync(join(deloHome, 'profiles', 'default', 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+    manifest.dsh.profile.bundles = [...DELO_PROFILE_BUNDLES, '@deepseek-ai/dsh-not-installed']
+    writeFileSync(join(deloHome, 'profiles', 'default', 'package.json'), JSON.stringify(manifest))
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording(seen))).toBeUndefined()
+    expect(seen[0]!.options.resolvedProfile?.profile.skippedBundles.map(bundle => bundle.packageName)).toEqual(['@deepseek-ai/dsh-not-installed'])
   })
 })

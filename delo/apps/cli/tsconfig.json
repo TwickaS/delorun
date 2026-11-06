@@ -14,6 +14,7 @@
     { "path": "../../../packages/boot/app-boot" },
     { "path": "../../../packages/util/brand" },
     { "path": "../../../packages/util/home-paths" },
-    { "path": "../../../packages/util/launch-environment" }
+    { "path": "../../../packages/util/launch-environment" },
+    { "path": "../../../packages/util/official-bundles" }
   ]
 }

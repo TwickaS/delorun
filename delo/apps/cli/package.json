@@ -12,6 +12,7 @@
     "@deepseek-ai/dsh": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delo/bundle-local": "workspace:*",
     "@delo/contract-home-layout": "workspace:*",
     "@delo/contract-operational-logs": "workspace:*",
     "@delo/home": "workspace:*",

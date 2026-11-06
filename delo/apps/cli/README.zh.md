@@ -49,7 +49,9 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 
 ## Profile
 
-CLI profile 为 `default`，或由 `DELO_PROFILE` 或 `--profile` 选定的名称，遵循上游的 profile 命名规则。桌面应用的 `desktop` profile 无论字母大小写如何，都会以用法退出码被拒绝；`delorun plugin --profile desktop` 也会被上游自身的解析器拒绝。因此 `delorun` 从不运行、初始化或修改 `profiles/desktop/` 或其锁。setup 的入口从上游的 `web` profile 模板创建 CLI profile，该模板的 Web 应用提供 studio。
+CLI profile 为 `default`，或由 `DELO_PROFILE` 或 `--profile` 选定的名称，遵循上游的 profile 命名规则。桌面应用的 `desktop` profile 无论字母大小写如何，都会以用法退出码被拒绝；`delorun plugin --profile desktop` 也会被上游自身的解析器拒绝。因此 `delorun` 从不运行、初始化或修改 `profiles/desktop/` 或其锁。setup 的入口以 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 的 `DELO_PROFILE_BUNDLES` 创建 CLI profile：上游的 `web` profile 模板（其 Web 应用提供 studio），其后是 `@delo/bundle-local`。
+
+启动时按上游启动的方式加载该 profile；若某个 Delo bundle（`@delo/` 作用域下的任何 bundle）因无法解析、读取或接受而被跳过，则拒绝启动它。否则上游会以其余各层及其自身默认值启动，而这些默认值会把会话日志上传给 DeepSeek。错误信息列出每个被跳过的 bundle、上游给出的原因及修复方法：在源码检出中，对本 `delorun` 自带的 bundle 运行 `delorun plugin --profile <name> add link:<directory>`；否则重新安装 Delo，或运行 `delorun plugin --profile <name> install`。被跳过的上游 bundle 按上游的方式报告，不会阻止启动。
 
 <a id="the-home-lock"></a>
 
@@ -84,4 +86,4 @@ CLI profile 为 `default`，或由 `DELO_PROFILE` 或 `--profile` 选定的名�
 
 ## 开发
 
-在检出的代码中用 `pnpm --filter @delo/cli delorun <command>` 运行 `delorun`；它需要先执行 `pnpm run build:artifacts`。规格测试用 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/cli` 运行，应用的类型检查用 `node_modules/.bin/tsc --noEmit -p delo/apps/cli/tsconfig.json` 运行。规格测试使用临时的操作系统 home，从不触及真实的 `~/.delo` 或 `~/.dsh`。
+在检出的代码中用 `pnpm --filter @delo/cli delorun <command>` 运行 `delorun`；它需要先执行 `pnpm run build:artifacts`，且检出中的 CLI profile 需要按首次启动的错误信息所示链接 `@delo/bundle-local`。规格测试用 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/cli` 运行，应用的类型检查用 `node_modules/.bin/tsc --noEmit -p delo/apps/cli/tsconfig.json` 运行。规格测试使用临时的操作系统 home，从不触及真实的 `~/.delo` 或 `~/.dsh`。

@@ -1245,6 +1245,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@delo/bundle-local':
+        specifier: workspace:*
+        version: link:../../packages/bundle-local
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout

@@ -2,7 +2,8 @@
  * `delorun start --foreground` and the start half of a bare `delorun`: take
  * the profile's home lock (contract C1, "The home lock") and boot the CLI
  * profile through upstream's profile runner in this process, holding the lock
- * until the process exits.
+ * until the process exits. A profile that skipped a Delo bundle is refused
+ * before it boots ([delo-bundles](./delo-bundles.ts)).
  *
  * This is the foreground home process without contract C19's update channel,
  * start token, supervisor or confinement probes. Until the update channel
@@ -15,15 +16,18 @@
 import { readFileSync } from 'node:fs'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
-import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
+import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { acquireHomeLock, HomeLayoutError, readHomeLock, runDirectory, type HolderProbe, type HomeLock } from '@delo/home'
+import { refuseSkippedDeloBundles } from './delo-bundles.ts'
 import { hasCliProfile } from './profile.ts'
 
 /** What the foreground start calls outside this module; specs replace them. */
 export interface StartDependencies {
+  /** Loads the profile and reports its skipped bundles as upstream's boot does; upstream's `prepareProfile` by default. */
+  readonly prepareProfile: (profile: string) => Promise<ResolvedProfileRuntime>
   /** Boots the profile; upstream's `runProfile` by default. */
   readonly runProfile: (options: RunProfileOptions) => Promise<unknown>
   /** Loads the launch environment with upstream's `.env` layers; upstream's `loadLayeredEnv` by default. */
@@ -60,10 +64,16 @@ function runningVersion(): RuntimeVersion {
 
 /**
  * The dependencies of a real start.
- * @returns upstream's profile runner and `.env` loader, the probe without an update channel, and the process's exit event.
+ * @returns upstream's profile preparation, profile runner and `.env` loader, the probe without an update channel, and the
+ *   process's exit event.
  */
-function defaultDependencies(): StartDependencies {
+export function upstreamDependencies(): StartDependencies {
   return {
+    async prepareProfile(profile) {
+      // Loaded after the launch variables are set, so upstream resolves the Delo home.
+      const { INSTALL_ANCHOR, prepareProfile } = await import('@deepseek-ai/dsh/profile-boot')
+      return { profile: prepareProfile(profile), installAnchor: INSTALL_ANCHOR }
+    },
     async runProfile(options) {
       // Loaded after the launch variables are set, so upstream resolves the Delo home.
       const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
@@ -78,17 +88,18 @@ function defaultDependencies(): StartDependencies {
 }
 
 /**
- * Take the home lock and boot the CLI profile in this process. On success the
+ * Take the home lock, load the CLI profile and boot it in this process. A
+ * profile that skipped a Delo bundle is refused before it boots. On success the
  * profile's plugins keep the process alive and the lock is released when it
- * exits; a failed boot releases it at once.
+ * exits; a refusal or a failed boot releases it at once.
  * @param request - the home, profile, studio choice and output.
- * @param dependencies - the profile runner, environment loader, holder probe and exit hook.
+ * @param dependencies - the profile preparation and runner, environment loader, holder probe and exit hook.
  * @returns `undefined` once the profile has booted: upstream's profile runner sets the exit code when the process ends;
  *   {@link EXIT.ok} when a home process for the profile already runs.
- * @throws {CliError} when the home has no CLI profile or the profile fails to boot.
+ * @throws {CliError} when the home has no CLI profile, the profile skipped a Delo bundle, or it fails to boot.
  * @throws {HomeLayoutError} `HOME_UNRESPONSIVE` when the lock's holder lives but does not answer.
  */
-export async function startForeground(request: StartRequest, dependencies: StartDependencies = defaultDependencies()): Promise<CommandResult> {
+export async function startForeground(request: StartRequest, dependencies: StartDependencies = upstreamDependencies()): Promise<CommandResult> {
   if (!hasCliProfile(request.home, request.profile)) {
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} is not set up in ${request.home}; run: delorun setup`)
   }
@@ -103,10 +114,20 @@ export async function startForeground(request: StartRequest, dependencies: Start
     return EXIT.ok
   }
   dependencies.onExit(() => { lock.release() })
+  let resolvedProfile: ResolvedProfileRuntime
+  try {
+    resolvedProfile = await dependencies.prepareProfile(request.profile)
+    refuseSkippedDeloBundles(resolvedProfile.profile)
+  } catch (error) {
+    lock.release()
+    if (error instanceof CliError) throw error
+    throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
+  }
   try {
     await dependencies.runProfile({
       environment: dependencies.loadEnvironment(),
       profile: request.profile,
+      resolvedProfile,
       patchFiles: [],
       args: request.open ? [] : ['--no-open'],
     })

@@ -43,7 +43,9 @@ Exit codes: 0 done, 1 failed, 2 a wrong command line, 3 no home process runs for
 
 ## Profiles
 
-The CLI profile is `default`, or the name `DELO_PROFILE` or `--profile` selects, under upstream's profile-name rules. The desktop app's `desktop` profile is refused in any letter case with the usage exit code, and `delorun plugin --profile desktop` is refused by upstream's own parser, so `delorun` never runs, initialises or changes `profiles/desktop/` or its lock. Setup's entry point creates the CLI profile from upstream's `web` profile template, whose Web application serves the studio.
+The CLI profile is `default`, or the name `DELO_PROFILE` or `--profile` selects, under upstream's profile-name rules. The desktop app's `desktop` profile is refused in any letter case with the usage exit code, and `delorun plugin --profile desktop` is refused by upstream's own parser, so `delorun` never runs, initialises or changes `profiles/desktop/` or its lock. Setup's entry point creates the CLI profile with [`@delo/bundle-local`](../../packages/bundle-local/README.md)'s `DELO_PROFILE_BUNDLES`: upstream's `web` profile template, whose Web application serves the studio, followed by `@delo/bundle-local`.
+
+A start loads the profile as upstream's boot does and refuses to boot it when a Delo bundle, any bundle in the `@delo/` scope, was skipped because it could not be resolved, read or accepted. Upstream would otherwise start with the remaining layers and its own defaults, which upload session logs to DeepSeek. The error names each skipped bundle with upstream's reason and its fix: in a source checkout, `delorun plugin --profile <name> add link:<directory>` for the bundle this `delorun` carries; otherwise reinstalling Delo or `delorun plugin --profile <name> install`. A skipped upstream bundle is reported as upstream reports it and does not stop the start.
 
 ## The home lock
 
@@ -68,4 +70,4 @@ A start takes `run/<profile>/home.lock` with `@delo/home`'s `acquireHomeLock` be
 
 ## Development
 
-Run `delorun` from a checkout with `pnpm --filter @delo/cli delorun <command>`; it needs `pnpm run build:artifacts` first. The specs run with `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/cli`, and the app typechecks with `node_modules/.bin/tsc --noEmit -p delo/apps/cli/tsconfig.json`. The specs use temporary OS homes and never touch the real `~/.delo` or `~/.dsh`.
+Run `delorun` from a checkout with `pnpm --filter @delo/cli delorun <command>`; it needs `pnpm run build:artifacts` first, and a checkout's CLI profile needs `@delo/bundle-local` linked into it, as the first start's error prints. The specs run with `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/cli`, and the app typechecks with `node_modules/.bin/tsc --noEmit -p delo/apps/cli/tsconfig.json`. The specs use temporary OS homes and never touch the real `~/.delo` or `~/.dsh`.

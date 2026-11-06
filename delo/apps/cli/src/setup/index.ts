@@ -1,17 +1,17 @@
 /**
  * Setup's entry point: `delorun setup`, and `delorun` on a home without a CLI
  * profile. This module is the hand-off point the setup screen fills; until then
- * it only creates the CLI profile from upstream's `web` profile template and
- * asks nothing. It never replaces an existing profile.
+ * it only creates the CLI profile, in upstream's profile layout, with
+ * `@delo/bundle-local`'s bundle list (upstream's `web` template followed by
+ * `@delo/bundle-local`), and asks nothing. It never replaces an existing profile.
  *
  * @module @delo/cli/setup
  */
+import { initProfile } from '@deepseek-ai/dsh-app-boot'
+import { DELO_PROFILE_BUNDLES } from '@delo/bundle-local/profile'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput } from '../command.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
-
-/** The upstream profile template the CLI profile starts from: the Web application, which serves the studio. */
-const CLI_PROFILE_TEMPLATE = 'web'
 
 /** What setup runs against. */
 export interface SetupRequest {
@@ -28,21 +28,19 @@ export interface SetupRequest {
  * @param request - the home, profile and output.
  * @returns the exit code.
  */
-export async function runSetup(request: SetupRequest): Promise<ExitCode> {
+export function runSetup(request: SetupRequest): Promise<ExitCode> {
   const directory = profileDirectory(request.home, request.profile)
   if (hasCliProfile(request.home, request.profile)) {
     request.output.stdout(`The CLI profile ${request.profile} is already set up at ${directory}.\n`)
-    return EXIT.ok
+    return Promise.resolve(EXIT.ok)
   }
-  // Loaded after the launch variables are set, so upstream resolves the Delo home.
-  const { initializeProfileFromDefault } = await import('@deepseek-ai/dsh/profile-boot')
   try {
-    initializeProfileFromDefault(request.profile, CLI_PROFILE_TEMPLATE, request.home)
+    initProfile(directory, DELO_PROFILE_BUNDLES)
   } catch (error) {
-    throw new CliError(EXIT.failed, `delorun setup: could not create the CLI profile ${request.profile} at ${directory}: ${error instanceof Error ? error.message : String(error)}`)
+    return Promise.reject(new CliError(EXIT.failed, `delorun setup: could not create the CLI profile ${request.profile} at ${directory}: ${error instanceof Error ? error.message : String(error)}`))
   }
   request.output.stdout(`Set up the CLI profile ${request.profile} at ${directory}.\nRun delorun to start Delo and open the studio.\n`)
-  return EXIT.ok
+  return Promise.resolve(EXIT.ok)
 }
 
 /** `delorun setup [--profile <name>]`. */
