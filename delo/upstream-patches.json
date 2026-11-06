@@ -1004,7 +1004,7 @@
     {
       "path": "scripts/gen-cordis-catalog.ts",
       "class": "delo-feature",
-      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. The late session projection keys add the `ProjectionRegistrationListener` row. Upstream's rows are unchanged."
+      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. The late session projection keys add the `ProjectionRegistrationListener` row. Upstream's rows are unchanged. The Settings layout and Sidebar layout services (`settingsLayout`, `settingsShell`, `sidebarLayout`) are named in SERVICE_WALK_EXEMPTIONS with their README owners, because the rendering projection does not reach them."
     },
     {
       "path": "scripts/gen-doc-graphs.ts",
@@ -1354,7 +1354,7 @@
     {
       "path": "packages/client/ui-settings-general/src/client/layout.ts",
       "class": "delo-feature",
-      "reason": "Adds the Settings layout types, the grouped navigation builder and the search over it."
+      "reason": "Adds the Settings layout types, the grouped navigation builder and the search over it. `getSnapshot` carries description prose so the catalog JSDoc gate passes."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/shell-contract.ts",

@@ -228,7 +228,10 @@ export class SettingsLayoutRegistry {
     }
   }
 
-  /** @returns the layout in force, or `undefined` for the flat list. */
+  /**
+   * Read the layout in force.
+   * @returns the layout in force, or `undefined` for the flat list.
+   */
   getSnapshot(): SettingsLayout | undefined {
     return this.layouts.at(-1)
   }

@@ -223,6 +223,9 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   sidebarRight: 'client-side right-Sidebar navigation face — packages/client/ui-sidebar-right/README.md owns the API',
   sidebarRightTabs: 'client-side right-Sidebar tab-type registry — packages/client/ui-sidebar-right/README.md owns the API',
   documentPreviews: 'client-side document renderer registry — docs/subsystems/sidebar-right.md owns the API',
+  settingsLayout: 'client-side Settings layout registry — packages/client/ui-settings-general/README.md owns the API',
+  settingsShell: 'client-side Settings shell accessor — packages/client/ui-settings/README.md owns the API',
+  sidebarLayout: 'client-side Sidebar layout registry — packages/client/ui-sidebar/README.md owns the API',
 }
 
 /**
