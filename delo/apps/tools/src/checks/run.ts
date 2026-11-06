@@ -1,0 +1,241 @@
+/**
+ * Run a plan: start each check once its needs have passed and the CPUs it
+ * asks for are free, serve a check from the pass cache when its key matches a
+ * stored pass, write each one's output to its own log, and stop every process a
+ * check started when the run is interrupted, so no local compiler or worker
+ * outlives it.
+ *
+ * @module @delo/tools/checks/run
+ */
+import { spawn, type ChildProcess } from 'node:child_process'
+import { createWriteStream, readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import type { PassCache } from './cache.ts'
+import type { Planned } from './plan.ts'
+
+/** How a check ended. */
+export type Outcome = 'passed' | 'failed' | 'declined' | 'skipped'
+
+/**
+ * Whether an outcome fails the run: `declined` (this host cannot run it) and `skipped` do not.
+ * @param outcome - how a check ended.
+ * @returns true when the run fails.
+ */
+export function failing(outcome: Outcome): boolean {
+  return outcome === 'failed'
+}
+
+/** One check's result. */
+export interface Result {
+  readonly id: string
+  readonly outcome: Outcome
+  readonly seconds: number
+  /** The log's path, for a check that ran. */
+  readonly log?: string
+  /** Why it was declined or skipped, the exit status that failed it, or the pass it was served from. */
+  readonly detail?: string
+  /** Whether a stored pass with the same key served the result, so the check did not run. */
+  readonly cached?: boolean
+  /** The resident memory of its process group at its peak, sampled every half second. */
+  readonly peakBytes?: number
+  /** Whether the kernel's out-of-memory killer stopped one of its processes. */
+  readonly oomKilled?: boolean
+}
+
+/** What the run needs from its caller. */
+export interface RunOptions {
+  /** The repository root, which each check's `cwd` is relative to. */
+  readonly root: string
+  /** The environment every check inherits. */
+  readonly env: NodeJS.ProcessEnv
+  /** Where the logs go, one `<id>.log` each. */
+  readonly logDir: string
+  /** The CPUs the checks may keep busy at once; a check asking for more runs alone. */
+  readonly cpus: number
+  /** The memory the checks may hold at once; a check needing more than all of it is declined. */
+  readonly memoryBytes: number
+  /** The cgroup's count of out-of-memory kills so far, read before and after each check; undefined where there is none. */
+  readonly oomKills?: () => number | undefined
+  /** Stop starting checks after the first failure. */
+  readonly bail: boolean
+  /** Which ready check to start first: a higher value first, such as `criticalPath` (plan.ts) gives; ties keep plan order. */
+  readonly priority?: ReadonlyMap<string, number>
+  /** The pass cache; undefined runs every check. */
+  readonly cache?: PassCache
+  /** Told as each check starts and ends. */
+  readonly report: (event: { readonly kind: 'start'; readonly check: Planned } | { readonly kind: 'end'; readonly check: Planned; readonly result: Result }) => void
+}
+
+/**
+ * The last lines of a log.
+ * @param path - the log.
+ * @param lines - how many.
+ * @returns the text, or an empty string when it cannot be read.
+ */
+export function logTail(path: string, lines: number): string {
+  try {
+    return readFileSync(path, 'utf8').trimEnd().split('\n').slice(-lines).join('\n')
+  } catch (error) {
+    // A check declined before it started has no log.
+    if (error instanceof Error) return ''
+    throw error
+  }
+}
+
+/**
+ * Stop a check's process group. Each check leads its own group, so the worker
+ * and compiler processes it started stop with it, including any it left
+ * running after it exited.
+ * @param child - the check's process.
+ */
+function stopGroup(child: ChildProcess): void {
+  if (child.pid === undefined) return
+  try {
+    process.kill(-child.pid, 'SIGTERM')
+  } catch (error) {
+    // ESRCH: the group has no process left.
+    if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error
+  }
+}
+
+function gib(bytes: number): string {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`
+}
+
+const PAGE_BYTES = 4096
+
+/**
+ * The resident memory of every process in a process group, from `/proc`.
+ * @param group - the group's id, its leader's pid.
+ * @returns the sum in bytes, or 0 where `/proc` cannot be read.
+ */
+export function groupResidentBytes(group: number): number {
+  let total = 0
+  let entries: string[]
+  try {
+    entries = readdirSync('/proc')
+  } catch (error) {
+    // Not Linux: no sample.
+    if (error instanceof Error) return 0
+    throw error
+  }
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue
+    try {
+      // Fields after the command's closing parenthesis: state, ppid, pgrp, ... rss is the 22nd after it.
+      const stat = readFileSync(`/proc/${entry}/stat`, 'utf8')
+      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
+      if (Number(fields[2]) === group) total += Number(fields[21]) * PAGE_BYTES
+    } catch (error) {
+      // The process exited between the listing and the read.
+      void error
+    }
+  }
+  return total
+}
+
+/**
+ * Run every check of a plan.
+ * @param plan - the checks, in catalog order; needs refer to checks of the plan.
+ * @param options - the root, environment, logs, CPU budget, pass cache and reporter.
+ * @returns each check's result, in plan order.
+ */
+export async function runPlan(plan: readonly Planned[], options: RunOptions): Promise<Result[]> {
+  const results = new Map<string, Result>()
+  const running = new Map<string, ChildProcess>()
+  // Each check's pass key, computed before any check runs: a check's key describes the inputs it started from.
+  const keys = new Map(plan.map(check => [check.id, options.cache?.keyOf(check)]))
+  let busy = 0
+  let held = 0
+  let alone = false
+  let failed = false
+  let interrupted = false
+
+  const stopAll = (): void => {
+    interrupted = true
+    for (const child of running.values()) stopGroup(child)
+  }
+  process.once('SIGINT', stopAll)
+  process.once('SIGTERM', stopAll)
+
+  const finish = (check: Planned, result: Result): void => {
+    results.set(check.id, result)
+    if (failing(result.outcome)) failed = true
+    options.report({ kind: 'end', check, result })
+  }
+
+  const ordered = [...plan].sort((a, b) => (options.priority?.get(b.id) ?? 0) - (options.priority?.get(a.id) ?? 0))
+  await new Promise<void>(resolve => {
+    const pump = (): void => {
+      for (const check of ordered) {
+        if (results.has(check.id) || running.has(check.id)) continue
+        const unmet = check.needs.filter(need => results.get(need)?.outcome !== 'passed')
+        const blocked = check.needs.find(need => { const outcome = results.get(need)?.outcome; return outcome !== undefined && outcome !== 'passed' })
+        if (blocked !== undefined || interrupted || (failed && options.bail)) {
+          finish(check, { id: check.id, outcome: 'skipped', seconds: 0, detail: blocked !== undefined ? `${blocked} did not pass` : interrupted ? 'interrupted' : 'an earlier check failed (--bail)' })
+          continue
+        }
+        if (check.declined !== undefined) {
+          finish(check, { id: check.id, outcome: 'declined', seconds: 0, detail: check.declined })
+          continue
+        }
+        if (check.memoryBytes > options.memoryBytes) {
+          finish(check, { id: check.id, outcome: 'declined', seconds: 0, detail: `it needs ${gib(check.memoryBytes)} and the run's ceiling is ${gib(options.memoryBytes)}; run it on a bigger host` })
+          continue
+        }
+        if (unmet.length > 0) continue
+        const key = keys.get(check.id)
+        if (key !== undefined && options.cache?.has(check, key) === true) {
+          finish(check, { id: check.id, outcome: 'passed', seconds: 0, cached: true, detail: `cached pass (${key.slice(0, 12)})` })
+          continue
+        }
+        if (alone || (check.exclusive === true && running.size > 0)) continue
+        if (busy > 0 && busy + check.cpus > options.cpus) continue
+        if (held > 0 && held + check.memoryBytes > options.memoryBytes) continue
+        start(check)
+      }
+      if (results.size === plan.length) resolve()
+    }
+
+    const start = (check: Planned): void => {
+      const log = join(options.logDir, `${check.id.replaceAll(':', '-')}.log`)
+      const out = createWriteStream(log)
+      const begun = performance.now()
+      const [command = '', ...args] = check.command
+      const child = spawn(command, args, { cwd: join(options.root, check.cwd), env: { ...options.env, ...check.environment }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+      running.set(check.id, child)
+      busy += check.cpus
+      held += check.memoryBytes
+      if (check.exclusive === true) alone = true
+      const oomBefore = options.oomKills?.()
+      let peakBytes = 0
+      const sampler = setInterval(() => { peakBytes = Math.max(peakBytes, child.pid === undefined ? 0 : groupResidentBytes(child.pid)) }, 500)
+      options.report({ kind: 'start', check })
+      child.stdout.pipe(out, { end: false })
+      child.stderr.pipe(out, { end: false })
+      const done = (outcome: Outcome, detail?: string, signal?: NodeJS.Signals | null): void => {
+        if (!running.delete(check.id)) return
+        clearInterval(sampler)
+        busy -= check.cpus
+        held -= check.memoryBytes
+        if (check.exclusive === true) alone = false
+        stopGroup(child)
+        const oomAfter = options.oomKills?.()
+        const oomKilled = signal === 'SIGKILL' && oomBefore !== undefined && oomAfter !== undefined && oomAfter > oomBefore
+        const key = keys.get(check.id)
+        if (outcome === 'passed' && key !== undefined) options.cache?.store(check, key)
+        out.end(() => {
+          finish(check, { id: check.id, outcome, seconds: (performance.now() - begun) / 1000, log, ...detail === undefined ? {} : { detail: oomKilled ? `${detail}, at the memory ceiling` : detail }, ...peakBytes > 0 ? { peakBytes } : {}, ...oomKilled ? { oomKilled } : {} })
+          pump()
+        })
+      }
+      child.once('error', error => { done('failed', error.message) })
+      child.once('close', (code, signal) => { done(code === 0 ? 'passed' : 'failed', code === 0 ? undefined : signal === null ? `exit ${String(code)}` : `stopped by ${signal}`, signal) })
+    }
+
+    pump()
+  })
+  process.off('SIGINT', stopAll)
+  process.off('SIGTERM', stopAll)
+  return plan.map(check => results.get(check.id) ?? { id: check.id, outcome: 'skipped', seconds: 0 })
+}

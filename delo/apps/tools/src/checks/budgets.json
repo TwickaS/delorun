@@ -1,0 +1,19 @@
+{
+  "$comment": "Each check's resident memory at its peak, in GiB, and whether it must run alone; a worker-count check scales its figure per worker. `checks` is keyed by check id or by id family (`typecheck`, `gates`): the most specific entry wins, and an id with no entry fails the run at load. `tiers` gives the time budget of a tier's run in seconds. The runner schedules checks so their memory sums stay inside the run's ceiling, and declines one that cannot fit at all.",
+  "tiers": {
+    "pre-commit": { "seconds": 5 }
+  },
+  "checks": {
+    "boundary": { "memoryGiB": 0.3 },
+    "gates": { "memoryGiB": 0.5 },
+    "whitespace": { "memoryGiB": 0.1 },
+    "jsdoc": { "memoryGiB": 1.5 },
+    "typecheck:upstream": { "memoryGiB": 2.5 },
+    "typecheck": { "memoryGiB": 1 },
+    "tests:fork": { "memoryGiB": 0.5, "perWorker": true },
+    "tests:upstream-changed": { "memoryGiB": 0.6, "perWorker": true },
+    "tests:snapshots": { "memoryGiB": 0.6, "perWorker": true, "exclusive": true },
+    "build:artifacts": { "memoryGiB": 4 },
+    "generate:native": { "memoryGiB": 1 }
+  }
+}
