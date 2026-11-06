@@ -139,6 +139,7 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'workspaceFiles/readBytes': 'owner-only', // owner Workspace file access
   'workspaceFiles/stat': 'owner-only', // owner Workspace file access
   'pluginManager/cancelInstall': 'owner-only', // owner plugin management
+  'pluginManager/history': 'owner-only', // owner plugin management
   'pluginManager/inspect': 'owner-only', // owner plugin management
   'pluginManager/installBundle': 'owner-only', // owner plugin management
   'pluginManager/listBundles': 'owner-only', // owner plugin management
@@ -148,9 +149,11 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'pluginManager/readBundleDetail': 'owner-only', // owner plugin management
   'pluginManager/registries': 'owner-only', // owner plugin management
   'pluginManager/removeBundle': 'owner-only', // owner plugin management
+  'pluginManager/restore': 'owner-only', // owner plugin management
   'pluginManager/setBundleEnabled': 'owner-only', // owner plugin management
   'pluginManager/setPluginEnabled': 'owner-only', // owner plugin management
   'pluginManager/setVersionExemption': 'owner-only', // owner plugin management
+  'pluginManager/undo': 'owner-only', // owner plugin management
   'pluginManager/updateBundle': 'owner-only', // owner plugin management
   'pluginManager/waitForInstall': 'owner-only', // owner plugin management
   'pluginMarket/listIndexes': 'owner-only', // owner plugin market

@@ -1025,6 +1025,11 @@
       "path": "packages/client/ui-plugin-manager/tests/browser-plugin.client.spec.tsx",
       "class": "delo-feature",
       "reason": "Plugin-manager improvements: covers `pluginNavigation.openItem`."
+    },
+    {
+      "path": "packages/experimental/liveshare/src/endpoint-classification.ts",
+      "class": "security",
+      "reason": "LiveShare endpoint classes: classifies the `pluginManager/history`, `pluginManager/restore` and `pluginManager/undo` Remotes as `owner-only`, so a share viewer can never call them. Lead verdict: kept; stricter or equal, since LiveShare refuses an unclassified endpoint by default."
     }
   ],
   "retired": []
