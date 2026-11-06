@@ -75,8 +75,8 @@ home 只把浏览器或桌面应用作为受信任设备（trusted device）接�
 - **所有者验证码。** home 没有所有者时，`delorun setup` 与 `delorun start` 会向其终端打印所有者验证码，`delorun devices code` 会打印一个新的验证码。验证码为 RFC 4648 base32 字母表（`A`–`Z`、`2`–`7`）中的 26 个字符，连续打印为一串。每个命令只在其标准输出是终端时才打印验证码；否则它打印一条说明，要求在终端中运行 `delorun devices code`。新验证码取代之前的验证码。验证码只能使用一次，并在打印后 10 分钟过期。输入大小写均可接受，空格与连字符会被忽略。任何服务都不记录验证码，C20 的脱敏器把每个已登记的验证码视为机密（[C20](c20-operational-logs.zh.md#redaction)）。
 - **用验证码认领。** 回环监听器上的 `POST /auth/owner/claim` 携带 `{ "v": 1, "ownerCode", "devicePublicKey", "label" }`。home 以恒定时间比较验证码的哈希，消耗该验证码，创建所有者记录，并把该设备记录为第一台受信任设备。错误、已使用或已过期的验证码得到 `403 OWNER_CODE_INVALID`。不设锁定：验证码具有 128 位熵，且认领尝试限制为每个来源每分钟 10 次。
 - **从回环会话认领。** 回环监听器上带有上游启动令牌凭据的请求，可以不用验证码认领 home，作为开启远程访问的第一步。
-- **远程访问监听器。** 每个远程访问监听器对 `POST /auth/owner/claim` 都以 `403 OWNER_CLAIM_LOOPBACK_ONLY` 和一条写明回环监听器与 SSH 端口转发的消息作答，且不读取请求体（[C4](c04-admission.zh.md#pre-login-allowlist)）。这是当前约定，因为 C7 的[回退方案](c07-reach-providers.md#tailscale-serve-target)正在生效：远程访问开启之前不存在身份因子，且任何监听器都不信任身份标头。
-- **Tailscale 套接字变体上的认领。** 若 C7 采用其套接字变体，`reach-tailscale-private` 也接受携带所有者验证码、且其 Tailscale 身份标头受 C7 信任的请求所发起的认领。发起认领的 tailnet 登录名成为 tailnet 登录名允许列表的第一项（[C7](c07-reach-providers.md#identity-headers)）。
+- **远程访问监听器。** 每个远程访问监听器对 `POST /auth/owner/claim` 都以 `403 OWNER_CLAIM_LOOPBACK_ONLY` 和一条写明回环监听器与 SSH 端口转发的消息作答，且不读取请求体（[C4](c04-admission.zh.md#pre-login-allowlist)）。这是当前约定，因为 C7 的[回退方案](c07-reach-providers.zh.md#tailscale-serve-target)正在生效：远程访问开启之前不存在身份因子，且任何监听器都不信任身份标头。
+- **Tailscale 套接字变体上的认领。** 若 C7 采用其套接字变体，`reach-tailscale-private` 也接受携带所有者验证码、且其 Tailscale 身份标头受 C7 信任的请求所发起的认领。发起认领的 tailnet 登录名成为 tailnet 登录名允许列表的第一项（[C7](c07-reach-providers.zh.md#identity-headers)）。
 
 <a id="approval-request"></a>
 ### 批准请求
@@ -254,7 +254,7 @@ Delo Run 信箱经由 Delo Run 在设备之间传递由设备签名的批准；�
 
 消息版本为 `1`，每个存储的文件都带有 `v: 1`。home 以 `400` 拒绝其他版本的消息。对匹配码派生方式、签名对象或限制的更改，属于对本约定的更改，并需要新的消息版本。新的告警种类属于新增；读取方把未知种类显示为阻断性告警，并附上其原始 subject。
 
-`ts.net` 依赖方 ID 的 spike 结果决定通行密钥是否作为 `ts.net` 地址上的身份因子（[C14](c14-oidc-passkeys.md#compatibility)），Tailscale serve 目标的 spike 结果决定 `reach-tailscale-private` 是否接受所有者认领（[C7](c07-reach-providers.md#compatibility)）。在这些页面记录 spike 结果之前，本页的当前约定有效：所有者认领只限回环，且 `ts.net` 地址上的批准携带 OpenID Connect 重新认证，因为 C14 的当前约定在那里不提供通行密钥。
+`ts.net` 依赖方 ID 的 spike 结果决定通行密钥是否作为 `ts.net` 地址上的身份因子（[C14](c14-oidc-passkeys.md#compatibility)），Tailscale serve 目标的 spike 结果决定 `reach-tailscale-private` 是否接受所有者认领（[C7](c07-reach-providers.zh.md#compatibility)）。在这些页面记录 spike 结果之前，本页的当前约定有效：所有者认领只限回环，且 `ts.net` 地址上的批准携带 OpenID Connect 重新认证，因为 C14 的当前约定在那里不提供通行密钥。
 
 <a id="security"></a>
 ## 安全

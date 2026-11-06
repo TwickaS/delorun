@@ -1313,6 +1313,12 @@ importers:
         specifier: workspace:*
         version: link:../contract-release-manifest
 
+  delo/packages/contract-reach-providers:
+    dependencies:
+      '@delo/contract-admission':
+        specifier: workspace:*
+        version: link:../contract-admission
+
   delo/packages/contract-relay-protocol:
     dependencies:
       '@deepseek-ai/dsh-brand':

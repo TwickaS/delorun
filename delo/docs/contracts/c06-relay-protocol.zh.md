@@ -144,7 +144,7 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 - **拒绝。** 只要存在未说明的未申请证书，home 就会发起 `unrequested-certificate`，其中继客户端关闭隧道，且不打开任何隧道。
 - **延迟。** 检测需要等待某个日志收录该证书，并等待下一次查询，该延迟受各日志的收录策略限定；在此延迟期间，上述拒绝无法生效。
 
-`ts.net` 名称不受监控：其证书由 Tailscale 获取（[C7](c07-reach-providers.md#visibility-notes)）。
+`ts.net` 名称不受监控：其证书由 Tailscale 获取（[C7](c07-reach-providers.zh.md#visibility-notes)）。
 
 <a id="limits"></a>
 ### 限额
@@ -204,7 +204,7 @@ Delo 中继位于 `delo.run` 名称下，其中继控制面位于 Delo Run 上�
 - `delo/packages/reach/`：中继客户端、令牌请求、握手，以及把流交给 `reach-self-hosted-relay`。
 - `delo/packages/certificates/`：证书监控，以及证书未说明期间的拒绝。
 - `delo/packages/contract-relay-protocol/`：帧类型、关闭代码、错误代码与限额。
-- [C5](c05-device-approval.zh.md#alerts)：通告所发起的告警；[C7](c07-reach-providers.md)：自托管中继提供方及其自有域名规则。
+- [C5](c05-device-approval.zh.md#alerts)：通告所发起的告警；[C7](c07-reach-providers.zh.md)：自托管中继提供方及其自有域名规则。
 
 <a id="compatibility"></a>
 ## 兼容性

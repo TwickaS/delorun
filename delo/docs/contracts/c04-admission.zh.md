@@ -55,12 +55,12 @@ description: "约定 C4：上游连接中的准入 seam、回环与远程访问�
 <a id="listeners"></a>
 ### 监听器
 
-home 的 Host 运行一个回环监听器；在远程访问开启期间，还为 [C7](c07-reach-providers.md) 的每个生效的远程访问方式各运行一个远程访问监听器。每个监听器都有自己的地址、自己的策略与自己声明的协议。协议是策略的一部分，而不是从套接字推断，因为 `tailscaled` 终止 TLS 并转发明文 HTTP，所以监听器关于 `Secure` cookie 的决定遵循浏览器所见的协议。
+home 的 Host 运行一个回环监听器；在远程访问开启期间，还为 [C7](c07-reach-providers.zh.md) 的每个生效的远程访问方式各运行一个远程访问监听器。每个监听器都有自己的地址、自己的策略与自己声明的协议。协议是策略的一部分，而不是从套接字推断，因为 `tailscaled` 终止 TLS 并转发明文 HTTP，所以监听器关于 `Secure` cookie 的决定遵循浏览器所见的协议。
 
 | 监听器 id | 绑定到 | 声明的协议 | TLS 终止于 | `Host` 规则 | 登录 |
 | --- | --- | --- | --- | --- | --- |
 | `loopback` | 上游 web 服务器的地址，在 Delo 的 profile 中为 `127.0.0.1:3080` | `http` | 无 TLS | 上游的防护：回环名称或绑定地址 | 上游的启动令牌与 `/connect` |
-| `reach-tailscale-private` | [C7](c07-reach-providers.md#tailscale-serve-target) 的 Tailscale 私有目标：`127.0.0.1` 上的一个 TCP 端口，或 C7 套接字变体的 Unix 套接字 | `https` | `tailscaled` | 等于所配置的 `ts.net` 地址，端口不是 443 时带上端口 | 设备密钥与身份因子（identity factor）之后的[会话](#sessions) |
+| `reach-tailscale-private` | [C7](c07-reach-providers.zh.md#tailscale-serve-target) 的 Tailscale 私有目标：`127.0.0.1` 上的一个 TCP 端口，或 C7 套接字变体的 Unix 套接字 | `https` | `tailscaled` | 等于所配置的 `ts.net` 地址，端口不是 443 时带上端口 | 设备密钥与身份因子（identity factor）之后的[会话](#sessions) |
 | `reach-tailscale-funnel` | `127.0.0.1` 上的一个 TCP 端口，与私有目标分开 | `https` | `tailscaled` | 等于所配置的 Funnel 地址，端口不是 443 时带上端口 | 同上 |
 | `reach-self-hosted-relay` | 无地址：它只接受 [C6](c06-relay-protocol.zh.md) 的中继客户端在 home 进程（home process）内传给它的流 | `https` | 该监听器，使用 home 自己的证书 | 等于绑定的名称，且等于连接的 SNI | 同上 |
 
@@ -73,7 +73,7 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 
 远程访问监听器对每个 HTTP 请求与每个升级请求，按以下顺序应用以下步骤，然后才运行任何路由、升级处理器或回退处理器。
 
-1. **移除请求头。** 监听器移除名称以 `tailscale-` 开头（不区分大小写）的每个请求头，[C7](c07-reach-providers.md#identity-headers) 指定的监听器及条件下除外。
+1. **移除请求头。** 监听器移除名称以 `tailscale-` 开头（不区分大小写）的每个请求头，[C7](c07-reach-providers.zh.md#identity-headers) 指定的监听器及条件下除外。
 2. **`Host` 规则。** `Host` 不满足监听器规则的请求被拒绝，返回 `421 HOST_MISMATCH`。回环名称或地址（`localhost`、`127.0.0.1`、`[::1]`、任何 `127.0.0.0/8` 地址）从不满足远程访问监听器的规则。
 3. **SNI。** 在 `reach-self-hosted-relay` 上，`Host` 与 TLS 连接的 SNI 不同的请求被拒绝，返回 `421 SNI_MISMATCH`。
 4. **Origin。** `Origin` 请求头存在且不是该监听器地址的请求，或 `Sec-Fetch-Site` 为 `cross-site` 的请求，被拒绝，返回 `403 ORIGIN_MISMATCH`。没有 `Origin` 请求头的升级请求以同样方式被拒绝。
