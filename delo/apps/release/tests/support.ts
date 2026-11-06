@@ -67,19 +67,33 @@ export function peImage(body: Buffer): Buffer {
 }
 
 /**
- * One `WIN_CERTIFICATE` entry: its length, revision 2.0, type PKCS #7 SignedData, and the signature bytes.
- * @param signature - the stand-in for the PKCS #7 blob.
+ * A DER SEQUENCE around content, standing in for a PKCS #7 SignedData blob.
+ * @param content - the SEQUENCE's content.
+ * @returns the encoded SEQUENCE, with a short or long length form as its length needs.
+ */
+export function derSequence(content: Buffer): Buffer {
+  if (content.byteLength < 0x80) return Buffer.concat([Buffer.from([0x30, content.byteLength]), content])
+  const length = Buffer.alloc(4)
+  length.writeUInt32BE(content.byteLength)
+  const digits = length.subarray(length.findIndex(byte => byte !== 0))
+  return Buffer.concat([Buffer.from([0x30, 0x80 | digits.byteLength]), digits, content])
+}
+
+/**
+ * One `WIN_CERTIFICATE` entry: its length, revision, certificate type and body, padded to 8 bytes.
+ * @param body - the entry's body; a {@link derSequence} for a valid entry.
  * @param revision - the revision to write; 0x0200 for a valid entry.
  * @param type - the certificate type to write; 0x0002 for a valid entry.
+ * @param padding - the byte the alignment padding repeats; 0 for a valid entry.
  * @returns the entry, padded to 8 bytes.
  */
-export function winCertificate(signature: Buffer, revision = 0x0200, type = 0x0002): Buffer {
+export function winCertificate(body: Buffer, revision = 0x0200, type = 0x0002, padding = 0): Buffer {
   const header = Buffer.alloc(8)
-  header.writeUInt32LE(8 + signature.byteLength, 0)
+  header.writeUInt32LE(8 + body.byteLength, 0)
   header.writeUInt16LE(revision, 4)
   header.writeUInt16LE(type, 6)
-  const entry = Buffer.concat([header, signature])
-  return Buffer.concat([entry, Buffer.alloc((8 - (entry.byteLength % 8)) % 8)])
+  const entry = Buffer.concat([header, body])
+  return Buffer.concat([entry, Buffer.alloc((8 - (entry.byteLength % 8)) % 8, padding)])
 }
 
 /**

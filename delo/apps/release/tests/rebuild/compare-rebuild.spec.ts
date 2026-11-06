@@ -11,7 +11,7 @@ import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { compareOutputs } from '../../src/rebuild/compare.ts'
-import { peImage, runEntry, scratch, signPe, winCertificate, writeTree, type StagedContent } from '../support.ts'
+import { derSequence, peImage, runEntry, scratch, signPe, winCertificate, writeTree, type StagedContent } from '../support.ts'
 
 const EPOCH = 1_793_981_656
 const HELPER = 'app/node_modules/node-pty/prebuilds/win32-x64/conpty.node'
@@ -49,7 +49,7 @@ describe('compare-rebuild', CHILD_PROCESS_TIMEOUT, () => {
   })
 
   it('exits 0 when a PE file differs only by its Authenticode signature, naming the exception', async (test) => {
-    const released = await output(test, 'win32-x64', tree(signPe(UNSIGNED, winCertificate(Buffer.from('certificate table from the release workflow')), 0x1234)))
+    const released = await output(test, 'win32-x64', tree(signPe(UNSIGNED, winCertificate(derSequence(Buffer.from('certificate table from the release workflow'))), 0x1234)))
     const rebuilt = await output(test, 'win32-x64', tree(UNSIGNED))
     const result = runEntry('compare-rebuild.ts', [released, rebuilt])
     expect(result.stdout).toContain(`accepted: delorun-0.1.0-win32-x64.zip: ${HELPER} (rebuild exception pe-authenticode)`)
@@ -57,7 +57,7 @@ describe('compare-rebuild', CHILD_PROCESS_TIMEOUT, () => {
   })
 
   it('exits 1 when a signed PE file also differs in its code', async (test) => {
-    const released = await output(test, 'win32-x64', tree(signPe(peImage(Buffer.from('code section bytEs')), winCertificate(Buffer.from('certificate')), 1)))
+    const released = await output(test, 'win32-x64', tree(signPe(peImage(Buffer.from('code section bytEs')), winCertificate(derSequence(Buffer.from('certificate'))), 1)))
     const rebuilt = await output(test, 'win32-x64', tree(UNSIGNED))
     const result = runEntry('compare-rebuild.ts', [released, rebuilt])
     expect(result.stdout).toContain(`differs: delorun-0.1.0-win32-x64.zip: ${HELPER}: content differs`)
@@ -119,7 +119,7 @@ describe('compare-rebuild', CHILD_PROCESS_TIMEOUT, () => {
   })
 
   it('exits 1 when a PE file in a Linux or macOS archive differs only by a signature, which the exception does not cover there', async (test) => {
-    const released = await output(test, 'linux-x64', tree(signPe(UNSIGNED, winCertificate(Buffer.from('certificate')), 1)))
+    const released = await output(test, 'linux-x64', tree(signPe(UNSIGNED, winCertificate(derSequence(Buffer.from('certificate'))), 1)))
     const rebuilt = await output(test, 'linux-x64', tree(UNSIGNED))
     const result = runEntry('compare-rebuild.ts', [released, rebuilt])
     expect(result.stdout).toContain(`differs: delorun-0.1.0-linux-x64.tar.gz: ${HELPER}: content differs`)
@@ -128,12 +128,35 @@ describe('compare-rebuild', CHILD_PROCESS_TIMEOUT, () => {
 
   it('exits 1 when bytes appended after a PE image do not form an Authenticode certificate table', async (test) => {
     const rebuilt = await output(test, 'win32-x64', tree(UNSIGNED))
-    for (const table of [Buffer.from('appended bytes, not a certificate table'), winCertificate(Buffer.from('certificate'), 0x0100), winCertificate(Buffer.from('certificate'), 0x0200, 0x0001), Buffer.concat([winCertificate(Buffer.from('certificate')), Buffer.from('trailing bytes')])]) {
+    for (const table of [Buffer.from('appended bytes, not a certificate table'), winCertificate(derSequence(Buffer.from('certificate')), 0x0100), winCertificate(derSequence(Buffer.from('certificate')), 0x0200, 0x0001), Buffer.concat([winCertificate(derSequence(Buffer.from('certificate'))), Buffer.from('trailing bytes')])]) {
       const released = await output(test, 'win32-x64', tree(signPe(UNSIGNED, table, 1)))
       const result = runEntry('compare-rebuild.ts', [released, rebuilt])
       expect(result.stdout).toContain(`differs: delorun-0.1.0-win32-x64.zip: ${HELPER}: content differs`)
       expect(result.status).toBe(1)
     }
+  })
+
+  it('exits 1 when a certificate entry holds anything but one DER SEQUENCE, or non-zero padding', async (test) => {
+    const rebuilt = await output(test, 'win32-x64', tree(UNSIGNED))
+    const signature = derSequence(Buffer.from('certificate'))
+    const tables = [
+      winCertificate(Buffer.from('#!/bin/sh\necho payload\n')),
+      winCertificate(Buffer.concat([signature, Buffer.from('#!/bin/sh\necho payload\n')])),
+      winCertificate(Buffer.concat([signature, Buffer.alloc(8)])),
+      winCertificate(signature.subarray(0, signature.byteLength - 1)),
+      winCertificate(Buffer.concat([Buffer.from([0x30, 0x81, 0x0b]), Buffer.from('certificate')])),
+      winCertificate(Buffer.concat([Buffer.from([0x30, 0x82, 0x00, 0x8c]), Buffer.alloc(0x8c, 7)])),
+      winCertificate(Buffer.concat([signature, Buffer.from([1, 2, 3])])),
+      winCertificate(signature, 0x0200, 0x0002, 0x41),
+    ]
+    for (const table of tables) {
+      const released = await output(test, 'win32-x64', tree(signPe(UNSIGNED, table, 1)))
+      const result = runEntry('compare-rebuild.ts', [released, rebuilt])
+      expect(result.stdout).toContain(`differs: delorun-0.1.0-win32-x64.zip: ${HELPER}: content differs`)
+      expect(result.status).toBe(1)
+    }
+    const long = await output(test, 'win32-x64', tree(signPe(UNSIGNED, winCertificate(Buffer.concat([derSequence(Buffer.alloc(300, 7)), Buffer.alloc(3)])), 1)))
+    expect(runEntry('compare-rebuild.ts', [long, rebuilt]).status).toBe(0)
   })
 
   it('exits 1 when two archives hold the same files with a different mtime', async (test) => {
@@ -151,7 +174,7 @@ describe('compare-rebuild', CHILD_PROCESS_TIMEOUT, () => {
   })
 
   it('accepts no PE difference when the exceptions list none', async (test) => {
-    const released = await output(test, 'win32-x64', tree(signPe(UNSIGNED, winCertificate(Buffer.from('certificate')), 1)))
+    const released = await output(test, 'win32-x64', tree(signPe(UNSIGNED, winCertificate(derSequence(Buffer.from('certificate'))), 1)))
     const rebuilt = await output(test, 'win32-x64', tree(UNSIGNED))
     const comparison = await compareOutputs(released, rebuilt, { schema: 'delo.rebuild-exceptions/1', exceptions: [] })
     expect(comparison.differences.map(item => item.entry)).toEqual([HELPER])

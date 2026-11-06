@@ -55,9 +55,42 @@ const WIN_CERT_REVISION_2_0 = 0x0200
 const WIN_CERT_TYPE_PKCS_SIGNED_DATA = 0x0002
 
 /**
+ * The length of the DER SEQUENCE that starts a range: tag 0x30 and a definite length in its shortest form.
+ * @param data - the file's bytes.
+ * @param offset - the range's start.
+ * @param end - the range's end.
+ * @returns the SEQUENCE's length with its header, or `undefined` when the range does not start with one that fits.
+ */
+function derSequenceLength(data: Buffer, offset: number, end: number): number | undefined {
+  if (offset + 2 > end || data[offset] !== 0x30) return undefined
+  const first = data[offset + 1]!
+  if (first < 0x80) return offset + 2 + first <= end ? 2 + first : undefined
+  const count = first & 0x7f
+  if (count === 0 || count > 4 || offset + 2 + count > end || data[offset + 2] === 0) return undefined
+  let length = 0
+  for (let index = 0; index < count; index += 1) length = length * 256 + data[offset + 2 + index]!
+  if (length < 0x80 || offset + 2 + count + length > end) return undefined
+  return 2 + count + length
+}
+
+/**
+ * Whether every byte of a range is zero.
+ * @param data - the file's bytes.
+ * @param from - the range's start.
+ * @param to - the range's end.
+ * @returns true for an empty or all-zero range.
+ */
+function isZero(data: Buffer, from: number, to: number): boolean {
+  for (let index = from; index < to; index += 1) if (data[index] !== 0) return false
+  return true
+}
+
+/**
  * Whether a certificate table holds only Authenticode `WIN_CERTIFICATE` entries that fill it exactly: each entry's
- * `dwLength` covers its 8-byte header, its revision is 2.0 and its type PKCS #7 SignedData, and the entries, each
- * padded to 8 bytes except the last, end where the table ends.
+ * `dwLength` covers its 8-byte header, its revision is 2.0 and its type PKCS #7 SignedData; its body is one DER
+ * SEQUENCE followed by fewer than 8 zero bytes, the alignment padding some signing tools count in `dwLength`; and the
+ * entries, each padded with zero bytes to 8 bytes except the last, end where the table ends. Data hidden after the
+ * signature, as in CVE-2013-3900, fails the check.
  * @param data - the file's bytes.
  * @param offset - the table's file offset.
  * @param length - the table's length.
@@ -69,9 +102,14 @@ function certificateTableIsAuthenticode(data: Buffer, offset: number, length: nu
   while (cursor < end) {
     if (cursor + 8 > end) return false
     const entryLength = data.readUInt32LE(cursor)
-    if (entryLength < 8 || cursor + entryLength > end) return false
+    const entryEnd = cursor + entryLength
+    if (entryLength < 8 || entryEnd > end) return false
     if (data.readUInt16LE(cursor + 4) !== WIN_CERT_REVISION_2_0 || data.readUInt16LE(cursor + 6) !== WIN_CERT_TYPE_PKCS_SIGNED_DATA) return false
-    cursor += Math.ceil(entryLength / 8) * 8
+    const signature = derSequenceLength(data, cursor + 8, entryEnd)
+    if (signature === undefined || entryEnd - (cursor + 8 + signature) >= 8 || !isZero(data, cursor + 8 + signature, entryEnd)) return false
+    const next = cursor + Math.ceil(entryLength / 8) * 8
+    if (!isZero(data, entryEnd, Math.min(next, end))) return false
+    cursor = next
   }
   // The last entry may end the table without its padding.
   return cursor > offset && cursor - end < 8
