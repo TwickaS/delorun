@@ -95,8 +95,8 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 | `GET /auth/device/request/<request id>` | `@delo/home-auth` | 一个批准请求的状态，凭其请求密钥读取。 |
 | `POST /auth/device/challenge` | `@delo/home-auth` | 一个新的设备密钥质询（[C5](c05-device-approval.zh.md#sign-in)）。 |
 | `POST /auth/session` | `@delo/home-auth` | 根据设备密钥签名创建与轮换会话；创建时还需要身份因子证明。 |
-| `POST /auth/passkey/options` | `@delo/home-auth` | 该监听器地址的 WebAuthn 选项（[C14](c14-oidc-passkeys.md#passkeys)）。 |
-| `GET /auth/oidc/start` | `@delo/home-auth` | OpenID Connect 登录的开始（[C14](c14-oidc-passkeys.md#authorization-flow)）。 |
+| `POST /auth/passkey/options` | `@delo/home-auth` | 该监听器地址的 WebAuthn 选项（[C14](c14-oidc-passkeys.zh.md#passkeys)）。 |
+| `GET /auth/oidc/start` | `@delo/home-auth` | OpenID Connect 登录的开始（[C14](c14-oidc-passkeys.zh.md#authorization-flow)）。 |
 | `GET /auth/oidc/callback` | `@delo/home-auth` | 该登录的重定向 URI。 |
 | `POST /auth/recovery` | `@delo/home-auth` | 使用恢复套件（recovery kit），见 [C5](c05-device-approval.zh.md#recovery-kit)。 |
 | `POST /auth/owner/claim` | `@delo/home-auth` | 在每个远程访问监听器上响应 `403 OWNER_CLAIM_LOOPBACK_ONLY`，且不读取请求体；[C5](c05-device-approval.zh.md#owner-claim) 允许在 Tailscale 私有目标上认领的情况除外。 |
@@ -111,8 +111,8 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 - **令牌。** 会话令牌是来自操作系统加密随机源的 32 字节，以不带填充的 base64url 编码（43 个字符）。
 - **Cookie。** `__Host-delo-session=<token>; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=<seconds to the absolute expiry>`，不带 `Domain` 属性。每个 studio 地址是独立的 origin，因此一个地址的会话 cookie 从不发送到另一个地址。
 - **存储。** 提供方在内存中把每个会话保存为一条以其令牌的 SHA-256 哈希为键的记录：设备 id、监听器、studio 地址、创建时使用的身份因子、创建时间、最近使用时间、最近滚动更新时间与绝对到期时间。没有任何记录保存令牌。存储在变更后 5 秒内以及 home 进程停止时持久化到 `~/.delo/secrets/home-auth/sessions.json`（[C1](c01-home-layout.zh.md#secrets)）。撤销在引起它的响应返回之前持久化。
-- **创建。** `POST /auth/session` 只根据以下两项创建会话：已为该监听器地址批准的受信任设备给出的新鲜设备密钥签名，以及针对该地址的身份因子证明（[C5](c05-device-approval.zh.md#sign-in)、[C14](c14-oidc-passkeys.md)）。
-- **注册会话。** 在没有已注册身份因子的地址上，同样的签名在没有证明时创建一个注册会话：一个绝对限值为 10 分钟的远程访问会话，只准入 [C14](c14-oidc-passkeys.md#enrolment) 的注册路由，在其他地方被拒绝并返回 `401 NOT_SIGNED_IN`。
+- **创建。** `POST /auth/session` 只根据以下两项创建会话：已为该监听器地址批准的受信任设备给出的新鲜设备密钥签名，以及针对该地址的身份因子证明（[C5](c05-device-approval.zh.md#sign-in)、[C14](c14-oidc-passkeys.zh.md)）。
+- **注册会话。** 在没有已注册身份因子的地址上，同样的签名在没有证明时创建一个注册会话：一个绝对限值为 10 分钟的远程访问会话，只准入 [C14](c14-oidc-passkeys.zh.md#enrolment) 的注册路由，在其他地方被拒绝并返回 `401 NOT_SIGNED_IN`。
 
 **回环会话**保留上游的凭据：启动令牌交换、`/connect`，以及用上游 `.credentials.yaml` 中的浏览器会话密钥签名的无状态 HMAC cookie `dsh-auth-<hash>`。`@delo/home-auth` 在签发每个回环凭据时记录它，以凭据值的 SHA-256 哈希为键；对于验证通过但没有记录的回环凭据，它予以拒绝并返回 `401 SESSION_EXPIRED`。Delo 的 profile 把上游的 `cookieMaxAgeDays` 设为 30。
 

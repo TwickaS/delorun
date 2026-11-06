@@ -1,0 +1,70 @@
+# Bilingual-pair consistency record for c14-oidc-passkeys.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/contracts/c14-oidc-passkeys.md
+/:
+  en: 3baa081f23d04b55
+  zh: 3cfd99c3c0fa555e
+/contract-c14-openid-connect-and-passkeys:
+  en: 1e14ae51b27b78f4
+  zh: 5a5a5b32ea6e4a6b
+/contract-c14-openid-connect-and-passkeys/summary:
+  en: 3422bca140d69d65
+  zh: d562d681166433b4
+/contract-c14-openid-connect-and-passkeys/contents:
+  en: dea6a2e4dfb61b80
+  zh: 8c59fce53cd64e26
+/contract-c14-openid-connect-and-passkeys/contract:
+  en: 01be7ced4357bf93
+  zh: d0b98165ff86d494
+/contract-c14-openid-connect-and-passkeys/contract/relying-party-ids:
+  en: 0a9b1347535b310f
+  zh: d4adbbc2a23081b6
+/contract-c14-openid-connect-and-passkeys/contract/enrolment:
+  en: d3ff51bd47382eba
+  zh: 41386b126bc9863f
+/contract-c14-openid-connect-and-passkeys/contract/passkeys:
+  en: 2cb6016a06a437ce
+  zh: e50111ee5a63abe5
+/contract-c14-openid-connect-and-passkeys/contract/client-registration:
+  en: 914693bc4119aa3d
+  zh: 8fd6c1b1bfdb2747
+/contract-c14-openid-connect-and-passkeys/contract/authorization-flow:
+  en: 1d1e856a3144759d
+  zh: 7662aa34abb0f187
+/contract-c14-openid-connect-and-passkeys/contract/id-token-checks:
+  en: 6b7027a742a4abf1
+  zh: 0af023e062292189
+/contract-c14-openid-connect-and-passkeys/contract/owner-subject:
+  en: b30432e5acac4b83
+  zh: 116244b85d0bed8d
+/contract-c14-openid-connect-and-passkeys/contract/re-authentication:
+  en: b1223b6bae716224
+  zh: 43baf04f65fb56b0
+/contract-c14-openid-connect-and-passkeys/contract/signing-keys:
+  en: 0541abeae79c9779
+  zh: f14812bc166118a6
+/contract-c14-openid-connect-and-passkeys/contract/tailnet-identity:
+  en: 51ccea93ba7bd0a2
+  zh: ba0bdb836e2f29d4
+/contract-c14-openid-connect-and-passkeys/contract/limits:
+  en: a72ddae0f679d724
+  zh: ac19d58423de47a9
+/contract-c14-openid-connect-and-passkeys/contract/errors:
+  en: 63d3decb9009d64b
+  zh: ad7a83cdc61622c6
+/contract-c14-openid-connect-and-passkeys/contract/delo-run-issuer:
+  en: ba5a45572ec1cb18
+  zh: ffb3b8c5c212810f
+/contract-c14-openid-connect-and-passkeys/consumers:
+  en: 311d8573977e1ddc
+  zh: 8d29c9e495162e65
+/contract-c14-openid-connect-and-passkeys/compatibility:
+  en: 33920b0a42258627
+  zh: 1dbaa430a41344f7
+/contract-c14-openid-connect-and-passkeys/security:
+  en: 7cc57f41c5706e60
+  zh: d376f4c56a86748b
+/contract-c14-openid-connect-and-passkeys/decided-values:
+  en: 0963e19916032bcd
+  zh: 899291ad0c5ad41d

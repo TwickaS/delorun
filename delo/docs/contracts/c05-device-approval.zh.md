@@ -52,18 +52,18 @@ home 只把浏览器或桌面应用作为受信任设备（trusted device）接�
 | 浏览器设备密钥 | ECDSA P-256 配合 SHA-256，由 WebCrypto 以 `extractable: false` 生成 | 一个浏览器源 | 该源的 IndexedDB，数据库 `delo-device`，对象存储 `keys`。私钥从不离开浏览器。 |
 | 桌面设备密钥 | ECDSA P-256 配合 SHA-256 | 桌面应用 | 桌面应用 profile 目录中每个 home 一个文件 `delo/device-keys/<home key id>.bin`，以 Electron 的 `safeStorage` 加密。 |
 | 设备 id | 设备公钥的 RFC 7638 SHA-256 指纹 | 所有人 | 不保密。 |
-| 通行密钥 | 一个 WebAuthn 凭据，算法为 ES256、EdDSA 或 RS256，带用户验证 | 认证器 | 认证器；home 在 `~/.delo/secrets/home-auth/passkeys.json` 中保存凭据 id、公钥与地址（[C14](c14-oidc-passkeys.md#passkeys)）。 |
+| 通行密钥 | 一个 WebAuthn 凭据，算法为 ES256、EdDSA 或 RS256，带用户验证 | 认证器 | 认证器；home 在 `~/.delo/secrets/home-auth/passkeys.json` 中保存凭据 id、公钥与地址（[C14](c14-oidc-passkeys.zh.md#passkeys)）。 |
 | 所有者验证码 | 16 个随机字节 | home 与本人 | 在终端中显示一次；home 只在 `~/.delo/secrets/home-auth/owner-code.json` 中保存其 SHA-256 哈希与过期时间。 |
 | 恢复套件 | 32 个随机字节，写作 `DELO-RK1-` 后接 52 个 base32 字符 | 本人 | 在 studio 中显示一次；home 只在 `~/.delo/secrets/home-auth/recovery.json` 中保存其 SHA-256 哈希。 |
 
-设备记录位于 `~/.delo/secrets/home-auth/devices.json`：每台设备的 id、公钥、studio 地址、标签、平台、批准时间、批准它的设备与最近一次登录时间。所有者记录位于 `~/.delo/secrets/home-auth/owner.json`：认领时间、第一台设备，以及 [C14](c14-oidc-passkeys.md#owner-subject) 的已固定身份。每个文件的模式为 0600，并带有值为 `1` 的 `v` 字段。
+设备记录位于 `~/.delo/secrets/home-auth/devices.json`：每台设备的 id、公钥、studio 地址、标签、平台、批准时间、批准它的设备与最近一次登录时间。所有者记录位于 `~/.delo/secrets/home-auth/owner.json`：认领时间、第一台设备，以及 [C14](c14-oidc-passkeys.zh.md#owner-subject) 的已固定身份。每个文件的模式为 0600，并带有值为 `1` 的 `v` 字段。
 
 <a id="binding-to-an-address"></a>
 ### 绑定到地址
 
-设备密钥绑定到生成它的源，通行密钥绑定到其依赖方 ID（[C14](c14-oidc-passkeys.md#relying-party-ids)）。为某一个 studio 地址批准的设备在另一个地址上不受信任，home 在那里以 `DEVICE_NOT_TRUSTED` 拒绝其密钥。
+设备密钥绑定到生成它的源，通行密钥绑定到其依赖方 ID（[C14](c14-oidc-passkeys.zh.md#relying-party-ids)）。为某一个 studio 地址批准的设备在另一个地址上不受信任，home 在那里以 `DEVICE_NOT_TRUSTED` 拒绝其密钥。
 
-- **添加地址。** 每台要使用新地址的设备都在该源上生成密钥，并像新设备一样为该地址获得批准。身份因子（identity factor）先为新地址完成注册，home 才在该地址上接受注册会话以外的会话（[C14](c14-oidc-passkeys.md#enrolment)）。
+- **添加地址。** 每台要使用新地址的设备都在该源上生成密钥，并像新设备一样为该地址获得批准。身份因子（identity factor）先为新地址完成注册，home 才在该地址上接受注册会话以外的会话（[C14](c14-oidc-passkeys.zh.md#enrolment)）。
 - **更改地址。** 更改地址会移除旧地址及其设备记录、通行密钥与会话，并添加新地址。
 - **回环。** 在回环源上，持有回环会话（[C4](c04-admission.zh.md#sessions)）的浏览器无需批准即可登记其设备密钥，因为回环凭据已经证明了本地访问。回环设备可以为每个地址批准设备。
 
@@ -119,8 +119,8 @@ home 把请求绑定到该监听器的 studio 地址，并以 `201` 作答，返
 | `issuedAt`、`expiresAt` | 以毫秒计的时间；`expiresAt` 不晚于请求的过期时间。 |
 | `approverDeviceId` | 批准方设备的 id。 |
 | `signature` | 由批准方设备密钥生成的 ECDSA P-256 签名。 |
-| `webauthn` | 在其地址具有通行密钥的远程访问监听器上（[C14](c14-oidc-passkeys.md#relying-party-ids)）：一个带用户验证的 WebAuthn 断言，其质询为批准哈希，即去掉 `signature`、`webauthn` 与 `oidcReauth` 后的批准的 SHA-256 哈希。 |
-| `oidcReauth` | 在其地址没有通行密钥的远程访问监听器上：一次以 `prompt=login` 与 `max_age=0` 进行的 OpenID Connect 登录所得的 ID 令牌，其 `nonce` 为批准哈希（[C14](c14-oidc-passkeys.md#re-authentication)）。 |
+| `webauthn` | 在其地址具有通行密钥的远程访问监听器上（[C14](c14-oidc-passkeys.zh.md#relying-party-ids)）：一个带用户验证的 WebAuthn 断言，其质询为批准哈希，即去掉 `signature`、`webauthn` 与 `oidcReauth` 后的批准的 SHA-256 哈希。 |
+| `oidcReauth` | 在其地址没有通行密钥的远程访问监听器上：一次以 `prompt=login` 与 `max_age=0` 进行的 OpenID Connect 登录所得的 ID 令牌，其 `nonce` 为批准哈希（[C14](c14-oidc-passkeys.zh.md#re-authentication)）。 |
 
 只有以下各项全部成立时，home 才接受该批准：该请求在一个设备为 `approverDeviceId` 的实时会话上被接纳；签名可用该设备的密钥验证；在远程访问监听器上，要么断言可针对为批准方地址注册的通行密钥验证且设置了用户已验证标志，要么重新认证令牌可针对所有者的已固定身份验证且 `auth_time` 在 120 秒以内；远程访问监听器上两者都没有的批准会被拒绝，此类地址上的设备从回环监听器批准；请求处于待处理状态且未过期，且 `homeNonce`、`homeKeyId`、`deviceId` 与 `address` 与请求中的相同；`typedCode` 等于匹配码；且 `issuedAt` 与 home 时钟相差不超过 60 秒。同一请求出现 3 次错误代码后，home 取消该请求。接受之后，home 记录该设备，每个会话都轮换（[C4](c04-admission.zh.md#rotation-and-revocation)），且 home 发出 `device-approved` 告警。
 
@@ -135,7 +135,7 @@ home 把请求绑定到该监听器的 studio 地址，并以 `201` 作答，返
 受信任设备使用新的质询在远程访问监听器上登录。
 
 1. 携带 `{ "deviceId" }` 的 `POST /auth/device/challenge` 返回一个 32 字节的 `challenge`，它在 60 秒后过期。一台设备最多持有 5 个未使用的质询。
-2. `POST /auth/session` 携带 `deviceId`、`challenge`、对 `"delo-signin-v1" ‖ 0x00 ‖ address ‖ challenge` 的 `signature`，以及该地址的身份因子证明（通行密钥断言或 OpenID Connect 登录凭证，[C14](c14-oidc-passkeys.md)）与正在轮换的会话令牌二者之一。在没有已注册身份因子的地址上，两者都不带的请求会创建一个注册会话（[C14](c14-oidc-passkeys.md#enrolment)）。
+2. `POST /auth/session` 携带 `deviceId`、`challenge`、对 `"delo-signin-v1" ‖ 0x00 ‖ address ‖ challenge` 的 `signature`，以及该地址的身份因子证明（通行密钥断言或 OpenID Connect 登录凭证，[C14](c14-oidc-passkeys.zh.md)）与正在轮换的会话令牌二者之一。在没有已注册身份因子的地址上，两者都不带的请求会创建一个注册会话（[C14](c14-oidc-passkeys.zh.md#enrolment)）。
 
 质询只能使用一次。在该监听器地址上没有记录的设备 id 得到 `401 DEVICE_NOT_TRUSTED`，重复使用、已过期或外来的质询得到 `401 CHALLENGE_INVALID`。没有已批准设备密钥的有效身份因子证明不会创建会话。
 
@@ -247,14 +247,14 @@ Delo Run 信箱经由 Delo Run 在设备之间传递由设备签名的批准；�
 - `delo/packages/plugin-reach-ui/`：批准提示、设备屏幕、告警页面与恢复屏幕。
 - 桌面应用与另一个 home 的连接：其设备密钥、批准与 TLS 固定。
 - `delo/packages/contract-device-approval/`：消息类型、告警种类、错误码与限制。
-- [C4](c04-admission.zh.md)（路由与轮换）、[C14](c14-oidc-passkeys.md)（身份因子证明）、[C15](c15-verification-checks.zh.md)（`owner-and-devices` 与 `certificates` 检查）。
+- [C4](c04-admission.zh.md)（路由与轮换）、[C14](c14-oidc-passkeys.zh.md)（身份因子证明）、[C15](c15-verification-checks.zh.md)（`owner-and-devices` 与 `certificates` 检查）。
 
 <a id="compatibility"></a>
 ## 兼容性
 
 消息版本为 `1`，每个存储的文件都带有 `v: 1`。home 以 `400` 拒绝其他版本的消息。对匹配码派生方式、签名对象或限制的更改，属于对本约定的更改，并需要新的消息版本。新的告警种类属于新增；读取方把未知种类显示为阻断性告警，并附上其原始 subject。
 
-`ts.net` 依赖方 ID 的 spike 结果决定通行密钥是否作为 `ts.net` 地址上的身份因子（[C14](c14-oidc-passkeys.md#compatibility)），Tailscale serve 目标的 spike 结果决定 `reach-tailscale-private` 是否接受所有者认领（[C7](c07-reach-providers.zh.md#compatibility)）。在这些页面记录 spike 结果之前，本页的当前约定有效：所有者认领只限回环，且 `ts.net` 地址上的批准携带 OpenID Connect 重新认证，因为 C14 的当前约定在那里不提供通行密钥。
+`ts.net` 依赖方 ID 的 spike 结果决定通行密钥是否作为 `ts.net` 地址上的身份因子（[C14](c14-oidc-passkeys.zh.md#compatibility)），Tailscale serve 目标的 spike 结果决定 `reach-tailscale-private` 是否接受所有者认领（[C7](c07-reach-providers.zh.md#compatibility)）。在这些页面记录 spike 结果之前，本页的当前约定有效：所有者认领只限回环，且 `ts.net` 地址上的批准携带 OpenID Connect 重新认证，因为 C14 的当前约定在那里不提供通行密钥。
 
 <a id="security"></a>
 ## 安全

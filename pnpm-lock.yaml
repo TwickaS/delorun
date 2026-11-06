@@ -1299,6 +1299,12 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/util/brand
 
+  delo/packages/contract-oidc-passkeys:
+    dependencies:
+      '@delo/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../contract-reach-providers
+
   delo/packages/contract-operational-logs:
     dependencies:
       '@deepseek-ai/dsh-brand':

@@ -44,7 +44,7 @@ description: "约定 C7：远程访问提供方的 Service Definition 及其状�
 | `tailscale-funnel` | `reach-tailscale-funnel` | home 上的 `tailscaled` | 通行密钥或 OpenID Connect 登录 | `https://<machine>.<tailnet>.ts.net`，Funnel 端口不是 443 时带上该端口 |
 | `self-hosted-relay` | `reach-self-hosted-relay` | home 的远程访问监听器，使用其自己的证书 | 通行密钥或 OpenID Connect 登录 | 本人自有域名上的 `https://<name>` |
 
-方式 id 即 setup 回答（[C11](c11-setup-answers.zh.md)）中的 id。设备批准（device approval，[C5](c05-device-approval.zh.md)）适用于每种方式。某个地址可以使用哪种身份因子（identity factor），由 [C14](c14-oidc-passkeys.md#relying-party-ids) 定义。
+方式 id 即 setup 回答（[C11](c11-setup-answers.zh.md)）中的 id。设备批准（device approval，[C5](c05-device-approval.zh.md)）适用于每种方式。某个地址可以使用哪种身份因子（identity factor），由 [C14](c14-oidc-passkeys.zh.md#relying-party-ids) 定义。
 
 <a id="provider-service-definition"></a>
 ### 提供方 Service Definition
@@ -58,7 +58,7 @@ description: "约定 C7：远程访问提供方的 Service Definition 及其状�
 - **`provider.visibility(spec)`** 返回该方式针对该 spec 的[可见性说明](#visibility-notes)。
 - **`reach/state`** 是每次状态变化时发出的事件，携带方式 id、状态及其原因。
 
-只有在每项前提条件都成立时，`start` 才会运行：home 有所有者（[C5](c05-device-approval.zh.md#owner-claim)）；[C14](c14-oidc-passkeys.md) 允许该地址使用的某个身份因子已注册，或在开启该方式的过程中注册；本人以交互方式开启了该方式，从不通过 `--yes` 或 `--config`（[C11](c11-setup-answers.zh.md)）；并且该方式自身在下文中的检查通过。
+只有在每项前提条件都成立时，`start` 才会运行：home 有所有者（[C5](c05-device-approval.zh.md#owner-claim)）；[C14](c14-oidc-passkeys.zh.md) 允许该地址使用的某个身份因子已注册，或在开启该方式的过程中注册；本人以交互方式开启了该方式，从不通过 `--yes` 或 `--config`（[C11](c11-setup-answers.zh.md)）；并且该方式自身在下文中的检查通过。
 
 <a id="states"></a>
 ### 状态
