@@ -69,6 +69,46 @@
       "path": "docs/i18n/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "States the translation-pairing scope with Delo's delo/docs/ tree included, matching scripts/translation-pairing.ts."
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "class": "delo-feature",
+      "reason": "Delo's contribution guide: contributions are welcome under MIT with DCO sign-off, the root AGENTS.md is the one guide, and upstream edits need ledger entries."
+    },
+    {
+      "path": "CONTRIBUTING.zh.md",
+      "class": "delo-feature",
+      "reason": "The Chinese pair of Delo's contribution guide."
+    },
+    {
+      "path": "CONTRIBUTING.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "The consistency record of Delo's contribution guide pair."
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "class": "delo-feature",
+      "reason": "Delo's code of conduct, Contributor Covenant 2.1, with Delo's enforcement contact."
+    },
+    {
+      "path": "SECURITY.md",
+      "class": "delo-feature",
+      "reason": "Delo's security policy: private reporting, supported releases, dependency advisories and dependency-only patch releases."
+    },
+    {
+      "path": "GOVERNANCE.md",
+      "class": "delo-feature",
+      "reason": "How Delo is maintained and how decisions are recorded."
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "class": "delo-feature",
+      "reason": "Names Delo's maintainer for every path and explicitly for the security-sensitive ones."
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "class": "delo-feature",
+      "reason": "Adds Delo's DCO, ledger and changelog checklist to upstream's pull request template."
     }
   ]
 }
