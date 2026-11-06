@@ -1450,6 +1450,11 @@
       "path": "apps/web/tests/plugin-manager.e2e.ts",
       "class": "delo-feature",
       "reason": "Expects the plugin bar to show the History action beside upstream's three header buttons."
+    },
+    {
+      "path": "apps/web/tests/settings-chrome.e2e.ts",
+      "class": "delo-feature",
+      "reason": "Delo adds the Custom transcript mode; the menu lists five modes."
     }
   ],
   "retired": []

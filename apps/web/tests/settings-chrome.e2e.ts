@@ -1094,7 +1094,8 @@ describe('web e2e: Host-backed collapse timing preference', () => {
     const dialog = page.getByRole('dialog', { name: copy.settings, exact: true })
     const details = dialog.getByText(copy.details, { exact: true }).locator('../..')
     await details.getByRole('button').click()
-    expect(await page.getByRole('menuitem').count()).toBe(4)
+    // Delo's Custom work-details mode is the fifth item.
+    expect(await page.getByRole('menuitem').count()).toBe(5)
     // The persistence checks require an explicit saved mode, not the client's default.
     await page.getByRole('menuitem', { name: copy.compact, exact: true }).click()
     await expect.poll(() => scaffold.ctx.settings.describe().find(row => row.ns === 'ui-chat')?.value, uiWait)
