@@ -1,0 +1,5 @@
+{
+  "schema": "delo.release-closure/1",
+  "buildRoot": "/var/tmp/delo-release-build",
+  "deployRoot": "dsh-python-runtime-closure"
+}

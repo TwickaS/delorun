@@ -1,0 +1,10 @@
+{
+  "schema": "delo.rebuild-exceptions/1",
+  "exceptions": [
+    {
+      "id": "pe-authenticode",
+      "applies": "pe",
+      "reason": "The release workflow signs every PE file of the Windows closure with Authenticode (contract C2, R11), and a rebuild made outside the release workflow cannot hold that certificate. A PE file is compared with its certificate table, the security data directory entry and the optional header checksum removed, so any other difference in it still fails the comparison."
+    }
+  ]
+}

@@ -1,11 +1,16 @@
 {
   "name": "@delo/release",
-  "description": "Delo's release tooling: the changelog fragment gate and the release-notes assembly.",
+  "description": "Delo's release tooling: the changelog gate and release-notes assembly, the deterministic runtime closure build and the rebuild comparison.",
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@delo/tools": "workspace:*"
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/tools": "workspace:*",
+    "extract-zip": "^2.0.1",
+    "tar": "^7.5.22",
+    "zod": "4.4.3"
   }
 }

@@ -1279,9 +1279,24 @@ importers:
 
   delo/apps/release:
     dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../../packages/contract-release-manifest
       '@delo/tools':
         specifier: workspace:*
         version: link:../tools
+      extract-zip:
+        specifier: ^2.0.1
+        version: 2.0.1(supports-color@10.2.2)
+      tar:
+        specifier: ^7.5.22
+        version: 7.5.22
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   delo/apps/tools:
     dependencies:
