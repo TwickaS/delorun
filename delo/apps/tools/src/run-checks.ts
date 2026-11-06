@@ -30,7 +30,7 @@
  * duration go under `node_modules/.cache/delo-checks/`; a check that declares its
  * inputs and passed under the same key is served from the pass cache
  * (`checks/cache.ts`). A run of a tree that a record covers reports the record and starts nothing, and a passing
- * pre-push run records its pass (`checks/tree-pass.ts`).
+ * pre-push run records its pass (`checks/tree-pass.ts`) in the git common directory, shared by every worktree of the clone.
  *
  * @module @delo/tools/run-checks
  */
@@ -46,7 +46,7 @@ import { GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
-import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
+import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { readWebSpecs } from './checks/web.ts'
 import { git, repositoryRoot } from './git.ts'
 
@@ -511,7 +511,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
 
   // A pre-push run of the pushed HEAD, or a change run, measures HEAD's tree, which a tree record can cover.
   const measuresHead = values['pre-push'] ? pushBase !== undefined : changed !== undefined
-  const treeRecords = join(root, CACHE_DIR, 'trees')
+  const treeRecords = treeRecordsDir(root)
   const treeRecordsOn = measuresHead && treePassEnabled({ noCache: values['no-cache'] }, env)
   const facts: RunFacts = { lockfile: contentId(root, 'pnpm-lock.yaml'), node: process.version, pnpm: () => pnpmVersionOf(root), env }
   // Whether the record covers this run, which then starts nothing; `announce` names the reason a record does not cover it.
@@ -577,7 +577,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   writeReport(root, results)
   if (before !== undefined && !results.some(result => failing(result.outcome))) {
     const written = recordTreePass(treeRecords, { before, after: treeState(root), base: changed === undefined ? null : treeOfRef(root, changed.base), plan, results }, facts, new Date())
-    console.log(written.recorded ? `delo checks: this tree's pass is recorded in ${relative(root, join(treeRecords, `${before.tree}.json`))}` : `delo checks: this tree's pass is not recorded: ${written.reason}`)
+    console.log(written.recorded ? `delo checks: this tree's pass is recorded in ${treePassPath(treeRecords, before.tree, process.version)}` : `delo checks: this tree's pass is not recorded: ${written.reason}`)
   }
   const elapsed = (performance.now() - started) / 1000
   const tierSeconds = values['pre-commit'] ? budgets.tiers['pre-commit']?.seconds : undefined

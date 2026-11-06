@@ -1,7 +1,8 @@
 /**
  * The tree pass record against temporary git repositories: a passing pre-push run records its pass, a repeat of the
  * same tree is covered, a commit with the same tree and other history reruns the checks that read commits, and a plan
- * the record does not cover, a dirty tree, a failing run or a changed fact leaves the checks to run.
+ * the record does not cover, a dirty tree, a failing run or a changed fact leaves the checks to run. Records are shared by
+ * the worktrees of a clone, and a record of one Node major never serves another.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -11,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { contentId } from '../src/checks/cache.ts'
 import type { Planned } from '../src/checks/plan.ts'
 import { runPlan } from '../src/checks/run.ts'
-import { findTreePass, readTreePass, recordTreePass, treeOfRef, treePassEnabled, treeState, type RunFacts, type TreePassWrite } from '../src/checks/tree-pass.ts'
+import { findTreePass, readTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreePassWrite } from '../src/checks/tree-pass.ts'
 
 const temporary: string[] = []
 
@@ -67,12 +68,12 @@ function makeRepo(): string {
 }
 
 /**
- * The directory of tree records under a repository.
+ * The directory of tree records a repository's worktrees share.
  * @param root - the repository.
  * @returns the directory.
  */
 function treesOf(root: string): string {
-  return join(root, 'node_modules', '.cache', 'delo-checks', 'trees')
+  return treeRecordsDir(root)
 }
 
 /**
@@ -147,7 +148,7 @@ describe('the tree pass record', () => {
     const facts = factsFor(root, { env: { TZ: 'UTC' } })
     const written = await runAndRecord(root, plan, facts)
     expect(written.recorded).toBe(true)
-    expect(readTreePass(treesOf(root), treeOf(root))).toEqual({
+    expect(readTreePass(treesOf(root), treeOf(root), 'v24.9.0')).toEqual({
       tree: treeOf(root),
       base: treeOfRef(root, 'origin/v5'),
       head: headOf(root),
@@ -160,7 +161,7 @@ describe('the tree pass record', () => {
       pnpm: '11.28.5',
       env: { TZ: 'UTC' },
     })
-    expect(readdirSync(treesOf(root))).toEqual([`${treeOf(root)}.json`])
+    expect(readdirSync(treesOf(root))).toEqual([`${treeOf(root)}-node24.json`])
     expect(lookup(root, plan, facts)).toMatchObject({ hit: true })
   })
 
@@ -215,7 +216,7 @@ describe('the tree pass record', () => {
     const facts = factsFor(root, { env: { TZ: 'UTC' } })
     expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
     expect(lookup(root, plan, factsFor(root, { env: { TZ: 'UTC' }, lockfile: 'sha256:other' }))).toEqual({ hit: false, reason: 'the lockfile changed' })
-    expect(lookup(root, plan, factsFor(root, { env: { TZ: 'UTC' }, node: 'v26.0.0' }))).toEqual({ hit: false, reason: 'the Node version changed' })
+    expect(lookup(root, plan, factsFor(root, { env: { TZ: 'UTC' }, node: 'v24.10.0' }))).toEqual({ hit: false, reason: 'the Node version changed' })
     expect(lookup(root, plan, factsFor(root, { env: { TZ: 'UTC' }, pnpm: () => '11.28.6' }))).toEqual({ hit: false, reason: 'the pnpm version changed' })
     expect(lookup(root, plan, factsFor(root, { env: { TZ: 'Europe/Berlin' } }))).toEqual({ hit: false, reason: 'TZ changed' })
     expect(lookup(root, plan, facts)).toMatchObject({ hit: true })
@@ -258,8 +259,47 @@ describe('the tree pass record', () => {
     const plan = [check('a', PASS)]
     const facts = factsFor(root)
     expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
-    writeFileSync(join(treesOf(root), `${treeOf(root)}.json`), '{ not json')
+    writeFileSync(treePassPath(treesOf(root), treeOf(root), 'v24.9.0'), '{ not json')
     expect(lookup(root, plan, facts)).toEqual({ hit: false })
+  })
+
+  it('stores records in the git common directory, so a record written in one worktree of the clone covers another worktree', async () => {
+    const root = makeRepo()
+    const other = join(tempDir('delo-tree-worktrees-'), 'other')
+    git(root, ['worktree', 'add', '-q', '--detach', other, 'HEAD'])
+    const plan = [check('a', PASS), check('boundary', PASS, { history: true })]
+    const facts = factsFor(root)
+    expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
+    expect(treeRecordsDir(other)).toBe(treeRecordsDir(root))
+    expect(treeRecordsDir(root).endsWith(join('.git', 'delo-checks', 'trees'))).toBe(true)
+    expect(existsSync(join(root, 'node_modules', '.cache', 'delo-checks', 'trees'))).toBe(false)
+    expect(lookup(other, plan, facts)).toMatchObject({ hit: true })
+  })
+
+  it('does not serve a record written under another Node major, and keeps one record per major', async () => {
+    const root = makeRepo()
+    const plan = [check('a', PASS)]
+    expect((await runAndRecord(root, plan, factsFor(root, { node: 'v26.0.0' }))).recorded).toBe(true)
+    expect(lookup(root, plan, factsFor(root))).toEqual({ hit: false })
+    expect(lookup(root, plan, factsFor(root, { node: 'v26.0.0' }))).toMatchObject({ hit: true })
+    expect((await runAndRecord(root, plan, factsFor(root))).recorded).toBe(true)
+    expect(readdirSync(treesOf(root)).sort()).toEqual([`${treeOf(root)}-node24.json`, `${treeOf(root)}-node26.json`])
+    expect(lookup(root, plan, factsFor(root, { node: 'v24.10.0' }))).toEqual({ hit: false, reason: 'the Node version changed' })
+  })
+
+  it('does not serve a record to another worktree whose tree has any changed file', async () => {
+    const root = makeRepo()
+    const other = join(tempDir('delo-tree-worktrees-'), 'other')
+    git(root, ['worktree', 'add', '-q', '--detach', other, 'HEAD'])
+    const plan = [check('a', PASS)]
+    const facts = factsFor(root)
+    expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
+    mkdirSync(join(other, 'src', 'nested'))
+    writeFileSync(join(other, 'src', 'nested', 'b.txt'), 'b\n')
+    writeFileSync(join(other, 'src', 'a.txt'), 'changed\n')
+    git(other, ['add', '-A'])
+    git(other, ['commit', '-q', '-m', 'change two files'])
+    expect(lookup(other, plan, facts)).toEqual({ hit: false })
   })
 
   it('is off with --no-cache, in CI, and when DELO_FULL_GATE=1 asks for the full gate', () => {

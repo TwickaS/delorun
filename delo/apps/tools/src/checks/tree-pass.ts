@@ -9,6 +9,9 @@
  * base the record was made at, because commit messages and history are not part of the tree. A dirty working tree
  * neither reads nor writes a record, since the checks then read the working tree instead of HEAD's tree.
  *
+ * Records live in the git common directory, so every worktree of a clone reads and writes the same ones. A record file is
+ * named by the tree and the Node major, so a pass on one major never serves another.
+ *
  * @module @delo/tools/checks/tree-pass
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
@@ -118,6 +121,29 @@ export function treeState(root: string): TreeState {
 }
 
 /**
+ * The directory of tree records for a clone: `delo-checks/trees` under the git common directory, which every worktree of
+ * the clone shares.
+ * @param root - the repository root of any worktree of the clone.
+ * @returns the directory, which may not exist yet.
+ */
+export function treeRecordsDir(root: string): string {
+  return join(git(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']).trim(), 'delo-checks', 'trees')
+}
+
+/**
+ * The file a tree's record is stored in: the tree id and the Node major of the run, so a pass recorded under one major
+ * is never read under another.
+ * @param dir - the directory of tree records.
+ * @param tree - the tree's id.
+ * @param node - the Node version, `process.version`, such as `v24.9.0`.
+ * @returns the file path.
+ */
+export function treePassPath(dir: string, tree: string, node: string): string {
+  const major = node.replace(/^v/, '').split('.')[0] ?? ''
+  return join(dir, `${tree}-node${major}.json`)
+}
+
+/**
  * The tree a revision names, for a record's base.
  * @param root - the repository root.
  * @param ref - a commit id, a branch, or another revision.
@@ -129,14 +155,16 @@ export function treeOfRef(root: string, ref: string): string | null {
 }
 
 /**
- * The record stored for a tree. A file that cannot be read or parsed is treated as absent, so its checks run again.
+ * The record stored for a tree under a Node major. A file that cannot be read or parsed is treated as absent, so its checks
+ * run again.
  * @param dir - the directory of tree records.
  * @param tree - the tree's id.
+ * @param node - the Node version of the run, `process.version`.
  * @returns the record, or undefined when there is none.
  */
-export function readTreePass(dir: string, tree: string): TreePass | undefined {
+export function readTreePass(dir: string, tree: string, node: string): TreePass | undefined {
   try {
-    const parsed = TreePassFile.safeParse(JSON.parse(readFileSync(join(dir, `${tree}.json`), 'utf8')))
+    const parsed = TreePassFile.safeParse(JSON.parse(readFileSync(treePassPath(dir, tree, node), 'utf8')))
     return parsed.success && parsed.data.tree === tree ? parsed.data : undefined
   } catch (error) {
     // A missing file, or one that is not JSON: no record covers the tree.
@@ -156,7 +184,7 @@ export function readTreePass(dir: string, tree: string): TreePass | undefined {
  */
 export function findTreePass(dir: string, state: TreeState, plan: readonly Check[], facts: RunFacts): TreePassLookup {
   if (!state.clean || plan.length === 0) return { hit: false }
-  const record = readTreePass(dir, state.tree)
+  const record = readTreePass(dir, state.tree, facts.node)
   if (record === undefined) return { hit: false }
   const reason = uncovered(record, state, plan, facts)
   return reason === undefined ? { hit: true, record } : { hit: false, reason }
@@ -258,13 +286,14 @@ export function recordTreePass(dir: string, run: TreePassRun, facts: RunFacts, n
 }
 
 /**
- * Write a record through a temporary file that is renamed into place, so an interrupted write leaves the earlier record.
+ * Write a record through a temporary file in the same directory, renamed into place, so an interrupted write and a write
+ * from another worktree that finishes at the same time each leave a whole record.
  * @param dir - the directory of tree records.
  * @param record - the record.
  */
 function writeTreePass(dir: string, record: TreePass): void {
   mkdirSync(dir, { recursive: true })
-  const path = join(dir, `${record.tree}.json`)
+  const path = treePassPath(dir, record.tree, record.node)
   const temporary = `${path}.${String(process.pid)}.tmp`
   writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`)
   renameSync(temporary, path)
