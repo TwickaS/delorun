@@ -1247,6 +1247,12 @@ importers:
 
   delo/packages/contract-parity-composition: {}
 
+  delo/packages/contract-release-manifest:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+
   delo/packages/contract-setup-answers: {}
 
   delo/packages/contract-verification-checks: {}

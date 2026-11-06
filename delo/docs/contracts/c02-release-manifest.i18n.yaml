@@ -1,0 +1,76 @@
+# Bilingual-pair consistency record for c02-release-manifest.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/contracts/c02-release-manifest.md
+/:
+  en: 7f13751b79753714
+  zh: a0ea6e2e8a77f3a3
+/c2-release-manifest-and-signature:
+  en: 3a697450cd2395ed
+  zh: 52fbe7b789bb3dc4
+/c2-release-manifest-and-signature/summary:
+  en: ecb378b97df3449d
+  zh: ffeca9eadf06e863
+/c2-release-manifest-and-signature/contents:
+  en: e3d38cacb599727a
+  zh: e2db1295b853bbc0
+/c2-release-manifest-and-signature/release-files:
+  en: 0d57bf4c7449002a
+  zh: 4a4268a4a95f06e8
+/c2-release-manifest-and-signature/signature-envelope:
+  en: 55f0c5bb339c9fa6
+  zh: 4a1bd26106153c75
+/c2-release-manifest-and-signature/key-roles:
+  en: 4e4f160e8608871b
+  zh: cc5c2f738ce6f879
+/c2-release-manifest-and-signature/root-metadata:
+  en: f1604f7e24b903c3
+  zh: e3b5c1b0ee606c47
+/c2-release-manifest-and-signature/timestamp-metadata:
+  en: aa288887ce5d7c90
+  zh: eae842988dd43834
+/c2-release-manifest-and-signature/release-manifest:
+  en: 58c88e3332bc0411
+  zh: ca2909c5565dfcaf
+/c2-release-manifest-and-signature/runtime-file-list:
+  en: e950f26600a53ac9
+  zh: 8db82c1fe79b2630
+/c2-release-manifest-and-signature/client-verification:
+  en: 8e7216558fffe948
+  zh: 54997351f6d6cd1f
+/c2-release-manifest-and-signature/freshness-and-rollback-protection:
+  en: 730432991559a9ad
+  zh: b76efd0c46e1c314
+/c2-release-manifest-and-signature/key-rotation:
+  en: 31aa1927437e0264
+  zh: d91e762aeeea8835
+/c2-release-manifest-and-signature/rebuild-before-signing:
+  en: 33ae84a705daec7c
+  zh: e43ec31dd26d0a3b
+/c2-release-manifest-and-signature/dependency-advisory-check:
+  en: 28eb7d5408170f76
+  zh: c78b4cb738d63771
+/c2-release-manifest-and-signature/npm-publication:
+  en: f9b39d0ba2876907
+  zh: b4df6af9991f4885
+/c2-release-manifest-and-signature/desktop-updates-and-rollback:
+  en: e75a292727464604
+  zh: c4628437e4b4b2da
+/c2-release-manifest-and-signature/values-and-limits:
+  en: a3d56a780db8e261
+  zh: 49f7800dff68844e
+/c2-release-manifest-and-signature/consumers:
+  en: 12e55f6246c9cfbf
+  zh: e3711e366a4a2e82
+/c2-release-manifest-and-signature/compatibility:
+  en: 126ff96804d92ba3
+  zh: 847da80dbf03cce5
+/c2-release-manifest-and-signature/security:
+  en: 52543dba9bf0d349
+  zh: bd232096a834cc62
+/c2-release-manifest-and-signature/security/requirements:
+  en: 8989badce59ed5e2
+  zh: 692a173812d73cb5
+/c2-release-manifest-and-signature/security/denial-tests:
+  en: e925f820636d5e2f
+  zh: abe0612381e8f043
