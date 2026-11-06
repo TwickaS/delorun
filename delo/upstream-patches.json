@@ -1455,6 +1455,11 @@
       "path": "apps/web/tests/settings-chrome.e2e.ts",
       "class": "delo-feature",
       "reason": "Delo adds the Custom transcript mode; the menu lists five modes."
+    },
+    {
+      "path": "apps/web/tests/expected/plugin-manager/loading.expected.md",
+      "class": "delo-feature",
+      "reason": "Records the History action in the plugin page loading golden, which the Delo plugin bar shows beside upstream's header buttons."
     }
   ],
   "retired": []
