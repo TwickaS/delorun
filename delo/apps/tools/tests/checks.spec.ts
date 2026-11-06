@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
-import { affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
+import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
+import { affectsParity, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
@@ -119,7 +120,7 @@ describe('the catalog', () => {
 
 describe('selection', () => {
   it('runs every default check with no target, and neither the changed-upstream lane nor the opt-in native build', () => {
-    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'tests:fork', 'tests:snapshots'])
+    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'tests:fork', 'tests:snapshots', 'parity-switches', 'parity-replay'])
     expect(CHECKS.find(check => check.id === 'generate:native')?.tiers).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['generate:native'] }))).toEqual(['generate:native'])
   })
@@ -219,6 +220,26 @@ describe('the pre-commit tier', () => {
   it('leaves the whitespace check out of every other tier', () => {
     expect(ids(select(GATED, TREE, { ...NONE, changed: { base: 'v5', paths: ['delo/packages/providers/src/index.ts'] } }))).not.toContain('whitespace:staged')
     expect(ids(select(GATED, TREE, NONE))).toEqual(expect.arrayContaining(['gates:secrets', 'gates:docs']))
+  })
+})
+
+describe('the parity checks', () => {
+  it('replay upstream\'s scenarios through the overlay with no inputs, so a selection always runs them, after a stale build', () => {
+    const replay = CHECKS.find(check => check.id === 'parity-replay')
+    expect(replay).toMatchObject({ group: 'parity', command: ['pnpm', 'run', '--silent', 'test:snapshot'], environment: { DSH_SNAPSHOT_PATCH: PARITY_OVERLAY_PATH, DSH_SNAPSHOT_MAX_CONCURRENCY: '5' }, needs: [], exclusive: true })
+    expect(replay?.inputs).toBeUndefined()
+    expect(catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] }).find(check => check.id === 'parity-replay')?.needs).toEqual(['build:artifacts'])
+    expect(CHECKS.find(check => check.id === 'parity-switches')?.command).toEqual(['node_modules/.bin/tsx', 'delo/apps/tools/src/parity/composition/check-parity-switches.ts'])
+  })
+
+  it('run when Delo code or an upstream edit changes, and not for documentation alone or a narrowed target', () => {
+    const parity = (paths: string[]) => ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'b', paths } })).filter(id => id.startsWith('parity-'))
+    for (const path of ['delo/packages/control-protocol/src/messages.ts', 'delo/apps/tools/src/parity/composition/parity.overlay.yml', 'packages/boot/plugin-manager/src/tools.ts', 'snapshots/session/text-turn/runtime.cordis.yml']) {
+      expect(affectsParity(path)).toBe(true)
+      expect(parity([path])).toEqual(['parity-switches', 'parity-replay'])
+    }
+    for (const path of ['delo/docs/contracts/c16-parity-composition.md', 'delo/apps/tools/README.i18n.yaml', 'docs/architecture.md']) expect(parity([path])).toEqual([])
+    expect(ids(select(CHECKS, TREE, { ...NONE, targets: ['delo/packages/control-protocol/src/messages.ts'] }))).not.toContain('parity-replay')
   })
 })
 

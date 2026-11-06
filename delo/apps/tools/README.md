@@ -20,8 +20,9 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/checks/` holds the check catalogue (`plan.ts`), the scheduler (`run.ts`), the machine budget (`machine.ts`), the pass cache (`cache.ts`) and the budgets (`budgets.json`).
 - `src/setup-worktree.ts` sets up a checkout or worktree in one command: the hooks file, the install, the hooks, the ledger merge driver and a warning when Node differs from `.nvmrc`.
 - `src/git.ts` runs git for the modules and reports exit statuses.
+- `src/parity/composition/` holds contract C16's parity overlay, the `parity-switches` check (`check-parity-switches.ts`, with `switches.ts`, `contributions.ts`, `overlay.ts` and `sweep.ts`) and the staged switch-on scenarios; the parity composition section below describes them.
 - `src/issues/` turns maintainer-written work briefs into GitHub issues: `brief.ts` holds the fields, the rules and the issue body, `references.ts` the links and paths a brief may carry, `labels.ts` the label file, `gh.ts` the `gh` calls, and `issues.ts` the command line.
-- `tests/` holds the specs. The ledger rules run against temporary git repositories, and `ledger-merge.spec.ts` also rebases branches through the merge driver in them. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees. `checks.spec.ts` and `checks-cache.spec.ts` cover the runner's selection, tiers, budgets, pass cache and `--plan`.
+- `tests/` holds the specs. The ledger rules run against temporary git repositories, and `ledger-merge.spec.ts` also rebases branches through the merge driver in them. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees. `checks.spec.ts` and `checks-cache.spec.ts` cover the runner's selection, tiers, budgets, pass cache and `--plan`. `parity/` covers the parity checks on the real tree and on planted fixtures, and runs upstream's headless adapter with a planted overlay.
 
 ## The divergence ledger
 
@@ -174,6 +175,8 @@ Each check has a budget, its resident memory at the peak and its CPUs, which the
 | `tests:snapshots` | Upstream's keyless recorded-session replay (`pnpm run test:snapshot`) | 0.6 GiB per worker, 5 CPUs, alone | `changed`, `full` |
 | `tests:upstream-changed` | The specs of each changed upstream package and, within 150 spec files, of its direct dependents ([upstream's `vitest.config.ts`](../../../vitest.config.ts)) | 0.6 GiB per worker, up to 8 workers | `changed` |
 | `generate:native` | Upstream's native system addon (`pnpm run build:native-system`) | 1 GiB, 2 CPUs | none: `--only generate:native` |
+| `parity-switches` | C16's registry against the switch fields, the parity overlay and the model-visible contributions, and the switch sweep ([`check-parity-switches.ts`](src/parity/composition/check-parity-switches.ts)) | 0.5 GiB, 1 CPU | `changed` for Delo code or an upstream edit, `full` |
+| `parity-replay` | Upstream's recorded-session replay (`pnpm run test:snapshot`) with `DSH_SNAPSHOT_PATCH` naming the parity overlay | 0.6 GiB per worker, 5 CPUs, alone | `changed` for Delo code or an upstream edit, `full` |
 
 The `pre-commit` tier runs within a budget of 5 seconds (`budgets.json`) and reports a run that exceeds it. The Docker lane, the built-package specs, the documentation site, the workflow checks and the Cordis check arrive with the packages that need them.
 
@@ -188,9 +191,9 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:fork
 node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts delo/apps/tools    # targets: that package's specs, and the typechecks of the packages that depend on it
 ```
 
-Options: `--changed`, `--pre-commit` and `--pre-push` each select a tier, so give one; `--base <ref>` measures `--changed` from another ref (default `v5`); `--only` and `--skip` take check ids or groups (`boundary`, `gates`, `whitespace`, `docs`, `typecheck`, `tests`, `generate`), comma-separated; `--plan` and `--list` print without running; `--no-cache` skips the pass cache; `--bail` stops at the first failure; `--workers <n>` sets the fork suite's workers; `--no-scope` runs without the systemd user scope.
+Options: `--changed`, `--pre-commit` and `--pre-push` each select a tier, so give one; `--base <ref>` measures `--changed` from another ref (default `v5`); `--only` and `--skip` take check ids or groups (`boundary`, `gates`, `whitespace`, `docs`, `typecheck`, `tests`, `generate`, `parity`), comma-separated; `--plan` and `--list` print without running; `--no-cache` skips the pass cache; `--bail` stops at the first failure; `--workers <n>` sets the fork suite's workers; `--no-scope` runs without the systemd user scope.
 
-A check that declares its inputs passes once per key: the sha256 of the sorted list of its input files' git blob ids (the blob id of a tracked, unmodified file; the content hash of a modified, deleted or untracked one), the lockfile's blob id, the Node and pnpm versions, the command, its budget entry, and the values of the environment variables it lists. A stored pass with the same key is reported as `cached pass (<key prefix>)`, and the check does not run. The cache is off for `--no-cache`, `pnpm check:full`, a push with `DELO_FULL_GATE=1`, and when `CI` is set. A check without declared inputs always runs: the replay, the bundle build, the native addon and the staged whitespace check.
+A check that declares its inputs passes once per key: the sha256 of the sorted list of its input files' git blob ids (the blob id of a tracked, unmodified file; the content hash of a modified, deleted or untracked one), the lockfile's blob id, the Node and pnpm versions, the command, its budget entry, and the values of the environment variables it lists. A stored pass with the same key is reported as `cached pass (<key prefix>)`, and the check does not run. The cache is off for `--no-cache`, `pnpm check:full`, a push with `DELO_FULL_GATE=1`, and when `CI` is set. A check without declared inputs always runs: the two replays, the bundle build, the native addon and the staged whitespace check.
 
 To install the hooks, write a one-line `lefthook-local.yml` at the root with `extends: [delo/lefthook.yml]` (git ignores it), then run `node scripts/install-lefthook.mjs`. The `pre-commit` hook runs the `pre-commit` tier. The `pre-push` hook runs `--pre-push`: what changed since the remote branch's tip, or, for a new branch, since its merge base with `v5`. `DELO_PUSH_SKIP=<check or group>,… git push` leaves checks out, and `DELO_FULL_GATE=1 git push` runs the full gate. The `commit-msg` hook runs `check-commits.ts --message <file>` on each commit message.
 
@@ -199,6 +202,90 @@ Reports and logs are under `node_modules/.cache/delo-checks/`: `report.json` hol
 The ledger check alone is `pnpm --filter @delo/tools check`. One gate runs with `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/<name>.ts`, such as `licence`, and the range gates take `--base <rev>`. The specs run with `node_modules/.bin/vitest run --config delo/vitest.config.ts`, and this package typechecks with `node_modules/.bin/tsc -p delo/apps/tools/tsconfig.json --noEmit`.
 
 The [delo-dev-workflow skill](../../../.agents/skills/delo-dev-workflow/SKILL.md) states when to run each check.
+
+## Parity composition
+
+[Contract C16](../../docs/contracts/c16-parity-composition.md) states that Delo, with its model-visible additions switched off, replays upstream's recorded scenarios at `dsh-v0.2.2-rc.1` with no difference from their expected output. This package checks that statement with two checks: `parity-replay` runs upstream's replay through the parity overlay, and `parity-switches` checks that every model-visible Delo change has a registered switch that the overlay turns off.
+
+### The overlay
+
+[`src/parity/composition/parity.overlay.yml`](src/parity/composition/parity.overlay.yml) is a Cordis patch file. Each recorded-session adapter reads `DSH_SNAPSHOT_PATCH` through upstream's `snapshotPatchOverlay` in `packages/test-support/session-snapshot/src/snapshot-patch.ts` when its module loads. It places the named file after the root configuration of every process it starts and before every scenario layer: the headless, SDK and ACP adapters pass it as a `--patch` argument, and the Web scaffold applies it after the shipped bundle layers. In `DSH_SNAPSHOT=record` or `refresh` mode an adapter that receives the variable throws before it starts a process. No shipped profile, bundle or command-line option names the file, and the `dsh` command does not read the variable.
+
+A patch row replaces its entry's whole `config` and reaches only entries of the root tree, so the overlay sets a switch only where no earlier layer configures the entry. Every other built switch is at its parity value through its validated Config default:
+
+| Switch | How the parity composition sets it |
+| --- | --- |
+| `plugin_manager_read_exemption`, `profile_history` | The overlay row `tool-plugin-manager`, `name: '@deepseek-ai/dsh-plugin-manager/tools'`, sets `readActionsExempt: false` and `profileHistory: false`. |
+| `preset_inspect` | Config default `false`. The row sits in each Web preset's plugin list, which a patch reaches only by replacing the whole preset row. |
+| `container_denial_marker` | Config default `false`. The bundles and the root configurations set `sandbox-policy`'s mode and workspace root, which an overlay row would erase. |
+| `doctor` | Config default `false`. Only the `doctor` profile mounts the app, and the replay starts no doctor process. |
+
+None of C16's changed defaults is changed in this tree. The studio bundle, the permission defaults and the fetch guard are planned, and the preset default (`standard`), the session-log upload (on) and desktop analytics (off) keep upstream's values, so the overlay restores none of them.
+
+### The registry
+
+`PARITY_SWITCHES` in [`@delo/contract-parity-composition`](../../packages/contract-parity-composition/README.md) is the one list of switches. A built entry names its Config field (the module a `cordis.yml` row mounts, the module's source file and the key) and the source files whose model-visible contributions it turns off. A planned entry is a switch C16 lists whose change is not in the tree yet; it names the work package that builds it and has no field. `doctor` is a feature switch: it is not model-visible and has no switch-on scenario.
+
+| Switch | State | Field | Default | Parity | Model-visible |
+| --- | --- | --- | --- | --- | --- |
+| `studio_additions` | planned | none | on | off | yes |
+| `permission_defaults` | planned | none | on | off | yes |
+| `fetch_guard` | planned | none | on | off | yes |
+| `preset_inspect` | built | `@deepseek-ai/dsh-agent-preset-registry/tools` `presetInspect` | on | off | yes |
+| `doctor` | built | `@deepseek-ai/dsh-doctor/app` `doctor` | on | off | no |
+| `plugin_manager_read_exemption` | built | `@deepseek-ai/dsh-plugin-manager/tools` `readActionsExempt` | on | off | yes |
+| `profile_history` | built | `@deepseek-ai/dsh-plugin-manager/tools` `profileHistory` | on | off | yes |
+| `scheduled_task_consent` | planned | none | on | off | yes |
+| `instruction_layer_consent` | planned | none | on | off | yes |
+| `mcp_add_consent` | planned | none | on | off | yes |
+| `container_denial_marker` | built | `@deepseek-ai/dsh-sandbox-policy` `containerDenialMarker` | on | off | yes |
+
+The default column is the value in Delo's default composition; each built field's schema default is the parity value.
+
+### What `parity-switches` detects
+
+The check reads the TypeScript sources under `delo/**/src` and every ledgered upstream source under `packages/` and `apps/`, without specs. It fails when:
+
+- a property of an interface named `Config` whose JSDoc names `` C16 switch `<id>` `` has no built registry entry with that field, or its entry is still planned;
+- a built entry's source has no such field, the field's `z.boolean().default(…)` is not the parity value, the entry's parity value equals its default, or a model-visible entry names no source file or no scenario `<profile>/delo-<id>`;
+- a Delo-owned source calls a model-visible registration API, or a ledgered upstream edit changes a line inside a top-level statement that calls one, and no built, model-visible entry lists that file in its sources;
+- an overlay row names a module with no built switch, sets a key that is no switch of that module or a value that is not the parity value, or sets anything besides `id`, `name` and `config`, or a built switch is neither in the overlay nor in `DEFAULT_PARITY` in `overlay.ts` with its reason;
+- a model-visible built switch has neither a recorded scenario nor a staged one.
+
+The model-visible registration APIs are `systemPrompt.section`, `systemPrompt.context` and `systemPrompt.suppressRuntimeContext`; `tools.register`, `tools.restrict`, `tools.setExecutor` and `tools.guard`; `defineTool`; and listeners registered with `on` for `system-prompt/assemble`, `agent/request`, `agent/pre-step`, `request/context`, `tools/execute`, `tools/pre-execute`, `tools/post-execute` and `tools/result`.
+
+### What it cannot detect
+
+The scan matches names, not types or data flow, so it misses:
+
+- text that reaches the model through a helper outside the registering statement, such as a renderer module or a constant at the top of a file, when no changed line falls inside a registering statement;
+- a call through another receiver name, an alias or a dynamic property, and a model-visible event that is not in its list;
+- whether a listed switch really gates the contribution at its parity value. The replay proves that for the scenarios that reach the contribution, and the switch-on scenario proves the switch's on-path once it is recorded.
+
+It also accepts any contribution in a listed source file, so a second, unswitched contribution added to the same file passes the scan and must fail the replay.
+
+### The switch sweep
+
+Each model-visible built switch has a switch-on scenario `snapshots/<profile>/delo-<id>` whose `runtime.cordis.yml` sets that one switch to its non-parity value. Once recorded, `parity-replay` replays it with the rest of the corpus under the overlay, so the switch under test is the only difference from the parity composition. Upstream's corpus gate refuses a scenario directory without a Session fixture, so an unrecorded scenario keeps its `snapshot.yml` and `runtime.cordis.yml` under [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/), and `parity-switches` reports it as `pending recording`, not as passing. A Web scenario runs through an e2e driver under `apps/web/tests`, which turns `preset_inspect` on with `launchWebScaffold`'s `presetInspect` option.
+
+Pending recording:
+
+- `session/delo-plugin-manager-read-exemption`: the plugin-manager composition with `readActionsExempt: true`, in `workspace-write`.
+- `session/delo-profile-history`: the plugin-manager composition with `profileHistory: true`.
+- `session/delo-container-denial-marker`: the PTC composition with `containerDenialMarker: true`, so `run_code` declares bash's `sandbox.deniedBy`.
+- `web/delo-preset-inspect`: the Standard preset with `preset_inspect` on; its driver is written with the recording.
+
+To record one, move its directory to `snapshots/<profile>/`, run upstream's record command for that scenario without `DSH_SNAPSHOT_PATCH`, review the outputs, and remove `input.task` once the Session fixture carries the task.
+
+### Commands
+
+```sh
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only parity
+DSH_SNAPSHOT_PATCH=delo/apps/tools/src/parity/composition/parity.overlay.yml pnpm run test:snapshot
+node_modules/.bin/tsx delo/apps/tools/src/parity/composition/check-parity-switches.ts
+```
+
+`pnpm run test:snapshot` replays the session, SDK and ACP scenarios through their adapters and checks every scenario of the corpus, Web included, against upstream's corpus gate. The Web scenarios replay through their e2e drivers in `test:web`, which reads the same variable through the scaffold: `DSH_SNAPSHOT=replay DSH_SNAPSHOT_PATCH=<overlay> pnpm run test:web:built`.
 
 ## Reconciliation against rc.1
 

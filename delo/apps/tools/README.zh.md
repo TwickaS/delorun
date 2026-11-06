@@ -20,8 +20,9 @@
 - `src/checks/` 包含检查目录（`plan.ts`）、调度器（`run.ts`）、机器预算（`machine.ts`）、通过缓存（`cache.ts`）与预算（`budgets.json`）。
 - `src/setup-worktree.ts` 用一条命令完成检出或工作树的设置：钩子文件、安装、钩子、台账合并驱动，以及在 Node 与 `.nvmrc` 不一致时给出警告。
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
+- `src/parity/composition/` 包含约定 C16 的对等覆盖层、`parity-switches` 检查（`check-parity-switches.ts`，以及 `switches.ts`、`contributions.ts`、`overlay.ts` 与 `sweep.ts`）和暂存的开关开启场景；下文的对等组合一节描述它们。
 - `src/issues/` 把维护者撰写的 brief 转为 GitHub Issue：`brief.ts` 包含字段、规则与 Issue 正文，`references.ts` 包含 brief 可以携带的链接与路径，`labels.ts` 包含标签文件，`gh.ts` 包含 `gh` 调用，`issues.ts` 为命令行。
-- `tests/` 包含测试规范。台账规则在临时 git 仓库中运行，`ledger-merge.spec.ts` 还在其中让分支经由合并驱动完成变基。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。`checks.spec.ts` 与 `checks-cache.spec.ts` 覆盖运行器的选择、层级、预算、通过缓存与 `--plan`。
+- `tests/` 包含测试规范。台账规则在临时 git 仓库中运行，`ledger-merge.spec.ts` 还在其中让分支经由合并驱动完成变基。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。`checks.spec.ts` 与 `checks-cache.spec.ts` 覆盖运行器的选择、层级、预算、通过缓存与 `--plan`。`parity/` 在真实仓库与植入违规的夹具上覆盖对等检查，并以植入的覆盖层运行上游的 headless 适配器。
 
 ## 差异台账
 
@@ -173,6 +174,8 @@ brief 中原有的链接也按同样方式改写。
 | `tests:snapshots` | 上游的无密钥录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，独占 | `changed`、`full` |
 | `tests:upstream-changed` | 每个有变更的上游包的规范，以及在 150 个规范文件之内其直接依赖的规范（[上游的 `vitest.config.ts`](../../../vitest.config.ts)） | 每个 worker 0.6 GiB，至多 8 个 worker | `changed` |
 | `generate:native` | 上游的原生系统插件（`pnpm run build:native-system`） | 1 GiB，2 个 CPU | 无：仅 `--only generate:native` |
+| `parity-switches` | C16 的注册表与开关字段、对等覆盖层和对模型可见的贡献相符，以及开关清点（[`check-parity-switches.ts`](src/parity/composition/check-parity-switches.ts)） | 0.5 GiB，1 个 CPU | Delo 代码或上游编辑改动时为 `changed`；`full` |
+| `parity-replay` | 在 `DSH_SNAPSHOT_PATCH` 指向对等覆盖层时运行上游的录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，单独运行 | Delo 代码或上游编辑改动时为 `changed`；`full` |
 
 `pre-commit` 层级在 5 秒预算内运行（见 `budgets.json`），运行超出预算时会报告。Docker 通道、构建后包的规范、文档站点、工作流检查与 Cordis 检查，将随需要它们的包一同到达。
 
@@ -187,9 +190,9 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:fork
 node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts delo/apps/tools    # targets: that package's specs, and the typechecks of the packages that depend on it
 ```
 
-选项：`--changed`、`--pre-commit` 与 `--pre-push` 各自选择一个层级，只能给出其一；`--base <ref>` 让 `--changed` 从另一个引用开始度量（默认 `v5`）；`--only` 与 `--skip` 接受检查 id 或分组（`boundary`、`gates`、`whitespace`、`docs`、`typecheck`、`tests`、`generate`），以逗号分隔；`--plan` 与 `--list` 只打印而不运行；`--no-cache` 跳过通过缓存；`--bail` 在第一个失败处停止；`--workers <n>` 设置 fork 规范套件的 worker 数；`--no-scope` 不在 systemd 用户作用域中运行。
+选项：`--changed`、`--pre-commit` 与 `--pre-push` 各自选择一个层级，只能给出其一；`--base <ref>` 让 `--changed` 从另一个引用开始度量（默认 `v5`）；`--only` 与 `--skip` 接受检查 id 或分组（`boundary`、`gates`、`whitespace`、`docs`、`typecheck`、`tests`、`generate`、`parity`），以逗号分隔；`--plan` 与 `--list` 只打印而不运行；`--no-cache` 跳过通过缓存；`--bail` 在第一个失败处停止；`--workers <n>` 设置 fork 规范套件的 worker 数；`--no-scope` 不在 systemd 用户作用域中运行。
 
-声明了输入的检查，每个键只通过一次。键由以下内容构成：其输入文件的 git blob id 排序列表的 sha256（已跟踪且未修改的文件取其 blob id；已修改、已删除或未跟踪的文件取其内容哈希）、锁文件的 blob id、Node 与 pnpm 版本、命令、其预算条目，以及其列出的环境变量的取值。键相同的已存储通过结果会报告为 `cached pass (<键前缀>)`，该检查不再运行。以下情况下缓存关闭：`--no-cache`、`pnpm check:full`、带 `DELO_FULL_GATE=1` 的推送，以及设置了 `CI` 时。未声明输入的检查总是运行：回放、产物构建、原生插件与暂存的空白检查。
+声明了输入的检查，每个键只通过一次。键由以下内容构成：其输入文件的 git blob id 排序列表的 sha256（已跟踪且未修改的文件取其 blob id；已修改、已删除或未跟踪的文件取其内容哈希）、锁文件的 blob id、Node 与 pnpm 版本、命令、其预算条目，以及其列出的环境变量的取值。键相同的已存储通过结果会报告为 `cached pass (<键前缀>)`，该检查不再运行。以下情况下缓存关闭：`--no-cache`、`pnpm check:full`、带 `DELO_FULL_GATE=1` 的推送，以及设置了 `CI` 时。未声明输入的检查总是运行：两项回放、产物构建、原生插件与暂存的空白检查。
 
 安装钩子时，在仓库根目录写入一行 `lefthook-local.yml`，内容为 `extends: [delo/lefthook.yml]`（Git 会忽略它），然后运行 `node scripts/install-lefthook.mjs`。`pre-commit` 钩子运行 `pre-commit` 层级。`pre-push` 钩子运行 `--pre-push`：自远程分支的最新提交以来的改动；对于新分支，则是自其与 `v5` 的合并基以来的改动。`DELO_PUSH_SKIP=<检查或分组>,… git push` 会跳过指定的检查，`DELO_FULL_GATE=1 git push` 运行完整门禁。`commit-msg` 钩子对每条提交消息运行 `check-commits.ts --message <file>`。
 
@@ -198,6 +201,90 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts delo/apps/tools    # tar
 账本检查单独运行为 `pnpm --filter @delo/tools check`。单个门禁用 `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/<name>.ts` 运行（如 `licence`），范围门禁接受 `--base <rev>`。规范用 `node_modules/.bin/vitest run --config delo/vitest.config.ts` 运行，本包的类型检查用 `node_modules/.bin/tsc -p delo/apps/tools/tsconfig.json --noEmit`。
 
 [delo-dev-workflow 技能](../../../.agents/skills/delo-dev-workflow/SKILL.md)说明了何时运行各项检查。
+
+## 对等组合
+
+[约定 C16](../../docs/contracts/c16-parity-composition.zh.md) 规定：Delo 在关闭其对模型可见的新增内容后，回放上游在 `dsh-v0.2.2-rc.1` 录制的场景，与其预期输出没有任何差异。本包用两项检查验证这一点：`parity-replay` 经由对等覆盖层运行上游的回放，`parity-switches` 检查每项对模型可见的 Delo 变更都有一个已注册、且被覆盖层关闭的开关。
+
+### 覆盖层
+
+[`src/parity/composition/parity.overlay.yml`](src/parity/composition/parity.overlay.yml) 是一个 Cordis patch 文件。每个录制会话适配器在其模块加载时，经由上游 `packages/test-support/session-snapshot/src/snapshot-patch.ts` 中的 `snapshotPatchOverlay` 读取 `DSH_SNAPSHOT_PATCH`。它把所指定的文件放在其启动的每个进程的根配置之后、每个场景层之前：headless、SDK 与 ACP 适配器将其作为 `--patch` 参数传入，Web 脚手架则在随附的 bundle 层之后应用它。在 `DSH_SNAPSHOT=record` 或 `refresh` 模式下，收到该变量的适配器在启动任何进程之前抛出错误。没有任何随附的 profile、bundle 或命令行选项指向该文件，`dsh` 命令也不读取该变量。
+
+一条 patch 行会替换其条目的整个 `config`，并且只能到达根树中的条目，因此覆盖层只在之前没有任何层配置该条目时才设置开关。其余每个已构建的开关都通过其经过校验的 Config 默认值处于对等取值：
+
+| 开关 | 对等组合如何设置它 |
+| --- | --- |
+| `plugin_manager_read_exemption`、`profile_history` | 覆盖层的 `tool-plugin-manager` 行（`name: '@deepseek-ai/dsh-plugin-manager/tools'`）设置 `readActionsExempt: false` 与 `profileHistory: false`。 |
+| `preset_inspect` | Config 默认值 `false`。该行位于每个 Web preset 的插件列表中，patch 只有替换整个 preset 行才能到达它。 |
+| `container_denial_marker` | Config 默认值 `false`。bundle 与根配置设置了 `sandbox-policy` 的模式与工作区根目录，覆盖层的一行会抹掉它们。 |
+| `doctor` | Config 默认值 `false`。只有 `doctor` profile 挂载该应用，回放不启动 doctor 进程。 |
+
+C16 所列的变更默认值在本仓库中都未改动。studio bundle、权限默认值与 fetch 防护尚在计划中；preset 默认值（`standard`）、会话日志上传（开启）与桌面端分析（关闭）保持上游的取值，因此覆盖层不恢复其中任何一项。
+
+### 注册表
+
+[`@delo/contract-parity-composition`](../../packages/contract-parity-composition/README.zh.md) 中的 `PARITY_SWITCHES` 是唯一的开关列表。已构建的条目给出其 Config 字段（`cordis.yml` 行挂载的模块、该模块的源文件与键），以及它所关闭的对模型可见贡献所在的源文件。计划中的条目是 C16 列出、但其变更尚未进入本仓库的开关；它给出构建它的工作包，没有字段。`doctor` 是功能开关：它对模型不可见，也没有开关开启场景。
+
+| 开关 | 状态 | 字段 | 默认 | 对等 | 对模型可见 |
+| --- | --- | --- | --- | --- | --- |
+| `studio_additions` | 计划中 | 无 | 开 | 关 | 是 |
+| `permission_defaults` | 计划中 | 无 | 开 | 关 | 是 |
+| `fetch_guard` | 计划中 | 无 | 开 | 关 | 是 |
+| `preset_inspect` | 已构建 | `@deepseek-ai/dsh-agent-preset-registry/tools` `presetInspect` | 开 | 关 | 是 |
+| `doctor` | 已构建 | `@deepseek-ai/dsh-doctor/app` `doctor` | 开 | 关 | 否 |
+| `plugin_manager_read_exemption` | 已构建 | `@deepseek-ai/dsh-plugin-manager/tools` `readActionsExempt` | 开 | 关 | 是 |
+| `profile_history` | 已构建 | `@deepseek-ai/dsh-plugin-manager/tools` `profileHistory` | 开 | 关 | 是 |
+| `scheduled_task_consent` | 计划中 | 无 | 开 | 关 | 是 |
+| `instruction_layer_consent` | 计划中 | 无 | 开 | 关 | 是 |
+| `mcp_add_consent` | 计划中 | 无 | 开 | 关 | 是 |
+| `container_denial_marker` | 已构建 | `@deepseek-ai/dsh-sandbox-policy` `containerDenialMarker` | 开 | 关 | 是 |
+
+默认一列是 Delo 默认组合中的取值；每个已构建字段的 schema 默认值都是对等取值。
+
+### `parity-switches` 能检测什么
+
+该检查读取 `delo/**/src` 下的 TypeScript 源文件，以及 `packages/` 与 `apps/` 下每个列入台账的上游源文件，不含测试规范。以下情况它会失败：
+
+- 名为 `Config` 的接口中，某个属性的 JSDoc 写有 `` C16 switch `<id>` ``，但没有带该字段的已构建注册表条目，或其条目仍在计划中；
+- 已构建条目的源文件中没有这样的字段，该字段的 `z.boolean().default(…)` 不是对等取值，条目的对等取值等于其默认值，或对模型可见的条目没有给出源文件或 `<profile>/delo-<id>` 场景；
+- Delo 自有的源文件调用了对模型可见的注册 API，或列入台账的上游编辑改动了调用这类 API 的顶层语句中的某一行，而没有任何已构建、对模型可见的条目在其源文件中列出该文件；
+- 覆盖层的某行指向没有已构建开关的模块，设置了不属于该模块开关的键或不是对等取值的值，或者设置了 `id`、`name` 与 `config` 之外的内容；或者某个已构建开关既不在覆盖层中，也不在 `overlay.ts` 的 `DEFAULT_PARITY` 中附带理由；
+- 某个对模型可见的已构建开关既没有已录制的场景，也没有暂存的场景。
+
+对模型可见的注册 API 包括：`systemPrompt.section`、`systemPrompt.context` 与 `systemPrompt.suppressRuntimeContext`；`tools.register`、`tools.restrict`、`tools.setExecutor` 与 `tools.guard`；`defineTool`；以及用 `on` 为 `system-prompt/assemble`、`agent/request`、`agent/pre-step`、`request/context`、`tools/execute`、`tools/pre-execute`、`tools/post-execute` 与 `tools/result` 注册的监听器。
+
+### 它无法检测什么
+
+该扫描按名称匹配，而不按类型或数据流，因此会漏掉：
+
+- 经由注册语句之外的辅助代码到达模型的文本，例如渲染模块或文件顶部的常量，且没有改动的行落在注册语句之内；
+- 通过其他接收者名称、别名或动态属性发起的调用，以及不在其列表中的对模型可见的事件；
+- 所列开关在其对等取值下是否真的关闭了该贡献。对于触及该贡献的场景，回放证明这一点；开关开启场景录制之后，则证明开关开启时的路径。
+
+它还接受所列源文件中的任何贡献，因此在同一文件中新增的第二个未受开关控制的贡献能通过扫描，必须由回放使其失败。
+
+### 开关清点
+
+每个对模型可见的已构建开关都有一个开关开启场景 `snapshots/<profile>/delo-<id>`，其 `runtime.cordis.yml` 把这一个开关设为非对等取值。录制之后，`parity-replay` 在覆盖层下把它与语料库的其余部分一同回放，因此被测开关是与对等组合的唯一差异。上游的语料库门禁拒绝没有 Session 夹具的场景目录，因此未录制的场景把其 `snapshot.yml` 与 `runtime.cordis.yml` 保存在 [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/) 下，`parity-switches` 将其报告为 `pending recording`（待录制），而不是通过。Web 场景经由 `apps/web/tests` 下的 e2e 驱动运行，该驱动用 `launchWebScaffold` 的 `presetInspect` 选项开启 `preset_inspect`。
+
+待录制：
+
+- `session/delo-plugin-manager-read-exemption`：plugin-manager 组合，`readActionsExempt: true`，处于 `workspace-write`。
+- `session/delo-profile-history`：plugin-manager 组合，`profileHistory: true`。
+- `session/delo-container-denial-marker`：PTC 组合，`containerDenialMarker: true`，因此 `run_code` 声明 bash 的 `sandbox.deniedBy`。
+- `web/delo-preset-inspect`：开启 `preset_inspect` 的 Standard preset；其驱动随录制一同编写。
+
+录制其中一个时，把其目录移到 `snapshots/<profile>/`，在不设 `DSH_SNAPSHOT_PATCH` 的情况下为该场景运行上游的录制命令，审阅输出，并在 Session 夹具携带任务之后删除 `input.task`。
+
+### 命令
+
+```sh
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only parity
+DSH_SNAPSHOT_PATCH=delo/apps/tools/src/parity/composition/parity.overlay.yml pnpm run test:snapshot
+node_modules/.bin/tsx delo/apps/tools/src/parity/composition/check-parity-switches.ts
+```
+
+`pnpm run test:snapshot` 经由各自的适配器回放 session、SDK 与 ACP 场景，并用上游的语料库门禁检查语料库中的每个场景，包括 Web 场景。Web 场景在 `test:web` 中经由其 e2e 驱动回放，后者通过脚手架读取同一个变量：`DSH_SNAPSHOT=replay DSH_SNAPSHOT_PATCH=<overlay> pnpm run test:web:built`。
 
 ## 与 rc.1 的对齐
 

@@ -6,6 +6,7 @@
  *
  * @module @delo/tools/checks/plan
  */
+import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
 import type { GateCheck } from './types.ts'
 
 /**
@@ -171,6 +172,8 @@ const UPSTREAM_CODE = ['packages/**', 'apps/**', 'vendor/**', 'native/**', 'scri
 const FORK_CODE = [...DELO_CODE, ...UPSTREAM_CODE]
 /** The variables the fork and upstream test lanes read, through their locale and time zone. */
 const TEST_ENV = ['LANG', 'LC_ALL', 'TZ']
+/** C16's parity overlay, which the parity replay hands to every snapshot adapter through `DSH_SNAPSHOT_PATCH`. */
+const PARITY_OVERLAY = { DSH_SNAPSHOT_PATCH: PARITY_OVERLAY_PATH }
 
 /**
  * The name a program's check carries: its directory, and the config's own suffix when it has one.
@@ -307,8 +310,42 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       tiers: ['changed', 'full'],
       cpus: SNAPSHOT_CONCURRENCY,
     },
+    {
+      id: 'parity-switches',
+      group: 'parity',
+      title: 'C16\'s switch registry against the tree: each switch field, the parity overlay, every model-visible contribution of Delo code and ledgered upstream edits, and the switch sweep',
+      cwd: '',
+      command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/parity/composition/check-parity-switches.ts'],
+      needs: [],
+      inputs: ['delo/**', ...UPSTREAM_CODE],
+      tiers: ['changed', 'full'],
+      cpus: 1,
+    },
+    // The replay declares no inputs, so it runs whenever a selection picks it: its result is upstream's recorded output against the whole tree.
+    {
+      id: 'parity-replay',
+      group: 'parity',
+      title: 'Upstream\'s recorded-session replay (`pnpm run test:snapshot`) through C16\'s parity overlay: Delo with its additions switched off reproduces the base tag\'s expected output',
+      cwd: '',
+      command: ['pnpm', 'run', '--silent', 'test:snapshot'],
+      environment: { ...PARITY_OVERLAY, DSH_SNAPSHOT_MAX_CONCURRENCY: String(SNAPSHOT_CONCURRENCY) },
+      needs: built,
+      tiers: ['changed', 'full'],
+      cpus: SNAPSHOT_CONCURRENCY,
+    },
   )
   return checks
+}
+
+/**
+ * Whether a change can alter what the parity replay asserts: Delo code or configuration, which the overlay, the
+ * registry and the switches read, or an upstream path that changes upstream's runtime or its recorded scenarios.
+ * @param path - a repository-relative changed path.
+ * @returns true when the parity replay should run for it.
+ */
+export function affectsParity(path: string): boolean {
+  if (path.startsWith('delo/')) return /\.(?:tsx?|json|ya?ml)$/.test(path) && !/\.i18n\.yaml$/.test(path)
+  return affectsUpstreamRuntime(path)
 }
 
 function matches(check: Check, names: readonly string[]): boolean {
@@ -463,6 +500,9 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     } else if (check.id === 'tests:snapshots') {
       const upstream = paths.find(path => !path.startsWith('delo/') && affectsUpstreamRuntime(path))
       if (upstream !== undefined) pick(check, `upstream-owned code changed (${upstream})`)
+    } else if (check.group === 'parity' && selection.changed !== undefined) {
+      const parity = paths.find(affectsParity)
+      if (parity !== undefined) pick(check, `${parity.startsWith('delo/') ? 'Delo code' : 'upstream-owned code'} changed (${parity})`)
     } else if (check.id === 'tests:upstream-changed') {
       const { dirs, dependents } = upstreamSpecDirs(tree.upstream, paths.filter(path => !path.startsWith('delo/') && !/\.(?:md|i18n\.yaml)$/.test(path)))
       if (dirs.length > 0) pick(check, dependents ? `${String(dirs.length)} upstream package(s): the changed ones and their direct dependents` : `the changed upstream package(s) only; their direct dependents exceed ${String(UPSTREAM_CHANGED_SPEC_BUDGET)} spec files and run in upstream's full suite`)

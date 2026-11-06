@@ -13,6 +13,8 @@
     "tests:fork": { "memoryGiB": 0.5, "perWorker": true },
     "tests:upstream-changed": { "memoryGiB": 0.6, "perWorker": true },
     "tests:snapshots": { "memoryGiB": 0.6, "perWorker": true, "exclusive": true },
+    "parity-switches": { "memoryGiB": 0.5 },
+    "parity-replay": { "memoryGiB": 0.6, "perWorker": true, "exclusive": true },
     "build:artifacts": { "memoryGiB": 4 },
     "generate:native": { "memoryGiB": 1 }
   }

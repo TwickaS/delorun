@@ -6,8 +6,8 @@
   en: 07096e107ed9b4f5
   zh: ad60ced076417c59
 /delo-tools/modules:
-  en: 311fb4d427a959c9
-  zh: e13a0ea4ec2e3d10
+  en: 81febd248331c4de
+  zh: e5f304ee061e9fd1
 /delo-tools/the-divergence-ledger:
   en: 6b9db91d3f89e63e
   zh: 84c706d477682880
@@ -21,8 +21,29 @@
   en: 8cce82ede4ac52ca
   zh: 680f4164489b77ce
 /delo-tools/local-checks:
-  en: f79519fcb4ea7aac
-  zh: 564718df3f40dbe3
+  en: fe4d076f2cb4d107
+  zh: 4f9014f1abf6d18a
+/delo-tools/parity-composition:
+  en: 473ce5274405809c
+  zh: 5ac12bfcdcc0a9e4
+/delo-tools/parity-composition/the-overlay:
+  en: 93fc70ec7fa35b57
+  zh: 225702df50913223
+/delo-tools/parity-composition/the-registry:
+  en: 641e2dac03b3866c
+  zh: 62d1d406aa82c1ca
+/delo-tools/parity-composition/what-parity-switches-detects:
+  en: e9c8e791b6c02ff3
+  zh: fbb617f3aa71d498
+/delo-tools/parity-composition/what-it-cannot-detect:
+  en: 341d63ec8cc23b8e
+  zh: 428a4faeb6044021
+/delo-tools/parity-composition/the-switch-sweep:
+  en: c5bbce6b0b3108c5
+  zh: bc629cd645d0beaf
+/delo-tools/parity-composition/commands:
+  en: 33426141a410c907
+  zh: 08164f2269132637
 /delo-tools/reconciliation-against-rc-1:
   en: 729b74aa034647ec
   zh: 82e076dc8074d4b8
