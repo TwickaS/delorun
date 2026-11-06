@@ -1,11 +1,12 @@
 /**
- * Contract C1's home for the `delorun` command: resolving the Delo home,
- * creating its tree at the contract's modes, protected files and the home lock.
+ * Contract C1's home, the one implementation every Delo component uses:
+ * resolving the Delo home, creating its tree at the contract's modes, reading
+ * and writing protected files, and the per-profile home lock.
  *
- * @module @delo/cli/home
+ * @module @delo/home
  */
 export { HomeLayoutError } from './errors.ts'
 export { resolveDeloHome, type DeloHome } from './resolve.ts'
 export { checkPrivateDirectory, ensureHomeTree, runDirectory } from './tree.ts'
 export { checkProtectedFile, readProtectedFile, writeProtectedFile } from './protected-file.ts'
-export { acquireHomeLock, processExists, readHomeLock, type AcquireOptions, type HolderAnswer, type HolderProbe, type HomeLock } from './lock.ts'
+export { acquireHomeLock, processExists, readHomeLock, removeStaleLock, type AcquireOptions, type HolderAnswer, type HolderProbe, type HomeLock } from './lock.ts'

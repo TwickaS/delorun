@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/home/README.md
+/:
+  en: 4ab63b1ad401b6a6
+  zh: 13920d9d278452c8
+/delo-home:
+  en: 85c57f4ac3d7e90d
+  zh: 5d25ab71ce6e468f
+/delo-home/summary:
+  en: 5c53077afd5095fd
+  zh: ad437b562a9f553c
+/delo-home/contents:
+  en: f16155e69763f022
+  zh: d6203fe0114397f6
+/delo-home/use-this-package:
+  en: 2f5acf2e8513cc19
+  zh: 22e91ff06cbba69a
+/delo-home/resolving-the-home:
+  en: 4651c04bb479172a
+  zh: 295f263602bed536
+/delo-home/the-tree-and-its-modes:
+  en: 9ddb10df7fedde87
+  zh: 5284d2023fc7285e
+/delo-home/protected-files:
+  en: 241adbf6e367be3e
+  zh: cf506a8ffa350b8f
+/delo-home/the-home-lock:
+  en: 60e90f39fecc77d2
+  zh: 560049dd98de7459
+/delo-home/not-yet-implemented:
+  en: 19f811921a78ef3c
+  zh: a5afee33573c433c
+/delo-home/development:
+  en: b673da1b4cedc4d1
+  zh: 6ad6d3a3cdc89c54

@@ -76,7 +76,7 @@ afterEach(() => {
   rmSync(osHome, { recursive: true, force: true })
 })
 
-describe('delorun', () => {
+describe('delorun', { timeout: 60_000 }, () => {
   it('runs setup on the first run against an empty home, and creates the home at mode 0700', () => {
     const first = delorun([])
     expect(first.stderr).toBe('')

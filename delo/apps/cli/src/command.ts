@@ -7,7 +7,7 @@
  */
 import { parseArgs, type ParseArgsConfig } from 'node:util'
 import { CliError, EXIT, type ExitCode } from './exit.ts'
-import { ensureHomeTree, resolveDeloHome, type DeloHome } from './home/index.ts'
+import { ensureHomeTree, resolveDeloHome, type DeloHome } from '@delo/home'
 import { applyLaunchEnvironment } from './launch-environment.ts'
 import { selectProfile } from './profile.ts'
 

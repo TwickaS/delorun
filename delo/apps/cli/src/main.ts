@@ -18,7 +18,7 @@
  */
 import { CliError, EXIT, type ExitCode } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
-import { HomeLayoutError } from './home/index.ts'
+import { HomeLayoutError } from '@delo/home'
 import { hasCliProfile } from './profile.ts'
 import { runSetup, setupCommand } from './setup/index.ts'
 import { startCommand, startForeground } from './start.ts'

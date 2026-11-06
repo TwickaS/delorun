@@ -8,7 +8,7 @@
  * check. Upstream's entries keep upstream's layout and modes; this module
  * creates none of them.
  *
- * @module @delo/cli/home/tree
+ * @module @delo/home/tree
  */
 import { lstat, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'

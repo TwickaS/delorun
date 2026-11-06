@@ -4,16 +4,24 @@
  * 0600, a stale lock replaced only when its process no longer exists, and a
  * live holder never taken over.
  *
- * The record is written to a temporary file first and hard-linked to the lock
- * path, so the lock appears with its whole record or not at all, and of two
- * contenders exactly one link succeeds. A stale lock is moved aside by rename
- * and removed only when the moved file is the one found stale; a contender that
- * moved a lock another contender had just created links it back.
+ * Every file this module creates is written to a temporary file and
+ * hard-linked to its path, so it appears with its whole record or not at all,
+ * and of any number of contenders exactly one link succeeds.
  *
- * @module @delo/cli/home/lock
+ * A stale lock is removed under a takeover guard, `home.lock.takeover-<id>`,
+ * named after the stale record's random `startId` and created the same way, so
+ * one contender at a time may remove that one record. Holding the guard, it
+ * removes the lock only when the file still holds that `startId`. A `startId`
+ * is never reused, and only the guard holder may remove that record, so a
+ * contender never removes a lock other than the stale one it found, however
+ * late it runs. A guard left by a contender that died is itself removed under a
+ * guard named after its own random id.
+ *
+ * @module @delo/home/lock
  */
 import { randomBytes } from 'node:crypto'
-import { closeSync, constants, fstatSync, fsyncSync, linkSync, lstatSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, fstatSync, fsyncSync, linkSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { PROTECTED_FILE_MODE, RUN_ENTRIES, type HomeLockRecord, type RuntimeVersion, type StartId } from '@delo/contract-home-layout'
@@ -52,13 +60,42 @@ export interface AcquireOptions {
   readonly probe: HolderProbe
 }
 
-/** Contention rounds before a contender gives up; each round ends in a link, a refusal or a removed stale lock. */
-const MAX_ROUNDS = 16
+/**
+ * How long a contender keeps waiting while another contender removes a stale
+ * lock, in milliseconds. A removal takes a few system calls; the wait bounds a
+ * contender only when that other contender's process hangs mid-removal.
+ */
+const TAKEOVER_WAIT_MS = 10_000
 
-/** The largest lock record read; a valid record is far smaller. */
+/** Nested takeovers of guards left by dead contenders before giving up; each level needs another contender to have died mid-removal. */
+const MAX_TAKEOVER_DEPTH = 8
+
+/** The largest lock or guard record read; a valid record is far smaller. */
 const MAX_RECORD_BYTES = 4096
 
-const START_ID = /^[0-9a-f]{32}$/
+const RANDOM_ID = /^[0-9a-f]{32}$/
+
+/**
+ * A new random identifier: 16 bytes as 32 lowercase hexadecimal digits.
+ * @returns the identifier.
+ */
+function randomId(): string {
+  return randomBytes(16).toString('hex')
+}
+
+/**
+ * Parse JSON text, or `undefined` when it is not JSON.
+ * @param text - the text.
+ * @returns the value.
+ */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    // Not JSON: the caller reports the file as not a record.
+    return undefined
+  }
+}
 
 /**
  * Parse a lock record, or `undefined` when the bytes are not one.
@@ -66,17 +103,11 @@ const START_ID = /^[0-9a-f]{32}$/
  * @returns the record.
  */
 function parseRecord(text: string): HomeLockRecord | undefined {
-  let value: unknown
-  try {
-    value = JSON.parse(text)
-  } catch {
-    // Not JSON: the caller reports the file as not a lock record.
-    return undefined
-  }
+  const value = parseJson(text)
   if (typeof value !== 'object' || value === null) return undefined
   const record = value as Record<string, unknown>
   if (record.v !== 1 || !Number.isSafeInteger(record.pid) || (record.pid as number) <= 0) return undefined
-  if (typeof record.startId !== 'string' || !START_ID.test(record.startId)) return undefined
+  if (typeof record.startId !== 'string' || !RANDOM_ID.test(record.startId)) return undefined
   if (typeof record.runtime !== 'string' || typeof record.startedAt !== 'string') return undefined
   return {
     v: 1,
@@ -87,20 +118,34 @@ function parseRecord(text: string): HomeLockRecord | undefined {
   }
 }
 
-/** A lock file read together with the identity of the file read. */
-interface ReadLock {
-  readonly record: HomeLockRecord
-  readonly ino: number
-  readonly dev: number
+/** The contents of a takeover guard. */
+interface GuardRecord {
+  /** The guard holder's process id. */
+  readonly pid: number
+  /** The guard's own random id, which names the guard that removes it. */
+  readonly id: string
 }
 
 /**
- * Read the lock at a path.
- * @param path - the lock file.
- * @returns the record and file identity, or `undefined` when no lock exists.
- * @throws {Error} when the file is not a lock record; it names the path.
+ * Parse a guard record, or `undefined` when the bytes are not one.
+ * @param text - the guard file's contents.
+ * @returns the record.
  */
-function readLock(path: string): ReadLock | undefined {
+function parseGuard(text: string): GuardRecord | undefined {
+  const value = parseJson(text)
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as Record<string, unknown>
+  if (!Number.isSafeInteger(record.pid) || (record.pid as number) <= 0 || typeof record.id !== 'string' || !RANDOM_ID.test(record.id)) return undefined
+  return { pid: record.pid as number, id: record.id }
+}
+
+/**
+ * Read a small record file without following a symbolic link.
+ * @param path - the file.
+ * @returns its text, or `undefined` when it does not exist.
+ * @throws {Error} naming the path when it is not a regular file of at most {@link MAX_RECORD_BYTES} bytes.
+ */
+function readSmallFile(path: string): string | undefined {
   let fd: number
   try {
     fd = openSync(path, constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW))
@@ -110,11 +155,120 @@ function readLock(path: string): ReadLock | undefined {
   }
   try {
     const stats = fstatSync(fd)
-    const record = stats.isFile() && stats.size <= MAX_RECORD_BYTES ? parseRecord(readFileSync(fd, 'utf8')) : undefined
-    if (record === undefined) throw new Error(`${path} is not a home lock record; remove it once no delorun process runs for this profile`)
-    return { record, ino: stats.ino, dev: stats.dev }
+    if (!stats.isFile() || stats.size > MAX_RECORD_BYTES) throw new Error(`${path} is not a home lock file; remove it once no delorun process runs for this profile`)
+    return readFileSync(fd, 'utf8')
   } finally {
     closeSync(fd)
+  }
+}
+
+/**
+ * Read the lock at a path.
+ * @param path - the lock file.
+ * @returns the record, or `undefined` when no lock exists.
+ * @throws {Error} when the file is not a lock record; it names the path.
+ */
+function readLock(path: string): HomeLockRecord | undefined {
+  const text = readSmallFile(path)
+  if (text === undefined) return undefined
+  const record = parseRecord(text)
+  if (record === undefined) throw new Error(`${path} is not a home lock record; remove it once no delorun process runs for this profile`)
+  return record
+}
+
+/**
+ * Read a takeover guard.
+ * @param path - the guard file.
+ * @returns the record, or `undefined` when no guard exists.
+ * @throws {Error} when the file is not a guard record; it names the path.
+ */
+function readGuard(path: string): GuardRecord | undefined {
+  const text = readSmallFile(path)
+  if (text === undefined) return undefined
+  const record = parseGuard(text)
+  if (record === undefined) throw new Error(`${path} is not a home lock takeover guard; remove it once no delorun process runs for this profile`)
+  return record
+}
+
+/**
+ * The random id a lock or guard file holds now: a lock's `startId` or a guard's `id`.
+ * @param path - the file.
+ * @param kind - which record the file holds.
+ * @returns the id, or `undefined` when the file does not exist.
+ */
+function currentId(path: string, kind: 'lock' | 'guard'): string | undefined {
+  return kind === 'lock' ? readLock(path)?.startId : readGuard(path)?.id
+}
+
+/**
+ * Create a file with its whole contents at mode 0600, unless the path exists:
+ * the text goes to a temporary sibling created exclusively and flushed, which
+ * is hard-linked to the path and then removed.
+ * @param path - the file to create.
+ * @param text - its contents.
+ * @returns true when this call created the file, false when the path existed.
+ */
+function createWhole(path: string, text: string): boolean {
+  const candidate = `${path}.new-${randomBytes(8).toString('hex')}`
+  const fd = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, PROTECTED_FILE_MODE)
+  try {
+    writeSync(fd, text)
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+  try {
+    linkSync(candidate, path)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
+    throw error
+  } finally {
+    unlinkSync(candidate)
+  }
+}
+
+/**
+ * Remove a file, ignoring one that is already gone.
+ * @param path - the file.
+ */
+function removeIfPresent(path: string): void {
+  try {
+    unlinkSync(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+}
+
+/**
+ * Remove a lock or guard whose process was found dead, under the takeover
+ * guard named after its id. The file is removed only when it still holds that
+ * id, so a file another contender has meanwhile created is never touched.
+ * @param lockPath - the home lock's path, which names every guard.
+ * @param path - the file found dead: the lock or a guard.
+ * @param kind - which record it holds.
+ * @param id - the dead record's random id.
+ * @param depth - how many guards of dead contenders this removal is nested in.
+ * @returns `done` when the dead record is gone, by this call or another;
+ *   `busy` when a live contender holds its guard.
+ */
+async function removeDead(lockPath: string, path: string, kind: 'lock' | 'guard', id: string, depth: number): Promise<'done' | 'busy'> {
+  if (depth > MAX_TAKEOVER_DEPTH) throw new Error(`could not take ${lockPath}: ${String(depth)} nested takeovers were abandoned by processes that died; remove ${lockPath}.takeover-* once no delorun process runs for this profile`)
+  const guardPath = `${lockPath}.takeover-${id}`
+  const guard: GuardRecord = { pid: process.pid, id: randomId() }
+  for (;;) {
+    if (createWhole(guardPath, JSON.stringify(guard))) {
+      try {
+        if (currentId(path, kind) === id) unlinkSync(path)
+      } finally {
+        unlinkSync(guardPath)
+      }
+      return 'done'
+    }
+    const holder = readGuard(guardPath)
+    if (holder === undefined) continue
+    if (processExists(holder.pid)) return 'busy'
+    if (await removeDead(lockPath, guardPath, 'guard', holder.id, depth + 1) === 'busy') return 'busy'
   }
 }
 
@@ -125,7 +279,7 @@ function readLock(path: string): ReadLock | undefined {
  * @throws {Error} when the file is not a lock record.
  */
 export function readHomeLock(runDirectory: string): HomeLockRecord | undefined {
-  return readLock(join(runDirectory, RUN_ENTRIES.lock))?.record
+  return readLock(join(runDirectory, RUN_ENTRIES.lock))
 }
 
 /**
@@ -143,62 +297,20 @@ export function processExists(pid: number): boolean {
 }
 
 /**
- * Write a new record to a temporary sibling of the lock, created exclusively at mode 0600 and flushed.
- * @param path - the lock path.
- * @param record - the record.
- * @returns the temporary file's path.
+ * Remove the profile's lock when it still holds the record with this start id
+ * and that record's process no longer exists, under the record's takeover
+ * guard. A contender that found the record stale calls this however late it
+ * runs: a lock created since, by any process, is left as it is.
+ * @param runDirectory - the profile's run directory.
+ * @param startId - the start id of the record found stale.
+ * @returns `done` when that record is gone, `busy` when a live contender is removing it.
+ * @throws {Error} when the lock or a takeover guard is not a record of this module.
  */
-function writeCandidate(path: string, record: HomeLockRecord): string {
-  const candidate = `${path}.new-${randomBytes(8).toString('hex')}`
-  const fd = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, PROTECTED_FILE_MODE)
-  try {
-    writeSync(fd, JSON.stringify(record))
-    fsyncSync(fd)
-  } finally {
-    closeSync(fd)
-  }
-  return candidate
-}
-
-/**
- * Remove a file, ignoring one that is already gone.
- * @param path - the file.
- */
-function removeIfPresent(path: string): void {
-  try {
-    unlinkSync(path)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-  }
-}
-
-/**
- * Move a stale lock aside and remove it, when the lock at the path is still
- * the file found stale. A lock that another contender created in between is
- * linked back. When a third contender has taken the path in the moment between
- * the move and the link back, the link fails, and the contender whose lock was
- * moved keeps running without a lock file; this needs three starts of one
- * profile within the same few system calls after a holder died.
- * @param path - the lock path.
- * @param stale - the stale lock as it was read.
- */
-function removeStale(path: string, stale: ReadLock): void {
-  const aside = `${path}.stale-${randomBytes(8).toString('hex')}`
-  try {
-    renameSync(path, aside)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-    throw error
-  }
-  const moved = lstatSync(aside)
-  if (moved.ino !== stale.ino || moved.dev !== stale.dev) {
-    try {
-      linkSync(aside, path)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-    }
-  }
-  unlinkSync(aside)
+export async function removeStaleLock(runDirectory: string, startId: StartId): Promise<'done' | 'busy'> {
+  const path = join(runDirectory, RUN_ENTRIES.lock)
+  const found = readLock(path)
+  if (found?.startId !== startId || processExists(found.pid)) return 'done'
+  return removeDead(path, path, 'lock', startId, 0)
 }
 
 /**
@@ -207,40 +319,33 @@ function removeStale(path: string, stale: ReadLock): void {
  * @returns the held lock.
  * @throws {HomeLayoutError} `HOME_RUNNING` when a live holder answers the probe, `HOME_UNRESPONSIVE` when it does not;
  *   both name the holder's process id, and neither takes the lock over.
- * @throws {Error} when the lock file is not a lock record, or contention does not settle.
+ * @throws {Error} when the lock or a takeover guard is not a record of this module, or another contender's removal of
+ *   a stale lock does not finish within {@link TAKEOVER_WAIT_MS}.
  */
 export async function acquireHomeLock(options: AcquireOptions): Promise<HomeLock> {
   const path = join(options.runDirectory, RUN_ENTRIES.lock)
   const record: HomeLockRecord = {
     v: 1,
     pid: process.pid,
-    startId: brandString<StartId>(randomBytes(16).toString('hex')),
+    startId: brandString<StartId>(randomId()),
     runtime: options.runtime,
     startedAt: new Date().toISOString(),
   }
-  for (let round = 0; round < MAX_ROUNDS; round += 1) {
-    const candidate = writeCandidate(path, record)
-    let linked = false
-    try {
-      linkSync(candidate, path)
-      linked = true
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-    } finally {
-      unlinkSync(candidate)
-    }
-    if (linked) return heldLock(path, record)
+  const deadline = Date.now() + TAKEOVER_WAIT_MS
+  for (;;) {
+    if (createWhole(path, JSON.stringify(record))) return heldLock(path, record)
     const found = readLock(path)
     if (found === undefined) continue
-    if (processExists(found.record.pid)) {
-      const answer = await options.probe(found.record)
-      const holder = `process ${String(found.record.pid)}, started ${found.record.startedAt}`
+    if (processExists(found.pid)) {
+      const answer = await options.probe(found)
+      const holder = `process ${String(found.pid)}, started ${found.startedAt}`
       if (answer === 'answered') throw new HomeLayoutError('HOME_RUNNING', path, `a home process for this profile is already running (${holder})`)
       throw new HomeLayoutError('HOME_UNRESPONSIVE', path, `${holder} holds ${path} but did not answer within 2 seconds; stop that process, or remove the file if it is not a delorun process`)
     }
-    removeStale(path, found)
+    if (await removeStaleLock(options.runDirectory, found.startId) === 'done') continue
+    if (Date.now() > deadline) throw new Error(`could not take ${path}: another process kept replacing the stale lock for ${String(TAKEOVER_WAIT_MS / 1000)} seconds`)
+    await sleep(5 + Math.floor(Math.random() * 20))
   }
-  throw new Error(`could not take ${path}: other processes kept changing it`)
 }
 
 /**
@@ -257,14 +362,14 @@ function heldLock(path: string, record: HomeLockRecord): HomeLock {
     release() {
       if (released) return
       released = true
-      let current: ReadLock | undefined
+      let current: HomeLockRecord | undefined
       try {
         current = readLock(path)
       } catch {
         // Not a lock record any more: not this holder's, so it is left for its writer.
         return
       }
-      if (current?.record.startId === record.startId) removeIfPresent(path)
+      if (current?.startId === record.startId) removeIfPresent(path)
     },
   }
 }

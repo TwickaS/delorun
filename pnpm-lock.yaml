@@ -1245,12 +1245,12 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-      '@deepseek-ai/dsh-home-paths':
-        specifier: workspace:*
-        version: link:../../../packages/util/home-paths
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../../packages/home
     devDependencies:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
@@ -1402,6 +1402,18 @@ importers:
         version: link:../contract-release-manifest
 
   delo/packages/contract-verification-checks: {}
+
+  delo/packages/home:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
 
   delo/packages/plugin-main-chat:
     dependencies:

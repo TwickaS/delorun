@@ -13,7 +13,7 @@
 import { DSH_HOME_ENV } from '@delo/contract-home-layout'
 import { EXIT } from './exit.ts'
 import { parseOptions, type CliCommand } from './command.ts'
-import { processExists, readHomeLock, resolveDeloHome, runDirectory } from './home/index.ts'
+import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
 import { selectProfile } from './profile.ts'
 
 /** `delorun status [--profile <name>]`. */

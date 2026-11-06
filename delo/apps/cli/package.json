@@ -12,8 +12,8 @@
     "@deepseek-ai/dsh": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
-    "@deepseek-ai/dsh-home-paths": "workspace:*",
-    "@delo/contract-home-layout": "workspace:*"
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/home": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-launch-environment": "workspace:*"

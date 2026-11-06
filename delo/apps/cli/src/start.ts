@@ -19,7 +19,7 @@ import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
-import { acquireHomeLock, HomeLayoutError, readHomeLock, runDirectory, type HolderProbe, type HomeLock } from './home/index.ts'
+import { acquireHomeLock, HomeLayoutError, readHomeLock, runDirectory, type HolderProbe, type HomeLock } from '@delo/home'
 import { hasCliProfile } from './profile.ts'
 
 /** What the foreground start calls outside this module; specs replace them. */

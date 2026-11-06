@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
-import { checkProtectedFile, ensureHomeTree, HomeLayoutError, readProtectedFile, resolveDeloHome, runDirectory, writeProtectedFile } from '../src/home/index.ts'
+import { checkProtectedFile, ensureHomeTree, HomeLayoutError, readProtectedFile, resolveDeloHome, runDirectory, writeProtectedFile } from '../src/index.ts'
 
 const POSIX = process.platform !== 'win32'
 
@@ -82,7 +82,7 @@ describe.runIf(POSIX)('ensureHomeTree', () => {
   it('creates the home at mode 0700 under a permissive umask', () => {
     // process.umask cannot be changed in a worker, so a child process creates the home.
     const home = join(osHome, 'umask-home')
-    const script = `process.umask(0); const { ensureHomeTree } = await import(${JSON.stringify(new URL('../src/home/tree.ts', import.meta.url).href)}); await ensureHomeTree(${JSON.stringify(home)}, 'default')`
+    const script = `process.umask(0); const { ensureHomeTree } = await import(${JSON.stringify(new URL('../src/tree.ts', import.meta.url).href)}); await ensureHomeTree(${JSON.stringify(home)}, 'default')`
     execFileSync(process.execPath, ['--import', 'tsx/esm', '--input-type=module', '--eval', script], { cwd: join(import.meta.dirname, '../../../..'), stdio: 'pipe' })
     expect(mode(home)).toBe(0o700)
     expect(mode(join(home, 'secrets'))).toBe(0o700)

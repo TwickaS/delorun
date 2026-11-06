@@ -10,7 +10,7 @@
  * implemented here, so on Windows a read checks only that the path is a
  * regular file.
  *
- * @module @delo/cli/home/protected-file
+ * @module @delo/home/protected-file
  */
 import { randomBytes } from 'node:crypto'
 import { constants, type Stats } from 'node:fs'

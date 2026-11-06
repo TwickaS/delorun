@@ -4,7 +4,7 @@
  * that is relative, the filesystem root, the OS home directory, or upstream's
  * `~/.dsh` or a path inside it.
  *
- * @module @delo/cli/home/resolve
+ * @module @delo/home/resolve
  */
 import { homedir } from 'node:os'
 import { isAbsolute, join, parse, resolve, sep } from 'node:path'

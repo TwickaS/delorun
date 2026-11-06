@@ -9,16 +9,13 @@
 import { prepareHome, type CliCommand } from './command.ts'
 
 /**
- * Run upstream's command line with these arguments. Upstream reads its
- * arguments from `process.argv`, and this process runs nothing else after it,
- * so the arguments after the script are replaced before it starts.
- * @param args - the arguments `dsh` would receive.
+ * Run upstream's command line with these arguments.
+ * @param argv - the arguments `dsh` would receive.
  */
-async function runUpstreamCli(args: readonly string[]): Promise<void> {
-  process.argv = [...process.argv.slice(0, 2), ...args]
+async function runUpstreamCli(argv: readonly string[]): Promise<void> {
   // Loaded after the launch variables are set, so upstream resolves the Delo home.
   const { runCli } = await import('@deepseek-ai/dsh/lib/bin.js')
-  await runCli()
+  await runCli({ argv })
 }
 
 /**

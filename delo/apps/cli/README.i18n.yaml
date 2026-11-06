@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/apps/cli/README.md
 /:
-  en: 34f0ec007ef3a311
-  zh: 0ebd8dda2d6ebdd0
+  en: f2b00959c3741341
+  zh: ea4a57573ff4474e
 /delo-cli:
   en: e0183ae30248e2a7
   zh: 30a02ae85c8f4a0d
 /delo-cli/summary:
-  en: 5406e38b1097ab0e
-  zh: 68406ebc77f1fc37
+  en: 76e7044ed721e8d3
+  zh: 2168eda99b0107b9
 /delo-cli/contents:
   en: 3aea59a950b5ad3b
   zh: 6496d39c7d4fddcc
@@ -18,23 +18,23 @@
   en: d6b040d63743d981
   zh: 51131e9365850838
 /delo-cli/the-home:
-  en: d5098622c93668b5
-  zh: 9ce9d1c442dfccd3
+  en: e8c430a5cd4008ee
+  zh: dbc6b9a6b5d36ff0
 /delo-cli/profiles:
   en: 32265b7a38261060
   zh: 618ea5ffe9bcfa89
 /delo-cli/the-home-lock:
-  en: e78adfde86065f85
-  zh: 8c57783daa209819
+  en: 75b042d766905c4e
+  zh: 0c26a32ee95aad98
 /delo-cli/how-delorun-runs-upstream:
-  en: 59c17e49283d1bf8
-  zh: aab6600ad565cec6
+  en: 71b3499a4e4921b2
+  zh: 66e79672f83504bc
 /delo-cli/extension-points:
   en: e5e6b6384485b0f6
   zh: 812d262b248917f8
 /delo-cli/not-yet-implemented:
-  en: 542d27b2d2b9ab68
-  zh: 4be738c932d66820
+  en: 9cc2f54fcbeb43ca
+  zh: 995e7a8d3423643f
 /delo-cli/development:
   en: 9b54c2a82a33880e
   zh: b7d0a2d31135c553

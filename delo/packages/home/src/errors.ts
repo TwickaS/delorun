@@ -3,7 +3,7 @@
  * error code, the path it concerns and, where one exists, the command that
  * fixes it.
  *
- * @module @delo/cli/home/errors
+ * @module @delo/home/errors
  */
 import type { HomeLayoutErrorCode } from '@delo/contract-home-layout'
 
