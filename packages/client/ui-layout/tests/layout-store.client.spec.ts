@@ -14,6 +14,7 @@ describe('createLayoutStore', () => {
       panelInfo: { activePanelId: null },
       layoutInfo: {
         sidebar: 280,
+        sidebarWidths: { default: 280, min: 264 },
         viewportWidth: 1920,
         narrowExpanded: false,
         rightbar: null,
@@ -51,6 +52,19 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot().layoutInfo.sidebar).toBe(0)
     actions.toggleSidebar()
     expect(store.getSnapshot().layoutInfo.sidebar).toBe(280)
+  })
+
+  it('opens at and clamps to the widths a plugin sets, and opens a closed sidebar at the new default later', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setSidebarWidths({ default: 256, min: 240 })
+    expect(store.getSnapshot().layoutInfo.sidebar).toBe(256)
+    actions.setSidebar(1)
+    expect(store.getSnapshot().layoutInfo.sidebar).toBe(240)
+    actions.toggleSidebar()
+    actions.setSidebarWidths({ default: 300, min: 264 })
+    expect(store.getSnapshot().layoutInfo.sidebar).toBe(0)
+    actions.toggleSidebar()
+    expect(store.getSnapshot().layoutInfo.sidebar).toBe(300)
   })
 
   it('keeps the sidebar preference while toggling its narrow override', () => {

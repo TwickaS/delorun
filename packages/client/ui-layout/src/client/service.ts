@@ -11,6 +11,7 @@
 import type { BoundActions, HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { createLayoutStore } from './stores.ts'
+import { SIDEBAR_COLLAPSED, SIDEBAR_MAX, STOCK_SIDEBAR_WIDTHS, type SidebarWidths } from './columns.ts'
 
 /** Identity shared by a sidebar panel entry and its main-slot occupant. */
 export type MainPanelId = Branded<'MainPanelId'>
@@ -39,8 +40,15 @@ export interface ILayout {
    * @returns a signal aborted by the next navigation or layout disposal; check it before committing UI state.
    */
   beginNavigation(): AbortSignal
-  /** Toggle the sidebar panel (closed ⟷ contract default width). */
+  /** Toggle the sidebar panel (closed ⟷ default width). */
   toggleSidebar(): void
+  /**
+   * Replace the sidebar's default width and drag floor; an open sidebar takes the new default at once.
+   * @param widths - the widths, with `SIDEBAR_COLLAPSED` < `min` <= `default` <= `SIDEBAR_MAX`.
+   * @returns the disposer that restores the contract's widths.
+   * @throws when the widths are outside that range; nothing changes.
+   */
+  setSidebarWidths(widths: SidebarWidths): () => void
   /**
    * Report the right panel's presentation without changing its expanded state.
    * @param track - whether the normal panel width reserves a grid track,
@@ -89,9 +97,18 @@ export class LayoutController implements ILayout {
     this.navigation.abort()
   }
 
-  /** Toggle the sidebar panel (closed ⟷ contract default width). */
+  /** Toggle the sidebar panel (closed ⟷ default width). */
   toggleSidebar(): void {
     this.panels.toggleSidebar()
+  }
+
+  /** @returns the disposer that restores the contract's widths. */
+  setSidebarWidths(widths: SidebarWidths): () => void {
+    if (!(SIDEBAR_COLLAPSED < widths.min && widths.min <= widths.default && widths.default <= SIDEBAR_MAX)) {
+      throw new Error(`layout.setSidebarWidths: ${String(widths.min)}..${String(widths.default)} is outside ${String(SIDEBAR_COLLAPSED)}..${String(SIDEBAR_MAX)}`)
+    }
+    this.panels.setSidebarWidths(widths)
+    return () => { this.panels.setSidebarWidths(STOCK_SIDEBAR_WIDTHS) }
   }
 
   /** Report the right panel's track and fullscreen presentation. */

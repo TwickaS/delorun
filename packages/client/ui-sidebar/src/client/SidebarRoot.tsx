@@ -16,7 +16,7 @@
  * scrollbar indirection away while it is elsewhere, so a list the user is not
  * pointing at carries no bar.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import {
   FishLogo, IconAppsAddOutlineRegular, IconNewChatOutlineMedium, IconNewChatOutlineRegular,
@@ -24,6 +24,7 @@ import {
   writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type {
   SidebarPanelActionsOwnerProps, SidebarPanelMetadata, SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps,
 } from './contract/slots.ts'
@@ -57,6 +58,10 @@ type PanelRowProps =
   & Pick<PropsRuntime<'sidebar'>, 'usePanelInfo'>
   & Pick<InjectFace<SidebarRootInjected>, 'selectPanel' | 'trackEntryClick'>
   & PropsRenderSlots<'sidebar.panellist'>
+  & { readonly current?: ObservableSnapshot<boolean> }
+
+/** A row that nothing but its own panel marks current. */
+const NOT_CURRENT: ObservableSnapshot<boolean> = { getSnapshot: () => false, subscribe: () => () => {} }
 
 /** Analytics category of an official panel; other panels are never reported. */
 function officialEntry(id: string): 'plugin' | 'cron' | undefined {
@@ -65,8 +70,11 @@ function officialEntry(id: string): 'plugin' | 'cron' | undefined {
 }
 
 /** Each panel row subscribes only to its own selection state. */
-function PanelRow({ id, label, wide, usePanelInfo, selectPanel, trackEntryClick, renderSlot }: PanelRowProps) {
-  const active = usePanelInfo(info => info.activePanelId === id)
+function PanelRow({ id, label, wide, usePanelInfo, selectPanel, trackEntryClick, renderSlot, current = NOT_CURRENT }: PanelRowProps) {
+  const selected = usePanelInfo(info => info.activePanelId === id)
+  const subscribe = useCallback((listener: () => void) => current.subscribe(listener), [current])
+  const standsFor = useSyncExternalStore(subscribe, () => current.getSnapshot())
+  const active = selected || standsFor
   return (
     <Tooltip label={label} delayMs={500} disabled={wide}>
       <button
@@ -141,6 +149,10 @@ export function SidebarRoot({
   usePanels,
   useEntryPins,
   useEntryActions,
+  usePanelPlacement,
+  useLeadPanel,
+  useNewSessionButton,
+  useFootRow,
   useShortcuts,
   usePanelInfo,
   t,
@@ -150,6 +162,13 @@ export function SidebarRoot({
   const unpinned = useEntryPins(ids => ids)
   const activePanelId = usePanelInfo(info => info.activePanelId)
   const hasEntryActions = useEntryActions(registered => registered)
+  // In the foot, the panels are a row of icon buttons with tooltips above the foot's own controls.
+  const inFoot = usePanelPlacement(placement => placement) === 'footer'
+  const leadEntry = useLeadPanel(entry => entry)
+  const newSessionButton = useNewSessionButton(shown => shown)
+  const footRow = useFootRow(row => row)
+  const lead = panels.find(panel => panel.id === leadEntry?.panelId)
+  const listed = lead === undefined ? panels : panels.filter(panel => panel.id !== lead.id)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const newShortcut = useShortcuts(rows => rows.find(row => row.id === 'session.new'))
   // A page whose access snapshot excludes starting a Session offers no New Session affordance.
@@ -252,6 +271,47 @@ export function SidebarRoot({
     })
   }
 
+  const panelsWide = wide && !inFoot
+  const panelList = listed.length === 0 ? null : (
+    <nav className={clsx(css.panelList, inFoot && css.footPanels)} aria-label={t('panels.label')}>
+      {listed.filter(({ id }) => id === FIXED_PANEL_ID || !unpinned.includes(id)).map(({ id, label }) => (
+        <PanelRow
+          key={id}
+          id={id}
+          label={label}
+          wide={panelsWide}
+          usePanelInfo={usePanelInfo}
+          selectPanel={selectPanel}
+          trackEntryClick={trackEntryClick}
+          renderSlot={renderSlot}
+        />
+      ))}
+      {hasEntryActions && (
+        <PanelMoreMenu
+          wide={panelsWide}
+          label={t('panels.more')}
+          entries={listed.filter(({ id }) => id !== FIXED_PANEL_ID)
+            .map(({ id, label }) => ({ id, label, pinned: !unpinned.includes(id), active: id === activePanelId }))}
+          onOpen={(id) => {
+            const entry = officialEntry(id)
+            if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar_more' })
+            const panel = panels.find(candidate => candidate.id === id)
+            if (panel !== undefined) selectPanel(panel.id)
+          }}
+          onPinnedChange={setPinned}
+          trackEntryClick={trackEntryClick}
+          renderSlot={renderSlot}
+        />
+      )}
+    </nav>
+  )
+
+  const settingsArea = (
+    <div className={css.settingsArea}>
+      {renderSlot('sidebar.settings', { wide })}
+    </div>
+  )
+
   const darwinDesktop = isDarwinDesktop()
   // Rail resting state is the whale mark; hovering swaps in the panel icon
   // (the expand affordance, figma sidebar-hover flow). Expanded it is a plain
@@ -299,6 +359,7 @@ export function SidebarRoot({
       }}
       onPointerLeave={() => { armLinger() }}
     >
+      {wide && <div className={css.backdrop} aria-hidden="true">{renderSlot('sidebar.backdrop', {})}</div>}
       {/* macOS hiddenInset titlebar: the strip shares the row with the
           traffic lights and keeps the toggle at the sidebar's top-right. */}
       {darwinDesktop && <div className={css.topStrip} data-window-drag>{toggle}</div>}
@@ -353,8 +414,23 @@ export function SidebarRoot({
         {!darwinDesktop && toggle}
       </div>
 
+      {lead !== undefined && (
+        <div className={css.leadPanel}>
+          <PanelRow
+            id={lead.id}
+            label={lead.label}
+            wide={wide}
+            usePanelInfo={usePanelInfo}
+            selectPanel={selectPanel}
+            trackEntryClick={trackEntryClick}
+            renderSlot={renderSlot}
+            {...(leadEntry?.current === undefined ? {} : { current: leadEntry.current })}
+          />
+        </div>
+      )}
+
       {/* The label fades before the hover/focus shortcut, including on translucent backgrounds. */}
-      {canStartSession && (
+      {canStartSession && (newSessionButton || !wide) && (
         <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500} side={captionTooltipSide} disabled={wide}>
           <button
             type="button"
@@ -376,39 +452,7 @@ export function SidebarRoot({
         </Tooltip>
       )}
 
-      {panels.length > 0 && (
-        <nav className={css.panelList} aria-label={t('panels.label')}>
-          {panels.filter(({ id }) => id === FIXED_PANEL_ID || !unpinned.includes(id)).map(({ id, label }) => (
-            <PanelRow
-              key={id}
-              id={id}
-              label={label}
-              wide={wide}
-              usePanelInfo={usePanelInfo}
-              selectPanel={selectPanel}
-              trackEntryClick={trackEntryClick}
-              renderSlot={renderSlot}
-            />
-          ))}
-          {hasEntryActions && (
-            <PanelMoreMenu
-              wide={wide}
-              label={t('panels.more')}
-              entries={panels.filter(({ id }) => id !== FIXED_PANEL_ID)
-                .map(({ id, label }) => ({ id, label, pinned: !unpinned.includes(id), active: id === activePanelId }))}
-              onOpen={(id) => {
-                const entry = officialEntry(id)
-                if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar_more' })
-                const panel = panels.find(candidate => candidate.id === id)
-                if (panel !== undefined) selectPanel(panel.id)
-              }}
-              onPinnedChange={setPinned}
-              trackEntryClick={trackEntryClick}
-              renderSlot={renderSlot}
-            />
-          )}
-        </nav>
-      )}
+      {!inFoot && panelList}
 
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}
@@ -423,14 +467,28 @@ export function SidebarRoot({
         <Toast key={copiedToast} tone="success" text={t('version.copied')} onDone={() => { setCopiedToast(null) }} />
       )}
 
-      {/* Footer actions stack above Settings in both sidebar widths. */}
+      {/* Footer actions stack above Settings, or, in a wide one-row foot, end the settings row. */}
       <div className={css.footArea}>
-        <div className={css.footerActions}>
-          {renderSlot('sidebar.footer.action', { wide })}
-        </div>
-        <div className={css.settingsArea}>
-          {renderSlot('sidebar.settings', { wide })}
-        </div>
+        {inFoot && !wide && panelList}
+        {wide && footRow
+          ? (
+            <div className={css.footRow}>
+              {settingsArea}
+              {inFoot && panelList}
+              <div className={css.footerActionsInline}>{renderSlot('sidebar.footer.action', { wide, inline: true })}</div>
+            </div>
+          )
+          : (
+            <>
+              <div className={css.footerActions}>
+                {renderSlot('sidebar.footer.action', { wide })}
+              </div>
+              {/* Wide, panels placed in the foot share the settings row, at its end. */}
+              {inFoot && wide
+                ? <div className={css.footRow}>{settingsArea}{panelList}</div>
+                : settingsArea}
+            </>
+          )}
       </div>
     </div>
   )

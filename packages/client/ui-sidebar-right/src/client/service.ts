@@ -268,6 +268,11 @@ export interface ISidebarRight {
    * @returns `true` while expanded; `false` while collapsed to its rail.
    */
   isExpanded(): boolean
+  /**
+   * Whether the column, once expanded, covers the main column, as it does at a narrow frame width.
+   * @returns the automatic fullscreen rule's verdict for the width the seats last rendered at.
+   */
+  presentsFullscreen(): boolean
   /** Collapse the column, or expand it and focus its active dock pane. Recorded in the sequence. */
   toggleExpanded(): void
   /**
@@ -601,6 +606,14 @@ export class SidebarRightController implements ISidebarRight {
    */
   isExpanded(): boolean {
     return this.mountedSurface()?.layout.expanded ?? false
+  }
+
+  /**
+   * Whether the column, once expanded, covers the main column.
+   * @returns the automatic fullscreen rule's verdict for the width the seats last rendered at.
+   */
+  presentsFullscreen(): boolean {
+    return this.host.autoFullscreen()
   }
 
   /** Collapse the column, or expand it and focus its active dock pane after rendering. */

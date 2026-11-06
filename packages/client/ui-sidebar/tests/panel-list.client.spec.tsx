@@ -45,6 +45,7 @@ async function bench(collapsed = false, track?: TrackProductEvent) {
     panelInfo: runtime.panelInfo,
     beginNavigation: vi.fn(() => new AbortController().signal),
     toggleSidebar: vi.fn(),
+    setSidebarWidths: vi.fn(() => () => {}),
     selectPanel: vi.fn((activePanelId: MainPanelId | null) => { runtime.panelInfo.set({ activePanelId }) }),
     openRightbar: vi.fn(),
     closeRightbar: vi.fn(),
@@ -118,6 +119,11 @@ function OfficialOpen({ onOpen }: PropsRuntime<'sidebar.panellist.actions'>) {
   )
 }
 
+/** A footer action that says whether it was placed inline. */
+function FootProbe({ inline }: PropsRuntime<'sidebar.footer.action'>) {
+  return <span data-testid="foot-probe" data-inline={String(inline === true)} />
+}
+
 async function mountProbeActions(runtime: SlotTestRuntime, id = 'probe', component = ProbeActions) {
   return runtime.mount({
     inject: ['slots'],
@@ -170,6 +176,118 @@ async function mountPanels(runtime: SlotTestRuntime, locale: LocaleRuntime, beta
 }
 
 describe('sidebar global panels', () => {
+  it('lists the panels in the foot of the collapsed rail as a column above the settings', async () => {
+    const { runtime, locale, view } = await bench(true)
+    await mountPanels(runtime, locale)
+    runtime.ctx.get('sidebarLayout')?.setPanelPlacement('footer')
+    await waitFor(() => { expect(view.getByRole('navigation', { name: 'Global panels' }).className).toMatch(/footPanels/) })
+    expect(view.getByRole('navigation', { name: 'Global panels' }).parentElement?.className).not.toMatch(/footRow/)
+  })
+
+  it('leads the sidebar with one panel\'s row above New Session while a distribution asks, the latest call winning', async () => {
+    const { runtime, locale, view } = await bench()
+    await mountPanels(runtime, locale)
+    const layout = runtime.ctx.get('sidebarLayout')
+    if (layout === undefined) throw new Error('no sidebarLayout')
+    const leadRow = () => document.querySelector('[class*="leadPanel"] button')?.getAttribute('aria-label')
+    const listed = () => within(view.getByRole('navigation', { name: 'Global panels' })).queryAllByRole('button').map(button => button.getAttribute('aria-label'))
+    expect(leadRow()).toBeUndefined()
+    const alpha = layout.setLeadPanel(ALPHA)
+    const beta = layout.setLeadPanel(BETA)
+    await waitFor(() => { expect(leadRow()).toBe('Beta panel') })
+    expect(listed()).toEqual(['Alpha panel'])
+    fireEvent.click(view.getByRole('button', { name: 'Beta panel' }))
+    expect(view.getByRole('heading', { name: 'Beta content' })).toBeTruthy()
+    beta()
+    beta()
+    await waitFor(() => { expect(leadRow()).toBe('Alpha panel') })
+    alpha()
+    await waitFor(() => { expect(leadRow()).toBeUndefined() })
+    expect(listed()).toEqual(['Beta panel', 'Alpha panel'])
+  })
+
+  it('hides the wide sidebar\'s New Session button while a distribution asks, the latest call winning', async () => {
+    const { runtime, locale } = await bench()
+    await mountPanels(runtime, locale)
+    const layout = runtime.ctx.get('sidebarLayout')
+    if (layout === undefined) throw new Error('no sidebarLayout')
+    const button = () => document.querySelector('button[class*="newSession"]')
+    await waitFor(() => { expect(button()).not.toBeNull() })
+    const hide = layout.setNewSessionButton(false)
+    const show = layout.setNewSessionButton(true)
+    await waitFor(() => { expect(button()).not.toBeNull() })
+    show()
+    show()
+    await waitFor(() => { expect(button()).toBeNull() })
+    hide()
+    await waitFor(() => { expect(button()).not.toBeNull() })
+  })
+
+  it('ends the wide settings row with the footer actions, told they sit inline, while a distribution asks for a one-row foot', async () => {
+    const { runtime, view } = await bench()
+    await runtime.mount({
+      inject: ['slots'],
+      apply(ctx: Context) {
+        ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({ name: 'sidebar.footer.action', id: 'foot-probe' }, FootProbe))
+      },
+    })
+    const layout = runtime.ctx.get('sidebarLayout')
+    if (layout === undefined) throw new Error('no sidebarLayout')
+    const probe = () => view.getByTestId('foot-probe')
+    await waitFor(() => { expect(probe().dataset.inline).toBe('false') })
+    expect(probe().closest('[class*="footerActionsInline"]')).toBeNull()
+    const row = layout.setFootRow(true)
+    await waitFor(() => { expect(probe().dataset.inline).toBe('true') })
+    expect(probe().closest('[class*="footRow"]')).not.toBeNull()
+    row()
+    row()
+    await waitFor(() => { expect(probe().dataset.inline).toBe('false') })
+  })
+
+  it('marks the lead row current while its signal reads true, as when its panel handed the main view to a Session', async () => {
+    const { runtime, locale, view } = await bench()
+    await mountPanels(runtime, locale)
+    const layout = runtime.ctx.get('sidebarLayout')
+    if (layout === undefined) throw new Error('no sidebarLayout')
+    let current = false
+    const listeners = new Set<() => void>()
+    layout.setLeadPanel(ALPHA, {
+      getSnapshot: () => current,
+      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    })
+    const row = () => view.getByRole('button', { name: 'Alpha panel' })
+    await waitFor(() => { expect(row().getAttribute('aria-current')).toBeNull() })
+    act(() => { current = true; for (const listener of listeners) listener() })
+    expect(row().getAttribute('aria-current')).toBe('page')
+  })
+
+  it('lists the panels in the foot as icon buttons while a distribution asks, the latest call winning, and back on top after', async () => {
+    const { runtime, locale, view } = await bench()
+    await mountPanels(runtime, locale)
+    const layout = runtime.ctx.get('sidebarLayout')
+    if (layout === undefined) throw new Error('no sidebarLayout')
+    const navigation = await view.findByRole('navigation', { name: 'Global panels' })
+    expect(within(navigation).getByText('Alpha panel')).toBeTruthy()
+    const foot = layout.setPanelPlacement('footer')
+    const top = layout.setPanelPlacement('top')
+    const again = layout.setPanelPlacement('footer')
+    await waitFor(() => { expect(view.getByRole('navigation', { name: 'Global panels' }).className).toMatch(/footPanels/) })
+    const footNavigation = view.getByRole('navigation', { name: 'Global panels' })
+    // Wide, the panels share the settings row.
+    expect(footNavigation.parentElement?.className).toMatch(/footRow/)
+    // Icon buttons: the names stay on the buttons, the labels leave the row.
+    expect(within(footNavigation).queryByText('Alpha panel')).toBeNull()
+    fireEvent.click(within(footNavigation).getByRole('button', { name: 'Alpha panel' }))
+    expect(view.getByRole('heading', { name: 'Alpha content' })).toBeTruthy()
+    again()
+    again()
+    await waitFor(() => { expect(view.getByRole('navigation', { name: 'Global panels' }).className).not.toMatch(/footPanels/) })
+    top()
+    await waitFor(() => { expect(view.getByRole('navigation', { name: 'Global panels' }).className).toMatch(/footPanels/) })
+    foot()
+    await waitFor(() => { expect(within(view.getByRole('navigation', { name: 'Global panels' })).getByText('Alpha panel')).toBeTruthy() })
+  })
+
   it('adds late registrations, removes each plugin contribution, and leaves no empty panel-list DOM', async () => {
     const { runtime, locale, view } = await bench()
     expect(runtime.slots.entries('sidebar.panellist')).toEqual([])

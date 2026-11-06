@@ -96,6 +96,15 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
     style="width: 300px;"
   >
     <div
+      aria-hidden="true"
+      class="backdrop"
+    >
+      <div
+        data-slot="sidebar.backdrop"
+        style="display: contents;"
+      />
+    </div>
+    <div
       class="logoRow"
       data-window-drag="true"
     >
@@ -344,6 +353,15 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
     style="width: 300px;"
   >
     <div
+      aria-hidden="true"
+      class="backdrop"
+    >
+      <div
+        data-slot="sidebar.backdrop"
+        style="display: contents;"
+      />
+    </div>
+    <div
       class="logoRow"
       data-window-drag="true"
     >
@@ -487,6 +505,15 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
     class="root quietBars"
     style="width: 300px;"
   >
+    <div
+      aria-hidden="true"
+      class="backdrop"
+    >
+      <div
+        data-slot="sidebar.backdrop"
+        style="display: contents;"
+      />
+    </div>
     <div
       class="logoRow"
       data-window-drag="true"

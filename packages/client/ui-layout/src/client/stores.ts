@@ -6,7 +6,7 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-sto
 import type { MainPanelId } from './service.ts'
 import {
   clampWidth, RIGHTBAR_DEFAULT_RATIO, RIGHTBAR_MAX_RATIO, RIGHTBAR_MIN,
-  SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT, SIDEBAR_DRAWER_BREAKPOINT, SIDEBAR_MAX, SIDEBAR_MIN,
+  SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT, SIDEBAR_DRAWER_BREAKPOINT, SIDEBAR_MAX, STOCK_SIDEBAR_WIDTHS, type SidebarWidths,
 } from './columns.ts'
 
 /**
@@ -23,6 +23,8 @@ type LayoutState = {
 
 type LayoutInfo = {
   sidebar: number
+  /** Width an opened sidebar takes and the drag clamp's floor: the contract's, or a plugin's through `ctx.layout.setSidebarWidths`. */
+  sidebarWidths: SidebarWidths
   /** Last positive frame measurement; window width bootstraps the first render. */
   viewportWidth: number
   narrowExpanded: boolean
@@ -59,6 +61,7 @@ type LayoutActions = {
   selectPanel: (draft: LayoutState, panelId: MainPanelId | null) => void
   retainMainPanels: (draft: LayoutState, panelIds: readonly string[]) => void
   setSidebar: (draft: LayoutState, px: number) => void
+  setSidebarWidths: (draft: LayoutState, widths: SidebarWidths) => void
   toggleSidebar: (draft: LayoutState) => void
   setViewportWidth: (draft: LayoutState, width: number) => void
   setRightbar: (draft: LayoutState, px: number) => void
@@ -81,6 +84,7 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       panelInfo: { activePanelId: null },
       layoutInfo: {
         sidebar: SIDEBAR_DEFAULT,
+        sidebarWidths: STOCK_SIDEBAR_WIDTHS,
         viewportWidth: window.innerWidth,
         narrowExpanded: false,
         rightbar: null,
@@ -102,14 +106,19 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       },
       setSidebar: (d, px: number) => {
         d.layoutInfo.rightbarInstant = false
-        d.layoutInfo.sidebar = clampWidth(px, SIDEBAR_MIN, SIDEBAR_MAX)
+        d.layoutInfo.sidebar = clampWidth(px, d.layoutInfo.sidebarWidths.min, SIDEBAR_MAX)
+      },
+      // An open sidebar takes the new default; a closed one opens at it.
+      setSidebarWidths: (d, widths: SidebarWidths) => {
+        d.layoutInfo.sidebarWidths = widths
+        if (d.layoutInfo.sidebar !== 0) d.layoutInfo.sidebar = widths.default
       },
       // Narrow toggles flip only the override: the width preference survives
       // untouched, so re-widening restores the pre-squeeze layout.
       toggleSidebar: (d) => {
         d.layoutInfo.rightbarInstant = false
         if (d.layoutInfo.viewportWidth < SIDEBAR_AUTO_COLLAPSE) d.layoutInfo.narrowExpanded = !d.layoutInfo.narrowExpanded
-        else d.layoutInfo.sidebar = d.layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : 0
+        else d.layoutInfo.sidebar = d.layoutInfo.sidebar === 0 ? d.layoutInfo.sidebarWidths.default : 0
       },
       // Crossing the breakpoint in either direction drops the override: the
       // narrow default is auto-collapsed, the wide state is the preference.

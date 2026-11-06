@@ -1040,6 +1040,161 @@
       "path": ".gitignore",
       "class": "delo-feature",
       "reason": "Keeps each worktree's uncommitted lefthook-local.yml, which extends delo/lefthook.yml, out of commits."
+    },
+    {
+      "path": "packages/client/ui-layout/README.md",
+      "class": "delo-feature",
+      "reason": "Documents ctx.layout.setSidebarWidths, which replaces the sidebar default width and drag floor, and its disposer."
+    },
+    {
+      "path": "packages/client/ui-layout/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the layout README, which documents ctx.layout.setSidebarWidths."
+    },
+    {
+      "path": "packages/client/ui-layout/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the layout README setSidebarWidths sentence and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-layout/src/client/AppFrame.tsx",
+      "class": "delo-feature",
+      "reason": "Reads the sidebar default width from the layout store, so a width set through ctx.layout.setSidebarWidths applies to the opened sidebar and to the drawer fallback."
+    },
+    {
+      "path": "packages/client/ui-layout/src/client/columns.ts",
+      "class": "delo-feature",
+      "reason": "Adds the SidebarWidths type and the stock widths that ctx.layout.setSidebarWidths replaces."
+    },
+    {
+      "path": "packages/client/ui-layout/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Exports the SidebarWidths type for plugins that set the sidebar widths."
+    },
+    {
+      "path": "packages/client/ui-layout/src/client/service.ts",
+      "class": "delo-feature",
+      "reason": "Adds ctx.layout.setSidebarWidths, which rejects widths outside the allowed range and returns a disposer that restores the stock widths."
+    },
+    {
+      "path": "packages/client/ui-layout/src/client/stores.ts",
+      "class": "delo-feature",
+      "reason": "Keeps the sidebar widths in the layout store, so the drag floor and the open width follow ctx.layout.setSidebarWidths."
+    },
+    {
+      "path": "packages/client/ui-layout/tests/layout-store.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the layout store sidebar widths and the reopen at the new default width."
+    },
+    {
+      "path": "packages/client/ui-layout/tests/service.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers ctx.layout.setSidebarWidths range checks and its disposer."
+    },
+    {
+      "path": "packages/client/ui-sidebar-right/README.md",
+      "class": "delo-feature",
+      "reason": "Documents presentsFullscreen, which reports whether the expanded right column covers the main column."
+    },
+    {
+      "path": "packages/client/ui-sidebar-right/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the sidebar-right README, which documents presentsFullscreen."
+    },
+    {
+      "path": "packages/client/ui-sidebar-right/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the sidebar-right README presentsFullscreen sentence and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-sidebar-right/src/client/service.ts",
+      "class": "delo-feature",
+      "reason": "Adds presentsFullscreen to the right sidebar controller, which returns the automatic fullscreen rule the seats report."
+    },
+    {
+      "path": "packages/client/ui-sidebar-right/tests/controller-harness.client.ts",
+      "class": "delo-feature",
+      "reason": "Adds a narrow-frame switch to the controller harness, so a spec can model the automatic fullscreen rule."
+    },
+    {
+      "path": "packages/client/ui-sidebar-right/tests/service.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers presentsFullscreen at a wide frame and at a narrow frame."
+    },
+    {
+      "path": "packages/client/ui-sidebar/README.md",
+      "class": "delo-feature",
+      "reason": "Documents the sidebar layout placements, the lead panel, the New Session button, the foot row and the backdrop slot."
+    },
+    {
+      "path": "packages/client/ui-sidebar/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the sidebar README, which documents the sidebar layout placements and the backdrop slot."
+    },
+    {
+      "path": "packages/client/ui-sidebar/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the sidebar README layout paragraphs and their Chinese counterparts changed."
+    },
+    {
+      "path": "packages/client/ui-sidebar/src/client/SidebarRoot.module.css",
+      "class": "delo-feature",
+      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot."
+    },
+    {
+      "path": "packages/client/ui-sidebar/src/client/SidebarRoot.tsx",
+      "class": "delo-feature",
+      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot and the backdrop slot."
+    },
+    {
+      "path": "packages/client/ui-sidebar/src/client/contract/slots.ts",
+      "class": "delo-feature",
+      "reason": "Declares the sidebar.backdrop slot and the sidebarLayout placement, lead panel, New Session button and foot row hooks."
+    },
+    {
+      "path": "packages/client/ui-sidebar/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Implements ctx.sidebarLayout for the panel placement, the lead panel, the New Session button and the foot row."
+    },
+    {
+      "path": "packages/client/ui-sidebar/tests/panel-list.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Adds a setSidebarWidths stand-in to the layout double and a footer-action probe for the panel list."
+    },
+    {
+      "path": "packages/client/ui-sidebar/tests/pointer-scrollbars.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Supplies the sidebar layout hooks with their stock values to the column mount."
+    },
+    {
+      "path": "packages/client/ui-sidebar/tests/sidebar-root.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Supplies the sidebar layout hooks to each shell mount and covers the backdrop slot."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/rows/Rows.module.css",
+      "class": "delo-feature",
+      "reason": "Styles the one-list session row: the open row tint and bar, the Workspace caption, the trailing status, the waiting pill and the unread title."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/rows/Rows.tsx",
+      "class": "delo-feature",
+      "reason": "Adds the one-list treatment to the session row: the Workspace caption, the status after the title, the running title shimmer and the waiting pill; the stock row is unchanged when the new props are absent."
+    },
+    {
+      "path": "packages/client/ui-workspace/tests/browser-styles.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Asserts the selected-row fill token of the one-list session row."
+    },
+    {
+      "path": "packages/client/ui-workspace/tests/rows.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the default leading status cell and the status after the title in the session row."
+    },
+    {
+      "path": "packages/client/ui-workspace/tests/workspaces-service.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Adds setSidebarWidths to the layout double, which the layout actions now include."
     }
   ],
   "retired": []

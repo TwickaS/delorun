@@ -27,8 +27,10 @@ export function controllerHarness() {
     title: address => address.slice(address.lastIndexOf('/') + 1),
   })
   const pin = vi.fn<(address: string, signal: AbortSignal) => void>()
+  /** The automatic fullscreen rule's verdict the seats would report; a spec flips it to model a narrow frame. */
+  const frame = { narrow: false }
   const { controller, adopt, forget, show, measure } = createSidebarRightController(tabs, pin, {
-    autoFullscreen: () => false,
+    autoFullscreen: () => frame.narrow,
     openWithFocus: (_sessionId, open) => { open() },
     closeWithFocus: (_sessionId, _paneId, close) => { close() },
   })
@@ -57,5 +59,8 @@ export function controllerHarness() {
   }
   const entries = (): number => instance.getSnapshot().bySession[SESSION]?.history.entries.length ?? 0
   const expand = (): void => { instance.actions.setExpanded(SESSION, true) }
-  return { controller, adopt, unadopt, forget, show, measure, tabs, instance, pin, publish, titles, tabOf, layout, entries, room, expand }
+  return {
+    controller, adopt, unadopt, forget, show, measure, tabs, instance, pin, publish, titles, tabOf, layout, entries, room, expand,
+    frame,
+  }
 }

@@ -15,6 +15,15 @@ export const SIDEBAR_MIN = 264
 export const SIDEBAR_MAX = 420
 /** Sidebar width before any user drag. */
 export const SIDEBAR_DEFAULT = 280
+/** The sidebar's opening width and drag floor. */
+export interface SidebarWidths {
+  /** Width an opened sidebar takes before any drag. */
+  readonly default: number
+  /** Drag clamp floor. */
+  readonly min: number
+}
+/** The contract's sidebar widths, which `ctx.layout.setSidebarWidths` replaces. */
+export const STOCK_SIDEBAR_WIDTHS: SidebarWidths = { default: SIDEBAR_DEFAULT, min: SIDEBAR_MIN }
 /** Closed-sidebar rail: a 24px icon column between 16px horizontal paddings. */
 export const SIDEBAR_COLLAPSED = 56
 /** Frame width below which the sidebar overlays the main content without a rail. */

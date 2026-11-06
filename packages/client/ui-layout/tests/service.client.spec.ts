@@ -8,6 +8,7 @@ function fakePanels(): PanelActions {
     selectPanel: vi.fn(),
     retainMainPanels: vi.fn(),
     setSidebar: vi.fn(),
+    setSidebarWidths: vi.fn(),
     toggleSidebar: vi.fn(),
     setViewportWidth: vi.fn(),
     setRightbar: vi.fn(),
@@ -42,6 +43,19 @@ describe('LayoutController', () => {
 
     expect(panels.toggleSidebar).toHaveBeenCalledTimes(1)
     expect(panels.setSidebar).not.toHaveBeenCalled()
+  })
+
+  it('sets the sidebar widths, restores the contract\'s on disposal, and refuses widths outside the frame\'s range', () => {
+    const panels = fakePanels()
+    const service = new LayoutController(panels, () => true, createSnapshotStore({ activePanelId: null }))
+    const restore = service.setSidebarWidths({ default: 256, min: 240 })
+    restore()
+    expect(panels.setSidebarWidths).toHaveBeenNthCalledWith(1, { default: 256, min: 240 })
+    expect(panels.setSidebarWidths).toHaveBeenNthCalledWith(2, { default: 280, min: 264 })
+    expect(() => service.setSidebarWidths({ default: 250, min: 260 })).toThrow(/outside/)
+    expect(() => service.setSidebarWidths({ default: 500, min: 260 })).toThrow(/outside/)
+    expect(() => service.setSidebarWidths({ default: 256, min: 40 })).toThrow(/outside/)
+    expect(panels.setSidebarWidths).toHaveBeenCalledTimes(2)
   })
 
   it('forwards panel selection and returning to the Conversation without changing geometry', () => {

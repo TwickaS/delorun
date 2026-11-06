@@ -11,14 +11,14 @@
  * session and workspace hover cards are suppressed while a menu is open.
  */
 import { useEffect, useMemo, useRef } from 'react'
-import type { PointerEvent, RefObject } from 'react'
+import type { PointerEvent, ReactNode, RefObject } from 'react'
 import clsx from 'clsx'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   HoverCard, IconArchiveOutlineRegular,
   IconEllipsisOutlineRegular, IconFolderCloseRegular, IconFolderOpenRegular,
   IconNewChatOutlineRegular, IconPinFillRegular,
-  IconTriangleRightFillRegular, IconUnarchiveOutlineRegular, relativeTime, StateDot, Tooltip, useRowDragPreview,
+  IconTriangleRightFillRegular, IconUnarchiveOutlineRegular, relativeTime, StateDot, TextShimmer, Tooltip, useRowDragPreview,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -589,6 +589,11 @@ export function SearchResultItem({
  * @param props.drag - optional row-drag target wiring; blank rows, and rows whose access excludes
  * `workspace/insertSessionBefore`, cannot start a drag.
  * @param props.home - host account home for POSIX hover-path abbreviation.
+ * @param props.workspace - the Session's Workspace name, shown before the time in the flat list; omitted under a group.
+ * @param props.workspaceColor - the custom property of the Workspace's dot colour, beside its name.
+ * @param props.pinMark - whether a pinned row shows the pin mark; a Pinned heading already says it.
+ * @param props.trailingStatus - draw the status dot and the leading seat after the title, before the time, and keep no
+ * leading cell, so a list without hierarchy starts its titles at the row's edge.
  * @param props.useSessionAccess - the browser root's Session access Hook; the title double-click
  * renames only while it allows `session/rename`.
  * @param props.t - the browser root's locale seat.
@@ -596,7 +601,9 @@ export function SearchResultItem({
  */
 export function SessionNodeItem({
   node, currentId, now, onOpen, onRenameRequest, renderSlot, openSessionMenu, useContextMenuTarget,
-  useContextMenu, onReveal, drag, home, useSessionAccess, t,
+  useContextMenu, onReveal, drag, home, workspace, workspaceColor,
+  pinMark = true, trailingStatus = false,
+  useSessionAccess, t,
 }: {
   useContextMenu: WorkspaceBrowserProps['useContextMenu']
   openSessionMenu: WorkspaceBrowserProps['openSessionMenu']
@@ -613,6 +620,14 @@ export function SessionNodeItem({
   drag?: RowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
+  /** The Session's Workspace name, where no group heading names it. */
+  workspace?: string | undefined
+  /** The custom property of the Workspace's dot colour. */
+  workspaceColor?: string | undefined
+  /** Whether a pinned row shows the pin mark (default true). */
+  pinMark?: boolean
+  /** Whether the status sits after the title instead of in a leading cell (default false). */
+  trailingStatus?: boolean
   t: RowTranslate
 } & Pick<WorkspaceBrowserProps, 'useSessionAccess'> & PropsRenderSlots<
   | 'sidebar.workspaces.session.row.action'
@@ -627,6 +642,10 @@ export function SessionNodeItem({
   const statuses = sessionStatuses(node, t)
   const primaryStatus = statuses[0]
   const showStatus = primaryStatus.state !== 'idle'
+  // Drawn only where the row shows it, so an archived or blank row never asks the leading seat.
+  const status = (): ReactNode => (showStatus
+    ? <SessionStatusDots statuses={statuses} />
+    : renderSlot('sidebar.session.row.leading', { sessionId: node.id }))
   // Archived rows hold their in-place grayed slot, so manual reorder cannot
   // move them. Pinned rows drag within the pinned block: the browser gates
   // their drop targets to fellow pinned rows.
@@ -658,7 +677,8 @@ export function SessionNodeItem({
       data-row-key={`session:${node.id}`}
       className={clsx(
         css.sessionRow, selected && css.selected, menuOpen && css.menuOpen,
-        row.archived && css.archived,
+        row.archived && css.archived, trailingStatus && css.trailingStatusRow,
+        trailingStatus && row.completed && css.unread,
         drag?.marker === 'before' && css.dropBefore, drag?.marker === 'after' && css.dropAfter,
       )}
       role="treeitem"
@@ -706,11 +726,11 @@ export function SessionNodeItem({
           and is cleared by opening the session. Archived rows keep the slot
           blank — the grayed row carries the archived look — and their live
           status stays on the hover card only. */}
-      <span className={css.slot}>
-        {!row.archived && !row.blank && (showStatus
-          ? <SessionStatusDots statuses={statuses} />
-          : renderSlot('sidebar.session.row.leading', { sessionId: node.id }))}
-      </span>
+      {!trailingStatus && (
+        <span className={css.slot}>
+          {!row.archived && !row.blank && status()}
+        </span>
+      )}
       <span
         ref={titleRef}
         className={css.title}
@@ -729,20 +749,34 @@ export function SessionNodeItem({
             onRenameRequest(node.id, row.title)
           }}
       >
-        {title}
+        {trailingStatus && row.running && !row.archived ? <TextShimmer active>{title}</TextShimmer> : title}
       </span>
       {/* Blank rows have no first prompt, so neither trailing details nor
           actions for existing content are available. */}
       {!row.blank && (
         <span className={css.rowResting}>
-          <span
-            className={clsx(css.time, primaryStatus.trailingLabel === undefined && css.timestamp)}
-            aria-hidden={primaryStatus.trailingLabel === undefined ? undefined : true}
-          >
-            {primaryStatus.trailingLabel ?? timeLabel(row.updatedAt, now, t)}
-          </span>
+          {workspace !== undefined && workspace !== '' && (
+            <span className={css.workspace}>
+              {workspaceColor !== undefined && <span className={css.workspaceDot} style={{ background: `var(${workspaceColor})` }} />}
+              {workspace}
+            </span>
+          )}
+          {/* Waiting on the person, the one-list view says what for in an accent pill in place of the dot and time. */}
+          {trailingStatus && !row.archived && primaryStatus.trailingLabel !== undefined
+            ? <span className={css.pendingPill} aria-hidden="true">{primaryStatus.trailingLabel}</span>
+            : (
+              <>
+                {trailingStatus && !row.archived && <span className={css.trailingStatus}>{status()}</span>}
+                <span
+                  className={clsx(css.time, primaryStatus.trailingLabel === undefined && css.timestamp)}
+                  aria-hidden={primaryStatus.trailingLabel === undefined ? undefined : true}
+                >
+                  {primaryStatus.trailingLabel ?? timeLabel(row.updatedAt, now, t)}
+                </span>
+              </>
+            )}
           {renderSlot('sidebar.session.row.trailing', { sessionId: node.id })}
-          {row.pinned && !row.archived && <PinnedIndicator t={t} />}
+          {pinMark && row.pinned && !row.archived && <PinnedIndicator t={t} />}
         </span>
       )}
       {/* The strip's clicks stay in the strip: the trigger and every

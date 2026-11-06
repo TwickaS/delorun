@@ -736,6 +736,13 @@ describe('SidebarRightController — the readable slice', () => {
     expect(Object.values(layout().tabs).filter(tab => tab.contentId === 'dsh-resource://file/session/s-test/a.txt')).toHaveLength(1)
     expect(controller.active()?.contentId).toBe('dsh-resource://file/session/s-test/a.txt')
   })
+
+  it('says whether an expanded column would cover the main column at the frame width the seats reported', () => {
+    const { controller, frame } = harness()
+    expect(controller.presentsFullscreen()).toBe(false)
+    frame.narrow = true
+    expect(controller.presentsFullscreen()).toBe(true)
+  })
 })
 
 describe('SidebarRightController — the on-screen Session', () => {

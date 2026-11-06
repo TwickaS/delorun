@@ -21,8 +21,14 @@
   }
 }
 
+/* A theme may tint the open chat's row and mark its leading edge with a short
+   bar; by default it takes the hover fill and no bar. */
 .sessionRow.selected {
-  background-color: var(--dsw-alias-interactive-bg-hover);
+  background-color: var(--dsh-sidebar-row-selected-fill, var(--dsw-alias-interactive-bg-hover));
+  background-image: linear-gradient(var(--dsh-sidebar-row-selected-edge-color, transparent), var(--dsh-sidebar-row-selected-edge-color, transparent));
+  background-position: left center;
+  background-repeat: no-repeat;
+  background-size: var(--dsh-sidebar-row-selected-edge, 0px) 16px;
 }
 
 .dragPreview {
@@ -127,6 +133,22 @@
 
 .sessionRow .title {
   margin: 0 6px 0 var(--dsh-sidebar-label-gap);
+}
+
+/* A list without hierarchy starts titles at the row's edge; the status sits before the time. */
+.sessionRow.trailingStatusRow .title {
+  margin-left: 0;
+}
+
+.trailingStatus {
+  display: inline-flex;
+  align-items: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Gone, gap and all, while it holds only empty slot wrappers. */
+.trailingStatus:not(:has(:not([data-slot]))) {
+  display: none;
 }
 
 .slot {
@@ -235,6 +257,49 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* The flat list's Workspace name: a muted caption before the time, short
+   enough to leave the title room, after the Workspace's colour dot. */
+.workspace {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 80px;
+  overflow: hidden;
+  color: var(--dsw-alias-label-caption, var(--dsw-alias-label-tertiary));
+  font-size: 10px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  corner-shape: round;
+}
+
+/* What a chat waits on, in the one-list view: the accent's tint behind the
+   accent's text colour. */
+.pendingPill {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  corner-shape: round;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  color: var(--dsw-alias-link);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* A finished chat the person has not opened since. */
+.sessionRow.unread .title {
+  font-weight: 600;
+}
+
 .time {
   flex: none;
   font-size: 10px;
@@ -317,6 +382,10 @@
 @media (hover: hover) {
   .sessionRow:hover {
     background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+
+  .sessionRow.selected:hover {
+    background-color: var(--dsh-sidebar-row-selected-fill, var(--dsw-alias-interactive-bg-hover));
   }
 
   .sessionRow:hover .rowActions,

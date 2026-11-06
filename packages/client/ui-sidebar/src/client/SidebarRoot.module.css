@@ -23,10 +23,35 @@
      scrollbar uses the l2 pair. .quietBars hides it without changing layout. */
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  position: relative;
+  isolation: isolate;
 }
 
 :global([data-animating]:not([data-dragging])) .root {
   transition: width var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+/* The backdrop art's box: the column's top 80px, behind every row, taking no pointer. */
+.backdrop {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 80px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.backdrop:empty {
+  display: none;
+}
+
+/* On the art the brand and the toggle read light, as on a photograph; art that marks itself `data-backdrop-plain`, such as a small badge, leaves them as they are. */
+.root:has(> .backdrop:not(:empty, :has(> [data-backdrop-plain]))) .logoRow,
+.root:has(> .backdrop:not(:empty, :has(> [data-backdrop-plain]))) .topStrip {
+  color: var(--dsw-static-neutral-bluish-00);
+  --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-00);
+  --dsw-alias-label-secondary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 82%, transparent);
+  --dsw-alias-label-tertiary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 72%, transparent);
 }
 
 /* macOS desktop: the AppFrame column owns the translucent sidebar tint; an
@@ -530,6 +555,14 @@
   }
 }
 
+/* A distribution's lead panel: one panel row between the brand and New Session. */
+.leadPanel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 6px;
+}
+
 .panelList {
   flex: none;
   display: flex;
@@ -683,4 +716,76 @@
     transition: none;
     animation: none;
   }
+}
+
+/* Panels in the foot (ctx.sidebarLayout): wide, a row of icon buttons with
+   tooltips at the end of the settings row; on the rail, a column above it. */
+.footRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.footRow > .settingsArea {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  display: flex;
+}
+
+/* A one-row foot (setFootRow): the settings seat and panels keep their width; the footer actions take the rest, ending
+ * the row. */
+.footRow:has(> .footerActionsInline) > .settingsArea {
+  flex: none;
+}
+
+.footerActionsInline {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.footPanels {
+  flex: none;
+  flex-direction: row;
+  gap: 0;
+  margin: 0;
+  padding-inline-end: var(--dsh-sidebar-paint-inset);
+}
+
+.footPanels .panelRow {
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  border-inline: 0;
+  background-clip: border-box;
+  color: var(--dsw-alias-label-secondary);
+}
+
+@media (hover: hover) {
+  .footPanels .panelRow:hover {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.footPanels .panelActive {
+  color: var(--dsw-alias-label-primary);
+}
+
+.collapsed .footPanels {
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-inline: 0;
+}
+
+.collapsed .footPanels .panelRow {
+  width: 36px;
+  height: 36px;
 }

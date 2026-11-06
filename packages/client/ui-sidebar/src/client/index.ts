@@ -1,7 +1,7 @@
 /** Registers the sidebar shell and global panel navigation. */
 import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
@@ -10,18 +10,62 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the Session root standard-props merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import type { SidebarPanelMetadata, SidebarRootInjected } from './contract/slots.ts'
+import type { SidebarLeadPanel, SidebarPanelMetadata, SidebarRootInjected } from './contract/slots.ts'
 import { createPanelPins } from './panel-pins.ts'
 import { HeaderLeadingControls } from './HeaderLeadingControls.tsx'
 import { SidebarRoot } from './SidebarRoot.tsx'
 import { en, ja, es, fr, de, ru, pt, zh, type SidebarKey } from './locales.ts'
 
 export type {
-  SidebarBrandMarkOwnerProps, SidebarBrandNameOwnerProps, SidebarFooterActionOwnerProps,
-  SidebarPanelActionEntry, SidebarPanelActionsOwnerProps, SidebarPanelIconOwnerProps, SidebarPanelMetadata,
+  SidebarBackdropOwnerProps, SidebarBrandMarkOwnerProps, SidebarBrandNameOwnerProps, SidebarFooterActionOwnerProps,
+  SidebarLeadPanel, SidebarPanelActionEntry, SidebarPanelActionsOwnerProps, SidebarPanelIconOwnerProps, SidebarPanelMetadata,
   SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps, SidebarSettingsOwnerProps,
 } from './contract/slots.ts'
 export type { SidebarKey } from './locales.ts'
+
+/** Where the sidebar lists the global panels (Plugins, Automation tasks and the like): under New Session, or in its foot. */
+export type SidebarPanelPlacement = 'top' | 'footer'
+
+/** How a distribution arranges the sidebar. */
+export interface SidebarLayout {
+  /**
+   * List the global panels at `placement` until the returned disposer runs; the latest call wins.
+   * @param placement - where the panel list goes.
+   * @returns the disposer that restores the previous placement.
+   */
+  setPanelPlacement(placement: SidebarPanelPlacement): () => void
+  /**
+   * Lead the sidebar with one global panel's row, above New Session and out of the panel list, until the returned
+   * disposer runs; the latest call wins.
+   * @param panelId - a registered `sidebar.panellist` id.
+   * @param current - also marks the row current while it reads true, for a panel that hands the main view to a
+   *   Session it stands for, which closes the panel.
+   * @returns the disposer that restores the previous lead.
+   */
+  setLeadPanel(panelId: MainPanelId, current?: ObservableSnapshot<boolean>): () => void
+  /**
+   * Show or hide the wide sidebar's New Session button until the returned disposer runs, for a chat list that offers
+   * its own; the folded rail keeps the button. The latest call wins.
+   * @param shown - whether the wide sidebar shows the button.
+   * @returns the disposer that restores the previous choice.
+   */
+  setNewSessionButton(shown: boolean): () => void
+  /**
+   * Lay the wide sidebar's foot out as one row until the returned disposer runs: the `sidebar.settings` seat, the panel
+   * list when it sits in the foot, then the `sidebar.footer.action` entries at the row's end, told they sit inline.
+   * Otherwise the footer actions stack above the settings row. The latest call wins.
+   * @param row - whether the foot is one row.
+   * @returns the disposer that restores the previous choice.
+   */
+  setFootRow(row: boolean): () => void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The sidebar's arrangement, which a distribution sets. */
+    sidebarLayout: SidebarLayout
+  }
+}
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -47,6 +91,61 @@ export function apply(ctx: ClientContext): void {
   const workspaceNavigation = ctx.get('uiWorkspace') as unknown as WorkspaceNavigation
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-sidebar: dictionaries')
   const panels = createSnapshotStore<readonly SidebarPanelMetadata[]>([])
+  // Each call keeps its own entry, so disposing an earlier call never drops a later one.
+  const placements: { readonly placement: SidebarPanelPlacement }[] = []
+  const panelPlacement = createSnapshotStore<SidebarPanelPlacement>('top')
+  const leads: SidebarLeadPanel[] = []
+  const leadPanel = createSnapshotStore<SidebarLeadPanel | null>(null)
+  const newSessionChoices: { readonly shown: boolean }[] = []
+  const newSessionButton = createSnapshotStore(true)
+  const footRowChoices: { readonly row: boolean }[] = []
+  const footRow = createSnapshotStore(false)
+  ctx.provide('sidebarLayout', {
+    setPanelPlacement: (placement) => {
+      const entry = { placement }
+      placements.push(entry)
+      panelPlacement.set(placement)
+      return () => {
+        const index = placements.indexOf(entry)
+        if (index === -1) return
+        placements.splice(index, 1)
+        panelPlacement.set(placements.at(-1)?.placement ?? 'top')
+      }
+    },
+    setLeadPanel: (panelId, current) => {
+      const entry: SidebarLeadPanel = current === undefined ? { panelId } : { panelId, current }
+      leads.push(entry)
+      leadPanel.set(entry)
+      return () => {
+        const index = leads.indexOf(entry)
+        if (index === -1) return
+        leads.splice(index, 1)
+        leadPanel.set(leads.at(-1) ?? null)
+      }
+    },
+    setNewSessionButton: (shown) => {
+      const entry = { shown }
+      newSessionChoices.push(entry)
+      newSessionButton.set(shown)
+      return () => {
+        const index = newSessionChoices.indexOf(entry)
+        if (index === -1) return
+        newSessionChoices.splice(index, 1)
+        newSessionButton.set(newSessionChoices.at(-1)?.shown ?? true)
+      }
+    },
+    setFootRow: (row) => {
+      const entry = { row }
+      footRowChoices.push(entry)
+      footRow.set(row)
+      return () => {
+        const index = footRowChoices.indexOf(entry)
+        if (index === -1) return
+        footRowChoices.splice(index, 1)
+        footRow.set(footRowChoices.at(-1)?.row ?? false)
+      }
+    },
+  } satisfies SidebarLayout)
   const syncPanels = (): void => {
     const next = ctx.slots.entriesOfSlot('sidebar.panellist').map(({ options }) => {
       // The list registration requires an id; StoredEntry erases the slot kind.
@@ -76,7 +175,10 @@ export function apply(ctx: ClientContext): void {
     selectPanel: (id) => { ctx.layout.selectPanel(id) },
     setPinned: panelPins.setPinned,
     trackEntryClick: (attributes) => { ctx.get('productAnalytics')?.track('sidebar_menu_click', attributes) },
-    hooks: { panels, shortcuts: ctx.shortcuts.catalog, entryPins: panelPins.unpinned, entryActions },
+    hooks: {
+      panels, shortcuts: ctx.shortcuts.catalog, entryPins: panelPins.unpinned, entryActions, panelPlacement, leadPanel, newSessionButton,
+      footRow,
+    },
   })
   ctx.slots.inject('sidebar', () => ctx.slots.register({
     name: 'sidebar',
@@ -84,6 +186,7 @@ export function apply(ctx: ClientContext): void {
     children: {
       'sidebar.brand.mark': { kind: 'single', scope: 'root' },
       'sidebar.brand.name': { kind: 'single', scope: 'root' },
+      'sidebar.backdrop': { kind: 'single', scope: 'root' },
       'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
       'sidebar.panellist': { kind: 'list', scope: 'root' },
       'sidebar.panellist.actions': { kind: 'list', scope: 'root' },

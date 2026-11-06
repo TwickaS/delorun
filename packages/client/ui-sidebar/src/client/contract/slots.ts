@@ -30,6 +30,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.brand.name': { kind: 'single'; scope: 'root'; owner: SidebarBrandNameOwnerProps }
     /**
+     * Art behind the expanded sidebar's top, under the brand row and fading into the column. Declared by this
+     * package's `sidebar` entry; while an entry occupies it, the brand and the toggle turn light to read on the art.
+     * The occupant fills its box, 80px tall across the column, and draws nothing that takes the pointer.
+     */
+    'sidebar.backdrop': { kind: 'single'; scope: 'root'; owner: SidebarBackdropOwnerProps }
+    /**
      * Global panel icons. Each list id addresses the matching main panel;
      * the sidebar owns the button and resolves its label from list metadata.
      */
@@ -57,6 +63,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
+/** The panel row that leads the sidebar, and what else marks it current. */
+export interface SidebarLeadPanel {
+  readonly panelId: MainPanelId
+  /** Also marks the row current while it reads true. */
+  readonly current?: ObservableSnapshot<boolean>
+}
+
 /** Geometry supplied to the sidebar brand-mark occupant. */
 export interface SidebarBrandMarkOwnerProps {
   /** Requested square edge in pixels. */
@@ -66,6 +79,12 @@ export interface SidebarBrandMarkOwnerProps {
 /** Empty owner share for the sidebar brand-name occupant. */
 export interface SidebarBrandNameOwnerProps {
   /** Marker field: the occupant owns its own content and width. */
+  children?: never
+}
+
+/** Owner share of the sidebar's backdrop art. */
+export interface SidebarBackdropOwnerProps {
+  /** Marker field: the occupant fills the box the shell gives it. */
   children?: never
 }
 
@@ -142,6 +161,8 @@ export interface SidebarSettingsOwnerProps {
 export interface SidebarFooterActionOwnerProps {
   /** Whether the sidebar renders wide content (false = 56px rail). */
   wide: boolean
+  /** Whether the entry sits at the end of the foot's one row (`SidebarLayout.setFootRow`) rather than above it. */
+  inline?: boolean
 }
 
 /**
@@ -175,6 +196,14 @@ export type SidebarRootInjected = {
     entryPins: ObservableSnapshot<readonly string[]>
     /** Whether `sidebar.panellist.actions` has registrations. */
     entryActions: ObservableSnapshot<boolean>
+    /** Where the global panels are listed (`ctx.sidebarLayout`). */
+    panelPlacement: ObservableSnapshot<'top' | 'footer'>
+    /** The panel whose row leads the sidebar, above New Session (`ctx.sidebarLayout`). */
+    leadPanel: ObservableSnapshot<SidebarLeadPanel | null>
+    /** Whether the wide sidebar shows its New Session button (`SidebarLayout.setNewSessionButton`). */
+    newSessionButton: ObservableSnapshot<boolean>
+    /** Whether the wide sidebar's foot is one row (`SidebarLayout.setFootRow`). */
+    footRow: ObservableSnapshot<boolean>
   }
 }
 
@@ -188,6 +217,7 @@ export type SidebarRootComponentProps =
   & PropsRenderSlots<
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
+    | 'sidebar.backdrop'
     | 'sidebar.toggle.badge'
     | 'sidebar.panellist'
     | 'sidebar.panellist.actions'

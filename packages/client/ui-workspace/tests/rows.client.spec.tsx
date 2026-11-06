@@ -259,7 +259,7 @@ describe('native row drag previews', () => {
 })
 
 describe('workspace browser rows', () => {
-  it('keeps the leading status cell in the hierarchy-free flat list', () => {
+  it('keeps the leading status cell by default', () => {
     const idle: SessionNode = {
       id: sid('flat'), title: 'Flat Session', blank: false, running: false,
       runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived: false,
@@ -275,6 +275,36 @@ describe('workspace browser rows', () => {
       onOpen={vi.fn()} t={t} />)
     // A row that gains a state dot keeps that dot in the same cell.
     expect(screen.getByText('Flat Session').previousElementSibling?.querySelector('[data-state="ongoing"]')).toBeTruthy()
+  })
+
+  it('with the status after the title, keeps no leading cell and draws the dot before the time', () => {
+    const running: SessionNode = {
+      id: sid('flat'), title: 'Flat Session', blank: false, running: true,
+      runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived: false,
+    }
+    render(<SessionNodeItem node={running} currentId={undefined} now={0} onOpen={vi.fn()} t={t} trailingStatus />)
+    expect(screen.getByText('Flat Session').previousElementSibling).toBeNull()
+    const dot = document.querySelector('[data-state="ongoing"]')
+    expect(dot?.closest('[class*="trailingStatus"]')).toBeTruthy()
+  })
+
+  it('with the status after the title, shimmers a working title, names what a chat waits on in a pill and bolds an unread finish', () => {
+    const base: SessionNode = {
+      id: sid('flat'), title: 'Flat Session', blank: false, running: true,
+      runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived: false,
+    }
+    const view = render(<SessionNodeItem node={base} currentId={undefined} now={0} onOpen={vi.fn()} t={t} trailingStatus
+      workspace="alpha" workspaceColor="--dsw-static-blue-450" />)
+    expect(screen.getByText('Flat Session').closest('[data-shimmer]')).toBeTruthy()
+    expect(document.querySelector<HTMLElement>('[class*="workspaceDot"]')?.style.background).toBe('var(--dsw-static-blue-450)')
+    view.rerender(<SessionNodeItem node={{ ...base, pendingInteraction: 'question' }} currentId={undefined} now={0} onOpen={vi.fn()}
+      t={t} trailingStatus />)
+    expect(document.querySelector('[class*="pendingPill"]')?.textContent).toBeTruthy()
+    expect(document.querySelector('[class*="trailingStatus"] [data-state]')).toBeNull()
+    view.rerender(<SessionNodeItem node={{ ...base, running: false, completed: true }} currentId={undefined} now={0} onOpen={vi.fn()}
+      t={t} trailingStatus />)
+    expect(screen.getByText('Flat Session').closest('[data-shimmer]')).toBeNull()
+    expect(document.querySelector('[class*="unread"]')).toBeTruthy()
   })
 
   it('renders a selected content-search row and opens only its session', () => {
