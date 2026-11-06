@@ -207,7 +207,7 @@ describe('delorun logs', () => {
     chmodSync(location.file, 0o644)
     const { code, err } = await logs(root, ['home'])
     expect(code).toBe(1)
-    expect(err).toContain(`fix: chmod 600 ${location.file}`)
+    expect(err).toContain(`fix it with: chmod 600 ${location.file}`)
   })
 
   it.each([
@@ -249,6 +249,26 @@ describe('delorun logs in the command table', () => {
     expect(out).toBe(`${join(root, 'logs', 'home-work', 'home.log')}\n`)
     expect(existsSync(join(root, 'logs'))).toBe(false)
     expect((await delorun(['logs', '--path', '--profile=other'], { DELO_HOME: root })).out).toBe(`${join(root, 'logs', 'home-other', 'home.log')}\n`)
+  })
+
+  it('prunes every expired operational log as any command starts, and warns about a refused one without failing', async () => {
+    const root = newHome()
+    const expired = writer(root, 'supervisor')
+    expired.time.now = Date.now() - 15 * DAY
+    expired.logger.info('expired')
+    expired.log.close()
+    const fresh = writer(root, 'desktop-host')
+    fresh.time.now = Date.now()
+    fresh.logger.info('fresh')
+    const run = await delorun(['logs', '--path'], { DELO_HOME: root })
+    expect(run.code).toBe(0)
+    expect(existsSync(expired.location.file)).toBe(false)
+    expect(existsSync(fresh.location.file)).toBe(true)
+    chmodSync(fresh.location.dir, 0o755)
+    const warned = await delorun(['logs', '--path'], { DELO_HOME: root })
+    expect(warned.code).toBe(0)
+    expect(warned.err).toContain('delorun: warning: an expired operational log was not pruned: HOME_MODE')
+    chmodSync(fresh.location.dir, 0o700)
   })
 
   it('refuses the desktop profile and declines a clear without a terminal', async () => {

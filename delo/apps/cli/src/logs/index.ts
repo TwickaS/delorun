@@ -14,7 +14,7 @@ import {
   clearSurface,
   followLines,
   localSurfaces,
-  LogsError,
+  isLogsFailure,
   oldestRecordTime,
   pruneLocalSurfaces,
   readLines,
@@ -205,7 +205,7 @@ function print(io: LogsIo, options: Options, line: StoredLine): void {
 }
 
 function reportFailures(io: LogsIo, report: RetentionReport): LogsExit {
-  for (const failure of report.failures) io.stderr(`${failure.message}${failure.fix === undefined ? '' : `; fix: ${failure.fix}`}\n`)
+  for (const failure of report.failures) io.stderr(`${failure.message}\n`)
   return report.failures.length === 0 ? 0 : 1
 }
 
@@ -227,8 +227,8 @@ function overview(io: LogsIo, profile: string): void {
         state = `${size(bytes)} in ${String(paths.length)} file${paths.length === 1 ? '' : 's'}, oldest record ${Number.isFinite(oldest) ? new Date(oldest).toISOString() : 'none'}`
       }
     } catch (error: unknown) {
-      if (!(error instanceof LogsError)) throw error
-      state = `refused: ${error.message}${error.fix === undefined ? '' : `; fix: ${error.fix}`}`
+      if (!isLogsFailure(error)) throw error
+      state = `refused: ${error.message}`
     }
     io.stdout(`  ${location.surface}  ${location.file}  ${state}\n`)
   }
@@ -333,8 +333,8 @@ export async function runLogs(argv: readonly string[], io: LogsIo): Promise<Logs
       io.stderr(`delorun logs: ${error.message}\n`)
       return 2
     }
-    if (!(error instanceof LogsError)) throw error
-    io.stderr(`delorun logs: ${error.message}${error.fix === undefined ? '' : `; fix: ${error.fix}`}\n`)
+    if (!isLogsFailure(error)) throw error
+    io.stderr(`delorun logs: ${error.message}\n`)
     return 1
   }
 }

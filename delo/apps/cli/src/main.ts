@@ -11,7 +11,8 @@
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |
  *
- * Every command resolves the Delo home, `DELO_HOME` or `~/.delo`, and every
+ * Every invocation but `--help` first prunes the home's expired operational logs (contract C20;
+ * [startup pruning](./logs/startup.ts)). Every command resolves the Delo home, `DELO_HOME` or `~/.delo`, and every
  * command but `status` creates its tree at mode 0700 and refuses a laxer one
  * before upstream code runs. Exit codes are {@link EXIT}'s.
  *
@@ -25,6 +26,7 @@ import { runSetup, setupCommand } from './setup/index.ts'
 import { startCommand, startForeground } from './start.ts'
 import { statusCommand } from './status.ts'
 import { logsCommand } from './logs/command.ts'
+import { pruneLogsAtStart } from './logs/startup.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
@@ -81,6 +83,7 @@ export async function main(argv: readonly string[], context: CommandContext = {
       context.stdout(usage())
       return EXIT.ok
     }
+    await pruneLogsAtStart(context, Date.now())
     if (first === undefined || first.startsWith('-')) return await bare(argv, context)
     const command = COMMANDS.find(candidate => candidate.name === first)
     if (command === undefined) throw new CliError(EXIT.usage, `delorun: unknown command ${JSON.stringify(first)}\n\n${usage()}`)
