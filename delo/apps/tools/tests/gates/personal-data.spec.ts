@@ -23,8 +23,11 @@ const PATTERNS = `# comment\n${NAME}\n${EMAIL}\n${PHONE}\n`
 
 // Address fixtures are assembled at run time, so this file holds no address shape for the gate to find.
 const POSTCODE = ['Z9', '9ZZ'].join(' ')
-const UK_LINE = `Flat 1, 1 Example ${['Road'].join('')}, Testington ${POSTCODE}`
-const US_LINE = `100 Fictional ${['Street'].join('')}, Nowhere, XX ${'12345'}`
+const ROAD = ['Road'].join('')
+const STREET = ['Street'].join('')
+const ZIP = ['12', '345'].join('')
+const UK_LINE = `Flat 1, 1 Example ${ROAD}, Testington ${POSTCODE}`
+const US_LINE = `100 Fictional ${STREET}, Nowhere, XX ${ZIP}`
 
 const dirs: string[] = []
 afterEach(() => {
