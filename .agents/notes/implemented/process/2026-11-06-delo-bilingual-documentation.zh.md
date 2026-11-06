@@ -14,7 +14,7 @@ Delo 的文档由英文与中文读者阅读。只有一种语言的页面会使
 
 Delo 的产品术语及其中文译法保存在[术语来源](../../../../docs/i18n/terminology.md)中，Delo 术语表为每个概念提供条目。译文使用术语来源中的译法。
 
-文档网站为每一页同时提供 HTML 与 Markdown 两种形式，并为编码 agent 发布一份 `llms.txt` 索引。每一页都注明其所描述的 Delo 版本。
+文档标准要求 Delo 文档网站为每一页同时提供 HTML 与 Markdown 两种形式，并为编码 agent 提供 `llms.txt` 索引，且每一页都注明其所描述的 Delo 版本。
 
 ## 验证
 

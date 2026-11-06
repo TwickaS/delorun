@@ -12,7 +12,7 @@ Delo changes defaults and adds tools, and any such change can move an approval, 
 
 Every change that moves an approval, a refusal or an escalation carries three things. It has the `security` class in the [divergence ledger](../../../../delo/upstream-patches.json). A lead verdict is recorded with it. It includes a denial test that fails before the change and passes after it, or a denial test that shows the refusal holds.
 
-A Delo exemption from a stock check is narrow, names the check and the case it covers, and sits behind a switch that is off in the parity composition. A change does not lower the safety of any stock path, even when it adds capability elsewhere.
+A Delo exemption from a stock check is narrow, names the check and the case it covers, and sits behind a switch that is off in the parity composition, which the [stock parity proposal](../../proposed/testing/2026-11-06-delo-stock-parity.md) specifies. A change does not lower the safety of any stock path, even when it adds capability elsewhere.
 
 ## Verification
 

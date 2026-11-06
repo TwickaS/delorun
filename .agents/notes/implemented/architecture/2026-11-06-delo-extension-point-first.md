@@ -1,8 +1,8 @@
-# Agent Note: Seam-first rule for Delo's behaviour
+# Agent Note: Extension-point-first rule for Delo's behaviour
 
 Status: implemented
 
-English | [中文](2026-11-06-delo-seam-first.zh.md)
+English | [中文](2026-11-06-delo-extension-point-first.zh.md)
 
 ## Problem
 
@@ -10,11 +10,11 @@ Delo changes what a person's copy of DSH does: the studio, safe updates, workspa
 
 ## Decision
 
-Delo's behaviour lives under `delo/` and attaches to upstream's documented extension points: plugins, client slots, registries, theme layers and configuration fields, including the Service Definitions of capability seams. The [seam-first rule](../../../../delo/docs/reference/glossary.md) is the name that Delo's glossary gives this decision.
+Delo's behaviour lives under `delo/` and attaches to upstream's documented extension points: plugins, client slots, registries, theme layers and configuration fields, including the Service Definitions of capability seams. The [extension-point-first rule](../../../../delo/docs/reference/glossary.md) is the name that Delo's glossary gives this decision.
 
 When a needed change has no extension point, the change adds one to the upstream tree as a hook, a Service Definition or a configuration field, and the behaviour stays under `delo/`. Editing upstream behaviour in place is allowed only when no extension point can carry the change. Such an edit is recorded in the [divergence ledger](../../../../delo/upstream-patches.json) with its reason and class, as the [hard fork decision](../process/2026-11-06-delo-hard-fork-on-upstream-tag.md) requires.
 
-This note uses "extension point" for hooks, slots, registries, theme layers and configuration fields. It reserves "seam" for upstream's capability seam, the complete capability made of a Service Definition, its Service Providers and its Consumers. The root guide states the rule as "a missing seam is added upstream as a seam (hook, Service Definition, configuration field)", which applies the word more widely than this note does.
+This note uses "extension point" for hooks, slots, registries, theme layers and configuration fields. It reserves "seam" for upstream's capability seam, the complete capability made of a Service Definition, its Service Providers and its Consumers. The root guide uses the same terms.
 
 ## Verification
 

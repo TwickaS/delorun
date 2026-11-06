@@ -1,25 +1,25 @@
 # Bilingual-pair consistency record for 2026-11-06-delo-web-fetch-private-targets.md (docs/i18n/README.md): per heading
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-06-delo-web-fetch-private-targets.md
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-11-06-delo-web-fetch-private-targets.md
 /agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets:
-  en: 9c3fbcc626774445
-  zh: c13e27deb4a6ae87
+  en: 3875ad71d1eb8fe4
+  zh: 9657c2bb88156d13
 /agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/problem:
   en: 74470c1ea73aacc1
   zh: 9d872c7c389266cc
-/agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/decision:
-  en: 08d992b11049ca68
-  zh: f9c813741e6cbfad
-/agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/verification:
-  en: 96f3a77dc1996dc6
-  zh: d6168b99135a0dba
+/agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/proposal:
+  en: 479ccdbd67512a10
+  zh: c9cf2af5a3e2ad7d
 /agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/related:
-  en: 973262c506bf166b
-  zh: a5d64c8001e51c71
+  en: ae76611b130448e0
+  zh: 2215268da759fa61
 /agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/alternatives-considered:
   en: e748e822aec29768
-  zh: 96003d7500e004c3
-/agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/consequences:
-  en: 4a4a1798d38e101d
-  zh: 6d5106a48712a7d1
+  zh: ab68f9e1118ac1df
+/agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/acceptance-criteria:
+  en: ed2e95890a3b7e63
+  zh: 483389f292318403
+/agent-note-web-fetch-refuses-loopback-link-local-and-private-network-targets/risks:
+  en: 387f8a65b433d211
+  zh: ceb29c7e59826341

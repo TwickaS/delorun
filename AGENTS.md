@@ -26,7 +26,7 @@ Record each externally perceptible breaking change immediately in an [upgrade gu
 
 ## The fork boundary
 
-- **Seam first.** Delo behaviour lives under `delo/` on upstream's seams; a missing seam is added upstream as a seam (hook, Service Definition, configuration field), not as the behaviour.
+- **Extension point first.** Delo behaviour lives under `delo/` on upstream's extension points; a missing extension point is added upstream as an extension point (hook, Service Definition, configuration field), not as the behaviour.
 - **Upstream edits are made in place**, in upstream's style, updating in the same change the package README, subsystems page, `docs/architecture.md` for agent-loop changes, upgrade guide, persistence acknowledgements, snapshots, both SDKs' expected outputs and each Chinese pair.
 - **Ledger.** Every changed or added file outside `delo/`, this one included, has a `delo/upstream-patches.json` entry with reason and class (`delo-feature`, `generic-fix`, `security`), and a substantial plugin change a [divergence record](delo/docs/reference/divergence/README.md); generic fixes get their own commits.
 - **Budget.** Ledger growth per release stays within the [divergence budget](delo/docs/reference/divergence/README.md#divergence-budget), measured by a rehearsal merge onto upstream's newest tag; going beyond it, or a conflicted `security` file, needs a lead decision.

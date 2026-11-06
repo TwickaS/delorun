@@ -1,8 +1,8 @@
-# Agent Note: Delo 行为的 seam 优先规则
+# Agent Note: Delo 行为的扩展点优先规则
 
 Status: implemented
 
-[English](2026-11-06-delo-seam-first.md) | 中文
+[English](2026-11-06-delo-extension-point-first.md) | 中文
 
 ## 问题
 
@@ -10,11 +10,11 @@ Delo 改变的是本人所用 DSH 副本的行为：studio、安全更新、工�
 
 ## 决策
 
-Delo 的行为位于 `delo/` 之下，并挂接在上游有文档的扩展点上：插件、client slot、注册表、主题层与配置字段，包括能力 seam 的 Service Definition。[seam 优先规则](../../../../delo/docs/reference/glossary.zh.md) 是 Delo 术语表为本决策所起的名字。
+Delo 的行为位于 `delo/` 之下，并挂接在上游有文档的扩展点上：插件、client slot、注册表、主题层与配置字段，包括能力 seam 的 Service Definition。[扩展点优先规则](../../../../delo/docs/reference/glossary.zh.md) 是 Delo 术语表为本决策所起的名字。
 
 当所需的改动没有对应的扩展点时，则在上游代码树中增加一个扩展点，形式可以是钩子、Service Definition 或配置字段，而行为仍位于 `delo/` 之下。只有在没有任何扩展点能承载改动时，才允许就地编辑上游行为。此类编辑须连同其原因与类别记入[差异台账](../../../../delo/upstream-patches.json)，如 [hard fork 决策](../process/2026-11-06-delo-hard-fork-on-upstream-tag.zh.md) 所要求的那样。
 
-本笔记用「扩展点」指钩子、slot、注册表、主题层与配置字段，并把「seam」保留给上游的能力 seam，即由 Service Definition、Service Provider 与 Consumer 组成的完整能力。根指南写道「a missing seam is added upstream as a seam (hook, Service Definition, configuration field)」，它对 seam 一词的使用比本笔记更宽泛。
+本笔记用「扩展点」指钩子、slot、注册表、主题层与配置字段，并把「seam」保留给上游的能力 seam，即由 Service Definition、Service Provider 与 Consumer 组成的完整能力。根指南采用相同的用词。
 
 ## 验证
 

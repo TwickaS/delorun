@@ -283,10 +283,14 @@
 | parity checklist | 对等清单 | | | 每项 stock 功能及其证据 |
 | parity composition | 对等组合 | | | 关闭 studio 组合包与 Delo 模型可见修改的运行时 |
 | parity replay | 对等回放 | | | 上游场景在对等组合上的原样运行 |
-| seam-first rule | seam 优先规则 | | | Delo 行为位于 `delo/` 之下，上游的修改只增加 seam |
+| extension-point-first rule | 扩展点优先规则 | | | Delo 行为位于 `delo/` 之下，上游的修改只增加扩展点 |
 | rehearsal merge | 预演合并 | | | 发布前对上游最新标签的试验性合并 |
 | work package | 工作包 | | | 具有拥有路径与验收证据的并行工作单元 |
 | denial test | 拒绝测试 | | | 证明禁止操作会失败的测试 |
+| check runner | 检查运行器 | 检查运行器（check runner） | | Delo 运行改动所涉及检查的命令（`pnpm check`） |
+| changelog fragment | changelog fragment | | | 保留英文；位于 `delo/changelog/unreleased/` 下，每项可察觉改动一个文件 |
+| brief | brief | | | 保留英文；由维护者创建、加 `brief` 标签并锁定的 agent 工作 issue |
+| SBOM | SBOM | SBOM（软件物料清单） | | 保留英文；发布中组件的机器可读清单 |
 | upstream standard | 上游标准 | | | 上游的 AGENTS、文档标准与门禁规则，Delo 就地改写后适用于 Delo |
 | architecture notes | 架构说明 | | | `delo/docs/architecture/` |
 | consistency record | 一致性记录 | | | `<page>.i18n.yaml`，按小节保存两侧哈希 |

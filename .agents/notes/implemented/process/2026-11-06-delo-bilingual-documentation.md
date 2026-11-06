@@ -14,7 +14,7 @@ Every page under `delo/docs/` is an English and Chinese pair with its consistenc
 
 Delo's product terms and their Chinese renderings are in the [terminology source](../../../../docs/i18n/terminology.md), and Delo's glossary gives each concept its entry. Translations use the renderings in the terminology source.
 
-The documentation website serves each page as Markdown as well as HTML, and it publishes an `llms.txt` index for coding agents. Each page names the Delo version that it describes.
+The documentation standard requires the Delo documentation website to serve each page as Markdown as well as HTML, with an `llms.txt` index for coding agents, and each page to name the Delo version that it describes.
 
 ## Verification
 
