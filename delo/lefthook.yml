@@ -1,0 +1,28 @@
+# The fork's git hooks, merged over upstream's lefthook.yml through a one-line
+# uncommitted lefthook-local.yml (`extends: [delo/lefthook.yml]`). GitHub
+# Actions does not run on this repository, so the hooks are the checks a
+# change gets: the commit runs the staged gates, and the push runs what
+# changed since the remote branch's tip, or a new branch's merge base with v5,
+# which already passed the gate. DELO_FULL_GATE=1 runs the whole gate.
+# DELO_PUSH_SKIP names checks or groups the push leaves out, such as
+# tests:snapshots. The `commit-msg` job is skipped while its checker is absent
+# (WP1.11 adds it); remove the skip condition once the checker is on the branch.
+pre-commit:
+  jobs:
+    - name: delo checks (staged)
+      run: node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --pre-commit
+
+pre-push:
+  jobs:
+    - name: typecheck
+      skip: true
+    - name: delo checks
+      run: node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --pre-push --skip "${DELO_PUSH_SKIP:-}"
+      use_stdin: true
+
+commit-msg:
+  jobs:
+    - name: delo commit standard
+      skip:
+        - run: test ! -f delo/apps/tools/src/check-commits.ts
+      run: node_modules/.bin/tsx delo/apps/tools/src/check-commits.ts --message {1}
