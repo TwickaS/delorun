@@ -152,6 +152,11 @@ type ProjectionEventChangeListener = (
 ) => void
 ```
 
+```ts type-equiv
+/** Called with each client-visible key that becomes live, after its unit is in place. */
+type ProjectionRegistrationListener = (key: Extract<keyof SessionProjectionMap, string>) => void
+```
+
 `snapshot(session)` is fully synchronous: a carrier reads it in the same tick as its page slice, so `asOfSeq` covers both reads at one sequence number. It returns only client views, and every value passes its unit's `viewSchema` before return. `handle.stateOf(session)` reads one live host state without computing unrelated views; callers must not mutate the borrowed reference. A state-reference change computes one cached raw view, and the change feed fires only when that result changes by `Object.is`; an object-valued view must preserve its reference to suppress publication across internal-only state changes. After every unit has been driven for one committed event, the event-level feed calls each `onEventChanged` listener once with every client-visible key whose view the event changed; an event that changes no client view makes no event-level call.
 
 ## Summary reads
@@ -374,6 +379,22 @@ onChanged(listener: ProjectionChangeListener): () => void
  * @returns the exact disposer that unsubscribes.
  */
 onEventChanged(listener: ProjectionEventChangeListener): () => void
+
+/**
+ * Subscribe to client-visible keys becoming live: a key that becomes live
+ * after clients read their baselines has no client value until its next
+ * change, so a carrier sends each live Session's value when its key arrives.
+ * A key becomes live when its first registrant registers it, and again when
+ * it is registered after its last release; a registration that shares a live
+ * key does not call the listener. The listener runs after the unit is in
+ * place, so `snapshot` already includes it, and before `register` resolves.
+ * A listener throw rejects that `register` call; the calling fiber still
+ * holds the unit and releases it when it disposes. The subscription is an
+ * effect on the calling context's fiber.
+ * @param listener - called with each client-visible key that becomes live.
+ * @returns the exact disposer that unsubscribes.
+ */
+onRegistered(listener: ProjectionRegistrationListener): () => void
 
 /**
  * One consistent cut over every registered client-visible unit for one session, read from

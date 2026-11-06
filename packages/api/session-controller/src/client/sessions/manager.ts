@@ -642,8 +642,8 @@ export class SessionManager {
   // ---- Live control and Host-event sinks ----
 
   /**
-   * Apply a complete control baseline or one later per-event projection frame.
-   * @param frame - baseline or live per-event projection change from Session Controller.
+   * Apply a complete control baseline or one later projection frame.
+   * @param frame - baseline or live projection frame from Session Controller.
    */
   handleControlFrame(frame: SessionControlFrame): void {
     if (frame.type === 'baseline') {

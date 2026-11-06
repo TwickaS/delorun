@@ -665,6 +665,35 @@ describe('SessionProjectionRegistry drive', () => {
     expect(ctx.sessionProjections.snapshot(session).values).toEqual({})
   })
 
+  it('announces each newly registered client-visible key once, with its value already in snapshots', async () => {
+    const { ctx, session } = await harness()
+    mark(session, ['before'])
+    const announced: { key: string; value: unknown }[] = []
+    const stop = ctx.sessionProjections.onRegistered((key) => {
+      announced.push({ key, value: ctx.sessionProjections.snapshot(session).values[key] })
+    })
+    await ctx.sessionProjections.register(countUnit())
+    const first = await ctx.sessionProjections.register(marksUnit())
+    await ctx.sessionProjections.register(marksUnit())
+    expect(announced).toEqual([{ key: 'test/marks', value: { marks: ['before'] } }])
+    await first.dispose()
+    stop()
+    await ctx.sessionProjections.register(stableViewUnit(state => state.value))
+    expect(announced).toHaveLength(1)
+  })
+
+  it('removes a registration listener when its owning fiber unloads (HMR safety)', async () => {
+    const { ctx } = await harness()
+    const announced: string[] = []
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      inner.sessionProjections.onRegistered((key) => { announced.push(key) })
+    }, { inject: ['sessionProjections'] }))
+    await (await ctx.sessionProjections.register(marksUnit())).dispose()
+    await fiber.dispose()
+    await ctx.sessionProjections.register(marksUnit())
+    expect(announced).toEqual(['test/marks'])
+  })
+
   it('retains readable state during owner teardown', async () => {
     const { ctx, session } = await harness()
     onTestFinished(async () => { await ctx.fiber.dispose() })

@@ -571,12 +571,19 @@ export interface SessionControlBaseline {
 }
 
 /**
- * Projection changes caused by one committed Session event; the Host emits one
- * update per event that changed at least one client-visible projection view.
+ * Projection values as of one committed Session event. The Host emits one
+ * update per event that changed at least one client-visible projection view,
+ * and one update per Session with a committed event when a client-visible key
+ * becomes live after the stream's baseline, listing only that key at the
+ * Session's current seq. A Session with no committed event receives no update
+ * for such a key.
  */
 export interface SessionProjectionUpdate {
   readonly sessionId: SessionId
-  /** Seq of the committed event that caused every listed change. */
+  /**
+   * Seq of the committed event that caused every listed change, or, for a key
+   * that became live, the Session's current seq.
+   */
   readonly seq: number
   /**
    * One entry per client-visible key whose view the event changed, in

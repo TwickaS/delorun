@@ -3028,6 +3028,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the exact disposer that unsubscribes.',
       },
       {
+        signature: 'onRegistered(listener: ProjectionRegistrationListener): () => void',
+        description: 'Subscribe to client-visible keys becoming live: a key that becomes live after clients read their baselines has no client value until its next change, so a carrier sends each live Session\'s value when its key arrives. A key becomes live when its first registrant registers it, and again when it is registered after its last release; a registration that shares a live key does not call the listener. The listener runs after the unit is in place, so `snapshot` already includes it, and before `register` resolves. A listener throw rejects that `register` call; the calling fiber still holds the unit and releases it when it disposes. The subscription is an effect on the calling context\'s fiber.',
+        parameters: [{ name: 'listener', description: 'called with each client-visible key that becomes live.' }],
+        returns: 'the exact disposer that unsubscribes.',
+      },
+      {
         signature: 'snapshot( session: Session, keys?: ProjectionKeySelection, ): ProjectionSnapshot',
         description: 'One consistent cut over every registered client-visible unit for one session, read from the watermark cache (missing cells fold lazily over the in-memory log). Only the returned units are computed: other units, including Host-only units without `wire`, are neither folded nor advanced by this read. Fully synchronous — every value and `asOfSeq` reflect the same log position. Each value passes its unit\'s `viewSchema` before leaving.',
         parameters: [{ name: 'session', description: 'the session whose projection values are read.' }, { name: 'keys', description: 'optional client-visible outputs; only these units are computed.' }],
@@ -7767,6 +7773,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProjectionKeySelection',
     declaration: 'export type ProjectionKeySelection = readonly Extract<keyof SessionProjectionMap, string>[] | ReadonlySet<Extract<keyof SessionProjectionMap, string>>;',
+  },
+  {
+    name: 'ProjectionRegistrationListener',
+    declaration: 'export type ProjectionRegistrationListener = (key: Extract<keyof SessionProjectionMap, string>) => void;',
   },
   {
     name: 'ProjectionSnapshot',

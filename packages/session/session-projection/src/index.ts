@@ -157,6 +157,9 @@ export type ProjectionEventChangeListener = (
   seq: SessionSeq,
 ) => void
 
+/** Called with each client-visible key that becomes live, after its unit is in place. */
+export type ProjectionRegistrationListener = (key: Extract<keyof SessionProjectionMap, string>) => void
+
 /**
  * One read's client-visible key selection: an explicit key list, or a derived
  * set such as {@link SessionProjectionRegistry.summaryKeys}. A set is used as
@@ -285,6 +288,7 @@ export class SessionProjectionRegistry extends Service {
   private summaryKeySet: ReadonlySet<Extract<keyof SessionProjectionMap, string>> | undefined
   private readonly listeners = new Set<ProjectionChangeListener>()
   private readonly eventListeners = new Set<ProjectionEventChangeListener>()
+  private readonly registrationListeners = new Set<ProjectionRegistrationListener>()
   /** Keys whose deprecated registry-level read has already been reported. */
   private readonly deprecatedStateOfKeys = new Set<string>()
 
@@ -403,6 +407,7 @@ export class SessionProjectionRegistry extends Service {
       throw new Error(`session projection ${JSON.stringify(definition.key)} stateVersion must be a non-negative integer, got ${String(definition.stateVersion)}`)
     }
     let registration!: Registration
+    let live = false
     const dispose = this.ctx.effect(() => {
       const key = erased.key
       const existing = this.registrations.get(key)
@@ -410,6 +415,7 @@ export class SessionProjectionRegistry extends Service {
         registration = { def: erased, cells: new WeakMap(), refs: 1 }
         this.registrations.set(key, registration)
         this.summaryKeySet = undefined
+        live = true
       } else {
         if (existing.def.stateVersion !== erased.stateVersion) {
           throw new Error(`session projection key ${JSON.stringify(key)} is already registered at stateVersion ${String(existing.def.stateVersion)}; refusing to share it with stateVersion ${String(erased.stateVersion)}`)
@@ -431,6 +437,11 @@ export class SessionProjectionRegistry extends Service {
     // Observe disposal during the asynchronous registration handoff before exposing a reader.
     await Promise.resolve()
     this.ctx.fiber.assertActive()
+    // Announce outside the effect setup: the fiber already holds the release, so a listener throw still releases the unit.
+    if (live && erased.wire !== undefined) {
+      const key = erased.key as Extract<keyof SessionProjectionMap, string>
+      for (const listener of this.registrationListeners) listener(key)
+    }
     const handle: ProjectionHandle<S> = {
       async dispose() {
         await dispose()
@@ -497,6 +508,30 @@ export class SessionProjectionRegistry extends Service {
         this.eventListeners.delete(listener)
       }
     }, 'sessionProjections.onEventChanged()')
+    return () => void dispose()
+  }
+
+  /**
+   * Subscribe to client-visible keys becoming live: a key that becomes live
+   * after clients read their baselines has no client value until its next
+   * change, so a carrier sends each live Session's value when its key arrives.
+   * A key becomes live when its first registrant registers it, and again when
+   * it is registered after its last release; a registration that shares a live
+   * key does not call the listener. The listener runs after the unit is in
+   * place, so `snapshot` already includes it, and before `register` resolves.
+   * A listener throw rejects that `register` call; the calling fiber still
+   * holds the unit and releases it when it disposes. The subscription is an
+   * effect on the calling context's fiber.
+   * @param listener - called with each client-visible key that becomes live.
+   * @returns the exact disposer that unsubscribes.
+   */
+  onRegistered(listener: ProjectionRegistrationListener): () => void {
+    const dispose = this.ctx.effect(() => {
+      this.registrationListeners.add(listener)
+      return () => {
+        this.registrationListeners.delete(listener)
+      }
+    }, 'sessionProjections.onRegistered()')
     return () => void dispose()
   }
 

@@ -152,6 +152,11 @@ type ProjectionEventChangeListener = (
 ) => void
 ```
 
+```ts type-equiv
+/** Called with each client-visible key that becomes live, after its unit is in place. */
+type ProjectionRegistrationListener = (key: Extract<keyof SessionProjectionMap, string>) => void
+```
+
 `snapshot(session)` 完全同步：载体在切出页面切片的同一 tick 内读取它，因此 `asOfSeq` 使两次读取使用同一个序号。它只返回客户端视图，并在返回前通过各单元的 `viewSchema` 校验。`handle.stateOf(session)` 可在不计算无关视图的情况下读取一份实时 host 状态；调用方不得修改这一借用引用。state 引用变化时，注册表计算并缓存一次原始 view；只有该结果通过 `Object.is` 判定为变化时才触发变更流，对象 view 若要在仅内部 state 变化时抑制发布就必须保留引用。一个已提交事件驱动完所有单元后，事件级变更流以该事件改变了视图的全部客户端可见 key 调用每个 `onEventChanged` 监听器一次；未改变任何客户端视图的事件不产生事件级调用。
 
 ## 摘要读取
@@ -374,6 +379,22 @@ onChanged(listener: ProjectionChangeListener): () => void
  * @returns the exact disposer that unsubscribes.
  */
 onEventChanged(listener: ProjectionEventChangeListener): () => void
+
+/**
+ * Subscribe to client-visible keys becoming live: a key that becomes live
+ * after clients read their baselines has no client value until its next
+ * change, so a carrier sends each live Session's value when its key arrives.
+ * A key becomes live when its first registrant registers it, and again when
+ * it is registered after its last release; a registration that shares a live
+ * key does not call the listener. The listener runs after the unit is in
+ * place, so `snapshot` already includes it, and before `register` resolves.
+ * A listener throw rejects that `register` call; the calling fiber still
+ * holds the unit and releases it when it disposes. The subscription is an
+ * effect on the calling context's fiber.
+ * @param listener - called with each client-visible key that becomes live.
+ * @returns the exact disposer that unsubscribes.
+ */
+onRegistered(listener: ProjectionRegistrationListener): () => void
 
 /**
  * One consistent cut over every registered client-visible unit for one session, read from

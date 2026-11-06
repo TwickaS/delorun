@@ -10,6 +10,7 @@ import type {
   SessionControlFrame,
   SessionProjectionBaseline,
   SessionProjectionUpdate,
+  SessionProjectionValue,
   SessionProjectionValues,
 } from './types.ts'
 
@@ -27,6 +28,23 @@ export class SessionControlController {
         // Every projection definition validates its value before change publication.
         changes: changes as SessionProjectionUpdate['changes'],
       })
+    })
+    // A key that becomes live after the streams' baselines, such as one from a
+    // plugin enabled while a page is open, reaches them now rather than at its
+    // next change. A frame carries a committed seq, so a Session without one is skipped.
+    ctx.sessionProjections.onRegistered((key) => {
+      if (this.streams.size === 0) return
+      for (const session of ctx.sessions.list()) {
+        const snapshot = ctx.sessionProjections.snapshot(session, [key])
+        if (snapshot.asOfSeq < 0 || !(key in snapshot.values)) continue
+        this.broadcast({
+          type: 'projection',
+          sessionId: session.id,
+          seq: snapshot.asOfSeq,
+          // Every projection definition validates its value before snapshot publication.
+          changes: [{ key, val: snapshot.values[key] as SessionProjectionValue }],
+        })
+      }
     })
     ctx.effect(() => () => {
       for (const stream of this.streams) stream.end()

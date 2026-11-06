@@ -836,4 +836,33 @@ describe('Session control projection frames', () => {
     abort.abort()
     expect(await changes.next()).toEqual({ done: true, value: undefined })
   })
+
+  it('sends a key that becomes live after the baseline with each committed Session\'s value at its current seq', async () => {
+    const { ctx, session } = await harness(true)
+    const proxy = await remote(ctx)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    seedMessages(session, 1)
+    // A Session with no committed event has no seq a frame could carry.
+    const empty = ctx.sessions.create(undefined, { meta: { cwd: '/workspace' } })
+    expect(empty.seq).toBe(0)
+    const abort = new AbortController()
+    const frames: SessionControlFrame[] = []
+    // The next committed event's frame follows every frame the registration sent.
+    const last = session.seq
+    for await (const next of proxy.control(abort.signal)) {
+      if (next.type === 'baseline') {
+        await ctx.sessionProjections.register(lastUserUnit())
+        session.append('turn/start', { turn: 1 })
+        continue
+      }
+      frames.push(next)
+      if (next.type === 'projection' && next.sessionId === session.id && next.seq === last) break
+    }
+    abort.abort()
+    const late = frames.filter(frame => frame.type === 'projection' && frame.changes.some(change => change.key === 'test/last-user'))
+    expect(late).toEqual([
+      { type: 'projection', sessionId: session.id, seq: last - 1, changes: [{ key: 'test/last-user', val: { text: 'm0' } }] },
+    ])
+    expect(frames.some(frame => frame.type === 'projection' && frame.sessionId === empty.id)).toBe(false)
+  })
 })

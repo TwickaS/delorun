@@ -55,7 +55,7 @@ const definition = {
 
 ### 注册与读取
 
-`await register(definition)` 从 `stateSchema` 推导宿主状态类型，安装单元，并返回提供同步 `stateOf(session)` 读取和 `dispose(): Promise<void>` 的 handle。等待 `dispose()` 完成即可释放注册；重复调用是安全的。具有相同 key 和 `stateVersion` 的注册方共享 cell；版本不兼容或非法时注册会拒绝。注册归调用方 fiber 所有。最后一个注册方注销后，单元退出全局事件驱动、快照、恢复读取和变更通知；`checkpoint(session)` 仍保留每个 Session 中该单元的最后一个 cell，直到同一 key 再次注册、由新单元重新折叠日志。注册表不再推进这个 cell，但已保留的 handle 读取时仍会把它向前推进，检查点输出推进后的 cell。已有 handle 仍可读取：它保留原有单元，按需折叠新增的 Session 事件，即使同一 key 后来注册了其他版本也不受影响。读取 handle 不会初始化无关单元，也不会重新注册。载体用 `snapshot(session)` 读取一致的客户端视图切面，用 `onChanged(listener)` 按每个变化的单元接收一次调用，用 `onEventChanged(listener)` 按每个已提交事件接收一次调用，列出该事件改变了视图的全部客户端可见单元。
+`await register(definition)` 从 `stateSchema` 推导宿主状态类型，安装单元，并返回提供同步 `stateOf(session)` 读取和 `dispose(): Promise<void>` 的 handle。等待 `dispose()` 完成即可释放注册；重复调用是安全的。具有相同 key 和 `stateVersion` 的注册方共享 cell；版本不兼容或非法时注册会拒绝。注册归调用方 fiber 所有。最后一个注册方注销后，单元退出全局事件驱动、快照、恢复读取和变更通知；`checkpoint(session)` 仍保留每个 Session 中该单元的最后一个 cell，直到同一 key 再次注册、由新单元重新折叠日志。注册表不再推进这个 cell，但已保留的 handle 读取时仍会把它向前推进，检查点输出推进后的 cell。已有 handle 仍可读取：它保留原有单元，按需折叠新增的 Session 事件，即使同一 key 后来注册了其他版本也不受影响。读取 handle 不会初始化无关单元，也不会重新注册。载体用 `snapshot(session)` 读取一致的客户端视图切面，用 `onChanged(listener)` 按每个变化的单元接收一次调用，用 `onEventChanged(listener)` 按每个已提交事件接收一次调用，列出该事件改变了视图的全部客户端可见单元。`onRegistered(listener)` 在单元就位后报告每个变为活跃的客户端可见 key，使载体能为在读取方基线之后到达的 key 发送每个活跃 Session 的值；key 在首次注册时变为活跃，在最后一次释放后再次注册时也会再次变为活跃，共享已活跃 key 的注册不报告。
 
 ```text
 const todoProjectionHandle = await ctx.sessionProjections.register(definition)

@@ -999,12 +999,12 @@
     {
       "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
       "class": "delo-feature",
-      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event."
+      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event. It also carries `onRegistered` and `ProjectionRegistrationListener` of the late session projection keys."
     },
     {
       "path": "scripts/gen-cordis-catalog.ts",
       "class": "delo-feature",
-      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. Upstream's rows are unchanged."
+      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. The late session projection keys add the `ProjectionRegistrationListener` row. Upstream's rows are unchanged."
     },
     {
       "path": "scripts/gen-doc-graphs.ts",
@@ -1460,6 +1460,81 @@
       "path": "apps/web/tests/expected/plugin-manager/loading.expected.md",
       "class": "delo-feature",
       "reason": "Records the History action in the plugin page loading golden, which the Delo plugin bar shows beside upstream's header buttons."
+    },
+    {
+      "path": "packages/session/session-projection/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: adds `ProjectionRegistrationListener` and `SessionProjectionRegistry.onRegistered(listener)`, which reports each client-visible key that becomes live, from `acquire()` after the unit is in place and outside the effect setup, so a carrier can send open pages the value of a key registered after their baselines. Upstream's exports and listeners are unchanged."
+    },
+    {
+      "path": "packages/session/session-projection/tests/registry.spec.ts",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: covers one call per key that becomes live with its value already in `snapshot`, no call for a shared registration, and no call after the listener stops or its fiber unloads."
+    },
+    {
+      "path": "packages/session/session-projection/README.md",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: documents `onRegistered(listener)` in the register paragraph, including when a key becomes live again."
+    },
+    {
+      "path": "packages/session/session-projection/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the Chinese counterpart of the `onRegistered(listener)` sentence added to README.md."
+    },
+    {
+      "path": "packages/session/session-projection/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the consistency record re-recorded after the `onRegistered` sentence was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "docs/subsystems/session-projection.md",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the `ProjectionRegistrationListener` type-equivalence block, and the regenerated catalog region that lists `onRegistered`."
+    },
+    {
+      "path": "docs/subsystems/session-projection.zh.md",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the same `ProjectionRegistrationListener` block and regenerated catalog region as the English page."
+    },
+    {
+      "path": "scripts/type-equiv.manifest.json",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the `ProjectionRegistrationListener` row, which holds the subsystem page's block equal to the source type. Upstream's rows are unchanged."
+    },
+    {
+      "path": "packages/api/session-controller/src/control.ts",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: `SessionControlController` subscribes to `onRegistered` and sends each open control stream one `projection` frame per live Session with a committed event, carrying only the new key at the Session's current seq; a Session with no committed event has no seq for a frame and is skipped. The frame reaches the same streams, through the same remote-access filter, as upstream's baseline and change frames."
+    },
+    {
+      "path": "packages/api/session-controller/src/types.ts",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the `SessionProjectionUpdate` JSDoc states the frame sent when a key becomes live after the baseline and that a Session with no committed event receives none. The fields are unchanged."
+    },
+    {
+      "path": "packages/api/session-controller/src/client/sessions/manager.ts",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the `handleControlFrame` JSDoc names projection frames in general, since a frame no longer always comes from one event. Behaviour is unchanged."
+    },
+    {
+      "path": "packages/api/session-controller/tests/session-projections.host.spec.ts",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: covers a key that becomes live after the baseline reaching the control stream with the committed Session's value at its current seq, and no frame for a Session with no committed event."
+    },
+    {
+      "path": "packages/api/session-controller/README.md",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: states that a key that becomes live after the baseline reaches each open control stream as one frame per live Session with a committed event, and that a Session with no committed event receives the key with its first event that changes the view or with the next baseline."
+    },
+    {
+      "path": "packages/api/session-controller/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the Chinese counterpart of the late-key sentence added to README.md."
+    },
+    {
+      "path": "packages/api/session-controller/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Late session projection keys: the consistency record re-recorded after the late-key sentence was added to README.md and its Chinese counterpart."
     }
   ],
   "retired": []
