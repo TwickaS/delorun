@@ -12,6 +12,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/fork-boundary.ts` holds the ledger schema, the matcher for fork-owned paths and globs, the boundary errors and the divergence total.
 - `src/check-fork-boundary.ts` is the command-line gate. It reads the ledger, checks the repository against it, and prints the count with `--count`.
 - `src/ledger-merge.ts` is git's merge driver for the ledger. It merges the entries by path, and the rules are in the divergence ledger section below.
+- `src/rehearse-upstream.ts` is the rehearsal merge. It merges an upstream tag in a scratch worktree and holds the result to the divergence budget, as the rehearsal merge section below describes.
 - `src/check-commits.ts` is the commit standard: a Conventional Commits subject, a DCO sign-off, and a changelog fragment or a `Changelog: none (<reason>)` trailer. It checks one message with `--message <file>`, the form a `commit-msg` hook passes.
 - `src/checks/types.ts` and `src/checks/gates/index.ts` describe each gate as one command that the check runner executes.
 - `src/checks/gates/` holds the gate modules and their data: licence, secrets, personal data, infrastructure, DCO, documentation times and the documentation checks.
@@ -22,7 +23,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/git.ts` runs git for the modules and reports exit statuses.
 - `src/parity/composition/` holds contract C16's parity overlay, the `parity-switches` check (`check-parity-switches.ts`, with `switches.ts`, `contributions.ts`, `overlay.ts` and `sweep.ts`) and the staged switch-on scenarios; the parity composition section below describes them.
 - `src/issues/` turns maintainer-written work briefs into GitHub issues: `brief.ts` holds the fields, the rules and the issue body, `references.ts` the links and paths a brief may carry, `labels.ts` the label file, `gh.ts` the `gh` calls, and `issues.ts` the command line.
-- `tests/` holds the specs. The ledger rules run against temporary git repositories, and `ledger-merge.spec.ts` also rebases branches through the merge driver in them. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees. `checks.spec.ts` and `checks-cache.spec.ts` cover the runner's selection, tiers, budgets, pass cache and `--plan`. `parity/` covers the parity checks on the real tree and on planted fixtures, and runs upstream's headless adapter with a planted overlay.
+- `tests/` holds the specs. The ledger rules run against temporary git repositories, and `ledger-merge.spec.ts` also rebases branches through the merge driver in them. `rehearse/` builds an upstream repository and a fork of it in temporary directories and rehearses merges between them. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees. `checks.spec.ts` and `checks-cache.spec.ts` cover the runner's selection, tiers, budgets, pass cache and `--plan`. `parity/` covers the parity checks on the real tree and on planted fixtures, and runs upstream's headless adapter with a planted overlay.
 
 ## The divergence ledger
 
@@ -51,6 +52,20 @@ git config merge.delo-ledger.driver 'node_modules/.bin/tsx delo/apps/tools/src/l
 ```
 
 Without the setting, git merges the ledger as text. With it, the driver merges entries by `path`. An entry that one side changed takes that side's version, and so does an entry that one side removed while the other side left it alone. An entry that both sides added or changed identically is kept once. `forkOwned` is the ordered union of both sides, `upstream` must match on both sides, and `$schema` merges as one entry does. An entry that the sides changed differently stays in conflict, including an entry that one side removed while the other changed it: the driver wraps only those entries in conflict markers, names each on standard error, and exits 1. It also exits 1, after writing the merge, when the result fails the ledger parser or the entry rules. `forkOwned` keeps an entry while either side still lists it, so an entry leaves the ledger only when both sides have removed it.
+
+## The rehearsal merge
+
+[`src/rehearse-upstream.ts`](src/rehearse-upstream.ts) rehearses the merge of an upstream tag and holds the result to the [divergence budget](../../docs/reference/divergence/README.md#divergence-budget). Run it from the repository root:
+
+```sh
+node_modules/.bin/tsx delo/apps/tools/src/rehearse-upstream.ts --tag <tag>
+```
+
+It reads the ledger at `HEAD`, fetches the tag from the ledger's `upstream.repository`, and adds a scratch worktree in a temporary directory, detached at `HEAD`. There it merges the tag's commit without committing, with hooks and recorded resolutions off, and it removes the scratch worktree whatever the outcome. The fetch writes only the scratch worktree's `FETCH_HEAD`, so the checkout's refs, branches, index and working tree stay unchanged, and its uncommitted changes are not measured.
+
+It prints the conflicted paths with their class and conflict regions, and the conflicted hunks as a share of the ledger's hunks at the tag. It then prints, for each class (`delo-feature`, `generic-fix`, `security`), the entries and hunks measured against the pin and against the tag with their growth, and the total beside the caps. A differing path that no entry lists is counted as `unlisted`. A conflicted file is measured with its conflict markers, so a conflict region usually counts as two hunks at the tag. An entry that differs from the pin but not from the tag is absorbed by the tag: it is listed as credited, and the count at the tag leaves it out. Until the first release's baseline is recorded, the caps are the budget's floors, 20 entries and 150 hunks. The ledger marks no entry as generated, so every entry is counted, and the output says so.
+
+It exits 1, with one line per failure, when the total growth in entries or in hunks exceeds its cap, when the conflicted hunks exceed 15 % of the ledger's hunks at the tag, and for each conflicted `security`-class file, because the ledger records no maintainer decision. It exits 2 with a usage line when `--tag` is missing, and with git's error when the fetch or the merge fails.
 
 ## The gates
 

@@ -1,0 +1,440 @@
+/**
+ * Rehearsal merge of an upstream tag against the divergence budget. Run from anywhere inside the repository:
+ * `node_modules/.bin/tsx delo/apps/tools/src/rehearse-upstream.ts --tag <tag>`. It fetches the tag from the ledger's
+ * upstream repository, merges it without committing in a scratch worktree detached at `HEAD`, prints the conflicted
+ * paths and the ledger's growth per class against the budget's caps, and exits 1 when the merge breaks the budget.
+ * The scratch worktree lives in a temporary directory and is removed on every path; the checkout it starts from, its
+ * branches, index and working tree stay unchanged. The budget's rules are in `delo/docs/reference/divergence/README.md`.
+ *
+ * @module @delo/tools/rehearse-upstream
+ */
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { devNull, tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { parseArgs } from 'node:util'
+import { changedSince, hunkCount } from './check-fork-boundary.ts'
+import { divergence, isForkOwned, MANIFEST_PATH, parseManifest, type Patch, type PatchManifest } from './fork-boundary.ts'
+import { git, repositoryRoot, runGit } from './git.ts'
+
+/** The growth floors the divergence budget names: the caps until the first release's baseline is recorded. */
+export const GROWTH_FLOORS = { entries: 20, hunks: 150 } as const
+
+/** The share of the first release's baseline that the growth caps rise to when it exceeds the floors. */
+export const BASELINE_SHARE = 0.1
+
+/** The largest share of the ledger's hunks at the tag that may conflict in a rehearsal merge. */
+export const CONFLICT_SHARE_LIMIT = 0.15
+
+/** The classes a count is kept for: the ledger's three, and `unlisted` for differing paths that no entry names. */
+export type CountedClass = Patch['class'] | 'unlisted'
+
+/** Every counted class, in the order the report prints them. */
+export const COUNTED_CLASSES: readonly CountedClass[] = ['delo-feature', 'generic-fix', 'security', 'unlisted']
+
+/** Entries and hunks of one class, or of the whole ledger. */
+export interface Count {
+  /** Paths that differ from the measured upstream commit. */
+  readonly entries: number
+  /** Their hunks, as `git diff --unified=0` splits them. */
+  readonly hunks: number
+}
+
+/** One count per counted class. */
+export type ClassCounts = Readonly<Record<CountedClass, Count>>
+
+/** The growth caps a rehearsal is held to. */
+export interface BudgetCaps {
+  /** The largest entry growth that stays within the budget. */
+  readonly entries: number
+  /** The largest hunk growth that stays within the budget. */
+  readonly hunks: number
+  /** False while the first release's baseline is not recorded, so the caps are the floors. */
+  readonly baselineRecorded: boolean
+}
+
+/** What the command line asks for. */
+export interface RehearsalRequest {
+  /** The upstream tag to merge. */
+  readonly tag: string
+}
+
+/** One rehearsal, resolved from a request: everything {@link rehearse} reads, named explicitly. */
+export interface RehearsalSpec {
+  /** The top level of the checkout the rehearsal starts from. */
+  readonly root: string
+  /** The upstream tag to merge. */
+  readonly tag: string
+  /** The upstream repository the tag is fetched from, the ledger's `upstream.repository`. */
+  readonly repository: string
+  /** The ledger's current pin. */
+  readonly pin: { readonly ref: string; readonly commit: string }
+  /** The commit the scratch worktree is detached at, the checkout's `HEAD`. */
+  readonly head: string
+  /** The ledger at `head`. */
+  readonly manifest: PatchManifest
+  /** The growth caps. */
+  readonly caps: BudgetCaps
+}
+
+/** One path the rehearsal merge left conflicted. */
+export interface Conflict {
+  /** Repository-relative path. */
+  readonly path: string
+  /** The class of the ledger entry that lists the path, or `unlisted`. */
+  readonly class: CountedClass
+  /** Conflict regions in the file; a conflict without markers, such as modify/delete or binary, counts as one. */
+  readonly hunks: number
+}
+
+/** A listed entry that differs from the pin but not from the tag, so the tag absorbs it. */
+export interface AbsorbedEntry {
+  /** Repository-relative path. */
+  readonly path: string
+  /** The entry's class. */
+  readonly class: Patch['class']
+  /** Its hunks against the pin, the credit it earns. */
+  readonly hunks: number
+}
+
+/** The measured outcome of one rehearsal merge. */
+export interface Rehearsal {
+  /** The rehearsal that was run. */
+  readonly spec: RehearsalSpec
+  /** The commit the tag names. */
+  readonly tagCommit: string
+  /** The conflicted paths, in git's order. */
+  readonly conflicts: readonly Conflict[]
+  /** The ledger at `HEAD` measured against the pin. */
+  readonly current: ClassCounts
+  /** The merged tree measured against the tag; a conflicted file is measured with its conflict markers. */
+  readonly atTag: ClassCounts
+  /** Entries the tag absorbs; they are absent from `atTag`, so the growth is net of them. */
+  readonly absorbed: readonly AbsorbedEntry[]
+}
+
+/** Git configuration for every command in the scratch worktree: no hooks, no recorded resolutions, plain markers. */
+const SCRATCH_CONFIG = ['-c', `core.hooksPath=${devNull}`, '-c', 'rerere.enabled=false', '-c', 'merge.conflictStyle=merge'] as const
+
+/** An identity for the merge, which git requires even though the rehearsal never commits. */
+const SCRATCH_IDENTITY = ['-c', 'user.name=Delo rehearsal', '-c', 'user.email=rehearsal@delo.invalid'] as const
+
+const USAGE = 'usage: rehearse-upstream.ts --tag <tag>'
+
+/**
+ * The growth caps: the larger of each floor and {@link BASELINE_SHARE} of the first release's baseline.
+ * @param baseline - the first release's baseline, or undefined while it is not recorded.
+ * @returns the caps; without a baseline they are {@link GROWTH_FLOORS}.
+ */
+export function budgetCaps(baseline: Count | undefined): BudgetCaps {
+  if (baseline === undefined) return { ...GROWTH_FLOORS, baselineRecorded: false }
+  return {
+    entries: Math.max(GROWTH_FLOORS.entries, baseline.entries * BASELINE_SHARE),
+    hunks: Math.max(GROWTH_FLOORS.hunks, baseline.hunks * BASELINE_SHARE),
+    baselineRecorded: true,
+  }
+}
+
+/**
+ * Resolve a request into the rehearsal it describes, reading the ledger at `HEAD`.
+ * @param root - the top level of the checkout to rehearse from.
+ * @param request - the tag to merge.
+ * @returns the spec, with the upstream repository and the pin from the ledger and the caps from the floors.
+ * @throws Error when the tag is not a valid tag name, or the ledger at `HEAD` is missing or invalid.
+ */
+export function resolveRehearsal(root: string, request: RehearsalRequest): RehearsalSpec {
+  if (runGit(root, ['check-ref-format', `refs/tags/${request.tag}`]).status !== 0) {
+    throw new Error(`${request.tag} is not a valid tag name`)
+  }
+  const manifest = parseManifest(git(root, ['show', `HEAD:${MANIFEST_PATH}`]))
+  return {
+    root,
+    tag: request.tag,
+    repository: manifest.upstream.repository,
+    pin: { ref: manifest.upstream.ref, commit: manifest.upstream.commit },
+    head: git(root, ['rev-parse', '--verify', 'HEAD^{commit}']).trim(),
+    manifest,
+    caps: budgetCaps(undefined),
+  }
+}
+
+/**
+ * Run a rehearsal: fetch the tag, merge it without committing in a scratch worktree detached at the spec's `HEAD`,
+ * and measure the ledger before and after. Objects the fetch downloads stay in the clone's object store; no ref,
+ * branch, index or working tree of the checkout changes, and the scratch worktree is removed on every path.
+ * @param spec - the resolved rehearsal.
+ * @returns the conflicts and the counts against the pin and the tag.
+ * @throws Error when the fetch or the merge fails other than by conflicting, or when the scratch worktree cannot be
+ * removed; a removal failure names the leftover registration.
+ */
+export function rehearse(spec: RehearsalSpec): Rehearsal {
+  return withScratchWorktree(spec.root, spec.head, tree => {
+    const current = measure(tree, spec.manifest, spec.pin.commit)
+    const tagCommit = fetchTag(tree, spec.repository, spec.tag)
+    const conflicted = mergeWithoutCommit(tree, tagCommit)
+    const atTag = measure(tree, spec.manifest, tagCommit)
+    const classOf = new Map<string, Patch['class']>(spec.manifest.patches.map(patch => [patch.path, patch.class]))
+    const conflicts = conflicted.map((path): Conflict => ({ path, class: classOf.get(path) ?? 'unlisted', hunks: conflictRegions(tree, path) }))
+    const absorbed = spec.manifest.patches
+      .filter(patch => current.hunks.has(patch.path) && !atTag.hunks.has(patch.path))
+      .map(patch => ({ path: patch.path, class: patch.class, hunks: current.hunks.get(patch.path) ?? 0 }))
+    return { spec, tagCommit, conflicts, current: current.counts, atTag: atTag.counts, absorbed }
+  })
+}
+
+/**
+ * Total a count over every class.
+ * @param counts - one count per class.
+ * @returns the summed entries and hunks.
+ */
+export function totalCount(counts: ClassCounts): Count {
+  return COUNTED_CLASSES.reduce((sum, name) => ({ entries: sum.entries + counts[name].entries, hunks: sum.hunks + counts[name].hunks }), { entries: 0, hunks: 0 })
+}
+
+/**
+ * The conflicted hunks of a rehearsal as a share of the ledger's hunks at the tag.
+ * @param rehearsal - the measured rehearsal.
+ * @returns the share from 0; any conflict against a ledger without hunks is an infinite share.
+ */
+export function conflictShare(rehearsal: Rehearsal): number {
+  const conflicted = conflictedHunks(rehearsal)
+  const hunks = totalCount(rehearsal.atTag).hunks
+  if (conflicted === 0) return 0
+  return hunks === 0 ? Number.POSITIVE_INFINITY : conflicted / hunks
+}
+
+/**
+ * Apply the divergence budget to a rehearsal.
+ * @param rehearsal - the measured rehearsal.
+ * @returns one line per failure: entry growth or hunk growth above its cap, conflicted hunks above
+ * {@link CONFLICT_SHARE_LIMIT} of the ledger's hunks at the tag, and each conflicted `security`-class file; the ledger
+ * records no maintainer decision, so every `security`-class conflict fails. Empty when the merge stays within budget.
+ */
+export function budgetFailures(rehearsal: Rehearsal): string[] {
+  const failures: string[] = []
+  const { caps } = rehearsal.spec
+  const growth = difference(totalCount(rehearsal.atTag), totalCount(rehearsal.current))
+  if (growth.entries > caps.entries) failures.push(`entry growth ${signed(growth.entries)} exceeds the cap of ${String(caps.entries)}`)
+  if (growth.hunks > caps.hunks) failures.push(`hunk growth ${signed(growth.hunks)} exceeds the cap of ${String(caps.hunks)}`)
+  const share = conflictShare(rehearsal)
+  if (share > CONFLICT_SHARE_LIMIT) {
+    failures.push(`conflicted hunks ${conflictSummary(rehearsal)} exceed the limit of ${percent(CONFLICT_SHARE_LIMIT)}`)
+  }
+  for (const conflict of rehearsal.conflicts) {
+    if (conflict.class === 'security') failures.push(`${conflict.path}: security-class file conflicts without a recorded maintainer decision`)
+  }
+  return failures
+}
+
+/**
+ * Format a rehearsal as the lines the command prints.
+ * @param rehearsal - the measured rehearsal.
+ * @returns the merge, the conflicted paths, the conflict share, one count line per class and the total against the
+ * caps, the absorbed entries, and the notes on the caps and on generated entries.
+ */
+export function formatRehearsal(rehearsal: Rehearsal): string[] {
+  const { spec } = rehearsal
+  const lines = [
+    `rehearsal merge of ${spec.tag} (${rehearsal.tagCommit}) from ${spec.repository} into HEAD ${spec.head}, pinned at ${spec.pin.ref} (${spec.pin.commit})`,
+  ]
+  if (rehearsal.conflicts.length === 0) {
+    lines.push('conflicted paths: none')
+  } else {
+    lines.push(`conflicted paths: ${String(rehearsal.conflicts.length)}`)
+    for (const conflict of rehearsal.conflicts) lines.push(`  ${conflict.path} (${conflict.class}, ${counted(conflict.hunks, 'hunk')})`)
+  }
+  lines.push(`conflicted hunks: ${conflictSummary(rehearsal)}, limit ${percent(CONFLICT_SHARE_LIMIT)}`)
+  lines.push(`ledger growth from ${spec.pin.ref} to ${spec.tag}:`)
+  for (const name of COUNTED_CLASSES) lines.push(`  ${name}: ${growthText(rehearsal.current[name], rehearsal.atTag[name])}`)
+  const total = growthText(totalCount(rehearsal.current), totalCount(rehearsal.atTag), spec.caps)
+  lines.push(`  total: ${total}`)
+  if (rehearsal.absorbed.length > 0) {
+    const credited = rehearsal.absorbed.reduce((sum, entry) => sum + entry.hunks, 0)
+    lines.push(`absorbed by ${spec.tag} (credited): ${counted(rehearsal.absorbed.length, 'entry', 'entries')}, ${counted(credited, 'hunk')}`)
+    for (const entry of rehearsal.absorbed) lines.push(`  ${entry.path} (${entry.class}, ${counted(entry.hunks, 'hunk')})`)
+  }
+  lines.push(spec.caps.baselineRecorded
+    ? 'caps: 10 % of the first release\'s baseline, at least the floors of 20 entries and 150 hunks'
+    : 'caps: the floors of 20 entries and 150 hunks; the first release\'s baseline is not recorded')
+  lines.push('generated entries are not separated: the ledger marks none, so every entry is counted')
+  return lines
+}
+
+/**
+ * Create a scratch worktree detached at a commit, run a body in it, and remove it whatever the outcome.
+ * @param root - the checkout whose repository the worktree is added to.
+ * @param head - the commit to detach at.
+ * @param body - the work to run with the worktree's path.
+ * @returns the body's result.
+ * @throws the body's error, or an Error naming the leftover worktree when removal fails.
+ */
+function withScratchWorktree<T>(root: string, head: string, body: (tree: string) => T): T {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'delo-rehearse-')))
+  const tree = join(directory, 'tree')
+  let outcome: { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown }
+  try {
+    git(root, [...SCRATCH_CONFIG, 'worktree', 'add', '--detach', '--quiet', tree, head])
+    outcome = { ok: true, value: body(tree) }
+  } catch (error) {
+    outcome = { ok: false, error }
+  }
+  const leftover = removeScratchWorktree(root, directory, tree)
+  if (leftover !== undefined) throw new Error(outcome.ok ? leftover : `${errorText(outcome.error)}; ${leftover}`)
+  if (!outcome.ok) throw outcome.error
+  return outcome.value
+}
+
+/**
+ * Remove a scratch worktree's registration and its temporary directory.
+ * @param root - the checkout the worktree was added to.
+ * @param directory - the temporary directory that holds the worktree.
+ * @param tree - the worktree's path.
+ * @returns a message when the registration remains, or undefined when the worktree is gone.
+ */
+function removeScratchWorktree(root: string, directory: string, tree: string): string | undefined {
+  const removal = isRegisteredWorktree(root, tree) ? runGit(root, ['worktree', 'remove', '--force', tree]) : undefined
+  rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+  if (!isRegisteredWorktree(root, tree)) return undefined
+  return `scratch worktree ${tree} is still registered (${removal?.stderr.trim() ?? 'not removed'}); run \`git worktree prune\``
+}
+
+function isRegisteredWorktree(root: string, tree: string): boolean {
+  return git(root, ['worktree', 'list', '--porcelain', '-z']).split('\0').includes(`worktree ${tree}`)
+}
+
+/**
+ * Fetch one tag into the scratch worktree's own `FETCH_HEAD`, so that no ref of the checkout changes.
+ * @param tree - the scratch worktree.
+ * @param repository - the upstream repository.
+ * @param tag - the tag to fetch.
+ * @returns the commit the tag names.
+ * @throws Error when the fetch fails or the tag names no commit.
+ */
+function fetchTag(tree: string, repository: string, tag: string): string {
+  const fetch = runGit(tree, [
+    ...SCRATCH_CONFIG, '-c', 'gc.auto=0', '-c', 'maintenance.auto=false',
+    'fetch', '--quiet', '--no-tags', '--no-recurse-submodules', '--', repository, `refs/tags/${tag}`,
+  ])
+  if (fetch.status !== 0) throw new Error(`cannot fetch tag ${tag} from ${repository}: ${fetch.stderr.trim()}`)
+  return git(tree, ['rev-parse', '--verify', 'FETCH_HEAD^{commit}']).trim()
+}
+
+/**
+ * Merge a commit into the scratch worktree without committing.
+ * @param tree - the scratch worktree.
+ * @param commit - the commit to merge.
+ * @returns the conflicted paths; empty for a clean merge.
+ * @throws Error when git fails other than by stopping at conflicts.
+ */
+function mergeWithoutCommit(tree: string, commit: string): string[] {
+  const merge = runGit(tree, [...SCRATCH_CONFIG, ...SCRATCH_IDENTITY, 'merge', '--no-ff', '--no-commit', '--no-edit', '--quiet', commit])
+  const conflicted = git(tree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(path => path.length > 0)
+  if (merge.status === 0 || (merge.status === 1 && conflicted.length > 0)) return conflicted
+  throw new Error(`git merge ${commit} exited ${String(merge.status)}: ${`${merge.stderr}${merge.stdout}`.trim()}`)
+}
+
+/**
+ * Count the conflict regions git wrote into a conflicted file.
+ * @param tree - the scratch worktree.
+ * @param path - the conflicted path.
+ * @returns the number of opening markers, at least one.
+ */
+function conflictRegions(tree: string, path: string): number {
+  const file = join(tree, path)
+  if (!existsSync(file)) return 1
+  return Math.max(1, readFileSync(file, 'utf8').match(/^<{7}(?: |$)/gmu)?.length ?? 0)
+}
+
+/**
+ * Measure the scratch worktree against one upstream commit, per class.
+ * @param tree - the scratch worktree.
+ * @param manifest - the ledger whose entries name the classes and the fork-owned paths.
+ * @param commit - the upstream commit to measure against.
+ * @returns the counts per class, and the hunks of every differing path that is not fork-owned.
+ */
+function measure(tree: string, manifest: PatchManifest, commit: string): { counts: ClassCounts; hunks: ReadonlyMap<string, number> } {
+  const hunks = new Map<string, number>()
+  for (const change of changedSince(tree, commit)) {
+    if (!isForkOwned(change.path, manifest.forkOwned)) hunks.set(change.path, hunkCount(tree, commit, change))
+  }
+  const listed = new Set(manifest.patches.map(patch => patch.path))
+  const ofClass = (name: Patch['class']): Count => {
+    const count = divergence({ ...manifest, patches: manifest.patches.filter(patch => patch.class === name) }, hunks)
+    return { entries: count.entries, hunks: count.hunks }
+  }
+  const unlisted = [...hunks].filter(([path]) => !listed.has(path))
+  return {
+    counts: {
+      'delo-feature': ofClass('delo-feature'),
+      'generic-fix': ofClass('generic-fix'),
+      security: ofClass('security'),
+      unlisted: { entries: unlisted.length, hunks: unlisted.reduce((sum, [, count]) => sum + count, 0) },
+    },
+    hunks,
+  }
+}
+
+function conflictedHunks(rehearsal: Rehearsal): number {
+  return rehearsal.conflicts.reduce((sum, conflict) => sum + conflict.hunks, 0)
+}
+
+function conflictSummary(rehearsal: Rehearsal): string {
+  const hunks = totalCount(rehearsal.atTag).hunks
+  return `${String(conflictedHunks(rehearsal))} of ${counted(hunks, 'ledger hunk')} at ${rehearsal.spec.tag} (${percent(conflictShare(rehearsal))})`
+}
+
+function growthText(before: Count, after: Count, caps?: BudgetCaps): string {
+  const growth = difference(after, before)
+  const cap = (limit: number | undefined): string => (limit === undefined ? '' : `, cap ${String(limit)}`)
+  return `${String(before.entries)} → ${String(after.entries)} entries (${signed(growth.entries)}${cap(caps?.entries)}), `
+    + `${String(before.hunks)} → ${String(after.hunks)} hunks (${signed(growth.hunks)}${cap(caps?.hunks)})`
+}
+
+function difference(after: Count, before: Count): Count {
+  return { entries: after.entries - before.entries, hunks: after.hunks - before.hunks }
+}
+
+function signed(value: number): string {
+  return value > 0 ? `+${String(value)}` : String(value)
+}
+
+function percent(share: number): string {
+  return Number.isFinite(share) ? `${(share * 100).toFixed(1).replace(/\.0$/u, '')} %` : 'all'
+}
+
+function counted(count: number, singular: string, plural = `${singular}s`): string {
+  return `${String(count)} ${count === 1 ? singular : plural}`
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function main(argv: readonly string[]): number {
+  let tag: string | undefined
+  try {
+    tag = parseArgs({ args: [...argv], options: { tag: { type: 'string' } }, strict: true, allowPositionals: false }).values.tag
+  } catch (error) {
+    console.error(`rehearse-upstream: ${errorText(error)}`)
+  }
+  if (tag === undefined || tag.length === 0) {
+    console.error(USAGE)
+    return 2
+  }
+  let rehearsal: Rehearsal
+  try {
+    rehearsal = rehearse(resolveRehearsal(repositoryRoot(process.cwd()), { tag }))
+  } catch (error) {
+    console.error(`rehearse-upstream: ${errorText(error)}`)
+    return 2
+  }
+  for (const line of formatRehearsal(rehearsal)) console.log(line)
+  const failures = budgetFailures(rehearsal)
+  for (const failure of failures) console.error(`rehearse-upstream: ${failure}`)
+  if (failures.length === 0) console.log(`rehearse-upstream: ${rehearsal.spec.tag} merges within the divergence budget`)
+  return failures.length === 0 ? 0 : 1
+}
+
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = main(process.argv.slice(2))
+}

@@ -51,7 +51,7 @@ The budget limits how far the ledger may grow in one release, and it names the c
 - **Count.** A release's count is the ledger's non-generated entries and hunks, per class. A retired entry is credited against the count: growth is measured net of the entries and hunks that retired entries record.
 - **Growth cap.** Growth per release is capped at the larger of 20 entries or 10 % of the first release's baseline entries. Growth in hunks is capped at the larger of 150 hunks or 10 % of the first release's baseline hunks.
 - **Breach.** A breach of either cap needs a maintainer decision, recorded in the release notes.
-- **Rehearsal merge.** Delo's budget requires that the rehearsal merge onto upstream's newest tag fail when conflicted hunks exceed 15 % of the ledger's hunks at that tag. It also fails when any `security`-class file conflicts without a recorded maintainer decision.
+- **Rehearsal merge.** Delo's budget requires that the rehearsal merge onto upstream's newest tag fail when conflicted hunks exceed 15 % of the ledger's hunks at that tag. It also fails when any `security`-class file conflicts without a recorded maintainer decision. `node_modules/.bin/tsx delo/apps/tools/src/rehearse-upstream.ts --tag <tag>` runs the rehearsal merge in a scratch worktree and also holds the growth to the caps; the [tools README](../../../apps/tools/README.md#the-rehearsal-merge) describes its output.
 - **Baseline.** The first release's baseline is recorded when that release is cut.
 - **Current count.** `node_modules/.bin/tsx delo/apps/tools/src/check-fork-boundary.ts --count` prints the ledger's entries and hunks against the base tag; the first release's baseline is recorded in that release's notes.
 
