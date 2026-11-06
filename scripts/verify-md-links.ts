@@ -21,6 +21,7 @@ const PATTERNS = [
   'README.zh.md',
   '.agents/notes/**/*.md',
   'docs/**/*.md',
+  'delo/docs/**/*.md',
   'packages/*.md',
   'packages/*/*.md',
   'packages/*/*/*.md',

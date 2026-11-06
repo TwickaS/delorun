@@ -62,6 +62,21 @@ describe('Markdown source discovery', () => {
       join('packages', 'core', 'probe', 'docs', 'DETAIL.md'),
     ])
   })
+
+  it('checks Delo documentation under delo/docs/ and its anchors, and leaves other Delo files out', () => {
+    const root = layout({
+      'delo/docs/guide/page.md': '# Page\n\n[missing](missing.md) [dead](other.md#nowhere)\n',
+      'delo/docs/guide/other.md': '# Other\n',
+      'delo/apps/tools/README.md': '[missing](missing.md)\n',
+    })
+    const sources = markdownLinkSourcePaths(root)
+    const violations = sources.flatMap(file => findViolations(join(root, file), markdownLinkCache(), root))
+    expect(violations.map(({ file, reason }) => ({ file, reason })).sort((a, b) => a.file.localeCompare(b.file)))
+      .toEqual([
+        { file: join('delo', 'docs', 'guide', 'page.md'), reason: 'target' },
+        { file: join('delo', 'docs', 'guide', 'page.md'), reason: 'anchor' },
+      ])
+  })
 })
 
 describe('documentAnchors', () => {
