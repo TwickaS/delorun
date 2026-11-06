@@ -53,7 +53,7 @@ The budget limits how far the ledger may grow in one release, and it names the c
 - **Breach.** A breach of either cap needs a maintainer decision, recorded in the release notes.
 - **Rehearsal merge.** Delo's budget requires that the rehearsal merge onto upstream's newest tag fail when conflicted hunks exceed 15 % of the ledger's hunks at that tag. It also fails when any `security`-class file conflicts without a recorded maintainer decision.
 - **Baseline.** The first release's baseline is recorded when that release is cut.
-- **Count at this commit.** The checker reports 62 entries and 407 hunks against `dsh-v0.2.2-rc.1`. Of these, the `delo-feature` class holds 61 entries and 403 hunks, the `security` class holds 1 entry and 4 hunks, and the `generic-fix` class holds none. No entry is retired.
+- **Current count.** `node_modules/.bin/tsx delo/apps/tools/src/check-fork-boundary.ts --count` prints the ledger's entries and hunks against the base tag; the first release's baseline is recorded in that release's notes.
 
 ## Divergence records
 
