@@ -815,6 +815,16 @@
       "path": "tsconfig.base.json",
       "class": "delo-feature",
       "reason": "Source-plane path aliases for the subpath exports Delo adds: `@deepseek-ai/dsh-settings/redact` (settings by chat, C4) and `@deepseek-ai/dsh-plugin-manager/history` (profile history and safe mode). Upstream's aliases are unchanged."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/audit.ts",
+      "class": "security",
+      "reason": "Plugin audit on install: the store of the person's acceptances that the optional `pluginAudit` service consults, as digests per package in `.plugin-manager/audits.json` at mode 0600, at most eight per package. A missing, non-JSON or malformed record reads as no acceptance, so findings ask again. Lead verdict: kept; records only digests the manager accepted for an `accepted` decision, unreadable records accept nothing, and it is stricter than stock, which has no audit."
+    },
+    {
+      "path": "packages/boot/plugin-manager/tests/audit.spec.ts",
+      "class": "delo-feature",
+      "reason": "Plugin audit on install: the acceptance store's spec, showing that a missing, non-JSON or malformed record accepts nothing, that at most eight digests are kept per package at mode 0600, and that an unreadable record fails loud."
     }
   ],
   "retired": []
