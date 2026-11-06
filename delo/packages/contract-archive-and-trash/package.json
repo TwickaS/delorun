@@ -1,0 +1,11 @@
+{
+  "name": "@delo/contract-archive-and-trash",
+  "description": "Types and constants of the archive format v1, its customisation schema, the error codes and the trash retention, as specified by contract C8.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

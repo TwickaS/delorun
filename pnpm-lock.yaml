@@ -1237,6 +1237,8 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  delo/packages/contract-archive-and-trash: {}
+
   delo/packages/contract-host-qualified-keys:
     dependencies:
       '@deepseek-ai/dsh-brand':

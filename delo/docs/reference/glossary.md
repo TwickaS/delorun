@@ -71,6 +71,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 ## Keeping work safe
 
 - **trash** — where deleted chats and workspaces wait, restorable, until purged. <a id="trash"></a>
+- **untrusted chat** — an imported chat. It shows a banner that names its source and keeps its history out of model context until the person marks it trusted. <a id="untrusted-chat"></a>
 - **export file** — an export of workspaces with their chats and customisation, secrets excluded, that imports without overwriting anything and applies customisation only after showing its diff. Code and maintainer docs: archive (`@delo/archive`); interface text says "export file", because upstream's interface uses Archive for a session action. <a id="archive"></a>
 - **verification status** — the result of Delo's checks on a home (release, files, isolation, exposure, sign-in, plugins, data sharing) with its mode: `warn` by default, `enforce` or `off`. Code: `@delo/integrity`, `delorun verify`. <a id="verification"></a>
 - **snapshot** — a profile history version made automatically before an update, migration or recovery. <a id="snapshot"></a>

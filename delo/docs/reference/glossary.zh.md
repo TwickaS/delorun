@@ -83,6 +83,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 ## 保障工作安全
 
 - **回收站**（trash）：已删除的 chat 与工作区在此等待，可以恢复，直至被清除。<a id="trash"></a>
+- **未受信任的 chat**（untrusted chat）：导入的 chat。它显示写明其来源的横幅，并在本人将其标记为受信任之前，让其历史保持在模型上下文之外。<a id="untrusted-chat"></a>
 - **导出文件**（export file）：工作区及其 chat 与定制内容的导出文件，不含密钥。导入时不覆盖任何内容，且只在显示其差异后才应用定制内容。代码与维护者文档中为 archive（`@delo/archive`）；界面文本使用「export file」，因为上游界面把 Archive 用作会话操作。<a id="archive"></a>
 - **验证状态**（verification status）：Delo 对 home 所做检查（发布版本、文件、隔离、暴露、登录、插件、数据共享）的结果，附带其模式：默认为 `warn`，另有 `enforce` 与 `off`。代码对应：`@delo/integrity`、`delorun verify`。<a id="verification"></a>
 - **快照**（snapshot）：在更新、迁移或恢复之前自动创建的 profile 历史版本。<a id="snapshot"></a>
