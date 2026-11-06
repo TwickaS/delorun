@@ -1269,6 +1269,12 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/util/brand
 
+  delo/packages/contract-operational-logs:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+
   delo/packages/contract-parity-composition: {}
 
   delo/packages/contract-plugin-versions:
