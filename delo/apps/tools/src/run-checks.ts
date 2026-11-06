@@ -436,9 +436,11 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const memory = runMemoryBytes(budget.memoryBytes)
   const cpus = budget.cpus
   const reads = values.list || values.plan
+  // The pre-commit tier runs only light staged gates, so it neither waits for a running gate nor takes a memory scope.
+  const light = reads || values['pre-commit']
   // One gate at a time on this machine; a second run waits for the first.
-  if (!reads && env[IN_SCOPE] === undefined) await holdRunLock()
-  if (!reads && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
+  if (!light && env[IN_SCOPE] === undefined) await holdRunLock()
+  if (!light && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
     const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)
     const child = spawnSync(command, args, { stdio: 'inherit', env: { ...env, [IN_SCOPE]: '1' } })
     return child.status ?? 1
