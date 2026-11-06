@@ -320,6 +320,36 @@
       "path": ".github/workflows/ci-windows.yml",
       "class": "delo-feature",
       "reason": "Runs on GitHub-hosted runners outside upstream's repository."
+    },
+    {
+      "path": "packages/client/modules/src/assets.ts",
+      "class": "security",
+      "reason": "Adds `.woff2` to the client package-asset media types, so a client plugin can ship its own fonts through the package-asset route as it ships images. Delo's theme serves its typefaces this way."
+    },
+    {
+      "path": "packages/experimental/webworker-runtime/src/package-assets.ts",
+      "class": "security",
+      "reason": "Adds `.woff2` to the WebWorker preview's own media-type table, which its spec holds equal to the client-modules table, so the preview serves a client package's fonts as it serves its images."
+    },
+    {
+      "path": "packages/client/AGENTS.md",
+      "class": "delo-feature",
+      "reason": "Lists `.woff2` among the package asset extensions, matching the client-modules media-type table, so package authors know fonts take the same route as images."
+    },
+    {
+      "path": "packages/client/modules/README.md",
+      "class": "delo-feature",
+      "reason": "Documents `.woff2` among the asset extensions the `/plugins` route serves, matching the media-type table; the route answers 404 for any other extension."
+    },
+    {
+      "path": "packages/client/modules/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the modules README; its package-assets paragraph documents the .woff2 extension with the English text."
+    },
+    {
+      "path": "packages/client/modules/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the modules README's package-assets paragraph and its Chinese counterpart changed."
     }
   ],
   "retired": []

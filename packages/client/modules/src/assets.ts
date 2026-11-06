@@ -20,6 +20,7 @@ export const PACKAGE_ASSET_MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
   ['.webp', 'image/webp'],
   ['.jpg', 'image/jpeg'],
   ['.jpeg', 'image/jpeg'],
+  ['.woff2', 'font/woff2'],
 ])
 
 /** Package export key that publishes built assets. */
