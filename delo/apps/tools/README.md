@@ -11,6 +11,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 
 - `src/fork-boundary.ts` holds the ledger schema, the matcher for fork-owned paths and globs, the boundary errors and the divergence total.
 - `src/check-fork-boundary.ts` is the command-line gate. It reads the ledger, checks the repository against it, and prints the count with `--count`.
+- `src/ledger-merge.ts` is git's merge driver for the ledger. It merges the entries by path, and the rules are in the divergence ledger section below.
 - `src/check-commits.ts` is the commit standard: a Conventional Commits subject, a DCO sign-off, and a changelog fragment or a `Changelog: none (<reason>)` trailer. It checks one message with `--message <file>`, the form a `commit-msg` hook passes.
 - `src/checks/types.ts` and `src/checks/gates/index.ts` describe each gate as one command that the check runner executes.
 - `src/checks/gates/` holds the gate modules and their data: licence, secrets, personal data, infrastructure, DCO, documentation times and the documentation checks.
@@ -19,7 +20,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/checks/` holds the check catalogue (`plan.ts`), the scheduler (`run.ts`), the machine budget (`machine.ts`), the pass cache (`cache.ts`) and the budgets (`budgets.json`).
 - `src/git.ts` runs git for the modules and reports exit statuses.
 - `src/issues/` turns maintainer-written work briefs into GitHub issues: `brief.ts` holds the fields, the rules and the issue body, `references.ts` the links and paths a brief may carry, `labels.ts` the label file, `gh.ts` the `gh` calls, and `issues.ts` the command line.
-- `tests/` holds the specs. The ledger rules run against temporary git repositories. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees. `checks.spec.ts` and `checks-cache.spec.ts` cover the runner's selection, tiers, budgets, pass cache and `--plan`.
+- `tests/` holds the specs. The ledger rules run against temporary git repositories, and `ledger-merge.spec.ts` also rebases branches through the merge driver in them. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees. `checks.spec.ts` and `checks-cache.spec.ts` cover the runner's selection, tiers, budgets, pass cache and `--plan`.
 
 ## The divergence ledger
 
@@ -40,6 +41,14 @@ The checker fails when:
 - a fork-owned tree holds a compiled twin of a TypeScript source.
 
 `--count` prints the listed entries and their hunks. A hunk is one `@@` header of `git diff --unified=0` against the pinned commit, and an untracked file counts as one hunk. Retired entries are credited and listed separately; they are not part of the count.
+
+[`src/ledger-merge.ts`](src/ledger-merge.ts) is git's merge driver for the ledger, and [`.gitattributes`](../../../.gitattributes) routes `delo/upstream-patches.json` to it. Each clone configures the driver once, and every worktree of that clone shares the setting:
+
+```sh
+git config merge.delo-ledger.driver 'node_modules/.bin/tsx delo/apps/tools/src/ledger-merge.ts %O %A %B'
+```
+
+Without the setting, git merges the ledger as text. With it, the driver merges entries by `path`. An entry that one side changed takes that side's version, and so does an entry that one side removed while the other side left it alone. An entry that both sides added or changed identically is kept once. `forkOwned` is the ordered union of both sides, `upstream` must match on both sides, and `$schema` merges as one entry does. An entry that the sides changed differently stays in conflict, including an entry that one side removed while the other changed it: the driver wraps only those entries in conflict markers, names each on standard error, and exits 1. It also exits 1, after writing the merge, when the result fails the ledger parser or the entry rules. `forkOwned` keeps an entry while either side still lists it, so an entry leaves the ledger only when both sides have removed it.
 
 ## The gates
 

@@ -1910,6 +1910,11 @@
       "path": "docs/subsystems/ptc-runtime.zh.md",
       "class": "delo-feature",
       "reason": "Container denial marker: the same `PtcRunSandbox.deniedBy` field as the English page."
+    },
+    {
+      "path": ".gitattributes",
+      "class": "delo-feature",
+      "reason": "Delo's ledger merge driver: the attribute routes the ledger to the driver that merges its entries by path, so parallel branches that list different upstream paths do not conflict on it."
     }
   ],
   "retired": []

@@ -12,7 +12,8 @@ The root [`AGENTS.md`](../../../AGENTS.md) states the rules: branches, the green
 1. `pnpm install` at the worktree's root.
 2. Write the one-line `lefthook-local.yml` at the root: `extends: [delo/lefthook.yml]`. Git ignores it.
 3. `node scripts/install-lefthook.mjs`, then confirm the hooks directory (`git rev-parse --git-path hooks`) holds `commit-msg`, `pre-commit` and `pre-push`. Without the file, none of Delo's hooks run.
-4. The first `pnpm check` is cold: upstream's typecheck and, when no runtime build exists, `build:artifacts`, which the runner starts by itself.
+4. Set the ledger merge driver: `git config merge.delo-ledger.driver 'node_modules/.bin/tsx delo/apps/tools/src/ledger-merge.ts %O %A %B'`. The setting lives in the clone's shared configuration, so one run serves every worktree of the clone, and a repeat run changes nothing. Without it, git merges `delo/upstream-patches.json` as plain text, which conflicts on parallel edits.
+5. The first `pnpm check` is cold: upstream's typecheck and, when no runtime build exists, `build:artifacts`, which the runner starts by itself.
 
 ## Choose what to run
 

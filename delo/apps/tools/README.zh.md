@@ -11,6 +11,7 @@
 
 - `src/fork-boundary.ts` 包含台账的 schema、fork 自有路径与 glob 的匹配器、边界错误以及差异汇总。
 - `src/check-fork-boundary.ts` 是命令行门禁。它读取台账，依据台账检查本仓库，并在传入 `--count` 时打印差异数量。
+- `src/ledger-merge.ts` 是台账的 git 合并驱动。它按 `path` 合并条目，规则见下文的差异台账一节。
 - `src/check-commits.ts` 是提交标准：Conventional Commits 主题行、DCO 签名，以及一个变更片段或一行 `Changelog: none (<reason>)` 尾注。它以 `--message <file>` 检查单条消息，`commit-msg` 钩子即以这种方式调用它。
 - `src/checks/types.ts` 与 `src/checks/gates/index.ts` 将每个门禁描述为检查运行器执行的一条命令。
 - `src/checks/gates/` 包含门禁模块及其数据：许可证、密钥、个人数据、基础设施、DCO、文档时间以及文档检查。
@@ -19,7 +20,7 @@
 - `src/checks/` 包含检查目录（`plan.ts`）、调度器（`run.ts`）、机器预算（`machine.ts`）、通过缓存（`cache.ts`）与预算（`budgets.json`）。
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
 - `src/issues/` 把维护者撰写的 brief 转为 GitHub Issue：`brief.ts` 包含字段、规则与 Issue 正文，`references.ts` 包含 brief 可以携带的链接与路径，`labels.ts` 包含标签文件，`gh.ts` 包含 `gh` 调用，`issues.ts` 为命令行。
-- `tests/` 包含测试规范。台账规则在临时 git 仓库中运行。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。`checks.spec.ts` 与 `checks-cache.spec.ts` 覆盖运行器的选择、层级、预算、通过缓存与 `--plan`。
+- `tests/` 包含测试规范。台账规则在临时 git 仓库中运行，`ledger-merge.spec.ts` 还在其中让分支经由合并驱动完成变基。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。`checks.spec.ts` 与 `checks-cache.spec.ts` 覆盖运行器的选择、层级、预算、通过缓存与 `--plan`。
 
 ## 差异台账
 
@@ -40,6 +41,14 @@
 - fork 自有的目录中含有某个 TypeScript 源文件的编译产物。
 
 `--count` 打印已列出条目及其差异块数。差异块是 `git diff --unified=0` 相对于锁定提交输出的一个 `@@` 头，未跟踪文件计为一个差异块。retired 条目被计入抵免并单独列出；它们不计入总数。
+
+[`src/ledger-merge.ts`](src/ledger-merge.ts) 是台账的 git 合并驱动，[`.gitattributes`](../../../.gitattributes) 将 `delo/upstream-patches.json` 指向它。每个克隆仓库配置一次该驱动，该克隆的所有工作树共享这一设置：
+
+```sh
+git config merge.delo-ledger.driver 'node_modules/.bin/tsx delo/apps/tools/src/ledger-merge.ts %O %A %B'
+```
+
+未配置该设置时，git 把台账当作文本合并。配置后，驱动按 `path` 合并条目：仅一方修改的条目采用该方的版本，仅一方删除而另一方未改动的条目同样予以删除；两方以相同方式新增或修改的条目只保留一份。`forkOwned` 取两方的有序并集，`upstream` 须在两方之间一致，`$schema` 的合并方式与一个条目相同。两方以不同方式修改的条目保持冲突，包括一方删除而另一方修改的条目：驱动只在这些条目外围写入冲突标记，在标准错误中逐条说明，并以 1 退出。合并后的台账未通过解析器或条目规则校验时，驱动同样写入结果并以 1 退出。`forkOwned` 只要任一方仍列出某条目就保留它，因此只有两方都删除后，该条目才会离开台账。
 
 ## 门禁
 
