@@ -1,0 +1,10 @@
+# Bilingual-pair consistency record for harness-feedback.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/reference/harness-feedback.md
+/harness-feedback-pain-points:
+  en: 835bebb3ee408297
+  zh: 96c66ca3a7bc01e5
+/harness-feedback-pain-points/entries:
+  en: 2a38f622e9c1d12f
+  zh: bd21b6d5cbbbb3e0

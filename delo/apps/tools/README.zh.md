@@ -5,7 +5,7 @@
 `@delo/tools` 是 Delo 的 fork 工具，一个位于 `delo/apps/tools` 的私有包。
 它包含差异台账检查器：该检查器记录本树与其锁定的上游提交之间的每一处差异，并统计这些差异的数量。
 它还包含对每项变更进行检查的门禁、提交标准，以及上游工作流的清单。
-负责排序并运行这些门禁的检查运行器、本地 stack 以及其他 fork 工具将随后续工作包到达。
+检查运行器 [`src/run-checks.ts`](src/run-checks.ts) 负责排序并运行这些门禁与下文所述的其他本地检查；本地 stack 以及其他 fork 工具将随后续工作包到达。
 
 ## 模块
 
@@ -14,9 +14,12 @@
 - `src/check-commits.ts` 是提交标准：Conventional Commits 主题行、DCO 签名，以及一个变更片段或一行 `Changelog: none (<reason>)` 尾注。它以 `--message <file>` 检查单条消息，`commit-msg` 钩子即以这种方式调用它。
 - `src/checks/types.ts` 与 `src/checks/gates/index.ts` 将每个门禁描述为检查运行器执行的一条命令。
 - `src/checks/gates/` 包含门禁模块及其数据：许可证、密钥、个人数据、基础设施、DCO、文档时间以及文档检查。
+- `src/check-jsdoc.ts` 将上游的 JSDoc 规则应用于 `delo/` 下的每个 `src` 树。
+- `src/run-checks.ts` 是检查运行器：层级、选择与报告。
+- `src/checks/` 包含检查目录（`plan.ts`）、调度器（`run.ts`）、机器预算（`machine.ts`）、通过缓存（`cache.ts`）与预算（`budgets.json`）。
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
 - `src/issues/` 把维护者撰写的 brief 转为 GitHub Issue：`brief.ts` 包含字段、规则与 Issue 正文，`references.ts` 包含 brief 可以携带的链接与路径，`labels.ts` 包含标签文件，`gh.ts` 包含 `gh` 调用，`issues.ts` 为命令行。
-- `tests/` 包含测试规范。台账规则在临时 git 仓库中运行。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。
+- `tests/` 包含测试规范。台账规则在临时 git 仓库中运行。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。`checks.spec.ts` 与 `checks-cache.spec.ts` 覆盖运行器的选择、层级、预算、通过缓存与 `--plan`。
 
 ## 差异台账
 
@@ -143,15 +146,48 @@ brief 中原有的链接也按同样方式改写。
 
 ## 本地检查
 
-检查运行器 `delo/apps/tools/src/run-checks.ts` 将随 WP1.10 到达。在此之前，从仓库根目录运行以下命令：
+[`src/run-checks.ts`](src/run-checks.ts) 运行本地检查。检查目录位于 [`src/checks/plan.ts`](src/checks/plan.ts)，它按变更与包选择检查；[`src/checks/run.ts`](src/checks/run.ts) 在某个检查的依赖通过且所需的 CPU 与内存空闲后启动它；[`src/checks/machine.ts`](src/checks/machine.ts) 设定内存上限；[`src/checks/cache.ts`](src/checks/cache.ts) 为未变化的检查提供通过缓存。仓库门禁来自 [`src/checks/gates/index.ts`](src/checks/gates/index.ts)，预算来自 [`src/checks/budgets.json`](src/checks/budgets.json)。
 
-- `pnpm --filter @delo/tools check` 运行上文所述的台账检查，出现任何违规时以 1 退出。
-- `node_modules/.bin/tsx delo/apps/tools/src/check-fork-boundary.ts --count` 运行同样的检查，并打印差异数量。
-- `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/<name>.ts` 运行上表中的某个门禁，`<name>` 为其文件名，例如 `licence`。范围门禁接受 `--base <rev>`。
-- `node_modules/.bin/vitest run --config delo/vitest.config.ts` 运行 `delo/apps/*/tests` 与 `delo/packages/*/tests` 下的测试规范。
-- `node_modules/.bin/tsc -p delo/apps/tools/tsconfig.json --noEmit` 对本包进行类型检查。
+每个检查都有预算（其峰值常驻内存与所用的 CPU，运行器将其控制在本次运行的上限之内）和层级（选中它的调用方式）：`pre-commit` 针对暂存路径运行，`changed` 按变更选择（即 `--changed` 与推送前钩子），`full` 为完整门禁。
 
-[delo-dev-workflow 技能](../../../.agents/skills/delo-dev-workflow/SKILL.md)说明了何时运行每项检查。
+| 检查 | 证明的内容 | 预算 | 层级 |
+| --- | --- | --- | --- |
+| `boundary` | 与上游的每处差异都属于 fork 自有，或是已列出的补丁（[`check-fork-boundary.ts`](src/check-fork-boundary.ts)） | 0.3 GiB，1 个 CPU | `changed`、`full` |
+| `gates:*` | [`checks/gates/index.ts`](src/checks/gates/index.ts) 中的八个仓库门禁；标记为 `staged` 的门禁也在 `pre-commit` 中运行 | 每个 0.5 GiB，1 个 CPU | `changed`、`full`；标记为 staged 的门禁另含 `pre-commit` |
+| `whitespace:staged` | 暂存的改动中没有空白错误（`git diff --cached --check`） | 0.1 GiB，1 个 CPU | `pre-commit` |
+| `jsdoc` | 上游的 JSDoc 规则应用于 fork 每个 `src` 树中的所有导出（[`check-jsdoc.ts`](src/check-jsdoc.ts)） | 1.5 GiB，1 个 CPU | `changed`、`full` |
+| `typecheck:upstream` | 上游的增量类型检查（`pnpm run typecheck`），fork 的程序所读取的声明由它提供 | 2.5 GiB，2 个 CPU | `changed`、`full` |
+| `typecheck:delo:<program>` | 对每个 Delo tsconfig 运行 `tsc -p`，每个程序一个检查；`--only typecheck:delo` 选中全部 | 每个 1 GiB，1 个 CPU | `changed`、`full` |
+| `build:artifacts` | 上游的运行时产物，仅当某个产物缺失或早于其源码时构建（`pnpm run build:artifacts`） | 4 GiB，4 个 CPU | `changed`、`full`，且仅在过期时 |
+| `tests:fork` | `delo/apps/*/tests` 与 `delo/packages/*/tests` 下的每个规范（[`vitest.config.ts`](../../vitest.config.ts)） | 每个 worker 0.5 GiB | `changed`、`full` |
+| `tests:snapshots` | 上游的无密钥录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，独占 | `changed`、`full` |
+| `tests:upstream-changed` | 每个有变更的上游包的规范，以及在 150 个规范文件之内其直接依赖的规范（[上游的 `vitest.config.ts`](../../../vitest.config.ts)） | 每个 worker 0.6 GiB，至多 8 个 worker | `changed` |
+| `generate:native` | 上游的原生系统插件（`pnpm run build:native-system`） | 1 GiB，2 个 CPU | 无：仅 `--only generate:native` |
+
+`pre-commit` 层级在 5 秒预算内运行（见 `budgets.json`），运行超出预算时会报告。Docker 通道、构建后包的规范、文档站点、工作流检查与 Cordis 检查，将随需要它们的包一同到达。
+
+在仓库根目录运行的命令：
+
+```sh
+pnpm check                       # --changed: what changed since v5, and the checks it needs
+pnpm check:full                  # the full gate, with no pass cache
+pnpm check -- --plan             # the selection with each reason, cache state, expected time and budget; runs nothing
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --list        # the whole catalogue
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:fork
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts delo/apps/tools    # targets: that package's specs, and the typechecks of the packages that depend on it
+```
+
+选项：`--changed`、`--pre-commit` 与 `--pre-push` 各自选择一个层级，只能给出其一；`--base <ref>` 让 `--changed` 从另一个引用开始度量（默认 `v5`）；`--only` 与 `--skip` 接受检查 id 或分组（`boundary`、`gates`、`whitespace`、`docs`、`typecheck`、`tests`、`generate`），以逗号分隔；`--plan` 与 `--list` 只打印而不运行；`--no-cache` 跳过通过缓存；`--bail` 在第一个失败处停止；`--workers <n>` 设置 fork 规范套件的 worker 数；`--no-scope` 不在 systemd 用户作用域中运行。
+
+声明了输入的检查，每个键只通过一次。键由以下内容构成：其输入文件的 git blob id 排序列表的 sha256（已跟踪且未修改的文件取其 blob id；已修改、已删除或未跟踪的文件取其内容哈希）、锁文件的 blob id、Node 与 pnpm 版本、命令、其预算条目，以及其列出的环境变量的取值。键相同的已存储通过结果会报告为 `cached pass (<键前缀>)`，该检查不再运行。以下情况下缓存关闭：`--no-cache`、`pnpm check:full`、带 `DELO_FULL_GATE=1` 的推送，以及设置了 `CI` 时。未声明输入的检查总是运行：回放、产物构建、原生插件与暂存的空白检查。
+
+安装钩子时，在仓库根目录写入一行 `lefthook-local.yml`，内容为 `extends: [delo/lefthook.yml]`（Git 会忽略它），然后运行 `node scripts/install-lefthook.mjs`。`pre-commit` 钩子运行 `pre-commit` 层级。`pre-push` 钩子运行 `--pre-push`：自远程分支的最新提交以来的改动；对于新分支，则是自其与 `v5` 的合并基以来的改动。`DELO_PUSH_SKIP=<检查或分组>,… git push` 会跳过指定的检查，`DELO_FULL_GATE=1 git push` 运行完整门禁。`commit-msg` 钩子在 `check-commits.ts` 进入分支后运行它；在此之前该任务跳过。
+
+报告与日志位于 `node_modules/.cache/delo-checks/` 下：`report.json` 记录每个检查的状态、是否由通过缓存提供、原因、日志、耗时与内存峰值；`logs/<check>.log` 保存完整输出；`pass/` 为通过缓存；`durations.json` 记录每个检查最近一次的耗时，用于安排下一次运行的顺序；`tsbuildinfo/` 保存增量类型检查的状态。机器范围的锁使第二次运行等待第一次结束。
+
+账本检查单独运行为 `pnpm --filter @delo/tools check`。单个门禁用 `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/<name>.ts` 运行（如 `licence`），范围门禁接受 `--base <rev>`。规范用 `node_modules/.bin/vitest run --config delo/vitest.config.ts` 运行，本包的类型检查用 `node_modules/.bin/tsc -p delo/apps/tools/tsconfig.json --noEmit`。
+
+[delo-dev-workflow 技能](../../../.agents/skills/delo-dev-workflow/SKILL.md)说明了何时运行各项检查。
 
 ## 与 rc.1 的对齐
 

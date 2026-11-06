@@ -5,7 +5,7 @@ English | [中文](README.zh.md)
 `@delo/tools` is Delo's fork tooling, a private package in `delo/apps/tools`.
 It holds the divergence-ledger checker, which keeps every difference between this tree and its pinned upstream commit recorded, and the count of that difference.
 It also holds the gates that check each change, the commit standard, and the inventory of upstream's workflows.
-The check runner that orders and runs the gates, the local stack and the other fork tools arrive with later work packages.
+The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs those gates and the other local checks described below; the local stack and the other fork tools arrive with later work packages.
 
 ## Modules
 
@@ -14,9 +14,12 @@ The check runner that orders and runs the gates, the local stack and the other f
 - `src/check-commits.ts` is the commit standard: a Conventional Commits subject, a DCO sign-off, and a changelog fragment or a `Changelog: none (<reason>)` trailer. It checks one message with `--message <file>`, the form a `commit-msg` hook passes.
 - `src/checks/types.ts` and `src/checks/gates/index.ts` describe each gate as one command that the check runner executes.
 - `src/checks/gates/` holds the gate modules and their data: licence, secrets, personal data, infrastructure, DCO, documentation times and the documentation checks.
+- `src/check-jsdoc.ts` applies upstream's JSDoc rules to every `src` tree under `delo/`.
+- `src/run-checks.ts` is the check runner: the tiers, the selection, the report.
+- `src/checks/` holds the check catalogue (`plan.ts`), the scheduler (`run.ts`), the machine budget (`machine.ts`), the pass cache (`cache.ts`) and the budgets (`budgets.json`).
 - `src/git.ts` runs git for the modules and reports exit statuses.
 - `src/issues/` turns maintainer-written work briefs into GitHub issues: `brief.ts` holds the fields, the rules and the issue body, `references.ts` the links and paths a brief may carry, `labels.ts` the label file, `gh.ts` the `gh` calls, and `issues.ts` the command line.
-- `tests/` holds the specs. The ledger rules run against temporary git repositories. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees.
+- `tests/` holds the specs. The ledger rules run against temporary git repositories. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees. `checks.spec.ts` and `checks-cache.spec.ts` cover the runner's selection, tiers, budgets, pass cache and `--plan`.
 
 ## The divergence ledger
 
@@ -144,13 +147,46 @@ The specs in `tests/issues/` run the tool in scratch repositories with a fake `g
 
 ## Local checks
 
-The check runner, `delo/apps/tools/src/run-checks.ts`, arrives with WP1.10. Until then, these commands run from the repository root:
+[`src/run-checks.ts`](src/run-checks.ts) runs the local checks. The catalogue is [`src/checks/plan.ts`](src/checks/plan.ts), which selects checks by change and by package; [`src/checks/run.ts`](src/checks/run.ts) starts each check once its needs pass and its CPUs and memory are free; [`src/checks/machine.ts`](src/checks/machine.ts) sets the memory ceiling; and [`src/checks/cache.ts`](src/checks/cache.ts) serves unchanged checks from the pass cache. The repository gates come from [`src/checks/gates/index.ts`](src/checks/gates/index.ts), and the budgets from [`src/checks/budgets.json`](src/checks/budgets.json).
 
-- `pnpm --filter @delo/tools check` runs the ledger checks above and exits 1 on any violation.
-- `node_modules/.bin/tsx delo/apps/tools/src/check-fork-boundary.ts --count` runs the same checks and prints the divergence count.
-- `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/<name>.ts` runs one gate in the table above, with `<name>` the gate's file name, such as `licence`. The range gates take `--base <rev>`.
-- `node_modules/.bin/vitest run --config delo/vitest.config.ts` runs the specs under `delo/apps/*/tests` and `delo/packages/*/tests`.
-- `node_modules/.bin/tsc -p delo/apps/tools/tsconfig.json --noEmit` typechecks this package.
+Each check has a budget, its resident memory at the peak and its CPUs, which the runner keeps inside the run's ceiling, and a tier, the invocations that select it: `pre-commit` runs over the staged paths, `changed` selects by change (`--changed` and the pre-push hook), and `full` is the full gate.
+
+| Check | What it proves | Budget | Tier |
+| --- | --- | --- | --- |
+| `boundary` | Every difference from upstream is fork-owned or a listed patch ([`check-fork-boundary.ts`](src/check-fork-boundary.ts)) | 0.3 GiB, 1 CPU | `changed`, `full` |
+| `gates:*` | Each of the eight repository gates in [`checks/gates/index.ts`](src/checks/gates/index.ts); a gate marked `staged` also runs in `pre-commit` | 0.5 GiB, 1 CPU each | `changed`, `full`; a staged gate also `pre-commit` |
+| `whitespace:staged` | No whitespace error in the staged changes (`git diff --cached --check`) | 0.1 GiB, 1 CPU | `pre-commit` |
+| `jsdoc` | Upstream's JSDoc rules over every export of the fork's `src` trees ([`check-jsdoc.ts`](src/check-jsdoc.ts)) | 1.5 GiB, 1 CPU | `changed`, `full` |
+| `typecheck:upstream` | Upstream's incremental typecheck (`pnpm run typecheck`), whose declarations the fork's programs read | 2.5 GiB, 2 CPUs | `changed`, `full` |
+| `typecheck:delo:<program>` | `tsc -p` over each Delo tsconfig, one check per program; `--only typecheck:delo` selects them all | 1 GiB, 1 CPU each | `changed`, `full` |
+| `build:artifacts` | Upstream's runtime bundles, built only when one is missing or older than its sources (`pnpm run build:artifacts`) | 4 GiB, 4 CPUs | `changed`, `full`, when stale |
+| `tests:fork` | Every spec under `delo/apps/*/tests` and `delo/packages/*/tests` ([`vitest.config.ts`](../../vitest.config.ts)) | 0.5 GiB per worker | `changed`, `full` |
+| `tests:snapshots` | Upstream's keyless recorded-session replay (`pnpm run test:snapshot`) | 0.6 GiB per worker, 5 CPUs, alone | `changed`, `full` |
+| `tests:upstream-changed` | The specs of each changed upstream package and, within 150 spec files, of its direct dependents ([upstream's `vitest.config.ts`](../../../vitest.config.ts)) | 0.6 GiB per worker, up to 8 workers | `changed` |
+| `generate:native` | Upstream's native system addon (`pnpm run build:native-system`) | 1 GiB, 2 CPUs | none: `--only generate:native` |
+
+The `pre-commit` tier runs within a budget of 5 seconds (`budgets.json`) and reports a run that exceeds it. The Docker lane, the built-package specs, the documentation site, the workflow checks and the Cordis check arrive with the packages that need them.
+
+Commands, from the repository root:
+
+```sh
+pnpm check                       # --changed: what changed since v5, and the checks it needs
+pnpm check:full                  # the full gate, with no pass cache
+pnpm check -- --plan             # the selection with each reason, cache state, expected time and budget; runs nothing
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --list        # the whole catalogue
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:fork
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts delo/apps/tools    # targets: that package's specs, and the typechecks of the packages that depend on it
+```
+
+Options: `--changed`, `--pre-commit` and `--pre-push` each select a tier, so give one; `--base <ref>` measures `--changed` from another ref (default `v5`); `--only` and `--skip` take check ids or groups (`boundary`, `gates`, `whitespace`, `docs`, `typecheck`, `tests`, `generate`), comma-separated; `--plan` and `--list` print without running; `--no-cache` skips the pass cache; `--bail` stops at the first failure; `--workers <n>` sets the fork suite's workers; `--no-scope` runs without the systemd user scope.
+
+A check that declares its inputs passes once per key: the sha256 of the sorted list of its input files' git blob ids (the blob id of a tracked, unmodified file; the content hash of a modified, deleted or untracked one), the lockfile's blob id, the Node and pnpm versions, the command, its budget entry, and the values of the environment variables it lists. A stored pass with the same key is reported as `cached pass (<key prefix>)`, and the check does not run. The cache is off for `--no-cache`, `pnpm check:full`, a push with `DELO_FULL_GATE=1`, and when `CI` is set. A check without declared inputs always runs: the replay, the bundle build, the native addon and the staged whitespace check.
+
+To install the hooks, write a one-line `lefthook-local.yml` at the root with `extends: [delo/lefthook.yml]` (git ignores it), then run `node scripts/install-lefthook.mjs`. The `pre-commit` hook runs the `pre-commit` tier. The `pre-push` hook runs `--pre-push`: what changed since the remote branch's tip, or, for a new branch, since its merge base with `v5`. `DELO_PUSH_SKIP=<check or group>,… git push` leaves checks out, and `DELO_FULL_GATE=1 git push` runs the full gate. The `commit-msg` hook runs `check-commits.ts` once that script is on the branch; until then its job is skipped.
+
+Reports and logs are under `node_modules/.cache/delo-checks/`: `report.json` holds each check's status, whether a cached pass served it, its reason, log, duration and peak memory; `logs/<check>.log` holds its full output; `pass/` holds the pass cache; `durations.json` holds each check's last duration, which orders the next run; `tsbuildinfo/` holds the incremental typecheck state. A machine-wide lock makes a second run wait for the first.
+
+The ledger check alone is `pnpm --filter @delo/tools check`. One gate runs with `node_modules/.bin/tsx delo/apps/tools/src/checks/gates/<name>.ts`, such as `licence`, and the range gates take `--base <rev>`. The specs run with `node_modules/.bin/vitest run --config delo/vitest.config.ts`, and this package typechecks with `node_modules/.bin/tsc -p delo/apps/tools/tsconfig.json --noEmit`.
 
 The [delo-dev-workflow skill](../../../.agents/skills/delo-dev-workflow/SKILL.md) states when to run each check.
 
