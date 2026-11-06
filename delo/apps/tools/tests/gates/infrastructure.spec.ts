@@ -52,6 +52,13 @@ describe('identifiers of a deployment', () => {
 
   it('does not read a version number as an address', () => {
     expect(lineFindings(`release ${['1', '2', '3', '4', '5'].join('.')} and ${ip(10, 1, 5)}`, 1)).toEqual([])
+    expect(lineFindings('build 1.2.3.4.5', 1)).toEqual([])
+    expect(lineFindings('kernel 5.15.153.1-microsoft-standard-WSL2', 1)).toEqual([])
+  })
+
+  it('still refuses a real address in prose, even beside punctuation', () => {
+    expect(lineFindings(`the relay runs at ${ip(8, 8, 4, 4)}; retry`, 1)).toEqual([{ kind: 'IPv4 address', value: ip(8, 8, 4, 4), line: 1 }])
+    expect(lineFindings(`(${ip(8, 8, 4, 4)}).`, 2)).toEqual([{ kind: 'IPv4 address', value: ip(8, 8, 4, 4), line: 2 }])
   })
 
   it('refuses a tailnet name other than the example tailnet', () => {

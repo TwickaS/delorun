@@ -50,7 +50,8 @@ const DOCUMENTATION_ACCOUNT = '123456789012'
 const EXAMPLE_TAILNET = 'example'
 
 const OCTET = '(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)'
-const IPV4 = new RegExp(`(?<![\\d.])(${OCTET}(?:\\.${OCTET}){3})(?![\\d]|\\.\\d)`, 'gu')
+/** A dotted quad that stands alone: a longer token, such as a version string or a longer dotted number, is not an address. */
+const IPV4 = new RegExp(`(?<![\\w.-])(${OCTET}(?:\\.${OCTET}){3})(?![\\w-]|\\.\\d)`, 'gu')
 /** A run of hexadecimal groups and colons, optionally ending in an IPv4 tail; {@link ipv6Groups} validates each run. */
 const IPV6 = /(?<![0-9A-Za-z:])(?:[0-9A-Fa-f]{0,4}:){2,7}(?:[0-9A-Fa-f]{0,4}|(?:\d{1,3}\.){3}\d{1,3})(?![0-9A-Za-z:])/gu
 const TAILNET = /(?<![\w-])((?:[a-z0-9-]+\.)*[a-z0-9-]+)\.ts\.net(?![\w-])/giu
