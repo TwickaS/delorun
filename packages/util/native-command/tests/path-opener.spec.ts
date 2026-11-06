@@ -416,14 +416,14 @@ describe('native file manager', () => {
     await expect(revealNativePath('/file', AbortSignal.abort(new Error('cancelled')), { run })).rejects.toThrow('cancelled')
     expect(run).not.toHaveBeenCalled()
     await expect(revealNativePath('/file', signal(), { platform: 'darwin', run })).rejects.toThrow('desktop failed')
-    expect(nativeFileManager()).toBe(process.platform === 'darwin' ? 'finder' : process.platform === 'win32' ? 'explorer' : 'directory')
+    expect(nativeFileManager({ osRelease: '6.8.0-generic', env: {} })).toBe(process.platform === 'darwin' ? 'finder' : process.platform === 'win32' ? 'explorer' : 'directory')
   })
 })
 
 
 it('uses the native runner for a file-manager handoff when none is injected', async () => {
   execFileMock.mockImplementation((_command, _args, _options, callback) => { callback(null, '', '') })
-  await revealNativePath('/tmp/report.txt', signal())
+  await revealNativePath('/tmp/report.txt', signal(), { osRelease: '6.8.0-generic', env: {} })
   expect(execFileMock).toHaveBeenCalled()
 })
 

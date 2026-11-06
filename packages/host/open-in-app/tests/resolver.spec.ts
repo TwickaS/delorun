@@ -133,10 +133,18 @@ describe('resolveOpenInAppApps', () => {
     const home = await tempRoot()
     const resolveExecutable = pathTable({ 'xdg-open': '/usr/bin/xdg-open' })
     await expect(resolveLaunch(byId('filemanager'), TIMEOUT_MS, bare({
-      platform: 'linux', home, env: linuxEnv(home), resolveExecutable,
+      platform: 'linux', home, env: linuxEnv(home), osRelease: '6.8.0-generic', resolveExecutable,
     }))).resolves.toBeNull()
     await expect(resolveLaunch(byId('filemanager'), TIMEOUT_MS, bare({
-      platform: 'linux', home, env: { ...linuxEnv(home), WAYLAND_DISPLAY: 'wayland-0' }, resolveExecutable,
+      platform: 'linux', home, env: { ...linuxEnv(home), WAYLAND_DISPLAY: 'wayland-0' }, osRelease: '6.8.0-generic', resolveExecutable,
+    }))).resolves.toEqual({ launch: { kind: 'argv', command: '/usr/bin/xdg-open', args: [] }, icon: undefined })
+  })
+
+  it('offers the Linux file manager on a WSL kernel even without a display server', async () => {
+    const home = await tempRoot()
+    const resolveExecutable = pathTable({ 'xdg-open': '/usr/bin/xdg-open' })
+    await expect(resolveLaunch(byId('filemanager'), TIMEOUT_MS, bare({
+      platform: 'linux', home, env: linuxEnv(home), osRelease: '5.15.153.1-microsoft-standard-WSL2', resolveExecutable,
     }))).resolves.toEqual({ launch: { kind: 'argv', command: '/usr/bin/xdg-open', args: [] }, icon: undefined })
   })
 

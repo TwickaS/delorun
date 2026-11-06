@@ -107,12 +107,12 @@ describe('native file associations', () => {
 })
 
 
-it('uses the production command adapter and current platform when no override is supplied', async () => {
+it('uses the production command adapter and current platform when no platform override is supplied', async () => {
   const run = vi.spyOn(runner, 'runNativeCommand').mockImplementation(async command => ({
     stdout: command === 'gio' ? 'standard::content-type: audio/mpeg' : command === 'env' ? 'No applications found' : JSON.stringify([application]), stderr: '',
   }))
   onTestFinished(() => { run.mockRestore() })
-  expect(await nativeFileApplications('/file.mp3', signal)).toEqual(process.platform === 'linux' ? [] : [application])
+  expect(await nativeFileApplications('/file.mp3', signal, { osRelease: '6.8.0-generic', env: {} })).toEqual(process.platform === 'linux' ? [] : [application])
   await openNativeFileApplication('/file.mp3', application.id, signal, { platform: 'darwin' })
   expect(run).toHaveBeenLastCalledWith('open', ['-a', application.id, '/file.mp3'], signal, 'hidden')
 })
@@ -180,6 +180,6 @@ it('uses production environment and runner defaults for Linux and WSL', async ()
         : command === 'wslpath' ? 'C:\\file.mp3\n' : JSON.stringify([application]), stderr: '',
   }))
   onTestFinished(() => { run.mockRestore() })
-  expect(await nativeFileApplications('/file.mp3', signal, { platform: 'linux', osRelease: 'linux' })).toEqual([])
+  expect(await nativeFileApplications('/file.mp3', signal, { platform: 'linux', osRelease: 'linux', env: {} })).toEqual([])
   expect(await nativeFileApplications('/file.mp3', signal, { platform: 'linux', osRelease: 'microsoft', env: {} })).toEqual([application])
 })

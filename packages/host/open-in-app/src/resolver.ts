@@ -104,6 +104,8 @@ export interface OpenInAppInternals {
   applicationRoots?: readonly string[]
   /** Environment for `${VAR}`/`%VAR%` expansion in candidates and registry values. */
   env?: Readonly<Record<string, string | undefined>>
+  /** Kernel release replacing the host's `os.release()` in the WSL check; absent reads the host's release. */
+  osRelease?: string
   /** Home directory replacing a leading `~/` in candidates. */
   home?: string
   run?: NativeCommandRunner
@@ -118,6 +120,7 @@ export interface ResolvedInternals {
   ssh: boolean
   applicationRoots: readonly string[]
   env: Readonly<Record<string, string | undefined>>
+  osRelease: string | undefined
   home: string
   run: NativeCommandRunner
   launch: OpenInAppLauncher
@@ -143,6 +146,7 @@ export function resolveInternals(internals: OpenInAppInternals): ResolvedInterna
     ssh: internals.ssh ?? false,
     applicationRoots: internals.applicationRoots ?? ['/Applications', join(home, 'Applications')],
     env: internals.env ?? process.env,
+    osRelease: internals.osRelease,
     home,
     run: internals.run ?? runNativeCommand,
     launch: internals.launch ?? launchDetachedApp,
@@ -507,6 +511,8 @@ async function locate(
       if (locator.requiresDesktop === true && !canOpenNativePath({
         platform: internals.platform,
         env: { ...internals.env },
+        // exactOptionalPropertyTypes: an absent release is omitted, which reads the host's release.
+        ...(internals.osRelease === undefined ? {} : { osRelease: internals.osRelease }),
       })) return null
       const found = await internals.resolveExecutable(locator.name)
       return found === null

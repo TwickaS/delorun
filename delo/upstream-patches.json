@@ -755,6 +755,31 @@
       "path": ".nvmrc",
       "class": "delo-feature",
       "reason": "Pins upstream CI's Node major for contributors and Delo's check runner."
+    },
+    {
+      "path": "packages/host/open-in-app/src/resolver.ts",
+      "class": "generic-fix",
+      "reason": "The test injected the host's kernel release, so it failed on every WSL host; it now injects a non-WSL Linux release. Offer upstream. The resolver forwards an optional osRelease to its WSL check; when it is absent, the host's release is read as before."
+    },
+    {
+      "path": "packages/host/open-in-app/tests/resolver.spec.ts",
+      "class": "generic-fix",
+      "reason": "The test injected the host's kernel release, so it failed on every WSL host; it now injects a non-WSL Linux release. Offer upstream."
+    },
+    {
+      "path": "packages/util/native-command/tests/path-opener.spec.ts",
+      "class": "generic-fix",
+      "reason": "The test injected the host's kernel release, so it failed on every WSL host; it now injects a non-WSL Linux release. Offer upstream."
+    },
+    {
+      "path": "packages/util/native-command/tests/file-applications.spec.ts",
+      "class": "generic-fix",
+      "reason": "The test injected the host's kernel release, so it failed on every WSL host; it now injects a non-WSL Linux release. Offer upstream."
+    },
+    {
+      "path": "packages/util/native-command/tests/file-applications-linux-native.spec.ts",
+      "class": "generic-fix",
+      "reason": "The test injected the host's kernel release, so it failed on every WSL host; it now injects a non-WSL Linux release. Offer upstream."
     }
   ],
   "retired": []
