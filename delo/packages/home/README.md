@@ -34,7 +34,7 @@ Every failure the contract defines is a `HomeLayoutError` with C1's `code`, the 
 
 ## The tree and its modes
 
-`ensureHomeTree(home, profile)` creates the home, each of Delo's top-level entries (`runtimes/`, `staging/`, `trust/`, `status/`, `catalogue/`, `secrets/`, `run/`, `supervisor/`, `bin/`, `alerts/`) and `run/<profile>/` at mode 0700 through `mkdir` with that mode, so the umask can only narrow it. It then checks the home, `secrets/` and `run/<profile>/` with `checkPrivateDirectory`, which refuses a symbolic link, another user's directory or one with a group or other bit set with `HOME_MODE` and the fix `chmod 700 <path>`. An existing directory keeps its mode: nothing here changes a mode. Upstream's entries keep upstream's layout and modes, and this package creates none of them.
+`ensureHomeTree(home, profile)` creates the home, each of Delo's top-level entries (`runtimes/`, `staging/`, `trust/`, `status/`, `catalogue/`, `secrets/`, `run/`, `supervisor/`, `bin/`, `alerts/`) and `run/<profile>/` at mode 0700 through `mkdir` with that mode, so the umask can only narrow it. It then checks the home, `secrets/` and `run/<profile>/` with `checkPrivateDirectory`, which refuses a symbolic link, another user's directory or one with a group or other bit set with `HOME_MODE` and the fix `chmod 700 <path>`. `checkPrivateDirectorySync(path)` runs the same check synchronously, for a caller on a synchronous path such as the log writer of [`@delo/logs`](../logs/README.md). An existing directory keeps its mode: nothing here changes a mode. Upstream's entries keep upstream's layout and modes, and this package creates none of them.
 
 ## Protected files
 
@@ -42,7 +42,7 @@ C1's protected files are every file under `secrets/`, `trust/`, `status/` and `c
 
 - `writeProtectedFile(path, data)` writes a sibling temporary file created exclusively at mode 0600, flushes it, renames it over the path and, on Linux and macOS, flushes the directory. A failed write removes the temporary file and leaves the path unchanged.
 - `readProtectedFile(path)` refuses, with `SECRET_FILE_MODE`, a path that is a symbolic link, not a regular file, another user's, or has a group or other bit set, with the fix `chmod 600 <path>` for a laxer mode. It examines the path before opening it, so a FIFO or device is never opened, and checks the opened file again, so a file swapped in between is refused.
-- `checkProtectedFile(path)` runs the same check without reading the file.
+- `checkProtectedFile(path)` runs the same check without reading the file, and `checkProtectedFileSync(path)` runs it synchronously and returns the `lstat` result it checked, so a caller that then opens the file can confirm it opened the same one.
 
 ## The home lock
 

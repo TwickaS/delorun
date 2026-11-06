@@ -40,7 +40,7 @@ import { ensureHomeTree, readProtectedFile, resolveDeloHome, writeProtectedFile 
 
 ## 目录树及其模式
 
-`ensureHomeTree(home, profile)` 以 0700 模式、通过带该模式的 `mkdir` 创建 home、Delo 的每个顶层条目（`runtimes/`、`staging/`、`trust/`、`status/`、`catalogue/`、`secrets/`、`run/`、`supervisor/`、`bin/`、`alerts/`）以及 `run/<profile>/`，因此 umask 只能收窄该模式。随后它以 `checkPrivateDirectory` 检查 home、`secrets/` 与 `run/<profile>/`；该函数以 `HOME_MODE` 拒绝符号链接、其他用户的目录，或设置了组或其他用户权限位的目录，并给出修复命令 `chmod 700 <path>`。已存在的目录保持其模式：此处不改动任何模式。上游的条目保持上游的布局与模式，本包不创建其中任何条目。
+`ensureHomeTree(home, profile)` 以 0700 模式、通过带该模式的 `mkdir` 创建 home、Delo 的每个顶层条目（`runtimes/`、`staging/`、`trust/`、`status/`、`catalogue/`、`secrets/`、`run/`、`supervisor/`、`bin/`、`alerts/`）以及 `run/<profile>/`，因此 umask 只能收窄该模式。随后它以 `checkPrivateDirectory` 检查 home、`secrets/` 与 `run/<profile>/`；该函数以 `HOME_MODE` 拒绝符号链接、其他用户的目录，或设置了组或其他用户权限位的目录，并给出修复命令 `chmod 700 <path>`。`checkPrivateDirectorySync(path)` 以同步方式执行相同的检查，供处于同步路径上的调用方使用，例如 [`@delo/logs`](../logs/README.zh.md) 的日志写入方。已存在的目录保持其模式：此处不改动任何模式。上游的条目保持上游的布局与模式，本包不创建其中任何条目。
 
 <a id="protected-files"></a>
 
@@ -50,7 +50,7 @@ import { ensureHomeTree, readProtectedFile, resolveDeloHome, writeProtectedFile 
 
 - `writeProtectedFile(path, data)` 先写入一个同目录临时文件（以 0600 模式独占创建），将其刷新，再重命名覆盖该路径，并在 Linux 与 macOS 上刷新该目录。写入失败时，它删除临时文件，并保持该路径不变。
 - `readProtectedFile(path)` 拒绝以下路径：符号链接、非常规文件、属于其他用户的文件，或设置了组或其他用户权限位的文件，错误代码为 `SECRET_FILE_MODE`；对于较宽松的模式，它给出修复命令 `chmod 600 <path>`。它在打开路径之前先检查该路径，因此 FIFO 或设备永远不会被打开；打开之后它再次检查已打开的文件，因此中途被替换的文件同样会被拒绝。
-- `checkProtectedFile(path)` 执行相同的检查，但不读取文件。
+- `checkProtectedFile(path)` 执行相同的检查，但不读取文件；`checkProtectedFileSync(path)` 以同步方式执行该检查，并返回它所检查的 `lstat` 结果，以便随后打开该文件的调用方确认打开的是同一个文件。
 
 <a id="the-home-lock"></a>
 

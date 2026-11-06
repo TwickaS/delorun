@@ -7,6 +7,6 @@
  */
 export { HomeLayoutError } from './errors.ts'
 export { resolveDeloHome, type DeloHome } from './resolve.ts'
-export { checkPrivateDirectory, ensureHomeTree, runDirectory } from './tree.ts'
-export { checkProtectedFile, readProtectedFile, writeProtectedFile } from './protected-file.ts'
+export { checkPrivateDirectory, checkPrivateDirectorySync, ensureHomeTree, runDirectory } from './tree.ts'
+export { checkProtectedFile, checkProtectedFileSync, readProtectedFile, writeProtectedFile } from './protected-file.ts'
 export { acquireHomeLock, processExists, readHomeLock, removeStaleLock, type AcquireOptions, type HolderAnswer, type HolderProbe, type HomeLock } from './lock.ts'

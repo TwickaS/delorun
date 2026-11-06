@@ -13,7 +13,7 @@
  * @module @delo/home/protected-file
  */
 import { randomBytes } from 'node:crypto'
-import { constants, type Stats } from 'node:fs'
+import { constants, lstatSync, type Stats } from 'node:fs'
 import { lstat, open, rename, unlink } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { FORBIDDEN_MODE_BITS, PROTECTED_FILE_MODE } from '@delo/contract-home-layout'
@@ -46,6 +46,21 @@ function refusal(path: string, stats: Stats): HomeLayoutError | undefined {
 export async function checkProtectedFile(path: string): Promise<void> {
   const problem = refusal(path, await lstat(path))
   if (problem !== undefined) throw problem
+}
+
+/**
+ * Check a protected file without reading it, synchronously, for callers on a synchronous path such as a log
+ * writer.
+ * @param path - the absolute file path.
+ * @returns the `lstat` result the check passed, so a caller that opens the file can confirm it opened the same one.
+ * @throws {HomeLayoutError} `SECRET_FILE_MODE` naming the path, with the `chmod 600` fix for a laxer mode.
+ * @throws the filesystem error, such as `ENOENT`, when the path cannot be examined.
+ */
+export function checkProtectedFileSync(path: string): Stats {
+  const stats = lstatSync(path)
+  const problem = refusal(path, stats)
+  if (problem !== undefined) throw problem
+  return stats
 }
 
 /**

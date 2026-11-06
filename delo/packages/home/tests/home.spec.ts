@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
-import { checkProtectedFile, ensureHomeTree, HomeLayoutError, readProtectedFile, resolveDeloHome, runDirectory, writeProtectedFile } from '../src/index.ts'
+import { checkPrivateDirectory, checkPrivateDirectorySync, checkProtectedFile, checkProtectedFileSync, ensureHomeTree, HomeLayoutError, readProtectedFile, resolveDeloHome, runDirectory, writeProtectedFile } from '../src/index.ts'
 
 const POSIX = process.platform !== 'win32'
 
@@ -178,5 +178,55 @@ describe.runIf(POSIX)('protected files', () => {
     await writeProtectedFile(join(secrets, 'ok.key'), 'x')
     expect(statSync(secrets).isDirectory()).toBe(true)
     expect(execFileSync('ls', ['-A', secrets], { encoding: 'utf8' }).trim().split('\n')).toEqual(['ok.key'])
+  })
+})
+
+describe.runIf(POSIX)('synchronous checks', () => {
+  let home: string
+
+  beforeEach(async () => {
+    home = join(osHome, '.delo')
+    await ensureHomeTree(home, 'default')
+  })
+
+  /** The error a synchronous check throws. */
+  function thrown(check: () => unknown): HomeLayoutError {
+    try {
+      check()
+    } catch (error) {
+      if (error instanceof HomeLayoutError) return error
+      throw error
+    }
+    throw new Error('the check passed')
+  }
+
+  it('passes a 0600 file and returns the lstat it checked, and refuses what the asynchronous check refuses', async () => {
+    const path = join(home, 'secrets', 'sync.key')
+    await writeProtectedFile(path, 'x')
+    expect(checkProtectedFileSync(path).ino).toBe(lstatSync(path).ino)
+    chmodSync(path, 0o640)
+    const error = thrown(() => checkProtectedFileSync(path))
+    expect(error.code).toBe('SECRET_FILE_MODE')
+    expect(error.fix).toBe(`chmod 600 ${path}`)
+    expect(error.message).toBe((await refusal(checkProtectedFile(path))).message)
+    const link = join(home, 'secrets', 'sync-link.key')
+    chmodSync(path, 0o600)
+    symlinkSync(path, link)
+    expect(thrown(() => checkProtectedFileSync(link)).code).toBe('SECRET_FILE_MODE')
+    expect(() => checkProtectedFileSync(join(home, 'secrets', 'absent.key'))).toThrow(expect.objectContaining({ code: 'ENOENT' }))
+  })
+
+  it('passes a 0700 directory and refuses a laxer one or a symbolic link with HOME_MODE, as the asynchronous check does', async () => {
+    const secrets = join(home, 'secrets')
+    expect(() => { checkPrivateDirectorySync(secrets) }).not.toThrow()
+    chmodSync(secrets, 0o750)
+    const error = thrown(() => { checkPrivateDirectorySync(secrets) })
+    expect(error.code).toBe('HOME_MODE')
+    expect(error.fix).toBe(`chmod 700 ${secrets}`)
+    expect(error.message).toBe((await refusal(checkPrivateDirectory(secrets))).message)
+    chmodSync(secrets, 0o700)
+    const link = join(home, 'linked')
+    symlinkSync(secrets, link)
+    expect(thrown(() => { checkPrivateDirectorySync(link) }).message).toContain('symbolic link')
   })
 })
