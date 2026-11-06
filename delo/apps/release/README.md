@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-`@delo/release` is Delo's release tooling, a private package in `delo/apps/release`. It holds the changelog gate, the release-notes assembly, the published recipe that builds the runtime closures, and the comparison of two builds that signing requires. The [release manifest contract](../../docs/contracts/c02-release-manifest.md) (C2) defines the release files, the reproducibility scope and the signing rules this package implements.
+`@delo/release` is Delo's release tooling, a private package in `delo/apps/release`. It holds the changelog gate, the release-notes assembly, the published recipe that builds the runtime closures, the comparison of two builds that signing requires, and the signing and verification of release metadata. The [release manifest contract](../../docs/contracts/c02-release-manifest.md) (C2) defines the release files, the reproducibility scope and the signing rules this package implements.
 
 ## Modules
 
@@ -14,7 +14,8 @@ English | [中文](README.zh.md)
 - `src/build-closure.ts` is the closure recipe's command; `src/closure/` holds its steps: the recipe files (`config.ts`), the pinned downloads (`sources.ts`), the staged tree and the runtime file list (`tree.ts`), the native-code check (`native.ts`) and the archiving (`archive-closure.ts`).
 - `src/archive/` holds the deterministic tar, gzip and ZIP writers, their readers, and the inspection that checks an archive is in the deterministic form.
 - `src/compare-rebuild.ts` is the rebuild comparison's command; `src/rebuild/` holds the comparison and the PE normalisation of its first exception.
-- `tests/` holds the specs. The changelog specs run both entry points on temporary git repositories; the archive, closure and rebuild specs build fixture closures in temporary directories and serve pinned downloads from a local HTTP stand-in, so none needs the network.
+- `src/record-rebuild.ts`, `src/sign-release.ts`, `src/sign-root.ts` and `src/sign-timestamp.ts` are the signing commands; `src/rebuild/record.ts` holds the rebuild record's facts and `src/sign/` the signature envelope, the canonical JSON, the readers of each signed file, the timestamp content, signing and client verification.
+- `tests/` holds the specs. The changelog specs run both entry points on temporary git repositories; the archive, closure and rebuild specs build fixture closures in temporary directories and serve pinned downloads from a local HTTP stand-in, and the signing specs sign fixture releases with keys generated in the test, so none needs the network or a real key.
 
 ## The gate
 
@@ -63,3 +64,36 @@ An archive is at most 1 GiB, the download limit of [C1](../../docs/contracts/c01
 - Any other file matches when it is byte-identical.
 
 `rebuild-exceptions.json` lists each accepted difference with an id, the comparison it applies (`pe` is the only one) and its reason; unknown fields fail validation. Its first entry, `pe-authenticode`, applies only to the Windows archive: it compares a PE file without its Authenticode certificate table, the security data directory entry and the header checksum, padded with zeros to 8 bytes, because the release workflow signs the Windows closure's PE files and a rebuild outside it cannot. The table must consist of `WIN_CERTIFICATE` entries of revision 2.0 and type PKCS #7 SignedData that fill it to the end of the file, each holding one DER SEQUENCE followed by fewer than 8 zero bytes, with only zero bytes padding entries to 8 bytes; any other appended or hidden bytes are a difference.
+
+## Signing
+
+Signing happens on the targets-key holder's machine, outside CI, after the release workflow has built the release from the tag `v<version>` and the holder has rebuilt it:
+
+1. Download the release workflow's files of the draft release, including its `manifest-draft.json`, into a directory, such as `release/`.
+2. Check out the tag in the repository and build it with the same recipe: `node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/`.
+3. Record the rebuild: `node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --builder <name> --compared-with <workflow run URL>`. It compares every rebuilt file with the workflow's file of the same name under `rebuild-exceptions.json`, writes `release/delorun-<version>.rebuild.json`, and exits 1 when the comparison finds a difference. It refuses to run with `CI` or `GITHUB_ACTIONS` set.
+4. Sign: `node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --key <targets.pem>`.
+
+`sign-release.ts` refuses with a message naming the required source, "a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe", when the rebuild record is missing or does not read; when it says `ci: true` or reports a difference; when `CI` or `GITHUB_ACTIONS` is set; when `--rebuild` is not a directory on this machine or its files do not reproduce the record's digests; when the record's commit is not the commit the tag names, or its recipe digest or toolchain is not the recipe's at that commit; or when comparing the workflow's files with the rebuild again finds a difference. It also refuses a draft whose files are not in the release directory with the lengths and digests it lists. When every check passes, it signs each runtime file list in place and writes `delorun-<version>.manifest.json`, whose `rebuild` names the record and the holder with `ci: false`; it writes nothing before then.
+
+### The targets key
+
+The targets key is an Ed25519 private key in a PKCS #8 PEM file that only its owner can read; `sign-release.ts` refuses a key file with any group or other permission. The repository holds no key. The owner creates the key in the signing ceremony on the offline machine that signs releases, for example with OpenSSL 3:
+
+```sh
+umask 077
+openssl genpkey -algorithm ed25519 -out targets.pem
+openssl pkey -in targets.pem -pubout -out targets.pub.pem
+```
+
+The public key goes into the root metadata's `keys` and `roles.targets`, signed by the root key ([C2](../../docs/contracts/c02-release-manifest.md#root-metadata)); the private key never enters CI, a cloud service or a machine the release workflow can reach.
+
+### Root and timestamp metadata
+
+`node_modules/.bin/tsx delo/apps/release/src/sign-root.ts --draft <file> --key <root.pem>... [--previous <root file>] --out <root/<n>.root.json>` signs root metadata in the owner's ceremony: the draft is the root's `signed` content, and the file is written only when it verifies with its own root threshold and, for a rotation, as the version after `--previous` with that root's threshold too.
+
+`node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --root <file> [--previous <timestamp.json>] [--manifest <file> --channel <stable|beta>] --out <timestamp.json>` signs the next timestamp with the online key from the `DELO_TIMESTAMP_KEY` environment variable: version one above `--previous`, expiry 3 days after issue, and a channel moved only to a manifest that verifies with the root's targets keys. A first timestamp names the release for both channels.
+
+## Verification
+
+`src/sign/verify.ts` applies C2's client verification: `readTrustedRoot` and `adoptNextRoot` walk root versions, each signed by the previous root threshold and its own; `verifyTimestamp` checks the timestamp role's signature, the 3-day lifetime, expiry with no clock tolerance (its refusal names the expiry and the local clock) and the stored version; `verifyChannelManifest` accepts only the manifest file the fresh timestamp names for the channel, signed by a targets key valid for the release (an `active` key, or a `retired` key whose `lastRelease` is at or above it; never a `revoked` one); `verifyFileList` and `checkFileRef` check each file's length and SHA-256 against the manifest. Every signed file is read with its size limit before parsing, and a duplicate JSON key, an unknown field or an unknown `schema` fails the read. `src/sign/json.ts` holds the RFC 8785 serialization that signatures cover.

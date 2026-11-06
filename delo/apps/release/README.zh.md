@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-`@delo/release` 是 Delo 的发布工具，一个位于 `delo/apps/release` 的私有包。它包含变更片段门禁、发布说明汇总工具、用于构建运行时发行包（runtime closure）的已发布构建配方，以及签名所需的两次构建的比较。[发布 manifest（release manifest）约定](../../docs/contracts/c02-release-manifest.zh.md)（C2）定义了本包所实现的发布文件、可复现范围与签名规则。
+`@delo/release` 是 Delo 的发布工具，一个位于 `delo/apps/release` 的私有包。它包含变更片段门禁、发布说明汇总工具、用于构建运行时发行包（runtime closure）的已发布构建配方、签名所需的两次构建的比较，以及发布元数据的签名与验证。[发布 manifest（release manifest）约定](../../docs/contracts/c02-release-manifest.zh.md)（C2）定义了本包所实现的发布文件、可复现范围与签名规则。
 
 ## 模块
 
@@ -14,7 +14,8 @@
 - `src/build-closure.ts` 是运行时发行包配方的命令；`src/closure/` 存放其各步骤：配方文件（`config.ts`）、固定的下载（`sources.ts`）、暂存目录树与运行时文件列表（`tree.ts`）、原生代码检查（`native.ts`）以及归档（`archive-closure.ts`）。
 - `src/archive/` 存放确定性 tar、gzip 与 ZIP 写入器、对应的读取器，以及用于检查归档是否为确定性形式的检查模块。
 - `src/compare-rebuild.ts` 是重建比较的命令；`src/rebuild/` 存放比较逻辑，以及其第一条例外所对应的 PE 规范化。
-- `tests/` 存放规格。变更片段规格在临时 git 仓库上运行两个入口；归档、运行时发行包与重建规格则在临时目录中构建 fixture（测试前置数据）运行时发行包，并从本地 HTTP 替身提供固定的下载，因此都不需要网络。
+- `src/record-rebuild.ts`、`src/sign-release.ts`、`src/sign-root.ts` 与 `src/sign-timestamp.ts` 是签名命令；`src/rebuild/record.ts` 存放重建记录的事实，`src/sign/` 存放签名信封、RFC 8785 序列化（canonical JSON）、各签名文件的读取器、时间戳元数据内容、签名与客户端验证。
+- `tests/` 存放规格。变更片段规格在临时 git 仓库上运行两个入口；归档、运行时发行包与重建规格则在临时目录中构建 fixture（测试前置数据）运行时发行包，并从本地 HTTP 替身提供固定的下载；签名规格用测试中生成的密钥签署 fixture 发布，因此都不需要网络，也不需要真实密钥。
 
 ## 门禁
 
@@ -63,3 +64,36 @@
 - 其他文件在字节完全相同时匹配。
 
 `rebuild-exceptions.json` 列出每项被接受的差异，包括其 id、所适用的比较（`pe` 为唯一一种）及其理由；出现未知字段时校验失败。其第一条为 `pe-authenticode`，仅适用于 Windows 归档：它在比较 PE 文件时去掉 Authenticode 证书表、安全数据目录项与头部校验和，并以零补齐至 8 字节，因为发布工作流会对 Windows 运行时发行包中的 PE 文件签名，而工作流之外的重建无法签名。证书表必须由修订版本 2.0、类型为 PKCS #7 SignedData 的 `WIN_CERTIFICATE` 条目组成，并一直填充到文件末尾；每个条目只含一个 DER SEQUENCE，其后至多跟随少于 8 个零字节，条目之间补齐到 8 字节的填充也只能是零字节；其他任何追加或隐藏的字节都算作差异。
+
+## 签名
+
+签名在目标密钥持有者的机器上、CI 之外进行，发生于发布工作流已从标签 `v<version>` 构建发布、且持有者已完成重建之后：
+
+1. 将草稿发布中发布工作流的文件（包括其 `manifest-draft.json`）下载到某个目录中，例如 `release/`。
+2. 在仓库中检出该标签，并用同一配方构建它：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/`。
+3. 记录重建：`node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --builder <name> --compared-with <workflow run URL>`。它依据 `rebuild-exceptions.json`，将每个重建文件与发布工作流中同名的文件比较，写入 `release/delorun-<version>.rebuild.json`，并在比较发现差异时以 1 退出。设置了 `CI` 或 `GITHUB_ACTIONS` 时，它拒绝运行。
+4. 签名：`node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --key <targets.pem>`。
+
+`sign-release.ts` 会拒绝运行，并给出一条写明所需来源的消息，即 "a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe"。出现以下任一情况时，它都会拒绝：重建记录缺失或无法读取；记录写明 `ci: true` 或报告了差异；设置了 `CI` 或 `GITHUB_ACTIONS`；`--rebuild` 不是本机上的目录，或其文件无法复现记录中的摘要；记录的提交不是标签所指的提交，或记录中的配方摘要或工具链与该提交的配方不一致；或将发布工作流的文件与重建再次比较时发现差异。它还拒绝这样的草稿：其文件未以草稿所列的长度与摘要出现在发布目录中。所有检查通过后，它会就地签署每个运行时文件列表，并写入 `delorun-<version>.manifest.json`；该 manifest 的 `rebuild` 字段写明记录与持有者，并标注 `ci: false`。在此之前，它不写入任何内容。
+
+### targets 密钥
+
+targets 密钥是一个 Ed25519 私钥，保存在 PKCS #8 PEM 文件中，且只有其所有者可读；`sign-release.ts` 会拒绝组用户或其他用户拥有任何权限的密钥文件。仓库中不保存任何密钥。所有者在用于签署发布的离线机器上，于签名步骤中创建该密钥，例如使用 OpenSSL 3：
+
+```sh
+umask 077
+openssl genpkey -algorithm ed25519 -out targets.pem
+openssl pkey -in targets.pem -pubout -out targets.pub.pem
+```
+
+公钥写入根元数据（root metadata）的 `keys` 与 `roles.targets`，并由根密钥签名（[C2](../../docs/contracts/c02-release-manifest.zh.md#root-metadata)）；私钥绝不进入 CI、云服务，或发布工作流可以访问的机器。
+
+### 根元数据与时间戳元数据
+
+`node_modules/.bin/tsx delo/apps/release/src/sign-root.ts --draft <file> --key <root.pem>... [--previous <root file>] --out <root/<n>.root.json>` 在所有者的签名步骤中签署根元数据：草稿即根元数据的 `signed` 内容；只有当该文件以其自身的根阈值验证通过时，才会写入该文件；对于轮换，它还须作为 `--previous` 之后的版本，并以该根的阈值同样验证通过。
+
+`node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --root <file> [--previous <timestamp.json>] [--manifest <file> --channel <stable|beta>] --out <timestamp.json>` 使用来自 `DELO_TIMESTAMP_KEY` 环境变量的在线密钥签署下一个时间戳：版本比 `--previous` 高一号，过期时间为签发后 3 天，并且通道只会移向能用根元数据中的 targets 密钥验证通过的 manifest。首个时间戳为两个通道都指明该发布。
+
+## 验证
+
+`src/sign/verify.ts` 实施 C2 的客户端验证：`readTrustedRoot` 与 `adoptNextRoot` 遍历各根版本，每个版本都须由上一版本根密钥的阈值及其自身根密钥的阈值签名；`verifyTimestamp` 检查时间戳角色的签名、3 天有效期、不设时钟容差的过期检查（其拒绝消息写明过期时间与本地时间），以及已存储的版本；`verifyChannelManifest` 只接受新鲜的时间戳为该通道指明的 manifest 文件，且该文件须由对该发布有效的 targets 密钥签名（`active` 密钥，或 `lastRelease` 不低于该发布的 `retired` 密钥；绝不接受 `revoked` 密钥）；`verifyFileList` 与 `checkFileRef` 依据 manifest 检查每个文件的长度与 SHA-256。每个签名文件都先按其大小上限读取，再进行解析；重复的 JSON 键、未知字段或未知的 `schema` 都会使读取失败。`src/sign/json.ts` 存放签名所覆盖的 RFC 8785 序列化。

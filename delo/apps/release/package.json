@@ -1,6 +1,6 @@
 {
   "name": "@delo/release",
-  "description": "Delo's release tooling: the changelog gate and release-notes assembly, the deterministic runtime closure build and the rebuild comparison.",
+  "description": "Delo's release tooling: the changelog gate and release-notes assembly, the deterministic runtime closure build, the rebuild comparison, and signing and verification of release metadata.",
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
@@ -10,7 +10,11 @@
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/tools": "workspace:*",
     "extract-zip": "^2.0.1",
+    "semver": "^7.8.5",
     "tar": "^7.5.22",
     "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
   }
 }

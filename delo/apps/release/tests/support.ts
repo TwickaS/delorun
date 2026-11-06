@@ -123,13 +123,14 @@ export interface RunResult {
 }
 
 /**
- * Run a release entry point from the repository root.
+ * Run a release entry point, from the repository root unless another directory is named.
  * @param entry - the path under `delo/apps/release/src/`.
  * @param args - its arguments.
  * @param env - extra environment variables.
+ * @param cwd - the working directory, the repository root by default.
  * @returns its exit status and output.
  */
-export function runEntry(entry: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): RunResult {
-  const result = spawnSync(TSX, [join(REPO, 'delo/apps/release/src', entry), ...args], { cwd: REPO, encoding: 'utf8', env: { ...process.env, ...env } })
+export function runEntry(entry: string, args: readonly string[], env: NodeJS.ProcessEnv = {}, cwd: string = REPO): RunResult {
+  const result = spawnSync(TSX, [join(REPO, 'delo/apps/release/src', entry), ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...env } })
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
 }

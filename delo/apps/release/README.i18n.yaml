@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/apps/release/README.md
 /delo-release-tooling:
-  en: 966aff3a8934b5ef
-  zh: 28b5769ef4e60c5f
+  en: d7c9b83e57d9f973
+  zh: d40a6cccd40a4fe8
 /delo-release-tooling/modules:
-  en: 86bdfc2e6764a6c6
-  zh: c273d6f5780d9e78
+  en: 2bf784968d026426
+  zh: 6f6c76cf8ae28ee9
 /delo-release-tooling/the-gate:
   en: 2291e5ca1bbe97c7
   zh: 2d7664c91c232c43
@@ -23,3 +23,15 @@
 /delo-release-tooling/rebuild-comparison:
   en: 5a57c3169256aeb7
   zh: e969398b71c69ad5
+/delo-release-tooling/signing:
+  en: ec723dc9c7df7fa4
+  zh: 6421559a9706aa10
+/delo-release-tooling/signing/the-targets-key:
+  en: 7f3ce2e4d30c2ea4
+  zh: e379b60ddf0a540b
+/delo-release-tooling/signing/root-and-timestamp-metadata:
+  en: daed3908f399155b
+  zh: 71985a02151a0f44
+/delo-release-tooling/verification:
+  en: 2430ef974e5c1cd9
+  zh: e275a05fd25dba90
