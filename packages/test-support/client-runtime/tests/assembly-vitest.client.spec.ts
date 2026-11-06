@@ -5,12 +5,13 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createClientTest, webApp, type TestClient } from '../src/assembly/index.ts'
 
 const test = createClientTest({ roster: webApp.closure(['@deepseek-ai/dsh-api-gateway']) })
-const clients: TestClient[] = []
+// One client per test: a retried attempt, such as `--retry` gives the expected failure, replaces its own.
+const clients = new Map<string, TestClient>()
 const expired: (() => Promise<TestClient>)[] = []
 
 afterAll(async () => {
-  expect(clients).toHaveLength(2)
-  for (const client of clients) {
+  expect(clients.size).toBe(2)
+  for (const client of clients.values()) {
     expect(client.ctx.get('loader')).toBeUndefined()
     expect(client.mock.log.streams('$events').map(stream => stream.state)).toEqual(['cancelled'])
   }
@@ -21,7 +22,7 @@ afterAll(async () => {
 })
 
 describe('createClientTest', () => {
-  test('allows response configuration before boot and shares concurrent starts', async ({ mock, remote, start }) => {
+  test('allows response configuration before boot and shares concurrent starts', async ({ mock, remote, start, task }) => {
     expired.push(start)
     expect(remote).toBe(mock.remote)
     remote.session.rename.mockResolvedValueOnce(ok({ title: 'test title', seq: 1 }))
@@ -29,7 +30,7 @@ describe('createClientTest', () => {
     const second = start()
     expect(second).toBe(first)
     const client = await first
-    clients.push(client)
+    clients.set(task.id, client)
     expect(client.mock).toBe(mock)
     expect(mock.log.streams('$events')).toHaveLength(1)
     await expect(client.ctx.remote.session.rename({ sessionId: 's' as SessionId, title: 't' }))
@@ -37,9 +38,9 @@ describe('createClientTest', () => {
     expect(remote.session.rename).toHaveBeenCalledExactlyOnceWith({ sessionId: 's', title: 't' })
   })
 
-  test.fails('disposes its client even when the test assertion fails', async ({ start }) => {
+  test.fails('disposes its client even when the test assertion fails', async ({ start, task }) => {
     expired.push(start)
-    clients.push(await start())
+    clients.set(task.id, await start())
     expect.fail('fixture cleanup negative control')
   })
 

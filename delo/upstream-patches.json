@@ -1620,6 +1620,11 @@
       "path": "docs/subsystems/permission-presets.zh.md",
       "class": "delo-feature",
       "reason": "Per-workspace permission defaults: the same regenerated catalog region as the English page."
+    },
+    {
+      "path": "packages/test-support/client-runtime/tests/assembly-vitest.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Test-support retry keying: the assembly spec keys its started clients by task id, so a retried `test.fails` control replaces its own client and the `afterAll` count holds under `--retry`, which Delo's gate passes. Test infrastructure only."
     }
   ],
   "retired": []
