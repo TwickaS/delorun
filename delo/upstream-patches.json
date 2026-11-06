@@ -750,6 +750,11 @@
       "path": "packages/client/ui-chat/tests/presentation-precedence.client.spec.tsx",
       "class": "delo-feature",
       "reason": "Covers the assistant renderer's presentation source: a stock-style registration's own source wins over the seat's live policy, and the seat's policy is the fallback when the registration supplies none."
+    },
+    {
+      "path": ".nvmrc",
+      "class": "delo-feature",
+      "reason": "Pins upstream CI's Node major for contributors and Delo's check runner."
     }
   ],
   "retired": []
