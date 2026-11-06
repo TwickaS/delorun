@@ -6,7 +6,39 @@
     "commit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db"
   },
   "forkOwned": [
-    "delo/"
+    "delo/",
+    ".agents/skills/delo-*/"
   ],
-  "patches": []
+  "patches": [
+    {
+      "path": "AGENTS.md",
+      "class": "delo-feature",
+      "reason": "Delo's agent standard: the root guide adds Delo's rules, fork boundary and repository layout to upstream's commands and conventions, so one guide governs both trees. It replaces upstream's file at the base tag and keeps the CLAUDE.md symlinks."
+    },
+    {
+      "path": "docs/AGENTS.md",
+      "class": "delo-feature",
+      "reason": "Delo's agent standard: the documentation standard adds Delo's tiers, writing and trust-wording rules, website section and word-budget targets, so Delo's pages follow the same standard as upstream's. Upstream's rules that Delo does not touch stand unchanged."
+    },
+    {
+      "path": "scripts/doc-budgets.manifest.json",
+      "class": "delo-feature",
+      "reason": "Delo's agent standard: the ceilings for AGENTS.md and docs/AGENTS.md rise to fit the text Delo added to them. No other ceiling changes."
+    },
+    {
+      "path": ".agents/notes/README.md",
+      "class": "delo-feature",
+      "reason": "Delo's agent standard: a section states that Delo's decisions are Agent Notes in this tree beside upstream's, and how Delo notes supersede or cross-link upstream notes. The layout, classes and format rules are unchanged."
+    },
+    {
+      "path": ".agents/notes/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Delo's agent standard: the Chinese counterpart of the Delo notes section added to README.md, translated for that section only."
+    },
+    {
+      "path": ".agents/notes/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Delo's agent standard: the consistency record re-recorded after the Delo notes section was added to README.md and its Chinese counterpart."
+    }
+  ]
 }

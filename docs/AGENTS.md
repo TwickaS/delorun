@@ -1,6 +1,6 @@
 # AGENTS.md — The documentation standard
 
-This file defines document structure, Markdown tiers, writing rules, and `verify-doc-budgets` ceilings. Use [dsh-doc](../.agents/skills/dsh-doc/SKILL.md) for placement and validation, and [dsh-prose-standard](../.agents/skills/dsh-prose-standard/SKILL.md) for required coverage and editorial judgment; the [archived doc-tiers Agent Note](../.agents/notes/archived/process/2026-07-04-doc-tiers-and-budgets.md) records the historical rationale.
+This file defines document structure, Markdown tiers, writing rules, and `verify-doc-budgets` ceilings. Use [dsh-doc](../.agents/skills/dsh-doc/SKILL.md) for placement and validation, and [dsh-prose-standard](../.agents/skills/dsh-prose-standard/SKILL.md) for required coverage and editorial judgment; the [archived doc-tiers Agent Note](../.agents/notes/archived/process/2026-07-04-doc-tiers-and-budgets.md) records the historical rationale. These rules govern Delo's documentation under `delo/` as they govern upstream's; the sections below name the Delo tiers, Delo's website and the wording Delo's trust promises require.
 
 ## Document structure
 
@@ -28,12 +28,22 @@ Each fact has one home: the tier whose job it is; elsewhere, link there.
 | [Persistence history](persistence-changes/README.md) and [format references](persistence-changes/historical-formats/README.md) | Type-change acknowledgements, release comparisons, and complete historical format schemas | Behavior-only changes; current runtime contracts |
 | [cookbook/](cookbook/adding-a-package.md) | Step-by-step how-tos with numbered verify steps | Design rationale (→ the Agent Note each guide links) |
 | [user/](user/index.md) | Product-facing guides published by the documentation website | Generated reference tables, contributor procedures, decision history |
+| [delo/docs/guide/](../delo/docs/guide/README.md) | Delo's user guide, published by Delo's documentation website: what each feature does, how to use it, what it exposes, its limits and how to undo it; the Delo vs stock DSH page holds the roadmap, ordered by stage, which root `ROADMAP.md` links | Contributor procedures, decision history |
+| [delo/docs/cookbook/](../delo/docs/cookbook/README.md) | Step-by-step how-tos for work on Delo with numbered verify steps | Design rationale (→ the Agent Note each guide links) |
+| [delo/docs/reference/](../delo/docs/reference/README.md), [delo/docs/contracts/](../delo/docs/contracts/README.md), [delo/docs/security/](../delo/docs/security/threat-model.md) | Delo's references: the glossary, the parity checklist and divergence records; contract pages that work packages consume as written (purpose, exact types or wire formats, limits, errors, security requirements with their denial tests, consumers); the threat model and release verification | Tutorials, decision rationale (→ Agent Notes) |
+| [delo/docs/defensive-patterns/](../delo/docs/defensive-patterns/README.md) | Rules Delo enforces in review of its own code, split by artifact | Rules upstream's `defensive-patterns/` already states |
+| [delo/docs/architecture/](../delo/docs/architecture/README.md) | Architecture notes: the ordered map of Delo's packages and seams in `README.md`, and one current-state page per subsystem, written as it ships; read before changing `delo/` | Decision rationale (→ Agent Notes), per-package detail (→ package READMEs) |
+| `delo/docs/upgrade-guide/` | Upgrade guides for breaking changes to Delo's own surfaces, `v<Delo version>/<item>/guide.md`, written with [dsh-create-upgrade-guide](../.agents/skills/dsh-create-upgrade-guide/SKILL.md) | Breaks in upstream code (→ `upgrade-guide/`) |
+| `delo/changelog/unreleased/` | One fragment per change people can perceive, assembled into release notes | Anything not perceptible |
+| `delo/upstream-patches.json` | The divergence ledger: the upstream tag and every changed or added file outside `delo/` with its reason and class | Merge instructions (→ divergence records) |
+| Skills in `delo/packages/bundle-*/skills/` | What a person's own agent needs to act on Delo | Contributor workflow (→ `.agents/skills/`) |
+| GitHub issues and milestones | Work in progress and its briefs | Any document in the tree |
 | Package README | The per-package contract: config, semantics, limitations, extension points, and [Model Experience](cookbook/adding-a-package.md#4-write-the-package-readme) | JSDoc restatement, generated-catalog restatement (event/tool tables), other packages' concerns |
 | [development.md](development.md) | Contributor setup, daily workflow, and a summary of CI; a bilingual pair under the [i18n contract](i18n/README.md) | Runtime/version rationale (→ Agent Notes), check-by-check lists that drift from `package.json` scripts |
 | Generated reference: the per-page `cordis-surface` regions in [subsystems/](subsystems/README.md), the [Cordis core API + inherited tier](cordis-api/context.md), [tool-catalog](tool-catalog.md), [config-catalog](config-catalog.md), [persistence-catalog](persistence-catalog.md), [module-graph.md](module-graph.md), [cli-help](cli-help.md) | Exhaustive English sources regenerated from source and freshness-gated; reviewed Chinese counterparts follow the [pairing workflow](i18n/README.md#scope-and-exclusions) | Hand edits to generated English sources or regions; Chinese counterparts update through pairing only |
 | Skills (`.agents/skills/`) | Reusable workflows and specialized decision standards | Product and runtime contracts (→ docs or source) |
 
-Placement: bugs → postmortems; rationale → Agent Notes; procedures → cookbooks; type definitions → subsystems; package contracts → READMEs; standing orders → root `AGENTS.md` with a rationale link; review-enforced rules → `defensive-patterns/`.
+Placement: bugs → postmortems; rationale → Agent Notes; procedures → cookbooks; type definitions → subsystems; package contracts → READMEs; standing orders → root `AGENTS.md` with a rationale link; review-enforced rules → `defensive-patterns/`. Delo's code documents in the `delo/docs/` tiers above; upstream code documents in upstream's tiers, edited in place in the change that edits the code. Delo's decisions are Agent Notes in `.agents/notes/` beside upstream's. Delo's working plans are not documents in this tree.
 
 ## Writing rules
 
@@ -45,6 +55,30 @@ Placement: bugs → postmortems; rationale → Agent Notes; procedures → cookb
 - **Pairs update together**: [Terminology-guided](i18n/terminology.md), single-pass active-agent work repositions first-use annotations, preserves untouched prose, and re-records; `dsh-translate-docs` remains user-invoked ([contract](i18n/README.md)).
 - **Comments and JSDoc state complete contracts, not reasoning transcripts.** Preserve behavior, failure, timing, ownership, modality, exceptions, consequences, and non-obvious orientation; delete narration, test walkthroughs, review analysis, and code restatement. Keep the local contract and link its rationale. Use [dsh-prose-standard](../.agents/skills/dsh-prose-standard/SKILL.md) for details.
 - Write directly: name actors and facts ([reference](../.agents/skills/dsh-prose-standard/SKILL.md)). Reserve `seam` for the defined capability. Name the exact check, type, API, operation, or behavior instead of metaphorical "gate", "vocabulary", or "surface".
+- **No calendar planning.** Documents carry no schedules, deadlines or time estimates; a date appears only as a record of when something happened or was decided, and a duration only where it defines behaviour (`workflow:doc-times`).
+- **Delo's pages are pairs too.** Every page under `delo/docs/` is an English and Chinese pair with its consistency record under the [i18n contract](i18n/README.md); upstream's gate already covers Delo's READMEs and Agent Notes, and Delo's documentation gate runs `verify-translation-pairing`, `verify-md-wrap`, `verify-md-links`, `doc-typecheck` and `verify-doc-budgets` over `delo/docs/`. Delo's documentation is English and Chinese only; its screens ship in every upstream language.
+- **Delo's words.** The [Delo glossary](../delo/docs/reference/glossary.md) names each Delo concept once and upstream's [glossary](glossary.md) owns the harness's terms; pages, skills, interface strings and a plugin's `meta.title` and `meta.description` use those words, and a new concept gets its entry in the same change.
+- **A person's agent is a reader.** Delo's shipped skills (`delo` in every mode, `delo-plugins` in Creator) link the website's Markdown pages and `llms.txt`; a change to what a person's agent can do updates them.
+
+## Security and trust wording
+
+Delo's pages, interface text and skills describe trust exactly; review rejects these failures:
+
+- A label such as "secure" or "private" without the statement of what each party can and cannot see or do. "Zero-trust" describes only reach with no Delo involvement (Tailscale, a self-hosted relay); the Delo relay gets exact statements.
+- Omitted residual trust: Delo's releases, Delo-controlled names and certificates, the identity provider, the catalogue.
+- The desktop app called end-to-end through every relay; it pins the home's TLS leaf key, on homes that keep one across certificate renewals.
+- Own-domain reach called end-to-end beyond its conditions: the CAA record binds issuance to the home's ACME account (`accounturi`), the home answers no certificate challenge through a relay, and only the RFC 8657 parameters the named CA enforces are claimed.
+- Native confinement overstated: file writes are confined, and reads of or connections to anything under `~/.delo` or the Docker socket are denied where the dialect enforces it, which `delorun verify` reports; other Unix sockets and the network are not confined. The fetch guard limits `web_fetch`'s targets, not what commands can reach.
+- A claim that Delo audits plugins. Findings a catalogue entry lists are the author's or a reviewer's claims, which Delo does not verify, and the page says so where it shows them.
+- Certificate monitoring promised without its delay: detection follows a log's inclusion of the certificate, a delay each log's inclusion policy bounds.
+- Telemetry described before it ships. Delo has no telemetry of its own; upstream's desktop analytics and DeepSeek session-log upload stay available and off by default.
+- Recovery stated without its configuration: with an identity factor, the recovery kit and the home's terminal; without one, the terminal only.
+- A badge other than "tested with Delo X" with the release named, or a rebuild called "independent" rather than "reproduced from the tagged source with the published recipe" by the signer on a machine outside CI.
+- A limit called "enforced" without a test that proves it on that runtime; otherwise it is advisory. Native mode always says commands run with the person's own access.
+
+## Delo's documentation website
+
+Delo's documentation website is Delo's own Fumadocs site in [`delo/apps/docs/`](../delo/apps/docs/README.md), published at `docs.delorun.com`. It reads each `delo/docs/` pair, English at the root and Chinese under `/zh/`, publishes the user guide and references, and links upstream's documentation for harness topics instead of copying it. Each page names the Delo version it describes and is also served as Markdown with `llms.txt` indexes; the site's README owns its routes, build and deployment. Upstream's `website/` and the [dsh-doc](../.agents/skills/dsh-doc/SKILL.md) website-publication workflow apply only to upstream's VitePress projection, which stays unmodified.
 
 ## Wordcount Budgets
 
@@ -56,7 +90,7 @@ When the gate goes red:
 2. **Condense** content that belongs here but can be shorter.
 3. **Raise** the ceiling only when the words need the space; justify the manifest diff in the PR. A too-low ceiling is a budget bug.
 
-Ceilings are guardrails, not reduction targets. At or below target, retain at least 5% headroom; above target, freeze the ceiling until relocation or condensation brings the document under target. Lower a ceiling only when the document still has room. Targets: root `AGENTS.md` ≤ 2,080; `architecture.md` ≤ 2,400; subtree `AGENTS.md` ≤ 600, except `packages/AGENTS.md` ≤ 810 and this file ≤ 1,430; `packages/README.md` ≤ 994; plus `cordis-primer.md` 600, `testing.md` 1,300, `examples/AGENTS.md` 310. Review governs unbudgeted tiers.
+Ceilings are guardrails, not reduction targets. At or below target, retain at least 5% headroom; above target, freeze the ceiling until relocation or condensation brings the document under target. Lower a ceiling only when the document still has room. Targets: root `AGENTS.md` ≤ 3,250; `architecture.md` and `delo/docs/architecture/README.md` ≤ 2,400; subtree `AGENTS.md` ≤ 600, except `packages/AGENTS.md` ≤ 810 and this file ≤ 2,480; `packages/README.md` ≤ 994; plus `cordis-primer.md` 600, `testing.md` 1,300, `examples/AGENTS.md` 310. Review governs unbudgeted tiers.
 
 ## The slop checklist
 
