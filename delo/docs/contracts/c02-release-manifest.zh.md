@@ -132,7 +132,7 @@ npm 启动器、安装脚本与桌面应用各自内嵌其构建时最新的根�
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `version` | 语义化版本 | 本发布的 Delo 版本。 |
-| `dsh` | 语义化版本 | 发布中 `@deepseek-ai/dsh-app-boot` 的 `version`，即上游的版本（[C17](c17-plugin-versions.md)）。 |
+| `dsh` | 语义化版本 | 发布中 `@deepseek-ai/dsh-app-boot` 的 `version`，即上游的版本（[C17](c17-plugin-versions.zh.md)）。 |
 | `channel` | `stable` 或 `beta` | 发布所在的通道。 |
 | `source` | `{ "repository", "tag", "commit" }` | 公开仓库的 URL、`v<version>`，以及该标签指向的 40 位十六进制提交。 |
 | `published` | 时间戳 | targets 密钥签名它的时间。 |

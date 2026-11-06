@@ -1256,6 +1256,12 @@ importers:
 
   delo/packages/contract-parity-composition: {}
 
+  delo/packages/contract-plugin-versions:
+    dependencies:
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+
   delo/packages/contract-release-log:
     dependencies:
       '@delo/contract-release-manifest':

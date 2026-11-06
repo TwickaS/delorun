@@ -1,0 +1,14 @@
+{
+  "name": "@delo/contract-plugin-versions",
+  "description": "Types and fixed values of Delo contract C17: the two plugin version axes, their exemptions and the version output",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@delo/contract-release-manifest": "workspace:*"
+  }
+}

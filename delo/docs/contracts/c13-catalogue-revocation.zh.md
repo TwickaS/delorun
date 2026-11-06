@@ -68,7 +68,7 @@ description: "约定 C13：Discover 首先列出的已签名插件索引文件�
 | --- | --- | --- |
 | `version` | 确切的语义化版本 | 一个已发布的版本。 |
 | `integrity` | `sha512-` 字符串 | npm tarball 的完整性值；安装会固定它。 |
-| `engines` | `{ "dsh"?, "delo"? }` | 包声明的版本范围，复制自它的 manifest（元数据清单；见 [C17](c17-plugin-versions.md)）。 |
+| `engines` | `{ "dsh"?, "delo"? }` | 包声明的版本范围，复制自它的 manifest（元数据清单；见 [C17](c17-plugin-versions.zh.md)）。 |
 | `badges` | 徽章记录列表 | 该版本的语料库结果。 |
 | `findings` | 发现列表 | 为该版本列出的发现；可以为空。 |
 
@@ -118,7 +118,7 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 - 安装会固定确切的版本及其 `integrity`；完整性与索引文件不符的 tarball 会被拒绝。
 - 安装当前撤销列表所撤销的版本会被拒绝，并给出该列表中的原因。
 - 撤销列表处于陈旧状态时，安装会被拒绝（[陈旧状态](#stale-state)）。
-- 安装前会检查两条版本轴（[C17](c17-plugin-versions.md)）。
+- 安装前会检查两条版本轴（[C17](c17-plugin-versions.zh.md)）。
 - 验证失败、比已存储的 `sequence` 更旧或已过期的索引文件不会被使用；Discover 会把插件索引显示为不可用并给出原因，且不列出任何插件索引条目。
 
 <a id="revocation-list"></a>
