@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delo-never-less-safe-than-stock.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-11-06-delo-never-less-safe-than-stock.md
+/agent-note-delo-never-moves-an-approval-refusal-or-escalation-toward-less-safety:
+  en: 6b64600ab7752156
+  zh: cde1786a61a191cc
+/agent-note-delo-never-moves-an-approval-refusal-or-escalation-toward-less-safety/problem:
+  en: 94c2f34c7980928a
+  zh: 389311a8368fe2da
+/agent-note-delo-never-moves-an-approval-refusal-or-escalation-toward-less-safety/decision:
+  en: 53b0f8c2a823f87c
+  zh: e7c8bc2d210cbe00
+/agent-note-delo-never-moves-an-approval-refusal-or-escalation-toward-less-safety/verification:
+  en: 9068e5b3309cc729
+  zh: 811b68662dee7acd
+/agent-note-delo-never-moves-an-approval-refusal-or-escalation-toward-less-safety/related:
+  en: cba429f52975f163
+  zh: e42a26f906584c6d
+/agent-note-delo-never-moves-an-approval-refusal-or-escalation-toward-less-safety/alternatives-considered:
+  en: 79855c2f13cc6612
+  zh: ebf95f60e4e58ea3
+/agent-note-delo-never-moves-an-approval-refusal-or-escalation-toward-less-safety/consequences:
+  en: 02fd07485431a873
+  zh: 1418526f8db216d9

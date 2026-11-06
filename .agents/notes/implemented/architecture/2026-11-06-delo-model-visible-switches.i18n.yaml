@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delo-model-visible-switches.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-06-delo-model-visible-switches.md
+/agent-note-each-model-visible-delo-addition-has-its-own-switch-off-in-the-parity-composition:
+  en: ef4060876c364bd5
+  zh: 7218a8968d00359f
+/agent-note-each-model-visible-delo-addition-has-its-own-switch-off-in-the-parity-composition/problem:
+  en: d8c160199453872f
+  zh: b220c7f580b1ebac
+/agent-note-each-model-visible-delo-addition-has-its-own-switch-off-in-the-parity-composition/decision:
+  en: 6e53492e98393a12
+  zh: f1298215155697b9
+/agent-note-each-model-visible-delo-addition-has-its-own-switch-off-in-the-parity-composition/verification:
+  en: 469b28760b1d2af8
+  zh: 32c76ca86eb29b14
+/agent-note-each-model-visible-delo-addition-has-its-own-switch-off-in-the-parity-composition/related:
+  en: d659a6b56b9f8bc0
+  zh: 787591648cef2075
+/agent-note-each-model-visible-delo-addition-has-its-own-switch-off-in-the-parity-composition/alternatives-considered:
+  en: 2f38cb0f9e0e7031
+  zh: 8413adc17cd85649
+/agent-note-each-model-visible-delo-addition-has-its-own-switch-off-in-the-parity-composition/consequences:
+  en: ae8522efdc8db178
+  zh: 12f0502338a6e174

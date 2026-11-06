@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delo-check-tiers.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-11-06-delo-check-tiers.md
+/agent-note-delo-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence:
+  en: 7826332075d55275
+  zh: 7ca65bfdec999459
+/agent-note-delo-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/problem:
+  en: da2a09b96d567c11
+  zh: 33eed4c75707eb5d
+/agent-note-delo-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/decision:
+  en: 6311ee4c2fe54638
+  zh: 586a2a10e2bfb326
+/agent-note-delo-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/verification:
+  en: 8c70988afd5647aa
+  zh: aae1b5f6d14f706f
+/agent-note-delo-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/related:
+  en: 117f6c6804f0bc00
+  zh: 8ae9a23913ebcab0
+/agent-note-delo-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/alternatives-considered:
+  en: ba876832fd03d393
+  zh: ffb0678f7f38f96f
+/agent-note-delo-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/consequences:
+  en: 10b6d84662fe6162
+  zh: 5bc8fe56eb493ad9

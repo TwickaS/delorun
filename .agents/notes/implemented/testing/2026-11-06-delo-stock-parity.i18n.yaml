@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delo-stock-parity.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/testing/2026-11-06-delo-stock-parity.md
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay:
+  en: 73819de9c1bcead0
+  zh: d64d620be90471ad
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/problem:
+  en: 1b3245c9aae19339
+  zh: 716e8737e5f80089
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/decision:
+  en: b7be43db51b3158e
+  zh: 4928735f22ddc57d
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/verification:
+  en: 7762c137c07de75e
+  zh: 639442cad9c925d2
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/related:
+  en: f6fc9da997a15627
+  zh: 54aaed38134a68fc
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/alternatives-considered:
+  en: bd30c68169d129e1
+  zh: 0b8cbe422f8dfe8f
+/agent-note-a-fresh-install-follows-stock-dsh-checked-by-a-parity-replay/consequences:
+  en: fbb0859d3b857e56
+  zh: c2f86b7306baf92b

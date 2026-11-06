@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-06-delo-home-directory.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-06-delo-home-directory.md
+/agent-note-delo-keeps-its-state-in-delo-beside-an-untouched-dsh:
+  en: ba8cf467fe9e533f
+  zh: 02b55e6dc1f9a7a3
+/agent-note-delo-keeps-its-state-in-delo-beside-an-untouched-dsh/problem:
+  en: 512af7186caacad7
+  zh: fed8f7b3637e810f
+/agent-note-delo-keeps-its-state-in-delo-beside-an-untouched-dsh/decision:
+  en: a94b9eb41d12e70b
+  zh: bdeb0d979b3fea5e
+/agent-note-delo-keeps-its-state-in-delo-beside-an-untouched-dsh/verification:
+  en: 8e8238aa9296ed7d
+  zh: 6c329970032ab432
+/agent-note-delo-keeps-its-state-in-delo-beside-an-untouched-dsh/related:
+  en: c841366a8d2ee41a
+  zh: d4f13ab0fa89bee0
+/agent-note-delo-keeps-its-state-in-delo-beside-an-untouched-dsh/alternatives-considered:
+  en: f63bcfdbcf60be3f
+  zh: b7be3a80ab50a2c5
+/agent-note-delo-keeps-its-state-in-delo-beside-an-untouched-dsh/consequences:
+  en: 12198e45822b9197
+  zh: 889dc99200f0ff77
