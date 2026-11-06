@@ -15,6 +15,7 @@ The check runner that orders and runs the gates, the local stack and the other f
 - `src/checks/types.ts` and `src/checks/gates/index.ts` describe each gate as one command that the check runner executes.
 - `src/checks/gates/` holds the gate modules and their data: licence, secrets, personal data, infrastructure, DCO, documentation times and the documentation checks.
 - `src/git.ts` runs git for the modules and reports exit statuses.
+- `src/issues/` turns maintainer-written work briefs into GitHub issues: `brief.ts` holds the fields, the rules and the issue body, `references.ts` the links and paths a brief may carry, `labels.ts` the label file, `gh.ts` the `gh` calls, and `issues.ts` the command line.
 - `tests/` holds the specs. The ledger rules run against temporary git repositories. The gate specs plant one violation per gate in temporary trees, and the documentation specs run upstream's scripts on planted fixture trees.
 
 ## The divergence ledger
@@ -97,6 +98,46 @@ Upstream's workflows are in [`.github/workflows`](../../../.github/workflows). E
 `ci.yml` and `ci-windows.yml` need no secret, so they are kept. Each job keeps upstream's runner expression as the branch that applies in upstream's repository, where DeepSeek's runner labels such as `dsh-ubuntu-24-04-16core` and `dsh-windows-2025-16core` stay in use. Every other repository runs the job on `ubuntu-latest` or `windows-latest`, so this repository never waits for a DeepSeek runner. Each file has a `delo-feature` ledger entry for this routing.
 
 The self-hosted route in `release.yml` and `release-vendor.yml` is guarded by `github.repository == 'deepseek-harness/deepseek-harness'`, which names a different organisation from the upstream repository in the ledger. The route applies only when the failover variable is set, so Delo does not reach it; the guard's organisation name is left as upstream wrote it.
+
+## Brief issues
+
+`src/issues/issues.ts` turns a briefs file into brief issues.
+A briefs file is a JSON array of objects.
+Each object holds the sixteen fields of the [brief template](../../../.agents/skills/delo-delegation/SKILL.md#write-the-brief) under their labels, and also a `title`, the `labels` that the issue carries and its `milestone`.
+The issue form [`brief.yml`](../../../.github/ISSUE_TEMPLATE/brief.yml) asks for the same fields in the same order, and [`labels.yml`](../../../.github/labels.yml) defines the labels.
+
+Run the tool from the repository root in one of three modes:
+
+- `--input <briefs.json> --dry-run` validates the briefs and prints each issue body.
+- `--input <briefs.json> --create --repo <owner/name>` validates the briefs, checks that `gh` is signed in as a maintainer of the repository, skips each brief whose title an issue already has, and creates and locks the others.
+- `--sync-labels --repo <owner/name>` creates or updates each label in `labels.yml` with `gh label create --force`.
+
+```sh
+node_modules/.bin/tsx delo/apps/tools/src/issues/issues.ts --input delo/apps/tools/tests/issues/fixtures/briefs.valid.json --dry-run
+```
+
+Every problem prints one line on standard error and exits 1 before any GitHub call.
+A brief has a problem when:
+
+- a field is missing, blank or unknown, or the file is not a non-empty JSON array of briefs;
+- `Model` is not one of Haiku at medium, high or max effort, or Opus at medium or high effort, so Opus at max effort is refused;
+- a link is neither an `https://` URL on github.com/Delo-Run/delo or docs.delorun.com nor a relative path that the repository tracks;
+- a backticked path, whose first segment is a top-level directory of the repository, names no tracked file or directory;
+- the text names `delo/docs/plans/`, the private plan directory, or a machine path such as one that starts with `/home/`, `/Users/` or `~/`;
+- a label is not defined in `labels.yml`, the labels omit `brief`, or the brief carries a `kind/*` label, which belongs to pull requests;
+- a field adds a Markdown heading to the body, or two briefs share a title.
+
+Paths are checked against `git ls-files`, so a file must be in the index before a brief names it.
+Create the labels and the milestone in the repository before `--create`, because `gh issue create` fails on a label or milestone that the repository does not define.
+
+Known limits:
+
+- `gh` 2.45 has no flag for the native Issue Type, so an issue that `--create` makes carries no Issue Type.
+- A relative link does not resolve inside an issue body, so the body keeps the link as written.
+- A run that stops between creating an issue and locking it leaves that issue unlocked. The next run skips the title, so lock the issue by hand.
+- The title check reads at most 1000 issues and refuses a listing that reaches that count.
+
+The specs in `tests/issues/` run the tool in scratch repositories with a fake `gh` first on `PATH`, and no spec reaches GitHub.
 
 ## Local checks
 

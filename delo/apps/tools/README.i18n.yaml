@@ -6,8 +6,8 @@
   en: 000e2d9105eb5662
   zh: 54b056f3228daa6a
 /delo-tools/modules:
-  en: baec2558ee5aea25
-  zh: 39de49c98ea3569d
+  en: 3662e452218c5823
+  zh: d3958c8fd749778a
 /delo-tools/the-divergence-ledger:
   en: 66033ce958f26559
   zh: cc4cc9d0b058b557
@@ -17,6 +17,9 @@
 /delo-tools/workflows:
   en: d7a988598da4d95c
   zh: e3b1ffabb83cf89b
+/delo-tools/brief-issues:
+  en: c8198dc37a3b5d14
+  zh: 2dff5572cecdf9b8
 /delo-tools/local-checks:
   en: 90fb2d1f23f050c1
   zh: c240621a978bcc8b

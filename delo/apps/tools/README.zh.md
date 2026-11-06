@@ -15,6 +15,7 @@
 - `src/checks/types.ts` 与 `src/checks/gates/index.ts` 将每个门禁描述为检查运行器执行的一条命令。
 - `src/checks/gates/` 包含门禁模块及其数据：许可证、密钥、个人数据、基础设施、DCO、文档时间以及文档检查。
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
+- `src/issues/` 把维护者撰写的 brief 转为 GitHub Issue：`brief.ts` 包含字段、规则与 Issue 正文，`references.ts` 包含 brief 可以携带的链接与路径，`labels.ts` 包含标签文件，`gh.ts` 包含 `gh` 调用，`issues.ts` 为命令行。
 - `tests/` 包含测试规范。台账规则在临时 git 仓库中运行。门禁规范在临时树中为每个门禁植入一处违规，文档规范则在植入违规的夹具树上运行上游脚本。
 
 ## 差异台账
@@ -97,6 +98,45 @@
 `ci.yml` 与 `ci-windows.yml` 不需要密钥，因此予以保留。每个作业都把上游的运行器表达式作为仅在上游仓库中适用的分支，那里仍使用 `dsh-ubuntu-24-04-16core` 与 `dsh-windows-2025-16core` 等 DeepSeek 运行器标签。其他仓库一律在 `ubuntu-latest` 或 `windows-latest` 上运行该作业，因此本仓库从不等待 DeepSeek 的运行器。两个文件各有一条 `delo-feature` 台账条目记录此路由。
 
 `release.yml` 与 `release-vendor.yml` 中的自托管路由由 `github.repository == 'deepseek-harness/deepseek-harness'` 守卫，该名称所指的组织与台账中的上游仓库不同。该路由仅在故障切换变量被设置时才适用，Delo 不会进入该路由；守卫中的组织名称保持上游原有的写法。
+
+## brief Issue
+
+`src/issues/issues.ts` 把 briefs 文件转为 brief Issue。
+briefs 文件是一个 JSON 数组，其中每个对象以字段标签保存 [brief 模板](../../../.agents/skills/delo-delegation/SKILL.md#write-the-brief)的十六个字段，另有 `title`、该 Issue 所带的 `labels` 以及 `milestone`。
+Issue 表单 [`brief.yml`](../../../.github/ISSUE_TEMPLATE/brief.yml) 按相同顺序询问相同的字段，[`labels.yml`](../../../.github/labels.yml) 则定义标签。
+
+在仓库根目录以以下三种模式之一运行该工具：
+
+- `--input <briefs.json> --dry-run` 校验 briefs 并打印每个 Issue 的正文。
+- `--input <briefs.json> --create --repo <owner/name>` 校验 briefs，检查 `gh` 是否以该仓库维护者的身份登录，跳过标题已属于某个 Issue 的 brief，并创建其余 brief 的 Issue 并将其锁定。
+- `--sync-labels --repo <owner/name>` 以 `gh label create --force` 创建或更新 `labels.yml` 中的每个标签。
+
+```sh
+node_modules/.bin/tsx delo/apps/tools/src/issues/issues.ts --input delo/apps/tools/tests/issues/fixtures/briefs.valid.json --dry-run
+```
+
+任何问题都会在标准错误输出一行，并在任何 GitHub 调用之前以 1 退出。
+brief 存在问题的情形如下：
+
+- 字段缺失、为空或未知，或文件不是非空的 brief JSON 数组；
+- `Model` 不是 Haiku 的 medium、high 或 max effort，也不是 Opus 的 medium 或 high effort，因此 Opus 的 max effort 会被拒绝；
+- 链接既不是 github.com/Delo-Run/delo 或 docs.delorun.com 上的 `https://` URL，也不是仓库已跟踪的相对路径；
+- 反引号中的路径（其首段为仓库的顶层目录）所指的文件或目录未被跟踪；
+- 文本提及私有计划目录 `delo/docs/plans/`，或提及以 `/home/`、`/Users/` 或 `~/` 开头的机器路径；
+- 标签未在 `labels.yml` 中定义，标签中缺少 `brief`，或该 brief 带有属于拉取请求的 `kind/*` 标签；
+- 字段向正文添加了 Markdown 标题，或两个 brief 共用同一标题。
+
+路径依据 `git ls-files` 检查，因此 brief 引用某个文件之前，该文件必须已加入 git 索引（暂存区）。
+在 `--create` 之前，先在仓库中创建标签与里程碑，因为 `gh issue create` 遇到仓库中未定义的标签或里程碑会失败。
+
+已知限制：
+
+- `gh` 2.45 没有设置 GitHub 内置 Issue Type 的参数，因此 `--create` 创建的 Issue 不带 Issue Type。
+- 相对链接在 Issue 正文中无法解析，因此正文保留链接的原样。
+- 若某次运行在创建 Issue 之后、锁定之前中止，该 Issue 会保持未锁定。下一次运行会跳过同一标题，因此需手动锁定该 Issue。
+- 标题检查最多读取 1000 个 Issue，列表达到该数量时会拒绝运行。
+
+`tests/issues/` 下的测试规范在临时仓库中运行该工具，并将假的 `gh` 置于 `PATH` 之首；没有任何规范会访问 GitHub。
 
 ## 本地检查
 
