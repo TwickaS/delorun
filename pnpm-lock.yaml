@@ -1248,9 +1248,15 @@ importers:
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout
+      '@delo/contract-operational-logs':
+        specifier: workspace:*
+        version: link:../../packages/contract-operational-logs
       '@delo/home':
         specifier: workspace:*
         version: link:../../packages/home
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../../packages/logs
     devDependencies:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*

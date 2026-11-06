@@ -8,6 +8,7 @@
  * | `delorun setup [--profile <name>]` | setup's entry point ([setup](./setup/index.ts)) |
  * | `delorun start --foreground [--profile <name>]` | the home process in this terminal, holding the profile's lock ([start](./start.ts)) |
  * | `delorun status [--profile <name>]` | the home, the profile and whether its home process runs ([status](./status.ts)) |
+ * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |
  *
  * Every command resolves the Delo home, `DELO_HOME` or `~/.delo`, and every
@@ -23,10 +24,11 @@ import { hasCliProfile } from './profile.ts'
 import { runSetup, setupCommand } from './setup/index.ts'
 import { startCommand, startForeground } from './start.ts'
 import { statusCommand } from './status.ts'
+import { logsCommand } from './logs/command.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, statusCommand, pluginCommand, headlessCommand]
+export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, statusCommand, logsCommand, pluginCommand, headlessCommand]
 
 /**
  * The help text.
