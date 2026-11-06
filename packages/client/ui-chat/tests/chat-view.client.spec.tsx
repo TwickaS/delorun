@@ -327,6 +327,7 @@ function HarnessChatNode({
     useTurnData: CHAT_NODE_INJECT.hooks.turnData(standard, hookContext),
     useDisclosure: CHAT_NODE_INJECT.hooks.disclosure(standard, hookContext),
     useGroupAction: CHAT_NODE_INJECT.hooks.groupAction(standard, hookContext),
+    useSeatPresentation: CHAT_NODE_INJECT.hooks.seatPresentation(standard, hookContext),
   }), [standard, hookContext])
   const { renderSlot: _rootRenderSlot, __renders: _rootRenders, ...shared } = standard
   const nodeProps = { ...shared, ...owner, ...hooks }

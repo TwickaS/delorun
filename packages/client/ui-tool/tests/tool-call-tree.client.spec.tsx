@@ -39,7 +39,7 @@ function props(
   }) as unknown as ToolTreeProps['renderSlot']
   const fixture: Partial<ToolTreeProps> = {
     useDisclosure,
-    usePresentation: selector => selector(presentationPolicyFor(mode)),
+    useSeatPresentation: selector => selector(presentationPolicyFor(mode)),
     useTurnData: () => undefined,
     useSession,
     renderSlot,

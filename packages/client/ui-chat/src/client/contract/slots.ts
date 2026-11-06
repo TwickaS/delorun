@@ -218,8 +218,12 @@ export interface ChatNodeInjected {
     turnData: SlotHookFactory<'conversation.chat.node', UseChatNodeTurnData>
     disclosure: SlotHookFactory<'conversation.chat.node', UseDisclosure>
     groupAction: SlotHookFactory<'conversation.chat.node', UseGroupAction>
-    /** The live work-details policy, which a renderer such as the tool-call tree reads for what it shows. */
-    presentation: SlotHookFactory<'conversation.chat.node', UsePresentation>
+    /**
+     * The seat's live work-details policy, bound per keyed renderer as `useSeatPresentation`. A renderer whose
+     * registration supplies its own `usePresentation` source uses that source; this fallback serves the rest.
+     * The distinct name keeps this binding from replacing a registration's source.
+     */
+    seatPresentation: SlotHookFactory<'conversation.chat.node', UsePresentation>
   }
 }
 
@@ -286,8 +290,8 @@ export interface TurnProcessOwnerProps {
 
 /**
  * Shared presentation policy source for renderers that depend on the work-details mode.
- * @deprecated Keyed Chat nodes read the live policy through the seat's `usePresentation`, which takes precedence
- * over this source; new code reads `usePresentation`. Kept so stock imports still typecheck.
+ * @deprecated Kept so stock imports still typecheck. A registration that supplies this source gets it as its
+ * `usePresentation` prop, which takes precedence over the seat's `useSeatPresentation` fallback.
  */
 export interface PresentationInjected {
   hooks: {

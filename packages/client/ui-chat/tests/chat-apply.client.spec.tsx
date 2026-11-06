@@ -402,10 +402,12 @@ describe('Chat apply wiring', () => {
     expect(nodeSpec.inject.hooks.groupAction(standard, {
       turnData: undefined, disclosureReset: createSnapshotStore(0), useGroupAction: useFirst, usePresentation,
     })).toBe(useFirst)
-    // Every keyed Chat renderer reads the work-details policy through the seat's own Hook.
-    expect(nodeSpec.inject.hooks.presentation(standard, {
+    // The seat binds its policy under its own name, so it never replaces a registration's usePresentation.
+    expect(nodeSpec.inject.hooks.seatPresentation(standard, {
       turnData: undefined, disclosureReset: createSnapshotStore(0), useGroupAction: useFirst, usePresentation,
     })).toBe(usePresentation)
+    expect(Object.keys(nodeSpec.inject.hooks)).toContain('seatPresentation')
+    expect(Object.keys(nodeSpec.inject.hooks)).not.toContain('presentation')
     const reveal = vi.fn()
     function Probe({ useHidden, hidden, label }: { useHidden: UseGroupAction; hidden: boolean; label: string }) {
       const ref = useHidden(hidden, reveal)

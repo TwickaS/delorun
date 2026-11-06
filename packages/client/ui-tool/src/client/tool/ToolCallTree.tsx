@@ -115,8 +115,8 @@ const ToolCallBranch = memo(function ToolCallBranch({
  * @returns the Tool call tree.
  */
 export function ToolCallTree({
-  renderSlot, node, cwd, openFile, inspectCall, loadImage, useDisclosure, usePresentation, useHostInfo, t, useContextMenu,
-  sessionId, resolveFilePath,
+  renderSlot, node, cwd, openFile, inspectCall, loadImage, useDisclosure, usePresentation, useSeatPresentation, useHostInfo,
+  t, useContextMenu, sessionId, resolveFilePath,
 }: ToolTreeProps) {
   const { getTriggerProps } = useContextMenu()
   const getFileTriggerProps = useCallback((path: string) => getTriggerProps(() => ({
@@ -125,7 +125,9 @@ export function ToolCallTree({
   const renderFallback = useCallback((owner: ToolCallOwnerProps) =>
     <GenericToolCard {...owner} t={t} getFileTriggerProps={getFileTriggerProps} />, [t, getFileTriggerProps])
   const home = useHostInfo(info => info.home)
-  const terminalOpen = usePresentation(policy => policy.openTerminalCards)
+  // A registration's own policy source wins; the seat's live policy is the fallback.
+  const usePolicy = usePresentation ?? useSeatPresentation
+  const terminalOpen = usePolicy(policy => policy.openTerminalCards)
   return (
     <ToolCallBranch
       renderSlot={renderSlot}

@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from 'react'
 import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ChatFileMentions, ChatNodeViewProps, TurnTailOwnerProps } from '../contract/slots.ts'
+import type { ChatFileMentions, ChatNodeViewProps, TurnTailOwnerProps, UsePresentation } from '../contract/slots.ts'
 import { AssistantMarkdown } from './AssistantMarkdown.tsx'
 
 /** Business readers owned by the assistant renderer's existing Slot registration. */
@@ -13,11 +13,15 @@ export interface AssistantNodeInjected {
 
 type AssistantNodeViewProps = ChatNodeViewProps<'assistant-step'> & InjectFace<AssistantNodeInjected>
   & PropsRenderSlots<'conversation.chat.reasoning.body' | 'conversation.chat.message.images'>
+  & {
+    /** The registration's own live policy source, supplied only when the registration provides `hooks.presentation`. */
+    readonly usePresentation?: UsePresentation | undefined
+  }
 
 /** Streaming, settled, and interrupted Assistant states share one keyed renderer instance. */
 export const AssistantNodeView = memo(function AssistantNodeView({
   node, groupPart, useDisclosure, useGroupAction, useTurnData, turnProcess, openFile, loadImage, fileMentions,
-  usePresentation, renderSlot, t, sessionId, useContextMenu, resolveFilePath,
+  usePresentation, useSeatPresentation, renderSlot, t, sessionId, useContextMenu, resolveFilePath,
 }: AssistantNodeViewProps) {
   const { getTriggerProps } = useContextMenu()
   const getFileTriggerProps = useCallback((path: string) => getTriggerProps(() => ({
@@ -37,7 +41,9 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     () => owner === undefined ? undefined : fileMentions(owner, getFileTriggerProps),
     [fileMentions, owner, getFileTriggerProps],
   )
-  const keepReplies = usePresentation(policy => policy.foldedReplies === 'all')
+  // A registration's own policy source wins; the seat's live policy is the fallback.
+  const usePolicy = usePresentation ?? useSeatPresentation
+  const keepReplies = usePolicy(policy => policy.foldedReplies === 'all')
   // A kept reply row stays visible while the folded Turn hides its inline reasoning.
   const reasoningHidden = turnProcess !== undefined
     && turnProcess.foldable
@@ -57,7 +63,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
       loadImage={loadImage}
       reasoningHidden={reasoningHidden}
       useGroupAction={useGroupAction}
-      usePresentation={usePresentation}
+      usePresentation={usePolicy}
       renderSlot={renderSlot}
       revealProcess={revealProcess}
       mentions={mentions}

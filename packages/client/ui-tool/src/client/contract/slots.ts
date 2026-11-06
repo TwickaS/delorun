@@ -5,7 +5,7 @@ import type {
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
   OpenFileOptions, PreparingToolCall, StartedToolCall,
-  ToolResultNode, UseDisclosure,
+  ToolResultNode, UseDisclosure, UsePresentation,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { MessageImageLoader, MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { AskUserQuestionAnswerItem, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
@@ -152,5 +152,9 @@ export type ToolHostInfoInjected = {
 /** Full props of the Tool call-tree renderer registered as a tool-call Chat Node. */
 export type ToolTreeProps = PropsRuntime<'conversation.chat.node', 'tool-call'>
   & PropsRenderSlots<'tool.call.toolview'>
+  & {
+    /** The registration's own live policy source, supplied only when the registration provides `hooks.presentation`. */
+    readonly usePresentation?: UsePresentation | undefined
+  }
   & PropsLocale<'conversation'>
   & InjectFace<ToolHostInfoInjected & ToolFileInjected>

@@ -72,7 +72,7 @@ export const CHAT_NODE_INJECT: ChatNodeInjected = {
     },
     disclosure: (_standard, { disclosureReset }) => bindDisclosure(disclosureReset),
     groupAction: (_standard, { useGroupAction }) => useGroupAction,
-    presentation: (_standard, { usePresentation }) => usePresentation,
+    seatPresentation: (_standard, { usePresentation }) => usePresentation,
   },
 }
 

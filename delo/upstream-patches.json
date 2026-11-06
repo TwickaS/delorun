@@ -444,7 +444,7 @@
     {
       "path": "packages/client/ui-chat/src/client/apply.ts",
       "class": "delo-feature",
-      "reason": "Passes the Chat Node presentation Hook into the node hooks and the Custom display setting into the presentation policy, so the Verbose view can open terminal cards; the other views are unchanged."
+      "reason": "Passes the Chat Node's live policy into the node hooks as seatPresentation and the Custom display setting into the presentation policy, so the Verbose view can open terminal cards; the other views are unchanged."
     },
     {
       "path": "packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx",
@@ -459,17 +459,17 @@
     {
       "path": "packages/client/ui-chat/src/client/contract/slots.ts",
       "class": "delo-feature",
-      "reason": "Adds the presentation Hook to the Chat Node hook context and the keyed seat's injected Hooks, so every keyed Chat renderer, the tool-call tree among them, reads the live work-details policy through the seat. The deprecated PresentationInjected type stays exported so stock imports still typecheck."
+      "reason": "Adds the presentation Hook to the Chat Node hook context and the keyed seat's injected Hooks as seatPresentation, which a keyed renderer reads as its fallback when its registration supplies no usePresentation source. The deprecated PresentationInjected type stays exported so stock imports still typecheck."
     },
     {
       "path": "packages/client/ui-chat/src/client/chat/AssistantNodeView.tsx",
       "class": "delo-feature",
-      "reason": "Removes the separate presentation source from the assistant renderer's injected face, which now reads the policy through the seat's presentation Hook."
+      "reason": "Reads the work-details policy from its registration's own usePresentation source when the registration supplies one, and from the seat's useSeatPresentation fallback otherwise; its injected face no longer carries a presentation source."
     },
     {
       "path": "packages/client/ui-chat/tests/chat-apply.client.spec.tsx",
       "class": "delo-feature",
-      "reason": "Builds the Chat Node Hook contexts with a presentation Hook and checks that the seat supplies its own presentation Hook to every keyed renderer."
+      "reason": "Builds the Chat Node Hook contexts with a presentation Hook and checks that the seat binds its policy as seatPresentation, never as a presentation source."
     },
     {
       "path": "packages/client/ui-chat/tests/reasoning-render-fixture.tsx",
@@ -479,12 +479,12 @@
     {
       "path": "packages/client/ui-tool/src/client/contract/slots.ts",
       "class": "delo-feature",
-      "reason": "Adds an optional terminalOpen to the Tool owner currency: a shell command's terminal card starts open, capped to its head and tail, and its disclosure closes it."
+      "reason": "Adds an optional terminalOpen to the Tool owner currency: a shell command's terminal card starts open, capped to its head and tail, and its disclosure closes it. The tool-call tree props also take an optional registration-level usePresentation source."
     },
     {
       "path": "packages/client/ui-tool/src/client/tool/ToolCallTree.tsx",
       "class": "delo-feature",
-      "reason": "Reads the openTerminalCards policy through the seat's presentation Hook and passes it to every call, nested ones included, as terminalOpen."
+      "reason": "Reads the openTerminalCards policy from its registration's own presentation source when one is supplied, otherwise from the seat's useSeatPresentation fallback, and passes it to every call, nested ones included, as terminalOpen."
     },
     {
       "path": "packages/client/ui-tool/src/client/tool/components/ToolRow.tsx",
@@ -514,7 +514,7 @@
     {
       "path": "packages/client/ui-workflow-run/tests/workflow-run.client.spec.tsx",
       "class": "delo-feature",
-      "reason": "Supplies the presentation Hook to the workflow panel's Chat Node props."
+      "reason": "Supplies the seat's useSeatPresentation hook to the workflow panel's Chat Node props."
     },
     {
       "path": "packages/client/ui-tool/src/client/tool/components/terminal-disclosure.ts",
@@ -730,6 +730,16 @@
       "path": "packages/client/ui-chat/src/client/index.ts",
       "class": "delo-feature",
       "reason": "Re-exports the deprecated PresentationInjected type, with a lint exemption comment, so stock plugins that import it still typecheck."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/chat-view.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Supplies the seat's useSeatPresentation hook to the harness's keyed Chat nodes, as the seat binds it."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/presentation-precedence.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the assistant renderer's presentation source: a stock-style registration's own source wins over the seat's live policy, and the seat's policy is the fallback when the registration supplies none."
     }
   ],
   "retired": []
