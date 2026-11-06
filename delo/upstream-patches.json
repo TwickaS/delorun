@@ -1915,6 +1915,16 @@
       "path": ".gitattributes",
       "class": "delo-feature",
       "reason": "Delo's ledger merge driver: the attribute routes the ledger to the driver that merges its entries by path, so parallel branches that list different upstream paths do not conflict on it."
+    },
+    {
+      "path": "apps/web/tests/expected/plugin-manager/manager.expected.md",
+      "class": "delo-feature",
+      "reason": "Records the History action beside Refresh in the plugin page's list golden, which the Delo plugin bar shows once the list has loaded."
+    },
+    {
+      "path": "apps/web/tests/expected/plugin-manager/live-enabled.expected.md",
+      "class": "delo-feature",
+      "reason": "Records the History action beside Refresh in the plugin page's live-enabled golden, which the Delo plugin bar shows once the list has loaded."
     }
   ],
   "retired": []
