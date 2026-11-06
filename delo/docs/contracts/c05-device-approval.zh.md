@@ -48,7 +48,7 @@ home 只把浏览器或桌面应用作为受信任设备（trusted device）接�
 | 密钥或机密 | 类型 | 持有方 | 存储 |
 | --- | --- | --- | --- |
 | home 密钥 | Ed25519 | home | `~/.delo/secrets/home-auth/home-key.pem`，PKCS #8，模式 0600（[C1](c01-home-layout.zh.md#secrets)）。在 home 首次启动时生成，重置后仍保留。 |
-| home 密钥 id | 32 字节原始 home 公钥的 SHA-256 | 所有人 | 不保密。它在批准、告警以及 [C6](c06-relay-protocol.md) 的中继绑定中标识该 home。 |
+| home 密钥 id | 32 字节原始 home 公钥的 SHA-256 | 所有人 | 不保密。它在批准、告警以及 [C6](c06-relay-protocol.zh.md) 的中继绑定中标识该 home。 |
 | 浏览器设备密钥 | ECDSA P-256 配合 SHA-256，由 WebCrypto 以 `extractable: false` 生成 | 一个浏览器源 | 该源的 IndexedDB，数据库 `delo-device`，对象存储 `keys`。私钥从不离开浏览器。 |
 | 桌面设备密钥 | ECDSA P-256 配合 SHA-256 | 桌面应用 | 桌面应用 profile 目录中每个 home 一个文件 `delo/device-keys/<home key id>.bin`，以 Electron 的 `safeStorage` 加密。 |
 | 设备 id | 设备公钥的 RFC 7638 SHA-256 指纹 | 所有人 | 不保密。 |
@@ -178,7 +178,7 @@ home 把请求绑定到该监听器的 studio 地址，并以 `201` 作答，返
 <a id="alerts"></a>
 ### 告警
 
-告警记录本人必须看到的事件。其种类为 `unrequested-certificate`、`second-tunnel-refused` 与 `tunnel-rebound`（[C6](c06-relay-protocol.md)），以及 `device-approved`、`device-removed`、`recovery-started`、`recovery-cancelled`、`recovery-completed` 与 `reset`。`unrequested-certificate`、`second-tunnel-refused` 与 `recovery-started` 是阻断性告警；其余为通知。
+告警记录本人必须看到的事件。其种类为 `unrequested-certificate`、`second-tunnel-refused` 与 `tunnel-rebound`（[C6](c06-relay-protocol.zh.md)），以及 `device-approved`、`device-removed`、`recovery-started`、`recovery-cancelled`、`recovery-completed` 与 `reset`。`unrequested-certificate`、`second-tunnel-refused` 与 `recovery-started` 是阻断性告警；其余为通知。
 
 每个 home 都通过以下所有渠道投递每条告警；屏幕无人查看的 home 依靠后三个渠道。
 

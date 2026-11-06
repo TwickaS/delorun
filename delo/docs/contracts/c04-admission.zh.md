@@ -62,7 +62,7 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 | `loopback` | 上游 web 服务器的地址，在 Delo 的 profile 中为 `127.0.0.1:3080` | `http` | 无 TLS | 上游的防护：回环名称或绑定地址 | 上游的启动令牌与 `/connect` |
 | `reach-tailscale-private` | [C7](c07-reach-providers.md#tailscale-serve-target) 的 Tailscale 私有目标：`127.0.0.1` 上的一个 TCP 端口，或 C7 套接字变体的 Unix 套接字 | `https` | `tailscaled` | 等于所配置的 `ts.net` 地址，端口不是 443 时带上端口 | 设备密钥与身份因子（identity factor）之后的[会话](#sessions) |
 | `reach-tailscale-funnel` | `127.0.0.1` 上的一个 TCP 端口，与私有目标分开 | `https` | `tailscaled` | 等于所配置的 Funnel 地址，端口不是 443 时带上端口 | 同上 |
-| `reach-self-hosted-relay` | 无地址：它只接受 [C6](c06-relay-protocol.md) 的中继客户端在 home 进程（home process）内传给它的流 | `https` | 该监听器，使用 home 自己的证书 | 等于绑定的名称，且等于连接的 SNI | 同上 |
+| `reach-self-hosted-relay` | 无地址：它只接受 [C6](c06-relay-protocol.zh.md) 的中继客户端在 home 进程（home process）内传给它的流 | `https` | 该监听器，使用 home 自己的证书 | 等于绑定的名称，且等于连接的 SNI | 同上 |
 
 - **不允许覆盖 host。** 没有任何配置字段能设定远程访问监听器的地址。TCP 远程访问监听器绑定 `127.0.0.1`，端口由操作系统分配，远程访问提供方读取绑定后的端口。为远程访问监听器设定 `host` 或 `port` 的 profile 行在加载时失败，并返回 `REACH_LISTENER_HOST_OVERRIDE`。
 - **端口复用。** 回环监听器与远程访问监听器从不共用端口或套接字。

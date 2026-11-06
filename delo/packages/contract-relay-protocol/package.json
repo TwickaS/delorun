@@ -1,0 +1,14 @@
+{
+  "name": "@delo/contract-relay-protocol",
+  "description": "Tunnel token, handshake messages, frame types, close and error codes, and limits of the relay protocol, as specified by contract C6.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*"
+  }
+}
