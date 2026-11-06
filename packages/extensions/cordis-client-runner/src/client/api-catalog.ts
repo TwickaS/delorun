@@ -100,7 +100,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'toggleSidebar(): void',
-        description: 'Toggle the sidebar panel (closed ⟷ contract default width).',
+        description: 'Toggle the sidebar panel (closed ⟷ default width).',
         parameters: [],
       },
       {
