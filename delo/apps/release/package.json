@@ -1,0 +1,11 @@
+{
+  "name": "@delo/release",
+  "description": "Delo's release tooling: the changelog fragment gate and the release-notes assembly.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@delo/tools": "workspace:*"
+  }
+}

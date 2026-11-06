@@ -1231,6 +1231,12 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  delo/apps/release:
+    dependencies:
+      '@delo/tools':
+        specifier: workspace:*
+        version: link:../tools
+
   delo/apps/tools:
     dependencies:
       '@secretlint/node':
