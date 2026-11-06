@@ -134,7 +134,7 @@ describe('ui-plugin-manager browser plugin', () => {
     expect(navigation.getSnapshot()).toEqual({ tab: 'installed', view: { kind: 'package', name: 'dsh-navigation-test' } })
   })
 
-  it('opens the Plugins list from another panel and resets bundle details without opening installation', async () => {
+  it('opens the Plugins list or an official plugin\'s page from another panel without opening installation', async () => {
     const b = await bench()
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
@@ -152,6 +152,11 @@ describe('ui-plugin-manager browser plugin', () => {
 
     b.ctx.pluginNavigation.openBundle('dsh-navigation-test')
     expect(navigation.getSnapshot()).toEqual({ tab: 'installed', view: { kind: 'package', name: 'dsh-navigation-test' } })
+    navigation.actions.setTab('fixture-discover')
+    b.selectPanel(null)
+    b.ctx.pluginNavigation.openItem('subagent')
+    expect(b.panelInfo.getSnapshot().activePanelId).toBe(PANEL_ID)
+    expect(navigation.getSnapshot()).toEqual({ tab: 'installed', view: { kind: 'item', id: 'subagent' } })
     navigation.actions.setTab('fixture-discover')
     b.ctx.pluginNavigation.openList()
     expect(b.panelInfo.getSnapshot().activePanelId).toBe(PANEL_ID)

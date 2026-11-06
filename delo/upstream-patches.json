@@ -1010,6 +1010,21 @@
       "path": "scripts/gen-doc-graphs.ts",
       "class": "delo-feature",
       "reason": "Plugin audit on install: the `pluginAudit` row of the capability-seam table, a Service Definition the plugin manager consumes and a distribution provides. Upstream's rows are unchanged."
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/diagnostic.ts",
+      "class": "delo-feature",
+      "reason": "Plugin-manager improvements: the desktop diagnostic schema records the `config`, `undo` and `restore` reasons and stages and the audit and history error codes; it records outcomes and decides nothing."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Plugin-manager improvements: `pluginNavigation.openItem(id)` opens an official plugin's page without changing the current Session. Upstream's navigation calls are unchanged."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/tests/browser-plugin.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Plugin-manager improvements: covers `pluginNavigation.openItem`."
     }
   ],
   "retired": []
