@@ -17,6 +17,7 @@
 - `src/checks/types.ts` 与 `src/checks/gates/index.ts` 将每个门禁描述为检查运行器执行的一条命令。
 - `src/checks/gates/` 包含门禁模块及其数据：许可证、密钥、个人数据、基础设施、DCO、文档时间以及文档检查。
 - `src/check-jsdoc.ts` 将上游的 JSDoc 规则应用于 `delo/` 下的每个 `src` 树。
+- `src/check-docs-site.ts` 启动文档网站的构建（包括其死链接检查），并在站点依赖安装之前拒绝运行。
 - `src/run-checks.ts` 是检查运行器：层级、选择与报告。
 - `src/checks/` 包含检查目录（`plan.ts`）、调度器（`run.ts`）、机器预算（`machine.ts`）、通过缓存（`cache.ts`）与预算（`budgets.json`）。
 - `src/setup-worktree.ts` 用一条命令完成检出或工作树的设置：钩子文件、安装、钩子、台账合并驱动，以及在 Node 与 `.nvmrc` 不一致时给出警告。
@@ -191,6 +192,7 @@ brief 中原有的链接也按同样方式改写。
 | `tests:upstream-changed` | 每个有变更的上游包的规范，以及在 150 个规范文件之内其直接依赖的规范（[上游的 `vitest.config.ts`](../../../vitest.config.ts)） | 每个 worker 0.6 GiB，至多 8 个 worker | `changed` |
 | `tests:web-changed` | 基于官方客户端构建运行的、变更所涉及的 `apps/web/tests` 下的 Chromium 端到端规范，至多 12 个规范（[`checks/web.ts`](src/checks/web.ts)） | 5 GiB，8 个 CPU，独占，1200 秒 | `changed` |
 | `generate:native` | 上游的原生系统插件（`pnpm run build:native-system`） | 1 GiB，2 个 CPU | 无：仅 `--only generate:native` |
+| `docs-site` | Delo 文档网站可以构建，且其死链接检查通过（[`delo/apps/docs`](../docs/README.zh.md)）；在站点依赖安装之前拒绝运行（[`check-docs-site.ts`](src/check-docs-site.ts)） | 2 GiB，2 个 CPU，900 秒 | `changed`、`full` |
 | `parity-switches` | C16 的注册表与开关字段、对等覆盖层和对模型可见的贡献相符，以及开关清点（[`check-parity-switches.ts`](src/parity/composition/check-parity-switches.ts)） | 0.5 GiB，1 个 CPU | Delo 代码或上游编辑改动时为 `changed`；`full` |
 | `parity-replay` | 在 `DSH_SNAPSHOT_PATCH` 指向对等覆盖层时运行上游的录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，单独运行 | Delo 代码或上游编辑改动时为 `changed`；`full` |
 

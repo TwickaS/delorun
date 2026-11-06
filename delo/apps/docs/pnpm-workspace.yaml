@@ -1,0 +1,6 @@
+# The site is its own workspace root with its own lockfile (the repository's root workspace excludes it).
+# esbuild ships a native binary through its install script; Next.js and Fumadocs need it.
+allowBuilds:
+  esbuild: true
+# A config change purges node_modules; without a terminal pnpm would abort instead of reinstalling.
+confirmModulesPurge: false

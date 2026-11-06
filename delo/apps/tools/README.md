@@ -17,6 +17,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/checks/types.ts` and `src/checks/gates/index.ts` describe each gate as one command that the check runner executes.
 - `src/checks/gates/` holds the gate modules and their data: licence, secrets, personal data, infrastructure, DCO, documentation times and the documentation checks.
 - `src/check-jsdoc.ts` applies upstream's JSDoc rules to every `src` tree under `delo/`.
+- `src/check-docs-site.ts` launches the documentation website's build, which includes its dead-link check, and refuses to run until the site's dependencies are installed.
 - `src/run-checks.ts` is the check runner: the tiers, the selection, the report.
 - `src/checks/` holds the check catalogue (`plan.ts`), the scheduler (`run.ts`), the machine budget (`machine.ts`), the pass cache (`cache.ts`) and the budgets (`budgets.json`).
 - `src/setup-worktree.ts` sets up a checkout or worktree in one command: the hooks file, the install, the hooks, the ledger merge driver and a warning when Node differs from `.nvmrc`.
@@ -191,6 +192,7 @@ Each check has a budget, its resident memory at the peak and its CPUs, which the
 | `tests:upstream-changed` | The specs of each changed upstream package and, within 150 spec files, of its direct dependents ([upstream's `vitest.config.ts`](../../../vitest.config.ts)) | 0.6 GiB per worker, up to 8 workers | `changed` |
 | `tests:web-changed` | The reached Chromium e2e specs under `apps/web/tests`, run on the official client build, up to 12 specs ([`checks/web.ts`](src/checks/web.ts)) | 5 GiB, 8 CPUs, alone, 1200 s | `changed` |
 | `generate:native` | Upstream's native system addon (`pnpm run build:native-system`) | 1 GiB, 2 CPUs | none: `--only generate:native` |
+| `docs-site` | Delo's documentation website builds, and its dead-link check passes ([`delo/apps/docs`](../docs/README.md)); refuses to run until the site's dependencies are installed ([`check-docs-site.ts`](src/check-docs-site.ts)) | 2 GiB, 2 CPUs, 900 s | `changed`, `full` |
 | `parity-switches` | C16's registry against the switch fields, the parity overlay and the model-visible contributions, and the switch sweep ([`check-parity-switches.ts`](src/parity/composition/check-parity-switches.ts)) | 0.5 GiB, 1 CPU | `changed` for Delo code or an upstream edit, `full` |
 | `parity-replay` | Upstream's recorded-session replay (`pnpm run test:snapshot`) with `DSH_SNAPSHOT_PATCH` naming the parity overlay | 0.6 GiB per worker, 5 CPUs, alone | `changed` for Delo code or an upstream edit, `full` |
 

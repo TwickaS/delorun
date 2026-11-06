@@ -183,6 +183,13 @@ const UPSTREAM_CODE = ['packages/**', 'apps/**', 'vendor/**', 'native/**', 'scri
 const FORK_CODE = [...DELO_CODE, ...UPSTREAM_CODE]
 /** The variables the fork and upstream test lanes read, through their locale and time zone. */
 const TEST_ENV = ['LANG', 'LC_ALL', 'TZ']
+/**
+ * The documentation website: its own workspace with its own lockfile and installed dependencies, so the fork suite
+ * has no specs there and its packages are not reached through it.
+ */
+export const DOCS_SITE_DIR = 'delo/apps/docs'
+/** The check that builds the documentation website and its dead-link check. */
+export const DOCS_SITE_ID = 'docs-site'
 /** C16's parity overlay, which the parity replay hands to every snapshot adapter through `DSH_SNAPSHOT_PATCH`. */
 const PARITY_OVERLAY = { DSH_SNAPSHOT_PATCH: PARITY_OVERLAY_PATH }
 
@@ -284,6 +291,18 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     checks.push({ id: 'build:artifacts', group: 'generate', title: `Upstream's runtime bundles (\`pnpm run build:artifacts\`): ${String(host.staleRuntime.length)} reason(s), such as ${first}`, cwd: '', command: ['pnpm', 'run', '--silent', 'build:artifacts'], needs: [], tiers: ['changed', 'full'], cpus: 4 })
   }
   checks.push(
+    // Builds the site from its own install, so its verdict reads the site's sources, Delo's pages and the release version it names.
+    {
+      id: DOCS_SITE_ID,
+      group: DOCS_SITE_ID,
+      title: 'Delo\'s documentation website builds, and every internal link and fragment in both locales names a built file or id (`pnpm --dir docs run build`)',
+      cwd: '',
+      command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-docs-site.ts'],
+      needs: [],
+      inputs: [`${DOCS_SITE_DIR}/**`, 'delo/docs/**', 'delo/apps/release/package.json'],
+      tiers: ['changed', 'full'],
+      cpus: 2,
+    },
     { id: 'generate:native', group: 'generate', title: 'The host\'s native system addon, which upstream\'s suite loads (`pnpm run build:native-system`)', cwd: '', command: ['pnpm', 'run', '--silent', 'build:native-system'], needs: [], tiers: [], cpus: 2 },
     {
       id: 'tests:fork',
@@ -466,9 +485,10 @@ export function upstreamDependents(upstream: readonly UpstreamPackage[], names: 
 /**
  * The fork package directory a path lies in.
  * @param path - a repository-relative path.
- * @returns such as `delo/apps/cell`, or undefined outside `delo/apps` and `delo/packages`.
+ * @returns such as `delo/apps/cell`, or undefined outside `delo/apps` and `delo/packages` and for the documentation site.
  */
 export function packageDirOf(path: string): string | undefined {
+  if (path.startsWith(`${DOCS_SITE_DIR}/`)) return undefined
   return /^delo\/(?:apps|packages)\/[^/]+/.exec(path)?.[0]
 }
 
@@ -524,6 +544,9 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     } else if (check.id === 'tests:snapshots') {
       const upstream = paths.find(path => !path.startsWith('delo/') && affectsUpstreamRuntime(path))
       if (upstream !== undefined) pick(check, `upstream-owned code changed (${upstream})`)
+    } else if (check.id === DOCS_SITE_ID) {
+      const site = paths.find(path => path.startsWith(`${DOCS_SITE_DIR}/`) || path.startsWith('delo/docs/') || path === 'delo/apps/release/package.json')
+      if (site !== undefined) pick(check, `the documentation site or its pages changed (${site})`)
     } else if (check.group === 'parity' && selection.changed !== undefined) {
       const parity = paths.find(affectsParity)
       if (parity !== undefined) pick(check, `${parity.startsWith('delo/') ? 'Delo code' : 'upstream-owned code'} changed (${parity})`)

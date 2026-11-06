@@ -78,7 +78,7 @@ Delo's pages, interface text and skills describe trust exactly; review rejects t
 
 ## Delo's documentation website
 
-Delo's documentation website is Delo's own Fumadocs site in `delo/apps/docs/`, published at `docs.delorun.com`; the site's README, `delo/apps/docs/README.md`, comes with the documentation site and this tree does not contain it. It reads each `delo/docs/` pair, English at the root and Chinese under `/zh/`, publishes the user guide and references, and links upstream's documentation for harness topics instead of copying it. Each page names the Delo version it describes and is also served as Markdown with `llms.txt` indexes; the site's README owns its routes, build and deployment. Upstream's `website/` and the [dsh-doc](../.agents/skills/dsh-doc/SKILL.md) website-publication workflow apply only to upstream's VitePress projection, which stays unmodified.
+Delo's documentation website is Delo's own Fumadocs site in `delo/apps/docs/`; its README, `delo/apps/docs/README.md` with its Chinese pair, owns its routes, build, dead-link check and deployment. It reads each `delo/docs/` pair, English at the root and Chinese under `/zh/`, publishes the user guide and references, and links upstream's documentation for harness topics instead of copying it. Each page names the Delo version it describes and is also served as Markdown with `llms.txt` indexes; the site's README owns its routes, build and deployment. Upstream's `website/` and the [dsh-doc](../.agents/skills/dsh-doc/SKILL.md) website-publication workflow apply only to upstream's VitePress projection, which stays unmodified.
 
 ## Wordcount Budgets
 
