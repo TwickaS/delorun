@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for logs.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/guide/logs.md
+/:
+  en: 118e954bc6263a73
+  zh: e1f9766da3ebe827
+/where-delo-keeps-its-logs:
+  en: 75bd67c378bc718c
+  zh: a8596eee02400d13
+/where-delo-keeps-its-logs/summary:
+  en: 17a2f3c7c5859416
+  zh: 50bbb73f015aa13a
+/where-delo-keeps-its-logs/contents:
+  en: 0976f6a9fd36b283
+  zh: f1b66fef20d08b0f
+/where-delo-keeps-its-logs/log-locations:
+  en: 21117353d8689a37
+  zh: 3d5f4ff9643c0d4f
+/where-delo-keeps-its-logs/what-a-log-holds:
+  en: f3ef891cbd88c3a1
+  zh: 8e40ae55a5fdfa4f
+/where-delo-keeps-its-logs/how-long-logs-are-kept:
+  en: ad442287341a95e9
+  zh: 051df31298ff5f2b
+/where-delo-keeps-its-logs/reading-logs-with-delorun-logs:
+  en: 6323490f778efc23
+  zh: 02c1790ad0d9f840
+/where-delo-keeps-its-logs/clearing-logs:
+  en: 46cfdbb44affb8c3
+  zh: 08aa6ab4a6a32a4c
