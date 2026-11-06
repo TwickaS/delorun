@@ -266,7 +266,7 @@ acceptances:
 - 在 `install` 把下载内容交给 electron-updater 的 `quitAndInstall` 之前，应用会验证新鲜的时间戳、manifest 的签名、下载文件的 SHA-512 与 SHA-256 是否与 manifest 的 `desktop` 条目一致，以及 manifest 的日志条目（[C18](c18-release-log.zh.md)）。任何一项失败都会拒绝安装，并使正在运行的版本保持不变。
 - 更新应用之后，应用会在其更新缓存目录中保留被替换发布的安装程序或更新归档，并已对照该发布的 manifest 验证。缓存恰好保留一个之前的发布。
 - 更新源拒绝自动降级：所指明版本低于或等于正在运行版本的更新源不提供任何内容。
-- 本人请求的回滚会安装缓存中的上一个发布，或本人指定、从 GitHub Releases 下载的更早发布。目标必须验证为已签名（manifest 与文件摘要）且已记录日志（包含证明）；未签名、未记录日志或不一致的目标会被拒绝。安装之后，profile 会从历史中恢复（[C3](c03-update-report.md)）。
+- 本人请求的回滚会安装缓存中的上一个发布，或本人指定、从 GitHub Releases 下载的更早发布。目标必须验证为已签名（manifest 与文件摘要）且已记录日志（包含证明）；未签名、未记录日志或不一致的目标会被拒绝。安装之后，profile 会从历史中恢复（[C3](c03-update-report.zh.md)）。
 
 <a id="values-and-limits"></a>
 

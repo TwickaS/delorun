@@ -173,7 +173,7 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 ## 停用被撤销的插件
 
 - 当新验证通过的列表撤销某个已安装的版本时，正在运行的插件不会被停止。studio 显示该插件、原因与消息，以及重启提示。
-- 在下一次加载时，profile 中该版本的行会在 Loader 导入它之前被停用，这一改动是一个注明该撤销的 profile 历史（profile history）版本（[C3](c03-update-report.md)）。
+- 在下一次加载时，profile 中该版本的行会在 Loader 导入它之前被停用，这一改动是一个注明该撤销的 profile 历史（profile history）版本（[C3](c03-update-report.zh.md)）。
 - 插件的界面提供更新到列表未撤销的版本与保持停用两个选项。重新启用被撤销的版本需要本人在写明原因的界面上确认，接受台账会针对该确切的 `package@version` 与列表的 `sequence` 记录这一确认；之后若有列表以新的原因再次撤销它，则会再次征询。
 
 <a id="catalogue-repository-ci"></a>
@@ -208,7 +208,7 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delo <del
 - `Delo-Run/delo-plugins`（WP7.1、WP7.2）：索引文件、其 schema 检查、语料库与发布任务。
 - `delo/packages/catalogue/src/revocation/`（WP7.3）：获取、陈旧状态与加载时停用。
 - Discover 的配置与 studio 插件（WP7.4）：列出条目、徽章、发现与安装。
-- `delorun verify`（[C15](c15-verification-checks.md)）与更新报告（[C3](c03-update-report.md)）。
+- `delorun verify`（[C15](c15-verification-checks.md)）与更新报告（[C3](c03-update-report.zh.md)）。
 
 <a id="compatibility"></a>
 

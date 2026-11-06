@@ -1,0 +1,15 @@
+{
+  "name": "@delo/contract-update-report",
+  "description": "Types and fixed values of Delo contract C3: the update report, its items and reasons, update states, health-check criteria and rollback triggers",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/contract-plugin-versions": "workspace:*"
+  }
+}

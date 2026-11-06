@@ -1276,6 +1276,15 @@ importers:
 
   delo/packages/contract-setup-answers: {}
 
+  delo/packages/contract-update-report:
+    dependencies:
+      '@delo/contract-plugin-versions':
+        specifier: workspace:*
+        version: link:../contract-plugin-versions
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+
   delo/packages/contract-verification-checks: {}
 
   native/system:

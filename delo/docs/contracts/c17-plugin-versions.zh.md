@@ -75,7 +75,7 @@ Delo 有自己的语义化版本，并基于一个上游 DSH 版本构建，因�
 
 - 安装时，由插件管理器在添加该包之前检查；
 - 每次启动时，由上游的 profile 预检（[`compatibility-preflight.ts`](../../../packages/boot/app-boot/src/compatibility-preflight.ts) 中的 `prepareProfileEntries`）检查，它在 Loader 导入未满足要求的条目之前将其停用，并在 studio 中报告，提供 Update、Keep disabled 与 Roll back；
-- 更新之前，对照目标发布版本的两个版本检查，用于更新报告（[C3](c03-update-report.md)）；
+- 更新之前，对照目标发布版本的两个版本检查，用于更新报告（[C3](c03-update-report.zh.md)）；
 - 在插件索引语料库中检查，语料库记录徽章运行时所用的版本（[C13](c13-catalogue-revocation.zh.md#badge-record)）。
 
 <a id="exemptions"></a>
@@ -118,7 +118,7 @@ Delo 有自己的语义化版本，并基于一个上游 DSH 版本构建，因�
 | 启动时停用 | `Disabled <package>@<version>: it requires <DSH or Delo> <range>, and this is Delo <delo> on DSH <dsh>.` |
 | 已豁免 | `<package>@<version> requires <DSH or Delo> <range>; it runs on Delo <delo> on DSH <dsh> because you accepted the risk for this exact version.` |
 
-每种情形对应的更新报告条目见 [C3](c03-update-report.md#reasons)。
+每种情形对应的更新报告条目见 [C3](c03-update-report.zh.md#reasons)。
 
 <a id="version-output"></a>
 
@@ -138,7 +138,7 @@ DSH 0.2.2
 ## 消费方
 
 - 上游 app-boot 中 `plugin-compatibility.ts` 的差异块，以及 `delo/apps/cli/src/version.ts`（WP3.8）。
-- 更新前报告（WP3.4，[C3](c03-update-report.md)）。
+- 更新前报告（WP3.4，[C3](c03-update-report.zh.md)）。
 - 插件索引语料库与徽章（WP7.2，[C13](c13-catalogue-revocation.zh.md)）。
 
 <a id="compatibility"></a>
