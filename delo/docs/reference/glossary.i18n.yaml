@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for glossary.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/reference/glossary.md
+/delo-glossary:
+  en: 17dc037d4976aecb
+  zh: f7344737eb6e34b4
+/delo-glossary/contents:
+  en: 16b4c54858b530cb
+  zh: 4eb0e0aeff70ac4f
+/delo-glossary/the-product:
+  en: 876bf3186af6cfe5
+  zh: 109b2e7fab689bbd
+/delo-glossary/where-things-run:
+  en: 6aad9ea4dddd1450
+  zh: 85028f8202630b93
+/delo-glossary/reaching-a-studio:
+  en: 936d49386737e495
+  zh: 66acaa3cc688871c
+/delo-glossary/signing-in:
+  en: 2de16b89ba6040b7
+  zh: 41eb3aa169c73273
+/delo-glossary/changing-the-harness:
+  en: 3c9af10b9564cd98
+  zh: 32d500225c36a861
+/delo-glossary/keeping-work-safe:
+  en: 929003c46f73b9aa
+  zh: 2e4467b793d7326c
+/delo-glossary/community:
+  en: da08503cb44f7d30
+  zh: 5db034a62febb5fe
+/delo-glossary/building-delo:
+  en: 88b92b9936760a5d
+  zh: 1f48d9c24eb91581
+/delo-glossary/writing-delo-s-documentation:
+  en: 7d6f64a4c72f226b
+  zh: 5d27c01eac877062
+/delo-glossary/words-to-avoid:
+  en: d9fd1df4de836593
+  zh: 4f0417cf15e902d8

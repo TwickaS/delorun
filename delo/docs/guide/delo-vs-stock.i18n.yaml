@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for delo-vs-stock.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/guide/delo-vs-stock.md
+/:
+  en: 2e1a0487da2c0b89
+  zh: 0eaead5b19fd3c8e
+/delo-and-stock-deepseek-harness:
+  en: f14a7ca676ec11d8
+  zh: 478e6b67841d0426
+/delo-and-stock-deepseek-harness/summary:
+  en: f9beef1a66deb1f4
+  zh: a51b2621b5f9b8f4
+/delo-and-stock-deepseek-harness/contents:
+  en: 961cdd8b31852486
+  zh: 9c6f986d7d49e40f
+/delo-and-stock-deepseek-harness/why-delo-exists:
+  en: 3c7c6002938cf2db
+  zh: 36383150e17826b7
+/delo-and-stock-deepseek-harness/what-stays-the-same:
+  en: 35f718527d515b64
+  zh: b8ad9af92c117e08
+/delo-and-stock-deepseek-harness/what-is-different:
+  en: 963ace4c8ab0a3da
+  zh: c737fcea30ced668
+/delo-and-stock-deepseek-harness/defaults-that-differ:
+  en: a5e35a2a1a13d284
+  zh: 81383276df1ff4cc
+/delo-and-stock-deepseek-harness/what-delo-removes:
+  en: 83dc00ccce1b3f10
+  zh: 5d6b541d3ffb5d0e
+/delo-and-stock-deepseek-harness/moving-between-dsh-and-delo:
+  en: 6b8b05e59b0fea9f
+  zh: a0b7a2eb8df95c3e
+/delo-and-stock-deepseek-harness/roadmap:
+  en: 2d8662dedaa87806
+  zh: 266249981efb555a

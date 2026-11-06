@@ -39,6 +39,21 @@
       "path": ".agents/notes/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Delo's agent standard: the consistency record re-recorded after the Delo notes section was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "scripts/translation-pairing.ts",
+      "class": "delo-feature",
+      "reason": "Delo's documentation under delo/docs/ is held to upstream's pairing rules: every page has a Chinese pair and a consistency record."
+    },
+    {
+      "path": "scripts/translation-pairing.spec.ts",
+      "class": "delo-feature",
+      "reason": "Delo's documentation under delo/docs/ is held to upstream's pairing rules: the scope cases cover the delo/docs/ inclusion and an out-of-scope Delo path."
+    },
+    {
+      "path": "docs/i18n/terminology.md",
+      "class": "delo-feature",
+      "reason": "Delo's product terms with their Chinese renderings."
     }
   ]
 }

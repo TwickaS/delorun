@@ -164,6 +164,7 @@ export function isTranslationScopeFile(file: string): boolean {
     || ROOT_PAIRED_DOCUMENT_ARTIFACT.test(file)
     || file.startsWith('.agents/notes/')
     || file.startsWith('docs/')
+    || file.startsWith('delo/docs/')
     || file.startsWith('python/'))
 }
 

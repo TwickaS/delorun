@@ -1,0 +1,10 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/architecture/README.md
+/:
+  en: af1ec697452e78e0
+  zh: 82b2b538b2e12d3f
+/delo-architecture-notes:
+  en: 6f25aeb24f4060ca
+  zh: e37fc8a97d091f43
