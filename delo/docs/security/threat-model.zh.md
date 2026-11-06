@@ -27,7 +27,7 @@ Delo 在任何路径上都不比 stock DSH 更不安全，并且在它改变默�
 
 上游的安全声明原样适用于 Delo：沙箱、批准与权限控制能降低风险，但不保证隔离。在原生（native）工作区中，命令以本人（the person）自己的权限运行。
 
-Delo 改变了以下默认值。[对等清单](../reference/parity.md)列出每一项及其证据。
+Delo 改变了以下默认值。对等清单（`delo/docs/reference/parity.md`）列出每一项及其证据，本树不包含该清单。
 
 | 默认值 | stock DSH | Delo | 对安全的影响 |
 | --- | --- | --- | --- |

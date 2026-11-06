@@ -74,7 +74,7 @@ Delo 始终遵循以下几条规则：
 
 ## 不同的默认值
 
-Delo 有意更改了 DSH 的一些默认值，其[对等检查](../reference/parity.md)会逐项列出：
+Delo 有意更改了 DSH 的一些默认值，对等清单（`delo/docs/reference/parity.md`）会逐项列出，本树不包含该清单：
 
 - Delo 的 studio 附加功能默认开启；切换一下即可使用 stock 外观。
 - 在新手引导中选择模式时，PTC 已预先选中。

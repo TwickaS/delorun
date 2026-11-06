@@ -66,7 +66,7 @@ Delo is built on a few rules it keeps everywhere:
 
 ## Defaults that differ
 
-Delo changes a few of DSH's defaults on purpose, and its [parity checks](../reference/parity.md) list each one:
+Delo changes a few of DSH's defaults on purpose, and the parity checklist (`delo/docs/reference/parity.md`), which this tree does not contain, lists each one:
 
 - Delo's studio additions are on; the stock look is one switch away.
 - PTC is preselected when you choose a mode in onboarding.

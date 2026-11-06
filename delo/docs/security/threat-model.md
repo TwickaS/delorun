@@ -25,7 +25,7 @@ Delo is never less safe than stock DSH on any path, and it is safer where it cha
 
 Upstream's safety statement holds for Delo as written: sandboxing, approvals and permission controls reduce risk and do not guarantee isolation. In a native workspace, commands run with the person's own access.
 
-Delo changes these defaults. The [parity checklist](../reference/parity.md) lists each one with its evidence.
+Delo changes these defaults. The parity checklist (`delo/docs/reference/parity.md`), which this tree does not contain, lists each one with its evidence.
 
 | Default | Stock DSH | Delo | Effect on safety |
 | --- | --- | --- | --- |
