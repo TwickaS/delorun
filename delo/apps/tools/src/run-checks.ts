@@ -47,6 +47,7 @@ import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer,
 import { catalog, criticalPath, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
+import { readWebSpecs } from './checks/web.ts'
 import { git, repositoryRoot } from './git.ts'
 
 /** Where the runner keeps its state, relative to the repository root. */
@@ -72,7 +73,7 @@ const manifestSchema = z.object({
 const BudgetsFile = z.strictObject({
   $comment: z.string().optional(),
   tiers: z.record(z.string(), z.strictObject({ seconds: z.number().positive() })),
-  checks: z.record(z.string(), z.strictObject({ memoryGiB: z.number().positive(), perWorker: z.boolean().optional(), exclusive: z.boolean().optional() })),
+  checks: z.record(z.string(), z.strictObject({ memoryGiB: z.number().positive(), perWorker: z.boolean().optional(), exclusive: z.boolean().optional(), seconds: z.number().positive().optional() })),
 })
 
 const durationsSchema = z.record(z.string(), z.number())
@@ -106,7 +107,8 @@ function readTree(root: string): ForkTree {
       for (const file of readdirSync(join(root, dir)).filter(entry => /^tsconfig(\..+)?\.json$/.test(entry)).sort()) programs.push({ config: `${dir}/${file}` })
     }
   }
-  return { packages, programs, upstream: readUpstream(root) }
+  const upstream = readUpstream(root)
+  return { packages, programs, upstream, webSpecs: readWebSpecs(root, upstream) }
 }
 
 const SPEC = /\.(?:spec|test)\.[cm]?[jt]sx?$/

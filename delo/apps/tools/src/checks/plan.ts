@@ -7,6 +7,7 @@
  * @module @delo/tools/checks/plan
  */
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
+import { selectWebLane, WEB_CHECK_ID, WEB_LANE_MODULE, type WebSelection, type WebSpec } from './web.ts'
 import type { GateCheck } from './types.ts'
 
 /**
@@ -22,6 +23,8 @@ export interface BudgetEntry {
   readonly perWorker?: boolean | undefined
   /** Run with no other check beside it. */
   readonly exclusive?: boolean | undefined
+  /** Wall-clock budget in seconds; the check's own command reports a run over it. */
+  readonly seconds?: number | undefined
 }
 
 /** One command the runner starts. */
@@ -99,6 +102,8 @@ export interface ForkTree {
   readonly programs: readonly Program[]
   /** Upstream's packages, for running the specs of a changed upstream package and its direct dependents. */
   readonly upstream: readonly UpstreamPackage[]
+  /** The web browser lane's inventory, from `checks/web.ts`; absent in a tree without one, so the lane is never reached. */
+  readonly webSpecs?: readonly WebSpec[] | undefined
 }
 
 /** The test runners' worker counts. */
@@ -166,6 +171,8 @@ const SNAPSHOT_CONCURRENCY = 5
 export const UPSTREAM_CHANGED_SPEC_BUDGET = 150
 // The changed-upstream lane's workers: path-filtered runs measured well inside this beside the compilers.
 const UPSTREAM_CHANGED_WORKERS = 8
+// The web lane's CPUs: the artifact build runs eight gate workers, and the specs one browser at a time. The lane runs alone, so the figure sizes only its CPU budget.
+const WEB_LANE_CPUS = 8
 /** Paths whose change can affect every check: fork-wide test and compiler configuration and the dependency set. */
 const FORK_WIDE = ['delo/vitest.', 'delo/apps/tools/src/checks/', 'tsconfig', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'vitest.shared.ts']
 /** Fork TypeScript and configuration: what a fork program or the fork suite can compile or import. */
@@ -303,6 +310,17 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       needs: built,
       tiers: ['changed'],
       cpus: Math.min(workers.upstream, UPSTREAM_CHANGED_WORKERS),
+    },
+    // The lane has no declared inputs, so it always runs when a change reaches it: its verdict reads the official build, which no cache key covers.
+    {
+      id: WEB_CHECK_ID,
+      group: 'tests',
+      title: 'The reached Chromium e2e specs under `apps/web/tests`, run after the official client build',
+      cwd: '',
+      command: ['node_modules/.bin/tsx', WEB_LANE_MODULE],
+      needs: [],
+      tiers: ['changed'],
+      cpus: WEB_LANE_CPUS,
     },
     {
       id: 'tests:snapshots',
@@ -470,6 +488,7 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
   }
   const paths = selection.changed?.paths ?? selection.targets
   const everything = paths.length === 0 && selection.changed === undefined
+  const web = selectWebLane(tree.webSpecs ?? [], paths, tree.upstream, everything)
   // An upstream package's code reaches only the fork packages that depend on it, directly or through other upstream packages. Any other code outside delo/ (root configuration, scripts, vendor) reaches everything; upstream's documentation, notes and recorded scenarios reach no fork check.
   const upstreamOf = (path: string): UpstreamPackage | undefined => tree.upstream.find(pkg => path.startsWith(`${pkg.dir}/`))
   const upstreamTouched = new Set(paths.filter(path => !path.startsWith('delo/') && affectsUpstreamRuntime(path)).flatMap(path => upstreamOf(path)?.name ?? []))
@@ -508,6 +527,8 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     } else if (check.group === 'parity' && selection.changed !== undefined) {
       const parity = paths.find(affectsParity)
       if (parity !== undefined) pick(check, `${parity.startsWith('delo/') ? 'Delo code' : 'upstream-owned code'} changed (${parity})`)
+    } else if (check.id === WEB_CHECK_ID) {
+      if (web.reached) pick(check, web.reason)
     } else if (check.id === 'tests:upstream-changed') {
       const { dirs, dependents } = upstreamSpecDirs(tree.upstream, paths.filter(path => !path.startsWith('delo/') && !/\.(?:md|i18n\.yaml)$/.test(path)))
       if (dirs.length > 0) pick(check, dependents ? `${String(dirs.length)} upstream package(s): the changed ones and their direct dependents` : `the changed upstream package(s) only; their direct dependents exceed ${String(UPSTREAM_CHANGED_SPEC_BUDGET)} spec files and run in upstream's full suite`)
@@ -523,7 +544,7 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     if (plan.has(check.id)) return
     const required = check.needs.flatMap(need => checks.filter(candidate => candidate.id === need && !matches(candidate, selection.skip)))
     for (const need of required) add(need, `needed by ${check.id}`)
-    plan.set(check.id, { ...narrowed(check, selection, paths, forkWide.length > 0 ? undefined : [...reachedDirs].map(dir => `${dir}/`), tree.upstream), needs: required.map(need => need.id), reason })
+    plan.set(check.id, { ...narrowed(check, selection, paths, forkWide.length > 0 ? undefined : [...reachedDirs].map(dir => `${dir}/`), tree.upstream, web), needs: required.map(need => need.id), reason })
   }
   for (const check of checks) {
     if (kept(check)) add(check, picked.get(check.id) ?? '')
@@ -559,9 +580,11 @@ export function selectPreCommit(checks: readonly Check[], staged: readonly strin
  * @param paths - the changed or targeted paths.
  * @param reachedDirs - the fork package directories the change reaches, with a trailing slash; undefined after a fork-wide change, which runs every spec.
  * @param upstream - upstream's packages.
+ * @param web - the web lane's selection: the specs it runs, or why it runs none.
  * @returns the check, with its command and scope narrowed where the selection narrows it.
  */
-function narrowed(check: Check, selection: Selection, paths: readonly string[], reachedDirs: readonly string[] | undefined, upstream: readonly UpstreamPackage[]): Check {
+function narrowed(check: Check, selection: Selection, paths: readonly string[], reachedDirs: readonly string[] | undefined, upstream: readonly UpstreamPackage[], web: WebSelection): Check {
+  if (check.id === WEB_CHECK_ID) return web.declined !== undefined ? { ...check, declined: web.declined } : { ...check, command: [...check.command, ...web.specs], scope: web.specs }
   if (check.id === 'tests:upstream-changed') {
     const { dirs } = upstreamSpecDirs(upstream, paths.filter(path => !path.startsWith('delo/')))
     // With no directory it would run every upstream spec, which the full gate does not run in this lane.

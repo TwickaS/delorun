@@ -1,5 +1,5 @@
 {
-  "$comment": "Each check's resident memory at its peak, in GiB, and whether it must run alone; a worker-count check scales its figure per worker. `checks` is keyed by check id or by id family (`typecheck`, `gates`): the most specific entry wins, and an id with no entry fails the run at load. `tiers` gives the time budget of a tier's run in seconds. The runner schedules checks so their memory sums stay inside the run's ceiling, and declines one that cannot fit at all.",
+  "$comment": "Each check's resident memory at its peak, in GiB, and whether it must run alone; a worker-count check scales its figure per worker. `checks` is keyed by check id or by id family (`typecheck`, `gates`): the most specific entry wins, and an id with no entry fails the run at load. `tiers` gives the time budget of a tier's run in seconds, and a check's `seconds`, where it has one, is its wall-clock budget, which the check's own command reports a run over. The runner schedules checks so their memory sums stay inside the run's ceiling, and declines one that cannot fit at all.",
   "tiers": {
     "pre-commit": { "seconds": 5 }
   },
@@ -15,6 +15,7 @@
     "tests:snapshots": { "memoryGiB": 0.6, "perWorker": true, "exclusive": true },
     "parity-switches": { "memoryGiB": 0.5 },
     "parity-replay": { "memoryGiB": 0.6, "perWorker": true, "exclusive": true },
+    "tests:web-changed": { "memoryGiB": 5, "exclusive": true, "seconds": 1200 },
     "build:artifacts": { "memoryGiB": 4 },
     "generate:native": { "memoryGiB": 1 }
   }

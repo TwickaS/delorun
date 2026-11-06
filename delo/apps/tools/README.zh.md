@@ -173,11 +173,12 @@ brief 中原有的链接也按同样方式改写。
 | `tests:fork` | `delo/apps/*/tests` 与 `delo/packages/*/tests` 下的每个规范（[`vitest.config.ts`](../../vitest.config.ts)） | 每个 worker 0.5 GiB | `changed`、`full` |
 | `tests:snapshots` | 上游的无密钥录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，独占 | `changed`、`full` |
 | `tests:upstream-changed` | 每个有变更的上游包的规范，以及在 150 个规范文件之内其直接依赖的规范（[上游的 `vitest.config.ts`](../../../vitest.config.ts)） | 每个 worker 0.6 GiB，至多 8 个 worker | `changed` |
+| `tests:web-changed` | 基于官方客户端构建运行的、变更所涉及的 `apps/web/tests` 下的 Chromium 端到端规范，至多 12 个规范（[`checks/web.ts`](src/checks/web.ts)） | 5 GiB，8 个 CPU，独占，1200 秒 | `changed` |
 | `generate:native` | 上游的原生系统插件（`pnpm run build:native-system`） | 1 GiB，2 个 CPU | 无：仅 `--only generate:native` |
 | `parity-switches` | C16 的注册表与开关字段、对等覆盖层和对模型可见的贡献相符，以及开关清点（[`check-parity-switches.ts`](src/parity/composition/check-parity-switches.ts)） | 0.5 GiB，1 个 CPU | Delo 代码或上游编辑改动时为 `changed`；`full` |
 | `parity-replay` | 在 `DSH_SNAPSHOT_PATCH` 指向对等覆盖层时运行上游的录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，单独运行 | Delo 代码或上游编辑改动时为 `changed`；`full` |
 
-`pre-commit` 层级在 5 秒预算内运行（见 `budgets.json`），运行超出预算时会报告。Docker 通道、构建后包的规范、文档站点、工作流检查与 Cordis 检查，将随需要它们的包一同到达。
+`pre-commit` 层级在 5 秒预算内运行（见 `budgets.json`），运行超出预算时会报告。网页通道（`tests:web-changed`，[`src/checks/web.ts`](src/checks/web.ts)）运行变更所涉及的、`apps/web/tests` 下的 Chromium 端到端规范。当非文档路径位于 `packages/client` 或 `apps/web` 之下，或位于清单中某个规范所导入的包之下时，变更便涉及该通道。规范自身的文件有变更，或它映射到有变更的包，则该规范被选中；变更的规范文件只选中它自己，不会使其所在的包视为有变更。规范映射到其导入所触及的包：包名导入映射到该包，相对导入映射到其解析路径所在的包，因此每个规范都通过其辅助导入映射到 `apps/web`。若某个规范的导入都不映射任何包，则按文件名映射到目录名是该文件名主干中以连字符分隔的连续片段的包。没有规范命名能映射到某个包的路由或客户端界面，因此不映射页面目标。选中的规范超过 12 个时，检查被拒绝而不是部分运行：检查报告数量，并由 CI 的网页快照门禁运行整个清单。既未指定变更也未指定目标的运行会选中整个清单，因此同一上限会拒绝它。该通道先以 `DSH_BUILD_CLIENT_PROFILE=official` 运行 `pnpm run build:artifacts`，然后在上游的 `vitest.web.config.ts` 下逐一运行选中的规范，设置 `DSH_SNAPSHOT=replay`，且不带 `DEEPSEEK_API_KEY`。其预算为 5 GiB、8 个 CPU、独占，以及 1200 秒的挂钟时间，运行超出时命令会报告。该通道只运行 Chromium。有十一个规范在内部启动 WebKit，且没有能单独运行其 Chromium 部分的开关，因此在本机具备 WebKit 的系统库之前，该通道会排除这十一个文件；CI 会以 WebKit 运行它们。该通道不声明输入，因此只要变更涉及它便会运行。Docker 通道、构建后包的规范、文档站点、工作流检查与 Cordis 检查，将随需要它们的包一同到达。
 
 在仓库根目录运行的命令：
 
@@ -188,6 +189,7 @@ pnpm check -- --plan             # the selection with each reason, cache state, 
 node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --list        # the whole catalogue
 node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:fork
 node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts delo/apps/tools    # targets: that package's specs, and the typechecks of the packages that depend on it
+node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:web-changed apps/web/tests/forge-panel.e2e.ts    # the web lane for named specs, after the official client build
 ```
 
 选项：`--changed`、`--pre-commit` 与 `--pre-push` 各自选择一个层级，只能给出其一；`--base <ref>` 让 `--changed` 从另一个引用开始度量（默认 `v5`）；`--only` 与 `--skip` 接受检查 id 或分组（`boundary`、`gates`、`whitespace`、`docs`、`typecheck`、`tests`、`generate`、`parity`），以逗号分隔；`--plan` 与 `--list` 只打印而不运行；`--no-cache` 跳过通过缓存；`--bail` 在第一个失败处停止；`--workers <n>` 设置 fork 规范套件的 worker 数；`--no-scope` 不在 systemd 用户作用域中运行。
