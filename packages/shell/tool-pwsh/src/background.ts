@@ -7,7 +7,7 @@
  */
 
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { escalationHintMarker, sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
+import { denialMarkers } from '@deepseek-ai/dsh-sandbox'
 import type { ShellProcess, ShellSandboxInfo } from '@deepseek-ai/dsh-shell'
 import type { JobChunk, JobHooks, JobOutcome, JobOutputSource } from '@deepseek-ai/dsh-jobs'
 
@@ -24,12 +24,7 @@ function sandboxNotes(sandbox: ShellSandboxInfo | undefined, escalationModes: re
   if (sandbox?.runnerFailed) {
     return [`[sandbox: the sandbox runner itself failed under ${sandbox.mode} mode — the command did not run; this is a sandbox problem, not a command failure]`]
   }
-  if (sandbox?.denied) {
-    const notes = [sandboxDenialMarker(sandbox.mode)]
-    if (escalationModes.length > 0) notes.push(escalationHintMarker('command'))
-    return notes
-  }
-  return []
+  return sandbox === undefined ? [] : denialMarkers(sandbox, escalationModes, 'command')
 }
 
 /**

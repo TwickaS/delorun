@@ -8,6 +8,8 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  denialMarkers,
+  environmentDenialMarker,
   ESCALATION_TARGETS,
   WIDER_MODES,
   approveEscalation,
@@ -47,6 +49,14 @@ describe('the model-facing markers', () => {
   it('the denial marker names the mode', () => {
     expect(sandboxDenialMarker('read-only')).toBe('[sandbox: file access denied under read-only mode]')
     expect(sandboxDenialMarker('workspace-write')).toBe('[sandbox: file access denied under workspace-write mode]')
+  })
+
+  it('a denial no mode lifts has the environment\'s marker and never the escalation hint', () => {
+    expect(environmentDenialMarker()).toBe('[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]')
+    expect(denialMarkers({ mode: 'workspace-write', denied: true, deniedBy: 'environment' }, ['danger-full-access'], 'command')).toEqual([environmentDenialMarker()])
+    expect(denialMarkers({ mode: 'workspace-write', denied: true }, ['danger-full-access'], 'command')).toEqual([sandboxDenialMarker('workspace-write'), escalationHintMarker('command')])
+    expect(denialMarkers({ mode: 'read-only', denied: true }, [], 'command')).toEqual([sandboxDenialMarker('read-only')])
+    expect(denialMarkers({ mode: 'read-only', denied: false }, ['workspace-write'], 'command')).toEqual([])
   })
 
   it('the sandbox_permissions description names the family subject', () => {

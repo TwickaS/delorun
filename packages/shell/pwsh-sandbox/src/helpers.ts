@@ -62,13 +62,31 @@ interface RunnerFailureMatch {
 }
 
 /**
- * Classify a failed run against the selected backend's denial dialect.
+ * Classify a failed run against the selected backend's denial dialect, then the environment's.
+ * @param exitCode - process exit code; null means signal termination.
+ * @param stderr - collected stderr text.
+ * @param signatures - case-insensitive denial substrings from the active wrap.
+ * @param environment - the environment's denial substrings from the active wrap.
+ * @returns `denied`, with `deniedBy: 'environment'` when only the environment's matched.
+ */
+export function denialOf(exitCode: number | null, stderr: string, signatures: readonly string[], environment: readonly string[]): { readonly denied: boolean; readonly deniedBy?: 'environment' } {
+  if (matchesSignature(exitCode, stderr, signatures)) return { denied: true }
+  return matchesSignature(exitCode, stderr, environment) ? { denied: true, deniedBy: 'environment' } : { denied: false }
+}
+
+/**
+ * Classify a failed run against the selected backend's denial dialect, then the environment's.
  * @param result - settled foreground run.
  * @param signatures - case-insensitive denial substrings from the active wrap.
- * @returns whether the failed run matches that denial dialect.
+ * @param environment - the environment's denial substrings from the active wrap.
+ * @returns `denied`, with `deniedBy: 'environment'` when only the environment's matched.
  */
-export function classifyDenial(result: ShellRunResult, signatures: readonly string[]): boolean {
-  return matchesSignature(result.exitCode, result.stderr.text, signatures)
+export function classifyDenial(
+  result: ShellRunResult,
+  signatures: readonly string[],
+  environment: readonly string[] = [],
+): ReturnType<typeof denialOf> {
+  return denialOf(result.exitCode, result.stderr.text, signatures, environment)
 }
 
 /**

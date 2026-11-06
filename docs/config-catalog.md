@@ -2947,6 +2947,16 @@ export interface Config {
    * `read-only`.
    */
   additionalWritableRoots?: string[]
+  /**
+   * Report a failed run that matches only the wrap's
+   * `ConfinedArgv.environmentDenialSignatures`, such as a write to a
+   * container's read-only root, as `deniedBy: 'environment'`, whose result
+   * carries the environment's marker and no escalation hint (default: off).
+   * Off, consumers ignore those signatures and classify every run against
+   * `denialSignatures` alone. This is Delo's C16 switch
+   * `container_denial_marker`, off in the parity composition.
+   */
+  containerDenialMarker?: boolean
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sandbox-policy -->

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { classifyRunnerFailure, isRunnerSpawnFailure, matchesSignature } from '../src/diagnostics.ts'
+import { classifyRunnerFailure, denialOf, isRunnerSpawnFailure, matchesSignature } from '../src/diagnostics.ts'
 
 const spillDir = mkdtempSync(join(tmpdir(), 'dsh-sandbox-diagnostics-'))
 afterAll(() => { rmSync(spillDir, { recursive: true, force: true }) })
@@ -140,5 +140,27 @@ describe('shared diagnostic status and matching rules', () => {
     [1, 'ordinary output', false],
   ] as const)('matches selected denial signatures only on failed exits (%s,%s)', (code, stderr, expected) => {
     expect(matchesSignature(code, stderr, ['permission denied'])).toBe(expected)
+  })
+})
+
+describe('denialOf', () => {
+  it.each([
+    ['read-only file system'],
+    ['permission denied'],
+    ['operation not permitted'],
+    ['access is denied', 'access to the path', 'permission denied', 'operation not permitted'],
+  ])('a policy signature always wins over every environment signature (%s)', (...policy: string[]) => {
+    for (const signature of policy) {
+      const stderr = `cannot write /x: ${signature.toUpperCase()}`
+      expect(denialOf(1, stderr, policy, [...policy, 'read-only file system'])).toEqual({ denied: true })
+    }
+  })
+
+  it('labels a failure only the environment\'s signatures match, and never a clean exit or a signal death', () => {
+    const stderr = 'touch: cannot touch \'/usr/x\': Read-only file system'
+    expect(denialOf(1, stderr, ['permission denied'], ['read-only file system'])).toEqual({ denied: true, deniedBy: 'environment' })
+    expect(denialOf(0, stderr, ['permission denied'], ['read-only file system'])).toEqual({ denied: false })
+    expect(denialOf(null, stderr, ['permission denied'], ['read-only file system'])).toEqual({ denied: false })
+    expect(denialOf(1, stderr, ['permission denied'], [])).toEqual({ denied: false })
   })
 })

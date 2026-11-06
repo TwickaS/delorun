@@ -15,7 +15,7 @@ import SandboxPolicyService, { SANDBOX_MODES, setSandboxMode } from '@deepseek-a
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt, { renderContextSnapshot, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 
-async function mounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string; additionalWritableRoots?: string[] } = {}) {
+async function mounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string; additionalWritableRoots?: string[]; containerDenialMarker?: boolean } = {}) {
   const ctx = new Context()
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SandboxPolicyService, config)
@@ -167,6 +167,32 @@ describe('SandboxPolicyService', () => {
     await ctx.plugin(SessionProjectionRegistry)
     // schemastery rejects the union violation when the plugin loads.
     await expect(ctx.plugin(SandboxPolicyService, { mode: 'yolo' as never })).rejects.toThrow()
+  })
+
+  it('keeps container_denial_marker off by default, so consumers classify against policy signatures alone', async () => {
+    const wrap = { environmentDenialSignatures: ['read-only file system'] }
+    expect((await mounted()).sandboxPolicy.containerDenialMarker).toBe(false)
+    expect((await mounted()).sandboxPolicy.environmentDenialSignatures(wrap)).toEqual([])
+    const on = await mounted({ containerDenialMarker: true })
+    expect(on.sandboxPolicy.environmentDenialSignatures(wrap)).toEqual(['read-only file system'])
+    expect(on.sandboxPolicy.environmentDenialSignatures({})).toEqual([])
+    // The switch never changes the model-visible policy context.
+    const contexts: (string | undefined)[] = []
+    for (const containerDenialMarker of [false, true]) {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SessionProjectionRegistry)
+      await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', containerDenialMarker })
+      contexts.push(await policyContext(ctx, session('sess-switch', '/ws')))
+    }
+    expect(contexts[0]).toContain('workspace-write')
+    expect(contexts[1]).toBe(contexts[0])
+  })
+
+  it('rejects a non-boolean container_denial_marker at load', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await expect(ctx.plugin(SandboxPolicyService, { containerDenialMarker: 'yes' as never })).rejects.toThrow()
   })
 
   it('disposes the service and context contribution from a child fiber (HMR safety)', async () => {

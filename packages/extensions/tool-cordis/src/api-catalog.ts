@@ -2620,6 +2620,17 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'readonly containerDenialMarker: boolean',
+        description: 'Whether consumers classify environment-only denials apart from policy denials (Config.containerDenialMarker).',
+        parameters: [],
+      },
+      {
+        signature: 'environmentDenialSignatures(confined: Pick<ConfinedArgv, \'environmentDenialSignatures\'>): readonly string[]',
+        description: 'The environment denial signatures a consumer classifies a confined run against: the wrap\'s own with containerDenialMarker on, none with it off.',
+        parameters: [{ name: 'confined', description: 'the wrap\'s `environmentDenialSignatures`, absent when the environment adds none.' }],
+        returns: 'the signatures to pass to `denialOf`.',
+      },
+      {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
         description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
@@ -5986,7 +5997,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ConfinedArgv',
-    declaration: 'export interface ConfinedArgv {\n    argv: string[];\n    enforcement: SandboxEnforcement;\n    denialSignatures: readonly string[];\n    runnerFailureRules: readonly RunnerFailureRule[];\n}',
+    declaration: 'export interface ConfinedArgv {\n    argv: string[];\n    enforcement: SandboxEnforcement;\n    denialSignatures: readonly string[];\n    environmentDenialSignatures?: readonly string[];\n    runnerFailureRules: readonly RunnerFailureRule[];\n}',
   },
   {
     name: 'ConfinedSandboxMode',
@@ -7878,7 +7889,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PtcRunSandbox',
-    declaration: 'export interface PtcRunSandbox {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n}',
+    declaration: 'export interface PtcRunSandbox {\n    mode: SandboxMode;\n    denied: boolean;\n    deniedBy?: \'environment\';\n    enforcement?: SandboxEnforcement;\n}',
   },
   {
     name: 'PtcRunSpec',
@@ -9074,7 +9085,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ShellSandboxInfo',
-    declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
+    declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    deniedBy?: \'environment\';\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
   },
   {
     name: 'SignInAttemptId',

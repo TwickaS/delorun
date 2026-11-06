@@ -159,6 +159,12 @@ interface ShellSandboxInfo {
   mode: SandboxMode
   /** Whether the sandbox denied a file operation. */
   denied: boolean
+  /**
+   * `environment` when the denial matched only the environment's signatures
+   * (`ConfinedArgv.environmentDenialSignatures`): no sandbox mode allows the
+   * operation, so no escalation is offered. Absent for a policy denial.
+   */
+  deniedBy?: 'environment'
   /** How completely the selected runner enforced the requested mode. */
   enforcement?: SandboxEnforcement
   /** Whether the sandbox runner failed before the command could run. */

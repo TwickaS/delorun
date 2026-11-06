@@ -123,6 +123,12 @@ export interface PtcRunSandbox {
   mode: SandboxMode
   /** Program failure text matched backend diagnostics; not enforcement proof or an exhaustive denial record. */
   denied: boolean
+  /**
+   * `environment` when the failure text matched only the environment's
+   * signatures (`ConfinedArgv.environmentDenialSignatures`): no sandbox mode
+   * allows the operation, so no escalation is offered. Absent for a policy denial.
+   */
+  deniedBy?: 'environment'
   /** Completeness reported by the selected confining backend; absent for full access. */
   enforcement?: SandboxEnforcement
 }

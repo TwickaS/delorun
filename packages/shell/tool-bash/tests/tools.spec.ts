@@ -21,7 +21,7 @@ import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
-import { escalationHintMarker, sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
+import { environmentDenialMarker, escalationHintMarker, sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
 import * as BashEnvPlugin from '@deepseek-ai/dsh-shell-env'
@@ -214,7 +214,31 @@ class CountingStartExecutor extends ShellExecutor {
   }
 }
 
-async function setupSandboxed(withApproval = false) {
+/** A confining executor whose foreground run fails with the given sandbox facts, as a container's read-only root does. */
+class DeniedSandboxExecutor extends RecordingSandboxExecutor {
+  static facts: NonNullable<ShellRunResult['sandbox']> = { mode: 'workspace-write', denied: false }
+
+  override async execute(spec: ShellExecSpec): Promise<ShellExecution> {
+    const execution = await super.execute(spec)
+    const settled = execution.result
+    return {
+      ...execution,
+      result: async () => ({
+        ...await settled(),
+        exitCode: 1,
+        stdout: { text: '', truncated: false },
+        stderr: { text: "touch: cannot touch '/usr/x': Read-only file system", truncated: false },
+        sandbox: DeniedSandboxExecutor.facts,
+      }),
+    }
+  }
+}
+
+async function setupSandboxed(
+  withApproval = false,
+  Executor: typeof RecordingSandboxExecutor = RecordingSandboxExecutor,
+  containerDenialMarker = false,
+) {
   const ctx = new Context()
   provideWorkingDirectoryFixture(ctx)
   await ctx.plugin(SystemPrompt)
@@ -224,8 +248,8 @@ async function setupSandboxed(withApproval = false) {
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(LocalJobRegistry)
   await ctx.plugin(ToolJobs)
-  await ctx.plugin(SandboxPolicyService, {})
-  await ctx.plugin(RecordingSandboxExecutor)
+  await ctx.plugin(SandboxPolicyService, { containerDenialMarker })
+  await ctx.plugin(Executor)
   if (withApproval) await ctx.plugin(ApprovalService)
   await ctx.plugin(BashEnvPlugin)
   await ctx.plugin(ToolBash)
@@ -913,6 +937,47 @@ describe('sandbox escalation through the generic task producer', () => {
     expect(bash.modes).toEqual(['workspace-write', 'danger-full-access'])
   })
 
+  it('container denial carries no escalation guidance: an environment denial reaches the model with its marker and no hint', async () => {
+    DeniedSandboxExecutor.facts = { mode: 'workspace-write', denied: true, deniedBy: 'environment', enforcement: 'full' }
+    const { ctx } = await setupSandboxed(true, DeniedSandboxExecutor, true)
+    try {
+      expect(ctx.tools.schemas().find(item => item.name === 'bash')?.parameters.properties).toHaveProperty('sandbox_permissions')
+      const result = await call(ctx, 'bash', { command: 'touch /usr/x', description: 'write the read-only root' }, sandboxAgent('workspace-write'))
+      if (result.isError) throw new Error(`expected the denial as a foreground result, got ${text(result)}`)
+      expect(result.value).toMatchObject({ kind: 'foreground', exitCode: 1, sandbox: { mode: 'workspace-write', denied: true, deniedBy: 'environment', enforcement: 'full' } })
+      expect(text(result)).toContain(environmentDenialMarker())
+      expect(text(result)).not.toContain(escalationHintMarker('command'))
+      expect(text(result)).not.toContain(sandboxDenialMarker('workspace-write'))
+      expect(text(result).endsWith('[exit code: 1]')).toBe(true)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('declares deniedBy in the output schema, which the PTC SDK shows the model, only with container_denial_marker on', async () => {
+    for (const on of [false, true]) {
+      const { ctx } = await setupSandboxed(false, RecordingSandboxExecutor, on)
+      try {
+        expect(JSON.stringify(ctx.tools.get('bash')?.output?.schema).includes('"deniedBy"')).toBe(on)
+      } finally {
+        await ctx.fiber.dispose()
+      }
+    }
+  })
+
+  it('keeps the policy marker and escalation hint on a policy denial in the same composition', async () => {
+    DeniedSandboxExecutor.facts = { mode: 'workspace-write', denied: true, enforcement: 'full' }
+    const { ctx } = await setupSandboxed(true, DeniedSandboxExecutor, true)
+    try {
+      const result = await call(ctx, 'bash', { command: 'touch /etc/x', description: 'write outside the workspace' }, sandboxAgent('workspace-write'))
+      expect(result.isError).toBe(false)
+      expect(text(result)).toContain(`${sandboxDenialMarker('workspace-write')}\n${escalationHintMarker('command')}`)
+      expect(text(result)).not.toContain(environmentDenialMarker())
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('omits sandbox facts the executor did not acquire from the canonical result', async () => {
     const { ctx } = await setupSandboxed()
     const result = await call(ctx, 'bash', {
@@ -996,6 +1061,11 @@ describe('renderJobRead', () => {
     )
     expect(runner).toContain('sandbox runner itself failed under workspace-write mode')
     expect(runner).not.toContain('file access denied')
+  })
+
+  it('reports a denial the environment made with its own marker and no escalation hint', () => {
+    expect(renderJobRead('tail', false, [], { mode: 'workspace-write', denied: true, deniedBy: 'environment' }, ['danger-full-access']))
+      .toBe('tail\n[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]')
   })
 })
 

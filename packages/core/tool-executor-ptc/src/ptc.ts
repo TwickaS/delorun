@@ -13,7 +13,7 @@ import { createUserMessage, HarnessError } from '@deepseek-ai/dsh-llm'
 
 import type { ContentBlock, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
 import type { PtcBindingFunction, PtcRunResult, PtcRunSandbox, PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
-import { approveEscalation, ESCALATION_TARGETS, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
+import { approveEscalation, environmentDenialMarker, ESCALATION_TARGETS, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-working-directory'
@@ -325,6 +325,7 @@ export function createRunCodeTool(
             properties: {
               mode: { type: 'string', required: true, enum: ['read-only', 'workspace-write', 'danger-full-access'] },
               denied: { type: 'boolean', required: true },
+              deniedBy: { type: 'string', enum: ['environment'] },
               enforcement: { type: 'string', enum: ['full', 'partial'] },
             },
           },
@@ -334,7 +335,11 @@ export function createRunCodeTool(
         const rendered = value.result === undefined ? '' : renderValue(value.result)
         const parts = [value.logs.join('\n'), rendered].filter(part => part.length > 0)
         if (value.sandbox?.enforcement === 'partial') parts.push('File sandbox enforcement is partial on this host.')
-        if (value.sandbox?.denied) parts.push(`The ${value.sandbox.mode} file sandbox denied an operation.${escalationGuidance(ctx.get('ptcRuntime')?.sandboxMode)}`)
+        // A denial no sandbox mode lifts carries the environment's marker and never the escalation guidance.
+        if (value.sandbox?.denied) {
+          parts.push(value.sandbox.deniedBy === 'environment' ? environmentDenialMarker()
+            : `The ${value.sandbox.mode} file sandbox denied an operation.${escalationGuidance(ctx.get('ptcRuntime')?.sandboxMode)}`)
+        }
         return [{ type: 'text', text: parts.length > 0 ? parts.join('\n') : '(run_code completed with no output)' }]
       },
     },
@@ -700,9 +705,12 @@ export function createRunCodeTool(
               throw error
             }
             const logsText = result.logs.length > 0 ? `\nCaptured output:\n${result.logs.join('\n')}` : ''
+            // A denial no sandbox mode lifts states the environment's marker in place of `operation denied` and the escalation guidance.
+            const environmentDenied = result.sandbox?.denied === true && result.sandbox.deniedBy === 'environment'
             const sandboxText = result.sandbox === undefined ? ''
-              : `\nFile sandbox: ${result.sandbox.mode}${result.sandbox.enforcement === undefined ? '' : `; enforcement: ${result.sandbox.enforcement}`}${result.sandbox.denied ? '; operation denied' : ''}.`
-            throw new CodeRunFailedError(`code run failed (${result.error.kind}): ${result.error.message}${logsText}${sandboxText}${result.sandbox?.denied ? escalationGuidance(runtime.sandboxMode) : ''}`)
+              : `\nFile sandbox: ${result.sandbox.mode}${result.sandbox.enforcement === undefined ? '' : `; enforcement: ${result.sandbox.enforcement}`}${result.sandbox.denied && !environmentDenied ? '; operation denied' : ''}.${environmentDenied ? `\n${environmentDenialMarker()}` : ''}`
+            const guidance = result.sandbox?.denied === true && !environmentDenied ? escalationGuidance(runtime.sandboxMode) : ''
+            throw new CodeRunFailedError(`code run failed (${result.error.kind}): ${result.error.message}${logsText}${sandboxText}${guidance}`)
           }
           return {
             logs: result.logs,

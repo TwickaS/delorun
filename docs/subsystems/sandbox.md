@@ -124,7 +124,7 @@ interface RunnerFailureRule {
 }
 ```
 
-`ConfinedArgv` is what the consumer spawns. Besides the replacement argv, it carries the backend's enforcement fact and two orthogonal stderr classifiers. `denialSignatures` identify the confined command being blocked while the sandbox works correctly. `runnerFailureRules` identify the sandbox runner refusing or failing before it executes the command; consumers check these first and surface a sandbox infrastructure failure, never an ordinary task failure.
+`ConfinedArgv` is what the consumer spawns. Besides the replacement argv, it carries the backend's enforcement fact and the stderr classifiers. `denialSignatures` identify the confined command being blocked while the sandbox works correctly. The optional `environmentDenialSignatures` identify a denial by the environment around the backend, such as a container's read-only root, which no sandbox mode lifts: with the sandbox policy's `containerDenialMarker` on, consumers report it with `[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]` and offer no escalation, and a policy signature outranks it. `runnerFailureRules` identify the sandbox runner refusing or failing before it executes the command; consumers check these first and surface a sandbox infrastructure failure, never an ordinary task failure.
 
 ```ts type-equiv
 /**
@@ -146,6 +146,14 @@ interface ConfinedArgv {
    * union claims denials a given backend never produces.
    */
   denialSignatures: readonly string[]
+  /**
+   * The case-insensitive stderr substrings of a file effect the environment
+   * around the backend refuses, such as `Read-only file system` under a
+   * container's read-only root. No wider sandbox mode lifts such a denial, so
+   * consumers report it apart from {@link denialSignatures}' policy denials.
+   * Absent when the environment adds none.
+   */
+  environmentDenialSignatures?: readonly string[]
   /**
    * Structured runner-failure evidence rules. Consumers require a matching
    * fatal stderr line (after informational exclusions) and any rule-specific
@@ -203,6 +211,14 @@ Source: [`packages/sandbox/sandbox/src/index.ts`](../../packages/sandbox/sandbox
 The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, and current request-time policy section. Tool layers call resolve for each execution so a session's mode log and immutable cwd travel together to every enforcing capability.
 
 ```ts cordis-catalog
+/**
+ * The environment denial signatures a consumer classifies a confined run
+ * against: the wrap's own with {@link containerDenialMarker} on, none with it off.
+ * @param confined - the wrap's `environmentDenialSignatures`, absent when the environment adds none.
+ * @returns the signatures to pass to `denialOf`.
+ */
+environmentDenialSignatures(confined: Pick<ConfinedArgv, 'environmentDenialSignatures'>): readonly string[]
+
 /**
  * Resolve the complete policy for one capability call. An approved explicit
  * mode outranks the session's last `sandbox/mode` event, which outranks the

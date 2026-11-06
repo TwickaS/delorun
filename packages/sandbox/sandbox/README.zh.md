@@ -146,7 +146,7 @@ sandbox mode "<mode>" is requested but no sandbox backend is usable on this host
 
 #### 模型看到什么
 
-被拒绝的调用会呈现标记 `[sandbox: file access denied under <mode> mode]`，组合声明升权能力时还会呈现提示 `[sandbox: escalation available — retry this exact <subject> once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`。重试携带 `sandbox_permissions` 与 `justification`；用户的 `allowed-once`／`rejected`／`cancelled` 决定成为该调用的结果文本。
+被拒绝的调用会呈现标记 `[sandbox: file access denied under <mode> mode]`，组合声明升权能力时还会呈现提示 `[sandbox: escalation available — retry this exact <subject> once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`。沙箱所处环境造成的拒绝（`ConfinedArgv.environmentDenialSignatures`，例如容器的只读根；消费方在沙箱策略的 `containerDenialMarker` 开启时才这样分类）改为呈现 `[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]`，且不带提示，因为任何模式都无法解除它；`denialMarkers()` 按调用的事实选择标记。重试携带 `sandbox_permissions` 与 `justification`；用户的 `allowed-once`／`rejected`／`cancelled` 决定成为该调用的结果文本。
 
 #### Token 影响
 

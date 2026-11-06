@@ -10,7 +10,11 @@ import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import NodeRuntime from '../src/index.ts'
 import type { Config } from '../src/index.ts'
 
-export async function mountRuntime(ctx: Context, config: Config = {}, policy: { mode?: SandboxMode; workspaceRoot?: string } = {}) {
+export async function mountRuntime(
+  ctx: Context,
+  config: Config = {},
+  policy: { mode?: SandboxMode; workspaceRoot?: string; containerDenialMarker?: boolean } = {},
+) {
   onTestFinished(async () => { await ctx.fiber.dispose() })
   if (!ctx.get('sessions')) await ctx.plugin(SessionStore)
   if (!ctx.get('fs')) await ctx.plugin(FileSystem)

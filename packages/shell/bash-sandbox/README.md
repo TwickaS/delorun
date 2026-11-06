@@ -136,7 +136,7 @@ A standing-policy change appends a complete owner-rendered context snapshot afte
 
 #### What the model sees
 
-After ordinary bounded output, a denied call appends exactly `[sandbox: file access denied under <mode> mode]`. When escalation is available it next appends `[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`. A settled background runner failure instead appends `[sandbox: the sandbox runner itself failed under <mode> mode — the command did not run; this is a sandbox problem, not a command failure]`.
+After ordinary bounded output, a denied call appends exactly `[sandbox: file access denied under <mode> mode]`. When escalation is available it next appends `[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`. A failed run that matches only the wrap's `environmentDenialSignatures` reports `deniedBy: 'environment'` and appends `[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]` with no escalation hint; a policy signature outranks it. This classification applies only with the sandbox policy's `containerDenialMarker` on. A settled background runner failure instead appends `[sandbox: the sandbox runner itself failed under <mode> mode — the command did not run; this is a sandbox problem, not a command failure]`.
 
 #### Token effect
 

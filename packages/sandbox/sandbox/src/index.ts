@@ -13,6 +13,8 @@ export {
   ESCALATION_TARGETS,
   WIDER_MODES,
   approveEscalation,
+  denialMarkers,
+  environmentDenialMarker,
   escalationHintMarker,
   sandboxDenialMarker,
   sandboxPermissionsDescription,
@@ -115,6 +117,14 @@ export interface ConfinedArgv {
    */
   denialSignatures: readonly string[]
   /**
+   * The case-insensitive stderr substrings of a file effect the environment
+   * around the backend refuses, such as `Read-only file system` under a
+   * container's read-only root. No wider sandbox mode lifts such a denial, so
+   * consumers report it apart from {@link denialSignatures}' policy denials.
+   * Absent when the environment adds none.
+   */
+  environmentDenialSignatures?: readonly string[]
+  /**
    * Structured runner-failure evidence rules. Consumers require a matching
    * fatal stderr line (after informational exclusions) and any rule-specific
    * exit-code gate before checking denial signatures: runner failure means the
@@ -194,4 +204,4 @@ export abstract class SandboxProvider extends Service {
 
 export default SandboxProvider
 
-export { classifyRunnerFailure, isRunnerSpawnFailure, matchesSignature } from './diagnostics.ts'
+export { classifyRunnerFailure, denialOf, isRunnerSpawnFailure, matchesSignature } from './diagnostics.ts'

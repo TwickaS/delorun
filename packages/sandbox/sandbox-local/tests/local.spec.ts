@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { LAUNCHER_FAILURE_EXIT } from '@deepseek-ai/node-addon-system/landlock-run'
-import { SANDBOX_UNAVAILABLE, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
+import { SANDBOX_UNAVAILABLE, SandboxUnavailableError, denialOf } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import {
   LocalSandboxProvider,
@@ -222,6 +222,16 @@ describe('the platform chains', () => {
       runnerFailureRules: [{ fatalSignatures: ['bwrap: '] }],
     })
     expect(probeLandlock).not.toHaveBeenCalled()
+  })
+
+  it('bwrap policy denial is never labelled environment', async () => {
+    // bwrap's wrap declares no environment signatures, and its own dialect outranks any a container adds.
+    const { sandbox } = await setup({}, { platform: 'linux', probeBwrap: () => true, probeLandlock: () => 'full' as const })
+    const confined = await sandbox.confine(['true'], RO)
+    expect(confined.environmentDenialSignatures).toBeUndefined()
+    const stderr = 'touch: cannot touch \'/x\': Read-only file system'
+    expect(denialOf(1, stderr, confined.denialSignatures, confined.environmentDenialSignatures ?? [])).toEqual({ denied: true })
+    expect(denialOf(1, stderr, confined.denialSignatures, ['read-only file system'])).toEqual({ denied: true })
   })
 
   it('linux falls back to the launcher when the bwrap probe fails, speaking the landlock dialect', async () => {

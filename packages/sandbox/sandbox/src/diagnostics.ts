@@ -98,3 +98,17 @@ export function matchesSignature(exitCode: number | null, stderr: string, signat
   const lowered = stderr.toLowerCase()
   return signatures.some(signature => lowered.includes(signature.toLowerCase()))
 }
+
+/**
+ * Classify a failed run as a policy denial, an environment denial or neither.
+ * A policy signature wins, since a wider mode can lift that denial.
+ * @param exitCode - process exit code; null means signal termination.
+ * @param stderr - collected stderr text.
+ * @param policy - the backend's denial signatures (`ConfinedArgv.denialSignatures`).
+ * @param environment - the environment's (`ConfinedArgv.environmentDenialSignatures`).
+ * @returns `denied`, with `deniedBy: 'environment'` when only the environment's signatures matched.
+ */
+export function denialOf(exitCode: number | null, stderr: string, policy: readonly string[], environment: readonly string[]): { readonly denied: boolean; readonly deniedBy?: 'environment' } {
+  if (matchesSignature(exitCode, stderr, policy)) return { denied: true }
+  return matchesSignature(exitCode, stderr, environment) ? { denied: true, deniedBy: 'environment' } : { denied: false }
+}

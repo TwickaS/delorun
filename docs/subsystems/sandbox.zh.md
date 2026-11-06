@@ -124,7 +124,7 @@ interface RunnerFailureRule {
 }
 ```
 
-`ConfinedArgv` 是消费方实际 spawn 的内容。除了替换后的 argv，它还携带后端的强制执行事实和两种正交的 stderr 分类器。`denialSignatures` 用于识别沙箱正常工作时受限命令被阻止的情况。`runnerFailureRules` 用于识别沙箱 runner 在执行命令之前拒绝或失败的情况；消费方应先检查后者，将其作为沙箱基础设施故障上报，而非普通任务失败。
+`ConfinedArgv` 是消费方实际 spawn 的内容。除了替换后的 argv，它还携带后端的强制执行事实和 stderr 分类器。`denialSignatures` 用于识别沙箱正常工作时受限命令被阻止的情况。可选的 `environmentDenialSignatures` 用于识别后端所处环境（例如容器的只读根）造成的拒绝，任何沙箱模式都无法解除这类拒绝：沙箱策略的 `containerDenialMarker` 开启时，消费方以 `[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]` 报告它且不提供提权，策略特征优先于它。`runnerFailureRules` 用于识别沙箱 runner 在执行命令之前拒绝或失败的情况；消费方应先检查后者，将其作为沙箱基础设施故障上报，而非普通任务失败。
 
 ```ts type-equiv
 /**
@@ -146,6 +146,14 @@ interface ConfinedArgv {
    * union claims denials a given backend never produces.
    */
   denialSignatures: readonly string[]
+  /**
+   * The case-insensitive stderr substrings of a file effect the environment
+   * around the backend refuses, such as `Read-only file system` under a
+   * container's read-only root. No wider sandbox mode lifts such a denial, so
+   * consumers report it apart from {@link denialSignatures}' policy denials.
+   * Absent when the environment adds none.
+   */
+  environmentDenialSignatures?: readonly string[]
   /**
    * Structured runner-failure evidence rules. Consumers require a matching
    * fatal stderr line (after informational exclusions) and any rule-specific
@@ -203,6 +211,14 @@ Source: [`packages/sandbox/sandbox/src/index.ts`](../../packages/sandbox/sandbox
 The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, and current request-time policy section. Tool layers call resolve for each execution so a session's mode log and immutable cwd travel together to every enforcing capability.
 
 ```ts cordis-catalog
+/**
+ * The environment denial signatures a consumer classifies a confined run
+ * against: the wrap's own with {@link containerDenialMarker} on, none with it off.
+ * @param confined - the wrap's `environmentDenialSignatures`, absent when the environment adds none.
+ * @returns the signatures to pass to `denialOf`.
+ */
+environmentDenialSignatures(confined: Pick<ConfinedArgv, 'environmentDenialSignatures'>): readonly string[]
+
 /**
  * Resolve the complete policy for one capability call. An approved explicit
  * mode outranks the session's last `sandbox/mode` event, which outranks the

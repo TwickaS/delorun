@@ -6,7 +6,7 @@
 
 import type { ShellRunResult, ShellSandboxInfo, CollectedOutput } from '@deepseek-ai/dsh-shell'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { escalationHintMarker, sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
+import { denialMarkers } from '@deepseek-ai/dsh-sandbox'
 
 /** Append the truncation notice (with the full-output spill path) to a stream's text. */
 function streamText(output: CollectedOutput): string {
@@ -42,13 +42,8 @@ export function renderResult(
 
   const markers: string[] = []
   // Keep the exit marker last because parseExitStatus anchors there.
-  if (result.sandbox?.denied) {
-    markers.push(sandboxDenialMarker(result.sandbox.mode))
-    // Hint only when the composition exposes escalation, before the final exit marker.
-    if (escalationModes.length > 0) {
-      markers.push(escalationHintMarker('command'))
-    }
-  }
+  // The escalation hint rides a policy denial only when the composition exposes escalation, before the final exit marker.
+  if (result.sandbox !== undefined) markers.push(...denialMarkers(result.sandbox, escalationModes, 'command'))
   // A command may trap SIGTERM and exit 0 after timeout; still report interruption.
   if (result.timedOut) markers.push(`[timed out after ${result.timeoutMs}ms]`)
   // A kill from outside the call (the human stopping its job) is not a
@@ -107,11 +102,8 @@ export function renderJobRead(
   }
   if (sandbox?.runnerFailed) {
     notices.push(`[sandbox: the sandbox runner itself failed under ${sandbox.mode} mode — the command did not run; this is a sandbox problem, not a command failure]`)
-  } else if (sandbox?.denied) {
-    notices.push(sandboxDenialMarker(sandbox.mode))
-    if (escalationModes.length > 0) {
-      notices.push(escalationHintMarker('command'))
-    }
+  } else if (sandbox !== undefined) {
+    notices.push(...denialMarkers(sandbox, escalationModes, 'command'))
   }
   if (notices.length === 0) return delta
   return `${delta}${delta.length > 0 && !delta.endsWith('\n') ? '\n' : ''}${notices.join('\n')}`

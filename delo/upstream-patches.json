@@ -724,12 +724,12 @@
     {
       "path": "docs/config-catalog.md",
       "class": "delo-feature",
-      "reason": "Generated config catalogue, regenerated for the welcomeNotice option beside credentialOnboarding, the workspace controller's `defaultWorkspaceDirectory` and the plugin manager's profile-history options."
+      "reason": "Generated config catalogue, regenerated for the welcomeNotice option beside credentialOnboarding, the workspace controller's `defaultWorkspaceDirectory` the plugin manager's profile-history options and the sandbox policy's `containerDenialMarker`."
     },
     {
       "path": "docs/config-catalog.zh.md",
       "class": "delo-feature",
-      "reason": "Chinese counterpart of the generated config catalogue, regenerated with it for the welcomeNotice, `defaultWorkspaceDirectory` and profile-history options."
+      "reason": "Chinese counterpart of the generated config catalogue, regenerated with it for the welcomeNotice, `defaultWorkspaceDirectory`, profile-history and `containerDenialMarker` options."
     },
     {
       "path": "packages/client/ui-chat/tests/presentation-injected.client.spec.ts",
@@ -999,7 +999,7 @@
     {
       "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
       "class": "delo-feature",
-      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event. It also carries `onRegistered` and `ProjectionRegistrationListener` of the late session projection keys. The Session created-at adds `createdAt` to the `SessionSummary` declaration. The per-workspace permission defaults add `PermissionPresetService.unset`."
+      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event. It also carries `onRegistered` and `ProjectionRegistrationListener` of the late session projection keys. The Session created-at adds `createdAt` to the `SessionSummary` declaration. The per-workspace permission defaults add `PermissionPresetService.unset`. The container denial marker adds `SandboxPolicyService.containerDenialMarker` and `environmentDenialSignatures`, `ConfinedArgv.environmentDenialSignatures`, and the `deniedBy` fields of `ShellSandboxInfo` and `PtcRunSandbox`."
     },
     {
       "path": "scripts/gen-cordis-catalog.ts",
@@ -1625,6 +1625,291 @@
       "path": "packages/test-support/client-runtime/tests/assembly-vitest.client.spec.ts",
       "class": "delo-feature",
       "reason": "Test-support retry keying: the assembly spec keys its started clients by task id, so a retried `test.fails` control replaces its own client and the `afterAll` count holds under `--retry`, which Delo's gate passes. Test infrastructure only."
+    },
+    {
+      "path": "packages/sandbox/sandbox/src/diagnostics.ts",
+      "class": "security",
+      "reason": "Container denial marker: adds `denialOf(exitCode, stderr, policy, environment)`, which returns upstream's `matchesSignature` result whenever a policy signature matches and adds `deniedBy: 'environment'` only when the environment's signatures alone match. Lead verdict: kept; stricter (an extra denial report, no approval path changed), permitted by A84."
+    },
+    {
+      "path": "packages/sandbox/sandbox/src/escalation.ts",
+      "class": "security",
+      "reason": "Container denial marker: adds `environmentDenialMarker()` and `denialMarkers(facts, escalationModes, subject)`, which return upstream's marker and escalation hint for a policy denial and only the environment's marker, with no hint, for an environment denial. Lead verdict: kept; stricter (fewer escalation invitations; the approval prompt is unchanged), permitted by A84."
+    },
+    {
+      "path": "packages/sandbox/sandbox/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: exports `denialMarkers`, `environmentDenialMarker` and `denialOf`, and adds the optional `ConfinedArgv.environmentDenialSignatures` seam. No upstream export is removed or renamed."
+    },
+    {
+      "path": "packages/sandbox/sandbox/tests/escalation.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: covers the environment marker and that `denialMarkers` never adds the escalation hint to an environment denial."
+    },
+    {
+      "path": "packages/sandbox/sandbox/tests/diagnostics.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: covers `denialOf`: a policy signature always wins over every environment signature, and an environment-only match is labelled only on a failed exit."
+    },
+    {
+      "path": "packages/sandbox/sandbox/README.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: documents the environment marker in the model-visible section and that consumers classify it with the switch on."
+    },
+    {
+      "path": "packages/sandbox/sandbox/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the Chinese counterpart of the environment-marker sentence added to README.md."
+    },
+    {
+      "path": "packages/sandbox/sandbox/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the consistency record re-recorded after the environment-marker sentence was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/sandbox/sandbox-local/tests/local.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: `bwrap policy denial is never labelled environment`: the local provider's bwrap wrap declares no environment signatures, and its `read-only file system` dialect outranks the same text declared by an environment."
+    },
+    {
+      "path": "packages/sandbox/sandbox-policy/src/index.ts",
+      "class": "security",
+      "reason": "Container denial marker: the validated Config field `containerDenialMarker` (Delo's C16 switch `container_denial_marker`, off by default and in the parity composition) and `environmentDenialSignatures(confined)`, which the shell and PTC consumers read to pick the environment signatures a run classifies against; off, they get none and classify exactly as upstream does. The policy context the model reads is unchanged. Lead verdict: required by the lead's WP1.6c switch decision (A114, A115); with the switch off the output is byte-identical to stock, and on it only withholds the escalation hint for a denial no mode lifts, which is stricter."
+    },
+    {
+      "path": "packages/sandbox/sandbox-policy/tests/policy.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: covers the switch off by default, the signatures it passes on and off, an unchanged policy context, and the load-time rejection of a non-boolean value."
+    },
+    {
+      "path": "packages/sandbox/sandbox-policy/README.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the `containerDenialMarker` row of the configuration table."
+    },
+    {
+      "path": "packages/sandbox/sandbox-policy/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the Chinese counterpart of the `containerDenialMarker` row."
+    },
+    {
+      "path": "packages/sandbox/sandbox-policy/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the consistency record re-recorded after the `containerDenialMarker` row was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/shell/shell/src/types.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: `ShellSandboxInfo.deniedBy?: 'environment'`, set only for a denial the environment's signatures alone match."
+    },
+    {
+      "path": "packages/shell/bash-sandbox/src/helpers.ts",
+      "class": "security",
+      "reason": "Container denial marker: `classifyDenial` delegates to `denialOf`; with the default empty environment list it equals upstream. Lead verdict: kept; stricter, permitted by A84."
+    },
+    {
+      "path": "packages/shell/bash-sandbox/src/index.ts",
+      "class": "security",
+      "reason": "Container denial marker: foreground and background sandbox facts classify through `denialOf` against the environment signatures fixed at confinement by `ctx.sandboxPolicy.environmentDenialSignatures`, none with the switch off. Runner failure still outranks denial: the foreground still throws `SandboxUnavailableError`, and a background runner failure still forces `denied: false` with `runnerFailed`. Lead verdict: kept; stricter (denial facts gain `deniedBy` only for environment-only matches), permitted by A84."
+    },
+    {
+      "path": "packages/shell/bash-sandbox/tests/sandbox.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: covers environment-only classification in the foreground and when a background process settles, the switch off restoring upstream's facts, and a bwrap-dialect policy denial never labelled environment."
+    },
+    {
+      "path": "packages/shell/bash-sandbox/README.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: documents `deniedBy: 'environment'`, its marker and the switch in the model-visible section."
+    },
+    {
+      "path": "packages/shell/bash-sandbox/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the Chinese counterpart of the environment-denial sentences added to README.md."
+    },
+    {
+      "path": "packages/shell/bash-sandbox/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the consistency record re-recorded after the environment-denial sentences were added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/shell/pwsh-sandbox/src/helpers.ts",
+      "class": "security",
+      "reason": "Container denial marker: the pwsh twin of `denialOf` and `classifyDenial`, equal to upstream with no environment signatures. Lead verdict: kept; stricter, permitted by A84."
+    },
+    {
+      "path": "packages/shell/pwsh-sandbox/src/index.ts",
+      "class": "security",
+      "reason": "Container denial marker: the pwsh twin of the bash executor's foreground and background classification, with the environment signatures fixed at confinement from the switch. Lead verdict: kept; stricter, permitted by A84."
+    },
+    {
+      "path": "packages/shell/pwsh-sandbox/tests/sandbox.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: covers the pwsh `denialOf`, environment-only classification in the foreground and background, the switch off, and a policy signature outranking the same environment text, with a Node program in place of pwsh."
+    },
+    {
+      "path": "packages/shell/tool-bash/src/background.ts",
+      "class": "security",
+      "reason": "Container denial marker: background sandbox notes come from `denialMarkers`, equal to upstream for a value without `deniedBy`; the E5 output-splitting helpers are left out. Lead verdict: kept; runner failure still wins, stricter, permitted by A84."
+    },
+    {
+      "path": "packages/shell/tool-bash/src/index.ts",
+      "class": "security",
+      "reason": "Container denial marker: the canonical foreground result carries `sandbox.deniedBy`, and with the switch on the foreground output schema declares it as `{ type: 'string', enum: ['environment'] }`, without which output validation would turn an environment denial into a tool error. With the switch off the schema, which the PTC SDK declares to the model, is upstream's, and no executor reports the field. The E4 promote and E5 result-kind hunks are left out, and the tool description is unchanged. Lead verdict: kept with change; stricter (A84), with the output-schema property and a tool-level spec added."
+    },
+    {
+      "path": "packages/shell/tool-bash/src/render.ts",
+      "class": "security",
+      "reason": "Container denial marker: foreground results and job reads take their denial markers from `denialMarkers`, the exit marker still last and runner failure still outranking denial; the E5 promoted-output renderer and its `joinStreams` import are left out. Lead verdict: kept; stricter, permitted by A84."
+    },
+    {
+      "path": "packages/shell/tool-bash/tests/tools.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: covers the output schema declaring `deniedBy` only with the switch on, the environment marker on a job read, a foreground environment denial reaching the model through the tool with its marker and no escalation hint, and a policy denial in the same composition keeping both; the E4 promote case is left out."
+    },
+    {
+      "path": "packages/shell/tool-bash/README.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: names the environment marker among the conditional lines; the E4 promote and E5 result-kind paragraphs are left out."
+    },
+    {
+      "path": "packages/shell/tool-bash/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the Chinese counterpart of the environment marker added to the conditional lines."
+    },
+    {
+      "path": "packages/shell/tool-bash/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the consistency record re-recorded after the environment marker was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/src/background.ts",
+      "class": "security",
+      "reason": "Container denial marker: the pwsh twin of the bash background notes through `denialMarkers`; the E5 helpers are left out. Lead verdict: kept; stricter, permitted by A84."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/src/index.ts",
+      "class": "security",
+      "reason": "Container denial marker: `PwshForegroundResult` and the canonical result carry `sandbox.deniedBy`, and with the switch on the foreground output schema declares it as for bash; with it off the schema is upstream's. The E4 promote and E5 hunks are left out, and the tool description is unchanged. Lead verdict: kept with change; stricter (A84), with the output-schema property and a tool-level spec added."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/src/render.ts",
+      "class": "security",
+      "reason": "Container denial marker: the pwsh twin of the bash foreground and job-read markers through `denialMarkers`; the E5 renderer and its `joinStreams` import are left out. Lead verdict: kept; stricter, permitted by A84."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/tests/tools.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: covers the output schema declaring `deniedBy` only with the switch on, a foreground environment denial reaching the model through the pwsh tool with its marker and no escalation hint, a policy denial keeping both, and the environment marker on a job read."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/README.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: names the environment marker among the conditional lines, as the bash README does."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the Chinese counterpart of the environment marker added to the conditional lines."
+    },
+    {
+      "path": "packages/shell/tool-pwsh/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the consistency record re-recorded after the environment marker was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/ptc-runtime/ptc-runtime/src/types.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: `PtcRunSandbox.deniedBy?: 'environment'`, set only for a failure the environment's signatures alone match."
+    },
+    {
+      "path": "packages/ptc-runtime/ptc-runtime-node/src/worker.ts",
+      "class": "security",
+      "reason": "Container denial marker: the Node worker classifies a failed program against the wrap's policy signatures first and then the environment signatures fixed at confinement from the switch, none with it off; a `sandbox-unavailable` failure is never a denial, as upstream. Lead verdict: required by the lead's WP1.6c PTC decision (A114, A115) and C9 requirement 12; equal to stock for policy denials and stricter for environment ones."
+    },
+    {
+      "path": "packages/ptc-runtime/ptc-runtime-node/tests/host-failures.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: covers environment-only classification with the switch on, the switch off, and a policy signature outranking the same environment text."
+    },
+    {
+      "path": "packages/ptc-runtime/ptc-runtime-node/tests/setup.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the test mount passes `containerDenialMarker` to the sandbox policy."
+    },
+    {
+      "path": "packages/ptc-runtime/ptc-runtime-node/README.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: documents the environment classification and the switch beside `result.sandbox`."
+    },
+    {
+      "path": "packages/ptc-runtime/ptc-runtime-node/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the Chinese counterpart of the environment-classification sentence added to README.md."
+    },
+    {
+      "path": "packages/ptc-runtime/ptc-runtime-node/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the consistency record re-recorded after the environment-classification sentence was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/core/tool-executor-ptc/src/ptc.ts",
+      "class": "security",
+      "reason": "Container denial marker: `run_code` declares `sandbox.deniedBy` in its output schema, and both its completed and failed results carry `[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]` in place of the denial sentence and the escalation guidance when `deniedBy` is `environment`; a policy denial keeps upstream's text. `sandbox_permissions` and its approval are unchanged. Lead verdict: required by the lead's WP1.6c PTC decision (A114, A115) and C9 requirement 12; a denial inside a container is never answered with escalation guidance, which is stricter."
+    },
+    {
+      "path": "packages/core/tool-executor-ptc/tests/ptc.spec.ts",
+      "class": "delo-feature",
+      "reason": "Container denial marker: `container denial carries no escalation guidance` for a failed and a completed program, and a policy denial in the same composition keeping the guidance."
+    },
+    {
+      "path": "packages/core/tool-executor-ptc/README.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: documents the environment marker in `run_code` results."
+    },
+    {
+      "path": "packages/core/tool-executor-ptc/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the Chinese counterpart of the environment-marker sentence added to README.md."
+    },
+    {
+      "path": "packages/core/tool-executor-ptc/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the consistency record re-recorded after the environment-marker sentence was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "docs/subsystems/sandbox.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: documents `environmentDenialSignatures`, its marker and the switch beside `ConfinedArgv`'s classifiers, with the type-equivalence block and the regenerated catalog region."
+    },
+    {
+      "path": "docs/subsystems/sandbox.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the Chinese counterpart of the `environmentDenialSignatures` sentences, with the same type-equivalence block and catalog region."
+    },
+    {
+      "path": "docs/subsystems/sandbox.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the consistency record re-recorded after the `environmentDenialSignatures` sentences were added to sandbox.md and its Chinese counterpart."
+    },
+    {
+      "path": "docs/subsystems/shell.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the `ShellSandboxInfo.deniedBy` field in the type-equivalence block."
+    },
+    {
+      "path": "docs/subsystems/shell.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the same `ShellSandboxInfo.deniedBy` field as the English page."
+    },
+    {
+      "path": "docs/subsystems/ptc-runtime.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the `PtcRunSandbox.deniedBy` field in the type-equivalence block."
+    },
+    {
+      "path": "docs/subsystems/ptc-runtime.zh.md",
+      "class": "delo-feature",
+      "reason": "Container denial marker: the same `PtcRunSandbox.deniedBy` field as the English page."
     }
   ],
   "retired": []

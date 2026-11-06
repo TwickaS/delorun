@@ -24,6 +24,7 @@ import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@de
 import type { SessionEventMap } from '@deepseek-ai/dsh-session'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
+import { environmentDenialMarker } from '@deepseek-ai/dsh-sandbox'
 import SessionProjections from '@deepseek-ai/dsh-session-projection'
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -2591,6 +2592,44 @@ describe('per-program execution controls', () => {
       expect(JSON.stringify(result.content)).toContain('Earlier effects may already have completed')
       expect(effects).toBe(1)
       expect(ask).not.toHaveBeenCalled()
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('container denial carries no escalation guidance: a failed program the environment denied states its marker', async () => {
+    const { ctx, runtime, execute } = await controlledSetup()
+    const message = "EROFS: read-only file system, open '/usr/x'"
+    runtime.behavior = () => Promise.resolve({ logs: ['first effect completed'], error: { kind: 'exception', message },
+      sandbox: { mode: 'read-only', denied: true, deniedBy: 'environment', enforcement: 'full' } })
+    try {
+      const result = await execute({})
+      expect(result.isError).toBe(true)
+      const text = result.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+      expect(text).toContain(`File sandbox: read-only; enforcement: full.\n${environmentDenialMarker()}`)
+      expect(text).not.toContain('operation denied')
+      expect(text).not.toContain('A sandbox escalation approves')
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('container denial carries no escalation guidance: a completed program the environment denied states its marker', async () => {
+    const { ctx, runtime, execute } = await controlledSetup()
+    const sandbox = { mode: 'read-only', denied: true, deniedBy: 'environment', enforcement: 'full' } as const
+    runtime.behavior = () => Promise.resolve({ logs: ['caught the write failure'], sandbox })
+    try {
+      const result = await execute({})
+      expect(result.isError).not.toBe(true)
+      expect(result.value).toEqual({ logs: ['caught the write failure'], sandbox })
+      expect(result.content).toEqual([{ type: 'text', text: `caught the write failure\n${environmentDenialMarker()}` }])
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('keeps the escalation guidance on a policy denial in the same composition', async () => {
+    const { ctx, runtime, execute } = await controlledSetup()
+    runtime.behavior = () => Promise.resolve({ logs: [], sandbox: { mode: 'read-only', denied: true, enforcement: 'full' } })
+    try {
+      const result = await execute({})
+      const text = result.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+      expect(text).toContain('The read-only file sandbox denied an operation. A sandbox escalation approves this complete program for one execution only.')
+      expect(text).not.toContain(environmentDenialMarker())
     } finally { await ctx.fiber.dispose() }
   })
 

@@ -136,7 +136,7 @@ kind: "package-reference"
 
 #### 模型看到的内容
 
-在普通有界输出之后，被拒绝的调用会精确追加 `[sandbox: file access denied under <mode> mode]`。当升权可用时，接下来精确追加 `[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`。已结算的后台 runner 失败则追加 `[sandbox: the sandbox runner itself failed under <mode> mode — the command did not run; this is a sandbox problem, not a command failure]`。
+在普通有界输出之后，被拒绝的调用会精确追加 `[sandbox: file access denied under <mode> mode]`。当升权可用时，接下来精确追加 `[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]`。只匹配 wrap 的 `environmentDenialSignatures` 的失败运行会报告 `deniedBy: 'environment'`，并追加 `[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]`，不带升权提示；策略特征优先于它。只有沙箱策略的 `containerDenialMarker` 开启时才会这样分类。已结算的后台 runner 失败则追加 `[sandbox: the sandbox runner itself failed under <mode> mode — the command did not run; this is a sandbox problem, not a command failure]`。
 
 #### Token 影响
 

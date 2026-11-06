@@ -26,7 +26,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
-import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -108,6 +108,16 @@ export interface Config {
    * `read-only`.
    */
   additionalWritableRoots?: string[]
+  /**
+   * Report a failed run that matches only the wrap's
+   * `ConfinedArgv.environmentDenialSignatures`, such as a write to a
+   * container's read-only root, as `deniedBy: 'environment'`, whose result
+   * carries the environment's marker and no escalation hint (default: off).
+   * Off, consumers ignore those signatures and classify every run against
+   * `denialSignatures` alone. This is Delo's C16 switch
+   * `container_denial_marker`, off in the parity composition.
+   */
+  containerDenialMarker?: boolean
 }
 
 /** Inputs that select the sandbox policy for one capability call. */
@@ -139,6 +149,7 @@ export class SandboxPolicyService extends Service {
     // stored root is always absolute regardless of how it was supplied.
     workspaceRoot: z.string(),
     additionalWritableRoots: z.array(z.string()).default([]),
+    containerDenialMarker: z.boolean().default(false),
   })
 
   static inject = ['sessionProjections']
@@ -149,6 +160,11 @@ export class SandboxPolicyService extends Service {
   readonly workspaceRoot: string
   /** The frozen extra writable directories shared by every resolved policy, or `undefined` for none. */
   readonly additionalWritableRoots: readonly string[] | undefined
+  /**
+   * Whether consumers classify environment-only denials apart from policy
+   * denials ({@link Config.containerDenialMarker}).
+   */
+  readonly containerDenialMarker: boolean
   private sandboxModeProjectionHandle!: ProjectionHandle<SandboxMode | null>
 
   constructor(ctx: Context, config: Config) {
@@ -159,6 +175,17 @@ export class SandboxPolicyService extends Service {
     this.defaultMode = config.mode as SandboxMode
     this.workspaceRoot = resolveWorkspaceRoot(config.workspaceRoot ?? process.cwd())
     this.additionalWritableRoots = resolveAdditionalWritableRoots(config.additionalWritableRoots)
+    this.containerDenialMarker = config.containerDenialMarker === true
+  }
+
+  /**
+   * The environment denial signatures a consumer classifies a confined run
+   * against: the wrap's own with {@link containerDenialMarker} on, none with it off.
+   * @param confined - the wrap's `environmentDenialSignatures`, absent when the environment adds none.
+   * @returns the signatures to pass to `denialOf`.
+   */
+  environmentDenialSignatures(confined: Pick<ConfinedArgv, 'environmentDenialSignatures'>): readonly string[] {
+    return this.containerDenialMarker ? confined.environmentDenialSignatures ?? [] : []
   }
 
   protected async [Service.init](): Promise<void> {

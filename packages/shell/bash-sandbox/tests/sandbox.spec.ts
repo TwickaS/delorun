@@ -65,10 +65,11 @@ const passthrough = (argv: readonly string[]): ConfinedArgv =>
  * per test) and the executor under test on top of it.
  */
 async function setup(
-  config: { mode?: SandboxMode; workspaceRoot?: string } & NonNullable<Parameters<typeof SandboxBashExecutor.Config>[0]> = {},
+  config: { mode?: SandboxMode; workspaceRoot?: string; containerDenialMarker?: boolean }
+    & NonNullable<Parameters<typeof SandboxBashExecutor.Config>[0]> = {},
   behavior: (argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal) => ConfinedArgv | Promise<ConfinedArgv> = passthrough,
 ) {
-  const { mode, workspaceRoot, ...execConfig } = config
+  const { mode, workspaceRoot, containerDenialMarker, ...execConfig } = config
   const calls: ConfineCall[] = []
   class FakeSandboxProvider extends SandboxProvider {
     async confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv> {
@@ -82,6 +83,7 @@ async function setup(
   await ctx.plugin(SandboxPolicyService, {
     ...mode !== undefined ? { mode } : {},
     ...workspaceRoot !== undefined ? { workspaceRoot } : {},
+    ...containerDenialMarker !== undefined ? { containerDenialMarker } : {},
   })
   await ctx.plugin(LocalSubprocessRuntime)
   ;(ctx.subprocess as LocalSubprocessRuntime).internals = { spillDir }
@@ -477,19 +479,19 @@ describe('per-call sandbox policy (the session and escalation carrier)', () => {
 
 describe('classifyDenial', () => {
   it('never classifies a clean exit or a signal kill as a denial', () => {
-    expect(classifyDenial(runResult(0, 'Permission denied'), UNIX_SIGNATURES)).toBe(false)
-    expect(classifyDenial(runResult(null, 'Permission denied'), UNIX_SIGNATURES)).toBe(false)
+    expect(classifyDenial(runResult(0, 'Permission denied'), UNIX_SIGNATURES).denied).toBe(false)
+    expect(classifyDenial(runResult(null, 'Permission denied'), UNIX_SIGNATURES).denied).toBe(false)
   })
 
   it('classifies failed runs by the wrap\'s own dialect, conservatively', () => {
-    expect(classifyDenial(runResult(1, 'touch: cannot touch /x: Read-only file system'), UNIX_SIGNATURES)).toBe(true)
-    expect(classifyDenial(runResult(1, 'sh: /x: Permission denied'), UNIX_SIGNATURES)).toBe(true)
+    expect(classifyDenial(runResult(1, 'touch: cannot touch /x: Read-only file system'), UNIX_SIGNATURES).denied).toBe(true)
+    expect(classifyDenial(runResult(1, 'sh: /x: Permission denied'), UNIX_SIGNATURES).denied).toBe(true)
     // Bare EPERM is not a Linux runner's dialect: mount/kill/ptrace fail with
     // it unsandboxed too, and the mode vocabulary governs file effects only —
     // claiming a file denial here would tell the model the sandbox blocked
     // something it never governed.
-    expect(classifyDenial(runResult(1, 'mount: Operation not permitted'), UNIX_SIGNATURES)).toBe(false)
-    expect(classifyDenial(runResult(1, 'No such file or directory'), UNIX_SIGNATURES)).toBe(false)
+    expect(classifyDenial(runResult(1, 'mount: Operation not permitted'), UNIX_SIGNATURES).denied).toBe(false)
+    expect(classifyDenial(runResult(1, 'No such file or directory'), UNIX_SIGNATURES).denied).toBe(false)
   })
 
   it('matches exactly the active backend\'s dialect: EPERM classifies under Seatbelt, EACCES does not under bwrap', () => {
@@ -497,8 +499,15 @@ describe('classifyDenial', () => {
     // text IS how the kernel refuses a governed file write; under bwrap's
     // EROFS-only dialect, `Permission denied` is ordinary DAC, not the
     // sandbox — per-wrap signatures are what keep both classifications honest.
-    expect(classifyDenial(runResult(1, 'bash: /etc/x: Operation not permitted'), ['operation not permitted'])).toBe(true)
-    expect(classifyDenial(runResult(1, 'sh: /x: Permission denied'), ['read-only file system'])).toBe(false)
+    expect(classifyDenial(runResult(1, 'bash: /etc/x: Operation not permitted'), ['operation not permitted']).denied).toBe(true)
+    expect(classifyDenial(runResult(1, 'sh: /x: Permission denied'), ['read-only file system']).denied).toBe(false)
+  })
+
+  it('names a denial only the environment\'s signatures match, which a policy signature outranks', () => {
+    const rofs = runResult(1, 'touch: cannot touch /usr/x: Read-only file system')
+    expect(classifyDenial(rofs, ['permission denied'], ['read-only file system'])).toEqual({ denied: true, deniedBy: 'environment' })
+    expect(classifyDenial(rofs, ['read-only file system'], ['read-only file system'])).toEqual({ denied: true })
+    expect(classifyDenial(runResult(0, 'Read-only file system'), [], ['read-only file system'])).toEqual({ denied: false })
   })
 })
 
@@ -596,6 +605,52 @@ describe('background sandbox facts', () => {
   it('stamps a settled denial: nonzero exit + permission stderr under a confined mode', async () => {
     const { bash } = await setup()
     const task = (await start(bash, bash.resolve({ command: 'echo "x: Permission denied" >&2; exit 1' })))
+    await task.done
+    expect(task.sandbox).toEqual({ mode: 'read-only', denied: true, enforcement: 'full' })
+  })
+
+  it('names a denial only the environment\'s signatures match, in the foreground and when a background process settles', async () => {
+    const { bash } = await setup({ containerDenialMarker: true }, argv => ({
+      argv: ['env', ...argv],
+      enforcement: 'full',
+      denialSignatures: ['permission denied'],
+      environmentDenialSignatures: ['read-only file system'],
+      runnerFailureRules: RUNNER_FAILURE,
+    }))
+    const command = 'echo "touch: cannot touch /usr/x: Read-only file system" >&2; exit 1'
+    expect((await run(bash, bash.resolve({ command }))).sandbox).toEqual({ mode: 'read-only', denied: true, deniedBy: 'environment', enforcement: 'full' })
+    const task = await start(bash, bash.resolve({ command }))
+    await task.done
+    expect(task.sandbox).toEqual({ mode: 'read-only', denied: true, deniedBy: 'environment', enforcement: 'full' })
+  })
+
+  it('ignores the environment\'s signatures with container_denial_marker off, as upstream classifies', async () => {
+    const { bash } = await setup({}, argv => ({
+      argv: ['env', ...argv],
+      enforcement: 'full',
+      denialSignatures: ['permission denied'],
+      environmentDenialSignatures: ['read-only file system'],
+      runnerFailureRules: RUNNER_FAILURE,
+    }))
+    const command = 'echo "touch: cannot touch /usr/x: Read-only file system" >&2; exit 1'
+    expect((await run(bash, bash.resolve({ command }))).sandbox).toEqual({ mode: 'read-only', denied: false, enforcement: 'full' })
+    const task = await start(bash, bash.resolve({ command }))
+    await task.done
+    expect(task.sandbox).toEqual({ mode: 'read-only', denied: false, enforcement: 'full' })
+  })
+
+  it('bwrap policy denial is never labelled environment, even when the environment declares the same text', async () => {
+    // bwrap's own dialect is `read-only file system`; a policy signature always outranks the environment's.
+    const { bash } = await setup({ containerDenialMarker: true }, argv => ({
+      argv: ['env', ...argv],
+      enforcement: 'full',
+      denialSignatures: ['read-only file system'],
+      environmentDenialSignatures: ['read-only file system'],
+      runnerFailureRules: RUNNER_FAILURE,
+    }))
+    const command = 'echo "touch: cannot touch /x: Read-only file system" >&2; exit 1'
+    expect((await run(bash, bash.resolve({ command }))).sandbox).toEqual({ mode: 'read-only', denied: true, enforcement: 'full' })
+    const task = await start(bash, bash.resolve({ command }))
     await task.done
     expect(task.sandbox).toEqual({ mode: 'read-only', denied: true, enforcement: 'full' })
   })

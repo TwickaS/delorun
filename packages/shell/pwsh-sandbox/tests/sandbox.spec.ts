@@ -19,7 +19,7 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { SandboxPwshExecutor } from '../src/index.ts'
-import { classifyRunnerFailure, isRunnerSpawnFailure, matchesSignature } from '../src/helpers.ts'
+import { classifyRunnerFailure, denialOf, isRunnerSpawnFailure, matchesSignature } from '../src/helpers.ts'
 import type { ShellExecSpec, ShellExecution, ShellRunResult } from '@deepseek-ai/dsh-shell'
 
 /** Historical foreground shorthand over the unified execute() seam. */
@@ -68,6 +68,7 @@ function throwingSubprocessRuntime(error: unknown): new (ctx: Context) => Servic
 async function setup(
   behavior: (argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal) => ConfinedArgv | Promise<ConfinedArgv> = passthrough,
   subprocess: new (ctx: Context) => Service = LocalSubprocessRuntime,
+  containerDenialMarker = false,
 ): Promise<{ ctx: Context; executor: SandboxPwshExecutor; calls: ConfineCall[] }> {
   const calls: ConfineCall[] = []
   class FakeSandboxProvider extends SandboxProvider {
@@ -79,7 +80,7 @@ async function setup(
   const ctx = new Context()
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(FakeSandboxProvider)
-  await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: spillDir })
+  await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: spillDir, containerDenialMarker })
   await ctx.plugin(subprocess)
   if (ctx.subprocess instanceof LocalSubprocessRuntime) {
     ctx.subprocess.internals = { spillDir }
@@ -160,6 +161,51 @@ describe('helpers (pure)', () => {
       expect(matchesSignature(0, 'access is denied', ['access is denied'])).toBe(false)
       expect(matchesSignature(null, 'access is denied', ['access is denied'])).toBe(false)
     })
+  })
+})
+
+describe('environment denials', () => {
+  const RO: SandboxPolicy = { mode: 'read-only', workspaceRoot: spillDir }
+  // A Node program in place of the wrapped pwsh argv, so the classification runs without pwsh.
+  const failing = (denialSignatures: readonly string[]) => (): ConfinedArgv => ({
+    argv: [process.execPath, '-e', 'process.stderr.write("New-Item: Read-only file system : /usr/x"); process.exit(1)'],
+    enforcement: 'full',
+    denialSignatures,
+    environmentDenialSignatures: ['read-only file system'],
+    runnerFailureRules: [],
+  })
+
+  async function facts(denialSignatures: readonly string[], containerDenialMarker: boolean) {
+    const { ctx, executor } = await setup(failing(denialSignatures), LocalSubprocessRuntime, containerDenialMarker)
+    try {
+      const foreground = (await run(executor, executor.resolve({ command: 'New-Item /usr/x', sandboxPolicy: RO }))).sandbox
+      const task = await start(executor, executor.resolve({ command: 'New-Item /usr/x', sandboxPolicy: RO }))
+      await task.done
+      return { foreground, background: task.sandbox }
+    } finally { await ctx.fiber.dispose() }
+  }
+
+  it('classifies a pure function: a policy signature outranks the environment\'s', () => {
+    const stderr = 'New-Item: Read-only file system'
+    expect(denialOf(1, stderr, ['access is denied'], ['read-only file system'])).toEqual({ denied: true, deniedBy: 'environment' })
+    expect(denialOf(1, stderr, ['read-only file system'], ['read-only file system'])).toEqual({ denied: true })
+    expect(denialOf(0, stderr, [], ['read-only file system'])).toEqual({ denied: false })
+    expect(denialOf(null, stderr, [], ['read-only file system'])).toEqual({ denied: false })
+  })
+
+  it('names a denial only the environment\'s signatures match, in the foreground and when a background process settles', async () => {
+    const expected = { mode: 'read-only', denied: true, deniedBy: 'environment', enforcement: 'full' }
+    expect(await facts(['access is denied'], true)).toEqual({ foreground: expected, background: expected })
+  })
+
+  it('ignores the environment\'s signatures with container_denial_marker off, as upstream classifies', async () => {
+    const expected = { mode: 'read-only', denied: false, enforcement: 'full' }
+    expect(await facts(['access is denied'], false)).toEqual({ foreground: expected, background: expected })
+  })
+
+  it('never labels a policy denial environment, even when the environment declares the same text', async () => {
+    const expected = { mode: 'read-only', denied: true, enforcement: 'full' }
+    expect(await facts(['read-only file system'], true)).toEqual({ foreground: expected, background: expected })
   })
 })
 

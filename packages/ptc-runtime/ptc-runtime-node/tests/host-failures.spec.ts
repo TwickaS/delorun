@@ -15,9 +15,9 @@ import { mountRuntime } from './setup.ts'
 
 const request: PtcRunRequest = { program: 'return 1', bindings: [] }
 
-async function setup(config: Config = {}, mode: 'read-only' | 'danger-full-access' = 'danger-full-access') {
+async function setup(config: Config = {}, mode: 'read-only' | 'danger-full-access' = 'danger-full-access', containerDenialMarker = false) {
   const ctx = new Context()
-  const { runtime } = await mountRuntime(ctx, config, { mode, workspaceRoot: process.cwd() })
+  const { runtime } = await mountRuntime(ctx, config, { mode, workspaceRoot: process.cwd(), containerDenialMarker })
   return { ctx, runtime, ...fakeChild(ctx, runtime, request) }
 }
 
@@ -86,6 +86,22 @@ describe('Node runtime host failures', () => {
     const result = await h.start()
     expect(result.error).toEqual({ kind: 'exception', message })
     expect(result.sandbox).toEqual({ mode: 'read-only', denied, enforcement: 'partial' })
+  })
+
+  it.each([
+    ['labels an environment-only failure with container_denial_marker on', true, ['EACCES'], { denied: true, deniedBy: 'environment' }],
+    ['ignores the environment\'s signatures with container_denial_marker off', false, ['EACCES'], { denied: false }],
+    ['never labels a policy denial environment, even when the environment declares the same text', true, ['read-only file system'], { denied: true }],
+  ] as const)('%s', async (_name, containerDenialMarker, denialSignatures, expected) => {
+    const h = await setup({}, 'read-only', containerDenialMarker)
+    vi.spyOn(h.ctx.sandbox, 'confine').mockImplementation(async argv => ({
+      ...confinement([...argv]), denialSignatures, environmentDenialSignatures: ['read-only file system'],
+    }))
+    const message = "EROFS: read-only file system, open '/usr/x'"
+    h.onBoot(() => { h.complete({ error: { kind: 'exception', message } }) })
+    const result = await h.start()
+    expect(result.error).toEqual({ kind: 'exception', message })
+    expect(result.sandbox).toEqual({ mode: 'read-only', enforcement: 'partial', ...expected })
   })
 
   it('distinguishes fatal sandbox startup output from a program denial', async () => {

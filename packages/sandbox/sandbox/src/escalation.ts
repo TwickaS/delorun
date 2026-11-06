@@ -74,6 +74,31 @@ export function sandboxDenialMarker(mode: SandboxMode): string {
 }
 
 /**
+ * The model-facing marker for a file operation the environment around the
+ * sandbox refused, such as a container's read-only root, which no sandbox
+ * mode lifts, so it carries no escalation hint.
+ * @returns the marker line, exactly as the model sees it.
+ */
+export function environmentDenialMarker(): string {
+  return '[sandbox: file access denied by the environment the sandbox runs in; no sandbox mode allows it]'
+}
+
+/**
+ * The markers a denied call's result carries: the environment's marker for a
+ * denial no mode lifts, otherwise the policy marker and, when the composition
+ * offers escalation, the escalation hint.
+ * @param facts - the call's sandbox facts.
+ * @param escalationModes - the escalation targets this composition advertises.
+ * @param subject - the family's noun for the denied action, such as `command`.
+ * @returns the markers, oldest first; none when the call was not denied.
+ */
+export function denialMarkers(facts: { readonly mode: SandboxMode; readonly denied: boolean; readonly deniedBy?: 'environment' }, escalationModes: readonly SandboxMode[], subject: string): string[] {
+  if (!facts.denied) return []
+  if (facts.deniedBy === 'environment') return [environmentDenialMarker()]
+  return escalationModes.length > 0 ? [sandboxDenialMarker(facts.mode), escalationHintMarker(subject)] : [sandboxDenialMarker(facts.mode)]
+}
+
+/**
  * The same-turn escalation hint that rides a denial when the composition
  * advertises the escalation fields — the nudge lives at the decision point so
  * the sanctioned retry does not depend on the model recalling the tool

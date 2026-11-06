@@ -36,6 +36,8 @@ interface Evaluation {
 export class ProgramWorker {
   private readonly unregister: (() => void) | undefined
   private confined: ConfinedArgv | undefined
+  /** The environment denial signatures fixed at confinement; none unconfined or with the switch off. */
+  private environmentDenialSignatures: readonly string[] = []
   private handle?: SubprocessHandle
   private channel?: BirpcReturn<ProgramMethods, HostMethods>
   private active: Evaluation | undefined
@@ -90,8 +92,15 @@ export class ProgramWorker {
       const result = await this.evaluate(spec, bindings)
       if (this.confined !== undefined) {
         sandbox.enforcement = this.confined.enforcement
-        sandbox.denied ||= result.error?.kind !== 'sandbox-unavailable' && this.confined.denialSignatures.some(signature =>
-          result.error?.message.toLowerCase().includes(signature.toLowerCase()))
+        const message = result.error === undefined || result.error.kind === 'sandbox-unavailable' ? undefined : result.error.message.toLowerCase()
+        const matches = (signatures: readonly string[]): boolean => message !== undefined
+          && signatures.some(signature => message.includes(signature.toLowerCase()))
+        // A policy signature outranks the environment's, since a wider mode can lift that denial.
+        if (matches(this.confined.denialSignatures)) sandbox.denied = true
+        else if (matches(this.environmentDenialSignatures)) {
+          sandbox.denied = true
+          sandbox.deniedBy = 'environment'
+        }
       }
       return { ...result, sandbox }
     } finally { this.running = false }
@@ -246,6 +255,7 @@ export class ProgramWorker {
       ...bootstrapArgs(this.ctx.fs, this.config.launch, this.config.maxMessageBytes, this.retainsState)]
     const policy = this.policy
     this.confined = policy.mode === 'danger-full-access' ? undefined : await this.ctx.sandbox.confine(argv, { ...policy, mode: policy.mode }, this.controller.signal)
+    this.environmentDenialSignatures = this.confined === undefined ? [] : this.ctx.sandboxPolicy.environmentDenialSignatures(this.confined)
     // oxlint-disable-next-line typescript/no-unnecessary-condition -- Cancellation can close the process during confinement.
     if (this.closed) return
     const env: NodeJS.ProcessEnv = Object.fromEntries(Object.keys(process.env)

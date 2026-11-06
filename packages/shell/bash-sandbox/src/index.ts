@@ -24,7 +24,7 @@ import type {
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import type { Config as LocalConfig } from '@deepseek-ai/dsh-bash-local'
-import { classifyDenial, classifyRunnerFailure, isRunnerSpawnFailure, matchesSignature } from './helpers.ts'
+import { classifyDenial, classifyRunnerFailure, denialOf, isRunnerSpawnFailure } from './helpers.ts'
 
 /**
  * Plugin config: the local executor's knobs, verbatim. The sandbox policy —
@@ -60,6 +60,7 @@ export class SandboxBashExecutor extends LocalBashExecutor {
     mode: ConfinedSandboxMode
     enforcement: SandboxEnforcement
     denialSignatures: readonly string[]
+    environmentDenialSignatures: readonly string[]
     runnerFailureRules: readonly RunnerFailureRule[]
     runnerProgram: string | undefined
     workdir: string
@@ -96,10 +97,13 @@ export class SandboxBashExecutor extends LocalBashExecutor {
       )
     }
     let confined: ConfinedArgv | undefined
+    // The environment signatures this run classifies against, fixed at confinement; none with the switch off.
+    let environment: readonly string[] = []
     const ex = await this.executeArgv(spec, async (signal) => {
       const prepared = await this.confine(spec.command, { ...policy, mode }, signal)
       signal.throwIfAborted()
       confined = prepared
+      environment = this.ctx.sandboxPolicy.environmentDenialSignatures(prepared)
       return prepared.argv
     }, (process) => {
       const facts = confined as ConfinedArgv
@@ -107,6 +111,7 @@ export class SandboxBashExecutor extends LocalBashExecutor {
         mode,
         enforcement: facts.enforcement,
         denialSignatures: facts.denialSignatures,
+        environmentDenialSignatures: environment,
         runnerFailureRules: facts.runnerFailureRules,
         runnerProgram: facts.argv[0],
         workdir: spec.workdir,
@@ -121,7 +126,8 @@ export class SandboxBashExecutor extends LocalBashExecutor {
       if (runnerFailure !== undefined) {
         throw new SandboxUnavailableError(mode, runnerFailure.detail)
       }
-      return { ...result, sandbox: { mode, denied: classifyDenial(result, denialSignatures), enforcement } }
+      // A policy signature outranks the environment's.
+      return { ...result, sandbox: { mode, ...classifyDenial(result, denialSignatures, environment), enforcement } }
     }, (error) => {
       // An upstream abort remains cancellation even when it prevents spawn.
       if (spec.signal?.aborted === true) spec.signal.throwIfAborted()
@@ -167,7 +173,7 @@ export class SandboxBashExecutor extends LocalBashExecutor {
         : classifyRunnerFailure(proc.exitCode, stderr, facts.runnerFailureRules) !== undefined
       proc.sandbox = {
         mode: facts.mode,
-        denied: !runnerFailed && matchesSignature(proc.exitCode, stderr, facts.denialSignatures),
+        ...runnerFailed ? { denied: false } : denialOf(proc.exitCode, stderr, facts.denialSignatures, facts.environmentDenialSignatures),
         enforcement: facts.enforcement,
         ...(runnerFailed ? { runnerFailed } : {}),
       }

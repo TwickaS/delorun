@@ -171,6 +171,7 @@ function canonicalBashResult(result: ShellRunResult, cwd: string) {
       sandbox: {
         mode: result.sandbox.mode,
         denied: result.sandbox.denied,
+        ...result.sandbox.deniedBy !== undefined ? { deniedBy: result.sandbox.deniedBy } : {},
         ...result.sandbox.enforcement !== undefined ? { enforcement: result.sandbox.enforcement } : {},
         ...result.sandbox.runnerFailed !== undefined ? { runnerFailed: result.sandbox.runnerFailed } : {},
       },
@@ -210,6 +211,8 @@ export function apply(ctx: Context, config: Config = {}): void {
   if (defaultMode !== undefined && sandboxPolicy === undefined) {
     throw new Error('tool-bash: the mounted bash executor confines but ctx.sandboxPolicy is missing')
   }
+  // The PTC SDK declares this schema to the model, so `deniedBy` appears only where an executor can report it.
+  const environmentDenials = sandboxPolicy?.containerDenialMarker === true
   /** Resolve the complete standing policy for this call when a confining executor is mounted. */
   const resolveSandboxPolicy = (exec: ToolExecution): SandboxExecutionPolicy | undefined =>
     sandboxPolicy?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session })
@@ -457,6 +460,7 @@ export function apply(ctx: Context, config: Config = {}): void {
                   properties: {
                     mode: { type: 'string', required: true },
                     denied: { type: 'boolean', required: true },
+                    ...environmentDenials ? { deniedBy: { type: 'string', enum: ['environment'] } } : {},
                     enforcement: { type: 'string' },
                     runnerFailed: { type: 'boolean' },
                   },
