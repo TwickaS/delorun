@@ -35,7 +35,7 @@ The parity composition is the configuration under which Delo replays upstream's 
 The parity composition consists of the following parts.
 
 - Upstream's profiles, bundles and scenario layers at the base tag, unchanged. A scenario's profile and composition come from its `snapshot.yml`. Its replay layers apply as upstream applies them: the composition's `cordis.snapshot.yml`, the base composition's `model.cordis.yml` and the scenario's `runtime.cordis.yml` where present.
-- The Delo bundles `@delo/bundle-studio` and `@delo/bundle-local` mounted, with the studio bundle's stock look switched on.
+- The Delo bundles `@delo/bundle-studio` and `@delo/bundle-local`, which the studio packages deliver, mounted, with the studio bundle's stock look switched on.
 - Every switch in the [switch registry](#switch-registry) at its parity value. A switch that is off registers no model-visible contribution: no tool, tool schema, tool description, tool result text, system prompt context or runtime context.
 - Each changed default in the [table below](#changed-defaults) at its parity value.
 
@@ -66,13 +66,13 @@ The registry has these entries.
 
 | Switch id | Registered by | Default | Parity | Model-visible contributions it switches |
 | --- | --- | --- | --- | --- |
-| `studio_additions` | `@delo/bundle-studio`, with the main chat in `@delo/plugin-main-chat` | On | Off | Theme, sidebar, chat states, onboarding tour and the main chat, including its write-class tools. Off is the stock look. |
+| `studio_additions` | `@delo/bundle-studio`, which the studio packages deliver, with the main chat in `@delo/plugin-main-chat` | On | Off | Theme, sidebar, chat states, onboarding tour and the main chat, including its write-class tools. Off is the stock look. |
 | `permission_defaults` | `@delo/plugin-permission-defaults` | On | Off | The workspace default preset and the one-consent requirement for full access. |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | On | Off | Refusal of loopback, link-local and private targets by `web_fetch` and the HTTP fetch provider, with a typed reason. |
 | `preset_inspect` | Delo's edit of upstream's preset tools | On | Off | The `preset_inspect` tool. |
 | `doctor` | `packages/boot/doctor`, launched by `apps/cli` | On | Off | None: a feature switch for the doctor command. |
 | `plugin_manager_read_exemption` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The escalation exemption for the read actions `list_plugins`, `list_bundles`, `list_version_exemptions`, `history` and `read_config`, and the tool description that states it. |
-| `profile_history` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The actions `history`, `read_config`, `undo` and `restore`, and the audit of plugins, builds and exemptions that `undo` and `restore` bring back. |
+| `profile_history` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The actions `history`, `read_config`, `configure`, `undo` and `restore`, and the audit of plugins, builds and exemptions that `undo` and `restore` bring back. |
 | `scheduled_task_consent` | Delo's edit of upstream's schedule tools | On | Off | The consent for `schedule_create` and `schedule_edit`, which names the recurrence, the target session and its permission preset. |
 | `instruction_layer_consent` | Delo's approval for instruction-layer files | On | Off | The approval for a model-authored write to a skill, a preset or an `AGENTS.md`, which names the effect and shows the diff. |
 | `mcp_add_consent` | Delo's MCP server add flow | On | Off | The consent that names the command an added MCP server will run. |
@@ -102,8 +102,8 @@ A parity run passes when `pnpm run test:snapshot` with the overlay exits 0 for e
 - `delo/packages/contract-parity-composition/`: the registry, its version and the switch types.
 - `delo/apps/tools/src/parity/composition/`: the parity overlay, the replay lane, the static scan and the switch sweep.
 - `delo/apps/tools/src/run-checks.ts`: the `parity-replay` and `parity-switches` checks.
-- `delo/apps/tools/src/parity/release/`: the parity run on built release artifacts.
-- `@delo/bundle-studio`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`: the packages that register switches.
+- `delo/apps/tools/src/parity/release/`: the release tooling delivers the parity run on built release artifacts.
+- `@delo/bundle-studio`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`: the packages that register switches, which the studio packages deliver.
 - `packages/boot/doctor`, launched by `apps/cli`: the doctor's registration.
 - Upstream's `vitest.snapshot.config.ts`, the snapshot adapters listed in `snapshotAdapters`, and the `snapshot.yml` and replay layer files of each scenario, which the lane reads without changing them.
 

@@ -35,7 +35,7 @@ description: "约定 C16：对等组合的规格，它使上游录制的场景�
 对等组合由以下部分组成。
 
 - 基线标签上上游的 profile、bundle 与场景层，不作任何改动。场景的 profile 与 composition 来自其 `snapshot.yml`。其回放层按上游的方式生效：composition 的 `cordis.snapshot.yml`、基础 composition 的 `model.cordis.yml`，以及场景的 `runtime.cordis.yml`（如存在）。
-- 挂载 Delo 的 bundle `@delo/bundle-studio` 与 `@delo/bundle-local`，并打开 studio bundle 的 stock 外观开关。
+- 挂载 Delo 的 bundle `@delo/bundle-studio` 与 `@delo/bundle-local`，这两个 bundle 由 studio 包交付，并打开 studio bundle 的 stock 外观开关。
 - [开关注册表](#switch-registry)中的每个开关都处于其对等取值。关闭的开关不注册任何影响模型的内容：不注册工具、工具 schema、工具描述、工具结果文本、system prompt context 或运行时 context。
 - [下表](#changed-defaults)中的每项已变更默认值都处于其对等取值。
 
@@ -66,13 +66,13 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 
 | 开关 id | 注册方 | 默认值 | 对等取值 | 它所开关的、对模型可见的内容 |
 | --- | --- | --- | --- | --- |
-| `studio_additions` | `@delo/bundle-studio`，其中的主 chat 位于 `@delo/plugin-main-chat` | 开 | 关 | 主题、侧边栏、chat 状态、新手引导，以及主 chat（包括其写入类工具）。关闭即 stock 外观。 |
+| `studio_additions` | `@delo/bundle-studio`（由 studio 包交付），其中的主 chat 位于 `@delo/plugin-main-chat` | 开 | 关 | 主题、侧边栏、chat 状态、新手引导，以及主 chat（包括其写入类工具）。关闭即 stock 外观。 |
 | `permission_defaults` | `@delo/plugin-permission-defaults` | 开 | 关 | 工作区默认预设，以及完全访问的一次性同意要求。 |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | 开 | 关 | `web_fetch` 与 HTTP 抓取提供方对回环、链路本地与私有网络目标的拒绝，附带带类型的原因。 |
 | `preset_inspect` | Delo 对上游预设工具的编辑 | 开 | 关 | `preset_inspect` 工具。 |
 | `doctor` | `packages/boot/doctor`，由 `apps/cli` 启动 | 开 | 关 | 无：doctor 命令的功能开关。 |
 | `plugin_manager_read_exemption` | Delo 对上游 `plugin_manager` 工具的编辑 | 开 | 关 | 只读动作 `list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 与 `read_config` 的提权豁免，以及说明该豁免的工具描述。 |
-| `profile_history` | Delo 对上游 `plugin_manager` 工具的编辑 | 开 | 关 | 动作 `history`、`read_config`、`undo` 与 `restore`，以及 `undo` 与 `restore` 带回的插件、构建与豁免的审计。 |
+| `profile_history` | Delo 对上游 `plugin_manager` 工具的编辑 | 开 | 关 | 动作 `history`、`read_config`、`configure`、`undo` 与 `restore`，以及 `undo` 与 `restore` 带回的插件、构建与豁免的审计。 |
 | `scheduled_task_consent` | Delo 对上游 schedule 工具的编辑 | 开 | 关 | `schedule_create` 与 `schedule_edit` 的同意，它写明重复规则、目标会话及其权限预设。 |
 | `instruction_layer_consent` | Delo 对指令层文件的审批 | 开 | 关 | 模型发起的、对 skill、预设或 `AGENTS.md` 的写入所需的审批，它写明效果并展示差异。 |
 | `mcp_add_consent` | Delo 的 MCP 服务器添加流程 | 开 | 关 | 同意书，写明添加的 MCP 服务器将运行的命令。 |
@@ -102,8 +102,8 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 - `delo/packages/contract-parity-composition/`：注册表、其版本与开关类型。
 - `delo/apps/tools/src/parity/composition/`：对等覆盖层、回放通道、静态扫描与开关扫描。
 - `delo/apps/tools/src/run-checks.ts`：检查 `parity-replay` 与 `parity-switches`。
-- `delo/apps/tools/src/parity/release/`：对构建好的发布产物进行的对等运行。
-- `@delo/bundle-studio`、`@delo/plugin-main-chat`、`@delo/plugin-permission-defaults` 与 `@delo/plugin-fetch-guard`：注册开关的包。
+- `delo/apps/tools/src/parity/release/`：由发布工具交付的、对构建好的发布产物进行的对等运行。
+- `@delo/bundle-studio`、`@delo/plugin-main-chat`、`@delo/plugin-permission-defaults` 与 `@delo/plugin-fetch-guard`：注册开关的包，由 studio 包交付。
 - `packages/boot/doctor`，由 `apps/cli` 启动：doctor 命令的注册。
 - 上游的 `vitest.snapshot.config.ts`、`snapshotAdapters` 中列出的 snapshot 适配器，以及每个场景的 `snapshot.yml` 与回放层文件；回放通道读取它们，但不改动它们。
 

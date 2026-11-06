@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/docs/reference/glossary.md
 /delo-glossary:
-  en: 17dc037d4976aecb
-  zh: f7344737eb6e34b4
+  en: 907ec6597f505426
+  zh: 421ea462c41e2f4e
 /delo-glossary/contents:
   en: 16b4c54858b530cb
   zh: 4eb0e0aeff70ac4f
 /delo-glossary/the-product:
-  en: 876bf3186af6cfe5
-  zh: 109b2e7fab689bbd
+  en: aaba3f10af4f157c
+  zh: a6f9d863daf77562
 /delo-glossary/where-things-run:
-  en: 3f4fd7dd38778947
-  zh: d1595fdedea96981
+  en: dffbc4a60278319a
+  zh: 1bb760b0a410fb6f
 /delo-glossary/reaching-a-studio:
-  en: 080e04d8237a051f
-  zh: 2acf080b4f0a18a0
+  en: 9c509e8133c1cab6
+  zh: 9f78f02491ed51ed
 /delo-glossary/signing-in:
   en: f4edd414d2172eb3
   zh: 7b585ba70b129502
@@ -24,8 +24,8 @@
   en: edc30fb12bdcd166
   zh: 3eeb89711440ac7c
 /delo-glossary/keeping-work-safe:
-  en: ea06586e04034450
-  zh: 28ab28b41ccad171
+  en: c42a864eec8ff713
+  zh: 4de6ccd57110e9a4
 /delo-glossary/community:
   en: da08503cb44f7d30
   zh: b8f801e961dc5dfd

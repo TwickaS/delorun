@@ -6,17 +6,17 @@
   en: a8c3f89cfc0ece7e
   zh: be11eb2234e602cd
 /delo-threat-model:
-  en: a86091ede7ea8375
-  zh: 4b3d1a30a1befb77
+  en: 94808aec7ef01112
+  zh: 0adddfe448e41f16
 /delo-threat-model/summary:
-  en: 4b18797e0663b797
-  zh: 1b6f7a5ccce1a637
+  en: 01969c78cf631013
+  zh: d75e99fc9da83cb9
 /delo-threat-model/contents:
   en: 7836ffd3e3ac3bc2
   zh: 9a5e9c9123f57331
 /delo-threat-model/goal:
-  en: 03a0388e7c10545a
-  zh: bdbef6d72b29b1e5
+  en: 615db039df9baac8
+  zh: 9d1364bf667fcd66
 /delo-threat-model/assets:
   en: 001c95fb2ca3217d
   zh: 9cf37e4f3b0594bf
@@ -24,41 +24,41 @@
   en: c261a17929625605
   zh: cd8592b6b91f7d1c
 /delo-threat-model/parties-and-trust/the-person:
-  en: 994ccf74157ff5e5
-  zh: e5482573b7d2579f
+  en: 738ffe53222685a6
+  zh: 37c2aba5c8e1b704
 /delo-threat-model/parties-and-trust/the-model-and-its-tool-calls:
-  en: b30e6cb296a7c88b
-  zh: 7f0c7f37596063c2
+  en: 77b28c555b9e386c
+  zh: 44e9950f5f6eb4c5
 /delo-threat-model/parties-and-trust/plugins:
-  en: df7b9c78c40999ce
-  zh: c83c42a6fa1ddd04
+  en: 9548735e839f02bf
+  zh: 0a00b4449e470bd4
 /delo-threat-model/parties-and-trust/other-local-processes-under-the-same-user:
-  en: 83dd65f2c7a3f880
-  zh: 63cdcc27fa9b4963
+  en: 7bef8df07155f6ad
+  zh: e6a5ea584c6eb9fe
 /delo-threat-model/parties-and-trust/other-users-on-the-machine:
-  en: c3d36a82d3d4352c
-  zh: ed03cf78055cb996
+  en: 6f332de6f40f81ad
+  zh: a190b463f39a2bb2
 /delo-threat-model/parties-and-trust/the-network:
-  en: 68b666207e2e2cd4
-  zh: 655b6e0aaa9b49f3
+  en: c3a5f46ea12ed8f0
+  zh: 698cc684c9123679
 /delo-threat-model/parties-and-trust/tailscale-the-person-s-own-relay-and-oidc-provider:
-  en: aa07d21572ee02ed
-  zh: 2f71e95724b6fbba
+  en: 446f25364f5b11bd
+  zh: a222f979f48e81c7
 /delo-threat-model/parties-and-trust/delo-run-the-project:
-  en: 504c0c54a79f9d6e
-  zh: 701c02621202f323
+  en: 19759d6f947d0bfd
+  zh: 5ceecb650b24a863
 /delo-threat-model/parties-and-trust/upstream-and-dependency-authors:
-  en: 47662dbfcd8885b9
-  zh: c100329e694a98c5
+  en: 62af24c8edcedb46
+  zh: 2432156aac871ddd
 /delo-threat-model/parties-and-trust/a-party-holding-a-stolen-device:
-  en: 830b72b2ffacef40
-  zh: e32ad8f1fabc71a0
+  en: 95c5fef0bac9c6cc
+  zh: 19f73f61114ace17
 /delo-threat-model/boundaries-and-their-defences:
   en: 59868d4e1d99c745
   zh: e387884da7e262b7
 /delo-threat-model/boundaries-and-their-defences/confinement-of-native-commands:
-  en: 7e32ed329bc823b9
-  zh: 4d567b98a020f9ea
+  en: cf8172ded78e60f1
+  zh: 6aa91f4e90246e34
 /delo-threat-model/boundaries-and-their-defences/the-home-s-control-channels:
   en: c2ff3f98496438ce
   zh: 6a1789c05bb38953
@@ -96,14 +96,14 @@
   en: a66f409a8d74d485
   zh: 4a753540711eedef
 /delo-threat-model/boundaries-and-their-defences/parity:
-  en: 2fbe097534f1de20
-  zh: fd40d1bb87ac0457
+  en: 886660e2f490ff48
+  zh: a542b853bea3b277
 /delo-threat-model/boundaries-and-their-defences/the-web-fetch-guard:
-  en: 4dff901b4bb2bd36
-  zh: 29b1b4bfe52386ad
+  en: 79a81db7be945814
+  zh: 9d2b2e865b3d3b9f
 /delo-threat-model/boundaries-and-their-defences/data-sharing:
-  en: 383a642dd02fe724
-  zh: 853b9bab89ce09e3
+  en: ff3f8cdfea974ac6
+  zh: 29724d8892709ec9
 /delo-threat-model/what-delo-does-not-protect-against:
   en: 2036a5e225e19775
   zh: 5913b8af0a3e7f41
