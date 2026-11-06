@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for c16-parity-composition.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/docs/contracts/c16-parity-composition.md
+/:
+  en: 36486638987df388
+  zh: f38c0c6feeb15404
+/contract-c16-parity-composition:
+  en: 80600ca60eb983b8
+  zh: 8c30b68580958724
+/contract-c16-parity-composition/summary:
+  en: 32af245a920f3aec
+  zh: ed9c9be9c97738ea
+/contract-c16-parity-composition/contents:
+  en: 9c9d9eecca7bfd80
+  zh: 9127c809423784ee
+/contract-c16-parity-composition/contract:
+  en: fc2209b246452100
+  zh: 0bf8d0ab45039888
+/contract-c16-parity-composition/contract/composition:
+  en: a06caf45ac586864
+  zh: 94b8dfce7cb96c04
+/contract-c16-parity-composition/contract/changed-defaults:
+  en: 82ea13ef7d6a8ffd
+  zh: 831a98cbf71b472f
+/contract-c16-parity-composition/contract/switch-registry:
+  en: 93b0ff6c34d33b9e
+  zh: 44d050f083d50e33
+/contract-c16-parity-composition/contract/replay-lane:
+  en: 8f291573f03530e2
+  zh: 40ae70618d998694
+/contract-c16-parity-composition/contract/switch-sweep-and-pass-rule:
+  en: 3b58d9424db9a1b4
+  zh: 27f4e7b1374387a0
+/contract-c16-parity-composition/consumers:
+  en: 5b2dbe58c903be8d
+  zh: 037e6d77cf2fec84
+/contract-c16-parity-composition/compatibility:
+  en: de74b59fd82f1ebc
+  zh: 5fefad55e68089f8
+/contract-c16-parity-composition/security:
+  en: 86da3ea678f07023
+  zh: 939a0b6cfc0ad876
+/contract-c16-parity-composition/decided-values:
+  en: 6ea907ef935b7554
+  zh: 06a42f44f458ff2b
