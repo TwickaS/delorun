@@ -100,7 +100,7 @@ Delo 中继不在 setup 的远程访问选项之列。setup 读取 stock home �
 | `desktopAnalytics` | `product-analytics` 行的 `config.enabled`。 | `desktop` profile；该 profile 不存在时 setup 会创建它。 |
 | `importStockHome` | 按归档约定导入 stock home。 | 不是 profile 写入。 |
 
-上游的会话遥测行 `session-telemetry-otel` 不是一个回答。只有本人提交反馈后，它才会发送会话日志前缀，setup 在下面的说明中陈述这一行为。
+上游的会话遥测行 `session-telemetry-otel` 不是一个回答。只有本人提交反馈后，它才会发送会话日志前缀，setup 在下面的说明中陈述这一行为。反馈对话框在本人发送前显示确切的载荷（包括会话日志前缀）及其目的地。
 
 <a id="yes-and-config-forms"></a>
 ### --yes 与 --config 形式

@@ -100,7 +100,7 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | `desktopAnalytics` | `config.enabled` of the `product-analytics` row. | The `desktop` profile, which setup creates when it does not exist. |
 | `importStockHome` | The import of a stock home under the archive contract. | Not a profile write. |
 
-Upstream's session-telemetry row `session-telemetry-otel` is not an answer. It sends a session-log prefix only after the person submits feedback, and setup states that behaviour in the statements below.
+Upstream's session-telemetry row `session-telemetry-otel` is not an answer. It sends a session-log prefix only after the person submits feedback, and setup states that behaviour in the statements below. The feedback dialog shows the exact payload, the session-log prefix included, and its destination before the person sends it.
 
 <a id="yes-and-config-forms"></a>
 ### The --yes and --config forms
