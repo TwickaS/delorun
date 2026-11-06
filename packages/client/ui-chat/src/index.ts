@@ -2,14 +2,15 @@
 import type {} from '@deepseek-ai/dsh-settings'
 
 import type { Volatile, Context } from '@deepseek-ai/cordis'
-import type { ChatSettings, CollapseTiming, FoldedReplies, LinkOpening, PerformanceUsageMode } from './chat-settings.ts'
+import type { ChatSettings, CollapseTiming, CustomDisplay, FoldedReplies, LinkOpening, PerformanceUsageMode } from './chat-settings.ts'
 import z from '@deepseek-ai/schemastery'
 import { TRANSCRIPT_VIEW_FIELD } from './chat-settings.ts'
 
 import { ChatSettingsFields } from './chat-settings.ts'
 
 export {
-  CHAT_SETTINGS_NAMESPACE, DEFAULT_TRANSCRIPT_VIEW_MODE, LEGACY_TRANSCRIPT_VIEW_MODE,
+  CHAT_SETTINGS_NAMESPACE, CUSTOM_DISPLAY_FIELD, DEFAULT_CUSTOM_DISPLAY, STEP_GROUPINGS, THINKING_DISPLAYS,
+  type CustomDisplay, type StepGrouping, type ThinkingDisplay, DEFAULT_TRANSCRIPT_VIEW_MODE, LEGACY_TRANSCRIPT_VIEW_MODE,
   LEGACY_EXPANDED_TRANSCRIPT_VIEW_MODE, TRANSCRIPT_VIEW_FIELD,
   TRANSCRIPT_VIEW_MODES, type ChatSettings, type TranscriptViewMode,
 } from './chat-settings.ts'
@@ -22,6 +23,8 @@ export interface Config {
   collapseTiming: Volatile<CollapseTiming>
   /** Assistant replies kept visible while a completed Turn folds its process. */
   foldedReplies: Volatile<FoldedReplies>
+  /** The parts of the Custom work-details mode. */
+  customDisplay: Volatile<CustomDisplay>
   /** Performance and usage detail level. */
   performanceUsage: Volatile<PerformanceUsageMode>
   /** Default destination for Chat HTTP(S) links. */
@@ -33,6 +36,7 @@ export const Config = z.object({
   [TRANSCRIPT_VIEW_FIELD]: ChatSettingsFields[TRANSCRIPT_VIEW_FIELD].volatile(),
   collapseTiming: ChatSettingsFields.collapseTiming.volatile(),
   foldedReplies: ChatSettingsFields.foldedReplies.volatile(),
+  customDisplay: ChatSettingsFields.customDisplay.volatile(),
   performanceUsage: ChatSettingsFields['performanceUsage'].volatile(),
   linkOpening: ChatSettingsFields.linkOpening.volatile(),
 })

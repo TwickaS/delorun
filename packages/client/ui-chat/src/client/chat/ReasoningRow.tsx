@@ -1,5 +1,5 @@
 /** Assistant reasoning disclosure, independent of Tool-call presentation. */
-import { memo, useMemo } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { DisclosureRow, IconThinkOutlineRegular, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ChatViewSlotProps, UseDisclosure, UsePresentation } from '../contract/slots.ts'
@@ -37,7 +37,10 @@ function latestCompletedParagraphFirstLine(text: string): string {
  * collapsed summary omits double-asterisk markers; expanded content renders
  * the complete Markdown with secondary typography. A streaming preview advances
  * when a paragraph's first line completes. Mode changes toggle CSS display without unmounting
- * collapsed summaries. The Body Slot receives both original and display-ready text.
+ * collapsed summaries. The Body Slot receives both original and display-ready text. The policy's
+ * `thinking` decides the rest: `title` shows no preview, `live` stays open while the block streams,
+ * `expanded` starts open, and `window` shows the body in a window of `thinkingWindowLines` lines
+ * that follows the stream until the reader opens it in full.
  * @param props.text - complete or streaming reasoning text.
  * @param props.running - whether this block is the streaming tail.
  * @param props.usePresentation - live display-policy selector for this reasoning row.
@@ -57,14 +60,26 @@ export const ReasoningRow = memo(function ReasoningRow({
   t: ChatViewSlotProps['t']
 } & Pick<PropsRenderSlots<'conversation.chat.reasoning.body'>, 'renderSlot'>) {
   const { expanded, toggle } = useDisclosure()
+  const thinking = usePresentation(policy => policy.thinking)
+  const windowLines = usePresentation(policy => policy.thinkingWindowLines)
+  // `expanded` starts open, so the reader's toggle closes it there.
+  const open = thinking === 'expanded' ? !expanded : expanded || (thinking === 'live' && running)
+  const windowed = thinking === 'window' && !expanded
+  const shown = open || windowed
   const { text, hidden } = useMemo(() => {
     const text = reasoningText(rawText)
     return { text, hidden: text !== rawText && text.trim() === '' }
   }, [rawText])
   const summaryText = running ? latestCompletedParagraphFirstLine(text) : firstLine(text)
   const summary = useMemo(() => summaryText.replaceAll('**', ''), [summaryText])
-  const preview = usePresentation(policy => !expanded && summary !== ''
+  const preview = usePresentation(policy => !shown && summary !== '' && policy.thinking !== 'title'
     && (running || policy.settledReasoningPreview))
+  const windowRef = useRef<HTMLDivElement>(null)
+  // The window follows the stream: each new line scrolls it to the end.
+  useLayoutEffect(() => {
+    const node = windowRef.current
+    if (node !== null && running) node.scrollTop = node.scrollHeight
+  }, [running, text, windowed])
   const collapsedContent = useMemo(() => (
     <>
       <span className={css.separator} data-shimmer-decoration aria-hidden />
@@ -75,11 +90,21 @@ export const ReasoningRow = memo(function ReasoningRow({
       </span>
     </>
   ), [running, summary])
-  const content = useMemo(() => expanded ? (
-    <div className={css.thinkBody} data-text-interaction-source={textInteractionSource && !running ? '' : undefined}>
-      {renderSlot('conversation.chat.reasoning.body', { rawText, text, running })}
-    </div>
-  ) : undefined, [expanded, renderSlot, running, rawText, text, textInteractionSource])
+  const content = useMemo(() => {
+    if (!shown) return undefined
+    const body = (
+      <div className={css.thinkBody} data-text-interaction-source={textInteractionSource && !running ? '' : undefined}>
+        {renderSlot('conversation.chat.reasoning.body', { rawText, text, running })}
+      </div>
+    )
+    if (!windowed) return body
+    return (
+      <div ref={windowRef} className={css.thinkWindow} data-streaming={running || undefined}
+        style={{ '--think-window-lines': windowLines } as CSSProperties}>
+        {body}
+      </div>
+    )
+  }, [shown, windowed, windowLines, renderSlot, running, rawText, text, textInteractionSource])
 
   if (hidden) return null
 
@@ -88,7 +113,8 @@ export const ReasoningRow = memo(function ReasoningRow({
       className={css.root}
       data-variant="think"
       data-state={running ? 'running' : 'ok'}
-      data-expanded={expanded || undefined}
+      data-expanded={shown || undefined}
+      data-thinking={thinking}
       data-preview={preview || undefined}
     >
       {running && <span className={a11yCss.visuallyHidden}>{t('row.running')}</span>}
@@ -99,7 +125,7 @@ export const ReasoningRow = memo(function ReasoningRow({
         icon={THINK_ICON}
         title={t('message.think')}
         running={running}
-        open={expanded}
+        open={shown}
         expandable
         expandOnRowClick
         onToggle={toggle}

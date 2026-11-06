@@ -32,8 +32,8 @@ export type FoldedReplies = typeof FOLDED_REPLIES[number]
 /** Keep every Assistant reply visible when no folded-reply preference is saved. */
 export const DEFAULT_FOLDED_REPLIES: FoldedReplies = 'all'
 
-/** Work-details presentation modes a user can choose. */
-export const TRANSCRIPT_VIEW_MODES = ['compact', 'standard', 'detailed', 'verbose'] as const
+/** Work-details presentation modes a user can choose; `custom` takes each part from {@link CUSTOM_DISPLAY_FIELD}. */
+export const TRANSCRIPT_VIEW_MODES = ['compact', 'standard', 'detailed', 'verbose', 'custom'] as const
 
 /** Work-details presentation mode. */
 export type TranscriptViewMode = typeof TRANSCRIPT_VIEW_MODES[number]
@@ -51,6 +51,52 @@ export const LEGACY_EXPANDED_TRANSCRIPT_VIEW_MODE = 'expanded'
 const TRANSCRIPT_VIEW_SETTING_VALUES = [
   ...TRANSCRIPT_VIEW_MODES, LEGACY_TRANSCRIPT_VIEW_MODE, LEGACY_EXPANDED_TRANSCRIPT_VIEW_MODE,
 ] as const
+
+/** Field carrying the parts of the Custom work-details mode. */
+export const CUSTOM_DISPLAY_FIELD = 'customDisplay'
+
+/**
+ * How a reasoning block shows: folded to its title, its title with a
+ * one-line preview, open while the model thinks and folded after, always
+ * open, or open in a window of a few lines that follows the stream.
+ * `rsvp` is reserved for word-by-word reading and shows as `preview`.
+ */
+export const THINKING_DISPLAYS = ['title', 'preview', 'live', 'expanded', 'window', 'rsvp'] as const
+
+/** How a reasoning block shows. */
+export type ThinkingDisplay = typeof THINKING_DISPLAYS[number]
+
+/** Collapsible step groups for every Turn, past Turns only, or none. */
+export const STEP_GROUPINGS = ['collapsed', 'history', 'none'] as const
+
+/** Collapsible step groups for every Turn, past Turns only, or none. */
+export type StepGrouping = typeof STEP_GROUPINGS[number]
+
+/** The parts of the Custom work-details mode. */
+export interface CustomDisplay {
+  /** How reasoning shows. */
+  thinking: ThinkingDisplay
+  /** The window's height in lines, for `window` reasoning. */
+  thinkingWindowLines: number
+  /** Collapsible step groups. */
+  stepGrouping: StepGrouping
+  /** Show the running command, path, query or reasoning detail in group titles. */
+  liveProcessDetail: boolean
+  /** Whether a shell command's terminal card starts open. */
+  openTerminalCards: boolean
+  /** Whether a completed Turn folds its process rows. */
+  foldCompletedTurns: boolean
+}
+
+/** The Custom mode's parts before the person changes any: the Detailed mode's. */
+export const DEFAULT_CUSTOM_DISPLAY: CustomDisplay = {
+  thinking: 'preview',
+  thinkingWindowLines: 6,
+  stepGrouping: 'history',
+  liveProcessDetail: true,
+  openTerminalCards: false,
+  foldCompletedTurns: true,
+}
 
 /** Default work details for non-Desktop Web clients. */
 export const DEFAULT_TRANSCRIPT_VIEW_MODE: TranscriptViewMode = 'detailed'
@@ -78,6 +124,8 @@ export interface ChatSettings {
   collapseTiming?: CollapseTiming
   /** Replies kept visible in a folded Turn; absence keeps every reply. */
   foldedReplies?: FoldedReplies
+  /** The Custom mode's parts; absence uses {@link DEFAULT_CUSTOM_DISPLAY}. */
+  customDisplay?: CustomDisplay
   /** Detail level for composer statistics and completed-Turn usage. */
   performanceUsage: PerformanceUsageMode
   /** Default destination for Chat HTTP(S) links. */
@@ -90,6 +138,14 @@ export const ChatSettingsFields = {
   [FOLDED_REPLIES_FIELD]: z.union([...FOLDED_REPLIES]).default(DEFAULT_FOLDED_REPLIES),
   linkOpening: z.union(['sidebar', 'new-tab']).default(DEFAULT_LINK_OPENING),
   performanceUsage: z.union([...PERFORMANCE_USAGE_MODES]).default(DEFAULT_PERFORMANCE_USAGE),
+  [CUSTOM_DISPLAY_FIELD]: z.object({
+    thinking: z.union([...THINKING_DISPLAYS]).default(DEFAULT_CUSTOM_DISPLAY.thinking),
+    thinkingWindowLines: z.natural().min(2).max(20).default(DEFAULT_CUSTOM_DISPLAY.thinkingWindowLines),
+    stepGrouping: z.union([...STEP_GROUPINGS]).default(DEFAULT_CUSTOM_DISPLAY.stepGrouping),
+    liveProcessDetail: z.boolean().default(DEFAULT_CUSTOM_DISPLAY.liveProcessDetail),
+    openTerminalCards: z.boolean().default(DEFAULT_CUSTOM_DISPLAY.openTerminalCards),
+    foldCompletedTurns: z.boolean().default(DEFAULT_CUSTOM_DISPLAY.foldCompletedTurns),
+  }),
   // Missing and unrecognized modes defer to the client's default.
   [TRANSCRIPT_VIEW_FIELD]: z.union([...TRANSCRIPT_VIEW_SETTING_VALUES]).loose(),
 }

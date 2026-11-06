@@ -75,3 +75,17 @@
   padding: 4px 0 4px calc(22px + var(--dsh-content-font-delta, 0px));
   min-width: 0;
 }
+
+/* A window of a few lines that follows the stream; the top edge fades so
+   earlier lines read as scrolled away. */
+.thinkWindow {
+  max-height: calc(var(--think-window-lines, 6) * 1.6em + 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 1.6em);
+}
+
+.thinkWindow:not([data-streaming]) {
+  mask-image: none;
+}

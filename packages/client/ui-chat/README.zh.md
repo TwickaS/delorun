@@ -102,6 +102,8 @@ Chat 末尾为进行中的 Turn 控制行，且该轮尚无可见输入时，第
 
 工作步骤展示模式控制过程组显示与推理预览。简洁、标准、详细模式收起符合条件的已完成轮次，保留所有 Assistant 回复可见，选「仅最终回答」时只保留最终答案；完全展开模式保留时长或状态抬头，但不支持收起，历史过程行直接显示。[业务规则明细](src/client/conversation-nodes/README.zh.md#display-modes) 统一说明模式表、组头行为、整轮折叠资格、时钟与开合重置。
 
+自定义模式（`transcriptView: 'custom'`）不使用预设，而是逐项取自 `ui-chat.customDisplay`：`thinking`、`thinkingWindowLines`、`stepGrouping`、`liveProcessDetail`、`openTerminalCards` 和 `foldCompletedTurns`，默认值与详细模式相同。`thinking` 决定推理块的显示方式：折叠为标题（`title`）、显示单行预览（`preview`）、流式输出时展开并在结束后折叠（`live`）、展开直至读者折叠（`expanded`），或以 `thinkingWindowLines` 行（2 至 20 行）的窗口显示并跟随流式输出，直到读者完整展开（`window`）；`rsvp` 保留给逐词阅读，显示为 `preview`。四种预设的行为保持不变。
+
 工作步骤展示下方的设置行提供[独立的收起时机设置](src/client/conversation-nodes/README.zh.md#collapse-timing)和[「收起后显示的回复」设置](src/client/conversation-nodes/README.zh.md#folded-replies)（`ui-chat.foldedReplies`，完全展开模式下隐藏），二者都通过相同的 Host profile 配置保存。
 
 -----

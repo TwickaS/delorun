@@ -16,10 +16,12 @@ describe('ui-chat Host settings', () => {
 
     expect(plainConfig(configuration.fiber.effectiveConfig)).toEqual({
       performanceUsage: 'detailed', linkOpening: 'sidebar', collapseTiming: 'completion', foldedReplies: 'all',
+      customDisplay: { thinking: 'preview', thinkingWindowLines: 6, stepGrouping: 'history', liveProcessDetail: true, openTerminalCards: false, foldCompletedTurns: true },
     })
     await configuration.update({ transcriptView: 'normal' })
     expect(plainConfig(configuration.fiber.effectiveConfig)).toEqual({
       transcriptView: 'normal', performanceUsage: 'detailed', linkOpening: 'sidebar', collapseTiming: 'completion', foldedReplies: 'all',
+      customDisplay: { thinking: 'preview', thinkingWindowLines: 6, stepGrouping: 'history', liveProcessDetail: true, openTerminalCards: false, foldCompletedTurns: true },
     })
     for (const mode of ['expanded', 'compact', 'standard', 'detailed', 'verbose']) {
       await configuration.update({ transcriptView: mode })
@@ -36,6 +38,10 @@ describe('ui-chat Host settings', () => {
     expect(plainConfig(configuration.fiber.effectiveConfig)).toMatchObject({ linkOpening: 'new-tab' })
     await expect(configuration.update({ linkOpening: 'popup' })).rejects.toThrow()
 
+    await configuration.update({ transcriptView: 'custom', customDisplay: { thinking: 'window', thinkingWindowLines: 10 } })
+    expect(plainConfig(configuration.fiber.effectiveConfig)).toMatchObject({ transcriptView: 'custom', customDisplay: { thinking: 'window', thinkingWindowLines: 10, stepGrouping: 'history' } })
+    await expect(configuration.update({ customDisplay: { thinking: 'shout' } })).rejects.toThrow()
+    await expect(configuration.update({ customDisplay: { thinkingWindowLines: 1 } })).rejects.toThrow()
     await fiber.dispose()
   })
 

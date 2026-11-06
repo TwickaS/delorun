@@ -102,6 +102,8 @@ When Chat ends with an open Turn control and that Turn has no visible input, the
 
 Work-details modes control process-group display and reasoning previews. Compact, Standard, and Detailed fold eligible completed Turns while keeping every Assistant reply visible, or only the final answer under Final answer only; Verbose retains the duration/status header without a collapse action and shows historical process rows directly. The [business-rule reference](src/client/conversation-nodes/README.md#display-modes) contains the mode table, title behavior, whole-Turn eligibility, clocks, and disclosure resets.
 
+Custom (`transcriptView: 'custom'`) takes each part from `ui-chat.customDisplay` instead of a preset: `thinking`, `thinkingWindowLines`, `stepGrouping`, `liveProcessDetail`, `openTerminalCards` and `foldCompletedTurns`, which default to Detailed's. `thinking` shows a reasoning block folded to its title (`title`), with a one-line preview (`preview`), open while it streams and folded after (`live`), open until the reader folds it (`expanded`), or in a window of `thinkingWindowLines` lines (2 to 20) that follows the stream until the reader opens it in full (`window`); `rsvp` is reserved for word-by-word reading and shows as `preview`. The four presets keep their behaviour.
+
 The Settings rows below Work details offer an [independent collapse-timing preference](src/client/conversation-nodes/README.md#collapse-timing) and a [Replies After Collapse preference](src/client/conversation-nodes/README.md#folded-replies) (`ui-chat.foldedReplies`, hidden in Verbose), both saved through the same Host profile configuration.
 
 -----

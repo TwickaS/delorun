@@ -8,8 +8,8 @@ import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts
 import { zh } from '../src/client/locale.ts'
 import { AssistantMarkdown, type AssistantMarkdownProps } from '../src/client/chat/AssistantMarkdown.tsx'
 import { useDetailedPresentation } from './presentation-fixture.client.ts'
-import type { TranscriptViewMode } from '../src/chat-settings.ts'
-import { derivePresentationPolicy, type CollapseTiming, type FoldedReplies } from '../src/client/presentation-policy.ts'
+import { DEFAULT_CUSTOM_DISPLAY, type TranscriptViewMode } from '../src/chat-settings.ts'
+import { derivePresentationPolicy, presentationPolicyFor, type CollapseTiming, type FoldedReplies } from '../src/client/presentation-policy.ts'
 import { ReasoningRow } from '../src/client/chat/ReasoningRow.tsx'
 import { bindDisclosure, useDisclosure } from '../src/client/chat/use-disclosure.ts'
 import { useSearchableHidden } from '../src/client/chat/searchable-hidden.ts'
@@ -147,6 +147,41 @@ describe('ReasoningRow', () => {
     expect(calls).toHaveBeenCalledWith('conversation.chat.reasoning.body', { rawText: 'Original thought', text: 'Original thought', running: false })
     expect(view.getAllByText('Original thought')).toHaveLength(1)
     expect(view.getAllByRole('button')).toHaveLength(1)
+  })
+
+  it.each([
+    ['title', false, false, false, false],
+    ['preview', false, false, true, true],
+    ['live', true, false, false, true],
+    ['expanded', true, true, false, false],
+    ['window', true, true, false, false],
+    ['rsvp', false, false, true, true],
+  ] as const)('shows %s thinking: open while running %s, open when settled %s, preview while running %s, settled preview %s', (thinking, openRunning, openSettled, previewRunning, previewSettled) => {
+    const policy = presentationPolicyFor('custom', 'completion', 'all', { ...DEFAULT_CUSTOM_DISPLAY, thinking, thinkingWindowLines: 3 })
+    const usePresentation = bindSnapshotSelector({ getSnapshot: () => policy, subscribe: () => () => {} })
+    const text = 'First line\n\nSecond paragraph\nMore'
+    const running = render(<ReasoningRow renderSlot={renderSlot} useDisclosure={useDisclosure}
+      text={text} running usePresentation={usePresentation} t={t} />)
+    const root = () => running.container.querySelector('[data-variant="think"]')!
+    expect(root().getAttribute('data-thinking')).toBe(thinking)
+    expect(running.getByRole('button').getAttribute('aria-expanded')).toBe(String(openRunning))
+    expect(root().hasAttribute('data-preview')).toBe(previewRunning)
+    expect(root().querySelector('[class*="thinkWindow"]') !== null).toBe(thinking === 'window')
+    running.rerender(<ReasoningRow renderSlot={renderSlot} useDisclosure={useDisclosure}
+      text={text} running={false} usePresentation={usePresentation} t={t} />)
+    expect(running.getByRole('button').getAttribute('aria-expanded')).toBe(String(openSettled))
+    expect(root().hasAttribute('data-preview')).toBe(previewSettled)
+    if (thinking === 'window') {
+      // Opening a window shows the whole block.
+      fireEvent.click(running.getByRole('button'))
+      expect(root().querySelector('[class*="thinkWindow"]')).toBeNull()
+      expect(running.getByRole('button').getAttribute('aria-expanded')).toBe('true')
+    }
+    if (thinking === 'expanded') {
+      fireEvent.click(running.getByRole('button'))
+      expect(running.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+    }
+    running.unmount()
   })
 
   it.each([

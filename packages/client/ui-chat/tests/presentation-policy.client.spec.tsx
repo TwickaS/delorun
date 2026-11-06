@@ -13,14 +13,15 @@ afterEach(cleanup)
 
 describe('Chat presentation policy', () => {
   it.each([
-    ['compact', true, 'collapsed', false, false],
-    ['standard', true, 'collapsed', true, true],
-    ['detailed', true, 'history', true, true],
-    ['verbose', false, 'none', true, false],
-  ] as const)('maps %s to stable presentation capabilities', (mode, foldCompletedTurns, stepGrouping, settledReasoningPreview, liveProcessDetail) => {
+    ['compact', true, 'collapsed', false, false, false],
+    ['standard', true, 'collapsed', true, true, false],
+    ['detailed', true, 'history', true, true, false],
+    ['verbose', false, 'none', true, false, true],
+  ] as const)('maps %s to stable presentation capabilities', (mode, foldCompletedTurns, stepGrouping, settledReasoningPreview, liveProcessDetail, openTerminalCards) => {
     const policy = presentationPolicyFor(mode)
     expect(policy).toEqual({
-      mode, collapseTiming: 'completion', foldedReplies: 'all', foldCompletedTurns, stepGrouping, settledReasoningPreview, liveProcessDetail,
+      mode, collapseTiming: 'completion', foldedReplies: 'all', foldCompletedTurns, stepGrouping, settledReasoningPreview, liveProcessDetail, openTerminalCards,
+      thinking: 'preview', thinkingWindowLines: 6,
     })
     expect(presentationPolicyFor(mode)).toBe(policy)
     expect(presentationPolicyFor(mode, 'completion')).toBe(policy)
@@ -32,6 +33,18 @@ describe('Chat presentation policy', () => {
     const finalOnly = presentationPolicyFor(mode, 'completion', 'final')
     expect(finalOnly).toEqual({ ...policy, foldedReplies: 'final' })
     expect(presentationPolicyFor(mode, 'completion', 'final')).toBe(finalOnly)
+  })
+
+  it('builds Custom from its parts, one stable object per set of choices', () => {
+    const parts = { thinking: 'window', thinkingWindowLines: 3, stepGrouping: 'none', liveProcessDetail: false, openTerminalCards: true, foldCompletedTurns: false } as const
+    const policy = presentationPolicyFor('custom', 'next-input', 'final', parts)
+    expect(policy).toEqual({
+      mode: 'custom', collapseTiming: 'next-input', foldedReplies: 'final', foldCompletedTurns: false, stepGrouping: 'none',
+      settledReasoningPreview: true, liveProcessDetail: false, openTerminalCards: true, thinking: 'window', thinkingWindowLines: 3,
+    })
+    expect(presentationPolicyFor('custom', 'next-input', 'final', { ...parts })).toBe(policy)
+    expect(presentationPolicyFor('custom', 'next-input', 'final', { ...parts, thinking: 'title' }).settledReasoningPreview).toBe(false)
+    expect(presentationPolicyFor('custom').thinking).toBe('preview')
   })
 
   it('keeps all sixteen mode, timing, and folded-reply policies distinct and stable', () => {

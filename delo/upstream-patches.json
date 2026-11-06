@@ -382,6 +382,66 @@
       "reason": "Documents the effort caption's level attributes and what a stylesheet can draw from them."
     },
     {
+      "path": "packages/client/ui-chat/src/chat-settings.ts",
+      "class": "delo-feature",
+      "reason": "Adds the Custom work-details mode, whose parts (reasoning display, window height, step grouping, live process detail, open terminal cards and completed-Turn folding) live in one `customDisplay` setting; the four presets are unchanged."
+    },
+    {
+      "path": "packages/client/ui-chat/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Exports the Custom mode's setting field, its types and defaults to the settings surfaces."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/transcript-view.ts",
+      "class": "delo-feature",
+      "reason": "Holds the live Custom parts beside the work-details mode and adopts them from the accepted Host section, so the Custom mode reads its saved parts."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/presentation-policy.ts",
+      "class": "delo-feature",
+      "reason": "Derives the presentation policy from the Custom parts and adds the fields the chat renderers read: `openTerminalCards`, true only in the Verbose view, and the reasoning display `thinking` with `thinkingWindowLines`; the four presets keep their behaviour."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/presentation-policy.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Expects the policy fields the presentation policy now carries and the Custom mode's parts."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/ReasoningRow.tsx",
+      "class": "delo-feature",
+      "reason": "Shows a reasoning block by the policy's `thinking` display: folded to its title, with a preview, open while it streams, open until folded, or in a window of a few lines that follows the stream."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/ReasoningRow.module.css",
+      "class": "delo-feature",
+      "reason": "Styles the reasoning window: a fixed number of lines that follows the stream, with a fade at its top edge while it streams."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/locale.ts",
+      "class": "delo-feature",
+      "reason": "Adds the Custom work-details label to every locale dictionary of the chat package."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/settings/TranscriptViewRow.tsx",
+      "class": "delo-feature",
+      "reason": "Labels the Custom work-details choice in the transcript view settings row."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/config.host.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the Custom mode's saved parts and their validation in the Host settings spec."
+    },
+    {
+      "path": "packages/client/ui-chat/tests/reasoning-row.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the reasoning display modes: title, live, expanded and window."
+    },
+    {
+      "path": "packages/client/ui-chat/README.md",
+      "class": "delo-feature",
+      "reason": "Documents the Custom work-details mode and its parts."
+    },
+    {
       "path": "packages/client/modules/README.zh.md",
       "class": "delo-feature",
       "reason": "Chinese counterpart of the modules README; its package-assets paragraph documents the .woff2 extension with the English text."
@@ -390,6 +450,16 @@
       "path": "packages/client/modules/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Consistency record re-recorded after the modules README's package-assets paragraph and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-chat/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the chat README; it documents the Custom work-details mode and its parts."
+    },
+    {
+      "path": "packages/client/ui-chat/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the chat README's Custom work-details paragraph and its Chinese counterpart changed."
     },
     {
       "path": "packages/client/ui-conversation/README.zh.md",

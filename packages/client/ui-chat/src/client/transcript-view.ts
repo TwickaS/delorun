@@ -4,9 +4,10 @@ import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { CollapseTiming, FoldedReplies } from './presentation-policy.ts'
 import {
-  COLLAPSE_TIMING_FIELD, DEFAULT_COLLAPSE_TIMING, DEFAULT_FOLDED_REPLIES, FOLDED_REPLIES_FIELD,
+  COLLAPSE_TIMING_FIELD, CUSTOM_DISPLAY_FIELD, DEFAULT_COLLAPSE_TIMING, DEFAULT_CUSTOM_DISPLAY,
+  DEFAULT_FOLDED_REPLIES, FOLDED_REPLIES_FIELD,
   DEFAULT_TRANSCRIPT_VIEW_MODE, LEGACY_TRANSCRIPT_VIEW_MODE, LEGACY_EXPANDED_TRANSCRIPT_VIEW_MODE, TRANSCRIPT_VIEW_FIELD,
-  type ChatSettings, type TranscriptViewMode,
+  type ChatSettings, type CustomDisplay, type TranscriptViewMode,
 } from '../chat-settings.ts'
 
 /** Live work-details preference consumed by Chat and its Settings row. */
@@ -18,6 +19,8 @@ export class TranscriptViewPolicy {
   readonly collapseTiming: SnapshotStore<CollapseTiming> = createSnapshotStore<CollapseTiming>(DEFAULT_COLLAPSE_TIMING)
   /** Reactive folded-reply choice, keeping every reply until Host settings arrive. */
   readonly foldedReplies: SnapshotStore<FoldedReplies> = createSnapshotStore<FoldedReplies>(DEFAULT_FOLDED_REPLIES)
+  /** Reactive Custom parts, the Detailed mode's until Host settings arrive. */
+  readonly customDisplay: SnapshotStore<CustomDisplay> = createSnapshotStore<CustomDisplay>(DEFAULT_CUSTOM_DISPLAY)
 
   /**
    * @param host - durable Chat settings scope.
@@ -65,6 +68,15 @@ export class TranscriptViewPolicy {
     void this.host.set(FOLDED_REPLIES_FIELD, replies)
   }
 
+  /**
+   * Publish and persist the Custom mode's parts.
+   * @param display - every part of the Custom mode.
+   */
+  setCustomDisplay(display: CustomDisplay): void {
+    this.customDisplay.set(display)
+    void this.host.set(CUSTOM_DISPLAY_FIELD, display)
+  }
+
   /** Adopt the latest accepted Host section without writing it back. */
   private adopt(): void {
     const section = this.host.getSnapshot().value
@@ -77,5 +89,7 @@ export class TranscriptViewPolicy {
     if (this.collapseTiming.getSnapshot() !== timing) this.collapseTiming.set(timing)
     const replies = section.foldedReplies ?? DEFAULT_FOLDED_REPLIES
     if (this.foldedReplies.getSnapshot() !== replies) this.foldedReplies.set(replies)
+    const custom = section.customDisplay ?? DEFAULT_CUSTOM_DISPLAY
+    if (JSON.stringify(this.customDisplay.getSnapshot()) !== JSON.stringify(custom)) this.customDisplay.set(custom)
   }
 }
