@@ -200,6 +200,121 @@
       "path": ".github/workflows/gates.yml",
       "class": "delo-feature",
       "reason": "Delo's gate workflow: runs each Delo check gate on pull requests and on pushes to v5 and main."
+    },
+    {
+      "path": ".github/workflows/build-exe-for-python-sdk.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/build-preview-cloudflare.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/ci-master.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/ci-python.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/cua-helper-package.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/desktop-publish.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/docs-pages.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/e2e.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/issue-lifecycle.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/issue-policy.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/macos-intel-package.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/macos-package.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/node-addon-system-release.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/pi-ai-provider-e2e.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/pr-check-after-approve.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/pr-check-on-base-branch.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/pr-check-on-head-branch.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/publish-ssh-helper.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/python-release.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/release-publish.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/release-vendor-publish.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/weighted-approval.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
+    },
+    {
+      "path": ".github/workflows/windows-package.yml",
+      "class": "delo-feature",
+      "reason": "Runs only in upstream's repository: it needs DeepSeek's secrets or infrastructure."
     }
   ],
   "retired": []
