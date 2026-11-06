@@ -53,7 +53,7 @@ The registry contains these checks.
 | `release-signature` | `none` | The installed release's signature and its release-log entry, under the release contract. |
 | `runtime-files` | `start` | The runtime files against the signed manifest, under the release contract. A changed file is a `fail`. |
 | `workspace-isolation` | `none` | The isolation in effect for each workspace, and the limits that Docker enforces on the machine. |
-| `confinement-rule` | `none` | Whether the sandbox dialect of the machine keeps confined commands from reading or connecting to anything under `~/.delo` and the Docker socket, under the runtime contract. A dialect that cannot enforce it is a `not-enforced`. |
+| `confinement-rule` | `none` | Whether the sandbox dialect of the machine keeps confined commands from reading Delo's secrets or tokens, and from connecting to its control sockets and the Docker socket, under the runtime contract. A dialect that cannot enforce it is a `not-enforced`. |
 | `reach-binding` | `reach` | The reach listener's binding and the active reach option. An exposure mismatch is a `fail`. |
 | `own-domain-caa` | `reach` | The CAA record for an own domain, checked only for the parameters that the certificate authority named by the reach contract enforces. |
 | `certificates` | `reach` | The certificate state for the home's names, and the certificate alerts that the home has raised. |

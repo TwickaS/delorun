@@ -53,7 +53,7 @@ description: "约定 C15：验证检查的注册表、各项检查与其阶段�
 | `release-signature` | `none` | 已安装发布版本的签名及其发布日志条目，依据发布约定。 |
 | `runtime-files` | `start` | 运行时文件与已签名清单的比对，依据发布约定。文件被改动即为 `fail`。 |
 | `workspace-isolation` | `none` | 每个工作区实际生效的隔离，以及机器上 Docker 所实施的限制。 |
-| `confinement-rule` | `none` | 机器的沙箱方言是否使受限命令无法读取或连接 `~/.delo` 与 Docker socket 下的任何内容，依据运行时约定。无法实施该规则的方言结果为 `not-enforced`。 |
+| `confinement-rule` | `none` | 机器的沙箱方言是否使受限命令无法读取 Delo 的密钥与令牌，且无法连接其控制套接字与 Docker socket，依据运行时约定。无法实施该规则的方言结果为 `not-enforced`。 |
 | `reach-binding` | `reach` | 远程访问监听器的绑定与生效的远程访问选项。暴露不匹配即为 `fail`。 |
 | `own-domain-caa` | `reach` | 自有域名的 CAA 记录，仅就远程访问约定所指定的证书颁发机构所实施的参数进行检查。 |
 | `certificates` | `reach` | home 名称的证书状态，以及 home 已发出的证书告警。 |
