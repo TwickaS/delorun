@@ -638,6 +638,8 @@ export type OnboardingProcess = 'compact' | 'standard' | 'detailed'
 export interface Config {
   /** Offer the browser API-key step when no native shell owns credential onboarding. */
   credentialOnboarding: boolean
+  /** Show the Web welcome (preview) notice before the first session; a composition with its own onboarding turns it off. */
+  welcomeNotice: boolean
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-models -->

@@ -682,9 +682,54 @@
       "reason": "Consistency record re-recorded after the locale README's override section and its Chinese counterpart changed."
     },
     {
+      "path": "packages/client/ui-settings-models/src/onboarding-config.ts",
+      "class": "delo-feature",
+      "reason": "Adds the welcomeNotice option, default on, beside credentialOnboarding, so a composition with its own onboarding can drop the Web welcome notice."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Publishes welcomeNotice with the onboarding choices before browser plugins activate."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Shows the Web welcome notice only while welcomeNotice is on, so a composition with its own onboarding can drop it."
+    },
+    {
+      "path": "packages/client/ui-settings-models/README.md",
+      "class": "delo-feature",
+      "reason": "Documents the welcomeNotice option beside credentialOnboarding."
+    },
+    {
+      "path": "packages/client/ui-settings-models/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the settings-models README; it documents the welcomeNotice option."
+    },
+    {
+      "path": "packages/client/ui-settings-models/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the settings-models README's welcomeNotice sentence and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-settings-models/tests/apply.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the welcomeNotice option: its default in the published onboarding choices and its effect on the welcome notice."
+    },
+    {
       "path": "packages/extensions/cordis-client-runner/src/client/slot-catalog.ts",
       "class": "delo-feature",
       "reason": "Generated client slot catalogue, regenerated for the Chat presentation Hook, the removed assistant presentation source and the new headline slot, which move the source lines of the Chat slot declarations."
+    },
+    {
+      "path": "docs/config-catalog.md",
+      "class": "delo-feature",
+      "reason": "Generated config catalogue, regenerated for the welcomeNotice option beside credentialOnboarding."
+    },
+    {
+      "path": "docs/config-catalog.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the generated config catalogue, regenerated with it for the welcomeNotice option."
     }
   ],
   "retired": []
