@@ -6,3 +6,10 @@
   name: '@deepseek-ai/dsh-plugin-manager/tools'
   config:
     readActionsExempt: true
+# Pins the corpus model. model.cordis.yml pins the model only when a primary Session
+# exists, so a first record needs this row.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

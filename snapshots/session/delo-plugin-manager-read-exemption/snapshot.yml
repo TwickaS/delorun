@@ -7,5 +7,3 @@ permission: workspace-write
 header:
   class: delo-plugin-manager-read-exemption
   pin: true
-input:
-  task: List the plugins of this profile with the plugin manager, then list its bundles.

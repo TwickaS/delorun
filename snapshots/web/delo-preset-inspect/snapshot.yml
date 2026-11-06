@@ -10,5 +10,3 @@ recording: live
 header:
   class: delo-preset-inspect
   pin: true
-input:
-  task: Which modes does this harness offer? Use preset_inspect.

@@ -7,5 +7,3 @@ permission: danger-full-access
 header:
   class: delo-profile-history
   pin: true
-input:
-  task: Show the version history of this profile with the plugin manager.
