@@ -264,7 +264,7 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:web-changed
 | `doctor` | Config 默认值 `false`。只有 `doctor` profile 挂载该应用，回放不启动 doctor 进程。 |
 | `studio_additions` | Config 默认值 `false`，属于 `@delo/plugin-main-chat` 的 `studioAdditions`。尚无已发布的 profile 或 bundle 挂载主对话。 |
 
-C16 所列的变更默认值在本仓库中都未改动。studio bundle、权限默认值与 fetch 防护尚在计划中；studio 附加功能中只有主对话在本树中，且默认关闭；preset 默认值（`standard`）、会话日志上传（开启）与桌面端分析（关闭）保持上游的取值，因此覆盖层不恢复其中任何一项。
+覆盖层还挂载 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md)：在开关行之后，它按各 `LOCAL_ROWS` 条目给出的对等形式，重述该组合包 `cordis.patch.yml` 的 patch；当重述与该文件的 `parityPatches` 不一致时，`parity-switches` 失败（[`overlay.ts`](src/parity/composition/overlay.ts) 中的 `localBundleErrors`）。会话日志上传行是 C16 所列的变更默认值，它被省略，因此保持上游的取值：覆盖层跟随每次回放的根配置，该配置对 headless 与 ACP 语料关闭上传，在其他语料中保持开启。桌面端分析保持 Delo 的 `false`，“隐私”分区行存在且已禁用。studio bundle、权限默认值与 fetch 防护尚在计划中；studio 附加功能中只有主对话在本树中，且默认关闭；preset 默认值保持上游的取值（`standard`）。
 
 ### 注册表
 

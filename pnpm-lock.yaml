@@ -1270,6 +1270,9 @@ importers:
 
   delo/apps/tools:
     dependencies:
+      '@delo/bundle-local':
+        specifier: workspace:*
+        version: link:../../packages/bundle-local
       '@delo/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../../packages/contract-oidc-passkeys

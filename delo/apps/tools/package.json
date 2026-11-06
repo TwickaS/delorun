@@ -9,6 +9,7 @@
     "check": "tsx src/check-fork-boundary.ts"
   },
   "dependencies": {
+    "@delo/bundle-local": "workspace:*",
     "@delo/contract-oidc-passkeys": "workspace:*",
     "@delo/contract-parity-composition": "workspace:*",
     "@delo/contract-reach-providers": "workspace:*",

@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 摘要
 
-`@delo/bundle-local` 是 Delo 的 CLI profile 在上游的 `web` profile 模板之后加入的组合包。它的 patch 保存 Delo 的本地集成行，每一行的理由都列在 [`LOCAL_ROWS`](src/profile.ts) 中，因此 Delo 的 CLI profile 在组合上游的 web profile 时，只改变或新增这些行，其他一概不变。它关闭上游的两个选择加入项，即 DeepSeek 的会话日志上传与桌面端分析，并新增设置中的“隐私”分区；本人在该分区中经同意对话框后打开每一项，也可以再次关闭（[C11](../../docs/contracts/c11-setup-answers.zh.md)）。Delo 的基础设施插件到达时，会各自添加自己的行。
+`@delo/bundle-local` 是 Delo 的 CLI profile 在上游的 `web` profile 模板之后加入的组合包。它的 patch 保存 Delo 的本地集成行，每一行的理由都列在 [`LOCAL_ROWS`](src/rows.ts) 中，因此 Delo 的 CLI profile 在组合上游的 web profile 时，只改变或新增这些行，其他一概不变。它关闭上游的两个选择加入项，即 DeepSeek 的会话日志上传与桌面端分析，并新增设置中的“隐私”分区；本人在该分区中经同意对话框后打开每一项，也可以再次关闭（[C11](../../docs/contracts/c11-setup-answers.zh.md)）。Delo 的基础设施插件到达时，会各自添加自己的行。
 
 ## 目录
 
@@ -22,7 +22,8 @@ kind: "package-bundle"
 <a id="use-this-bundle"></a>
 ## 使用本组合包
 
-- **组合包列表。**[`DELO_PROFILE_BUNDLES`](src/profile.ts) 是 Delo CLI profile 有序的 `dsh.profile.bundles` 列表：先是上游的 `web` 模板，从 `@deepseek-ai/dsh-official-bundles` 读取，然后是 `@delo/bundle-local`。`delorun` 会把它写入每个创建于 `~/.delo/profiles/` 之下的 CLI profile（[C1](../../docs/contracts/c01-home-layout.zh.md#profiles)）。上游自身的模板并不列出本组合包，因此 `dsh --profile web`、录制会话的回放以及[对等组合](../../docs/contracts/c16-parity-composition.zh.md)只组合上游的组合包。
+- **组合包列表。**[`DELO_PROFILE_BUNDLES`](src/profile.ts) 从 `@delo/bundle-local/profile` 导出，是 Delo CLI profile 有序的 `dsh.profile.bundles` 列表：先是上游的 `web` 模板，从 `@deepseek-ai/dsh-official-bundles` 读取，然后是 `@delo/bundle-local`。上游自身的模板并不列出本组合包，因此 `dsh --profile web` 与录制会话的回放只组合上游的组合包。
+- **`delorun` 的职责。**`delorun` 负责创建 `~/.delo/profiles/` 之下的 CLI profile（[C1](../../docs/contracts/c01-home-layout.zh.md#profiles)），把 `DELO_PROFILE_BUNDLES` 写入其创建的每个 CLI profile；当上游的 profile 加载器在 `skippedBundles` 中报告本组合包时，它拒绝启动该 CLI profile，因为隐私默认值只在本组合包加载时才成立。本包两件事都不做。
 - **层顺序。**本组合包在每个上游组合包之后、profile 自身的 `cordis.patch.yml`、home patch 与 `--patch` overlay 之前生效，因此本人在 profile 中的设置仍然优先于此处的行（[上游的 profile 层](../../../apps/cli/README.zh.md#profiles)）。“隐私”分区写入 profile 的 `cordis.patch.yml`。
 - **读取组合结果。**`dsh --profile <name> --dump-config` 会在每个 `# ==` 行之下打印全部组合后的行。该标注写明插入此行的组合包，以及修补此行的每个组合包；本组合包写入的行，在该标注中写有 `@delo/bundle-local`。
 - **加载。**本组合包未声明 `engines.dsh` 范围，也没有上游的对等依赖，因此版本变更之后，上游的兼容性检查从不会跳过它；若 profile 的组合包列表中列出了它却无法解析，则会把该组合包报告为已跳过。
@@ -31,15 +32,15 @@ kind: "package-bundle"
 <a id="rows"></a>
 ## 行
 
-[`LOCAL_ROWS`](src/profile.ts) 列出 Delo CLI profile 与上游 web profile 有所不同的每一行：
+[`LOCAL_ROWS`](src/rows.ts) 列出 Delo CLI profile 与上游 web profile 有所不同的每一行，以及该行在 C16 对等组合中的形式：
 
-| 行 | 类型 | 在 Delo CLI profile 中 | 在上游的 web profile 中 |
-| --- | --- | --- | --- |
-| `session-log-deepseek` | 改变 | `config.enabled: false`：模型请求不携带 `dsh_session_log` 字段 | 插件的默认值，即 `true` |
-| `product-analytics` | 改变 | `config.enabled: false`，重申上游的 `appVersion`，并保留上游的 `disabled` 条件，因此该行只在桌面 profile 中挂载，并且在 Delo CLI profile 中不接受任何事件 | `config.enabled: true` |
-| `delo-privacy` | 新增 | “隐私”分区，位于设置中 | 无 |
+| 行 | 类型 | 在 Delo CLI profile 中 | 在上游的 web profile 中 | 在对等组合中 |
+| --- | --- | --- | --- | --- |
+| `session-log-deepseek` | 改变 | `config.enabled: false`：模型请求不携带 `dsh_session_log` 字段 | 插件的默认值，即 `true` | 沿用上游的组合：覆盖层省略该行，因为它跟随每次回放的根配置，而根配置按语料库设定上传 |
+| `product-analytics` | 改变 | `config.enabled: false`，重申上游的 `appVersion`，并保留上游的 `disabled` 条件，因此该行只在桌面 profile 中挂载，并且在 Delo CLI profile 中不接受任何事件 | `config.enabled: true` | 与此处所写相同；回放不挂载桌面端 Host |
+| `delo-privacy` | 新增 | “隐私”分区，位于设置中 | 无 | 存在且已禁用，因为录制的 Web 场景比较的是上游的界面输出 |
 
-上游的反馈遥测行 `session-telemetry-otel` 保持不变：它仅在本人发送反馈时才发送会话日志前缀，“隐私”分区会对此予以说明。没有任何行指明 Delo 主机。
+[对等覆盖层](../../apps/tools/src/parity/composition/parity.overlay.yml) 以该形式重述本组合包的 patch，从而挂载本组合包；[`parityPatches`](src/rows.ts) 从本组合包的 `cordis.patch.yml` 推导出该形式，覆盖层与之不一致时，`parity-switches` 失败。上游的反馈遥测行 `session-telemetry-otel` 保持不变：它仅在本人发送反馈时才发送会话日志前缀，“隐私”分区会对此予以说明。没有任何行指明 Delo 主机。
 
 <a id="the-privacy-section"></a>
 ## “隐私”分区
@@ -66,7 +67,7 @@ kind: "package-bundle"
 <a id="limits"></a>
 ## 限制
 
-- 组合包列表是供 `delorun` 写入的常量；没有任何已发布的上游模板列出它，因此 C16 对等回放不挂载本组合包。
+- 组合包列表是供 `delorun` 写入的常量；没有任何已发布的上游模板列出它，因此录制会话的回放只经由对等覆盖层挂载本组合包。
 - 在 `DELO_PROFILE_BUNDLES` 变更之前创建的 profile，保留其创建时的列表。
-- 隐私默认值只有在 profile 加载本组合包时才成立。上游会把无法加载的组合包报告为已跳过，并在不含它的情况下启动，此时会话日志上传处于开启状态。
+- 隐私默认值只有在 profile 加载本组合包时才成立。上游会把无法加载的组合包报告为已跳过，并在不含它的情况下启动，此时会话日志上传处于开启状态；`delorun` 拒绝启动此类 profile，正是它保住了这些默认值。
 - 桌面端分析只挂载于上游的 `desktop` profile，而 `delorun` 不运行该 profile，因此 Delo CLI profile 的“隐私”分区显示该行的原因，而不显示开关。

@@ -15,7 +15,7 @@ import { PARITY_OVERLAY_PATH, PARITY_REGISTRY_VERSION, PARITY_SWITCHES, type Par
 import { readManifest } from '../../check-fork-boundary.ts'
 import { repositoryRoot, runGit } from '../../git.ts'
 import { changedLines, contributionErrors, findContributions, type Contribution } from './contributions.ts'
-import { overlayErrors, parseOverlay } from './overlay.ts'
+import { LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, readOverlay } from './overlay.ts'
 import { registryErrors, switchMarkers, type SwitchMarker } from './switches.ts'
 import { sweep, sweepLine, type SweepRow } from './sweep.ts'
 
@@ -107,7 +107,8 @@ export function scanParity(root: string, options: ScanOptions = {}): ParityScan 
     ...contributionErrors(contributions, registry),
   ]
   try {
-    errors.push(...overlayErrors(parseOverlay(read(PARITY_OVERLAY_PATH)), registry))
+    const overlay = readOverlay(read(PARITY_OVERLAY_PATH))
+    errors.push(...overlayErrors(overlay.switches, registry), ...localBundleErrors(overlay.localBundle, read(LOCAL_BUNDLE_PATCH_PATH)))
   } catch (error) {
     errors.push(`${PARITY_OVERLAY_PATH}: ${error instanceof Error ? error.message : String(error)}`)
   }

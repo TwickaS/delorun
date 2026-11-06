@@ -264,7 +264,7 @@ A patch row replaces its entry's whole `config` and reaches only entries of the 
 | `doctor` | Config default `false`. Only the `doctor` profile mounts the app, and the replay starts no doctor process. |
 | `studio_additions` | Config default `false` of `@delo/plugin-main-chat`'s `studioAdditions`. No shipped profile or bundle mounts the main chat yet. |
 
-None of C16's changed defaults is changed in this tree. The studio bundle, the permission defaults and the fetch guard are planned; of the studio additions only the main chat is in the tree, off by its own default, and the preset default (`standard`), the session-log upload (on) and desktop analytics (off) keep upstream's values, so the overlay restores none of them.
+The overlay also mounts [`@delo/bundle-local`](../../packages/bundle-local/README.md): after the switch rows it restates that bundle's `cordis.patch.yml` in the parity form each `LOCAL_ROWS` entry gives, and `parity-switches` fails when the restatement differs from `parityPatches` of the bundle's file (`localBundleErrors` in [`overlay.ts`](src/parity/composition/overlay.ts)). The session-log upload row, C16's changed default, is left out, so it keeps upstream's value: the overlay follows each replay's root configuration, which turns upload off for the headless and ACP corpora and leaves it on elsewhere. Desktop analytics keeps Delo's `false`, and the Privacy section row is present and disabled. The studio bundle, the permission defaults and the fetch guard are planned; of the studio additions only the main chat is in the tree, off by its own default, and the preset default keeps upstream's value (`standard`).
 
 ### The registry
 

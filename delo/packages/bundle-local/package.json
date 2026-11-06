@@ -16,6 +16,7 @@
       "default": "./lib/client.js"
     },
     "./profile": "./src/profile.ts",
+    "./rows": "./src/rows.ts",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -26,7 +27,8 @@
     "lib/types/**/*.d.ts",
     "locale/*.json",
     "cordis.patch.yml",
-    "src/profile.ts"
+    "src/profile.ts",
+    "src/rows.ts"
   ],
   "dsh": {
     "bundle": {

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@delo/bundle-local` is the bundle that Delo's CLI profiles add after upstream's `web` profile template. Its patch holds Delo's local integration rows, each listed with its reason in [`LOCAL_ROWS`](src/profile.ts), so a Delo CLI profile composes upstream's web profile with those rows changed or added and nothing else. It turns off upstream's two opt-ins, DeepSeek's session-log upload and the desktop app's analytics, and adds the Privacy section in Settings, where the person turns each one on after a consent dialog and off again ([C11](../../docs/contracts/c11-setup-answers.md)). Delo's infrastructure plugins add their rows as they arrive.
+`@delo/bundle-local` is the bundle that Delo's CLI profiles add after upstream's `web` profile template. Its patch holds Delo's local integration rows, each listed with its reason in [`LOCAL_ROWS`](src/rows.ts), so a Delo CLI profile composes upstream's web profile with those rows changed or added and nothing else. It turns off upstream's two opt-ins, DeepSeek's session-log upload and the desktop app's analytics, and adds the Privacy section in Settings, where the person turns each one on after a consent dialog and off again ([C11](../../docs/contracts/c11-setup-answers.md)). Delo's infrastructure plugins add their rows as they arrive.
 
 ## Contents
 
@@ -21,7 +21,8 @@ English | [中文](README.zh.md)
 
 ## Use this bundle
 
-- **The bundle list.** [`DELO_PROFILE_BUNDLES`](src/profile.ts) is the ordered `dsh.profile.bundles` list of a Delo CLI profile: upstream's `web` template, read from `@deepseek-ai/dsh-official-bundles`, followed by `@delo/bundle-local`. `delorun` writes it into each CLI profile it creates under `~/.delo/profiles/` ([C1](../../docs/contracts/c01-home-layout.md#profiles)). Upstream's own templates do not list this bundle, so `dsh --profile web`, the recorded-session replay and the [parity composition](../../docs/contracts/c16-parity-composition.md) compose upstream's bundles alone.
+- **The bundle list.** [`DELO_PROFILE_BUNDLES`](src/profile.ts), exported from `@delo/bundle-local/profile`, is the ordered `dsh.profile.bundles` list of a Delo CLI profile: upstream's `web` template, read from `@deepseek-ai/dsh-official-bundles`, followed by `@delo/bundle-local`. Upstream's own templates do not list this bundle, so `dsh --profile web` and the recorded-session replay compose upstream's bundles alone.
+- **What `delorun` owns.** `delorun`, which creates the CLI profiles under `~/.delo/profiles/` ([C1](../../docs/contracts/c01-home-layout.md#profiles)), writes `DELO_PROFILE_BUNDLES` into each CLI profile it creates, and refuses to start a CLI profile when upstream's profile loader reports this bundle in `skippedBundles`, because the privacy defaults hold only while the bundle loads. This package does neither itself.
 - **Layer order.** The bundle applies after every upstream bundle and before the profile's own `cordis.patch.yml`, the home patch and `--patch` overlays, so a person's setting in the profile still wins over a row here ([upstream's profile layers](../../../apps/cli/README.md#profiles)). The Privacy section writes to the profile's `cordis.patch.yml`.
 - **Reading the composition.** `dsh --profile <name> --dump-config` prints every composed row under a `# ==` line naming the bundle that inserted it and each bundle that patched it; a row this bundle writes names `@delo/bundle-local` there.
 - **Loading.** The bundle declares no `engines.dsh` range and no upstream peer, so upstream's compatibility check never skips it after a version change; a profile whose bundle list names it and cannot resolve it reports the bundle as skipped.
@@ -29,15 +30,15 @@ English | [中文](README.zh.md)
 
 ## Rows
 
-[`LOCAL_ROWS`](src/profile.ts) lists each row in which a Delo CLI profile differs from upstream's web profile:
+[`LOCAL_ROWS`](src/rows.ts) lists each row in which a Delo CLI profile differs from upstream's web profile, and the row's form in the C16 parity composition:
 
-| Row | Kind | In a Delo CLI profile | In upstream's web profile |
-| --- | --- | --- | --- |
-| `session-log-deepseek` | changed | `config.enabled: false`: model requests carry no `dsh_session_log` field | the plugin's default, `true` |
-| `product-analytics` | changed | `config.enabled: false`, with upstream's `appVersion` restated and upstream's `disabled` condition kept, so the row mounts only in the desktop profile and accepts no event there | `config.enabled: true` |
-| `delo-privacy` | added | the Privacy section in Settings | absent |
+| Row | Kind | In a Delo CLI profile | In upstream's web profile | In the parity composition |
+| --- | --- | --- | --- | --- |
+| `session-log-deepseek` | changed | `config.enabled: false`: model requests carry no `dsh_session_log` field | the plugin's default, `true` | upstream's composition: the overlay leaves the row out, because it follows each replay's root configuration, which sets the upload per corpus |
+| `product-analytics` | changed | `config.enabled: false`, with upstream's `appVersion` restated and upstream's `disabled` condition kept, so the row mounts only in the desktop profile and accepts no event there | `config.enabled: true` | as written here; the replay mounts no desktop Host |
+| `delo-privacy` | added | the Privacy section in Settings | absent | present and disabled, because recorded web scenarios compare upstream's interface output |
 
-Upstream's feedback telemetry row `session-telemetry-otel` is unchanged: it sends a session-log prefix only when the person sends feedback, and the Privacy section states that. No row names a Delo host.
+The [parity overlay](../../apps/tools/src/parity/composition/parity.overlay.yml) mounts this bundle by restating its patch in that form; [`parityPatches`](src/rows.ts) derives the form from this bundle's `cordis.patch.yml`, and `parity-switches` fails when the overlay differs from it. Upstream's feedback telemetry row `session-telemetry-otel` is unchanged: it sends a session-log prefix only when the person sends feedback, and the Privacy section states that. No row names a Delo host.
 
 ## The Privacy section
 
@@ -61,7 +62,7 @@ Setup and other surfaces open the section with `ctx.settingsShell.openSection('d
 
 ## Limits
 
-- The bundle list is a constant for `delorun` to write; no shipped upstream template names it, so the C16 parity replay does not mount this bundle.
+- The bundle list is a constant for `delorun` to write; no shipped upstream template names it, so the recorded-session replay mounts this bundle only through the parity overlay.
 - A profile created before a change to `DELO_PROFILE_BUNDLES` keeps the list it was created with.
-- The privacy defaults hold only while the profile loads this bundle. Upstream reports a bundle it cannot load as skipped and starts without it, and session-log upload is then on.
+- The privacy defaults hold only while the profile loads this bundle. Upstream reports a bundle it cannot load as skipped and starts without it, and session-log upload is then on; `delorun`'s refusal to start such a profile is what keeps the defaults.
 - Desktop analytics mounts only in upstream's `desktop` profile, which `delorun` does not run, so a Delo CLI profile's section shows that row's reason instead of a switch.

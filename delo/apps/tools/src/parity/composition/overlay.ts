@@ -1,14 +1,19 @@
 /**
- * The parity overlay held against the registry. Each overlay row names an
- * entry `id`, the module that entry mounts as `name`, and a `config` holding
- * only built switches of that module at their parity values. A built switch
- * the overlay does not set is listed in {@link DEFAULT_PARITY} with the reason
- * a row cannot set it; its Config default is its parity value, which
- * `registryErrors` checks.
+ * The parity overlay held against the registry and against `@delo/bundle-local`.
+ * A switch row names an entry `id`, the module that entry mounts as `name`,
+ * and a `config` holding only built switches of that module at their parity
+ * values. A built switch the overlay does not set is listed in
+ * {@link DEFAULT_PARITY} with the reason a row cannot set it; its Config
+ * default is its parity value, which `registryErrors` checks. The overlay also
+ * mounts `@delo/bundle-local`: it restates each patch of that bundle in the
+ * parity form its `LOCAL_ROWS` entry gives, which {@link localBundleErrors}
+ * checks against the bundle's own patch file.
  *
  * @module @delo/tools/parity/composition/overlay
  */
+import { isDeepStrictEqual } from 'node:util'
 import yaml from 'js-yaml'
+import { LOCAL_ROWS, parityPatches, type PatchRow } from '@delo/bundle-local/rows'
 import type { BuiltParitySwitch, ParitySwitchEntry, ParitySwitchId } from '@delo/contract-parity-composition'
 
 /**
@@ -29,29 +34,112 @@ export interface OverlayRow {
   readonly config: Readonly<Record<string, unknown>>
 }
 
+/** `@delo/bundle-local`'s patch file, which the overlay restates in its parity form. */
+export const LOCAL_BUNDLE_PATCH_PATH = 'delo/packages/bundle-local/cordis.patch.yml'
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/** The `!!js` tag of Cordis patch files, kept as its source text, as Cordis's include parses it. */
+const JS_EXPRESSION = new yaml.Type('tag:yaml.org,2002:js', {
+  kind: 'scalar',
+  resolve: (data: unknown) => typeof data === 'string',
+  construct: (data: string) => ({ __jsExpr: data }),
+})
+const PATCH_SCHEMA = yaml.DEFAULT_SCHEMA.extend([JS_EXPRESSION])
+
+/** The overlay split into its switch rows and its restatement of `@delo/bundle-local`. */
+export interface ParsedOverlay {
+  readonly switches: OverlayRow[]
+  readonly localBundle: PatchRow[]
+}
+
 /**
- * Parse the overlay.
- * @param text - the overlay's YAML.
- * @returns its rows.
- * @throws Error when it is not a list of rows with a string `id`, a string `name`, an object `config` and no other key.
+ * Whether a patch belongs to `@delo/bundle-local`: an id patch of a row it changes, or an insert of rows it adds.
+ * @param row - one overlay patch.
+ * @returns true for the bundle's patches.
  */
-export function parseOverlay(text: string): OverlayRow[] {
-  const parsed: unknown = yaml.load(text)
-  if (!Array.isArray(parsed)) throw new Error('the parity overlay is a list of patch rows')
+function isLocalBundlePatch(row: Record<string, unknown>): boolean {
+  const listed = (id: unknown, kind: 'changed' | 'added'): boolean => LOCAL_ROWS.some(entry => entry.kind === kind && entry.id === id)
+  if ('id' in row) return listed(row['id'], 'changed')
+  const insert = row['insert']
+  return Array.isArray(insert) && insert.length > 0 && insert.every((entry: unknown) => isRecord(entry) && listed(entry['id'], 'added'))
+}
+
+/**
+ * Parse a Cordis patch file with its `!!js` values kept.
+ * @param text - the file's YAML.
+ * @param what - the file, named in the error.
+ * @returns its patches.
+ * @throws Error when it is not a list of mappings.
+ */
+export function parsePatchFile(text: string, what: string): Record<string, unknown>[] {
+  const parsed: unknown = yaml.load(text, { schema: PATCH_SCHEMA })
+  if (!Array.isArray(parsed)) throw new Error(`${what} is a list of patch rows`)
   return parsed.map((row: unknown, index) => {
-    if (!isRecord(row)) throw new Error(`parity overlay row ${String(index)} is not a mapping`)
+    if (!isRecord(row)) throw new Error(`${what} row ${String(index)} is not a mapping`)
+    return row
+  })
+}
+
+/**
+ * Split the overlay into its switch rows and its restatement of `@delo/bundle-local`.
+ * @param text - the overlay's YAML.
+ * @returns the switch rows and the bundle's patches, each in file order.
+ * @throws Error when a switch row is not a row with a string `id`, a string `name`, an object `config` and no other key.
+ */
+export function readOverlay(text: string): ParsedOverlay {
+  const switches: OverlayRow[] = []
+  const localBundle: PatchRow[] = []
+  parsePatchFile(text, 'the parity overlay').forEach((row, index) => {
+    if (isLocalBundlePatch(row)) {
+      localBundle.push(row)
+      return
+    }
     const extra = Object.keys(row).filter(key => !['id', 'name', 'config'].includes(key))
     if (extra.length > 0) throw new Error(`parity overlay row ${String(index)} sets ${extra.join(', ')}; a row sets only switch values in config`)
     const { id, name, config } = row
     if (typeof id !== 'string' || typeof name !== 'string' || !isRecord(config)) {
       throw new Error(`parity overlay row ${String(index)} needs a string id, a string name and a config mapping`)
     }
-    return { id, name, config }
+    switches.push({ id, name, config })
   })
+  return { switches, localBundle }
+}
+
+/**
+ * Every difference between the overlay's restatement of `@delo/bundle-local` and the parity form of the bundle's
+ * own patch file.
+ * @param overlay - the overlay's `@delo/bundle-local` patches, from {@link readOverlay}.
+ * @param bundlePatchText - the text of {@link LOCAL_BUNDLE_PATCH_PATH}.
+ * @returns one message per missing, extra or different patch; empty when the overlay mounts the bundle in its parity form.
+ */
+export function localBundleErrors(overlay: readonly PatchRow[], bundlePatchText: string): string[] {
+  let expected: PatchRow[]
+  try {
+    expected = parityPatches(parsePatchFile(bundlePatchText, LOCAL_BUNDLE_PATCH_PATH))
+  } catch (error) {
+    return [`${LOCAL_BUNDLE_PATCH_PATH}: ${error instanceof Error ? error.message : String(error)}`]
+  }
+  const label = (patch: PatchRow | undefined): string => patch === undefined ? 'nothing' : JSON.stringify(patch)
+  const errors: string[] = []
+  for (let index = 0; index < Math.max(expected.length, overlay.length); index += 1) {
+    if (!isDeepStrictEqual(overlay[index], expected[index])) {
+      errors.push(`parity overlay: @delo/bundle-local patch ${String(index)} is ${label(overlay[index])}, not its parity form ${label(expected[index])}`)
+    }
+  }
+  return errors
+}
+
+/**
+ * Parse the overlay's switch rows.
+ * @param text - the overlay's YAML.
+ * @returns its switch rows, leaving out its restatement of `@delo/bundle-local`.
+ * @throws Error when a switch row is not a row with a string `id`, a string `name`, an object `config` and no other key.
+ */
+export function parseOverlay(text: string): OverlayRow[] {
+  return readOverlay(text).switches
 }
 
 /**

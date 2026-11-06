@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { PARITY_OVERLAY_PATH, PARITY_SWITCHES, type BuiltParitySwitch, type ParitySwitchEntry } from '@delo/contract-parity-composition'
 import { report, scanParity } from '../../src/parity/composition/check-parity-switches.ts'
 import { changedLines, contributionErrors, findContributions } from '../../src/parity/composition/contributions.ts'
-import { DEFAULT_PARITY, overlayErrors, parseOverlay } from '../../src/parity/composition/overlay.ts'
+import { DEFAULT_PARITY, LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parseOverlay, readOverlay } from '../../src/parity/composition/overlay.ts'
 import { registryErrors, scenarioName, switchMarkers } from '../../src/parity/composition/switches.ts'
 import { STAGED_ROOT, sweep, sweepLine } from '../../src/parity/composition/sweep.ts'
 
@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 /**
- * A fixture repository with an empty ledger, the real overlay and the given files.
+ * A fixture repository with an empty ledger, the real overlay, the local bundle's patch and the given files.
  * @param files - repository paths and their contents.
  * @returns the fixture's root.
  */
@@ -33,6 +33,7 @@ function fixtureTree(files: Record<string, string>): string {
   const all: Record<string, string> = {
     'delo/upstream-patches.json': JSON.stringify({ upstream: { repository: 'r', ref: 't', commit: '0'.repeat(40) }, forkOwned: ['delo/'], patches: [], retired: [] }),
     [PARITY_OVERLAY_PATH]: readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'),
+    [LOCAL_BUNDLE_PATCH_PATH]: readFileSync(join(ROOT, LOCAL_BUNDLE_PATCH_PATH), 'utf8'),
     ...files,
   }
   for (const [path, text] of Object.entries(all)) {
@@ -191,6 +192,35 @@ describe('the parity overlay', () => {
       'profile_history: the overlay does not set it; add a row, or list it in DEFAULT_PARITY with the reason a row cannot',
     ])
     expect(() => parseOverlay('- id: tool-plugin-manager\n  name: x\n  disabled: true\n  config: {}\n')).toThrow('sets disabled')
+  })
+})
+
+describe('the parity overlay\'s mount of @delo/bundle-local', () => {
+  const bundle = readFileSync(join(ROOT, LOCAL_BUNDLE_PATCH_PATH), 'utf8')
+
+  it('restates the bundle\'s patch in its parity form', () => {
+    const { localBundle } = readOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
+    expect(localBundleErrors(localBundle, bundle)).toEqual([])
+    expect(localBundle).toEqual([
+      { id: 'product-analytics', config: { enabled: false, appVersion: { __jsExpr: 'process.env.DSH_CLIENT_VERSION' } } },
+      { insert: [{ id: 'delo-privacy', name: '@delo/bundle-local', disabled: true }] },
+    ])
+  })
+
+  it('fails a missing bundle row, a restated row whose parity form is upstream\'s, and an unlisted bundle row', () => {
+    const { localBundle } = readOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
+    expect(localBundleErrors(localBundle.slice(0, 1), bundle)).toEqual([
+      'parity overlay: @delo/bundle-local patch 1 is nothing, not its parity form {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}',
+    ])
+    // The session-log row's parity form is upstream's composition, so restating it overrides the replay's root configuration.
+    expect(localBundleErrors([{ id: 'session-log-deepseek', config: { enabled: false } }, ...localBundle], bundle)).toEqual([
+      'parity overlay: @delo/bundle-local patch 0 is {"id":"session-log-deepseek","config":{"enabled":false}}, not its parity form {"id":"product-analytics","config":{"enabled":false,"appVersion":{"__jsExpr":"process.env.DSH_CLIENT_VERSION"}}}',
+      'parity overlay: @delo/bundle-local patch 1 is {"id":"product-analytics","config":{"enabled":false,"appVersion":{"__jsExpr":"process.env.DSH_CLIENT_VERSION"}}}, not its parity form {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}',
+      'parity overlay: @delo/bundle-local patch 2 is {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}, not its parity form nothing',
+    ])
+    expect(localBundleErrors(localBundle, `${bundle}\n- id: web-search-deepseek\n  config: {}\n`)).toEqual([
+      `${LOCAL_BUNDLE_PATCH_PATH}: @delo/bundle-local writes row "web-search-deepseek", which LOCAL_ROWS does not list`,
+    ])
   })
 })
 

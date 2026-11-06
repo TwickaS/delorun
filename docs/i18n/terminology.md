@@ -156,9 +156,11 @@
 | module | 模块 | | | |
 | non-escalation | 非升权 | | 非升级、不可升级 | 仅用于安全与权限语境，指主体不得获得超出既有授权的权限；普通升级不适用此行 |
 | npm dependency | NPM 依赖 | | | `package.json` 中的包关系；`dependencies`、`devDependencies` 等字段保持原样 |
+| opt-in | 选择加入项 | 选择加入项（opt-in） | | 本人主动打开后才生效的数据共享项，例如桌面端分析与 DeepSeek 会话日志上传 |
 | opt-out ratio | opt-out 比例 | | 退出检查比例 | |
 | orphan | 遗留 | | 孤儿、孤立 | 指英文源已不存在的 `.zh.md`（如「遗留译文」）；进程语境按 OS 惯用语译「孤儿进程」 |
 | orphan branch | 孤立分支 | | 孤儿分支 | 沿用 git 官方中文翻译 |
+| OTLP collector | OTLP 收集器 | OTLP 收集器（OTLP collector） | | 接收 OpenTelemetry（OTLP）日志的服务端；OTLP 保留英文 |
 | package | 包 | | | 指 npm 包（`@deepseek-ai/dsh-*`）；`package.json` 等代码标识保持原样 |
 | pairing | 配对 | | | |
 | parent-subset grants | 父级子集授权 | | 父集合授权 | 指授权范围仅限于父级所持授权的子集 |
