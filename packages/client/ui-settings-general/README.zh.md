@@ -61,6 +61,10 @@ Web 与桌面端的通用设置底部显示当前发布版本，使用构建注�
 
 访问控制：设置外壳与 `settings.open` 快捷键只在当前 Peer 可以调用 `settings/describe` 时注册。owner 始终有权限。
 
+### 设置布局
+
+发行版可以通过 `ctx.settingsLayout.register(layout)` 注册一份布局来编排设置，该调用返回注销函数；以最近一次注册为准。布局由带标签的页面分组构成，每个页面堆叠若干区块：已注册的 `settings.section`，或由 `settings.general.item` 标识的一组通用行，并可带一个可选标题。随后导航显示各分组，其上方的搜索框可按名称与关键词查找页面、卡片和行，打开某个分区 ID 会选中包含它的页面。分区或行未注册的区块不显示，内容为空的页面同样不显示；布局未编排的分区与行（其 `hiddenItems` 中列出的除外）出现在末尾的分组下，因此第三方贡献总有其位置。卡片以通用分区的入口渲染，并仅绘制其 `items` 所列的行。页面的首个分区若自行绘制标题，则需设置 `sectionTitle`。自定义属性 `--dsh-settings-panel-width`、`--dsh-settings-panel-height`、`--dsh-settings-nav-width` 与 `--dsh-settings-content-width` 决定面板尺寸；未注册布局时，外壳保留平铺列表与 800 × 800 面板。分组页面可设置 `--dsh-settings-section-title-size`、`--dsh-settings-section-title-weight`、`--dsh-settings-section-title-line-height` 与 `--dsh-settings-section-max-width`，分区读取这些属性来绘制自身标题与宽度上限，使其与页面一致；在由外壳绘制标题的页面上，`--dsh-settings-section-title-display` 为 `none`，读取它的分区隐藏自身标题，页面因而只保留一个标题。外壳提供 `ctx.settingsShell`（由 `@deepseek-ai/dsh-client-ui-settings` 声明），它与其触发器和命令共用同一个 store：显式打开的引导步骤保存在该 store 中，因此入口、功能浮层或发行版控件打开它的效果相同。
+
 -----
 
 <a id="understand-the-implementation"></a>

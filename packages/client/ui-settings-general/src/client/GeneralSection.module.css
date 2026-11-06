@@ -10,3 +10,24 @@
 .section > :global([data-slot='settings.general.item']) > :last-child {
   border-bottom: none;
 }
+
+/* A grouped layout's card: the card draws hairlines between its rows, so the
+   rows' own separators are removed. */
+.rows {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* A row that renders nothing takes no space and draws no hairline. */
+.cardRow:not(:has(> [data-slot] > *)) {
+  display: none;
+}
+
+.cardRow:has(> [data-slot] > *) ~ .cardRow:has(> [data-slot] > *) {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.cardRow > :global([data-slot='settings.general.item']) > * {
+  border-bottom: none;
+}

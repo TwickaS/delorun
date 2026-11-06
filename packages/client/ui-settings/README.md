@@ -55,7 +55,7 @@ A committed write folds its answer into the shared mirror. Refused writes refres
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
-The optional `settings.launcher` contribution receives sidebar geometry, whether the open Settings panel covers the sidebar, the settings navigation callbacks, and the effective Settings key labels and accessible combination. The shell omits shortcut presentation for an unbound command and retains its plain Settings trigger when no launcher is registered.
+The optional `settings.launcher` contribution receives sidebar geometry, whether the open Settings panel covers the sidebar, the settings navigation callbacks, and the effective Settings key labels and accessible combination. The shell omits shortcut presentation for an unbound command and retains its plain Settings trigger when no launcher is registered. Code outside the shell navigates Settings through `ctx.settingsShell` ([`contract/shell.ts`](src/client/contract/shell.ts)), which the shell plugin provides: `open()`, `openSection(id)` and `openOnboarding(id)`, the last closing Settings under the step as a launcher's `openOnboarding` does; each call does nothing while no shell is mounted.
 
 <details>
 <summary>Implementation internals — click to expand</summary>

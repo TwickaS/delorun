@@ -4,7 +4,7 @@ import type { ShortcutCatalogEntry, ShortcutCommandId } from '@deepseek-ai/dsh-c
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useEffect, useState } from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { createSettingsShellStore } from '../src/client/shell-store.ts'
 import { allowAllAccess, bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -13,6 +13,7 @@ import type { SettingsRootComponentProps } from '../src/client/shell-contract.ts
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
 import { en, zh } from '../src/client/locales.ts'
 import type { DesktopUpdateView } from '../src/types.ts'
+import { projectLayout, type SettingsLayout, type SettingsNav } from '../src/client/layout.ts'
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
@@ -68,7 +69,9 @@ function mount({
     { id: 'welcome', order: -100 },
     { id: 'credential', order: 0 },
   ],
+  nav,
 }: {
+  nav?: SettingsNav
   shortcuts?: readonly ShortcutCatalogEntry[]
   wide?: boolean
   dictionary?: typeof en | typeof zh
@@ -88,7 +91,10 @@ function mount({
   const reconnect = vi.fn()
   const renderSlot = vi.fn(
     ((key: string, _owner: unknown, opts?: { only?: string; fallback?: import('react').ReactNode }) => {
-      if (key === 'settings.section') return <div data-testid={`section-${opts?.only ?? 'all'}`} />
+      if (key === 'settings.section') {
+        const items = (_owner as { items?: readonly string[] }).items
+        return <div data-testid={`section-${opts?.only ?? 'all'}`} data-items={items?.join(',')} />
+      }
       return SEAT_CONTENT[key] ?? opts?.fallback
     }) as SettingsRootComponentProps['renderSlot'],
   )
@@ -133,6 +139,7 @@ function mount({
       return select(currentConnectionState)
     },
     useOnboardingSteps: select => select(steps),
+    useNav: select => select(nav),
     useSections: (select) => {
       const [, force] = useState(0)
       useEffect(() => {
@@ -543,4 +550,53 @@ it('passes current Settings key labels to the launcher and removes them when unb
 
   setShortcuts([{ ...row, keys: [], aria: undefined, binding: null, modified: true }])
   expect(launcher()).not.toHaveProperty('settingsShortcut')
+})
+
+/** A layout over the default rows: two groups, one card of General rows, Agent presets left unplaced. */
+const LAYOUT: SettingsLayout = {
+  groups: [
+    { id: 'you', label: () => 'You', pages: [{ id: 'chat', label: () => 'Chat', blocks: [{ kind: 'items', id: 'work', heading: () => 'Work details', items: [{ id: 'transcript-view', label: () => 'Tool call detail' }, { id: 'composer-enter', label: () => 'Enter sends' }] }] }] },
+    { id: 'agent', label: () => 'Agent', pages: [{ id: 'agent-models', label: () => 'Models', blocks: [{ kind: 'section', id: 'models' }] }] },
+  ],
+  other: { label: () => 'More', itemsLabel: () => 'General' },
+  search: { placeholder: () => 'Search settings', empty: () => 'No settings match' },
+}
+const GROUPED_ROWS = [
+  { id: 'general', order: 0, label: 'General' },
+  { id: 'models', order: 10, label: 'Models' },
+  { id: 'agent-presets', order: 20, label: 'Agent presets' },
+]
+const groupedNav = (): SettingsNav => projectLayout(LAYOUT, GROUPED_ROWS, ['transcript-view', 'composer-enter', 'language'])
+
+describe('SettingsPanel with a layout', () => {
+  it('groups the navigation and shows a card of General rows through the General entry', () => {
+    mount({ rows: GROUPED_ROWS, nav: groupedNav() })
+    openPanel()
+    expect(screen.getByRole('group', { name: 'You' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'More' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Chat' })).toBeTruthy()
+    expect(screen.getByTestId('section-general').dataset.items).toBe('transcript-view,composer-enter')
+  })
+
+  it('opens the page holding a requested section, and leftovers under the trailing group', () => {
+    const { view } = mount({ rows: GROUPED_ROWS, nav: groupedNav() })
+    openPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Agent presets' }))
+    expect(screen.getByTestId('section-agent-presets')).toBeTruthy()
+    fireEvent.click(within(screen.getByRole('group', { name: 'More' })).getByRole('button', { name: 'General' }))
+    expect(screen.getByTestId('section-general').dataset.items).toBe('language')
+    view.unmount()
+  })
+
+  it('searches rows by name and opens the result on its page', () => {
+    mount({ rows: GROUPED_ROWS, nav: groupedNav() })
+    openPanel()
+    const search = screen.getByRole('searchbox', { name: 'Search settings' })
+    fireEvent.change(search, { target: { value: 'nothing here' } })
+    expect(screen.getByText('No settings match')).toBeTruthy()
+    fireEvent.change(search, { target: { value: 'enter' } })
+    fireEvent.click(screen.getByRole('button', { name: /Enter sends/ }))
+    expect(screen.getByRole('heading', { name: 'Chat' })).toBeTruthy()
+    expect((search as HTMLInputElement).value).toBe('')
+  })
 })

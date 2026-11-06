@@ -11,6 +11,7 @@ import { createClientTest, type TestClient, webApp } from '@deepseek-ai/dsh-clie
 import { inject } from '../src/client/index.ts'
 import type { SettingsRootInjected } from '../src/client/shell-contract.ts'
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
+import type { createSettingsShellStore } from '../src/client/shell-store.ts'
 import type { DesktopUpdatePresentation } from '../src/types.ts'
 
 const SELF = '@deepseek-ai/dsh-client-ui-settings-general'
@@ -91,6 +92,21 @@ describe('ui-settings-general shell', () => {
   withoutSettingsAccess('leaves sidebar.settings unoccupied while the current Peer may not read the settings description', async ({ start }) => {
     const c = await start()
     expect(c.ctx.slots.entries('sidebar.settings')).toEqual([])
+    // Without a shell, Settings navigation from outside it does nothing.
+    c.ctx.settingsShell.open()
+    c.ctx.settingsShell.openSection('models')
+    c.ctx.settingsShell.openOnboarding('deepseek-official')
+  }, COLD_BOOT_TIMEOUT_MS)
+
+  it('opens Settings, one of its sections and an onboarding step for code outside the shell, through the shell\'s own store', async ({ start }) => {
+    const c = await start()
+    const store = (c.ctx.slots.entries('sidebar.settings')[0]!.store as ReturnType<typeof createSettingsShellStore>).create()
+    c.ctx.settingsShell.openSection('models')
+    expect(store.getSnapshot()).toEqual({ open: true, activeId: 'models', onboarding: undefined })
+    c.ctx.settingsShell.openOnboarding('deepseek-official')
+    expect(store.getSnapshot()).toEqual({ open: false, activeId: undefined, onboarding: 'deepseek-official' })
+    c.ctx.settingsShell.open()
+    expect(store.getSnapshot().open).toBe(true)
   }, COLD_BOOT_TIMEOUT_MS)
 
   it('projects the section ledger: product sections in order, defaults for bare rows, stable snapshots', async ({ start }) => {

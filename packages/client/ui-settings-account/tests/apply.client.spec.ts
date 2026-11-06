@@ -11,6 +11,7 @@ import type { QuotaNoticeOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/clie
 import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import type { AccountOverlayInjected } from '../src/client/AccountOverlay.tsx'
 import { Config as OnboardingConfig } from '../src/index.ts'
 import { ChatSettingsSchema as ChatConfig } from '../../ui-chat/src/chat-settings.ts'
 import { DeveloperToolsSettingsSchema as SettingsConfig } from '../../ui-settings/src/developer-tools-settings.ts'
@@ -70,6 +71,7 @@ it('registers account sign-in in a plain browser without the Desktop-only surfac
     if (reload) await c.reload(SELF)
     await c.mock.streams.opened('account/watch', reload ? 2 : 1)
     expect(c.ctx.slots.entries('settings.launcher')).toHaveLength(1)
+    expect(c.ctx.slots.entries('shell.overlay').some(entry => entry.options.id === 'account.sign-in')).toBe(true)
     expect(c.ctx.slots.entries('settings.models.sign-in')).toHaveLength(1)
     expect(quotaNoticeEntry(c)).toBeDefined()
     expect(platformHostEntry(c)).toBeUndefined()
@@ -85,6 +87,16 @@ withoutAccountAccess('opens no account stream and registers no account surface w
   expect(quotaNoticeEntry(c)).toBeUndefined()
   expect(c.ctx.slots.entries('settings.models.sign-in')).toHaveLength(0)
   expect(c.ctx.slots.entries('settings.section').some(entry => entry.options.id === 'account')).toBe(false)
+}, 60_000)
+
+it('hands the sign-in overlay\'s API-key choice to the Settings shell\'s onboarding step', async ({ start }) => {
+  const c = await start()
+  await c.mock.streams.opened('account/watch', 1)
+  const overlay = c.ctx.slots.entries('shell.overlay').find(entry => entry.options.id === 'account.sign-in')!
+  const openOnboarding = vi.spyOn(c.ctx.settingsShell, 'openOnboarding')
+  const injected: object = overlay.inject!()
+  ;(injected as AccountOverlayInjected).openOnboarding('deepseek-official')
+  expect(openOnboarding).toHaveBeenCalledExactlyOnceWith('deepseek-official')
 }, 60_000)
 
 it('claims account balance notices from the frame-wide quota chain and declines generic quota', async ({ start }) => {

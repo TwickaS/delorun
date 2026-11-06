@@ -4,14 +4,16 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 760px;
+  max-width: var(--dsh-settings-section-max-width, 760px);
   color: var(--dsw-alias-label-primary);
 }
 
 .heading {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--dsh-settings-section-title-size, 18px);
+  font-weight: var(--dsh-settings-section-title-weight, 600);
+  line-height: var(--dsh-settings-section-title-line-height, normal);
+  display: var(--dsh-settings-section-title-display, block);
 }
 
 .intro {

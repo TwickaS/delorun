@@ -13,16 +13,17 @@
  * is active. Visible dialog chrome belongs to the step, so a
  * mounted-but-deciding step paints nothing here.
  */
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
-  IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
+  IconPersonalizationOutlineMedium, IconSearchOutlineRegular, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
+import { GENERAL_SECTION_ID, searchNav, UNPLACED_ITEMS_PAGE, type SettingsNav, type SettingsNavPage } from './layout.ts'
 import css from './SettingsRoot.module.css'
 import { DesktopUpdateIndicator } from './DesktopUpdateIndicator.tsx'
 
@@ -43,6 +44,8 @@ function navIcon(id: string) {
 
 type PanelProps = {
   rows: readonly SettingsSectionRow[]
+  /** The grouped navigation when a layout is registered; the flat list otherwise. */
+  nav: SettingsNav | undefined
   renderSlot: SettingsRootComponentProps['renderSlot']
   activeId: string | undefined
   onSelect: (id: string) => void
@@ -54,11 +57,33 @@ type PanelProps = {
  * header button, a mask click, and document-level Escape (mounted only while
  * open, so the listener lifetime is the panel's).
  */
-function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelProps) {
+function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose }: PanelProps) {
   // Entries can unmount underneath the requested id, so the render-time
-  // projection falls back to the first row when the id is gone.
-  const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
+  // projection falls back to the first row when the id is gone. In a grouped
+  // layout a requested section id selects the page that holds it.
+  const pages = useMemo(() => nav?.groups.flatMap(group => group.pages) ?? [], [nav])
+  const activePage = nav === undefined
+    ? undefined
+    : (pages.find(page => page.id === activeId)
+      ?? pages.find(page => page.blocks.some(block => block.kind === 'section' && block.id === activeId))
+      ?? pages[0])
+  const active = nav === undefined ? (rows.find(r => r.id === activeId)?.id ?? rows[0]?.id) : activePage?.id
   const titleId = useId()
+  const [query, setQuery] = useState('')
+  const [anchor, setAnchor] = useState<string | undefined>()
+  const options = useRef<HTMLDivElement>(null)
+  const results = useMemo(() => (nav === undefined ? [] : searchNav(nav, query)), [nav, query])
+  const searching = query.trim() !== ''
+
+  // A search result opens its page, then brings its card or row into view.
+  useEffect(() => {
+    if (anchor === undefined || searching) return
+    const target = Array.from(options.current?.querySelectorAll<HTMLElement>('[data-settings-anchor]') ?? [])
+      .find(node => node.dataset.settingsAnchor === anchor)
+    if (target === undefined) return
+    target.scrollIntoView({ block: 'start' })
+    setAnchor(undefined)
+  }, [anchor, searching, active])
 
   const panel = useRef<HTMLDivElement>(null)
   useModalLayer(panel, true, onClose)
@@ -77,7 +102,35 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
         <div className={css.navTitle} id={titleId} tabIndex={-1}
           data-modal-autofocus={active === undefined ? '' : undefined}>{renderSlot('settings.header', {})}</div>
         <nav className={css.nav}>
-          <div className={css.navList}>
+          {nav !== undefined && (
+            <label className={css.search}>
+              <IconSearchOutlineRegular size={14} className={css.searchIcon} />
+              <input
+                type="search"
+                className={css.searchInput}
+                value={query}
+                placeholder={nav.searchPlaceholder}
+                aria-label={nav.searchPlaceholder}
+                onChange={(event) => { setQuery(event.target.value) }}
+                onKeyDown={(event) => { if (event.key === 'Escape' && query !== '') { event.stopPropagation(); setQuery('') } }}
+              />
+            </label>
+          )}
+          {nav !== undefined && (
+            <div className={clsx(css.navList, css.navGroups)}>
+              {nav.groups.map(group => (
+                <div key={group.id} className={css.navGroup} role="group" aria-label={group.label}>
+                  <div className={css.navGroupLabel} aria-hidden="true">{group.label}</div>
+                  {group.pages.map(page => (
+                    <NavCell key={page.id} id={page.id} label={page.label} icon={page.icon}
+                      active={!searching && page.id === active} renderSlot={renderSlot}
+                      onSelect={(id) => { setQuery(''); onSelect(id) }} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+          {nav === undefined && <div className={css.navList}>
             {rows.map(row => (
               <button
                 key={row.id}
@@ -96,7 +149,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
                 <span className={css.navLabel}>{row.label}</span>
               </button>
             ))}
-          </div>
+          </div>}
         </nav>
         <div className={css.header}>
           <div className={css.actions}>{renderSlot('settings.action', {})}</div>
@@ -105,12 +158,89 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
             <span className={css.hiddenLabel}>{renderSlot('settings.close', {})}</span>
           </button>
         </div>
-        <div className={css.options}>
-          {active !== undefined && renderSlot('settings.section', { close: onClose }, { only: active })}
+        <div ref={options} className={css.options}>
+          {nav === undefined && active !== undefined && renderSlot('settings.section', { close: onClose }, { only: active })}
+          {nav !== undefined && searching && (
+            <ul className={css.results}>
+              {results.length === 0 && <li className={css.resultsEmpty}>{nav.searchEmpty}</li>}
+              {results.map(result => (
+                <li key={`${result.pageId}/${result.anchor ?? ''}`}>
+                  <button type="button" className={css.result}
+                    onClick={() => { setQuery(''); setAnchor(result.anchor); onSelect(result.pageId) }}>
+                    {result.path.map((part, index) => (
+                      <span key={index} className={index === result.path.length - 1 ? css.resultName : css.resultPath}>{part}</span>
+                    ))}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {nav !== undefined && !searching && activePage !== undefined && (
+            <GroupedPage page={activePage} renderSlot={renderSlot} onClose={onClose} />
+          )}
         </div>
       </div>
     </div>
   ), document.body)
+}
+
+/** One cell of the grouped navigation; its icon sits in the same wrapper as the flat rows. */
+function NavCell({ id, label, icon: Icon, active, renderSlot, onSelect }: {
+  id: string
+  label: string
+  icon: SettingsNavPage['icon']
+  active: boolean
+  renderSlot: PanelProps['renderSlot']
+  onSelect: (id: string) => void
+}) {
+  return (
+    <button
+      type="button"
+      className={clsx(css.navCell, active && css.active)}
+      aria-current={active ? 'true' : undefined}
+      data-modal-autofocus={active ? '' : undefined}
+      onFocus={(event) => { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }}
+      onClick={() => { onSelect(id) }}
+    >
+      <span className={css.navIcon} aria-hidden="true">
+        {Icon === undefined
+          ? renderSlot('settings.section.icon', { size: 16, active }, { only: id, fallback: navIcon(id) })
+          : <Icon size={16} />}
+      </span>
+      <span className={css.navLabel}>{label}</span>
+    </button>
+  )
+}
+
+/**
+ * A grouped-layout page: its title, then each block in order. A card of
+ * General rows renders the General section's entry with the rows it holds.
+ */
+function GroupedPage({ page, renderSlot, onClose }: {
+  page: SettingsNavPage
+  renderSlot: PanelProps['renderSlot']
+  onClose: () => void
+}) {
+  return (
+    <div className={clsx(css.page, page.titled && css.titledPage)}>
+      {page.titled && <h2 className={css.pageTitle}>{page.label}</h2>}
+      {page.blocks.map(block => (block.kind === 'section'
+        ? (
+          <div key={`section:${block.id}`} className={css.pageSection} data-settings-anchor={block.id}>
+            {renderSlot('settings.section', { close: onClose }, { only: block.id })}
+          </div>
+        )
+        : (
+          <section key={`items:${block.id}`} className={css.card} data-settings-anchor={block.id}
+            aria-label={block.heading ?? (page.id === UNPLACED_ITEMS_PAGE ? page.label : undefined)}>
+            {block.heading !== undefined && <h3 className={css.cardHeading}>{block.heading}</h3>}
+            <div className={css.cardBody}>
+              {renderSlot('settings.section', { close: onClose, items: block.items.map(item => item.id) }, { only: GENERAL_SECTION_ID })}
+            </div>
+          </section>
+        )))}
+    </div>
+  )
 }
 
 /**
@@ -121,12 +251,11 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
 export function SettingsRoot(props: SettingsRootComponentProps) {
   const {
     wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t,
-    useDesktopUpdate, openDesktopUpdate, useStore, actions, useShortcuts,
+    useDesktopUpdate, openDesktopUpdate, useStore, actions, useShortcuts, useNav,
   } = props
-  const { open, activeId } = useStore(state => state)
+  const { open, activeId, onboarding: requestedOnboarding } = useStore(state => state)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'settings.open'))
-  const { close, openSection } = actions
-  const [requestedOnboarding, setRequestedOnboarding] = useState<string | undefined>()
+  const { close, openSection, requestOnboarding, finishOnboarding } = actions
   const [completedOnboarding, setCompletedOnboarding] = useState<ReadonlySet<string>>(() => new Set())
   const [showRecovery, setShowRecovery] = useState(false)
   const [holdConnecting, setHoldConnecting] = useState(false)
@@ -136,6 +265,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   // freshly localized text on locale change, and the trigger/header/close
   // seats re-render through their own outlets' subscriptions.
   const rows = useSections(s => s)
+  const nav = useNav(state => state)
   const desktopUpdate = useDesktopUpdate(state => state)
   const connectionState = useConnectionState(state => state)
   const previousConnectionState = useRef(connectionState)
@@ -204,12 +334,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   }, [connectionState])
 
   const completeOnboardingStep = useCallback((id: string) => {
-    setRequestedOnboarding(undefined)
+    finishOnboarding()
     setCompletedOnboarding((previous) => {
       if (previous.has(id)) return previous
       return new Set([...previous, id])
     })
-  }, [])
+  }, [finishOnboarding])
 
   let connectionIndicator: ConnectionIndicatorState | undefined
   if (connectionState === 'connecting' || holdConnecting) {
@@ -226,7 +356,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
         {renderSlot('settings.launcher', {
           wide, settingsOpen: open, openSettings: actions.open,
           ...(shortcut?.keys.length ? { settingsShortcut: { keys: shortcut.keys, aria: shortcut.aria } } : {}),
-          openOnboarding: (id) => { close(); setRequestedOnboarding(id) },
+          openOnboarding: requestOnboarding,
         }, { fallback: <Tooltip disabled={open} label={t('trigger')} shortcutKeys={shortcut?.keys}>
           <button
             type="button"
@@ -255,6 +385,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
       {open && (
         <SettingsPanel
           rows={rows}
+          nav={nav}
           renderSlot={renderSlot}
           activeId={activeId}
           onSelect={actions.select}

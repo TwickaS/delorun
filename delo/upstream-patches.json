@@ -1265,6 +1265,186 @@
       "path": "packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx",
       "class": "delo-feature",
       "reason": "Covers the one-list view, the open search field, the per-Workspace dot colours and the list seat with its dialogs."
+    },
+    {
+      "path": "packages/client/ui-agent-preset/src/client/AgentPresetSection.module.css",
+      "class": "delo-feature",
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the agent preset section title aligns with the other sections."
+    },
+    {
+      "path": "packages/client/ui-settings-account/README.md",
+      "class": "delo-feature",
+      "reason": "Documents that the Account section is listed first only while signed in, and the shared Host snapshot stream its section and launcher read."
+    },
+    {
+      "path": "packages/client/ui-settings-account/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the settings-account README, which documents the Account section sign-in visibility."
+    },
+    {
+      "path": "packages/client/ui-settings-account/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the settings-account README Account section sentence and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-settings-account/src/client/AccountMenu.tsx",
+      "class": "delo-feature",
+      "reason": "Updates the account menu rows for the grouped Settings layout and keeps the sign-out confirmation."
+    },
+    {
+      "path": "packages/client/ui-settings-account/src/client/AccountOverlay.tsx",
+      "class": "delo-feature",
+      "reason": "Adds the account overlay that the Settings layout opens for the Account section."
+    },
+    {
+      "path": "packages/client/ui-settings-account/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Registers the Account section with the Settings layout and the account overlay."
+    },
+    {
+      "path": "packages/client/ui-settings-account/tests/account.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the Account section sign-in visibility and the account overlay."
+    },
+    {
+      "path": "packages/client/ui-settings-account/tests/apply.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the Account section registration with the Settings layout."
+    },
+    {
+      "path": "packages/client/ui-settings-general/README.md",
+      "class": "delo-feature",
+      "reason": "Documents ctx.settingsLayout.register, the grouped page and block model, and the settingsShell overlay."
+    },
+    {
+      "path": "packages/client/ui-settings-general/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the settings-general README, which documents the Settings layout registration."
+    },
+    {
+      "path": "packages/client/ui-settings-general/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the settings-general README Settings layout section and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/GeneralSection.module.css",
+      "class": "delo-feature",
+      "reason": "Styles the General card rows of the grouped Settings page."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/GeneralSection.tsx",
+      "class": "delo-feature",
+      "reason": "Renders the General card rows, so a grouped layout can show the rows it names."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/SettingsRoot.module.css",
+      "class": "delo-feature",
+      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
+      "class": "delo-feature",
+      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Registers the Settings layout seam and the settingsShell provider."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/layout.ts",
+      "class": "delo-feature",
+      "reason": "Adds the Settings layout types, the grouped navigation builder and the search over it."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/shell-contract.ts",
+      "class": "delo-feature",
+      "reason": "Adds the navigation hook to the Settings root contract, so the shell can read the registered layout."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/shell-store.ts",
+      "class": "delo-feature",
+      "reason": "Holds the Settings open state and the onboarding request, so code outside the shell can open a section or the onboarding."
+    },
+    {
+      "path": "packages/client/ui-settings-general/tests/layout.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers the Settings layout navigation projection and search."
+    },
+    {
+      "path": "packages/client/ui-settings-general/tests/settings-root.client.spec.tsx",
+      "class": "delo-feature",
+      "reason": "Covers the grouped navigation, the section cards and the search in the Settings root."
+    },
+    {
+      "path": "packages/client/ui-settings-general/tests/shell.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers opening a Settings section and the onboarding from outside the shell."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/ModelsSection.module.css",
+      "class": "delo-feature",
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the models section title aligns with the other sections."
+    },
+    {
+      "path": "packages/client/ui-settings-plugin-inventory/src/client/PluginInventorySettingsTab.module.css",
+      "class": "delo-feature",
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the plugin inventory tab matches the other sections."
+    },
+    {
+      "path": "packages/client/ui-settings-plugins/src/client/PluginsSettingsSection.module.css",
+      "class": "delo-feature",
+      "reason": "Reads the grouped Settings page section properties with fallbacks, so the plugins section title aligns with the other sections."
+    },
+    {
+      "path": "packages/client/ui-settings/README.md",
+      "class": "delo-feature",
+      "reason": "Documents the settings.launcher callbacks that open a section and the onboarding, and the sidebar geometry it receives."
+    },
+    {
+      "path": "packages/client/ui-settings/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the settings README, which documents the settings.launcher callbacks."
+    },
+    {
+      "path": "packages/client/ui-settings/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the settings README launcher paragraph and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-settings/src/client/contract/shell.ts",
+      "class": "delo-feature",
+      "reason": "Adds the SettingsShell contract for code outside the Settings shell: opening a section and the onboarding."
+    },
+    {
+      "path": "packages/client/ui-settings/src/client/contract/slots.ts",
+      "class": "delo-feature",
+      "reason": "Adds the optional items list to the settings section owner props, so a grouped General card shows only the rows a layout names."
+    },
+    {
+      "path": "packages/client/ui-settings/src/client/index.ts",
+      "class": "delo-feature",
+      "reason": "Exports the SettingsShell type."
+    },
+    {
+      "path": "packages/client/ui-theme/README.md",
+      "class": "delo-feature",
+      "reason": "Documents the settings section tokens that base.css leaves unset, so each section keeps its own fallback."
+    },
+    {
+      "path": "packages/client/ui-theme/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the theme README, which documents the settings section tokens."
+    },
+    {
+      "path": "packages/client/ui-theme/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the theme README settings-token sentence and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-theme/src/styles/base.css",
+      "class": "delo-feature",
+      "reason": "Declares the settings section custom properties as unset in the body block, so the theme stylesheet spec finds them declared while each section keeps its fallback."
     }
   ],
   "retired": []

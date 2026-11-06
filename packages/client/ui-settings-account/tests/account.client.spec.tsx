@@ -11,6 +11,7 @@ import { AccountPlatformHost } from '../src/client/AccountPlatformHost.tsx'
 import { AccountSection, type AccountSectionInjected, type AccountSnapshot } from '../src/client/AccountSection.tsx'
 import type { BonusNotice } from '../src/client/bonus-notices.ts'
 import type { AccountMenuProps } from '../src/client/AccountMenu.tsx'
+import { AccountOverlay } from '../src/client/AccountOverlay.tsx'
 import type {} from '../src/client/index.ts'
 import { en, zh, type AccountKey } from '../src/client/locales.ts'
 import css from '../src/client/AccountSection.module.css'
@@ -236,18 +237,22 @@ it('reports a failed start in the login dialog, not as a sidebar alert', async (
     snapshot = { ...snapshot, loginVisible: true, loginFailed: true }
     return Promise.reject(new Error('account start failed'))
   })
-  const view = render(<AccountMenu {...({} as GlobalStandardProps)} {...operations} settingsOpen={false} start={start}
-    useAccount={selector => selector(snapshot)} useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
-    wide openOnboarding={() => {}} openSettings={() => {}}
-    t={key => key in en ? en[key as AccountKey] : key} />)
+  // The launcher starts sign-in; the shell overlay shows its dialog.
+  const launcherAndOverlay = () => <>
+    <AccountMenu {...({} as GlobalStandardProps)} {...operations} settingsOpen={false} start={start}
+      useAccount={selector => selector(snapshot)} useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
+      wide openOnboarding={() => {}} openSettings={() => {}}
+      t={key => key in en ? en[key as AccountKey] : key} />
+    <AccountOverlay {...({} as GlobalStandardProps)} {...operations} start={start} openOnboarding={() => {}}
+      useAccount={selector => selector(snapshot)} useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
+      t={key => key in en ? en[key as AccountKey] : key} />
+  </>
+  const view = render(launcherAndOverlay())
   fireEvent.click(screen.getByRole('button', { name: en.menu }))
   await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: en.signIn })) })
   expect(start).toHaveBeenCalledOnce()
   expect(screen.queryByRole('alert')).toBeNull()
-  view.rerender(<AccountMenu {...({} as GlobalStandardProps)} {...operations} settingsOpen={false} start={start}
-    useAccount={selector => selector(snapshot)} useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
-    wide openOnboarding={() => {}} openSettings={() => {}}
-    t={key => key in en ? en[key as AccountKey] : key} />)
+  view.rerender(launcherAndOverlay())
   expect(screen.getByRole('dialog').textContent).toContain(en.failed)
   expect(screen.queryByRole('alert')).toBeNull()
   // The dialog is the only place that reports the failure, so its copy appears once.
@@ -503,13 +508,12 @@ it.each([en, zh])('shows a localized toast when the account credential expires',
   onTestFinished(() => { vi.useRealTimers() })
   const operations = mount({ status: 'signed-out', attempt: null }, copy)
   cleanup()
-  const { AccountMenu } = await import('../src/client/AccountMenu.tsx')
   let expire: (() => void) | undefined
   const unsubscribe = vi.fn()
-  const element = <AccountMenu {...({} as GlobalStandardProps)} {...operations}
-    settingsOpen={false} subscribeSessionExpired={(listener) => { expire = listener; return unsubscribe }}
+  const element = <AccountOverlay {...({} as GlobalStandardProps)} {...operations}
+    subscribeSessionExpired={(listener) => { expire = listener; return unsubscribe }}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
-    useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide openOnboarding={() => {}} openSettings={() => {}}
+    useTheme={selector => selector(operations.hooks.theme.getSnapshot())} openOnboarding={() => {}}
     t={key => key in copy ? copy[key as AccountKey] : key} />
   const view = render(element)
   expect(screen.queryByRole('alert')).toBeNull()
@@ -599,7 +603,7 @@ it('reports a rejected settings login and disables login while initial state is 
   expect(screen.getByRole('status').textContent).toBe(en.failed)
 })
 
-it('dismisses a collapsed menu and hands its login dialog to the API-key onboarding step', async () => {
+it('dismisses a collapsed menu, and the overlay hands its login dialog to the API-key onboarding step', async () => {
   const operations = mount({ status: 'credential-stored', attempt: null }, en, { profile: { status: 'failed' } })
   cleanup()
   const { AccountMenu } = await import('../src/client/AccountMenu.tsx')
@@ -609,19 +613,20 @@ it('dismisses a collapsed menu and hands its login dialog to the API-key onboard
     useAccount: <T,>(select: (value: AccountSnapshot) => T) => select(snapshot),
     useTheme: <T,>(select: (value: ThemeSnapshot) => T) => select(operations.hooks.theme.getSnapshot()),
     t: (key: string) => en[key as AccountKey] }
-  const view = render(<AccountMenu {...props} />)
+  const both = () => <><AccountMenu {...props} /><AccountOverlay {...props} /></>
+  const view = render(both())
   expect(screen.getByRole('button', { name: en.menu }).textContent).toBe('')
   fireEvent.click(screen.getByRole('button', { name: en.menu }))
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('menu')).toBeNull()
   snapshot = { ...snapshot, view: { ...snapshot.view!, status: 'signed-out' }, loginVisible: true }
-  view.rerender(<AccountMenu {...props} />)
+  view.rerender(both())
   fireEvent.click(screen.getByRole('button', { name: en.close }))
   expect(operations.showLogin).toHaveBeenLastCalledWith(false)
   fireEvent.click(screen.getByRole('button', { name: en.addApiKey }))
   expect(openOnboarding).toHaveBeenCalledExactlyOnceWith('deepseek-official')
   snapshot = { ...snapshot, onboarding: true }
-  view.rerender(<AccountMenu {...props} />)
+  view.rerender(both())
   expect(screen.queryByRole('dialog')).toBeNull()
 })
 
@@ -715,11 +720,9 @@ it.each([en, zh])('shows live model sign-in guidance without replaying it after 
   let listener: (() => void) | undefined
   const unsubscribe = vi.fn(() => { listener = undefined })
   operations.subscribeModelSignInRequired = (next) => { listener = next; return unsubscribe }
-  const { AccountMenu } = await import('../src/client/AccountMenu.tsx')
-  const element = <AccountMenu {...({} as GlobalStandardProps)} {...operations}
-    settingsOpen={false}
+  const element = <AccountOverlay {...({} as GlobalStandardProps)} {...operations}
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
-    useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide openOnboarding={() => {}} openSettings={() => {}}
+    useTheme={selector => selector(operations.hooks.theme.getSnapshot())} openOnboarding={() => {}}
     t={key => key in copy ? copy[key as AccountKey] : key} />
   const view = render(element)
   expect(screen.queryByRole('alert')).toBeNull()

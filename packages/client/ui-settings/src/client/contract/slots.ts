@@ -127,13 +127,20 @@ export interface SettingsHeaderOwnerProps {
 /**
  * Owner share of a settings section entry. The shell owns modal visibility
  * and navigation; a section's data arrives through its own inject faces and
- * stores. `close` is the one shell affordance a section receives, for flows
- * that leave settings altogether (starting a session from a section) — the
- * onboarding coordinator's `openSection`/`complete` precedent, inverted.
+ * stores, except the grouped layout's `items` selection. `close` is the one
+ * shell affordance a section receives, for flows that leave settings
+ * altogether (starting a session from a section) — the onboarding
+ * coordinator's `openSection`/`complete` precedent, inverted.
  */
 export interface SettingsSectionOwnerProps {
   /** Close the settings panel (the shell owns the open state). */
   close: () => void
+  /**
+   * In a grouped Settings layout, the General rows one card shows, by
+   * `settings.general.item` id; only the General section reads it, and
+   * without it the General section shows every row.
+   */
+  items?: readonly string[]
 }
 
 /** Icon presentation supplied by the settings navigation row. */

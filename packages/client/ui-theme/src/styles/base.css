@@ -31,6 +31,13 @@ body {
   --ds-font-family-code: var(--dsh-font-family-code, var(--dsh-font-family-code-default)), var(--dsh-font-family-code-default);
   --dsw-alias-settings-card-fill: var(--dsw-alias-bg-layer-2);
   --dsw-alias-settings-card-stroke: var(--dsw-alias-border-l4);
+  /* Unset here, so each settings section keeps its own fallback until a grouped
+   * Settings page sets the value (ui-settings-general SettingsRoot.module.css). */
+  --dsh-settings-section-max-width: initial;
+  --dsh-settings-section-title-size: initial;
+  --dsh-settings-section-title-weight: initial;
+  --dsh-settings-section-title-line-height: initial;
+  --dsh-settings-section-title-display: initial;
 }
 
 [data-dsh-automatic-focus]:focus,

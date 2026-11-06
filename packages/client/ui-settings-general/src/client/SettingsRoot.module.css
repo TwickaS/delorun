@@ -96,13 +96,14 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 188px minmax(0, 1fr);
+  grid-template-columns: var(--dsh-settings-nav-width, 188px) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     'title header'
     'nav options';
-  width: 800px;
-  height: min(800px, calc(100vh - 2 * max(24px, var(--dsh-frame-overlay-top, 24px))));
+  /* A distribution may size the panel through these properties; the defaults are the shared 800 × 800 layout. */
+  width: var(--dsh-settings-panel-width, 800px);
+  height: min(var(--dsh-settings-panel-height, 800px), calc(100vh - 2 * max(24px, var(--dsh-frame-overlay-top, 24px))));
   max-width: calc(100vw - 48px);
   border-radius: var(--dsw-radius-panel);
   overflow: hidden;
@@ -250,6 +251,182 @@
   overflow-y: auto;
 }
 
+/* Grouped layout (a registered settings layout): a search field over the
+   navigation, labelled groups of cells, and pages of titled blocks whose
+   General rows sit in cards. */
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 0 12px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  color: var(--dsw-alias-label-tertiary);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 30px;
+  box-sizing: border-box;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.searchInput::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.searchInput:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -1px;
+}
+
+.navGroups {
+  gap: 16px;
+  padding-bottom: 16px;
+}
+
+.navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navGroupLabel {
+  padding: 0 12px 4px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.navGroups .navCell {
+  height: calc(36px * var(--dsh-density, 1));
+  padding-block: 0;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: calc(24px * var(--dsh-density, 1));
+  max-width: var(--dsh-settings-content-width, none);
+  padding-top: 4px;
+  /* A section that draws its own title takes the page title's type, and its
+     own width cap lifts so its rows reach the column's right edge. */
+  --dsh-settings-section-title-size: 20px;
+  --dsh-settings-section-title-weight: 500;
+  --dsh-settings-section-title-line-height: 28px;
+  --dsh-settings-section-max-width: none;
+}
+
+/* A page the shell titles keeps one title: a section on it hides its own. */
+.titledPage {
+  --dsh-settings-section-title-display: none;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  text-wrap: balance;
+}
+
+.pageSection {
+  min-width: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cardHeading {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* A card whose rows all render nothing does not show. */
+.card:not(:has([data-settings-anchor] > [data-slot] > *)) {
+  display: none;
+}
+
+.cardBody {
+  padding: 0 16px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 4px 0 0;
+  list-style: none;
+}
+
+.resultsEmpty {
+  padding: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .result:hover {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.resultPath {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.resultPath::after {
+  content: '›';
+  margin-left: 6px;
+}
+
+.resultName {
+  font-weight: 500;
+}
+
 /* Browsers below 768px use the full-viewport panel and horizontal navigation.
    Windows custom captions and macOS native titlebars retain the desktop rail;
    their independent root markers exclude both window-chrome layouts. Linux
@@ -323,6 +500,25 @@
 
   :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .options {
     padding: 0 16px 24px;
+  }
+
+  /* The grouped strip runs every group's cells in one row; group labels and the search field's side margin drop. */
+  :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .search {
+    margin: 12px 16px 0;
+  }
+
+  :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .navGroup {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .navGroupLabel {
+    display: none;
+  }
+
+  :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .navGroups {
+    gap: 4px;
+    padding-bottom: 14px;
   }
 }
 
