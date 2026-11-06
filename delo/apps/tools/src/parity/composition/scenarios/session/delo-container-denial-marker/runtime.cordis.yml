@@ -1,0 +1,10 @@
+# C16 switch container_denial_marker on: bash and pwsh declare sandbox.deniedBy
+# in the output schema that run_code's SDK declares to the model. The row
+# replaces sandbox-policy's config, so it repeats the default composition's
+# mode and workspace root from snapshots/session/text-turn/cordis.yml.
+- id: sandbox-policy
+  name: '@deepseek-ai/dsh-sandbox-policy'
+  config:
+    mode: !!js "process.env.DSH_PERMISSION_MODE ?? (process.env.DSH_SNAPSHOT === undefined ? 'workspace-write' : 'danger-full-access')"
+    workspaceRoot: !!js process.cwd()
+    containerDenialMarker: true

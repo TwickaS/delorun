@@ -1,0 +1,11 @@
+version: 1
+scenario: delo-plugin-manager-read-exemption
+profile: headless
+composition: plugin-manager
+recording: live
+permission: workspace-write
+header:
+  class: delo-plugin-manager-read-exemption
+  pin: true
+input:
+  task: List the plugins of this profile with the plugin manager, then list its bundles.

@@ -1,0 +1,30 @@
+# Delo's parity overlay (contract C16). The replay lane passes this file to
+# every snapshot process through DSH_SNAPSHOT_PATCH, after the root
+# configuration and before every scenario layer. Record and refresh refuse it,
+# and no shipped profile, bundle or person's configuration names it.
+#
+# A row here replaces the named entry's whole `config`, so the overlay sets a
+# switch only on an entry that no layer before it configures. Those rows name
+# the entry's module, which Cordis checks before it applies the row.
+#
+# The other built switches rest on their validated Config default, which is the
+# parity value and which `parity-switches` checks against the registry:
+#   preset_inspect          the row sits inside each Web preset's plugin list,
+#                           which a patch cannot reach without replacing the
+#                           whole preset row;
+#   container_denial_marker the bundles and the root configurations set
+#                           sandbox-policy's mode and workspace root, which a
+#                           row here would erase;
+#   doctor                  only the doctor profile mounts the app, and the
+#                           replay starts no doctor process.
+#
+# None of C16's changed defaults is changed in this tree: the studio bundle,
+# the permission defaults and the fetch guard are planned, and the preset
+# default (standard), the session-log upload (on) and desktop analytics (off)
+# keep upstream's values, so the overlay restores none of them.
+
+- id: tool-plugin-manager
+  name: '@deepseek-ai/dsh-plugin-manager/tools'
+  config:
+    readActionsExempt: false
+    profileHistory: false

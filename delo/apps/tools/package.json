@@ -1,6 +1,6 @@
 {
   "name": "@delo/tools",
-  "description": "Delo's fork tooling: the divergence-ledger checker and its divergence count",
+  "description": "Delo's fork tooling: the divergence-ledger checker, the check runner and the parity-composition checks",
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
@@ -9,10 +9,12 @@
     "check": "tsx src/check-fork-boundary.ts"
   },
   "dependencies": {
+    "@delo/contract-parity-composition": "workspace:*",
     "@secretlint/node": "13.0.7",
     "@secretlint/secretlint-rule-pattern": "13.0.7",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
     "js-yaml": "^4.3.2",
+    "typescript": "^6.0.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {

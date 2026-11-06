@@ -1242,6 +1242,9 @@ importers:
 
   delo/apps/tools:
     dependencies:
+      '@delo/contract-parity-composition':
+        specifier: workspace:*
+        version: link:../../packages/contract-parity-composition
       '@secretlint/node':
         specifier: 13.0.7
         version: 13.0.7(supports-color@10.2.2)
@@ -1254,6 +1257,9 @@ importers:
       js-yaml:
         specifier: ^4.3.2
         version: 4.3.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
       zod:
         specifier: ^4.4.3
         version: 4.4.3

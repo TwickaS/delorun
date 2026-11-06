@@ -1,0 +1,8 @@
+# C16 switch plugin_manager_read_exemption on: the plugin_manager tool runs its
+# read actions without the danger-full-access escalation and says so in its
+# description. The row replaces the entry's config, so profile_history keeps
+# its default, the parity value.
+- id: tool-plugin-manager
+  name: '@deepseek-ai/dsh-plugin-manager/tools'
+  config:
+    readActionsExempt: true

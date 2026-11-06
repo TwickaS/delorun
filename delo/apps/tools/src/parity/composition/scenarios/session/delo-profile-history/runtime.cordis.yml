@@ -1,0 +1,7 @@
+# C16 switch profile_history on: the plugin_manager tool offers read_config,
+# configure, history, undo and restore. The row replaces the entry's config,
+# so plugin_manager_read_exemption keeps its default, the parity value.
+- id: tool-plugin-manager
+  name: '@deepseek-ai/dsh-plugin-manager/tools'
+  config:
+    profileHistory: true
