@@ -171,6 +171,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Shares profile package operations with the CLI and reports persisted and running state to Web and agent callers.',
   },
   {
+    key: 'doctor',
+    pkg: 'doctor',
+    title: 'Doctor check registry for the doctor profile',
+    mode: 'bundle',
+    consumers: [],
+    note: 'Packages register checks through the doctor service; the doctor profile runs them once startup commits and prints one line per check.',
+  },
+  {
     key: 'pluginAudit',
     pkg: 'plugin-manager',
     title: 'Optional plugin audit before a bundle is selected or enabled',

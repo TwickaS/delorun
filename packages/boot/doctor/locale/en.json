@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Doctor profile",
+    "description": "Check the machine and composition dsh runs on, print one line per check, and exit."
+  }
+}

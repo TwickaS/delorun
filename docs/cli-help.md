@@ -12,6 +12,7 @@ Run `pnpm run gen-cli-help` to regenerate; run `pnpm run verify-cli-help` to che
 - [`dsh`](#dsh)
 - [`dsh plugin`](#dsh-plugin)
 - [`dsh acp`](#dsh-acp)
+- [`dsh doctor`](#dsh-doctor)
 - [`dsh headless`](#dsh-headless)
 - [`dsh sdk`](#dsh-sdk)
 - [`dsh sdk-minimal`](#dsh-sdk-minimal)
@@ -95,6 +96,21 @@ Options:
 Example:
   dsh --profile acp     serve ACP until the client disconnects
 
+```
+
+<a id="dsh-doctor"></a>
+## `dsh doctor`
+
+Invocations: `dsh doctor --help`, `dsh --profile doctor --help`
+
+```text
+Usage: dsh --profile doctor [options]
+
+Check the machine and composition dsh runs on: print one line per check, and
+exit 0 when none failed, 1 otherwise.
+
+Options:
+  -h, --help  show this help
 ```
 
 <a id="dsh-headless"></a>

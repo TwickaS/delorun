@@ -64,6 +64,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   pluginRecommendations: 'boot.md',
   pluginAudit: 'boot.md',
   pluginMarket: 'boot.md',
+  doctor: 'boot.md',
   pluginRegistryProbe: 'boot.md',
   configEditor: 'boot.md',
   profileContext: 'boot.md',
@@ -1116,6 +1117,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   TerminalFrame: 'Browser terminal stream frames are owned by packages/api/terminal-controller/README.md',
   TerminalRetentionFrame: 'Browser terminal window holds are owned by packages/api/terminal-controller/README.md',
   WebTerminalId: 'Browser terminal identity is owned by packages/api/terminal-controller/README.md',
+  DoctorCheck: 'packages/boot/doctor/README.md',
+  DoctorResult: 'packages/boot/doctor/README.md',
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */

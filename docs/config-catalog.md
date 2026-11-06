@@ -883,6 +883,22 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-deepseek-account-platform -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-doctor -->
+<a id="deepseek-aidsh-doctor"></a>
+
+## `@deepseek-ai/dsh-doctor`
+
+- `source`: [`packages/boot/doctor/src/index.ts:49`](../packages/boot/doctor/src/index.ts)
+
+```ts config-catalog
+/** Registry configuration. */
+export interface Config {
+  /** How long one check may run before it is reported as failed. */
+  checkTimeoutMs: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-doctor -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-agent-team -->
 <a id="deepseek-aidsh-experimental-agent-team"></a>
 

@@ -9,8 +9,8 @@
   en: b7174eab3476579d
   zh: 5ddab967320e3cff
 /dsh-cli-help/contents:
-  en: 00308bcc6dc90afd
-  zh: 16f7442b76686a02
+  en: 300db96faa415d59
+  zh: b294d2fe7cb89505
 /dsh-cli-help/dsh:
   en: e0695abcf7d8b521
   zh: 712c23b3c8a115ca
@@ -18,8 +18,11 @@
   en: adad99c125d0ac51
   zh: f11024971184f737
 /dsh-cli-help/dsh-acp:
-  en: bcb0f84577ce5f03
-  zh: 4382e617006849db
+  en: cf963786260813b3
+  zh: 575ae223f7ec06b8
+/dsh-cli-help/dsh-doctor:
+  en: 96340db13cbd700b
+  zh: cac44fea306e3c47
 /dsh-cli-help/dsh-headless:
   en: 878a1dd78017964d
   zh: bb43d91b4beb9bda

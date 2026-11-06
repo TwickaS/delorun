@@ -1158,6 +1158,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'doctor',
+    summary: 'Registers checks and runs them.',
+    description: 'Registers checks and runs them.',
+    methods: [
+      {
+        signature: 'register(check: DoctorCheck): () => void',
+        description: 'Add a check for the calling plugin\'s lifetime.',
+        parameters: [{ name: 'check', description: 'the check; its id must be unused.' }],
+        returns: 'the disposer that removes it.',
+        throws: ['when another check already has the id.'],
+      },
+      {
+        signature: 'async run(signal: AbortSignal): Promise<DoctorResult[]>',
+        description: 'Run every registered check concurrently, each under the configured deadline.',
+        parameters: [{ name: 'signal', description: 'cancels every check still running.' }],
+        returns: 'one result per check, in registration order.',
+      },
+    ],
+  },
+  {
     key: 'fileReferences',
     summary: 'Host capability for cancellable file-reference discovery.',
     description: 'Host capability for cancellable file-reference discovery.',
@@ -6322,6 +6342,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DirectoryRegistrationHandle',
     declaration: 'export interface DirectoryRegistrationHandle {\n    (): void;\n    replace(entries: readonly LlmConfigurableProvider[]): void;\n}',
+  },
+  {
+    name: 'DoctorCheck',
+    declaration: 'export interface DoctorCheck {\n    readonly id: string;\n    readonly title: string;\n    run(signal: AbortSignal): Promise<DoctorOutcome>;\n}',
+  },
+  {
+    name: 'DoctorOutcome',
+    declaration: 'export interface DoctorOutcome {\n    readonly status: DoctorStatus;\n    readonly detail: string;\n}',
+  },
+  {
+    name: 'DoctorResult',
+    declaration: 'export interface DoctorResult extends DoctorOutcome {\n    readonly id: string;\n    readonly title: string;\n}',
+  },
+  {
+    name: 'DoctorStatus',
+    declaration: 'export type DoctorStatus = \'pass\' | \'warn\' | \'fail\';',
   },
   {
     name: 'Domain',

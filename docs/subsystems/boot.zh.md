@@ -150,6 +150,31 @@ async edit( entry: Entry, change: (current: Record<string, unknown>, inherited: 
 
 Source: [`packages/boot/config-editor/src/index.ts`](../../packages/boot/config-editor/src/index.ts)
 
+<a id="ctxdoctor--doctorregistry"></a>
+
+### `ctx.doctor` — `DoctorRegistry`
+
+Registers checks and runs them.
+
+```ts cordis-catalog
+/**
+ * Add a check for the calling plugin's lifetime.
+ * @param check - the check; its id must be unused.
+ * @returns the disposer that removes it.
+ * @throws when another check already has the id.
+ */
+register(check: DoctorCheck): () => void
+
+/**
+ * Run every registered check concurrently, each under the configured deadline.
+ * @param signal - cancels every check still running.
+ * @returns one result per check, in registration order.
+ */
+async run(signal: AbortSignal): Promise<DoctorResult[]>
+```
+
+Source: [`packages/boot/doctor/src/index.ts`](../../packages/boot/doctor/src/index.ts)
+
 <a id="ctxheadlessstartup--headlessstartupvalues"></a>
 
 ### `ctx.headlessStartup` — `HeadlessStartupValues`
