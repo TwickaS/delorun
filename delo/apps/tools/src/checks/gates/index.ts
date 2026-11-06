@@ -51,6 +51,11 @@ export const GATES: readonly GateCheck[] = [
     command: [TSX, 'delo/apps/tools/src/check-commits.ts', '--base', RANGE_BASE],
   },
   {
+    id: 'gates:changelog',
+    title: 'Each product change in the range has a changelog fragment or a reasoned trailer, and every fragment parses',
+    command: [TSX, 'delo/apps/release/src/changelog/check.ts', '--base', RANGE_BASE],
+  },
+  {
     id: 'gates:doc-times',
     title: 'No calendar planning in the Delo documentation the range adds',
     command: [TSX, `${GATE_DIR}/doc-times.ts`, '--base', RANGE_BASE],

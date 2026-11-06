@@ -19,7 +19,8 @@ export const COMMIT_TYPES = ['feat', 'fix', 'docs', 'refactor', 'perf', 'test', 
 
 const SUBJECT = new RegExp(`^(?:${COMMIT_TYPES.join('|')})(?:\\([a-z0-9][a-z0-9.,/ -]*\\))?!?: \\S`)
 const SIGN_OFF = /^Signed-off-by: .+ <[^<>@\s]+@[^<>\s]+>$/m
-const CHANGELOG_NONE = /^Changelog: none\b(.*)$/m
+/** The `Changelog: none` trailer; group 1 is the text after `none`, which must name the reason. */
+export const CHANGELOG_NONE = /^Changelog: none\b(.*)$/m
 
 /** Where changelog fragments live, one Markdown file per perceptible change. */
 export const FRAGMENTS = 'delo/changelog/unreleased/'
