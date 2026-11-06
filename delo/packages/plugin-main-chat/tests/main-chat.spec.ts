@@ -633,11 +633,11 @@ describe('the main chat\'s guard over other tools', () => {
     expect(prompts.map(prompt => prompt.text)).toEqual(['First.'])
   })
 
-  it('lets the plugin manager\'s reads, run_code and the read-only tools through, and nothing of another chat\'s', () => {
+  it('lets the plugin manager\'s reads and the read-only tools through, and not run_code or anything that writes', () => {
     expect(guardFree({ name: 'plugin_manager', arguments: { action: 'history' } })).toBe(true)
     expect(guardFree({ name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'x' } })).toBe(false)
-    for (const name of ['run_code', 'read', 'chat_read', 'workspace_trash']) expect(guardFree({ name, arguments: {} }), name).toBe(true)
-    for (const name of ['bash', 'write', 'edit', 'web_fetch', 'publish_plugin', 'cell_release', 'git_push']) expect(guardFree({ name, arguments: {} }), name).toBe(false)
+    for (const name of ['read', 'chat_read', 'workspace_trash']) expect(guardFree({ name, arguments: {} }), name).toBe(true)
+    for (const name of ['run_code', 'bash', 'write', 'edit', 'web_fetch', 'publish_plugin', 'cell_release', 'git_push']) expect(guardFree({ name, arguments: {} }), name).toBe(false)
   })
 })
 

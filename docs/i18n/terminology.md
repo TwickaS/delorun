@@ -223,6 +223,11 @@
 | the person | 本人 | 本人（the person） | user、用户 | 维护者文档用 "the person"，界面文本用「你」；"user" 是上游模型对话中的用户角色 |
 | augmentation | 增强功能 | 增强功能（augmentation） | 扩展功能 | 超出 stock 工作流、由本人选择开启的附加功能 |
 | studio additions | studio 附加功能 | | | Delo 的主题、侧边栏、对话状态等附加功能，默认开启 |
+| main chat | 主对话 | 主对话（main chat） | 主 chat 区域 | 所有工作区之外的一个 chat，本人在其中询问、引导其他 chat，并在某个工作区开始工作 |
+| owner note | 所有者备注 | 所有者备注（owner note） | | 主对话应本人要求写在工作区 `AGENTS.md` 末尾的带日期备注 |
+| guard | 守卫 | 守卫（guard） | | 主对话在调用非只读工具前向本人询问的机制 |
+| Your chats | 你的对话 | | | 界面标签：主对话旁列出等待本人或正在工作的 chat 的标签页 |
+| preset | preset | | | 保留英文；agent preset，chat 运行所用的模式；上游部分中文文档写作「预设」 |
 | stock | stock | | 原版 | 保留英文；指上游按原样发布的 DeepSeek Harness |
 | stock look | stock 外观 | | | 关闭 studio 附加功能后的 Delo 外观 |
 | studio | studio | | | 保留英文；Delo 的网页界面 |

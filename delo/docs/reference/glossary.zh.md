@@ -29,7 +29,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **Delo Run**：位于 delorun.com 的托管服务：社区页面与候补名单；配合 Delo 中继（路线图第 2 阶段），它还提供账户（邮件验证码、GitHub、可选的通行密钥）、登录，以及经由 Delo 的设备批准。公开文本只标注联系邮箱 support@delorun.com。<a id="delo-run"></a>
 - **stock DSH**：上游按原样发布的 DeepSeek Harness。**stock look**：关闭 studio 附加功能后的 Delo。<a id="stock"></a>
 - **studio**：harness 的网页界面，在浏览器与桌面应用中相同。代码对应：上游的 Web 客户端。<a id="studio"></a>
-- **studio 附加功能**：Delo 的主题、侧边栏、chat 状态、主 chat 区域、设置布局、思考视图与新手引导；首个发布版本默认开启它们。代码对应：`@delo/bundle-studio`。<a id="studio-additions"></a>
+- **studio 附加功能**：Delo 的主题、侧边栏、chat 状态、主对话、设置布局、思考视图与新手引导；首个发布版本默认开启它们。代码对应：`@delo/bundle-studio`。<a id="studio-additions"></a>
 - **主对话**（main chat）：位于所有工作区之外的一个 chat，本人从这里询问并引导其他 chat，并在某个工作区中开始工作；凡超出单个轮次的变更，它都会先询问本人。代码对应：`@delo/plugin-main-chat`。<a id="main-chat"></a>
 - **增强功能**（augmentation）：超出 stock 工作流、需由本人选择开启的附加功能，例如远程访问、Docker 隔离或额外机器。<a id="augmentation"></a>
 - **本人**（the person）：一个 home 的唯一所有者。维护者文档用「the person」，界面文本用「你」。不用 user 一词，上游把它用于模型对话中的用户角色。<a id="the-person"></a>

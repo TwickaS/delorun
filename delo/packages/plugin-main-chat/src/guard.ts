@@ -5,11 +5,11 @@
  * every workspace, so a file write or a command there reaches any
  * workspace's files, `AGENTS.md` included, and untrusted text reaches a turn
  * through fetched pages and files as well as other chats. That covers file
- * writes and commands, web requests, the plugin manager's changes, and any
- * tool a plugin adds. The account tools ask from inside their own execution
- * instead, and `run_code` runs free while each tool its program calls is
- * decided on its own. Messaging or stopping another chat asks only in a
- * turn that read another chat's or workspace's text.
+ * writes and commands, `run_code`, whose program can write files under the
+ * session's file policy without calling a tool, web requests, the plugin
+ * manager's changes, and any tool a plugin adds. The account tools ask from
+ * inside their own execution instead. Messaging or stopping another chat
+ * asks only in a turn that read another chat's or workspace's text.
  *
  * @module @delo/plugin-main-chat/guard
  */
@@ -21,14 +21,14 @@ import { MAIN_CHAT_SESSION_ID } from './wire.ts'
 
 /**
  * The tools the main chat calls without the guard's question: the ones that only read, ask the person themselves, or
- * run a program whose tool calls are decided one by one.
+ * change only the main chat's own session state (its working directory, todo list, deliverables and plan mode). None
+ * can change a file or state outside the session without a tool call the guard decides.
  */
 export const GUARD_FREE: ReadonlySet<string> = new Set([
   'chat_list', 'chat_search', 'chat_read', 'workspace_list', 'workspace_instructions',
   'workspace_create', 'workspace_import', 'workspace_trash', 'workspace_restore', 'workspace_instructions_write', 'workspace_note', 'workspace_note_remove',
   'read', 'read_image', 'glob', 'grep', 'working_directory', 'todo_write', 'skill', 'present', 'ask_user_question', 'exit_plan_mode',
   'job_list', 'job_output', 'get_goal', 'schedule_list', 'list_agents', 'cordis_inspect_list', 'cordis_inspect_query',
-  'run_code',
 ])
 
 /**
@@ -45,7 +45,7 @@ const MAIN = SessionId(MAIN_CHAT_SESSION_ID)
 /**
  * Whether a call of the main chat runs without the guard's question.
  * @param exec - the pending call.
- * @returns whether it only reads, asks for itself, or is `run_code`.
+ * @returns whether it only reads, asks for itself, or changes only the session's own state.
  */
 export function guardFree(exec: Pick<ToolExecution, 'name' | 'arguments'>): boolean {
   if (GUARD_FREE.has(exec.name)) return true

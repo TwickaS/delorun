@@ -10,22 +10,25 @@
   zh: 13df6f2e7cca9dc7
 /delo-plugin-main-chat/summary:
   en: 7952eeec8f6acace
-  zh: 265f3922d86dc299
+  zh: deb9d136b3eb5190
 /delo-plugin-main-chat/contents:
-  en: febb7a96fef039ed
-  zh: 30f06a7bbad7171f
+  en: 8bf66d3b83ffcbb9
+  zh: c379944b4d12748a
 /delo-plugin-main-chat/contract:
   en: 5e67add2b7a98f89
-  zh: c8ff95cc9a87d7af
+  zh: 87b9d8d1fb0adafa
 /delo-plugin-main-chat/approvals:
-  en: 68af9643f9851b96
-  zh: 191e31dea7cb7cf2
+  en: 5edeba9dd2a17794
+  zh: 491a59021f5630e8
 /delo-plugin-main-chat/configuration:
   en: 688be5310faa8689
-  zh: 31cad1be897be67d
+  zh: b4d43205248ee463
 /delo-plugin-main-chat/carry-forward-review:
-  en: b257b77b0a4586dd
-  zh: a7a3de2bd597864a
+  en: 3721644fade1eff9
+  zh: b67353ed1368a5fa
+/delo-plugin-main-chat/known-limitations:
+  en: 63e1e32e9f2093d3
+  zh: e136d78f8497526a
 /delo-plugin-main-chat/tests:
-  en: 0e688b38bffa456a
-  zh: a3569ef99dfbdab9
+  en: 3c8a56ca61bfb8e2
+  zh: bcaac4375d504a5c

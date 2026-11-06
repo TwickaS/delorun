@@ -48,6 +48,9 @@
     },
     {
       "path": "../../../packages/interaction/user-approval"
+    },
+    {
+      "path": "../../../packages/ptc-runtime/ptc-runtime"
     }
   ],
   "exclude": [
