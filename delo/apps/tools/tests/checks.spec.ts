@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
 import { affectsParity, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
@@ -109,6 +110,12 @@ describe('the catalog', () => {
     expect(gates.find(check => check.id === 'gates:docs')?.inputs).toBeUndefined()
   })
 
+  it('marks the checks whose verdict reads commits beyond the tree: the boundary check and the range gates, and no other check', () => {
+    const history = catalog(TREE, { ...HOST, gates: GATES }).filter(check => check.history === true).map(check => check.id)
+    expect(history).toEqual(['boundary', 'gates:personal-data', 'gates:dco', 'gates:commits', 'gates:changelog', 'gates:doc-times'])
+    expect(CHECKS.find(check => check.id === 'tests:fork')?.scope).toBeUndefined()
+  })
+
   it('builds the runtime bundles only when they are missing or stale, and the lanes that run built code wait for that build', () => {
     expect(CHECKS.some(check => check.id === 'build:artifacts')).toBe(false)
     const stale = catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] })
@@ -149,6 +156,7 @@ describe('selection', () => {
     expect(fork?.command.slice(-3)).toEqual(['delo/apps/control/', 'delo/packages/providers/', 'delo/packages/client-status/'])
     expect(fork?.command).not.toContain('--changed')
     expect(fork?.reason).toBe('specs of the packages a change reaches, dependents included')
+    expect(fork?.scope).toEqual(['delo/apps/control/', 'delo/packages/providers/', 'delo/packages/client-status/'])
     expect(ids(plan)).not.toContain('typecheck:delo:cell')
   })
 

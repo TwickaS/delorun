@@ -11,7 +11,7 @@ const TSX = 'node_modules/.bin/tsx'
 const GATE_DIR = 'delo/apps/tools/src/checks/gates'
 
 /** The integration branch that pull requests merge into; the range gates compare against it by default. */
-const RANGE_BASE = 'origin/v5'
+export const RANGE_BASE = 'origin/v5'
 
 /**
  * The repository gates the runner schedules, in catalogue order. A gate's command runs from the repository root and
@@ -36,6 +36,7 @@ export const GATES: readonly GateCheck[] = [
     title: 'No personal data or postal address in the staged paths or the range',
     command: [TSX, `${GATE_DIR}/personal-data.ts`, '--base', RANGE_BASE],
     staged: true,
+    history: true,
   },
   {
     id: 'gates:infrastructure',
@@ -48,21 +49,25 @@ export const GATES: readonly GateCheck[] = [
     id: 'gates:dco',
     title: 'Every commit in the range is signed off by its author',
     command: [TSX, `${GATE_DIR}/dco.ts`, '--base', RANGE_BASE],
+    history: true,
   },
   {
     id: 'gates:commits',
     title: 'Commit subjects, sign-offs and changelog trailers in the range',
     command: [TSX, 'delo/apps/tools/src/check-commits.ts', '--base', RANGE_BASE],
+    history: true,
   },
   {
     id: 'gates:changelog',
     title: 'Each product change in the range has a changelog fragment or a reasoned trailer, and every fragment parses',
     command: [TSX, 'delo/apps/release/src/changelog/check.ts', '--base', RANGE_BASE],
+    history: true,
   },
   {
     id: 'gates:doc-times',
     title: 'No calendar planning in the Delo documentation the range adds',
     command: [TSX, `${GATE_DIR}/doc-times.ts`, '--base', RANGE_BASE],
+    history: true,
   },
   {
     id: 'gates:docs',

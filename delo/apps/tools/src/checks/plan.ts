@@ -53,6 +53,10 @@ export interface Check {
   readonly exclusive?: boolean
   /** Why this host cannot run it; the runner reports it declined, which fails no run. */
   readonly declined?: string
+  /** True when the verdict reads commits beyond the tree; a tree pass covers the check only at the same HEAD and range base. */
+  readonly history?: boolean
+  /** What a narrowed check runs over: the paths or package directories its command appends. Absent when the command is whole. */
+  readonly scope?: readonly string[]
   /** The budget the memory and exclusivity came from; the cache key includes it. */
   readonly budget: BudgetEntry
 }
@@ -233,7 +237,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
   // Lanes that execute upstream's built code wait for a build when it is missing or stale, instead of failing every scenario on it.
   const built = host.staleRuntime.length > 0 ? ['build:artifacts'] : []
   const checks: Draft[] = [
-    { id: 'boundary', group: 'boundary', title: 'Every difference from upstream is fork-owned or a listed patch', cwd: '', command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-fork-boundary.ts'], needs: [], inputs: ['**'], tiers: ['changed', 'full'], cpus: 1 },
+    { id: 'boundary', group: 'boundary', title: 'Every difference from upstream is fork-owned or a listed patch', cwd: '', command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-fork-boundary.ts'], needs: [], inputs: ['**'], history: true, tiers: ['changed', 'full'], cpus: 1 },
   ]
   for (const gate of host.gates) {
     checks.push({
@@ -244,6 +248,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       command: [...gate.command],
       needs: [],
       ...gate.inputs === undefined ? {} : { inputs: gate.inputs },
+      ...gate.history === true ? { history: true } : {},
       tiers: gate.staged === true ? ['pre-commit', 'changed', 'full'] : ['changed', 'full'],
       cpus: 1,
     })
@@ -554,17 +559,17 @@ export function selectPreCommit(checks: readonly Check[], staged: readonly strin
  * @param paths - the changed or targeted paths.
  * @param reachedDirs - the fork package directories the change reaches, with a trailing slash; undefined after a fork-wide change, which runs every spec.
  * @param upstream - upstream's packages.
- * @returns the check, with its command narrowed where the selection narrows it.
+ * @returns the check, with its command and scope narrowed where the selection narrows it.
  */
 function narrowed(check: Check, selection: Selection, paths: readonly string[], reachedDirs: readonly string[] | undefined, upstream: readonly UpstreamPackage[]): Check {
   if (check.id === 'tests:upstream-changed') {
     const { dirs } = upstreamSpecDirs(upstream, paths.filter(path => !path.startsWith('delo/')))
     // With no directory it would run every upstream spec, which the full gate does not run in this lane.
-    return dirs.length === 0 ? { ...check, declined: 'no upstream package changed' } : { ...check, command: [...check.command, ...dirs] }
+    return dirs.length === 0 ? { ...check, declined: 'no upstream package changed' } : { ...check, command: [...check.command, ...dirs], scope: dirs }
   }
   if (check.id !== 'tests:fork') return check
   if (selection.changed !== undefined) {
-    return reachedDirs === undefined || reachedDirs.length === 0 ? check : { ...check, command: [...check.command, ...reachedDirs] }
+    return reachedDirs === undefined || reachedDirs.length === 0 ? check : { ...check, command: [...check.command, ...reachedDirs], scope: reachedDirs }
   }
   if (paths.length === 0) return check
   const filters = [...new Set(paths.flatMap(path => {
@@ -573,7 +578,7 @@ function narrowed(check: Check, selection: Selection, paths: readonly string[], 
     const dir = packageDirOf(path)
     return dir === undefined ? [] : [`${dir}/`]
   }))]
-  return filters.length === 0 ? check : { ...check, command: [...check.command, ...filters] }
+  return filters.length === 0 ? check : { ...check, command: [...check.command, ...filters], scope: filters }
 }
 
 /**

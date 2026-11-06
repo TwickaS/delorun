@@ -51,7 +51,7 @@ A new spec goes in its package's `tests/` directory, which `tests:fork` runs.
 
 1. A change people can perceive adds a fragment under [`delo/changelog/unreleased/`](../../../delo/changelog/unreleased/README.md).
 2. `git commit -s` with a Conventional Commits subject; a change nobody can perceive ends with `Changelog: none (<reason>)`.
-3. The `commit-msg` hook checks the message against the commit standard; the pre-push gate checks what changed since the remote branch's tip.
+3. The `commit-msg` hook checks the message against the commit standard; the pre-push gate checks what changed since the remote branch's tip. Merging by fast-forward after the branch push does not rerun the gate, because the tree pass record covers the same commit ([tools README](../../../delo/apps/tools/README.md#local-checks)).
 4. Open the pull request with `dsh-pr-description`.
 
 ## Tools

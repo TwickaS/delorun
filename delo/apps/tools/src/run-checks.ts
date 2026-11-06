@@ -29,7 +29,8 @@
  * of WSL only (`checks/machine.ts`). Logs, the report and each check's last
  * duration go under `node_modules/.cache/delo-checks/`; a check that declares its
  * inputs and passed under the same key is served from the pass cache
- * (`checks/cache.ts`).
+ * (`checks/cache.ts`). A run of a tree that a record covers reports the record and starts nothing, and a passing
+ * pre-push run records its pass (`checks/tree-pass.ts`).
  *
  * @module @delo/tools/run-checks
  */
@@ -40,11 +41,12 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { z } from 'zod'
-import { createPassCache, passCacheEnabled, type PassCache } from './checks/cache.ts'
+import { contentId, createPassCache, passCacheEnabled, type PassCache } from './checks/cache.ts'
 import { GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
+import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { git, repositoryRoot } from './git.ts'
 
 /** Where the runner keeps its state, relative to the repository root. */
@@ -438,13 +440,6 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const reads = values.list || values.plan
   // The pre-commit tier runs only light staged gates, so it neither waits for a running gate nor takes a memory scope.
   const light = reads || values['pre-commit']
-  // One gate at a time on this machine; a second run waits for the first.
-  if (!light && env[IN_SCOPE] === undefined) await holdRunLock()
-  if (!light && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
-    const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)
-    const child = spawnSync(command, args, { stdio: 'inherit', env: { ...env, [IN_SCOPE]: '1' } })
-    return child.status ?? 1
-  }
 
   const workers = workerCounts(cpus, memory)
   const forkWorkers = values.workers === undefined ? workers.fork : Number(values.workers)
@@ -470,17 +465,22 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     return 0
   }
 
+  // A pre-push run reads the push lines once; a scoped child gets them on its standard input.
+  const pushInput = values['pre-push'] ? readFileSync(0, 'utf8') : undefined
   const fullGate = values['pre-push'] && env['DELO_FULL_GATE'] === '1'
   let plan: Planned[]
   let mode: string
+  // The base a pre-push run measures from and the changed paths it selects by; the tree pass below reads both.
+  let pushBase: string | undefined
+  let changed: { readonly base: string, readonly paths: string[] } | undefined
   if (values['pre-commit']) {
     const staged = stagedPaths(root)
     plan = selectPreCommit(checks, staged)
     mode = `pre-commit tier, ${String(staged.length)} staged path(s)`
   } else {
-    const pushBase = values['pre-push'] ? prePushBase(root, readFileSync(0, 'utf8'), values.base ?? DEFAULT_BASE, fullGate) : undefined
+    pushBase = values['pre-push'] ? prePushBase(root, pushInput ?? '', values.base ?? DEFAULT_BASE, fullGate) : undefined
     const base = values.base ?? pushBase ?? DEFAULT_BASE
-    const changed = values.changed || values.base !== undefined || pushBase !== undefined ? { base, paths: changedPaths(root, base) } : undefined
+    changed = values.changed || values.base !== undefined || pushBase !== undefined ? { base, paths: changedPaths(root, base) } : undefined
     // Under `pnpm --filter`, a script runs in its package; `INIT_CWD` is where it was invoked.
     const targets = positionals.map(path => relative(root, resolve(process.env['INIT_CWD'] ?? process.cwd(), path)))
     plan = select(checks, tree, { targets, ...changed === undefined ? {} : { changed }, only: list(values.only), skip: list(values.skip) })
@@ -506,6 +506,38 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     if (tierSeconds !== undefined) console.log(`  the pre-commit tier's budget: ${String(tierSeconds)} s`)
     return 0
   }
+
+  // A pre-push run of the pushed HEAD, or a change run, measures HEAD's tree, which a tree record can cover.
+  const measuresHead = values['pre-push'] ? pushBase !== undefined : changed !== undefined
+  const treeRecords = join(root, CACHE_DIR, 'trees')
+  const treeRecordsOn = measuresHead && treePassEnabled({ noCache: values['no-cache'] }, env)
+  const facts: RunFacts = { lockfile: contentId(root, 'pnpm-lock.yaml'), node: process.version, pnpm: () => pnpmVersionOf(root), env }
+  // Whether the record covers this run, which then starts nothing; `announce` names the reason a record does not cover it.
+  const covered = (state: TreeState | undefined, announce: boolean): boolean => {
+    if (state?.clean !== true) return false
+    const lookup = findTreePass(treeRecords, state, plan, facts)
+    if (lookup.hit) {
+      console.log(`delo checks: this tree passed these checks at ${lookup.record.passedAt}: ${plan.map(check => check.id).join(', ')}; nothing ran`)
+      return true
+    }
+    if (announce && lookup.reason !== undefined) console.log(`delo checks: the record for this tree does not cover this run (${lookup.reason}); the checks run`)
+    return false
+  }
+  // Answered before the lock: a covered tree starts nothing, so it does not wait for a gate running on this machine.
+  if (covered(treeRecordsOn ? treeState(root) : undefined, false)) return 0
+
+  // One gate at a time on this machine; a second run waits for the first.
+  if (!light && env[IN_SCOPE] === undefined) await holdRunLock()
+  if (!light && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
+    const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)
+    const child = spawnSync(command, args, { stdio: [pushInput === undefined ? 'inherit' : 'pipe', 'inherit', 'inherit'], env: { ...env, [IN_SCOPE]: '1' }, ...pushInput === undefined ? {} : { input: pushInput } })
+    return child.status ?? 1
+  }
+  // A gate that ran while this run waited for the lock may have recorded the tree, so the record is read again here.
+  const startState = treeRecordsOn ? treeState(root) : undefined
+  if (covered(startState, true)) return 0
+  // Only a pre-push run records its pass, and only from a clean tree.
+  const before = values['pre-push'] && startState?.clean === true ? startState : undefined
 
   const scratch = scratchDir()
   const childEnv = checkEnvironment(env, scratch)
@@ -541,6 +573,10 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   rmSync(scratch, { recursive: true, force: true })
   writeDurations(root, durations, results)
   writeReport(root, results)
+  if (before !== undefined && !results.some(result => failing(result.outcome))) {
+    const written = recordTreePass(treeRecords, { before, after: treeState(root), base: changed === undefined ? null : treeOfRef(root, changed.base), plan, results }, facts, new Date())
+    console.log(written.recorded ? `delo checks: this tree's pass is recorded in ${relative(root, join(treeRecords, `${before.tree}.json`))}` : `delo checks: this tree's pass is not recorded: ${written.reason}`)
+  }
   const elapsed = (performance.now() - started) / 1000
   const tierSeconds = values['pre-commit'] ? budgets.tiers['pre-commit']?.seconds : undefined
   if (tierSeconds !== undefined && elapsed > tierSeconds) console.log(`  the pre-commit tier took ${formatSeconds(elapsed)}, over its ${String(tierSeconds)} s budget (budgets.json)`)

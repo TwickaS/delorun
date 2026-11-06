@@ -78,7 +78,7 @@ export function passCacheEnabled(options: { readonly noCache: boolean, readonly 
  * @param path - a repository-relative path.
  * @returns `sha256:<hex>` or `deleted`.
  */
-function contentId(root: string, path: string): string {
+export function contentId(root: string, path: string): string {
   const absolute = join(root, path)
   if (!existsSync(absolute)) return 'deleted'
   return `sha256:${createHash('sha256').update(readFileSync(absolute)).digest('hex')}`
