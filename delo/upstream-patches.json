@@ -114,7 +114,7 @@
     {
       "path": "pnpm-workspace.yaml",
       "class": "security",
-      "reason": "Adds Delo's workspace globs, the `!delo/apps/docs` exclusion, the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delo's packages. Upstream's lines are unchanged."
+      "reason": "Adds Delo's workspace globs, the `!delo/apps/docs` exclusion, the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delo's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock."
     },
     {
       "path": "pnpm-lock.yaml",
@@ -145,6 +145,11 @@
       "path": "scripts/test-non-loopback-address.spec.ts",
       "class": "delo-feature",
       "reason": "Covers the link-local exclusion and the IPv6 loopback probe."
+    },
+    {
+      "path": "apps/cli/tests/profiles/web/tests/public-url.expected.e2e.ts",
+      "class": "delo-feature",
+      "reason": "Skips the IPv6 loopback root test when the host cannot listen on ::1, using the probe that scripts/test-non-loopback-address.ts exports."
     },
     {
       "path": "scripts/types/client-assets/index.d.ts",

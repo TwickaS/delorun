@@ -10,7 +10,7 @@ import { Readable } from 'node:stream'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
-import { probeNonLoopbackIpv4, probeZonedLoopback } from '../../../../../../scripts/test-non-loopback-address.ts'
+import { probeIpv6Loopback, probeNonLoopbackIpv4, probeZonedLoopback } from '../../../../../../scripts/test-non-loopback-address.ts'
 import { startPrefixProxy } from '../../../../../../apps/web/tests/prefix-proxy.ts'
 import { PROCESS_SHUTDOWN_TIMEOUT_MS } from '../../../../src/process-shutdown.ts'
 import { materializeTlsFixture } from '../../../../../../packages/host/webserver/tests/tls-fixture.ts'
@@ -25,6 +25,8 @@ const MOUNT = '/tools/dsh/'
 const NON_LOOPBACK_IPV4 = builtArtifactsExist ? await probeNonLoopbackIpv4() : undefined
 
 const ZONED_LOOPBACK = builtArtifactsExist ? await probeZonedLoopback() : undefined
+
+const IPV6_LOOPBACK = builtArtifactsExist ? await probeIpv6Loopback() : undefined
 
 /**
  * Every spelling that binds IPv6 loopback. `::0.0.0.1` is the same address as
@@ -339,7 +341,7 @@ describe.skipIf(!builtArtifactsExist)('dsh Web profile bind address and advertis
     })
   })
 
-  it.each(IPV6_LOOPBACKS)('prints the IPv6 loopback root for %s and serves it', async (host) => {
+  it.skipIf(IPV6_LOOPBACK === undefined).each(IPV6_LOOPBACKS)('prints the IPv6 loopback root for %s and serves it', async (host) => {
     await withWeb(['--host', host], async (web) => {
       expect(web.startup.origin).toBe(`http://[::1]:${String(web.port)}`)
       const authority = `[::1]:${String(web.port)}`
