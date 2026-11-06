@@ -111,6 +111,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 ## Building Delo
 
 - **upstream** — DeepSeek Harness as its maintainers release it. **divergence ledger** — `delo/upstream-patches.json`: every changed upstream file with its reason and class. **[divergence record](divergence/README.md)** — the page explaining a substantial change to one upstream plugin and how to merge the next upstream release. <a id="upstream"></a>
+- **parity baseline** ([`parity-baseline.md`](parity-baseline.md)) — the recorded results of the parity runs at `dsh-v0.2.2-rc.1`, with the environment and failure classification that page states. <a id="parity-baseline"></a>
 - **parity checklist** ([`parity.md`](parity.md)) — every stock feature at the recorded upstream tag, with its evidence, and every deliberate difference. **parity composition** — Delo's runtime with the studio bundle and every model-visible Delo change switched off. **parity replay** — upstream's recorded scenarios run unchanged against the parity composition. <a id="parity"></a>
 - **parity switch** — one registered switch of the parity composition: a model-visible Delo change, with its default value and its parity value. Code: the registry `PARITY_SWITCHES` in `@delo/contract-parity-composition`. <a id="parity-switch"></a>
 - **switch sweep** — the check that turns each parity switch on, replays its own Delo scenario, and the static scan that finds model-visible input under `delo/` with no registered switch. <a id="switch-sweep"></a>
