@@ -1030,6 +1030,16 @@
       "path": "packages/experimental/liveshare/src/endpoint-classification.ts",
       "class": "security",
       "reason": "LiveShare endpoint classes: classifies the `pluginManager/history`, `pluginManager/restore` and `pluginManager/undo` Remotes as `owner-only`, so a share viewer can never call them. Lead verdict: kept; stricter or equal, since LiveShare refuses an unclassified endpoint by default."
+    },
+    {
+      "path": "package.json",
+      "class": "delo-feature",
+      "reason": "Adds the `check` and `check:full` scripts: Delo's check runner over the changed paths, and over the full gate without the pass cache."
+    },
+    {
+      "path": ".gitignore",
+      "class": "delo-feature",
+      "reason": "Keeps each worktree's uncommitted lefthook-local.yml, which extends delo/lefthook.yml, out of commits."
     }
   ],
   "retired": []
