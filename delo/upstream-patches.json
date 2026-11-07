@@ -2840,6 +2840,41 @@
       "path": "apps/web/tests/delo-reach-listener.e2e.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): the studio boots and styles a terminal on a reach listener with no policy violation, and a remote chat image renders as a placeholder that is never requested. Lead verdict: pending; the lead reviews this file line by line before it merges."
+    },
+    {
+      "path": "packages/client/ui-primitives/README.md",
+      "class": "delo-feature",
+      "reason": "Reach listener Content Security Policy (C4): documents the `remoteImages` delegate of `MarkdownDelegateProvider`, whose placeholder replaces a Markdown image whose source is another origin, names its host and never requests it."
+    },
+    {
+      "path": "packages/client/ui-primitives/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Reach listener Content Security Policy (C4): the Chinese counterpart of the remote-image placeholder paragraph in README.md."
+    },
+    {
+      "path": "packages/client/ui-primitives/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Reach listener Content Security Policy (C4): the consistency record re-recorded after the README and its Chinese counterpart gained the remote-image placeholder paragraph."
+    },
+    {
+      "path": "packages/client/web/README.md",
+      "class": "delo-feature",
+      "reason": "Reach listener Content Security Policy (C4): documents the `./page-policy` entry, which stamps the page's nonce on every `<style>` element `document.createElement` creates and puts zod in jitless mode on a page served under a nonce-based policy."
+    },
+    {
+      "path": "packages/client/web/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Reach listener Content Security Policy (C4): the Chinese counterpart of the page-policy paragraph in README.md."
+    },
+    {
+      "path": "packages/client/web/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Reach listener Content Security Policy (C4): the consistency record re-recorded after the README and its Chinese counterpart gained the page-policy paragraph."
+    },
+    {
+      "path": "vendor/README.md",
+      "class": "security",
+      "reason": "Reach listener Content Security Policy (C4): the local-modification log records V28, the Loader's lazily compiled `!!js` evaluator, whose absence upstream keeps a policy without `'unsafe-eval'` from loading the studio. Lead verdict: pending; the lead reviews this file line by line before it merges."
     }
   ],
   "retired": []
