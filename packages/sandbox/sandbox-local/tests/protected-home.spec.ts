@@ -319,7 +319,7 @@ describe('denied socket directories', () => {
 
 describe('bwrap profile', () => {
   it('shadows each denied socket path and hides the home under a read-only tmpfs with its readable entries bound', () => {
-    const protection: Protection = { home: '/h', homeAliases: ['/mnt/distro/h'], homeAliasMounts: ['/mnt/distro'], readable: [{ path: '/h/runtimes', source: '/h/runtimes' }], socketSpellings: [], shadowedSockets: ['/run/docker.sock'], hiddenDirectories: [] }
+    const protection: Protection = { home: '/h', homeAliases: ['/mnt/distro/h'], homeAliasMounts: ['/mnt/distro'], aliasCoverage: 'complete', readable: [{ path: '/h/runtimes', source: '/h/runtimes' }], socketSpellings: [], shadowedSockets: ['/run/docker.sock'], hiddenDirectories: [] }
     expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)).toEqual([
       ...BASE,
       '--ro-bind', '/dev/null', '/run/docker.sock',
@@ -397,6 +397,7 @@ describe('seatbelt profile', () => {
       home: '/h',
       homeAliases: ['/System/Volumes/Data/h'],
       homeAliasMounts: ['/System/Volumes/Data/h'],
+      aliasCoverage: 'complete',
       readable: [{ path: '/h/runtimes', source: '/h/runtimes' }],
       socketSpellings: ['/var/run/docker.sock', '/private/var/run/docker.sock'],
       shadowedSockets: [],
