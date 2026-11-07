@@ -4,11 +4,13 @@
  * refusals around them) and a signing that passes them, whose manifest and file lists verify with the targets key.
  * Every key is a throwaway key generated in the test.
  */
+import { randomBytes } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
-import { REQUIRED_SOURCE } from '../../src/rebuild/record.ts'
+import { attestationText } from '../../src/rebuild/attestation.ts'
+import { outputRefs, REQUIRED_SOURCE } from '../../src/rebuild/record.ts'
 import { checkFileRef, verifyFileList, verifySignedManifest } from '../../src/sign/verify.ts'
 import { writeTree } from '../support.ts'
 import { COMMITTED_COMPILER, releaseFixture, rootFile, VERSION, type ReleaseFixture } from './fixture.ts'
@@ -128,6 +130,7 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     rmSync(join(fixture.rebuild, `delorun-${VERSION}-linux-x64.files.json`))
     const { archiveClosure } = await import('../../src/closure/archive-closure.ts')
     await archiveClosure({ stage, outDir: fixture.rebuild, version: VERSION, platform: 'linux-x64', epoch: 1_793_981_656, pins: undefined })
+    writeFileSync(fixture.attestationPath, attestationText(fixture.attestationKey, { version: VERSION, commit: fixture.commit, outputs: await outputRefs(fixture.rebuild) }))
     const recorded = fixture.record()
     expect(recorded.stdout).toContain('differs: delorun-0.1.0-linux-x64.tar.gz: app/lib/bin.js: content differs')
     expect(recorded.status).toBe(1)
@@ -213,5 +216,39 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     const script = join(fixture.release, 'install.sh')
     writeFileSync(script, readFileSync(script, 'utf8').toUpperCase())
     refusedWithoutWriting(fixture, fixture.sign(), 'install.sh does not match install.sh in the draft')
+  })
+
+  it('refuses without the rebuild attestation, or with one another key made or that covers another build', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const missing = fixture.sign({}, { attestation: join(fixture.rebuild, '..', 'none.json') })
+    refusal(missing.stderr)
+    refusedWithoutWriting(fixture, missing, 'no rebuild attestation exists at')
+    const outputs = await outputRefs(fixture.rebuild)
+    const other = join(fixture.rebuild, '..', 'other.json')
+    writeFileSync(other, attestationText(randomBytes(32), { version: VERSION, commit: fixture.commit, outputs }))
+    refusedWithoutWriting(fixture, fixture.sign({}, { attestation: other }), 'its HMAC does not verify with this machine\'s attestation key')
+    writeFileSync(other, attestationText(fixture.attestationKey, { version: VERSION, commit: 'e'.repeat(40), outputs }))
+    refusedWithoutWriting(fixture, fixture.sign({}, { attestation: other }), `it attests ${VERSION} at ${'e'.repeat(40)}, not ${VERSION} at ${fixture.commit}`)
+    writeFileSync(other, attestationText(fixture.attestationKey, { version: VERSION, commit: fixture.commit, outputs: outputs.slice(1) }))
+    refusedWithoutWriting(fixture, fixture.sign({}, { attestation: other }), 'it attests other output files than the rebuild directory holds')
+    const forged = JSON.parse(readFileSync(fixture.attestationPath, 'utf8')) as { hmac: string }
+    writeFileSync(other, JSON.stringify({ ...forged, hmac: '0'.repeat(64) }))
+    refusedWithoutWriting(fixture, fixture.sign({}, { attestation: other }), 'its HMAC does not verify')
+    copyFileSync(fixture.attestationPath, join(fixture.rebuild, '..', 'release', 'attestation.json'))
+    refusedWithoutWriting(fixture, fixture.sign({}, { attestation: join(fixture.release, 'attestation.json') }), 'lies in the release or rebuild directory')
+  })
+
+  it('changes nothing in the release directory when writing a signed file fails', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const list = join(fixture.release, `delorun-${VERSION}-linux-x64.files.json`)
+    const before = readFileSync(list)
+    mkdirSync(join(fixture.release, `${MANIFEST}.signing`))
+    const result = fixture.sign()
+    refusedWithoutWriting(fixture, result, 'writing the signed files failed, and nothing was changed')
+    expect(readFileSync(list)).toEqual(before)
+    expect(existsSync(join(fixture.release, RECORD))).toBe(false)
+    expect(existsSync(`${list}.signing`)).toBe(false)
   })
 })

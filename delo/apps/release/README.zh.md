@@ -70,11 +70,11 @@
 签名在目标密钥持有者的机器上、CI 之外进行，发生于发布工作流已从标签 `v<version>` 构建发布、且持有者已完成重建之后：
 
 1. 将草稿发布中发布工作流的文件（包括其 `manifest-draft.json`）下载到某个目录中，例如 `release/`。
-2. 在仓库中检出该标签，并用同一配方构建它：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/`。
+2. 在仓库中检出该标签，用同一配方构建它，并为输出生成证明：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`。
 3. 记录重建：`node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --builder <name> --compared-with <workflow run URL>`。它依据该标签处提交的 `rebuild-exceptions.json`，将每个重建文件与发布工作流中同名的文件比较，将记录写入 `release/` 之外的 `--record`，并在比较发现差异时以 1 退出。设置了 `CI` 或 `GITHUB_ACTIONS` 时，它拒绝运行；重建缺少任一平台的归档或文件列表时，它也拒绝。
-4. 签名：`node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --key <targets.pem>`。
+4. 签名：`node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --attestation rebuild.attestation.json --attestation-key ~/.config/delo/rebuild-attestation.key --key <targets.pem>`。
 
-`sign-release.ts` 会拒绝运行，并给出一条写明所需来源的消息，即 "a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe"。出现以下任一情况时，它都会拒绝：重建记录缺失或无法读取；`release/` 中已有 `delorun-<version>.rebuild.json`，或 `--record` 或 `--rebuild` 位于 `release/` 之中；记录写明 `ci: true` 或报告了差异；设置了 `CI` 或 `GITHUB_ACTIONS`；`--rebuild` 不是本机上的目录、其文件无法复现记录中的摘要，或缺少任一平台的运行时归档或文件列表；记录的提交不是标签所指的提交，或记录中的配方摘要或工具链（Node.js、pnpm、编译器与链接器）与该提交的配方不一致；或将发布工作流的文件与重建再次比较时发现差异。它还拒绝这样的草稿：其运行时条目不是对应平台自身的 `delorun-<version>-<platform>.tar.gz`（`win32-x64` 为 `.zip`）与 `delorun-<version>-<platform>.files.json`，或其文件未以草稿所列的长度与摘要出现在发布目录中。所有检查通过后，它会就地签署每个运行时文件列表，将记录以 `delorun-<version>.rebuild.json` 之名复制到 `release/` 中，并写入 `delorun-<version>.manifest.json`；该 manifest 的 `rebuild` 字段写明记录与持有者，并标注 `ci: false`。在此之前，它不写入任何内容。
+`sign-release.ts` 会拒绝运行，并给出一条写明所需来源的消息，即 "a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe"。出现以下任一情况时，它都会拒绝：重建记录缺失或无法读取；`release/` 中已有 `delorun-<version>.rebuild.json`，或 `--record` 或 `--rebuild` 位于 `release/` 之中；记录写明 `ci: true` 或报告了差异；设置了 `CI` 或 `GITHUB_ACTIONS`；`--rebuild` 不是本机上的目录、其文件无法复现记录中的摘要，或缺少任一平台的运行时归档或文件列表；记录的提交不是标签所指的提交，或记录中的配方摘要或工具链（Node.js、pnpm、编译器与链接器）与该提交的配方不一致；证明缺失、位于 `release/` 或 `rebuild/` 之中，或无法用证明密钥对版本、提交以及 `rebuild/` 中的每个文件验证通过；或将发布工作流的文件与重建再次比较时发现差异。它还拒绝这样的草稿：其运行时条目不是对应平台自身的 `delorun-<version>-<platform>.tar.gz`（`win32-x64` 为 `.zip`）与 `delorun-<version>-<platform>.files.json`，或其文件未以草稿所列的长度与摘要出现在发布目录中。所有检查通过后，它会先以临时文件名在 `release/` 中写入每个已签名的运行时文件列表、以 `delorun-<version>.rebuild.json` 为名的记录，以及 `delorun-<version>.manifest.json`（该 manifest 的 `rebuild` 字段写明记录与持有者，并标注 `ci: false`），再将它们重命名到位，manifest 最后重命名；重命名之前的任何失败都不会改动 `release/`。
 
 ### targets 密钥
 
@@ -88,12 +88,25 @@ openssl pkey -in targets.pem -pubout -out targets.pub.pem
 
 公钥写入根元数据（root metadata）的 `keys` 与 `roles.targets`，并由根密钥签名（[C2](../../docs/contracts/c02-release-manifest.zh.md#root-metadata)）；私钥绝不进入 CI、云服务，或发布工作流可以访问的机器。
 
+### 重建证明密钥
+
+证明密钥是一个至少 32 字节的机密，位于持有者签名机器上的 `~/.config/delo/rebuild-attestation.key`，只有其所有者可读；它从不离开那台机器。持有者只需创建一次：
+
+```sh
+mkdir -p ~/.config/delo && umask 077
+openssl rand -out ~/.config/delo/rebuild-attestation.key 32
+```
+
+`build-closure.ts --attestation-key` 对发布版本、提交以及 `--out` 中每个文件的长度与 SHA-256 写入一个 HMAC-SHA256，`sign-release.ts` 会检查它。它能发现把 `--rebuild` 指向并非本机构建所写目录的失误，例如发布工作流输出的下载副本。它无法阻止蓄意作弊的持有者，因为持有者掌握密钥，可以为任何目录生成证明；C2 已说明重建的独立性无法证明。
+
 ### 根元数据与时间戳元数据
 
-`node_modules/.bin/tsx delo/apps/release/src/sign-root.ts --draft <file> --key <root.pem>... [--previous <root file>] --out <root/<n>.root.json>` 在所有者的签名步骤中签署根元数据：草稿即根元数据的 `signed` 内容；只有当该文件以其自身的根阈值验证通过时，才会写入该文件；对于轮换，它还须作为 `--previous` 之后的版本，并以该根的阈值同样验证通过。
+`node_modules/.bin/tsx delo/apps/release/src/sign-root.ts --draft <file> --key <root.pem>... [--previous <root file>] --out <root/<n>.root.json>` 在所有者的签名步骤中签署根元数据：草稿即根元数据的 `signed` 内容；只有当该文件以其自身的根阈值验证通过且尚未过期时，才会写入该文件；对于轮换，它还须作为 `--previous` 之后的版本，并以该根的阈值同样验证通过。
 
-`node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --root <file>... [--previous <timestamp.json>] --stable <manifest> --beta <manifest> --out <timestamp.json>` 使用来自 `DELO_TIMESTAMP_KEY` 环境变量的在线密钥签署下一个时间戳。根轮换之后 `--root` 可重复：先给出上一个时间戳所指明的根，最后给出最新的根。`--previous` 必须能用其所指明的根中的时间戳密钥验证通过，并与该根文件的摘要一致；它可以已经过期。每个通道的 manifest 都必须能用最新根中的 targets 密钥验证通过；stable 通道指明一个 stable 发布，beta 通道指明一个 beta 或 stable 发布；任何通道都不会移向更低的版本，也不会移向其所指明版本的另一个 manifest。新版本比 `--previous` 高一号，过期时间为签发后 3 天。
+`node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --state <state.json> --root <file>... (--previous <timestamp.json> | --first) --stable <manifest> --beta <manifest> [--replaced <manifest>]... --out <timestamp.json>` 使用来自 `DELO_TIMESTAMP_KEY` 环境变量的在线密钥签署下一个时间戳，然后写入新的状态。`--root` 从状态所信任的根开始，根轮换之后可重复，最后给出最新的根。`--previous` 必须正是状态记录为最近一次签署的那个时间戳文件，并能用其所指明的根中的时间戳密钥验证通过，且与该根文件的摘要一致；它可以已经过期。`--first` 在没有上一个时间戳的情况下签名，仅当状态尚未记录任何时间戳时才可使用。每个通道的 manifest 都必须能用最新根中的 targets 密钥验证通过；stable 通道指明一个 stable 发布，beta 通道指明一个 beta 或 stable 发布；任何通道都不会移向更低的版本。只有当通道所指明的 manifest（以 `--replaced` 传入）已无法用最新根中的 targets 密钥验证通过（例如 targets 密钥轮换之后），或与新的 manifest 仅签名不同时，通道才会移向同一发布的另一个 manifest。新版本比 `--previous` 高一号，过期时间为签发后 3 天。
+
+状态文件（`delo.release-timestamp-state/1`）保存签名者所信任的根，以及最近一次签署的时间戳的版本与 SHA-256，因此不受信任的元数据主机提供的真实但较旧的时间戳无法让通道回滚。所有者在根签名步骤中用 `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --init-state --root root/1.root.json --state state.json` 写入一次，并把其内容保存为发布工作流受保护的 `release` 环境中的变量 `DELO_TIMESTAMP_STATE`，绝不放在元数据主机上。每个签名作业把该变量还原为文件，签名后，用一个只对该环境中的作业可用、且可写入该环境变量的令牌，把新状态写回该变量。
 
 ## 验证
 
-`src/sign/verify.ts` 实施 C2 的客户端验证：`readTrustedRoot`、`adoptNextRoot` 与 `trustRootChain` 遍历各根版本，每个版本都须由上一版本根密钥的阈值及其自身根密钥的阈值签名，签发时间早于过期时间，有效期至多 365 天，且最新版本尚未过期；把同一密钥分配给两个角色、或 `active` 的 targets 密钥不恰好为一个的根读取失败；`verifyTimestamp` 检查时间戳角色的签名、3 天有效期、签发时间不晚于本地时间、不设时钟容差的过期检查（其拒绝消息写明过期时间与本地时间）、已存储的版本，以及其所指明的根版本与根文件摘要；`verifyChannelManifest` 只接受新鲜的时间戳为该通道指明的 manifest 文件，其发布与通道须与时间戳所指明的一致（beta 通道也指明 stable 发布），且该文件须由对该发布有效的 targets 密钥签名（`active` 密钥，或 `lastRelease` 不低于该发布的 `retired` 密钥；绝不接受 `revoked` 密钥）；`verifyFileList` 与 `checkFileRef` 依据 manifest 检查每个文件的长度与 SHA-256。每个签名文件都先按其大小上限读取，再进行解析；重复的 JSON 键、未知字段或未知的 `schema` 都会使读取失败。`src/sign/json.ts` 存放签名所覆盖的 RFC 8785 序列化。
+`src/sign/verify.ts` 实施 C2 的客户端验证：`trustRootChain` 从调用方持有的根开始遍历各根版本，每个版本都须由上一版本根密钥的阈值及其自身根密钥的阈值签名，签发时间早于过期时间，有效期至多 365 天，且最新版本尚未过期；把同一密钥分配给两个角色、或 `active` 的 targets 密钥不恰好为一个的根读取失败；`verifyTimestamp` 检查时间戳角色的签名、3 天有效期、签发时间不晚于本地时间、不设时钟容差的过期检查（其拒绝消息写明过期时间与本地时间）、已存储的版本，以及其所指明的根版本与根文件摘要；`verifyChannelManifest` 只接受新鲜的时间戳为该通道指明的 manifest 文件，其发布与通道须与时间戳所指明的一致（beta 通道也指明 stable 发布），且该文件须由对该发布有效的 targets 密钥签名（`active` 密钥，或 `lastRelease` 不低于该发布的 `retired` 密钥；绝不接受 `revoked` 密钥）；`verifyFileList` 与 `checkFileRef` 依据 manifest 检查每个文件的长度与 SHA-256。每个签名文件都先按其大小上限读取，再进行解析；重复的 JSON 键、未知字段或未知的 `schema` 都会使读取失败。`src/sign/json.ts` 存放签名所覆盖的 RFC 8785 序列化。

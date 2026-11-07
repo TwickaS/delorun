@@ -11,8 +11,8 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { semanticVersion, sha256Hex } from '../../src/brands.ts'
 import { publicKeyEntry, signEnvelope, signedBytes } from '../../src/sign/envelope.ts'
 import { canonicalJson, parseStrictJson, toJsonValue } from '../../src/sign/json.ts'
-import { nextTimestamp, type ManifestFile } from '../../src/sign/timestamp.ts'
-import { adoptNextRoot, checkFileRef, readTrustedRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifySignedManifest, verifyTimestamp, type TrustedRoot } from '../../src/sign/verify.ts'
+import { initialState, nextTimestamp, stateAfter, type ManifestFile, type TimestampRequest, type TimestampState } from '../../src/sign/timestamp.ts'
+import { checkFileRef, trustRootChain, verifyChannelManifest, verifyFileList, verifySignedManifest, verifyTimestamp, type TrustedRoot } from '../../src/sign/verify.ts'
 import { manifestContent, rootFile, throwawayKeys, type Keys } from './fixture.ts'
 
 const ISSUED = Date.parse('2026-11-06T12:00:00Z') / 1000
@@ -30,20 +30,32 @@ function manifestFile(keys: Keys, version: string, channel: ReleaseChannel = 'st
   return { name: `delorun-${version}.manifest.json`, bytes: envelopeBytes({ ...manifestContent(version, archive), channel }, [keys.targets]) }
 }
 
+function trusted(bytes: Uint8Array, now = ISSUED): TrustedRoot {
+  return trustRootChain([bytes], now).at(-1)!
+}
+
 interface Published {
   readonly keys: Keys
   readonly root: TrustedRoot
+  /** The signer's state after the first timestamp. */
+  readonly state: TimestampState
   readonly archive: Buffer
   readonly manifestBytes: Buffer
   readonly timestamp: { metadata: TimestampMetadata, bytes: Buffer }
 }
 
 function publish(version = '0.1.0', keys: Keys = throwawayKeys()): Published {
-  const root = readTrustedRoot(rootFile(keys).bytes)
+  const root = trusted(rootFile(keys).bytes)
   const archive = Buffer.from(`runtime archive ${version}`)
   const manifest = manifestFile(keys, version, 'stable', archive)
-  const metadata = nextTimestamp([root], undefined, { stable: manifest, beta: manifest }, ISSUED)
-  return { keys, root, archive, manifestBytes: manifest.bytes, timestamp: { metadata, bytes: envelopeBytes(metadata, [keys.timestamp]) } }
+  const metadata = nextTimestamp({ state: initialState(root), roots: [root], previous: { first: true }, manifests: { stable: manifest, beta: manifest }, replaced: [], now: ISSUED })
+  const bytes = envelopeBytes(metadata, [keys.timestamp])
+  return { keys, root, state: stateAfter(root, bytes, metadata.version), archive, manifestBytes: manifest.bytes, timestamp: { metadata, bytes } }
+}
+
+/** The next timestamp after a published one, as the signer's state allows. */
+function continueFrom(release: Published, manifests: TimestampRequest['manifests'], now: number, overrides: Partial<TimestampRequest> = {}): TimestampMetadata {
+  return nextTimestamp({ state: release.state, roots: [release.root], previous: { bytes: release.timestamp.bytes }, manifests, replaced: [], now, ...overrides })
 }
 
 describe('release verification', () => {
@@ -129,7 +141,7 @@ describe('release verification', () => {
   it('refuses a replayed timestamp with a lower version, and a different file with the stored version', () => {
     const release = publish()
     const manifest = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
-    const second = nextTimestamp([release.root], release.timestamp.bytes, { stable: manifest, beta: manifest }, ISSUED + DAY)
+    const second = continueFrom(release, { stable: manifest, beta: manifest }, ISSUED + DAY)
     const secondBytes = envelopeBytes(second, [release.keys.timestamp])
     expect(() => verifyTimestamp(release.root, release.timestamp.bytes, ISSUED + DAY + 60, { version: 2, bytes: secondBytes })).toThrow(/version 1 is lower than the stored version 2/u)
     const resigned = envelopeBytes(second, [release.keys.timestamp, generateKeyPairSync('ed25519').privateKey])
@@ -166,28 +178,27 @@ describe('release verification', () => {
   it('adopts the next root only when both the previous and its own root keys sign it', () => {
     const keys = throwawayKeys()
     const first = rootFile(keys)
-    const trusted = readTrustedRoot(first.bytes)
     const newRoot = generateKeyPairSync('ed25519').privateKey
     const rotated: Keys = { ...keys, root: newRoot }
-    const both = rootFile(rotated, { version: 2 }, [keys.root, newRoot])
-    expect(adoptNextRoot(trusted, both.bytes).metadata.version).toBe(2)
-    expect(() => adoptNextRoot(trusted, rootFile(rotated, { version: 2 }, [newRoot]).bytes)).toThrow(/previous root's keys/u)
-    expect(() => adoptNextRoot(trusted, rootFile(rotated, { version: 2 }, [keys.root]).bytes)).toThrow(/root 2 has 0 valid signatures/u)
-    expect(() => adoptNextRoot(trusted, rootFile(rotated, { version: 3 }, [keys.root, newRoot]).bytes)).toThrow(/does not follow/u)
+    const chain = (next: Buffer): TrustedRoot[] => trustRootChain([first.bytes, next], ISSUED)
+    expect(chain(rootFile(rotated, { version: 2 }, [keys.root, newRoot]).bytes).at(-1)!.metadata.version).toBe(2)
+    expect(() => chain(rootFile(rotated, { version: 2 }, [newRoot]).bytes)).toThrow(/previous root's keys/u)
+    expect(() => chain(rootFile(rotated, { version: 2 }, [keys.root]).bytes)).toThrow(/root 2 has 0 valid signatures/u)
+    expect(() => chain(rootFile(rotated, { version: 3 }, [keys.root, newRoot]).bytes)).toThrow(/does not follow/u)
   })
 
   it('refuses a root past its expiry, one expiring before it was issued, and one living longer than 365 days', () => {
     const keys = throwawayKeys()
     const { bytes, metadata } = rootFile(keys)
     const expires = Date.parse(metadata.expires) / 1000
-    expect(readTrustedRoot(bytes, expires).metadata.version).toBe(1)
-    expect(() => readTrustedRoot(bytes, expires + 1)).toThrow(`root 1 expired at ${metadata.expires}; this machine's clock reads ${utc(expires + 1)}. A newer root must verify before installs and updates`)
-    expect(() => trustRootChain([bytes], expires + 1)).toThrow(/root 1 expired/u)
+    expect(trusted(bytes, expires).metadata.version).toBe(1)
+    expect(() => trusted(bytes, expires + 1)).toThrow(`root 1 expired at ${metadata.expires}; this machine's clock reads ${utc(expires + 1)}. A newer root must verify before installs and updates`)
+    expect(() => trustRootChain([bytes, rootFile(keys, { version: 2 }).bytes], expires + 1)).toThrow(/root 2 expired/u)
     expect(trustRootChain([bytes, rootFile(keys, { version: 2, expires: utc(expires + DAY) }).bytes], expires + 1).map(root => root.metadata.version)).toEqual([1, 2])
-    expect(() => readTrustedRoot(rootFile(keys, { expires: metadata.issued }).bytes)).toThrow(`root 1 expires at ${metadata.issued}, not after it was issued at ${metadata.issued}`)
+    expect(() => trusted(rootFile(keys, { expires: metadata.issued }).bytes)).toThrow(`root 1 expires at ${metadata.issued}, not after it was issued at ${metadata.issued}`)
     const issued = Date.parse(metadata.issued) / 1000
-    expect(readTrustedRoot(rootFile(keys, { expires: utc(issued + 365 * DAY) }).bytes).metadata.version).toBe(1)
-    expect(() => readTrustedRoot(rootFile(keys, { expires: utc(issued + 365 * DAY + 1) }).bytes)).toThrow('root 1 expires more than 365 days after it was issued')
+    expect(trusted(rootFile(keys, { expires: utc(issued + 365 * DAY) }).bytes).metadata.version).toBe(1)
+    expect(() => trusted(rootFile(keys, { expires: utc(issued + 365 * DAY + 1) }).bytes)).toThrow('root 1 expires more than 365 days after it was issued')
   })
 
   it('refuses a root that gives one key two roles, or does not have exactly one active targets key', () => {
@@ -195,12 +206,12 @@ describe('release verification', () => {
     const { metadata } = rootFile(keys)
     const targetsId = publicKeyEntry(keys.targets).keyid
     const shared = rootFile(keys, { roles: { ...metadata.roles, timestamp: { keyids: [targetsId], threshold: 1 } } })
-    expect(() => readTrustedRoot(shared.bytes)).toThrow(`key ${targetsId} is already in role targets; each key holds one role`)
+    expect(() => trusted(shared.bytes)).toThrow(`key ${targetsId} is already in role targets; each key holds one role`)
     const extra = publicKeyEntry(generateKeyPairSync('ed25519').privateKey).keyid
     const twoActive = rootFile(keys, { roles: { ...metadata.roles, targets: { keys: [{ keyid: targetsId, status: 'active' }, { keyid: extra, status: 'active' }], threshold: 1 } } })
-    expect(() => readTrustedRoot(twoActive.bytes)).toThrow('2 targets keys are active; exactly one must be')
+    expect(() => trusted(twoActive.bytes)).toThrow('2 targets keys are active; exactly one must be')
     const noneActive = rootFile(keys, { roles: { ...metadata.roles, targets: { keys: [{ keyid: targetsId, status: 'retired', lastRelease: semanticVersion('0.1.0') }], threshold: 1 } } })
-    expect(() => readTrustedRoot(noneActive.bytes)).toThrow('0 targets keys are active; exactly one must be')
+    expect(() => trusted(noneActive.bytes)).toThrow('0 targets keys are active; exactly one must be')
   })
 
   it('refuses a signed file with a duplicate key, an unknown field or an unknown schema', () => {
@@ -226,44 +237,94 @@ describe('timestamp signing', () => {
     const release = publish()
     expect(release.timestamp.metadata.channels.beta).toEqual(release.timestamp.metadata.channels.stable)
     const beta = manifestFile(release.keys, '0.2.0-beta.1', 'beta')
-    expect(() => nextTimestamp([release.root], release.timestamp.bytes, { stable: beta, beta }, later)).toThrow(`${beta.name} is a beta release, which the stable channel does not name`)
+    expect(() => continueFrom(release, { stable: beta, beta }, later)).toThrow(`${beta.name} is a beta release, which the stable channel does not name`)
     const stable = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
-    expect(nextTimestamp([release.root], release.timestamp.bytes, { stable, beta }, later).channels.beta.release).toBe('0.2.0-beta.1')
+    expect(continueFrom(release, { stable, beta }, later).channels.beta.release).toBe('0.2.0-beta.1')
   })
 
-  it('refuses a previous timestamp the timestamp key did not sign, or one naming another root file, and reads an expired one', () => {
+  it('continues only from the last timestamp the state records, so an older genuine timestamp cannot roll a channel back', () => {
+    const release = publish('0.1.0')
+    const older = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
+    const newer = manifestFile(release.keys, '0.2.0')
+    const second = continueFrom(release, { stable: newer, beta: newer }, later)
+    const secondBytes = envelopeBytes(second, [release.keys.timestamp])
+    const state = stateAfter(release.root, secondBytes, second.version)
+    const rollback = { state, roots: [release.root], manifests: { stable: older, beta: older }, replaced: [], now: later + DAY }
+    expect(() => nextTimestamp({ ...rollback, previous: { bytes: release.timestamp.bytes } }))
+      .toThrow(`the previous timestamp has SHA-256 ${release.state.timestamp!.sha256}, not ${state.timestamp!.sha256}, the last timestamp signed (version 2) as the state records`)
+    expect(() => nextTimestamp({ ...rollback, previous: { first: true } })).toThrow('the state records timestamp 2 as the last signed; continue from it with --previous instead of signing a first timestamp')
+    expect(() => nextTimestamp({ ...rollback, previous: { bytes: secondBytes } })).toThrow('the stable channel would move back from 0.2.0 to 0.1.0')
+    expect(() => nextTimestamp({ ...rollback, state: initialState(release.root), previous: { bytes: release.timestamp.bytes } })).toThrow('the state records no timestamp yet; sign the first timestamp with --first')
+    expect(nextTimestamp({ ...rollback, previous: { bytes: secondBytes }, manifests: { stable: newer, beta: newer } }).version).toBe(3)
+  })
+
+  it('refuses a root chain that does not start at the root the state trusts, including for the first timestamp', () => {
+    const release = publish()
+    const stranger = trusted(rootFile(throwawayKeys()).bytes)
+    const manifest = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
+    expect(() => nextTimestamp({ state: initialState(release.root), roots: [stranger], previous: { first: true }, manifests: { stable: manifest, beta: manifest }, replaced: [], now: ISSUED }))
+      .toThrow(`the first root passed is root 1 with SHA-256 ${stranger.sha256}; the state trusts root 1 with SHA-256 ${release.root.sha256}`)
+  })
+
+  it('verifies the recorded previous timestamp with the timestamp key, and reads it after it expired', () => {
     const release = publish()
     const stable = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
     const manifests = { stable, beta: stable }
     const forged = envelopeBytes({ ...release.timestamp.metadata, version: 41 }, [generateKeyPairSync('ed25519').privateKey])
-    expect(() => nextTimestamp([release.root], forged, manifests, later)).toThrow(/timestamp has 0 valid signatures/u)
-    const otherRoot = envelopeBytes({ ...release.timestamp.metadata, root: { version: 1, sha256: sha256Hex('1'.repeat(64)) } }, [release.keys.timestamp])
-    expect(() => nextTimestamp([release.root], otherRoot, manifests, later)).toThrow(/not the trusted root file's/u)
-    expect(nextTimestamp([release.root], release.timestamp.bytes, manifests, ISSUED + 30 * DAY).version).toBe(2)
+    expect(() => continueFrom(release, manifests, later, { state: stateAfter(release.root, forged, 41), previous: { bytes: forged } })).toThrow(/timestamp has 0 valid signatures/u)
+    expect(continueFrom(release, manifests, ISSUED + 30 * DAY).version).toBe(2)
   })
 
-  it('reads a previous timestamp under the root it names after a rotation, and refuses one naming a root not passed', () => {
+  it('reads the previous timestamp under the root it names after a rotation, then continues from the new root', () => {
     const keys = throwawayKeys()
     const release = publish('0.1.0', keys)
     const newTimestamp = generateKeyPairSync('ed25519').privateKey
-    const second = readTrustedRoot(rootFile({ ...keys, timestamp: newTimestamp }, { version: 2 }, [keys.root]).bytes)
+    const second = trustRootChain([rootFile(keys).bytes, rootFile({ ...keys, timestamp: newTimestamp }, { version: 2 }, [keys.root]).bytes], ISSUED).at(-1)!
     const stable = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
-    const next = nextTimestamp([release.root, second], release.timestamp.bytes, { stable, beta: stable }, later)
+    const next = continueFrom(release, { stable, beta: stable }, later, { roots: [release.root, second] })
     expect(next.root).toEqual({ version: 2, sha256: second.sha256 })
-    expect(() => nextTimestamp([second], release.timestamp.bytes, { stable, beta: stable }, later)).toThrow('the previous timestamp names root 1, which is not among the roots passed')
+    expect(() => continueFrom(release, { stable, beta: stable }, later, { roots: [second] })).toThrow(`the first root passed is root 2 with SHA-256 ${second.sha256}; the state trusts root 1`)
+    const nextBytes = envelopeBytes(next, [newTimestamp])
+    expect(nextTimestamp({ state: stateAfter(second, nextBytes, 2), roots: [second], previous: { bytes: nextBytes }, manifests: { stable, beta: stable }, replaced: [], now: later + DAY }).version).toBe(3)
   })
 
   it('refuses to move a channel back to a lower release, or to another manifest of the release it names', () => {
     const keys = throwawayKeys()
-    const root = readTrustedRoot(rootFile(keys).bytes)
+    const root = trusted(rootFile(keys).bytes)
     const newer = manifestFile(keys, '0.2.0')
-    const first = envelopeBytes(nextTimestamp([root], undefined, { stable: newer, beta: newer }, ISSUED), [keys.timestamp])
+    const firstContent = nextTimestamp({ state: initialState(root), roots: [root], previous: { first: true }, manifests: { stable: newer, beta: newer }, replaced: [], now: ISSUED })
+    const first = envelopeBytes(firstContent, [keys.timestamp])
+    const request = { state: stateAfter(root, first, 1), roots: [root], previous: { bytes: first }, replaced: [], now: later }
     const older = manifestFile(keys, '0.1.0')
-    expect(() => nextTimestamp([root], first, { stable: older, beta: newer }, later)).toThrow('the stable channel would move back from 0.2.0 to 0.1.0')
-    expect(() => nextTimestamp([root], first, { stable: newer, beta: older }, later)).toThrow('the beta channel would move back from 0.2.0 to 0.1.0')
+    expect(() => nextTimestamp({ ...request, manifests: { stable: older, beta: newer } })).toThrow('the stable channel would move back from 0.2.0 to 0.1.0')
+    expect(() => nextTimestamp({ ...request, manifests: { stable: newer, beta: older } })).toThrow('the beta channel would move back from 0.2.0 to 0.1.0')
     const resigned = manifestFile(keys, '0.2.0', 'stable', Buffer.from('another archive'))
-    expect(() => nextTimestamp([root], first, { stable: resigned, beta: newer }, later)).toThrow(/the stable channel names release 0\.2\.0 by delorun-0\.2\.0\.manifest\.json [0-9a-f]{64}; delorun-0\.2\.0\.manifest\.json is another manifest of that release/u)
-    expect(nextTimestamp([root], first, { stable: newer, beta: newer }, later).version).toBe(2)
+    expect(() => nextTimestamp({ ...request, manifests: { stable: resigned, beta: newer } })).toThrow(/the stable channel names release 0\.2\.0 by delorun-0\.2\.0\.manifest\.json [0-9a-f]{64}; delorun-0\.2\.0\.manifest\.json is another manifest of that release/u)
+    expect(() => nextTimestamp({ ...request, manifests: { stable: resigned, beta: newer }, replaced: [newer] })).toThrow(/is another manifest of that release/u)
+    const sameContent = { name: newer.name, bytes: envelopeBytes(manifestContent('0.2.0', Buffer.from('runtime archive 0.2.0')), [keys.targets, generateKeyPairSync('ed25519').privateKey]) }
+    expect(nextTimestamp({ ...request, manifests: { stable: sameContent, beta: newer }, replaced: [newer] }).channels.stable.manifest.sha256).toBe(sha256Hex(createHash('sha256').update(sameContent.bytes).digest('hex')))
+    expect(nextTimestamp({ ...request, manifests: { stable: newer, beta: newer } }).version).toBe(2)
+  })
+
+  it('names a release re-signed after a targets-key rotation in place of the manifest the revoked key signed', () => {
+    const keys = throwawayKeys()
+    const release = publish('0.1.0', keys)
+    const successor = generateKeyPairSync('ed25519').privateKey
+    const revoked = publicKeyEntry(keys.targets)
+    const next = publicKeyEntry(successor)
+    const rootTwo = rootFile({ ...keys, targets: successor }, {
+      version: 2,
+      keys: { ...rootFile({ ...keys, targets: successor }).metadata.keys, [revoked.keyid]: revoked.entry },
+      roles: { ...release.root.metadata.roles, targets: { keys: [{ keyid: revoked.keyid, status: 'revoked' }, { keyid: next.keyid, status: 'active' }], threshold: 1 } },
+    }, [keys.root])
+    const roots = trustRootChain([rootFile(keys).bytes, rootTwo.bytes], later)
+    const old = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
+    const resigned = { name: old.name, bytes: envelopeBytes({ ...manifestContent('0.1.0', release.archive), published: '2026-11-07T09:00:00Z' }, [successor]) }
+    const manifests = { stable: resigned, beta: resigned }
+    expect(() => continueFrom(release, manifests, later, { roots })).toThrow(/is another manifest of that release/u)
+    const timestamp = continueFrom(release, manifests, later, { roots, replaced: [old] })
+    expect(timestamp.channels.stable.release).toBe('0.1.0')
+    expect(timestamp.root.version).toBe(2)
   })
 })
 

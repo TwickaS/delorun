@@ -9,7 +9,7 @@
  */
 import { createHash, type KeyObject } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { lstat, readFile, realpath, rename, writeFile } from 'node:fs/promises'
+import { lstat, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   RELEASE_REPOSITORY_URL,
@@ -26,6 +26,7 @@ import { z } from 'zod'
 import { fileDigest } from '../archive/sink.ts'
 import { sha256Hex } from '../brands.ts'
 import { closureFileNames } from '../closure/tree.ts'
+import { attestationProblem } from '../rebuild/attestation.ts'
 import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, type CommittedRecipe } from '../rebuild/record.ts'
 import { signEnvelope } from './envelope.ts'
@@ -56,6 +57,10 @@ export interface SigningRequest {
   readonly rebuild: string
   /** The holder's rebuild record, as `record-rebuild.ts` wrote it, outside {@link SigningRequest.release}. */
   readonly record: string
+  /** The attestation `build-closure.ts` wrote for the rebuild, outside the release and rebuild directories. */
+  readonly attestation: string
+  /** The holder's attestation key. */
+  readonly attestationKey: Buffer
   /** The targets private key. */
   readonly key: KeyObject
   /** The process environment, checked for CI markers. */
@@ -171,12 +176,47 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
   const names = new Set(local.map(ref => ref.name))
   const missing = requiredOutputs(draft.version).filter(name => !names.has(name))
   if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every runtime archive and file list`)
+  let attestationPath: string
+  let attestation: Buffer
+  try {
+    attestationPath = await realpath(request.attestation)
+    attestation = await readFile(attestationPath)
+  } catch (error) {
+    refuse(`no rebuild attestation exists at ${request.attestation}: ${(error as Error).message}; build-closure.ts writes it with --attestation-key`)
+  }
+  if (isWithin(attestationPath, release) || isWithin(attestationPath, rebuild)) refuse(`the rebuild attestation ${attestationPath} lies in the release or rebuild directory`)
+  const unattested = attestationProblem(request.attestationKey, attestation, { version: draft.version, commit: record.commit, outputs: local })
+  if (unattested !== undefined) refuse(`the rebuild attestation does not cover the rebuild in ${rebuild}: ${unattested}. The rebuild directory must be the one build-closure.ts wrote on this machine`)
   const comparison = await compareOutputs(release, rebuild, recipe.exceptions, names)
   if (comparison.differences.length > 0) {
     const first = comparison.differences[0]!
     refuse(`compare-rebuild finds ${String(comparison.differences.length)} differences between the release workflow's output and the rebuild, first ${first.file}${first.entry === undefined ? '' : `: ${first.entry}`}: ${first.detail}`)
   }
   return { record, recordBytes, comparison }
+}
+
+/** The suffix of the temporary files signing writes before renaming them into place. */
+const PENDING_SUFFIX = '.signing'
+
+/**
+ * Write every output under a temporary name, then rename each into place, so a failure while writing leaves the
+ * release directory as it was; the manifest is renamed last.
+ * @param directory - the release directory.
+ * @param outputs - each output's name and content, the manifest last.
+ * @throws SigningRefusal when a temporary file cannot be written; the temporary files written so far are removed.
+ */
+async function writeAll(directory: string, outputs: ReadonlyArray<readonly [string, string | Buffer]>): Promise<void> {
+  const written: string[] = []
+  try {
+    for (const [name, content] of outputs) {
+      await writeFile(join(directory, `${name}${PENDING_SUFFIX}`), content, { flag: 'wx', mode: 0o644 })
+      written.push(name)
+    }
+  } catch (error) {
+    await Promise.all(written.map(name => rm(join(directory, `${name}${PENDING_SUFFIX}`), { force: true })))
+    throw new SigningRefusal(`signing refuses: writing the signed files failed, and nothing was changed: ${(error as Error).message}`, { cause: error })
+  }
+  for (const [name] of outputs) await rename(join(directory, `${name}${PENDING_SUFFIX}`), join(directory, name))
 }
 
 /**
@@ -239,11 +279,7 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   const manifestPath = join(request.release, manifestName)
   if (existsSync(manifestPath)) throw new SigningRefusal(`signing refuses: ${manifestName} already exists`)
   const envelope = signEnvelope({ signed: toJsonValue(manifest), signatures: [] }, [request.key])
-  for (const [name, text] of signedLists) {
-    await writeFile(join(request.release, `${name}.signed`), text, { flag: 'w', mode: 0o644 })
-    await rename(join(request.release, `${name}.signed`), join(request.release, name))
-  }
-  await writeFile(join(request.release, recordName), recordBytes, { flag: 'wx', mode: 0o644 })
-  await writeFile(manifestPath, `${JSON.stringify(envelope, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
+  const outputs: Array<[string, string | Buffer]> = [...signedLists, [recordName, recordBytes], [manifestName, `${JSON.stringify(envelope, undefined, 2)}\n`]]
+  await writeAll(request.release, outputs)
   return { manifest, manifestName, comparison }
 }

@@ -19,7 +19,7 @@ import { RELEASE_FILE_SIZE_LIMITS } from '@delo/contract-release-manifest'
 import { readSigningKey, signEnvelope } from './sign/envelope.ts'
 import { parseStrictJson } from './sign/json.ts'
 import { RootSchema } from './sign/schemas.ts'
-import { adoptNextRoot, readTrustedRoot } from './sign/verify.ts'
+import { trustRootChain } from './sign/verify.ts'
 
 function main(argv: readonly string[]): number {
   const { values } = parseArgs({ args: [...argv], strict: true, options: { draft: { type: 'string' }, key: { type: 'string', multiple: true }, previous: { type: 'string' }, out: { type: 'string' } } })
@@ -30,7 +30,8 @@ function main(argv: readonly string[]): number {
     if (!checked.success) throw new Error(`the draft is not root metadata: ${checked.error.message}`)
     const envelope = signEnvelope({ signed: draft, signatures: [] }, values.key.map(path => readSigningKey(resolve(path))))
     const bytes = Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`)
-    const root = values.previous === undefined ? readTrustedRoot(bytes) : adoptNextRoot(readTrustedRoot(readFileSync(resolve(values.previous))), bytes)
+    const chain = values.previous === undefined ? [bytes] : [readFileSync(resolve(values.previous)), bytes]
+    const root = trustRootChain(chain, Math.floor(Date.now() / 1000)).at(-1)!
     writeFileSync(resolve(values.out), bytes, { flag: 'wx', mode: 0o644 })
     console.log(`sign-root: wrote root version ${String(root.metadata.version)} to ${values.out}`)
     return 0

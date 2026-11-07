@@ -1,10 +1,12 @@
 /**
  * Timestamp metadata (contract C2): the online timestamp key re-signs it every 24 hours and at each release, naming
- * each channel's current manifest by digest. Every signing reads the previous timestamp only after it verifies with
- * the root it names, and names a manifest for each channel only after that manifest verifies with the newest root's
- * targets keys. A new timestamp's version is one above the previous one's, it expires exactly 3 days after it is
- * issued, the stable channel names a stable release, the beta channel a beta or stable release, and no channel moves
- * to a lower version or to another manifest of the version it names.
+ * each channel's current manifest by digest. The signer keeps state that the release workflow protects and the
+ * metadata host never serves: the root it trusts and the version and digest of the last timestamp it signed. Every
+ * signing starts from that root and from exactly that timestamp, so a genuine but older timestamp and its manifests
+ * cannot roll a channel back; only the first signing, requested explicitly, has no previous timestamp. A channel names
+ * a manifest only after it verifies with the newest root's targets keys; the stable channel names a stable release,
+ * the beta channel a beta or stable release; and no channel moves to a lower version, or to another manifest of the
+ * version it names unless that manifest no longer verifies or differs from it only in signatures.
  *
  * @module @delo/release/sign/timestamp
  */
@@ -16,12 +18,15 @@ import {
   type ChannelPointer,
   type FileRef,
   type ReleaseChannel,
+  type Sha256Hex,
   type TimestampMetadata,
   type UtcTimestamp,
 } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import semver from 'semver'
+import { z } from 'zod'
 import { sha256Hex } from '../brands.ts'
+import { canonicalJson, parseStrictJson } from './json.ts'
 import { readEnvelope } from './schemas.ts'
 import { channelAccepts, verifySignedManifest, verifyTimestamp, type TrustedRoot } from './verify.ts'
 
@@ -33,57 +38,166 @@ export interface ManifestFile {
   readonly bytes: Uint8Array
 }
 
+const digest = z.string().regex(/^[0-9a-f]{64}$/u).transform(value => sha256Hex(value))
+const counted = z.strictObject({ version: z.number().int().min(1), sha256: digest })
+
+/** The timestamp signer's state: the root it trusts and the last timestamp it signed, absent before the first. */
+export const TimestampStateSchema = z.strictObject({
+  schema: z.literal('delo.release-timestamp-state/1'),
+  root: counted,
+  timestamp: counted.nullable(),
+})
+
+/** {@link TimestampStateSchema}'s parsed value. */
+export interface TimestampState {
+  /** The schema id. */
+  readonly schema: 'delo.release-timestamp-state/1'
+  /** The newest root the signer trusts, by version and file digest. */
+  readonly root: { readonly version: number, readonly sha256: Sha256Hex }
+  /** The last timestamp signed, by version and file digest; `null` before the first. */
+  readonly timestamp: { readonly version: number, readonly sha256: Sha256Hex } | null
+}
+
+/**
+ * Read the signer's state file.
+ * @param bytes - the file's bytes.
+ * @returns the state.
+ * @throws Error when the file is not strict JSON of the state schema.
+ */
+export function readTimestampState(bytes: Uint8Array): TimestampState {
+  const parsed = TimestampStateSchema.safeParse(parseStrictJson(bytes, 4096))
+  if (!parsed.success) throw new Error(`timestamp state: ${z.prettifyError(parsed.error).replaceAll('\n', '; ')}`)
+  return parsed.data
+}
+
+function sha256Of(bytes: Uint8Array): Sha256Hex {
+  return sha256Hex(createHash('sha256').update(bytes).digest('hex'))
+}
+
+/**
+ * The state before the first timestamp, anchored to the root the owner trusts.
+ * @param root - that root.
+ * @returns the state.
+ */
+export function initialState(root: TrustedRoot): TimestampState {
+  return { schema: 'delo.release-timestamp-state/1', root: { version: root.metadata.version, sha256: root.sha256 }, timestamp: null }
+}
+
+/**
+ * The state after a signing.
+ * @param root - the newest root, which the new timestamp names.
+ * @param timestamp - the new timestamp file.
+ * @param version - its version.
+ * @returns the state.
+ */
+export function stateAfter(root: TrustedRoot, timestamp: Uint8Array, version: number): TimestampState {
+  return { schema: 'delo.release-timestamp-state/1', root: { version: root.metadata.version, sha256: root.sha256 }, timestamp: { version, sha256: sha256Of(timestamp) } }
+}
+
 function utc(seconds: number): UtcTimestamp {
   return brandString<UtcTimestamp>(`${new Date(seconds * 1000).toISOString().slice(0, 19)}Z`)
 }
 
 function fileRef(name: string, bytes: Uint8Array): FileRef {
-  return { name, length: bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
+  return { name, length: bytes.byteLength, sha256: sha256Of(bytes) }
+}
+
+/** The timestamp a signing continues from: the previous file, or an explicit first signing. */
+export type PreviousTimestamp = { readonly first: true } | { readonly bytes: Uint8Array }
+
+/** What the next timestamp is signed from. */
+export interface TimestampRequest {
+  /** The signer's state. */
+  readonly state: TimestampState
+  /** The verified root chain, oldest first; the first must be the state's root. */
+  readonly roots: readonly TrustedRoot[]
+  /** The previous timestamp, or an explicit first signing. */
+  readonly previous: PreviousTimestamp
+  /** The manifest file each channel names. */
+  readonly manifests: Readonly<Record<ReleaseChannel, ManifestFile>>
+  /** Manifests the previous timestamp names that a re-signed manifest of the same release replaces. */
+  readonly replaced: readonly ManifestFile[]
+  /** The signing time, in Unix seconds. */
+  readonly now: number
 }
 
 /**
- * Verify the previous timestamp with the root it names, which may be older than the newest root after a rotation.
- * @param roots - the verified root chain, oldest first.
- * @param bytes - the previous timestamp file.
- * @param now - the signing time, in Unix seconds.
- * @returns the previous timestamp.
- * @throws Error when the timestamp names a root outside the chain or does not verify with it; an expired timestamp
- * verifies.
+ * Verify the previous timestamp: the file the state records, signed under the root it names, which may be older than
+ * the newest root after a rotation.
+ * @param request - the request.
+ * @returns the previous timestamp, or `undefined` for the first signing.
+ * @throws Error when the previous timestamp is not the one the state records or does not verify, or the first-signing
+ * request does not match the state.
  */
-function verifyPrevious(roots: readonly TrustedRoot[], bytes: Uint8Array, now: number): TimestampMetadata {
-  const named = readEnvelope('timestamp', bytes).signed.root.version
-  const root = roots.find(candidate => candidate.metadata.version === named)
+function verifyPrevious(request: TimestampRequest): TimestampMetadata | undefined {
+  const last = request.state.timestamp
+  if ('first' in request.previous) {
+    if (last !== null) throw new Error(`the state records timestamp ${String(last.version)} as the last signed; continue from it with --previous instead of signing a first timestamp`)
+    return undefined
+  }
+  if (last === null) throw new Error('the state records no timestamp yet; sign the first timestamp with --first')
+  const actual = sha256Of(request.previous.bytes)
+  if (actual !== last.sha256) throw new Error(`the previous timestamp has SHA-256 ${actual}, not ${last.sha256}, the last timestamp signed (version ${String(last.version)}) as the state records`)
+  const named = readEnvelope('timestamp', request.previous.bytes).signed.root.version
+  const root = request.roots.find(candidate => candidate.metadata.version === named)
   if (root === undefined) throw new Error(`the previous timestamp names root ${String(named)}, which is not among the roots passed`)
-  return verifyTimestamp(root, bytes, now, undefined, { allowExpired: true })
+  return verifyTimestamp(root, request.previous.bytes, request.now, undefined, { allowExpired: true })
+}
+
+/**
+ * Whether a manifest may replace the one a channel names for the same release: the replaced file must be the one
+ * named, and either no longer verify with the newest root's targets keys, as after a targets-key rotation, or carry
+ * the same signed content.
+ * @param root - the newest root.
+ * @param named - the pointer the previous timestamp holds.
+ * @param file - the new manifest file.
+ * @param replaced - the files offered as the named manifest.
+ * @returns why the replacement is allowed, or `undefined` when it is not.
+ */
+function replacementAllowed(root: TrustedRoot, named: ChannelPointer, file: ManifestFile, replaced: readonly ManifestFile[]): string | undefined {
+  const old = replaced.find(candidate => sha256Of(candidate.bytes) === named.manifest.sha256 && candidate.bytes.byteLength === named.manifest.length)
+  if (old === undefined) return undefined
+  try {
+    verifySignedManifest(root.metadata, old.bytes)
+  } catch {
+    // The named manifest no longer verifies with the newest root's targets keys, so the re-signed one replaces it.
+    return 'the named manifest no longer verifies'
+  }
+  const same = canonicalJson(readEnvelope('manifest', old.bytes).signedJson) === canonicalJson(readEnvelope('manifest', file.bytes).signedJson)
+  return same ? 'only signatures differ' : undefined
 }
 
 /**
  * The next timestamp's content.
- * @param roots - the verified root chain, oldest first; the newest signs nothing here but names the targets keys.
- * @param previous - the previous timestamp file, absent only for the first timestamp.
- * @param manifests - the manifest file each channel names.
- * @param now - the signing time, in Unix seconds.
+ * @param request - the state, roots, previous timestamp, manifests and time.
  * @returns the content to sign.
- * @throws Error when the previous timestamp does not verify, a manifest does not verify with the newest root's targets
- * keys or is on a channel the timestamp channel may not name, or a channel would move to a lower version or to another
- * manifest of the same version.
+ * @throws Error when the first root is not the state's, the previous timestamp is not the state's last or does not
+ * verify, a manifest does not verify with the newest root's targets keys or is on a channel the timestamp channel may
+ * not name, or a channel would move to a lower version or to another manifest of the same version that may not
+ * replace the named one.
  */
-export function nextTimestamp(roots: readonly TrustedRoot[], previous: Uint8Array | undefined, manifests: Readonly<Record<ReleaseChannel, ManifestFile>>, now: number): TimestampMetadata {
-  const root = roots.at(-1)
-  if (root === undefined) throw new Error('no root to sign the timestamp under')
-  const issued = Math.floor(now)
-  const before = previous === undefined ? undefined : verifyPrevious(roots, previous, issued)
+export function nextTimestamp(request: TimestampRequest): TimestampMetadata {
+  const anchor = request.roots[0]
+  const root = request.roots.at(-1)
+  if (anchor === undefined || root === undefined) throw new Error('no root to sign the timestamp under')
+  const trusted = request.state.root
+  if (anchor.metadata.version !== trusted.version || anchor.sha256 !== trusted.sha256) {
+    throw new Error(`the first root passed is root ${String(anchor.metadata.version)} with SHA-256 ${anchor.sha256}; the state trusts root ${String(trusted.version)} with SHA-256 ${trusted.sha256}`)
+  }
+  const issued = Math.floor(request.now)
+  const before = verifyPrevious(request)
   const channels: Partial<Record<ReleaseChannel, ChannelPointer>> = {}
   for (const channel of RELEASE_CHANNELS) {
-    const file = manifests[channel]
+    const file = request.manifests[channel]
     const manifest = verifySignedManifest(root.metadata, file.bytes)
     if (!channelAccepts(channel, manifest.channel)) throw new Error(`${file.name} is a ${manifest.channel} release, which the ${channel} channel does not name`)
     const pointer = { release: manifest.version, manifest: fileRef(file.name, file.bytes) }
     const last = before?.channels[channel]
     if (last !== undefined) {
       if (semver.lt(pointer.release, last.release)) throw new Error(`the ${channel} channel would move back from ${last.release} to ${pointer.release}`)
-      if (pointer.release === last.release && (pointer.manifest.sha256 !== last.manifest.sha256 || pointer.manifest.name !== last.manifest.name)) {
-        throw new Error(`the ${channel} channel names release ${last.release} by ${last.manifest.name} ${last.manifest.sha256}; ${file.name} is another manifest of that release`)
+      const sameFile = pointer.manifest.sha256 === last.manifest.sha256 && pointer.manifest.name === last.manifest.name
+      if (pointer.release === last.release && !sameFile && replacementAllowed(root, last, file, request.replaced) === undefined) {
+        throw new Error(`the ${channel} channel names release ${last.release} by ${last.manifest.name} ${last.manifest.sha256}; ${file.name} is another manifest of that release, which replaces it only when the named manifest, passed with --replaced, no longer verifies or differs only in signatures`)
       }
     }
     channels[channel] = pointer

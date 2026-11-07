@@ -24,14 +24,17 @@
   en: 5a57c3169256aeb7
   zh: e969398b71c69ad5
 /delo-release-tooling/signing:
-  en: e8b7f77de5a0b291
-  zh: a14eefaf5cfb2493
+  en: fc5ca3a6bba67bd1
+  zh: 28dc697c83069791
 /delo-release-tooling/signing/the-targets-key:
   en: 7f3ce2e4d30c2ea4
   zh: e379b60ddf0a540b
+/delo-release-tooling/signing/the-rebuild-attestation-key:
+  en: 18752b9e116caf5c
+  zh: bff0105fcf8f111b
 /delo-release-tooling/signing/root-and-timestamp-metadata:
-  en: 7d79c27e8727a53f
-  zh: 7e821c0104c52991
+  en: 8be1b1cc3d8585a9
+  zh: a53e9d7ff923986a
 /delo-release-tooling/verification:
-  en: 7d803b63f883ff69
-  zh: 98e6644c77bbef51
+  en: a7f1e334f1ec809e
+  zh: 0ff7172c0a3d97db

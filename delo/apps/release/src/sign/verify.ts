@@ -67,50 +67,43 @@ function utcText(now: number): string {
 }
 
 /**
- * Read and check a root file that the client holds as trusted, such as the root embedded at build time.
+ * Read a root file signed by its own root threshold, issued before it expires and within the lifetime limit. It does
+ * not read the clock; {@link trustRootChain} checks the newest root's expiry.
  * @param bytes - the root file.
- * @param now - the client's clock in Unix seconds; when given, a root past its `expires` is refused, as installs and
- * updates require. A walk through older root versions omits it for every version but the last.
- * @returns the root and its file digest, signed by its own root threshold, issued before it expires and within the
+ * @returns the root and its file digest.
+ * @throws VerificationError when the file does not read or verify, or its dates are out of order or beyond the
  * lifetime limit.
- * @throws VerificationError when the file does not read or verify, its dates are out of order or beyond the lifetime
- * limit, or it has expired.
  */
-export function readTrustedRoot(bytes: Uint8Array, now?: number): TrustedRoot {
+function readRoot(bytes: Uint8Array): TrustedRoot {
   const envelope = readEnvelope('root', bytes)
   const root = envelope.signed
   const lifetime = seconds(root.expires) - seconds(root.issued)
   if (lifetime <= 0) throw new VerificationError(`root ${String(root.version)} expires at ${root.expires}, not after it was issued at ${root.issued}`)
   if (lifetime > ROOT_MAX_LIFETIME_DAYS * 86_400) throw new VerificationError(`root ${String(root.version)} expires more than ${String(ROOT_MAX_LIFETIME_DAYS)} days after it was issued`)
   requireThreshold(`root ${String(root.version)}`, asJson(envelope), roleKeys(root, root.roles.root.keyids), root.roles.root.threshold)
-  if (now !== undefined && now > seconds(root.expires) + CLOCK_TOLERANCE_SECONDS) {
-    throw new VerificationError(`root ${String(root.version)} expired at ${root.expires}; this machine's clock reads ${utcText(now)}. A newer root must verify before installs and updates`)
-  }
   return { metadata: root, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
 }
 
 /**
- * Adopt the next root version: it must be exactly one above the trusted one and verify with the trusted root's
- * threshold and with its own.
- * @param trusted - the newest root the client trusts.
+ * Read the root version after a trusted one: exactly one above it, verifying with the trusted root's threshold and
+ * with its own.
+ * @param trusted - the newest root trusted so far.
  * @param bytes - the next root file.
- * @param now - the client's clock, which the adopted root must not be past; omitted while walking intermediate
- * versions.
- * @returns the new trusted root.
- * @throws VerificationError on a version gap, a missing threshold, dates out of order or beyond the limit, or expiry.
+ * @returns the next root.
+ * @throws VerificationError on a version gap, a missing threshold, or dates out of order or beyond the limit.
  */
-export function adoptNextRoot(trusted: TrustedRoot, bytes: Uint8Array, now?: number): TrustedRoot {
+function adoptRoot(trusted: TrustedRoot, bytes: Uint8Array): TrustedRoot {
   const envelope = readEnvelope('root', bytes)
   const next = envelope.signed
   const previous = trusted.metadata
   if (next.version !== previous.version + 1) throw new VerificationError(`root ${String(next.version)} does not follow the trusted root ${String(previous.version)}`)
   requireThreshold(`root ${String(next.version)} (previous root's keys)`, asJson(envelope), roleKeys(previous, previous.roles.root.keyids), previous.roles.root.threshold)
-  return readTrustedRoot(bytes, now)
+  return readRoot(bytes)
 }
 
 /**
- * Trust a chain of root files: the first as held, each later one as the next version, and the last checked against
- * the clock.
+ * Trust a chain of root files: the first as the caller holds it, such as the root embedded at build time, each later
+ * one as the next version, and the newest checked against the clock, as installs and updates require.
  * @param files - the root files, oldest first; the first is the root the caller already trusts.
  * @param now - the clock in Unix seconds, which the newest root must not be past.
  * @returns every root of the chain, oldest first.
@@ -118,8 +111,12 @@ export function adoptNextRoot(trusted: TrustedRoot, bytes: Uint8Array, now?: num
  */
 export function trustRootChain(files: readonly Uint8Array[], now: number): TrustedRoot[] {
   if (files.length === 0) throw new VerificationError('no root file to trust')
-  const chain = [readTrustedRoot(files[0]!, files.length === 1 ? now : undefined)]
-  for (const [index, bytes] of files.slice(1).entries()) chain.push(adoptNextRoot(chain.at(-1)!, bytes, index === files.length - 2 ? now : undefined))
+  const chain = [readRoot(files[0]!)]
+  for (const bytes of files.slice(1)) chain.push(adoptRoot(chain.at(-1)!, bytes))
+  const newest = chain.at(-1)!.metadata
+  if (now > seconds(newest.expires) + CLOCK_TOLERANCE_SECONDS) {
+    throw new VerificationError(`root ${String(newest.version)} expired at ${newest.expires}; this machine's clock reads ${utcText(now)}. A newer root must verify before installs and updates`)
+  }
   return chain
 }
 

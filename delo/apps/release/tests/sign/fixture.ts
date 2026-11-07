@@ -1,12 +1,12 @@
 /**
  * A complete fixture release for the signing and verification specs: a git repository with the release's tag and
  * the recipe committed under `delo/apps/release`, the release workflow's output with its manifest draft, the
- * targets-key holder's rebuild of the same closures and its rebuild record path outside the release, a throwaway
- * targets key file, and root metadata over throwaway keys. Every key is generated in the test and removed with its
+ * targets-key holder's rebuild of the same closures with its attestation and rebuild record path outside the release,
+ * throwaway attestation and targets key files, and root metadata over throwaway keys. Every key is generated in the test and removed with its
  * temporary directory.
  */
 import { execFileSync } from 'node:child_process'
-import { createHash, generateKeyPairSync, type KeyObject } from 'node:crypto'
+import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { devNull } from 'node:os'
 import { join } from 'node:path'
@@ -15,6 +15,8 @@ import { DESKTOP_PLATFORMS, RELEASE_REPOSITORY_URL, RELEASE_SCHEMAS, RUNTIME_PLA
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { sha256Hex } from '../../src/brands.ts'
 import { RECIPE_DIR, RECIPE_FILES } from '../../src/closure/config.ts'
+import { attestationText } from '../../src/rebuild/attestation.ts'
+import { outputRefs } from '../../src/rebuild/record.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { publicKeyEntry, signEnvelope } from '../../src/sign/envelope.ts'
 import { toJsonValue } from '../../src/sign/json.ts'
@@ -97,6 +99,12 @@ export interface ReleaseFixture {
   readonly rebuild: string
   /** The holder's rebuild record, outside the release directory. */
   readonly recordPath: string
+  /** The attestation of the holder's rebuild, outside the release and rebuild directories. */
+  readonly attestationPath: string
+  /** The holder's throwaway attestation key file. */
+  readonly attestationKeyPath: string
+  /** The attestation key's bytes. */
+  readonly attestationKey: Buffer
   readonly keyPath: string
   readonly keys: Keys
   readonly commit: string
@@ -104,8 +112,8 @@ export interface ReleaseFixture {
   readonly run: (entry: string, args: readonly string[], env?: NodeJS.ProcessEnv) => RunResult
   /** Record the rebuild with `record-rebuild.ts`. */
   readonly record: () => RunResult
-  /** Sign with `sign-release.ts`, optionally from another rebuild output or record. */
-  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string }) => RunResult
+  /** Sign with `sign-release.ts`, optionally from another rebuild output, record or attestation. */
+  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string }) => RunResult
 }
 
 /**
@@ -168,6 +176,11 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     advisories: { report: ref(release, 'delorun-0.1.0.advisories.json'), accepted: [] },
   }
   writeFileSync(join(release, 'manifest-draft.json'), `${JSON.stringify(draft, undefined, 2)}\n`)
+  const attestationKey = randomBytes(32)
+  const attestationKeyPath = join(directory, 'attestation.key')
+  writeFileSync(attestationKeyPath, attestationKey, { mode: 0o600 })
+  const attestationPath = join(directory, 'rebuild.attestation.json')
+  writeFileSync(attestationPath, attestationText(attestationKey, { version: VERSION, commit, outputs: await outputRefs(rebuild) }))
   const keys = throwawayKeys()
   const keyPath = join(directory, 'targets.pem')
   writeFileSync(keyPath, keys.targets.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 })
@@ -177,12 +190,15 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     release,
     rebuild,
     recordPath,
+    attestationPath,
+    attestationKeyPath,
+    attestationKey,
     keyPath,
     keys,
     commit,
     run,
     record: () => run('record-rebuild.ts', ['--version', VERSION, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
-    sign: (signEnv = {}, args = {}) => run('sign-release.ts', ['--release', release, '--rebuild', args.rebuild ?? rebuild, '--record', args.record ?? recordPath, '--key', keyPath], signEnv),
+    sign: (signEnv = {}, args = {}) => run('sign-release.ts', ['--release', release, '--rebuild', args.rebuild ?? rebuild, '--record', args.record ?? recordPath, '--attestation', args.attestation ?? attestationPath, '--attestation-key', attestationKeyPath, '--key', keyPath], signEnv),
   }
 }
 

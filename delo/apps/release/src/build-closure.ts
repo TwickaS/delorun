@@ -3,7 +3,7 @@
  * targets-key holder run the same command from a checkout of the release's commit:
  *
  * `node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --out <dir> [--commit <rev>]
- * [--platform <platform>]... [--cache <dir>] [--write-pins]`
+ * [--platform <platform>]... [--cache <dir>] [--write-pins] [--attestation-key <file> --attestation <file>]`
  *
  * It exports the commit's tree to the fixed build root `closure.json` names, so absolute paths that bundlers embed
  * are the same on every builder; installs the locked dependencies and builds the artifacts there under
@@ -12,7 +12,9 @@
  * native packages, adds the pinned Node and pnpm, checks every native file against `prebuilt-pins.json`, and writes
  * the deterministic archive and its unsigned runtime file list to `--out`. It refuses to run under a Node or pnpm
  * other than `toolchain.json` pins. `--write-pins` records the native files found instead of checking them, for a
- * reviewed change of `prebuilt-pins.json`.
+ * reviewed change of `prebuilt-pins.json`. On the targets-key holder's machine, `--attestation-key` and
+ * `--attestation` write an HMAC over the version, commit and every file in `--out`, keyed with the holder's secret,
+ * which signing checks; the attestation file lies outside `--out`.
  *
  * @module @delo/release/build-closure
  */
@@ -31,6 +33,8 @@ import { semanticVersion } from './brands.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { stageNode, stagePnpm, substitutePrebuilt } from './closure/sources.ts'
+import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
+import { isWithin, outputRefs } from './rebuild/record.ts'
 
 /** The marker that identifies a build root this command created, so it never removes another directory. */
 const BUILD_ROOT_MARKER = '.delo-release-build-root'
@@ -193,6 +197,8 @@ async function main(argv: readonly string[]): Promise<number> {
       platform: { type: 'string', multiple: true },
       cache: { type: 'string', default: join(homedir(), '.cache', 'delo-release') },
       'write-pins': { type: 'boolean', default: false },
+      'attestation-key': { type: 'string' },
+      'attestation': { type: 'string' },
     },
   })
   try {
@@ -208,9 +214,17 @@ async function main(argv: readonly string[]): Promise<number> {
     const repository = repositoryRoot(process.cwd())
     const commit = execFileSync('git', ['rev-parse', '--verify', `${values.commit}^{commit}`], { cwd: repository, encoding: 'utf8' }).trim()
     const out = resolve(values.out)
+    if ((values['attestation-key'] === undefined) !== (values.attestation === undefined)) throw new Error('pass --attestation-key and --attestation together')
+    const attestationKey = values['attestation-key'] === undefined ? undefined : readAttestationKey(resolve(values['attestation-key']))
     await mkdir(out, { recursive: true })
     const results = await buildClosures(repository, recipe, { version: semanticVersion(values.version), commit, out, platforms, cache: resolve(values.cache), writePins: values['write-pins'] })
     if (values['write-pins']) await writePins(results)
+    if (attestationKey !== undefined && values.attestation !== undefined) {
+      const path = resolve(values.attestation)
+      if (isWithin(path, out)) throw new Error(`write the attestation outside ${out}`)
+      await writeFile(path, attestationText(attestationKey, { version: values.version, commit, outputs: await outputRefs(out) }), { mode: 0o644 })
+      console.log(`build-closure: attested ${out} in ${path}`)
+    }
     return 0
   } catch (error) {
     console.error(`build-closure: ${error instanceof Error ? error.message : String(error)}`)
