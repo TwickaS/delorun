@@ -14,6 +14,13 @@
   config:
     enabled: false
 
+# DeepSeek's account and Platform sign-in (browser PKCE to platform.deepseek.com, account details, Usage and Top-up pages)
+# is removed from Delo's CLI profiles: the first release has no DeepSeek account service. The row stays in upstream's
+# composition for parity, and llm-deepseek-account, which needs a signed-in account, stays inert without it. The
+# DeepSeek API-key provider is unaffected.
+- id: deepseek-account
+  disabled: true
+
 # Desktop analytics is off until the person turns it on (C11). The row keeps
 # the web bundle's `disabled` condition, so it mounts only in the desktop
 # profile; `appVersion` restates the web bundle's value.

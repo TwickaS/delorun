@@ -38,15 +38,16 @@ kind: "package-bundle"
 | 行 | 类型 | 在 Delo CLI profile 中 | 在上游的 web profile 中 | 在对等组合中 |
 | --- | --- | --- | --- | --- |
 | `session-log-deepseek` | 改变 | `config.enabled: false`：模型请求不携带 `dsh_session_log` 字段 | 插件的默认值，即 `true` | 沿用上游的组合：覆盖层省略该行，因为它跟随每次回放的根配置，而根配置按语料库设定上传 |
+| `deepseek-account` | 改变 | `disabled: true`：没有 DeepSeek 账户登录、Platform、用量或充值页面；`llm-deepseek-account` 在没有账户的情况下保持不可用 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `product-analytics` | 改变 | `config.enabled: false`，重申上游的 `appVersion`，并保留上游的 `disabled` 条件，因此该行只在桌面 profile 中挂载，并且在 Delo CLI profile 中不接受任何事件 | `config.enabled: true` | 与此处所写相同；回放不挂载桌面端 Host |
-| `delo-privacy` | 新增 | “隐私”分区，位于设置中 | 无 | 存在且已禁用，因为录制的 Web 场景比较的是上游的界面输出 |
+| `delo-privacy` | 新增 | “隐私”分区（位于设置中），以及 Delo 侧栏品牌（产品名称的文字形式，在批准官方图标之前不显示标志） | 无 | 存在且已禁用，因为录制的 Web 场景比较的是上游的界面输出与品牌 |
 
 [对等覆盖层](../../apps/tools/src/parity/composition/parity.overlay.yml) 以该形式重述本组合包的 patch，从而挂载本组合包；[`parityPatches`](src/rows.ts) 从本组合包的 `cordis.patch.yml` 推导出该形式，覆盖层与之不一致时，`parity-switches` 失败。上游的反馈遥测行 `session-telemetry-otel` 保持不变：它仅在本人发送反馈时才发送会话日志前缀，“隐私”分区会对此予以说明。没有任何行指明 Delo 主机。
 
 <a id="the-privacy-section"></a>
 ## “隐私”分区
 
-浏览器端部分（[`src/client/index.ts`](src/client/index.ts)）在上游的“插件”分区之后，注册 `settings.section` `delo-privacy`（[`PRIVACY_SECTION_ID`](src/client/index.ts)）。它展示 C11 的声明（Delo 没有自己的遥测；两个选择加入项在本人打开之前均为关闭；发送反馈时会附带会话日志前缀，且只在发送反馈时发送），然后为每个选择加入项各列一行：
+浏览器端部分（[`src/client/index.ts`](src/client/index.ts)）在上游的“插件”分区之后，注册 `settings.section` `delo-privacy`（[`PRIVACY_SECTION_ID`](src/client/index.ts)）。它展示 C11 的声明（Delo 没有自己的遥测；两个选择加入项在本人打开之前均为关闭；发送反馈时会附带会话日志前缀，且只在发送反馈时发送），然后为每个选择加入项各列一行： 浏览器端部分还注册侧栏品牌的 occupant `sidebar.brand.name` 与 `sidebar.brand.mark`（[`src/client/brand.tsx`](src/client/brand.tsx)），以文字形式显示产品名称，不显示标志。两者都来自同一个 `delo-privacy` 行，因此禁用该行的对等组合保持上游的品牌。文档标题是构建设置 `DSH_CLIENT_TITLE`，不在 slot 系统之内。
 
 - **DeepSeek 会话日志上传**编辑 `session-log-deepseek`，**桌面端分析**编辑 `product-analytics`，两者都通过上游为该行提供的配置表单进行（[`OPT_IN_ROWS`](src/client/index.ts)，来自 `@delo/contract-setup-answers`）。一次写入只改变该行的 `config.enabled`。
 - **打开时**会弹出一个对话框，写明发送什么内容以及发往何处；在本人选择“打开”之前不写入任何内容，选择“取消”同样不写入。**关闭时**立即写入。
@@ -60,9 +61,9 @@ kind: "package-bundle"
 
 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/bundle-local` 运行本包的 spec，它们导入上游已构建的包，因此需要 `pnpm run build:artifacts`；构建产物缺失时，Delo 的检查运行器会启动它。
 
-- [`composition.spec.ts`](tests/composition.spec.ts) 在临时的 `DSH_HOME` 下构建一个 Delo CLI profile，并通过上游真实的 `dsh --profile <name> --dump-config` 读取它：列表中的每个组合包都已加载，且没有一个被跳过；转储结果中，每一行都位于一个标注之下，该标注的写入者是列表中的组合包，第一个标注之前不打印任何内容，stderr 上也没有任何输出，并且列出的恰是本组合包所写入的 `LOCAL_ROWS` 各行；组合结果与上游的 `web` profile 逐行相同，但 `LOCAL_ROWS` 中的行例外，它们按各项的说明，或就地改变，或添加在上游各行之后。
+- [`composition.spec.ts`](tests/composition.spec.ts) 在临时的 `DSH_HOME` 下构建一个 Delo CLI profile，并通过上游真实的 `dsh --profile <name> --dump-config` 读取它：列表中的每个组合包都已加载，且没有一个被跳过；转储结果中，每一行都位于一个标注之下，该标注的写入者是列表中的组合包，第一个标注之前不打印任何内容，stderr 上也没有任何输出，并且列出的恰是本组合包所写入的 `LOCAL_ROWS` 各行；组合结果与上游的 `web` profile 逐行相同，但 `LOCAL_ROWS` 中的行例外，它们按各项的说明，或就地改变，或添加在上游各行之后。 它还把已启用的行所指明的 DeepSeek 主机限定在列出的例外之内：没有已启用的 `deepseek-account` 行；除模型 API 外，只有反馈导出器的收集端，而它仍是一个待决定事项。
 - [`privacy-defaults.spec.ts`](tests/privacy-defaults.spec.ts) 使用各 profile 所组合的行挂载上游自身的插件，并针对本地网络 fixture（测试前置数据）运行。在 Delo CLI profile 的各行下，发往 mock DeepSeek API 的任何模型请求体都不携带 `dsh_session_log`，本地 OTLP 收集器也收不到任何分析记录；在上游 web profile 的各行下，同样的 fixture 会收到两者。组合中没有任何字符串（包括 `!!js` 表达式）指向 Delo 主机，且唯一指明 Delo 包的行就是本组合包新增的各行。
-- [`privacy-section.client.spec.tsx`](tests/privacy-section.client.spec.tsx) 渲染该分区：每个选择加入项只有在对话框中点击“打开”之后才会打开，且只写入自己的行，并可通过同一开关再次关闭；“取消”不写入任何内容；写入失败时保留已接受的值；profile 未提供的桌面端分析行会显示其原因；该插件注册该分区，并把每个选择加入项写入其上游的行。
+- [`privacy-section.client.spec.tsx`](tests/privacy-section.client.spec.tsx) 渲染该分区（并验证插件注册侧栏品牌 occupant）：每个选择加入项只有在对话框中点击“打开”之后才会打开，且只写入自己的行，并可通过同一开关再次关闭；“取消”不写入任何内容；写入失败时保留已接受的值；profile 未提供的桌面端分析行会显示其原因；该插件注册该分区，并把每个选择加入项写入其上游的行。
 - `apps/web/tests/delo-privacy-consent.e2e.ts` 构建本包，以它作为 profile 组合包启动 studio，针对 mock DeepSeek API 运行，并在 Chromium 中操作该分区：第一次模型请求不携带会话日志；桌面端分析与会话日志上传各自在同意后单独打开；下一次请求携带会话日志；再从该分区关闭上传后，其后的请求便不再携带会话日志。
 
 <a id="limits"></a>

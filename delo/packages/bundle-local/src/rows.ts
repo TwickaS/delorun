@@ -43,6 +43,15 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     },
   },
   {
+    id: 'deepseek-account',
+    kind: 'changed',
+    reason: 'DeepSeek\'s account and Platform sign-in is removed from Delo\'s CLI profiles, because the first release has no DeepSeek account service; upstream mounts it.',
+    parity: {
+      kind: 'upstream',
+      reason: 'C16\'s changed default takes upstream\'s value: the replay signs no account in, and the overlay does not restate the row.',
+    },
+  },
+  {
     id: 'product-analytics',
     kind: 'changed',
     reason: 'The desktop app\'s analytics is off until the person turns it on, as contract C11 requires; upstream turns it on.',
@@ -51,8 +60,8 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'delo-privacy',
     kind: 'added',
-    reason: 'The Privacy section in Settings, where the person turns each of the two opt-ins on after consent, and off again.',
-    parity: { kind: 'disabled', reason: 'Recorded web scenarios compare upstream\'s interface output, which has no Privacy section.' },
+    reason: 'The browser half of this bundle: the Privacy section in Settings, where the person turns each of the two opt-ins on after consent and off again, and the Delo sidebar brand.',
+    parity: { kind: 'disabled', reason: 'Recorded web scenarios compare upstream\'s interface output, which has no Privacy section and shows upstream\'s brand.' },
   },
 ]
 

@@ -1,0 +1,10 @@
+/* Sidebar brand name: the product name as text, at the size of the sidebar's own brand row. */
+
+.name {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  color: inherit;
+}

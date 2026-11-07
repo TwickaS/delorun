@@ -56,7 +56,7 @@ function writers(label: string): string[] {
   return [origin, ...patched === undefined ? [] : patched.split(', ')]
 }
 
-const text = (row: DumpedRow['row']): string => yaml.dump(row, { schema: entryListSchema, noRefs: true })
+const text = (row: object): string => yaml.dump(row, { schema: entryListSchema, noRefs: true })
 
 beforeAll(() => { home = createTestHome() })
 
@@ -84,6 +84,19 @@ describe('a Delo CLI profile', () => {
     }
     const local = dump.rows.filter(({ label }) => writers(label).includes(LOCAL_BUNDLE)).map(({ row }) => row.id)
     expect(local).toEqual(LOCAL_ROWS.map(row => row.id))
+  })
+
+  it('composes no enabled DeepSeek account row, and names no DeepSeek host outside the listed exceptions', () => {
+    const rows = home.rows(DELO_PROFILE)
+    const enabled = (id: string) => rows.filter(row => row.id === id && row.disabled !== true)
+    expect(enabled('deepseek-account')).toEqual([])
+    const hosts = new Set<string>()
+    for (const row of rows.filter(entry => entry.disabled !== true)) {
+      for (const match of text(row).matchAll(/https?:\/\/([a-z0-9.-]*deepseek[a-z0-9.-]*)/gi)) hosts.add(`${String(row.id)} ${String(match[1])}`)
+    }
+    // api.deepseek.com is the model provider's API. The feedback exporter is an open decision (see the rebrand PR):
+    // it sends a session-log prefix only when the person sends feedback, and this list records it until the lead decides.
+    expect([...hosts].sort()).toEqual(['session-telemetry-otel dsh-otel-collector.deepseeksvc.com'])
   })
 
   it('composes upstream\'s web profile except the listed rows', () => {

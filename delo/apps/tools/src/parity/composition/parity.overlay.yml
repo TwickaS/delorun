@@ -25,9 +25,11 @@
 # the two differ. The session-log upload row is left out: C16 gives it
 # upstream's value, and this overlay follows each replay's root configuration,
 # which turns upload off for the headless and ACP corpora and leaves it on
-# elsewhere, so a row here would override it. Desktop analytics keeps Delo's
-# `false`. The Privacy section is present and disabled, because recorded web
-# scenarios compare upstream's interface output. The studio bundle, the permission
+# elsewhere, so a row here would override it. The account row `deepseek-account`
+# is left out too: C16 gives it upstream's value. Desktop analytics keeps Delo's
+# `false`. The Privacy section and the Delo sidebar brand are present and
+# disabled, because recorded web scenarios compare upstream's interface output
+# and brand. The studio bundle, the permission
 # defaults and the fetch guard are planned, and the preset default keeps
 # upstream's value (`standard`).
 

@@ -123,11 +123,14 @@ describe('the plugin', () => {
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
       // The Settings shell declares the section slot; this stands in for it.
-      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' } }, inject: () => ({}) },
+      // The sidebar's brand holes are declared at the root, where the Delo occupants wait for them.
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const [section] = slots.entries('settings.section')
       expect(section?.options).toMatchObject({ id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER })
+      expect(slots.entries('sidebar.brand.name')).toHaveLength(1)
+      expect(slots.entries('sidebar.brand.mark')).toHaveLength(1)
       const sessionLog = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.sessionLog), 'set').mockResolvedValue(true)
       const analytics = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.analytics), 'set').mockResolvedValue(true)
       const face = section?.inject?.()

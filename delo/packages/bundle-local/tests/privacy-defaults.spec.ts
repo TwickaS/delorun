@@ -117,9 +117,9 @@ function strings(value: unknown): string[] {
 }
 
 describe('a Delo CLI profile', () => {
-  it('lists the two upstream opt-in rows it turns off', () => {
+  it('lists the two upstream opt-in rows it turns off, and the account row it removes', () => {
     expect(LOCAL_ROWS.filter(row => row.kind === 'changed').map(row => row.id).sort())
-      .toEqual([SETUP_OPT_IN_ROWS.desktopAnalytics, SETUP_OPT_IN_ROWS.sessionLogUpload].sort())
+      .toEqual([SETUP_OPT_IN_ROWS.desktopAnalytics, 'deepseek-account', SETUP_OPT_IN_ROWS.sessionLogUpload].sort())
   })
 
   it('default-profile model request carries no dsh_session_log', async () => {

@@ -48,7 +48,7 @@ Delo 保留上游的 SDK 及其文档化的运行时选择。
 | 项目 | `dsh-v0.2.2-rc.1` 与本树 | 状态 | 证据 |
 | --- | --- | --- | --- |
 | home 目录 | `dsh-v0.2.2-rc.1`：主目录为 `~/.dsh`，由 `packages/util/home-paths/src/index.ts` 第 12 行的 `DSH_HOME_DIR_NAME` 命名；本树没有 `~/.delo` 的解析器，而 `delo/packages/contract-home-layout/src/index.ts` 第 15 行仅将 `~/.delo` 命名为约定常量 | 计划中：没有开关 ID 或工作包；约定 [C1](../contracts/c01-home-layout.zh.md) | 人工检查：两行均符合此描述，且 `packages/` 或 `apps/` 下没有代码读取 `.delo`。 |
-| DeepSeek 账户与 Platform | `dsh-v0.2.2-rc.1`：`packages/credentials/deepseek-account`、`packages/credentials/deepseek-account-platform` 与 `packages/llm/llm-deepseek-account` 都在树中；本树保留这三者，而[对比页面](../guide/delo-vs-stock.zh.md)把移除它们列为 Delo 的差异 | 计划中：没有开关 ID 或工作包 | 人工检查：三个目录均存在，且都没有台账条目。 |
+| DeepSeek 账户与 Platform | `dsh-v0.2.2-rc.1`：`packages/credentials/deepseek-account`、`packages/credentials/deepseek-account-platform` 与 `packages/llm/llm-deepseek-account` 都在树中。本树的 Delo CLI profile 将 `deepseek-account` 组合为禁用，这由 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 作为 C16 的改变默认值设定，因此不提供 Platform 登录、用量或充值页面，`llm-deepseek-account` 保持不可用；对等组合保留上游的行，覆盖层省略该行 | 已构建：C16 改变默认值，无开关 ID | `delo/packages/bundle-local/tests/composition.spec.ts`（没有已启用的 `deepseek-account` 行） |
 
 ### 权限
 
@@ -101,6 +101,7 @@ Delo 保留上游的 SDK 及其文档化的运行时选择。
 
 | 项目 | `dsh-v0.2.2-rc.1` 与本树 | 状态 | 证据 |
 | --- | --- | --- | --- |
+| 侧栏品牌 | `dsh-v0.2.2-rc.1`：侧栏默认品牌是上游的标志与名称（“DSH 本地构建”加构建版本）。本树的 Delo CLI profile 通过 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 的 `delo-privacy` 行，以文字形式显示产品名称、不显示标志；对等组合禁用该行。文档标题是构建设置 `DSH_CLIENT_TITLE`，由 Delo 的构建设定，对等构建不设定 | 已构建：C16 组合行 `delo-privacy`，无开关 ID | `delo/packages/bundle-local/tests/privacy-section.client.spec.tsx`（occupant 注册）与 `parity-switches`（该行保持禁用） |
 | Studio 附加功能 | `dsh-v0.2.2-rc.1`：stock 外观，没有 Delo 的 studio 包；本树有 `@delo/plugin-main-chat`，其 `studioAdditions` 开关默认关闭，且没有任何 bundle 挂载它，同时没有 `@delo/bundle-studio` | 已为主对话构建：`studio_additions`（开关开启场景待录制）；其他 studio 包仍为计划中 | `parity-switches` |
 | 入门预设 | `dsh-v0.2.2-rc.1` 与本树：`standard` 是默认预设（`packages/bundle/web-app/cordis.patch.yml` 第 593 行）。计划中：`ptc`，即 C16 的变更默认值 `agent-preset-registry.config.default` | 计划中：C16 变更默认值；没有开关 ID 或工作包 | 人工检查：第 593 行设定 `standard`，且 C16 变更默认值表列出了计划值。 |
 | `plugin_manager` 读取豁免 | `dsh-v0.2.2-rc.1`：`plugin_manager` 的每个操作都需要 `danger-full-access` 提权；本树的 `readActionsExempt` 开关默认关闭 | 已构建：`plugin_manager_read_exemption`（开关开启场景待录制） | `packages/boot/plugin-manager/tests/tools.spec.ts` |
