@@ -20,7 +20,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/check-docs-site.ts` launches the documentation website's build, which includes its dead-link check, and refuses to run until the site's dependencies are installed.
 - `src/run-checks.ts` is the check runner: the tiers, the selection, the report.
 - `src/checks/` holds the check catalogue (`plan.ts`), the scheduler (`run.ts`), the machine budget (`machine.ts`), the pass cache (`cache.ts`) and the budgets (`budgets.json`).
-- `src/setup-worktree.ts` sets up a checkout or worktree in one command: the hooks file, the install, the hooks, the ledger merge driver and a warning when Node differs from `.nvmrc`.
+- `src/setup-worktree.ts` sets up a checkout or worktree in one command: the hooks file, the install, the hooks, the ledger merge driver and a warning when Node differs from `.nvmrc`. The check runner refuses to run a gate on any other Node major; only the pre-commit tier and the read-only listings run anyway.
 - `src/git.ts` runs git for the modules and reports exit statuses.
 - `src/parity/composition/` holds contract C16's parity overlay, the `parity-switches` check (`check-parity-switches.ts`, with `switches.ts`, `contributions.ts`, `overlay.ts` and `sweep.ts`) and the staged switch-on scenarios; the parity composition section below describes them.
 - `src/issues/` turns maintainer-written work briefs into GitHub issues: `brief.ts` holds the fields, the rules and the issue body, `references.ts` the links and paths a brief may carry, `labels.ts` the label file, `gh.ts` the `gh` calls, and `issues.ts` the command line.

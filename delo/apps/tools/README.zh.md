@@ -20,7 +20,7 @@
 - `src/check-docs-site.ts` 启动文档网站的构建（包括其死链接检查），并在站点依赖安装之前拒绝运行。
 - `src/run-checks.ts` 是检查运行器：层级、选择与报告。
 - `src/checks/` 包含检查目录（`plan.ts`）、调度器（`run.ts`）、机器预算（`machine.ts`）、通过缓存（`cache.ts`）与预算（`budgets.json`）。
-- `src/setup-worktree.ts` 用一条命令完成检出或工作树的设置：钩子文件、安装、钩子、台账合并驱动，以及在 Node 与 `.nvmrc` 不一致时给出警告。
+- `src/setup-worktree.ts` 用一条命令完成检出或工作树的设置：钩子文件、安装、钩子、台账合并驱动，以及在 Node 与 `.nvmrc` 不一致时给出警告。检查运行器拒绝在其他 Node 主版本上运行门禁；只有提交前层级和只读列表照常运行。
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
 - `src/parity/composition/` 包含约定 C16 的对等覆盖层、`parity-switches` 检查（`check-parity-switches.ts`，以及 `switches.ts`、`contributions.ts`、`overlay.ts` 与 `sweep.ts`）和暂存的开关开启场景；下文的对等组合一节描述它们。
 - `src/issues/` 把维护者撰写的 brief 转为 GitHub Issue：`brief.ts` 包含字段、规则与 Issue 正文，`references.ts` 包含 brief 可以携带的链接与路径，`labels.ts` 包含标签文件，`gh.ts` 包含 `gh` 调用，`issues.ts` 为命令行。

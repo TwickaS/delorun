@@ -49,6 +49,7 @@ import { catalog, criticalPath, select, selectPreCommit, type Budgets, type Chec
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { readWebSpecs } from './checks/web.ts'
+import { nodeWarning, pinnedNodeMajor } from './setup-worktree.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
 
 /** Where the runner keeps its state, relative to the repository root. */
@@ -462,6 +463,11 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const reads = values.list || values.plan
   // The pre-commit tier runs only light staged gates, so it neither waits for a running gate nor takes a memory scope.
   const light = reads || values['pre-commit']
+  // A pass on another Node major is not evidence for the pinned one, and tree-pass records are keyed by the major.
+  const pinned = pinnedNodeMajor(root)
+  if (!light && nodeWarning(process.version, pinned) !== undefined) {
+    throw new Error(`run-checks: Node ${process.version} is running and the repository pins Node ${String(pinned)} (.nvmrc); run \`nvm use\` and retry`)
+  }
 
   const workers = workerCounts(cpus, memory)
   const forkWorkers = values.workers === undefined ? workers.fork : Number(values.workers)
