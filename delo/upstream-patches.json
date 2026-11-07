@@ -999,12 +999,12 @@
     {
       "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
       "class": "delo-feature",
-      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event. It also carries `onRegistered` and `ProjectionRegistrationListener` of the late session projection keys. The Session created-at adds `createdAt` to the `SessionSummary` declaration. The per-workspace permission defaults add `PermissionPresetService.unset`. The container denial marker adds `SandboxPolicyService.containerDenialMarker` and `environmentDenialSignatures`, `ConfinedArgv.environmentDenialSignatures`, and the `deniedBy` fields of `ShellSandboxInfo` and `PtcRunSandbox`. Admission seam (C4): the regenerated rows for `ctx.authenticator`, `ctx.connection`'s `builtinAdmission` and `openReachListener`, `openListener` and the `authenticator/policy` event."
+      "reason": "Profile history and settings by chat: gen-cordis-catalog regenerates the API catalog for the `pluginAudit` service, the new plugin-manager methods and the `config-editor/edited` event. It also carries `onRegistered` and `ProjectionRegistrationListener` of the late session projection keys. The Session created-at adds `createdAt` to the `SessionSummary` declaration. The per-workspace permission defaults add `PermissionPresetService.unset`. The container denial marker adds `SandboxPolicyService.containerDenialMarker` and `environmentDenialSignatures`, `ConfinedArgv.environmentDenialSignatures`, and the `deniedBy` fields of `ShellSandboxInfo` and `PtcRunSandbox`. Admission seam (C4): the regenerated rows for `ctx.authenticator`, `ctx.connection`'s `builtinAdmission` and `openReachListener`, `openListener` and the `authenticator/policy` and `authenticator/minted` events."
     },
     {
       "path": "scripts/gen-cordis-catalog.ts",
       "class": "delo-feature",
-      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. The late session projection keys add the `ProjectionRegistrationListener` row. Upstream's rows are unchanged. The Settings layout and Sidebar layout services (`settingsLayout`, `settingsShell`, `sidebarLayout`) are named in SERVICE_WALK_EXEMPTIONS with their README owners, because the rendering projection does not reach them. Admission seam (C4): maps `ctx.authenticator` and the `authenticator` event scope to web-server.md, links `WebListener` and `WebListenerOptions` there, and names the owners of `Admission`, `ListenerPolicy`, `ReachListener` and `ReachListenerOptions`."
+      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. The late session projection keys add the `ProjectionRegistrationListener` row. Upstream's rows are unchanged. The Settings layout and Sidebar layout services (`settingsLayout`, `settingsShell`, `sidebarLayout`) are named in SERVICE_WALK_EXEMPTIONS with their README owners, because the rendering projection does not reach them. Admission seam (C4): maps `ctx.authenticator` and the `authenticator` event scope to web-server.md, links `WebListener` and `WebListenerOptions` there, and names the owners of `Admission`, `ListenerPolicy`, `ReachListener`, `ReachListenerOptions` and `MintedCredential`."
     },
     {
       "path": "scripts/gen-doc-graphs.ts",
@@ -2429,7 +2429,7 @@
     {
       "path": "packages/client/connection/src/authenticator.ts",
       "class": "security",
-      "reason": "Admission seam (C4): the `Authenticator` Service Definition (`ctx.authenticator`) with its synchronous `admit(request, listener)` and `policy(listener)`, the `authenticator/policy` event, and the admission and policy types, which C4's `@delo/contract-admission` types are assignable to. No upstream composition provides it, so Connection keeps its built-in admission. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Admission seam (C4): the `Authenticator` Service Definition (`ctx.authenticator`) with its synchronous `admit(request, listener)` and `policy(listener)`, the `authenticator/policy` event, and the admission and policy types, which C4's `@delo/contract-admission` types are assignable to. It also declares `authenticator/minted` and `MintedCredential`, the announcement of each loopback credential Connection mints, by hash and never by value. No upstream composition provides it, so Connection keeps its built-in admission. Lead verdict: pending; the lead reviews this file line by line before it merges."
     },
     {
       "path": "packages/client/connection/src/reach.ts",
@@ -2444,7 +2444,7 @@
     {
       "path": "packages/client/connection/src/index.ts",
       "class": "delo-feature",
-      "reason": "Admission seam (C4): exports the `Authenticator` Service Definition, its types, `LOOPBACK_LISTENER`, the reach listener types and `REACH_REFUSAL_STATUS`."
+      "reason": "Admission seam (C4): exports the `Authenticator` Service Definition, its types including `MintedCredential`, emits `authenticator/minted` from `BrowserAuth`'s mint callback, `LOOPBACK_LISTENER`, the reach listener types and `REACH_REFUSAL_STATUS`."
     },
     {
       "path": "packages/client/connection/tsconfig.host.json",
@@ -2459,12 +2459,12 @@
     {
       "path": "packages/client/connection/README.md",
       "class": "delo-feature",
-      "reason": "Admission seam (C4): documents the Authenticator Service Definition, `builtinAdmission`, `openReachListener` and the reach dispatcher's steps and refusals."
+      "reason": "Admission seam (C4): documents the Authenticator Service Definition, `builtinAdmission`, `openReachListener` and the reach dispatcher's steps and refusals. It also documents `authenticator/minted`."
     },
     {
       "path": "packages/client/connection/README.zh.md",
       "class": "delo-feature",
-      "reason": "Admission seam (C4): the Chinese counterpart of the admission section in README.md."
+      "reason": "Admission seam (C4): the Chinese counterpart of the admission section in README.md. It also documents `authenticator/minted`."
     },
     {
       "path": "packages/client/connection/README.i18n.yaml",
@@ -2474,7 +2474,7 @@
     {
       "path": "docs/subsystems/web-server.md",
       "class": "delo-feature",
-      "reason": "Admission seam (C4): one sentence on `openListener`, and the catalog regions gen-cordis-catalog regenerates for `ctx.authenticator`, `ctx.connection`'s new members, `openListener` and the `authenticator/policy` event."
+      "reason": "Admission seam (C4): one sentence on `openListener`, and the catalog regions gen-cordis-catalog regenerates for `ctx.authenticator`, `ctx.connection`'s new members, `openListener` and the `authenticator/policy` and `authenticator/minted` events."
     },
     {
       "path": "docs/subsystems/web-server.zh.md",
@@ -2485,6 +2485,16 @@
       "path": "docs/subsystems/web-server.i18n.yaml",
       "class": "delo-feature",
       "reason": "Admission seam (C4): the consistency record re-recorded after the `openListener` sentence was added to web-server.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/client/connection/src/browser-auth.ts",
+      "class": "security",
+      "reason": "Admission seam (C4, loopback credential records): `BrowserAuth.create` takes an `onMint` callback, called synchronously with the credential's kind, the SHA-256 of its value, its audience, issue and expiry times and, for `/connect`, its Peer id, before the launch-token exchange or `/connect` writes the response that sets it. It never receives the credential's value. Without a callback nothing is called, so upstream's minting is unchanged. Lead verdict: pending; the lead reviews this file line by line before it merges."
+    },
+    {
+      "path": "packages/client/connection/tests/minted.host.spec.ts",
+      "class": "security",
+      "reason": "Admission seam (C4, loopback credential records): proves that each launch-token exchange and each `/connect` mint announces `authenticator/minted` once, before the response is written, with the hash of the cookie value and never the value, and that requests minting nothing announce nothing. Lead verdict: pending; the lead reviews this file line by line before it merges."
     }
   ],
   "retired": []

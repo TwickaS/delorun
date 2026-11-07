@@ -115,7 +115,7 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 - **创建。** `POST /auth/session` 只根据以下两项创建会话：已为该监听器地址批准的受信任设备给出的新鲜设备密钥签名，以及针对该地址的身份因子证明（[C5](c05-device-approval.zh.md#sign-in)、[C14](c14-oidc-passkeys.zh.md)）。
 - **注册会话。** 在没有已注册身份因子的地址上，同样的签名在没有证明时创建一个注册会话：一个绝对限值为 10 分钟的远程访问会话，只准入 [C14](c14-oidc-passkeys.zh.md#enrolment) 的注册路由，在其他地方被拒绝并返回 `401 NOT_SIGNED_IN`。
 
-**回环会话**保留上游的凭据：启动令牌交换、`/connect`，以及用上游 `.credentials.yaml` 中的浏览器会话密钥签名的无状态 HMAC cookie `dsh-auth-<hash>`。`@delo/home-auth` 在签发每个回环凭据时记录它，以凭据值的 SHA-256 哈希为键；对于验证通过但没有记录的回环凭据，它予以拒绝并返回 `401 SESSION_EXPIRED`。Delo 的 profile 把上游的 `cookieMaxAgeDays` 设为 30。
+**回环会话**保留上游的凭据：启动令牌交换、`/connect`，以及用上游 `.credentials.yaml` 中的浏览器会话密钥签名的无状态 HMAC cookie `dsh-auth-<hash>`。`@delo/home-auth` 在每个回环凭据签发时记录它，以凭据值的 SHA-256 哈希为键；对于验证通过但没有记录的回环凭据，它予以拒绝并返回 `401 SESSION_EXPIRED`。上游的 connection 以事件 `authenticator/minted` 通告每次签发，该事件同步发出，且早于写出携带该凭据的响应；它携带凭据的种类（启动令牌交换签发的为 `browser`，`/connect` 签发的为 `api`）、凭据值的 SHA-256 哈希（无填充的 base64url）、其受众、签发与过期时间，以及对 `api` 而言其所接纳的 Peer 的 id；该事件从不携带凭据值。Delo 的 profile 把上游的 `cookieMaxAgeDays` 设为 30。
 
 | 监听器 | 空闲限值 | 绝对限值 | 滚动更新 |
 | --- | --- | --- | --- |

@@ -309,6 +309,25 @@ Source: [`packages/host/webserver/src/index.ts`](../../packages/host/webserver/s
 
 ### `authenticator/*` events
 
+<a id="authenticatorminted--emit"></a>
+
+#### `authenticator/minted` — emit
+
+Connection minted a loopback credential. Emitted synchronously, before the response that carries the credential is written, so a provider can record it before the browser can present it.
+
+```ts cordis-catalog
+/**
+ * Connection minted a loopback credential. Emitted synchronously, before
+ * the response that carries the credential is written, so a provider can
+ * record it before the browser can present it.
+ * @param credential - what identifies the credential; never its value.
+ * @mode emit
+ */
+'authenticator/minted'(credential: MintedCredential): void
+```
+
+Source: [`packages/client/connection/src/authenticator.ts`](../../packages/client/connection/src/authenticator.ts)
+
 <a id="authenticatorpolicy--emit"></a>
 
 #### `authenticator/policy` — emit

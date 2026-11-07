@@ -17,6 +17,7 @@ This types-only package exports the identifiers and limits of a home's admission
 - `Admission`: the three results of `admit`.
 - `HOME_AUTH_PRE_LOGIN_ROUTES` and `PreLoginRoute`: the routes a reach listener serves before sign-in.
 - `ADMISSION_REFUSAL_CODES`, `ADMISSION_REFUSAL_STATUS` and `REACH_LISTENER_HOST_OVERRIDE`: the refusals and the load failure.
+- `LOOPBACK_MINT_EVENT` and `LoopbackCredentialMint`: the notification of each loopback credential upstream mints, which `@delo/home-auth` records.
 - `ROTATION_TRIGGERS`: the events that rotate every session.
 - `REACH_SESSION_COOKIE`, `UPSTREAM_COOKIE_PREFIX`, `SESSION_TOKEN_BYTES`, `SESSION_LIMITS`, `LOOPBACK_COOKIE_MAX_AGE_DAYS`, `SESSION_STORE_PERSIST_MS` and `SESSION_STORE_VERSION`: the cookie, the token size, the lifetimes and the store.
 - `LOOPBACK_LISTENER_ADDRESS` and `REACH_LISTENER_BIND_HOST`: the listener addresses.

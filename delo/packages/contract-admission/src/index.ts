@@ -133,6 +133,25 @@ export type Admission<Peer> =
     readonly code: AdmissionRefusalCode
   }
 
+/** Event upstream's connection emits, synchronously and before the response is written, for each loopback credential it mints. */
+export const LOOPBACK_MINT_EVENT = 'authenticator/minted' as const
+
+/** A loopback credential upstream's connection minted, as {@link LOOPBACK_MINT_EVENT} carries it. It never holds the credential's value. */
+export interface LoopbackCredentialMint {
+  /** `browser` for the launch-token exchange's cookie, `api` for the `/connect` cookie. */
+  readonly kind: 'browser' | 'api'
+  /** SHA-256 of the credential value, base64url without padding: the key `@delo/home-auth` records it under. */
+  readonly hash: string
+  /** The audience the credential is bound to: the request's authority, as an `https:` origin on a TLS listener. */
+  readonly authority: string
+  /** Issue time, in milliseconds since the epoch. */
+  readonly issuedAt: number
+  /** Absolute expiry, in milliseconds since the epoch. */
+  readonly expiresAt: number
+  /** The API Peer id an `api` credential admits. */
+  readonly peer?: string
+}
+
 /** Events that rotate every session of the home. */
 export const ROTATION_TRIGGERS = [
   'device-approved',

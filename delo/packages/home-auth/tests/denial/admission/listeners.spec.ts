@@ -6,8 +6,8 @@ import { once } from 'node:events'
 import { connect } from 'node:net'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { REACH_REFUSAL_STATUS, type Admission as UpstreamAdmission, type ListenerPolicy as UpstreamPolicy, type PeerScope, type ReachListener } from '@deepseek-ai/dsh-client-connection'
-import { ADMISSION_REFUSAL_STATUS, type Admission, type ListenerPolicy } from '@delo/contract-admission'
+import { REACH_REFUSAL_STATUS, type Admission as UpstreamAdmission, type ListenerPolicy as UpstreamPolicy, type MintedCredential, type PeerScope, type ReachListener } from '@deepseek-ai/dsh-client-connection'
+import { ADMISSION_REFUSAL_STATUS, type Admission, type ListenerPolicy, type LoopbackCredentialMint } from '@delo/contract-admission'
 import {
   ADDRESSES, REACH_LISTENERS, SESSION_COOKIE, StandInHomeAuth, mountFixturePlugin, relayEndpoint, relayTls, tcpEndpoint,
   type Endpoint, type FixturePlugin, type RelayEndpoint, type Reply,
@@ -18,6 +18,8 @@ import { bootStudio, type Registration, type Studio } from './studio.ts'
 type Assignable<T extends U, U> = T
 export type ContractAdmissionFitsSeam = Assignable<Admission<PeerScope>, UpstreamAdmission>
 export type ContractPolicyFitsSeam = Assignable<ListenerPolicy, UpstreamPolicy>
+/** Compile-time: what upstream announces for a mint is a value of C4's mint type. */
+export type SeamMintFitsContract = Assignable<MintedCredential, LoopbackCredentialMint>
 
 const TAILNET_HOST = new URL(ADDRESSES['reach-tailscale-private']).host
 

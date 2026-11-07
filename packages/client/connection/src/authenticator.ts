@@ -8,7 +8,7 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
+import type { PeerId, PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import type { ConnectionIndexRequest } from './rpc.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -23,11 +23,35 @@ declare module '@deepseek-ai/cordis' {
      * @mode emit
      */
     'authenticator/policy'(listener: string): void
+    /**
+     * Connection minted a loopback credential. Emitted synchronously, before
+     * the response that carries the credential is written, so a provider can
+     * record it before the browser can present it.
+     * @param credential - what identifies the credential; never its value.
+     * @mode emit
+     */
+    'authenticator/minted'(credential: MintedCredential): void
   }
 }
 
 /** Id of the listener Connection's configured web server address answers on. */
 export const LOOPBACK_LISTENER = 'loopback'
+
+/** A loopback credential Connection minted, as `authenticator/minted` carries it. It never holds the credential's value. */
+export interface MintedCredential {
+  /** `browser` for the launch-token exchange's cookie, `api` for the `/connect` cookie. */
+  readonly kind: 'browser' | 'api'
+  /** SHA-256 of the cookie value, base64url without padding. */
+  readonly hash: string
+  /** The audience the credential is bound to: the request's authority, as an `https:` origin on a TLS listener. */
+  readonly authority: string
+  /** Issue time, in milliseconds since the epoch. */
+  readonly issuedAt: number
+  /** Absolute expiry, in milliseconds since the epoch. */
+  readonly expiresAt: number
+  /** The API Peer an `api` credential admits. */
+  readonly peer?: PeerId
+}
 
 /** Scheme a listener declares: the scheme the browser sees, not the socket's protocol. */
 export type DeclaredScheme = 'http' | 'https'

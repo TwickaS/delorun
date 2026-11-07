@@ -17,6 +17,7 @@ description: "只含类型的包，保存 home 准入的监听器 id、准入结
 - `Admission`：`admit` 的三种结果。
 - `HOME_AUTH_PRE_LOGIN_ROUTES` 与 `PreLoginRoute`：远程访问监听器在登录之前提供的路由。
 - `ADMISSION_REFUSAL_CODES`、`ADMISSION_REFUSAL_STATUS` 与 `REACH_LISTENER_HOST_OVERRIDE`：各项拒绝与加载失败。
+- `LOOPBACK_MINT_EVENT` 与 `LoopbackCredentialMint`：上游每签发一个回环凭据时发出的通知，由 `@delo/home-auth` 记录。
 - `ROTATION_TRIGGERS`：轮换每个会话的事件。
 - `REACH_SESSION_COOKIE`、`UPSTREAM_COOKIE_PREFIX`、`SESSION_TOKEN_BYTES`、`SESSION_LIMITS`、`LOOPBACK_COOKIE_MAX_AGE_DAYS`、`SESSION_STORE_PERSIST_MS` 与 `SESSION_STORE_VERSION`：cookie、令牌大小、有效期与存储。
 - `LOOPBACK_LISTENER_ADDRESS` 与 `REACH_LISTENER_BIND_HOST`：各监听器地址。

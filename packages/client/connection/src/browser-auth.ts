@@ -5,6 +5,7 @@ import type { PeerId } from '@deepseek-ai/dsh-typert-protocol'
 import { CONNECT_PATH, type ConnectionInteractions } from './connect-protocol.ts'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
+import type { MintedCredential } from './authenticator.ts'
 import type {
   ConnectionIndexRequest,
   ConnectionIndexResponse,
@@ -139,6 +140,11 @@ function sessionCookie(
   return secure ? `${attributes}; Secure` : attributes
 }
 
+/** SHA-256 of a credential value, base64url without padding: the key a provider records it under. */
+function credentialHash(value: string): string {
+  return encodeBase64Url(createHash('sha256').update(value).digest())
+}
+
 function signature(secret: Buffer, body: string): Buffer {
   return createHmac('sha256', secret).update(body).digest()
 }
@@ -211,6 +217,7 @@ export class BrowserAuth {
     processOwner: object,
     private readonly secret: Buffer,
     maxAgeDays: number,
+    private readonly onMint: (credential: MintedCredential) => void,
   ) {
     this.launchToken = processLaunchToken(processOwner)
     this.maxAgeMilliseconds = maxAgeDays * DAY_MILLISECONDS
@@ -226,14 +233,16 @@ export class BrowserAuth {
    * @param processOwner - root application context retaining one token across Connection reloads.
    * @param credentials - persistent credential provider for the Web profile.
    * @param maxAgeDays - positive absolute browser-cookie lifetime in days.
+   * @param onMint - called synchronously for each credential minted, before its response is written.
    * @returns initialized authentication owner with the process owner's launch token.
    */
   static async create(
     processOwner: object,
     credentials: CredentialProvider,
     maxAgeDays: number,
+    onMint: (credential: MintedCredential) => void = () => {},
   ): Promise<BrowserAuth> {
-    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays)
+    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, onMint)
   }
 
   /**
@@ -276,6 +285,7 @@ export class BrowserAuth {
           issuedAt,
           expiresAt,
         }, this.secret)
+        this.onMint({ kind: 'browser', hash: credentialHash(value), authority, issuedAt, expiresAt })
         res.writeHead(303, {
           'cache-control': 'no-store',
           'location': './',
@@ -336,6 +346,7 @@ export class BrowserAuth {
     const expiresAt = issuedAt + this.maxAgeMilliseconds
     const id = publish(interactions)
     const value = encodeCookie({ version: 2, authority, id, issuedAt, expiresAt }, this.secret)
+    this.onMint({ kind: 'api', hash: credentialHash(value), authority, issuedAt, expiresAt, peer: id })
     res.writeHead(302, {
       'cache-control': 'no-store',
       'location': './api/remote.mux',

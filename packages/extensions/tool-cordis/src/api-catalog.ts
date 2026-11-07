@@ -4920,6 +4920,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'req', description: 'pending approval request.' }],
   },
   {
+    name: 'authenticator/minted',
+    mode: 'emit',
+    signature: '\'authenticator/minted\'(credential: MintedCredential): void',
+    summary: 'Connection minted a loopback credential.',
+    description: 'Connection minted a loopback credential. Emitted synchronously, before the response that carries the credential is written, so a provider can record it before the browser can present it.',
+    parameters: [{ name: 'credential', description: 'what identifies the credential; never its value.' }],
+  },
+  {
     name: 'authenticator/policy',
     mode: 'emit',
     signature: '\'authenticator/policy\'(listener: string): void',
@@ -7302,6 +7310,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'MessageSourceMap',
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n    \'system-prompt\': SystemPromptMessageSource;\n}',
+  },
+  {
+    name: 'MintedCredential',
+    declaration: 'export interface MintedCredential {\n    readonly kind: \'browser\' | \'api\';\n    readonly hash: string;\n    readonly authority: string;\n    readonly issuedAt: number;\n    readonly expiresAt: number;\n    readonly peer?: PeerId;\n}',
   },
   {
     name: 'ModDefinition',

@@ -1016,6 +1016,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   ConnectionTrustRequest: 'transport authentication input is owned by packages/client/connection/src/rpc.ts',
   Admission: 'admission results are owned by packages/client/connection/src/authenticator.ts',
   ListenerPolicy: 'listener policies are owned by packages/client/connection/src/authenticator.ts',
+  MintedCredential: 'loopback mint announcements are owned by packages/client/connection/src/authenticator.ts',
   ReachListener: 'reach listener handles are owned by packages/client/connection/src/reach.ts',
   ReachListenerOptions: 'reach listener options are owned by packages/client/connection/src/reach.ts',
   PeerAdmission: 'Peer admission outcome is owned by packages/client/connection/src/rpc.ts',
