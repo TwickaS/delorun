@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSyn
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkDocker, checkHome, checkKey, checkPort, runDockerVersion, type DockerProbe } from '../../src/doctor/checks.ts'
+import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, runDockerVersion, type DockerProbe } from '../../src/doctor/checks.ts'
 import { parsePort } from '../../src/doctor/index.ts'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { ANSWERING_DOCKER, closeServer, FAILING_DOCKER, GOOD_KEY, leaksPartOf, listenOnEphemeralPort, POSIX } from './fixtures.ts'
@@ -16,6 +16,13 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs()
   rmSync(base, { recursive: true, force: true })
+})
+
+describe('dockerProbeEnvironment', () => {
+  it('keeps the program search path and the Docker selectors, and drops every other variable', () => {
+    const probe = dockerProbeEnvironment({ PATH: '/bin', DOCKER_HOST: 'unix:///run/docker.sock', DELO_SECRET_CANARY: 'canary', AWS_SECRET_ACCESS_KEY: 'x' })
+    expect(probe).toEqual({ PATH: '/bin', DOCKER_HOST: 'unix:///run/docker.sock' })
+  })
 })
 
 describe('checkKey', { timeout: 60_000 }, () => {
@@ -99,19 +106,19 @@ describe.runIf(POSIX)('runDockerVersion', { timeout: 60_000 }, () => {
 
   it('reports a missing program when no docker is on the search path', async () => {
     vi.stubEnv('PATH', emptyBin)
-    expect(await runDockerVersion()).toEqual({ kind: 'missing' })
+    expect(await runDockerVersion(dockerProbeEnvironment(process.env))).toEqual({ kind: 'missing' })
   })
 
   it('reports an engine that exits non-zero as unanswered', async () => {
     fakeDocker(FAILING_DOCKER)
     vi.stubEnv('PATH', fakeBin)
-    expect(await runDockerVersion()).toEqual({ kind: 'unanswered' })
+    expect(await runDockerVersion(dockerProbeEnvironment(process.env))).toEqual({ kind: 'unanswered' })
   })
 
   it('reads the server version of an answering engine with the exact probe command', async () => {
     fakeDocker(ANSWERING_DOCKER)
     vi.stubEnv('PATH', fakeBin)
-    expect(await runDockerVersion()).toEqual({ kind: 'answered', serverVersion: '27.3.1' })
+    expect(await runDockerVersion(dockerProbeEnvironment(process.env))).toEqual({ kind: 'answered', serverVersion: '27.3.1' })
   })
 
   it('stops a probe that hangs at its timeout and reports the engine as unanswered', async () => {
@@ -119,7 +126,7 @@ describe.runIf(POSIX)('runDockerVersion', { timeout: 60_000 }, () => {
     fakeDocker('exec sleep 10\n')
     vi.stubEnv('PATH', fakeBin)
     const started = Date.now()
-    expect(await runDockerVersion(300)).toEqual({ kind: 'unanswered' })
+    expect(await runDockerVersion(dockerProbeEnvironment(process.env), 300)).toEqual({ kind: 'unanswered' })
     expect(Date.now() - started).toBeLessThan(4000)
   })
 })

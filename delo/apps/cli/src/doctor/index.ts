@@ -24,7 +24,7 @@ import { CliError, EXIT } from '../exit.ts'
 import { applyLaunchEnvironment } from '../launch-environment.ts'
 import { selectProfile } from '../profile.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
-import { checkDocker, checkHome, checkKey, checkPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
+import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
 
 /** The `delorun doctor --help` text. */
 const DOCTOR_USAGE = [
@@ -153,7 +153,7 @@ export const doctorCommand: CliCommand = {
     const profile = selectProfile(undefined, context.env)
     const results = [
       await guarded('home', () => checkHome(context.env, profile)),
-      await guarded('docker', () => checkDocker(() => runDockerVersion())),
+      await guarded('docker', () => checkDocker(() => runDockerVersion(dockerProbeEnvironment(context.env)))),
       await guarded('key', () => keyCheck(context, profile)),
       await guarded('port', () => checkPort(port)),
     ]

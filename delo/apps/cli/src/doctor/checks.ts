@@ -96,14 +96,32 @@ function outcome(name: CheckName, status: CheckStatus, message: string): CheckRe
   return { name, status, message }
 }
 
+/** The variables the Docker probe receives: its program search path, the user's home, and the selectors the Docker CLI reads for the engine it talks to. */
+const DOCKER_PROBE_ENVIRONMENT = ['PATH', 'HOME', 'USERPROFILE', 'SYSTEMROOT', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'XDG_RUNTIME_DIR'] as const
+
 /**
- * Run `docker version --format {{.Server.Version}}` with no shell, bounded by a timeout.
+ * The environment the Docker probe runs with: only the names in {@link DOCKER_PROBE_ENVIRONMENT} that the command's environment sets.
+ * @param env - the command's environment.
+ * @returns the probe's environment.
+ */
+export function dockerProbeEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
+  const probe: Record<string, string> = {}
+  for (const name of DOCKER_PROBE_ENVIRONMENT) {
+    const value = env[name]
+    if (value !== undefined) probe[name] = value
+  }
+  return probe
+}
+
+/**
+ * Run `docker version --format {{.Server.Version}}` with no shell, bounded by a timeout, with the given environment only.
+ * @param environment - the probe's environment, from {@link dockerProbeEnvironment}.
  * @param timeoutMillis - the longest the probe may run.
  * @returns what the probe found; the promise does not reject.
  */
-export function runDockerVersion(timeoutMillis = DOCKER_PROBE_TIMEOUT_MILLIS): Promise<DockerProbe> {
+export function runDockerVersion(environment: Readonly<Record<string, string>>, timeoutMillis = DOCKER_PROBE_TIMEOUT_MILLIS): Promise<DockerProbe> {
   return new Promise((resolve) => {
-    execFile('docker', ['version', '--format', '{{.Server.Version}}'], { timeout: timeoutMillis, windowsHide: true }, (error, stdout) => {
+    execFile('docker', ['version', '--format', '{{.Server.Version}}'], { env: { ...environment }, timeout: timeoutMillis, windowsHide: true }, (error, stdout) => {
       if (error !== null && errorCode(error) === 'ENOENT') {
         resolve({ kind: 'missing' })
         return
