@@ -175,6 +175,31 @@ export const SESSION_TOKEN_BYTES = 32 as const
 /** Bytes of randomness in a Content Security Policy nonce, new for every page response. */
 export const CSP_NONCE_BYTES = 16 as const
 
+/**
+ * The directives of every reach response's Content Security Policy, in header
+ * order, joined with `; `. `<nonce>` stands for the response's nonce. No
+ * directive allows `'unsafe-eval'`.
+ */
+export const REACH_CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self' 'nonce-<nonce>'",
+  "style-src-elem 'self' 'nonce-<nonce>'",
+  "style-src-attr 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' data:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "frame-src 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "require-trusted-types-for 'script'",
+  'trusted-types default delo-plugin-loader',
+] as const
+
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 

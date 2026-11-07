@@ -21,7 +21,7 @@ This types-only package exports the identifiers and limits of a home's admission
 - `ROTATION_TRIGGERS`: the events that rotate every session.
 - `REACH_SESSION_COOKIE`, `UPSTREAM_COOKIE_PREFIX`, `SESSION_TOKEN_BYTES`, `SESSION_LIMITS`, `LOOPBACK_COOKIE_MAX_AGE_DAYS`, `SESSION_STORE_PERSIST_MS` and `SESSION_STORE_VERSION`: the cookie, the token size, the lifetimes and the store.
 - `LOOPBACK_LISTENER_ADDRESS` and `REACH_LISTENER_BIND_HOST`: the listener addresses.
-- `CSP_NONCE_BYTES`, `TRUSTED_TYPES_POLICIES` and `PLUGIN_SCRIPT_PATH_PREFIX`: the Content Security Policy nonce and the Trusted Types policies.
+- `CSP_NONCE_BYTES`, `REACH_CSP_DIRECTIVES`, `TRUSTED_TYPES_POLICIES` and `PLUGIN_SCRIPT_PATH_PREFIX`: the Content Security Policy nonce and directives and the Trusted Types policies.
 
 ## Limits
 

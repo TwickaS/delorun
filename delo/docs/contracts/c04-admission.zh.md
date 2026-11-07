@@ -145,7 +145,7 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 
 | 响应头 | 值 |
 | --- | --- |
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<nonce>'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types default delo-plugin-loader` |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<nonce>'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; require-trusted-types-for 'script'; trusted-types default delo-plugin-loader` |
 | `Strict-Transport-Security` | `max-age=31536000` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `no-referrer` |
@@ -154,6 +154,8 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 | `Cache-Control` | 每个 `/auth/` 与 `/api` 响应上为 `no-store` |
 
 `<nonce>` 是来自加密随机源的 16 字节，以 base64url 编码，每个首页与登录页响应都重新生成。上游的首页渲染器把它作为其渲染的每个内联 `<script>` 与 `<style>` 元素的 `nonce` 属性加入。
+
+**不对字符串求值，样式带 nonce。** 该策略从不允许 `'unsafe-eval'`，因此 studio 代码在加载时不对任何字符串求值。Loader 只在某个配置表达式需要时才编译其 `!!js` 求值器，而浏览器端组合不含此类表达式。Web 入口把页面的 nonce 加到通过 `document.createElement` 创建的每个 `<style>` 元素上，使插件与库的样式得以生效，并把 zod 切换到 jitless 模式，使 zod 不探测字符串求值。
 
 **远程图片。** 在远程访问监听器上，studio 把 chat 内容中来源既不同源、也不是 `data:` URL 的图片或媒体元素渲染为占位符，占位符写明来源的主机名。占位符从不请求该来源；若有任何代码发出该请求，内容安全策略（Content Security Policy）会拒绝它。
 
@@ -212,7 +214,7 @@ cookie 名称 `__Host-delo-session`、监听器 id、拒绝代码以及会话存
 - 远程访问会话以哈希形式保存在服务器端，可被撤销，使用带有与声明协议相符的 `Secure` 属性的 `__Host-` cookie。
 - 会话遵循上述有效期，并在上述事件发生时轮换；被移除设备的会话在移除操作返回之前结束。
 - `delorun devices reset` 替换回环浏览器会话密钥，因此在此之前签发的回环 cookie 停止生效。
-- 远程访问监听器的内容安全策略把 `connect-src`、`img-src` 与 `media-src` 限制为 `'self'`，图片与媒体另允许 `data:`；chat 中渲染的远程图片是占位符，从不被获取。
+- 远程访问监听器的内容安全策略把 `connect-src`、`img-src` 与 `media-src` 限制为 `'self'`，图片与媒体另允许 `data:`，图片还允许 `blob:`，且从不允许 `'unsafe-eval'`；chat 中渲染的远程图片是占位符，从不被获取。
 - Trusted Types 以上述两个策略强制执行。
 - 移除或替换 `@delo/home-auth` 会停止每个远程访问监听器，且远程访问从不回退到上游的 cookie。
 - `admit` 基于内存状态同步执行；需要 I/O 才能作出决定的提供方，在其状态加载完成之前一律拒绝。
@@ -238,6 +240,7 @@ cookie 名称 `__Host-delo-session`、监听器 id、拒绝代码以及会话存
 | `a loopback cookie minted before devices reset is refused after it` | 在 `delorun devices reset` 之前获准入的回环 cookie，在其之后被拒绝。 |
 | `a script URL outside the allowlist does not load` | `src` 为不在启动 manifest 中的同源路径、或为其他 origin 的 script 元素，被该策略拒绝，且从不被请求。 |
 | `a community plugin's HTML loses its scripts` | 一个赋值含 `<script>` 与 `onerror` 属性的 HTML 的 fixture 客户端插件，渲染出 HTML 的其余部分，且两者都不保留。 |
+| `the studio boots and styles a terminal with no policy violation` | 在远程访问监听器上，studio 启动、连接一个工作区并渲染一个侧边栏终端，其所有 `<style>` 元素都生效，且页面没有报告任何内容安全策略违规，包括字符串求值违规。 |
 | `a remote image in chat is never requested` | 一个录制的 fixture chat，其消息含有带远程 URL 的 Markdown 图片；它在远程访问监听器上渲染为占位符，且网络防护没有记录到对该远程主机的任何请求。 |
 
 <a id="what-this-does-not-prove"></a>

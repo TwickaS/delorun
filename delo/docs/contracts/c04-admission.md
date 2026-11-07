@@ -145,7 +145,7 @@ Every response from a reach listener carries these headers. The loopback listene
 
 | Header | Value |
 | --- | --- |
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<nonce>'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types default delo-plugin-loader` |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<nonce>'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; require-trusted-types-for 'script'; trusted-types default delo-plugin-loader` |
 | `Strict-Transport-Security` | `max-age=31536000` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `no-referrer` |
@@ -154,6 +154,8 @@ Every response from a reach listener carries these headers. The loopback listene
 | `Cache-Control` | `no-store` on every `/auth/` and `/api` response |
 
 `<nonce>` is 16 bytes from the cryptographic random source, base64url-encoded, and new for every index and sign-in page response. Upstream's index renderer adds it as the `nonce` attribute of every inline `<script>` and `<style>` element it renders.
+
+**No string evaluation and nonced styles.** The policy never allows `'unsafe-eval'`, so no studio code evaluates a string when it loads. The Loader compiles its `!!js` evaluator only when a configuration expression needs it, and the browser composition carries no such expression. The Web entry stamps the page's nonce on every `<style>` element created through `document.createElement`, so plugin and library styles apply, and puts zod in jitless mode, so zod does not probe for string evaluation.
 
 **Remote images.** On a reach listener, the studio renders an image or media element in chat content whose source is not same-origin and not a `data:` URL as a placeholder that names the source's host. The placeholder never requests the source, and the Content Security Policy refuses the request if any code makes it.
 
@@ -212,7 +214,7 @@ Requirements:
 - Reach sessions are stored hashed, server-side and revocable, in `__Host-` cookies with the declared scheme's `Secure` attribute.
 - Sessions follow the lifetimes and rotate on the events above; a removed device's sessions end before the removal returns.
 - `delorun devices reset` replaces the loopback browser session secret, so loopback cookies minted before it stop working.
-- The reach listener's Content Security Policy limits `connect-src`, `img-src` and `media-src` to `'self'`, with `data:` for images and media, and chat-rendered remote images are placeholders that are never fetched.
+- The reach listener's Content Security Policy limits `connect-src`, `img-src` and `media-src` to `'self'`, with `data:` for images and media and `blob:` for images, never allows `'unsafe-eval'`, and chat-rendered remote images are placeholders that are never fetched.
 - Trusted Types are enforced with the two policies above.
 - Removing or replacing `@delo/home-auth` stops every reach listener, and reach never falls back to upstream's cookies.
 - `admit` is synchronous over in-memory state; a provider that needs I/O to decide refuses until its state is loaded.
@@ -238,6 +240,7 @@ Denial tests:
 | `a loopback cookie minted before devices reset is refused after it` | A loopback cookie that admitted before `delorun devices reset` is refused after it. |
 | `a script URL outside the allowlist does not load` | A script element whose `src` is a same-origin path not in the boot manifest, or another origin, is refused by the policy and never requested. |
 | `a community plugin's HTML loses its scripts` | A fixture client plugin that assigns HTML containing `<script>` and an `onerror` attribute renders the rest of the HTML with neither. |
+| `the studio boots and styles a terminal with no policy violation` | On a reach listener, the studio boots, connects a workspace and renders a sidebar terminal whose `<style>` elements all apply, and the page reports no Content Security Policy violation, including none for string evaluation. |
 | `a remote image in chat is never requested` | A recorded fixture chat whose message holds a Markdown image with a remote URL renders a placeholder on a reach listener, and a network guard records no request to the remote host. |
 
 <a id="what-this-does-not-prove"></a>
