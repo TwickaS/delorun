@@ -60,7 +60,7 @@ Setup runs its steps in order: create the CLI profile, store a typed key in upst
 
 The Docker runtime option carries C1's label on a system whose sandbox dialect cannot enforce `docker-connect`: Landlock, Windows and a system without a sandbox.
 
-Not written by setup yet: the desktop analytics row, which belongs to the desktop app's profile; the model selection; the studio additions, the onboarding flag and the runtime, whose targets arrive with their own packages. Setup records each of those answers in the answers record.
+Desktop analytics is recorded, not written. Setup records the answer and writes no row to the desktop app's profile, because desktop packaging is outside the MVP and the desktop app keeps upstream's own profile; the desktop app applies the recorded answer once it composes Delo's bundle. A spec pins this behaviour. Also not written by setup yet: the model selection, the studio additions, the onboarding flag and the runtime, whose targets arrive with their own packages. Setup records each of those answers in the answers record.
 
 ## The home lock
 

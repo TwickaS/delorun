@@ -127,8 +127,8 @@ async function runStep(step: SetupStep, request: SetupRequest, progress: SetupPr
       setPatchRow(join(directory, 'cordis.patch.yml'), { id: SESSION_LOG_ROW, config: { enabled: answers.sessionLogUpload } })
       return undefined
     case 'desktop-row':
-      // The desktop app's profile is its own: setup records the answer and writes no row there.
-      return `Desktop analytics is recorded as ${answers.desktopAnalytics ? 'on' : 'off'}; the desktop app's profile is not written by setup.`
+      // Recorded, not written: the desktop app keeps its own profile until it composes Delo's bundle.
+      return `Desktop analytics is recorded as ${answers.desktopAnalytics ? 'on' : 'off'}. Setup does not write the desktop app's profile; the desktop app applies the answer once it composes Delo's bundle.`
   }
   return assertNever(step)
 }

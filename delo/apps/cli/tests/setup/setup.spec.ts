@@ -216,10 +216,23 @@ describe('setup forms', () => {
     expect(readFileSync(join(profileDirectory(home, PROFILE), 'setup-answers.json'), 'utf8')).not.toContain('typed-key-value')
   })
 
+  it('records desktop analytics and writes no row to the desktop profile (pinned: a later change updates this test)', async () => {
+    // The desktop app owns its profile; setup must leave it byte-identical whatever the answer is.
+    const desktop = profileDirectory(home, 'desktop')
+    mkdirSync(desktop, { recursive: true })
+    writeFileSync(join(desktop, 'package.json'), '{"name":"dsh-profile-desktop"}\n')
+    const before = tree(desktop)
+    const asked = scripted({ ...defaultAnswers, 'desktop analytics': true })
+    expect(await setup({ kind: 'interactive', prompter: asked.prompter, dialect: 'bwrap' })).toBe(EXIT.ok)
+    expect(lines.join('')).toContain('Desktop analytics is recorded as on.')
+    expect(tree(desktop)).toEqual(before)
+    expect(JSON.parse(readFileSync(join(profileDirectory(home, PROFILE), 'setup-answers.json'), 'utf8')).desktopAnalytics).toBe(true)
+  })
+
   it('--yes and --config leave reach and credential forwarding off', async () => {
     expect(await setup({ kind: 'yes' })).toBe(EXIT.ok)
     expect(lines.join('')).toContain('Delo has no telemetry of its own.')
-    expect(lines.join('')).toContain('are off unless you turn them on here')
+    expect(lines.join('')).toContain('You can turn them on later in Settings → Privacy.')
     const patch = readFileSync(join(profileDirectory(home, PROFILE), 'cordis.patch.yml'), 'utf8')
     expect(patch).not.toMatch(/reach|forward/i)
     expect(yesAnswers({ DEEPSEEK_API_KEY: KEY }).reach).toEqual({ option: 'none', identityFactor: null })
