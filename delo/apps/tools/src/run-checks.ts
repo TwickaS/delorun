@@ -45,7 +45,7 @@ import { z } from 'zod'
 import { contentId, createPassCache, passCacheEnabled, type PassCache } from './checks/cache.ts'
 import { GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
-import { catalog, criticalPath, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
+import { catalog, criticalPath, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { readWebSpecs } from './checks/web.ts'
@@ -569,8 +569,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
 
   const scratch = scratchDir()
   const childEnv = checkEnvironment(env, scratch)
-  // The environment `pnpm run` gives a script is read from pnpm only when a check runs pnpm.
-  if (plan.some(check => check.command[0] === 'pnpm')) Object.assign(childEnv, pnpmScriptEnvironment(root, childEnv['PATH'] ?? ''))
+  // The environment `pnpm run` gives a script is read from pnpm only when a planned check needs it.
+  if (plan.some(readsPnpmScriptEnvironment)) Object.assign(childEnv, pnpmScriptEnvironment(root, childEnv['PATH'] ?? ''))
   const logDir = join(root, CACHE_DIR, 'logs')
   rmSync(logDir, { recursive: true, force: true })
   mkdirSync(logDir, { recursive: true })

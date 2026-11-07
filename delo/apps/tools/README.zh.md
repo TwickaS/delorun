@@ -175,6 +175,7 @@ brief 中原有的链接也按同样方式改写。
 
 `tests/issues/` 下的测试规范在临时仓库中运行该工具，并将假的 `gh` 置于 `PATH` 之首；没有任何规范会访问 GitHub。
 
+<a id="local-checks"></a>
 ## 本地检查
 
 [`src/run-checks.ts`](src/run-checks.ts) 运行本地检查。检查目录位于 [`src/checks/plan.ts`](src/checks/plan.ts)，它按变更与包选择检查；[`src/checks/run.ts`](src/checks/run.ts) 在某个检查的依赖通过且所需的 CPU 与内存空闲后启动它；[`src/checks/machine.ts`](src/checks/machine.ts) 设定内存上限；[`src/checks/cache.ts`](src/checks/cache.ts) 为未变化的检查提供通过缓存。仓库门禁来自 [`src/checks/gates/index.ts`](src/checks/gates/index.ts)，预算来自 [`src/checks/budgets.json`](src/checks/budgets.json)。
@@ -200,6 +201,8 @@ brief 中原有的链接也按同样方式改写。
 | `parity-replay` | 在 `DSH_SNAPSHOT_PATCH` 指向对等覆盖层时运行上游的录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，单独运行 | Delo 代码或上游编辑改动时为 `changed`；`full` |
 
 `pre-commit` 层级在 5 秒预算内运行（见 `budgets.json`），运行超出预算时会报告。网页通道（`tests:web-changed`，[`src/checks/web.ts`](src/checks/web.ts)）运行变更所涉及的、`apps/web/tests` 下的 Chromium 端到端规范。当非文档路径位于 `packages/client` 或 `apps/web` 之下，或位于清单中某个规范所导入的包之下时，变更便涉及该通道。规范自身的文件有变更，或它映射到有变更的包，则该规范被选中；变更的规范文件只选中它自己，不会使其所在的包视为有变更。规范映射到其导入所触及的包：包名导入映射到该包，相对导入映射到其解析路径所在的包，因此每个规范都通过其辅助导入映射到 `apps/web`。若某个规范的导入都不映射任何包，则按文件名映射到目录名是该文件名主干中以连字符分隔的连续片段的包。没有规范命名能映射到某个包的路由或客户端界面，因此不映射页面目标。选中的规范超过 12 个时，检查被拒绝而不是部分运行：检查报告数量，并由 CI 的网页快照门禁运行整个清单。既未指定变更也未指定目标的运行会选中整个清单，因此同一上限会拒绝它。该通道先以 `DSH_BUILD_CLIENT_PROFILE=official` 运行 `pnpm run build:artifacts`，然后在上游的 `vitest.web.config.ts` 下逐一运行选中的规范，设置 `DSH_SNAPSHOT=replay`，且不带 `DEEPSEEK_API_KEY`。其预算为 5 GiB、8 个 CPU、独占，以及 1200 秒的挂钟时间，运行超出时命令会报告。该通道只运行 Chromium。有十一个规范在内部启动 WebKit，且没有能单独运行其 Chromium 部分的开关，因此在本机具备 WebKit 的系统库之前，该通道会排除这十一个文件；CI 会以 WebKit 运行它们。该通道不声明输入，因此只要变更涉及它便会运行。Docker 通道、构建后包的规范、文档站点、工作流检查与 Cordis 检查，将随需要它们的包一同到达。
+
+每个检查都继承运行器的环境，但不含 git 的仓库变量；在 WSL 上，还不含 `PATH` 中的 Windows 目录与 Windows 侧的变量，其中包括 `NoDefaultCurrentDirectoryInExePath`（[`src/checks/machine.ts`](src/checks/machine.ts)）。若某次运行所规划的检查会运行 pnpm，或规划了 `tests:upstream-changed`（其规范自行启动 pnpm），则该次运行会为每个检查提供 `pnpm run` 为脚本提供的环境：固定版本的 pnpm 置于 `PATH` 首位并作为 `npm_execpath`，且设定 `pnpm_config_verify_deps_before_run=false`。上游的整个单元测试套件不属于任何通道；绿色基线按[对等基线](../../docs/reference/parity-baseline.zh.md#green-base-on-v5)中的运行步骤与前置条件运行它。
 
 在仓库根目录运行的命令：
 

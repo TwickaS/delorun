@@ -46,6 +46,11 @@ export interface Check {
   readonly env?: readonly string[]
   /** Variables the check sets for its command, over the inherited environment. */
   readonly environment?: Readonly<Record<string, string>>
+  /**
+   * True when the command does not start through pnpm but runs specs that start pnpm themselves, which need the
+   * environment `pnpm run` gives a script ({@link readsPnpmScriptEnvironment}).
+   */
+  readonly pnpmScript?: boolean
   /** The tiers that select the check by default. */
   readonly tiers: readonly Tier[]
   /** The CPUs it keeps busy, which the runner budgets. */
@@ -206,6 +211,17 @@ export function programLabel(config: string): string {
   return suffix === undefined ? dir : `${dir}-${suffix}`
 }
 
+/**
+ * Whether a check needs the environment `pnpm run` gives a script: the repository's pinned pnpm first on `PATH` and
+ * as `npm_execpath`, and `pnpm_config_verify_deps_before_run=false`, so a nested pnpm neither resolves another pnpm
+ * nor installs before it runs.
+ * @param check - the check.
+ * @returns true when its command runs pnpm or it is marked {@link Check.pnpmScript}.
+ */
+export function readsPnpmScriptEnvironment(check: Pick<Check, 'command' | 'pnpmScript'>): boolean {
+  return check.command[0] === 'pnpm' || check.pnpmScript === true
+}
+
 /** A check before its budget is attached. */
 type Draft = Omit<Check, 'budget' | 'memoryBytes'>
 
@@ -324,6 +340,8 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       command: [VITEST, 'run', '--config', UPSTREAM_CONFIG, `--maxWorkers=${String(Math.min(workers.upstream, UPSTREAM_CHANGED_WORKERS))}`, '--passWithNoTests'],
       // Upstream's setting for lanes on shared hosts: it raises the default test, hook and expect.poll timeouts together, which its process- and Git-heavy specs need at this parallelism.
       environment: { DSH_COVERAGE_TEST_TIMEOUT_MS: '30000' },
+      // Upstream's CI runs its specs through `pnpm run test`; specs that start pnpm in fixtures read that script environment.
+      pnpmScript: true,
       inputs: UPSTREAM_CODE,
       env: TEST_ENV,
       needs: built,

@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
-import { affectsParity, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
+import { affectsParity, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
@@ -297,6 +297,14 @@ describe('the changed-upstream lane', () => {
     expect(plan.find(check => check.id === 'tests:upstream-changed')?.command.slice(-2)).toEqual(['packages/core/session/', 'packages/core/agent-loop/'])
   })
 
+  it('hands the changed-upstream lane pnpm\'s script environment even when no other planned check runs pnpm', () => {
+    const plan = select(CHECKS, TREE, { ...NONE, only: ['tests:upstream-changed'], changed: { base: 'base', paths: ['packages/core/session/src/index.ts'] } })
+    expect(plan.map(check => check.id)).toEqual(['tests:upstream-changed'])
+    expect(plan.some(readsPnpmScriptEnvironment)).toBe(true)
+    expect(readsPnpmScriptEnvironment({ command: ['pnpm', 'run', 'typecheck'] })).toBe(true)
+    expect(readsPnpmScriptEnvironment({ command: ['node_modules/.bin/vitest', 'run'] })).toBe(false)
+  })
+
   it('leaves the changed-upstream lane out of a fork-only change and the full gate, and declines it with nothing to narrow to', () => {
     expect(ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'base', paths: ['delo/apps/control/src/index.ts'] } }))).not.toContain('tests:upstream-changed')
     expect(ids(select(CHECKS, TREE, NONE))).not.toContain('tests:upstream-changed')
@@ -347,10 +355,12 @@ describe('the machine budget', () => {
   })
 
   it('confines checks to the Linux side of WSL: no Windows PATH directories, no WSL interop variables', () => {
-    const env = checkEnvironment({ PATH: '/usr/bin:/mnt/c/Windows/system32:/usr/local/bin', WSL_DISTRO_NAME: 'Ubuntu', WSL_INTEROP: '/run/WSL/1_interop', WSLENV: 'X', DISPLAY: ':0' }, '/tmp/run')
+    const env = checkEnvironment({ PATH: '/usr/bin:/mnt/c/Windows/system32:/usr/local/bin', WSL_DISTRO_NAME: 'Ubuntu', WSL_INTEROP: '/run/WSL/1_interop', WSLENV: 'X', DISPLAY: ':0', NoDefaultCurrentDirectoryInExePath: '1' }, '/tmp/run')
     expect(env['PATH']).toBe('/usr/bin:/usr/local/bin')
     expect(env).not.toHaveProperty('WSL_INTEROP')
     expect(env).not.toHaveProperty('DISPLAY')
+    // Upstream's Windows command lookup reads it from the process environment on any platform; a leaked value drops the current directory from spawn-runner.spec.ts's search roots.
+    expect(env).not.toHaveProperty('NoDefaultCurrentDirectoryInExePath')
   })
 
   it('reads pnpm\'s script environment from the last line, after pnpm\'s own warnings', () => {
