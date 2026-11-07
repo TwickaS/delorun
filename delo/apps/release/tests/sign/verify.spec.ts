@@ -48,14 +48,14 @@ function publish(version = '0.1.0', keys: Keys = throwawayKeys()): Published {
   const root = trusted(rootFile(keys).bytes)
   const archive = Buffer.from(`runtime archive ${version}`)
   const manifest = manifestFile(keys, version, 'stable', archive)
-  const metadata = nextTimestamp({ state: initialState(root), roots: [root], previous: { first: true }, manifests: { stable: manifest, beta: manifest }, replaced: [], now: ISSUED })
+  const metadata = nextTimestamp({ state: initialState(root), roots: [root], first: true, manifests: { stable: manifest, beta: manifest }, replaced: [], now: ISSUED })
   const bytes = envelopeBytes(metadata, [keys.timestamp])
   return { keys, root, state: stateAfter(root, bytes, metadata.version), archive, manifestBytes: manifest.bytes, timestamp: { metadata, bytes } }
 }
 
 /** The next timestamp after a published one, as the signer's state allows. */
 function continueFrom(release: Published, manifests: TimestampRequest['manifests'], now: number, overrides: Partial<TimestampRequest> = {}): TimestampMetadata {
-  return nextTimestamp({ state: release.state, roots: [release.root], previous: { bytes: release.timestamp.bytes }, manifests, replaced: [], now, ...overrides })
+  return nextTimestamp({ state: release.state, roots: [release.root], first: false, manifests, replaced: [], now, ...overrides })
 }
 
 describe('release verification', () => {
@@ -242,27 +242,30 @@ describe('timestamp signing', () => {
     expect(continueFrom(release, { stable, beta }, later).channels.beta.release).toBe('0.2.0-beta.1')
   })
 
-  it('continues only from the last timestamp the state records, so an older genuine timestamp cannot roll a channel back', () => {
+  it('continues only from the last timestamp the state holds, so an older genuine timestamp cannot roll a channel back', () => {
     const release = publish('0.1.0')
     const older = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
     const newer = manifestFile(release.keys, '0.2.0')
     const second = continueFrom(release, { stable: newer, beta: newer }, later)
     const secondBytes = envelopeBytes(second, [release.keys.timestamp])
     const state = stateAfter(release.root, secondBytes, second.version)
-    const rollback = { state, roots: [release.root], manifests: { stable: older, beta: older }, replaced: [], now: later + DAY }
-    expect(() => nextTimestamp({ ...rollback, previous: { bytes: release.timestamp.bytes } }))
-      .toThrow(`the previous timestamp has SHA-256 ${release.state.timestamp!.sha256}, not ${state.timestamp!.sha256}, the last timestamp signed (version 2) as the state records`)
-    expect(() => nextTimestamp({ ...rollback, previous: { first: true } })).toThrow('the state records timestamp 2 as the last signed; continue from it with --previous instead of signing a first timestamp')
-    expect(() => nextTimestamp({ ...rollback, previous: { bytes: secondBytes } })).toThrow('the stable channel would move back from 0.2.0 to 0.1.0')
-    expect(() => nextTimestamp({ ...rollback, state: initialState(release.root), previous: { bytes: release.timestamp.bytes } })).toThrow('the state records no timestamp yet; sign the first timestamp with --first')
-    expect(nextTimestamp({ ...rollback, previous: { bytes: secondBytes }, manifests: { stable: newer, beta: newer } }).version).toBe(3)
+    expect(Buffer.from(state.timestamp!.file, 'base64')).toEqual(secondBytes)
+    const request = { state, roots: [release.root], first: false, manifests: { stable: newer, beta: newer }, replaced: [], now: later + DAY }
+    expect(() => nextTimestamp({ ...request, manifests: { stable: older, beta: older } })).toThrow('the stable channel would move back from 0.2.0 to 0.1.0')
+    expect(() => nextTimestamp({ ...request, first: true })).toThrow('the state records timestamp 2 as the last signed; continue from it instead of signing a first timestamp')
+    expect(() => nextTimestamp({ ...request, state: initialState(release.root) })).toThrow('the state records no timestamp yet; sign the first timestamp with --first')
+    const swapped = { ...state, timestamp: { ...state.timestamp!, file: release.state.timestamp!.file } }
+    expect(() => nextTimestamp({ ...request, state: swapped, manifests: { stable: older, beta: older } })).toThrow(`the state's last timestamp has SHA-256 ${release.state.timestamp!.sha256}, not the ${state.timestamp!.sha256} it records`)
+    const relabelled = { ...release.state, timestamp: { ...release.state.timestamp!, version: 2 } }
+    expect(() => nextTimestamp({ ...request, state: relabelled, manifests: { stable: older, beta: older } })).toThrow('the state\'s last timestamp is version 1, not the 2 it records')
+    expect(nextTimestamp(request).version).toBe(3)
   })
 
   it('refuses a root chain that does not start at the root the state trusts, including for the first timestamp', () => {
     const release = publish()
     const stranger = trusted(rootFile(throwawayKeys()).bytes)
     const manifest = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
-    expect(() => nextTimestamp({ state: initialState(release.root), roots: [stranger], previous: { first: true }, manifests: { stable: manifest, beta: manifest }, replaced: [], now: ISSUED }))
+    expect(() => nextTimestamp({ state: initialState(release.root), roots: [stranger], first: true, manifests: { stable: manifest, beta: manifest }, replaced: [], now: ISSUED }))
       .toThrow(`the first root passed is root 1 with SHA-256 ${stranger.sha256}; the state trusts root 1 with SHA-256 ${release.root.sha256}`)
   })
 
@@ -271,7 +274,7 @@ describe('timestamp signing', () => {
     const stable = { name: 'delorun-0.1.0.manifest.json', bytes: release.manifestBytes }
     const manifests = { stable, beta: stable }
     const forged = envelopeBytes({ ...release.timestamp.metadata, version: 41 }, [generateKeyPairSync('ed25519').privateKey])
-    expect(() => continueFrom(release, manifests, later, { state: stateAfter(release.root, forged, 41), previous: { bytes: forged } })).toThrow(/timestamp has 0 valid signatures/u)
+    expect(() => continueFrom(release, manifests, later, { state: stateAfter(release.root, forged, 41), first: false })).toThrow(/timestamp has 0 valid signatures/u)
     expect(continueFrom(release, manifests, ISSUED + 30 * DAY).version).toBe(2)
   })
 
@@ -285,16 +288,16 @@ describe('timestamp signing', () => {
     expect(next.root).toEqual({ version: 2, sha256: second.sha256 })
     expect(() => continueFrom(release, { stable, beta: stable }, later, { roots: [second] })).toThrow(`the first root passed is root 2 with SHA-256 ${second.sha256}; the state trusts root 1`)
     const nextBytes = envelopeBytes(next, [newTimestamp])
-    expect(nextTimestamp({ state: stateAfter(second, nextBytes, 2), roots: [second], previous: { bytes: nextBytes }, manifests: { stable, beta: stable }, replaced: [], now: later + DAY }).version).toBe(3)
+    expect(nextTimestamp({ state: stateAfter(second, nextBytes, 2), roots: [second], first: false, manifests: { stable, beta: stable }, replaced: [], now: later + DAY }).version).toBe(3)
   })
 
   it('refuses to move a channel back to a lower release, or to another manifest of the release it names', () => {
     const keys = throwawayKeys()
     const root = trusted(rootFile(keys).bytes)
     const newer = manifestFile(keys, '0.2.0')
-    const firstContent = nextTimestamp({ state: initialState(root), roots: [root], previous: { first: true }, manifests: { stable: newer, beta: newer }, replaced: [], now: ISSUED })
+    const firstContent = nextTimestamp({ state: initialState(root), roots: [root], first: true, manifests: { stable: newer, beta: newer }, replaced: [], now: ISSUED })
     const first = envelopeBytes(firstContent, [keys.timestamp])
-    const request = { state: stateAfter(root, first, 1), roots: [root], previous: { bytes: first }, replaced: [], now: later }
+    const request = { state: stateAfter(root, first, 1), roots: [root], first: false, replaced: [], now: later }
     const older = manifestFile(keys, '0.1.0')
     expect(() => nextTimestamp({ ...request, manifests: { stable: older, beta: newer } })).toThrow('the stable channel would move back from 0.2.0 to 0.1.0')
     expect(() => nextTimestamp({ ...request, manifests: { stable: newer, beta: older } })).toThrow('the beta channel would move back from 0.2.0 to 0.1.0')
@@ -306,7 +309,7 @@ describe('timestamp signing', () => {
     expect(nextTimestamp({ ...request, manifests: { stable: newer, beta: newer } }).version).toBe(2)
   })
 
-  it('names a release re-signed after a targets-key rotation in place of the manifest the revoked key signed', () => {
+  it('names a release re-signed after a targets-key rotation in place of the manifest the revoked key signed, but not one whose content changed', () => {
     const keys = throwawayKeys()
     const release = publish('0.1.0', keys)
     const successor = generateKeyPairSync('ed25519').privateKey
@@ -325,6 +328,8 @@ describe('timestamp signing', () => {
     const timestamp = continueFrom(release, manifests, later, { roots, replaced: [old] })
     expect(timestamp.channels.stable.release).toBe('0.1.0')
     expect(timestamp.root.version).toBe(2)
+    const changed = { name: old.name, bytes: envelopeBytes({ ...manifestContent('0.1.0', Buffer.from('another archive')), published: '2026-11-07T09:00:00Z' }, [successor]) }
+    expect(() => continueFrom(release, { stable: changed, beta: changed }, later, { roots, replaced: [old] })).toThrow(/is another manifest of that release/u)
   })
 })
 

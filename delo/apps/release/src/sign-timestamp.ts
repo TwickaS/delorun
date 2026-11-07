@@ -2,21 +2,21 @@
  * Signs timestamp metadata with the online timestamp key (contract C2, timestamp metadata), in the release workflow's
  * protected environment: every 24 hours, and when a release is published.
  *
- * `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --state <state.json> --root <root file>...
- * (--previous <timestamp.json> | --first) --stable <manifest file> --beta <manifest file> [--replaced <manifest
- * file>]... --out <timestamp.json>`
+ * `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --state <state.json> --root <root file>... [--first]
+ * --stable <manifest file> --beta <manifest file> [--replaced <manifest file>]... --out <timestamp.json>`
  *
  * `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --init-state --root <root file> --state <state.json>`
  *
- * `--state` is the signer's state (`delo.release-timestamp-state/1`): the root it trusts and the version and SHA-256
- * of the last timestamp it signed. It lives where the release workflow's protected environment keeps it, never on
- * the metadata host; the package README states where. `--init-state` writes it once, in the owner's ceremony, from
- * the first root, and refuses to overwrite a file. `--root` starts at the state's root and repeats for each later
- * version, newest last. `--previous` must be the exact file the state records, and `--first` signs without one only
- * while the state records none. `--replaced` passes the manifest a channel names when a re-signed manifest of the
- * same release replaces it after a targets-key rotation. The private key is read from the environment variable
- * `DELO_TIMESTAMP_KEY` as PKCS #8 PEM, the workflow environment's secret; it is never a file or an argument. The
- * command writes the timestamp and then the new state, each through a temporary file renamed into place.
+ * `--state` is the signer's state (`delo.release-timestamp-state/1`): the root it trusts and the last timestamp it
+ * signed, with its version, SHA-256 and bytes, which the next signing continues from. It lives where the release
+ * workflow's protected environment keeps it, never on the metadata host; the package README states where.
+ * `--init-state` writes it once, in the owner's ceremony, from the first root, and refuses to overwrite a file.
+ * `--root` starts at the state's root and repeats for each later version, newest last. `--first` signs without a
+ * previous timestamp, only while the state records none. `--replaced` passes the manifest a channel names when a
+ * re-signed manifest of the same release replaces it after a targets-key rotation. The private key is read from the
+ * environment variable `DELO_TIMESTAMP_KEY` as PKCS #8 PEM, the workflow environment's secret; it is never a file or
+ * an argument. The command writes the new state and then the timestamp, each through a temporary file renamed into
+ * place, so no timestamp exists that the state does not record.
  *
  * @module @delo/release/sign-timestamp
  */
@@ -27,7 +27,7 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { signEnvelope } from './sign/envelope.ts'
 import { toJsonValue } from './sign/json.ts'
-import { initialState, nextTimestamp, readTimestampState, stateAfter, type ManifestFile, type PreviousTimestamp } from './sign/timestamp.ts'
+import { initialState, nextTimestamp, readTimestampState, stateAfter, type ManifestFile } from './sign/timestamp.ts'
 import { trustRootChain, verifyTimestamp } from './sign/verify.ts'
 
 function manifestFile(path: string): ManifestFile {
@@ -47,7 +47,6 @@ function main(argv: readonly string[]): number {
       'state': { type: 'string' },
       'init-state': { type: 'boolean' },
       'root': { type: 'string', multiple: true },
-      'previous': { type: 'string' },
       'first': { type: 'boolean' },
       'stable': { type: 'string' },
       'beta': { type: 'string' },
@@ -68,16 +67,14 @@ function main(argv: readonly string[]): number {
       return 0
     }
     if (values.stable === undefined || values.beta === undefined || values.out === undefined) throw new Error('pass --stable <manifest>, --beta <manifest> and --out <file>')
-    if ((values.previous === undefined) === (values.first !== true)) throw new Error('pass exactly one of --previous <timestamp.json> and --first')
     const pem = process.env.DELO_TIMESTAMP_KEY
     if (pem === undefined || pem === '') throw new Error('DELO_TIMESTAMP_KEY holds no key')
     const key = createPrivateKey(pem)
     if (key.asymmetricKeyType !== 'ed25519') throw new Error('DELO_TIMESTAMP_KEY is not an Ed25519 key')
-    const previous: PreviousTimestamp = values.previous === undefined ? { first: true } : { bytes: readFileSync(resolve(values.previous)) }
     const content = nextTimestamp({
       state: readTimestampState(readFileSync(statePath)),
       roots,
-      previous,
+      first: values.first === true,
       manifests: { stable: manifestFile(values.stable), beta: manifestFile(values.beta) },
       replaced: (values.replaced ?? []).map(manifestFile),
       now,
@@ -85,8 +82,8 @@ function main(argv: readonly string[]): number {
     const bytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(content), signatures: [] }, [key]), undefined, 2)}\n`)
     const newest = roots.at(-1)!
     verifyTimestamp(newest, bytes, now)
-    replaceFile(resolve(values.out), bytes)
     replaceFile(statePath, `${JSON.stringify(stateAfter(newest, bytes, content.version), undefined, 2)}\n`)
+    replaceFile(resolve(values.out), bytes)
     console.log(`sign-timestamp: version ${String(content.version)}, expires ${content.expires}`)
     return 0
   } catch (error) {

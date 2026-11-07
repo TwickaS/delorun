@@ -103,9 +103,12 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 
 `node_modules/.bin/tsx delo/apps/release/src/sign-root.ts --draft <file> --key <root.pem>... [--previous <root file>] --out <root/<n>.root.json>` 在所有者的签名步骤中签署根元数据：草稿即根元数据的 `signed` 内容；只有当该文件以其自身的根阈值验证通过且尚未过期时，才会写入该文件；对于轮换，它还须作为 `--previous` 之后的版本，并以该根的阈值同样验证通过。
 
-`node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --state <state.json> --root <file>... (--previous <timestamp.json> | --first) --stable <manifest> --beta <manifest> [--replaced <manifest>]... --out <timestamp.json>` 使用来自 `DELO_TIMESTAMP_KEY` 环境变量的在线密钥签署下一个时间戳，然后写入新的状态。`--root` 从状态所信任的根开始，根轮换之后可重复，最后给出最新的根。`--previous` 必须正是状态记录为最近一次签署的那个时间戳文件，并能用其所指明的根中的时间戳密钥验证通过，且与该根文件的摘要一致；它可以已经过期。`--first` 在没有上一个时间戳的情况下签名，仅当状态尚未记录任何时间戳时才可使用。每个通道的 manifest 都必须能用最新根中的 targets 密钥验证通过；stable 通道指明一个 stable 发布，beta 通道指明一个 beta 或 stable 发布；任何通道都不会移向更低的版本。只有当通道所指明的 manifest（以 `--replaced` 传入）已无法用最新根中的 targets 密钥验证通过（例如 targets 密钥轮换之后），或与新的 manifest 仅签名不同时，通道才会移向同一发布的另一个 manifest。新版本比 `--previous` 高一号，过期时间为签发后 3 天。
+`node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --state <state.json> --root <file>... [--first] --stable <manifest> --beta <manifest> [--replaced <manifest>]... --out <timestamp.json>` 使用来自 `DELO_TIMESTAMP_KEY` 环境变量的在线密钥，从状态所保存的最近一次时间戳继续签署下一个时间戳，并先写入新的状态，再写入时间戳。`--root` 从状态所信任的根开始，根轮换之后可重复，最后给出最新的根。状态中的最近一次时间戳必须与状态记录的摘要和版本一致，能用其所指明的根中的时间戳密钥验证通过，且与该根文件的摘要一致；它可以已经过期。调用方不传入上一个时间戳。`--first` 在没有上一个时间戳的情况下签名，仅当状态尚未记录任何时间戳时才可使用。每个通道的 manifest 都必须能用最新根中的 targets 密钥验证通过；stable 通道指明一个 stable 发布，beta 通道指明一个 beta 或 stable 发布；任何通道都不会移向更低的版本。只有当通道所指明的 manifest（以 `--replaced` 传入）与新的 manifest 仅签名不同，或在其已无法用最新根中的 targets 密钥验证通过之后（例如 targets 密钥轮换之后）仅签名与 `published` 不同时，通道才会移向同一发布的另一个 manifest；签名内容的任何其他改动都会被拒绝。新版本比 `--previous` 高一号，过期时间为签发后 3 天。
 
-状态文件（`delo.release-timestamp-state/1`）保存签名者所信任的根，以及最近一次签署的时间戳的版本与 SHA-256，因此不受信任的元数据主机提供的真实但较旧的时间戳无法让通道回滚。所有者在根签名步骤中用 `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --init-state --root root/1.root.json --state state.json` 写入一次，并把其内容保存为发布工作流受保护的 `release` 环境中的变量 `DELO_TIMESTAMP_STATE`，绝不放在元数据主机上。每个签名作业把该变量还原为文件，签名后，用一个只对该环境中的作业可用、且可写入该环境变量的令牌，把新状态写回该变量。
+状态文件（`delo.release-timestamp-state/1`）保存签名者所信任的根，以及最近一次签署的时间戳及其版本、SHA-256 与字节，因此不受信任的元数据主机提供的真实但较旧的时间戳无法让通道回滚。所有者在根签名步骤中用 `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --init-state --root root/1.root.json --state state.json` 写入一次，并把其内容保存为发布工作流受保护的 `release` 环境中的变量 `DELO_TIMESTAMP_STATE`，绝不放在元数据主机上。每个签名作业把该变量还原为文件，签名后，用一个只对该环境中的作业可用、且可写入该环境变量的令牌，把新状态写回该变量。所有者尚未编写的发布工作流文件必须：
+
+- 把每个签署时间戳的作业放进同一个 `concurrency` 组，使两次签名绝不会从同一状态开始；
+- 在发布时间戳之前把新状态写回 `DELO_TIMESTAMP_STATE`，使已发布的时间戳始终是状态所保存的那一个。
 
 ## 验证
 
