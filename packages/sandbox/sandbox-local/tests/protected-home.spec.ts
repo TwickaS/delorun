@@ -11,9 +11,9 @@ import { basename, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
-import { LocalSandboxProvider, RUNNER_PROTECTION } from '@deepseek-ai/dsh-sandbox-local'
+import { LocalSandboxProvider, RUNNER_PROTECTION, pathAliasCoverage } from '@deepseek-ai/dsh-sandbox-local'
 import type { Config } from '@deepseek-ai/dsh-sandbox-local'
-import { DATA_VOLUME, deviceName, firmlinkAliases, mountAliases, parseMountInfo, readMountTable } from '../src/mounts.ts'
+import { ALIAS_UNRELIABLE_FILESYSTEMS, DATA_VOLUME, aliasCoverage, deviceName, firmlinkAliases, mountAliases, parseMountInfo, readMountTable } from '../src/mounts.ts'
 import type { MountEntry } from '../src/mounts.ts'
 import { NO_PROTECTION, bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from '../src/profiles.ts'
 import type { Protection, ProtectionSettings } from '../src/profiles.ts'
@@ -32,7 +32,7 @@ function resolveIsolated(settings: ProtectionSettings, mounts: readonly MountEnt
  */
 function aliasMount(target: string, alias: string): MountEntry[] {
   const device = deviceName(statSync(target, { bigint: true }).dev)
-  return [{ device, root: '/', mountPoint: '/' }, { device, root: dirname(target), mountPoint: alias }]
+  return [{ device, root: '/', mountPoint: '/', fsType: 'ext4' }, { device, root: dirname(target), mountPoint: alias, fsType: 'ext4' }]
 }
 
 const BASE = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent']
@@ -161,17 +161,18 @@ describe('mount aliases', () => {
       '22 1 8:48 / / rw,relatime shared:1 - ext4 /dev/sdd rw',
       '82 81 8:48 /a\\040b /mnt/with\\040space ro shared:3 - ext4 /dev/sdd rw',
       '704 76 8:48 /gone//deleted /mnt/gone rw - ext4 /dev/sdd rw',
+      '705 76 8:48 / /mnt/no-separator rw',
       '',
     ].join('\n')
     expect(parseMountInfo(text)).toEqual([
-      { device: '8:48', root: '/', mountPoint: '/' },
-      { device: '8:48', root: '/a b', mountPoint: '/mnt/with space' },
+      { device: '8:48', root: '/', mountPoint: '/', fsType: 'ext4' },
+      { device: '8:48', root: '/a b', mountPoint: '/mnt/with space', fsType: 'ext4' },
     ])
   })
 
   it('reads the mount table on Linux only, and fails closed when it cannot', () => {
     expect(readMountTable('darwin')).toEqual([])
-    expect(readMountTable('linux', () => '22 1 8:48 / / rw - ext4 /dev/sdd rw')).toEqual([{ device: '8:48', root: '/', mountPoint: '/' }])
+    expect(readMountTable('linux', () => '22 1 8:48 / / rw - ext4 /dev/sdd rw')).toEqual([{ device: '8:48', root: '/', mountPoint: '/', fsType: 'ext4' }])
     expect(() => readMountTable('linux', () => { throw new Error('no /proc') })).toThrow(/cannot read \/proc\/self\/mountinfo/)
     if (process.platform === 'linux') expect(readMountTable().length).toBeGreaterThan(0)
   })
@@ -195,20 +196,20 @@ describe('mount aliases', () => {
     // A mount whose candidate is another directory is stale or overmounted: left out.
     const other = join(root, 'other')
     mkdirSync(join(other, basename(home)), { recursive: true })
-    const stale: MountEntry = { device: table[0]!.device, root: dirname(home), mountPoint: other }
+    const stale: MountEntry = { device: table[0]!.device, root: dirname(home), mountPoint: other, fsType: 'ext4' }
     expect(mountAliases(home, [...table, stale]).map(entry => entry.path)).toEqual([join(alias, basename(home))])
     expect(mountAliases(join(root, 'missing'), table)).toEqual([])
-    expect(mountAliases(home, [{ device: '0:0', root: '/', mountPoint: '/' }])).toEqual([])
+    expect(mountAliases(home, [{ device: '0:0', root: '/', mountPoint: '/', fsType: 'ext4' }])).toEqual([])
     // A bind mount of a directory inside the path reaches that part of it; one mounted inside the path itself, or of
     // a missing directory, is not an alias.
     const secretsBind = join(root, 'secrets-bind')
     symlinkSync(join(home, 'secrets'), secretsBind, 'dir')
-    expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'secrets'), mountPoint: secretsBind }])).toEqual([{ path: secretsBind, mountPoint: secretsBind }])
-    expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'secrets'), mountPoint: join(home, 'runtimes') }])).toEqual([])
-    expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'missing'), mountPoint: secretsBind }])).toEqual([])
+    expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'secrets'), mountPoint: secretsBind, fsType: 'ext4' }])).toEqual([{ path: secretsBind, mountPoint: secretsBind }])
+    expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'secrets'), mountPoint: join(home, 'runtimes'), fsType: 'ext4' }])).toEqual([])
+    expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'missing'), mountPoint: secretsBind, fsType: 'ext4' }])).toEqual([])
     // The deepest mount containing the path decides its path inside the filesystem, whatever the table's order.
     const device = table[0]!.device
-    expect(mountAliases(home, [{ device, root: root, mountPoint: root }, { device, root: '/', mountPoint: '/' }])).toEqual([])
+    expect(mountAliases(home, [{ device, root: root, mountPoint: root, fsType: 'ext4' }, { device, root: '/', mountPoint: '/', fsType: 'ext4' }])).toEqual([])
   })
 
   it('finds a Data-volume spelling only where it reaches the same file', () => {
@@ -219,6 +220,41 @@ describe('mount aliases', () => {
     expect(firmlinkAliases(home, data)).toEqual([])
     expect(firmlinkAliases(join(data, 'x'), data)).toEqual([])
     expect(DATA_VOLUME).toBe('/System/Volumes/Data')
+  })
+})
+
+describe('alias coverage', () => {
+  it('is unknown on a filesystem whose aliases cannot be found by device, and when the table does not hold the path\'s device', () => {
+    const { home } = fixture()
+    const device = deviceName(statSync(home, { bigint: true }).dev)
+    const ext4: MountEntry[] = [{ device, root: '/', mountPoint: '/', fsType: 'ext4' }]
+    expect(aliasCoverage(home, ext4, 'linux')).toBe('complete')
+    for (const fsType of ALIAS_UNRELIABLE_FILESYSTEMS) {
+      expect(aliasCoverage(home, [{ device, root: '/', mountPoint: '/', fsType }], 'linux')).toBe('unknown')
+    }
+    // A btrfs subvolume reports another device in stat than the table lists.
+    expect(aliasCoverage(home, [{ device: '0:9999', root: '/', mountPoint: '/', fsType: 'btrfs' }], 'linux')).toBe('unknown')
+    expect(aliasCoverage(home, [], 'linux')).toBe('unknown')
+    expect(aliasCoverage(join(home, 'missing'), [], 'linux')).toBe('complete')
+    expect(aliasCoverage(home, [], 'darwin')).toBe('complete')
+  })
+
+  it('makes a wrap\'s protection report unknown when the home or an existing denied socket is on such a filesystem', () => {
+    const { root, home } = fixture()
+    const socket = join(root, 'docker.sock')
+    writeFileSync(socket, '')
+    const device = deviceName(statSync(home, { bigint: true }).dev)
+    const settings: ProtectionSettings = { home, readable: [], deniedSockets: [socket] }
+    expect(resolveProtection(settings, [{ device, root: '/', mountPoint: '/', fsType: 'ext4' }], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('complete')
+    expect(resolveProtection(settings, [{ device, root: '/', mountPoint: '/', fsType: 'overlay' }], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('unknown')
+    expect(resolveProtection({ home: undefined, readable: [], deniedSockets: [socket] }, [], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('unknown')
+  })
+
+  it('is reported by the provider and for any path on this host', async () => {
+    const { home } = fixture()
+    const sandbox = await provider({ protectedHome: home })
+    expect(sandbox.aliasCoverage()).toBe(pathAliasCoverage(home))
+    expect((await provider({})).aliasCoverage()).toBe('complete')
   })
 })
 

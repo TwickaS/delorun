@@ -15,6 +15,7 @@ import {
   type RuntimeAnswer,
   type SetupAnswers,
 } from '@delo/contract-setup-answers'
+import type { AliasCoverage } from '@deepseek-ai/dsh-sandbox-local'
 import type { SandboxDialect } from './dialect.ts'
 import { dockerConnectEnforced } from './dialect.ts'
 import { SetupCancelled, type Prompter } from './prompts.ts'
@@ -50,10 +51,11 @@ export function showStatements(prompter: Prompter): void {
  * Ask every question and return the answers.
  * @param prompter - the prompter.
  * @param dialect - the system's sandbox dialect, which decides whether Docker mode carries its label.
+ * @param dockerCoverage - whether the Docker socket's other mounts can be found; when not, Docker mode is labelled.
  * @returns the answers and the typed key.
  * @throws {SetupCancelled} when the person cancels a question or declines the review.
  */
-export async function askAnswers(prompter: Prompter, dialect: SandboxDialect): Promise<InteractiveAnswers> {
+export async function askAnswers(prompter: Prompter, dialect: SandboxDialect, dockerCoverage: AliasCoverage): Promise<InteractiveAnswers> {
   const credential = await prompter.select('Where does the DeepSeek API key come from?', [
     { value: 'prompt', label: 'Enter the key now', hint: 'stored in the home\'s credentials document' },
     { value: 'environment', label: `Read ${SETUP_DEFAULT_CREDENTIAL_VARIABLE} from the environment at each start` },
@@ -61,7 +63,7 @@ export async function askAnswers(prompter: Prompter, dialect: SandboxDialect): P
   let secret: string | undefined
   if (credential === 'prompt') secret = await prompter.secret('DeepSeek API key')
 
-  const runtime = await askRuntime(prompter, dialect)
+  const runtime = await askRuntime(prompter, dialect, dockerCoverage)
 
   const studioAdditions = await prompter.confirm('Turn on the Delo additions to the studio?', SETUP_DEFAULTS.studioAdditions)
   const helpSetUpModels = await prompter.confirm('Help me set up other models?', SETUP_DEFAULTS.helpSetUpModels)
@@ -95,12 +97,13 @@ export async function askAnswers(prompter: Prompter, dialect: SandboxDialect): P
  * cannot enforce `docker-connect`.
  * @param prompter - the prompter.
  * @param dialect - the system's sandbox dialect.
+ * @param dockerCoverage - whether the Docker socket's other mounts can be found.
  * @returns the runtime answer.
  */
-async function askRuntime(prompter: Prompter, dialect: SandboxDialect): Promise<RuntimeAnswer> {
+async function askRuntime(prompter: Prompter, dialect: SandboxDialect, dockerCoverage: AliasCoverage): Promise<RuntimeAnswer> {
   const kind = await prompter.select('Where do commands run?', [
     { value: 'native', label: 'On this computer' },
-    { value: 'docker', label: 'In Docker containers', hint: dockerConnectEnforced(dialect) ? undefined : DOCKER_NOT_ENFORCED_LABEL },
+    { value: 'docker', label: 'In Docker containers', hint: dockerConnectEnforced(dialect, dockerCoverage) ? undefined : DOCKER_NOT_ENFORCED_LABEL },
   ], 'native')
   if (kind === 'native') return { kind: 'native' }
   const shape = await prompter.select('Container shape', DOCKER_SHAPES.map(value => ({ value, label: value })), 'S2')

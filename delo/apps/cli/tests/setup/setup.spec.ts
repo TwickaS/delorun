@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ensureHomeTree, runDirectory } from '@delo/home'
 import { DOCKER_NOT_ENFORCED_LABEL } from '../../src/setup/interactive.ts'
 import { readAnswersDocument, yesAnswers } from '../../src/setup/answers.ts'
-import { dockerConnectEnforced, probeSandboxDialect, type SandboxDialect } from '../../src/setup/dialect.ts'
+import { dockerConnectEnforced, probeDockerAliasCoverage, probeSandboxDialect, type SandboxDialect } from '../../src/setup/dialect.ts'
 import { readProgress, SETUP_STEPS, type SetupStep } from '../../src/setup/progress.ts'
 import { runSetup, type SetupForm, type SetupHooks } from '../../src/setup/index.ts'
 import { SetupCancelled, type Prompter, type PromptOption } from '../../src/setup/prompts.ts'
@@ -168,11 +168,12 @@ describe('setup answers', { timeout: SETUP_TIMEOUT_MS }, () => {
 
   it('labels Docker mode when the dialect cannot enforce docker-connect, and not when it can', async () => {
     const docker: Record<string, string> = { 'Container shape': 'S2', 'Resource preset': 'small' }
-    for (const [dialect, labelled] of [['landlock', true], ['bwrap', false], ['seatbelt', false]] as const) {
-      const root = join(osHome, `docker-${dialect}`, '.delo')
+    const cases = [['landlock', 'complete', true], ['bwrap', 'complete', false], ['seatbelt', 'complete', false], ['bwrap', 'unknown', true]] as const
+    for (const [dialect, dockerCoverage, labelled] of cases) {
+      const root = join(osHome, `docker-${dialect}-${dockerCoverage}`, '.delo')
       await ensureHomeTree(root, PROFILE)
       const asked = scripted({ ...defaultAnswers, 'Where do commands run': 'docker', ...docker })
-      await setup({ kind: 'interactive', prompter: asked.prompter, dialect }, { DEEPSEEK_API_KEY: KEY }, undefined, root)
+      await setup({ kind: 'interactive', prompter: asked.prompter, dialect, dockerCoverage }, { DEEPSEEK_API_KEY: KEY }, undefined, root)
       const option = asked.selects.find(question => question.message.includes('Where do commands run'))?.options.find(entry => entry.value === 'docker')
       expect(option?.hint).toBe(labelled ? DOCKER_NOT_ENFORCED_LABEL : undefined)
     }
@@ -184,9 +185,19 @@ describe('setup answers', { timeout: SETUP_TIMEOUT_MS }, () => {
     expect(dockerConnectEnforced('windows-acl')).toBe(false)
   })
 
-  it('describes Docker without the label only where upstream\'s sandbox profiles express the socket rule', () => {
+  it('describes Docker without the label only where upstream\'s sandbox profiles express the socket rule and its aliases can be found', () => {
     expect(dockerConnectEnforced('bwrap')).toBe(true)
     expect(dockerConnectEnforced('seatbelt')).toBe(true)
+    expect(dockerConnectEnforced('bwrap', 'unknown')).toBe(false)
+  })
+
+  it('reads the Docker sockets\' alias coverage, and treats an unreadable mount table as unknown', () => {
+    const seen: string[] = []
+    expect(probeDockerAliasCoverage('/run/user/1000', (path) => { seen.push(path); return 'complete' })).toBe('complete')
+    expect(seen).toEqual(['/var/run/docker.sock', '/run/user/1000/docker.sock'])
+    expect(probeDockerAliasCoverage(undefined, path => path === '/var/run/docker.sock' ? 'unknown' : 'complete')).toBe('unknown')
+    expect(probeDockerAliasCoverage('', () => { throw new Error('no /proc') })).toBe('unknown')
+    expect(['complete', 'unknown']).toContain(probeDockerAliasCoverage(process.env['XDG_RUNTIME_DIR']))
   })
 
   it('probes the dialect: bwrap when it is on the path on Linux, Landlock otherwise, Seatbelt on macOS', () => {

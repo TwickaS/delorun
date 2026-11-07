@@ -19,6 +19,8 @@ export interface MountEntry {
   readonly root: string
   /** Where it is mounted. */
   readonly mountPoint: string
+  /** The filesystem type, such as `ext4`, `btrfs` or `overlay`. */
+  readonly fsType: string
 }
 
 /** Decode mountinfo's octal escapes (`\040` for a space, `\134` for a backslash). */
@@ -37,8 +39,10 @@ export function parseMountInfo(text: string): MountEntry[] {
   for (const line of text.split('\n')) {
     const fields = line.split(' ')
     const [, , device, root, mountPoint] = fields
-    if (device === undefined || root === undefined || mountPoint === undefined || root.endsWith('//deleted')) continue
-    entries.push({ device, root: unescape(root), mountPoint: unescape(mountPoint) })
+    const separator = fields.indexOf('-')
+    const fsType = separator < 0 ? undefined : fields[separator + 1]
+    if (device === undefined || root === undefined || mountPoint === undefined || fsType === undefined || root.endsWith('//deleted')) continue
+    entries.push({ device, root: unescape(root), mountPoint: unescape(mountPoint), fsType })
   }
   return entries
 }
@@ -90,6 +94,43 @@ function statOf(path: string): BigIntStats | undefined {
   }
 }
 
+/** The deepest mount on `device` whose mount point contains `path`, the last listed among equals. */
+function containingMount(path: string, device: string, mounts: readonly MountEntry[]): MountEntry | undefined {
+  let containing: MountEntry | undefined
+  for (const entry of mounts) {
+    if (entry.device !== device || !pathWithin(path, entry.mountPoint)) continue
+    if (containing === undefined || entry.mountPoint.length >= containing.mountPoint.length) containing = entry
+  }
+  return containing
+}
+
+/**
+ * Filesystem types whose files report a device in `stat` that other mounts of the same data need not share:
+ * btrfs and bcachefs subvolumes each have their own device, and overlayfs layers are reachable through their own
+ * mounts. Aliases of a path on one of them cannot be found by device.
+ */
+export const ALIAS_UNRELIABLE_FILESYSTEMS: readonly string[] = ['btrfs', 'bcachefs', 'overlay']
+
+/** Whether {@link mountAliases} finds every mount alias of a path: `complete`, or `unknown` where it cannot tell. */
+export type AliasCoverage = 'complete' | 'unknown'
+
+/**
+ * Whether the mount aliases of `path` can be found from the mount table. On Linux they cannot when no mount on the
+ * path's `stat` device contains it (the table and `stat` disagree) or when its filesystem is one of
+ * {@link ALIAS_UNRELIABLE_FILESYSTEMS}; a consumer then reports alias coverage as unknown rather than enforced.
+ * @param path - a canonical path.
+ * @param mounts - the mount table.
+ * @param platform - the operating system; off Linux there is no mount table and the result is `complete`.
+ * @returns `complete` when every alias is found, `unknown` otherwise; `complete` for a path that does not exist.
+ */
+export function aliasCoverage(path: string, mounts: readonly MountEntry[], platform: string = process.platform): AliasCoverage {
+  if (platform !== 'linux') return 'complete'
+  const own = statOf(path)
+  if (own === undefined) return 'complete'
+  const containing = containingMount(path, deviceName(own.dev), mounts)
+  return containing === undefined || ALIAS_UNRELIABLE_FILESYSTEMS.includes(containing.fsType) ? 'unknown' : 'complete'
+}
+
 /**
  * The other paths that reach `path`, or a part of it, through another mount of its filesystem: a mount of the path or
  * of a directory above it, and a bind mount of a directory or file inside it. Each candidate is computed from the
@@ -104,11 +145,7 @@ export function mountAliases(path: string, mounts: readonly MountEntry[]): Mount
   const own = statOf(path)
   if (own === undefined) return []
   const device = deviceName(own.dev)
-  let containing: MountEntry | undefined
-  for (const entry of mounts) {
-    if (entry.device !== device || !pathWithin(path, entry.mountPoint)) continue
-    if (containing === undefined || entry.mountPoint.length >= containing.mountPoint.length) containing = entry
-  }
+  const containing = containingMount(path, device, mounts)
   if (containing === undefined) return []
   const inFilesystem = posix.join(containing.root, posix.relative(containing.mountPoint, path))
   const aliases = new Map<string, MountAlias>()

@@ -13,8 +13,8 @@ import { basename, dirname, join } from 'node:path'
 import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-system/landlock-run'
 import { SandboxUnsupportedPolicyError, canonicalPath, pathWithin, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
-import { DATA_VOLUME, firmlinkAliases, mountAliases, readMountTable } from './mounts.ts'
-import type { MountEntry } from './mounts.ts'
+import { DATA_VOLUME, aliasCoverage, firmlinkAliases, mountAliases, readMountTable } from './mounts.ts'
+import type { AliasCoverage, MountEntry } from './mounts.ts'
 
 /** A runner of the local provider's platform chains. */
 export type LocalSandboxRunner = 'bwrap' | 'landlock' | 'seatbelt' | 'windows-acl'
@@ -72,6 +72,12 @@ export interface Protection {
   readonly homeAliasMounts: readonly string[]
   /** The home's readable entries that exist now and lead neither elsewhere inside the home nor above it. */
   readonly readable: readonly ReadableEntry[]
+  /**
+   * Whether every mount alias of the home and of each existing denied socket was found: `unknown` when one lies on
+   * a filesystem whose aliases cannot be found by device ({@link aliasCoverage}), so a consumer reports the rules
+   * that depend on them as unknown rather than enforced.
+   */
+  readonly aliasCoverage: AliasCoverage
   /** Every spelling of every denied socket: as configured, with its directory resolved, fully resolved, and aliased. */
   readonly socketSpellings: readonly string[]
   /** The denied sockets' resolved paths and mount aliases that exist now and lie outside the home, which bwrap shadows. */
@@ -83,6 +89,7 @@ export const NO_PROTECTION: Protection = {
   home: undefined,
   homeAliases: [],
   homeAliasMounts: [],
+  aliasCoverage: 'complete',
   readable: [],
   socketSpellings: [],
   shadowedSockets: [],
@@ -111,6 +118,7 @@ function touches(path: string, protectedPaths: readonly string[]): boolean {
  * @param settings - the provider's validated protection settings.
  * @param mounts - the mount table; read from this process when omitted.
  * @param dataVolume - where macOS mounts the Data volume that firmlinks point into.
+ * @param platform - the operating system, which decides whether alias coverage is checked.
  * @returns the protection the profile builders apply.
  * @throws {SandboxUnsupportedPolicyError} when the Linux mount table cannot be read.
  */
@@ -118,6 +126,7 @@ export function resolveProtection(
   settings: ProtectionSettings,
   mounts: readonly MountEntry[] | undefined = undefined,
   dataVolume: string = DATA_VOLUME,
+  platform: string = process.platform,
 ): Protection {
   if (settings.home === undefined && settings.deniedSockets.length === 0) return NO_PROTECTION
   const table = mounts ?? readMountTable()
@@ -146,6 +155,7 @@ export function resolveProtection(
   }
   const socketSpellings = new Set<string>()
   const shadowedSockets = new Set<string>()
+  const covered = [...home === undefined ? [] : [home], ...settings.deniedSockets.map(socket => canonicalPath(socket))]
   for (const socket of settings.deniedSockets) {
     const real = canonicalPath(socket)
     const aliases = existsSync(real) ? aliasesOf(real) : []
@@ -154,7 +164,15 @@ export function resolveProtection(
       if (!protectedPaths.some(entry => pathWithin(path, entry))) shadowedSockets.add(path)
     }
   }
-  return { home, homeAliases, homeAliasMounts, readable, socketSpellings: [...socketSpellings], shadowedSockets: [...shadowedSockets] }
+  return {
+    home,
+    homeAliases,
+    homeAliasMounts,
+    aliasCoverage: covered.some(path => aliasCoverage(path, table, platform) === 'unknown') ? 'unknown' : 'complete',
+    readable,
+    socketSpellings: [...socketSpellings],
+    shadowedSockets: [...shadowedSockets],
+  }
 }
 
 /**

@@ -19,7 +19,8 @@ import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delo/home'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE, type SetupAnswers } from '@delo/contract-setup-answers'
 import { readAnswersDocument, yesAnswers } from './answers.ts'
-import { probeSandboxDialect, type SandboxDialect } from './dialect.ts'
+import type { AliasCoverage } from '@deepseek-ai/dsh-sandbox-local'
+import { probeDockerAliasCoverage, probeSandboxDialect, type SandboxDialect } from './dialect.ts'
 import { askAnswers, showStatements, statementLines } from './interactive.ts'
 import { readProgress, removeProgress, SETUP_STEPS, writeAnswersRecord, writeProgress, type SetupProgress, type SetupStep } from './progress.ts'
 import { setPatchRow, storeCredential } from './writes.ts'
@@ -30,8 +31,8 @@ const SESSION_LOG_ROW = 'session-log-deepseek'
 
 /** How setup gets its answers. */
 export type SetupForm =
-  /** The questions. Tests pass a prompter and a dialect; a terminal run leaves both to setup. */
-  | { readonly kind: 'interactive'; readonly prompter?: Prompter; readonly dialect?: SandboxDialect }
+  /** The questions. Tests pass a prompter, a dialect and the Docker socket's alias coverage; a terminal run leaves them to setup. */
+  | { readonly kind: 'interactive'; readonly prompter?: Prompter; readonly dialect?: SandboxDialect; readonly dockerCoverage?: AliasCoverage }
   /** Every default, with the model key from the environment. */
   | { readonly kind: 'yes' }
   /** An answers document. */
@@ -113,7 +114,8 @@ async function collectAnswers(form: SetupForm, env: Readonly<Record<string, stri
     return { answers, secret: undefined }
   }
   const dialect = form.dialect ?? probeSandboxDialect(process.platform, process.env['PATH'])
-  const { answers, secret } = await askAnswers(prompterFor(form), dialect)
+  const dockerCoverage = form.dockerCoverage ?? probeDockerAliasCoverage(process.env['XDG_RUNTIME_DIR'])
+  const { answers, secret } = await askAnswers(prompterFor(form), dialect, dockerCoverage)
   return { answers, secret }
 }
 

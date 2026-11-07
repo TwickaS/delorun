@@ -238,6 +238,7 @@ export type RuleReason =
   | 'not-proven-on-platform'
   | 'probe-failed'
   | 'probe-not-run'
+  | 'aliases-unknown'
   | 'no-sandbox'
   | 'full-access'
 
