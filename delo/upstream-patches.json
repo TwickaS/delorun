@@ -2589,7 +2589,7 @@
     {
       "path": "native/system/packages/entry/src/main.c",
       "class": "security",
-      "reason": "Protected home (C1), review of #66: `landlock-run` opens every grant root with `openat2(RESOLVE_NO_SYMLINKS)` instead of `open(O_PATH)`, so a grant path swapped for a symbolic link between the caller's check and the launch fails the run (exit 125, `cannot open rule path`) instead of granting the link's target; the review won a write grant on the home in 1 of 52 races without it. `struct open_how` and the flag are defined locally, as the Landlock UAPI is. Callers must pass resolved paths; sandbox-local does. Stricter only; the CLI contract changes, so the native package family needs a version bump and release note before it ships."
+      "reason": "Protected home (C1), review of #66: `landlock-run` opens every grant root with `openat2(RESOLVE_NO_SYMLINKS)` instead of `open(O_PATH)`, so a grant path swapped for a symbolic link between the caller's check and the launch fails the run (exit 125, `cannot open rule path`) instead of granting the link's target; the review won a write grant on the home in 1 of 52 races without it. `struct open_how` and the flag are defined locally, as the Landlock UAPI is. Callers must pass resolved paths; sandbox-local does. Stricter only; the CLI contract changes, so the native package family moves to 0.2.0 with a release note (lead decision on #66)."
     },
     {
       "path": "native/system/docs/cli-contract.md",
@@ -2605,6 +2605,36 @@
       "path": "packages/sandbox/sandbox-local/src/mounts.ts",
       "class": "security",
       "reason": "Protected home and denied sockets (C1's confinement rules): finds the other paths that reach a protected path: mounts of the same filesystem from `/proc/self/mountinfo` (a mount of the path or a directory above it, or a bind mount of a part of it), each confirmed by device and inode, and the macOS Data-volume firmlink spelling; an unreadable Linux mount table fails the wrap closed. Review of #66 found the home readable through WSLg's `/mnt/wslg/distro` and Docker reachable through Docker Desktop's bind mount of its socket."
+    },
+    {
+      "path": "native/system/package.json",
+      "class": "security",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes."
+    },
+    {
+      "path": "native/system/packages/entry/package.json",
+      "class": "security",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes."
+    },
+    {
+      "path": "native/system/packages/linux-x64/package.json",
+      "class": "security",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes."
+    },
+    {
+      "path": "native/system/packages/linux-arm64/package.json",
+      "class": "security",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes."
+    },
+    {
+      "path": "native/system/packages/darwin-x64/package.json",
+      "class": "security",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes."
+    },
+    {
+      "path": "native/system/packages/darwin-arm64/package.json",
+      "class": "security",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes."
     }
   ],
   "retired": []
