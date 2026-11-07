@@ -19,6 +19,7 @@ import {
   checkRootlessDockerDenied,
   checkWritableRootRefused,
   closeServers,
+  checkSocketDirectoryDenied,
   checkHomeLinkDenied,
   checkHomeMountAliasDenied,
   checkReadableAboveHomeDropped,
@@ -249,6 +250,9 @@ describe.skipIf(!seatbeltUsable)('sandbox-local: the protected home and denied s
   })
   it('home-read-denied: the Data-volume firmlink spelling and a case variant of the home are refused', async () => {
     await checkMacPathVariantsDenied(provider, tempDir)
+  })
+  it('docker-socket-connect-denied: every socket present in a denied socket directory is unreachable', async () => {
+    await checkSocketDirectoryDenied(provider, tempDir, false)
   })
   it('home-socket-connect-denied: a socket under the home is unreachable and a fixture ssh-agent socket is reachable', async () => {
     await checkHomeSocketDenied(provider, tempDir)

@@ -2900,7 +2900,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-sandbox-local`
 
-- `source`: [`packages/sandbox/sandbox-local/src/index.ts:57`](../packages/sandbox/sandbox-local/src/index.ts)
+- `source`: [`packages/sandbox/sandbox-local/src/index.ts:72`](../packages/sandbox/sandbox-local/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config. All optional — `static Config` supplies the defaults. */
@@ -2943,6 +2943,13 @@ export interface Config {
    * resolved at every wrap, and its resolved spellings are denied too.
    */
   deniedSockets?: string[]
+  /**
+   * Absolute paths of directories that hold only sockets confined commands cannot connect to, such as Docker
+   * Desktop's control-socket directories. bwrap hides each one under an empty read-only tmpfs, so a socket created
+   * there later is hidden too; Seatbelt denies each entry present at the wrap by its path; Landlock cannot express it.
+   * Never name a directory that also holds sockets commands need, such as `$XDG_RUNTIME_DIR`.
+   */
+  deniedSocketDirectories?: string[]
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sandbox-local -->
@@ -4358,7 +4365,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-str-replace-editor`
 
 - `inject`: `tools` · `fs`
-- `source`: [`packages/fs/tool-str-replace-editor/src/index.ts:506`](../packages/fs/tool-str-replace-editor/src/index.ts)
+- `source`: [`packages/fs/tool-str-replace-editor/src/index.ts:522`](../packages/fs/tool-str-replace-editor/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for the string-replacement editor tool. */

@@ -48,6 +48,7 @@ Load the sandbox service and mount the provider; the defaults below are the sele
 | `protectedHome` | none | Absolute path of an existing directory, such as the harness home, that confined commands cannot write or read; a `workspace-write` root that overlaps it is refused with `HOME_IN_WRITABLE_ROOT` |
 | `protectedHomeReadable` | `[]` | Paths under `protectedHome`, relative to it, that confined commands may still read and execute; requires `protectedHome` |
 | `deniedSockets` | `[]` | Absolute Unix socket paths that confined commands cannot connect to, on runners that express the rule |
+| `deniedSocketDirectories` | `[]` | Absolute directories that hold only sockets confined commands cannot connect to, such as Docker Desktop's control sockets; bwrap hides each directory, Seatbelt denies each socket present at the wrap |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-sandbox-local) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -86,9 +87,12 @@ A consumer passes absolute paths: the home, the entries under it that commands s
       - /home/me/.delo/run/default/supervisor.sock
       - /var/run/docker.sock
       - /run/docker.sock
+    deniedSocketDirectories:
+      - /mnt/wsl/docker-desktop/shared-sockets/host-services
+      - /mnt/wsl/docker-desktop/shared-sockets/guest-services
 ```
 
-With Docker Desktop on macOS, the denied sockets also name `~/Library/Containers/com.docker.docker/Data/docker.raw.sock`, `~/Library/Containers/com.docker.docker/Data/docker.sock` and `~/.docker/run/docker.sock`, as absolute paths.
+The two socket directories are Docker Desktop's under WSL; `host-services/backend.sock` there is world-writable and controls the engine. With Docker Desktop on Linux the directory is `~/.docker/desktop`, and on macOS `~/Library/Containers/com.docker.docker/Data` and `~/.docker/run`, as absolute paths.
 
 -----
 

@@ -82,6 +82,11 @@ export interface Protection {
   readonly socketSpellings: readonly string[]
   /** The denied sockets' resolved paths and mount aliases that exist now and lie outside the home, which bwrap shadows. */
   readonly shadowedSockets: readonly string[]
+  /**
+   * The denied socket directories' resolved paths and mount aliases that exist now and lie outside the home, which
+   * bwrap hides under an empty read-only tmpfs.
+   */
+  readonly hiddenDirectories: readonly string[]
 }
 
 /** No protected home and no denied socket: every profile is upstream's. */
@@ -93,6 +98,7 @@ export const NO_PROTECTION: Protection = {
   readable: [],
   socketSpellings: [],
   shadowedSockets: [],
+  hiddenDirectories: [],
 }
 
 /** The provider's validated protection settings: the canonical home, its readable entries and the denied sockets. */
@@ -103,6 +109,8 @@ export interface ProtectionSettings {
   readonly readable: readonly string[]
   /** Absolute socket paths. */
   readonly deniedSockets: readonly string[]
+  /** Absolute directories every socket in which is denied. */
+  readonly deniedSocketDirectories: readonly string[]
 }
 
 /** Whether `path` lies inside or above one of the protected paths. */
@@ -120,7 +128,7 @@ function touches(path: string, protectedPaths: readonly string[]): boolean {
  * @param dataVolume - where macOS mounts the Data volume that firmlinks point into.
  * @param platform - the operating system, which decides whether alias coverage is checked.
  * @returns the protection the profile builders apply.
- * @throws {SandboxUnsupportedPolicyError} when the Linux mount table cannot be read.
+ * @throws {SandboxUnsupportedPolicyError} when the Linux mount table or a denied socket directory cannot be read.
  */
 export function resolveProtection(
   settings: ProtectionSettings,
@@ -128,7 +136,8 @@ export function resolveProtection(
   dataVolume: string = DATA_VOLUME,
   platform: string = process.platform,
 ): Protection {
-  if (settings.home === undefined && settings.deniedSockets.length === 0) return NO_PROTECTION
+  const nothing = settings.home === undefined && settings.deniedSockets.length === 0 && settings.deniedSocketDirectories.length === 0
+  if (nothing) return NO_PROTECTION
   const table = mounts ?? readMountTable()
   const aliasesOf = (path: string): string[] => [
     ...mountAliases(path, table).map(alias => alias.path),
@@ -155,7 +164,31 @@ export function resolveProtection(
   }
   const socketSpellings = new Set<string>()
   const shadowedSockets = new Set<string>()
-  const covered = [...home === undefined ? [] : [home], ...settings.deniedSockets.map(socket => canonicalPath(socket))]
+  const hiddenDirectories = new Set<string>()
+  const covered = [
+    ...home === undefined ? [] : [home],
+    ...[...settings.deniedSockets, ...settings.deniedSocketDirectories].map(path => canonicalPath(path)),
+  ]
+  const directorySockets: string[] = []
+  for (const directory of settings.deniedSocketDirectories) {
+    const real = canonicalPath(directory)
+    if (!existsSync(real)) continue
+    for (const path of [real, ...aliasesOf(real)]) {
+      if (!protectedPaths.some(entry => pathWithin(path, entry))) hiddenDirectories.add(path)
+    }
+    // Seatbelt has no directory rule for socket connects, so each entry present now is denied by its path.
+    let entries: string[]
+    try {
+      entries = readdirSync(real)
+    } catch (error) {
+      throw new SandboxUnsupportedPolicyError(`cannot list the denied socket directory ${JSON.stringify(directory)}: ${String(error)}`)
+    }
+    for (const entry of entries) directorySockets.push(join(directory, entry))
+  }
+  for (const socket of directorySockets) {
+    const spellings = [socket, join(canonicalPath(dirname(socket)), basename(socket)), canonicalPath(socket)]
+    for (const spelling of spellings) socketSpellings.add(spelling)
+  }
   for (const socket of settings.deniedSockets) {
     const real = canonicalPath(socket)
     const aliases = existsSync(real) ? aliasesOf(real) : []
@@ -172,14 +205,16 @@ export function resolveProtection(
     readable,
     socketSpellings: [...socketSpellings],
     shadowedSockets: [...shadowedSockets],
+    hiddenDirectories: [...hiddenDirectories],
   }
 }
 
 /**
  * Build the bwrap profile arguments for one file-effect policy. With a protected home, each denied socket and each of
  * its mount aliases outside the home is shadowed by binding `/dev/null` over that one path (never its directory,
- * which holds other sockets), and the home is replaced by an empty tmpfs carrying read-only binds of its readable
- * entries, then remounted read-only; each alias of the home gets an empty read-only tmpfs too.
+ * which holds other sockets), each denied socket directory gets an empty read-only tmpfs, and the home is replaced
+ * by an empty tmpfs carrying read-only binds of its readable entries, then remounted read-only; each alias of the
+ * home gets an empty read-only tmpfs too.
  * @param policy - file-effect policy to express as bwrap mounts.
  * @param protection - the protected home and denied sockets.
  * @returns profile arguments before the trailing separator and command argv.
@@ -191,6 +226,7 @@ export function bwrapProfileArgs(policy: SandboxPolicy, protection: Protection =
     for (const root of workspaceWritableRoots(policy)) args.push('--bind', root, root)
   }
   for (const socket of protection.shadowedSockets) args.push('--ro-bind', '/dev/null', socket)
+  for (const directory of protection.hiddenDirectories) args.push('--tmpfs', directory, '--remount-ro', directory)
   if (protection.home !== undefined) {
     args.push('--tmpfs', protection.home)
     for (const entry of protection.readable) args.push('--ro-bind', entry.source, entry.path)

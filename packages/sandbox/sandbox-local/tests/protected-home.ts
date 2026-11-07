@@ -484,3 +484,59 @@ export async function checkMacPathVariantsDenied(make: ProviderFactory, director
   const open = await make({})
   for (const variant of variants) expect(await probe(open, atHome, 'read', variant)).toBe('ok')
 }
+
+/** Docker Desktop's world-writable engine-control socket under WSL. */
+export const WSL_DOCKER_DESKTOP_BACKEND = '/mnt/wsl/docker-desktop/shared-sockets/host-services/backend.sock'
+
+/**
+ * Why Docker Desktop's WSL backend socket cannot be used on this host, or `undefined` when an unconfined command
+ * connects to it.
+ * @returns the reason, or `undefined`.
+ */
+export function dockerDesktopBackendUnusable(): string | undefined {
+  if (!existsSync(WSL_DOCKER_DESKTOP_BACKEND)) return `no Docker Desktop backend socket at ${WSL_DOCKER_DESKTOP_BACKEND} on this host`
+  const result = spawnSync(process.execPath, ['-e', PROBE, 'connect', WSL_DOCKER_DESKTOP_BACKEND], { encoding: 'utf8', timeout: 10_000 })
+  return result.stdout.trim() === 'ok' ? undefined : `an unconfined connect to ${WSL_DOCKER_DESKTOP_BACKEND} fails on this host`
+}
+
+/**
+ * With Docker Desktop's control-socket directory denied, a confined command cannot connect to its backend socket;
+ * without the denial it connects.
+ * @param make - the provider factory.
+ * @param directory - the fixture directory factory.
+ * @returns completion.
+ */
+export async function checkDockerDesktopBackendDenied(make: ProviderFactory, directory: DirectoryFactory): Promise<void> {
+  const fixture = await homeFixture(directory)
+  const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: fixture.workspace }
+  const denied = await make({ ...protectionConfig(fixture), deniedSocketDirectories: [dirname(WSL_DOCKER_DESKTOP_BACKEND)] })
+  expect(await probe(denied, policy, 'connect', WSL_DOCKER_DESKTOP_BACKEND)).not.toBe('ok')
+  expect(await probe(await make(protectionConfig(fixture)), policy, 'connect', WSL_DOCKER_DESKTOP_BACKEND)).toBe('ok')
+}
+
+/**
+ * Every socket in a denied socket directory is unreachable, while an ssh-agent socket elsewhere stays reachable;
+ * without the denial the directory's socket connects. With `later`, a socket created in the directory after the wrap
+ * is unreachable too, as bwrap hides the whole directory.
+ * @param make - the provider factory.
+ * @param directory - the fixture directory factory.
+ * @param later - whether to check a socket created after the wrap.
+ * @returns completion.
+ */
+export async function checkSocketDirectoryDenied(make: ProviderFactory, directory: DirectoryFactory, later: boolean): Promise<void> {
+  const fixture = await homeFixture(directory)
+  const sockets = join(dirname(fixture.home), 'shared-sockets')
+  mkdirSync(sockets)
+  const backend = await listen(join(sockets, 'backend.sock'))
+  const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: fixture.workspace }
+  const provider = await make({ ...protectionConfig(fixture), deniedSocketDirectories: [sockets] })
+  expect(await probe(provider, policy, 'connect', backend)).not.toBe('ok')
+  expect(await probe(provider, policy, 'connect', fixture.agentSocket)).toBe('ok')
+  if (later) {
+    const confined = await provider.confine([process.execPath, '-e', PROBE, 'connect', join(sockets, 'later.sock'), ''], policy)
+    await listen(join(sockets, 'later.sock'))
+    const { stdout } = await execFileAsync(confined.argv[0] ?? '', confined.argv.slice(1), { encoding: 'utf8', timeout: 30_000 })
+    expect(stdout.trim()).not.toBe('ok')
+  }
+  expect(await probe(await make(protectionConfig(fixture)), policy, 'connect', backend)).toBe('ok')
+}

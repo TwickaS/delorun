@@ -19,6 +19,9 @@ import {
   checkRootlessDockerDenied,
   checkWritableRootRefused,
   closeServers,
+  checkDockerDesktopBackendDenied,
+  checkSocketDirectoryDenied,
+  dockerDesktopBackendUnusable,
   checkHomeLinkDenied,
   checkHomeMountAliasDenied,
   checkReadableAboveHomeDropped,
@@ -215,6 +218,17 @@ describe.skipIf(!bwrapUsable)('sandbox-local: the protected home and denied sock
   })
   it('home-socket-connect-denied: other spellings of a denied socket\'s path are refused too', async () => {
     await checkSocketSpellingsDenied(provider, tempDir)
+  })
+  it('docker-socket-connect-denied: every socket in a denied socket directory is unreachable, including one created after the wrap', async () => {
+    await checkSocketDirectoryDenied(provider, tempDir, true)
+  })
+  it('docker-socket-connect-denied: Docker Desktop\'s backend control socket is unreachable', async (test) => {
+    const unusable = dockerDesktopBackendUnusable()
+    if (unusable !== undefined) {
+      test.skip(`not run: ${unusable}`)
+      return
+    }
+    await checkDockerDesktopBackendDenied(provider, tempDir)
   })
   it('home-socket-connect-denied: a socket under the home is unreachable and a fixture ssh-agent socket is reachable', async () => {
     await checkHomeSocketDenied(provider, tempDir)

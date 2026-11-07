@@ -108,6 +108,13 @@ export interface Config {
    * resolved at every wrap, and its resolved spellings are denied too.
    */
   deniedSockets?: string[]
+  /**
+   * Absolute paths of directories that hold only sockets confined commands cannot connect to, such as Docker
+   * Desktop's control-socket directories. bwrap hides each one under an empty read-only tmpfs, so a socket created
+   * there later is hidden too; Seatbelt denies each entry present at the wrap by its path; Landlock cannot express it.
+   * Never name a directory that also holds sockets commands need, such as `$XDG_RUNTIME_DIR`.
+   */
+  deniedSocketDirectories?: string[]
 }
 
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
@@ -254,6 +261,7 @@ function assertPositiveFinite(name: string, value: number): void {
 function protectionSettings(config: Config): ProtectionSettings {
   const readable = config.protectedHomeReadable as string[]
   const deniedSockets = config.deniedSockets as string[]
+  const deniedSocketDirectories = config.deniedSocketDirectories as string[]
   const configuredHome = config.protectedHome
   if (configuredHome === undefined && readable.length > 0) {
     throw new Error('sandbox-local: protectedHomeReadable requires protectedHome')
@@ -261,7 +269,12 @@ function protectionSettings(config: Config): ProtectionSettings {
   for (const socket of deniedSockets) {
     if (!isAbsolute(socket)) throw new Error(`sandbox-local: deniedSockets entries must be absolute paths: ${JSON.stringify(socket)}`)
   }
-  if (configuredHome === undefined) return { home: undefined, readable: [], deniedSockets }
+  for (const directory of deniedSocketDirectories) {
+    if (!isAbsolute(directory) || normalize(join(directory, '..')) === normalize(directory)) {
+      throw new Error(`sandbox-local: deniedSocketDirectories entries must be absolute paths other than the filesystem root: ${JSON.stringify(directory)}`)
+    }
+  }
+  if (configuredHome === undefined) return { home: undefined, readable: [], deniedSockets, deniedSocketDirectories }
   if (!isAbsolute(configuredHome)) throw new Error(`sandbox-local: protectedHome must be an absolute path: ${JSON.stringify(configuredHome)}`)
   let home: string
   try {
@@ -285,7 +298,7 @@ function protectionSettings(config: Config): ProtectionSettings {
       throw new Error(`sandbox-local: deniedSockets entry ${JSON.stringify(socket)} lies inside the readable entry ${JSON.stringify(entry)}, where commands could reach it`)
     }
   }
-  return { home, readable, deniedSockets }
+  return { home, readable, deniedSockets, deniedSocketDirectories }
 }
 
 /**
@@ -347,6 +360,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     protectedHome: z.string(),
     protectedHomeReadable: z.array(z.string()).default([]),
     deniedSockets: z.array(z.string()).default([]),
+    deniedSocketDirectories: z.array(z.string()).default([]),
   })
 
   /** Test hook (mirrors the bash executors' `internals`). */

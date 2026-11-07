@@ -48,6 +48,7 @@ kind: "package-reference"
 | `protectedHome` | 无 | 受限命令不能写入或读取的现有目录（例如 harness 主目录）的绝对路径；与它重叠的 `workspace-write` 根目录会以 `HOME_IN_WRITABLE_ROOT` 被拒绝 |
 | `protectedHomeReadable` | `[]` | `protectedHome` 下、相对于它的路径，受限命令仍可读取和执行；需要 `protectedHome` |
 | `deniedSockets` | `[]` | 受限命令不能连接的 Unix 套接字绝对路径，在能表达该规则的 runner 上生效 |
+| `deniedSocketDirectories` | `[]` | 只存放受限命令不能连接的套接字的目录的绝对路径，例如 Docker Desktop 的控制套接字目录；bwrap 隐藏整个目录，Seatbelt 拒绝包装时其中存在的每个套接字 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-sandbox-local)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -86,9 +87,12 @@ Seatbelt、bwrap 和 Landlock 在 `workspace-write` 下包含策略显式指定�
       - /home/me/.delo/run/default/supervisor.sock
       - /var/run/docker.sock
       - /run/docker.sock
+    deniedSocketDirectories:
+      - /mnt/wsl/docker-desktop/shared-sockets/host-services
+      - /mnt/wsl/docker-desktop/shared-sockets/guest-services
 ```
 
-在 macOS 上使用 Docker Desktop 时，被拒绝的套接字还要以绝对路径列出 `~/Library/Containers/com.docker.docker/Data/docker.raw.sock`、`~/Library/Containers/com.docker.docker/Data/docker.sock` 与 `~/.docker/run/docker.sock`。
+这两个套接字目录是 WSL 下 Docker Desktop 的目录；其中 `host-services/backend.sock` 对所有用户可写，并控制引擎。在 Linux 上使用 Docker Desktop 时目录为 `~/.docker/desktop`，在 macOS 上为 `~/Library/Containers/com.docker.docker/Data` 与 `~/.docker/run`，均以绝对路径传入。
 
 -----
 
