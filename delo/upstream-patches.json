@@ -2549,12 +2549,12 @@
     {
       "path": "packages/sandbox/sandbox-local/README.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): documents the three Config fields, the per-runner mechanism table, `RUNNER_PROTECTION`, and the Landlock and alias limitations. Also shows the exact configuration a consumer passes (the home, its readable entries, the channel sockets and the Docker socket's configured and real paths) and `ctx.sandbox.protectedHome`. Review of #66: documents aliases, the dropped readable entries, the load-time socket refusal, Docker Desktop's macOS sockets, and recreated sockets as a consumer requirement. Documents alias coverage and the filesystems that hide aliases."
+      "reason": "Protected home and denied sockets (C1's confinement rules): documents the three Config fields, the per-runner mechanism table, `RUNNER_PROTECTION`, and the Landlock and alias limitations. Also shows the exact configuration a consumer passes (the home, its readable entries, the channel sockets and the Docker socket's configured and real paths) and `ctx.sandbox.protectedHome`. Review of #66: documents aliases, the dropped readable entries, the load-time socket refusal, Docker Desktop's macOS sockets, and recreated sockets as a consumer requirement. Documents alias coverage and the filesystems that hide aliases. States that a consumer retries the wrap once after a Landlock run refusal before reporting it (lead decision on #66)."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.zh.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the README.md additions. Also the Chinese counterpart of the consumer configuration example. Review of #66: the Chinese counterpart of those additions. Also the Chinese counterpart of the alias-coverage text."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the README.md additions. Also the Chinese counterpart of the consumer configuration example. Review of #66: the Chinese counterpart of those additions. Also the Chinese counterpart of the alias-coverage text. Also the Chinese counterpart of the retry sentence."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.i18n.yaml",
