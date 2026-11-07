@@ -4,10 +4,12 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { ociImageRef, readImagesRecipe } from '../../src/images/build.ts'
+import { builderProblems, imageDebianPackages, ociImageRef, readImagesRecipe } from '../../src/images/build.ts'
+import { readRecipe } from '../../src/closure/config.ts'
+import { compareOutputs } from '../../src/rebuild/compare.ts'
 import { spdxDocument } from '../../src/sbom/spdx.ts'
 import { scratch } from '../support.ts'
 
@@ -38,13 +40,62 @@ describe('image digests', () => {
     expect(recipe.images.s3.repository).toBe('ghcr.io/delo-run/delo-harness-s3')
   })
 
-  it('describes both images in the SBOM by index digest, descended from the base', () => {
+  it('describes both images in the SBOM by index digest, descended from the base, with their Debian packages', () => {
     const index = `sha256:${'d'.repeat(64)}`
     const document = spdxDocument('0.1.0', 1_793_981_656, { node: { version: '24.22.0', origin: 'https://nodejs.org/dist/v24.22.0' }, pnpm: { version: '11.28.5', integrity: `sha512-${'B'.repeat(86)}==` } }, [], {
       base: `docker.io/library/debian:bookworm-slim@sha256:${'e'.repeat(64)}`,
       images: { s2: { repository: 'ghcr.io/delo-run/delo-workspace-s2', index }, s3: { repository: 'ghcr.io/delo-run/delo-harness-s3', index } },
-    }) as { packages: Array<{ name: string, versionInfo: string }>, relationships: Array<{ relationshipType: string }> }
+      debian: { s2: { 'linux/amd64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'amd64' }], 'linux/arm64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'arm64' }] }, s3: { 'linux/amd64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'amd64' }], 'linux/arm64': [] } },
+    }) as { packages: Array<{ name: string, versionInfo: string, externalRefs?: Array<{ referenceLocator: string }> }>, relationships: Array<{ relationshipType: string }> }
     expect(document.packages.find(item => item.name === 'ghcr.io/delo-run/delo-workspace-s2')?.versionInfo).toBe(index)
+    expect(document.packages.filter(item => item.name === 'base-files').map(item => item.externalRefs?.[0]?.referenceLocator).sort()).toEqual(['pkg:deb/debian/base-files@12.4%2Bdeb12u11?arch=amd64', 'pkg:deb/debian/base-files@12.4%2Bdeb12u11?arch=arm64'])
     expect(document.relationships.filter(item => item.relationshipType === 'DESCENDANT_OF')).toHaveLength(2)
+  })
+})
+
+describe('Debian packages of an image', () => {
+  it('lists the installed packages of the topmost layer carrying a dpkg status', (test) => {
+    const directory = scratch(test)
+    const layout = join(directory, 'layout')
+    mkdirSync(join(layout, 'blobs', 'sha256'), { recursive: true })
+    const rootfs = join(directory, 'rootfs')
+    mkdirSync(join(rootfs, 'var/lib/dpkg'), { recursive: true })
+    writeFileSync(join(rootfs, 'var/lib/dpkg/status'), 'Package: base-files\nStatus: install ok installed\nArchitecture: amd64\nVersion: 12.4+deb12u11\n\nPackage: removed-tool\nStatus: deinstall ok config-files\nArchitecture: amd64\nVersion: 1.0\n\nPackage: bash\nStatus: install ok installed\nArchitecture: amd64\nVersion: 5.2.15-2+b8\n')
+    execFileSync('tar', ['-czf', join(directory, 'layer.tgz'), '-C', rootfs, 'var'])
+    const layer = createHash('sha256').update(readFileSync(join(directory, 'layer.tgz'))).digest('hex')
+    writeFileSync(join(layout, 'blobs', 'sha256', layer), readFileSync(join(directory, 'layer.tgz')))
+    const empty = blob(layout, { note: 'not a tar layer' })
+    const manifest = blob(layout, { schemaVersion: 2, layers: [{ digest: `sha256:${layer}`, mediaType: 'application/vnd.oci.image.layer.v1.tar+gzip' }] })
+    writeFileSync(join(layout, 'index.json'), JSON.stringify({ schemaVersion: 2, manifests: [{ digest: empty }] }))
+    execFileSync('tar', ['-cf', join(directory, 'image.oci.tar'), '-C', layout, 'index.json', 'blobs'])
+    expect(imageDebianPackages(join(directory, 'image.oci.tar'), manifest)).toEqual([
+      { name: 'base-files', version: '12.4+deb12u11', architecture: 'amd64' },
+      { name: 'bash', version: '5.2.15-2+b8', architecture: 'amd64' },
+    ])
+    const bare = blob(layout, { schemaVersion: 2, layers: [{ digest: `sha256:${layer}`, mediaType: 'application/vnd.oci.image.layer.v1.tar+zstd' }] })
+    execFileSync('tar', ['-cf', join(directory, 'image.oci.tar'), '-C', layout, 'index.json', 'blobs'])
+    expect(() => imageDebianPackages(join(directory, 'image.oci.tar'), bare)).toThrow(/neither gzip nor plain tar/u)
+  })
+})
+
+describe('image builder pin', () => {
+  it('refuses a Docker Engine or BuildKit other than toolchain.json pins', () => {
+    const pinned = readRecipe().toolchain.images
+    expect(builderProblems(pinned, pinned)).toEqual([])
+    expect(builderProblems(pinned, { docker: '28.0.0', buildkit: 'v0.20.0' })).toEqual([
+      `Docker Engine 28.0.0 would build the images, but toolchain.json pins ${pinned.docker}`,
+      `BuildKit v0.20.0 would build the images, but toolchain.json pins ${pinned.buildkit}`,
+    ])
+  })
+
+  it('makes the rebuild comparison fail on images files that differ only in the builder that made them', async (test) => {
+    const directory = scratch(test)
+    const image = { repository: 'ghcr.io/delo-run/fixture', index: `sha256:${'a'.repeat(64)}`, platforms: { 'linux/amd64': `sha256:${'b'.repeat(64)}`, 'linux/arm64': `sha256:${'c'.repeat(64)}` } }
+    for (const [name, buildkit] of [['first', 'v0.34.0'], ['second', 'v0.35.0']] as const) {
+      mkdirSync(join(directory, name))
+      writeFileSync(join(directory, name, 'delorun-0.1.0.images.json'), `${JSON.stringify({ s2: image, s3: image, builder: { docker: '29.9.2', buildkit } }, undefined, 2)}\n`)
+    }
+    const comparison = await compareOutputs(join(directory, 'first'), join(directory, 'second'), { ...readRecipe(), images: readImagesRecipe() })
+    expect(comparison.differences).toEqual([{ file: 'delorun-0.1.0.images.json', detail: expect.stringContaining('content differs') as unknown as string }])
   })
 })

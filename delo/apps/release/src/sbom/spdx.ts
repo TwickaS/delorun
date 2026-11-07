@@ -35,6 +35,8 @@ export interface ImageContents {
   readonly base: string
   /** Each image by repository and index digest. */
   readonly images: Readonly<Record<'s2' | 's3', { readonly repository: string, readonly index: string }>>
+  /** Each image's installed Debian packages per OCI platform. */
+  readonly debian: Readonly<Record<'s2' | 's3', Readonly<Record<string, ReadonlyArray<{ readonly name: string, readonly version: string, readonly architecture: string }>>>>>
 }
 
 /** The pinned toolchain parts each closure carries. */
@@ -148,6 +150,13 @@ export function spdxDocument(version: string, epoch: number, toolchain: Toolchai
       const repository = image.repository.slice(image.repository.lastIndexOf('/') + 1)
       packages.set(id, { SPDXID: id, name: image.repository, versionInfo: image.index, downloadLocation: `https://${image.repository}`, filesAnalyzed: false, primaryPackagePurpose: 'CONTAINER', licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION', checksums: [{ algorithm: 'SHA256', checksumValue: image.index.slice('sha256:'.length) }], externalRefs: [{ referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: `pkg:oci/${repository}@${encodeURIComponent(image.index)}?repository_url=${encodeURIComponent(image.repository.slice(0, image.repository.lastIndexOf('/')))}` }] })
       relationships.push({ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: id }, { spdxElementId: id, relationshipType: 'DESCENDANT_OF', relatedSpdxElement: baseId })
+      for (const installed of Object.values(images.debian[name as 's2' | 's3'])) {
+        for (const deb of installed) {
+          const debId = spdxId('deb', `${deb.name}:${deb.architecture}`, deb.version)
+          addPackage(packages, debId, { SPDXID: debId, name: deb.name, versionInfo: deb.version, downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION', externalRefs: [{ referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: `pkg:deb/debian/${encodeURIComponent(deb.name)}@${encodeURIComponent(deb.version)}?arch=${encodeURIComponent(deb.architecture)}` }] })
+          relationships.push({ spdxElementId: id, relationshipType: 'CONTAINS', relatedSpdxElement: debId })
+        }
+      }
       if (name === 's3') {
         for (const archive of archives.filter(item => item.platform === 'linux-x64' || item.platform === 'linux-arm64')) relationships.push({ spdxElementId: id, relationshipType: 'CONTAINS', relatedSpdxElement: spdxId('archive', archive.platform, version) })
       }

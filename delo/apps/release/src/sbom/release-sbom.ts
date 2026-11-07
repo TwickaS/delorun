@@ -12,7 +12,7 @@ import { archiveEntries } from '../archive/inspect.ts'
 import { fileDigest } from '../archive/sink.ts'
 import type { Toolchain } from '../closure/config.ts'
 import { closureFileNames } from '../closure/tree.ts'
-import { imagesName, type ReleaseImages } from '../images/build.ts'
+import { imagesName, type ImagesFile } from '../images/build.ts'
 import { isPackageManifest, spdxDocument, type ArchiveContents, type ImageContents, type NpmPackageEntry } from './spdx.ts'
 
 /** The closure lockfile's path inside a runtime archive. */
@@ -75,7 +75,7 @@ export async function deriveSbomText(directory: string, version: string, toolcha
     epoch = contents.mtime
     archives.push({ platform, name, sha256: (await fileDigest(join(directory, name))).sha256, packages: contents.packages, lockfile: contents.lockfile })
   }
-  const images = present.has(imagesName(version)) ? imageContents(JSON.parse(await readFile(join(directory, imagesName(version)), 'utf8')) as ReleaseImages, base) : undefined
+  const images = present.has(imagesName(version)) ? imageContents(JSON.parse(await readFile(join(directory, imagesName(version)), 'utf8')) as ImagesFile, base) : undefined
   const document = spdxDocument(version, epoch, { node: { version: toolchain.node.version, origin: toolchain.node.origin }, pnpm: { version: toolchain.pnpm.version, integrity: toolchain.pnpm.integrity } }, archives, images)
   return `${JSON.stringify(document, undefined, 2)}\n`
 }
@@ -96,6 +96,7 @@ export async function writeReleaseSbom(directory: string, version: string, toolc
   return sbomName(version)
 }
 
-function imageContents(images: ReleaseImages, base: string): ImageContents {
-  return { base, images: { s2: { repository: images.s2.repository, index: images.s2.index }, s3: { repository: images.s3.repository, index: images.s3.index } } }
+function imageContents(images: ImagesFile, base: string): ImageContents {
+  if (images.debian === undefined) throw new Error('the images file lists no Debian packages; build-images.ts writes them')
+  return { base, images: { s2: { repository: images.s2.repository, index: images.s2.index }, s3: { repository: images.s3.repository, index: images.s3.index } }, debian: images.debian }
 }

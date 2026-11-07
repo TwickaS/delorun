@@ -253,7 +253,7 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   } catch (error) {
     throw new SigningRefusal(`signing refuses: ${imagesName(draft.version)} does not read: ${(error as Error).message}`)
   }
-  if (canonicalJson(toJsonValue(draft.images)) !== canonicalJson(toJsonValue(built))) {
+  if (canonicalJson(toJsonValue(draft.images)) !== canonicalJson(toJsonValue({ s2: built.s2, s3: built.s3 }))) {
     throw new SigningRefusal(`signing refuses: the draft's images are not the images ${imagesName(draft.version)} records, which the rebuild comparison checked`)
   }
   const recordName = rebuildRecordName(draft.version)

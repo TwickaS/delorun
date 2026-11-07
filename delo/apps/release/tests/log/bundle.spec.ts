@@ -9,12 +9,13 @@ import type { ReleaseLogBundle } from '@delo/contract-release-log'
 import { sha256Hex } from '../../src/brands.ts'
 import { hashedRekordBody, LogVerificationError, verifyBundle } from '../../src/log/bundle.ts'
 import { consistencyProof, leafHash, treeRoot, verifyConsistency } from '../../src/log/merkle.ts'
+import { parseVerifier, splitNote, verifySignature } from '../../src/log/note.ts'
 import { rootFile, throwawayKeys, type Keys } from '../sign/fixture.ts'
 import { LogStandIn, WitnessStandIn } from './standin.ts'
 
 const MANIFEST = Buffer.from('{"signed":{"schema":"delo.release-manifest/1"},"signatures":[]}\n')
 
-function setup(keys: Keys = throwawayKeys()): { log: LogStandIn, witness: WitnessStandIn, root: ReturnType<typeof rootFile>['metadata'], bundle: (note?: (checkpoint: string) => string, manifest?: Buffer) => ReleaseLogBundle } {
+function setup(keys: Keys = throwawayKeys()): { keys: Keys, log: LogStandIn, witness: WitnessStandIn, root: ReturnType<typeof rootFile>['metadata'], bundle: (note?: (checkpoint: string) => string, manifest?: Buffer) => ReleaseLogBundle } {
   const log = new LogStandIn()
   const witness = new WitnessStandIn()
   const root = rootFile(keys, { log: { origin: log.origin, vkey: log.vkey }, witnesses: { keys: [{ name: witness.name, vkey: witness.vkey }], threshold: 1 } }).metadata
@@ -26,8 +27,10 @@ function setup(keys: Keys = throwawayKeys()): { log: LogStandIn, witness: Witnes
     log.append(Buffer.from('a later entry'))
     return log.bundle(index, { name: 'delorun-0.1.0.manifest.json', sha256: sha256Hex(digest) }, note(log.checkpoint()))
   }
-  return { log, witness, root, bundle }
+  return { keys, log, witness, root, bundle }
 }
+
+const DIGEST = createHash('sha256').update(MANIFEST).digest('hex')
 
 function failure(run: () => unknown): string | undefined {
   try {
@@ -83,6 +86,54 @@ describe('release-log bundle', () => {
     const good = bundle()
     const forged = other.checkpoint().replace(other.origin, root.log.origin)
     expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', { ...good, checkpoint: witness.cosign(forged, 1) }))).toBe('log-signature-invalid')
+  })
+})
+
+describe('release-log bundle checks, each on its own', () => {
+  it('refuses a bundle that names another manifest digest than the manifest verified', () => {
+    const { root, bundle } = setup()
+    const good = bundle()
+    expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', { ...good, manifest: { ...good.manifest, sha256: sha256Hex('0'.repeat(64)) } }))).toBe('manifest-digest-mismatch')
+  })
+
+  it('refuses an entry whose hashedrekord names another digest, though its signature covers the manifest', () => {
+    const { keys, log, witness, root } = setup()
+    const pem = createPublicKey(keys.targets).export({ format: 'pem', type: 'spki' }).toString()
+    const index = log.append(hashedRekordBody('1'.repeat(64), sign(null, MANIFEST, keys.targets), pem))
+    const bundle = log.bundle(index, { name: 'delorun-0.1.0.manifest.json', sha256: sha256Hex(DIGEST) }, witness.cosign(log.checkpoint(), 1_793_981_700))
+    expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', bundle))).toBe('manifest-digest-mismatch')
+  })
+
+  it('refuses an entry carrying the targets key with a signature over other bytes', () => {
+    const { keys, log, witness, root } = setup()
+    const pem = createPublicKey(keys.targets).export({ format: 'pem', type: 'spki' }).toString()
+    const index = log.append(hashedRekordBody(DIGEST, sign(null, Buffer.from('other bytes'), keys.targets), pem))
+    const bundle = log.bundle(index, { name: 'delorun-0.1.0.manifest.json', sha256: sha256Hex(DIGEST) }, witness.cosign(log.checkpoint(), 1_793_981_700))
+    expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', bundle))).toBe('entry-signature-invalid')
+  })
+
+  it('refuses a signed, cosigned checkpoint of another tree size than the inclusion proof', () => {
+    const { log, witness, root, bundle } = setup()
+    const good = bundle()
+    log.append(Buffer.from('an entry after the proof'))
+    expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', { ...good, checkpoint: witness.cosign(log.checkpoint(), 1_793_981_700) }))).toBe('log-signature-invalid')
+  })
+
+  it('refuses a checkpoint that only a witness signed', () => {
+    const { log, root, bundle } = setup()
+    const good = bundle()
+    const withoutLog = good.checkpoint.split('\n').filter(line => !line.startsWith(`— ${log.origin} `)).join('\n')
+    expect(withoutLog).not.toBe(good.checkpoint)
+    expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', { ...good, checkpoint: withoutLog }))).toBe('log-signature-invalid')
+  })
+
+  it('does not accept a valid signature under a key hash other than the verifier key\'s', () => {
+    const { log } = setup()
+    const note = splitNote(log.checkpoint())
+    const line = note.signatures[0]!
+    const verifier = parseVerifier(log.vkey)
+    expect(verifySignature(verifier, note.body, line)).toBe(true)
+    expect(verifySignature(verifier, note.body, { ...line, keyHash: Buffer.alloc(line.keyHash.byteLength) })).toBe(false)
   })
 })
 

@@ -82,7 +82,7 @@
 签名在目标密钥持有者的机器上、CI 之外进行，发生于发布工作流已从标签 `v<version>` 构建发布、且持有者已完成重建之后：
 
 1. 将草稿发布中发布工作流的文件（包括其 `manifest-draft.json`）下载到某个目录中，例如 `release/`。
-2. 在仓库中检出该标签，用同一配方构建它，并为输出生成证明：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`，然后对同一输出构建镜像：`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --commit v<version> --out rebuild/ --oci rebuild-oci/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`，它会重写证明，使其也覆盖镜像文件与重写后的 SBOM。
+2. 在仓库中检出该标签，用同一配方构建它，并为输出生成证明：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`，然后对同一输出构建镜像：`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out rebuild/ --oci rebuild-oci/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`，它会先检查证明能用该密钥验证通过，且恰好覆盖 `rebuild/` 中的文件，然后保留其提交，把它扩展到镜像文件与重写后的 SBOM；对于并非本机构建写出的目录，它不会生成证明。
 3. 记录重建：`node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --builder <name> --compared-with <workflow run URL>`。它依据该标签处提交的 `rebuild-exceptions.json`，将每个重建文件与发布工作流中同名的文件比较，将记录写入 `release/` 之外的 `--record`，并在比较发现差异时以 1 退出。设置了 `CI` 或 `GITHUB_ACTIONS` 时，它拒绝运行；重建缺少任一平台的归档或文件列表或 SBOM 时，它也拒绝。
 4. 签名：`node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --attestation rebuild.attestation.json --attestation-key ~/.config/delo/rebuild-attestation.key --key <targets.pem>`。
 
@@ -128,12 +128,12 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 
 ## 镜像
 
-`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--commit <rev>] [--attestation-key <file> --attestation <file>]` 紧接在 `build-closure.ts` 之后，对同一输出运行。它为 `images.json` 所列的每个镜像构建 `linux/amd64` 与 `linux/arm64` 两个平台，各自以其按摘要固定的 Debian 基础镜像为基础；构建时使用 BuildKit 的 `rewrite-timestamp`，时间戳取运行时发行包的 `SOURCE_DATE_EPOCH`，不使用缓存，也不生成 provenance 或 SBOM attestation，因为二者的构建时间与调用 id 会使各次构建不同。Dockerfile 按摘要固定其 frontend。
+`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--attestation-key <file> --attestation <file>]` 紧接在 `build-closure.ts` 之后，对同一输出运行。它为 `images.json` 所列的每个镜像构建 `linux/amd64` 与 `linux/arm64` 两个平台，各自以其按摘要固定的 Debian 基础镜像为基础；构建时使用 BuildKit 的 `rewrite-timestamp`，时间戳取运行时发行包的 `SOURCE_DATE_EPOCH`，不使用缓存，也不生成 provenance 或 SBOM attestation，因为二者的构建时间与调用 id 会使各次构建不同。Dockerfile 按摘要固定其 frontend。
 
 - S2 工作区镜像（`images/s2/`）添加空的辅助套接字目录 `/run/delo-helper`。S2 辅助程序与出站代理（egress proxy）尚未包含在其中。
 - S3 harness 镜像（`images/s3/`）添加用户 `delo`（uid 1000）与 `delo-harness`（uid 1001），以及各架构的 Linux 运行时发行包（只读，位于 `/opt/delo/runtime`），并以 `delo-harness` 身份运行。
 
-该命令把各镜像的 OCI 布局写入 `--oci`，并把 `delorun-<version>.images.json` 写入 `--out`。该文件记录每个镜像的仓库，以及其索引与各平台 manifest 的摘要；重建比较会逐字节比较它。当 `--out` 中包含所有平台的运行时发行包时，命令还会重写 SBOM，使其同时描述两个镜像。发布工作流按摘要推送各 OCI 布局，发布 manifest 的 `images` 复制该文件。镜像文件是每次重建与签名比较都必须覆盖的文件之一；草稿的 `images` 与之不同时，签名会拒绝；签名时，SBOM 中的镜像条目依据该发布提交处 `images.json` 所列的基础镜像推导。
+该命令把各镜像的 OCI 布局写入 `--oci`，并把 `delorun-<version>.images.json` 写入 `--out`。该文件记录每个镜像的仓库、其索引与各平台 manifest 的摘要、构建它们的 Docker Engine 与 BuildKit 版本，以及每个镜像各平台已安装的 Debian 包（读取自带有 dpkg status 的最上层）。重建比较会逐字节比较该文件，因此使用其他 Docker 或 BuildKit 版本、或包含其他包的重建都会出现差异；若版本与 `toolchain.json` 的 `images` 固定值不同，命令拒绝构建。当 `--out` 中包含所有平台的运行时发行包时，命令还会重写 SBOM，使其描述两个镜像、基础镜像及其 Debian 包（以 `pkg:deb/debian` purl 表示）。发布工作流按摘要推送各 OCI 布局，发布 manifest 的 `images` 复制该文件中的镜像引用。镜像文件是每次重建与签名比较都必须覆盖的文件之一；草稿的 `images` 与之不同时，签名会拒绝；签名时，SBOM 中的镜像条目依据该发布提交处 `images.json` 所列的基础镜像推导。
 
 ## 发布日志
 
@@ -146,3 +146,6 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 以下发布内容尚未在此构建；每一项归属于所注明的工作包。
 
 - SBOM 尚未描述桌面安装包，它们有待桌面应用（P6，已推迟）。
+- S2 镜像尚未包含 S2 辅助程序与出站代理（WP4.4），S3 镜像尚未在 C9 所指定的路径 `/usr/local/bin/delo-egress-proxy` 包含出站代理（WP4.3）。
+- 发布日志条目与公共 Rekor 的格式不符。Rekor v1（`rekor.sigstore.dev`）与 Rekor v2（`log2025-1.rekor.sigstore.dev`）都拒绝以纯 Ed25519 签名的 `hashedrekord` 条目：v1 只按条目摘要验证预哈希形式的 Ed25519，v2 只在其 `hashedRekordRequestV002` 主体中接受 `PKIX_ED25519_PH` 形式的 Ed25519。Rekor v2 以 Ed25519 签署检查点，此处的 C2SP note 验证器可以读取；Rekor v1 以 ECDSA P-256 签署检查点，此验证器无法读取。契约 C18 规定对 manifest 字节使用纯 Ed25519，因此要与任一日志匹配都需修改 C18（WP3.1 与该契约的所有者）；各规格使用本地替身，针对线上日志检查一次提交是所有者的操作。
+- 镜像尚未带有 seccomp 配置文件条目；该 manifest 字段随 Docker supervisor（#61）一同加入。

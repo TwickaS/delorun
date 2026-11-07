@@ -33,6 +33,8 @@ export const Toolchain = z.strictObject({
   }),
   pnpm: z.strictObject({ version: exactVersion, tarball: z.url({ protocol: /^https$/u }), integrity }),
   native: z.strictObject({ route: z.literal('prebuilt'), compiler: z.string().min(1), linker: z.string().min(1) }),
+  /** The Docker Engine and BuildKit versions that build the S2 and S3 images. */
+  images: z.strictObject({ docker: exactVersion, buildkit: z.string().regex(/^v\d+\.\d+\.\d+$/u, 'a BuildKit version such as v0.34.0') }),
 })
 
 /** {@link Toolchain}'s parsed value. */

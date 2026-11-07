@@ -20,5 +20,9 @@
     "route": "prebuilt",
     "compiler": "none: every native addon is a prebuilt file prebuilt-pins.json lists",
     "linker": "none: every native addon is a prebuilt file prebuilt-pins.json lists"
+  },
+  "images": {
+    "docker": "29.9.2",
+    "buildkit": "v0.34.0"
   }
 }

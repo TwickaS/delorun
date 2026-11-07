@@ -89,3 +89,48 @@ export function attestationProblem(key: Buffer, bytes: Uint8Array, build: Attest
   if (!timingSafeEqual(expected, Buffer.from(parsed.hmac, 'hex'))) return 'its HMAC does not verify with this machine\'s attestation key'
   return undefined
 }
+
+/**
+ * Read an attestation whose HMAC verifies with the key, with the version, commit and outputs it covers.
+ * @param key - the holder's attestation key.
+ * @param bytes - the attestation file.
+ * @returns the attested build.
+ * @throws Error when the file does not read or its HMAC does not verify with the key.
+ */
+export function readAttestation(key: Buffer, bytes: Uint8Array): AttestedBuild {
+  let parsed: z.output<typeof AttestationSchema>
+  try {
+    const result = AttestationSchema.safeParse(parseStrictJson(bytes, 1024 * 1024))
+    if (!result.success) throw new Error(z.prettifyError(result.error).replaceAll('\n', '; '))
+    parsed = result.data
+  } catch (error) {
+    throw new Error(`the attestation is not a rebuild attestation: ${(error as Error).message}`, { cause: error })
+  }
+  const build = { version: parsed.version, commit: parsed.commit, outputs: parsed.outputs }
+  if (!timingSafeEqual(Buffer.from(mac(key, build), 'hex'), Buffer.from(parsed.hmac, 'hex'))) throw new Error('the attestation\'s HMAC does not verify with this machine\'s attestation key')
+  return build
+}
+
+/**
+ * Extend an attested build with the files a later step added or rewrote in the same output directory: every attested
+ * file the step did not rewrite must be unchanged, every file present must be attested or added, and the commit and
+ * version stay the attestation's.
+ * @param prior - the attested build, as {@link readAttestation} returned it.
+ * @param outputs - every file the directory now holds.
+ * @param changed - the names the step may add or rewrite.
+ * @returns the extended build.
+ * @throws Error naming a file the step changed, added or removed outside `changed`.
+ */
+export function extendAttestation(prior: AttestedBuild, outputs: readonly FileRef[], changed: readonly string[]): AttestedBuild {
+  const now = new Map(outputs.map(ref => [ref.name, ref]))
+  for (const ref of prior.outputs) {
+    if (changed.includes(ref.name)) continue
+    const current = now.get(ref.name)
+    if (current === undefined) throw new Error(`${ref.name}, which the attestation covers, is gone`)
+    if (current.length !== ref.length || current.sha256 !== ref.sha256) throw new Error(`${ref.name} is not the file the attestation covers`)
+  }
+  const attested = new Set(prior.outputs.map(ref => ref.name))
+  const unexpected = outputs.filter(ref => !attested.has(ref.name) && !changed.includes(ref.name))
+  if (unexpected.length > 0) throw new Error(`${unexpected.map(ref => ref.name).join(', ')} is neither attested nor written by this step`)
+  return { version: prior.version, commit: prior.commit, outputs }
+}

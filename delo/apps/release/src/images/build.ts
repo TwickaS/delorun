@@ -31,10 +31,112 @@ export const ImagesRecipe = z.strictObject({
 /** {@link ImagesRecipe}'s parsed value. */
 export type ImagesRecipe = z.output<typeof ImagesRecipe>
 
-/** The two images' references, as `delorun-<version>.images.json` holds them. */
+/** The two images' references, as the manifest's `images` holds them. */
 export interface ReleaseImages {
   readonly s2: ImageRef
   readonly s3: ImageRef
+}
+
+/** The Docker Engine and BuildKit versions that built the images. */
+export interface ImageBuilder {
+  readonly docker: string
+  readonly buildkit: string
+}
+
+/** One installed Debian package of an image, as its dpkg status lists it. */
+export interface DebianPackage {
+  readonly name: string
+  readonly version: string
+  readonly architecture: string
+}
+
+/** Each image's installed Debian packages per OCI platform. */
+export type ImageDebianPackages = Readonly<Record<'s2' | 's3', Readonly<Record<'linux/amd64' | 'linux/arm64', readonly DebianPackage[]>>>>
+
+/**
+ * `delorun-<version>.images.json`: both images' references, the builder versions and each image's installed Debian
+ * packages, all of which the rebuild comparison checks byte for byte and the SBOM describes.
+ */
+export interface ImagesFile extends ReleaseImages {
+  readonly builder: ImageBuilder
+  readonly debian: ImageDebianPackages
+}
+
+/**
+ * The installed packages a dpkg status file lists.
+ * @param text - `/var/lib/dpkg/status`.
+ * @returns each package whose status is installed, by name and architecture.
+ */
+export function parseDpkgStatus(text: string): DebianPackage[] {
+  const found: DebianPackage[] = []
+  for (const paragraph of text.split(/\n\s*\n/u)) {
+    const fields = new Map<string, string>()
+    for (const line of paragraph.split('\n')) {
+      const match = /^([A-Za-z-]+):\s*(.*)$/u.exec(line)
+      if (match !== null) fields.set(match[1]!, match[2]!)
+    }
+    const name = fields.get('Package')
+    const version = fields.get('Version')
+    const architecture = fields.get('Architecture')
+    if (name === undefined || version === undefined || architecture === undefined || !/\binstalled$/u.test(fields.get('Status') ?? '')) continue
+    found.push({ name, version, architecture })
+  }
+  return found.sort((a, b) => (a.name === b.name ? (a.architecture < b.architecture ? -1 : 1) : a.name < b.name ? -1 : 1))
+}
+
+function blobFromTar(tar: string, value: string): Buffer {
+  const result = spawnSync('tar', ['-xOf', tar, `blobs/sha256/${value.slice('sha256:'.length)}`], { maxBuffer: 2 * 1024 ** 3 })
+  if (result.status !== 0) throw new Error(`${tar} holds no blob ${value}`)
+  return result.stdout
+}
+
+const OciManifest = z.looseObject({ layers: z.array(z.looseObject({ digest: z.string().regex(/^sha256:[0-9a-f]{64}$/u), mediaType: z.string() })).min(1) })
+
+/**
+ * The installed Debian packages of one platform's image in an OCI layout tar: the dpkg status of the topmost layer
+ * that carries `var/lib/dpkg/status`.
+ * @param tar - the OCI layout tar.
+ * @param manifest - the platform manifest's digest.
+ * @returns the installed packages.
+ * @throws Error when no layer carries a dpkg status or a layer's compression is not gzip or none.
+ */
+export function imageDebianPackages(tar: string, manifest: string): DebianPackage[] {
+  const layers = OciManifest.parse(JSON.parse(blobFromTar(tar, manifest).toString('utf8'))).layers
+  for (const layer of [...layers].reverse()) {
+    const compression = layer.mediaType.endsWith('+gzip') || layer.mediaType.endsWith('.gzip') ? ['-z'] : layer.mediaType.endsWith('.tar') ? [] : undefined
+    if (compression === undefined) throw new Error(`${tar} layer ${layer.digest} has media type ${layer.mediaType}, neither gzip nor plain tar`)
+    const status = spawnSync('tar', ['-x', ...compression, '-O', '-f', '-', '--wildcards', '*var/lib/dpkg/status'], { input: blobFromTar(tar, layer.digest), maxBuffer: 256 * 1024 * 1024 })
+    if (status.status === 0 && status.stdout.byteLength > 0) return parseDpkgStatus(status.stdout.toString('utf8'))
+  }
+  throw new Error(`no layer of ${tar} manifest ${manifest} carries var/lib/dpkg/status`)
+}
+
+/**
+ * The Docker Engine and BuildKit versions on this machine: the engine's server version and the BuildKit version of
+ * the `default` builder the images build with.
+ * @returns the versions.
+ * @throws Error when Docker does not answer.
+ */
+export function builderVersions(): ImageBuilder {
+  const docker = spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], { encoding: 'utf8' })
+  const inspect = spawnSync('docker', ['buildx', 'inspect', 'default'], { encoding: 'utf8' })
+  if (docker.status !== 0 || inspect.status !== 0) throw new Error(`docker does not answer: ${docker.stderr}${inspect.stderr}`.trim())
+  const buildkit = /^BuildKit version:\s*(\S+)$/mu.exec(inspect.stdout)?.[1]
+  if (buildkit === undefined) throw new Error('docker buildx inspect default names no BuildKit version')
+  return { docker: docker.stdout.trim(), buildkit }
+}
+
+/**
+ * Why this machine's builder differs from the pinned one.
+ * @param pinned - `toolchain.json`'s `images`.
+ * @param actual - this machine's versions.
+ * @returns one message per difference; empty when they match.
+ */
+export function builderProblems(pinned: ImageBuilder, actual: ImageBuilder): string[] {
+  const problems: string[] = []
+  if (actual.docker !== pinned.docker) problems.push(`Docker Engine ${actual.docker} would build the images, but toolchain.json pins ${pinned.docker}`)
+  if (actual.buildkit !== pinned.buildkit) problems.push(`BuildKit ${actual.buildkit} would build the images, but toolchain.json pins ${pinned.buildkit}`)
+  return problems
 }
 
 /** The OCI platforms each image is built for, and the closure platform each carries under S3. */
@@ -132,6 +234,8 @@ export interface ImageBuildRequest {
   readonly version: string
   /** The release's `SOURCE_DATE_EPOCH`. */
   readonly epoch: number
+  /** The builder versions, checked against the pin, which the images file records. */
+  readonly builder: ImageBuilder
 }
 
 /**
@@ -144,6 +248,7 @@ export async function buildImages(request: ImageBuildRequest): Promise<ReleaseIm
   const work = await mkdtemp(join(tmpdir(), 'delo-images-'))
   try {
     const refs: Partial<Record<'s2' | 's3', ImageRef>> = {}
+    const debian: Partial<Record<'s2' | 's3', Record<'linux/amd64' | 'linux/arm64', DebianPackage[]>>> = {}
     for (const name of ['s2', 's3'] as const) {
       const image = request.recipe.images[name]
       const context = join(work, name)
@@ -153,10 +258,13 @@ export async function buildImages(request: ImageBuildRequest): Promise<ReleaseIm
       }
       const tar = join(request.oci, `${name}.oci.tar`)
       buildx(context, request.recipe.base, request.epoch, tar)
-      refs[name] = ociImageRef(tar, image.repository)
+      const ref = ociImageRef(tar, image.repository)
+      refs[name] = ref
+      debian[name] = { 'linux/amd64': imageDebianPackages(tar, ref.platforms['linux/amd64']), 'linux/arm64': imageDebianPackages(tar, ref.platforms['linux/arm64']) }
     }
     const images: ReleaseImages = { s2: refs.s2!, s3: refs.s3! }
-    await writeFile(join(request.out, imagesName(request.version)), `${JSON.stringify(images, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
+    const file: ImagesFile = { ...images, builder: request.builder, debian: { s2: debian.s2!, s3: debian.s3! } }
+    await writeFile(join(request.out, imagesName(request.version)), `${JSON.stringify(file, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
     return images
   } finally {
     // The extracted closure is read-only; its owner makes it writable again so it can be removed.

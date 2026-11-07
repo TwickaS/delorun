@@ -2,57 +2,67 @@
  * Builds the S2 and S3 images after `build-closure.ts`, as part of the same recipe:
  *
  * `node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir>
- * [--commit <rev>] [--attestation-key <file> --attestation <file>]`
+ * [--attestation-key <file> --attestation <file>]`
  *
  * `--out` is the closure build's output, whose Linux archives the S3 image carries and whose entries' mtime is the
  * release's `SOURCE_DATE_EPOCH`; the command writes `delorun-<version>.images.json` there, which the rebuild
  * comparison compares byte for byte, and rewrites the SBOM so it describes both images. The OCI layout tars go to
  * `--oci`, from which the release workflow pushes the images by digest. It needs Docker with BuildKit and emulation
- * for the other architecture. On the targets-key holder's machine, `--attestation-key` and `--attestation` rewrite
- * the attestation `build-closure.ts` wrote so it covers the images file and the rewritten SBOM too; `--commit` (`HEAD`
- * when omitted) is the commit the closures were built from.
+ * for the other architecture. On the targets-key holder's machine, `--attestation-key` and `--attestation` name the
+ * attestation `build-closure.ts` wrote: before building, the command refuses unless its HMAC verifies with the key
+ * and it covers exactly the files in `--out`; afterwards it extends it with the images file and the rewritten SBOM,
+ * keeping its commit, so a directory this machine's build did not write gets no attestation.
  *
  * @module @delo/release/build-images
  */
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
-import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { archiveEntries } from './archive/inspect.ts'
 import { semanticVersion } from './brands.ts'
 import { closureFileNames } from './closure/tree.ts'
 import { readRecipe } from './closure/config.ts'
-import { buildImages, readImagesRecipe } from './images/build.ts'
-import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
-import { commitOf, isWithin, outputRefs } from './rebuild/record.ts'
-import { writeReleaseSbom } from './sbom/release-sbom.ts'
+import { builderProblems, builderVersions, buildImages, imagesName, readImagesRecipe } from './images/build.ts'
+import { attestationText, extendAttestation, readAttestation, readAttestationKey, type AttestedBuild } from './rebuild/attestation.ts'
+import { isWithin, outputRefs } from './rebuild/record.ts'
+import { sbomName, writeReleaseSbom } from './sbom/release-sbom.ts'
 
 async function main(argv: readonly string[]): Promise<number> {
-  const { values } = parseArgs({ args: [...argv], strict: true, options: { 'version': { type: 'string' }, 'out': { type: 'string' }, 'oci': { type: 'string' }, 'commit': { type: 'string', default: 'HEAD' }, 'attestation-key': { type: 'string' }, 'attestation': { type: 'string' } } })
+  const { values } = parseArgs({ args: [...argv], strict: true, options: { 'version': { type: 'string' }, 'out': { type: 'string' }, 'oci': { type: 'string' }, 'attestation-key': { type: 'string' }, 'attestation': { type: 'string' } } })
   try {
     if (values.version === undefined || values.out === undefined || values.oci === undefined) throw new Error('pass --version <version>, --out <dir> and --oci <dir>')
     const version = semanticVersion(values.version)
     const out = resolve(values.out)
     if ((values['attestation-key'] === undefined) !== (values.attestation === undefined)) throw new Error('pass --attestation-key and --attestation together')
     const attestationKey = values['attestation-key'] === undefined ? undefined : readAttestationKey(resolve(values['attestation-key']))
+    const attestationPath = values.attestation === undefined ? undefined : resolve(values.attestation)
+    let attested: AttestedBuild | undefined
+    if (attestationKey !== undefined && attestationPath !== undefined) {
+      if (isWithin(attestationPath, out)) throw new Error(`the attestation ${attestationPath} lies in ${out}`)
+      attested = readAttestation(attestationKey, readFileSync(attestationPath))
+      if (attested.version !== version) throw new Error(`the attestation covers release ${attested.version}, not ${version}`)
+      extendAttestation(attested, await outputRefs(out), [])
+    }
     const entries = archiveEntries(join(out, closureFileNames(version, 'linux-x64').archive), 'tar.gz')
     const first = await entries.next()
     await entries.return(undefined)
     if (first.done === true) throw new Error('the linux-x64 closure holds no entry')
     await mkdir(resolve(values.oci), { recursive: true })
-    const images = await buildImages({ recipe: readImagesRecipe(), out, oci: resolve(values.oci), version, epoch: first.value.mtime })
+    const builder = builderVersions()
+    const problems = builderProblems(readRecipe().toolchain.images, builder)
+    if (problems.length > 0) throw new Error(problems.join('\n'))
+    const images = await buildImages({ recipe: readImagesRecipe(), out, oci: resolve(values.oci), version, epoch: first.value.mtime, builder })
     for (const [name, image] of Object.entries(images)) console.log(`build-images: ${name}: ${image.repository}@${image.index}`)
     const complete = RUNTIME_PLATFORMS.every(platform => existsSync(join(out, closureFileNames(version, platform).archive)))
     if (complete) console.log(`build-images: rewrote ${await writeReleaseSbom(out, version, readRecipe().toolchain, readImagesRecipe().base)} with both images`)
     else console.log('build-images: the output does not hold every platform\'s closure, so no SBOM is written')
-    if (attestationKey !== undefined && values.attestation !== undefined) {
-      const path = resolve(values.attestation)
-      if (isWithin(path, out)) throw new Error(`write the attestation outside ${out}`)
-      await writeFile(path, attestationText(attestationKey, { version, commit: commitOf(repositoryRoot(process.cwd()), values.commit), outputs: await outputRefs(out) }), { mode: 0o644 })
-      console.log(`build-images: attested ${out} with the images in ${path}`)
+    if (attestationKey !== undefined && attestationPath !== undefined && attested !== undefined) {
+      const extended = extendAttestation(attested, await outputRefs(out), [imagesName(version), sbomName(version)])
+      await writeFile(attestationPath, attestationText(attestationKey, extended), { mode: 0o644 })
+      console.log(`build-images: extended the attestation in ${attestationPath} with the images file and the SBOM`)
     }
     return 0
   } catch (error) {

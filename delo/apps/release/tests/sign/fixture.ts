@@ -168,7 +168,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
   const recipe = recipeAt(repo, commit)
   for (const directory of [release, rebuild]) {
-    writeFileSync(join(directory, imagesName(VERSION)), `${JSON.stringify({ s2: image, s3: image }, undefined, 2)}\n`)
+    writeFileSync(join(directory, imagesName(VERSION)), `${JSON.stringify({ s2: image, s3: image, builder: recipe.toolchain.images, debian: { s2: { 'linux/amd64': [], 'linux/arm64': [] }, s3: { 'linux/amd64': [], 'linux/arm64': [] } } }, undefined, 2)}\n`)
     await writeReleaseSbom(directory, VERSION, recipe.toolchain, recipe.images.base)
   }
   const feed = await feedStandIn(test, {})
