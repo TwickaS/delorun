@@ -160,6 +160,16 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
     return openReachListener(this.ctx, this.reach, options)
   }
 
+  /**
+   * Whether a reach listener's dispatcher admitted this Peer, so a page
+   * rendered for it is served under the reach listener's Content Security Policy.
+   * @param peer - the Peer a page speaks for.
+   * @returns true for a Peer a reach dispatcher admitted.
+   */
+  isReachPeer(peer: PeerScope): boolean {
+    return this.reach.peers.has(peer)
+  }
+
   /** Destroy the open reach connections admitted for a session or device. */
   closeReachConnections(match: { readonly sessionId?: string; readonly deviceId?: string }): number {
     return this.reach.closeConnections(match)

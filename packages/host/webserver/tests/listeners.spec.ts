@@ -36,7 +36,7 @@ afterEach(async () => {
 })
 
 /** A webserver on 127.0.0.1 with a handler, resource and upgrade route and a resource fallback, each recording that it ran. */
-async function startServer(): Promise<{ server: WebServer; ran: string[]; peers: (PeerScope | undefined)[] }> {
+async function startServer(): Promise<{ ctx: Context; server: WebServer; ran: string[]; peers: (PeerScope | undefined)[] }> {
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(WebServer, { host: '127.0.0.1', port: 0 })
@@ -64,7 +64,7 @@ async function startServer(): Promise<{ server: WebServer; ran: string[]; peers:
     peers.push(peer)
     return Promise.resolve(new Response('fallback'))
   } })
-  return { server, ran, peers }
+  return { ctx, server, ran, peers }
 }
 
 function address(listener: WebListener): AddressInfo {
@@ -154,6 +154,26 @@ describe('additional listeners', () => {
     await once(socket, 'connect')
     expect(await rawUpgrade(socket, '/socket')).toMatch(/^HTTP\/1\.1 401 /)
     expect(ran).toEqual(['handler', 'assets'])
+  })
+
+  it('renders an index with the pass\'s nonce on every inline element, and without one on the configured listener', async () => {
+    const { ctx, server } = await startServer()
+    server.register({ kind: 'exact', path: '/page', resource: (_request, peer) => Promise.resolve(new Response(
+      server.renderIndex('<html><head></head><body></body></html>', peer ?? PEER),
+    )) })
+    ctx.on('webserver/index-inject', (table) => {
+      table.push({ kind: 'global', name: 'probe', value: 1 }, { kind: 'script', placement: 'body', text: 'void 0' }, { kind: 'style', text: 'b{}' })
+    })
+    const nonces = ['first-nonce', 'second"nonce']
+    const listener = await server.openListener({ id: 'reach-a', bind: { kind: 'loopback' }, gate: () => ({ kind: 'pass', peer: PEER, nonce: nonces.shift() ?? '' }) })
+    const { port } = address(listener)
+    const first = await (await get(port, '/page')).text()
+    expect(first.match(/<(script|style)[^>]*>/g)).toEqual([
+      '<script nonce="first-nonce">', '<style nonce="first-nonce">', '<script nonce="first-nonce">', '<script nonce="first-nonce">',
+    ])
+    // The attribute is escaped, and each response renders with its own nonce.
+    expect(await (await get(port, '/page')).text()).toContain('<script nonce="second&quot;nonce">')
+    expect((await (await get(server.port ?? 0, '/page')).text()).match(/<(script|style)[^>]*>/g)).toEqual(['<script>', '<style>', '<script>', '<script>'])
   })
 
   it('answers 500 and dispatches nothing when the gate throws', async () => {

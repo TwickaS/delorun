@@ -60,7 +60,7 @@ const MOTION_TAIL_MS = 800
  */
 export function ChatView({
   useSession, useChat, useConversation, useSessions, renderSlot,
-  sessionId, openFile, openExternalLink, resolveFilePath, useContextMenu,
+  sessionId, openFile, openExternalLink, resolveFilePath, useContextMenu, remoteImagePlaceholders,
   loadOlder, loadThrough, loadImage, inspectCall, chatScroll, forkAt,
   usePresentation, useProjection, useInteractionIds, dispatchInteraction, t, fileDrag,
 }: ChatViewSlotProps) {
@@ -106,6 +106,9 @@ export function ChatView({
       dialog: t('image.dialog'), close: t('image.close'),
     },
   }), [cwd, t, fileDrag, sessionId])
+  const remoteImages = useMemo(() => remoteImagePlaceholders
+    ? { placeholder: (host: string) => t('image.remote', { host }) }
+    : undefined, [remoteImagePlaceholders, t])
   const running = useSession(s => s.running)
   // Fold transitions run while a Turn is live, while an input is pending, and briefly after settling.
   const [motionTail, setMotionTail] = useState(false)
@@ -248,6 +251,7 @@ export function ChatView({
               openFile={requestOpenFile}
               openExternalLink={openExternalLink}
               fileImages={fileImages}
+              remoteImages={remoteImages}
             >
               {renderSlot('conversation.chat.flow', {
                 entries, pendingInputs, lastInputTurn, deferCollapse,

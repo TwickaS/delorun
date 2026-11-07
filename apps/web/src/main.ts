@@ -1,4 +1,8 @@
-/** Browser entry for the Web client. */
+/**
+ * Browser entry for the Web client. The page policy module comes first, so it
+ * applies before any module creates a style or parses a value.
+ */
+import '@deepseek-ai/dsh-client-web/page-policy'
 import '@deepseek-ai/dsh-client-ui-theme/brand-font.css'
 import { AppWebEntry, applyIndexInjections } from '@deepseek-ai/dsh-client-web'
 

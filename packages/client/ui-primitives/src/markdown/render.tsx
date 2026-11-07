@@ -81,6 +81,23 @@ function remoteImageUrl(url: string): string | undefined {
   }
 }
 
+/**
+ * The host of an HTTP(S) image URL from an origin other than the page's.
+ * @param url - a displayable image URL.
+ * @returns the host, or `undefined` for the page's own origin and non-HTTP(S) URLs.
+ */
+function foreignHost(url: string): string | undefined {
+  const page = typeof location === 'undefined' ? undefined : location.origin
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
+    return parsed.origin === page ? undefined : parsed.host
+  } catch {
+    // A displayable image URL is absolute; an unparsable one names no host.
+    return undefined
+  }
+}
+
 /** Authenticated Host media routes as the Desktop application addresses them. */
 const DESKTOP_MEDIA_ROUTES = [
   'dsh-app://app/api/file?', 'dsh-app://app/api/plugin-market/detail-file?', 'dsh-app://app/api/plugin-manager/detail-file?',
@@ -682,12 +699,17 @@ function MarkdownImage({ destination, alt, pathImages, streaming, inLink }: {
   streaming: boolean
   inLink: boolean
 }): ReactNode {
-  const { fileImages } = useMarkdownDelegate()
+  const { fileImages, remoteImages } = useMarkdownDelegate()
   const [load] = useState(nextImageLoad)
   const file = streaming ? undefined : parseFileLink(destination)
   const resolved = file === undefined ? undefined : fileImages?.resolve(file.path)
   const src = resolved === undefined ? imageSource(destination, pathImages, load) : freshImageUrl(resolved, load)
   if (src === undefined) return <span className={css.imageAlt}>{alt}</span>
+  const remoteHost = remoteImages === undefined ? undefined : foreignHost(src)
+  if (remoteHost !== undefined) {
+    const label = remoteImages?.placeholder(remoteHost) ?? remoteHost
+    return <span className={css.remoteImage} role="img" aria-label={alt ? `${label}: ${alt}` : label}>{label}</span>
+  }
   return <LoadedMarkdownImage key={src} src={src} alt={alt} destination={destination} preview={inLink ? undefined : fileImages} />
 }
 

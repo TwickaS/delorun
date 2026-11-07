@@ -30,6 +30,18 @@ export interface MarkdownDelegate {
     resourceAddress?: ((path: string) => string) | undefined
     labels: ImageLightboxLabels & { open: string; loading: string; failed: string }
   } | undefined
+  /**
+   * Remote images: when present, an authored HTTP(S) image from another origin
+   * renders as a placeholder naming its host and is never requested.
+   */
+  readonly remoteImages?: {
+    /**
+     * The placeholder's text.
+     * @param host - the image URL's host.
+     * @returns the localized text naming it.
+     */
+    placeholder: (host: string) => string
+  } | undefined
   /** Ordinary HTTP(S) activation; absent handlers retain native anchor behavior. */
   readonly openExternalLink?: MarkdownExternalLinkHandler | undefined
   /**
@@ -59,9 +71,10 @@ export function MarkdownDelegateProvider({
   openFile,
   fileImages,
   getTriggerProps,
+  remoteImages,
 }: MarkdownDelegateProviderProps): ReactNode {
-  const delegate = useMemo(() => ({ openExternalLink, openFile, fileImages, getTriggerProps }),
-    [openExternalLink, openFile, fileImages, getTriggerProps])
+  const delegate = useMemo(() => ({ openExternalLink, openFile, fileImages, getTriggerProps, remoteImages }),
+    [openExternalLink, openFile, fileImages, getTriggerProps, remoteImages])
   return (
     <MarkdownDelegateContext.Provider value={delegate}>
       {children}

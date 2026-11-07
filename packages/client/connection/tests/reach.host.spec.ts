@@ -17,6 +17,7 @@ import {
   Authenticator,
   REACH_REFUSAL_STATUS,
   apply,
+  reachContentSecurityPolicy,
   inject,
   type Admission,
   type ConnectionIndexRequest,
@@ -399,6 +400,69 @@ describe('loopback admission with a provider, beyond the fence', () => {
     expect({ status: refusedConnect.status, cookie: refusedConnect.headers['set-cookie'] }).toEqual({ status: 401, cookie: undefined })
     harness.provider.loopbackPolicy = { listener: 'loopback', scheme: 'http', hostRule: { kind: 'upstream-fence' }, acceptsLaunchToken: true, preLogin: [] }
     expect((await send(harness.loopbackPort, `/connect${token}`, loopback)).status).toBe(302)
+  })
+})
+
+const SECURITY_HEADERS = {
+  'strict-transport-security': 'max-age=31536000',
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+  'cross-origin-opener-policy': 'same-origin',
+  'cross-origin-resource-policy': 'same-origin',
+}
+
+/** The nonce a reach response's policy names, after checking the policy's other directives. */
+function policyNonce(reply: Reply): string {
+  const policy = String(reply.headers['content-security-policy'])
+  const nonce = /'nonce-([A-Za-z0-9_-]{22})'/.exec(policy)?.[1] ?? ''
+  expect(policy).toBe([
+    "default-src 'self'", `script-src 'self' 'nonce-${nonce}'`, `style-src-elem 'self' 'nonce-${nonce}'`,
+    "style-src-attr 'unsafe-inline'", "img-src 'self' data: blob:", "media-src 'self' data:", "font-src 'self' data:",
+    "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'none'",
+    "object-src 'none'", "base-uri 'self'", "form-action 'self'",
+  ].join('; '))
+  expect(reachContentSecurityPolicy(nonce)).toBe(policy)
+  return nonce
+}
+
+describe('reach response headers', () => {
+  it('sends the security headers and a fresh nonce on every response, admitted, pre-login or refused', async () => {
+    const harness = await start()
+    const port = reachPort(harness)
+    const replies = [
+      await send(port, '/exact', { cookie: SESSION }),
+      await send(port, '/auth/sign-in'),
+      await send(port, '/exact'),
+      await send(port, '/exact', { host: 'evil.example' }),
+    ]
+    expect(replies.map(reply => reply.status)).toEqual([200, 200, 401, 421])
+    for (const reply of replies) expect(reply.headers).toMatchObject(SECURITY_HEADERS)
+    const nonces = replies.map(policyNonce)
+    expect(new Set(nonces).size).toBe(nonces.length)
+    expect(await upgrade(port, {})).toMatch(/content-security-policy: default-src 'self'[\s\S]*strict-transport-security: max-age=31536000/)
+  })
+
+  it('marks /auth/ and /api responses no-store', async () => {
+    const harness = await start()
+    const port = reachPort(harness)
+    expect((await send(port, '/auth/sign-in')).headers['cache-control']).toBe('no-store')
+    expect((await send(port, `${API_PATH}/session.list`, { cookie: SESSION })).headers['cache-control']).toBe('no-store')
+    expect((await send(port, '/exact', { cookie: SESSION })).headers['cache-control']).toBeUndefined()
+  })
+
+  it('declares placeholders for remote media only on pages rendered for a Peer a reach listener admitted', async () => {
+    const harness = await start()
+    harness.ctx.webServer.register({ kind: 'exact', path: '/page', resource: (_request, peer) => Promise.resolve(new Response(
+      harness.ctx.webServer.renderIndex('<html><head></head><body></body></html>', peer ?? harness.ctx.connection.browserPeer),
+    )) })
+    const page = await send(reachPort(harness), '/page', { cookie: SESSION })
+    const nonce = policyNonce(page)
+    expect(page.body).toContain(`<script nonce="${nonce}">globalThis["__DSH_REMOTE_MEDIA__"] = "placeholder"</script>`)
+    expect(page.body).not.toMatch(/<script>/)
+    const loopback = await send(harness.loopbackPort, '/page', { host: `127.0.0.1:${String(harness.loopbackPort)}` })
+    expect(loopback.status).toBe(200)
+    expect(loopback.body).not.toContain('__DSH_REMOTE_MEDIA__')
+    expect(loopback.headers['content-security-policy']).toBeUndefined()
   })
 })
 

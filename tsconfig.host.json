@@ -238,6 +238,8 @@
     "apps/web/tests/workflow-run.e2e.ts",
     "apps/web/tests/delo-preset-inspect.e2e.ts",
     "apps/web/tests/delo-privacy-consent.e2e.ts",
+    "apps/web/tests/delo-reach.ts",
+    "apps/web/tests/delo-reach-listener.e2e.ts",
     "apps/web/stress-tests/reasoning-chunks.stress.ts",
     "apps/cli/tests/**/*.ts",
     "apps/plugin-market-generator/tests/**/*.ts",

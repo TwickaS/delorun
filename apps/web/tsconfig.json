@@ -249,7 +249,9 @@
     "tests/pwsh-terminal.e2e.ts",
     "tests/workflow-run.e2e.ts",
     "tests/delo-preset-inspect.e2e.ts",
-    "tests/delo-privacy-consent.e2e.ts"
+    "tests/delo-privacy-consent.e2e.ts",
+    "tests/delo-reach.ts",
+    "tests/delo-reach-listener.e2e.ts"
   ],
   "references": [
     { "path": "../../packages/experimental/auto-review" },

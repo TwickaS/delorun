@@ -123,7 +123,15 @@ export interface ClientTransportHooks {
 interface ClientTransportGlobal {
   __DSH_TRANSPORT__?: ClientTransportHooks
   __DSH_CONNECTION_RECOVERY__?: unknown
+  __DSH_REMOTE_MEDIA__?: unknown
 }
+
+/**
+ * How the page treats images and media from other origins: `placeholder` on
+ * a page a reach listener served, whose Content Security Policy refuses them,
+ * so renderers show a placeholder and never request them; `load` elsewhere.
+ */
+export type RemoteMediaMode = 'load' | 'placeholder'
 
 /** Browser location fields used to classify loopback authority. */
 export interface ConnectionLocation {
@@ -140,6 +148,8 @@ export interface ConnectionInstallOptions {
   readonly recovery?: ConnectionRecoveryConfig
   /** Page location; omit for a non-browser composition. */
   readonly location?: ConnectionLocation
+  /** Remote media handling the Host declared for this page; omission loads remote media. */
+  readonly remoteMedia?: RemoteMediaMode
 }
 
 /**
@@ -155,6 +165,8 @@ export interface ConnectionHandle {
    * ({@link ClientTransportHooks.ownsHost}), or the context is not a browser.
    */
   readonly isLoopback: boolean
+  /** How renderers treat images and media from other origins on this page. */
+  readonly remoteMedia: RemoteMediaMode
   /** Current Remote event generation and the Host facts carried by its opening frame. */
   readonly generation: ConnectionGenerationState
   /** Current recovery lifecycle for connection-specific consumers. */
@@ -272,6 +284,7 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
     interactions,
     openWebSocket: path => openConnectionWebSocket(path, transport?.createWebSocket, transport?.streamBaseUrl),
     isLoopback: transport?.ownsHost === true || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    remoteMedia: options.remoteMedia ?? 'load',
     generation: {
       getSnapshot: () => generation,
       subscribe: (listener) => {
@@ -348,5 +361,6 @@ export function apply(ctx: Context): void {
     ...(transport === undefined ? {} : { transport }),
     recovery: resolveConnectionConfig(globals.__DSH_CONNECTION_RECOVERY__),
     ...(pageLocation === undefined ? {} : { location: pageLocation }),
+    remoteMedia: globals.__DSH_REMOTE_MEDIA__ === 'placeholder' ? 'placeholder' : 'load',
   })
 }

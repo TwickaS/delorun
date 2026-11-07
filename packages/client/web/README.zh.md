@@ -29,6 +29,8 @@ kind: "package-library"
 
 静态应用页面在入口运行前安装 `__DSH_BOOT_READY__`。`run()` 等待期间会立即显示启动页；页面所有者通过 `applyIndexInjections`（也从 `./injections` 导出）应用 Host 注入项，并在所有脚本完成后兑现延迟对象。延迟对象拒绝时显示启动失败；若调用方提供 `run(onFailure)`，则由外部呈现错误并保留加载页。Desktop 使用该回调请求原生恢复。Desktop 与 WebWorker 共享注入解释器；服务端 `tapIndex` HTML 转换仅适用于服务端提供的文档。
 
+在基于 nonce 的内容安全策略（Content Security Policy）下提供的页面，只接受带有该响应 nonce 的 `<style>` 元素，并拒绝字符串求值。在这样的页面上对 `./page-policy` 入口求值后，它把页面第一个带 nonce 的 `<script>` 的 nonce 加到 `document.createElement` 创建的每个 `<style>` 元素上，使插件与库的样式得以生效，并把 zod 切换到 jitless 模式，使 zod 从不尝试字符串求值；`apps/web` 的入口在任何其他模块之前导入它。没有带 nonce 的脚本的页面保持不变。
+
 外壳基础样式会在支持的浏览器中为普通内容自动添加中西文间距。语义化代码以及终端、diff、读取和搜索输出容器会保留源码中的原始间距和列对齐；不支持 `text-autospace` 的浏览器会忽略这两项声明。
 
 Web 和 Desktop 的数学公式渲染要求支持 WOFF2。[Web 构建](../../../apps/web/katex-fonts.ts)以 WOFF2 保留全部 KaTeX 字体样式，并排除 WOFF/TTF 后备格式；任一字体样式缺少 WOFF2 都会使构建失败。字体的字形、字重、样式和布局规则保持不变。

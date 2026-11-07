@@ -302,6 +302,16 @@
   font-style: italic;
 }
 
+/* A remote image the page never requests: a bordered note naming its host. */
+.remoteImage {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
 .image {
   display: block;
   width: auto;

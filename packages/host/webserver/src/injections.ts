@@ -43,8 +43,8 @@ function assertNever(row: never): never {
   throw new Error(`webserver: unknown index injection row ${JSON.stringify(row)}`)
 }
 
-/** Render one row to markup with its placement. */
-function renderRow(row: IndexInjection): { placement: IndexInjectionPlacement; markup: string } {
+/** Render one row to markup with its placement; `open` is the opening tag's attribute text for inline elements. */
+function renderRow(row: IndexInjection, open: string): { placement: IndexInjectionPlacement; markup: string } {
   switch (row.kind) {
     case 'global': {
       // `<` is escaped in JSON so a row-controlled string cannot break out of
@@ -53,16 +53,16 @@ function renderRow(row: IndexInjection): { placement: IndexInjectionPlacement; m
       const value = row.value === undefined
         ? 'undefined'
         : JSON.stringify(row.value).replaceAll('<', '\\u003c')
-      return { placement: 'head', markup: `<script>globalThis[${name}] = ${value}</script>` }
+      return { placement: 'head', markup: `<script${open}>globalThis[${name}] = ${value}</script>` }
     }
     case 'script':
-      return { placement: row.placement, markup: `<script>${row.text}</script>` }
+      return { placement: row.placement, markup: `<script${open}>${row.text}</script>` }
     case 'script-src':
       return { placement: row.placement, markup: `<script src="${escapeHtmlAttribute(row.src)}"></script>` }
     case 'script-preload':
       return { placement: 'head', markup: `<link rel="preload" as="script" href="${escapeHtmlAttribute(row.src)}">` }
     case 'style':
-      return { placement: 'head', markup: `<style>${row.text}</style>` }
+      return { placement: 'head', markup: `<style${open}>${row.text}</style>` }
     case 'html':
       return { placement: row.placement, markup: row.html }
     default:
@@ -83,25 +83,30 @@ function splice(html: string, at: number, markup: string): string {
  * settles it after the last row; the served form below creates and resolves
  * it in one statement, because every row is already in the document text.
  */
-const READY_MARKUP = '<script>(globalThis.__DSH_BOOT_READY__ ??= Promise.withResolvers()).resolve()</script>'
+const READY_SCRIPT = '(globalThis.__DSH_BOOT_READY__ ??= Promise.withResolvers()).resolve()'
 
 /**
  * Render rows into an index.html body: head rows immediately after the
  * opening head tag, body rows immediately after the opening body tag, each
  * group in table order, and the boot-readiness tail after the last body row.
+ * With a `nonce`, every inline `<script>` and `<style>` element a row or the
+ * tail renders carries it as its `nonce` attribute; markup in `html` rows is
+ * placed as written and receives none.
  * @param html - the raw index.html body.
  * @param rows - the collected injection table.
+ * @param nonce - the Content Security Policy nonce of the response, if it has one.
  * @returns the html with every row rendered.
  */
-export function renderIndexInjections(html: string, rows: readonly IndexInjection[]): string {
+export function renderIndexInjections(html: string, rows: readonly IndexInjection[], nonce?: string): string {
+  const open = nonce === undefined ? '' : ` nonce="${escapeHtmlAttribute(nonce)}"`
   let head = ''
   let body = ''
   for (const row of rows) {
-    const rendered = renderRow(row)
+    const rendered = renderRow(row, open)
     if (rendered.placement === 'head') head += rendered.markup
     else body += rendered.markup
   }
-  body += READY_MARKUP
+  body += `<script${open}>${READY_SCRIPT}</script>`
   let out = html
   if (head !== '') {
     const open = /<head(?:\s[^>]*)?>/i.exec(out)

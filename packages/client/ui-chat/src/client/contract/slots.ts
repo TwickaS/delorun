@@ -357,6 +357,8 @@ export interface ChatViewInjected {
   }
   /** Open one HTTP(S) message link at the selected destination, using an external tab if Sidebar Browser is unavailable. */
   openExternalLink: (url: string) => void
+  /** Whether message images from other origins render as placeholders that are never requested, as on a reach listener's page. */
+  remoteImagePlaceholders: boolean
   openFile: (path: string, options?: OpenFileOptions) => Promise<void>
   loadOlder: () => void
   /** Jump loader: page history back through seq; resolves when the window covers it. */

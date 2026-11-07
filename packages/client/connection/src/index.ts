@@ -64,6 +64,7 @@ export {
 } from './authenticator.ts'
 export {
   REACH_REFUSAL_STATUS,
+  reachContentSecurityPolicy,
   type HostConnectionAdmission,
   type ReachListener,
   type ReachListenerOptions,
@@ -157,8 +158,10 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
   )
   ctx.inject(['webServer'], (webCtx) => {
     assertImageBodyCapacity(webCtx, maxRequestBodyBytes)
-    webCtx.on('webserver/index-inject', (table) => {
+    webCtx.on('webserver/index-inject', (table, peer) => {
       table.push({ kind: 'global', name: '__DSH_CONNECTION_RECOVERY__', value: recovery })
+      // A reach listener's policy refuses remote media, so its pages render placeholders instead of requesting it.
+      if (connection.isReachPeer(peer)) table.push({ kind: 'global', name: '__DSH_REMOTE_MEDIA__', value: 'placeholder' })
     })
     const fetchHandler = connection.createSharedFetchHandler(API_PATH)
     const route: WebRoute = {

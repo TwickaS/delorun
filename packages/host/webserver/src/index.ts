@@ -9,6 +9,7 @@
  * also answers in-process reads.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { readFile } from 'node:fs/promises'
 import { createServer, STATUS_CODES } from 'node:http'
 import type { IncomingMessage, OutgoingHttpHeader, OutgoingHttpHeaders, ServerResponse, Server } from 'node:http'
@@ -124,7 +125,9 @@ export interface WebGateRefusal {
  *   replaced, except that `set-cookie` values are added to the route's and a
  *   `content-security-policy` is sent beside the route's, so both apply.
  *   `only` names the one registered route that may answer: any other route,
- *   the fallback, and every upgrade receive `only.refusal`.
+ *   the fallback, and every upgrade receive `only.refusal`. `nonce` is the
+ *   Content Security Policy nonce of the response: an index rendered while
+ *   answering it carries the nonce on every inline element it renders.
  * - `refuse` answers with the refusal; on an upgrade it writes the status line,
  *   headers and body to the socket and closes it.
  */
@@ -133,6 +136,7 @@ export type WebGateDecision =
     readonly kind: 'pass'
     readonly peer?: PeerScope
     readonly headers?: OutgoingHttpHeaders
+    readonly nonce?: string
     readonly only?: {
       readonly route: { readonly kind: WebRouteKind; readonly path: string }
       readonly refusal: WebGateRefusal
@@ -174,6 +178,9 @@ export interface WebListener {
    */
   close(): Promise<void>
 }
+
+/** The nonce of the response being answered, which {@link WebServer.renderIndex} reads. */
+const responseNonce = new AsyncLocalStorage<string>()
 
 /** Bind host of every `loopback` additional listener. */
 const LOOPBACK_LISTENER_HOST = '127.0.0.1'
@@ -884,8 +891,13 @@ export class WebServer extends Service {
           res.end()
         })
       }
-      if (this.gzip === undefined) next()
-      else this.gzip(req, res, next)
+      const nonce = pass?.kind === 'pass' ? pass.nonce : undefined
+      const dispatch = (): void => {
+        if (this.gzip === undefined) next()
+        else this.gzip(req, res, next)
+      }
+      if (nonce === undefined) dispatch()
+      else responseNonce.run(nonce, dispatch)
     }
   }
 
@@ -1052,13 +1064,15 @@ export class WebServer extends Service {
 
   /**
    * Render one index.html body for one Peer: the structured injection table
-   * first, then the raw `tapIndex` transforms over the result.
+   * first, then the raw `tapIndex` transforms over the result. While answering
+   * a request a listener gate passed with a nonce, every inline element the
+   * table renders carries that nonce.
    * @param html - the raw index.html body.
    * @param peer - the Peer the page speaks for.
    * @returns the transformed body.
    */
   renderIndex(html: string, peer: PeerScope): string {
-    return this.applyIndexTaps(renderIndexInjections(html, this.collectIndexInjections(peer)))
+    return this.applyIndexTaps(renderIndexInjections(html, this.collectIndexInjections(peer), responseNonce.getStore()))
   }
 }
 

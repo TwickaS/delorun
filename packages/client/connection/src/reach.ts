@@ -7,7 +7,8 @@
  * @module @deepseek-ai/dsh-client-connection/src/reach
  */
 
-import type { IncomingMessage } from 'node:http'
+import { randomBytes } from 'node:crypto'
+import type { IncomingMessage, OutgoingHttpHeaders } from 'node:http'
 import { BlockList } from 'node:net'
 import type { Duplex } from 'node:stream'
 import type { TLSSocket } from 'node:tls'
@@ -32,6 +33,52 @@ export const REACH_REFUSAL_STATUS = {
 
 /** One refusal code of {@link REACH_REFUSAL_STATUS}. */
 export type ReachRefusalCode = keyof typeof REACH_REFUSAL_STATUS
+
+/** Bytes of randomness in a reach response's Content Security Policy nonce. */
+const NONCE_BYTES = 16
+
+/**
+ * The Content Security Policy of one reach response. It keeps every request
+ * the page makes on its own origin, images to the origin, `data:` and `blob:`
+ * URLs, media to the origin and `data:` URLs, and inline elements to those
+ * carrying the response's nonce. It never allows string evaluation.
+ * @param nonce - the response's nonce, base64url.
+ * @returns the header value.
+ */
+export function reachContentSecurityPolicy(nonce: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'`,
+    `style-src-elem 'self' 'nonce-${nonce}'`,
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "frame-src 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ')
+}
+
+/** The headers every reach response carries, with a fresh nonce; `no-store` also on `/auth/` and `/api` paths. */
+function reachHeaders(pathname: string): { readonly nonce: string; readonly headers: OutgoingHttpHeaders } {
+  const nonce = randomBytes(NONCE_BYTES).toString('base64url')
+  const headers: OutgoingHttpHeaders = {
+    'content-security-policy': reachContentSecurityPolicy(nonce),
+    'strict-transport-security': 'max-age=31536000',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'cross-origin-opener-policy': 'same-origin',
+    'cross-origin-resource-policy': 'same-origin',
+  }
+  if (pathname.startsWith('/auth/') || pathname === '/api' || pathname.startsWith('/api/')) headers['cache-control'] = 'no-store'
+  return { nonce, headers }
+}
 
 /** Prefix of the request headers a reach listener removes before admission, compared in lower case. */
 const IDENTITY_HEADER_PREFIX = 'tailscale-'
@@ -239,16 +286,12 @@ function refusalBody(code: string): string {
   return JSON.stringify({ error: code })
 }
 
-function refusal(status: number, code: string): WebGateRefusal {
+function refusal(status: number, code: string, security: OutgoingHttpHeaders): WebGateRefusal {
   return {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    headers: { ...security, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     body: refusalBody(code),
   }
-}
-
-function refuse(code: ReachRefusalCode): WebGateDecision {
-  return { kind: 'refuse', ...refusal(REACH_REFUSAL_STATUS[code], code) }
 }
 
 /** Which sessions and devices one open reach connection was admitted for. */
@@ -324,6 +367,10 @@ class ReachDispatcher {
   }
 
   gate(request: IncomingMessage, kind: 'request' | 'upgrade'): WebGateDecision {
+    /* v8 ignore next -- node:http always sets url on server requests. */
+    const target = new URL(request.url ?? '/', 'http://reach.invalid')
+    const { nonce, headers: security } = reachHeaders(target.pathname)
+    const refuse = (code: ReachRefusalCode): WebGateDecision => ({ kind: 'refuse', ...refusal(REACH_REFUSAL_STATUS[code], code, security) })
     if (this.stopped) return refuse('NOT_SIGNED_IN')
     removeIdentityHeaders(request)
     const rule = this.rule
@@ -339,8 +386,6 @@ class ReachDispatcher {
     const origin = header(request, 'origin')
     if (origin === undefined ? kind === 'upgrade' : origin !== rule.origin) return refuse('ORIGIN_MISMATCH')
     if (header(request, 'sec-fetch-site') === 'cross-site') return refuse('ORIGIN_MISMATCH')
-    /* v8 ignore next -- node:http always sets url on server requests. */
-    const target = new URL(request.url ?? '/', 'http://reach.invalid')
     if (target.searchParams.has(TOKEN_QUERY)) return refuse('LAUNCH_TOKEN_REFUSED')
     if (target.pathname === CONNECT_PATH) return refuse('CONNECT_REFUSED')
     if (carriesUpstreamCookie(request)) return refuse('UPSTREAM_COOKIE_REFUSED')
@@ -348,20 +393,21 @@ class ReachDispatcher {
     switch (admission.kind) {
       case 'admitted': {
         this.state.requests.set(request, admission.peer)
+        this.state.peers.add(admission.peer)
         this.state.admitted(request.socket, admission)
         // A 101 response is written by the upgrade handler, so a rolled cookie waits for the next HTTP request.
-        if (admission.setCookie === undefined || kind === 'upgrade') return { kind: 'pass', peer: admission.peer }
-        return { kind: 'pass', peer: admission.peer, headers: { 'set-cookie': admission.setCookie } }
+        if (admission.setCookie === undefined || kind === 'upgrade') return { kind: 'pass', peer: admission.peer, nonce, headers: security }
+        return { kind: 'pass', peer: admission.peer, nonce, headers: { ...security, 'set-cookie': admission.setCookie } }
       }
       case 'pre-login': {
         const listed = rule.policy.preLogin.some(route => route.method === admission.route.method && route.path === admission.route.path)
         const route = listed && kind === 'request' ? preLoginTarget(admission.route, request.method, target.pathname) : undefined
         if (route === undefined) return refuse('NOT_SIGNED_IN')
         this.state.requests.set(request, undefined)
-        return { kind: 'pass', only: { route, refusal: refusal(REACH_REFUSAL_STATUS.NOT_SIGNED_IN, 'NOT_SIGNED_IN') } }
+        return { kind: 'pass', nonce, headers: security, only: { route, refusal: refusal(REACH_REFUSAL_STATUS.NOT_SIGNED_IN, 'NOT_SIGNED_IN', security) } }
       }
       case 'refused':
-        return { kind: 'refuse', ...refusal(admission.status, admission.code) }
+        return { kind: 'refuse', ...refusal(admission.status, admission.code, security) }
       default: {
         const unknown: never = admission
         throw new Error(`connection: unknown admission ${JSON.stringify(unknown)}`)
