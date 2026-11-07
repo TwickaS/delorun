@@ -2345,6 +2345,11 @@
       "path": "apps/web/tests/delo-privacy-consent.e2e.ts",
       "class": "delo-feature",
       "reason": "Web e2e driver of Delo's Privacy section: builds @delo/bundle-local, boots the scaffold with it as a profile bundle against a mock DeepSeek API, and turns each upstream opt-in on after consent and off again."
+    },
+    {
+      "path": "apps/web/vite.config.ts",
+      "class": "delo-feature",
+      "reason": "The build title variable DSH_CLIENT_TITLE also names the iOS home-screen title and the built web manifest, so Delo's build sets the product name in every place the page presents it. Default values are unchanged."
     }
   ],
   "retired": []

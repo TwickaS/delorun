@@ -12,6 +12,8 @@
 - `src/fork-boundary.ts` 包含台账的 schema、fork 自有路径与 glob 的匹配器、边界错误以及差异汇总。
 - `src/check-fork-boundary.ts` 是命令行门禁。它读取台账，依据台账检查本仓库，并在传入 `--count` 时打印差异数量。
 - `src/ledger-merge.ts` 是台账的 git 合并驱动。它按 `path` 合并条目，规则见下文的差异台账一节。
+- `src/build-web.ts` 以 Delo 的产品名称构建 web studio 的客户端：除非调用方已设置，否则将 `DSH_CLIENT_TITLE` 设为 `Delo`，通过上游的 `build:web` 并重建 `@deepseek-ai/dsh-client-ui-layout` 的客户端 bundle（它内嵌该标题）。发布流程（WP3.1）设置同一变量。
+- `src/network-log.mjs` 是网络 fixture 用的 Node preload：设置 `NODE_OPTIONS="--import <路径>"` 与 `DELO_NETWORK_LOG` 后，它把进程及其子进程打开的每个 TCP 连接的主机与端口追加写入该文件。
 - `src/rehearse-upstream.ts` 是预演合并。它在临时工作树中合并一个上游标签，并按差异预算检验结果，如下文的预演合并一节所述。
 - `src/check-commits.ts` 是提交标准：Conventional Commits 主题行、DCO 签名，以及一个变更片段或一行 `Changelog: none (<reason>)` 尾注。它以 `--message <file>` 检查单条消息，`commit-msg` 钩子即以这种方式调用它。
 - `src/checks/types.ts` 与 `src/checks/gates/index.ts` 将每个门禁描述为检查运行器执行的一条命令。

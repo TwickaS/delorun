@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,13 +20,30 @@ function escapeHtmlText(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-/** Project the public build title into the initial HTML document. */
+/**
+ * Project the public build title into the initial HTML document, the iOS home-screen title and the built web
+ * manifest's name, so one build variable names the product everywhere the page presents it.
+ */
 function clientDocumentTitle(): Plugin {
-  const title = escapeHtmlText(process.env.DSH_CLIENT_TITLE ?? DEFAULT_CLIENT_TITLE)
+  const rawTitle = process.env.DSH_CLIENT_TITLE ?? DEFAULT_CLIENT_TITLE
+  const title = escapeHtmlText(rawTitle)
+  let outputDirectory = ''
   return {
     name: 'dsh-client-document-title',
+    configResolved(config) {
+      outputDirectory = resolve(config.root, config.build.outDir)
+    },
     transformIndexHtml(html) {
-      return html.replace('<title>DSH Local Build</title>', `<title>${title}</title>`)
+      return html
+        .replace('<title>DSH Local Build</title>', `<title>${title}</title>`)
+        .replace('<meta name="apple-mobile-web-app-title" content="DSH" />', `<meta name="apple-mobile-web-app-title" content="${title}" />`)
+    },
+    async closeBundle() {
+      const path = resolve(outputDirectory, 'manifest.webmanifest')
+      // A build without public assets writes no manifest; there is then nothing to rename.
+      if (!existsSync(path)) return
+      const manifest = JSON.parse(await readFile(path, 'utf8')) as { name?: string, short_name?: string }
+      await writeFile(path, `${JSON.stringify({ ...manifest, name: rawTitle, short_name: rawTitle }, null, 2)}\n`)
     },
   }
 }

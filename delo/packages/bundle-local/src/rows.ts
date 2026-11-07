@@ -52,16 +52,46 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     },
   },
   {
+    id: 'session-telemetry-otel',
+    kind: 'changed',
+    reason: 'Feedback is not sent to DeepSeek\'s collector: the feedback exporter is disabled, because Delo\'s feedback has no DeepSeek destination.',
+    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
+  },
+  {
+    id: 'command-feedback',
+    kind: 'changed',
+    reason: 'The /feedback command is hidden, because it sends through the disabled feedback exporter and Delo has no feedback destination yet.',
+    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
+  },
+  {
     id: 'product-analytics',
     kind: 'changed',
     reason: 'The desktop app\'s analytics is off until the person turns it on, as contract C11 requires; upstream turns it on.',
     parity: { kind: 'as-written', reason: 'C16 keeps Delo\'s value: the replay mounts no desktop Host.' },
   },
   {
+    id: 'ui-settings-account',
+    kind: 'changed',
+    reason: 'The DeepSeek account menu, sign-in dialog and account section are hidden, because the first release has no DeepSeek account service.',
+    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
+  },
+  {
+    id: 'ui-settings-models',
+    kind: 'changed',
+    reason: 'Upstream\'s preview notice is replaced by Delo\'s own notice (welcomeNotice off), and the other onboarding settings keep upstream\'s values.',
+    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
+  },
+  {
+    id: 'ui-message-feedback',
+    kind: 'changed',
+    reason: 'The message feedback surface (Like, Dislike and the dialog) is hidden, for the same reason as command-feedback.',
+    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
+  },
+  {
     id: 'delo-privacy',
     kind: 'added',
-    reason: 'The browser half of this bundle: the Privacy section in Settings, where the person turns each of the two opt-ins on after consent and off again, and the Delo sidebar brand.',
-    parity: { kind: 'disabled', reason: 'Recorded web scenarios compare upstream\'s interface output, which has no Privacy section and shows upstream\'s brand.' },
+    reason: 'The browser half of this bundle: the Privacy section in Settings, the Delo sidebar brand, and Delo\'s own preview notice.',
+    parity: { kind: 'disabled', reason: 'Recorded web scenarios compare upstream\'s interface output, which has no Privacy section, shows upstream\'s brand and shows upstream\'s preview notice.' },
   },
 ]
 

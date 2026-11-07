@@ -1,0 +1,45 @@
+/* Delo's preview notice body: the copy and its one action, inside the shared modal. */
+
+.copy {
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.copy p {
+  margin: 0;
+}
+
+.copy p + p {
+  margin-top: 12px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.primary {
+  min-width: 120px;
+}
+
+.dialog {
+  width: min(600px, 100%);
+  max-height: 100%;
+  padding: 0;
+}
+
+.content {
+  padding: 28px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  color: var(--dsw-alias-label-primary);
+}
+
+.title {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 28px;
+}

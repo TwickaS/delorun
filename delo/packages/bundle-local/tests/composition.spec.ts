@@ -86,17 +86,22 @@ describe('a Delo CLI profile', () => {
     expect(local).toEqual(LOCAL_ROWS.map(row => row.id))
   })
 
-  it('composes no enabled DeepSeek account row, and names no DeepSeek host outside the listed exceptions', () => {
+  it('composes no enabled DeepSeek account row and no DeepSeek host beyond the model API', () => {
     const rows = home.rows(DELO_PROFILE)
-    const enabled = (id: string) => rows.filter(row => row.id === id && row.disabled !== true)
-    expect(enabled('deepseek-account')).toEqual([])
+    expect(rows.filter(row => row.id === 'deepseek-account' && row.disabled !== true)).toEqual([])
     const hosts = new Set<string>()
     for (const row of rows.filter(entry => entry.disabled !== true)) {
       for (const match of text(row).matchAll(/https?:\/\/([a-z0-9.-]*deepseek[a-z0-9.-]*)/gi)) hosts.add(`${String(row.id)} ${String(match[1])}`)
     }
-    // api.deepseek.com is the model provider's API. The feedback exporter is an open decision (see the rebrand PR):
-    // it sends a session-log prefix only when the person sends feedback, and this list records it until the lead decides.
-    expect([...hosts].sort()).toEqual(['session-telemetry-otel dsh-otel-collector.deepseeksvc.com'])
+    // api.deepseek.com is the model provider's API under the person's own key; no other DeepSeek origin is composed.
+    expect([...hosts].filter(entry => !entry.endsWith(' api.deepseek.com'))).toEqual([])
+  })
+
+  it('composes no enabled feedback exporter, feedback surface or account surface', () => {
+    const rows = home.rows(DELO_PROFILE)
+    for (const id of ['session-telemetry-otel', 'command-feedback', 'ui-message-feedback', 'ui-settings-account']) {
+      expect(rows.filter(row => row.id === id && row.disabled !== true), id).toEqual([])
+    }
   })
 
   it('composes upstream\'s web profile except the listed rows', () => {

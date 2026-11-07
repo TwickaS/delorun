@@ -21,6 +21,31 @@
 - id: deepseek-account
   disabled: true
 
+# Feedback goes nowhere outside the machine. Upstream's feedback telemetry exporter sends a session-log prefix to
+# DeepSeek's collector when the person sends feedback, and Delo has no DeepSeek feedback service, so the row is disabled.
+- id: session-telemetry-otel
+  disabled: true
+
+# The /feedback command and the message feedback surface (Like, Dislike and the dialog) send through that exporter.
+# Upstream offers no row that opens an external page, so Delo's composition hides both instead.
+- id: command-feedback
+  disabled: true
+
+- id: ui-message-feedback
+  disabled: true
+
+# The account menu, the sign-in dialog and the account section need DeepSeek's account service, which Delo's
+# composition removes; without this row the More menu shows no Sign in entry.
+- id: ui-settings-account
+  disabled: true
+
+# Upstream's Web preview notice names DeepSeek Harness; Delo shows its own notice from @delo/bundle-local instead.
+# The row keeps upstream's other onboarding settings.
+- id: ui-settings-models
+  config:
+    credentialOnboarding: true
+    welcomeNotice: false
+
 # Desktop analytics is off until the person turns it on (C11). The row keeps
 # the web bundle's `disabled` condition, so it mounts only in the desktop
 # profile; `appVersion` restates the web bundle's value.

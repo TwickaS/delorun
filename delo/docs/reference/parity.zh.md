@@ -73,7 +73,7 @@ Delo 保留上游的 SDK 及其文档化的运行时选择。
 | 桌面分析，Delo 默认值 | `dsh-v0.2.2-rc.1`：开启。本树：在 Delo 的 CLI profile 中关闭，其中 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 将 C16 的变更默认值 `product-analytics.config.enabled` 设为 `false`，并通过其“隐私”分区在同意后开启；上游自身的 profile 保持 `true` | 已构建：C16 变更默认值，没有开关 ID | `delo/packages/bundle-local/tests/privacy-defaults.spec.ts` 与 `privacy-section.client.spec.tsx` |
 | 会话日志上传，上游默认值 | `dsh-v0.2.2-rc.1` 与本树的上游 profile：默认开启。`packages/session/session-log-deepseek/src/index.ts` 第 60 行中 `session-log-deepseek` 的 `enabled` 默认为 `true`，基础 bundle 在 `packages/bundle/base/cordis.patch.yml` 第 43 行挂载该插件 | stock | 人工检查：这两行均符合此描述，且两个文件都没有台账条目。 |
 | 会话日志上传，Delo 默认值 | `dsh-v0.2.2-rc.1`：开启。本树：在 Delo 的 CLI profile 中关闭，其中 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 将 C16 的变更默认值 `session-log-deepseek.config.enabled` 设为 `false`，并通过其“隐私”分区在同意后开启；上游自身的 profile（因而包括录制会话回放）保持插件的默认值 `true` | 已构建：C16 变更默认值，没有开关 ID | `delo/packages/bundle-local/tests/privacy-defaults.spec.ts`、`privacy-section.client.spec.tsx` 与 `apps/web/tests/delo-privacy-consent.e2e.ts` |
-| 基于反馈的 OTel 会话上传 | `dsh-v0.2.2-rc.1` 与本树：基础 bundle 包含一项基于反馈的 OTel 会话上传，适用于所有人与提供方（[CLI 参考](../../../apps/cli/reference/README.zh.md)）；本树对它没有 Delo 修改 | stock | 人工检查：CLI 参考中关于基础 bundle 的段落与其 OTel 段落（第 137 与 139 行），且 `packages/session/session-telemetry-otel` 没有台账条目。 |
+| 基于反馈的 OTel 会话上传 | `dsh-v0.2.2-rc.1` 与本树的上游 profile：基础 bundle 包含一项基于反馈的 OTel 会话上传，适用于所有人与提供方（[CLI 参考](../../../apps/cli/reference/README.zh.md)）。本树的 Delo CLI profile 组合 `session-telemetry-otel`、`command-feedback` 与 `ui-message-feedback` 为禁用或隐藏，因此没有任何反馈离开本机；[`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 将它们设为 C16 的改变默认值 | 已构建：C16 改变默认值，无开关 ID | `delo/packages/bundle-local/tests/composition.spec.ts`（没有已启用的反馈导出器或反馈界面） |
 
 ### web_fetch
 
@@ -101,6 +101,7 @@ Delo 保留上游的 SDK 及其文档化的运行时选择。
 
 | 项目 | `dsh-v0.2.2-rc.1` 与本树 | 状态 | 证据 |
 | --- | --- | --- | --- |
+| 预览提示 | `dsh-v0.2.2-rc.1`：上游的 Web 预览提示点名 DeepSeek Harness。本树的 Delo CLI profile 将其关闭（`welcomeNotice`），并显示来自 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 的 Delo 自己的提示，说明 Delo 是预发布社区分支 | 已构建：C16 改变默认值 `ui-settings-models.config.welcomeNotice` 与组合行 `delo-privacy`，无开关 ID | `delo/packages/bundle-local/tests/notice.client.spec.tsx` 与 `composition.spec.ts` |
 | 侧栏品牌 | `dsh-v0.2.2-rc.1`：侧栏默认品牌是上游的标志与名称（“DSH 本地构建”加构建版本）。本树的 Delo CLI profile 通过 [`@delo/bundle-local`](../../packages/bundle-local/README.zh.md) 的 `delo-privacy` 行，以文字形式显示产品名称、不显示标志；对等组合禁用该行。文档标题是构建设置 `DSH_CLIENT_TITLE`，由 Delo 的构建设定，对等构建不设定 | 已构建：C16 组合行 `delo-privacy`，无开关 ID | `delo/packages/bundle-local/tests/privacy-section.client.spec.tsx`（occupant 注册）与 `parity-switches`（该行保持禁用） |
 | Studio 附加功能 | `dsh-v0.2.2-rc.1`：stock 外观，没有 Delo 的 studio 包；本树有 `@delo/plugin-main-chat`，其 `studioAdditions` 开关默认关闭，且没有任何 bundle 挂载它，同时没有 `@delo/bundle-studio` | 已为主对话构建：`studio_additions`（开关开启场景待录制）；其他 studio 包仍为计划中 | `parity-switches` |
 | 入门预设 | `dsh-v0.2.2-rc.1` 与本树：`standard` 是默认预设（`packages/bundle/web-app/cordis.patch.yml` 第 593 行）。计划中：`ptc`，即 C16 的变更默认值 `agent-preset-registry.config.default` | 计划中：C16 变更默认值；没有开关 ID 或工作包 | 人工检查：第 593 行设定 `standard`，且 C16 变更默认值表列出了计划值。 |

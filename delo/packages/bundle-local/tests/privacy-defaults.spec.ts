@@ -117,9 +117,12 @@ function strings(value: unknown): string[] {
 }
 
 describe('a Delo CLI profile', () => {
-  it('lists the two upstream opt-in rows it turns off, and the account row it removes', () => {
+  it('lists the two upstream opt-in rows it turns off, and the rows it removes or overrides', () => {
     expect(LOCAL_ROWS.filter(row => row.kind === 'changed').map(row => row.id).sort())
-      .toEqual([SETUP_OPT_IN_ROWS.desktopAnalytics, 'deepseek-account', SETUP_OPT_IN_ROWS.sessionLogUpload].sort())
+      .toEqual([
+        SETUP_OPT_IN_ROWS.desktopAnalytics, 'command-feedback', 'deepseek-account', 'session-telemetry-otel',
+        SETUP_OPT_IN_ROWS.sessionLogUpload, 'ui-message-feedback', 'ui-settings-account', 'ui-settings-models',
+      ].sort())
   })
 
   it('default-profile model request carries no dsh_session_log', async () => {

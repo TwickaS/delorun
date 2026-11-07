@@ -18,6 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { SETUP_OPT_IN_ROWS } from '@delo/contract-setup-answers'
 import { DeloBrandMark, DeloBrandName } from './brand.tsx'
+import { DeloNotice, type DeloNoticeInjected } from './DeloNotice.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { OptIn, type OptInSettings } from './opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
@@ -52,8 +53,8 @@ export const OPT_IN_ROWS: Readonly<Record<OptInId, string>> = {
 export const inject = ['slots', 'locale', 'configForms']
 
 /**
- * Register the Privacy section and the Delo sidebar brand. Both come from this bundle's `delo-privacy` row, which the
- * parity composition leaves disabled, so upstream's brand stays in the parity composition.
+ * Register the Privacy section, the Delo sidebar brand, Delo's preview notice. All of them come from this bundle's `delo-privacy` row, which the parity composition leaves disabled,
+ * so upstream's brand and notice stay in the parity composition.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
@@ -63,6 +64,12 @@ export function apply(ctx: Context): void {
       yield ctx.slots.register({ name: 'sidebar.brand.mark' }, DeloBrandMark)
       yield ctx.slots.register({ name: 'sidebar.brand.name' }, DeloBrandName)
     }))
+  ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+    name: 'settings.onboarding',
+    id: 'delo-notice',
+    order: -100,
+    inject: (): DeloNoticeInjected => ({ t: key => t(key) }),
+  }, DeloNotice))
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delo-privacy: section dictionaries')
   const optIns: Record<OptInId, OptIn> = {
     sessionLog: new OptIn(ctx.configForms.get<OptInSettings>(OPT_IN_ROWS.sessionLog)),
