@@ -51,7 +51,7 @@ description: "@delo/home-process 包，供 delorun 与运行时仓库的维护�
 <a id="the-update-handshake"></a>
 ## 更新握手
 
-`UpdateHandshake` 运行 C19 的各阶段，自 `snapshot` 起，在每个阶段开始时将日志 `run/<profile>/update.json` 以模式 0600 写入。同一时间只运行一次更新、准备或回滚（`UPDATE_IN_PROGRESS`）。
+`UpdateHandshake` 运行 C19 的各阶段，自 `snapshot` 起，在每个阶段开始时将日志 `run/<profile>/update.json` 以模式 0600 写入，其中记录更新前 `previous` 指针所指的版本。同一时间只运行一次更新、准备或回滚（`UPDATE_IN_PROGRESS`）。
 
 - **`update.prepare`** 运行运行时仓库（runtime store）的 `checking`、`installing` 与 `reporting` 阶段，返回 `reportId` 与报告，报告保留 600 秒（超时后或应用后，返回 `REPORT_EXPIRED`）。
 - **`update.apply`** 运行 `snapshot`，然后运行 `waiting`：从 `waiting` 开始时起，Host 的 chat 门控以 `UPDATE_PENDING` 拒绝新的轮次。`drain` 最多等待 `drainTimeoutS` 秒，直到运行中的 chat 归零（超时则返回 `DRAIN_TIMEOUT`）；`abort-if-busy` 在有 chat 运行时结束为 `aborted`，原因为 `CHATS_RUNNING`；`cancel` 取消运行中的轮次与任务，并等待它们结束。`update.cancel` 结束尚未开始 `switching` 的更新，`current` 保持不变。
@@ -67,7 +67,7 @@ description: "@delo/home-process 包，供 delorun 与运行时仓库的维护�
 <a id="interrupted-updates"></a>
 ## 中断的更新
 
-断开连接的请求方从不改变正在运行的更新。每次启动时，第 3 步读取被杀死的 home 进程留下的更新日志：若阶段早于 `switching`，或 `current` 仍指向 `from`，则表示没有任何切换，更新日志被删除。若阶段为 `switching` 或 `health-check`，且 `current` 指向本进程正在运行的 `to`，则本次启动自身的 Host 启动即为对 `to` 的健康检查；该检查失败时，本次启动将 `current` 恢复为 `from`（同时 `previous` 指向 `to`），恢复 profile 快照，删除更新日志，使用运行时仓库的命令从 `from` 启动 home 进程，并以 `HEALTH_CHECK_FAILED` 失败。
+断开连接的请求方从不改变正在运行的更新。每次启动时，第 3 步读取被杀死的 home 进程留下的更新日志：若阶段早于 `switching`，或 `current` 仍指向 `from`，则表示没有任何切换，更新日志被删除。若阶段为 `switching` 或 `health-check`，且 `current` 指向本进程正在运行的 `to`，则本次启动自身的 Host 启动即为对 `to` 的健康检查；该检查失败时，本次启动从更新日志恢复两个指针（`current` 恢复为 `from`，`previous` 恢复为更新日志中的 `previous`，更新日志中没有该字段时则删除 `previous`），恢复 profile 快照，删除更新日志，使用运行时仓库的命令从 `from` 启动 home 进程，并以 `HEALTH_CHECK_FAILED` 失败。
 
 <a id="stopping"></a>
 ## 停止

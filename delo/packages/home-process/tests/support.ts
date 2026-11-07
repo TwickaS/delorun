@@ -48,6 +48,9 @@ export const ENTRY = fileURLToPath(new URL('./fixtures/home-entry.ts', import.me
 export const V1 = brandString<RuntimeVersion>('1.0.0')
 export const V2 = brandString<RuntimeVersion>('1.1.0')
 
+/** A version older than both, kept as `previous` before an update. */
+export const V0 = brandString<RuntimeVersion>('0.9.0')
+
 /** How a fixture version's Host behaves, from `runtimes/<version>/fixture.json`. */
 export interface FixtureBehaviour {
   /** Whether its studio listener answers the health request. */
@@ -141,13 +144,15 @@ export class FixtureStore implements RuntimeStore {
   constructor(private readonly home: string, private readonly profile: string) {}
 
   /**
-   * Install the versions and point `current` at the first.
+   * Point `current`, and `previous` when given, at installed versions.
    * @param home - the Delo home.
    * @param current - the version `current` names.
+   * @param previous - the version `previous` names.
    */
-  static async seed(home: string, current: RuntimeVersion): Promise<void> {
+  static async seed(home: string, current: RuntimeVersion, previous?: RuntimeVersion): Promise<void> {
     mkdirSync(join(home, 'runtimes'), { recursive: true, mode: 0o700 })
     await writePointer(home, 'current', current)
+    if (previous !== undefined) await writePointer(home, 'previous', previous)
   }
 
   async pointers(): Promise<RuntimePointers> {
@@ -177,8 +182,9 @@ export class FixtureStore implements RuntimeStore {
 
   async restore(before: RuntimePointers): Promise<void> {
     this.switches.push(`restore:${before.current}`)
-    if (before.previous !== undefined) await writePointer(this.home, 'previous', before.previous)
     await writePointer(this.home, 'current', before.current)
+    if (before.previous !== undefined) await writePointer(this.home, 'previous', before.previous)
+    else rmSync(join(this.home, 'runtimes', 'previous'), { force: true })
   }
 
   homeCommand(version: RuntimeVersion, mode: HomeCommandMode): HomeCommand {

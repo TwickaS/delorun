@@ -113,12 +113,12 @@ An update moves a profile from the running version, `from`, to the target versio
 
 ## Interrupted updates
 
-The home process writes the journal `run/<profile>/update.json`, mode 0600, at the start of each phase from `snapshot` on: `{"v":1,"from":"<version>","to":"<version>","phase":"<phase>","startedAt":"<RFC 3339 UTC time>"}`.
+The home process writes the journal `run/<profile>/update.json`, mode 0600, at the start of each phase from `snapshot` on: `{"v":1,"from":"<version>","to":"<version>","previous":"<version>","phase":"<phase>","startedAt":"<RFC 3339 UTC time>"}`. `previous` is the version [C1](c01-home-layout.md)'s `previous` pointer named before the update, and the field is absent when no `previous` pointer existed.
 
 - **A killed requester.** Killing the terminal or process that sent the request does not stop the update; the home process keeps running and finishes the update or rolls it back.
 - **A killed home process.** Every pointer write is [C1](c01-home-layout.md)'s atomic rename, so `current` always names a whole, installed version. At the next start, step 3 of the start sequence reads the journal:
   - with a phase before `switching`, it removes the journal, and nothing has changed;
-  - with `switching` or `health-check` and `current` naming `to`, the start runs the health check on `to`; when it fails, it restores both pointers to their values before the update, starts again from `from` and logs the rollback;
+  - with `switching` or `health-check` and `current` naming `to`, the start runs the health check on `to`; when it fails, it restores both pointers to their values before the update (`current` to `from`, and `previous` to the journal's `previous`, or removes `previous` when the journal has none), starts again from `from` and logs the rollback;
   - with `current` naming `from`, the start runs `from` and removes the journal.
 - **Installed versions.** A version installed by an interrupted update stays in the store as a non-current version until [C1](c01-home-layout.md)'s retention removes it.
 

@@ -25,7 +25,7 @@ import {
 import type { DeloLogger } from '@delo/logs'
 import { HomeProcessError } from './errors.ts'
 import type { HandoverLine, Successor } from './handover.ts'
-import { removeJournal, writeJournal } from './journal.ts'
+import { removeJournal, writeJournal, type JournalledUpdate } from './journal.ts'
 import type { ChatGate, PreparedRuntime, ProfileSnapshots, RuntimePointers, RuntimeStore } from './seams.ts'
 
 /** What the handshake needs from the home process it runs in. */
@@ -257,7 +257,7 @@ export class UpdateHandshake {
     for (const [id, kept] of this.reports) if (kept.expiresAt <= now) this.reports.delete(id)
   }
 
-  private async phase(update: { readonly from: RuntimeVersion, readonly to: RuntimeVersion, readonly startedAt: string }, phase: UpdatePhase, progress: Progress): Promise<void> {
+  private async phase(update: JournalledUpdate, phase: UpdatePhase, progress: Progress): Promise<void> {
     this.current = { phase, target: update.to }
     await writeJournal(this.subject.journal, update, phase)
     this.subject.logger.info('update phase', { data: { phase, from: update.from, to: update.to } })
@@ -295,9 +295,9 @@ export class UpdateHandshake {
     const { store, snapshots } = this.support
     const from = this.subject.running
     const to = prepared.version
-    const update = { from, to, startedAt: new Date().toISOString() }
     let release: (() => void) | undefined
     let switching = false
+    let update: JournalledUpdate | undefined
     // `update.cancel` ends the update until the switch begins.
     const cancellation = new AbortController()
     this.waiting = cancellation
@@ -310,6 +310,7 @@ export class UpdateHandshake {
     }
     try {
       const before: RuntimePointers = await store.pointers()
+      update = { from, to, previous: before.previous, startedAt: new Date().toISOString() }
       await this.phase(update, 'snapshot', progress)
       await snapshots.save(from, to)
 

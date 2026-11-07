@@ -48,7 +48,7 @@ Confined commands reach neither the channel nor the token where C1's rules hold:
 
 ## The update handshake
 
-`UpdateHandshake` runs C19's phases, writing the journal `run/<profile>/update.json` at mode 0600 at the start of each phase from `snapshot` on. One update, prepare or rollback runs at a time (`UPDATE_IN_PROGRESS`).
+`UpdateHandshake` runs C19's phases, writing the journal `run/<profile>/update.json` at mode 0600 at the start of each phase from `snapshot` on, with the version the `previous` pointer named before the update. One update, prepare or rollback runs at a time (`UPDATE_IN_PROGRESS`).
 
 - **`update.prepare`** runs the store's `checking`, `installing` and `reporting` phases and returns a `reportId` and the report, kept for 600 seconds (`REPORT_EXPIRED` after that or once applied).
 - **`update.apply`** runs `snapshot`, then `waiting`: from its start, the Host's chat gate refuses new turns with `UPDATE_PENDING`. `drain` waits for running chats to reach zero for at most `drainTimeoutS` (`DRAIN_TIMEOUT`), `abort-if-busy` ends `aborted` with `CHATS_RUNNING` when a chat runs, and `cancel` cancels running turns and jobs and waits for them to end. `update.cancel` ends an update that has not begun `switching`, with `current` unchanged.
@@ -62,7 +62,7 @@ The predecessor starts the successor from the target's runtime with the store's 
 
 ## Interrupted updates
 
-A requester that disconnects never changes a running update. At each start, step 3 reads the journal a killed home process left: a phase before `switching`, or `current` still naming `from`, means nothing switched and the journal is removed. With `switching` or `health-check` and `current` naming `to`, which this process runs, the start's own Host boot is the health check of `to`; when it fails, the start restores `current` to `from` (with `previous` naming `to`), restores the profile snapshot, removes the journal, starts a home process from `from` with the store's command and fails with `HEALTH_CHECK_FAILED`.
+A requester that disconnects never changes a running update. At each start, step 3 reads the journal a killed home process left: a phase before `switching`, or `current` still naming `from`, means nothing switched and the journal is removed. With `switching` or `health-check` and `current` naming `to`, which this process runs, the start's own Host boot is the health check of `to`; when it fails, the start restores both pointers from the journal (`current` to `from`, and `previous` to the journal's `previous`, or removes it when the journal has none), restores the profile snapshot, removes the journal, starts a home process from `from` with the store's command and fails with `HEALTH_CHECK_FAILED`.
 
 ## Stopping
 

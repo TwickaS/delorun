@@ -436,15 +436,15 @@ export class HomeProcess implements HandshakeSubject {
   }
 
   /**
-   * After a failed start that was finishing an interrupted update: restore the pointers to `from`, restore the
-   * profile snapshot, and start a home process on `from`.
+   * After a failed start that was finishing an interrupted update: restore both pointers to their values before the
+   * update from the journal, restore the profile snapshot, and start a home process on `from`.
    */
   private async restartFromInterruptedUpdate(): Promise<void> {
     const journal = this.recovering
     const updates = this.options.updates
     if (journal === undefined || updates === undefined) return
     this.recovering = undefined
-    await updates.store.restore({ current: journal.from, previous: journal.to })
+    await updates.store.restore(journal.previous === undefined ? { current: journal.from } : { current: journal.from, previous: journal.previous })
     await updates.snapshots.restore(journal.from, journal.to)
     await removeJournal(this.journal)
     const command = updates.store.homeCommand(journal.from, 'start')

@@ -211,6 +211,8 @@ export interface UpdateJournal {
   readonly from: RuntimeVersion
   /** The target version. */
   readonly to: RuntimeVersion
+  /** The version the `previous` pointer named before the update; absent when no `previous` pointer existed. */
+  readonly previous?: RuntimeVersion
   /** The phase that started last. */
   readonly phase: UpdatePhase
   /** RFC 3339 UTC time the update started. */

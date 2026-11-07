@@ -79,7 +79,8 @@ export interface RuntimeStore {
    */
   switchTo(from: RuntimeVersion, to: RuntimeVersion): Promise<void>
   /**
-   * Restore both pointers to their values before an update, by C1's atomic rename.
+   * Restore both pointers to their values before an update, by C1's atomic rename; `previous` is removed when
+   * `before` has none.
    * @param before - the pointers read before the update.
    */
   restore(before: RuntimePointers): Promise<void>

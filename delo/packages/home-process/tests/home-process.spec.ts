@@ -15,7 +15,7 @@ import { newStartId, processExists, readHomeLock, readStartTokenFile, runDirecto
 import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it } from 'vitest'
 import { exchangeLines, journalPath, openHomeLog, queryHomeStatus, sendHomeRequest, updateSocketPath, writeJournal, type ResponseLine } from '../src/index.ts'
-import { FixtureStore, installFixture, killLockHolder, PROFILE, readPointer, startHome, tempHome, until, V1, V2, type InProcessHome, type TempHome } from './support.ts'
+import { FixtureStore, installFixture, killLockHolder, PROFILE, readPointer, startHome, tempHome, until, V0, V1, V2, type InProcessHome, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
 const homes: InProcessHome[] = []
@@ -354,20 +354,47 @@ describe('rollback', TIMEOUT, () => {
 })
 
 describe('home-killed-mid-switch', TIMEOUT, () => {
-  it('a start after a home process killed in health-check with a failing new version rolls back to the previous one', async () => {
+  it('a start after a home process killed in health-check with a failing new version restores both pointers from the journal', async () => {
     const home = await setUp({ healthy: false })
-    // What a home process killed in health-check leaves: the switch written and the journal in its phase.
+    installFixture(home, V0)
+    await FixtureStore.seed(home, V1, V0)
+    // What a home process killed in health-check leaves: the switch written and the journal, with the old `previous`.
     await new FixtureStore(home, PROFILE).switchTo(V1, V2)
-    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, startedAt: new Date().toISOString() }, 'health-check')
+    expect(readPointer(home, 'previous')).toBe(V1)
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString() }, 'health-check')
+    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ from: V1, to: V2, previous: V0 })
     await expect(startHome(home, { running: V2 })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V1)
+    expect(readPointer(home, 'previous')).toBe(V0)
     expect(existsSync(journalPath(home, PROFILE))).toBe(false)
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
   })
 
+  it('without a previous runtime before the update, the recovery removes previous', async () => {
+    const home = await setUp({ healthy: false })
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString() }, 'switching')
+    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).not.toHaveProperty('previous')
+    await expect(startHome(home, { running: V2 })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(readPointer(home, 'previous')).toBeUndefined()
+    await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
+  })
+
+  it('an update journals the previous pointer it found before the switch', async () => {
+    const home = await setUp({ bootMs: 1_500 })
+    installFixture(home, V0)
+    await FixtureStore.seed(home, V1, V0)
+    await start(home)
+    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } })
+    await until(async () => (await status(home).catch(() => undefined))?.update?.phase === 'health-check', 20_000, 'health-check')
+    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ v: 1, from: V1, to: V2, previous: V0, phase: 'health-check' })
+    expect(final(await applying)).toEqual({ ok: true, outcome: 'committed' })
+  })
+
   it('a start after a home process killed in switching before current was written runs the previous version and removes the journal', async () => {
     const home = await setUp()
-    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, startedAt: new Date().toISOString() }, 'switching')
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString() }, 'switching')
     await start(home)
     expect(existsSync(journalPath(home, PROFILE))).toBe(false)
     expect(await status(home)).toMatchObject({ state: 'running', runtime: { current: V1, running: V1 } })

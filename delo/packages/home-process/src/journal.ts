@@ -17,6 +17,7 @@ const journalSchema = z.strictObject({
   v: z.literal(1),
   from: version,
   to: version,
+  previous: version.optional(),
   phase: z.enum(['checking', 'installing', 'reporting', 'snapshot', 'waiting', 'switching', 'health-check', 'committed']),
   startedAt: z.string().datetime(),
 })
@@ -31,17 +32,26 @@ export function journalPath(home: string, profile: string): string {
   return join(runDirectory(home, profile), RUN_ENTRIES.updateJournal)
 }
 
+/** An update as its journal records it. */
+export interface JournalledUpdate {
+  /** The version that ran before the update. */
+  readonly from: RuntimeVersion
+  /** The target version. */
+  readonly to: RuntimeVersion
+  /** The version the `previous` pointer named before the update, or `undefined` when none existed. */
+  readonly previous: RuntimeVersion | undefined
+  /** RFC 3339 UTC time the update started. */
+  readonly startedAt: string
+}
+
 /**
  * Write the journal for an update entering a phase.
  * @param path - the journal path.
- * @param update - the update's versions and start time.
- * @param update.from - the version that ran before the update.
- * @param update.to - the target version.
- * @param update.startedAt - RFC 3339 UTC time the update started.
+ * @param update - the update's versions, the pointer `previous` held before it, and its start time.
  * @param phase - the phase that starts now.
  */
-export async function writeJournal(path: string, update: { readonly from: RuntimeVersion, readonly to: RuntimeVersion, readonly startedAt: string }, phase: UpdatePhase): Promise<void> {
-  const record: UpdateJournal = { v: 1, from: update.from, to: update.to, phase, startedAt: update.startedAt }
+export async function writeJournal(path: string, update: JournalledUpdate, phase: UpdatePhase): Promise<void> {
+  const record: UpdateJournal = { v: 1, from: update.from, to: update.to, ...update.previous === undefined ? {} : { previous: update.previous }, phase, startedAt: update.startedAt }
   await writeProtectedFile(path, `${JSON.stringify(record)}\n`)
 }
 
