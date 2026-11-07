@@ -245,6 +245,12 @@
 | Docker supervisor | Docker 监管器 | Docker 监管器（Docker supervisor） | | 唯一调用 Docker 的 Delo 组件 |
 | home process | home 进程 | home 进程（home process） | | 持有 CLI profile 锁并运行 Host 的后台进程 |
 | update channel | 更新通道 | | | `delorun update` 与 studio「Update now」使用的套接字 |
+| handover | 交接 | 交接（handover） | | home 进程把 profile 移交给新运行时上的后继进程 |
+| successor | 后继进程 | 后继进程（successor） | | 交接中在目标版本上启动、处于 `standby` 的 home 进程 |
+| predecessor | 前任进程 | 前任进程（predecessor） | | 交接中正在运行、把锁移交出去的 home 进程 |
+| confinement | 隔离 | 隔离（confinement） | 限制、禁锢 | 沙箱对受限命令可读、可写、可连接范围的约束 |
+| dialect | 方言 | 方言（dialect） | | 沙箱的一种实现，如 bwrap、Landlock、Seatbelt |
+| drain | 排空 | 排空（drain） | | 等待运行中的 chat 结束，期间拒绝新的轮次 |
 | reach | 远程访问 | 远程访问（reach） | | 从另一台设备或网络打开 studio |
 | reach option | 远程访问方式 | | | 远程访问的一种途径 |
 | Tailscale reach | Tailscale 远程访问 | | | 通过 tailnet 的远程访问 |

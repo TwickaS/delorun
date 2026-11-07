@@ -101,7 +101,7 @@ Setup 按顺序执行各步骤：创建 CLI profile；把输入的密钥以 0600
 
 ## 尚未实现
 
-- 登录时启动（`delorun start --at-login`、`delorun stop --at-login`）、`delorun status --follow`、运行时仓库的更新、Host 的 chat 门禁（[home 进程的 seams](../../packages/home-process/README.zh.md#seams-for-other-packages)），以及启动顺序中的限制探测。
+- 登录时启动（`delorun start --at-login`、`delorun stop --at-login`）、`delorun status --follow`、运行时仓库的更新、Host 的 chat 门禁（[home 进程的 seams](../../packages/home-process/README.zh.md#seams-for-other-packages)），以及启动顺序中的隔离探测。
 - setup 的 reach 问题，以及导入 DeepSeek Harness 的 stock home。setup 将 reach 记录为关闭。
 - Windows 的 DACL 检查（[#48](https://github.com/Delo-Run/delo/issues/48)）：在 Windows 上，目录与受保护文件的检查只查看文件类型。
 - `delorun --version`、`verify`、`doctor`、`logs`、`update`、`recover`、`reach`、`devices`、`export`、`import` 与 `dev`。
