@@ -2549,17 +2549,17 @@
     {
       "path": "packages/sandbox/sandbox-local/README.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): documents the three Config fields, the per-runner mechanism table, `RUNNER_PROTECTION`, and the Landlock and alias limitations. Also shows the exact configuration a consumer passes (the home, its readable entries, the channel sockets and the Docker socket's configured and real paths) and `ctx.sandbox.protectedHome`. Review of #66: documents aliases, the dropped readable entries, the load-time socket refusal, Docker Desktop's macOS sockets, and recreated sockets as a consumer requirement. Documents alias coverage and the filesystems that hide aliases. States that a consumer retries the wrap once after a Landlock run refusal before reporting it (lead decision on #66). Documents `deniedSocketDirectories` and Docker Desktop's directories per platform."
+      "reason": "Protected home and denied sockets (C1's confinement rules): documents the three Config fields, the per-runner mechanism table, `RUNNER_PROTECTION`, and the Landlock and alias limitations. Also shows the exact configuration a consumer passes (the home, its readable entries, the channel sockets and the Docker socket's configured and real paths) and `ctx.sandbox.protectedHome`. Review of #66: documents aliases, the dropped readable entries, the load-time socket refusal, Docker Desktop's macOS sockets, and recreated sockets as a consumer requirement. Documents alias coverage and the filesystems that hide aliases. States that a consumer retries the wrap once after a Landlock run refusal before reporting it (lead decision on #66). Documents `deniedSocketDirectories` and Docker Desktop's directories per platform. Documents that bind mounts of deleted or replaced home files are not covered."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.zh.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the README.md additions. Also the Chinese counterpart of the consumer configuration example. Review of #66: the Chinese counterpart of those additions. Also the Chinese counterpart of the alias-coverage text. Also the Chinese counterpart of the retry sentence. Also the Chinese counterpart."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the README.md additions. Also the Chinese counterpart of the consumer configuration example. Review of #66: the Chinese counterpart of those additions. Also the Chinese counterpart of the alias-coverage text. Also the Chinese counterpart of the retry sentence. Also the Chinese counterpart. Also the Chinese counterpart."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the README.md additions and their Chinese counterpart. Re-recorded again after the consumer configuration example. Re-recorded after the review's additions. Re-recorded after the alias-coverage text. Re-recorded after it."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the README.md additions and their Chinese counterpart. Re-recorded again after the consumer configuration example. Re-recorded after the review's additions. Re-recorded after the alias-coverage text. Re-recorded after it. Re-recorded after it."
     },
     {
       "path": "packages/fs/fs-sandbox/src/index.ts",
@@ -2574,17 +2574,17 @@
     {
       "path": "packages/fs/fs-sandbox/README.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): documents that `workspace-write` denies targets under the provider's `protectedHome` and that reads there are not fenced. States that the read and search tools, not this provider, fence reads under the home."
+      "reason": "Protected home and denied sockets (C1's confinement rules): documents that `workspace-write` denies targets under the provider's `protectedHome` and that reads there are not fenced. States that the read and search tools, not this provider, fence reads under the home. Review of #66: documents the check-then-write race with a link to the descriptor-based writes issue."
     },
     {
       "path": "packages/fs/fs-sandbox/README.zh.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the protected-home sentences. Also the Chinese counterpart of that statement."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the protected-home sentences. Also the Chinese counterpart of that statement. Also the Chinese counterpart of the race limit."
     },
     {
       "path": "packages/fs/fs-sandbox/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the protected-home sentences. Re-recorded after it."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the protected-home sentences. Re-recorded after it. Re-recorded after the race limit."
     },
     {
       "path": "native/system/packages/entry/src/main.c",
