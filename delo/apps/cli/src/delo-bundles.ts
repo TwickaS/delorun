@@ -1,27 +1,48 @@
 /**
- * The refusal to start a CLI profile whose composition skipped a Delo bundle.
- * Upstream's profile loader skips a bundle it cannot resolve, read or accept
- * and starts with the remaining layers, so a Delo profile missing
- * `@delo/bundle-local` would run with upstream's defaults, which turn
- * DeepSeek session-log upload back on. `delorun` therefore stops instead.
- * A Delo bundle is any bundle in the `@delo/` scope; a skipped upstream bundle
- * is reported as upstream reports it and does not stop the start.
+ * Delo's bundles in a CLI profile: making setup's bundles importable, and
+ * refusing a start whose composition lost any of them.
+ *
+ * Upstream's profile loader skips a bundle it cannot resolve, read or accept,
+ * and its startup audit only warns about a plugin row that did not activate;
+ * in both cases the profile starts with what is left. A Delo profile without
+ * `@delo/bundle-local`'s layer would run with upstream's defaults, which turn
+ * DeepSeek session-log upload back on, and one whose `delo-privacy` row did not
+ * import would run without the Privacy section that states and switches those
+ * defaults. `delorun` therefore refuses both. A Delo bundle is any bundle in
+ * the `@delo/` scope; a skipped upstream bundle and an inactive upstream row
+ * are reported as upstream reports them and do not stop the start.
  *
  * @module @delo/cli/delo-bundles
  */
-import type { Profile } from '@deepseek-ai/dsh-app-boot'
+import type { Profile, RuntimeResolution } from '@deepseek-ai/dsh-app-boot'
+import type { PackageOperationContext, PackageOperationOptions } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { CliError, EXIT } from './exit.ts'
 
-/** The npm scope of Delo's bundles. */
+/** The npm scope of Delo's bundles and plugins. */
 export const DELO_BUNDLE_SCOPE = '@delo/'
 
+/** Profile plugin operations wait for the profile's package lock and pnpm's package lookups this long, as `dsh plugin` does. */
+const PLUGIN_OPERATION_WAIT_MS = 120_000
+
+/** Output a profile plugin operation keeps for its result, as `dsh plugin` does. */
+const PLUGIN_OPERATION_OUTPUT_BYTES = 16_384
+
 /**
- * The directory of a Delo bundle that this installation of `delorun` carries,
- * which a source checkout can link into the profile.
- * @param packageName - the bundle's package name.
+ * Whether a package name is in Delo's scope.
+ * @param packageName - the package name.
+ * @returns true for `@delo/…`.
+ */
+function isDelo(packageName: string): boolean {
+  return packageName.startsWith(DELO_BUNDLE_SCOPE)
+}
+
+/**
+ * The directory of a Delo package that this installation of `delorun` carries,
+ * which a source checkout links into the profile.
+ * @param packageName - the package name.
  * @returns the package directory, or `undefined` when `delorun` cannot resolve it.
  */
-function carriedBundleDirectory(packageName: string): string | undefined {
+export function carriedPackageDirectory(packageName: string): string | undefined {
   try {
     return new URL('.', import.meta.resolve(`${packageName}/package.json`)).pathname
   } catch {
@@ -31,23 +52,149 @@ function carriedBundleDirectory(packageName: string): string | undefined {
 }
 
 /**
+ * The command that makes a Delo package available to a profile again.
+ * @param profile - the CLI profile.
+ * @param packageName - the package.
+ * @returns the fix, as a phrase that follows "To fix it, ".
+ */
+function packageFix(profile: string, packageName: string): string {
+  const directory = carriedPackageDirectory(packageName)
+  return directory === undefined
+    ? `reinstall Delo, or run: delorun plugin --profile ${profile} install`
+    : `run: delorun plugin --profile ${profile} add link:${directory}`
+}
+
+/** What {@link linkDeloBundles} uses from upstream, passed in so specs can observe it. */
+export interface BundleLinking {
+  /** Upstream's runtime resolution of the profile, which decides what its plugin rows can import. */
+  readonly resolve: () => Promise<{ readonly profile: Profile, readonly resolution: RuntimeResolution }>
+  /** Upstream's profile package operation, the one `dsh plugin` runs. */
+  readonly runPluginCommand: (context: PackageOperationContext, args: readonly string[], options: PackageOperationOptions) => Promise<{ readonly exitCode: number, readonly logPath: string }>
+  /** The installation anchor that `dsh plugin` passes. */
+  readonly installAnchor: string
+}
+
+/**
+ * Make each Delo bundle of a new CLI profile importable the way upstream makes
+ * its own bundles importable. A bundle that upstream's runtime resolution
+ * already supplies, as a released installation carries it beside upstream's
+ * packages, is left alone. One that it does not supply, but that this `delorun`
+ * carries, as a source checkout does, is added to the profile with upstream's
+ * `dsh plugin add link:<directory>` operation, which records the dependency in
+ * the profile's `package.json` and installs it with pnpm.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @param bundles - the profile's bundle list.
+ * @param linking - upstream's resolution and plugin operation.
+ * @param onOutput - receives the operation's output.
+ * @throws {CliError} when a Delo bundle is neither supplied nor carried, or the operation fails.
+ */
+export async function linkDeloBundles(
+  home: string, profile: string, bundles: readonly string[], linking: BundleLinking,
+  onOutput: (text: string, stream: 'stdout' | 'stderr') => void,
+): Promise<void> {
+  const { profile: loaded, resolution } = await linking.resolve()
+  const importable = new Set([...resolution.entries.map(entry => entry.name), ...resolution.localPackageNames])
+  for (const bundle of bundles.filter(isDelo)) {
+    const layered = loaded.layers.some(layer => layer.packageName === bundle)
+    if (layered && importable.has(bundle)) continue
+    const directory = carriedPackageDirectory(bundle)
+    if (directory === undefined) {
+      throw new CliError(EXIT.failed, `delorun setup: this installation of Delo does not carry ${bundle}, which the CLI profile ${profile} needs; reinstall Delo`)
+    }
+    const result = await linking.runPluginCommand(
+      { profile, installAnchor: linking.installAnchor, cwd: process.cwd(), home },
+      ['add', `link:${directory}`],
+      { execution: 'cli', outputBytes: PLUGIN_OPERATION_OUTPUT_BYTES, lockWaitMs: PLUGIN_OPERATION_WAIT_MS, lookupTimeoutMs: PLUGIN_OPERATION_WAIT_MS, onOutput },
+    )
+    if (result.exitCode !== 0) {
+      throw new CliError(EXIT.failed, `delorun setup: could not add ${bundle} to the CLI profile ${profile} (pnpm exited ${String(result.exitCode)}); diagnostics: ${result.logPath}`)
+    }
+  }
+}
+
+/**
  * Refuse a loaded profile when it skipped a Delo bundle.
  * @param profile - the profile as upstream's loader returned it.
  * @throws {CliError} with the failure code, naming each skipped Delo bundle, its reason and the command that fixes it.
  */
 export function refuseSkippedDeloBundles(profile: Pick<Profile, 'name' | 'skippedBundles'>): void {
-  const skipped = profile.skippedBundles.filter(bundle => bundle.packageName.startsWith(DELO_BUNDLE_SCOPE))
+  const skipped = profile.skippedBundles.filter(bundle => isDelo(bundle.packageName))
   if (skipped.length === 0) return
-  const lines = skipped.map(({ packageName, reason }) => {
-    const directory = carriedBundleDirectory(packageName)
-    const fix = directory === undefined
-      ? `reinstall Delo, or run: delorun plugin --profile ${profile.name} install`
-      : `run: delorun plugin --profile ${profile.name} add link:${directory}`
-    return `  ${packageName}: ${reason}\n  To fix it, ${fix}`
-  })
   throw new CliError(EXIT.failed, [
     `delorun: the CLI profile ${profile.name} could not load Delo's ${skipped.length === 1 ? 'bundle' : 'bundles'}, so Delo did not start:`,
-    ...lines,
+    ...skipped.map(({ packageName, reason }) => `  ${packageName}: ${reason}\n  To fix it, ${packageFix(profile.name, packageName)}`),
     'Without them the profile would start with DeepSeek Harness\'s own defaults, which upload session logs to DeepSeek.',
+  ].join('\n'))
+}
+
+/** How a booted plugin row ended its startup. */
+export type RowState = 'active' | 'failed' | 'pending' | 'not-imported'
+
+/** One plugin row of a booted profile, as the start's audit reads it. */
+export interface BootedRow {
+  /** The row's entry id. */
+  readonly id: string
+  /** The module the row imports. */
+  readonly name: string
+  /** Whether the row is disabled; a row whose `disabled` expression threw counts as enabled and failed. */
+  readonly disabled: boolean
+  /** How its startup ended. */
+  readonly state: RowState
+}
+
+/**
+ * The ids of the rows that Delo bundles insert into a profile.
+ * @param profile - the loaded profile.
+ * @returns the ids, from every `insert` list of each Delo layer's patches, nested lists included.
+ */
+export function deloRowIds(profile: Pick<Profile, 'layers'>): Set<string> {
+  const ids = new Set<string>()
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item)
+      return
+    }
+    if (typeof value !== 'object' || value === null) return
+    const record = value as Record<string, unknown>
+    if (typeof record.id === 'string' && typeof record.name === 'string') ids.add(record.id)
+    for (const child of Object.values(record)) if (typeof child === 'object') visit(child)
+  }
+  for (const layer of profile.layers) {
+    if (!isDelo(layer.packageName)) continue
+    for (const patch of layer.patches) visit((patch as { insert?: unknown }).insert)
+  }
+  return ids
+}
+
+/**
+ * The enabled Delo rows that did not activate: the rows Delo bundles insert,
+ * and any row whose module is in Delo's scope.
+ * @param rows - the booted profile's rows.
+ * @param deloIds - the ids Delo bundles insert ({@link deloRowIds}).
+ * @returns the inactive Delo rows.
+ */
+export function inactiveDeloRows(rows: readonly BootedRow[], deloIds: ReadonlySet<string>): BootedRow[] {
+  return rows.filter(row => (deloIds.has(row.id) || isDelo(row.name)) && !row.disabled && row.state !== 'active')
+}
+
+/**
+ * The refusal for a booted profile whose Delo rows did not all activate.
+ * @param profile - the CLI profile.
+ * @param rows - the inactive Delo rows ({@link inactiveDeloRows}); not empty.
+ * @returns the error to stop the start with.
+ */
+export function inactiveRowsRefusal(profile: string, rows: readonly BootedRow[]): CliError {
+  const describe: Record<RowState, string> = { 'active': 'active', 'failed': 'failed to start', 'pending': 'waits for a service that never came', 'not-imported': 'failed to import' }
+  return new CliError(EXIT.failed, [
+    `delorun: ${rows.length === 1 ? 'a plugin' : 'plugins'} of Delo's bundles did not start in the CLI profile ${profile}, so Delo stopped:`,
+    ...rows.map((row) => {
+      const directory = carriedPackageDirectory(row.name)
+      const fix = directory === undefined
+        ? packageFix(profile, row.name)
+        : `build it in this source checkout with: pnpm --filter ${row.name} run build, then start again; if the profile does not list it, run: delorun plugin --profile ${profile} add link:${directory}`
+      return `  ${row.id} (${row.name}) ${describe[row.state]}\n  To fix it, ${fix}`
+    }),
+    'The warning above names the cause. Without these plugins Delo would run without its privacy settings and statements.',
   ].join('\n'))
 }

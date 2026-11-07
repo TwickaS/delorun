@@ -1,15 +1,16 @@
-import { spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE } from '@delo/bundle-local/profile'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
+import type { BootedRow } from '../src/delo-bundles.ts'
 import { startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
 
 const BIN = join(import.meta.dirname, '../src/bin.ts')
@@ -91,7 +92,7 @@ describe('delorun', { timeout: 60_000 }, () => {
       expect(lstatSync(deloHome).mode & 0o777).toBe(0o700)
       expect(lstatSync(join(deloHome, 'secrets')).mode & 0o777).toBe(0o700)
     }
-    const again = delorun(['setup'])
+    const again = delorun(['setup', '--yes'])
     expect(again.status).toBe(EXIT.ok)
     expect(again.stdout).toContain('already set up')
   })
@@ -135,6 +136,8 @@ describe('delorun', { timeout: 60_000 }, () => {
 
   it('refuses to start a profile whose composition skipped @delo/bundle-local, and starts nothing', () => {
     expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
+    // Setup linked the bundle; removing the link is what an incomplete install leaves.
+    rmSync(join(deloHome, 'profiles', 'default', 'node_modules', LOCAL_BUNDLE))
     const refused = delorun(['start', '--foreground'])
     expect(refused.status).toBe(EXIT.failed)
     expect(refused.stderr).toContain('delorun: the CLI profile default could not load Delo\'s bundle, so Delo did not start:')
@@ -174,7 +177,7 @@ describe('delorun', { timeout: 60_000 }, () => {
   })
 })
 
-describe('starting the home process', () => {
+describe('starting the home process', { timeout: 60_000 }, () => {
   let context: CommandContext
 
   beforeEach(() => {
@@ -192,12 +195,12 @@ describe('starting the home process', () => {
    * @param seen - collects each run's options and DSH_HOME.
    * @returns the dependencies.
    */
-  function recording(seen: { options: RunProfileOptions, dshHome: string | undefined }[]): StartDependencies {
+  function recording(seen: { options: RunProfileOptions, dshHome: string | undefined }[], rows: readonly BootedRow[] = [], shutdowns: number[] = []): StartDependencies {
     return {
       prepareProfile: upstreamDependencies().prepareProfile,
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
-        return Promise.resolve()
+        return Promise.resolve({ rows: () => rows, shutdown: (code) => { shutdowns.push(code); return Promise.resolve() } })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
       probe: () => Promise.resolve('answered'),
@@ -229,7 +232,6 @@ describe('starting the home process', () => {
 
   it('boots the CLI profile with DSH_HOME set to the Delo home, and a second start leaves one holder', async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
-    linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
     const prepared = await prepareHome(context, undefined)
     expect(prepared.home).toEqual({ path: deloHome, ignoredDshHome: dshHome })
     const seen: { options: RunProfileOptions, dshHome: string | undefined }[] = []
@@ -255,7 +257,6 @@ describe('starting the home process', () => {
     await prepareHome(context, undefined)
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording([]))).rejects.toThrow('run: delorun setup')
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
-    linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
     const failing: StartDependencies = { ...recording([]), runProfile: () => Promise.reject(new Error('boot failed')) }
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, failing)).rejects.toThrow('failed to start: boot failed')
     expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
@@ -263,7 +264,6 @@ describe('starting the home process', () => {
 
   it('refuses a Delo bundle that resolves but fails to load, and still starts over a skipped upstream bundle', async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
-    linkIntoProfile(LOCAL_BUNDLE, BUNDLE_LOCAL_DIR)
     const broken = join(osHome, 'bundle-broken')
     mkdirSync(broken)
     writeFileSync(join(broken, 'package.json'), '{"name":"@delo/bundle-broken","version":"0.0.0"}\n')
@@ -278,5 +278,87 @@ describe('starting the home process', () => {
     writeFileSync(join(deloHome, 'profiles', 'default', 'package.json'), JSON.stringify(manifest))
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording(seen))).toBeUndefined()
     expect(seen[0]!.options.resolvedProfile?.profile.skippedBundles.map(bundle => bundle.packageName)).toEqual(['@deepseek-ai/dsh-not-installed'])
+  })
+
+  it('shuts down and refuses a profile in which a row of a Delo bundle did not import, and starts over inactive upstream rows', async () => {
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    const shutdowns: number[] = []
+    const rows: BootedRow[] = [
+      { id: 'agent-loop', name: '@deepseek-ai/dsh-agent-loop', disabled: false, state: 'active' },
+      { id: 'delo-privacy', name: LOCAL_BUNDLE, disabled: false, state: 'not-imported' },
+    ]
+    const refusal = startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording([], rows, shutdowns))
+    await expect(refusal).rejects.toThrow(/delo-privacy \(@delo\/bundle-local\) failed to import\n {2}To fix it, build it in this source checkout with: pnpm --filter @delo\/bundle-local run build/)
+    expect(shutdowns).toEqual([EXIT.failed])
+    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
+    const upstreamOnly: BootedRow[] = [{ id: 'mcp', name: '@deepseek-ai/dsh-mcp-client', disabled: false, state: 'failed' }, { ...rows[1]!, disabled: true }]
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording([], upstreamOnly, shutdowns))).toBeUndefined()
+    expect(shutdowns).toEqual([EXIT.failed])
+  })
+})
+
+describe('starting a set-up home with the real profile runner', { timeout: 180_000 }, () => {
+  const DRIVER = join(import.meta.dirname, 'fixtures/start-driver.ts')
+
+  beforeAll(() => {
+    // Upstream's build:artifacts does not build Delo's packages; the bundle's Host half must exist to import.
+    if (!existsSync(join(BUNDLE_LOCAL_DIR, 'lib', 'index.js')) || !existsSync(join(BUNDLE_LOCAL_DIR, 'lib', 'client.js'))) {
+      execFileSync('pnpm', ['--filter', LOCAL_BUNDLE, 'run', 'build'], { cwd: join(import.meta.dirname, '../../../..'), stdio: 'pipe' })
+    }
+  })
+
+  /** What the start driver printed. */
+  interface DriverReport {
+    readonly outcome: 'started' | 'refused'
+    readonly message?: string
+    readonly rows: readonly BootedRow[]
+    readonly sessionLogEnabled: unknown
+  }
+
+  /**
+   * Run the start driver against the fixture home.
+   * @returns its exit status and report.
+   */
+  function startDriver(): { status: number | null, report: DriverReport, stderr: string } {
+    const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DSH_|DELO_|NODE_PATH$)/.test(name)))
+    const result = spawnSync(process.execPath, ['--import', TSX_LOADER, DRIVER], {
+      cwd: osHome, env: { ...inherited, HOME: osHome, USERPROFILE: osHome }, encoding: 'utf8', timeout: 150_000,
+    })
+    const line = result.stdout.trim().split('\n').at(-1) ?? ''
+    return { status: result.status, report: JSON.parse(line) as DriverReport, stderr: result.stderr }
+  }
+
+  it('loads delo-privacy after a fresh home\'s setup, with no manual step, and keeps session-log upload off', () => {
+    const setup = delorun(['setup', '--yes'])
+    expect(setup.status).toBe(EXIT.ok)
+    const manifest = JSON.parse(readFileSync(join(deloHome, 'profiles', 'default', 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+    expect(manifest.dependencies[LOCAL_BUNDLE]).toBe(`link:${BUNDLE_LOCAL_DIR}`)
+    const started = startDriver()
+    expect(started.report.outcome, started.stderr).toBe('started')
+    expect(started.status).toBe(0)
+    expect(started.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ name: LOCAL_BUNDLE, state: 'active', disabled: false })
+    expect(started.report.sessionLogEnabled).toBe(false)
+  })
+
+  it('refuses to start when delo-privacy fails to import, while the bundle\'s privacy rows still apply', () => {
+    expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
+    // The bundle as an install whose Host half throws on import: the same manifest, patch and client, a broken lib/index.js.
+    const broken = join(osHome, 'bundle-local-broken')
+    mkdirSync(join(broken, 'lib'), { recursive: true })
+    const real = JSON.parse(readFileSync(join(BUNDLE_LOCAL_DIR, 'package.json'), 'utf8')) as Record<string, unknown>
+    writeFileSync(join(broken, 'package.json'), JSON.stringify({ name: real.name, version: real.version, type: 'module', exports: real.exports, dsh: real.dsh }))
+    for (const file of ['cordis.patch.yml', 'lib/client.js']) writeFileSync(join(broken, file), readFileSync(join(BUNDLE_LOCAL_DIR, file)))
+    writeFileSync(join(broken, 'lib', 'index.js'), 'throw new Error(\'forced import failure\')\n')
+    const link = join(deloHome, 'profiles', 'default', 'node_modules', LOCAL_BUNDLE)
+    rmSync(link)
+    symlinkSync(broken, link, 'junction')
+    const refused = startDriver()
+    expect(refused.status).toBe(1)
+    expect(refused.report.outcome).toBe('refused')
+    expect(refused.report.message).toContain('so Delo stopped:\n  delo-privacy (@delo/bundle-local) failed to import')
+    expect(refused.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ state: 'not-imported', disabled: false })
+    expect(refused.stderr).toContain('forced import failure')
+    expect(refused.report.sessionLogEnabled).toBe(false)
+    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
   })
 })

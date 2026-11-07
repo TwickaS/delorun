@@ -11,7 +11,10 @@
   "include": ["src", "tests"],
   "references": [
     { "path": "../../../apps/cli" },
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/loader" },
     { "path": "../../../packages/boot/app-boot" },
+    { "path": "../../../packages/boot/plugin-manager" },
     { "path": "../../../packages/util/brand" },
     { "path": "../../../packages/util/home-paths" },
     { "path": "../../../packages/util/launch-environment" },

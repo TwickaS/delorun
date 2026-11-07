@@ -1,7 +1,8 @@
 /**
  * Setup's entry point: `delorun setup`, and `delorun` on a home without a CLI profile. It asks the questions of
- * contract C11 in a terminal, or reads `--yes` or `--config`, then runs its steps: create the CLI profile, store
- * the model key, write the profile's opt-in rows and record the run. The three forms produce the same answers and
+ * contract C11 in a terminal, or reads `--yes` or `--config`, then runs its steps: create the CLI profile and make
+ * Delo's bundles importable in it ({@link linkDeloBundles}), store the model key, write the profile's opt-in rows and
+ * record the run. The three forms produce the same answers and
  * so the same writes. An interrupted run resumes at the first step that did not finish. Setup never replaces an
  * existing profile.
  *
@@ -9,10 +10,11 @@
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { initProfile } from '@deepseek-ai/dsh-app-boot'
+import { createRuntimeResolution, initProfile, loadProfile } from '@deepseek-ai/dsh-app-boot'
 import { DELO_PROFILE_BUNDLES } from '@delo/bundle-local/profile'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput } from '../command.ts'
+import { linkDeloBundles, type BundleLinking } from '../delo-bundles.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delo/home'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE, type SetupAnswers } from '@delo/contract-setup-answers'
@@ -58,6 +60,26 @@ export interface SetupRequest {
   readonly form: SetupForm
   /** Test seams. */
   readonly hooks?: SetupHooks
+}
+
+/**
+ * Upstream's resolution and plugin operation for a profile under the home.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @returns what {@link linkDeloBundles} uses.
+ */
+export async function upstreamLinking(home: string, profile: string): Promise<BundleLinking> {
+  // Loaded after the launch variables are set, so upstream resolves the Delo home.
+  const { INSTALL_ANCHOR } = await import('@deepseek-ai/dsh/profile-boot')
+  const { runPluginCommand } = await import('@deepseek-ai/dsh-plugin-manager/operations')
+  return {
+    installAnchor: INSTALL_ANCHOR,
+    async resolve() {
+      const loaded = loadProfile('delorun', profile, INSTALL_ANCHOR, home)
+      return { profile: loaded, resolution: await createRuntimeResolution({ installAnchor: INSTALL_ANCHOR, profile: loaded, home }) }
+    },
+    runPluginCommand,
+  }
 }
 
 /**
@@ -108,12 +130,15 @@ async function runStep(step: SetupStep, request: SetupRequest, progress: SetupPr
   const { answers } = progress
   switch (step) {
     case 'profile': {
-      if (hasCliProfile(request.home, request.profile)) return undefined
-      try {
-        initProfile(directory, DELO_PROFILE_BUNDLES)
-      } catch (error) {
-        throw new CliError(EXIT.failed, `delorun setup: could not create the CLI profile ${request.profile} at ${directory}: ${error instanceof Error ? error.message : String(error)}`)
+      if (!hasCliProfile(request.home, request.profile)) {
+        try {
+          initProfile(directory, DELO_PROFILE_BUNDLES)
+        } catch (error) {
+          throw new CliError(EXIT.failed, `delorun setup: could not create the CLI profile ${request.profile} at ${directory}: ${error instanceof Error ? error.message : String(error)}`)
+        }
       }
+      // Runs again when an interrupted run resumes this step; a bundle already importable is left alone.
+      await linkDeloBundles(request.home, request.profile, DELO_PROFILE_BUNDLES, await upstreamLinking(request.home, request.profile), (text) => { request.output.stderr(text) })
       return undefined
     }
     case 'credential': {

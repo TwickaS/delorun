@@ -1248,6 +1248,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local
@@ -1273,6 +1276,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../../packages/util/launch-environment

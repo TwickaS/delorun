@@ -13,6 +13,7 @@
     "@deepseek-ai/dsh": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "@delo/bundle-local": "workspace:*",
     "@delo/contract-home-layout": "workspace:*",
     "@delo/contract-operational-logs": "workspace:*",
@@ -23,6 +24,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-launch-environment": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~"
   }
 }

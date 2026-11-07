@@ -84,8 +84,16 @@ const defaultAnswers: Record<string, string | boolean> = {
   'set up Delo': true,
 }
 
+/** Each setup run adds Delo's bundle to the profile with a pnpm install, which takes seconds on a loaded host. */
+const SETUP_TIMEOUT_MS = 60_000
+
+/** Entries of a profile directory that the package manager writes for setup's `link:` dependency. */
+const PACKAGE_MANAGER_OUTPUTS = new Set(['node_modules', 'pnpm-lock.yaml', '.plugin-manager'])
+
 /**
- * Every file under a directory, relative to it, with its content.
+ * Every file under a directory, relative to it, with its content. The package manager's outputs are left out: they
+ * derive from the dependency `package.json` records, `pnpm-lock.yaml` spells a link relative to where the home lies,
+ * and `.plugin-manager/` holds upstream's per-operation logs under random names.
  * @param root - the directory.
  * @returns sorted `path<TAB>content` lines; a missing directory yields none.
  */
@@ -95,6 +103,7 @@ function tree(root: string): string[] {
   const walk = (path: string): void => {
     for (const entry of readdirSync(path)) {
       const full = join(path, entry)
+      if (PACKAGE_MANAGER_OUTPUTS.has(entry)) continue
       if (statSync(full).isDirectory()) walk(full)
       else out.push(`${relative(root, full)}\t${readFileSync(full, 'utf8')}`)
     }
@@ -140,7 +149,7 @@ afterEach(() => {
   rmSync(osHome, { recursive: true, force: true })
 })
 
-describe('setup answers', () => {
+describe('setup answers', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('states that Delo has no telemetry yet and that both upstream opt-ins default to No', async () => {
     const asked = scripted(defaultAnswers)
     expect(await setup({ kind: 'interactive', prompter: asked.prompter, dialect: 'bwrap' })).toBe(EXIT.ok)
@@ -187,7 +196,7 @@ describe('setup answers', () => {
   })
 })
 
-describe('setup forms', () => {
+describe('setup forms', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('interactive and --yes runs produce identical profile writes', async () => {
     const interactiveHome = join(osHome, 'interactive', '.delo')
     await ensureHomeTree(interactiveHome, PROFILE)
@@ -313,7 +322,7 @@ describe('setup forms', () => {
   })
 })
 
-describe('an interrupted setup', () => {
+describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('resumes at the first step that did not finish, without repeating a finished step or asking the key again', async () => {
     const steps: SetupStep[] = []
     const interrupt: SetupHooks = {
