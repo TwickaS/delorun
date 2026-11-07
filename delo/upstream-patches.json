@@ -743,8 +743,8 @@
     },
     {
       "path": "packages/client/ui-chat/tests/chat-view.client.spec.tsx",
-      "class": "delo-feature",
-      "reason": "Supplies the seat's useSeatPresentation hook to the harness's keyed Chat nodes, as the seat binds it."
+      "class": "security",
+      "reason": "Supplies the seat's useSeatPresentation hook to the harness's keyed Chat nodes, as the seat binds it. Reach listener Content Security Policy (C4): the fixture's standard props carry `remoteImagePlaceholders: false`, the loopback default of the value the view's injected props require. Lead verdict: pending; the lead reviews this file line by line before it merges."
     },
     {
       "path": "packages/client/ui-chat/tests/presentation-precedence.client.spec.tsx",
@@ -2064,7 +2064,7 @@
     {
       "path": "tsconfig.host.json",
       "class": "delo-feature",
-      "reason": "Delo's project reference of the doctor package, and the includes of Delo's scaffold-based web e2e drivers delo-preset-inspect.e2e.ts, delo-privacy-consent.e2e.ts and delo-reach-listener.e2e.ts with its helper delo-reach.ts beside the other scaffold-based drivers, so the host typecheck covers them."
+      "reason": "Delo's project reference of the doctor package, and the includes of Delo's scaffold-based web e2e drivers delo-preset-inspect.e2e.ts, delo-privacy-consent.e2e.ts and delo-reach-listener.e2e.ts with its helper delo-reach.ts beside the other scaffold-based drivers, so the host typecheck covers them. It also includes delo/apps/tools/src/stack/certificates.ts, Delo's test authority the reach listener's e2e helper imports."
     },
     {
       "path": "packages/boot/doctor/README.md",
@@ -2875,6 +2875,16 @@
       "path": "vendor/README.md",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): the local-modification log records V28, the Loader's lazily compiled `!!js` evaluator, whose absence upstream keeps a policy without `'unsafe-eval'` from loading the studio. Lead verdict: pending; the lead reviews this file line by line before it merges."
+    },
+    {
+      "path": "packages/api/gateway/tests/gateway.client.spec.ts",
+      "class": "security",
+      "reason": "Reach listener Content Security Policy (C4): the gateway client fixture's ConnectionHandle mocks carry `remoteMedia: 'load'`, the loopback mode of the property the admission seam requires. Lead verdict: pending; the lead reviews this file line by line before it merges."
+    },
+    {
+      "path": "packages/api/job-controller/tests/client-apply.client.spec.ts",
+      "class": "security",
+      "reason": "Reach listener Content Security Policy (C4): the job controller's client fixture carries `remoteMedia: 'load'` on its ConnectionHandle, the loopback mode of the property the admission seam requires. Lead verdict: pending; the lead reviews this file line by line before it merges."
     }
   ],
   "retired": []

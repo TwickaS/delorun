@@ -553,6 +553,8 @@ function makeHarness(
     forkAt,
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
+    // The loopback default: chat images load and none render as placeholders.
+    remoteImagePlaceholders: false,
     t,
   }
   const set = (next: HarnessUpdate): void => {

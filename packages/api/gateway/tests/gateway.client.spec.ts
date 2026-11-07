@@ -353,6 +353,7 @@ async function benchFiber(
     interactions: 'answer',
     openWebSocket: openConnectionWebSocket,
     isLoopback: true,
+    remoteMedia: 'load',
     generation: { getSnapshot: () => undefined, subscribe: () => () => {} },
     state: { getSnapshot: () => undefined, subscribe: () => () => {} },
     reconnect: () => {},
@@ -466,6 +467,7 @@ async function loaderReadinessBench(
     state: { getSnapshot: () => undefined, subscribe: () => () => {} },
     reconnect: () => {},
     rpc: carrier === 'web' ? { call } : { call, open: () => unexpectedInProcessStream() },
+    remoteMedia: 'load',
     registerGenerationSource: generation.register,
     start,
   } satisfies ConnectionHandle)
@@ -605,6 +607,7 @@ describe('Client Remote transport readiness', () => {
       interactions: 'answer',
       openWebSocket: openConnectionWebSocket,
       isLoopback: true,
+      remoteMedia: 'load',
       generation: { getSnapshot: () => live.snapshot, subscribe: () => () => {} },
       state: { getSnapshot: () => undefined, subscribe: () => () => {} },
       reconnect: () => {},
