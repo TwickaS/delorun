@@ -429,7 +429,7 @@
     {
       "path": "packages/client/ui-chat/src/client/locale.ts",
       "class": "security",
-      "reason": "Adds the Custom work-details label to every locale dictionary of the chat package. Reach listener Content Security Policy (C4): adds the remote-image placeholder text `image.remote` to every locale dictionary. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Adds the Custom work-details label to every locale dictionary of the chat package. Reach listener Content Security Policy (C4): adds the remote-image placeholder text `image.remote` to every locale dictionary. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-chat/src/client/settings/TranscriptViewRow.tsx",
@@ -454,7 +454,7 @@
     {
       "path": "packages/client/ui-chat/src/client/apply.ts",
       "class": "security",
-      "reason": "Passes the Chat Node's live policy into the node hooks as seatPresentation and the Custom display setting into the presentation policy, so the Verbose view can open terminal cards; the other views are unchanged. Reach listener Content Security Policy (C4): hands the Connection's remote-media mode to the chat view, which renders remote chat images as placeholders on a reach listener. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Passes the Chat Node's live policy into the node hooks as seatPresentation and the Custom display setting into the presentation policy, so the Verbose view can open terminal cards; the other views are unchanged. Reach listener Content Security Policy (C4): hands the Connection's remote-media mode to the chat view, which renders remote chat images as placeholders on a reach listener. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx",
@@ -469,7 +469,7 @@
     {
       "path": "packages/client/ui-chat/src/client/contract/slots.ts",
       "class": "security",
-      "reason": "Adds the presentation Hook to the Chat Node hook context and the keyed seat's injected Hooks as seatPresentation, which a keyed renderer reads as its fallback when its registration supplies no usePresentation source. The deprecated PresentationInjected type stays exported so stock imports still typecheck. Reach listener Content Security Policy (C4): adds `remoteImagePlaceholders` to the chat view's injected values. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Adds the presentation Hook to the Chat Node hook context and the keyed seat's injected Hooks as seatPresentation, which a keyed renderer reads as its fallback when its registration supplies no usePresentation source. The deprecated PresentationInjected type stays exported so stock imports still typecheck. Reach listener Content Security Policy (C4): adds `remoteImagePlaceholders` to the chat view's injected values. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-chat/src/client/chat/AssistantNodeView.tsx",
@@ -744,7 +744,7 @@
     {
       "path": "packages/client/ui-chat/tests/chat-view.client.spec.tsx",
       "class": "security",
-      "reason": "Supplies the seat's useSeatPresentation hook to the harness's keyed Chat nodes, as the seat binds it. Reach listener Content Security Policy (C4): the fixture's standard props carry `remoteImagePlaceholders: false`, the loopback default of the value the view's injected props require. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Supplies the seat's useSeatPresentation hook to the harness's keyed Chat nodes, as the seat binds it. Reach listener Content Security Policy (C4): the fixture's standard props carry `remoteImagePlaceholders: false`, the loopback default of the value the view's injected props require. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-chat/tests/presentation-precedence.client.spec.tsx",
@@ -2444,7 +2444,7 @@
     {
       "path": "packages/client/connection/src/index.ts",
       "class": "security",
-      "reason": "Admission seam (C4): exports the `Authenticator` Service Definition, its types including `MintedCredential`, emits `authenticator/minted` from `BrowserAuth`'s mint callback, `LOOPBACK_LISTENER`, the reach listener types and `REACH_REFUSAL_STATUS`. The `/api` route adds a provider's `setCookie` to its response. For a Peer admitted on a reach listener, the index injections add the `__DSH_REMOTE_MEDIA__` global with the value `placeholder`; `reachContentSecurityPolicy` is exported. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Admission seam (C4): exports the `Authenticator` Service Definition, its types including `MintedCredential`, emits `authenticator/minted` from `BrowserAuth`'s mint callback, `LOOPBACK_LISTENER`, the reach listener types and `REACH_REFUSAL_STATUS`. The `/api` route adds a provider's `setCookie` to its response. For a Peer admitted on a reach listener, the index injections add the `__DSH_REMOTE_MEDIA__` global with the value `placeholder`; `reachContentSecurityPolicy` is exported. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/connection/tsconfig.host.json",
@@ -2759,87 +2759,87 @@
     {
       "path": "packages/host/webserver/src/injections.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): `renderIndexInjections` adds the response's nonce as the `nonce` attribute of every inline `<script>` and `<style>` it renders; without a nonce its output is unchanged. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): `renderIndexInjections` adds the response's nonce as the `nonce` attribute of every inline `<script>` and `<style>` it renders; without a nonce its output is unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/connection/src/client/index.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): `ConnectionHandle.remoteMedia` reads the `__DSH_REMOTE_MEDIA__` global; it is `load` when the global is absent, so loopback pages are unchanged. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): `ConnectionHandle.remoteMedia` reads the `__DSH_REMOTE_MEDIA__` global; it is `load` when the global is absent, so loopback pages are unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-chat/src/client/chat/ChatView.tsx",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): passes a remote-image placeholder to the Markdown delegate when the view's remote-media mode is `placeholder`. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): passes a remote-image placeholder to the Markdown delegate when the view's remote-media mode is `placeholder`. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-primitives/src/markdown/MarkdownDelegate.tsx",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the delegate may carry `remoteImages`, which turns a Markdown image whose source is not same-origin and not `data:` into a placeholder naming the source's host. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): the delegate may carry `remoteImages`, which turns a Markdown image whose source is not same-origin and not `data:` into a placeholder naming the source's host. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-primitives/src/markdown/render.tsx",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): renders that placeholder, which never requests the source, when the delegate carries `remoteImages`; otherwise images render as before. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): renders that placeholder, which never requests the source, when the delegate carries `remoteImages`; otherwise images render as before. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-primitives/src/markdown/MarkdownText.module.css",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the remote-image placeholder's style. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): the remote-image placeholder's style. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-primitives/tests/markdown-remote-images.client.spec.tsx",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): covers the placeholder for remote images, and same-origin, `data:` and delegate-less images rendering as before. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): covers the placeholder for remote images, and same-origin, `data:` and delegate-less images rendering as before. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/web/src/page-policy.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): new client-boot module. On a page with a nonced `<script>` it stamps that nonce on every `<style>` element `document.createElement` creates, so plugin and library styles apply under the policy, and puts zod in jitless mode, so zod never probes string evaluation. A page without a nonced script is unchanged. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): new client-boot module. On a page with a nonced `<script>` it stamps that nonce on every `<style>` element `document.createElement` creates, so plugin and library styles apply under the policy, and puts zod in jitless mode, so zod never probes string evaluation. A page without a nonced script is unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/web/tests/page-policy.client.spec.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): covers the page policy module. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): covers the page policy module. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/web/package.json",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): exports and publishes the `./page-policy` entry. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): exports and publishes the `./page-policy` entry. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/web/tsdown.config.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): builds the `page-policy` entry. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): builds the `page-policy` entry. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "apps/web/src/main.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): imports `@deepseek-ai/dsh-client-web/page-policy` before any other module, so it applies before any module creates a style or parses a value. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): imports `@deepseek-ai/dsh-client-web/page-policy` before any other module, so it applies before any module creates a style or parses a value. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "scripts/check-workspace-constraints.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): allows the client-web package to publish `lib/page-policy.js`. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): allows the client-web package to publish `lib/page-policy.js`. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "vendor/loader/src/config/utils.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the Loader's `!!js` evaluator compiles on its first use instead of when the module loads, so the studio loads under a policy without `'unsafe-eval'`. Recorded as vendor local modification V28. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): the Loader's `!!js` evaluator compiles on its first use instead of when the module loads, so the studio loads under a policy without `'unsafe-eval'`. Recorded as vendor local modification V28. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "scripts/cordis-loader-lazy-eval.spec.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): covers that importing the Loader compiles no string and that the evaluator compiles on the first expression. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): covers that importing the Loader compiles no string and that the evaluator compiles on the first expression. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "apps/web/tests/delo-reach.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): Chromium on a reach listener for Web e2e scenarios, with a stand-in authenticator provider, Delo's test authority and a recorder of policy violations. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): Chromium on a reach listener for Web e2e scenarios, with a stand-in authenticator provider, Delo's test authority and a recorder of policy violations. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "apps/web/tests/delo-reach-listener.e2e.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the studio boots and styles a terminal on a reach listener with no policy violation, and a remote chat image renders as a placeholder that is never requested. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): the studio boots and styles a terminal on a reach listener with no policy violation, and a remote chat image renders as a placeholder that is never requested. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/client/ui-primitives/README.md",
@@ -2874,17 +2874,17 @@
     {
       "path": "vendor/README.md",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the local-modification log records V28, the Loader's lazily compiled `!!js` evaluator, whose absence upstream keeps a policy without `'unsafe-eval'` from loading the studio. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): the local-modification log records V28, the Loader's lazily compiled `!!js` evaluator, whose absence upstream keeps a policy without `'unsafe-eval'` from loading the studio. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/api/gateway/tests/gateway.client.spec.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the gateway client fixture's ConnectionHandle mocks carry `remoteMedia: 'load'`, the loopback mode of the property the admission seam requires. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): the gateway client fixture's ConnectionHandle mocks carry `remoteMedia: 'load'`, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
       "path": "packages/api/job-controller/tests/client-apply.client.spec.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the job controller's client fixture carries `remoteMedia: 'load'` on its ConnectionHandle, the loopback mode of the property the admission seam requires. Lead verdict: pending; the lead reviews this file line by line before it merges."
+      "reason": "Reach listener Content Security Policy (C4): the job controller's client fixture carries `remoteMedia: 'load'` on its ConnectionHandle, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     }
   ],
   "retired": []
