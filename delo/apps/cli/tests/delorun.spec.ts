@@ -165,9 +165,18 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(readdirSync(deloHome)).toEqual([])
   })
 
+  it('refuses a background start of a home without the CLI profile, and stop finds nothing to stop', () => {
+    const start = delorun(['start'])
+    expect(start.status).toBe(EXIT.failed)
+    expect(start.stderr).toContain('run: delorun setup')
+    const stop = delorun(['stop'])
+    expect(stop.status).toBe(EXIT.ok)
+    expect(stop.stdout).toContain('Delo is not running for the profile default.')
+  })
+
   it('reports wrong command lines with the usage code', () => {
-    expect(delorun(['start']).status).toBe(EXIT.usage)
-    expect(delorun(['start']).stderr).toContain('delorun start --foreground')
+    expect(delorun(['start', '--bogus']).status).toBe(EXIT.usage)
+    expect(delorun(['stop', '--bogus']).status).toBe(EXIT.usage)
     expect(delorun(['frobnicate']).status).toBe(EXIT.usage)
     expect(delorun(['status', '--bogus']).status).toBe(EXIT.usage)
     expect(delorun(['--profile', '..']).status).toBe(EXIT.usage)
@@ -203,8 +212,10 @@ describe('starting the home process', { timeout: 60_000 }, () => {
         return Promise.resolve({ rows: () => rows, shutdown: (code) => { shutdowns.push(code); return Promise.resolve() } })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
-      probe: () => Promise.resolve('answered'),
+      probe: () => () => Promise.resolve('answered'),
       onExit: () => undefined,
+      exit: () => undefined,
+      captureOutput: () => () => undefined,
     }
   }
 
@@ -247,7 +258,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: { ...context, stdout: text => void printed.push(text) } }, recording(seen))).toBe(EXIT.ok)
     expect(printed.join('')).toContain(`Delo is already running for the profile default (process ${String(process.pid)}`)
     expect(seen).toHaveLength(1)
-    const silent: StartDependencies = { ...recording(seen), probe: () => Promise.resolve('silent') }
+    const silent: StartDependencies = { ...recording(seen), probe: () => () => Promise.resolve('silent') }
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, silent)).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
     expect(seen).toHaveLength(1)
     expect(JSON.parse(readFileSync(join(deloHome, 'run', 'default', 'home.lock'), 'utf8'))).toEqual(lock)

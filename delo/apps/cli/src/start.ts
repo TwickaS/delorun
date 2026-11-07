@@ -1,28 +1,34 @@
 /**
- * `delorun start --foreground` and the start half of a bare `delorun`: take
- * the profile's home lock (contract C1, "The home lock") and boot the CLI
- * profile through upstream's profile runner in this process, holding the lock
- * until the process exits. A profile that skipped a Delo bundle is refused
- * before it boots, and one in which a row of a Delo bundle did not activate is
- * shut down and refused after it boots ([delo-bundles](./delo-bundles.ts)).
+ * `delorun start` and the start half of a bare `delorun` (contract C19, "Commands"): the home process of
+ * [`@delo/home-process`](../../../packages/home-process/README.md) for the CLI profile, whose Host is the profile
+ * booted through upstream's profile runner in the same process.
  *
- * This is the foreground home process without contract C19's update channel,
- * start token, supervisor or confinement probes. Until the update channel
- * exists, a live lock holder cannot be asked for its status and counts as
- * answering. A second start for a profile whose home process runs prints that
- * process and exits 0, as contract C19's `delorun start` does.
+ * - `delorun start --foreground` runs the home process in this terminal: it takes the profile's home lock, writes a
+ *   new start token, listens on the update channel and boots the profile, logging to the `home-<profile>` surface
+ *   while the terminal also shows its output.
+ * - `delorun start` starts the same command detached from the terminal, with standard input closed and its output
+ *   in its log, and waits at most 120 seconds for the update channel to report `running`.
+ *
+ * A second start for a profile whose home process answers prints that process and exits 0. A profile that skipped a
+ * Delo bundle is refused before it boots, and one in which a row of a Delo bundle did not activate is shut down and
+ * refused after it boots ([delo-bundles](./delo-bundles.ts)).
  *
  * @module @delo/cli/start
  */
+import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
-import type { RuntimeVersion } from '@delo/contract-home-layout'
+import { HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
+import { START_WAIT_MS } from '@delo/contract-home-process'
+import { CountingChatGate, HomeProcess, openHomeLog, captureHomeOutput, queryHomeStatus, updateChannelProbe, type HomeLog, type RunningHost } from '@delo/home-process'
+import { resolveSurface } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
-import { acquireHomeLock, HomeLayoutError, readHomeLock, runDirectory, type HolderProbe, type HomeLock } from '@delo/home'
+import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, refuseSkippedDeloBundles, type BootedRow, type RowState } from './delo-bundles.ts'
 import { hasCliProfile } from './profile.ts'
 
@@ -34,10 +40,17 @@ export interface StartDependencies {
   readonly runProfile: (options: RunProfileOptions) => Promise<BootedProfile>
   /** Loads the launch environment with upstream's `.env` layers; upstream's `loadLayeredEnv` by default. */
   readonly loadEnvironment: () => RunProfileOptions['environment']
-  /** Asks a live lock holder for its status. */
-  readonly probe: HolderProbe
+  /** Asks a live lock holder for its status; the update channel's `status` request by default. */
+  readonly probe: (home: string, profile: string) => HolderProbe
   /** Registers a listener for this process's exit. */
   readonly onExit: (listener: () => void) => void
+  /** Ends the process after a stop or a handover. */
+  readonly exit: (code: number) => void
+  /**
+   * Captures this process's output into the home log, also passing it to the terminal.
+   * @returns the disposer that restores both streams.
+   */
+  readonly captureOutput: (log: HomeLog) => () => void
 }
 
 /** A booted profile, as the start's audit of Delo's rows reads it. */
@@ -93,8 +106,8 @@ export interface StartRequest {
   readonly output: CommandOutput
 }
 
-/** The probe used until the update channel exists: a live holder counts as answering. */
-const assumeAnswering: HolderProbe = () => Promise.resolve('answered')
+/** The level of the home process's log. */
+const HOME_LOG_LEVEL = 'info'
 
 /**
  * The runtime version recorded in the lock: this package's version, until the runtime store names the running version.
@@ -107,8 +120,8 @@ function runningVersion(): RuntimeVersion {
 
 /**
  * The dependencies of a real start.
- * @returns upstream's profile preparation, profile runner and `.env` loader, the probe without an update channel, and the
- *   process's exit event.
+ * @returns upstream's profile preparation, profile runner and `.env` loader, the update channel's probe, the process's
+ *   exit event and exit, and the output capture.
  */
 export function upstreamDependencies(): StartDependencies {
   return {
@@ -124,22 +137,25 @@ export function upstreamDependencies(): StartDependencies {
       return { rows: () => bootedRows(ctx), shutdown: code => shutdown.shutdown(code) }
     },
     loadEnvironment: () => loadLayeredEnv('delorun'),
-    probe: assumeAnswering,
+    probe: updateChannelProbe,
     onExit(listener) {
       process.on('exit', listener)
     },
+    exit: (code) => { process.exit(code) },
+    captureOutput: log => captureHomeOutput(log.log, true),
   }
 }
 
 /**
- * Take the home lock, load the CLI profile and boot it in this process. A
- * profile that skipped a Delo bundle is refused before it boots; one in which a
- * row of a Delo bundle did not activate is shut down after its startup settles
- * and refused, which can come after the studio has opened in the browser. On
- * success the profile's plugins keep the process alive and the lock is
- * released when it exits; a refusal or a failed boot releases it at once.
+ * Run the home process for the CLI profile in this process: take the home lock, write a new start token, listen on
+ * the update channel, and load and boot the profile as its Host. A profile that skipped a Delo bundle is refused
+ * before it boots; one in which a row of a Delo bundle did not activate is shut down after its startup settles and
+ * refused, which can come after the studio has opened in the browser. On success the profile's plugins keep the
+ * process alive, and the lock, the token and the socket go when it exits; a refusal or a failed boot removes them
+ * at once.
  * @param request - the home, profile, studio choice and output.
- * @param dependencies - the profile preparation and runner, environment loader, holder probe and exit hook.
+ * @param dependencies - the profile preparation and runner, environment loader, holder probe, exit hooks and output
+ *   capture.
  * @returns `undefined` once the profile has booted: upstream's profile runner sets the exit code when the process ends;
  *   {@link EXIT.ok} when a home process for the profile already runs.
  * @throws {CliError} when the home has no CLI profile, the profile skipped a Delo bundle, a row of a Delo bundle did not
@@ -150,23 +166,52 @@ export async function startForeground(request: StartRequest, dependencies: Start
   if (!hasCliProfile(request.home, request.profile)) {
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} is not set up in ${request.home}; run: delorun setup`)
   }
-  const directory = runDirectory(request.home, request.profile)
-  let lock: HomeLock
+  const startId = newStartId()
+  const homeLog = openHomeLog({ home: request.home, profile: request.profile, startId, level: HOME_LOG_LEVEL, onFailure: () => {} })
+  const restoreOutput = dependencies.captureOutput(homeLog)
+  const closeLog = (): void => {
+    restoreOutput()
+    homeLog.log.close()
+  }
   try {
-    lock = await acquireHomeLock({ runDirectory: directory, runtime: runningVersion(), probe: dependencies.probe })
+    await HomeProcess.start({
+      home: request.home,
+      profile: request.profile,
+      running: runningVersion(),
+      startId,
+      host: { boot: async () => bootProfile(request, dependencies) },
+      probe: dependencies.probe(request.home, request.profile),
+      logger: homeLog.logger,
+      redactor: homeLog.redactor,
+      updates: undefined,
+      supervisor: undefined,
+      onExit: dependencies.onExit,
+      exit: dependencies.exit,
+    })
   } catch (error) {
+    closeLog()
     if (!(error instanceof HomeLayoutError) || error.code !== 'HOME_RUNNING') throw error
-    const holder = readHomeLock(directory)
+    const holder = readHomeLock(runDirectory(request.home, request.profile))
     request.output.stdout(`Delo is already running for the profile ${request.profile}${holder === undefined ? '' : ` (process ${String(holder.pid)}, started ${holder.startedAt})`}.\n`)
     return EXIT.ok
   }
-  dependencies.onExit(() => { lock.release() })
+  dependencies.onExit(closeLog)
+  return undefined
+}
+
+/**
+ * Load the CLI profile and boot it: the home process's Host.
+ * @param request - the home, profile, studio choice and output.
+ * @param dependencies - the profile preparation, runner and environment loader.
+ * @returns the running Host. Its chats are not yet fed by the Host's update plugin, so they count none.
+ * @throws {CliError} when the profile skipped a Delo bundle, fails to boot, or a row of a Delo bundle did not activate.
+ */
+async function bootProfile(request: StartRequest, dependencies: StartDependencies): Promise<RunningHost> {
   let resolvedProfile: ResolvedProfileRuntime
   try {
     resolvedProfile = await dependencies.prepareProfile(request.profile)
     refuseSkippedDeloBundles(resolvedProfile.profile)
   } catch (error) {
-    lock.release()
     if (error instanceof CliError) throw error
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -180,26 +225,86 @@ export async function startForeground(request: StartRequest, dependencies: Start
       args: request.open ? [] : ['--no-open'],
     })
   } catch (error) {
-    lock.release()
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} failed to start: ${error instanceof Error ? error.message : String(error)}`)
   }
   const inactive = inactiveDeloRows(booted.rows(), deloRowIds(resolvedProfile.profile))
   if (inactive.length > 0) {
     await booted.shutdown(EXIT.failed)
-    lock.release()
     throw inactiveRowsRefusal(request.profile, inactive)
   }
-  return undefined
+  return {
+    chats: new CountingChatGate(),
+    disabledPlugins: () => [],
+    healthy: () => Promise.resolve(true),
+    close: async () => booted.shutdown(EXIT.ok),
+  }
 }
 
-/** `delorun start --foreground [--profile <name>]`. */
+/**
+ * `delorun start` without `--foreground`: start the home process detached from the terminal and wait for it to report
+ * `running`.
+ * @param home - the prepared Delo home.
+ * @param profile - the CLI profile.
+ * @param output - where the command writes.
+ * @returns {@link EXIT.ok} when the home process runs, {@link EXIT.failed} when it exited or did not report `running`
+ *   within 120 seconds.
+ * @throws {CliError} when the home has no CLI profile.
+ */
+export async function startDetached(home: string, profile: string, output: CommandOutput): Promise<CommandResult> {
+  if (!hasCliProfile(home, profile)) throw new CliError(EXIT.failed, `delorun: the CLI profile ${profile} is not set up in ${home}; run: delorun setup`)
+  const running = await answeringStatus(home, profile)
+  if (running !== undefined) {
+    output.stdout(`Delo is already running for the profile ${profile} (process ${String(running.pid)}, ${running.state}).\n`)
+    return EXIT.ok
+  }
+  const entry = process.argv[1]
+  if (entry === undefined) throw new CliError(EXIT.failed, 'delorun: the command\'s own entry point is unknown, so the home process cannot be started')
+  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile], { detached: true, stdio: 'ignore', env: process.env })
+  let exitCode: number | null | undefined
+  child.once('exit', (code) => { exitCode = code })
+  child.unref()
+  const log = resolveSurface({ kind: 'home', home, profile }).file
+  const deadline = Date.now() + START_WAIT_MS
+  while (Date.now() < deadline) {
+    const status = await answeringStatus(home, profile)
+    if (status?.state === 'running' && status.pid === child.pid) {
+      output.stdout(`Delo is running for the profile ${profile} (process ${String(status.pid)}).\n`)
+      return EXIT.ok
+    }
+    if (exitCode !== undefined) {
+      output.stderr(`delorun start: the home process exited with code ${String(exitCode)} before it was running; see its log: ${log}\n`)
+      return EXIT.failed
+    }
+    await sleep(100)
+  }
+  output.stderr(`delorun start: the home process did not report running within ${String(START_WAIT_MS / 1000)} seconds; see its log: ${log}\n`)
+  return EXIT.failed
+}
+
+/**
+ * The status of a profile's home process when it answers.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @returns the status, or `undefined` when no home process answers.
+ */
+async function answeringStatus(home: string, profile: string): Promise<{ readonly pid: number, readonly state: string } | undefined> {
+  try {
+    const answer = await queryHomeStatus(home, profile, HOME_STATUS_TIMEOUT_MS)
+    return 'state' in answer && typeof answer.pid === 'number' && typeof answer.state === 'string' ? { pid: answer.pid, state: answer.state } : undefined
+  } catch (_notAnswering) {
+    // No token file, no socket or no answer: no home process answers for the profile.
+    return undefined
+  }
+}
+
+/** `delorun start [--foreground] [--profile <name>]`. */
 export const startCommand: CliCommand = {
   name: 'start',
-  summary: 'Start the home process in this terminal (--foreground)',
+  summary: 'Start the home process in the background, or in this terminal with --foreground',
   async run(args, context) {
     const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, profile: { type: 'string' } })
-    if (values.foreground !== true) throw new CliError(EXIT.usage, 'delorun start: this build runs the home process in the terminal only; run: delorun start --foreground')
     const { home, profile } = await prepareHome(context, values.profile)
+    if (values.foreground !== true) return startDetached(home.path, profile, context)
     return startForeground({ home: home.path, profile, open: false, output: context })
   },
 }

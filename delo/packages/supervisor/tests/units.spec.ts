@@ -1,12 +1,11 @@
 /**
- * The supervisor's pure parts: the start token check, the presets and their bounds, the listed-image refusals, the
+ * The supervisor's pure parts: the presets and their bounds, the listed-image refusals, the
  * Docker context resolution, the hardened container body and its comparison with an inspect record, and the limit
  * findings, including a limit the engine ignored.
  */
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import type { StartToken } from '@delo/contract-home-layout'
 import { GIB, IMAGES, PRESETS, type WorkspaceId } from '@delo/contract-runtime-supervisor'
 import type { OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -21,13 +20,9 @@ import {
   isAllowlistHost,
   limitFindings,
   listedImage,
-  parseStartToken,
   presetLimits,
-  readStartTokenFile,
   resolveDockerContext,
   shapesOf,
-  StartTokenCheck,
-  startTokenFile,
   SupervisorError,
   workspaceNames,
   type CreateBody,
@@ -35,7 +30,7 @@ import {
   type InspectRecord,
   type ProbeEvidence,
 } from '../src/index.ts'
-import { ABSENT_DIGEST, appliedRecord, fixtureManifest, PROFILE, tempHome, writeStartToken, type TempHome } from './support.ts'
+import { ABSENT_DIGEST, appliedRecord, fixtureManifest, tempHome, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
 afterEach(() => {
@@ -62,35 +57,6 @@ async function refusalOf(run: () => Promise<unknown>): Promise<SupervisorError> 
   }
   throw new Error('expected a refusal')
 }
-
-describe('the start token', () => {
-  it('accepts only the current token, compared whole', () => {
-    const token = 'a'.repeat(43) as StartToken
-    const check = new StartTokenCheck(token)
-    expect(check.accepts(token)).toBe(true)
-    for (const candidate of [undefined, null, 42, '', token.slice(1), `${token}a`, 'b'.repeat(43)]) expect(check.accepts(candidate)).toBe(false)
-  })
-
-  it('reads the token file through C1\'s protected-file check and refuses a readable one', async () => {
-    temp = await tempHome()
-    const token = await writeStartToken(temp.home)
-    const file = startTokenFile(temp.home, PROFILE)
-    expect(await readStartTokenFile(file)).toBe(token)
-    chmodSync(file, 0o644)
-    await expect(readStartTokenFile(file)).rejects.toMatchObject({ code: 'SECRET_FILE_MODE' })
-  })
-
-  it('refuses a token file that does not hold one token and one newline, without quoting it', async () => {
-    temp = await tempHome()
-    const file = startTokenFile(temp.home, PROFILE)
-    writeFileSync(file, 'short-secret-value\n', { mode: 0o600 })
-    await expect(readStartTokenFile(file)).rejects.toThrow(/does not hold one start token/)
-    await expect(readStartTokenFile(file)).rejects.not.toThrow(/short-secret-value/)
-    expect(parseStartToken('a'.repeat(43))).toBeDefined()
-    expect(parseStartToken('a'.repeat(42))).toBeUndefined()
-    expect(parseStartToken(`${'a'.repeat(42)}=`)).toBeUndefined()
-  })
-})
 
 describe('allowlist additions', () => {
   it('accepts host names and *.-prefixed suffixes, and refuses addresses, single labels and overlong names', () => {

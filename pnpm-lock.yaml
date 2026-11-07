@@ -1260,6 +1260,9 @@ importers:
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout
+      '@delo/contract-home-process':
+        specifier: workspace:*
+        version: link:../../packages/contract-home-process
       '@delo/contract-operational-logs':
         specifier: workspace:*
         version: link:../../packages/contract-operational-logs
@@ -1269,6 +1272,9 @@ importers:
       '@delo/home':
         specifier: workspace:*
         version: link:../../packages/home
+      '@delo/home-process':
+        specifier: workspace:*
+        version: link:../../packages/home-process
       '@delo/logs':
         specifier: workspace:*
         version: link:../../packages/logs
@@ -1623,6 +1629,46 @@ importers:
       '@delo/tools':
         specifier: workspace:*
         version: link:../../apps/tools
+
+  delo/packages/home-process:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/contract-home-process':
+        specifier: workspace:*
+        version: link:../contract-home-process
+      '@delo/contract-operational-logs':
+        specifier: workspace:*
+        version: link:../contract-operational-logs
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../logs
+      '@delo/supervisor':
+        specifier: workspace:*
+        version: link:../supervisor
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-sandbox':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox
+      '@deepseek-ai/dsh-sandbox-local':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-local
+      '@deepseek-ai/node-addon-system':
+        specifier: workspace:~
+        version: link:../../../native/system/packages/entry
 
   delo/packages/logs:
     dependencies:

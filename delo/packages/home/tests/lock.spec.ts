@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion, StartId } from '@delo/contract-home-layout'
-import { acquireHomeLock, HomeLayoutError, readHomeLock, removeStaleLock, type HolderProbe } from '../src/index.ts'
+import { acquireHomeLock, newStartId, HomeLayoutError, readHomeLock, removeStaleLock, type HolderProbe } from '../src/index.ts'
 
 const REPOSITORY = join(import.meta.dirname, '../../../..')
 const CONTENDER = join(import.meta.dirname, 'fixtures/lock-contender.ts')
@@ -92,7 +92,7 @@ function expectOneHolder(outcomes: readonly Outcome[]): void {
 
 describe('the home lock', () => {
   it('writes C1\'s record at mode 0600 and removes it on release', async () => {
-    const lock = await acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: answered })
+    const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
     const path = join(runDirectory, 'home.lock')
     const record = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
     expect(Object.keys(record)).toEqual(['v', 'pid', 'startId', 'runtime', 'startedAt'])
@@ -108,12 +108,12 @@ describe('the home lock', () => {
   })
 
   it('refuses a second start while the holder lives, with HOME_RUNNING or HOME_UNRESPONSIVE by the probe', async () => {
-    const held = await acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: answered })
-    const running = await acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: answered }).catch((error: unknown) => error)
+    const held = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
+    const running = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered }).catch((error: unknown) => error)
     expect(running).toBeInstanceOf(HomeLayoutError)
     expect(running).toMatchObject({ code: 'HOME_RUNNING' })
     expect((running as Error).message).toContain(`process ${String(process.pid)}`)
-    const silent = await acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: () => Promise.resolve('silent') }).catch((error: unknown) => error)
+    const silent = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: () => Promise.resolve('silent') }).catch((error: unknown) => error)
     expect(silent).toMatchObject({ code: 'HOME_UNRESPONSIVE' })
     expect(readHomeLock(runDirectory)).toEqual(held.record)
     held.release()
@@ -121,7 +121,7 @@ describe('the home lock', () => {
 
   it('replaces a lock whose process no longer exists', async () => {
     plantLock(deadPid())
-    const lock = await acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: answered })
+    const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
     expect(readHomeLock(runDirectory)?.pid).toBe(process.pid)
     lock.release()
     expect(readdirSync(runDirectory)).toEqual([])
@@ -129,13 +129,13 @@ describe('the home lock', () => {
 
   it('does not take over a live holder of another start and does not remove its lock on release', async () => {
     plantLock(process.pid, 'b'.repeat(32))
-    await expect(acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: answered })).rejects.toMatchObject({ code: 'HOME_RUNNING' })
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toMatchObject({ code: 'HOME_RUNNING' })
     expect(readHomeLock(runDirectory)?.startId).toBe('b'.repeat(32))
   })
 
   it('refuses a file that is not a lock record and leaves it', async () => {
     writeFileSync(join(runDirectory, 'home.lock'), 'not json')
-    await expect(acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: answered })).rejects.toThrow('is not a home lock record')
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toThrow('is not a home lock record')
     expect(readFileSync(join(runDirectory, 'home.lock'), 'utf8')).toBe('not json')
   })
 
@@ -165,7 +165,7 @@ describe('the home lock', () => {
   it('never removes a lock taken after a late contender found the old one stale', async () => {
     const staleId = brandString<StartId>('9'.repeat(32))
     plantLock(deadPid(), staleId)
-    const winner = await acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: answered })
+    const winner = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
     // A contender that read the dead record before the winner replaced it removes it only now.
     expect(await removeStaleLock(runDirectory, staleId)).toBe('done')
     expect(readHomeLock(runDirectory)).toEqual(winner.record)
@@ -190,7 +190,7 @@ describe('the home lock', () => {
     const staleId = 'e'.repeat(32)
     plantLock(deadPid(), staleId)
     writeFileSync(join(runDirectory, `home.lock.takeover-${staleId}`), JSON.stringify({ pid: process.pid, id: 'f'.repeat(32) }), { mode: 0o600 })
-    const pending = acquireHomeLock({ runDirectory, runtime: RUNTIME, probe: answered })
+    const pending = acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
     await new Promise(resolve => setTimeout(resolve, 200))
     expect(readHomeLock(runDirectory)?.startId).toBe(staleId)
     rmSync(join(runDirectory, `home.lock.takeover-${staleId}`))

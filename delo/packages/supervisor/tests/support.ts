@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import type { StartToken } from '@delo/contract-home-layout'
 import { IMAGES, type SupervisorFailure } from '@delo/contract-runtime-supervisor'
 import type { FileRef, OciDigest } from '@delo/contract-release-manifest'
-import { ensureHomeTree, writeProtectedFile } from '@delo/home'
+import { ensureHomeTree, startTokenFile, writeProtectedFile } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
 import { PRESETS, type DockerLimit, type LimitFinding } from '@delo/contract-runtime-supervisor'
 import {
@@ -19,7 +19,6 @@ import {
   homeIdOf,
   loadRootRules,
   openSupervisorLog,
-  startTokenFile,
   Supervisor,
   Workspaces,
   type CreateBody,

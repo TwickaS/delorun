@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { HOME_DRIVER } from '../../../home-process/tests/log-driver.ts'
 import { SUPERVISOR_DRIVER } from '../../../supervisor/tests/log-driver.ts'
 import { captureStream, LineCapture, Redactor, resolveSurface, SurfaceLog, type CapturedStream, type DeloLogDetails, type LogsFailure, type SurfaceLocation } from '../../src/index.ts'
 
@@ -57,7 +58,7 @@ export interface SurfaceEntry {
 
 /** Every surface C20 lists. */
 export const SURFACES: readonly SurfaceEntry[] = [
-  { name: 'home-<profile>', kind: 'home', owner: 'delo/packages/home-process', workPackage: 'WP3.9' },
+  { name: 'home-<profile>', kind: 'home', owner: 'delo/packages/home-process', workPackage: 'WP3.9', driver: HOME_DRIVER },
   { name: 'supervisor-<profile>', kind: 'supervisor', owner: 'delo/packages/supervisor', workPackage: 'WP4.1', driver: SUPERVISOR_DRIVER },
   { name: 'desktop-host', kind: 'desktop-host', owner: 'apps/desktop', workPackage: 'WP6.1' },
   { name: 'relay', kind: 'relay', owner: 'delo/apps/relay', workPackage: 'WP5.6' },

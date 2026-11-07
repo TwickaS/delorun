@@ -28,7 +28,7 @@ Delo 把它所知道的关于你的一切都保存在一个目录中，即你的
 
 ## 首次运行
 
-在新 home 上首次运行 `delorun` 会运行 setup，它创建 CLI profile。此后，`delorun` 会在你的终端中启动 Delo，并在浏览器中打开 studio；按 Ctrl-C 即可停止。`delorun start --foreground` 则只启动它，不打开浏览器。每个 profile 只运行一个 Delo：第二次启动会提示已有一个 Delo 在运行。
+在新 home 上首次运行 `delorun` 会运行 setup，它创建 CLI profile。此后，`delorun` 会在你的终端中启动 Delo，并在浏览器中打开 studio；按 Ctrl-C 即可停止。`delorun start` 会在后台启动 Delo，因此你可以关闭终端；`delorun start --foreground` 则在你的终端中运行它。两者都不打开浏览器。`delorun status` 显示 Delo 是否在运行、其进程与运行时版本；`delorun stop` 会在运行中的 chat 结束后停止它，使用 `delorun stop --now` 则立即停止。每个 profile 只运行一个 Delo：第二次启动会提示已有一个 Delo 在运行。
 
 <a id="profiles"></a>
 

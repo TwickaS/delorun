@@ -24,7 +24,7 @@ Set `DELO_HOME` to keep the home somewhere else, such as `DELO_HOME=~/work/delo 
 
 ## The first run
 
-The first `delorun` on a new home runs setup, which creates the CLI profile. After that, `delorun` starts Delo in your terminal and opens the studio in your browser; press Ctrl-C to stop it. `delorun start --foreground` starts it without opening the browser. Only one Delo runs per profile: a second start says that one is already running.
+The first `delorun` on a new home runs setup, which creates the CLI profile. After that, `delorun` starts Delo in your terminal and opens the studio in your browser; press Ctrl-C to stop it. `delorun start` starts Delo in the background, so you can close the terminal, and `delorun start --foreground` runs it in your terminal; neither opens the browser. `delorun status` shows whether Delo runs, its process and the runtime version, and `delorun stop` stops it once running chats end, or at once with `delorun stop --now`. Only one Delo runs per profile: a second start says that one is already running.
 
 ## Profiles
 

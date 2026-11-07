@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This app is the `delorun` command. Before any upstream code runs, it resolves and prepares the Delo home through [`@delo/home`](../../packages/home/README.md), which implements [contract C1](../../docs/contracts/c01-home-layout.md)'s home, selects the CLI profile, and runs that profile through upstream's profile runner with the Delo home as `DSH_HOME`. A new home goes to setup's entry point first. A start takes the profile's home lock, so one home process runs per profile.
+This app is the `delorun` command. Before any upstream code runs, it resolves and prepares the Delo home through [`@delo/home`](../../packages/home/README.md), which implements [contract C1](../../docs/contracts/c01-home-layout.md)'s home, selects the CLI profile, and runs that profile through upstream's profile runner with the Delo home as `DSH_HOME`. A new home goes to setup's entry point first. A start runs the profile's home process of [`@delo/home-process`](../../packages/home-process/README.md) ([contract C19](../../docs/contracts/c19-home-process.md)), which holds the profile's home lock, so one home process runs per profile, and `stop` and `status` reach it through its update channel.
 
 ## Contents
 
@@ -16,7 +16,7 @@ This app is the `delorun` command. Before any upstream code runs, it resolves an
 - [The home](#the-home)
 - [Profiles](#profiles)
 - [Setup](#setup)
-- [The home lock](#the-home-lock)
+- [The home process](#the-home-process)
 - [How delorun runs upstream](#how-delorun-runs-upstream)
 - [Extension points](#extension-points)
 - [Not yet implemented](#not-yet-implemented)
@@ -28,8 +28,9 @@ This app is the `delorun` command. Before any upstream code runs, it resolves an
 | --- | --- |
 | `delorun [--profile <name>]` | Runs setup on a home without the CLI profile; otherwise starts the home process in this terminal and opens the studio |
 | `delorun setup [--profile <name>] [--yes \| --config <file>]` | Setup: asks its questions in a terminal, or applies every default with `--yes`, or an answers document with `--config`; a finished setup is left unchanged |
-| `delorun start --foreground [--profile <name>]` | Starts the home process in this terminal without opening the studio |
-| `delorun status [--profile <name>]` | Prints the home, the profile, whether its home process runs, and an inherited `DSH_HOME` that `delorun` ignored |
+| `delorun start [--foreground] [--profile <name>]` | Starts the home process detached from the terminal and waits at most 120 seconds for it to report `running`; `--foreground` runs it in this terminal. Neither opens the studio |
+| `delorun stop [--now] [--profile <name>]` | Stops the home process once running chats end, waiting at most 1,800 seconds; `--now` cancels them first |
+| `delorun status [--profile <name>] [--json]` | Prints the home, the profile, an inherited `DSH_HOME` that `delorun` ignored, and the home process's state, process id, start id, runtime versions, running chats and update in progress; `--json` prints its `status` answer alone |
 | `delorun plugin …` | Upstream's `dsh plugin …`, unchanged, against the Delo home |
 | `delorun headless …` | Upstream's `dsh headless …`, unchanged, against the Delo home |
 
@@ -62,9 +63,13 @@ The Docker runtime option carries C1's label on a system whose sandbox dialect c
 
 Desktop analytics is recorded, not written. Setup records the answer and writes no row to the desktop app's profile, because desktop packaging is outside the MVP and the desktop app keeps upstream's own profile; the desktop app applies the recorded answer once it composes Delo's bundle. A spec pins this behaviour. Also not written by setup yet: the model selection, the studio additions, the onboarding flag and the runtime, whose targets arrive with their own packages. Setup records each of those answers in the answers record.
 
-## The home lock
+## The home process
 
-A start takes `run/<profile>/home.lock` with `@delo/home`'s `acquireHomeLock` before it boots the profile, and releases it when the process exits. Of any number of starts, exactly one holds the lock, including over the lock of a holder that died. A live holder is never taken over, and a second start prints the running process and exits 0, as C19's `delorun start` does. A process killed with `SIGKILL` leaves the lock, and the next start replaces it. Until the update channel exists, a live holder cannot be asked for its status and counts as answering, so `HOME_UNRESPONSIVE` is not reported.
+`delorun start --foreground` and a bare `delorun` run the home process in this process with `HomeProcess.start`: it takes `run/<profile>/home.lock`, writes a new start token, listens on the update channel `run/<profile>/update.sock` and boots the profile through upstream's profile runner as its Host. It logs to the `home-<profile>` operational log, and in the foreground the terminal also shows its output. Of any number of starts, exactly one holds the lock, including over the lock of a holder that died. A live holder is asked for its status over the update channel: when it answers, a second start prints the running process and exits 0; when it does not answer within 2 seconds, the start stops with `HOME_UNRESPONSIVE`. Whatever ends the process, the lock, the token file and the socket go with it; a process killed with `SIGKILL` leaves them, and the next start replaces them.
+
+`delorun start` without `--foreground` starts `delorun start --foreground` detached from the terminal, with standard input closed and its output in its log, and waits at most 120 seconds for the home process to report `running`; a home process that exits first or does not report `running` in time is reported with its log's location. `delorun stop` and `delorun status` read the token file and send `stop` or `status` over the update channel; with no live lock holder, `stop` prints that Delo is not running and exits 0, and `status` exits 3.
+
+This build has no runtime store yet, so its home process refuses update requests, and its Host counts no running chats, so `stop` does not wait for one ([the home process's seams](../../packages/home-process/README.md#seams-for-other-packages)).
 
 ## How delorun runs upstream
 
@@ -74,11 +79,11 @@ A start takes `run/<profile>/home.lock` with `@delo/home`'s `acquireHomeLock` be
 
 - **A command** is a module that exports one `CliCommand` (`src/command.ts`) and adds one row to `COMMANDS` in `src/main.ts`. `delorun doctor` belongs in `src/doctor/` and `delorun logs` in `src/logs/`, each through this row.
 - **Setup** is `runSetup` in `src/setup/index.ts`, which both `delorun setup` and a first run call. Its questions are in `src/setup/interactive.ts` behind the `Prompter` interface of `src/setup/prompts.ts`, so a test runs them against a scripted prompter.
-- **The holder probe** is the `probe` of `StartDependencies` in `src/start.ts`; the home process's `status` request replaces the probe that counts a live holder as answering.
+- **The home process's dependencies** are `StartDependencies` in `src/start.ts`: the profile preparation and runner, the environment loader, the holder probe (the update channel's `status` request), the exit hooks and the output capture, so a spec runs a start against stand-ins.
 
 ## Not yet implemented
 
-- `delorun start` without `--foreground`, `delorun stop`, and the parts of `delorun status` that come from the home process: the background home process, its update channel, start token and confinement probes.
+- Start at login (`delorun start --at-login`, `delorun stop --at-login`), `delorun status --follow`, the runtime store's updates and the Host's chat gate ([the home process's seams](../../packages/home-process/README.md#seams-for-other-packages)), and the confinement probes of the start sequence.
 - Setup's reach question and the import of a stock DeepSeek Harness home. Setup records reach as off.
 - The Windows DACL check ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory and protected-file checks look only at the file type.
 - `delorun --version`, `verify`, `doctor`, `logs`, `update`, `recover`, `reach`, `devices`, `export`, `import` and `dev`.

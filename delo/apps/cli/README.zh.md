@@ -8,7 +8,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 
 ## 摘要
 
-本应用即 `delorun` 命令。在任何上游代码运行之前，它通过 [`@delo/home`](../../packages/home/README.zh.md) 解析并准备 Delo home（该包实现 [约定 C1](../../docs/contracts/c01-home-layout.zh.md) 的 home），选择 CLI profile，并通过上游的 profile 运行器运行该 profile，同时把 Delo home 作为 `DSH_HOME`。新 home 先交给 setup 的入口。一次启动会获取该 profile 的 home 锁，因此每个 profile 只运行一个 home 进程。
+本应用即 `delorun` 命令。在任何上游代码运行之前，它通过 [`@delo/home`](../../packages/home/README.zh.md) 解析并准备 Delo home（该包实现 [约定 C1](../../docs/contracts/c01-home-layout.zh.md) 的 home），选择 CLI profile，并通过上游的 profile 运行器运行该 profile，同时把 Delo home 作为 `DSH_HOME`。新 home 先交给 setup 的入口。一次启动会运行该 profile 的 home 进程（home process），它由 [`@delo/home-process`](../../packages/home-process/README.zh.md)（[约定 C19](../../docs/contracts/c19-home-process.zh.md)）实现；它持有该 profile 的 home 锁，因此每个 profile 只运行一个 home 进程，`stop` 与 `status` 通过其更新通道与它通信。
 
 ## 目录
 
@@ -16,7 +16,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 - [home](#the-home)
 - [Profile](#profiles)
 - [Setup](#setup)
-- [home 锁](#the-home-lock)
+- [home 进程](#the-home-process)
 - [delorun 如何运行上游](#how-delorun-runs-upstream)
 - [扩展点](#extension-points)
 - [尚未实现](#not-yet-implemented)
@@ -30,8 +30,9 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 | --- | --- |
 | `delorun [--profile <name>]` | 若 home 上还没有 CLI profile，则运行 setup；否则在此终端中启动 home 进程并打开 studio |
 | `delorun setup [--profile <name>] [--yes \| --config <file>]` | setup：在终端中提问，或用 `--yes` 应用全部默认值，或用 `--config` 应用答案文档；已完成的 setup 保持不变 |
-| `delorun start --foreground [--profile <name>]` | 在此终端中启动 home 进程，但不打开 studio |
-| `delorun status [--profile <name>]` | 打印 home、profile、其 home 进程是否在运行，以及 `delorun` 忽略的、已继承的 `DSH_HOME` |
+| `delorun start [--foreground] [--profile <name>]` | 以脱离终端的方式启动 home 进程，并最多等待 120 秒使其报告 `running`；`--foreground` 则在此终端中运行它。两者都不打开 studio |
+| `delorun stop [--now] [--profile <name>]` | 在运行中的 chat 结束后停止 home 进程，最多等待 1,800 秒；`--now` 先取消它们 |
+| `delorun status [--profile <name>] [--json]` | 打印 home、profile、`delorun` 忽略的已继承 `DSH_HOME`，以及 home 进程的状态、进程 id、启动 id、运行时版本、运行中的 chat 与进行中的更新；`--json` 只打印其 `status` 应答 |
 | `delorun plugin …` | 上游的 `dsh plugin …`，不作改动，针对 Delo home 运行 |
 | `delorun headless …` | 上游的 `dsh headless …`，不作改动，针对 Delo home 运行 |
 
@@ -70,11 +71,15 @@ Setup 按顺序执行各步骤：创建 CLI profile；把输入的密钥以 0600
 
 桌面端分析是“记录而不写入”：setup 记录答案，但不向桌面应用的 profile 写入任何行，因为桌面打包不在 MVP 范围内，桌面应用仍保留上游自己的 profile；待桌面应用组合 Delo 的组合包后，它再应用已记录的答案。规格测试固定了这一行为。尚未由 setup 写入的还有：模型选择、studio 附加功能、引导标志与运行时；它们的目标分别随各自的包到来。setup 把这些答案记录在答案记录中。
 
-<a id="the-home-lock"></a>
+<a id="the-home-process"></a>
 
-## home 锁
+## home 进程
 
-一次启动会在引导该 profile 之前，使用 `@delo/home` 的 `acquireHomeLock` 获取 `run/<profile>/home.lock`，并在进程退出时释放它。在任意多次启动中，恰好只有一次会持有该锁，包括取代已死亡持有者留下的锁。存活的持有者绝不会被接管，第二次启动会打印正在运行的进程并以 0 退出，与 C19 的 `delorun start` 相同。被 `SIGKILL` 杀死的进程会留下该锁，下一次启动会将其替换。在更新通道存在之前，仍存活的持有者无法被询问状态，并被视为已响应，因此不会报告 `HOME_UNRESPONSIVE`。
+`delorun start --foreground` 与不带选项的 `delorun` 通过 `HomeProcess.start` 在本进程中运行 home 进程：它获取 `run/<profile>/home.lock`，写入新的启动令牌，在更新通道 `run/<profile>/update.sock` 上监听，并通过上游的 profile 运行器引导该 profile，使其作为 Host 运行。它写入 `home-<profile>` 运行日志；在前台运行时，终端还会显示其输出。无论有多少次启动，恰好只有一次持有该锁，包括取代已死亡持有者留下的锁。存活的持有者通过更新通道被询问状态：有回应时，第二次启动会打印正在运行的进程并以 0 退出；2 秒内无回应时，本次启动以 `HOME_UNRESPONSIVE` 停止。无论以何种方式结束进程，锁、令牌文件与套接字都会随之移除；被 `SIGKILL` 杀死的进程会留下它们，下一次启动会将其替换。
+
+不带 `--foreground` 的 `delorun start` 会以脱离终端的方式启动 `delorun start --foreground`，标准输入关闭，其输出写入日志，并最多等待 120 秒使 home 进程报告 `running`。若 home 进程先行退出或未及时报告 `running`，则报告失败，并给出其日志的位置。`delorun stop` 与 `delorun status` 读取令牌文件，并通过更新通道发送 `stop` 或 `status`；若没有存活的锁持有者，`stop` 会打印 Delo 未在运行并以 0 退出，`status` 则以 3 退出。
+
+本构建尚无运行时仓库，因此其 home 进程拒绝更新请求；其 Host 不统计运行中的 chat，因此 `stop` 不会等待任何 chat（[home 进程的 seams](../../packages/home-process/README.zh.md#seams-for-other-packages)）。
 
 <a id="how-delorun-runs-upstream"></a>
 
@@ -88,13 +93,13 @@ Setup 按顺序执行各步骤：创建 CLI profile；把输入的密钥以 0600
 
 - **命令**是导出一个 `CliCommand`（`src/command.ts`）的模块，并在 `src/main.ts` 的 `COMMANDS` 中添加一行。`delorun doctor` 属于 `src/doctor/`，`delorun logs` 属于 `src/logs/`，二者都通过这一行接入。
 - **Setup** 是 `src/setup/index.ts` 中的 `runSetup`，`delorun setup` 与首次运行都会调用它。提问位于 `src/setup/interactive.ts`，经由 `src/setup/prompts.ts` 的 `Prompter` 接口，因此测试可用脚本化的提问器运行它们。
-- **持有者探测**是 `src/start.ts` 中 `StartDependencies` 的 `probe`；home 进程的 `status` 请求会替换把仍存活的持有者视为已响应的探测。
+- **home 进程的依赖**是 `src/start.ts` 中的 `StartDependencies`：profile 的准备与运行器、环境加载器、持有者探测（更新通道的 `status` 请求）、退出钩子与输出捕获，因此规格测试可以用替身运行一次启动。
 
 <a id="not-yet-implemented"></a>
 
 ## 尚未实现
 
-- 不带 `--foreground` 的 `delorun start`、`delorun stop`，以及 `delorun status` 中来自 home 进程的部分：后台 home 进程、其更新通道、启动令牌与限制探测。
+- 登录时启动（`delorun start --at-login`、`delorun stop --at-login`）、`delorun status --follow`、运行时仓库的更新、Host 的 chat 门禁（[home 进程的 seams](../../packages/home-process/README.zh.md#seams-for-other-packages)），以及启动顺序中的限制探测。
 - setup 的 reach 问题，以及导入 DeepSeek Harness 的 stock home。setup 将 reach 记录为关闭。
 - Windows 的 DACL 检查（[#48](https://github.com/Delo-Run/delo/issues/48)）：在 Windows 上，目录与受保护文件的检查只查看文件类型。
 - `delorun --version`、`verify`、`doctor`、`logs`、`update`、`recover`、`reach`、`devices`、`export`、`import` 与 `dev`。

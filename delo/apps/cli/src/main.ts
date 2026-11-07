@@ -1,13 +1,14 @@
 /**
- * The `delorun` command (contract C1; the commands of contract C19 that need
- * no update channel):
+ * The `delorun` command (contract C1; contract C19's `start`, `stop` and
+ * `status`):
  *
  * | Command | What it does |
  * | --- | --- |
  * | `delorun [--profile <name>]` | runs setup on a home without the CLI profile; otherwise starts the home process in this terminal and opens the studio |
  * | `delorun setup [--profile <name>]` | setup's entry point ([setup](./setup/index.ts)) |
- * | `delorun start --foreground [--profile <name>]` | the home process in this terminal, holding the profile's lock ([start](./start.ts)) |
- * | `delorun status [--profile <name>]` | the home, the profile and whether its home process runs ([status](./status.ts)) |
+ * | `delorun start [--foreground] [--profile <name>]` | the home process in the background, or in this terminal ([start](./start.ts)) |
+ * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
+ * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |
  *
@@ -25,12 +26,13 @@ import { hasCliProfile } from './profile.ts'
 import { runSetup, setupCommand } from './setup/index.ts'
 import { startCommand, startForeground } from './start.ts'
 import { statusCommand } from './status.ts'
+import { stopCommand } from './stop.ts'
 import { logsCommand } from './logs/command.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, statusCommand, logsCommand, pluginCommand, headlessCommand]
+export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, logsCommand, pluginCommand, headlessCommand]
 
 /**
  * The help text.

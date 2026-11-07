@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/home-process/README.md
+/:
+  en: e940c9e16750466c
+  zh: e736c89a44cf0490
+/delo-home-process:
+  en: 73c5d70871e63f06
+  zh: 2e86dd285978f267
+/delo-home-process/summary:
+  en: 738d422c1f66cac5
+  zh: 8d747b942bfa6ed7
+/delo-home-process/contents:
+  en: ef59d61d36e7a17f
+  zh: 8238873783e96af8
+/delo-home-process/starting-a-home-process:
+  en: 3452127d750bc6c3
+  zh: e4c0ebcb225359e8
+/delo-home-process/the-update-channel:
+  en: bf40b7863d16730c
+  zh: 0e9030eabcf1d0e9
+/delo-home-process/the-update-handshake:
+  en: 34387512587c1408
+  zh: d5079918e17114cf
+/delo-home-process/the-handover:
+  en: aa1947d6f63af8c6
+  zh: b5395cccfb99d073
+/delo-home-process/interrupted-updates:
+  en: 79968eccaee20a7a
+  zh: cbdcf6c5171974e9
+/delo-home-process/stopping:
+  en: 30bc26bff5936fdd
+  zh: bf074aaa7ceb8f78
+/delo-home-process/the-supervisor:
+  en: 621c2e9780b3003d
+  zh: ab0b8c55cc42c1d9
+/delo-home-process/the-operational-log:
+  en: d6e2aeab812c2f86
+  zh: de6fcbb99ec99b86
+/delo-home-process/seams-for-other-packages:
+  en: f8842db3fefd8384
+  zh: a73118aa097a2a4b
+/delo-home-process/not-yet-implemented:
+  en: 929cff6a253a5fca
+  zh: f09ff49072ca42c1
+/delo-home-process/tests:
+  en: a7d0f9d33707c6aa
+  zh: 211ddc5d2e78cb9a

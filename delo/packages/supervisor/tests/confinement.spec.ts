@@ -19,7 +19,8 @@ import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import { launcherPath } from '@deepseek-ai/node-addon-system/landlock-run'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveDockerContext, startTokenFile } from '../src/index.ts'
+import { startTokenFile } from '@delo/home'
+import { resolveDockerContext } from '../src/index.ts'
 import { PROFILE, startSupervisor, tempHome, type RunningSupervisor, type TempHome } from './support.ts'
 
 /** What the confined command reports: whether it read the token, whether it connected, and the response line. */

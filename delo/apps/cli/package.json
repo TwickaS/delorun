@@ -17,9 +17,11 @@
     "@deepseek-ai/dsh-sandbox-local": "workspace:*",
     "@delo/bundle-local": "workspace:*",
     "@delo/contract-home-layout": "workspace:*",
+    "@delo/contract-home-process": "workspace:*",
     "@delo/contract-operational-logs": "workspace:*",
     "@delo/contract-setup-answers": "workspace:*",
     "@delo/home": "workspace:*",
+    "@delo/home-process": "workspace:*",
     "@delo/logs": "workspace:*",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"

@@ -7,14 +7,14 @@
 import { createInterface } from 'node:readline'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
-import { acquireHomeLock, HomeLayoutError } from '../../src/index.ts'
+import { acquireHomeLock, HomeLayoutError, newStartId } from '../../src/index.ts'
 
 const runDirectory = process.argv[2] as string
 const input = createInterface({ input: process.stdin })
 process.stdout.write('ready\n')
 await new Promise<void>((resolve) => { input.once('line', () => { resolve() }) })
 try {
-  const lock = await acquireHomeLock({ runDirectory, runtime: brandString<RuntimeVersion>('0.0.0'), probe: () => Promise.resolve('answered') })
+  const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: brandString<RuntimeVersion>('0.0.0'), probe: () => Promise.resolve('answered') })
   process.stdout.write(`${JSON.stringify({ outcome: 'held', startId: lock.record.startId, pid: process.pid })}\n`)
   input.once('close', () => {
     lock.release()

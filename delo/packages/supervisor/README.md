@@ -25,7 +25,7 @@ This package is the Docker supervisor of [contract C9](../../docs/contracts/c09-
 
 ## Launching the supervisor
 
-The home process ([C19](../../docs/contracts/c19-home-process.md)) owns the start token. At each start it writes the token to `run/<profile>/start-token` with `@delo/home`'s `writeProtectedFile`, then spawns `src/main.ts` with a pipe on file descriptor 3 (`LAUNCH_FD`) and writes one launch line to it with `encodeLaunch`:
+The home process ([C19](../../docs/contracts/c19-home-process.md), [`@delo/home-process`](../home-process/README.md)) owns the start token. At each start it writes the token to `run/<profile>/start-token` with `@delo/home`'s `writeNewStartToken`, then spawns `src/main.ts` with a pipe on file descriptor 3 (`LAUNCH_FD`) and writes one launch line to it with `encodeLaunch`:
 
 | Field | Value |
 | --- | --- |
@@ -43,11 +43,11 @@ The token reaches the supervisor only through the pipe, never a command line or 
 
 ## The socket and the token
 
-- The socket is the pathname socket `run/<profile>/supervisor.sock`, in a run directory that must pass C1's 0700 check. A path over 103 bytes is refused with `SOCKET_PATH_TOO_LONG`. The socket is bound under a temporary name in the run directory, set to mode 0600 and renamed into place, replacing a socket an earlier supervisor of the profile left; any other file at the path is refused. Stopping removes the path only while it is still this supervisor's socket, by device and inode, so an older supervisor that stops late leaves a newer one's socket in place. A start that fails after binding closes and removes its temporary socket, and each start removes temporary sockets an earlier supervisor left. The supervisor resolves the home once at its start and derives the run and helper directories, the labels' home id and the mount sources from the canonical path.
+- The socket is `@delo/home`'s token channel ([the token channels](../home/README.md#the-token-channels)) with C9's limits: the pathname socket `run/<profile>/supervisor.sock`, in a run directory that must pass C1's 0700 check. A path over 103 bytes is refused with `SOCKET_PATH_TOO_LONG`. The socket is bound under a temporary name in the run directory, set to mode 0600 and renamed into place, replacing a socket an earlier supervisor of the profile left; any other file at the path is refused. Stopping removes the path only while it is still this supervisor's socket, by device and inode, so an older supervisor that stops late leaves a newer one's socket in place. A start that fails after binding closes and removes its temporary socket, and each start removes temporary sockets an earlier supervisor left. The supervisor resolves the home once at its start and derives the run and helper directories, the labels' home id and the mount sources from the canonical path.
 - Each connection carries one request line of at most 65,536 bytes; its first byte must arrive within `firstByteMs` and the whole line within 5 seconds (`REQUEST_TIMEOUT`), and a 33rd open connection is answered `BUSY`. A connection's slot is released once its response line is written, and a connection whose caller has not closed it `firstByteMs` later is closed.
-- `StartTokenCheck` compares the request's `token` with the current start's token through fixed-length digests in constant time. A missing, wrong or previous start's token, and a line that is not a JSON object, receive `UNAUTHENTICATED` and nothing else. Refused authentications are logged at most once per `refusalLogIntervalMs`, with the count of those not logged.
+- `@delo/home`'s `StartTokenCheck` compares the request's `token` with the current start's token through fixed-length digests in constant time. A missing, wrong or previous start's token, and a line that is not a JSON object, receive `UNAUTHENTICATED` and nothing else. Refused authentications are logged at most once per `refusalLogIntervalMs`, with the count of those not logged.
 - The token is checked before the schema is read, so a caller without the token learns nothing about the API.
-- `readStartTokenFile` reads the token file through C1's protected-file check, for `delorun` client commands.
+- `@delo/home`'s `readStartTokenFile` reads the token file through C1's protected-file check, for `delorun` client commands.
 
 ## The API
 

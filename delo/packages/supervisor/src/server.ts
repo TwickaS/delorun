@@ -1,28 +1,22 @@
 /**
- * The supervisor's listener (contract C9, "The supervisor API"; C1, "Sockets and the start token"): a pathname Unix
- * socket under `run/<profile>/`, set to mode 0600 after it binds. Each connection carries one request line of at
+ * The supervisor's listener (contract C9, "The supervisor API"; C1, "Sockets and the start token"): `@delo/home`'s
+ * token channel on `run/<profile>/supervisor.sock` with C9's limits. Each connection carries one request line of at
  * most 65,536 bytes that must arrive within 5 seconds, and at most 32 connections are served at once; the 33rd is
  * answered `BUSY`. A request is authenticated by the current start's token before its schema is read, and the
  * connection closes after its response line.
  *
  * @module @delo/supervisor/server
  */
-import { randomBytes } from 'node:crypto'
-import { chmod, lstat, readdir, rename, unlink } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { createServer, type Server, type Socket } from 'node:net'
-import { PROTECTED_FILE_MODE, SOCKET_PATH_MAX_BYTES } from '@delo/contract-home-layout'
 import {
   SUPERVISOR_MAX_CONNECTIONS,
   SUPERVISOR_REQUEST_DEADLINE_MS,
   SUPERVISOR_REQUEST_MAX_BYTES,
   type SupervisorRequest,
 } from '@delo/contract-runtime-supervisor'
-import { HomeLayoutError } from '@delo/home'
+import { listenTokenSocket, type ChannelRefusal, type ListenerRefusal, type StartTokenCheck } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
 import { SupervisorError } from './errors.ts'
-import { decodeRequest } from './schema.ts'
-import type { StartTokenCheck } from './token.ts'
+import { checkRequest } from './schema.ts'
 
 /** Runs one authenticated request and returns the response line's fields after `ok`. */
 export type RequestHandler = (request: SupervisorRequest) => Promise<Record<string, unknown>>
@@ -64,231 +58,50 @@ function workspaceOf(request: SupervisorRequest): string | undefined {
 }
 
 /**
- * Check the socket path for a file left by an earlier supervisor of this profile. A socket there is replaced when the
- * new one is renamed over it; any other file is refused, so the supervisor never replaces a file it did not create.
- * @param path - the socket path.
- * @throws {Error} naming the path when something other than a socket is there.
+ * The supervisor's refusal as the channel answers it.
+ * @param error - the refusal.
+ * @returns the channel refusal.
  */
-async function refuseNonSocket(path: string): Promise<void> {
-  let stats
-  try {
-    stats = await lstat(path)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-    throw error
-  }
-  if (!stats.isSocket()) throw new Error(`${path} exists and is not a socket; remove it before starting the supervisor`)
+function channelRefusal(error: SupervisorError): ChannelRefusal {
+  return { code: error.code, ...error.detail === undefined ? {} : { detail: error.detail }, line: error.toFailure() }
 }
 
-/** The prefix of the temporary name a socket is bound under before it is renamed into place. */
-const TEMPORARY_PREFIX = '.s-'
-
-/**
- * Remove sockets left under a temporary name by a supervisor that stopped before renaming its socket into place.
- * Only sockets whose name is a temporary name are removed.
- * @param directory - the run directory.
- */
-async function removeStaleTemporaries(directory: string): Promise<void> {
-  for (const name of await readdir(directory)) {
-    if (!/^\.s-[0-9a-f]{8}$/.test(name)) continue
-    const path = join(directory, name)
-    if ((await lstat(path)).isSocket()) await unlink(path)
-  }
-}
-
-/** The refusals of requests without the current token, logged at most once per interval with a count. */
-class RefusalLog {
-  private suppressed = 0
-  private last = Number.NEGATIVE_INFINITY
-
-  /**
-   * @param logger - the supervisor's logger.
-   * @param intervalMs - the shortest time between two records.
-   */
-  constructor(private readonly logger: DeloLogger, private readonly intervalMs: number) {}
-
-  /** Count one refusal and write a record when the interval has passed since the last one. */
-  refused(): void {
-    const now = Date.now()
-    if (now - this.last < this.intervalMs) {
-      this.suppressed += 1
-      return
-    }
-    this.logger.warn('refused a request without the current start token', this.suppressed === 0 ? undefined : { data: { alsoRefusedSinceLastRecord: this.suppressed } })
-    this.last = now
-    this.suppressed = 0
-  }
+/** C9's codes for the refusals the listener raises; C9 has no code of its own for a long line or an early end. */
+const LISTENER_REFUSALS: Readonly<Record<ListenerRefusal, () => SupervisorError>> = {
+  UNAUTHENTICATED: () => new SupervisorError('UNAUTHENTICATED'),
+  BUSY: () => new SupervisorError('BUSY'),
+  REQUEST_TIMEOUT: () => new SupervisorError('REQUEST_TIMEOUT'),
+  REQUEST_TOO_LARGE: () => new SupervisorError('SCHEMA_VIOLATION', `the request line exceeds ${String(SUPERVISOR_REQUEST_MAX_BYTES)} bytes`),
+  REQUEST_ENDED: () => new SupervisorError('SCHEMA_VIOLATION', 'the connection ended before a request line'),
 }
 
 /**
- * Listen on the supervisor socket. The socket is bound under a temporary name in the same directory, set to mode 0600
- * and renamed into place, so it appears whole at its mode and replaces an earlier supervisor's socket in one step.
- * Closing removes the path only while it is still this listener's socket, so a supervisor that stops after a newer
- * one has started leaves the newer socket in place.
+ * Listen on the supervisor socket, bound and replaced as `@delo/home`'s `listenTokenSocket` states.
  * @param options - the path, token check, handler, logger and timing.
  * @returns the listener.
  * @throws {HomeLayoutError} `SOCKET_PATH_TOO_LONG` when the path exceeds C1's limit.
  * @throws {Error} when a file other than a socket is at the path.
  */
 export async function listenSupervisor(options: ListenOptions): Promise<SupervisorListener> {
-  const { socketPath, check, handle, logger } = options
-  if (Buffer.byteLength(socketPath, 'utf8') > SOCKET_PATH_MAX_BYTES) {
-    throw new HomeLayoutError('SOCKET_PATH_TOO_LONG', socketPath, `${socketPath} is longer than ${String(SOCKET_PATH_MAX_BYTES)} bytes; choose a shorter Delo home with DELO_HOME`)
-  }
-  await removeStaleTemporaries(dirname(socketPath))
-  const refusals = new RefusalLog(logger, options.refusalLogIntervalMs)
-  const sockets = new Set<Socket>()
-  let served = 0
-
-  // The connection's slot is released once the response is flushed. Input after the request line is read and
-  // discarded, so closing never resets the peer before it has the response; a peer that has not closed its side by
-  // the first-byte deadline is cut off.
-  const answer = (socket: Socket, fields: Record<string, unknown>): void => {
-    socket.removeAllListeners('data')
-    socket.resume()
-    socket.end(`${JSON.stringify(fields)}\n`, () => {
-      socket.emit('released')
-      const cutOff = setTimeout(() => { socket.destroy() }, options.firstByteMs)
-      cutOff.unref()
-      socket.once('close', () => { clearTimeout(cutOff) })
-    })
-  }
-
-  const run = async (socket: Socket, line: string): Promise<void> => {
-    let request: SupervisorRequest
-    try {
-      request = decodeRequest(line, check)
-    } catch (error) {
-      if (!(error instanceof SupervisorError)) {
-        logger.error('request decoding failed', { err: error })
-        socket.destroy()
-        return
-      }
-      const refusal = error
-      if (refusal.code === 'UNAUTHENTICATED') refusals.refused()
-      else logger.info('refused a request', { data: { outcome: refusal.code, detail: refusal.detail ?? '' } })
-      answer(socket, { ...refusal.toFailure() })
-      return
-    }
-    const workspaceId = workspaceOf(request)
-    try {
-      const result = await handle(request)
-      logger.info('request', { data: { op: request.op, ...workspaceId === undefined ? {} : { workspaceId }, outcome: 'ok' } })
-      answer(socket, { ok: true, ...result })
-    } catch (error) {
-      if (error instanceof SupervisorError) {
-        logger.info('request', { data: { op: request.op, ...workspaceId === undefined ? {} : { workspaceId }, outcome: error.code, detail: error.detail ?? '' } })
-        answer(socket, { ...error.toFailure() })
-        return
-      }
-      // An unexpected failure leaves the operation's outcome unknown; the connection closes without a response line.
-      logger.error('request failed', { err: error, data: { op: request.op, ...workspaceId === undefined ? {} : { workspaceId } } })
-      socket.destroy()
-    }
-  }
-
-  const server: Server = createServer({ allowHalfOpen: false }, (socket) => {
-    sockets.add(socket)
-    socket.on('close', () => { sockets.delete(socket) })
-    socket.on('error', (error: NodeJS.ErrnoException) => { logger.debug('connection error', { data: { code: error.code ?? 'unknown' } }) })
-    if (served >= SUPERVISOR_MAX_CONNECTIONS) {
-      logger.warn('refused a connection: all connections are in use', { data: { outcome: 'BUSY' } })
-      answer(socket, { ...new SupervisorError('BUSY').toFailure() })
-      return
-    }
-    served += 1
-    let held = true
-    const release = (): void => {
-      if (!held) return
-      held = false
-      served -= 1
-    }
-    socket.once('released', release)
-    socket.once('close', release)
-    let buffered = Buffer.alloc(0)
-    let done = false
-    const finish = (): void => {
-      done = true
-      clearTimeout(deadline)
-      socket.removeAllListeners('data')
-      socket.pause()
-    }
-    const timeOut = (): void => {
-      if (done) return
-      finish()
-      logger.info('refused a request', { data: { outcome: 'REQUEST_TIMEOUT' } })
-      answer(socket, { ...new SupervisorError('REQUEST_TIMEOUT').toFailure() })
-    }
-    // A caller that sends nothing is cut off at the first-byte deadline; one that has started has C9's 5 seconds.
-    const connectedAt = Date.now()
-    let deadline = setTimeout(timeOut, options.firstByteMs)
-    let started = false
-    socket.on('data', (chunk: Buffer) => {
-      if (done) return
-      if (!started) {
-        started = true
-        clearTimeout(deadline)
-        deadline = setTimeout(timeOut, SUPERVISOR_REQUEST_DEADLINE_MS - (Date.now() - connectedAt))
-      }
-      buffered = Buffer.concat([buffered, chunk])
-      const newline = buffered.indexOf(0x0a)
-      const length = newline === -1 ? buffered.length : newline
-      if (length > SUPERVISOR_REQUEST_MAX_BYTES) {
-        finish()
-        logger.info('refused a request', { data: { outcome: 'SCHEMA_VIOLATION', detail: 'request line too long' } })
-        answer(socket, { ...new SupervisorError('SCHEMA_VIOLATION', `the request line exceeds ${String(SUPERVISOR_REQUEST_MAX_BYTES)} bytes`).toFailure() })
-        return
-      }
-      if (newline === -1) return
-      finish()
-      void run(socket, buffered.subarray(0, newline).toString('utf8'))
-    })
-    socket.on('end', () => {
-      if (done) return
-      finish()
-      answer(socket, { ...new SupervisorError('SCHEMA_VIOLATION', 'the connection ended before a request line').toFailure() })
-    })
-  })
-
-  const temporary = join(dirname(socketPath), `${TEMPORARY_PREFIX}${randomBytes(4).toString('hex')}`)
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(temporary, () => {
-      server.off('error', reject)
-      resolve()
-    })
-  })
-  let bound
-  try {
-    await chmod(temporary, PROTECTED_FILE_MODE)
-    await refuseNonSocket(socketPath)
-    await rename(temporary, socketPath)
-    bound = await lstat(socketPath, { bigint: true })
-  } catch (error) {
-    // Nothing listens on a socket that never took its place, and its temporary name is removed.
-    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
-    await unlink(temporary).catch((cleanupError: unknown) => {
-      // ENOENT: the close or the rename already removed it; any other failure is reported with the start's own error.
-      if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') throw new AggregateError([error, cleanupError], `could not start the supervisor socket or remove ${temporary}`)
-    })
-    throw error
-  }
-  server.on('error', (error) => { logger.error('listener error', { err: error }) })
-
-  return {
-    socketPath,
-    async close() {
-      const closed = new Promise<void>((resolve) => { server.close(() => { resolve() }) })
-      for (const socket of sockets) socket.destroy()
-      await closed
-      let current
-      try {
-        current = await lstat(socketPath, { bigint: true })
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-        throw error
-      }
-      if (current.dev === bound.dev && current.ino === bound.ino) await unlink(socketPath)
+  const socket = await listenTokenSocket<SupervisorRequest>({
+    socketPath: options.socketPath,
+    check: options.check,
+    logger: options.logger,
+    limits: {
+      requestMaxBytes: SUPERVISOR_REQUEST_MAX_BYTES,
+      maxConnections: SUPERVISOR_MAX_CONNECTIONS,
+      requestDeadlineMs: SUPERVISOR_REQUEST_DEADLINE_MS,
+      firstByteMs: options.firstByteMs,
+      refusalLogIntervalMs: options.refusalLogIntervalMs,
     },
-  }
+    decode: checkRequest,
+    handle: async request => options.handle(request),
+    refusalOf: error => (error instanceof SupervisorError ? channelRefusal(error) : undefined),
+    refuse: kind => channelRefusal(LISTENER_REFUSALS[kind]()),
+    describe: (request) => {
+      const workspaceId = workspaceOf(request)
+      return { op: request.op, ...workspaceId === undefined ? {} : { workspaceId } }
+    },
+  })
+  return { socketPath: socket.socketPath, close: async () => socket.close() }
 }

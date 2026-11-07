@@ -19,7 +19,7 @@ import {
 } from '@delo/contract-runtime-supervisor'
 import { z } from 'zod'
 import { SupervisorError } from './errors.ts'
-import type { StartTokenCheck } from './token.ts'
+import { authenticateLine, type StartTokenCheck } from '@delo/home'
 
 const HOST_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/
 
@@ -105,6 +105,19 @@ function detailOf(issues: readonly z.core.$ZodIssue[]): string {
 }
 
 /**
+ * Check an authenticated request against the closed schema.
+ * @param value - the parsed request line, already authenticated by its token.
+ * @returns the request.
+ * @throws {SupervisorError} `SCHEMA_VIOLATION` when the request breaks the schema.
+ */
+export function checkRequest(value: object): SupervisorRequest {
+  const parsed = request.safeParse(value)
+  if (!parsed.success) throw new SupervisorError('SCHEMA_VIOLATION', detailOf(parsed.error.issues))
+  // The schema checked every field the contract's type names; the brands are the contract's own types.
+  return parsed.data as SupervisorRequest
+}
+
+/**
  * Authenticate one request line and check it against the closed schema.
  * @param line - the request line, without its newline.
  * @param check - the current start's token check.
@@ -113,17 +126,7 @@ function detailOf(issues: readonly z.core.$ZodIssue[]): string {
  *   token, and `SCHEMA_VIOLATION` when an authenticated request breaks the schema.
  */
 export function decodeRequest(line: string, check: StartTokenCheck): SupervisorRequest {
-  let value: unknown
-  try {
-    value = JSON.parse(line)
-  } catch (_notJson) {
-    // A line that is not JSON carries no token.
-    value = undefined
-  }
-  const token = typeof value === 'object' && value !== null && !Array.isArray(value) && Object.hasOwn(value, 'token') ? (value as { readonly token: unknown }).token : undefined
-  if (!check.accepts(token)) throw new SupervisorError('UNAUTHENTICATED')
-  const parsed = request.safeParse(value)
-  if (!parsed.success) throw new SupervisorError('SCHEMA_VIOLATION', detailOf(parsed.error.issues))
-  // The schema checked every field the contract's type names; the brands are the contract's own types.
-  return parsed.data as SupervisorRequest
+  const value = authenticateLine(line, check)
+  if (value === undefined) throw new SupervisorError('UNAUTHENTICATED')
+  return checkRequest(value)
 }

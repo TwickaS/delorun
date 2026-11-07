@@ -1,0 +1,236 @@
+/**
+ * The handover between a home process and its successor on a new runtime (contract C19, "The update handshake",
+ * steps `switching` to `committed`). The predecessor starts the successor with a pipe inherited as file descriptor 3
+ * and writes one handover line to it; the successor boots its Host in `standby`, checks its health and answers
+ * `ready` or `failed`. On `ready` the predecessor hands the lock over and writes `commit`; the successor then takes
+ * the update channel. Nothing of the handover passes through a command line or an environment variable, and no
+ * token passes at all: the successor writes its own.
+ *
+ * @module @delo/home-process/handover
+ */
+import { spawn, type ChildProcess } from 'node:child_process'
+import { Socket } from 'node:net'
+import type { Duplex } from 'node:stream'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import { RUNTIME_VERSION_PATTERN, type RuntimeVersion, type StartId } from '@delo/contract-home-layout'
+import { HANDOVER_FD, type HandoverMessage } from '@delo/contract-home-process'
+import { z } from 'zod'
+import type { HomeCommand } from './seams.ts'
+
+/** What the predecessor tells its successor, in the first line on the pipe. */
+export interface HandoverLine {
+  /** The line's kind. */
+  readonly type: 'handover'
+  /** Record version. */
+  readonly v: 1
+  /** The resolved Delo home. */
+  readonly home: string
+  /** The CLI profile. */
+  readonly profile: string
+  /** The version the predecessor runs. */
+  readonly from: RuntimeVersion
+  /** The version the successor runs. */
+  readonly to: RuntimeVersion
+  /** The start id the predecessor assigned to the successor, which the lock carries after the handover. */
+  readonly startId: StartId
+  /** The plugin ids the update report named as disabled at boot. */
+  readonly disabledPlugins: readonly string[]
+  /** RFC 3339 UTC time the update started, for the journal. */
+  readonly startedAt: string
+}
+
+/** The largest line on the handover pipe, in bytes. */
+export const HANDOVER_LINE_MAX_BYTES = 65_536
+
+const version = z.string().regex(new RegExp(RUNTIME_VERSION_PATTERN))
+const handoverSchema = z.strictObject({
+  type: z.literal('handover'),
+  v: z.literal(1),
+  home: z.string().min(1),
+  profile: z.string().min(1),
+  from: version,
+  to: version,
+  startId: z.string().regex(/^[0-9a-f]{32}$/),
+  disabledPlugins: z.array(z.string()),
+  startedAt: z.string().datetime(),
+})
+const messageSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('ready') }),
+  z.strictObject({ type: z.literal('failed'), reason: z.literal('HEALTH_CHECK_FAILED') }),
+])
+
+/**
+ * Read newline-separated lines from a stream and hand each to a listener; a line over the limit or the stream's end
+ * calls `end`.
+ * @param stream - the pipe.
+ * @param line - receives each line.
+ * @param end - called once, when the stream ends, fails or carries a line over {@link HANDOVER_LINE_MAX_BYTES}.
+ */
+function readLines(stream: Duplex, line: (text: string) => void, end: () => void): void {
+  let buffered = ''
+  let ended = false
+  const finish = (): void => {
+    if (ended) return
+    ended = true
+    end()
+  }
+  stream.setEncoding('utf8')
+  stream.on('data', (chunk: string) => {
+    if (ended) return
+    buffered += chunk
+    for (let newline = buffered.indexOf('\n'); newline !== -1 && !ended; newline = buffered.indexOf('\n')) {
+      const text = buffered.slice(0, newline)
+      buffered = buffered.slice(newline + 1)
+      line(text)
+    }
+    if (Buffer.byteLength(buffered, 'utf8') > HANDOVER_LINE_MAX_BYTES) finish()
+  })
+  stream.once('end', finish)
+  stream.once('close', finish)
+  stream.once('error', finish)
+}
+
+/**
+ * Parse one JSON line, or `undefined` when it is not JSON.
+ * @param text - the line.
+ * @returns the value.
+ */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch (_notJson) {
+    // Not JSON: the caller treats the line as a broken handover.
+    return undefined
+  }
+}
+
+/** A successor the predecessor started. */
+export interface Successor {
+  /** Its process id. */
+  readonly pid: number
+  /** Its first message, or `failed` when it exits, closes the pipe or does not answer before the deadline. */
+  readonly result: Promise<HandoverMessage>
+  /**
+   * Tell the successor that the lock is now its own, then let it run on after this process exits.
+   * @returns when the line is written.
+   */
+  commit(): Promise<void>
+  /**
+   * Stop the successor and wait for it to exit.
+   * @returns when it has exited.
+   */
+  stop(): Promise<void>
+}
+
+/**
+ * Start a successor from a version's runtime and write the handover line to its pipe. It runs in its own process
+ * group, so a signal to the requester's terminal does not reach it.
+ * @param command - the command from the runtime store.
+ * @param handover - the handover line.
+ * @param timeoutMs - how long the successor has to answer.
+ * @returns the successor.
+ */
+export function startSuccessor(command: HomeCommand, handover: HandoverLine, timeoutMs: number): Successor {
+  const child: ChildProcess = spawn(command.command, [...command.args], { cwd: command.cwd, stdio: ['ignore', 'ignore', 'ignore', 'pipe'], detached: true })
+  const pipe = child.stdio[HANDOVER_FD] as Duplex
+  const exited = new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) resolve()
+    else child.once('exit', () => { resolve() })
+  })
+  const result = new Promise<HandoverMessage>((resolve) => {
+    let settled = false
+    const settle = (message: HandoverMessage): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(message)
+    }
+    const failed = (): void => { settle({ type: 'failed', reason: 'HEALTH_CHECK_FAILED' }) }
+    const timer = setTimeout(failed, timeoutMs)
+    child.once('error', failed)
+    child.once('exit', failed)
+    readLines(pipe, (text) => {
+      const parsed = messageSchema.safeParse(parseJson(text))
+      settle(parsed.success ? parsed.data : { type: 'failed', reason: 'HEALTH_CHECK_FAILED' })
+    }, failed)
+  })
+  pipe.on('error', () => {
+    // EPIPE when the successor has exited; `result` reports it as failed.
+  })
+  pipe.write(`${JSON.stringify(handover)}\n`)
+  return {
+    pid: child.pid ?? -1,
+    result,
+    commit: () => new Promise<void>((resolve) => {
+      pipe.end(`${JSON.stringify({ type: 'commit' })}\n`, () => {
+        child.unref()
+        resolve()
+      })
+    }),
+    async stop() {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      await exited
+      pipe.destroy()
+    },
+  }
+}
+
+/** The successor's end of the handover. */
+export interface HandoverPipe {
+  /** The handover line. */
+  readonly handover: HandoverLine
+  /**
+   * Answer the predecessor.
+   * @param message - `ready` or `failed`.
+   */
+  send(message: HandoverMessage): void
+  /** Resolves true on `commit`, false when the pipe closes or carries anything else first. */
+  readonly committed: Promise<boolean>
+  /** Close the pipe. */
+  close(): void
+}
+
+/**
+ * Open the successor's end of the handover pipe and read the handover line. The pipe's end is watched from before the
+ * first await, so a predecessor that dies while the successor starts is seen.
+ * @param fd - the inherited descriptor, {@link HANDOVER_FD}.
+ * @returns the pipe.
+ * @throws {Error} when the pipe ends first or its first line is not a handover line; the message never quotes it.
+ */
+export function openHandoverPipe(fd: number = HANDOVER_FD): Promise<HandoverPipe> {
+  const pipe = new Socket({ fd, readable: true, writable: true })
+  return new Promise((resolve, reject) => {
+    let handover: HandoverLine | undefined
+    let commit: ((value: boolean) => void) | undefined
+    const committed = new Promise<boolean>((resolveCommit) => { commit = resolveCommit })
+    readLines(pipe, (text) => {
+      if (handover === undefined) {
+        const parsed = handoverSchema.safeParse(parseJson(text))
+        if (!parsed.success) {
+          pipe.destroy()
+          reject(new Error(`the handover line is not valid at ${parsed.error.issues[0]?.path.join('.') ?? 'its root'}`))
+          return
+        }
+        // The schema checked the versions' and start id's form; the brands are the contracts' own types.
+        const data = parsed.data
+        handover = { ...data, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), startId: brandString<StartId>(data.startId) }
+        const line = handover
+        resolve({
+          handover: line,
+          send: (message) => { pipe.write(`${JSON.stringify(message)}\n`) },
+          committed,
+          close: () => { pipe.destroy() },
+        })
+        return
+      }
+      const value = parseJson(text)
+      commit?.(typeof value === 'object' && value !== null && (value as { readonly type?: unknown }).type === 'commit')
+    }, () => {
+      commit?.(false)
+      if (handover === undefined) reject(new Error('the handover pipe closed before the handover line'))
+    })
+    pipe.on('error', () => {
+      // A predecessor that died: `readLines` sees the close and the successor stops waiting.
+    })
+  })
+}

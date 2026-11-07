@@ -8,7 +8,7 @@ description: "@delo/home 库：每个 Delo 组件所用的约定 C1 home，从�
 
 ## 摘要
 
-本包是每个 Delo 组件都使用的、[约定 C1](../../docs/contracts/c01-home-layout.zh.md) 中 home 的唯一实现。它解析 Delo home，以 0700 模式创建 home 及其中 Delo 的条目，拒绝其他用户可以访问的目录或受保护文件，以 0600 模式读写受保护文件，并获取按 profile 划分的 home 锁，使每个 profile 只运行一个 home 进程。名称、模式与错误代码均来自 [`@delo/contract-home-layout`](../contract-home-layout/README.zh.md)。`delorun` 命令（[`delo/apps/cli`](../../apps/cli/README.zh.md)）是它的首个使用者。
+本包是每个 Delo 组件都使用的、[约定 C1](../../docs/contracts/c01-home-layout.zh.md) 中 home 的唯一实现。它解析 Delo home，以 0700 模式创建 home 及其中 Delo 的条目，拒绝其他用户可以访问的目录或受保护文件，以 0600 模式读写受保护文件，并获取按 profile 划分的 home 锁，使每个 profile 只运行一个 home 进程，还拥有每次启动时的启动令牌，以及检查该令牌的两个通道（更新通道与 Docker 监管器的套接字）的监听器。名称、模式与错误代码均来自 [`@delo/contract-home-layout`](../contract-home-layout/README.zh.md)。`delorun` 命令（[`delo/apps/cli`](../../apps/cli/README.zh.md)）是它的首个使用者。
 
 ## 目录
 
@@ -17,6 +17,8 @@ description: "@delo/home 库：每个 Delo 组件所用的约定 C1 home，从�
 - [目录树及其模式](#the-tree-and-its-modes)
 - [受保护文件](#protected-files)
 - [home 锁](#the-home-lock)
+- [启动令牌](#the-start-token)
+- [令牌通道](#the-token-channels)
 - [尚未实现](#not-yet-implemented)
 - [开发](#development)
 
@@ -59,15 +61,33 @@ import { ensureHomeTree, readProtectedFile, resolveDeloHome, writeProtectedFile 
 `acquireHomeLock({ runDirectory, runtime, probe })` 获取 `run/<profile>/home.lock`，其记录为约定 C1 的 JSON 对象（`v`、`pid`、`startId`、`runtime`、`startedAt`），模式为 0600，并返回一个句柄；当锁中仍是本持有者的记录时，该句柄的 `release()` 会删除该锁。`release()` 是同步的，因此进程的 `exit` 监听器可以调用它。
 
 - **创建。** 锁写入的每个文件都先写入临时文件，再硬链接到其路径，因此它要么完整出现，要么完全不出现；无论有多少争用者，恰好只有一个链接会成功。
-- **存活的持有者**绝不会被接管。`probe` 在约定 C1 规定的两秒内询问其状态：有回应时结果为 `HOME_RUNNING`，无回应时为 `HOME_UNRESPONSIVE`。在 home 进程的更新通道存在之前，CLI 传入的探测会把存活的持有者视为已回应。
+- **存活的持有者**绝不会被接管。`probe` 在约定 C1 规定的两秒内询问其状态：有回应时结果为 `HOME_RUNNING`，无回应时为 `HOME_UNRESPONSIVE`。home 进程传入 `@delo/home-process` 的 `updateChannelProbe`，它通过更新通道发送 `status`。
+- **启动 id** 由调用方通过 `newStartId()` 提供，因此 home 进程在获取锁之前就已以它写日志。
+- **移交。** `handOver(successor)` 在文件仍持有本持有者的记录时，以后继 home 进程的进程 id、启动 id 与运行时原子地替换该记录；此后本句柄的 `release()` 不再做任何事。后继者通过 `adoptHomeLock(runDirectory, startId)` 接管该句柄，该函数拒绝不记录其自身进程的记录。
 - **陈旧的锁**，即其进程已不存在的锁，由 `removeStaleLock` 在接管守卫 `home.lock.takeover-<startId>` 之下删除；该守卫以同样方式创建，因此同一时刻只有一个争用者能够删除该记录。持有守卫的争用者只有在锁仍持有该 `startId` 时才会删除它。`startId` 是随机的且从不复用，且只有守卫持有者可以删除其记录，因此争用者无论运行得多晚，都不会删除它所发现的陈旧锁之外的锁。争用者死亡后遗留的守卫，由另一争用者以其自身的随机 id 作为守卫名称，以同样方式删除；在存活的争用者完成删除期间，争用者最多等待 10 秒。
+
+<a id="the-start-token"></a>
+
+## 启动令牌
+
+`writeNewStartToken(home, profile)` 在每次 home 进程启动时，向 `run/<profile>/start-token` 写入一个新令牌：来自操作系统随机源的 32 字节，以 base64url 编码并附一个换行符，以 0600 模式原子地替换。`readStartTokenFile` 通过受保护文件检查读取它，供 `delorun` 客户端命令使用，且从不回显格式错误文件的内容。`StartTokenCheck` 通过定长摘要，以恒定时间比较请求的 `token` 与当前启动的令牌，因此缺失、错误或属于上一次启动的令牌，同样被拒绝。`removeStartTokenFile` 在干净停止时删除该文件，且仅当文件中仍是本次启动的令牌时才删除；它是同步的，因此 `exit` 监听器可以调用它。
+
+<a id="the-token-channels"></a>
+
+## 令牌通道
+
+`listenTokenSocket` 是 C1 两个令牌通道的监听器；每个通道传入其约定的限制、代码与封闭模式。
+
+- **绑定。** 路径名套接字先以临时名称绑定在运行目录中，设为 0600 模式，再重命名到位，替换先前启动的套接字；路径上的任何其他文件都会被拒绝，超过 103 字节的路径会以 `SOCKET_PATH_TOO_LONG` 被拒绝。每次启动都会删除先前启动遗留的临时套接字。`close()` 与同步的 `removeSocketSync()` 只在该路径仍是本监听器的套接字（按设备号与 inode 判断）时删除它。
+- **请求。** 每个连接携带一行请求，其长度与期限都在通道的限制之内；超过通道限制的连接会被立即应答。`authenticateLine` 在读取其他任何内容之前检查该行的 `token`，因此没有令牌的调用方无法了解模式的任何信息。认证被拒绝时，日志至多每个间隔记录一次，不含所提交的值，并附上计数。
+- **应答。** 请求可以在最终行之前写出进度行；最终行写出后连接关闭。调用方在首字节期限前仍未关闭其一侧的连接会被切断。请求的调用方断开后，请求仍会继续运行，且该连接不再计入限制。`answered` 在最终行写出后运行，因此结束通道的请求只在其调用方已拿到应答后才关闭该通道。
 
 <a id="not-yet-implemented"></a>
 
 ## 尚未实现
 
 - 约定 C1 Windows 规则中的 DACL 检查（[#48](https://github.com/Delo-Run/delo/issues/48)）：在 Windows 上，目录与受保护文件的检查只查看文件类型。
-- 启动令牌、各通道的套接字，以及 home 进程所增加的限制探测。
+- 采用 C1 DACL 的 Windows 命名管道：令牌通道只在 Unix 套接字上监听。
 
 <a id="development"></a>
 

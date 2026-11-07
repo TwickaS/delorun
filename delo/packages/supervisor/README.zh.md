@@ -26,7 +26,7 @@ description: "@delo/supervisor 包，供 home 进程与 Docker 运行时的维�
 <a id="launching-the-supervisor"></a>
 ## 启动监管器
 
-home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动令牌。每次启动时，它使用 `@delo/home` 的 `writeProtectedFile` 将令牌写入 `run/<profile>/start-token`，然后以文件描述符 3（`LAUNCH_FD`）上的管道启动 `src/main.ts`，并用 `encodeLaunch` 向其写入一行启动信息：
+home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)，[`@delo/home-process`](../home-process/README.zh.md)）持有启动令牌。每次启动时，它使用 `@delo/home` 的 `writeNewStartToken` 将令牌写入 `run/<profile>/start-token`，然后以文件描述符 3（`LAUNCH_FD`）上的管道启动 `src/main.ts`，并用 `encodeLaunch` 向其写入一行启动信息：
 
 | 字段 | 取值 |
 | --- | --- |
@@ -45,11 +45,11 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 <a id="the-socket-and-the-token"></a>
 ## 套接字与令牌
 
-- 套接字是路径名套接字 `run/<profile>/supervisor.sock`，位于必须通过 C1 的 0700 检查的运行目录中。超过 103 字节的路径会以 `SOCKET_PATH_TOO_LONG` 被拒绝。套接字先以临时名称在运行目录中绑定，设为模式 0600，再重命名到位，替换该 profile 先前监管器遗留的套接字；路径上的任何其他文件都会被拒绝。停止时，只有该路径仍是本监管器的套接字（按设备号与 inode 判断）才会删除它，因此较晚停止的旧监管器会保留新监管器的套接字。绑定之后启动失败时，会关闭并删除其临时套接字，每次启动也会删除先前监管器遗留的临时套接字。监管器在启动时解析一次 home，并以规范路径推导运行目录与辅助程序目录、标签中的 home id 以及挂载来源。
+- 套接字是 `@delo/home` 的令牌通道（[令牌通道](../home/README.zh.md#the-token-channels)），采用 C9 的限制：路径名套接字 `run/<profile>/supervisor.sock`，位于必须通过 C1 的 0700 检查的运行目录中。超过 103 字节的路径会以 `SOCKET_PATH_TOO_LONG` 被拒绝。套接字先以临时名称在运行目录中绑定，设为模式 0600，再重命名到位，替换该 profile 先前监管器遗留的套接字；路径上的任何其他文件都会被拒绝。停止时，只有该路径仍是本监管器的套接字（按设备号与 inode 判断）才会删除它，因此较晚停止的旧监管器会保留新监管器的套接字。绑定之后启动失败时，会关闭并删除其临时套接字，每次启动也会删除先前监管器遗留的临时套接字。监管器在启动时解析一次 home，并以规范路径推导运行目录与辅助程序目录、标签中的 home id 以及挂载来源。
 - 每个连接携带一行至多 65,536 字节的请求；其第一个字节必须在 `firstByteMs` 内到达，整行必须在 5 秒内到达（`REQUEST_TIMEOUT`），第 33 个打开中的连接会收到 `BUSY` 应答。应答行一经写出，该连接所占的名额即被释放；调用方在此后 `firstByteMs` 内仍未关闭的连接会被关闭。
-- `StartTokenCheck` 通过定长摘要，以恒定时间比较请求的 `token` 与当前启动的令牌。缺失、错误或属于上一次启动的令牌，以及不是 JSON 对象的行，都只会收到 `UNAUTHENTICATED`，别无其他回应。认证拒绝至多每 `refusalLogIntervalMs` 记录一次日志，并附上未记录的次数。
+- `@delo/home` 的 `StartTokenCheck` 通过定长摘要，以恒定时间比较请求的 `token` 与当前启动的令牌。缺失、错误或属于上一次启动的令牌，以及不是 JSON 对象的行，都只会收到 `UNAUTHENTICATED`，别无其他回应。认证拒绝至多每 `refusalLogIntervalMs` 记录一次日志，并附上未记录的次数。
 - 令牌在读取模式之前检查，因此没有令牌的调用方无法了解 API 的任何信息。
-- `readStartTokenFile` 通过 C1 的受保护文件检查读取令牌文件，供 `delorun` 客户端命令使用。
+- `@delo/home` 的 `readStartTokenFile` 通过 C1 的受保护文件检查读取令牌文件，供 `delorun` 客户端命令使用。
 
 <a id="the-api"></a>
 ## API

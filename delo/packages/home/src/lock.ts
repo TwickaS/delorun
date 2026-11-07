@@ -20,7 +20,7 @@
  * @module @delo/home/lock
  */
 import { randomBytes } from 'node:crypto'
-import { closeSync, constants, fstatSync, fsyncSync, linkSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs'
+import { closeSync, constants, fstatSync, fsyncSync, linkSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -48,6 +48,16 @@ export interface HomeLock {
    * a process `exit` listener can call it; a second call does nothing.
    */
   release(): void
+  /**
+   * Hand the lock to a successor home process (contract C19, "The update
+   * handshake"): the record is replaced atomically with the successor's while
+   * the file still holds this holder's record, and this handle's
+   * {@link release} does nothing afterwards.
+   * @param successor - the successor's process id, start id and runtime.
+   * @returns the successor's record.
+   * @throws {Error} when the file no longer holds this holder's record; the lock is then left as it is.
+   */
+  handOver(successor: Pick<HomeLockRecord, 'pid' | 'startId' | 'runtime'>): HomeLockRecord
 }
 
 /** What {@link acquireHomeLock} needs. */
@@ -58,6 +68,8 @@ export interface AcquireOptions {
   readonly runtime: RuntimeVersion
   /** Asks a live holder for its status; decides between `HOME_RUNNING` and `HOME_UNRESPONSIVE`. */
   readonly probe: HolderProbe
+  /** The start id the record carries, from {@link newStartId}; the holder logs under it from before it takes the lock. */
+  readonly startId: StartId
 }
 
 /**
@@ -81,6 +93,14 @@ const RANDOM_ID = /^[0-9a-f]{32}$/
  */
 function randomId(): string {
   return randomBytes(16).toString('hex')
+}
+
+/**
+ * A new start id (contract C1, "The home lock"): random, never reused, not a secret.
+ * @returns the start id.
+ */
+export function newStartId(): StartId {
+  return brandString<StartId>(randomId())
 }
 
 /**
@@ -315,7 +335,7 @@ export async function removeStaleLock(runDirectory: string, startId: StartId): P
 
 /**
  * Take the profile's home lock, replacing a stale one.
- * @param options - the run directory, the runtime version and the holder probe.
+ * @param options - the run directory, the runtime version, the holder probe and the start id.
  * @returns the held lock.
  * @throws {HomeLayoutError} `HOME_RUNNING` when a live holder answers the probe, `HOME_UNRESPONSIVE` when it does not;
  *   both name the holder's process id, and neither takes the lock over.
@@ -327,7 +347,7 @@ export async function acquireHomeLock(options: AcquireOptions): Promise<HomeLock
   const record: HomeLockRecord = {
     v: 1,
     pid: process.pid,
-    startId: brandString<StartId>(randomId()),
+    startId: options.startId,
     runtime: options.runtime,
     startedAt: new Date().toISOString(),
   }
@@ -349,6 +369,21 @@ export async function acquireHomeLock(options: AcquireOptions): Promise<HomeLock
 }
 
 /**
+ * Take over the lock a predecessor handed to this process with
+ * {@link HomeLock.handOver}.
+ * @param runDirectory - the profile's run directory.
+ * @param startId - the start id the predecessor assigned to this process.
+ * @returns the held lock.
+ * @throws {Error} when the lock does not hold that start id with this process's id.
+ */
+export function adoptHomeLock(runDirectory: string, startId: StartId): HomeLock {
+  const path = join(runDirectory, RUN_ENTRIES.lock)
+  const record = readLock(path)
+  if (record?.startId !== startId || record.pid !== process.pid) throw new Error(`${path} was not handed to this process (start ${startId})`)
+  return heldLock(path, record)
+}
+
+/**
  * The handle of a lock this process holds.
  * @param path - the lock path.
  * @param record - this holder's record.
@@ -359,6 +394,26 @@ function heldLock(path: string, record: HomeLockRecord): HomeLock {
   return {
     path,
     record,
+    handOver(successor) {
+      if (released || readLock(path)?.startId !== record.startId) throw new Error(`${path} no longer holds this home process's record; it was not handed over`)
+      const next: HomeLockRecord = { v: 1, pid: successor.pid, startId: successor.startId, runtime: successor.runtime, startedAt: new Date().toISOString() }
+      const candidate = `${path}.new-${randomBytes(8).toString('hex')}`
+      const fd = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, PROTECTED_FILE_MODE)
+      try {
+        writeSync(fd, JSON.stringify(next))
+        fsyncSync(fd)
+      } finally {
+        closeSync(fd)
+      }
+      try {
+        renameSync(candidate, path)
+      } catch (error) {
+        removeIfPresent(candidate)
+        throw error
+      }
+      released = true
+      return next
+    },
     release() {
       if (released) return
       released = true
