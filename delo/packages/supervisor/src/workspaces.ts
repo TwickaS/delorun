@@ -53,8 +53,6 @@ export interface WorkspaceContext {
   readonly engine: Engine | undefined
   /** The home and profile whose labels every object carries. */
   readonly owner: Owner
-  /** The resolved Delo home. */
-  readonly home: string
   /** The setup-time roots. */
   readonly rules: RootRules
   /** The verified manifest. */
@@ -237,7 +235,7 @@ export class Workspaces {
   }
 
   private helperDirectory(workspaceId: WorkspaceId): string {
-    return join(runDirectory(this.context.home, this.context.owner.profile), 's2', workspaceHash(workspaceId))
+    return join(runDirectory(this.context.rules.deloHome, this.context.owner.profile), 's2', workspaceHash(workspaceId))
   }
 
   /**
@@ -248,13 +246,14 @@ export class Workspaces {
    */
   private async otherRoots(except: WorkspaceId | undefined): Promise<string[]> {
     const { owner } = this.context
-    const filters = JSON.stringify({ label: [`${LABELS.home}=${owner.homeId}`, `${LABELS.profile}=${owner.profile}`] })
+    // Every Delo container on the engine, of any home and any profile: a root may not nest with any of them.
+    const filters = JSON.stringify({ label: [LABELS.home] })
     const rows = await this.engine.call('GET', `/containers/json?all=true&filters=${encodeURIComponent(filters)}`) as readonly {
       readonly Labels?: Readonly<Record<string, string>>
       readonly Mounts?: readonly { readonly Type?: string, readonly Source?: string, readonly Destination?: string }[]
     }[]
     return rows
-      .filter(row => row.Labels?.[LABELS.workspace] !== except)
+      .filter(row => !(row.Labels?.[LABELS.home] === owner.homeId && row.Labels[LABELS.profile] === owner.profile && row.Labels[LABELS.workspace] === except))
       .flatMap(row => (row.Mounts ?? []).filter(mount => mount.Type === 'bind' && mount.Source !== undefined && mount.Source === mount.Destination).map(mount => mount.Source ?? ''))
   }
 

@@ -3,7 +3,8 @@
  * Docker engine: C9's `supervisor-token-required`, `supervisor-schema-closed` (its refusals; the Docker spec adds
  * that no container is created) and `supervisor-roots-refused`.
  */
-import { lstatSync, readFileSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, lstatSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { connect, type Socket } from 'node:net'
 import { join, sep } from 'node:path'
 import type { StartToken } from '@delo/contract-home-layout'
@@ -51,6 +52,18 @@ describe('the socket\'s lifetime', () => {
     temp = await tempHome()
     writeFileSync(join(temp.home, 'run', PROFILE, 'supervisor.sock'), 'not a socket')
     await expect(startSupervisor(temp.home)).rejects.toThrow(/is not a socket/)
+    // The socket bound under its temporary name is closed and removed, so nothing listens beside the refused path.
+    expect(readdirSync(join(temp.home, 'run', PROFILE)).filter(name => name.startsWith('.s-'))).toEqual([])
+  })
+
+  it('removes a socket an earlier supervisor left under its temporary name', async () => {
+    temp = await tempHome()
+    const stale = join(temp.home, 'run', PROFILE, '.s-0123abcd')
+    // A socket file that outlives its process, as a crash between bind and rename leaves one.
+    expect(spawnSync('python3', ['-I', '-c', 'import socket, sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])', stale]).status).toBe(0)
+    expect(lstatSync(stale).isSocket()).toBe(true)
+    running = await startSupervisor(temp.home)
+    expect(existsSync(stale)).toBe(false)
   })
 
   it('leaves a newer supervisor\'s socket in place when an older one stops', async () => {

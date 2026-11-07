@@ -8,7 +8,7 @@
  * @module @delo/supervisor/server
  */
 import { randomBytes } from 'node:crypto'
-import { chmod, lstat, rename, unlink } from 'node:fs/promises'
+import { chmod, lstat, readdir, rename, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { createServer, type Server, type Socket } from 'node:net'
 import { PROTECTED_FILE_MODE, SOCKET_PATH_MAX_BYTES } from '@delo/contract-home-layout'
@@ -80,6 +80,22 @@ async function refuseNonSocket(path: string): Promise<void> {
   if (!stats.isSocket()) throw new Error(`${path} exists and is not a socket; remove it before starting the supervisor`)
 }
 
+/** The prefix of the temporary name a socket is bound under before it is renamed into place. */
+const TEMPORARY_PREFIX = '.s-'
+
+/**
+ * Remove sockets left under a temporary name by a supervisor that stopped before renaming its socket into place.
+ * Only sockets whose name is a temporary name are removed.
+ * @param directory - the run directory.
+ */
+async function removeStaleTemporaries(directory: string): Promise<void> {
+  for (const name of await readdir(directory)) {
+    if (!/^\.s-[0-9a-f]{8}$/.test(name)) continue
+    const path = join(directory, name)
+    if ((await lstat(path)).isSocket()) await unlink(path)
+  }
+}
+
 /** The refusals of requests without the current token, logged at most once per interval with a count. */
 class RefusalLog {
   private suppressed = 0
@@ -119,7 +135,7 @@ export async function listenSupervisor(options: ListenOptions): Promise<Supervis
   if (Buffer.byteLength(socketPath, 'utf8') > SOCKET_PATH_MAX_BYTES) {
     throw new HomeLayoutError('SOCKET_PATH_TOO_LONG', socketPath, `${socketPath} is longer than ${String(SOCKET_PATH_MAX_BYTES)} bytes; choose a shorter Delo home with DELO_HOME`)
   }
-  await refuseNonSocket(socketPath)
+  await removeStaleTemporaries(dirname(socketPath))
   const refusals = new RefusalLog(logger, options.refusalLogIntervalMs)
   const sockets = new Set<Socket>()
   let served = 0
@@ -234,7 +250,7 @@ export async function listenSupervisor(options: ListenOptions): Promise<Supervis
     })
   })
 
-  const temporary = join(dirname(socketPath), `.s-${randomBytes(4).toString('hex')}`)
+  const temporary = join(dirname(socketPath), `${TEMPORARY_PREFIX}${randomBytes(4).toString('hex')}`)
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     server.listen(temporary, () => {
@@ -242,9 +258,21 @@ export async function listenSupervisor(options: ListenOptions): Promise<Supervis
       resolve()
     })
   })
-  await chmod(temporary, PROTECTED_FILE_MODE)
-  await rename(temporary, socketPath)
-  const bound = await lstat(socketPath, { bigint: true })
+  let bound
+  try {
+    await chmod(temporary, PROTECTED_FILE_MODE)
+    await refuseNonSocket(socketPath)
+    await rename(temporary, socketPath)
+    bound = await lstat(socketPath, { bigint: true })
+  } catch (error) {
+    // Nothing listens on a socket that never took its place, and its temporary name is removed.
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    await unlink(temporary).catch((cleanupError: unknown) => {
+      // ENOENT: the close or the rename already removed it; any other failure is reported with the start's own error.
+      if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') throw new AggregateError([error, cleanupError], `could not start the supervisor socket or remove ${temporary}`)
+    })
+    throw error
+  }
   server.on('error', (error) => { logger.error('listener error', { err: error }) })
 
   return {

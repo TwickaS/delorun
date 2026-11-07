@@ -228,7 +228,16 @@ export function fakeEngine(state: FakeEngineState): Engine {
       const name = decodeURIComponent(/^\/containers\/([^/?]+)/.exec(path)?.[1] ?? '')
       if (path.startsWith('/images/')) return Promise.resolve({ Id: 'sha256:i', RepoDigests: [`${IMAGES.s2}@${FAKE_DIGEST}`] })
       if (method === 'GET' && path.startsWith('/containers/json')) {
-        return Promise.resolve([...state.containers.entries()].map(([key, record]) => ({ Names: [`/${key}`], Labels: record.Config?.Labels ?? {}, Mounts: (record.Mounts ?? []).map(mount => ({ ...mount })) })))
+        // The engine's label filter: each entry is a key that must be present, or `key=value` that must match.
+        const query = new URLSearchParams(path.slice(path.indexOf('?') + 1)).get('filters')
+        const wanted = query === null ? [] : (JSON.parse(query) as { readonly label?: readonly string[] }).label ?? []
+        const matches = (labels: Readonly<Record<string, string>>): boolean => wanted.every((entry) => {
+          const [key = '', ...value] = entry.split('=')
+          return value.length === 0 ? key in labels : labels[key] === value.join('=')
+        })
+        return Promise.resolve([...state.containers.entries()]
+          .filter(([, record]) => matches(record.Config?.Labels ?? {}))
+          .map(([key, record]) => ({ Names: [`/${key}`], Labels: record.Config?.Labels ?? {}, Mounts: (record.Mounts ?? []).map(mount => ({ ...mount })) })))
       }
       if (method === 'POST' && path.startsWith('/containers/create')) {
         const created = decodeURIComponent(/name=([^&]+)/.exec(path)?.[1] ?? '')
@@ -264,12 +273,13 @@ export const ALL_ENFORCED = Object.fromEntries((['cpu', 'memory', 'pids', 'disk'
  * @param state - the fake engine's objects.
  * @param osHome - the OS home the rules compare with; the real one when omitted.
  * @param manifestDigest - the S2 digest the verified manifest lists; the one the fake engine holds when omitted.
+ * @param profile - the CLI profile whose labels the workspaces carry.
  * @returns the workspace operations.
  */
-export async function fakeWorkspaces(home: string, state: FakeEngineState, osHome: string = homedir(), manifestDigest: OciDigest = FAKE_DIGEST): Promise<Workspaces> {
+export async function fakeWorkspaces(home: string, state: FakeEngineState, osHome: string = homedir(), manifestDigest: OciDigest = FAKE_DIGEST, profile: string = PROFILE): Promise<Workspaces> {
   const limits = { ...ALL_ENFORCED, disk: { status: 'not-enforced' as const, evidence: 'fixture' } }
   return new Workspaces({
-    engine: fakeEngine(state), owner: { homeId: homeIdOf(home), profile: PROFILE }, home, rules: await loadRootRules(home, osHome),
+    engine: fakeEngine(state), owner: { homeId: homeIdOf(home), profile }, rules: await loadRootRules(home, osHome),
     manifest: fixtureManifest(manifestDigest), pull: 'none', seccompDirectory: join(home, 'seccomp'),
     inspection: () => ({
       docker: { engine: 'docker-engine', version: '29', rootless: false, context: 'default', endpoint: { kind: 'unix', path: '/var/run/docker.sock' }, storageDriver: 'overlay2', limits },

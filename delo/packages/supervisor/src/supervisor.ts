@@ -6,6 +6,7 @@
  *
  * @module @delo/supervisor/supervisor
  */
+import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { RUN_ENTRIES, type StartToken } from '@delo/contract-home-layout'
 import type { SupervisorRequest } from '@delo/contract-runtime-supervisor'
@@ -78,6 +79,7 @@ export class Supervisor {
 
   private constructor(
     private readonly options: SupervisorOptions,
+    private readonly home: string,
     private readonly owner: Owner,
     private readonly context: DockerContext | undefined,
     private readonly engine: Engine | undefined,
@@ -94,10 +96,13 @@ export class Supervisor {
    * @throws {Error} when the roots file is not C9's record.
    */
   static async start(options: SupervisorOptions): Promise<Supervisor> {
-    const runDir = runDirectory(options.home, options.profile)
+    // The canonical home names everything the supervisor derives from it: the run and helper directories, the
+    // labels' homeId and the mount sources, so a home reached through a symbolic link behaves as the home itself.
+    const home = await realpath(options.home)
+    const runDir = runDirectory(home, options.profile)
     await checkPrivateDirectory(runDir)
-    const rules = await loadRootRules(options.home, options.osHome)
-    const owner: Owner = { homeId: homeIdOf(options.home), profile: options.profile }
+    const rules = await loadRootRules(home, options.osHome)
+    const owner: Owner = { homeId: homeIdOf(home), profile: options.profile }
     let context: DockerContext | undefined
     try {
       context = await resolveDockerContext(options.env)
@@ -107,11 +112,11 @@ export class Supervisor {
     const path = context?.endpoint.path
     const engine = path !== undefined && (context?.endpoint.kind === 'unix' || context?.endpoint.kind === 'npipe') ? engineAt(path, { callMs: options.timing.engineCallMs, pullMs: options.timing.pullMs }) : undefined
     let supervisor: Supervisor | undefined
-    const workspaces = new Workspaces({ engine, owner, home: options.home, rules, manifest: options.manifest, pull: options.pull, seccompDirectory: options.seccompDirectory, inspection: () => supervisor?.inspection ?? { shapes: shapesOf(undefined, 'docker-unavailable', {}) } })
-    supervisor = new Supervisor(options, owner, context, engine, workspaces)
+    const workspaces = new Workspaces({ engine, owner, rules, manifest: options.manifest, pull: options.pull, seccompDirectory: options.seccompDirectory, inspection: () => supervisor?.inspection ?? { shapes: shapesOf(undefined, 'docker-unavailable', {}) } })
+    supervisor = new Supervisor(options, home, owner, context, engine, workspaces)
     await supervisor.refresh()
     supervisor.listener = await listenSupervisor({
-      socketPath: supervisorSocketPath(options.home, options.profile),
+      socketPath: supervisorSocketPath(home, options.profile),
       check: new StartTokenCheck(options.token),
       handle: async request => supervisor.dispatch(request),
       logger: options.logger,
@@ -124,7 +129,7 @@ export class Supervisor {
 
   /** The socket the supervisor listens on. */
   get socketPath(): string {
-    return supervisorSocketPath(this.options.home, this.options.profile)
+    return supervisorSocketPath(this.home, this.options.profile)
   }
 
   /** The latest inspection. */

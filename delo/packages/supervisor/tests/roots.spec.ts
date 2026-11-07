@@ -145,6 +145,33 @@ describe('other workspaces\' roots', () => {
   })
 })
 
+describe('roots of every Delo container on the engine', () => {
+  it('refuses a root nested with another profile\'s workspace root on the same engine', async () => {
+    const { workspaces, parent, state, home } = await setUp()
+    const a = made(join(parent, 'a'))
+    await workspaces.handle(create('a', a))
+    const other = await fakeWorkspaces(home, state, homedir(), undefined, 'other')
+    expect(await refusal(async () => other.handle(create('b', made(join(a, 'b')))))).toMatchObject({ code: 'ROOT_REFUSED', detail: expect.stringContaining('another workspace') })
+    const outer = made(join(parent, 'outer'))
+    renameSync(a, join(outer, 'a'))
+    symlinkSync(join(outer, 'a'), a)
+    expect(await refusal(async () => other.handle(create('a', outer)))).toMatchObject({ code: 'ROOT_REFUSED', detail: expect.stringContaining('another workspace') })
+  })
+})
+
+describe('a Delo home reached through a symbolic link', () => {
+  it('creates and starts a workspace', async () => {
+    temp = await tempHome()
+    const link = join(temp.outside, 'home-link')
+    symlinkSync(temp.home, link)
+    const parent = made(join(temp.outside, 'projects'))
+    await writeProtectedFile(join(temp.home, SUPERVISOR_ROOTS_FILE), JSON.stringify({ v: 1, parents: [parent] }))
+    const workspaces = await fakeWorkspaces(link, { containers: new Map(), calls: [] })
+    await workspaces.handle(create('w', made(join(parent, 'w'))))
+    expect(await workspaces.handle(start('w'))).toMatchObject({ workspace: { state: 'running' } })
+  })
+})
+
 describe('the check before every start', () => {
   it('refuses to start a workspace whose root now resolves elsewhere', async () => {
     const { workspaces, parent } = await setUp()
