@@ -9,7 +9,7 @@ import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { canonicalPath, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { SandboxProtectedRootError, assertRootsOutsideHome, canonicalPath, pathWithin, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
 
 /** Every temp root created by this file, removed after each test. */
 const roots: string[] = []
@@ -94,5 +94,34 @@ describe('writableRoots', () => {
       workspaceRoot: ws,
       additionalWritableRoots: [extra],
     })).toContain(realpathSync.native(extra))
+  })
+})
+
+describe('pathWithin', () => {
+  it('compares by path segment', () => {
+    expect(pathWithin('/a/b', '/a/b')).toBe(true)
+    expect(pathWithin('/a/b/c', '/a/b')).toBe(true)
+    expect(pathWithin('/a/bc', '/a/b')).toBe(false)
+    expect(pathWithin('/a', '/a/b')).toBe(false)
+    expect(pathWithin('/a/..b', '/a')).toBe(true)
+    expect(pathWithin('/x', '/a')).toBe(false)
+  })
+})
+
+describe('assertRootsOutsideHome', () => {
+  it('refuses a root that equals, lies inside or contains the home with HOME_IN_WRITABLE_ROOT', () => {
+    for (const root of ['/u/.delo', '/u/.delo/skills', '/u', '/']) {
+      expect(() => { assertRootsOutsideHome(['/w', root], '/u/.delo') }).toThrow(SandboxProtectedRootError)
+    }
+    try {
+      assertRootsOutsideHome(['/u'], '/u/.delo')
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'HOME_IN_WRITABLE_ROOT', name: 'SandboxProtectedRootError' })
+      expect(String(error)).toContain('/u/.delo')
+    }
+  })
+
+  it('accepts roots beside the home', () => {
+    expect(() => { assertRootsOutsideHome(['/u/project', '/u/.delo-other', '/tmp'], '/u/.delo') }).not.toThrow()
   })
 })

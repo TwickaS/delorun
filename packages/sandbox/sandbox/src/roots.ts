@@ -8,14 +8,16 @@
  * write tool cannot write /tmp but bash can" asymmetries cannot arise between
  * them. The bwrap and Landlock dialects keep their own grant spellings (an
  * ephemeral `/tmp` mount, launcher-owned flags) — the honest per-runner
- * differences recorded in the sandbox RFC — with parity pinned by test.
+ * differences recorded in the sandbox RFC — with parity pinned by test. It
+ * also holds the refusal of writable roots that overlap a protected home,
+ * which every backend applies before it builds a profile.
  *
  * @module dsh-sandbox/roots
  */
 
 import { realpathSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { SandboxExecutionPolicy } from './index.ts'
 
@@ -24,6 +26,14 @@ export class SandboxInvalidRootError extends HarnessError {
   constructor(path: string, detail: string) {
     super(`Invalid additional writable directory ${JSON.stringify(path)}: ${detail}`, 'SANDBOX_INVALID_ROOT')
     this.name = 'SandboxInvalidRootError'
+  }
+}
+
+/** A writable root equals, lies inside or contains the protected home, so no dialect can keep the home unwritable. */
+export class SandboxProtectedRootError extends HarnessError {
+  constructor(root: string, home: string) {
+    super(`Writable root ${JSON.stringify(root)} overlaps the protected home ${JSON.stringify(home)}: commands cannot run with write access there; open a workspace outside the home, or run read-only`, 'HOME_IN_WRITABLE_ROOT')
+    this.name = 'SandboxProtectedRootError'
   }
 }
 
@@ -97,4 +107,30 @@ export function workspaceWritableRoots(policy: SandboxExecutionPolicy): string[]
 export function writableRoots(policy: SandboxExecutionPolicy): string[] {
   if (policy.mode !== 'workspace-write') return []
   return [...new Set([...workspaceWritableRoots(policy), canonicalPath('/tmp'), canonicalPath(tmpdir())])]
+}
+
+/**
+ * Whether one absolute path equals another or lies beneath it, compared by path segment (so `/a/bc` is not inside
+ * `/a/b`). Both paths must already be canonical; the comparison does not touch the filesystem.
+ * @param path - the candidate path.
+ * @param ancestor - the directory it may lie in.
+ * @returns true when `path` is `ancestor` or a descendant of it.
+ */
+export function pathWithin(path: string, ancestor: string): boolean {
+  const rest = relative(ancestor, path)
+  return rest === '' || (rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest))
+}
+
+/**
+ * Refuse writable roots that overlap the protected home: a root that equals the home, lies inside it or contains it
+ * would let a confined command write the home. Every backend applies this before it builds a profile, because a
+ * write grant cannot be narrowed afterwards on every dialect (Landlock grants are a union).
+ * @param roots - the canonical workspace-owned writable roots ({@link workspaceWritableRoots}).
+ * @param home - the canonical protected home.
+ * @throws {SandboxProtectedRootError} naming the first overlapping root.
+ */
+export function assertRootsOutsideHome(roots: readonly string[], home: string): void {
+  for (const root of roots) {
+    if (pathWithin(root, home) || pathWithin(home, root)) throw new SandboxProtectedRootError(root, home)
+  }
 }

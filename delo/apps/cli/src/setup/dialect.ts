@@ -9,19 +9,21 @@
  */
 import { existsSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
+import { RUNNER_PROTECTION } from '@deepseek-ai/dsh-sandbox-local'
 
 /** The sandbox dialects C1 names. `none` is a system where no sandbox runs. */
 export type SandboxDialect = 'bwrap' | 'seatbelt' | 'landlock' | 'windows-acl' | 'none'
 
 /**
- * Whether a dialect confines `docker-connect` on a system where its probe proves it. Only bwrap and Seatbelt
- * express the rule; Landlock cannot deny a connect to a pathname socket, and Windows reports it only where its
- * pipe-denial test passes, which setup does not run.
+ * Whether a dialect confines `docker-connect` on a system where its probe proves it, as upstream's sandbox profiles
+ * report it (`RUNNER_PROTECTION`): bwrap and Seatbelt express the rule; Landlock cannot deny a connect to a pathname
+ * socket, and the Windows profile adds no pipe rule, so Windows reports it only where its pipe-denial test passes,
+ * which setup does not run.
  * @param dialect - the system's dialect.
  * @returns true when setup may describe Docker mode without the not-enforced label.
  */
 export function dockerConnectEnforced(dialect: SandboxDialect): boolean {
-  return dialect === 'bwrap' || dialect === 'seatbelt'
+  return dialect !== 'none' && RUNNER_PROTECTION[dialect].socketConnect
 }
 
 /**

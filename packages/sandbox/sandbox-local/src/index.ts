@@ -22,9 +22,9 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   LAUNCHER_BIN,
@@ -34,12 +34,23 @@ import {
 } from '@deepseek-ai/node-addon-system/landlock-run'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { SandboxProvider, SandboxUnavailableError, SandboxUnsupportedPolicyError, canonicalPath } from '@deepseek-ai/dsh-sandbox'
+import {
+  SandboxProvider,
+  SandboxUnavailableError,
+  SandboxUnsupportedPolicyError,
+  assertRootsOutsideHome,
+  canonicalPath,
+  workspaceWritableRoots,
+} from '@deepseek-ai/dsh-sandbox'
 import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { AclWriteGrant, assertTempRootOutsideWorkspace, registerAclDiagnosisSkill, tempWriteSid, workspaceWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import { bwrapProfileArgs, landlockProfileArgs, seatbeltProfileArgs } from './profiles.ts'
+import { bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from './profiles.ts'
+import type { LocalSandboxRunner, Protection, ProtectionSettings } from './profiles.ts'
+
+export { RUNNER_PROTECTION } from './profiles.ts'
+export type { LocalSandboxRunner, RunnerProtection } from './profiles.ts'
 
 /** Plugin config. All optional — `static Config` supplies the defaults. */
 export interface Config {
@@ -63,6 +74,24 @@ export interface Config {
   runnerFailureSignatures?: string[]
   /** Positive timeout for each functional probe; zero would mean unbounded to Node. */
   probeTimeoutMs?: number
+  /**
+   * Absolute path of an existing directory, such as the harness home, that confined commands can neither write nor
+   * read, as far as the selected runner expresses each rule ({@link RUNNER_PROTECTION}). A `workspace-write` call
+   * whose workspace root or extra root equals, lies inside or contains it is refused with `HOME_IN_WRITABLE_ROOT`.
+   * Absent: no directory is protected.
+   */
+  protectedHome?: string
+  /**
+   * Paths under {@link protectedHome}, relative to it, that confined commands may still read and execute, such as
+   * runtime and skill directories. Entries missing at a wrap grant nothing. Rejected without `protectedHome`.
+   */
+  protectedHomeReadable?: string[]
+  /**
+   * Absolute paths of Unix sockets that confined commands cannot connect to, such as the Docker socket and the
+   * channels under the protected home, on runners that express the rule ({@link RUNNER_PROTECTION}). Each path is
+   * resolved at every wrap, and its resolved spellings are denied too.
+   */
+  deniedSockets?: string[]
 }
 
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
@@ -139,7 +168,7 @@ export interface SandboxInternals {
 }
 
 /** The chain's verdict: which runner confines, and how completely it enforces. */
-type SelectedRunner = { runner: 'bwrap' | 'landlock' | 'seatbelt' | 'windows-acl'; enforcement: SandboxEnforcement }
+type SelectedRunner = { runner: LocalSandboxRunner; enforcement: SandboxEnforcement }
 
 /** One live session/workspace pair's private temp directory and capability. */
 interface AclTempCapability {
@@ -200,6 +229,42 @@ function assertPositiveFinite(name: string, value: number): void {
 }
 
 /**
+ * Validate the protection fields at load. The home must be an existing directory other than the filesystem root,
+ * and is canonicalized because every runner compares resolved paths; readable entries must stay inside it.
+ * @param config - the schema-defaulted config.
+ * @returns the settings each wrap resolves.
+ * @throws {Error} naming the invalid field.
+ */
+function protectionSettings(config: Config): ProtectionSettings {
+  const readable = config.protectedHomeReadable as string[]
+  const deniedSockets = config.deniedSockets as string[]
+  const configuredHome = config.protectedHome
+  if (configuredHome === undefined && readable.length > 0) {
+    throw new Error('sandbox-local: protectedHomeReadable requires protectedHome')
+  }
+  for (const socket of deniedSockets) {
+    if (!isAbsolute(socket)) throw new Error(`sandbox-local: deniedSockets entries must be absolute paths: ${JSON.stringify(socket)}`)
+  }
+  if (configuredHome === undefined) return { home: undefined, readable: [], deniedSockets }
+  if (!isAbsolute(configuredHome)) throw new Error(`sandbox-local: protectedHome must be an absolute path: ${JSON.stringify(configuredHome)}`)
+  let home: string
+  try {
+    home = realpathSync.native(configuredHome)
+    if (!statSync(home).isDirectory()) throw new Error('not a directory')
+  } catch (error) {
+    throw new Error(`sandbox-local: protectedHome must be an existing directory: ${JSON.stringify(configuredHome)}: ${String(error)}`, { cause: error })
+  }
+  if (normalize(join(home, '..')) === home) throw new Error('sandbox-local: protectedHome cannot be the filesystem root')
+  for (const entry of readable) {
+    const normalized = normalize(entry)
+    if (entry === '' || isAbsolute(entry) || normalized === '.' || normalized === '..' || normalized.startsWith(`..${sep}`)) {
+      throw new Error(`sandbox-local: protectedHomeReadable entries must be relative paths inside protectedHome: ${JSON.stringify(entry)}`)
+    }
+  }
+  return { home, readable, deniedSockets }
+}
+
+/**
  * The denial dialect each runner's kernel speaks — the case-insensitive stderr substrings a
  * denied file effect produces under it, carried on every wrap (the seam's
  * `ConfinedArgv.denialSignatures`).
@@ -255,6 +320,9 @@ export class LocalSandboxProvider extends SandboxProvider {
     runnerCommand: z.array(z.string()).default([]),
     runnerFailureSignatures: z.array(z.string()).default([]),
     probeTimeoutMs: z.natural().default(5_000),
+    protectedHome: z.string(),
+    protectedHomeReadable: z.array(z.string()).default([]),
+    deniedSockets: z.array(z.string()).default([]),
   })
 
   /** Test hook (mirrors the bash executors' `internals`). */
@@ -263,6 +331,7 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly runnerCommand: string[] | undefined
   private readonly configuredRunnerFailureSignatures: string[]
   private readonly probeTimeoutMs: number
+  private readonly protection: ProtectionSettings
   /** Cached chain verdict; undefined until the first confined wrap needs it. */
   private selectedRunner: SelectedRunner | 'unavailable' | undefined
   /**
@@ -295,6 +364,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     this.configuredRunnerFailureSignatures = runnerFailureSignatures
     this.probeTimeoutMs = config.probeTimeoutMs as number
     assertPositiveFinite('probeTimeoutMs', this.probeTimeoutMs)
+    this.protection = protectionSettings(config)
     // An operator-supplied runner does not use the ACL backend. The registry
     // remains optional and may be mounted after this provider.
     /* v8 ignore next 3 -- Windows-only registration; the Linux coverage lane cannot take this branch */
@@ -320,21 +390,24 @@ export class LocalSandboxProvider extends SandboxProvider {
    * @param signal - cancellation before policy resolution or grant creation.
    * @returns the wrapped argv plus the selected backend's enforcement completeness, denial
    *   signatures, and structured runner-failure rules; throws the fail-closed
-   *   `SANDBOX_UNAVAILABLE` error when the platform has no usable runner.
+   *   `SANDBOX_UNAVAILABLE` error when the platform has no usable runner, and
+   *   `HOME_IN_WRITABLE_ROOT` when a writable root overlaps the protected home.
    */
   async confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv> {
     signal?.throwIfAborted()
     policy = { ...policy, workspaceRoot: canonicalPath(policy.workspaceRoot) }
+    const protection = resolveProtection(this.protection)
+    if (protection.home !== undefined) assertRootsOutsideHome(workspaceWritableRoots(policy), protection.home)
     if (this.runnerCommand !== undefined) {
       return Promise.resolve<ConfinedArgv>({
-        argv: [...this.runnerCommand, ...bwrapProfileArgs(policy), '--', ...argv],
+        argv: [...this.runnerCommand, ...bwrapProfileArgs(policy, protection), '--', ...argv],
         enforcement: 'full',
         denialSignatures: DENIAL_SIGNATURES.runnerCommand,
         runnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }],
       })
     }
     const selected = this.selectRunner(policy.mode)
-    const runnerArgv = this.runnerArgv(selected.runner, policy)
+    const runnerArgv = this.runnerArgv(selected.runner, policy, protection)
     return Promise.resolve<ConfinedArgv>({
       argv: [...runnerArgv, '--', ...argv],
       enforcement: selected.enforcement,
@@ -343,12 +416,12 @@ export class LocalSandboxProvider extends SandboxProvider {
     })
   }
 
-  /** The selected rung's runner invocation (program + profile arguments) for one policy. */
-  private runnerArgv(runner: SelectedRunner['runner'], policy: SandboxPolicy): string[] {
+  /** The selected rung's runner invocation (program + profile arguments) for one policy and protection. */
+  private runnerArgv(runner: SelectedRunner['runner'], policy: SandboxPolicy, protection: Protection): string[] {
     switch (runner) {
-      case 'bwrap': return ['bwrap', ...bwrapProfileArgs(policy)]
-      case 'landlock': return [this.landlockLauncher(), ...landlockProfileArgs(policy)]
-      case 'seatbelt': return [this.seatbeltExec(), ...seatbeltProfileArgs(policy)]
+      case 'bwrap': return ['bwrap', ...bwrapProfileArgs(policy, protection)]
+      case 'landlock': return [this.landlockLauncher(), ...landlockProfileArgs(policy, protection)]
+      case 'seatbelt': return [this.seatbeltExec(), ...seatbeltProfileArgs(policy, protection)]
       case 'windows-acl': return this.windowsAclRunnerArgv(policy)
       default: return assertNever(runner)
     }

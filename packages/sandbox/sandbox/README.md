@@ -102,6 +102,8 @@ The ladder is a closed table — `read-only` may escalate to `workspace-write` o
 
 `workspaceWritableRoots` derives the workspace and explicit extra directories for bwrap and Landlock. `writableRoots` adds the host temporary areas for Seatbelt and the in-process filesystem fence. Both deduplicate roots and reject extra paths that are missing, are not directories, or resolve through symlinks. See the [mode definitions](../../../docs/subsystems/sandbox.md).
 
+`assertRootsOutsideHome` refuses writable roots that equal, lie inside or contain a protected home with `SandboxProtectedRootError` (`HOME_IN_WRITABLE_ROOT`), because a write grant over the home cannot be narrowed afterwards on every backend. `pathWithin` is its segment-wise containment test over canonical paths.
+
 </details>
 
 -----

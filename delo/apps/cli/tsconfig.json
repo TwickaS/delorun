@@ -15,6 +15,7 @@
     { "path": "../../../vendor/loader" },
     { "path": "../../../packages/boot/app-boot" },
     { "path": "../../../packages/boot/plugin-manager" },
+    { "path": "../../../packages/sandbox/sandbox-local" },
     { "path": "../../../packages/util/brand" },
     { "path": "../../../packages/util/home-paths" },
     { "path": "../../../packages/util/launch-environment" },

@@ -45,6 +45,9 @@ Load the sandbox service and mount the provider; the defaults below are the sele
 | `runnerCommand` | `[]` | Custom runner argv; bwrap-compatible profile arguments are appended, full enforcement is asserted, and built-in selection and probes are skipped |
 | `runnerFailureSignatures` | `[]` | Case-insensitive stderr substrings identifying the custom runner's own failure dialect; required with `runnerCommand` |
 | `probeTimeoutMs` | `5,000` | Timeout for each functional probe of a competing runner candidate |
+| `protectedHome` | none | Absolute path of an existing directory, such as the harness home, that confined commands cannot write or read; a `workspace-write` root that overlaps it is refused with `HOME_IN_WRITABLE_ROOT` |
+| `protectedHomeReadable` | `[]` | Paths under `protectedHome`, relative to it, that confined commands may still read and execute; requires `protectedHome` |
+| `deniedSockets` | `[]` | Absolute Unix socket paths that confined commands cannot connect to, on runners that express the rule |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-sandbox-local) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -57,6 +60,18 @@ With the provider mounted, a command runs under the mode you resolve per call. E
 An unsupported platform or an unusable runner fails closed: `confine()` rejects with `SANDBOX_UNAVAILABLE` and names the runner options for the platform, and the consumer surfaces that error rather than running the command unconfined. A runner that starts but refuses its profile is identified by its fatal stderr signature and exit code, so a broken sandbox is not mistaken for a denied command. The `runnerCommand` override is an operator assertion: it skips functional probes and assumes the configured runner implements the bwrap-compatible profile honestly.
 
 Seatbelt, bwrap, and Landlock include the policy's explicit `additionalWritableRoots` under `workspace-write`. Read-only ignores those grants. Invalid extra directories raise `SANDBOX_INVALID_ROOT` before the command starts.
+
+### Protected home and denied sockets
+
+With `protectedHome` set, confined commands cannot create, change or delete anything under that directory and, on runners that confine reads, cannot read anything under it except its `protectedHomeReadable` entries. A `workspace-write` call whose workspace root or extra root equals, lies inside or contains the home fails with `HOME_IN_WRITABLE_ROOT` before the command starts; read-only calls in such a workspace still run. With `deniedSockets` set, confined commands cannot connect to those sockets on runners that express the rule, while other Unix sockets and the network stay reachable. Without these fields every profile is the stock one.
+
+| Rule | bwrap | Landlock | Seatbelt | Windows ACL |
+|---|---|---|---|---|
+| Write under the home | Denied: an empty tmpfs over the home, remounted read-only | Denied: no write grant under the home | Denied: `deny file-write*` on the home after the write allows | Denied: the Low-integrity token writes granted roots only |
+| Read under the home | Denied, with readable entries bound read-only | Denied: reads are granted only beside the way to the home, plus readable entries | Denied: `deny file-read*` on the home, readable entries allowed | Not confined |
+| Connect to a denied socket | Denied: `/dev/null` bound over the socket's resolved path, never its directory | Not expressed | Denied: `remote unix-socket` path literals of each spelling | Not expressed |
+
+`RUNNER_PROTECTION` exports this table as booleans per runner, so a consumer can report which rules the selected runner does not enforce.
 
 -----
 
@@ -95,7 +110,7 @@ Each runner's kernel speaks its own denial dialect, carried on every wrap as `de
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: runner chain selection, functional probes, per-call wrap, ACL grant lifecycle |
-| [`src/profiles.ts`](src/profiles.ts) | Per-platform profile builders: bwrap mounts, Landlock grants, Seatbelt SBPL |
+| [`src/profiles.ts`](src/profiles.ts) | Per-platform profile builders: bwrap mounts, Landlock grants, Seatbelt SBPL, and each runner's protected-home rules |
 
 </details>
 
@@ -134,6 +149,8 @@ These limits define when the provider is a poor fit or needs special operational
 - **Windows ACL enforcement is partial** — NTFS hard links alias one file object across workspace and external paths, reads stay unconfined, and a tree another AppContainer tool has ACL'd with a package SID is unreadable to the Low-integrity child. The provider reports `enforcement: 'partial'` rather than overstating that boundary as full.
 - **Landlock may be partial** — older supported kernel ABIs confine only the access classes they expose, reported as `enforcement: 'partial'` rather than overstated as full.
 - **Seatbelt depends on deprecated `sandbox-exec`** — macOS still ships it, but this provider cannot replace or probe that private policy engine if Apple removes it.
+- **The protected home under Landlock** — Landlock grants reads by directory tree, so each wrap lists the directories on the way from `/` to the home and grants their other entries: those directories cannot be listed, an entry created in them after the wrap is unreadable, and an entry removed between the wrap and the launch makes the launcher refuse the run. Landlock has no right for connecting to a pathname socket, so denied sockets and sockets under the home stay reachable there.
+- **Socket and alias coverage** — bwrap shadows a denied socket only when it exists at the wrap, Seatbelt denies only the listed socket paths, and no runner covers a bind mount or hard link that exposes the home's files at another path.
 - **Runner selection is cached for the provider lifetime** — installing, removing, or repairing a runner requires reloading the plugin before selection changes.
 - **`runnerCommand` is an operator assertion** — a configured custom runner skips functional probes and is assumed to implement the bwrap-compatible profile honestly; if it is itself a Bash script, its interpreter startup runs before that script applies confinement.
 

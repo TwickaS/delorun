@@ -102,6 +102,8 @@ kind: "package-reference"
 
 `workspaceWritableRoots` 为 bwrap 和 Landlock 推导工作区与显式额外目录。`writableRoots` 为 Seatbelt 和进程内文件系统围栏加入主机临时区域。两者都对根目录去重，并拒绝不存在、不是目录或经过符号链接解析的额外路径。参见[模式定义](../../../docs/subsystems/sandbox.zh.md)。
 
+`assertRootsOutsideHome` 以 `SandboxProtectedRootError`（`HOME_IN_WRITABLE_ROOT`）拒绝等于、位于或包含受保护主目录的可写根目录，因为并非每个后端都能在授予主目录写权限之后再收窄它。`pathWithin` 是它在规范路径上按路径段判断包含关系的函数。
+
 </details>
 
 -----

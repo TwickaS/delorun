@@ -184,6 +184,11 @@ describe('setup answers', { timeout: SETUP_TIMEOUT_MS }, () => {
     expect(dockerConnectEnforced('windows-acl')).toBe(false)
   })
 
+  it('describes Docker without the label only where upstream\'s sandbox profiles express the socket rule', () => {
+    expect(dockerConnectEnforced('bwrap')).toBe(true)
+    expect(dockerConnectEnforced('seatbelt')).toBe(true)
+  })
+
   it('probes the dialect: bwrap when it is on the path on Linux, Landlock otherwise, Seatbelt on macOS', () => {
     const bin = join(osHome, 'bin')
     mkdirSync(bin)

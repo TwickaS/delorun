@@ -45,6 +45,9 @@ kind: "package-reference"
 | `runnerCommand` | `[]` | 自定义 runner argv；会追加 bwrap 兼容的 profile 参数，断言完全强制执行，并跳过内置选择与探测 |
 | `runnerFailureSignatures` | `[]` | 识别自定义 runner 自身失败方言的不区分大小写 stderr 子串；与 `runnerCommand` 搭配必需 |
 | `probeTimeoutMs` | `5,000` | 每次竞争 runner 候选功能探测的超时时间 |
+| `protectedHome` | 无 | 受限命令不能写入或读取的现有目录（例如 harness 主目录）的绝对路径；与它重叠的 `workspace-write` 根目录会以 `HOME_IN_WRITABLE_ROOT` 被拒绝 |
+| `protectedHomeReadable` | `[]` | `protectedHome` 下、相对于它的路径，受限命令仍可读取和执行；需要 `protectedHome` |
+| `deniedSockets` | `[]` | 受限命令不能连接的 Unix 套接字绝对路径，在能表达该规则的 runner 上生效 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-sandbox-local)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -57,6 +60,18 @@ kind: "package-reference"
 不受支持的平台或不可用的 runner 会拒绝执行：`confine()` 以 `SANDBOX_UNAVAILABLE` 拒绝 并列出该平台的 runner 选项，消费方会呈现该错误，而不是让命令不受限制地运行。启动后拒绝自身 profile 的 runner 由其致命 stderr 签名与退出码识别，因此损坏的沙箱不会被误认为被拒绝的命令。`runnerCommand` 覆盖是操作方断言：它跳过功能探测，并假定配置的 runner 诚实实现与 bwrap 兼容的 profile。
 
 Seatbelt、bwrap 和 Landlock 在 `workspace-write` 下包含策略显式指定的 `additionalWritableRoots`。只读模式忽略这些授权。无效的额外目录会在命令启动前触发 `SANDBOX_INVALID_ROOT`。
+
+### 受保护主目录与被拒绝的套接字
+
+设置 `protectedHome` 后，受限命令不能在该目录下创建、修改或删除任何内容；在限制读取的 runner 上，除 `protectedHomeReadable` 条目外也不能读取其中任何内容。工作区根目录或额外根目录等于、位于或包含主目录的 `workspace-write` 调用会在命令启动前以 `HOME_IN_WRITABLE_ROOT` 失败；在这样的工作区中，只读调用仍会运行。设置 `deniedSockets` 后，在能表达该规则的 runner 上受限命令不能连接这些套接字，其他 Unix 套接字与网络仍可访问。不设置这些字段时，每个 profile 都与原版相同。
+
+| 规则 | bwrap | Landlock | Seatbelt | Windows ACL |
+|---|---|---|---|---|
+| 在主目录下写入 | 拒绝：在主目录上挂载空 tmpfs，并重新挂载为只读 | 拒绝：主目录下没有写授权 | 拒绝：在写允许之后对主目录 `deny file-write*` | 拒绝：Low 完整性令牌只能写入已授权的根目录 |
+| 在主目录下读取 | 拒绝，可读条目以只读方式绑定 | 拒绝：只授予通往主目录路径旁的读取，以及可读条目 | 拒绝：对主目录 `deny file-read*`，允许可读条目 | 不受限制 |
+| 连接被拒绝的套接字 | 拒绝：把 `/dev/null` 绑定到套接字解析后的路径上，从不绑定其目录 | 无法表达 | 拒绝：每种写法的 `remote unix-socket` 路径字面量 | 无法表达 |
+
+`RUNNER_PROTECTION` 以每个 runner 的布尔值导出此表，供消费方报告所选 runner 不强制执行哪些规则。
 
 -----
 
@@ -95,7 +110,7 @@ Windows 档为每个工作区保留一个确定性写入 SID 和常驻 ACE，同
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：runner 链选择、功能探测、逐调用包装、ACL 授权生命周期 |
-| [`src/profiles.ts`](src/profiles.ts) | 各平台 profile 构建器：bwrap 挂载、Landlock 授权、Seatbelt SBPL |
+| [`src/profiles.ts`](src/profiles.ts) | 各平台 profile 构建器：bwrap 挂载、Landlock 授权、Seatbelt SBPL，以及每个 runner 的受保护主目录规则 |
 
 </details>
 
@@ -134,6 +149,8 @@ Windows 档为每个工作区保留一个确定性写入 SID 和常驻 ACE，同
 - **Windows ACL 只能实现部分强制执行**——NTFS 硬链接会使工作区路径与外部路径指向同一个文件对象，读取仍不受限，且被其他 AppContainer 工具以包 SID 标记过的目录树对 Low 完整性子进程不可读。提供方报告 `enforcement: 'partial'`，而不会把该边界夸大为完整强制执行。
 - **Landlock 可能只实现部分强制执行**——较旧且受支持的内核 ABI 只能限制自身公开的访问类别，因此报告 `enforcement: 'partial'`，不会夸大为完整强制执行。
 - **Seatbelt 依赖已弃用的 `sandbox-exec`**——macOS 仍会提供它，但若 Apple 移除该私有策略引擎，该提供方无法替换或探测。
+- **Landlock 下的受保护主目录**——Landlock 按目录树授予读取，因此每次包装都会列出从 `/` 到主目录路径上的各个目录，并授予其中的其他条目：这些目录本身不能被列出，包装之后在其中新建的条目不可读，而在包装与启动之间被删除的条目会让启动器拒绝运行。Landlock 没有管辖连接路径名套接字的权限，因此被拒绝的套接字和主目录下的套接字在那里仍可访问。
+- **套接字与别名的覆盖范围**——bwrap 只遮蔽包装时已存在的被拒绝套接字，Seatbelt 只拒绝列出的套接字路径，没有 runner 覆盖在其他路径暴露主目录文件的绑定挂载或硬链接。
 - **runner 选择在提供方生命周期内缓存**——安装、移除或修复 runner 后，必须重载插件才能改变选择。
 - **`runnerCommand` 是操作方断言**——配置的自定义 runner 会跳过功能探测，并假定它诚实实现与 bwrap 兼容的 profile；如果它本身是 Bash 脚本，其解释器启动发生在该脚本施加约束之前。
 

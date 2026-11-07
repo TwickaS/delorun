@@ -1251,6 +1251,9 @@ importers:
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager
+      '@deepseek-ai/dsh-sandbox-local':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-local
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local

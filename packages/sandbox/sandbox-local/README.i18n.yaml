@@ -21,14 +21,17 @@
   en: 722ad601000b13c7
   zh: d2723f3743fe160b
 /deepseek-ai-dsh-sandbox-local/use-this-package/minimal-configuration:
-  en: 5d5ac6aaea69b3db
-  zh: 8049d91463b6347d
+  en: c40312697436ba6e
+  zh: 071e1d2d1b306fef
 /deepseek-ai-dsh-sandbox-local/use-this-package/confined-execution-and-enforcement:
   en: 7282c9ec77fd6f01
   zh: 10e385a9489105e3
 /deepseek-ai-dsh-sandbox-local/use-this-package/failures-and-recovery:
-  en: 9b648f1bfdd55e76
-  zh: d9265bdf2e272581
+  en: e92125951e78ec07
+  zh: 5797cd0368fd52b6
+/deepseek-ai-dsh-sandbox-local/use-this-package/protected-home-and-denied-sockets:
+  en: 5af236012b4871a3
+  zh: 972caf888c20056d
 /deepseek-ai-dsh-sandbox-local/understand-the-implementation:
   en: 15db6ec303151ccc
   zh: 91f62c1f64192f92
@@ -42,8 +45,8 @@
   en: 62adfc9229c656cc
   zh: 11b1534b6d61e5de
 /deepseek-ai-dsh-sandbox-local/understand-the-implementation/source-map:
-  en: 215bb6bac514b8b4
-  zh: 41e7777eea10a480
+  en: f93902f7c11bd4ce
+  zh: 9b4681680da35ad7
 /deepseek-ai-dsh-sandbox-local/further-exploration:
   en: 4f8490b57aa528bc
   zh: 4b3930cbb4f00303
@@ -54,8 +57,8 @@
   en: e290ccc9b3c92c08
   zh: 469589ac12cdadab
 /deepseek-ai-dsh-sandbox-local/known-limitations-and-deferred-work:
-  en: 7cd5c6a4cc971803
-  zh: 4e4f495b654d95c5
+  en: 26b980aa85763831
+  zh: f4e035ae233a496b
 /deepseek-ai-dsh-sandbox-local/known-limitations-and-deferred-work/dev-note:
   en: cc273320f6a1beaf
   zh: 5c57a312ddc50651

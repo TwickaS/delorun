@@ -7,8 +7,17 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { launcherPath } from '@deepseek-ai/node-addon-system/landlock-run'
-import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
+import { LocalSandboxProvider, RUNNER_PROTECTION } from '@deepseek-ai/dsh-sandbox-local'
+import type { Config } from '@deepseek-ai/dsh-sandbox-local'
 import { checkExtraWrites, checkRedirectedRoot } from './extra-roots.ts'
+import {
+  TEMP_BASE,
+  checkHomeReadDenied,
+  checkHomeSocketNotEnforced,
+  checkHomeWriteDenied,
+  checkWritableRootRefused,
+  closeServers,
+} from './protected-home.ts'
 
 /**
  * Keyless backend integration through `confine()` and the workspace `landlock-run` launcher, with
@@ -28,6 +37,7 @@ const tempDirs: string[] = []
 afterEach(async () => {
   await ctx?.fiber.dispose()
   ctx = undefined
+  await closeServers()
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
@@ -37,9 +47,10 @@ async function tempDir(base: string): Promise<string> {
   return dir
 }
 
-async function provider(): Promise<LocalSandboxProvider> {
+async function provider(config: Config = {}): Promise<LocalSandboxProvider> {
+  await ctx?.fiber.dispose()
   ctx = new Context()
-  await ctx.plugin(LocalSandboxProvider, {})
+  await ctx.plugin(LocalSandboxProvider, config)
   const sandbox = ctx.sandbox as LocalSandboxProvider
   sandbox.internals = { probeBwrap: () => false }
   return sandbox
@@ -109,5 +120,26 @@ describe.skipIf(!landlockUsable)('sandbox-local: real Landlock confinement throu
     const { result } = await runConfined(sandbox, `printf tmp-ok > ${scratch}/scratch.txt`, { mode: 'workspace-write', workspaceRoot: workdir })
     expect(result.status).toBe(0)
     expect(readFileSync(join(scratch, 'scratch.txt'), 'utf8')).toBe('tmp-ok')
+  })
+})
+
+describe.skipIf(!landlockUsable)('sandbox-local: the protected home under real Landlock', () => {
+  it('reports the socket rule as not expressed', () => {
+    expect(RUNNER_PROTECTION.landlock).toEqual({ homeWrite: true, homeRead: true, socketConnect: false })
+  })
+  it('home-read-denied: a confined command in a workspace at ~ cannot read the home-auth key or the start token, and reads runtimes/', async () => {
+    await checkHomeReadDenied(provider, tempDir)
+  })
+  it('home-write-denied: a confined command cannot create, change or delete a file under the home', async () => {
+    await checkHomeWriteDenied(provider, tempDir)
+  })
+  it('home-write-denied: a home inside the granted temp area stays unwritable under workspace-write', async () => {
+    await checkHomeWriteDenied(provider, tempDir, TEMP_BASE)
+  })
+  it('writable-root-refused: a workspace-write root that equals, lies inside or contains the home is refused', async () => {
+    await checkWritableRootRefused(provider, tempDir)
+  })
+  it('landlock-token-unreadable: a socket under the home stays reachable, as reported, while the start token is unreadable', async () => {
+    await checkHomeSocketNotEnforced(provider, tempDir)
   })
 })

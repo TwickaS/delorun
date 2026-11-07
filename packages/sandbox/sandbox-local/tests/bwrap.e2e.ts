@@ -6,9 +6,21 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
-import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
+import { LocalSandboxProvider, RUNNER_PROTECTION } from '@deepseek-ai/dsh-sandbox-local'
+import type { Config } from '@deepseek-ai/dsh-sandbox-local'
 import { bwrapProfileArgs } from '../src/profiles.ts'
 import { checkExtraWrites, checkRedirectedRoot } from './extra-roots.ts'
+import {
+  TEMP_BASE,
+  checkHomeReadDenied,
+  checkHomeSocketDenied,
+  checkHomeWriteDenied,
+  checkRootfulDockerDenied,
+  checkRootlessDockerDenied,
+  checkWritableRootRefused,
+  closeServers,
+  rootfulDockerUnusable,
+} from './protected-home.ts'
 
 /**
  * Keyless backend integration through `confine()` and a real bwrap process. With no rung forced,
@@ -28,6 +40,7 @@ const tempFiles: string[] = []
 afterEach(async () => {
   await ctx?.fiber.dispose()
   ctx = undefined
+  await closeServers()
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
   for (const file of tempFiles.splice(0)) rmSync(file, { force: true })
 })
@@ -38,9 +51,10 @@ async function tempDir(base: string): Promise<string> {
   return dir
 }
 
-async function provider(): Promise<LocalSandboxProvider> {
+async function provider(config: Config = {}): Promise<LocalSandboxProvider> {
+  await ctx?.fiber.dispose()
   ctx = new Context()
-  await ctx.plugin(LocalSandboxProvider, {})
+  await ctx.plugin(LocalSandboxProvider, config)
   return ctx.sandbox as LocalSandboxProvider
 }
 
@@ -149,5 +163,37 @@ describe.skipIf(!bwrapUsable)('sandbox-local: real bwrap confinement', () => {
     expect(result.status).toBe(0)
     expect(result.stdout).toBe('tmp-ok')
     expect(existsSync(target)).toBe(false)
+  })
+})
+
+describe.skipIf(!bwrapUsable)('sandbox-local: the protected home and denied sockets under real bwrap', () => {
+  it('reports every protection rule as expressed', () => {
+    expect(RUNNER_PROTECTION.bwrap).toEqual({ homeWrite: true, homeRead: true, socketConnect: true })
+  })
+  it('home-read-denied: a confined command in a workspace at ~ cannot read the home-auth key or the start token, and reads runtimes/', async () => {
+    await checkHomeReadDenied(provider, tempDir)
+  })
+  it('home-write-denied: a confined command cannot create, change or delete a file under the home', async () => {
+    await checkHomeWriteDenied(provider, tempDir)
+  })
+  it('home-write-denied: a home inside the temp area stays unwritable under workspace-write', async () => {
+    await checkHomeWriteDenied(provider, tempDir, TEMP_BASE)
+  })
+  it('writable-root-refused: a workspace-write root that equals, lies inside or contains the home is refused', async () => {
+    await checkWritableRootRefused(provider, tempDir)
+  })
+  it('home-socket-connect-denied: a socket under the home is unreachable and a fixture ssh-agent socket is reachable', async () => {
+    await checkHomeSocketDenied(provider, tempDir)
+  })
+  it('docker-socket-connect-denied: the Docker socket at its real rootful path is unreachable', async (test) => {
+    const unusable = rootfulDockerUnusable()
+    if (unusable !== undefined) {
+      test.skip(`not run: ${unusable}`)
+      return
+    }
+    await checkRootfulDockerDenied(provider, tempDir)
+  })
+  it('docker-socket-connect-denied: a rootless Docker socket is unreachable while the ssh-agent socket beside it stays reachable', async () => {
+    await checkRootlessDockerDenied(provider, tempDir, (file) => { tempFiles.push(file) })
   })
 })

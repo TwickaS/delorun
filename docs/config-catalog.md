@@ -2900,7 +2900,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-sandbox-local`
 
-- `source`: [`packages/sandbox/sandbox-local/src/index.ts:45`](../packages/sandbox/sandbox-local/src/index.ts)
+- `source`: [`packages/sandbox/sandbox-local/src/index.ts:56`](../packages/sandbox/sandbox-local/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config. All optional — `static Config` supplies the defaults. */
@@ -2925,6 +2925,24 @@ export interface Config {
   runnerFailureSignatures?: string[]
   /** Positive timeout for each functional probe; zero would mean unbounded to Node. */
   probeTimeoutMs?: number
+  /**
+   * Absolute path of an existing directory, such as the harness home, that confined commands can neither write nor
+   * read, as far as the selected runner expresses each rule ({@link RUNNER_PROTECTION}). A `workspace-write` call
+   * whose workspace root or extra root equals, lies inside or contains it is refused with `HOME_IN_WRITABLE_ROOT`.
+   * Absent: no directory is protected.
+   */
+  protectedHome?: string
+  /**
+   * Paths under {@link protectedHome}, relative to it, that confined commands may still read and execute, such as
+   * runtime and skill directories. Entries missing at a wrap grant nothing. Rejected without `protectedHome`.
+   */
+  protectedHomeReadable?: string[]
+  /**
+   * Absolute paths of Unix sockets that confined commands cannot connect to, such as the Docker socket and the
+   * channels under the protected home, on runners that express the rule ({@link RUNNER_PROTECTION}). Each path is
+   * resolved at every wrap, and its resolved spellings are denied too.
+   */
+  deniedSockets?: string[]
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sandbox-local -->
