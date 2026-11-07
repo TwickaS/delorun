@@ -223,6 +223,33 @@ describe('the configuration at load', () => {
     await chmod(file, 0o644)
     await expect(mount({ config: { ...base(), credential: { host: fixtureHost(), file } } })).rejects.toThrow(/SECRET_FILE_MODE/)
   })
+  it.each([
+    ['GitHub.com', 'https://github.com/owner/repo.git', true],
+    ['github.com:443', 'https://github.com/owner/repo.git', true],
+    ['GitHub.com:443', 'https://github.com/owner/repo.git', true],
+    ['GitHub.com:8443', 'https://github.com:8443/owner/repo.git', true],
+    ['gitlab.com', 'https://github.com/owner/repo.git', false],
+    ['GitHub.com:8443', 'https://github.com/owner/repo.git', false],
+    ['GitHub.com:443', 'https://github.com:8443/owner/repo.git', false],
+  ])('answers the credential host %s with the token for the clone URL %s: %s', async (host, url, matched) => {
+    const file = await writeToken(fixture.password)
+    const mounted = await mount({ config: { ...base(), credential: { host, file } }, errorPipe: false })
+    await settledImport(mounted.service, (await mounted.service.startImport({ url })).import)
+    expect(mounted.spawns).toHaveLength(1)
+    expect(mounted.spawns[0]?.env?.DELO_GIT_TOKEN === undefined).toBe(!matched)
+  })
+
+  it.each([
+    ['a path', 'github.com/owner'],
+    ['a space', 'github.com old'],
+    ['a scheme', 'https://github.com'],
+    ['a user name and password', 'person:delo-test-password-not-a-secret@github.com'],
+  ])('refuses a credential host with %s at load, and its error names the option and not the value', async (_label, host) => {
+    const file = await writeToken(fixture.password)
+    const failure: unknown = await mount({ config: { ...base(), credential: { host, file } } }).then(() => undefined, (error: unknown) => error)
+    expect(String(failure)).toContain('credential.host')
+    expect(String(failure)).not.toContain(host)
+  })
 })
 
 describe('imports', () => {
@@ -273,6 +300,49 @@ describe('imports', () => {
     expect(mounted.spawns[0]?.argv).toEqual(expect.arrayContaining(['-c', `http.sslCAInfo=${fixture.caFile}`]))
   }, 30_000)
 
+  it('removes the git trace names the process environment sets from the clone\'s spawn, through the plugin', async () => {
+    const previous = { GIT_TRACE_SETUP: process.env.GIT_TRACE_SETUP }
+    process.env.GIT_TRACE_SETUP = '1'
+    try {
+      const mounted = await mount({ config: base() })
+      const started = await mounted.service.startImport({ url: publicUrl() })
+      await settledImport(mounted.service, started.import)
+      const env: NodeJS.ProcessEnv = mounted.spawns[0]?.env ?? {}
+      expect(Object.hasOwn(env, 'GIT_TRACE_SETUP')).toBe(true)
+      expect(env.GIT_TRACE_SETUP).toBeUndefined()
+    } finally {
+      restoreEnv(previous)
+    }
+  }, 30_000)
+
+  it('reads the credential file again for each clone: a file that became lax refuses the clone, and names neither the path nor the token', async () => {
+    const file = await writeToken(fixture.password)
+    const mounted = await mount({ config: { ...base(), credential: { host: fixtureHost(), file } } })
+    await chmod(file, 0o644)
+    const refused = await settledImport(mounted.service, (await mounted.service.startImport({ url: privateUrl() })).import)
+    expect(refused).toMatchObject({ state: 'failed', reason: 'the credential file is refused (SECRET_FILE_MODE)' })
+    expect(refused.reason ?? '').not.toContain(file)
+    expect(refused.reason ?? '').not.toContain(fixture.password)
+    expect(mounted.spawns).toHaveLength(0)
+    await chmod(file, 0o600)
+    const restored = await settledImport(mounted.service, (await mounted.service.startImport({ url: privateUrl() })).import)
+    expect(restored.state).toBe('done')
+  }, 60_000)
+
+  it('reads the credential file again for each clone: a file replaced by a symbolic link refuses the clone, and names neither the path nor the token', async () => {
+    const file = await writeToken(fixture.password)
+    const mounted = await mount({ config: { ...base(), credential: { host: fixtureHost(), file } } })
+    const target = join(scratch, 'moved-token')
+    await writeFile(target, fixture.password, { mode: 0o600 })
+    await rm(file)
+    await symlink(target, file)
+    const refused = await settledImport(mounted.service, (await mounted.service.startImport({ url: privateUrl() })).import)
+    expect(refused).toMatchObject({ state: 'failed', reason: 'the credential file is refused (SECRET_FILE_MODE)' })
+    expect(refused.reason ?? '').not.toContain(file)
+    expect(refused.reason ?? '').not.toContain(fixture.password)
+    expect(mounted.spawns).toHaveLength(0)
+  }, 30_000)
+
   it('sends the token only to the host of the credential, which clones the private repository', async () => {
     const file = await writeToken(fixture.password)
     const mounted = await mount({ config: { ...base(), credential: { host: fixtureHost(), file } } })
@@ -316,6 +386,20 @@ describe('imports', () => {
     expect(row.reason ?? '').not.toContain(wrong)
     expect(row.url).toBe(privateUrl())
     expect(await exists(join(root, 'private'))).toBe(false)
+  }, 30_000)
+
+  it('redacts the token from the reason it reports and from the log, though git\'s own failure output names it', async () => {
+    // The token is the fixture's host, which git's fatal line for a missing repository echoes with the clone URL.
+    const token = fixtureHost()
+    const file = await writeToken(token)
+    const mounted = await mount({ config: { ...base(), credential: { host: fixtureHost(), file } } })
+    const logs = spyOnLog(mounted)
+    const started = await mounted.service.startImport({ url: `${fixture.origin}/missing.git` })
+    const row = await settledImport(mounted.service, started.import)
+    expect(row.state).toBe('failed')
+    expect(row.reason).toContain('[redacted]')
+    expect(row.reason).not.toContain(token)
+    expect(JSON.stringify(logs.calls())).not.toContain(token)
   }, 30_000)
 
   it('fails a clone whose provider has no error pipe with the generic reason, removes its folder, and logs why', async () => {

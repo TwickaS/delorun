@@ -13,12 +13,15 @@ const TOKEN = 'fixture-token-for-git-specs'
 const CLONE_URL = 'https://127.0.0.1:8443/owner/repo.git'
 
 describe('GIT_OPTIONS', () => {
-  it('turns hooks and the file monitor off and allows only https', () => {
+  it('clears the askpass program, turns hooks and the file monitor off, and allows only https', () => {
     expect(GIT_OPTIONS).toEqual([
+      '-c', 'core.askPass=',
       '-c', 'core.hooksPath=/dev/null',
       '-c', 'core.fsmonitor=false',
       '-c', 'protocol.allow=never',
       '-c', 'protocol.https.allow=always',
+      '-c', 'protocol.file.allow=never',
+      '-c', 'protocol.ext.allow=never',
     ])
   })
 })
@@ -31,6 +34,11 @@ describe('GIT_ENV', () => {
     }
     expect(GIT_ENV.GIT_TERMINAL_PROMPT).toBe('0')
     expect(GIT_ENV.GCM_INTERACTIVE).toBe('never')
+  })
+
+  it('sets GIT_CONFIG_NOSYSTEM and GIT_CONFIG_GLOBAL, so no clone reads the system or the person\'s global configuration', () => {
+    expect(GIT_ENV.GIT_CONFIG_NOSYSTEM).toBe('1')
+    expect(GIT_ENV.GIT_CONFIG_GLOBAL).toBe('/dev/null')
   })
 })
 
@@ -51,6 +59,25 @@ describe('cloneEnvironment', () => {
     const env = cloneEnvironment({ git_dir: '/elsewhere' })
     expect(Object.hasOwn(env, 'git_dir')).toBe(true)
     expect(env.git_dir).toBeUndefined()
+  })
+
+  it('keeps GIT_CONFIG_NOSYSTEM and GIT_CONFIG_GLOBAL at the values a clone sets, whatever the parent sets', () => {
+    const env = cloneEnvironment({ GIT_CONFIG_NOSYSTEM: '0', GIT_CONFIG_GLOBAL: '/home/a/.gitconfig' })
+    expect(env.GIT_CONFIG_NOSYSTEM).toBe('1')
+    expect(env.GIT_CONFIG_GLOBAL).toBe('/dev/null')
+  })
+
+  it.each([
+    ['transport and template', ['GIT_ALLOW_PROTOCOL', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR']],
+    ['remote shell and proxy command', ['GIT_SSH', 'GIT_SSH_COMMAND', 'GIT_PROXY_COMMAND']],
+    ['client certificate', ['GIT_SSL_CERT', 'GIT_SSL_KEY']],
+    ['proxy, in upper and lower case', ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']],
+  ])('removes the %s names a parent environment sets', (_label, names) => {
+    const env = cloneEnvironment(Object.fromEntries(names.map((name) => [name, 'set-by-parent'])))
+    for (const name of names) {
+      expect(Object.hasOwn(env, name), name).toBe(true)
+      expect(env[name], name).toBeUndefined()
+    }
   })
 })
 
@@ -128,6 +155,16 @@ describe('redactClone', () => {
   it('applies each secret in turn and ignores an empty one', () => {
     expect(redactClone('a-secret-b', ['secret', 'a-secret'])).toBe('a-[redacted]-b')
     expect(redactClone('unchanged text', ['', 'zz'])).toBe('unchanged text')
+  })
+
+  it('redacts the user name and password of a URL, and the value of a credential-helper line, whatever the secrets', () => {
+    expect(redactClone('https://user:secret-value@host/a and https://secret-only@host/b', [])).toBe('https://[redacted]@host/a and https://[redacted]@host/b')
+    expect(redactClone('username=x-access-token\npassword=secret-value\npassword=\n', [])).toBe('username=[redacted]\npassword=[redacted]\npassword=\n')
+  })
+
+  it('redacts the value of an Authorization header under the Basic, Bearer and token schemes', () => {
+    expect(redactClone('Authorization: Basic c2VjcmV0\nauthorization: Bearer secret-value\nAuthorization: token secret-value', []))
+      .toBe('Authorization: Basic [redacted]\nauthorization: Bearer [redacted]\nAuthorization: token [redacted]')
   })
 })
 

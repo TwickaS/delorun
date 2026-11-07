@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { PassThrough, type Readable } from 'node:stream'
 import type { SubprocessHandle, SubprocessOutcome, SubprocessRuntime, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { type CloneOptions, type CloneResult, cloneRepository } from '../src/clone.ts'
+import { type CloneOptions, type CloneResult, type CloneSpec, cloneRepository, resolveClone } from '../src/clone.ts'
 import { tokenGit } from '../src/git.ts'
 import { type GitFixture, startGitFixture } from './fixtures/git-server.ts'
 
@@ -77,8 +77,9 @@ const started = startGitFixture().then(
 /** The running fixture of the current test. */
 let fixture: GitFixture | undefined
 
-/** The environment values a test changed, with what to restore. */
-let savedEnv: Record<string, string | undefined> = {}
+/** HOME and XDG_CONFIG_HOME as the process had them when this file loaded; no spec changes them. */
+const homeAtLoad = process.env.HOME
+const xdgConfigHomeAtLoad = process.env.XDG_CONFIG_HOME
 
 /** A scratch directory for each spec, removed after it. */
 let scratch = ''
@@ -88,13 +89,9 @@ beforeEach(async () => {
   const outcome = await started
   if ('error' in outcome) throw outcome.error
   fixture = outcome.fixture
-  savedEnv = { HOME: process.env.HOME, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME }
-  process.env.HOME = outcome.fixture.home
-  process.env.XDG_CONFIG_HOME = join(outcome.fixture.home, '.config')
 }, 60_000)
 
 afterEach(async () => {
-  restoreEnv(savedEnv)
   await rm(scratch, { recursive: true, force: true })
 })
 
@@ -137,14 +134,23 @@ describe('the arguments and environment a clone spawns with', () => {
 
   it('clears the git variables a parent environment sets, whatever their suffix', async () => {
     const { runtime, specs } = scripted({})
-    const result = await withEnv({ GIT_CONFIG_KEY_0: 'core.pager', GIT_TRACE2_EVENT: '/tmp/trace', GIT_ASKPASS: '/bin/ask', GIT_DIR: '/elsewhere' },
-      () => cloneRepository(inputs(runtime, { url: UNREACHED_URL }).options))
+    const parentEnv = { GIT_CONFIG_KEY_0: 'core.pager', GIT_TRACE2_EVENT: '/tmp/trace', GIT_ASKPASS: '/bin/ask', GIT_DIR: '/elsewhere' }
+    const result = await cloneRepository(inputs(runtime, { url: UNREACHED_URL, env: parentEnv }).options)
     expect(result).toEqual({ ok: true })
     const env = onlySpec(specs).env ?? {}
     for (const name of ['GIT_CONFIG_KEY_0', 'GIT_TRACE2_EVENT', 'GIT_ASKPASS', 'GIT_DIR']) {
       expect(Object.hasOwn(env, name), name).toBe(true)
       expect(env[name], name).toBeUndefined()
     }
+  })
+
+  it('ignores the system and the person\'s global configuration and the askpass program, for a token-less clone too', async () => {
+    const { runtime, specs } = scripted({})
+    const parentEnv = { GIT_CONFIG_NOSYSTEM: '0', GIT_CONFIG_GLOBAL: '/home/a/.gitconfig' }
+    expect(await cloneRepository(inputs(runtime, { url: UNREACHED_URL, env: parentEnv }).options)).toEqual({ ok: true })
+    const spec = onlySpec(specs)
+    expect(spec.env).toMatchObject({ GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' })
+    expect(spec.argv).toEqual(expect.arrayContaining(['core.askPass=', 'protocol.file.allow=never', 'protocol.ext.allow=never']))
   })
 
   it('passes the extra certificate authority as http.sslCAInfo, and leaves it out by default', async () => {
@@ -170,6 +176,57 @@ describe('the arguments and environment a clone spawns with', () => {
     const pending = cloneRepository(inputs(runtime, { url: UNREACHED_URL, signal: controller.signal }).options)
     controller.abort()
     expect(reasonOf(await pending)).toBe('the clone was cancelled; git was stopped by SIGTERM')
+  })
+})
+
+describe('resolveClone', () => {
+  it('resolves a clone into its spawn without starting a process', () => {
+    const { runtime, specs } = scripted({})
+    const io = inputs(runtime, { url: UNREACHED_URL, token: TOKEN, extraCaFile: '/etc/delo/private-ca.pem' })
+    const resolved = resolvedOf(resolveClone(io.options))
+    expect(specs).toHaveLength(0)
+    expect(resolved.argv[0]).toBe('git')
+    expect(resolved.argv).toEqual(expect.arrayContaining(['-c', 'http.sslCAInfo=/etc/delo/private-ca.pem']))
+    expect(resolved.argv.slice(-5)).toEqual(['clone', '--progress', '--', UNREACHED_URL, '.'])
+    expect(resolved.argv.join('\n')).not.toContain(TOKEN)
+    expect(resolved.cwd).toBe(io.options.directory)
+    expect(resolved.graceMs).toBe(5000)
+    expect(resolved.env).toMatchObject({ DELO_GIT_TOKEN: TOKEN })
+  })
+
+  it('passes the proxy as http.proxy only when one is given', () => {
+    const { runtime } = scripted({})
+    expect(resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL }).options)).argv.join('\n')).not.toContain('http.proxy')
+    const proxied = resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL, proxy: 'http://proxy.example:3128' }).options))
+    expect(proxied.argv).toEqual(expect.arrayContaining(['-c', 'http.proxy=http://proxy.example:3128']))
+  })
+
+  it('answers a refused URL or token in the failure shape, without starting a process', () => {
+    const { runtime, specs } = scripted({})
+    expect(resolveClone(inputs(runtime, { url: 'http://127.0.0.1:1/owner/repo.git' }).options)).toEqual({
+      ok: false,
+      reason: 'the repository URL must be an https URL without a user name, password, query or fragment',
+    })
+    expect(resolveClone(inputs(runtime, { url: UNREACHED_URL, token: 'two words' }).options)).toEqual({
+      ok: false,
+      reason: 'the token must be one line of at most 4096 printable ASCII characters without whitespace',
+    })
+    expect(specs).toHaveLength(0)
+  })
+
+  it('reads no process environment: a name only the process sets is not in the spawn environment', () => {
+    const previous = { GIT_TRACE: process.env.GIT_TRACE, GIT_TRACE_SETUP: process.env.GIT_TRACE_SETUP }
+    process.env.GIT_TRACE = '/tmp/process-trace'
+    process.env.GIT_TRACE_SETUP = '1'
+    try {
+      const { runtime } = scripted({})
+      const resolved = resolvedOf(resolveClone(inputs(runtime, { url: UNREACHED_URL, env: { PATH: '/usr/bin' } }).options))
+      expect(Object.values(resolved.env)).not.toContain('/tmp/process-trace')
+      // GIT_ENV always removes GIT_TRACE, so only a prefix-matched name shows a process read: GIT_TRACE_SETUP.
+      expect(Object.hasOwn(resolved.env, 'GIT_TRACE_SETUP'), 'GIT_TRACE_SETUP').toBe(false)
+    } finally {
+      restoreEnv(previous)
+    }
   })
 })
 
@@ -207,6 +264,32 @@ describe('failure reasons and progress', () => {
     const io = inputs(runtime, { url: UNREACHED_URL, token: TOKEN })
     expect(reasonOf(await cloneRepository(io.options))).toBe('git exited with code 128')
     expect(io.progress).toEqual(['Receiving objects: 9%'])
+  })
+
+  it('removes the control characters of a line, except tab, before the line is cut to 300 characters', async () => {
+    const progressLine = `${'\x01'.repeat(20)}${'p'.repeat(400)}`
+    const { runtime } = scripted({ stderr: `Receiving\tobjects:\x07 50%\n${progressLine}\nfatal: a \x1b[31mbad\x00 value\n`, exitCode: 128 })
+    const io = inputs(runtime, { url: UNREACHED_URL })
+    expect(reasonOf(await cloneRepository(io.options))).toBe('git exited with code 128\nfatal: a [31mbad value')
+    expect(io.progress).toEqual(['Receiving\tobjects: 50%', 'p'.repeat(300)])
+  })
+
+  it.each([
+    ['a user name and password in a URL', 'https://user:delo-test-password-not-a-secret@127.0.0.1:1/owner/repo.git', 'https://[redacted]@127.0.0.1:1/owner/repo.git'],
+    ['an Authorization header', 'Authorization: Bearer shape-only-value', 'Authorization: Bearer [redacted]'],
+    ['a credential-helper password line', 'password=shape-only-value', 'password=[redacted]'],
+  ])('redacts %s from the reason and the progress lines, though the token is not in the output', async (_label, shape, redacted) => {
+    const { runtime } = scripted({ stderr: `Receiving objects: 40% ${shape}\nfatal: could not use ${shape}\n`, exitCode: 128 })
+    const io = inputs(runtime, { url: UNREACHED_URL })
+    expect(reasonOf(await cloneRepository(io.options))).toBe(`git exited with code 128\nfatal: could not use ${redacted}`)
+    expect(io.progress).toEqual([`Receiving objects: 40% ${redacted}`])
+  })
+
+  it('removes the token from a stream error that names it, so no warning holds it', async () => {
+    const { runtime } = scripted({ failStderr: `read failed near ${TOKEN}`, exitCode: 0 })
+    const io = inputs(runtime, { url: UNREACHED_URL, token: TOKEN })
+    expect(await cloneRepository(io.options)).toEqual({ ok: true })
+    expect(io.warnings).toEqual(['git clone: reading its error output failed: read failed near [redacted]'])
   })
 
   it('rejects when the provider returns no error pipe for a spawn that asked for one', async () => {
@@ -344,16 +427,40 @@ describe('git over the local HTTPS fixture', () => {
     expect(io.warnings).toEqual([])
   })
 
+  it('never runs the askpass program of the person\'s configuration, even when a redirect asks for the token', async () => {
+    const directory = await emptyDirectory()
+    const { origin, caFile, password, home } = running()
+    const marker = join(scratch, 'askpass-ran')
+    const program = join(scratch, 'askpass.sh')
+    await writeFile(program, `#!/bin/sh\nprintf 'ran, token %s\\n' "\${DELO_GIT_TOKEN:+present}" > '${marker}'\nexit 1\n`, { mode: 0o755 })
+    const configPath = join(home, '.gitconfig')
+    await writeFile(configPath, `[core]\n\taskPass = ${program}\n`)
+    try {
+      const result = await cloneRepository(inputs(nodeRuntime(), { url: `${origin}/moved.git`, directory, extraCaFile: caFile, token: password }).options)
+      expect(result.ok).toBe(false)
+      expect(await readFile(marker, 'utf8').catch(() => undefined)).toBeUndefined()
+    } finally {
+      await rm(configPath, { force: true })
+    }
+  })
+
   it('answers the token only over https, for the clone URL host and path', () => {
     const { origin, password } = running()
     const invocation = tokenGit(`${origin}/private.git`, password)
-    const env = applyEnv(gitEnv(), invocation.env)
+    const env = applyEnv(running().env, invocation.env)
     const host = new URL(origin).host
     const ask = (input: string): string => spawnSync('git', [...invocation.options, 'credential', 'fill'], { env, input, encoding: 'utf8' }).stdout
     expect(ask(`protocol=https\nhost=${host}\npath=private.git\n\n`)).toContain(`password=${password}`)
     expect(ask(`protocol=http\nhost=${host}\npath=private.git\n\n`)).not.toContain(password)
     expect(ask(`protocol=https\nhost=127.0.0.1:1\npath=private.git\n\n`)).not.toContain(password)
     expect(ask(`protocol=https\nhost=${host}\npath=other.git\n\n`)).not.toContain(password)
+  })
+})
+
+describe('the process environment', () => {
+  it('keeps HOME and XDG_CONFIG_HOME as the process had them, because the specs pass their environment explicitly', () => {
+    expect(process.env.HOME).toBe(homeAtLoad)
+    expect(process.env.XDG_CONFIG_HOME).toBe(xdgConfigHomeAtLoad)
   })
 })
 
@@ -367,7 +474,7 @@ function running(): GitFixture {
 }
 
 /**
- * The clone inputs for one spec, rooted in its scratch directory.
+ * The clone inputs for one spec, rooted in its scratch directory, with the fixture environment as the parent environment.
  * @param subprocess - the provider the spec runs git through.
  * @param overrides - the options the spec sets.
  * @returns the options and the lists the clone's warnings and progress lines go to.
@@ -377,6 +484,7 @@ function inputs(subprocess: SubprocessRuntime, overrides: Partial<CloneOptions>)
   const progress: string[] = []
   const options: CloneOptions = {
     subprocess,
+    env: running().env,
     url: UNREACHED_URL,
     directory: join(scratch, 'workspace'),
     timeoutMs: 60_000,
@@ -403,6 +511,17 @@ function emptyDirectory(): Promise<string> {
 function reasonOf(result: CloneResult): string {
   if (result.ok) throw new Error('expected the clone to fail')
   return result.reason
+}
+
+/**
+ * The resolved spawn of a clone that the spec expects to resolve.
+ * @param spec - the resolution.
+ * @returns the spawn.
+ * @throws Error when the clone was refused.
+ */
+function resolvedOf(spec: CloneSpec): Extract<CloneSpec, { readonly ok: true }> {
+  if (!spec.ok) throw new Error(`expected the clone to resolve, saw the refusal: ${spec.reason}`)
+  return spec
 }
 
 /**
@@ -466,15 +585,16 @@ function outcomeOf(script: Script, spec: SubprocessSpawnSpec): Promise<Subproces
 
 /**
  * A subprocess provider over node:child_process, for the specs that run git.
- * Each spawn leads its own process group, which stands for the managed range:
- * stopping the spawn also stops the helper processes git starts.
+ * Each spawn starts from the fixture environment, which stands for the provider's
+ * scrubbed base, and leads its own process group: stopping the spawn also stops
+ * the helper processes git starts.
  * @returns the provider.
  */
 function nodeRuntime(): SubprocessRuntime {
   return {
     spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
       const [program = '', ...args] = spec.argv
-      const child = spawn(program, args, { cwd: spec.cwd, env: applyEnv(process.env, spec.env ?? {}), detached: true, stdio: ['ignore', 'ignore', 'pipe'] })
+      const child = spawn(program, args, { cwd: spec.cwd, env: applyEnv(running().env, spec.env ?? {}), detached: true, stdio: ['ignore', 'ignore', 'pipe'] })
       const stop = (): void => {
         if (child.pid === undefined) return
         try {
@@ -527,25 +647,6 @@ function restoreEnv(saved: Readonly<Record<string, string | undefined>>): void {
 }
 
 /**
- * Run a body with environment variables set, then restore them.
- * @param overrides - the values to set.
- * @param body - the spec's work.
- * @returns the body's result.
- */
-async function withEnv<T>(overrides: Readonly<Record<string, string>>, body: () => Promise<T>): Promise<T> {
-  const saved: Record<string, string | undefined> = {}
-  for (const [name, value] of Object.entries(overrides)) {
-    saved[name] = process.env[name]
-    process.env[name] = value
-  }
-  try {
-    return await body()
-  } finally {
-    restoreEnv(saved)
-  }
-}
-
-/**
  * An environment with the given entries applied: an undefined entry removes its name.
  * @param base - the environment to start from.
  * @param entries - the entries to apply.
@@ -561,22 +662,10 @@ function applyEnv(base: NodeJS.ProcessEnv, entries: Readonly<Record<string, stri
 }
 
 /**
- * The harness environment without the `GIT_` names, for the specs' own git commands.
- * @returns the environment.
- */
-function gitEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {}
-  for (const [name, value] of Object.entries(process.env)) {
-    if (!name.toUpperCase().startsWith('GIT_')) env[name] = value
-  }
-  return env
-}
-
-/**
- * Run git for a check of the clone's result.
+ * Run git for a check of the clone's result, in the fixture environment.
  * @param args - the arguments after `git`.
  * @returns the standard output without its final newline.
  */
 function gitOut(args: readonly string[]): string {
-  return spawnSync('git', [...args], { env: gitEnv(), encoding: 'utf8' }).stdout.trim()
+  return spawnSync('git', [...args], { env: running().env, encoding: 'utf8' }).stdout.trim()
 }

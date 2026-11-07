@@ -1,9 +1,9 @@
 /**
  * A local HTTPS git server for the clone specs: a self-signed certificate for
  * 127.0.0.1 made with openssl, `git http-backend` behind it, a public
- * repository, a private repository that needs a Basic credential, and a
- * repository whose advertisement never arrives. It reaches no real host or
- * account.
+ * repository, a private repository that needs a Basic credential, a
+ * repository whose advertisement never arrives, and a repository that redirects
+ * to the private one. It reaches no real host or account.
  * @module tests/fixtures/git-server
  */
 import { execFile, spawn } from 'node:child_process'
@@ -24,6 +24,9 @@ const PASSWORD = 'fixture-password-not-a-credential'
 
 /** The repository whose advertisement the server never sends. */
 const STALL = 'stall.git'
+
+/** The repositories whose requests the server answers with a redirect to another repository of the fixture, by directory name. */
+const REDIRECTS: ReadonlyMap<string, string> = new Map([['moved.git', 'private.git']])
 
 /** The repositories served with an answer, by directory name. */
 const SERVED = new Set<string>(['public.git', 'private.git'])
@@ -46,6 +49,8 @@ export interface GitFixture {
   readonly caFile: string
   /** The home directory the fixture's git commands and clones use; it holds no git configuration unless a spec writes one. */
   readonly home: string
+  /** The environment of the fixture's git commands and of the clones the specs run: the harness's variables without the `GIT_` names, with the fixture's home. */
+  readonly env: NodeJS.ProcessEnv
   /** The private repository's password; its user name is `x-access-token`. */
   readonly password: string
   /** The requests the server has received, in arrival order. */
@@ -65,6 +70,7 @@ interface CgiResponse {
 interface ServerState {
   readonly repos: string
   readonly home: string
+  readonly env: NodeJS.ProcessEnv
   readonly expected: string
   readonly requests: FixtureRequest[]
 }
@@ -87,7 +93,7 @@ export async function startGitFixture(): Promise<GitFixture> {
     '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-addext', 'basicConstraints=critical,CA:TRUE'])
   await buildRepositories(root, repos, env)
   const requests: FixtureRequest[] = []
-  const state: ServerState = { repos, home, expected: `Basic ${Buffer.from(`${USER}:${PASSWORD}`).toString('base64')}`, requests }
+  const state: ServerState = { repos, home, env, expected: `Basic ${Buffer.from(`${USER}:${PASSWORD}`).toString('base64')}`, requests }
   const server = createServer({ key: await readFile(keyFile), cert: await readFile(caFile) }, (req, res) => {
     serve(req, res, state).catch((error: unknown) => {
       if (!res.headersSent) res.writeHead(500)
@@ -101,6 +107,7 @@ export async function startGitFixture(): Promise<GitFixture> {
     origin: `https://127.0.0.1:${address.port}`,
     caFile,
     home,
+    env,
     password: PASSWORD,
     requests,
     close: async () => {
@@ -156,9 +163,8 @@ async function git(args: readonly string[], env: NodeJS.ProcessEnv): Promise<voi
 }
 
 /**
- * The environment of the fixture's own git commands: the harness's variables
- * without the `GIT_` names, which could point a command at another repository,
- * and a home of the fixture's own.
+ * The environment of the fixture's git commands and of the clones the specs run: the harness's variables without the `GIT_`
+ * names, which could point a command at another repository, and a home of the fixture's own.
  * @param home - the fixture's home directory.
  * @returns the environment.
  */
@@ -183,6 +189,11 @@ async function serve(req: IncomingMessage, res: ServerResponse, state: ServerSta
   const repository = url.pathname.split('/')[1] ?? ''
   state.requests.push({ method: req.method ?? 'GET', path: url.pathname, credential })
   if (repository === STALL) return
+  const target = REDIRECTS.get(repository)
+  if (target !== undefined) {
+    res.writeHead(301, { Location: `/${target}${url.pathname.slice(repository.length + 1)}${url.search}` }).end()
+    return
+  }
   if (!SERVED.has(repository)) {
     res.writeHead(404).end()
     return
@@ -206,7 +217,7 @@ async function serve(req: IncomingMessage, res: ServerResponse, state: ServerSta
  */
 function runHttpBackend(state: ServerState, req: IncomingMessage, url: URL, body: Buffer): Promise<CgiResponse> {
   const env = definedEntries({
-    PATH: process.env.PATH,
+    PATH: state.env.PATH,
     HOME: state.home,
     XDG_CONFIG_HOME: join(state.home, '.config'),
     GIT_CONFIG_NOSYSTEM: '1',

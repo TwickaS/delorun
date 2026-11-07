@@ -1,21 +1,28 @@
 /**
  * git's options, environment and credential helper for the workspaces'
- * clones. Every git command runs with no hooks, no file monitor and only
- * `https`, without the environment names that point git at other
- * configuration, traces or askpass programs. A token reaches git only through
- * a credential helper that answers for the clone URL's host and path, so the
- * token is in neither the argument list nor the URL the clone stores.
+ * clones. No clone reads the system or the person's global git configuration:
+ * every git command runs with no askpass program, no hooks, no file monitor and
+ * only `https`, and its environment has no names that point git at other
+ * configuration, traces, proxies, transports or template directories. A token
+ * reaches git only through a credential helper that answers for the clone URL's
+ * host and path, so the token is in neither the argument list nor the URL the
+ * clone stores. A private repository therefore needs that token.
  *
  * While git runs, the token is in git's environment and in the environment of
  * the processes git starts, so any of those processes can read it.
  * @module @delo/plugin-workspaces/git
  */
 
-/** Names a clone drops from git's environment: repository and index pointers, configuration, certificate overrides and traces. */
+/**
+ * Names a clone drops from git's environment: repository and index pointers, configuration, certificate and transport
+ * overrides, proxies, template directories, askpass programs and traces.
+ */
 const CLEARED = [
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
   'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CEILING_DIRECTORIES', 'GIT_NAMESPACE',
-  'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_SSL_NO_VERIFY', 'GIT_SSL_CAINFO', 'GIT_SSL_CAPATH', 'GIT_PROXY_SSL_CAINFO',
+  'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_SSL_NO_VERIFY', 'GIT_SSL_CAINFO', 'GIT_SSL_CAPATH', 'GIT_PROXY_SSL_CAINFO', 'GIT_SSL_CERT', 'GIT_SSL_KEY',
+  'GIT_ALLOW_PROTOCOL', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR', 'GIT_SSH', 'GIT_SSH_COMMAND', 'GIT_PROXY_COMMAND',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
   'GIT_TRACE', 'GIT_TRACE_CURL', 'GIT_TRACE_CURL_NO_DATA', 'GIT_TRACE_PACKET',
   'GIT_TRACE2', 'GIT_TRACE2_EVENT', 'GIT_TRACE2_PERF', 'GIT_CURL_VERBOSE',
 ] as const
@@ -65,22 +72,41 @@ export interface GitInvocation {
   readonly env: Readonly<Record<string, string | undefined>>
 }
 
-/** The options every git command of a workspace takes: no hooks, no file monitor, and only `https`. */
+/**
+ * The values every clone sets, which replace the parent environment's entries of the same names: git reads no system or
+ * global configuration file, and no git command prompts.
+ */
+const SET: Readonly<Record<string, string>> = {
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_TERMINAL_PROMPT: '0',
+  GCM_INTERACTIVE: 'never',
+}
+
+/** {@link SET}'s names in upper case, which match a parent name whatever its letter case. */
+const SET_NAMES: ReadonlySet<string> = new Set<string>(Object.keys(SET).map((name) => name.toUpperCase()))
+
+/**
+ * The options every git command of a workspace takes: no askpass program, no hooks, no file monitor, and only `https`. The file
+ * and external transports are refused by name as well.
+ */
 export const GIT_OPTIONS: readonly string[] = [
+  '-c', 'core.askPass=',
   '-c', 'core.hooksPath=/dev/null',
   '-c', 'core.fsmonitor=false',
   '-c', 'protocol.allow=never',
   '-c', 'protocol.https.allow=always',
+  '-c', 'protocol.file.allow=never',
+  '-c', 'protocol.ext.allow=never',
 ]
 
 /**
- * The environment every git command of a workspace takes: each {@link CLEARED}
- * name set to undefined, which removes it from the child, and no prompt.
+ * The environment every git command of a workspace takes: each {@link CLEARED} name set to undefined, which removes it from the
+ * child, then each {@link SET} value.
  */
 export const GIT_ENV: Readonly<Record<string, string | undefined>> = {
   ...Object.fromEntries(CLEARED.map((name): [string, undefined] => [name, undefined])),
-  GIT_TERMINAL_PROMPT: '0',
-  GCM_INTERACTIVE: 'never',
+  ...SET,
 }
 
 /**
@@ -111,8 +137,8 @@ export function tokenProblem(token: string): string | undefined {
 
 /**
  * The options and environment that give one git command the token for one
- * clone URL: {@link GIT_OPTIONS}, the credential helpers the person configured
- * replaced by {@link HELPER} (an empty `credential.helper` resets the list),
+ * clone URL: {@link GIT_OPTIONS}, a credential helper list that holds only
+ * {@link HELPER} (an empty `credential.helper` resets any list git has),
  * `http.sslVerify=true`, and the token with the URL's host and path in the
  * environment for the helper. The token is in neither the options nor the URL.
  * @param cloneUrl - the `https` clone URL the token applies to; the helper answers only for its host and path.
@@ -137,41 +163,56 @@ export function tokenGit(cloneUrl: string, token: string): GitInvocation {
 }
 
 /**
- * The environment one clone spawns with, merged onto the subprocess provider's
- * scrubbed base: {@link GIT_ENV}, plus an undefined entry for every name of
- * `parentEnv` that starts with `GIT_CONFIG`, `GIT_TRACE` or `GIT_ASKPASS` or
- * is one of {@link CLEARED}. Names are compared in upper case, because Windows
- * environment names are case-insensitive.
- * @param parentEnv - the environment the harness runs with.
- * @returns the entries; an undefined entry removes its name from the child.
+ * The environment entries one clone adds to the subprocess provider's scrubbed
+ * base: an undefined entry for every name of `parentEnv` that starts with
+ * `GIT_CONFIG`, `GIT_TRACE` or `GIT_ASKPASS` or is one of {@link CLEARED}, then
+ * {@link GIT_ENV}, whose values replace the entries of the same names. An
+ * undefined entry removes its name from the child. Names are compared in upper
+ * case, because Windows environment names are case-insensitive.
+ * @param parentEnv - the parent environment the clone's caller passes; the entries depend on this argument alone.
+ * @returns the entries.
  */
-export function cloneEnvironment(parentEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...GIT_ENV }
+export function cloneEnvironment(parentEnv: Readonly<Record<string, string | undefined>>): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {}
   for (const name of Object.keys(parentEnv)) {
     if (isCleared(name)) env[name] = undefined
   }
-  return env
+  return { ...env, ...GIT_ENV }
 }
 
 /**
- * Whether a clone drops an environment name.
+ * Whether a clone drops an environment name. A name {@link GIT_ENV} sets is not dropped: its value replaces the parent's.
  * @param name - the name as the parent environment holds it.
- * @returns true for a {@link CLEARED} name or a name under a {@link CLEARED_PREFIXES} prefix.
+ * @returns true for a {@link CLEARED} name or a name under a {@link CLEARED_PREFIXES} prefix, unless {@link SET_NAMES} holds it.
  */
 function isCleared(name: string): boolean {
   const upper = name.toUpperCase()
+  if (SET_NAMES.has(upper)) return false
   return CLEARED_NAMES.has(upper) || CLEARED_PREFIXES.some((prefix) => upper.startsWith(prefix))
 }
 
 /**
- * Replace every occurrence of each secret in a text with `[redacted]`.
+ * The shapes of credentials that git output can show without the secret's value: a URL's user name or password, the value of an
+ * `Authorization` header under the Basic, Bearer or token scheme, and the value of a `username=` or `password=` line of the
+ * credential protocol. Each replacement keeps the words around the value.
+ */
+const CREDENTIAL_SHAPES: readonly { readonly pattern: RegExp, readonly replacement: string }[] = [
+  { pattern: /([a-z][a-z\d+.-]*:\/\/)[^\s/?#]+@/gi, replacement: '$1[redacted]@' },
+  { pattern: /(authorization[ \t]*:[ \t]*(?:(?:basic|bearer|token)[ \t]+)?)\S+/gi, replacement: '$1[redacted]' },
+  { pattern: /\b(username|password)=[^\r\n]+/gi, replacement: '$1=[redacted]' },
+]
+
+/**
+ * Replace every occurrence of each secret in a text with `[redacted]`, then
+ * every value of a {@link CREDENTIAL_SHAPES} shape, whatever the value is.
  * Empty secrets are ignored.
  * @param text - the text to redact.
  * @param secrets - the values to remove.
  * @returns the redacted text.
  */
 export function redactClone(text: string, secrets: readonly string[]): string {
-  return secrets.reduce((redacted, secret) => (secret === '' ? redacted : redacted.split(secret).join('[redacted]')), text)
+  const withoutSecrets = secrets.reduce((redacted, secret) => (secret === '' ? redacted : redacted.split(secret).join('[redacted]')), text)
+  return CREDENTIAL_SHAPES.reduce((redacted, shape) => redacted.replace(shape.pattern, shape.replacement), withoutSecrets)
 }
 
 /**

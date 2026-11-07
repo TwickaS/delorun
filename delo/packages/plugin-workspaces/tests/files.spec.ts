@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { INSTRUCTIONS, InstructionsRefusedError, readInstructions, repositoryOf, revisionOf, writeInstructions } from '../src/files.ts'
+import { chooseWalk, INSTRUCTIONS, InstructionsRefusedError, InvalidPathError, probeProcFd, readInstructions, repositoryOf, revisionOf, UnsupportedHostError, unavailableReason, writeInstructions, type Walk, type WalkOptions } from '../src/files.ts'
 
 // Records the open calls, so a spec can read the flags and mode a temporary file is created with. Calls pass through.
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -15,6 +15,12 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 const LIMIT = 64
 const NONE = { text: null, revision: null }
 
+// The workspace's path below the root, in every spec that does not nest the workspace.
+const WORKSPACE = 'workspace'
+
+// The walks this host runs. The proc walk needs /proc/self/fd, so it is left out where that directory is absent.
+const WALKS: Walk[] = probeProcFd() ? ['proc', 'lstat'] : ['lstat']
+
 let root: string
 let dir: string
 
@@ -24,7 +30,7 @@ let dir: string
  * @param code - the refusal code expected.
  * @returns when the call refuses with that code.
  */
-async function expectRefusal<T>(promise: Promise<T>, code: 'conflict' | 'too-large'): Promise<void> {
+async function expectRefusal<T>(promise: Promise<T>, code: 'conflict' | 'too-large' | 'unavailable'): Promise<void> {
   const error = await promise.then(() => undefined, (reason: unknown) => reason)
   expect(error).toBeInstanceOf(InstructionsRefusedError)
   expect(error).toHaveProperty('code', code)
@@ -59,10 +65,13 @@ function remoteConfig(url: string): string {
   return `[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = ${url}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n`
 }
 
-describe.skipIf(process.platform !== 'linux')('instructions files', () => {
+/**
+ * Give each test of the enclosing suite a new workspace directory under a new temporary root, removed after the test.
+ */
+function freshWorkspace(): void {
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'delo-files-'))
-    dir = join(root, 'workspace')
+    dir = join(root, WORKSPACE)
     mkdirSync(dir)
     vi.mocked(open).mockClear()
   })
@@ -70,221 +79,372 @@ describe.skipIf(process.platform !== 'linux')('instructions files', () => {
   afterEach(() => {
     rmSync(root, { recursive: true, force: true })
   })
+}
 
-  describe('readInstructions', () => {
-    it('reads a regular file as text, with the SHA-256 of its bytes as the revision', async () => {
-      writeFileSync(join(dir, INSTRUCTIONS), 'Use pnpm.')
-      expect(await readInstructions(dir, LIMIT)).toEqual({ text: 'Use pnpm.', revision: revisionOf(Buffer.from('Use pnpm.')) })
-    })
+describe('walk selection', () => {
+  it('chooses the lstat walk without /proc/self/fd and the proc walk with it', () => {
+    expect(chooseWalk(false)).toBe('lstat')
+    expect(chooseWalk(true)).toBe('proc')
+  })
+})
 
-    it('reads a missing file and a missing workspace directory as no file', async () => {
-      expect(await readInstructions(dir, LIMIT)).toEqual(NONE)
-      expect(await readInstructions(join(root, 'missing'), LIMIT)).toEqual(NONE)
-    })
+describe('unsupported hosts', () => {
+  freshWorkspace()
 
-    it('reads a symbolic link named AGENTS.md as no file, never the file it points to', async () => {
+  it('refuses every call with UnsupportedHostError on Windows, and creates no file', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    try {
+      await expect(readInstructions(root, WORKSPACE, LIMIT)).rejects.toBeInstanceOf(UnsupportedHostError)
+      await expect(writeInstructions(root, WORKSPACE, 'x', null, LIMIT)).rejects.toBeInstanceOf(UnsupportedHostError)
+      await expect(repositoryOf(root, WORKSPACE)).rejects.toBeInstanceOf(UnsupportedHostError)
+    } finally {
+      if (platform !== undefined) Object.defineProperty(process, 'platform', platform)
+    }
+    expect(readdirSync(dir)).toEqual([])
+  })
+})
+
+describe.skipIf(process.platform === 'win32')('instructions files', () => {
+  describe('a host without /proc/self/fd', () => {
+    freshWorkspace()
+
+    it('refuses a symbolic link named AGENTS.md and a symbolic link as the workspace directory under chooseWalk(false)', async () => {
+      const options = { walk: chooseWalk(false) }
       const outside = join(root, 'outside.md')
       writeFileSync(outside, 'secret')
       symlinkSync(outside, join(dir, INSTRUCTIONS))
-      expect(await readInstructions(dir, LIMIT)).toEqual(NONE)
-    })
+      expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual(NONE)
+      await expectRefusal(writeInstructions(root, WORKSPACE, 'planted', null, LIMIT, options), 'conflict')
+      await expectRefusal(writeInstructions(root, WORKSPACE, 'planted', revisionOf(Buffer.from('secret')), LIMIT, options), 'conflict')
+      expect(readFileSync(outside, 'utf8')).toBe('secret')
 
-    it('reads nothing through a symbolic link at the workspace directory', async () => {
       const real = join(root, 'real')
       mkdirSync(real)
       writeFileSync(join(real, INSTRUCTIONS), 'secret')
       const linked = join(root, 'linked')
       symlinkSync(real, linked)
-      expect(await readInstructions(linked, LIMIT)).toEqual(NONE)
-    })
-
-    it('reads a directory named AGENTS.md as no file', async () => {
-      mkdirSync(join(dir, INSTRUCTIONS))
-      expect(await readInstructions(dir, LIMIT)).toEqual(NONE)
-    })
-
-    it('reads a FIFO named AGENTS.md as no file without waiting for a writer', async () => {
-      execFileSync('mkfifo', [join(dir, INSTRUCTIONS)])
-      expect(await readInstructions(dir, LIMIT)).toEqual(NONE)
-    })
-
-    it('refuses a file longer than the limit in UTF-8 bytes, though it has fewer characters', async () => {
-      writeFileSync(join(dir, INSTRUCTIONS), '€'.repeat(5))
-      await expectRefusal(readInstructions(dir, 12), 'too-large')
-    })
-
-    it('reads a file whose UTF-8 bytes equal the limit', async () => {
-      writeFileSync(join(dir, INSTRUCTIONS), '€'.repeat(4))
-      expect(await readInstructions(dir, 12)).toEqual({ text: '€'.repeat(4), revision: revisionOf(Buffer.from('€'.repeat(4))) })
+      expect(await readInstructions(root, 'linked', LIMIT, options)).toEqual(NONE)
+      await expectRefusal(writeInstructions(root, 'linked', 'planted', null, LIMIT, options), 'conflict')
+      await expectRefusal(writeInstructions(root, 'linked', 'planted', revisionOf(Buffer.from('secret')), LIMIT, options), 'conflict')
+      expect(readFileSync(join(real, INSTRUCTIONS), 'utf8')).toBe('secret')
     })
   })
 
-  describe('writeInstructions', () => {
-    it('writes a new file with mode 0644, reads it back, and leaves no temporary file', async () => {
-      await writeInstructions(dir, 'Use pnpm.', null, LIMIT)
-      expect(await readInstructions(dir, LIMIT)).toEqual({ text: 'Use pnpm.', revision: revisionOf(Buffer.from('Use pnpm.')) })
-      expect(statSync(join(dir, INSTRUCTIONS)).mode & 0o777).toBe(0o644)
-      expect(readdirSync(dir)).toEqual([INSTRUCTIONS])
+  describe.each(WALKS)('on the %s walk', (walk) => {
+    const options = { walk }
+
+    freshWorkspace()
+
+    describe('readInstructions', () => {
+      it('reads a regular file as text, with the SHA-256 of its bytes as the revision', async () => {
+        writeFileSync(join(dir, INSTRUCTIONS), 'Use pnpm.')
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual({ text: 'Use pnpm.', revision: revisionOf(Buffer.from('Use pnpm.')) })
+      })
+
+      it('reads a missing file and a missing workspace directory as no file', async () => {
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual(NONE)
+        expect(await readInstructions(root, 'missing', LIMIT, options)).toEqual(NONE)
+      })
+
+      it('reads a symbolic link named AGENTS.md as no file, never the file it points to', async () => {
+        const outside = join(root, 'outside.md')
+        writeFileSync(outside, 'secret')
+        symlinkSync(outside, join(dir, INSTRUCTIONS))
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual(NONE)
+      })
+
+      it('reads nothing through a symbolic link at the workspace directory', async () => {
+        const real = join(root, 'real')
+        mkdirSync(real)
+        writeFileSync(join(real, INSTRUCTIONS), 'secret')
+        const linked = join(root, 'linked')
+        symlinkSync(real, linked)
+        expect(await readInstructions(root, 'linked', LIMIT, options)).toEqual(NONE)
+      })
+
+      it('reads a directory named AGENTS.md as no file', async () => {
+        mkdirSync(join(dir, INSTRUCTIONS))
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual(NONE)
+      })
+
+      it('reads a FIFO named AGENTS.md as no file without waiting for a writer', async () => {
+        execFileSync('mkfifo', [join(dir, INSTRUCTIONS)])
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual(NONE)
+      })
+
+      it('refuses a file longer than the limit in UTF-8 bytes, though it has fewer characters', async () => {
+        writeFileSync(join(dir, INSTRUCTIONS), '€'.repeat(5))
+        await expectRefusal(readInstructions(root, WORKSPACE, 12, options), 'too-large')
+      })
+
+      it('reads a file whose UTF-8 bytes equal the limit', async () => {
+        writeFileSync(join(dir, INSTRUCTIONS), '€'.repeat(4))
+        expect(await readInstructions(root, WORKSPACE, 12, options)).toEqual({ text: '€'.repeat(4), revision: revisionOf(Buffer.from('€'.repeat(4))) })
+      })
     })
 
-    it('creates the temporary file with mode 0600 and exclusive creation', async () => {
-      await writeInstructions(dir, 'Use pnpm.', null, LIMIT)
-      const temporary = vi.mocked(open).mock.calls.filter(([path]) => String(path).includes(`/.${INSTRUCTIONS}.delo-`))
-      expect(temporary).toHaveLength(1)
-      const [, flags, mode] = temporary[0] ?? []
-      expect(mode).toBe(0o600)
-      expect(Number(flags) & constants.O_EXCL).toBe(constants.O_EXCL)
+    describe('writeInstructions', () => {
+      it('writes a new file with mode 0644, reads it back, and leaves no temporary file', async () => {
+        await writeInstructions(root, WORKSPACE, 'Use pnpm.', null, LIMIT, options)
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual({ text: 'Use pnpm.', revision: revisionOf(Buffer.from('Use pnpm.')) })
+        expect(statSync(join(dir, INSTRUCTIONS)).mode & 0o777).toBe(0o644)
+        expect(readdirSync(dir)).toEqual([INSTRUCTIONS])
+      })
+
+      it('creates the temporary file with mode 0600 and exclusive creation', async () => {
+        await writeInstructions(root, WORKSPACE, 'Use pnpm.', null, LIMIT, options)
+        const temporary = vi.mocked(open).mock.calls.filter(([path]) => String(path).includes(`/.${INSTRUCTIONS}.delo-`))
+        expect(temporary).toHaveLength(1)
+        const [, flags, mode] = temporary[0] ?? []
+        expect(mode).toBe(0o600)
+        expect(Number(flags) & constants.O_EXCL).toBe(constants.O_EXCL)
+      })
+
+      it('replaces the file when the expected revision matches', async () => {
+        await writeInstructions(root, WORKSPACE, 'one', null, LIMIT, options)
+        const { revision } = await readInstructions(root, WORKSPACE, LIMIT, options)
+        await writeInstructions(root, WORKSPACE, 'two', revision, LIMIT, options)
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual({ text: 'two', revision: revisionOf(Buffer.from('two')) })
+      })
+
+      it('refuses a stale revision, and a null revision when the file exists, and leaves the file as it was', async () => {
+        await writeInstructions(root, WORKSPACE, 'one', null, LIMIT, options)
+        await expectRefusal(writeInstructions(root, WORKSPACE, 'two', revisionOf(Buffer.from('zero')), LIMIT, options), 'conflict')
+        await expectRefusal(writeInstructions(root, WORKSPACE, 'two', null, LIMIT, options), 'conflict')
+        expect(onDisk(INSTRUCTIONS)).toBe('one')
+      })
+
+      it('removes the file for empty text when the revision matches', async () => {
+        await writeInstructions(root, WORKSPACE, 'Use pnpm.', null, LIMIT, options)
+        const { revision } = await readInstructions(root, WORKSPACE, LIMIT, options)
+        await writeInstructions(root, WORKSPACE, '', revision, LIMIT, options)
+        expect(existsSync(join(dir, INSTRUCTIONS))).toBe(false)
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual(NONE)
+      })
+
+      it('succeeds without a change for empty text when no file exists and the revision is null', async () => {
+        await expect(writeInstructions(root, WORKSPACE, '', null, LIMIT, options)).resolves.toBeUndefined()
+        expect(readdirSync(dir)).toEqual([])
+      })
+
+      it('refuses empty text with a stale revision and keeps the file', async () => {
+        writeFileSync(join(dir, INSTRUCTIONS), 'Use pnpm.')
+        await expectRefusal(writeInstructions(root, WORKSPACE, '', null, LIMIT, options), 'conflict')
+        await expectRefusal(writeInstructions(root, WORKSPACE, '', revisionOf(Buffer.from('other')), LIMIT, options), 'conflict')
+        expect(onDisk(INSTRUCTIONS)).toBe('Use pnpm.')
+      })
+
+      it('refuses a write through a symbolic link named AGENTS.md and leaves the file it points to unchanged', async () => {
+        const outside = join(root, 'outside.md')
+        writeFileSync(outside, 'secret')
+        symlinkSync(outside, join(dir, INSTRUCTIONS))
+        await expectRefusal(writeInstructions(root, WORKSPACE, 'planted', null, LIMIT, options), 'conflict')
+        await expectRefusal(writeInstructions(root, WORKSPACE, 'planted', revisionOf(Buffer.from('secret')), LIMIT, options), 'conflict')
+        await expectRefusal(writeInstructions(root, WORKSPACE, '', null, LIMIT, options), 'conflict')
+        expect(readFileSync(outside, 'utf8')).toBe('secret')
+        expect(lstatSync(join(dir, INSTRUCTIONS)).isSymbolicLink()).toBe(true)
+      })
+
+      it('refuses a write into a workspace directory that is a symbolic link and leaves the real directory unchanged', async () => {
+        const real = join(root, 'real')
+        mkdirSync(real)
+        writeFileSync(join(real, INSTRUCTIONS), 'secret')
+        const linked = join(root, 'linked')
+        symlinkSync(real, linked)
+        await expectRefusal(writeInstructions(root, 'linked', 'planted', null, LIMIT, options), 'conflict')
+        await expectRefusal(writeInstructions(root, 'linked', 'planted', revisionOf(Buffer.from('secret')), LIMIT, options), 'conflict')
+        expect(readFileSync(join(real, INSTRUCTIONS), 'utf8')).toBe('secret')
+      })
+
+      it('refuses to replace a directory named AGENTS.md and to wait on a FIFO of that name', async () => {
+        mkdirSync(join(dir, INSTRUCTIONS))
+        await expectRefusal(writeInstructions(root, WORKSPACE, 'x', null, LIMIT, options), 'conflict')
+        expect(statSync(join(dir, INSTRUCTIONS)).isDirectory()).toBe(true)
+        rmSync(join(dir, INSTRUCTIONS), { recursive: true })
+        execFileSync('mkfifo', [join(dir, INSTRUCTIONS)])
+        await expectRefusal(writeInstructions(root, WORKSPACE, 'x', null, LIMIT, options), 'conflict')
+      })
+
+      it('lets one of two concurrent writes that both expect no file succeed, and refuses the other as a conflict', async () => {
+        const results = await Promise.allSettled([writeInstructions(root, WORKSPACE, 'first', null, LIMIT, options), writeInstructions(root, WORKSPACE, 'second', null, LIMIT, options)])
+        const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+        expect(rejected).toHaveLength(1)
+        expect(rejected[0]?.reason).toBeInstanceOf(InstructionsRefusedError)
+        expect(rejected[0]?.reason).toHaveProperty('code', 'conflict')
+      })
+
+      it('queues writes through two paths to one directory together', async () => {
+        symlinkSync(root, join(root, 'alias'))
+        const results = await Promise.allSettled([
+          writeInstructions(root, WORKSPACE, 'first', null, LIMIT, options),
+          writeInstructions(join(root, 'alias'), WORKSPACE, 'second', null, LIMIT, options),
+        ])
+        expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+      })
+
+      it('refuses text longer than the limit in UTF-8 bytes, though it has fewer characters', async () => {
+        await expectRefusal(writeInstructions(root, WORKSPACE, 'a'.repeat(LIMIT + 1), null, LIMIT, options), 'too-large')
+        await expectRefusal(writeInstructions(root, WORKSPACE, '€'.repeat(5), null, 12, options), 'too-large')
+        expect(readdirSync(dir)).toEqual([])
+      })
+
+      it('accepts multi-byte text whose UTF-8 bytes equal the limit', async () => {
+        await writeInstructions(root, WORKSPACE, '€'.repeat(4), null, 12, options)
+        expect(await readInstructions(root, WORKSPACE, 12, options)).toEqual({ text: '€'.repeat(4), revision: revisionOf(Buffer.from('€'.repeat(4))) })
+      })
+
+      it('refuses a write over an existing file longer than the limit, since that file was never read', async () => {
+        writeFileSync(join(dir, INSTRUCTIONS), '€'.repeat(5))
+        await expectRefusal(writeInstructions(root, WORKSPACE, 'x', null, 12, options), 'conflict')
+      })
+
+      it('refuses to create the file in a missing workspace directory and treats empty text there as a no-op', async () => {
+        await expect(writeInstructions(root, 'missing', 'x', null, LIMIT, options)).rejects.toThrow('does not exist')
+        await expect(writeInstructions(root, 'missing', '', null, LIMIT, options)).resolves.toBeUndefined()
+        await expectRefusal(writeInstructions(root, 'missing', '', 'stale', LIMIT, options), 'conflict')
+      })
     })
 
-    it('replaces the file when the expected revision matches', async () => {
-      await writeInstructions(dir, 'one', null, LIMIT)
-      const { revision } = await readInstructions(dir, LIMIT)
-      await writeInstructions(dir, 'two', revision, LIMIT)
-      expect(await readInstructions(dir, LIMIT)).toEqual({ text: 'two', revision: revisionOf(Buffer.from('two')) })
+    describe('nested workspaces', () => {
+      it('opens the root by its path, so a link in the root path is followed', async () => {
+        const alias = join(root, 'alias')
+        symlinkSync(root, alias)
+        await writeInstructions(alias, WORKSPACE, 'Use pnpm.', null, LIMIT, options)
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual({ text: 'Use pnpm.', revision: revisionOf(Buffer.from('Use pnpm.')) })
+      })
+
+      it('reads and writes a workspace nested in real directories', async () => {
+        mkdirSync(join(root, 'a', 'b', 'c'), { recursive: true })
+        await writeInstructions(root, 'a/b/c', 'Use pnpm.', null, LIMIT, options)
+        expect(await readInstructions(root, 'a/b/c', LIMIT, options)).toEqual({ text: 'Use pnpm.', revision: revisionOf(Buffer.from('Use pnpm.')) })
+        expect(readFileSync(join(root, 'a', 'b', 'c', INSTRUCTIONS), 'utf8')).toBe('Use pnpm.')
+      })
+
+      it('refuses a symbolic link at a middle name: reads no file, and a write leaves the file it points to unchanged', async () => {
+        const outside = mkdtempSync(join(tmpdir(), 'delo-outside-'))
+        try {
+          mkdirSync(join(outside, 'c'))
+          writeFileSync(join(outside, 'c', INSTRUCTIONS), 'secret')
+          mkdirSync(join(root, 'a'))
+          symlinkSync(outside, join(root, 'a', 'b'))
+          const secret = revisionOf(Buffer.from('secret'))
+          expect(await readInstructions(root, 'a/b/c', LIMIT, options)).toEqual(NONE)
+          await expectRefusal(writeInstructions(root, 'a/b/c', 'planted', null, LIMIT, options), 'conflict')
+          await expectRefusal(writeInstructions(root, 'a/b/c', 'planted', secret, LIMIT, options), 'conflict')
+          await expectRefusal(writeInstructions(root, 'a/b/c', '', secret, LIMIT, options), 'conflict')
+          expect(readFileSync(join(outside, 'c', INSTRUCTIONS), 'utf8')).toBe('secret')
+        } finally {
+          rmSync(outside, { recursive: true, force: true })
+        }
+      })
+
+      it('refuses a regular file at a middle name: reads no file, and a write refuses it', async () => {
+        writeFileSync(join(root, 'a'), 'not a folder')
+        expect(await readInstructions(root, 'a/b/c', LIMIT, options)).toEqual(NONE)
+        await expectRefusal(writeInstructions(root, 'a/b/c', 'planted', null, LIMIT, options), 'conflict')
+        expect(readFileSync(join(root, 'a'), 'utf8')).toBe('not a folder')
+      })
+
+      it('reads a missing middle name as no file, and a write into it reports the missing folder', async () => {
+        expect(await readInstructions(root, 'a/b/c', LIMIT, options)).toEqual(NONE)
+        await expect(writeInstructions(root, 'a/b/c', 'x', null, LIMIT, options)).rejects.toThrow('does not exist')
+        expect(readdirSync(root)).toEqual([WORKSPACE])
+      })
     })
 
-    it('refuses a stale revision, and a null revision when the file exists, and leaves the file as it was', async () => {
-      await writeInstructions(dir, 'one', null, LIMIT)
-      await expectRefusal(writeInstructions(dir, 'two', revisionOf(Buffer.from('zero')), LIMIT), 'conflict')
-      await expectRefusal(writeInstructions(dir, 'two', null, LIMIT), 'conflict')
-      expect(onDisk(INSTRUCTIONS)).toBe('one')
-    })
+    describe('repositoryOf', () => {
+      it('reads the origin URL and the checked-out branch', async () => {
+        gitDirectory('ref: refs/heads/main\n', remoteConfig('https://github.com/acme/widgets.git'))
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: 'https://github.com/acme/widgets.git', branch: 'main' })
+      })
 
-    it('removes the file for empty text when the revision matches', async () => {
-      await writeInstructions(dir, 'Use pnpm.', null, LIMIT)
-      const { revision } = await readInstructions(dir, LIMIT)
-      await writeInstructions(dir, '', revision, LIMIT)
-      expect(existsSync(join(dir, INSTRUCTIONS))).toBe(false)
-      expect(await readInstructions(dir, LIMIT)).toEqual(NONE)
-    })
+      it('shows no origin for a URL with a user name or password', async () => {
+        gitDirectory('ref: refs/heads/main\n', remoteConfig('https://user:password@github.com/acme/widgets.git'))
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: null, branch: 'main' })
+        writeFileSync(join(dir, '.git', 'config'), remoteConfig('https://token@github.com/acme/widgets.git'))
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: null, branch: 'main' })
+      })
 
-    it('succeeds without a change for empty text when no file exists and the revision is null', async () => {
-      await expect(writeInstructions(dir, '', null, LIMIT)).resolves.toBeUndefined()
-      expect(readdirSync(dir)).toEqual([])
-    })
+      it('drops the query and fragment from an origin URL', async () => {
+        gitDirectory('ref: refs/heads/main\n', remoteConfig('https://github.com/acme/widgets.git?access=abc#top'))
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: 'https://github.com/acme/widgets.git', branch: 'main' })
+      })
 
-    it('refuses empty text with a stale revision and keeps the file', async () => {
+      it('keeps an address that is not a URL as written', async () => {
+        gitDirectory('ref: refs/heads/main\n', remoteConfig('git@github.com:acme/widgets.git'))
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: 'git@github.com:acme/widgets.git', branch: 'main' })
+      })
+
+      it('shows no branch for a detached HEAD', async () => {
+        gitDirectory('0123456789abcdef0123456789abcdef01234567\n', remoteConfig('https://github.com/acme/widgets.git'))
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: 'https://github.com/acme/widgets.git', branch: null })
+      })
+
+      it('shows no repository without a .git directory', async () => {
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: null, branch: null })
+      })
+
+      it('shows no repository for a .git file, such as a linked worktree', async () => {
+        writeFileSync(join(dir, '.git'), 'gitdir: /elsewhere\n')
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: null, branch: null })
+      })
+
+      it('shows no repository for a .git symbolic link', async () => {
+        const real = join(root, 'real.git')
+        mkdirSync(real)
+        writeFileSync(join(real, 'HEAD'), 'ref: refs/heads/main\n')
+        writeFileSync(join(real, 'config'), remoteConfig('https://github.com/acme/widgets.git'))
+        symlinkSync(real, join(dir, '.git'))
+        expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: null, branch: null })
+      })
+    })
+  })
+
+  describe('a forced proc walk whose descriptor directory cannot name the held descriptors', () => {
+    freshWorkspace()
+
+    it('refuses reads, writes and repository reads as unavailable, never as no file', async () => {
       writeFileSync(join(dir, INSTRUCTIONS), 'Use pnpm.')
-      await expectRefusal(writeInstructions(dir, '', null, LIMIT), 'conflict')
-      await expectRefusal(writeInstructions(dir, '', revisionOf(Buffer.from('other')), LIMIT), 'conflict')
+      const procRoot = join(root, 'no-such-descriptors')
+      const options: WalkOptions = { walk: 'proc', procRoot }
+      const refusal = await readInstructions(root, WORKSPACE, LIMIT, options).then(() => undefined, (reason: unknown) => reason)
+      expect(refusal).toHaveProperty('message', unavailableReason(procRoot, Object.assign(new Error('missing'), { code: 'ENOENT' })))
+      await expectRefusal(writeInstructions(root, WORKSPACE, 'planted', null, LIMIT, options), 'unavailable')
+      await expectRefusal(repositoryOf(root, WORKSPACE, options), 'unavailable')
       expect(onDisk(INSTRUCTIONS)).toBe('Use pnpm.')
     })
 
-    it('refuses a write through a symbolic link named AGENTS.md and leaves the file it points to unchanged', async () => {
-      const outside = join(root, 'outside.md')
-      writeFileSync(outside, 'secret')
-      symlinkSync(outside, join(dir, INSTRUCTIONS))
-      await expectRefusal(writeInstructions(dir, 'planted', null, LIMIT), 'conflict')
-      await expectRefusal(writeInstructions(dir, '', null, LIMIT), 'conflict')
-      expect(readFileSync(outside, 'utf8')).toBe('secret')
-      expect(lstatSync(join(dir, INSTRUCTIONS)).isSymbolicLink()).toBe(true)
+    it('refuses a missing workspace folder as unavailable as well', async () => {
+      const options: WalkOptions = { walk: 'proc', procRoot: join(root, 'no-such-descriptors') }
+      await expectRefusal(readInstructions(root, 'missing', LIMIT, options), 'unavailable')
     })
 
-    it('refuses a write into a workspace directory that is a symbolic link and leaves the real directory unchanged', async () => {
-      const real = join(root, 'real')
-      mkdirSync(real)
-      writeFileSync(join(real, INSTRUCTIONS), 'secret')
-      const linked = join(root, 'linked')
-      symlinkSync(real, linked)
-      await expectRefusal(writeInstructions(linked, 'planted', null, LIMIT), 'conflict')
-      expect(readFileSync(join(real, INSTRUCTIONS), 'utf8')).toBe('secret')
-    })
-
-    it('refuses to replace a directory named AGENTS.md and to wait on a FIFO of that name', async () => {
-      mkdirSync(join(dir, INSTRUCTIONS))
-      await expectRefusal(writeInstructions(dir, 'x', null, LIMIT), 'conflict')
-      expect(statSync(join(dir, INSTRUCTIONS)).isDirectory()).toBe(true)
-      rmSync(join(dir, INSTRUCTIONS), { recursive: true })
-      execFileSync('mkfifo', [join(dir, INSTRUCTIONS)])
-      await expectRefusal(writeInstructions(dir, 'x', null, LIMIT), 'conflict')
-    })
-
-    it('lets one of two concurrent writes that both expect no file succeed, and refuses the other as a conflict', async () => {
-      const results = await Promise.allSettled([writeInstructions(dir, 'first', null, LIMIT), writeInstructions(dir, 'second', null, LIMIT)])
-      const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
-      expect(rejected).toHaveLength(1)
-      expect(rejected[0]?.reason).toBeInstanceOf(InstructionsRefusedError)
-      expect(rejected[0]?.reason).toHaveProperty('code', 'conflict')
-    })
-
-    it('queues writes through two paths to one directory together', async () => {
-      symlinkSync(root, join(root, 'alias'))
-      const results = await Promise.allSettled([
-        writeInstructions(join(root, 'workspace'), 'first', null, LIMIT),
-        writeInstructions(join(root, 'alias', 'workspace'), 'second', null, LIMIT),
-      ])
-      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
-    })
-
-    it('refuses text longer than the limit in UTF-8 bytes, though it has fewer characters', async () => {
-      await expectRefusal(writeInstructions(dir, 'a'.repeat(LIMIT + 1), null, LIMIT), 'too-large')
-      await expectRefusal(writeInstructions(dir, '€'.repeat(5), null, 12), 'too-large')
-      expect(readdirSync(dir)).toEqual([])
-    })
-
-    it('accepts multi-byte text whose UTF-8 bytes equal the limit', async () => {
-      await writeInstructions(dir, '€'.repeat(4), null, 12)
-      expect(await readInstructions(dir, 12)).toEqual({ text: '€'.repeat(4), revision: revisionOf(Buffer.from('€'.repeat(4))) })
-    })
-
-    it('refuses a write over an existing file longer than the limit, since that file was never read', async () => {
-      writeFileSync(join(dir, INSTRUCTIONS), '€'.repeat(5))
-      await expectRefusal(writeInstructions(dir, 'x', null, 12), 'conflict')
-    })
-
-    it('refuses to create the file in a missing workspace directory and treats empty text there as a no-op', async () => {
-      const missing = join(root, 'missing')
-      await expect(writeInstructions(missing, 'x', null, LIMIT)).rejects.toThrow('does not exist')
-      await expect(writeInstructions(missing, '', null, LIMIT)).resolves.toBeUndefined()
-      await expectRefusal(writeInstructions(missing, '', 'stale', LIMIT), 'conflict')
+    it('refuses when the descriptor directory exists but does not name the held descriptors', async () => {
+      const empty = join(root, 'empty-descriptors')
+      mkdirSync(empty)
+      const options: WalkOptions = { walk: 'proc', procRoot: empty }
+      await expectRefusal(readInstructions(root, WORKSPACE, LIMIT, options), 'unavailable')
     })
   })
 
-  describe('repositoryOf', () => {
-    it('reads the origin URL and the checked-out branch', async () => {
-      gitDirectory('ref: refs/heads/main\n', remoteConfig('https://github.com/acme/widgets.git'))
-      expect(await repositoryOf(dir)).toEqual({ origin: 'https://github.com/acme/widgets.git', branch: 'main' })
+  describe('relative directories', () => {
+    freshWorkspace()
+
+    it('treats an empty relative directory as the root itself', async () => {
+      await writeInstructions(root, '', 'Use pnpm.', null, LIMIT)
+      expect(readFileSync(join(root, INSTRUCTIONS), 'utf8')).toBe('Use pnpm.')
+      expect(await readInstructions(root, '', LIMIT)).toEqual({ text: 'Use pnpm.', revision: revisionOf(Buffer.from('Use pnpm.')) })
     })
 
-    it('shows no origin for a URL with a user name or password', async () => {
-      gitDirectory('ref: refs/heads/main\n', remoteConfig('https://user:password@github.com/acme/widgets.git'))
-      expect(await repositoryOf(dir)).toEqual({ origin: null, branch: 'main' })
-      writeFileSync(join(dir, '.git', 'config'), remoteConfig('https://token@github.com/acme/widgets.git'))
-      expect(await repositoryOf(dir)).toEqual({ origin: null, branch: 'main' })
-    })
-
-    it('drops the query and fragment from an origin URL', async () => {
-      gitDirectory('ref: refs/heads/main\n', remoteConfig('https://github.com/acme/widgets.git?access=abc#top'))
-      expect(await repositoryOf(dir)).toEqual({ origin: 'https://github.com/acme/widgets.git', branch: 'main' })
-    })
-
-    it('keeps an address that is not a URL as written', async () => {
-      gitDirectory('ref: refs/heads/main\n', remoteConfig('git@github.com:acme/widgets.git'))
-      expect(await repositoryOf(dir)).toEqual({ origin: 'git@github.com:acme/widgets.git', branch: 'main' })
-    })
-
-    it('shows no branch for a detached HEAD', async () => {
-      gitDirectory('0123456789abcdef0123456789abcdef01234567\n', remoteConfig('https://github.com/acme/widgets.git'))
-      expect(await repositoryOf(dir)).toEqual({ origin: 'https://github.com/acme/widgets.git', branch: null })
-    })
-
-    it('shows no repository without a .git directory', async () => {
-      expect(await repositoryOf(dir)).toEqual({ origin: null, branch: null })
-    })
-
-    it('shows no repository for a .git file, such as a linked worktree', async () => {
-      writeFileSync(join(dir, '.git'), 'gitdir: /elsewhere\n')
-      expect(await repositoryOf(dir)).toEqual({ origin: null, branch: null })
-    })
-
-    it('shows no repository for a .git symbolic link', async () => {
-      const real = join(root, 'real.git')
-      mkdirSync(real)
-      writeFileSync(join(real, 'HEAD'), 'ref: refs/heads/main\n')
-      writeFileSync(join(real, 'config'), remoteConfig('https://github.com/acme/widgets.git'))
-      symlinkSync(real, join(dir, '.git'))
-      expect(await repositoryOf(dir)).toEqual({ origin: null, branch: null })
+    it('refuses an absolute path and a name that is empty, `.`, `..` or holds a NUL byte, and touches no file', async () => {
+      for (const value of ['/workspace', 'workspace/', 'a//b', './workspace', 'a/../workspace', '../workspace', 'a\0b']) {
+        await expect(readInstructions(root, value, LIMIT)).rejects.toBeInstanceOf(InvalidPathError)
+        await expect(writeInstructions(root, value, 'x', null, LIMIT)).rejects.toBeInstanceOf(InvalidPathError)
+        await expect(repositoryOf(root, value)).rejects.toBeInstanceOf(InvalidPathError)
+      }
+      expect(readdirSync(root)).toEqual([WORKSPACE])
     })
   })
 

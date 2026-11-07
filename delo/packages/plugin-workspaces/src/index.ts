@@ -49,6 +49,9 @@ const GIT_FAILED = 'git could not run'
 /** The plugin's name in its log lines. */
 const PLUGIN = 'delo-workspaces'
 
+/** Text a bare host or host:port lacks: whitespace and control characters, `/`, `\`, `?`, `#`, `@`, and a `:` with no port after it. */
+const NOT_HOST_TEXT = /[\x00-\x20\x7f/\\?#@]|:$/
+
 /** The workspaces plugin's configuration. */
 export interface Config {
   /** The absolute directory that holds the workspace folders and the trash. It is created at load when it is missing. */
@@ -60,9 +63,10 @@ export interface Config {
   /** How long a clone may take, in milliseconds; git is stopped when the time passes. */
   readonly importTimeoutMs: number
   /**
-   * The token for clones from one host. `host` is the clone URL's host with its port, when it has one; `file` is an absolute
-   * path to the token file, directly in the home's `secrets` directory. The file is read for each clone from that host and
-   * given to that clone only.
+   * The token for clones from one host. `host` is a bare host or host:port, matched in lower case with the https port 443
+   * dropped; `file` is an absolute path to the token file, directly in the home's `secrets` directory. The file is read for
+   * each clone from that host and given to that clone only. No clone reads git's system or global configuration, so a private
+   * repository needs this credential.
    */
   readonly credential?: { readonly host: string, readonly file: string }
   /**
@@ -80,7 +84,7 @@ export const Config: schema<Config> = schema.object({
   importTimeoutMs: schema.natural().min(1000).max(86_400_000).default(1_800_000).description('How long a repository clone may take, in milliseconds.'),
   // A union, not a plain object: schemastery fills an absent object with {}, which would then fail its required fields.
   credential: schema.union([schema.object({
-    host: schema.string().required().description('The clone URL host, with its port when it has one, that receives the token.'),
+    host: schema.string().required().description('The clone URL host, with its port when it has one, that receives the token; case does not matter, and the https port 443 may be written and is dropped.'),
     file: schema.string().pattern(/^\/.*[^/]$/).required().description('The absolute path of the token file, directly in the home\'s secrets directory.'),
   })]).description('A token for clones from one host, read from a token file in the home\'s secrets directory.'),
   caFile: schema.string().pattern(/^\/.*[^/]$/).description('The CA bundle git trusts for every clone; it replaces the system bundle, so include the public roots too.'),
@@ -107,6 +111,8 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
   static Config = Config
 
   private mounted?: Mounted
+  /** The credential as the clones match it, its host normalised at load; undefined without a credential. */
+  private credential?: NonNullable<Config['credential']>
   /** Aborted when the plugin is disposed; ends the clones in flight. */
   private readonly lifetime = new AbortController()
   /** The clones in flight, by import id. */
@@ -218,7 +224,7 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
     return this.call('reading the instructions', async () => {
       const path = this.workspacePath(workspace)
       const maxBytes = this.config.instructionsMaxBytes
-      const file = await instructionsRefusals(() => readInstructions(path, maxBytes))
+      const file = await instructionsRefusals(() => readInstructions(this.state().root, path.slice(this.state().root.length + 1), maxBytes))
       return { path: join(path, INSTRUCTIONS), text: file.text, revision: file.revision, maxBytes }
     })
   }
@@ -232,7 +238,7 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
     return this.call('writing the instructions', async () => {
       const path = this.workspacePath(request.workspace)
       if (!(await exists(path))) throw new WorkspaceRefusedError('not-found', 'the workspace folder is gone')
-      await instructionsRefusals(() => writeInstructions(path, request.text, request.revision, this.config.instructionsMaxBytes))
+      await instructionsRefusals(() => writeInstructions(this.state().root, path.slice(this.state().root.length + 1), request.text, request.revision, this.config.instructionsMaxBytes))
     })
   }
 
@@ -305,16 +311,19 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
   }
 
   /**
-   * Resolve the Delo home, refuse a root that is the home, lies inside it or contains it, check the credential file, and create
-   * the root.
+   * Resolve the Delo home, refuse a root that is the home, lies inside it or contains it, normalise and check the credential, and
+   * create the root.
    * @returns the root's canonical path.
-   * @throws Error when the root overlaps the home or the credential file is outside the home's secrets directory; HomeLayoutError when a path is refused.
+   * @throws Error when the root overlaps the home, the credential host is not a bare host or host:port, or the credential file is outside the home's secrets directory; HomeLayoutError when a path is refused.
    */
   private async prepareRoot(): Promise<string> {
     const home = await canonicalOf((await resolveDeloHome(process.env)).path)
     const root = await canonicalOf(this.config.root)
     if (overlaps(root, home)) throw new Error(`${PLUGIN}: the workspaces root ${this.config.root} cannot be the Delo home, lie inside it or contain it`)
-    if (this.config.credential !== undefined) await this.checkCredential(home, this.config.credential.file)
+    if (this.config.credential !== undefined) {
+      this.credential = { host: credentialHost(this.config.credential.host), file: this.config.credential.file }
+      await this.checkCredential(home, this.credential.file)
+    }
     await mkdir(root, { recursive: true, mode: FOLDER_MODE })
     return root
   }
@@ -389,6 +398,8 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
       if (reason === undefined) {
         const result = await cloneRepository({
           subprocess: this.ctx.subprocess,
+          // The process environment boundary: the clone reads its environment only from this argument.
+          env: process.env,
           url,
           directory: path,
           token,
@@ -426,7 +437,7 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
    * @throws the failure of reading the credential file, whose message may name the file.
    */
   private async tokenFor(url: string): Promise<string | undefined> {
-    const credential = this.config.credential
+    const credential = this.credential
     if (credential === undefined || new URL(url).host !== credential.host) return undefined
     return (await readProtectedFile(credential.file)).toString('utf8').trim()
   }
@@ -824,6 +835,21 @@ async function instructionsRefusals<T>(body: () => Promise<T>): Promise<T> {
     if (error instanceof InstructionsRefusedError) throw new WorkspaceRefusedError(error.code, error.message)
     throw error
   }
+}
+
+/**
+ * The configured credential host as a clone URL's host spells it: lower case, with the https default port 443 dropped and any
+ * other port kept.
+ * @param host - the configured host, with its port when it has one.
+ * @returns the normalised host.
+ * @throws Error naming `credential.host` when the value is not a bare host or host:port; the message names no part of the value.
+ */
+function credentialHost(host: string): string {
+  const url = URL.parse(`https://${host}`)
+  const bare = url !== null && url.hostname !== '' && url.username === '' && url.password === '' && url.pathname === '/'
+    && url.search === '' && url.hash === '' && !NOT_HOST_TEXT.test(host)
+  if (!bare) throw new Error(`${PLUGIN}: credential.host must be a bare host or host:port, without a scheme, path, user name or space`)
+  return url.host
 }
 
 /**
