@@ -206,6 +206,14 @@ describe('the log entry', () => {
     expect(verifyEd25519ph(createPublicKey(key), Buffer.from('abc'), sign(null, Buffer.from('abc'), key))).toBe(false)
     expect(verifyEd25519ph(createPublicKey(key), Buffer.from('abc'), signature.subarray(1))).toBe(false)
   })
+
+  it('refuses an Ed25519ph signature that only ZIP-215\'s cofactored check accepts', () => {
+    // A public key of order 8 with R the identity and S 0 satisfies the cofactored equation for every message, and the
+    // cofactorless one only when the challenge is a multiple of 8, which it is not for this message.
+    const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from('c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a', 'hex').toString('base64url') }, format: 'jwk' })
+    const signature = Buffer.concat([Buffer.from(`01${'00'.repeat(31)}`, 'hex'), Buffer.alloc(32)])
+    expect(verifyEd25519ph(key, Buffer.from('a'), signature)).toBe(false)
+  })
 })
 
 describe('RFC 6962 proofs', () => {

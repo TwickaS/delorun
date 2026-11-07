@@ -51,7 +51,8 @@ export function signEd25519ph(key: KeyObject, message: Uint8Array): Buffer {
 }
 
 /**
- * Verify an Ed25519ph signature with an empty context.
+ * Verify an Ed25519ph signature with an empty context as RFC 8032 does, with canonical encodings and the cofactorless
+ * equation (not ZIP-215), as the envelope verifier's Ed25519 does.
  * @param key - an Ed25519 public key.
  * @param message - the signed bytes.
  * @param signature - the signature.
@@ -59,7 +60,7 @@ export function signEd25519ph(key: KeyObject, message: Uint8Array): Buffer {
  */
 export function verifyEd25519ph(key: KeyObject, message: Uint8Array, signature: Uint8Array): boolean {
   try {
-    return ed25519ph.verify(signature, message, rawPublicKey(key))
+    return ed25519ph.verify(signature, message, rawPublicKey(key), { zip215: false })
   } catch (error) {
     // noble refuses a signature of the wrong length by throwing; such a signature does not verify.
     return error instanceof Error ? false : false
