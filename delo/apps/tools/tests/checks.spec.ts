@@ -145,6 +145,18 @@ describe('selection', () => {
     expect(plan.find(check => check.id === 'tests:fork')?.command.slice(-1)).toEqual(['delo/packages/control-protocol/'])
   })
 
+  it('offers the Docker lane only in a tree with Docker specs, and runs it on the packages a change reaches', () => {
+    expect(CHECKS.some(check => check.id === 'tests:docker')).toBe(false)
+    const tree: ForkTree = { ...TREE, packages: TREE.packages.map(pkg => pkg.name === '@delo/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
+    const checks = catalog(tree, HOST)
+    const docker = checks.find(check => check.id === 'tests:docker')
+    expect(docker?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delo/vitest.docker.config.ts', '--passWithNoTests'])
+    const reached = select(checks, tree, { ...NONE, changed: { base: 'v5', paths: ['delo/packages/providers/src/index.ts'] } }).find(check => check.id === 'tests:docker')
+    expect(reached?.reason).toBe('Docker specs of a package a change reaches (delo/packages/providers)')
+    expect(reached?.scope).toEqual(['delo/apps/control/', 'delo/packages/providers/', 'delo/packages/client-status/'])
+    expect(ids(select(checks, tree, { ...NONE, changed: { base: 'v5', paths: ['delo/apps/cell/src/index.ts'] } }))).not.toContain('tests:docker')
+  })
+
   it('passes spec paths to the fork suite as they are', () => {
     const plan = select(CHECKS, TREE, { ...NONE, targets: ['delo/apps/control/tests/front.spec.ts'] })
     expect(plan.find(check => check.id === 'tests:fork')?.command.slice(-1)).toEqual(['delo/apps/control/tests/front.spec.ts'])

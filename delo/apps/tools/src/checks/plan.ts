@@ -80,6 +80,8 @@ export interface ForkPackage {
   readonly upstreamDependencies: readonly string[]
   /** Whether it is a pnpm workspace of its own, with its own lockfile: its tsconfigs are not the fork's programs. */
   readonly ownWorkspace: boolean
+  /** Whether its `tests/` holds Docker specs (`*.docker.spec.ts`), which the Docker lane runs. */
+  readonly dockerSpecs?: boolean
 }
 
 /** A fork TypeScript program, type-checked with `tsc -p`. */
@@ -162,6 +164,9 @@ export interface Planned extends Check {
 const TSC = 'node_modules/.bin/tsc'
 const VITEST = 'node_modules/.bin/vitest'
 const FORK_CONFIG = 'delo/vitest.config.ts'
+const DOCKER_CONFIG = 'delo/vitest.docker.config.ts'
+/** The Docker lane's id. */
+export const DOCKER_CHECK_ID = 'tests:docker'
 // Upstream's own unit configuration, unchanged: the fork's WSL wrapper for it is not part of this tree.
 const UPSTREAM_CONFIG = 'vitest.config.ts'
 // Upstream's own default for the replay's scenarios at once. Ten at once measured 92 s against 110 s for five, bound by the largest scenario file, for 3.7 GB more memory.
@@ -356,6 +361,21 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       tiers: ['changed', 'full'],
       cpus: workers.fork,
     },
+    // Present only in a tree with Docker specs. The specs share the host's one engine, so they run one file at a time.
+    ...tree.packages.some(pkg => pkg.dockerSpecs === true)
+      ? [{
+          id: DOCKER_CHECK_ID,
+          group: 'tests',
+          title: 'Every `*.docker.spec.ts` spec, against the Docker engine of the active context (`delo/vitest.docker.config.ts`)',
+          cwd: '',
+          command: [VITEST, 'run', '--config', DOCKER_CONFIG, '--passWithNoTests'],
+          needs: built,
+          inputs: ['delo/**', ...UPSTREAM_CODE],
+          env: TEST_ENV,
+          tiers: ['changed', 'full'],
+          cpus: 2,
+        } satisfies Draft]
+      : [],
     {
       id: 'tests:upstream-changed',
       group: 'tests',
@@ -583,6 +603,9 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
       }
     } else if (check.id === 'tests:fork' && (touchedDirs.size > 0 || forkWide.length > 0 || viaUpstream.length > 0)) {
       pick(check, selection.changed === undefined ? 'specs under the targets' : 'specs of the packages a change reaches, dependents included')
+    } else if (check.id === DOCKER_CHECK_ID) {
+      const docker = tree.packages.find(pkg => pkg.dockerSpecs === true && (forkWide.length > 0 || reachedDirs.has(pkg.dir)))
+      if (docker !== undefined) pick(check, `Docker specs of a package a change reaches (${docker.dir})`)
     } else if (check.id === 'tests:snapshots') {
       const upstream = paths.find(path => !path.startsWith('delo/') && affectsUpstreamRuntime(path))
       if (upstream !== undefined) pick(check, `upstream-owned code changed (${upstream})`)
@@ -658,6 +681,7 @@ function narrowed(check: Check, selection: Selection, paths: readonly string[], 
     // With no directory it would run every upstream spec, which the full gate does not run in this lane.
     return dirs.length === 0 ? { ...check, declined: 'no upstream package changed' } : { ...check, command: [...check.command, ...dirs], scope: dirs }
   }
+  if (check.id === DOCKER_CHECK_ID) return reachedDirs === undefined || reachedDirs.length === 0 ? check : { ...check, command: [...check.command, ...reachedDirs], scope: reachedDirs }
   if (check.id !== 'tests:fork') return check
   if (selection.changed !== undefined) {
     return reachedDirs === undefined || reachedDirs.length === 0 ? check : { ...check, command: [...check.command, ...reachedDirs], scope: reachedDirs }

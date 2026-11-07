@@ -104,7 +104,9 @@ function readTree(root: string): ForkTree {
       const manifest = manifestSchema.parse(JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')))
       const dependencies = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.peerDependencies })
       const ownWorkspace = existsSync(join(root, dir, 'pnpm-workspace.yaml'))
-      packages.push({ name: manifest.name, dir, forkDependencies: dependencies.filter(dependency => dependency.startsWith('@delo/')), upstreamDependencies: dependencies.filter(dependency => dependency.startsWith('@deepseek-ai/')), ownWorkspace })
+      const tests = join(root, dir, 'tests')
+      const dockerSpecs = existsSync(tests) && readdirSync(tests, { recursive: true, encoding: 'utf8' }).some(entry => entry.endsWith('.docker.spec.ts'))
+      packages.push({ name: manifest.name, dir, forkDependencies: dependencies.filter(dependency => dependency.startsWith('@delo/')), upstreamDependencies: dependencies.filter(dependency => dependency.startsWith('@deepseek-ai/')), ownWorkspace, dockerSpecs })
       if (ownWorkspace) continue
       for (const file of readdirSync(join(root, dir)).filter(entry => /^tsconfig(\..+)?\.json$/.test(entry)).sort()) programs.push({ config: `${dir}/${file}` })
     }

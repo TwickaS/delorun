@@ -11,6 +11,7 @@
     "typecheck:upstream": { "memoryGiB": 2.5 },
     "typecheck": { "memoryGiB": 1 },
     "tests:fork": { "memoryGiB": 0.5, "perWorker": true },
+    "tests:docker": { "memoryGiB": 1 },
     "tests:upstream-changed": { "memoryGiB": 0.6, "perWorker": true },
     "tests:snapshots": { "memoryGiB": 0.6, "perWorker": true, "exclusive": true },
     "parity-switches": { "memoryGiB": 0.5 },

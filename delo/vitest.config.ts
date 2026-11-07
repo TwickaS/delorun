@@ -8,13 +8,14 @@ import { defineConfig } from 'vitest/config'
  * `.spec.ts` specs import upstream packages through their published entry points. Client component specs
  * (`.spec.tsx`, jsdom by per-file pragma) resolve upstream packages to their sources through `tsconfig.base.json`'s
  * paths, as upstream's own client specs do, because the built client modules load React's CommonJS shims that the
- * jsdom lane cannot import.
+ * jsdom lane cannot import. Docker specs (`.docker.spec.ts`) need a Docker engine and run in their own lane
+ * (`delo/vitest.docker.config.ts`), so the fork lane leaves them out.
  */
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   test: {
     projects: [
-      { test: { name: 'fork', include: ['apps/*/tests/**/*.spec.ts', 'packages/*/tests/**/*.spec.ts'] } },
+      { test: { name: 'fork', include: ['apps/*/tests/**/*.spec.ts', 'packages/*/tests/**/*.spec.ts'], exclude: ['**/node_modules/**', '**/*.docker.spec.ts'] } },
       {
         plugins: [tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
         test: {
