@@ -137,6 +137,8 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 
 该命令把各镜像的 OCI 布局写入 `--oci`，并把 `delorun-<version>.images.json` 写入 `--out`。该文件记录每个镜像的仓库、其索引与各平台 manifest 的摘要、构建它们的 Docker Engine 与 BuildKit 版本，以及每个镜像各平台已安装的 Debian 包（读取自带有 dpkg status 的最上层）。重建比较会逐字节比较该文件，因此使用其他 Docker 或 BuildKit 版本、或包含其他包的重建都会出现差异；若版本与 `toolchain.json` 的 `images` 固定值不同，命令拒绝构建。当 `--out` 中包含所有平台的运行时发行包时，命令还会重写 SBOM，使其描述两个镜像、基础镜像及其 Debian 包（以 `pkg:deb/debian` purl 表示）。发布工作流按摘要推送各 OCI 布局，发布 manifest 的 `images` 复制该文件中的镜像引用。镜像文件是每次重建与签名比较都必须覆盖的文件之一；草稿的 `images` 与之不同时，签名会拒绝；签名时，SBOM 中的镜像条目依据该发布提交处 `images.json` 所列的基础镜像推导。
 
+`images.json` 中每个镜像的条目还指明其 seccomp 配置文件，即本目录中的一个已提交文件：两个镜像都使用 `images/seccomp.json`，它是 Docker Engine 29.9.2 的默认配置文件（`github.com/moby/profiles/seccomp` v0.2.4 的 `default.json`，Apache-2.0，许可证见 `images/seccomp.LICENSE`）。该命令将其复制为 `--out` 中的 `delorun-<version>.<image>.seccomp.json`，镜像文件中该镜像的引用以 `seccomp` 文件引用的形式携带它，约定 C9 的 supervisor 以该配置文件运行该镜像的容器。每个所列配置文件都是每次重建与签名比较都必须覆盖的文件之一；配置文件的长度或 SHA-256 与草稿中的引用不同时，签名会拒绝。
+
 ## 发布日志
 
 `sign-release.ts` 还会写入 `delorun-<version>.manifest.entry.json`，即 C18 约定中的 Rekor v2 `hashedRekordRequestV002`：其中包含 manifest 文件的 SHA-512、targets 密钥对 manifest 文件字节的 Ed25519ph 签名（密钥详情为 `PKIX_ED25519_PH`），以及 DER 格式的 targets 公钥。Node 的 crypto 没有 Ed25519ph，因此 `src/log/entry.ts` 使用 `@noble/curves` 签名与验证。`node_modules/.bin/tsx delo/apps/release/src/log-release.ts --root <file> --manifest <file> --entry <file> --submit <url> --checkpoint <url> --proof <url> --out <bundle>` 在发布工作流中运行：它将该请求提交到 `--submit`，即日志的 `/api/v2/log/entries`，每 30 秒轮询一次、至多 60 次，等待某个检查点获得根元数据所列见证者的共同签名，且该检查点覆盖该条目；只有当 bundle 验证通过时，它才写入 `delorun-<version>.manifest.log.json`；否则它以 1 退出，该发布版本不会发布。
@@ -150,4 +152,3 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 - SBOM 尚未描述桌面安装包，它们有待桌面应用（P6，已推迟）。
 - S2 镜像尚未包含 S2 辅助程序与出站代理（WP4.4），S3 镜像尚未在 C9 所指定的路径 `/usr/local/bin/delo-egress-proxy` 包含出站代理（WP4.3）。
 - Rekor v2 以 C2SP `tlog-tiles` 形式提供其树，没有包含证明端点，而 `--proof` 需要一个返回证明的 URL；发布工作流在公共日志上记录发布版本之前，需要一个根据日志 tiles 计算证明的来源。各规格使用本地替身，向线上日志（`log2025-1.rekor.sigstore.dev`）的首次提交是所有者的操作，因为提交即发布。
-- 镜像尚未带有 seccomp 配置文件条目；该 manifest 字段随 Docker supervisor（#61）一同加入。

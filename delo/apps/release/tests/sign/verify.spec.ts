@@ -11,6 +11,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { semanticVersion, sha256Hex } from '../../src/brands.ts'
 import { publicKeyEntry, signEnvelope, signedBytes } from '../../src/sign/envelope.ts'
 import { canonicalJson, parseStrictJson, toJsonValue } from '../../src/sign/json.ts'
+import { ManifestSchema } from '../../src/sign/schemas.ts'
 import { initialState, nextTimestamp, stateAfter, type ManifestFile, type TimestampRequest, type TimestampState } from '../../src/sign/timestamp.ts'
 import { checkFileRef, trustRootChain, verifyChannelManifest, verifyFileList, verifySignedManifest, verifyTimestamp, type TrustedRoot } from '../../src/sign/verify.ts'
 import { manifestContent, rootFile, throwawayKeys, type Keys } from './fixture.ts'
@@ -59,6 +60,15 @@ function continueFrom(release: Published, manifests: TimestampRequest['manifests
 }
 
 describe('release verification', () => {
+  it('accepts an image seccomp profile named by one path segment and refuses one named by a path', () => {
+    const content = manifestContent('0.1.0', Buffer.from('x'))
+    const seccomp = { name: 'delorun-0.1.0.s2.seccomp.json', length: 1, sha256: 'a'.repeat(64) }
+    const withProfile = (name: string): unknown => ({ ...content, images: { ...content.images, s2: { ...content.images.s2, seccomp: { ...seccomp, name } } } })
+    expect(ManifestSchema.safeParse(withProfile(seccomp.name)).success).toBe(true)
+    expect(ManifestSchema.safeParse(withProfile('profiles/s2.json')).success).toBe(false)
+    expect(ManifestSchema.safeParse(withProfile('..')).success).toBe(false)
+  })
+
   it('verifies the channel manifest with the targets key and each file against it', () => {
     const release = publish()
     const timestamp = verifyTimestamp(release.root, release.timestamp.bytes, ISSUED + 60)

@@ -24,6 +24,7 @@ import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { semanticVersion } from './brands.ts'
 import { comparisonReport } from './compare-rebuild.ts'
 import { compareOutputs } from './rebuild/compare.ts'
+import { readReleaseImages } from './images/build.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs } from './rebuild/record.ts'
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -57,8 +58,8 @@ async function main(argv: readonly string[]): Promise<number> {
     if (isWithin(await realpath(dirname(path)), release)) throw new Error(`write the rebuild record outside the release directory ${release}`)
     const outputs = await outputRefs(rebuild)
     const names = new Set(outputs.map(output => output.name))
-    const missing = requiredOutputs(version).filter(name => !names.has(name))
-    if (missing.length > 0) throw new Error(`${rebuild} lacks ${missing.join(', ')}; rebuild every platform's runtime and the SBOM`)
+    const missing = requiredOutputs(version, await readReleaseImages(rebuild, version)).filter(name => !names.has(name))
+    if (missing.length > 0) throw new Error(`${rebuild} lacks ${missing.join(', ')}; rebuild every platform's runtime, the SBOM and the images`)
     const comparison = await compareOutputs(release, rebuild, recipe, names)
     for (const line of comparisonReport(comparison)) console.log(line)
     const record: RebuildRecord = {

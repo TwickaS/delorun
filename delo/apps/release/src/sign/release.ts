@@ -27,7 +27,7 @@ import { fileDigest } from '../archive/sink.ts'
 import { sha256Hex } from '../brands.ts'
 import { releaseAdvisoryCheck } from '../advisory/release.ts'
 import { closureFileNames } from '../closure/tree.ts'
-import { imagesName, type ReleaseImages } from '../images/build.ts'
+import { imagesName, readReleaseImages, type ReleaseImages } from '../images/build.ts'
 import { sbomName } from '../sbom/release-sbom.ts'
 import { attestationProblem } from '../rebuild/attestation.ts'
 import { logEntryName } from '../log/bundle.ts'
@@ -106,6 +106,10 @@ function draftRefs(draft: ManifestDraft): Array<{ where: string, ref: FileRef }>
   for (const [platform, files] of Object.entries(draft.desktop)) {
     refs.push({ where: `desktop.${platform}.installer`, ref: files.installer }, { where: `desktop.${platform}.update`, ref: files.update }, { where: `desktop.${platform}.blockmap`, ref: files.blockmap })
   }
+  for (const image of ['s2', 's3'] as const) {
+    const seccomp = draft.images[image].seccomp
+    if (seccomp !== undefined) refs.push({ where: `images.${image}.seccomp`, ref: seccomp })
+  }
   refs.push({ where: 'sbom', ref: draft.sbom }, { where: 'install.sh', ref: draft.install.sh }, { where: 'install.ps1', ref: draft.install.ps1 }, { where: 'advisories.report', ref: draft.advisories.report })
   return refs
 }
@@ -176,8 +180,8 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
     refuse(`the files in ${rebuild} do not reproduce the digests the rebuild record lists`)
   }
   const names = new Set(local.map(ref => ref.name))
-  const missing = requiredOutputs(draft.version).filter(name => !names.has(name))
-  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every runtime archive and file list and the SBOM`)
+  const missing = requiredOutputs(draft.version, draft.images).filter(name => !names.has(name))
+  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every runtime archive and file list, the SBOM, the images file and the images' seccomp profiles`)
   let attestationPath: string
   let attestation: Buffer
   try {
@@ -248,12 +252,13 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   }
   if (draft.sbom.name !== sbomName(draft.version)) throw new SigningRefusal(`signing refuses: the draft names ${draft.sbom.name} as the SBOM; a release's SBOM is ${sbomName(draft.version)}`)
   const { record, recordBytes, comparison } = await checkRebuild(request, draft)
-  let built: ReleaseImages
+  let built: ReleaseImages | undefined
   try {
-    built = JSON.parse(await readFile(join(request.release, imagesName(draft.version)), 'utf8')) as ReleaseImages
+    built = await readReleaseImages(request.release, draft.version)
   } catch (error) {
     throw new SigningRefusal(`signing refuses: ${imagesName(draft.version)} does not read: ${(error as Error).message}`)
   }
+  if (built === undefined) throw new SigningRefusal(`signing refuses: ${imagesName(draft.version)} is not in ${request.release}`)
   if (canonicalJson(toJsonValue(draft.images)) !== canonicalJson(toJsonValue({ s2: built.s2, s3: built.s3 }))) {
     throw new SigningRefusal(`signing refuses: the draft's images are not the images ${imagesName(draft.version)} records, which the rebuild comparison checked`)
   }

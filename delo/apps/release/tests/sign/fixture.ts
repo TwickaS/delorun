@@ -20,7 +20,7 @@ import { semanticVersion, sha256Hex } from '../../src/brands.ts'
 import { RECIPE_DIR, RECIPE_FILES } from '../../src/closure/config.ts'
 import { attestationText } from '../../src/rebuild/attestation.ts'
 import { outputRefs, recipeAt } from '../../src/rebuild/record.ts'
-import { imagesName } from '../../src/images/build.ts'
+import { imagesName, writeSeccompProfiles } from '../../src/images/build.ts'
 import { writeReleaseSbom } from '../../src/sbom/release-sbom.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { publicKeyEntry, readSigningKey, signEnvelope } from '../../src/sign/envelope.ts'
@@ -167,8 +167,11 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   const digest = `sha256:${'a'.repeat(64)}`
   const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
   const recipe = recipeAt(repo, commit)
+  let images: Record<'s2' | 's3', typeof image & { seccomp: FileRef }> | undefined
   for (const directory of [release, rebuild]) {
-    writeFileSync(join(directory, imagesName(VERSION)), `${JSON.stringify({ s2: image, s3: image, builder: recipe.toolchain.images, debian: { s2: { 'linux/amd64': [], 'linux/arm64': [] }, s3: { 'linux/amd64': [], 'linux/arm64': [] } } }, undefined, 2)}\n`)
+    const seccomp = await writeSeccompProfiles(recipe.images, directory, VERSION)
+    images = { s2: { ...image, seccomp: seccomp.s2 }, s3: { ...image, seccomp: seccomp.s3 } }
+    writeFileSync(join(directory, imagesName(VERSION)), `${JSON.stringify({ ...images, builder: recipe.toolchain.images, debian: { s2: { 'linux/amd64': [], 'linux/arm64': [] }, s3: { 'linux/amd64': [], 'linux/arm64': [] } } }, undefined, 2)}\n`)
     await writeReleaseSbom(directory, VERSION, recipe.toolchain, recipe.images.base)
   }
   const feed = await feedStandIn(test, {})
@@ -193,7 +196,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
       return [platform, { archive: ref(release, archive), files: ref(release, `delorun-${VERSION}-${platform}.files.json`) }]
     })),
     desktop,
-    images: { s2: image, s3: image },
+    images,
     sbom: { ...ref(release, 'delorun-0.1.0.spdx.json'), format: 'SPDX-2.3+json' },
     npm: [{ name: 'delorun', version: VERSION, integrity: `sha512-${'A'.repeat(86)}==` }],
     install: { sh: ref(release, 'install.sh'), ps1: ref(release, 'install.ps1') },

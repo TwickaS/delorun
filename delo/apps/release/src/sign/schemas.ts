@@ -90,7 +90,8 @@ export const TimestampSchema = z.strictObject({
 })
 
 const desktopRef = fileRef.extend({ sha512: z.string().regex(/^[A-Za-z0-9+/]{86}==$/u).transform(value => brandString<Sha512Base64>(value)) })
-const imageRef = z.strictObject({ repository: z.string().min(1), index: oci, platforms: z.strictObject({ 'linux/amd64': oci, 'linux/arm64': oci }) })
+/** An image's reference; `seccomp`, when present, is the release file holding the profile its containers run under. */
+export const ImageRefSchema = z.strictObject({ repository: z.string().min(1), index: oci, platforms: z.strictObject({ 'linux/amd64': oci, 'linux/arm64': oci }), seccomp: fileRef.exactOptional() })
 
 /** The signed content of a release manifest. */
 export const ManifestSchema = z.strictObject({
@@ -102,7 +103,7 @@ export const ManifestSchema = z.strictObject({
   published: timestamp,
   runtime: z.strictObject(Object.fromEntries(RUNTIME_PLATFORMS.map(platform => [platform, z.strictObject({ archive: fileRef, files: fileRef })])) as Record<(typeof RUNTIME_PLATFORMS)[number], z.ZodObject<{ archive: typeof fileRef, files: typeof fileRef }, z.core.$strict>>),
   desktop: z.strictObject(Object.fromEntries(DESKTOP_PLATFORMS.map(platform => [platform, z.strictObject({ installer: desktopRef, update: desktopRef, blockmap: fileRef })])) as Record<(typeof DESKTOP_PLATFORMS)[number], z.ZodObject<{ installer: typeof desktopRef, update: typeof desktopRef, blockmap: typeof fileRef }, z.core.$strict>>),
-  images: z.strictObject({ s2: imageRef, s3: imageRef }),
+  images: z.strictObject({ s2: ImageRefSchema, s3: ImageRefSchema }),
   sbom: fileRef.extend({ format: z.literal('SPDX-2.3+json') }),
   npm: z.array(z.strictObject({ name: z.string().min(1), version, integrity: z.string().regex(/^sha512-[A-Za-z0-9+/]{86}==$/u).transform(value => brandString<NpmIntegrity>(value)) })),
   install: z.strictObject({ sh: fileRef, ps1: fileRef }),

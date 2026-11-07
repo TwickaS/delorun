@@ -5,13 +5,14 @@
  * [--attestation-key <file> --attestation <file>]`
  *
  * `--out` is the closure build's output, whose Linux archives the S3 image carries and whose entries' mtime is the
- * release's `SOURCE_DATE_EPOCH`; the command writes `delorun-<version>.images.json` there, which the rebuild
- * comparison compares byte for byte, and rewrites the SBOM so it describes both images. The OCI layout tars go to
+ * release's `SOURCE_DATE_EPOCH`; the command writes `delorun-<version>.images.json` and each image's seccomp profile
+ * `delorun-<version>.<image>.seccomp.json` there, which the rebuild comparison compares byte for byte, and rewrites
+ * the SBOM so it describes both images. The OCI layout tars go to
  * `--oci`, from which the release workflow pushes the images by digest. It needs Docker with BuildKit and emulation
  * for the other architecture. On the targets-key holder's machine, `--attestation-key` and `--attestation` name the
  * attestation `build-closure.ts` wrote: before building, the command refuses unless its HMAC verifies with the key
- * and it covers exactly the files in `--out`; afterwards it extends it with the images file and the rewritten SBOM,
- * keeping its commit, so a directory this machine's build did not write gets no attestation.
+ * and it covers exactly the files in `--out`; afterwards it extends it with the images file, the seccomp profiles and
+ * the rewritten SBOM, keeping its commit, so a directory this machine's build did not write gets no attestation.
  *
  * @module @delo/release/build-images
  */
@@ -25,7 +26,7 @@ import { archiveEntries } from './archive/inspect.ts'
 import { semanticVersion } from './brands.ts'
 import { closureFileNames } from './closure/tree.ts'
 import { readRecipe } from './closure/config.ts'
-import { builderProblems, builderVersions, buildImages, imagesName, readImagesRecipe } from './images/build.ts'
+import { builderProblems, builderVersions, buildImages, imagesName, readImagesRecipe, seccompName } from './images/build.ts'
 import { attestationText, extendAttestation, readAttestation, readAttestationKey, type AttestedBuild } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
 import { sbomName, writeReleaseSbom } from './sbom/release-sbom.ts'
@@ -60,9 +61,9 @@ async function main(argv: readonly string[]): Promise<number> {
     if (complete) console.log(`build-images: rewrote ${await writeReleaseSbom(out, version, readRecipe().toolchain, readImagesRecipe().base)} with both images`)
     else console.log('build-images: the output does not hold every platform\'s closure, so no SBOM is written')
     if (attestationKey !== undefined && attestationPath !== undefined && attested !== undefined) {
-      const extended = extendAttestation(attested, await outputRefs(out), [imagesName(version), sbomName(version)])
+      const extended = extendAttestation(attested, await outputRefs(out), [imagesName(version), sbomName(version), seccompName(version, 's2'), seccompName(version, 's3')])
       await writeFile(attestationPath, attestationText(attestationKey, extended), { mode: 0o644 })
-      console.log(`build-images: extended the attestation in ${attestationPath} with the images file and the SBOM`)
+      console.log(`build-images: extended the attestation in ${attestationPath} with the images file, the seccomp profiles and the SBOM`)
     }
     return 0
   } catch (error) {

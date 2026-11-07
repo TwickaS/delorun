@@ -2,30 +2,37 @@
  * Builds the S2 and S3 images of contract C9 within C2's reproducible-rebuild scope: each from the digest-pinned base
  * `images.json` names, for `linux/amd64` and `linux/arm64`, with BuildKit's `rewrite-timestamp` at the release's
  * `SOURCE_DATE_EPOCH`, no cache, and no provenance or SBOM attestation (they record build times and invocation ids).
- * The S3 image carries each platform's Linux runtime closure, extracted read-only. The OCI index and per-platform
- * manifest digests go into `delorun-<version>.images.json`, which the manifest's `images` copies.
+ * The S3 image carries each platform's Linux runtime closure, extracted read-only. Each image's seccomp profile, the
+ * committed file `images.json` names for it, is copied to `delorun-<version>.<image>.seccomp.json`. The OCI index and
+ * per-platform manifest digests and the profile's file reference go into `delorun-<version>.images.json`, which the
+ * manifest's `images` copies.
  *
  * @module @delo/release/images/build
  */
 import { spawnSync } from 'node:child_process'
-import { chmod, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { ImageRef, OciDigest } from '@delo/contract-release-manifest'
+import type { FileRef, ImageRef, OciDigest } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
 import { archiveEntries } from '../archive/inspect.ts'
 import { RECIPE_DIR, readRecipeFile } from '../closure/config.ts'
 import { closureFileNames } from '../closure/tree.ts'
+import { sha256Hex } from '../brands.ts'
+import { parseStrictJson } from '../sign/json.ts'
+import { ImageRefSchema } from '../sign/schemas.ts'
 
-/** `images.json`: the base by digest and each image's repository and build context. */
+/** One image of `images.json`: its repository, and its build context and seccomp profile relative to the recipe directory. */
+const ImageRecipe = z.strictObject({ repository: z.string().min(1), context: z.string().min(1), seccomp: z.string().min(1) })
+
+/** `images.json`: the base by digest and each image's repository, build context and seccomp profile. */
 export const ImagesRecipe = z.strictObject({
   schema: z.literal('delo.release-images/1'),
   base: z.string().regex(/^docker\.io\/library\/debian:bookworm-slim@sha256:[0-9a-f]{64}$/u, 'the Debian base by digest'),
-  images: z.strictObject({
-    s2: z.strictObject({ repository: z.string().min(1), context: z.string().min(1) }),
-    s3: z.strictObject({ repository: z.string().min(1), context: z.string().min(1) }),
-  }),
+  images: z.strictObject({ s2: ImageRecipe, s3: ImageRecipe }),
 })
 
 /** {@link ImagesRecipe}'s parsed value. */
@@ -155,6 +162,52 @@ export function imagesName(version: string): string {
 }
 
 /**
+ * The release file name of an image's seccomp profile.
+ * @param version - the release.
+ * @param image - `s2` or `s3`.
+ * @returns `delorun-<version>.<image>.seccomp.json`.
+ */
+export function seccompName(version: string, image: 's2' | 's3'): string {
+  return `delorun-${version}.${image}.seccomp.json`
+}
+
+/** The images file's fields that the manifest's `images` copies; the rest are the builder and the Debian packages. */
+const ImagesFileImages = z.looseObject({ s2: ImageRefSchema, s3: ImageRefSchema })
+
+/**
+ * Read the two image references from an output directory's images file.
+ * @param directory - a build output or release directory.
+ * @param version - the release.
+ * @returns the references, or undefined when the directory holds no images file.
+ * @throws Error when the images file is not strict JSON or its image references do not validate.
+ */
+export async function readReleaseImages(directory: string, version: string): Promise<ReleaseImages | undefined> {
+  const path = join(directory, imagesName(version))
+  if (!existsSync(path)) return undefined
+  const parsed = ImagesFileImages.safeParse(parseStrictJson(await readFile(path), 4 * 1024 * 1024))
+  if (!parsed.success) throw new Error(`${imagesName(version)}: ${z.prettifyError(parsed.error).replaceAll('\n', '; ')}`)
+  return { s2: parsed.data.s2, s3: parsed.data.s3 }
+}
+
+/**
+ * Copy each image's committed seccomp profile into the output as its release file.
+ * @param recipe - the image recipe.
+ * @param out - the build output.
+ * @param version - the release.
+ * @returns each image's profile reference.
+ * @throws Error when a profile is missing or its release file exists.
+ */
+export async function writeSeccompProfiles(recipe: ImagesRecipe, out: string, version: string): Promise<Record<'s2' | 's3', FileRef>> {
+  const refs: Partial<Record<'s2' | 's3', FileRef>> = {}
+  for (const name of ['s2', 's3'] as const) {
+    const bytes = await readFile(join(RECIPE_DIR, recipe.images[name].seccomp))
+    await writeFile(join(out, seccompName(version, name)), bytes, { flag: 'wx', mode: 0o644 })
+    refs[name] = { name: seccompName(version, name), length: bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
+  }
+  return { s2: refs.s2!, s3: refs.s3! }
+}
+
+/**
  * Read the image recipe.
  * @returns the parsed `images.json`.
  */
@@ -242,11 +295,13 @@ export interface ImageBuildRequest {
  * Build both images and write the images file.
  * @param request - the recipe, directories, release and epoch.
  * @returns the two image references.
- * @throws Error when Docker fails, a Linux closure is missing or the images file exists.
+ * @throws Error when Docker fails, a Linux closure is missing, or the images file or a seccomp profile's release file
+ * exists.
  */
 export async function buildImages(request: ImageBuildRequest): Promise<ReleaseImages> {
   const work = await mkdtemp(join(tmpdir(), 'delo-images-'))
   try {
+    const seccomp = await writeSeccompProfiles(request.recipe, request.out, request.version)
     const refs: Partial<Record<'s2' | 's3', ImageRef>> = {}
     const debian: Partial<Record<'s2' | 's3', Record<'linux/amd64' | 'linux/arm64', DebianPackage[]>>> = {}
     for (const name of ['s2', 's3'] as const) {
@@ -258,7 +313,7 @@ export async function buildImages(request: ImageBuildRequest): Promise<ReleaseIm
       }
       const tar = join(request.oci, `${name}.oci.tar`)
       buildx(context, request.recipe.base, request.epoch, tar)
-      const ref = ociImageRef(tar, image.repository)
+      const ref: ImageRef = { ...ociImageRef(tar, image.repository), seccomp: seccomp[name] }
       refs[name] = ref
       debian[name] = { 'linux/amd64': imageDebianPackages(tar, ref.platforms['linux/amd64']), 'linux/arm64': imageDebianPackages(tar, ref.platforms['linux/arm64']) }
     }

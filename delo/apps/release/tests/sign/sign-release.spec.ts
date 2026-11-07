@@ -278,13 +278,13 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     const aside = join(fixture.rebuild, '..', 'aside.spdx.json')
     renameSync(sbom, aside)
     const partial = fixture.record()
-    expect(partial.stderr).toContain(`lacks delorun-${VERSION}.spdx.json; rebuild every platform's runtime and the SBOM`)
+    expect(partial.stderr).toContain(`lacks delorun-${VERSION}.spdx.json; rebuild every platform's runtime, the SBOM and the images`)
     expect(partial.status).toBe(2)
     renameSync(aside, sbom)
     expect(fixture.record().status).toBe(0)
     rmSync(sbom)
     editRecord(fixture, record => ({ ...record, outputs: (record.outputs as Array<{ name: string }>).filter(output => !output.name.endsWith('.spdx.json')) }))
-    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}.spdx.json; the comparison covers every runtime archive and file list and the SBOM`)
+    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}.spdx.json; the comparison covers every runtime archive and file list, the SBOM, the images file and the images' seccomp profiles`)
   })
 
   it('refuses a draft that names another file as the SBOM', async (test) => {
@@ -358,6 +358,41 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     draft.images.s3.index = `sha256:${'c'.repeat(64)}`
     writeFileSync(path, JSON.stringify(draft))
     refusedWithoutWriting(fixture, await fixture.sign(), `the draft's images are not the images delorun-${VERSION}.images.json records`)
+  })
+
+  it('carries each image\'s seccomp profile into the manifest, by its release file', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    expect((await fixture.sign()).status).toBe(0)
+    const manifest = JSON.parse(readFileSync(join(fixture.release, `delorun-${VERSION}.manifest.json`), 'utf8')) as { signed: { images: Record<'s2' | 's3', { seccomp: { name: string, length: number } }> } }
+    const profile = readFileSync(join(import.meta.dirname, '../../images/seccomp.json'))
+    for (const image of ['s2', 's3'] as const) {
+      expect(manifest.signed.images[image].seccomp).toEqual({ name: `delorun-${VERSION}.${image}.seccomp.json`, length: profile.byteLength, sha256: createHash('sha256').update(profile).digest('hex') })
+      expect(readFileSync(join(fixture.release, `delorun-${VERSION}.${image}.seccomp.json`)).equals(profile)).toBe(true)
+    }
+  })
+
+  it('refuses a rebuild without a seccomp profile its images list, recording or signing', async (test) => {
+    const fixture = await releaseFixture(test)
+    const profile = join(fixture.rebuild, `delorun-${VERSION}.s3.seccomp.json`)
+    const aside = join(fixture.rebuild, '..', 'aside.seccomp.json')
+    renameSync(profile, aside)
+    const partial = fixture.record()
+    expect(partial.stderr).toContain(`lacks delorun-${VERSION}.s3.seccomp.json`)
+    expect(partial.status).toBe(2)
+    renameSync(aside, profile)
+    expect(fixture.record().status).toBe(0)
+    rmSync(profile)
+    editRecord(fixture, record => ({ ...record, outputs: (record.outputs as Array<{ name: string }>).filter(output => !output.name.endsWith('.s3.seccomp.json')) }))
+    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}.s3.seccomp.json`)
+  })
+
+  it('refuses a seccomp profile whose bytes are not the ones the draft lists, even when the rebuild has the same bytes', async (test) => {
+    const fixture = await releaseFixture(test)
+    for (const directory of [fixture.release, fixture.rebuild]) writeFileSync(join(directory, `delorun-${VERSION}.s2.seccomp.json`), '{"defaultAction":"SCMP_ACT_ALLOW"}\n')
+    writeFileSync(fixture.attestationPath, attestationText(fixture.attestationKey, { version: VERSION, commit: fixture.commit, outputs: await outputRefs(fixture.rebuild) }))
+    expect(fixture.record().status).toBe(0)
+    refusedWithoutWriting(fixture, await fixture.sign(), `delorun-${VERSION}.s2.seccomp.json does not match images.s2.seccomp in the draft`)
   })
 
   it('describes the images in the SBOM with the base committed at the release', async (test) => {

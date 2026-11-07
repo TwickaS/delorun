@@ -1,13 +1,13 @@
 /**
- * Reading the S2 and S3 images' digests from their OCI layouts, the image recipe, and the SBOM's description of the
- * images; Docker builds run in `images.docker.spec.ts`.
+ * Reading the S2 and S3 images' digests from their OCI layouts, the image recipe, the images' seccomp profiles, and
+ * the SBOM's description of the images; Docker builds run in `images.docker.spec.ts`.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { builderProblems, imageDebianPackages, ociImageRef, readImagesRecipe } from '../../src/images/build.ts'
+import { builderProblems, imageDebianPackages, imagesName, ociImageRef, readImagesRecipe, readReleaseImages, writeSeccompProfiles } from '../../src/images/build.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { compareOutputs } from '../../src/rebuild/compare.ts'
 import { spdxDocument } from '../../src/sbom/spdx.ts'
@@ -38,6 +38,33 @@ describe('image digests', () => {
     expect(recipe.base).toMatch(/^docker\.io\/library\/debian:bookworm-slim@sha256:[0-9a-f]{64}$/u)
     expect(recipe.images.s2.repository).toBe('ghcr.io/delo-run/delo-workspace-s2')
     expect(recipe.images.s3.repository).toBe('ghcr.io/delo-run/delo-harness-s3')
+  })
+
+  it('copies each image\'s committed seccomp profile, Docker\'s default profile, into the output as a release file', async (test) => {
+    const out = scratch(test)
+    const recipe = readImagesRecipe()
+    expect(recipe.images.s2.seccomp).toBe('images/seccomp.json')
+    expect(recipe.images.s3.seccomp).toBe('images/seccomp.json')
+    const profile = readFileSync(join(import.meta.dirname, '../../images/seccomp.json'))
+    expect(JSON.parse(profile.toString('utf8'))).toMatchObject({ defaultAction: 'SCMP_ACT_ERRNO' })
+    const refs = await writeSeccompProfiles(recipe, out, '0.1.0')
+    for (const image of ['s2', 's3'] as const) {
+      expect(refs[image]).toEqual({ name: `delorun-0.1.0.${image}.seccomp.json`, length: profile.byteLength, sha256: createHash('sha256').update(profile).digest('hex') })
+      expect(readFileSync(join(out, refs[image].name)).equals(profile)).toBe(true)
+    }
+    await expect(writeSeccompProfiles(recipe, out, '0.1.0')).rejects.toThrow(/EEXIST/u)
+  })
+
+  it('reads the images file\'s seccomp references and refuses one whose name is a path', async (test) => {
+    const out = scratch(test)
+    const digest = `sha256:${'d'.repeat(64)}`
+    const seccomp = { name: 'delorun-0.1.0.s2.seccomp.json', length: 2, sha256: 'e'.repeat(64) }
+    const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
+    expect(await readReleaseImages(out, '0.1.0')).toBeUndefined()
+    writeFileSync(join(out, imagesName('0.1.0')), JSON.stringify({ s2: { ...image, seccomp }, s3: image, builder: {}, debian: {} }))
+    expect((await readReleaseImages(out, '0.1.0'))?.s2.seccomp).toEqual(seccomp)
+    writeFileSync(join(out, imagesName('0.1.0')), JSON.stringify({ s2: { ...image, seccomp: { ...seccomp, name: 'profiles/s2.json' } }, s3: image }))
+    await expect(readReleaseImages(out, '0.1.0')).rejects.toThrow(/delorun-0\.1\.0\.images\.json: .*seccomp/u)
   })
 
   it('describes both images in the SBOM by index digest, descended from the base, with their Debian packages', () => {
