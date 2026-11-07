@@ -11,5 +11,17 @@ export { launchFiles, launchProtocolOf, SUPPORTED, type LaunchCommand, type Laun
 export { parseRuntimeVersion, StorePaths } from './paths.ts'
 export type { RuntimePointers } from './pointer.ts'
 export { readStoredRoot, type ReleaseFileBytes, type VerifiedRelease } from './release.ts'
+export {
+  HomeRuntimeStore,
+  type ChannelRelease,
+  type HomeCommand,
+  type HomeCommandMode,
+  type HomeRuntimeStoreOptions,
+  type PreparePhase,
+  type PreparedRuntime,
+  type RuntimeChannel,
+  type UpdateReport,
+  type UpdateReporter,
+} from './seam.ts'
 export { RuntimeStore, type InstallRequest, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeStoreOptions, type VerifiedRuntime } from './store.ts'
 export type { TreeProblem } from './tree.ts'

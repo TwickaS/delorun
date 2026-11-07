@@ -38,7 +38,9 @@ async function requireWhole(versions: readonly RuntimeVersion[]): Promise<Runtim
   return current
 }
 
-describe('a switch killed mid-way', () => {
+// Each case spawns a Node child through tsx and hashes the installation, so the suite's tests get the
+// process-spawning budget the home process's specs use.
+describe('a switch killed mid-way', { timeout: 90_000 }, () => {
   const cases = [
     ...STEPS.map(step => ({ pointer: 'previous', step, current: V1 })),
     ...STEPS.map(step => ({ pointer: 'current', step, current: step === 'sync-directory' ? V2 : V1 })),

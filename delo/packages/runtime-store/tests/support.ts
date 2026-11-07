@@ -8,7 +8,7 @@ import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { DELO_HOME_ENTRIES, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import {
   DESKTOP_PLATFORMS,
   RELEASE_REPOSITORY_URL,
@@ -227,19 +227,20 @@ export function fixtureHome(): FixtureHome {
   chmodSync(home, 0o700)
   for (const entry of [DELO_HOME_ENTRIES.runtimes, DELO_HOME_ENTRIES.staging, DELO_HOME_ENTRIES.trust]) mkdirSync(join(home, entry), { mode: 0o700 })
   const keys = throwawayKeys()
-  const { metadata: root } = rootFile(keys)
+  const root = rootFile(keys)
+  writeFileSync(join(home, DELO_HOME_ENTRIES.trust, TRUST_FILES.root), root.bytes, { mode: 0o600 })
   const logger = new RecordingLogger()
   const store = new RuntimeStore({ home, platform: PLATFORM, logger })
   return {
     home,
     keys,
-    root,
+    root: root.metadata,
     store,
     logger,
     install: async (release, files = closureFiles(release)) => {
       await store.install({
         version: version(release),
-        root,
+        root: root.metadata,
         fill: async (directory) => {
           writeClosure(directory, files)
           return Promise.resolve(releaseFiles(keys.targets, release, files))
@@ -254,12 +255,17 @@ export function fixtureHome(): FixtureHome {
 }
 
 /**
- * Give the owner write permission on every directory under a path, so a spec can change or remove an installation.
+ * Give the owner write permission on every directory and file under a path, so a spec can change or remove an
+ * installation whose installed modes take the owner's write permission away.
  * @param path - the tree.
  */
 export function makeWritable(path: string): void {
   const stats = lstatSync(path, { throwIfNoEntry: false })
-  if (stats === undefined || !stats.isDirectory()) return
+  if (stats === undefined || stats.isSymbolicLink()) return
+  if (!stats.isDirectory()) {
+    chmodSync(path, 0o600)
+    return
+  }
   chmodSync(path, 0o700)
   for (const name of readdirSync(path)) makeWritable(join(path, name))
 }
