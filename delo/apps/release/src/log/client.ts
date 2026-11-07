@@ -1,12 +1,13 @@
 /**
- * The release workflow's side of contract C18: submit a signed manifest's `hashedrekord` entry to the log, wait until
+ * The release workflow's side of contract C18: submit a signed manifest's Rekor v2 `hashedrekord` request to the log
+ * (`POST /api/v2/log/entries`, answered with a `TransparencyLogEntry` in protobuf JSON), wait until
  * a listed witness has cosigned a checkpoint at or above the entry's tree size, and assemble the release-log bundle,
  * which must verify before the release is published.
  *
  * @module @delo/release/log/client
  */
 import { createHash } from 'node:crypto'
-import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_REQUEST_TIMEOUT_SECONDS, type ReleaseLogBundle } from '@delo/contract-release-log'
+import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_REQUEST_TIMEOUT_SECONDS, type HashedRekordRequest, type ReleaseLogBundle } from '@delo/contract-release-log'
 import type { RootMetadata } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
@@ -14,7 +15,7 @@ import { LogVerificationError, verifyBundle } from './bundle.ts'
 
 /** Where the log and the witnessed checkpoints are. */
 export interface LogEndpoints {
-  /** The log's entry submission URL. */
+  /** The log's entry submission URL, Rekor v2's `/api/v2/log/entries`. */
   readonly submit: string
   /** The URL that returns the latest checkpoint with witness cosignatures. */
   readonly checkpoint: string
@@ -22,7 +23,11 @@ export interface LogEndpoints {
   readonly proof: string
 }
 
-const Submitted = z.looseObject({ logIndex: z.number().int().min(0), integratedTime: z.number().int().min(0), body: z.string() })
+/** An int64 in protobuf JSON: a decimal string, and absent when zero. */
+const int64 = z.string().regex(/^(?:0|[1-9]\d{0,14})$/u).transform(Number)
+
+/** The `TransparencyLogEntry` fields the bundle keeps. Rekor v2 records no integration time, so it omits the field. */
+const Submitted = z.looseObject({ logIndex: int64.optional(), integratedTime: int64.optional(), canonicalizedBody: z.string().min(1) })
 const Proof = z.looseObject({ hashes: z.array(z.string().regex(/^[0-9a-f]{64}$/u)), rootHash: z.string().regex(/^[0-9a-f]{64}$/u) })
 
 async function request(url: string, init?: RequestInit): Promise<unknown> {
@@ -39,25 +44,27 @@ async function request(url: string, init?: RequestInit): Promise<unknown> {
  * @param manifestName - the manifest file's name.
  * @param manifest - the manifest file's bytes.
  * @param version - the release version.
- * @param entryBody - the `hashedrekord` body to submit.
+ * @param entry - the request the signing command wrote.
  * @param attempts - how many times to ask for a witnessed checkpoint that covers the entry.
  * @param wait - waits between attempts.
  * @returns the bundle, verified offline.
  * @throws Error when the log refuses the entry, no checkpoint a listed witness cosigned covers it in time, or the bundle
  * fails any other step.
  */
-export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, manifestName: string, manifest: Uint8Array, version: string, entryBody: Uint8Array, attempts: number, wait: () => Promise<void>): Promise<ReleaseLogBundle> {
-  const entry = Submitted.parse(await request(endpoints.submit, { method: 'POST', headers: { 'content-type': 'application/json' }, body: Buffer.from(entryBody) }))
+export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, manifestName: string, manifest: Uint8Array, version: string, entry: HashedRekordRequest, attempts: number, wait: () => Promise<void>): Promise<ReleaseLogBundle> {
+  const submitted = Submitted.parse(await request(endpoints.submit, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry) }))
+  // Protobuf JSON omits an int64 that is zero, so an absent index or time is 0.
+  const logged = { logIndex: submitted.logIndex ?? 0, integratedTime: submitted.integratedTime ?? 0, body: submitted.canonicalizedBody }
   for (let attempt = 0; attempt < attempts; attempt++) {
     const checkpoint = z.string().parse(await request(endpoints.checkpoint))
     const size = Number(checkpoint.split('\n')[1])
-    if (Number.isSafeInteger(size) && size > entry.logIndex) {
-      const proof = Proof.parse(await request(endpoints.proof.replace('{index}', String(entry.logIndex)).replace('{size}', String(size))))
+    if (Number.isSafeInteger(size) && size > logged.logIndex) {
+      const proof = Proof.parse(await request(endpoints.proof.replace('{index}', String(logged.logIndex)).replace('{size}', String(size))))
       const bundle: ReleaseLogBundle = {
         schema: RELEASE_LOG_BUNDLE_SCHEMA,
         manifest: { name: manifestName, sha256: brandString<ReleaseLogBundle['manifest']['sha256']>(createHash('sha256').update(manifest).digest('hex')) },
-        entry,
-        inclusion: { logIndex: entry.logIndex, treeSize: size, rootHash: proof.rootHash, hashes: proof.hashes },
+        entry: logged,
+        inclusion: { logIndex: logged.logIndex, treeSize: size, rootHash: proof.rootHash, hashes: proof.hashes },
         checkpoint,
       }
       try {
@@ -69,5 +76,5 @@ export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, ma
     }
     await wait()
   }
-  throw new Error(`no checkpoint cosigned by a listed witness covered log index ${String(entry.logIndex)} after ${String(attempts)} attempts; the release is not published`)
+  throw new Error(`no checkpoint cosigned by a listed witness covered log index ${String(logged.logIndex)} after ${String(attempts)} attempts; the release is not published`)
 }

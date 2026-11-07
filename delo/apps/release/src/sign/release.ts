@@ -7,7 +7,7 @@
  *
  * @module @delo/release/sign/release
  */
-import { createHash, createPublicKey, sign, type KeyObject } from 'node:crypto'
+import { createHash, type KeyObject } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { lstat, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -30,7 +30,8 @@ import { closureFileNames } from '../closure/tree.ts'
 import { imagesName, type ReleaseImages } from '../images/build.ts'
 import { sbomName } from '../sbom/release-sbom.ts'
 import { attestationProblem } from '../rebuild/attestation.ts'
-import { hashedRekordBody, logEntryName } from '../log/bundle.ts'
+import { logEntryName } from '../log/bundle.ts'
+import { entryRequest } from '../log/entry.ts'
 import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
 import { signEnvelope } from './envelope.ts'
@@ -306,8 +307,8 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   if (existsSync(manifestPath)) throw new SigningRefusal(`signing refuses: ${manifestName} already exists`)
   const envelope = signEnvelope({ signed: toJsonValue(manifest), signatures: [] }, [request.key])
   const manifestBytes = Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`)
-  const entryBody = hashedRekordBody(createHash('sha256').update(manifestBytes).digest('hex'), sign(null, manifestBytes, request.key), createPublicKey(request.key).export({ format: 'pem', type: 'spki' }).toString())
-  const outputs: Array<[string, string | Buffer]> = [...signedLists, [recordName, recordBytes], [logEntryName(draft.version), entryBody], [manifestName, manifestBytes]]
+  const entryBytes = Buffer.from(`${JSON.stringify(entryRequest(manifestBytes, request.key), undefined, 2)}\n`)
+  const outputs: Array<[string, string | Buffer]> = [...signedLists, [recordName, recordBytes], [logEntryName(draft.version), entryBytes], [manifestName, manifestBytes]]
   await writeAll(request.release, outputs)
   return { manifest, manifestName, comparison }
 }

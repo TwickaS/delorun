@@ -1,19 +1,21 @@
 /**
  * The release-log bundle of contract C18 (`delorun-<version>.manifest.log.json`) and its offline verification: the
- * manifest digest, the `hashedrekord` entry and its targets signature, the RFC 6962 inclusion proof, the checkpoint's
+ * manifest digest, the Rekor v2 `hashedrekord` entry and its targets Ed25519ph signature, the RFC 6962 inclusion
+ * proof, the checkpoint's
  * log signature, and at least the root metadata's threshold of cosignatures from listed witnesses. A bundle whose
  * checkpoint carries no valid listed cosignature fails, whatever its log signature says.
  *
  * @module @delo/release/log/bundle
  */
-import { createHash, createPublicKey, verify } from 'node:crypto'
-import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_BUNDLE_SIZE_LIMIT, RELEASE_LOG_ENTRY_TYPE, MAX_PROOF_HASHES, type ReleaseLogBundle, type ReleaseLogFailure } from '@delo/contract-release-log'
+import { createHash, createPublicKey } from 'node:crypto'
+import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_BUNDLE_SIZE_LIMIT, RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, RELEASE_LOG_ENTRY_KEY_DETAILS, MAX_PROOF_HASHES, type ReleaseLogBundle, type ReleaseLogFailure } from '@delo/contract-release-log'
 import type { RootMetadata } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
 import { keyIdOf, rawPublicKey } from '../sign/envelope.ts'
 import { parseStrictJson } from '../sign/json.ts'
 import { targetsKeysFor } from '../sign/verify.ts'
+import { EntryBodySchema, verifyEd25519ph } from './entry.ts'
 import { leafHash, rootFromInclusionProof } from './merkle.ts'
 import { parseCheckpoint, parseVerifier, splitNote, verifySignature } from './note.ts'
 
@@ -41,38 +43,13 @@ export const BundleSchema = z.strictObject({
   checkpoint: z.string().min(1),
 })
 
-/** The `hashedrekord` entry body the release workflow submits. */
-const HashedRekord = z.looseObject({
-  apiVersion: z.string(),
-  kind: z.literal(RELEASE_LOG_ENTRY_TYPE),
-  spec: z.looseObject({
-    data: z.looseObject({ hash: z.looseObject({ algorithm: z.literal('sha256'), value: hex }) }),
-    signature: z.looseObject({ content: z.string(), publicKey: z.looseObject({ content: z.string() }) }),
-  }),
-})
-
 /**
- * The name of the file that carries a manifest's log entry body from the signing machine to the release workflow.
+ * The name of the file that carries a manifest's log entry request from the signing machine to the release workflow.
  * @param version - the release.
  * @returns `delorun-<version>.manifest.entry.json`.
  */
 export function logEntryName(version: string): string {
   return `delorun-${version}.manifest.entry.json`
-}
-
-/**
- * The canonical `hashedrekord` body of a manifest entry.
- * @param manifestSha256 - the manifest file's SHA-256.
- * @param signature - the targets key's Ed25519 signature over the manifest file's bytes.
- * @param publicKeyPem - the targets public key in PKIX PEM.
- * @returns the body's bytes, keys in the order Rekor canonicalises them.
- */
-export function hashedRekordBody(manifestSha256: string, signature: Uint8Array, publicKeyPem: string): Buffer {
-  return Buffer.from(JSON.stringify({
-    apiVersion: '0.0.1',
-    kind: RELEASE_LOG_ENTRY_TYPE,
-    spec: { data: { hash: { algorithm: 'sha256', value: manifestSha256 } }, signature: { content: Buffer.from(signature).toString('base64'), publicKey: { content: Buffer.from(publicKeyPem, 'utf8').toString('base64') } } },
-  }))
 }
 
 /**
@@ -116,18 +93,25 @@ export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: 
     // A SyntaxError: a body that is not JSON fails the schema check below, which reports it.
     decoded = error
   }
-  const entry = HashedRekord.safeParse(decoded)
-  if (!entry.success || entry.data.spec.data.hash.value !== digest) throw new LogVerificationError('manifest-digest-mismatch', 'the log entry is not a hashedrekord of the manifest\'s digest')
+  const parsed = EntryBodySchema.safeParse(decoded)
+  const sha512 = createHash('sha512').update(manifest).digest('base64')
+  if (!parsed.success || parsed.data.spec.hashedRekordV002.data.algorithm !== RELEASE_LOG_ENTRY_DIGEST_ALGORITHM || parsed.data.spec.hashedRekordV002.data.digest !== sha512) {
+    throw new LogVerificationError('manifest-digest-mismatch', 'the log entry is not a Rekor v2 hashedrekord of the manifest\'s SHA-512 digest')
+  }
+  const { signature } = parsed.data.spec.hashedRekordV002
+  if (signature.verifier.keyDetails !== RELEASE_LOG_ENTRY_KEY_DETAILS) {
+    throw new LogVerificationError('entry-signature-invalid', `the log entry's key details are ${signature.verifier.keyDetails}, not ${RELEASE_LOG_ENTRY_KEY_DETAILS}`)
+  }
   let signerId: string
   try {
-    signerId = keyIdOf(rawPublicKey(createPublicKey(Buffer.from(entry.data.spec.signature.publicKey.content, 'base64').toString('utf8'))))
+    signerId = keyIdOf(rawPublicKey(createPublicKey({ key: Buffer.from(signature.verifier.publicKey.rawBytes, 'base64'), format: 'der', type: 'spki' })))
   } catch (error) {
     // A key-parsing error: an unreadable public key matches no targets key, and the refusal below reports that.
     signerId = error instanceof Error ? '' : ''
   }
   const targets = targetsKeysFor(root, version).find(key => key.keyid === signerId)
-  if (targets === undefined || !verify(null, manifest, targets.key, Buffer.from(entry.data.spec.signature.content, 'base64'))) {
-    throw new LogVerificationError('entry-signature-invalid', 'the log entry is not signed by a targets key valid for the release')
+  if (targets === undefined || !verifyEd25519ph(targets.key, manifest, Buffer.from(signature.content, 'base64'))) {
+    throw new LogVerificationError('entry-signature-invalid', 'the log entry has no Ed25519ph signature over the manifest by a targets key valid for the release')
   }
   const computed = rootFromInclusionProof(bundle.inclusion.logIndex, bundle.inclusion.treeSize, leafHash(body), bundle.inclusion.hashes.map((hash: string) => Buffer.from(hash, 'hex')))
   if (bundle.inclusion.logIndex !== bundle.entry.logIndex || computed === undefined || computed.toString('hex') !== bundle.inclusion.rootHash) {

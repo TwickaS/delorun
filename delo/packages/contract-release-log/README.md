@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@delo/contract-release-log` defines the release-log bundle that carries a release manifest's Rekor entry, its inclusion proof and a witnessed checkpoint, the check states a client records per installed release, and the witness threshold, checkpoint age, retry interval and size limits as constants. The package holds exported types and readonly constants only, with no runtime code, so it never changes what a process does; the contract page [C18 Release log and witness](../../docs/contracts/c18-release-log.md) is the authority, and this package follows it. Its entry is `src/index.ts`, exported as `.`.
+`@delo/contract-release-log` defines the Rekor v2 `hashedrekord` request and entry body of a release manifest (Ed25519ph, `PKIX_ED25519_PH`), the release-log bundle that carries the entry, its inclusion proof and a witnessed checkpoint, the check states a client records per installed release, and the witness threshold, checkpoint age, retry interval and size limits as constants. The package holds exported types and readonly constants only, with no runtime code, so it never changes what a process does; the contract page [C18 Release log and witness](../../docs/contracts/c18-release-log.md) is the authority, and this package follows it. Its entry is `src/index.ts`, exported as `.`.
 
 ## Contents
 

@@ -192,7 +192,7 @@ importers:
         version: 10.0.1
       extract-zip:
         specifier: ^2.0.1
-        version: 2.0.1(supports-color@9.4.0)
+        version: 2.0.1(supports-color@10.2.2)
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -1297,6 +1297,9 @@ importers:
       '@delo/tools':
         specifier: workspace:*
         version: link:../tools
+      '@noble/curves':
+        specifier: ^2.4.0
+        version: 2.4.0
       extract-zip:
         specifier: ^2.0.1
         version: 2.0.1(supports-color@10.2.2)
@@ -20957,6 +20960,10 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
+  '@noble/curves@2.4.0':
+    resolution: {integrity: sha512-P4/62zrgfH33CneE3Dn4WhJVA22YUU0eR51wKIan4NVRvwsA0YnPTwWGpNbpuacSujmSFLvyzpyuR30+fbq2Ew==}
+    engines: {node: '>= 20.19.0'}
+
   '@noble/hashes@1.4.0':
     resolution: {integrity: sha512-V1JJ1WTRUqHHrOSh597hURcMqVKVGL/ea3kv0gSnEdsEZ0/+VyPghM1lMNGc00z7CIQorSvbKpuJkxvuHbvdbg==}
     engines: {node: '>= 16'}
@@ -28882,6 +28889,10 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
+  '@noble/curves@2.4.0':
+    dependencies:
+      '@noble/hashes': 2.4.0
+
   '@noble/hashes@1.4.0': {}
 
   '@noble/hashes@1.8.0': {}
@@ -31851,16 +31862,6 @@ snapshots:
   extract-zip@2.0.1(supports-color@10.2.2):
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
-      get-stream: 5.2.0
-      yauzl: 3.4.0
-    optionalDependencies:
-      '@types/yauzl': 2.10.3
-    transitivePeerDependencies:
-      - supports-color
-
-  extract-zip@2.0.1(supports-color@9.4.0):
-    dependencies:
-      debug: 4.4.3(supports-color@9.4.0)
       get-stream: 5.2.0
       yauzl: 3.4.0
     optionalDependencies:

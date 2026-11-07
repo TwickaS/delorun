@@ -137,9 +137,9 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 
 ## 发布日志
 
-`sign-release.ts` 还会写入 `delorun-<version>.manifest.entry.json`，即 C18 约定中的 `hashedrekord` 条目主体：其中包含 manifest 文件的 SHA-256、targets 密钥对 manifest 文件字节的 Ed25519 签名，以及 PKIX PEM 格式的 targets 公钥。`node_modules/.bin/tsx delo/apps/release/src/log-release.ts --root <file> --manifest <file> --entry <file> --submit <url> --checkpoint <url> --proof <url> --out <bundle>` 在发布工作流中运行：它提交该条目，每 30 秒轮询一次、至多 60 次，等待某个检查点获得根元数据所列见证者的共同签名，且该检查点覆盖该条目；只有当 bundle 验证通过时，它才写入 `delorun-<version>.manifest.log.json`；否则它以 1 退出，该发布版本不会发布。
+`sign-release.ts` 还会写入 `delorun-<version>.manifest.entry.json`，即 C18 约定中的 Rekor v2 `hashedRekordRequestV002`：其中包含 manifest 文件的 SHA-512、targets 密钥对 manifest 文件字节的 Ed25519ph 签名（密钥详情为 `PKIX_ED25519_PH`），以及 DER 格式的 targets 公钥。Node 的 crypto 没有 Ed25519ph，因此 `src/log/entry.ts` 使用 `@noble/curves` 签名与验证。`node_modules/.bin/tsx delo/apps/release/src/log-release.ts --root <file> --manifest <file> --entry <file> --submit <url> --checkpoint <url> --proof <url> --out <bundle>` 在发布工作流中运行：它将该请求提交到 `--submit`，即日志的 `/api/v2/log/entries`，每 30 秒轮询一次、至多 60 次，等待某个检查点获得根元数据所列见证者的共同签名，且该检查点覆盖该条目；只有当 bundle 验证通过时，它才写入 `delorun-<version>.manifest.log.json`；否则它以 1 退出，该发布版本不会发布。
 
-`src/log/bundle.ts` 按 C18 的五个步骤离线验证 bundle：manifest 摘要、条目的 targets 签名、RFC 6962 包含证明、检查点的 origin、大小、根哈希与日志签名，以及来自所列见证者的共同签名，其数量至少达到根元数据的阈值。没有此类共同签名的检查点会验证失败，无论其日志签名如何，且每次失败都带有 C18 所定义的原因码。`src/log/note.ts` 读取 C2SP signed-note，并使用 Ed25519 note 密钥与 `cosignature/v1` 见证者密钥；`src/log/merkle.ts` 验证包含证明与一致性证明。
+`src/log/bundle.ts` 按 C18 的五个步骤离线验证 bundle：manifest 摘要、条目的 Rekor v2 格式及其 targets Ed25519ph 签名（拒绝纯 Ed25519 条目）、RFC 6962 包含证明、检查点的 origin、大小、根哈希与日志签名，以及来自所列见证者的共同签名，其数量至少达到根元数据的阈值。没有此类共同签名的检查点会验证失败，无论其日志签名如何，且每次失败都带有 C18 所定义的原因码。`src/log/note.ts` 读取 C2SP signed-note，并使用 Ed25519 note 密钥与 `cosignature/v1` 见证者密钥；`src/log/merkle.ts` 验证包含证明与一致性证明。
 
 ## 待完成事项
 
@@ -147,5 +147,5 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 
 - SBOM 尚未描述桌面安装包，它们有待桌面应用（P6，已推迟）。
 - S2 镜像尚未包含 S2 辅助程序与出站代理（WP4.4），S3 镜像尚未在 C9 所指定的路径 `/usr/local/bin/delo-egress-proxy` 包含出站代理（WP4.3）。
-- 发布日志条目与公共 Rekor 的格式不符。Rekor v1（`rekor.sigstore.dev`）与 Rekor v2（`log2025-1.rekor.sigstore.dev`）都拒绝以纯 Ed25519 签名的 `hashedrekord` 条目：v1 只按条目摘要验证预哈希形式的 Ed25519，v2 只在其 `hashedRekordRequestV002` 主体中接受 `PKIX_ED25519_PH` 形式的 Ed25519。Rekor v2 以 Ed25519 签署检查点，此处的 C2SP note 验证器可以读取；Rekor v1 以 ECDSA P-256 签署检查点，此验证器无法读取。契约 C18 规定对 manifest 字节使用纯 Ed25519，因此要与任一日志匹配都需修改 C18（WP3.1 与该契约的所有者）；各规格使用本地替身，针对线上日志检查一次提交是所有者的操作。
+- Rekor v2 以 C2SP `tlog-tiles` 形式提供其树，没有包含证明端点，而 `--proof` 需要一个返回证明的 URL；发布工作流在公共日志上记录发布版本之前，需要一个根据日志 tiles 计算证明的来源。各规格使用本地替身，向线上日志（`log2025-1.rekor.sigstore.dev`）的首次提交是所有者的操作，因为提交即发布。
 - 镜像尚未带有 seccomp 配置文件条目；该 manifest 字段随 Docker supervisor（#61）一同加入。

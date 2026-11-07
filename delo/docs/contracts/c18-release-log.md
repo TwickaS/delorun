@@ -26,7 +26,7 @@ Every signed release manifest of [C2](c02-release-manifest.md) has an entry in S
 
 ## The log and the witness
 
-- The log is Sigstore's public Rekor instance. Its checkpoint origin line and its checkpoint verifier key are in the root metadata's `log` field ([C2](c02-release-manifest.md#root-metadata)), so they change only by a root rotation.
+- The log is a shard of Sigstore's public Rekor v2 log, which signs its checkpoints with an Ed25519 note key. Its checkpoint origin line and its checkpoint verifier key are in the root metadata's `log` field ([C2](c02-release-manifest.md#root-metadata)), so they change only by a root rotation.
 - Checkpoints use the C2SP signed-note format (`tlog-checkpoint`); witness cosignatures use C2SP `tlog-cosignature` (`cosignature/v1`), whose signed message includes the cosigning time.
 - The witnesses are keys of witnesses in the public witness network, listed in the root metadata's `witnesses.keys` with `witnesses.threshold` 1: a checkpoint is witnessed when at least 1 listed witness cosigned it. Delo operates none of them.
 - Delo publishes nothing to the log except the entries of its release manifests and re-signed manifests.
@@ -37,10 +37,13 @@ One entry per signed manifest file, written by the release workflow after the ta
 
 | Entry field | Value |
 | --- | --- |
-| Type | `hashedrekord` |
-| Artifact digest | SHA-256 of the manifest file's bytes (the whole envelope) |
-| Signature | The targets key's Ed25519 signature over the manifest file's bytes |
-| Public key | The active targets public key, in PKIX PEM |
+| Type | `hashedrekord`, API version `0.0.2` (Rekor v2) |
+| Digest | SHA-512 of the manifest file's bytes (the whole envelope), algorithm `SHA2_512` |
+| Signature | The targets key's Ed25519ph signature (RFC 8032, empty context) over the manifest file's bytes |
+| Key details | `PKIX_ED25519_PH` |
+| Public key | The active targets public key, DER-encoded PKIX |
+
+The release workflow submits these fields as a `hashedRekordRequestV002` to the log's `/api/v2/log/entries`; the log builds the entry body from them, and the log's leaf is the RFC 8785 serialization of that body. Rekor v2 accepts an Ed25519 key only with Ed25519ph, so the log refuses a pure Ed25519 (`PKIX_ED25519`) entry, and clients refuse one too.
 
 A re-signed manifest after a targets-key revocation ([C2](c02-release-manifest.md#key-rotation)) gets its own entry. A release is "logged" when its manifest file's entry verifies as this page states.
 
@@ -51,7 +54,7 @@ A re-signed manifest after a targets-key revocation ([C2](c02-release-manifest.m
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `manifest` | `{ "name", "sha256" }` | The manifest file this bundle covers. |
-| `entry` | `{ "logIndex", "integratedTime", "body" }` | The entry as Rekor returned it; `body` is the base64 canonical entry. |
+| `entry` | `{ "logIndex", "integratedTime", "body" }` | The entry as Rekor returned it; `body` is the base64 canonical entry body. Rekor v2 records no integration time, so `integratedTime` is 0. |
 | `inclusion` | `{ "treeSize", "rootHash", "hashes": [hex...], "logIndex" }` | The RFC 6962 inclusion proof of the entry's leaf in that tree. |
 | `checkpoint` | string | The signed-note checkpoint for `treeSize` and `rootHash`, with Rekor's signature and at least 1 witness cosignature line. |
 
@@ -62,9 +65,9 @@ The release workflow publishes the bundle on GitHub Releases beside the manifest
 A bundle verifies when all of these hold, with the keys of the client's current trusted root:
 
 1. `manifest.sha256` equals the SHA-256 of the manifest file the client verified under [C2](c02-release-manifest.md).
-2. The entry body is a `hashedrekord` whose digest equals that SHA-256 and whose signature verifies with a targets key that is valid for the release.
+2. The entry body is a Rekor v2 `hashedrekord` (`0.0.2`) whose `SHA2_512` digest equals the SHA-512 of that manifest file, whose key details are `PKIX_ED25519_PH`, and whose Ed25519ph signature over the manifest file verifies with a targets key that is valid for the release.
 3. The leaf hash of the entry body, the inclusion proof and `treeSize` reproduce `rootHash`.
-4. The checkpoint names the root metadata's log origin, its `treeSize` and `rootHash` match the proof, and its log signature verifies with the log's verifier key.
+4. The checkpoint names the root metadata's log origin, its `treeSize` and `rootHash` match the proof, and its log signature verifies with the log's Ed25519 verifier key.
 5. Cosignatures from at least `witnesses.threshold` distinct listed witness keys verify over that checkpoint.
 
 A bundle without a valid witness cosignature fails step 5 and the entry is refused, whatever the log signature says.
@@ -149,6 +152,7 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 | `c18-unlisted-witness-refused` | WP3.2 | A cosignature from a key outside `witnesses.keys` does not count, and the bundle fails. |
 | `c18-wrong-inclusion-proof-refused` | WP3.2 | A bundle whose proof does not reproduce `rootHash` is refused before installation. |
 | `c18-entry-for-other-manifest-refused` | WP3.2 | A valid entry for a different manifest digest is refused. |
+| `c18-pure-ed25519-entry-refused` | WP3.1, WP3.2 | An entry with a pure Ed25519 signature or `PKIX_ED25519` key details is refused; the same manifest's Ed25519ph entry verifies. |
 | `c18-offline-start-warns` | WP2.11, WP3.9 | A start with the log and distributor stand-ins unreachable starts, prints the warning with the release's version and records `unchecked`. |
 | `c18-offline-recheck-on-connect` | WP3.9 | After the stand-ins become reachable, the home process's next retry records `verified`. |
 | `c18-offline-update-refused` | WP3.2, WP3.9, WP6.3 | An update attempted while the log is unreachable is refused, and the running version stays. |

@@ -1,6 +1,7 @@
 /**
  * Types and fixed values of contract C18, the release log and witness
- * (`delo/docs/contracts/c18-release-log.md`). Every release manifest has a Rekor entry;
+ * (`delo/docs/contracts/c18-release-log.md`). Every release manifest has a Rekor v2 `hashedrekord`
+ * entry signed with Ed25519ph by the targets key;
  * {@link ReleaseLogBundle} carries it with its inclusion proof and a witnessed checkpoint,
  * and {@link ReleaseLogCheckState} is what clients record per installed release.
  *
@@ -15,11 +16,54 @@ export const RELEASE_LOG_BUNDLE_SCHEMA = 'delo.release-log-bundle/1'
 /** The Rekor entry type of every release manifest entry. */
 export const RELEASE_LOG_ENTRY_TYPE = 'hashedrekord'
 
+/** The entry body's `apiVersion`: Rekor v2's `hashedrekord` v0.0.2. */
+export const RELEASE_LOG_ENTRY_API_VERSION = '0.0.2'
+
+/** The entry's `keyDetails`: Ed25519ph (RFC 8032, empty context) over the manifest file's bytes. */
+export const RELEASE_LOG_ENTRY_KEY_DETAILS = 'PKIX_ED25519_PH'
+
+/** The entry's digest algorithm, the hash Ed25519ph prehashes with: SHA-512 of the manifest file's bytes. */
+export const RELEASE_LOG_ENTRY_DIGEST_ALGORITHM = 'SHA2_512'
+
+/** The signature and its verifier, as Rekor v2's `Signature` message serializes them in JSON. */
+export interface HashedRekordSignature {
+  /** Base64 Ed25519ph signature over the manifest file's bytes. */
+  readonly content: string
+  readonly verifier: {
+    /** Base64 DER (PKIX SubjectPublicKeyInfo) of the targets public key. */
+    readonly publicKey: { readonly rawBytes: string }
+    /** Always {@link RELEASE_LOG_ENTRY_KEY_DETAILS}. */
+    readonly keyDetails: typeof RELEASE_LOG_ENTRY_KEY_DETAILS
+  }
+}
+
+/** `delorun-<version>.manifest.entry.json`: the request the release workflow submits to Rekor v2's `/api/v2/log/entries`. */
+export interface HashedRekordRequest {
+  readonly hashedRekordRequestV002: {
+    /** Base64 SHA-512 of the manifest file's bytes. */
+    readonly digest: string
+    readonly signature: HashedRekordSignature
+  }
+}
+
+/** The log entry body Rekor v2 builds from a {@link HashedRekordRequest}; the log's leaf is its RFC 8785 serialization. */
+export interface HashedRekordBody {
+  readonly apiVersion: typeof RELEASE_LOG_ENTRY_API_VERSION
+  readonly kind: typeof RELEASE_LOG_ENTRY_TYPE
+  readonly spec: {
+    readonly hashedRekordV002: {
+      /** The request's digest with its algorithm. */
+      readonly data: { readonly algorithm: typeof RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, readonly digest: string }
+      readonly signature: HashedRekordSignature
+    }
+  }
+}
+
 /** The manifest file a bundle covers. */
 export interface BundleManifestRef {
   /** `delorun-<version>.manifest.json`. */
   readonly name: string
-  /** SHA-256 of the whole manifest file, which is the entry's artifact digest. */
+  /** SHA-256 of the whole manifest file. */
   readonly sha256: Sha256Hex
 }
 
@@ -27,9 +71,9 @@ export interface BundleManifestRef {
 export interface BundleEntry {
   /** The entry's index in the log. */
   readonly logIndex: number
-  /** The log's integration time, in Unix seconds. */
+  /** The log's integration time in Unix seconds; Rekor v2 records none and returns 0. */
   readonly integratedTime: number
-  /** Base64 canonical entry body: a `hashedrekord` with the manifest digest, the targets key's Ed25519 signature and its PKIX PEM public key. */
+  /** Base64 RFC 8785 serialization of the {@link HashedRekordBody}. */
   readonly body: string
 }
 

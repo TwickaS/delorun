@@ -15,17 +15,17 @@
   en: 69c932f948da9e65
   zh: 696d253262e9ec6e
 /c18-release-log-and-witness/the-log-and-the-witness:
-  en: 6db52deca3a3c451
-  zh: de1893506e66d8fc
+  en: c0e11f1f45008f0c
+  zh: ca13a3268cc2ac3d
 /c18-release-log-and-witness/log-entry:
-  en: defa10d0e2b7746d
-  zh: ec08677f34544434
+  en: bf4c6f62c6951737
+  zh: b70a9da677a6d0b8
 /c18-release-log-and-witness/release-log-bundle:
-  en: 4d5a8d6e6ce06447
-  zh: 7f15f117a8eb6d47
+  en: bb93df746640d06d
+  zh: 924dbb6cb1ade87a
 /c18-release-log-and-witness/verifying-a-bundle:
-  en: 9f42ca24d7ebfff0
-  zh: 694919540d39e0a1
+  en: fc1c077a4c5c013b
+  zh: 5276c97b757fbfb6
 /c18-release-log-and-witness/consistency-with-the-current-log:
   en: d7bf2f8ff2316ed8
   zh: 7e9b33b228fbddfa
@@ -51,8 +51,8 @@
   en: e1c3ced04d4a3fa5
   zh: 6d40cdd609185b8a
 /c18-release-log-and-witness/security/denial-tests:
-  en: 815605ae5a09fb59
-  zh: 220a4e8604c0f534
+  en: 74a964533445d703
+  zh: 2a3b966a07e0ff00
 /c18-release-log-and-witness/security/what-this-does-not-prove:
   en: a8c259fd655c2585
   zh: d4a9bbaec9a65660

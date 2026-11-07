@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
 import { sha256Hex } from '../../src/brands.ts'
 import { logEntryName, verifyBundle } from '../../src/log/bundle.ts'
+import { readEntryRequest } from '../../src/log/entry.ts'
 import { attestationText } from '../../src/rebuild/attestation.ts'
 import { outputRefs, REQUIRED_SOURCE } from '../../src/rebuild/record.ts'
 import { LogStandIn, WitnessStandIn } from '../log/standin.ts'
@@ -337,7 +338,7 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     const witness = new WitnessStandIn()
     const root = rootFile(fixture.keys, { log: { origin: log.origin, vkey: log.vkey }, witnesses: { keys: [{ name: witness.name, vkey: witness.vkey }], threshold: 1 } }).metadata
     const manifest = readFileSync(join(fixture.release, MANIFEST))
-    const index = log.append(readFileSync(join(fixture.release, logEntryName(VERSION))))
+    const index = log.submit(readEntryRequest(readFileSync(join(fixture.release, logEntryName(VERSION)))))
     const bundle = log.bundle(index, { name: MANIFEST, sha256: sha256Hex(createHash('sha256').update(manifest).digest('hex')) }, witness.cosign(log.checkpoint(), 1_793_981_700))
     expect(verifyBundle(root, manifest, VERSION, bundle).treeSize).toBe(1)
   })

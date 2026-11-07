@@ -28,7 +28,7 @@ description: "约定 C18：每个 Delo 发布 manifest 如何记录在 Sigstore 
 
 ## 日志与见证者
 
-- 日志是 Sigstore 的公开 Rekor 实例。它的检查点 origin 行与检查点验证密钥位于根元数据的 `log` 字段中（[C2](c02-release-manifest.zh.md#root-metadata)），因此只能通过根轮换改变。
+- 日志是 Sigstore 公开 Rekor v2 日志的一个分片，它用 Ed25519 note 密钥为检查点签名。它的检查点 origin 行与检查点验证密钥位于根元数据的 `log` 字段中（[C2](c02-release-manifest.zh.md#root-metadata)），因此只能通过根轮换改变。
 - 检查点使用 C2SP signed-note 格式（`tlog-checkpoint`）；见证者共同签名使用 C2SP `tlog-cosignature`（`cosignature/v1`），其签名消息包含共同签名时间。
 - 见证者以公共见证网络中各见证者的密钥表示，列在根元数据的 `witnesses.keys` 中，`witnesses.threshold` 为 1：至少 1 个所列见证者为某个检查点共同签名时，该检查点即为经见证。Delo 不运营其中任何一个。
 - 除其发布 manifest 与重新签名的 manifest 的条目外，Delo 不向该日志发布任何内容。
@@ -41,10 +41,13 @@ description: "约定 C18：每个 Delo 发布 manifest 如何记录在 Sigstore 
 
 | 条目字段 | 值 |
 | --- | --- |
-| 类型 | `hashedrekord` |
-| 制品摘要 | manifest 文件字节（整个信封）的 SHA-256 |
-| 签名 | targets 密钥对 manifest 文件字节的 Ed25519 签名 |
-| 公钥 | 当前生效的 targets 公钥，采用 PKIX PEM 格式 |
+| 类型 | `hashedrekord`，API 版本 `0.0.2`（Rekor v2） |
+| 摘要 | manifest 文件字节（整个信封）的 SHA-512，算法为 `SHA2_512` |
+| 签名 | targets 密钥对 manifest 文件字节的 Ed25519ph 签名（RFC 8032，空上下文） |
+| 密钥详情 | `PKIX_ED25519_PH` |
+| 公钥 | 当前生效的 targets 公钥，采用 DER 编码的 PKIX 格式 |
+
+发布工作流将这些字段作为 `hashedRekordRequestV002` 提交到日志的 `/api/v2/log/entries`；日志据此构建条目主体，日志的叶子是该主体的 RFC 8785 序列化。Rekor v2 只以 Ed25519ph 接受 Ed25519 密钥，因此日志拒绝纯 Ed25519（`PKIX_ED25519`）条目，客户端同样拒绝。
 
 targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.zh.md#key-rotation)）有自己的条目。当发布版本的 manifest 文件条目按本页所述通过验证时，该发布版本即为「已记录」（logged）。
 
@@ -57,7 +60,7 @@ targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.z
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `manifest` | `{ "name", "sha256" }` | 此 bundle 所覆盖的 manifest 文件。 |
-| `entry` | `{ "logIndex", "integratedTime", "body" }` | Rekor 返回的原样条目；`body` 是 base64 编码的规范条目。 |
+| `entry` | `{ "logIndex", "integratedTime", "body" }` | Rekor 返回的原样条目；`body` 是 base64 编码的规范条目主体。Rekor v2 不记录集成时间，因此 `integratedTime` 为 0。 |
 | `inclusion` | `{ "treeSize", "rootHash", "hashes": [hex...], "logIndex" }` | 该条目的叶子在该树中的 RFC 6962 包含证明。 |
 | `checkpoint` | 字符串 | 对应 `treeSize` 与 `rootHash` 的 signed-note 检查点，带有 Rekor 的签名以及至少 1 行见证者共同签名。 |
 
@@ -70,9 +73,9 @@ targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.z
 使用客户端当前受信任根中的密钥，以下各项全部成立时，bundle 通过验证：
 
 1. `manifest.sha256` 等于客户端按 [C2](c02-release-manifest.zh.md) 验证过的 manifest 文件的 SHA-256。
-2. 条目主体是一个 `hashedrekord`，其摘要等于该 SHA-256，其签名可用一个对该发布版本有效的 targets 密钥验证。
+2. 条目主体是一个 Rekor v2 `hashedrekord`（`0.0.2`），其 `SHA2_512` 摘要等于该 manifest 文件的 SHA-512，其密钥详情为 `PKIX_ED25519_PH`，其针对 manifest 文件的 Ed25519ph 签名可用一个对该发布版本有效的 targets 密钥验证。
 3. 条目主体的叶子哈希、包含证明与 `treeSize` 能复算出 `rootHash`。
-4. 检查点指明根元数据中的日志 origin，其 `treeSize` 与 `rootHash` 与证明相符，其日志签名可用日志的验证密钥验证。
+4. 检查点指明根元数据中的日志 origin，其 `treeSize` 与 `rootHash` 与证明相符，其日志签名可用日志的 Ed25519 验证密钥验证。
 5. 来自至少 `witnesses.threshold` 个不同的所列见证者密钥的共同签名针对该检查点通过验证。
 
 没有有效见证者共同签名的 bundle 在第 5 步失败，条目被拒绝，无论日志签名如何。
@@ -175,6 +178,7 @@ bundle 的 `schema` 指明其主版本。日志的 origin 与密钥以及见证�
 | `c18-unlisted-witness-refused` | WP3.2 | 来自 `witnesses.keys` 之外密钥的共同签名不计入，bundle 验证失败。 |
 | `c18-wrong-inclusion-proof-refused` | WP3.2 | 证明无法复算出 `rootHash` 的 bundle 在安装之前被拒绝。 |
 | `c18-entry-for-other-manifest-refused` | WP3.2 | 针对另一个 manifest 摘要的有效条目被拒绝。 |
+| `c18-pure-ed25519-entry-refused` | WP3.1, WP3.2 | 带纯 Ed25519 签名或 `PKIX_ED25519` 密钥详情的条目被拒绝；同一 manifest 的 Ed25519ph 条目通过验证。 |
 | `c18-offline-start-warns` | WP2.11, WP3.9 | 在日志与分发服务的替身均无法访问时启动，仍会启动，打印带有该发布版本号的警告，并记录 `unchecked`。 |
 | `c18-offline-recheck-on-connect` | WP3.9 | 替身变为可访问后，home 进程的下一次重试记录 `verified`。 |
 | `c18-offline-update-refused` | WP3.2, WP3.9, WP6.3 | 在日志无法访问时尝试的更新被拒绝，正在运行的版本保持不变。 |
