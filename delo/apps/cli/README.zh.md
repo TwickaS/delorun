@@ -33,6 +33,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 | `delorun start [--foreground] [--profile <name>]` | 以脱离终端的方式启动 home 进程，并最多等待 120 秒使其报告 `running`；`--foreground` 则在此终端中运行它。两者都不打开 studio |
 | `delorun stop [--now] [--profile <name>]` | 在运行中的 chat 结束后停止 home 进程，最多等待 1,800 秒；`--now` 先取消它们 |
 | `delorun status [--profile <name>] [--json]` | 打印 home、profile、`delorun` 忽略的已继承 `DSH_HOME`，以及 home 进程的状态、进程 id、启动 id、运行时版本、运行中的 chat 与进行中的更新；`--json` 只打印其 `status` 应答 |
+| `delorun doctor [--port <n>]` | 检查 Delo home、Docker 引擎、DeepSeek API 密钥的格式以及 studio 的端口，每项检查输出一行；不联系任何模型，不启动容器，也不运行任何命令，只有只读的 `docker version` 探测例外 |
 | `delorun plugin …` | 上游的 `dsh plugin …`，不作改动，针对 Delo home 运行 |
 | `delorun headless …` | 上游的 `dsh headless …`，不作改动，针对 Delo home 运行 |
 
@@ -104,7 +105,7 @@ Setup 按顺序执行各步骤：创建 CLI profile；把输入的密钥以 0600
 - 登录时启动（`delorun start --at-login`、`delorun stop --at-login`）、`delorun status --follow`、运行时仓库的更新、Host 的 chat 门禁（[home 进程的 seams](../../packages/home-process/README.zh.md#seams-for-other-packages)），以及启动顺序中的隔离探测。
 - setup 的 reach 问题，以及导入 DeepSeek Harness 的 stock home。setup 将 reach 记录为关闭。
 - Windows 的 DACL 检查（[#48](https://github.com/Delo-Run/delo/issues/48)）：在 Windows 上，目录与受保护文件的检查只查看文件类型。
-- `delorun --version`、`verify`、`doctor`、`logs`、`update`、`recover`、`reach`、`devices`、`export`、`import` 与 `dev`。
+- `delorun --version`、`verify`、`logs`、`update`、`recover`、`reach`、`devices`、`export`、`import` 与 `dev`。
 
 <a id="development"></a>
 

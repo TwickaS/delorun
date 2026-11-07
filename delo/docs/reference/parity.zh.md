@@ -107,4 +107,4 @@ Delo 保留上游的 SDK 及其文档化的运行时选择。
 | 入门预设 | `dsh-v0.2.2-rc.1` 与本树：`standard` 是默认预设（`packages/bundle/web-app/cordis.patch.yml` 第 593 行）。计划中：`ptc`，即 C16 的变更默认值 `agent-preset-registry.config.default` | 计划中：C16 变更默认值；没有开关 ID 或工作包 | 人工检查：第 593 行设定 `standard`，且 C16 变更默认值表列出了计划值。 |
 | `plugin_manager` 读取豁免 | `dsh-v0.2.2-rc.1`：`plugin_manager` 的每个操作都需要 `danger-full-access` 提权；本树的 `readActionsExempt` 开关默认关闭 | 已构建：`plugin_manager_read_exemption`（开关开启场景待录制） | `packages/boot/plugin-manager/tests/tools.spec.ts` |
 | `profile_history` | `dsh-v0.2.2-rc.1`：没有 `history`、`read_config`、`configure`、`undo` 或 `restore` 操作；本树的 `profileHistory` 开关默认关闭 | 已构建：`profile_history`（开关开启场景待录制） | `packages/boot/plugin-manager/tests/tools.spec.ts` |
-| doctor | `dsh-v0.2.2-rc.1`：没有 doctor 应用；本树的 `doctor` 开关默认关闭，因此该应用不运行任何检查，且没有模型能看到它 | 已构建：`doctor`（功能开关；没有开关开启场景） | `packages/boot/doctor/tests/app.spec.ts` |
+| doctor | `dsh-v0.2.2-rc.1`：没有 doctor 应用；本树的 `doctor` 开关默认关闭，因此该应用不运行任何检查，且没有模型能看到它。`delorun doctor` 是独立的 Delo 命令，运行自己的检查，且不触达任何模型 | 已构建：`doctor`（功能开关；没有开关开启场景） | `packages/boot/doctor/tests/app.spec.ts` |

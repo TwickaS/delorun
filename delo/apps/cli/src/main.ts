@@ -27,12 +27,13 @@ import { runSetup, setupCommand } from './setup/index.ts'
 import { startCommand, startForeground } from './start.ts'
 import { statusCommand } from './status.ts'
 import { stopCommand } from './stop.ts'
+import { doctorCommand } from './doctor/index.ts'
 import { logsCommand } from './logs/command.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, logsCommand, pluginCommand, headlessCommand]
+export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, doctorCommand, logsCommand, pluginCommand, headlessCommand]
 
 /**
  * The help text.

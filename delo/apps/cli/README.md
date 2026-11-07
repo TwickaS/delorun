@@ -31,6 +31,7 @@ This app is the `delorun` command. Before any upstream code runs, it resolves an
 | `delorun start [--foreground] [--profile <name>]` | Starts the home process detached from the terminal and waits at most 120 seconds for it to report `running`; `--foreground` runs it in this terminal. Neither opens the studio |
 | `delorun stop [--now] [--profile <name>]` | Stops the home process once running chats end, waiting at most 1,800 seconds; `--now` cancels them first |
 | `delorun status [--profile <name>] [--json]` | Prints the home, the profile, an inherited `DSH_HOME` that `delorun` ignored, and the home process's state, process id, start id, runtime versions, running chats and update in progress; `--json` prints its `status` answer alone |
+| `delorun doctor [--port <n>]` | Checks the home, the Docker engine, the DeepSeek API key's format and the studio's port, one line per check; it contacts no model, starts no container and runs no command except the read-only `docker version` probe |
 | `delorun plugin …` | Upstream's `dsh plugin …`, unchanged, against the Delo home |
 | `delorun headless …` | Upstream's `dsh headless …`, unchanged, against the Delo home |
 
@@ -88,7 +89,7 @@ This build has no runtime store yet, so its home process refuses update requests
 - Start at login (`delorun start --at-login`, `delorun stop --at-login`), `delorun status --follow`, the runtime store's updates and the Host's chat gate ([the home process's seams](../../packages/home-process/README.md#seams-for-other-packages)), and the confinement probes of the start sequence.
 - Setup's reach question and the import of a stock DeepSeek Harness home. Setup records reach as off.
 - The Windows DACL check ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory and protected-file checks look only at the file type.
-- `delorun --version`, `verify`, `doctor`, `logs`, `update`, `recover`, `reach`, `devices`, `export`, `import` and `dev`.
+- `delorun --version`, `verify`, `logs`, `update`, `recover`, `reach`, `devices`, `export`, `import` and `dev`.
 
 ## Development
 
