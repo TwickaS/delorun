@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/docs/reference/parity-baseline.md
 /parity-baseline:
-  en: 606ecd2f2e92b393
-  zh: 39d3964d21ef6059
+  en: 623b853dac9df9c2
+  zh: 4e2b3885e2e647b6
 /parity-baseline/contents:
-  en: 414216b8a1d8bfe8
-  zh: b9acff77f0f26b84
+  en: e8237c4986bb6587
+  zh: 126716a48218b627
 /parity-baseline/reference-host-and-tree:
   en: f1f8538e6362f4b9
   zh: d5d822db0e264066
@@ -51,5 +51,23 @@
   en: 0f92dd025ceed19e
   zh: 26189b3d18892ba5
 /parity-baseline/host-state:
-  en: afae64387b531575
-  zh: 7edcef9a430234cc
+  en: 5aae3acbc13a5714
+  zh: 7a5c07696e2815fa
+/parity-baseline/green-base-on-v5:
+  en: 34f640ba3056b852
+  zh: 8096341ce42156d0
+/parity-baseline/green-base-on-v5/procedure:
+  en: df5ebfa1f24ac485
+  zh: 7583bc10593eacf3
+/parity-baseline/green-base-on-v5/prerequisites:
+  en: 9e5c5c7d4c7dcaa2
+  zh: 32752353a2342cae
+/parity-baseline/green-base-on-v5/results:
+  en: 834241568d7d1a31
+  zh: 71e49a1e5fa8c8b0
+/parity-baseline/green-base-on-v5/exclusion:
+  en: edb139e53f91074e
+  zh: 665e490201ae75ab
+/parity-baseline/green-base-on-v5/contention:
+  en: 4a9788c432404ee7
+  zh: 2edc8c481895b4ae

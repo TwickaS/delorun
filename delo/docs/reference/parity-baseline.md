@@ -2,7 +2,7 @@
 
 English | [中文](parity-baseline.zh.md)
 
-This page records the parity baseline: upstream DeepSeek Harness's own test suites, run on Delo's reference host at the upstream tag `dsh-v0.2.2-rc.1`. It holds two passes, a Node 24 check, the classification of each failure that remains, and the environment and host state those results depend on. Terms follow the [Delo glossary](glossary.md).
+This page records the parity baseline: upstream DeepSeek Harness's own test suites, run on Delo's reference host at the upstream tag `dsh-v0.2.2-rc.1`. It holds two passes, a Node 24 check, the classification of each failure that remains, and the environment and host state those results depend on. It also records the green base on `v5`: the procedure, its prerequisites, its one exclusion and the fixes that made each failing file pass. Terms follow the [Delo glossary](glossary.md).
 
 ## Contents
 
@@ -12,6 +12,7 @@ This page records the parity baseline: upstream DeepSeek Harness's own test suit
 - [Node 24 check](#node-24-check)
 - [Classification of the remaining failures](#classification-of-the-remaining-failures)
 - [Host state](#host-state)
+- [Green base on v5](#green-base-on-v5)
 
 <a id="reference-host-and-tree"></a>
 ## Reference host and tree
@@ -195,5 +196,85 @@ The causes below were not diagnosed further. Each file fails 3 of 3 when run alo
 
 - **WebKit libraries.** The reference host lacks WebKit's GTK and WPE system libraries, so WebKit launches fail in the class (a) files. Chromium resolves fully.
 - **IPv6 loopback.** IPv6 loopback is disabled on the host, so `::1` listeners fail with `EADDRNOTAVAIL`.
-- **Owner decision.** The owner deferred the host fixes for both items on 2026-11-06. The class (a) failures are host-state results, and this page records them as the host stands.
+- **Owner decision.** The owner deferred the host fixes for both items on 2026-11-06. The class (a) failures are host-state results, and this page records them as the host stands. [Issue #58](https://github.com/Delo-Run/delo/issues/58) tracks both fixes.
 - **Load.** Other jobs shared the host during both passes, as described in [Reference host and tree](#reference-host-and-tree). The solo reruns of pass 1 and the class (c) files show load-dependent failures.
+
+<a id="green-base-on-v5"></a>
+## Green base on v5
+
+The green base is `v5` with upstream's unit suite, upstream's recorded-session replay and Delo's full gate passing, and no known failure carried forward: a test that cannot pass is fixed, or excluded by name with its reason recorded here. The run below was taken at `v5` commit `2eb9c53b03` on Node `v24.22.0`; the fixes were made on top of `0b651c0d32`.
+
+### Procedure
+
+On Node 24 (`nvm use 24`), after `pnpm install --frozen-lockfile`, with no other test suite running on the host:
+
+```sh
+DSH_BUILD_CLIENT_PROFILE=official pnpm check:full
+env -u NoDefaultCurrentDirectoryInExePath DSH_TELEMETRY_DISABLED=1 DSH_BUILD_CLIENT_PROFILE=official DSH_COVERAGE_TEST_TIMEOUT_MS=90000 \
+  pnpm run test -t '^(?!.*(?:mock LLM server wire behaviors formats an IPv6 listener as a valid base URL))'
+DSH_EXAMPLE_MODE=lib node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:snapshots --no-cache
+```
+
+- `pnpm run test` runs upstream's own script, `pnpm run build:native-system && vitest run`, and pnpm appends the `-t` argument to it. `pnpm run test -- -t …` forwards the `--` as well, vitest then reads the pattern as file filters, and the exclusion does not apply.
+- Vitest matches `-t` against a test's full name joined with spaces, not against the `>`-separated form its listing prints.
+- A file that fails in the full run is rerun alone. A failure that disappears alone is contention and is recorded under [Contention](#contention); a failure that stays is fixed or excluded.
+
+### Prerequisites
+
+Upstream's CI runs the suite through `pnpm run test`, which gives each spec the first, third and fourth settings below; the reference host's first green-base run called vitest directly and lacked them. The second comes from WSL: the Windows side passes `NoDefaultCurrentDirectoryInExePath` into Linux shells, and upstream's CI never sets it.
+
+| ID | Setting | File that fails without it | Why the spec needs it |
+| --- | --- | --- | --- |
+| P1 | `npm_execpath` names the repository's pnpm | `apps/desktop/tests/macos-notarization-proxy.spec.ts`, 15 tests | The desktop packaging scripts the spec runs build the flock addon through the pnpm that `npm_execpath` names; without it they stop with `flock addon is not built`. |
+| P2 | `NoDefaultCurrentDirectoryInExePath` unset | `packages/subprocess/subprocess-local/tests/spawn-runner.spec.ts`, 1 test | Upstream's Windows command lookup in `runner-launch.ts` reads the variable from the process environment on any platform and then leaves the current directory out of the search roots the spec expects. |
+| P3 | pnpm 11.28.5, the version `packageManager` pins, first on `PATH` | `packages/boot/plugin-manager/tests/manager.spec.ts`, 1 test | The spec's fixture starts `pnpm`; the host's global pnpm 10.34.7 answers the build approval with `restart-required` where the pinned version fails it. |
+| P4 | `PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false` | `scripts/release/pack.spec.ts`, 1 test | pnpm 11 verifies a workspace's dependencies before `pnpm exec` and runs the fixture's `prepare` hook when they look stale, which the spec asserts does not happen. `pnpm run` sets `pnpm_config_verify_deps_before_run=false` for its script and the script's children. |
+
+P4 is a lead decision for the reference host, made on 2026-11-07: the setting reproduces the value `pnpm run test` gives every upstream spec in upstream's CI, so it changes nothing the spec checks. The alternative, excluding `release pack CLI > does not broaden an empty parallel family to the whole workspace` by name, would carry a known failure.
+
+The procedure above provides all four: `pnpm run test` gives P1, P3 and P4, and `env -u` gives P2. Delo's check runner has no lane for upstream's whole unit suite; its lanes get the same settings. `checkEnvironment` in `delo/apps/tools/src/checks/machine.ts` removes P2 with the other Windows-side variables for every check on WSL, and the runner reads P1, P3 and P4 from pnpm for any run that plans a check that runs pnpm or is marked `pnpmScript`, as `tests:upstream-changed` is ([tools README](../../apps/tools/README.md#local-checks)).
+
+### Results
+
+| Suite | Result at `2eb9c53b03` |
+| --- | --- |
+| `pnpm check:full` | 44 passed, 0 failed |
+| Recorded-session replay through the check runner | 9 files; 260 tests passed, 2 skipped |
+| Unit suite, `node_modules/.bin/vitest run` with the exclusion and without the prerequisites | 41 files failed, 2531 passed, 20 skipped; 88 tests failed, 52556 passed, 1 expected fail, 241 skipped; 2 unhandled rejections |
+
+Each failing unit file was rerun alone. 26 files passed alone: their 38 failing tests are contention. 15 files kept failing, with 58 failing tests: 50 that failed in the full run and the rerun, and 8 that failed only in the rerun. The table gives each file's cause and fix.
+
+| File | Class | Cause | Fix |
+| --- | --- | --- | --- |
+| `apps/desktop/tests/macos-notarization-proxy.spec.ts` | prerequisite | Without P1 | The procedure |
+| `scripts/ci-workflow.spec.ts` | Delo change | Delo's repository guard and runner routing in `ci.yml`, `ci-windows.yml`, `ci-master.yml`, `ci-python.yml` and the release, approval and issue workflows | The spec reads guarded fields through `scripts/tests/delo-repository-guard.ts` |
+| `scripts/tests/ci-release-selfhosted.spec.ts` | Delo change | Delo's repository guard in `cua-helper-package.yml` and `release-publish.yml` | As above |
+| `scripts/tests/ci-master-platforms.spec.ts` | Delo change | Delo's repository guard in `build-exe-for-python-sdk.yml`, `ci-python.yml` and `ci-master.yml` | As above; `serial-macos` in `ci-master.yml` returns to upstream's `if: false`, which needs no guard |
+| `scripts/client-bundle-css.spec.ts` | Delo change | Delo's `.woff2` package-asset media type; the spec used `.woff2` as its unsupported asset | The spec uses `.woff` as the unsupported font |
+| `scripts/verify-client-packages.spec.ts` | Delo change | As above | The spec expects the `.woff2` specifier and keeps a `.woff` one uncollected |
+| `scripts/translation-prompt.expected.spec.ts` | Delo change | Delo's rows in `docs/i18n/terminology.md`, which the assembled prompt embeds | The expected output is re-recorded with `DSH_SNAPSHOT=refresh` |
+| `scripts/release/pack.spec.ts` | prerequisite | Without P4 | The procedure |
+| `scripts/desktop-publish-workflow.spec.ts` | Delo change | Delo's repository guard in `desktop-publish.yml` | As for `ci-workflow.spec.ts` |
+| `scripts/ci-compatible-selfhosted.spec.ts` | Delo change | Delo's runner routing in `ci.yml` | As for `ci-workflow.spec.ts`, plus a case that every failover mode runs on `ubuntu-latest` outside upstream's repository |
+| `packages/subprocess/subprocess-local/tests/spawn-runner.spec.ts` | prerequisite | Without P2 | The procedure |
+| `packages/boot/plugin-manager/tests/manager.spec.ts` | prerequisite | Without P3 | The procedure |
+| `packages/subagent/subagent/tests/continuation.spec.ts` | contention | See [Contention](#contention) | None |
+| `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` | contention | See [Contention](#contention) | None |
+| `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` | contention | See [Contention](#contention) | None |
+
+Each upstream spec edit and the helper have a `delo-feature` entry in the divergence ledger.
+
+After the fixes, each of the 15 files ran alone once on Node `v24.22.0` with the prerequisites (`env -u NoDefaultCurrentDirectoryInExePath pnpm exec vitest run <file>`, with the variables of the procedure), and each passed: 800 tests in all, none failed. `server.spec.ts` with the exclusion passed 45 tests, with the excluded one skipped.
+
+### Exclusion
+
+One test is excluded by name: `mock LLM server wire behaviors > formats an IPv6 listener as a valid base URL` in `packages/test-support/llm-mock-server/tests/server.spec.ts`. It fails on every run alone with `Error: listen EADDRNOTAVAIL: address not available ::1`, because IPv6 loopback is disabled on the reference host ([Host state](#host-state)). The exclusion ends when the host fix lands; [issue #58](https://github.com/Delo-Run/delo/issues/58) tracks it and the WebKit libraries.
+
+<a id="contention"></a>
+### Contention
+
+The host is shared with other agents' suites, so these results depend on the load at the time of the run.
+
+- The 26 files that passed alone were rerun while at least one other vitest process was running.
+- `packages/subagent/subagent/tests/continuation.spec.ts` and `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` each failed in the full run and in a rerun that started while other vitest processes were running. Run alone at `2eb9c53b03`, each passed three times out of three (164 and 17 tests); run alone at `0b651c0d32`, each passed once. The host's load average was between 7 and 15 during these runs. Neither commit fails, so there was nothing to bisect; no commit between the tag and `v5` touches either package, and both files are in class (c) at the tag.
+- `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` had two failures in the full run, both of which passed alone, and one 90000 ms timeout in a rerun that started beside another vitest process. Run alone at `0b651c0d32`, with four other vitest processes on the host, it passed 118 tests of 118. It is in class (c) at the tag.

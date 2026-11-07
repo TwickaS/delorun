@@ -2,7 +2,7 @@
 
 [English](parity-baseline.md) | 中文
 
-本页记录对等基线：上游 DeepSeek Harness 自身的测试套件，在 Delo 参考主机上、于上游标签 `dsh-v0.2.2-rc.1` 下的运行结果。本页包含两轮运行、一次 Node 24 核对、每项剩余失败的分类，以及这些结果所依赖的环境与主机状态。术语遵循 [Delo 术语表](glossary.zh.md)。
+本页记录对等基线：上游 DeepSeek Harness 自身的测试套件，在 Delo 参考主机上、于上游标签 `dsh-v0.2.2-rc.1` 下的运行结果。本页包含两轮运行、一次 Node 24 核对、每项剩余失败的分类，以及这些结果所依赖的环境与主机状态。本页还记录 `v5` 上的绿色基线：运行步骤、前置条件、唯一的排除项，以及使每个失败文件通过的修复。术语遵循 [Delo 术语表](glossary.zh.md)。
 
 ## 目录
 
@@ -12,6 +12,7 @@
 - [Node 24 核对](#node-24-check)
 - [剩余失败的分类](#classification-of-the-remaining-failures)
 - [主机状态](#host-state)
+- [v5 上的绿色基线](#green-base-on-v5)
 
 <a id="reference-host-and-tree"></a>
 ## 参考主机与代码树
@@ -195,5 +196,85 @@ WebKit 浏览器启动失败，因为主机缺少 WebKit 的 GTK 与 WPE 系统�
 
 - **WebKit 库。** 参考主机缺少 WebKit 的 GTK 与 WPE 系统库，因此 (a) 类文件中的 WebKit 启动失败。Chromium 可完整解析。
 - **IPv6 loopback。** 主机上 IPv6 loopback 被禁用，因此 `::1` 监听失败，报 `EADDRNOTAVAIL`。
-- **负责人决定。** 负责人于 2026-11-06 推迟了这两项主机修复。(a) 类的失败属于主机状态的结果，本页按主机现状记录。
+- **负责人决定。** 负责人于 2026-11-06 推迟了这两项主机修复。(a) 类的失败属于主机状态的结果，本页按主机现状记录。[议题 #58](https://github.com/Delo-Run/delo/issues/58) 跟踪这两项修复。
 - **负载。** 两轮运行期间主机上还有其他任务，如[参考主机与代码树](#reference-host-and-tree)所述。第一轮的单独重跑以及 (c) 类文件显示出与负载相关的失败。
+
+<a id="green-base-on-v5"></a>
+## v5 上的绿色基线
+
+绿色基线是 `v5`：上游单元测试套件、上游录制会话回放与 Delo 完整门禁均通过，且不带入任何已知失败：无法通过的测试要么被修复，要么按名称排除并在本页记录原因。下列运行于 Node `v24.22.0` 上、在 `v5` 提交 `2eb9c53b03` 处进行；修复是在 `0b651c0d32` 之上完成的。
+
+### 运行步骤
+
+在 Node 24（`nvm use 24`）上，执行 `pnpm install --frozen-lockfile` 之后，且主机上没有其他测试套件运行时：
+
+```sh
+DSH_BUILD_CLIENT_PROFILE=official pnpm check:full
+env -u NoDefaultCurrentDirectoryInExePath DSH_TELEMETRY_DISABLED=1 DSH_BUILD_CLIENT_PROFILE=official DSH_COVERAGE_TEST_TIMEOUT_MS=90000 \
+  pnpm run test -t '^(?!.*(?:mock LLM server wire behaviors formats an IPv6 listener as a valid base URL))'
+DSH_EXAMPLE_MODE=lib node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:snapshots --no-cache
+```
+
+- `pnpm run test` 运行上游自己的脚本 `pnpm run build:native-system && vitest run`，pnpm 会把 `-t` 参数追加到其后。`pnpm run test -- -t …` 会同时转发 `--`，此时 vitest 把该模式读作文件过滤器，排除项便不再生效。
+- Vitest 将 `-t` 与测试的完整名称（以空格连接）匹配，而不是与其列表输出所用的、以 `>` 分隔的形式匹配。
+- 在完整运行中失败的文件会被单独重跑。单独重跑时消失的失败属于资源争用，记录于[资源争用](#contention)之下；仍然失败的则予以修复或排除。
+
+### 前置条件
+
+上游的 CI 通过 `pnpm run test` 运行测试套件，它为每个规范提供下文的第一、第三与第四项设定；参考主机上第一次绿色基线运行直接调用 vitest，因而缺少这些设定。第二项来自 WSL：Windows 一侧把 `NoDefaultCurrentDirectoryInExePath` 传入 Linux shell，而上游的 CI 从不设定它。
+
+| ID | 设定 | 缺少它时失败的文件 | 规范为何需要它 |
+| --- | --- | --- | --- |
+| P1 | `npm_execpath` 指定仓库的 pnpm | `apps/desktop/tests/macos-notarization-proxy.spec.ts`，15 个测试 | 该规范运行的桌面打包脚本通过 `npm_execpath` 所指定的 pnpm 构建 flock addon；缺少它时，脚本会以 `flock addon is not built` 停止。 |
+| P2 | 取消设置 `NoDefaultCurrentDirectoryInExePath` | `packages/subprocess/subprocess-local/tests/spawn-runner.spec.ts`，1 个测试 | 上游在 `runner-launch.ts` 中的 Windows 命令查找，无论在哪个平台，都从进程环境读取该变量，然后把当前目录排除在规范所期望的搜索根之外。 |
+| P3 | 固定版本的 pnpm 11.28.5，即 `packageManager` 所固定的版本，置于 `PATH` 首位 | `packages/boot/plugin-manager/tests/manager.spec.ts`，1 个测试 | 规范的 fixture（测试前置数据）会启动 `pnpm`；主机上的全局 pnpm 10.34.7 会对构建批准返回 `restart-required`，而固定版本则使该批准失败。 |
+| P4 | `PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false` | `scripts/release/pack.spec.ts`，1 个测试 | pnpm 11 在 `pnpm exec` 之前校验工作区的依赖；依赖看似过期时，它会运行 fixture 的 `prepare` 钩子，而规范断言这不会发生。`pnpm run` 为其脚本及脚本的子进程设定 `pnpm_config_verify_deps_before_run=false`。 |
+
+P4 是针对参考主机的牵头人决定，作出于 2026-11-07：该设定重现了 `pnpm run test` 在上游 CI 中为每个上游规范提供的值，因此不改变规范所检查的任何内容。另一种做法是按名称排除 `release pack CLI > does not broaden an empty parallel family to the whole workspace`，但这会带入一个已知失败。
+
+上文的运行步骤提供了全部四项设定：`pnpm run test` 提供 P1、P3 与 P4，`env -u` 提供 P2。Delo 的检查运行器没有运行上游整个单元测试套件的通道，但其各通道获得相同的设定。`delo/apps/tools/src/checks/machine.ts` 中的 `checkEnvironment` 在 WSL 上为每个检查移除 P2，并与其他 Windows 侧变量一并移除；对于规划了运行 pnpm 的检查（或标记为 `pnpmScript` 的检查，如 `tests:upstream-changed`）的任何运行，运行器从 pnpm 读取 P1、P3 与 P4（[工具 README](../../apps/tools/README.zh.md#local-checks)）。
+
+### 结果
+
+| 套件 | `2eb9c53b03` 上的结果 |
+| --- | --- |
+| `pnpm check:full` | 44 通过，0 失败 |
+| 经检查运行器的录制会话回放 | 9 个文件；260 个测试通过，2 个跳过 |
+| 单元测试套件，`node_modules/.bin/vitest run`，带排除项且不带前置条件 | 41 个文件失败，2531 通过，20 跳过；88 个测试失败，52556 通过，1 个预期失败，241 跳过；2 个未处理的 Promise 拒绝 |
+
+每个失败的单元文件都单独重跑。26 个文件单独运行时通过：它们的 38 个失败测试属于资源争用。15 个文件仍然失败，共 58 个失败测试：其中 50 个在完整运行与重跑中都失败，8 个只在重跑中失败。下表给出每个文件的原因与修复。
+
+| 文件 | 类别 | 原因 | 修复 |
+| --- | --- | --- | --- |
+| `apps/desktop/tests/macos-notarization-proxy.spec.ts` | 前置条件 | 缺少 P1 | 运行步骤 |
+| `scripts/ci-workflow.spec.ts` | Delo 改动 | Delo 的仓库守卫，以及 `ci.yml`、`ci-windows.yml`、`ci-master.yml`、`ci-python.yml` 中的运行器路由，还有发布、审批与议题工作流 | 规范通过 `scripts/tests/delo-repository-guard.ts` 读取受守卫的字段 |
+| `scripts/tests/ci-release-selfhosted.spec.ts` | Delo 改动 | Delo 在 `cua-helper-package.yml` 与 `release-publish.yml` 中的仓库守卫 | 同上 |
+| `scripts/tests/ci-master-platforms.spec.ts` | Delo 改动 | Delo 在 `build-exe-for-python-sdk.yml`、`ci-python.yml` 与 `ci-master.yml` 中的仓库守卫 | 同上；`ci-master.yml` 中的 `serial-macos` 恢复为上游的 `if: false`，无需守卫 |
+| `scripts/client-bundle-css.spec.ts` | Delo 改动 | Delo 的 `.woff2` 包资源媒体类型；规范把 `.woff2` 用作不受支持的资源 | 规范改用 `.woff` 作为不受支持的字体 |
+| `scripts/verify-client-packages.spec.ts` | Delo 改动 | 同上 | 规范期望 `.woff2` 说明符，并使一个 `.woff` 说明符保持不被收集 |
+| `scripts/translation-prompt.expected.spec.ts` | Delo 改动 | Delo 在 `docs/i18n/terminology.md` 中的各行，组装好的提示词会嵌入这些行 | 预期输出以 `DSH_SNAPSHOT=refresh` 重新录制 |
+| `scripts/release/pack.spec.ts` | 前置条件 | 缺少 P4 | 运行步骤 |
+| `scripts/desktop-publish-workflow.spec.ts` | Delo 改动 | Delo 在 `desktop-publish.yml` 中的仓库守卫 | 同 `ci-workflow.spec.ts` |
+| `scripts/ci-compatible-selfhosted.spec.ts` | Delo 改动 | Delo 在 `ci.yml` 中的运行器路由 | 同 `ci-workflow.spec.ts`，另加一个用例：在上游仓库之外，每种故障转移模式都运行于 `ubuntu-latest` |
+| `packages/subprocess/subprocess-local/tests/spawn-runner.spec.ts` | 前置条件 | 缺少 P2 | 运行步骤 |
+| `packages/boot/plugin-manager/tests/manager.spec.ts` | 前置条件 | 缺少 P3 | 运行步骤 |
+| `packages/subagent/subagent/tests/continuation.spec.ts` | 资源争用 | 见[资源争用](#contention) | 无 |
+| `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` | 资源争用 | 见[资源争用](#contention) | 无 |
+| `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` | 资源争用 | 见[资源争用](#contention) | 无 |
+
+每项对上游规范的编辑，以及辅助文件，在差异台账中都有一条 `delo-feature` 条目。
+
+修复后，15 个文件中的每一个都在 Node `v24.22.0` 上、带前置条件（`env -u NoDefaultCurrentDirectoryInExePath pnpm exec vitest run <file>`，并使用运行步骤中的变量）单独运行一次，全部通过：共 800 个测试，无一失败。`server.spec.ts` 带排除项运行，通过 45 个测试，被排除的那个测试被跳过。
+
+### 排除项
+
+按名称排除一个测试：`packages/test-support/llm-mock-server/tests/server.spec.ts` 中的 `mock LLM server wire behaviors > formats an IPv6 listener as a valid base URL`。该测试单独运行时每次都因 `Error: listen EADDRNOTAVAIL: address not available ::1` 而失败，原因是参考主机上禁用了 IPv6 loopback（[主机状态](#host-state)）。主机修复落地时，排除项即告结束；[议题 #58](https://github.com/Delo-Run/delo/issues/58) 跟踪该修复与 WebKit 库。
+
+<a id="contention"></a>
+### 资源争用
+
+主机与其他智能体的测试套件共享，因此这些结果取决于运行时的负载。
+
+- 单独通过的 26 个文件，是在至少另有一个 vitest 进程运行时重跑的。
+- `packages/subagent/subagent/tests/continuation.spec.ts` 与 `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` 各自在完整运行中失败，并在其他 vitest 进程运行期间开始的重跑中失败。在 `2eb9c53b03` 上单独运行时，两者各通过 3 次中的 3 次（分别为 164 与 17 个测试）；在 `0b651c0d32` 上单独运行时，两者各通过一次。这些运行期间，主机的平均负载在 7 至 15 之间。两个提交都不失败，因此无需二分查找；标签与 `v5` 之间没有提交触及这两个包，且两个文件在标签处都属于 (c) 类。
+- `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` 在完整运行中有两个失败，单独运行时均通过；在与另一个 vitest 进程同时开始的重跑中，出现一次 90000 ms 超时。在 `0b651c0d32` 上、主机另有四个 vitest 进程运行时单独运行，它通过了全部 118 个测试。该文件在标签处属于 (c) 类。
