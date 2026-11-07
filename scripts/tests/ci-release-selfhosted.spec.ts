@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
+import { upstreamCondition } from './delo-repository-guard.ts'
 
 const root = resolve(import.meta.dirname, '../..')
 const repository = 'deepseek-harness/deepseek-harness'
@@ -185,7 +186,7 @@ it('keeps DSH publication manual with hosted npm jobs and an explicit signed-hel
   expect(Object.keys(publish.on)).toEqual(['workflow_dispatch'])
   for (const [name, job] of Object.entries(publish.jobs)) {
     if (name === 'cua-helper') {
-      expect(job).toEqual({
+      expect({ ...job, if: upstreamCondition(job.if) }).toEqual({
         if: "(startsWith(github.ref, 'refs/tags/dsh-v') || inputs.skip-tag-check) && inputs.cua_run_id == '' && inputs.cua_run_attempt == ''",
         uses: './.github/workflows/cua-helper-package.yml',
         with: { source_ref: '${{ github.ref }}', preset: 'production' },
@@ -201,7 +202,7 @@ it.each([
   ['refs/heads/master', true, '123', '2', false],
   ['refs/tags/dsh-v0.2.1-rc.4', false, '', '2', false],
 ] as const)('selects the helper producer for ref %s, skip=%s, run=%s, attempt=%s', (ref, skip, runId, attempt, expected) => {
-  const expression = workflow('release-publish.yml').jobs['cua-helper']!.if!
+  const expression = upstreamCondition(workflow('release-publish.yml').jobs['cua-helper']!.if)!
   expect(evaluate(expression, { 'github.ref': ref, 'inputs.skip-tag-check': skip,
     'inputs.cua_run_id': runId, 'inputs.cua_run_attempt': attempt })).toBe(expected)
 })
@@ -219,7 +220,7 @@ it.each([
 ] as const)('gates npm packing with helper=%s, run=%s, attempt=%s, cancelled=%s', (result, runId, attempt, cancelled, expected) => {
   const pack = workflow('release-publish.yml').jobs['pack']!
   expect(pack.needs).toBe('cua-helper')
-  expect(evaluate(pack.if!, { 'needs.cua-helper.result': result,
+  expect(evaluate(upstreamCondition(pack.if)!, { 'needs.cua-helper.result': result,
     'inputs.cua_run_id': runId, 'inputs.cua_run_attempt': attempt, cancelled })).toBe(expected)
 })
 

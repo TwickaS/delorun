@@ -2365,6 +2365,41 @@
       "path": "scripts/snapshots/translation-prompt-v4/request-response.expected.json",
       "class": "delo-feature",
       "reason": "Re-recorded with `DSH_SNAPSHOT=refresh`: the assembled translation prompt embeds `docs/i18n/terminology.md`, which carries Delo's terminology rows and its Delo terms table."
+    },
+    {
+      "path": "scripts/tests/delo-repository-guard.ts",
+      "class": "delo-feature",
+      "reason": "Reads Delo's repository guard and runner routing on upstream's workflows back to the conditions and selectors upstream wrote, for upstream's workflow specs; each read fails when the guard is missing."
+    },
+    {
+      "path": "scripts/tests/delo-repository-guard.spec.ts",
+      "class": "delo-feature",
+      "reason": "Covers `scripts/tests/delo-repository-guard.ts`: each guarded form reads back to upstream's text, and a condition or runner selector without Delo's guard is refused."
+    },
+    {
+      "path": "scripts/ci-workflow.spec.ts",
+      "class": "delo-feature",
+      "reason": "Reads the jobs Delo guards or routes to GitHub-hosted runners through `scripts/tests/delo-repository-guard.ts`, so upstream's assertions apply to upstream's conditions and runner selectors and fail when Delo's guard is missing."
+    },
+    {
+      "path": "scripts/ci-compatible-selfhosted.spec.ts",
+      "class": "delo-feature",
+      "reason": "Evaluates upstream's runner selector through `scripts/tests/delo-repository-guard.ts` and adds the case that every failover mode runs on `ubuntu-latest` outside upstream's repository."
+    },
+    {
+      "path": "scripts/desktop-publish-workflow.spec.ts",
+      "class": "delo-feature",
+      "reason": "Reads the conditions of the jobs Delo guards through `scripts/tests/delo-repository-guard.ts`, so upstream's assertions apply to upstream's conditions and fail when Delo's guard is missing."
+    },
+    {
+      "path": "scripts/tests/ci-release-selfhosted.spec.ts",
+      "class": "delo-feature",
+      "reason": "Reads the conditions of the jobs Delo guards through `scripts/tests/delo-repository-guard.ts`, so upstream's assertions apply to upstream's conditions and fail when Delo's guard is missing."
+    },
+    {
+      "path": "scripts/tests/ci-master-platforms.spec.ts",
+      "class": "delo-feature",
+      "reason": "Reads the conditions of the jobs Delo guards through `scripts/tests/delo-repository-guard.ts`, so upstream's assertions apply to upstream's conditions and fail when Delo's guard is missing."
     }
   ],
   "retired": []

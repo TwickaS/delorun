@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import * as yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
+import { upstreamCondition, upstreamRunsOn } from './tests/delo-repository-guard.ts'
 
 function evaluateRunsOn(selector: unknown, context: Record<string, unknown>): unknown {
   if (typeof selector !== 'string') throw new TypeError('Runner selector must be a string')
@@ -409,7 +410,7 @@ describe('CI workflow', () => {
       expect(job['runs-on']).toContain('dsh-win-ci')
       expect(job['runs-on']).toContain('dsh-windows-2025-16core')
       const cores = jobName === 'windows-native-tests' ? 2 : 16
-      expect(evaluateRunsOn(job['runs-on'], { vars: { DSH_CI_FAILOVER_WINDOWS: 'blacksmith' } }))
+      expect(evaluateRunsOn(upstreamRunsOn(String(job['runs-on']), 'windows-latest'), { vars: { DSH_CI_FAILOVER_WINDOWS: 'blacksmith' } }))
         .toBe(`blacksmith-${cores}vcpu-windows-2025`)
       expect(job.if).toBe("github.event_name == 'pull_request'")
     }
@@ -505,7 +506,7 @@ describe('CI workflow', () => {
     expect(report?.run).toContain('Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append')
 
     // serial-windows: master-only standby, self-hosted, non-blocking, lives in ci-master.
-    expect(serialWindows.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
+    expect(upstreamCondition(String(serialWindows.if))).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
     expect(serialWindows['runs-on']).toEqual(['self-hosted', 'dsh-win-ci', 'windows'])
     expect(serialWindows.name).toBe('serial / windows (self-hosted standby)')
     // Its store must share the ReFS workspace volume for clone; the install
@@ -570,7 +571,7 @@ describe('CI workflow', () => {
       expect(job['runs-on'], `${jobName} runs-on must use the Linux failover switch`).toContain('DSH_CI_FAILOVER_LINUX')
       expect(job['runs-on'], `${jobName} runs-on must not use the Windows failover switch`).not.toContain('DSH_CI_FAILOVER_WINDOWS')
       expect(job['runs-on']).toContain('vm-backup')
-      expect(evaluateRunsOn(job['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: 'blacksmith' } }))
+      expect(evaluateRunsOn(upstreamRunsOn(String(job['runs-on']), 'ubuntu-latest'), { vars: { DSH_CI_FAILOVER_LINUX: 'blacksmith' } }))
         .toBe(`blacksmith-${jobName === 'node-24' ? 8 : 16}vcpu-ubuntu-2404`)
     }
     expect(aggregate['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
@@ -582,9 +583,9 @@ describe('CI workflow', () => {
     // blacksmith branch is standalone: it must not fall through to the
     // self-hosted pool when the two values are mutually exclusive.
     const selectors = {
-      linux: node24['runs-on'] as string,
-      linuxAggregate: aggregate['runs-on'] as string,
-      windows: windowsBuild['runs-on'] as string,
+      linux: upstreamRunsOn(node24['runs-on'] as string, 'ubuntu-latest'),
+      linuxAggregate: upstreamRunsOn(aggregate['runs-on'] as string, 'ubuntu-latest'),
+      windows: upstreamRunsOn(windowsBuild['runs-on'] as string, 'windows-latest'),
     }
     const evaluate = (expression: string, vars: Record<string, string>, login = 'maintainer'): unknown => {
       return evaluateRunsOn(expression, {
@@ -682,10 +683,10 @@ describe('CI workflow', () => {
 
     // The shared self-hosted pool is not an idle runner, so only the
     // Blacksmith leg moves the benchmarks off hosted Linux.
-    expect(evaluateRunsOn(benchmark['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: 'blacksmith' } }))
+    expect(evaluateRunsOn(upstreamRunsOn(String(benchmark['runs-on']), 'ubuntu-latest'), { vars: { DSH_CI_FAILOVER_LINUX: 'blacksmith' } }))
       .toBe('blacksmith-4vcpu-ubuntu-2404')
     for (const mode of ['', 'selfhosted', 'unexpected']) {
-      expect(evaluateRunsOn(benchmark['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: mode } })).toBe('ubuntu-24.04')
+      expect(evaluateRunsOn(upstreamRunsOn(String(benchmark['runs-on']), 'ubuntu-latest'), { vars: { DSH_CI_FAILOVER_LINUX: mode } })).toBe('ubuntu-24.04')
     }
     expect(JSON.stringify(benchmark.steps)).not.toContain('DSH_CI_FAILOVER_LINUX')
     expect(benchmark.if).toBe("github.event_name == 'pull_request'")
@@ -785,13 +786,14 @@ describe('CI workflow', () => {
       ['workflow_dispatch', 'refs/heads/topic', 'larger-runner-benchmark', false],
       ['workflow_dispatch', 'refs/heads/topic', 'consolidated-runner-benchmark', false],
     ] as const) {
-      expect(runInNewContext(wine.if, { github: { event_name: event, ref }, inputs: { suite } }, { timeout: 1000 })).toBe(expected)
+      expect(runInNewContext(upstreamCondition(wine.if)!, { github: { event_name: event, ref }, inputs: { suite } }, { timeout: 1000 }))
+        .toBe(expected)
     }
     const enabled = Object.entries(master.jobs).filter(([, job]) => {
       if (!isRecord(job)) throw new TypeError('CI master jobs must be objects')
       if (typeof job.if === 'boolean') return job.if
       if (typeof job.if !== 'string') throw new TypeError('CI master jobs must define trigger conditions')
-      return runInNewContext(job.if, { github: { event_name: 'workflow_dispatch', ref: 'refs/heads/topic' }, inputs: { suite: 'wine' } }, { timeout: 1000 }) === true
+      return runInNewContext(upstreamCondition(job.if)!, { github: { event_name: 'workflow_dispatch', ref: 'refs/heads/topic' }, inputs: { suite: 'wine' } }, { timeout: 1000 }) === true
     }).map(([name]) => name)
     expect(enabled).toEqual(['windows'])
   })
@@ -840,7 +842,7 @@ describe('CI workflow', () => {
       if (!isRecord(job)) throw new TypeError(`${name} must be defined`)
       expect(job.concurrency).toBeUndefined()
       // Standby drills remain post-merge work, but share run cancellation.
-      expect(job.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
+      expect(upstreamCondition(String(job.if))).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
     }
 
     // Pin the post-merge runtime, Wine, and standby inventory.
@@ -855,7 +857,7 @@ describe('CI workflow', () => {
         if (job.if === undefined) return true // unconditional: runs on every event
         if (job.if === false) return false // `if: false` parses as a boolean
         if (typeof job.if !== 'string') return true // unrecognized shape: surface it
-        return !NOT_PUSH_REACHABLE.has(job.if.trim())
+        return !NOT_PUSH_REACHABLE.has(upstreamCondition(job.if)!.trim())
       })
       .map(([name]) => name)
       .sort()
@@ -918,7 +920,7 @@ describe('CI workflow', () => {
       throw new TypeError('CI Python aggregate must define required job dependencies')
     }
 
-    expect(pythonRuntime).toMatchObject({
+    expect({ ...pythonRuntime, if: upstreamCondition(String(pythonRuntime.if)) }).toMatchObject({
       if: "github.event_name == 'pull_request'",
       name: 'python runtime / release-shaped matrix',
       uses: './.github/workflows/build-exe-for-python-sdk.yml',
@@ -946,7 +948,7 @@ describe('CI workflow', () => {
       ['push', 'ssh-helper', false], ['pull_request', 'ssh-helper', false],
       ['workflow_dispatch', 'larger-runner-benchmark', false], ['workflow_dispatch', 'ssh-helper', true],
     ] as const) {
-      expect(runInNewContext(master.if, { github: { event_name: event, ref: 'refs/heads/master' }, inputs: { suite } }, { timeout: 1000 })).toBe(expected)
+      expect(runInNewContext(upstreamCondition(master.if)!, { github: { event_name: event, ref: 'refs/heads/master' }, inputs: { suite } }, { timeout: 1000 })).toBe(expected)
     }
     expect(master.with).toEqual({ targets: 'node24-linux-x64,node24-linux-arm64,node24-macos-arm64,node24-macos-x64' })
     const workflow = loadWorkflow('.github/workflows/build-exe-for-ssh-helper.yml')
@@ -973,7 +975,7 @@ describe('CI workflow', () => {
     expect(workflowJob(publish, 'build')).toMatchObject({ needs: 'validate', with: { release: true } })
     const verify = workflowJob(publish, 'verify')
     expect(verify.needs).toEqual(['validate', 'build'])
-    expect(verify).not.toHaveProperty('if')
+    expect(upstreamCondition(String(verify.if))).toBeUndefined()
     expect(verify).not.toHaveProperty('permissions')
     if (!Array.isArray(verify.steps)) throw new Error('Release verification must define steps')
     const verification = verify.steps.findIndex(step => isRecord(step) && String(step.run).includes('scripts/ssh-helper/release.ts'))
@@ -982,9 +984,10 @@ describe('CI workflow', () => {
     expect(checksums).toBeGreaterThan(verification)
     expect(verify.steps[verification]).not.toHaveProperty('continue-on-error', true)
     const publication = workflowJob(publish, 'publish')
-    expect(publication).toMatchObject({ if: 'inputs.publish', needs: ['validate', 'verify'], permissions: { contents: 'write' } })
+    expect({ ...publication, if: upstreamCondition(String(publication.if)) }).toMatchObject({ if: 'inputs.publish', needs: ['validate', 'verify'], permissions: { contents: 'write' } })
     for (const requested of [false, true]) {
-      expect(runInNewContext(String(publication.if), { inputs: { publish: requested } }, { timeout: 1000 })).toBe(requested)
+      expect(runInNewContext(upstreamCondition(String(publication.if))!, { inputs: { publish: requested } }, { timeout: 1000 }))
+        .toBe(requested)
     }
   })
 
@@ -1178,13 +1181,13 @@ describe('Python release workflows', () => {
     })
     expect(authorize.run).toContain('[ "$REPOSITORY" = "$PYPI_PUBLISHER_REPOSITORY" ]')
     expect(validateSteps).toContain('100000000')
-    expect(publishRuntime).toMatchObject({
+    expect({ ...publishRuntime, if: upstreamCondition(String(publishRuntime.if)) }).toMatchObject({
       if: "github.event_name == 'workflow_dispatch' && inputs.publish",
       needs: 'validate',
       environment: 'pypi-runtime',
       permissions: { contents: 'read', 'id-token': 'write' },
     })
-    expect(publishSdk).toMatchObject({
+    expect({ ...publishSdk, if: upstreamCondition(String(publishSdk.if)) }).toMatchObject({
       if: "github.event_name == 'workflow_dispatch' && inputs.publish",
       needs: ['validate', 'publish-runtime'],
       environment: 'pypi',
@@ -1428,7 +1431,7 @@ describe('Weighted approval workflow', () => {
       group: "weighted-approval-${{ (github.event.pull_request.number || github.event.issue.number) && format('weighted-approval-review-event:{0}', github.event.pull_request.number || github.event.issue.number) || github.event.workflow_run.display_title }}",
       'cancel-in-progress': false,
     })
-    expect(job).toMatchObject({
+    expect({ ...job, if: upstreamCondition(String(job.if)) }).toMatchObject({
       if: "(github.event_name != 'pull_request_target' || github.event.pull_request.state == 'open') && "
         + "(github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') && "
         + "(github.event_name != 'issue_comment' || (github.event.issue.pull_request && github.event.issue.state == 'open' &&\n"
@@ -1560,7 +1563,7 @@ describe('Issue lifecycle workflow', () => {
     expect(preflightStep?.run).toContain('if [ -f .github/issue-management/selective-preflight.json ]; then')
     expect(preflightStep?.run).toContain('node .github/issue-management/policy.mjs pr-preflight')
     expect(preflightStep?.if).toBeUndefined()
-    expect(policyJob.if).toBeUndefined()
+    expect(upstreamCondition(String(policyJob.if))).toBeUndefined()
     expect(validateStep?.if).toBe("${{ steps.preflight.outputs.legacy-automated != 'true' }}")
 
     expect(tokenStep).toMatchObject({

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import yaml from 'js-yaml'
 import { expect, it } from 'vitest'
+import { upstreamCondition } from './tests/delo-repository-guard.ts'
 
 const workflow = yaml.load(readFileSync(resolve(import.meta.dirname, '../.github/workflows/desktop-publish.yml'), 'utf8')) as {
   on: Record<string, unknown>
@@ -34,11 +35,11 @@ it('selects packages manually and gates production secrets with the production E
     package_run_attempt: { type: 'string', required: false, default: '' },
   } })
   expect(workflow.permissions).toEqual({ contents: 'read', actions: 'read' })
-  expect(workflow.jobs.route?.if).toBeUndefined()
+  expect(upstreamCondition(workflow.jobs.route?.if)).toBeUndefined()
   const publish = workflow.jobs.publish!
   expect(publish.defaults).toBeUndefined()
   expect(publish.steps.find(step => step.id === 'key')?.run).toBe('node apps/desktop/scripts/read-desktop-app-key.mjs')
-  expect(publish.if).toBeUndefined()
+  expect(upstreamCondition(publish.if)).toBeUndefined()
   expect(publish['runs-on']).toEqual(['self-hosted', '${{ needs.route.outputs.runner }}'])
   expect(publish.environment).toBe("${{ needs.prepare.outputs.preset == 'production' && 'desktop-production' || 'desktop-test' }}")
   const ids = publish.steps.map(step => step.id)

@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm'
 import * as yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { BUILD_BACKED_NODE_COMPAT_VERSION } from './run-gates.ts'
+import { UPSTREAM_REPOSITORY, upstreamRunsOn } from './tests/delo-repository-guard.ts'
 
 interface Step {
   name?: string
@@ -43,11 +44,11 @@ function evaluate(expression: string, context: Record<string, unknown>): unknown
   }, { timeout: 1000 })
 }
 
-function route(options: { mode?: string; author?: string; repository?: string; fork?: boolean; actor?: string } = {}): unknown {
-  return evaluate(job['runs-on'], {
+function route(options: { mode?: string; author?: string; repository?: string; fork?: boolean; actor?: string } = {}, selector = upstreamRunsOn(job['runs-on'], 'ubuntu-latest'), repository = 'deepseek-harness/deepseek-harness'): unknown {
+  return evaluate(selector, {
     vars: { DSH_CI_FAILOVER_LINUX: options.mode ?? 'selfhosted' },
     github: {
-      repository: 'deepseek-harness/deepseek-harness',
+      repository,
       actor: options.actor ?? 'maintainer',
       event: { pull_request: {
         user: { login: options.author ?? 'maintainer' },
@@ -78,6 +79,13 @@ describe('Node compatibility self-hosted routing', () => {
     expect(route({ repository: 'outsider/fork', fork: false })).toBe('ubuntu-latest')
     expect(route({ fork: true })).toBe('ubuntu-latest')
     expect(route({ repository: '' })).toBe('ubuntu-latest')
+  })
+
+  it('routes every case to GitHub-hosted Linux outside upstream\'s repository', () => {
+    for (const mode of ['selfhosted', 'blacksmith', '']) {
+      expect(route({ mode }, job['runs-on'], 'Delo-Run/delo')).toBe('ubuntu-latest')
+      expect(route({ mode, repository: UPSTREAM_REPOSITORY }, job['runs-on'], UPSTREAM_REPOSITORY)).toEqual(route({ mode, repository: UPSTREAM_REPOSITORY }, undefined, UPSTREAM_REPOSITORY))
+    }
   })
 
   it('preserves the supported version jobs and their concurrency', () => {
