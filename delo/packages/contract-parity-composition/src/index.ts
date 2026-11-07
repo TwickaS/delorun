@@ -227,6 +227,24 @@ export const PARITY_SWITCHES = [
       'packages/shell/tool-pwsh/src/index.ts',
     ],
   },
+  {
+    id: 'sandbox_protected_reads',
+    state: 'built',
+    registeredBy: 'Delo edit of upstream fs search tools, the protected-read fence',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delo-sandbox-protected-reads',
+    field: {
+      module: '@deepseek-ai/dsh-tool-fs-search',
+      source: 'packages/fs/tool-fs-search/src/index.ts',
+      key: 'protectedReads',
+    },
+    sources: [
+      'packages/fs/tool-fs-search/src/glob.ts',
+      'packages/fs/tool-fs-search/src/grep.ts',
+    ],
+  },
 ] as const satisfies readonly ParitySwitchEntry[]
 
 /** One registry entry, as declared. */

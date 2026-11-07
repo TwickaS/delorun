@@ -2750,6 +2750,11 @@
       "path": "packages/sandbox/sandbox-local/tests/landlock-parity.spec.ts",
       "class": "delo-feature",
       "reason": "Protected home (C1), review of #66: with `/tmp` mocked to resolve elsewhere, an unprotected Landlock profile passes `/tmp` as written, as upstream does, and a protected one grants the resolved path."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/src/index.ts",
+      "class": "security",
+      "reason": "Protected home, read fence (review of #66): adds the `Config` field `protectedReads`, the switch field of the protected-read fence (Delo's C16 switch `sandbox_protected_reads`); the tools honour the sandbox provider's protected reads only while it is on. Lead verdict: kept; the field gates the search tools's honouring of the provider's protected reads, its default false keeps a bare profile at stock behaviour, the parity composition rests on that default, and the switch-state specs prove both sides."
     }
   ],
   "retired": []

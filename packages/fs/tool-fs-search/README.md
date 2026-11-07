@@ -54,11 +54,12 @@ Routine budgets stay out of the model-facing schema: a model that needs surround
 
 ### Configuration
 
-`sampleOverCapGlobResults` is required; the remaining keys are optional search caps with the defaults below.
+`sampleOverCapGlobResults` is required; the remaining keys are optional, with the defaults below.
 
 | Key | Default | Meaning |
 |---|---|---|
 | `sampleOverCapGlobResults` | none (required) | `true` samples an over-cap `glob` page across top-level entries; `false` keeps the modification-time-ordered head |
+| `protectedReads` | `false` | Whether the tools honour the sandbox provider's protected reads (see [Protected reads](#protected-reads)) |
 | `globMaxResults` | `100` | Max paths one `glob` call shows inline |
 | `grepMaxMatches` | `250` | Max flat matches one `grep` call retains inline; later matches go to the formatted spill artifact |
 | `grepMaxLineBytes` | `2000` | Byte cap per matched-line preview, preserving UTF-8 boundaries |
@@ -70,13 +71,18 @@ Routine budgets stay out of the model-facing schema: a model that needs surround
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-fs-search) is the exhaustive source for every accepted field and its JSDoc.
 
+<a id="protected-reads"></a>
+### Protected reads
+
+The optional `protectedReads` key gates whether the tools honour the mounted `ctx.sandbox` provider's protected reads. It defaults to `false`, and both tools keep stock behaviour: they search everywhere the session reaches, even when the provider reports protected reads. Delo's default composition turns it on. With it `true`, a search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under the protected home, outside its readable entries, are left out of a wider search, unless the call runs under `danger-full-access`.
+
 ### Deployment requirement
 
 Node deployments receive the `@vscode/ripgrep` platform package on supported macOS, Linux, and Windows targets; Python SDK wheels copy the target-native binary beside the single-file runtime as a `-rg` sidecar. No carrier requires a host `rg`. Returned paths are displayed relative to the resolved workdir (the calling session's cwd when present) and are follow-up-readable with `read` only when that workdir and the filesystem root are the same workspace.
 
 ### Failures and recovery
 
-Search failures carry the package-owned codes `SEARCH_INVALID_PATTERN` (ripgrep rejected the regex or glob), `SEARCH_FAILED` (a failed launch, inaccessible target, signal kill, or malformed `--json` output), `SEARCH_RAW_OUTPUT_OVERFLOW` (raw output over the cap), and `SEARCH_ABORTED` (cooperative timeout or caller cancellation). When the mounted `ctx.sandbox` provider reports `protectedReads`, a search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under it, outside its readable entries, are left out of a wider search, unless the call runs under `danger-full-access`. Exit 0 is success with results and exit 1 is a successful empty search; model argument mistakes stay ordinary tool argument errors.
+Search failures carry the package-owned codes `SEARCH_INVALID_PATTERN` (ripgrep rejected the regex or glob), `SEARCH_FAILED` (a failed launch, inaccessible target, signal kill, or malformed `--json` output), `SEARCH_RAW_OUTPUT_OVERFLOW` (raw output over the cap), and `SEARCH_ABORTED` (cooperative timeout or caller cancellation). With the `protectedReads` config on, the sandbox provider's protected reads add `SEARCH_SANDBOX_DENIED` and leave the protected paths out of a wider search ([Protected reads](#protected-reads)). Exit 0 is success with results and exit 1 is a successful empty search; model argument mistakes stay ordinary tool argument errors.
 
 -----
 

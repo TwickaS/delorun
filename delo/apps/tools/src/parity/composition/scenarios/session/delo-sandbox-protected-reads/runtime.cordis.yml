@@ -1,0 +1,17 @@
+# C16 switch sandbox_protected_reads on: glob and grep honour the sandbox
+# provider's protected reads — a search rooted under the protected home fails
+# with SEARCH_SANDBOX_DENIED and results under it drop from a wider search.
+# The row replaces tool-fs-search's config, so it repeats the over-cap
+# sampling choice the bundles set.
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+    protectedReads: true
+# Pins the corpus model. model.cordis.yml pins the model only when a primary Session
+# exists, so a first record needs this row.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

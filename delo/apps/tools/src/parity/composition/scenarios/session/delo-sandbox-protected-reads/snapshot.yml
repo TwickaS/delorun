@@ -1,0 +1,8 @@
+version: 1
+scenario: delo-sandbox-protected-reads
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delo-sandbox-protected-reads
+  pin: true

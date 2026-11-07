@@ -267,6 +267,7 @@ A patch row replaces its entry's whole `config` and reaches only entries of the 
 | `plugin_manager_read_exemption`, `profile_history` | The overlay row `tool-plugin-manager`, `name: '@deepseek-ai/dsh-plugin-manager/tools'`, sets `readActionsExempt: false` and `profileHistory: false`. |
 | `preset_inspect` | Config default `false`. The row sits in each Web preset's plugin list, which a patch reaches only by replacing the whole preset row. |
 | `container_denial_marker` | Config default `false`. The bundles and the root configurations set `sandbox-policy`'s mode and workspace root, which an overlay row would erase. |
+| `sandbox_protected_reads` | Config default `false`. The bundles set the search tools' over-cap sampling choice, which an overlay row would erase. |
 | `doctor` | Config default `false`. Only the `doctor` profile mounts the app, and the replay starts no doctor process. |
 | `studio_additions` | Config default `false` of `@delo/plugin-main-chat`'s `studioAdditions`. No shipped profile or bundle mounts the main chat yet. |
 
@@ -289,6 +290,7 @@ The overlay also mounts [`@delo/bundle-local`](../../packages/bundle-local/READM
 | `instruction_layer_consent` | planned | none | on | off | yes |
 | `mcp_add_consent` | planned | none | on | off | yes |
 | `container_denial_marker` | built | `@deepseek-ai/dsh-sandbox-policy` `containerDenialMarker` | on | off | yes |
+| `sandbox_protected_reads` | built | `@deepseek-ai/dsh-tool-fs-search` `protectedReads` | on | off | yes |
 
 The default column is the value in Delo's default composition; each built field's schema default is the parity value.
 
@@ -318,7 +320,7 @@ It also accepts any contribution in a listed source file, so a second, unswitche
 
 Each model-visible built switch has a switch-on scenario `snapshots/<profile>/delo-<id>` whose `runtime.cordis.yml` sets only that one switch to its non-parity value, plus the scenario-local `agent-default-model` pin that selects the corpus model `deepseek-v4-flash`. Once recorded, `parity-replay` replays it with the rest of the corpus under the overlay, so the switch under test is the only behavioural difference from the parity composition. A Web scenario runs through an e2e driver under `apps/web/tests`, which turns `preset_inspect` on with `launchWebScaffold`'s `presetInspect` option and, on replay, selects the same model through the agent default model.
 
-Four of the five switch-on scenarios are recorded: `session/delo-plugin-manager-read-exemption`, `session/delo-profile-history`, `session/delo-container-denial-marker` and `web/delo-preset-inspect`. Their directories are under `snapshots/`, and they replay keyless with and without the overlay (the Web scenario through `test:web:built`). The fifth, `web/delo-studio-additions`, is not recorded: its `snapshot.yml` stays under [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/), its driver is not yet written, and `parity-switches` reports it as `pending recording`.
+Four of the six switch-on scenarios are recorded: `session/delo-plugin-manager-read-exemption`, `session/delo-profile-history`, `session/delo-container-denial-marker` and `web/delo-preset-inspect`. Their directories are under `snapshots/`, and they replay keyless with and without the overlay (the Web scenario through `test:web:built`). The other two are not recorded: `web/delo-studio-additions` has no driver yet, and `session/delo-sandbox-protected-reads` waits for its recording. Both keep their configuration under [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/), and `parity-switches` reports them as `pending recording`.
 
 To record one, move its directory to `snapshots/<profile>/`, run upstream's record command for that scenario without `DSH_SNAPSHOT_PATCH`, review the outputs, and remove `input.task` once the Session fixture carries the task. A recording reads its task from a Session fixture already in the scenario directory when one exists, so move any earlier fixture out before recording with a changed `input.task`.
 

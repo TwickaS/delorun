@@ -340,7 +340,7 @@ describe('search tools and the sandbox provider\'s protected home', () => {
     await ctx.plugin(NativeToolExecutor)
     await ctx.plugin(LocalSubprocessRuntime)
     await ctx.plugin(ProtectingProvider)
-    await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: true })
+    await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: true, protectedReads: true })
   })
 
   afterEach(async () => {
@@ -389,5 +389,54 @@ describe('search tools and the sandbox provider\'s protected home', () => {
   it('searches under the home when the provider protects nothing', async () => {
     ProtectingProvider.reads = undefined
     expect(text(await call('grep', { pattern: 'needle', path: '.delo' }, agent()))).toContain('needle secret')
+  })
+})
+
+describe('the protectedReads switch (C16 sandbox_protected_reads)', () => {
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'dsh-search-switch-'))
+    const home = join(dir, '.delo')
+    await mkdir(join(home, 'secrets'), { recursive: true })
+    await mkdir(join(dir, 'sub'))
+    await writeFile(join(home, 'secrets', 'key.txt'), 'needle secret\n')
+    await writeFile(join(dir, 'sub', 'work.txt'), 'needle work\n')
+    const canonical = await realpath(dir)
+    ProtectingProvider.reads = { roots: [join(canonical, '.delo')], readable: [] }
+    ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(LocalSubprocessRuntime)
+    await ctx.plugin(ProtectingProvider)
+  })
+
+  afterEach(async () => {
+    ProtectingProvider.reads = undefined
+    await ctx.fiber.dispose()
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('keeps stock behaviour with the field false (the default): protected paths stay in the results and a protected root is searched', async () => {
+    await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: true })
+    const globbed = text(await call('glob', { pattern: '**/*.txt' }, agent()))
+    expect(globbed).toContain(join('.delo', 'secrets', 'key.txt'))
+    expect(globbed).toContain(join('sub', 'work.txt'))
+    // A protected root neither fails nor filters with the switch off (grep skips hidden
+    // directories, so a workspace-wide grep never lists the home in either state).
+    expect(text(await call('grep', { pattern: 'needle', path: '.delo' }, agent()))).toContain('needle secret')
+    expect(text(await call('glob', { pattern: '**/*', path: '.delo' }, agent()))).toContain(join('secrets', 'key.txt'))
+  })
+
+  it('drops protected paths and refuses a protected root with the field true', async () => {
+    await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: true, protectedReads: true })
+    const globbed = text(await call('glob', { pattern: '**/*.txt' }, agent()))
+    expect(globbed).toContain(join('sub', 'work.txt'))
+    expect(globbed).not.toContain('key.txt')
+    const grepped = text(await call('grep', { pattern: 'needle' }, agent()))
+    expect(grepped).toContain('needle work')
+    expect(grepped).not.toContain('needle secret')
+    expect(await call('glob', { pattern: '**/*', path: '.delo' }, agent())).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
+    expect(await call('grep', { pattern: 'needle', path: '.delo' }, agent())).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
   })
 })

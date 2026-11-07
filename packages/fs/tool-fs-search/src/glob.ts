@@ -40,6 +40,8 @@ export const GLOB_VCS_EXCLUDES: readonly string[] = ['.git', '.svn', '.hg', '.bz
 export interface GlobToolCaps {
   /** Whether over-cap pages are sampled across top-level entries instead of taking the modification-time head. */
   sampleOverCapGlobResults: boolean
+  /** Whether the tool honours the sandbox provider's `protectedReads` (the `protectedReads` config). */
+  protectedReads: boolean
   /** Max paths retained inline; later paths go to the formatted spill file. */
   maxResults: number
   /** Max bytes of serialized `presentationMeta`; trailing paths drop past it. */
@@ -352,7 +354,7 @@ export function applyGlobTool(ctx: Context, caps: GlobToolCaps): void {
       const input = parseGlobArgs(args)
       const run = await runRipgrep(ctx, exec, 'glob', buildGlobCommand(input), caps.rawOutputMaxBytes, caps.graceMs, caps.stderrMaxBytes)
       const root = input.path === undefined ? '.' : toWorkdirRelative(input.path, run.workdir)
-      const keep = protectedSearchFilter(ctx, exec, 'glob', run.workdir, input.path)
+      const keep = protectedSearchFilter(ctx, exec, 'glob', run.workdir, input.path, caps.protectedReads)
       if (run.noMatches) return { root, paths: [] }
 
       const all: string[] = []

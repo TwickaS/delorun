@@ -54,11 +54,12 @@ kind: "package-reference"
 
 ### 配置
 
-`sampleOverCapGlobResults` 为必填；其余键是可选的搜索上限，默认值如下。
+`sampleOverCapGlobResults` 为必填；其余键为可选项，默认值如下。
 
 | 键 | 默认值 | 含义 |
 |---|---|---|
 | `sampleOverCapGlobResults` | 无（必填） | `true` 在顶层条目之间对超过上限的 `glob` 页面采样；`false` 保留按修改时间排序的前部 |
+| `protectedReads` | `false` | 工具是否遵循沙箱提供方的受保护读取（见[受保护读取](#protected-reads)） |
 | `globMaxResults` | `100` | 一次 `glob` 调用内联展示的最大路径数 |
 | `grepMaxMatches` | `250` | 一次 `grep` 调用内联保留的最大平铺匹配数；后续匹配写入格式化 spill 产物 |
 | `grepMaxLineBytes` | `2000` | 每条匹配行预览的字节上限，保留 UTF-8 边界 |
@@ -70,13 +71,18 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-fs-search)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
+<a id="protected-reads"></a>
+### 受保护读取
+
+可选的 `protectedReads` 键决定两个工具是否遵循所挂载 `ctx.sandbox` 提供方的受保护读取。默认值为 `false`，两个工具保持 stock 行为：即使提供方报告了受保护读取，它们也会搜索会话可达的任何位置。Delo 的默认组合会将其开启。为 `true` 时，以受保护主目录或到达它的其他路径为根的搜索以 `SEARCH_SANDBOX_DENIED` 失败，范围更大的搜索会略去受保护主目录之下、可读条目之外的结果，除非该调用在 `danger-full-access` 下运行。
+
 ### 部署要求
 
 Node 部署在受支持的 macOS、Linux 与 Windows 目标上获得 `@vscode/ripgrep` 平台包；Python SDK 的 wheel 包把目标原生二进制复制到单文件运行时旁，作为 `-rg` 伴随文件。两种载体均不要求宿主安装 `rg`。返回路径相对于解析后的工作目录显示（有会话 cwd 时使用会话 cwd），只有该工作目录与文件系统根目录是同一工作区时，才能用 `read` 继续读取。
 
 ### 失败与恢复
 
-搜索失败携带本包定义的错误码：`SEARCH_INVALID_PATTERN`（ripgrep 拒绝正则或 glob）、`SEARCH_FAILED`（启动失败、目标不可访问、信号终止或 `--json` 输出格式错误）、`SEARCH_RAW_OUTPUT_OVERFLOW`（原始输出超过上限）与 `SEARCH_ABORTED`（协作式超时或调用方取消）。当挂载的 `ctx.sandbox` 提供方报告 `protectedReads` 时，以受保护主目录或到达它的其他路径为根的搜索以 `SEARCH_SANDBOX_DENIED` 失败，范围更大的搜索会略去其下、可读条目之外的结果，除非该调用在 `danger-full-access` 下运行。退出 0 表示成功且有结果，退出 1 表示成功的空搜索；模型参数错误仍是普通工具参数错误。
+搜索失败携带本包定义的错误码：`SEARCH_INVALID_PATTERN`（ripgrep 拒绝正则或 glob）、`SEARCH_FAILED`（启动失败、目标不可访问、信号终止或 `--json` 输出格式错误）、`SEARCH_RAW_OUTPUT_OVERFLOW`（原始输出超过上限）与 `SEARCH_ABORTED`（协作式超时或调用方取消）。`protectedReads` 配置开启时，沙箱提供方的受保护读取会添加 `SEARCH_SANDBOX_DENIED`，并把受保护路径从范围更大的搜索中略去（见[受保护读取](#protected-reads)）。退出 0 表示成功且有结果，退出 1 表示成功的空搜索；模型参数错误仍是普通工具参数错误。
 
 -----
 

@@ -268,6 +268,7 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:web-changed
 | `plugin_manager_read_exemption`、`profile_history` | 覆盖层的 `tool-plugin-manager` 行（`name: '@deepseek-ai/dsh-plugin-manager/tools'`）设置 `readActionsExempt: false` 与 `profileHistory: false`。 |
 | `preset_inspect` | Config 默认值 `false`。该行位于每个 Web preset 的插件列表中，patch 只有替换整个 preset 行才能到达它。 |
 | `container_denial_marker` | Config 默认值 `false`。bundle 与根配置设置了 `sandbox-policy` 的模式与工作区根目录，覆盖层的一行会抹掉它们。 |
+| `sandbox_protected_reads` | Config 默认值 `false`。bundle 设置了搜索工具的超过上限采样选择，覆盖层的一行会抹掉它。 |
 | `doctor` | Config 默认值 `false`。只有 `doctor` profile 挂载该应用，回放不启动 doctor 进程。 |
 | `studio_additions` | Config 默认值 `false`，属于 `@delo/plugin-main-chat` 的 `studioAdditions`。尚无已发布的 profile 或 bundle 挂载主对话。 |
 
@@ -290,6 +291,7 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:web-changed
 | `instruction_layer_consent` | 计划中 | 无 | 开 | 关 | 是 |
 | `mcp_add_consent` | 计划中 | 无 | 开 | 关 | 是 |
 | `container_denial_marker` | 已构建 | `@deepseek-ai/dsh-sandbox-policy` `containerDenialMarker` | 开 | 关 | 是 |
+| `sandbox_protected_reads` | 已构建 | `@deepseek-ai/dsh-tool-fs-search` `protectedReads` | 开 | 关 | 是 |
 
 默认一列是 Delo 默认组合中的取值；每个已构建字段的 schema 默认值都是对等取值。
 
@@ -319,7 +321,7 @@ node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only tests:web-changed
 
 每个对模型可见的已构建开关都有一个开关开启场景 `snapshots/<profile>/delo-<id>`，其 `runtime.cordis.yml` 只把这一个开关设为非对等取值，并加上一条场景本地的 `agent-default-model` 配置，用以固定语料库模型 `deepseek-v4-flash`。录制之后，`parity-replay` 在覆盖层下把它与语料库的其余部分一同回放，因此被测开关是与对等组合的唯一行为差异。Web 场景经由 `apps/web/tests` 下的 e2e 驱动运行，该驱动用 `launchWebScaffold` 的 `presetInspect` 选项开启 `preset_inspect`，并在回放时通过智能体默认模型选择同一模型。
 
-五个开关开启场景中有四个已录制：`session/delo-plugin-manager-read-exemption`、`session/delo-profile-history`、`session/delo-container-denial-marker` 与 `web/delo-preset-inspect`。它们的目录位于 `snapshots/` 下，并可在无密钥的情况下回放，有覆盖层与无覆盖层两种方式（Web 场景经由 `test:web:built` 回放）。第五个场景 `web/delo-studio-additions` 尚未录制：其 `snapshot.yml` 仍在 [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/) 下，其驱动尚未编写，`parity-switches` 将其报告为 `pending recording`（待录制）。
+六个开关开启场景中有四个已录制：`session/delo-plugin-manager-read-exemption`、`session/delo-profile-history`、`session/delo-container-denial-marker` 与 `web/delo-preset-inspect`。它们的目录位于 `snapshots/` 下，并可在无密钥的情况下回放，有覆盖层与无覆盖层两种方式（Web 场景经由 `test:web:built` 回放）。其余两个尚未录制：`web/delo-studio-additions` 的驱动尚未编写，`session/delo-sandbox-protected-reads` 等待录制。两者的配置都保留在 [`src/parity/composition/scenarios/`](src/parity/composition/scenarios/) 下，`parity-switches` 将它们报告为 `pending recording`（待录制）。
 
 录制其中一个时，把其目录移到 `snapshots/<profile>/`，在不设 `DSH_SNAPSHOT_PATCH` 的情况下为该场景运行上游的录制命令，审阅输出，并在 Session 夹具携带任务之后删除 `input.task`。录制时若场景目录中已有 Session 夹具，则从该夹具读取任务，因此在改动 `input.task` 后录制之前，须先把较早的夹具移出。
 

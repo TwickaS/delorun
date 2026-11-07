@@ -291,7 +291,9 @@ export async function runRipgrep(
 }
 
 /**
- * The sandbox provider's protected-read check for one finished search. A search root under the protected home is
+ * The sandbox provider's protected-read check for one finished search, gated by the `protectedReads`
+ * config. With the gate off the filter is a pass-through and nothing else is read, so the tools keep
+ * stock behaviour even when the provider reports protected reads. On, a search root under the protected home is
  * refused; under a root that contains it, each output path, which ripgrep prints beneath the root without following
  * links below it, is mapped to its canonical path beneath the resolved root and the protected ones are dropped.
  * @param ctx - the plugin context.
@@ -299,6 +301,8 @@ export async function runRipgrep(
  * @param toolName - `glob` or `grep`, for the error.
  * @param workdir - the directory ripgrep ran in.
  * @param searchPath - the requested search root, or the workdir when omitted.
+ * @param protectedReads - the `protectedReads` config (Delo's C16 switch `sandbox_protected_reads`): whether the sandbox
+ *   provider's protected reads apply to this search.
  * @returns a predicate that is true for an output path to keep.
  * @throws {SearchError} `SEARCH_SANDBOX_DENIED` when the root is protected.
  */
@@ -308,7 +312,9 @@ export function protectedSearchFilter(
   toolName: string,
   workdir: string,
   searchPath: string | undefined,
+  protectedReads: boolean,
 ): (outputPath: string) => boolean {
+  if (!protectedReads) return () => true
   const reads = ctx.get('sandbox')?.protectedReads
   if (reads === undefined) return () => true
   const mode = ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
