@@ -17,7 +17,7 @@
 - `src/record-rebuild.ts`、`src/sign-release.ts`、`src/sign-root.ts` 与 `src/sign-timestamp.ts` 是签名命令；`src/rebuild/record.ts` 存放重建记录的事实，`src/sign/` 存放签名信封、RFC 8785 序列化（canonical JSON）、各签名文件的读取器、时间戳元数据内容、签名与客户端验证。
 - `src/sbom/` 从运行时归档写入 SPDX SBOM；`src/check-advisories.ts` 与 `src/advisory/` 运行依赖安全公告检查。
 - `src/build-images.ts` 与 `src/images/` 从 `images.json` 与 `images/` 构建 S2 与 S3 镜像；`src/log-release.ts` 与 `src/log/` 写入并验证发布日志 bundle。
-- `tests/` 存放规格。变更片段规格在临时 git 仓库上运行两个入口；归档、运行时发行包与重建规格则在临时目录中构建 fixture（测试前置数据）运行时发行包，并从本地 HTTP 替身提供固定的下载；签名规格用测试中生成的密钥签署 fixture 发布，发布日志规格则运行本地日志与见证者（witness）替身，因此都不需要网络，也不需要真实密钥。`tests/images/images.docker.spec.ts` 将两个镜像各构建两次，仅在设置 `DELO_DOCKER_SPECS=1` 时运行，因为检查运行器（check runner）没有 Docker 通道。
+- `tests/` 存放规格。变更片段规格在临时 git 仓库上运行两个入口；归档、运行时发行包与重建规格则在临时目录中构建 fixture（测试前置数据）运行时发行包，并从本地 HTTP 替身提供固定的下载；签名规格用测试中生成的密钥签署 fixture 发布，发布日志规格则运行本地日志与见证者（witness）替身，因此都不需要网络，也不需要真实密钥。`tests/images/images.docker.spec.ts` 将两个镜像各构建两次，仅在设置 `DELO_DOCKER_SPECS=1` 时运行，因为检查运行器（check runner）没有 Docker 通道。`tests/closure/boot.closure.spec.ts` 从已构建的运行时发行包设置一个新的 home，启动 CLI 配置，并要求每个 `@delo/` 行都处于活动状态；它仅在 `DELO_CLOSURE_ARCHIVE` 指向一个已构建的 `linux-x64` 运行时发行包归档时运行，发布工作流必须对其发布的 `linux-x64` 归档运行它。
 
 ## 门禁
 
