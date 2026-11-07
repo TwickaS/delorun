@@ -15,7 +15,8 @@ import type { AddressInfo } from 'node:net'
 import type { TestContext } from 'vitest'
 import { DESKTOP_PLATFORMS, RELEASE_REPOSITORY_URL, RELEASE_SCHEMAS, RUNTIME_PLATFORMS, type FileRef, type ReleaseManifest, type RootMetadata, type UtcTimestamp } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { sha256Hex } from '../../src/brands.ts'
+import { releaseAdvisoryCheck } from '../../src/advisory/release.ts'
+import { semanticVersion, sha256Hex } from '../../src/brands.ts'
 import { RECIPE_DIR, RECIPE_FILES } from '../../src/closure/config.ts'
 import { attestationText } from '../../src/rebuild/attestation.ts'
 import { outputRefs, recipeAt } from '../../src/rebuild/record.ts'
@@ -147,6 +148,8 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   }
   mkdirSync(join(repo, 'delo', 'release'), { recursive: true })
   writeFileSync(join(repo, 'delo', 'release', 'advisory-acceptances.yaml'), 'acceptances: []\n')
+  mkdirSync(join(repo, '.github'))
+  writeFileSync(join(repo, '.github', 'CODEOWNERS'), '* @example-maintainer\n')
   git(['add', '-A'])
   git(['commit', '-q', '-m', 'fixture'])
   git(['tag', `v${VERSION}`])
@@ -159,8 +162,10 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   const { toolchain } = recipeAt(repo, commit)
   await writeReleaseSbom(release, VERSION, toolchain)
   await writeReleaseSbom(rebuild, VERSION, toolchain)
-  const extra = ['delorun-0.1.0.advisories.json', 'install.sh', 'install.ps1']
-  for (const name of extra) writeFileSync(join(release, name), `${name}\n`)
+  const feed = await feedStandIn(test, {})
+  const report = await releaseAdvisoryCheck(repo, commit, release, semanticVersion(VERSION), feed.url)
+  writeFileSync(join(release, 'delorun-0.1.0.advisories.json'), `${JSON.stringify(report, undefined, 2)}\n`)
+  for (const name of ['install.sh', 'install.ps1']) writeFileSync(join(release, name), `${name}\n`)
   const desktop: Record<string, unknown> = {}
   for (const platform of DESKTOP_PLATFORMS) {
     const names = { installer: `Delo-${VERSION}-${platform}.installer`, update: `Delo-${VERSION}-${platform}.update`, blockmap: `Delo-${VERSION}-${platform}.blockmap` }
@@ -211,7 +216,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     run,
     record: () => run('record-rebuild.ts', ['--version', VERSION, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
     sign: async (signEnv = {}, args = {}) => {
-      const feed = await feedStandIn(test, args.advisories ?? {})
+      feed.answer(args.advisories ?? {})
       try {
         const signed = await signRelease({
           repository: repo,
@@ -223,7 +228,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
           key: readSigningKey(keyPath),
           env: { ...signEnv },
           now: new Date('2026-11-06T12:00:00Z'),
-          feed,
+          feed: feed.url,
         })
         return { status: 0, stdout: signed.manifestName, stderr: '' }
       } catch (error) {
@@ -271,18 +276,19 @@ export function manifestContent(version: string, archive: Uint8Array): ReleaseMa
 /**
  * A local stand-in of npm's bulk advisory API, closed when the test ends.
  * @param test - the running test.
- * @param answer - the response body for every request.
- * @returns the stand-in's URL.
+ * @param answer - the response body until the next {@link answer} call.
+ * @returns the stand-in's URL, and the function that sets the body of later responses.
  */
-export async function feedStandIn(test: TestContext, answer: object): Promise<string> {
+export async function feedStandIn(test: TestContext, answer: object): Promise<{ readonly url: string, readonly answer: (next: object) => void }> {
+  let current = answer
   const server = createServer((request, response) => {
     request.resume()
     request.on('end', () => {
       response.writeHead(200, { 'content-type': 'application/json' })
-      response.end(JSON.stringify(answer))
+      response.end(JSON.stringify(current))
     })
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   test.onTestFinished(() => new Promise<void>(resolve => server.close(() => resolve())))
-  return `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
+  return { url: `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`, answer: (next) => { current = next } }
 }

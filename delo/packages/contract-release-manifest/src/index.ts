@@ -368,6 +368,8 @@ export interface AdvisoryAcceptance {
   readonly approver: string
   /** The last Delo version covered; a later release fails the check. */
   readonly lapsesAfter: SemanticVersion
+  /** The date the entry was added, `YYYY-MM-DD`, which the release notes show. */
+  readonly added: string
 }
 
 /** The parsed acceptances file. Unknown fields fail the advisory check. */

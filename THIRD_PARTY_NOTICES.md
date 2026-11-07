@@ -106,6 +106,7 @@ External packages installed for runtime use or embedded in distributed Host or b
 | [`fflate`](https://github.com/101arrowz/fflate) | MIT |
 | [`got`](https://github.com/sindresorhus/got) | MIT |
 | [`hosted-git-info`](https://github.com/npm/hosted-git-info) | ISC |
+| [`ignore`](https://github.com/kaelzhang/node-ignore) | MIT |
 | [`immer`](https://github.com/immerjs/immer) | MIT |
 | [`ipaddr.js`](https://github.com/whitequark/ipaddr.js) | MIT |
 | [`jose`](https://github.com/panva/jose) | MIT |

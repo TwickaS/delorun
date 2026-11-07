@@ -7,6 +7,7 @@
  *
  * @module @delo/release/sbom/spdx
  */
+import { createHash } from 'node:crypto'
 import { RELEASE_REPOSITORY_URL, type RuntimePlatform } from '@delo/contract-release-manifest'
 import { parse as parseYaml } from 'yaml'
 
@@ -44,8 +45,32 @@ export function isPackageManifest(path: string): boolean {
   return /(^|\/)node_modules\/(@[^/]+\/)?[^/@][^/]*\/package\.json$/u.test(path)
 }
 
+/**
+ * An SPDX id that no other kind, name and version maps to: the kind and the first 128 bits of the SHA-256 of
+ * `<kind> <name>@<version>`, since SPDX ids allow only letters, digits, `.` and `-`, and replacing a package name's
+ * other characters makes distinct names collide.
+ * @param kind - the package kind.
+ * @param name - the package name.
+ * @param version - the version.
+ * @returns the id.
+ */
 function spdxId(kind: string, name: string, version: string): string {
-  return `SPDXRef-${kind}-${`${name}-${version}`.replace(/[^A-Za-z0-9.-]/gu, '-')}`
+  return `SPDXRef-${kind}-${createHash('sha256').update(`${kind} ${name}@${version}`).digest('hex').slice(0, 32)}`
+}
+
+/**
+ * Add a package under its id, refusing an id that another package already holds.
+ * @param packages - the document's packages by id.
+ * @param id - the id.
+ * @param entry - the package.
+ * @throws Error when the id names a package with another name or version.
+ */
+function addPackage(packages: Map<string, Record<string, unknown>>, id: string, entry: Record<string, unknown>): void {
+  const held = packages.get(id)
+  if (held !== undefined && (held.name !== entry.name || held.versionInfo !== entry.versionInfo)) {
+    throw new Error(`SPDX id ${id} names both ${String(held.name)}@${String(held.versionInfo)} and ${String(entry.name)}@${String(entry.versionInfo)}`)
+  }
+  if (held === undefined) packages.set(id, entry)
 }
 
 function purl(name: string, version: string): string {
@@ -89,9 +114,8 @@ export function spdxDocument(version: string, epoch: number, toolchain: Toolchai
     const locked = integrities(archive.lockfile)
     for (const entry of archive.packages) {
       const id = spdxId('npm', entry.name, entry.version)
-      if (!packages.has(id)) {
-        const integrity = locked.get(`${entry.name}@${entry.version}`)
-        packages.set(id, {
+      const integrity = locked.get(`${entry.name}@${entry.version}`)
+      addPackage(packages, id, {
           SPDXID: id,
           name: entry.name,
           versionInfo: entry.version,
@@ -102,8 +126,7 @@ export function spdxDocument(version: string, epoch: number, toolchain: Toolchai
           copyrightText: 'NOASSERTION',
           ...(integrity?.startsWith('sha512-') === true ? { checksums: [{ algorithm: 'SHA512', checksumValue: Buffer.from(integrity.slice(7), 'base64').toString('hex') }] } : {}),
           externalRefs: [{ referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: purl(entry.name, entry.version) }],
-        })
-      }
+      })
       relationships.push({ spdxElementId: archiveId, relationshipType: 'CONTAINS', relatedSpdxElement: id })
     }
   }

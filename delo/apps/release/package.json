@@ -10,6 +10,7 @@
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/tools": "workspace:*",
     "extract-zip": "^2.0.1",
+    "ignore": "^7.0.8",
     "semver": "^7.8.5",
     "tar": "^7.5.22",
     "yaml": "^2.9.0",

@@ -200,7 +200,7 @@ When maintainers hold keys, signing requires matching rebuild records from two o
 
 ## Dependency advisory check
 
-Signatures and the rebuild show integrity, not that the locked dependencies are free of known vulnerabilities. Before signing, the release workflow checks every package name and version in the runtime closure's lockfile against the GitHub Advisory Database through npm's bulk advisory API (`POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`), and the signing command re-runs the check.
+Signatures and the rebuild show integrity, not that the locked dependencies are free of known vulnerabilities. Before signing, the release workflow checks every package name and version in the runtime closure's lockfile, every installed package version its SBOM lists and the pinned pnpm against the GitHub Advisory Database through npm's bulk advisory API (`POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`), and the signing command re-runs the check.
 
 The check fails, and the release stops, when an advisory of any severity affects a locked version and no valid acceptance covers it, when an acceptance has lapsed, or when the feed cannot be reached or returns a malformed response.
 
@@ -214,6 +214,7 @@ acceptances:
     reason: The vulnerable parser is not reachable from the closure's code paths.
     approver: example-maintainer
     lapsesAfter: 1.3.0
+    added: 2026-11-06
 ```
 
 | Field | Meaning |
@@ -224,8 +225,9 @@ acceptances:
 | `reason` | Why the release may ship with it. |
 | `approver` | The GitHub login of the maintainer who approved it, a CODEOWNERS owner of `delo/release/`. |
 | `lapsesAfter` | The last Delo version the acceptance covers; a later release fails the check until the entry is renewed or removed. |
+| `added` | The date the entry was added, `YYYY-MM-DD`. |
 
-An acceptance covers an advisory when the id and package match, the locked version satisfies `range`, and the release's version is at most `lapsesAfter`. Unknown fields fail the check. The release notes list every accepted advisory with its package, range, reason, approver, lapse release and the date of the commit that added the entry; the manifest's `advisories.accepted` lists their ids.
+An acceptance covers an advisory when the id and package match, the locked version satisfies `range`, the release's version is at most `lapsesAfter`, and `approver` is an owner of the file in `.github/CODEOWNERS` at the release's commit. Unknown and missing fields fail the check. The release notes list every accepted advisory with its package, range, reason, approver, lapse release and the date the entry records; the manifest's `advisories.accepted` lists their ids.
 
 ## npm publication
 

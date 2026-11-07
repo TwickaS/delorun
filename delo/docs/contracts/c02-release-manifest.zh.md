@@ -224,7 +224,7 @@ CLI 运行时的每次启动，在每种验证模式（`warn`、`enforce`、`off
 
 ## 依赖安全公告检查
 
-签名与重建表明的是完整性，而不是锁定的依赖没有已知漏洞。签名之前，发布工作流通过 npm 的批量安全公告 API（`POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`），对照 GitHub Advisory Database 检查运行时发行包锁文件中的每个包名与版本，签名命令会再次运行该检查。
+签名与重建表明的是完整性，而不是锁定的依赖没有已知漏洞。签名之前，发布工作流通过 npm 的批量安全公告 API（`POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`），对照 GitHub Advisory Database 检查运行时发行包锁文件中的每个包名与版本、其 SBOM 所列的每个已安装包版本以及固定的 pnpm，签名命令会再次运行该检查。
 
 当任何严重级别的安全公告影响某个锁定版本且没有有效的接受记录覆盖它、当某条接受记录已失效，或当公告源无法访问或返回格式错误的响应时，检查失败，发布停止。
 
@@ -238,6 +238,7 @@ acceptances:
     reason: The vulnerable parser is not reachable from the closure's code paths.
     approver: example-maintainer
     lapsesAfter: 1.3.0
+    added: 2026-11-06
 ```
 
 | 字段 | 含义 |
@@ -248,8 +249,9 @@ acceptances:
 | `reason` | 发布为何可以带着它交付。 |
 | `approver` | 批准它的维护者的 GitHub 登录名，即 `delo/release/` 的一名 CODEOWNERS 所有者。 |
 | `lapsesAfter` | 该接受记录覆盖的最后一个 Delo 版本；之后的发布会使检查失败，直到该条目被续期或移除。 |
+| `added` | 添加该条目的日期，`YYYY-MM-DD`。 |
 
-当 id 与包匹配、锁定版本满足 `range`，且发布的版本不高于 `lapsesAfter` 时，接受记录覆盖该安全公告。未知字段会使检查失败。发布说明列出每个已接受的安全公告及其包、范围、原因、批准者、失效版本，以及添加该条目的提交的日期；manifest 的 `advisories.accepted` 列出它们的 id。
+当 id 与包匹配、锁定版本满足 `range`、发布的版本不高于 `lapsesAfter`，且 `approver` 是该发布提交处 `.github/CODEOWNERS` 中该文件的所有者时，接受记录覆盖该安全公告。未知字段与缺失字段会使检查失败。发布说明列出每个已接受的安全公告及其包、范围、原因、批准者、失效版本，以及该条目记录的日期；manifest 的 `advisories.accepted` 列出它们的 id。
 
 <a id="npm-publication"></a>
 

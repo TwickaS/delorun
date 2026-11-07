@@ -36,7 +36,18 @@ describe('spdxDocument', () => {
     expect(parser.checksums).toEqual([{ algorithm: 'SHA512', checksumValue: Buffer.from('A'.repeat(86) + '==', 'base64').toString('hex') }])
     expect(document.packages.find(item => item.name === 'local-only')).toMatchObject({ downloadLocation: 'NOASSERTION', licenseDeclared: 'NOASSERTION' })
     expect(document.packages.find(item => item.name === ARCHIVE.name)).toMatchObject({ checksums: [{ algorithm: 'SHA256', checksumValue: 'a'.repeat(64) }] })
-    expect(document.relationships).toContainEqual({ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: 'SPDXRef-archive-linux-x64-0.1.0' })
+    const archiveId = document.packages.find(item => item.name === ARCHIVE.name)!.SPDXID as string
+    expect(archiveId).toMatch(/^SPDXRef-archive-[0-9a-f]{32}$/u)
+    expect(document.relationships).toContainEqual({ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: archiveId })
+  })
+
+  it('keeps packages whose names differ only in characters an SPDX id cannot hold', () => {
+    const names = ['@a-b/c', '@a/b-c', 'a_b', 'a-b', 'a.b']
+    const archive = { ...ARCHIVE, packages: names.map(name => ({ name, version: '1.0.0' })) }
+    const document = spdxDocument('0.1.0', 1_793_981_656, TOOLCHAIN, [archive]) as { packages: Array<{ name: string, SPDXID: string }> }
+    const listed = document.packages.filter(item => names.includes(item.name))
+    expect(listed.map(item => item.name).sort()).toEqual([...names].sort())
+    expect(new Set(listed.map(item => item.SPDXID)).size).toBe(names.length)
   })
 
   it('recognises installed package manifests at any depth and nothing else', () => {

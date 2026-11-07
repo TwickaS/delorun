@@ -24,11 +24,11 @@
   en: 755aef7566a6439f
   zh: ec5d3fc7f037c6a8
 /delo-release-tooling/sbom:
-  en: 18a9e8ad0c2ce598
-  zh: 99273499349df95c
+  en: f29222cd040c7ee9
+  zh: bbf955e86fa5899c
 /delo-release-tooling/dependency-advisory-check:
-  en: 77b4721d889f40df
-  zh: 9d170d17fc393814
+  en: f0aff0c6b0305cf4
+  zh: 660bc46a5f1c13b1
 /delo-release-tooling/signing:
   en: 411c46cb282d6378
   zh: a0159beaafde3144
@@ -44,3 +44,6 @@
 /delo-release-tooling/verification:
   en: a7f1e334f1ec809e
   zh: 0ff7172c0a3d97db
+/delo-release-tooling/open-items:
+  en: 5d81faffe3d73496
+  zh: a2a5f28e7b32f840

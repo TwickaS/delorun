@@ -68,13 +68,13 @@
 
 ## SBOM
 
-`delorun-<version>.spdx.json` 是一份 SPDX 2.3 JSON 文档，仅由运行时归档与 `toolchain.json` 推导而来：每个归档对应一个包并附其 SHA-256；固定的 Node 与 pnpm 各对应一个包；在某个归档中以 `node_modules/<name>/package.json` 形式找到的每个已安装 npm 包版本，各对应一个包，并附其 `pkg:npm` purl、其声明的许可证（当它是许可证表达式时），以及运行时发行包锁文件为其记录的 SHA-512。`created` 取归档的 `SOURCE_DATE_EPOCH`，因此相同的归档总是得到相同的文档。它尚未描述 S2 与 S3 镜像。
+`delorun-<version>.spdx.json` 是一份 SPDX 2.3 JSON 文档，仅由运行时归档与 `toolchain.json` 推导而来：每个归档对应一个包并附其 SHA-256；固定的 Node 与 pnpm 各对应一个包；在某个归档中以 `node_modules/<name>/package.json` 形式找到的每个已安装 npm 包版本，各对应一个包，并附其 `pkg:npm` purl、其声明的许可证（当它是许可证表达式时），以及运行时发行包锁文件为其记录的 SHA-512。每个包的 SPDX id 由其类型以及其类型、名称与版本的 SHA-256 的前 128 位组成，因此仅在 SPDX id 无法容纳的字符上不同的名称仍彼此区分；两个包会共用的 id 使构建失败。`created` 取归档的 `SOURCE_DATE_EPOCH`，因此相同的归档总是得到相同的文档。它尚未描述 S2 与 S3 镜像。
 
 ## 依赖安全公告检查
 
-`node_modules/.bin/tsx delo/apps/release/src/check-advisories.ts --version <version> --release <dir> [--commit <rev>] [--feed <url>]` 读取 `--release` 中每个运行时归档的 `app/pnpm-lock.yaml`，把每个来自注册表的锁定包版本（本地的 `file:` 与 `link:` 包是发布自身的源码，不在其列）发送给 npm 的批量安全公告 API `https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`，并写入 `delorun-<version>.advisories.json`。当锁定版本满足某条安全公告的受影响版本范围时，该安全公告影响此锁定版本。只有当每条影响锁定版本的安全公告，在 `--commit`（省略时为 `HEAD`；发布工作流中为该发布的标签，签名时为该发布的提交）处提交的 [`delo/release/advisory-acceptances.yaml`](../../release/advisory-acceptances.yaml) 中都有一条安全公告接受记录，且该记录的安全公告与包相同、其范围为锁定版本所满足、其 `lapsesAfter` 不低于本次发布的版本时，检查才通过。出现以下任一情况时检查失败，它以 1 退出：存在其他影响锁定版本的安全公告；某条安全公告接受记录已失效；安全公告接受记录文件含未知字段或重复键；或公告源无法访问、返回格式错误的响应。
+`node_modules/.bin/tsx delo/apps/release/src/check-advisories.ts --version <version> --release <dir> [--commit <rev>] [--feed <url>]` 读取 `--release` 中的每个运行时归档，把其中的每个包版本发送给 npm 的批量安全公告 API：`app/pnpm-lock.yaml` 锁定的每个注册表版本、SBOM 所列的每个已安装包版本（包括锁文件未列出、打包在另一个包内部的依赖），以及 `--commit` 处 `toolchain.json` 固定的 pnpm 版本。本地的 `file:` 与 `link:` 包是发布自身的源码，不在其列。该 API 为 `https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`，并写入 `delorun-<version>.advisories.json`。当被检查的版本满足某条安全公告的受影响版本范围时，该安全公告影响此版本；检查无法读取的范围属于格式错误的响应，会使检查失败，而不是视为不匹配。只有当每条影响锁定版本的安全公告，在 `--commit`（省略时为 `HEAD`；发布工作流中为该发布的标签，签名时为该发布的提交）处提交的 [`delo/release/advisory-acceptances.yaml`](../../release/advisory-acceptances.yaml) 中都有一条安全公告接受记录，且该记录的安全公告与包相同、其范围为锁定版本所满足、其 `lapsesAfter` 不低于本次发布的版本，其 `approver` 又是同一提交处 `.github/CODEOWNERS` 所指定的该文件所有者时，检查才通过。每个条目还记录 `added`，即添加该条目的日期（`YYYY-MM-DD`），发布说明会显示它。出现以下任一情况时检查失败，它以 1 退出：存在其他影响锁定版本的安全公告；某条安全公告接受记录已失效，或其批准者不是所有者；某个条目缺少 `added`；安全公告接受记录文件含未知字段或重复键；或公告源无法访问、返回格式错误的响应。
 
-报告包含 `schema`（`delo.release-advisories/1`）、`version`、`feed`、`packages`（已检查的锁定版本数）、`findings`（每条受影响的安全公告，附其包、版本、严重级别、标题与受影响版本范围，以及覆盖它的安全公告接受记录与添加该条目的提交的日期，或该接受记录已失效的原因）、`result`（`pass` 或 `fail`）与 `problems`。`assemble.ts --advisories <report>` 会在发布说明中加入「Accepted advisories」一节，逐条列出每个已接受的安全公告及其包、范围、原因、批准者、日期与失效版本，并拒绝另一次发布的报告，或失败的报告。
+报告包含 `schema`（`delo.release-advisories/1`）、`version`、`feed`、`packages`（已检查的锁定版本数）、`findings`（每条受影响的安全公告，附其包、版本、严重级别、标题与受影响版本范围，以及覆盖它的安全公告接受记录，或该接受记录已失效的原因（`lapsed`）或被拒绝的原因（`unapproved`））、`result`（`pass` 或 `fail`）与 `problems`。签名会再次运行检查，只有当已发布的报告作为 JSON 与其自身运行得到的报告相同时才继续。`assemble.ts --advisories <report> --manifest <signed manifest>` 会在发布说明中加入「Accepted advisories」一节，逐条列出每个已接受的安全公告及其包、范围、原因、批准者、日期与失效版本；它拒绝不是已签名 manifest 按长度与 SHA-256 所指明文件的报告、其已接受 id 与 manifest 不同的报告、另一次发布的报告，以及失败的报告。
 
 ## 签名
 
@@ -124,3 +124,9 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 ## 验证
 
 `src/sign/verify.ts` 实施 C2 的客户端验证：`trustRootChain` 从调用方持有的根开始遍历各根版本，每个版本都须由上一版本根密钥的阈值及其自身根密钥的阈值签名，签发时间早于过期时间，有效期至多 365 天，且最新版本尚未过期；把同一密钥分配给两个角色、或 `active` 的 targets 密钥不恰好为一个的根读取失败；`verifyTimestamp` 检查时间戳角色的签名、3 天有效期、签发时间不晚于本地时间、不设时钟容差的过期检查（其拒绝消息写明过期时间与本地时间）、已存储的版本，以及其所指明的根版本与根文件摘要；`verifyChannelManifest` 只接受新鲜的时间戳为该通道指明的 manifest 文件，其发布与通道须与时间戳所指明的一致（beta 通道也指明 stable 发布），且该文件须由对该发布有效的 targets 密钥签名（`active` 密钥，或 `lastRelease` 不低于该发布的 `retired` 密钥；绝不接受 `revoked` 密钥）；`verifyFileList` 与 `checkFileRef` 依据 manifest 检查每个文件的长度与 SHA-256。每个签名文件都先按其大小上限读取，再进行解析；重复的 JSON 键、未知字段或未知的 `schema` 都会使读取失败。`src/sign/json.ts` 存放签名所覆盖的 RFC 8785 序列化。
+
+## 待完成事项
+
+以下发布内容尚未在此构建；每一项归属于所注明的工作包。
+
+- SBOM 尚未描述桌面安装包，它们有待桌面应用（P6，已推迟）。

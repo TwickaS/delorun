@@ -2,9 +2,10 @@
  * Assembles a release's changelog fragments into the `CHANGELOG.md` block and the release notes, then moves the
  * consumed fragments into `delo/changelog/releases/<version>/`. Run from the repository root:
  * `node_modules/.bin/tsx delo/apps/release/src/changelog/assemble.ts --version <version> [--dry-run] [--first-public-release]
- * [--advisories <delorun-<version>.advisories.json>]`. With `--advisories`, the notes end with every advisory the
- * release ships with under an acceptance: its id, package, range, reason, approver, the date its entry was committed
- * and its lapse release.
+ * [--advisories <delorun-<version>.advisories.json> --manifest <delorun-<version>.manifest.json>]`. With `--advisories`,
+ * the notes end with every advisory the release ships with under an acceptance: its id, package, range, reason,
+ * approver, the date its entry records and its lapse release. The report must be the one the signed manifest names
+ * by length and SHA-256, with the accepted ids the manifest lists, so the notes come from the report signing checked.
  * `--dry-run` prints both documents and writes nothing. The command exits 1 with one line per refusal.
  *
  * The "From upstream" section names the upstream release in `delo/upstream-patches.json`, `upstream.ref`, and
@@ -13,14 +14,16 @@
  *
  * @module @delo/release/changelog/assemble
  */
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { readManifest } from '@delo/tools/src/check-fork-boundary.ts'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
-import type { AdvisoryAcceptance } from '@delo/contract-release-manifest'
+import type { AdvisoryAcceptance, FileRef } from '@delo/contract-release-manifest'
 import type { AdvisoryReport } from '../advisory/check.ts'
+import { readEnvelope } from '../sign/schemas.ts'
 import { fragmentPaths, parseFragment, SECTIONS, type Fragment, type Section } from './fragment.ts'
 import { versionErrors } from './version.ts'
 
@@ -88,21 +91,35 @@ function advisoryLines(accepted: readonly AcceptedAdvisory[]): string[] {
   return [...lines, '']
 }
 
+/** What the signed manifest records of the advisory report. */
+export interface SignedAdvisories {
+  /** The report file's reference. */
+  readonly report: FileRef
+  /** The accepted advisory ids. */
+  readonly accepted: readonly string[]
+}
+
 /**
  * The accepted advisories of an advisory report, for the notes of the release it checked.
- * @param text - the report file's text.
+ * @param bytes - the report file.
  * @param version - the release being assembled.
+ * @param signed - the signed manifest's `advisories`.
  * @returns each accepted advisory once, by id and package.
- * @throws Error when the report is for another release or did not pass.
+ * @throws Error when the report is not the file the manifest names, is for another release, did not pass, or accepts
+ * other advisories than the manifest lists.
  */
-export function acceptedAdvisories(text: string, version: string): AcceptedAdvisory[] {
-  const report = JSON.parse(text) as Partial<AdvisoryReport>
+export function acceptedAdvisories(bytes: Uint8Array, version: string, signed: SignedAdvisories): AcceptedAdvisory[] {
+  const sha256 = createHash('sha256').update(bytes).digest('hex')
+  if (bytes.byteLength !== signed.report.length || sha256 !== signed.report.sha256) throw new Error(`the advisory report is not ${signed.report.name}, the report the signed manifest names`)
+  const report = JSON.parse(Buffer.from(bytes).toString('utf8')) as Partial<AdvisoryReport>
   if (report.schema !== 'delo.release-advisories/1' || report.version !== version) throw new Error(`the advisory report is not the report of release ${version}`)
   if (report.result !== 'pass') throw new Error('the advisory report did not pass')
   const accepted = new Map<string, AcceptedAdvisory>()
   for (const finding of report.findings ?? []) {
     if (finding.accepted !== undefined) accepted.set(`${finding.accepted.advisory} ${finding.accepted.package}`, finding.accepted)
   }
+  const ids = [...new Set([...accepted.values()].map(item => item.advisory))].sort()
+  if (JSON.stringify(ids) !== JSON.stringify([...signed.accepted].sort())) throw new Error('the advisory report accepts other advisories than the signed manifest lists')
   return [...accepted.values()]
 }
 
@@ -188,6 +205,7 @@ function main(argv: readonly string[]): number {
       'dry-run': { type: 'boolean', default: false },
       'first-public-release': { type: 'boolean', default: false },
       advisories: { type: 'string' },
+      manifest: { type: 'string' },
     },
     strict: true,
   })
@@ -198,7 +216,10 @@ function main(argv: readonly string[]): number {
   const root = repositoryRoot(process.cwd())
   let assembly: Assembly
   try {
-    const accepted = values.advisories === undefined ? [] : acceptedAdvisories(readFileSync(values.advisories, 'utf8'), values.version)
+    if ((values.advisories === undefined) !== (values.manifest === undefined)) throw new Error('pass --advisories and --manifest together')
+    const accepted = values.advisories === undefined || values.manifest === undefined
+      ? []
+      : acceptedAdvisories(readFileSync(values.advisories), values.version, readEnvelope('manifest', readFileSync(values.manifest)).signed.advisories)
     assembly = assembleRelease(root, values.version, { firstPublicRelease: values['first-public-release'], accepted })
   } catch (error) {
     console.error(`assemble: ${error instanceof Error ? error.message : String(error)}`)

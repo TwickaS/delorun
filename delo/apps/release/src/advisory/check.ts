@@ -1,14 +1,16 @@
 /**
  * The dependency advisory check of contract C2: every registry package name and version in the runtime closure's
- * lockfile is checked against the GitHub Advisory Database through npm's bulk advisory API. The check fails when an
- * advisory of any severity affects a locked version and no valid acceptance in `delo/release/advisory-acceptances.yaml`
- * covers it, when an acceptance has lapsed, or when the feed cannot be reached or answers with a malformed response.
+ * lockfile, every installed package version the SBOM lists (bundled dependencies among them) and the staged pnpm are
+ * checked against the GitHub Advisory Database through npm's bulk advisory API. The check fails when an advisory of
+ * any severity affects a checked version and no valid acceptance in `delo/release/advisory-acceptances.yaml` covers
+ * it, when an acceptance has lapsed or its approver is not a CODEOWNERS owner of that file, or when the feed cannot be
+ * reached or answers with a malformed response, including a vulnerable range the check cannot read.
  *
  * @module @delo/release/advisory/check
  */
-import { execFileSync } from 'node:child_process'
 import { ADVISORY_ACCEPTANCES_PATH, METADATA_REQUEST_TIMEOUT_SECONDS, type AdvisoryAcceptance, type AdvisoryId, type SemanticVersion } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import ignore from 'ignore'
 import semver from 'semver'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
@@ -33,10 +35,12 @@ export interface Finding {
   readonly title: string
   /** The feed's vulnerable range. */
   readonly vulnerable: string
-  /** The acceptance that covers it, with the date its entry was added; absent when none does. */
-  readonly accepted?: AdvisoryAcceptance & { readonly added: string }
+  /** The acceptance that covers it; absent when none does. */
+  readonly accepted?: AdvisoryAcceptance
   /** Why an acceptance with the same advisory and package does not cover it. */
   readonly lapsed?: string
+  /** Why an acceptance that would cover it is refused: its approver is not a CODEOWNERS owner of the file. */
+  readonly unapproved?: string
 }
 
 /** The check's result, which the release publishes as `delorun-<version>.advisories.json`. */
@@ -46,7 +50,7 @@ export interface AdvisoryReport {
   readonly version: SemanticVersion
   /** The feed asked. */
   readonly feed: string
-  /** How many locked registry package versions were checked. */
+  /** How many package versions were checked. */
   readonly packages: number
   /** Every advisory that affects a locked version. */
   readonly findings: readonly Finding[]
@@ -59,6 +63,23 @@ export interface AdvisoryReport {
 /** Why the check could not run to a result: the feed was unreachable or answered malformed. */
 export class FeedFailure extends Error {
   override readonly name = 'FeedFailure'
+}
+
+/**
+ * The names of the local packages a pnpm lockfile (version 9) records, as `file:` or `link:` versions: the release's
+ * own workspace packages, which no registry advisory names.
+ * @param text - the lockfile's text.
+ * @returns the names.
+ */
+export function localPackageNames(text: string): Set<string> {
+  const lock = z.looseObject({ packages: z.record(z.string(), z.unknown()).optional() }).parse(parseYaml(text))
+  const names = new Set<string>()
+  for (const key of Object.keys(lock.packages ?? {})) {
+    const at = key.indexOf('@', 1)
+    const version = key.slice(at + 1)
+    if (at > 0 && (version.startsWith('file:') || version.startsWith('link:'))) names.add(key.slice(0, at))
+  }
+  return names
 }
 
 /**
@@ -87,7 +108,7 @@ const FeedAdvisory = z.looseObject({
   url: z.string().regex(/^https:\/\/github\.com\/advisories\/GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/u),
   title: z.string(),
   severity: z.string(),
-  vulnerable_versions: z.string(),
+  vulnerable_versions: z.string().refine(value => semver.validRange(value) !== null, 'a semantic-version range; a range the check cannot read fails it rather than matching nothing'),
 })
 const FeedResponse = z.record(z.string(), z.array(FeedAdvisory))
 
@@ -127,6 +148,7 @@ const Acceptance = z.strictObject({
   reason: z.string().trim().min(1),
   approver: z.string().regex(/^[A-Za-z0-9-]+$/u, 'a GitHub login'),
   lapsesAfter: z.string().refine(value => semver.valid(value) !== null, 'a release version').transform(value => brandString<SemanticVersion>(value)),
+  added: z.iso.date(),
 })
 
 /** The acceptances file's schema; unknown fields fail it. */
@@ -145,39 +167,47 @@ export function readAcceptances(text: string): AdvisoryAcceptance[] {
 }
 
 /**
- * The date of the commit that added an acceptance's entry, from the file's history up to a commit.
- * @param repository - the repository.
- * @param advisory - the entry's advisory id.
- * @param commit - the commit whose history applies, such as the release's.
- * @returns the committer date as `YYYY-MM-DD`, or `uncommitted` when no commit added it yet.
+ * The owners a CODEOWNERS file gives a path: the owners of the last rule whose pattern matches it, with gitignore
+ * pattern semantics, as GitHub applies them.
+ * @param text - the CODEOWNERS text.
+ * @param path - the repository-relative path.
+ * @returns the owners' logins without `@`; teams and e-mail owners are left out.
  */
-export function acceptanceDate(repository: string, advisory: string, commit: string): string {
-  const dates = execFileSync('git', ['log', '--format=%cs', '--reverse', `-S${advisory}`, commit, '--', ADVISORY_ACCEPTANCES_PATH], { cwd: repository, encoding: 'utf8' }).trim().split('\n').filter(line => line !== '')
-  return dates[0] ?? 'uncommitted'
+export function codeOwners(text: string, path: string): string[] {
+  let owners: string[] = []
+  for (const line of text.split('\n')) {
+    const [pattern, ...rest] = line.trim().split(/\s+/u)
+    if (pattern === undefined || pattern === '' || pattern.startsWith('#')) continue
+    if (ignore().add(pattern).ignores(path)) owners = rest.filter(owner => /^@[A-Za-z0-9-]+$/u.test(owner)).map(owner => owner.slice(1))
+  }
+  return owners
 }
 
 /** What one check needs. */
 export interface AdvisoryCheckRequest {
   /** The release's version, compared with each acceptance's `lapsesAfter`. */
   readonly version: SemanticVersion
-  /** The closure lockfiles' texts. */
-  readonly lockfiles: readonly string[]
+  /** Every package version to check. */
+  readonly packages: readonly LockedPackage[]
   /** The acceptances. */
   readonly acceptances: readonly AdvisoryAcceptance[]
+  /** The CODEOWNERS owners of the acceptances file, the only valid approvers. */
+  readonly owners: readonly string[]
   /** The bulk advisory endpoint. */
   readonly feed: string
-  /** The date an acceptance's entry was added. */
-  readonly added: (advisory: string) => string
 }
 
 /**
  * Run the advisory check.
- * @param request - the release, lockfiles, acceptances and feed.
- * @returns the report; a feed failure is a failed report naming it.
+ * @param request - the release, packages, acceptances, approvers and feed.
+ * @returns the report; a feed failure, or a package version the check cannot read, is a failed report naming it.
  */
 export async function checkAdvisories(request: AdvisoryCheckRequest): Promise<AdvisoryReport> {
-  const packages = [...new Map(request.lockfiles.flatMap(lockedPackages).map(locked => [`${locked.name}@${locked.version}`, locked])).values()]
+  const packages = [...new Map(request.packages.map(locked => [`${locked.name}@${locked.version}`, locked])).values()]
+    .sort((a, b) => (a.name === b.name ? (a.version < b.version ? -1 : a.version > b.version ? 1 : 0) : a.name < b.name ? -1 : 1))
   const base = { schema: 'delo.release-advisories/1', version: request.version, feed: request.feed, packages: packages.length } as const
+  const unreadable = packages.filter(locked => semver.valid(locked.version) === null)
+  if (unreadable.length > 0) return { ...base, findings: [], result: 'fail', problems: unreadable.map(locked => `${locked.name}@${locked.version} has no exact version the check can compare`) }
   let answer: z.output<typeof FeedResponse>
   try {
     answer = await queryFeed(request.feed, packages)
@@ -192,9 +222,15 @@ export async function checkAdvisories(request: AdvisoryCheckRequest): Promise<Ad
       const id = brandString<AdvisoryId>(advisory.url.slice('https://github.com/advisories/'.length))
       const finding = { advisory: id, package: locked.name, version: locked.version, severity: advisory.severity, title: advisory.title, vulnerable: advisory.vulnerable_versions }
       const candidates = request.acceptances.filter(acceptance => acceptance.advisory === id && acceptance.package === locked.name)
-      const covering = candidates.find(acceptance => semver.satisfies(locked.version, acceptance.range, { includePrerelease: true }) && semver.lte(request.version, acceptance.lapsesAfter))
+      const valid = candidates.filter(acceptance => semver.satisfies(locked.version, acceptance.range, { includePrerelease: true }) && semver.lte(request.version, acceptance.lapsesAfter))
+      const covering = valid.find(acceptance => request.owners.includes(acceptance.approver))
       if (covering !== undefined) {
-        findings.push({ ...finding, accepted: { ...covering, added: request.added(covering.advisory) } })
+        findings.push({ ...finding, accepted: covering })
+        continue
+      }
+      const unapproved = valid[0]
+      if (unapproved !== undefined) {
+        findings.push({ ...finding, unapproved: `its acceptance's approver ${unapproved.approver} is not a CODEOWNERS owner of ${ADVISORY_ACCEPTANCES_PATH}` })
         continue
       }
       const lapsed = candidates.find(acceptance => semver.gt(request.version, acceptance.lapsesAfter))
@@ -202,6 +238,6 @@ export async function checkAdvisories(request: AdvisoryCheckRequest): Promise<Ad
     }
   }
   findings.sort((a, b) => (a.advisory === b.advisory ? (a.package < b.package ? -1 : 1) : a.advisory < b.advisory ? -1 : 1))
-  const problems = findings.filter(finding => finding.accepted === undefined).map(finding => `${finding.advisory} (${finding.severity}) affects ${finding.package}@${finding.version}: ${finding.lapsed ?? 'no acceptance covers it'}`)
+  const problems = findings.filter(finding => finding.accepted === undefined).map(finding => `${finding.advisory} (${finding.severity}) affects ${finding.package}@${finding.version}: ${finding.unapproved ?? finding.lapsed ?? 'no acceptance covers it'}`)
   return { ...base, findings, result: problems.length === 0 ? 'pass' : 'fail', problems }
 }

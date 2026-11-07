@@ -4,7 +4,7 @@
  * refusals around them) and a signing that passes them, whose manifest and file lists verify with the targets key.
  * Every key is a throwaway key generated in the test.
  */
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -300,5 +300,29 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     writeFileSync(join(fixture.repo, 'delo/release/advisory-acceptances.yaml'), `acceptances:\n  - advisory: GHSA-2222-3333-4444\n    package: example-parser\n    range: '>=1.2.0 <1.2.5'\n    reason: An uncommitted acceptance that signing must not apply.\n    approver: example-maintainer\n    lapsesAfter: 0.3.0\n`)
     const result = await fixture.sign({}, { advisories: { 'example-parser': [{ id: 1, url: 'https://github.com/advisories/GHSA-2222-3333-4444', title: 'Parser reads past its buffer', severity: 'low', vulnerable_versions: '<2.0.0' }] } })
     refusedWithoutWriting(fixture, result, 'the dependency advisory check fails: GHSA-2222-3333-4444 (low) affects example-parser@1.2.3')
+  })
+
+  it('refuses a published advisory report that differs from the report signing\'s own check gives', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const path = join(fixture.release, `delorun-${VERSION}.advisories.json`)
+    const report = JSON.parse(readFileSync(path, 'utf8')) as { packages: number }
+    writeFileSync(path, `${JSON.stringify({ ...report, packages: report.packages + 1 }, undefined, 2)}\n`)
+    const draftPath = join(fixture.release, 'manifest-draft.json')
+    const draft = JSON.parse(readFileSync(draftPath, 'utf8')) as { advisories: { report: { length: number, sha256: string } } }
+    const bytes = readFileSync(path)
+    draft.advisories.report = { ...draft.advisories.report, length: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') }
+    writeFileSync(draftPath, JSON.stringify(draft))
+    refusedWithoutWriting(fixture, await fixture.sign(), `the advisory report delorun-${VERSION}.advisories.json is not the report signing's own check gives`)
+  })
+
+  it('refuses a draft whose accepted advisories are not the ones the check accepts', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const draftPath = join(fixture.release, 'manifest-draft.json')
+    const draft = JSON.parse(readFileSync(draftPath, 'utf8')) as { advisories: { accepted: string[] } }
+    draft.advisories.accepted = ['GHSA-2222-3333-4444']
+    writeFileSync(draftPath, JSON.stringify(draft))
+    refusedWithoutWriting(fixture, await fixture.sign(), 'the draft\'s accepted advisories (GHSA-2222-3333-4444) are not the ones the check accepts (none)')
   })
 })

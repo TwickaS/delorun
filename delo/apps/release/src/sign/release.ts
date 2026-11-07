@@ -32,7 +32,7 @@ import { attestationProblem } from '../rebuild/attestation.ts'
 import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
 import { signEnvelope } from './envelope.ts'
-import { parseStrictJson, toJsonValue, type JsonValue } from './json.ts'
+import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from './json.ts'
 import { ManifestSchema, readEnvelope, readRebuildRecord } from './schemas.ts'
 
 /** Signing refused; the message names what is missing or wrong. */
@@ -252,6 +252,15 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   const accepted = [...new Set(advisories.findings.map(finding => finding.advisory))].sort()
   if (JSON.stringify(accepted) !== JSON.stringify([...draft.advisories.accepted].sort())) {
     throw new SigningRefusal(`signing refuses: the draft's accepted advisories (${draft.advisories.accepted.join(', ') || 'none'}) are not the ones the check accepts (${accepted.join(', ') || 'none'})`)
+  }
+  let published: JsonValue
+  try {
+    published = parseStrictJson(await readFile(join(request.release, draft.advisories.report.name)), 4 * 1024 * 1024)
+  } catch (error) {
+    throw new SigningRefusal(`signing refuses: the advisory report ${draft.advisories.report.name} does not read: ${(error as Error).message}`)
+  }
+  if (canonicalJson(published) !== canonicalJson(toJsonValue(advisories))) {
+    throw new SigningRefusal(`signing refuses: the advisory report ${draft.advisories.report.name} is not the report signing's own check gives; run the check again and draft the release from its report`)
   }
   for (const { where, ref } of draftRefs(draft)) {
     if (!existsSync(join(request.release, ref.name))) throw new SigningRefusal(`signing refuses: ${where} names ${ref.name}, which is not in ${request.release}`)
