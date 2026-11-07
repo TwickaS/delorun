@@ -319,6 +319,7 @@ runtimes/
 ### 本约定不能证明的内容
 
 - **Landlock 与套接字。** Landlock 无法拒绝对路径名套接字的连接。在只有 Landlock 的系统上，受限命令能访问 rootful Docker 套接字，这等同于 root；`delorun verify` 会报告它，但在那里没有 Delo 机制能阻止它。home 的通道之所以仍然关闭，只是因为启动令牌不可读。
+- **Landlock 与 home 的上级目录。** Landlock 按目录树授予读取权限，因此 profile 授予从 `/` 到 home 路径旁的每个条目，而不是这些目录本身：受限命令不能列出 `/`、操作系统主目录或这条路径上的任何其他目录，命令启动后在其中新建的条目对它不可读。这些条目在包装命令时列出，因此在启动器应用规则集之前被删除的条目会让启动器拒绝运行；该命令不会运行，无论是否受限。
 - **Windows 上的读取。** windows-acl 不限制读取。home 上的 no-read-up 标签只在 `windows-home-read-label` 通过时才报告为 `enforced`；该标签不成立时，Windows 上的 `home-read` 与 `token-read` 不被强制执行，通道只依靠 `windows-pipe-connect-denied` 所证明的命名管道写拒绝。
 - **Windows 上的通道。** 在 Windows 上，通道是位于 home 文件系统目录树之外的命名管道；保护它们的只有其 DACL 与令牌。
 - **经网络的 Docker。** 端点为 TCP 或 SSH 的 Docker context，在每种方言上都可被任何有网络访问的命令访问。
