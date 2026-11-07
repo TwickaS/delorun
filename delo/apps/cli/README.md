@@ -81,6 +81,7 @@ This build has no runtime store yet, so its home process refuses update requests
 ## Extension points
 
 - **A command** is a module that exports one `CliCommand` (`src/command.ts`) and adds one row to `COMMANDS` in `src/main.ts`. `delorun doctor` belongs in `src/doctor/` and `delorun logs` in `src/logs/`, each through this row.
+- **`delorun doctor` key lookup.** The key is read in this order, and the first source that holds one is checked: the reference setup stored in the home's `.credentials.yaml`, the `DEEPSEEK_API_KEY` process environment variable, the invoking directory's `.env`, then the home's `.env`. The check reports the source's name only and never prints the key; it checks the format offline and does not send the key to DeepSeek.
 - **Setup** is `runSetup` in `src/setup/index.ts`, which both `delorun setup` and a first run call. Its questions are in `src/setup/interactive.ts` behind the `Prompter` interface of `src/setup/prompts.ts`, so a test runs them against a scripted prompter.
 - **The home process's dependencies** are `StartDependencies` in `src/start.ts`: the profile preparation and runner, the environment loader, the holder probe (the update channel's `status` request), the exit hooks and the output capture, so a spec runs a start against stand-ins.
 

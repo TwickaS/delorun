@@ -95,6 +95,7 @@ Setup 按顺序执行各步骤：创建 CLI profile；把输入的密钥以 0600
 ## 扩展点
 
 - **命令**是导出一个 `CliCommand`（`src/command.ts`）的模块，并在 `src/main.ts` 的 `COMMANDS` 中添加一行。`delorun doctor` 属于 `src/doctor/`，`delorun logs` 属于 `src/logs/`，二者都通过这一行接入。
+- **`delorun doctor` 的密钥查找顺序。** 依次读取：home 的 `.credentials.yaml` 中 setup 保存的引用，进程环境变量 `DEEPSEEK_API_KEY`，调用目录的 `.env`，最后是 home 的 `.env`。采用第一个含有密钥的来源并检查它。检查只输出来源名称，从不打印密钥；格式检查在本地进行，不把密钥发送给 DeepSeek。
 - **Setup** 是 `src/setup/index.ts` 中的 `runSetup`，`delorun setup` 与首次运行都会调用它。提问位于 `src/setup/interactive.ts`，经由 `src/setup/prompts.ts` 的 `Prompter` 接口，因此测试可用脚本化的提问器运行它们。
 - **home 进程的依赖**是 `src/start.ts` 中的 `StartDependencies`：profile 的准备与运行器、环境加载器、持有者探测（更新通道的 `status` 请求）、退出钩子与输出捕获，因此规格测试可以用替身运行一次启动。
 
