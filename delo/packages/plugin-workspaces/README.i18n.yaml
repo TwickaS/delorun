@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/plugin-workspaces/README.md
+/:
+  en: 6bd2b1423ae8efbd
+  zh: 0045077061dfaece
+/delo-plugin-workspaces:
+  en: c271747fbbdeb7ff
+  zh: d915f102d5946c14
+/delo-plugin-workspaces/summary:
+  en: 20710372883cabce
+  zh: 1a5424fbb215d745
+/delo-plugin-workspaces/contents:
+  en: 856049dfd6a2638b
+  zh: 2fb5356ebc723c6d
+/delo-plugin-workspaces/contract:
+  en: b2630878a115b971
+  zh: d04666849b64c7a0
+/delo-plugin-workspaces/configuration:
+  en: bb14da62adfc5dc1
+  zh: d10a51e991258f12
+/delo-plugin-workspaces/carry-forward-review:
+  en: b5e0c7bd1bc7f2aa
+  zh: a52b4f98908c727a
+/delo-plugin-workspaces/known-limitations:
+  en: 9077b6637298a27e
+  zh: 224661c479a2ffe7
+/delo-plugin-workspaces/tests:
+  en: 2a449fb07ab22570
+  zh: a33084e5221a21cb

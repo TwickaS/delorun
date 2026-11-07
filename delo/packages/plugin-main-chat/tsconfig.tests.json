@@ -9,8 +9,7 @@
     "declarationMap": false
   },
   "include": [
-    "tests",
-    "src/workspaces.ts"
+    "tests"
   ],
   "references": [
     {

@@ -1709,6 +1709,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delo/plugin-workspaces':
+        specifier: workspace:*
+        version: link:../plugin-workspaces
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -1794,6 +1797,43 @@ importers:
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
+  delo/packages/plugin-workspaces:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-storage':
+        specifier: workspace:*
+        version: link:../../../packages/storage/storage
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: workspace:*
+        version: link:../../../packages/storage/storage-domain
+      '@deepseek-ai/dsh-storage-json':
+        specifier: workspace:*
+        version: link:../../../packages/storage/storage-json
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:*
+        version: link:../../../packages/subprocess/subprocess
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
 
   delo/packages/supervisor:
     dependencies:

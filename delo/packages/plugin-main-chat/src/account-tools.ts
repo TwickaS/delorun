@@ -26,7 +26,7 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import { folders } from './folders.ts'
 import { newOwnerNoteId, OwnerNotesError, ownerNoteText, parseOwnerNotes, renderOwnerNotes } from './owner-notes.ts'
-import { CreateRequest, ImportRequest, WorkspaceRefusedError, type InstructionsResponse } from './workspaces.ts'
+import { CreateRequest, ImportRequest, WorkspaceRefusedError, type InstructionsResponse } from '@delo/plugin-workspaces/service'
 
 /** The plugin record of another chat's or workspace's text read in the main chat's turn, by `chat_read`, `chat_search` or `workspace_instructions`. */
 export const READ_RECORD = 'plugin:delo-main-chat/read'

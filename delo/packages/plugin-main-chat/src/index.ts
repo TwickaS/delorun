@@ -54,8 +54,8 @@ export { MAIN_CHAT_TOOLS, mainChatAccountTools, MainChatToolError, mainChatTools
 export type { MainChatToolErrorCode, ToolLimits } from './tools.ts'
 export { MAIN_CHAT_PATHS, MAIN_CHAT_SESSION_ID } from './wire.ts'
 export type { MainChatReportCount } from './wire.ts'
-export { CreateRequest, folderName, ImportRequest, MAX_URL_LENGTH, repositoryUrl, WorkspaceRefusedError } from './workspaces.ts'
-export type { DeloWorkspaces, ImportRow, InstructionsRequest, InstructionsResponse, TrashEntry, WorkspaceRefusalCode, WorkspacesListing } from './workspaces.ts'
+export { CreateRequest, folderName, ImportRequest, MAX_URL_LENGTH, repositoryUrl, WorkspaceRefusedError } from '@delo/plugin-workspaces/service'
+export type { DeloWorkspaces, ImportRow, InstructionsRequest, InstructionsResponse, TrashEntry, WorkspaceRefusalCode, WorkspacesListing } from '@delo/plugin-workspaces/service'
 
 /** Stable Cordis plugin name. */
 export const name = 'delo-main-chat'

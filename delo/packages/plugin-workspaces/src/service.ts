@@ -1,14 +1,14 @@
 /**
  * The workspaces service the main chat's account tools call: the Service
- * Definition of the `deloWorkspaces` capability seam. Delo's workspaces
- * plugin provides it; until a provider is mounted the account tools are not
+ * Definition of the `deloWorkspaces` capability seam. `@delo/plugin-workspaces`
+ * provides it; until a provider is mounted the account tools are not
  * registered, and the rest of the main chat runs without them.
  *
  * The requests a tool builds from the model's arguments are validated here
  * ({@link CreateRequest}, {@link ImportRequest}); the provider validates its
  * own inputs again at its routes.
  *
- * @module @delo/plugin-main-chat/workspaces
+ * @module @delo/plugin-workspaces/service
  */
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import { z } from 'zod'
@@ -61,6 +61,8 @@ export interface ImportRow {
   readonly state: 'cloning' | 'done' | 'failed'
   /** Why it failed, in git's words or the provider's. */
   readonly reason: string | null
+  /** git's latest progress line while the import runs, with the token removed; null once it ends. */
+  readonly progress: string | null
 }
 
 /** One folder in the trash and the workspaces it held. */

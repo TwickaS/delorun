@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "tests"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../packages/util/brand" },
+    { "path": "../../../packages/workspace/workspace" },
+    { "path": "../../../packages/subprocess/subprocess" },
+    { "path": "../../../packages/storage/storage-domain" }
+  ]
+}

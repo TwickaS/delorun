@@ -14,8 +14,7 @@
     "src/folders.ts",
     "src/guard.ts",
     "src/reports.ts",
-    "src/wire.ts",
-    "src/workspaces.ts"
+    "src/wire.ts"
   ],
   "references": [
     {
