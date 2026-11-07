@@ -71,7 +71,22 @@ With `protectedHome` set, confined commands cannot create, change or delete anyt
 | Read under the home | Denied, with readable entries bound read-only | Denied: reads are granted only beside the way to the home, plus readable entries | Denied: `deny file-read*` on the home, readable entries allowed | Not confined |
 | Connect to a denied socket | Denied: `/dev/null` bound over the socket's resolved path, never its directory | Not expressed | Denied: `remote unix-socket` path literals of each spelling | Not expressed |
 
-`RUNNER_PROTECTION` exports this table as booleans per runner, so a consumer can report which rules the selected runner does not enforce.
+`RUNNER_PROTECTION` exports this table as booleans per runner, so a consumer can report which rules the selected runner does not enforce. The provider also reports the canonical home as `ctx.sandbox.protectedHome`, which the [filesystem fence](../../fs/fs-sandbox/README.md) reads to refuse writes under it.
+
+A consumer passes absolute paths: the home, the entries under it that commands still need, relative to it, and every socket commands must not reach, with a socket's configured path and its real path when they differ. For a home at `/home/me/.delo` whose processes listen on two channel sockets, with a rootful Docker engine:
+
+```yaml
+- id: sandbox
+  name: '@deepseek-ai/dsh-sandbox-local'
+  config:
+    protectedHome: /home/me/.delo
+    protectedHomeReadable: [runtimes, skills, dsh-runtimes]
+    deniedSockets:
+      - /home/me/.delo/run/default/update.sock
+      - /home/me/.delo/run/default/supervisor.sock
+      - /var/run/docker.sock
+      - /run/docker.sock
+```
 
 -----
 

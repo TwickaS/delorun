@@ -2549,17 +2549,17 @@
     {
       "path": "packages/sandbox/sandbox-local/README.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): documents the three Config fields, the per-runner mechanism table, `RUNNER_PROTECTION`, and the Landlock and alias limitations."
+      "reason": "Protected home and denied sockets (C1's confinement rules): documents the three Config fields, the per-runner mechanism table, `RUNNER_PROTECTION`, and the Landlock and alias limitations. Also shows the exact configuration a consumer passes (the home, its readable entries, the channel sockets and the Docker socket's configured and real paths) and `ctx.sandbox.protectedHome`."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.zh.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the README.md additions."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the README.md additions. Also the Chinese counterpart of the consumer configuration example."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the README.md additions and their Chinese counterpart."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the README.md additions and their Chinese counterpart. Re-recorded again after the consumer configuration example."
     },
     {
       "path": "packages/fs/fs-sandbox/src/index.ts",
