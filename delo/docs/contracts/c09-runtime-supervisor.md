@@ -171,7 +171,8 @@ The supervisor is the only Delo component that calls Docker. It runs as a separa
 
 - **The roots file.** `supervisor/roots.json` ([C1](c01-home-layout.md), mode 0600) holds `{"v":1,"parents":["<absolute path>", ...]}` with at most 16 parent directories. Only `delorun setup` writes it, in the person's terminal; no Host API, tool or configuration row writes it. The supervisor reads it at its start.
 - **Parents.** Each parent is stored as its canonical absolute path. Setup refuses `/`, the OS home directory, the Delo home, any path that contains the Delo home and any path inside it.
-- **Workspace roots.** On `workspace.create` the supervisor resolves `root` with `realpath` itself. It refuses with `ROOT_REFUSED` a root that is `/`, the OS home directory or the Delo home, that contains or lies inside the Delo home, or that is not a directory owned by the person, and with `ROOT_NOT_UNDER_PARENT` a root that is not strictly inside one of the parents.
+- **Workspace roots.** On `workspace.create` the supervisor resolves `root` with `realpath` itself. It refuses with `ROOT_REFUSED` a root that is `/`, the OS home directory or the Delo home, that contains the OS home directory, that contains or lies inside the Delo home, that lies inside or contains the root of another workspace it manages, or that is not a directory owned by the person, and with `ROOT_NOT_UNDER_PARENT` a root that is not strictly inside one of the parents. Paths are compared by file identity, so an alias of a directory counts as that directory.
+- **Before each start.** On every `workspace.start` the supervisor checks the workspace's containers again: each must carry its home's and profile's labels, the root mount's source must still resolve to itself and pass every rule above (`ROOT_REFUSED`), and every setting of [containers](#containers) must still be in effect (`LIMITS_MISSING`). A container that fails is not started.
 - **Mounts.** An S2 container's bind mounts are the resolved workspace root, the workspace's helper socket directory and, when the workspace forwards an agent, that agent's socket. The S3 container's mounts are the resolved workspace roots, the volume that holds its Delo home and the machine's `~/.delo/run/<profile>/s3/`. No other host path is mounted. After creating the container, the supervisor compares the inspected mount sources with the resolved paths and removes the container with `ROOT_REFUSED` on any difference.
 - **Who can change the roots.** Confined commands cannot write the file wherever [C1](c01-home-layout.md)'s `home-write` rule holds, and upstream's in-process file tools are limited to writable roots, which never include the home. A command or tool that runs under `danger-full-access` can write it.
 
@@ -235,7 +236,7 @@ A file operation that a container's read-only root refuses is denied by the envi
 | `SCHEMA_VIOLATION` | Unknown `op` or field, or a value outside its type or bound |
 | `REQUEST_TIMEOUT` | No request line arrived within 5 seconds |
 | `BUSY` | 32 connections are already open |
-| `ROOT_REFUSED` | The root is `/`, the OS home or the Delo home, contains or lies inside the Delo home, is not the person's directory, or its mount source differed after creation |
+| `ROOT_REFUSED` | The root is `/`, the OS home or the Delo home, contains the OS home, contains or lies inside the Delo home, lies inside or contains another workspace's root, is not the person's directory, or its mount source differed after creation or no longer resolves to itself before a start |
 | `ROOT_NOT_UNDER_PARENT` | The root is not strictly inside a setup parent |
 | `IMAGE_NOT_IN_MANIFEST` | The image digest is not listed by the verified manifest, or the pulled digest differs |
 | `IMAGE_PULL_FAILED` | Pulling a listed digest failed |
@@ -293,7 +294,7 @@ A file operation that a container's read-only root refuses is denied by the envi
 | `supervisor-landlock` | Under Landlock, a confined native workspace command's connect to the supervisor socket succeeds and its request fails with `UNAUTHENTICATED`, because it cannot read the token, and `delorun verify` reports that state |
 | `supervisor-not-enforced-labelled` | On a fixture dialect that cannot enforce [C1](c01-home-layout.md)'s rules, `delorun verify` reports them and setup's Docker mode option carries the label |
 | `supervisor-schema-closed` | Requests with an image reference, a mount, an environment variable, a command or an unknown `op` are refused with `SCHEMA_VIOLATION`, and no container is created |
-| `supervisor-roots-refused` | Roots `/`, `$HOME`, `~/.delo`, a path containing `~/.delo`, a symbolic link resolving outside every parent and a path outside every parent are refused |
+| `supervisor-roots-refused` | Roots `/`, `$HOME`, `~/.delo`, a path containing `~/.delo` or `$HOME`, a path inside or containing another workspace's root, a symbolic link resolving outside every parent and a path outside every parent are refused, and a workspace whose root no longer resolves to itself is not started |
 | `supervisor-image-unlisted` | A container from a digest the verified manifest does not list is refused with `IMAGE_NOT_IN_MANIFEST` |
 | `capability-report-inspected` | Each `enforced` limit in the report matches `docker inspect` of the probe container, and a limit the engine ignores is reported `not-enforced` |
 | `cross-workspace-denied` | A workspace container cannot connect to another workspace's container or proxy |

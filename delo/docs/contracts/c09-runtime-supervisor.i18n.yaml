@@ -45,8 +45,8 @@
   en: d888e3b8925ae251
   zh: e51dac802099aa4f
 /c9-runtime-and-supervisor-interface/supervisor-roots:
-  en: fd3b9b5a18e7ad50
-  zh: f4520bd75190cb04
+  en: e6795340bdc82871
+  zh: 3a20dd39de6c1935
 /c9-runtime-and-supervisor-interface/the-s2-helper-channel:
   en: c5aa4bc6962309ef
   zh: 2dfec94f545a1563
@@ -60,8 +60,8 @@
   en: 9e650573f4027231
   zh: 672c78d9f250c864
 /c9-runtime-and-supervisor-interface/errors:
-  en: 3c787b92eb6c9b26
-  zh: 64840df17c1e9637
+  en: a620d204b6724a78
+  zh: b8037978266d4e48
 /c9-runtime-and-supervisor-interface/consumers:
   en: d72a5e8f5ebc81f5
   zh: a888f14c0d2adbe2
@@ -75,8 +75,8 @@
   en: 30992d1ddc627013
   zh: 86661bbf2df9ed9d
 /c9-runtime-and-supervisor-interface/security/denial-tests:
-  en: 294b2ad132711cb1
-  zh: 837e0e35e2fff5de
+  en: 2329acef6318988c
+  zh: 0e4234ee4109d002
 /c9-runtime-and-supervisor-interface/security/what-this-does-not-prove:
   en: 9dc0f4799c71702f
   zh: ba221ec3a91e68bf
