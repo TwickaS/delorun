@@ -73,7 +73,10 @@ export interface RuntimeStore {
   reportRollback(target: RuntimeVersion): Promise<PreparedRuntime>
   /**
    * Switch: write `previous` with `from`, then `current` with `to`, each by C1's atomic rename, so a process killed
-   * between the two writes leaves `current` naming `from`.
+   * between the two writes leaves `current` naming `from`. The handshake's interrupted-update recovery relies on
+   * this between-writes state — `previous` written before `current`, so a kill between the writes leaves
+   * `previous` holding `from` while the journal records the true one, which the recovery restores from the journal
+   * — so implementations must keep this write order.
    * @param from - the running version.
    * @param to - the target version.
    */

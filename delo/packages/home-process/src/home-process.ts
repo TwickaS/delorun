@@ -427,6 +427,10 @@ export class HomeProcess implements HandshakeSubject {
     const { current } = await this.options.updates.store.pointers()
     if (!SWITCH_PHASES.has(journal.phase) || current === journal.from) {
       this.logger.info('an interrupted update had not switched the runtime; nothing changed', { data: { from: journal.from, to: journal.to, phase: journal.phase } })
+      // A kill between the store's two pointer writes leaves `previous` holding `from` on disk while the journal
+      // still records the true rollback target; restore the journal's `previous` (or its absence) before the
+      // journal goes, or the person's rollback target is lost.
+      await this.options.updates.store.restore(journal.previous === undefined ? { current } : { current, previous: journal.previous })
       await removeJournal(this.journal)
       return
     }

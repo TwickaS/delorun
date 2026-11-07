@@ -133,7 +133,7 @@ home 进程是每个 CLI profile 一个的操作系统进程。它在同一进�
 - **被杀死的 home 进程。** 每次指针写入都是 [C1](c01-home-layout.zh.md) 的原子重命名，因此 `current` 始终指向一个完整的已安装版本。下次启动时，启动顺序的第 3 步读取日志文件：
   - 阶段早于 `switching` 时，它删除日志文件，没有任何改变；
   - 阶段为 `switching` 或 `health-check` 且 `current` 指向 `to` 时，启动对 `to` 运行健康检查；检查失败时，它把两个指针恢复为更新前的值（`current` 恢复为 `from`，`previous` 恢复为日志文件中的 `previous`，日志文件中没有该字段时则删除 `previous`），从 `from` 重新启动并记录这次回滚；
-  - `current` 指向 `from` 时，启动运行 `from` 并删除日志文件。
+  - `current` 指向 `from` 时，启动先把 `previous` 恢复为日志文件中的 `previous`（日志文件中没有该字段时则删除 `previous`——两次指针写入之间被杀时它留存的是 `from`），再运行 `from` 并删除日志文件。
 - **已安装的版本。** 被中断的更新安装的版本作为非当前版本留在仓库中，直到 [C1](c01-home-layout.zh.md) 的保留规则删除它。
 
 <a id="rollback"></a>

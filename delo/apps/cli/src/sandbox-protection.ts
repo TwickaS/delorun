@@ -6,6 +6,9 @@
  * Desktop's macOS sockets under `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` when present. The
  * settings travel as an overlay patch the start writes to `run/<profile>/sandbox.patch.yml` and hands to upstream's
  * profile runner; the provider's other settings in the profile's own patch are kept, its own denied sockets included.
+ * A patch that sets the runner itself (`runnerCommand`, `runnerFailureSignatures`) is refused: a non-empty runner
+ * command asserts full enforcement and skips the built-in selection, which would boot the row unconfined while the
+ * provider reports full.
  *
  * @module @delo/cli/sandbox-protection
  */
@@ -136,10 +139,18 @@ function personSettings(patchPath: string): Record<string, unknown> {
  * @param patchPath - the profile's `cordis.patch.yml`.
  * @param protection - the settings.
  * @returns the overlay's path, to pass to upstream's profile runner.
- * @throws {CliError} when the profile's own settings for the row cannot be carried over.
+ * @throws {CliError} when the profile's own settings for the row cannot be carried over, or when the row sets the
+ *   runner itself, which would replace the confinement Delo's home protection needs.
  */
 export async function writeSandboxOverlay(home: string, profile: string, patchPath: string, protection: SandboxProtection): Promise<string> {
   const own = personSettings(patchPath)
+  // The provider treats a non-empty `runnerCommand` as an assertion of full enforcement and skips its built-in
+  // selection, so a person-controlled row could boot unconfined while the provider reports full. Refuse it here,
+  // as the expressions above are refused: the row cannot carry over.
+  const runnerKeys = ['runnerCommand', 'runnerFailureSignatures'].filter(key => own[key] !== undefined)
+  if (runnerKeys.length > 0) {
+    throw new CliError(EXIT.failed, `delorun: ${patchPath} configures the ${SANDBOX_ROW} row with ${runnerKeys.join(' and ')}; Delo's home protection requires the provider's built-in runner selection, so remove ${runnerKeys.join(' and ')} from that row`)
+  }
   const listed = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [])
   // The person's own denied sockets stay denied; the home is Delo's.
   const config = {

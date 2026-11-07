@@ -258,8 +258,10 @@ export class UpdateHandshake {
   }
 
   private async phase(update: JournalledUpdate, phase: UpdatePhase, progress: Progress): Promise<void> {
-    this.current = { phase, target: update.to }
+    // The journal is written before the phase is announced: a kill while this runs leaves the journal at most one
+    // phase ahead of what `status` reports, never behind, and either state recovers the same way.
     await writeJournal(this.subject.journal, update, phase)
+    this.current = { phase, target: update.to }
     this.subject.logger.info('update phase', { data: { phase, from: update.from, to: update.to } })
     progress({ phase })
   }

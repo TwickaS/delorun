@@ -11,7 +11,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, 
 import { connect } from 'node:net'
 import { join } from 'node:path'
 import { REQUEST_MAX_BYTES, type HomeStatus } from '@delo/contract-home-process'
-import { newStartId, processExists, readHomeLock, readStartTokenFile, runDirectory, startTokenFile } from '@delo/home'
+import { newStartId, processExists, readHomeLock, readStartTokenFile, runDirectory, startTokenFile, writeProtectedFile } from '@delo/home'
 import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it } from 'vitest'
 import { exchangeLines, journalPath, openHomeLog, queryHomeStatus, sendHomeRequest, updateSocketPath, writeJournal, type ResponseLine } from '../src/index.ts'
@@ -381,15 +381,58 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
   })
 
+  it('a start after a kill between the store\'s two pointer writes restores the previous the journal recorded', async () => {
+    const home = await setUp()
+    installFixture(home, V0)
+    // What a kill between the two pointer writes leaves: the switch wrote `previous` with `from` and was killed
+    // before the `current` write, so both pointers name the running version while the journal in `switching`
+    // records the true previous V0.
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeProtectedFile(join(home, 'runtimes', 'current'), `${V1}\n`)
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString() }, 'switching')
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(readPointer(home, 'previous')).toBe(V1)
+    await start(home)
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(readPointer(home, 'previous')).toBe(V0) // restored from the journal, not left clobbered with `from`
+    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+    expect(await status(home)).toMatchObject({ state: 'running', runtime: { current: V1, running: V1 } })
+  })
+
+  it('a start after a kill between the store\'s two pointer writes with no previous before the update removes the clobbered pointer', async () => {
+    const home = await setUp()
+    // The same kill point when the update had no previous: the switch still wrote `previous` with `from`, and the
+    // journal records no previous, so the recovery removes the pointer the switch left behind.
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeProtectedFile(join(home, 'runtimes', 'current'), `${V1}\n`)
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString() }, 'switching')
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(readPointer(home, 'previous')).toBe(V1)
+    await start(home)
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(readPointer(home, 'previous')).toBeUndefined()
+    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+    expect(await status(home)).toMatchObject({ state: 'running', runtime: { current: V1, running: V1 } })
+  })
+
   it('an update journals the previous pointer it found before the switch', async () => {
     const home = await setUp({ bootMs: 1_500 })
     installFixture(home, V0)
     await FixtureStore.seed(home, V1, V0)
     await start(home)
     const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } })
-    await until(async () => (await status(home).catch(() => undefined))?.update?.phase === 'health-check', 20_000, 'health-check')
-    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ v: 1, from: V1, to: V2, previous: V0, phase: 'health-check' })
-    expect(final(await applying)).toEqual({ ok: true, outcome: 'committed' })
+    void applying.catch(() => {}) // an aborted assertion must not leave this rejection unhandled
+    try {
+      await until(async () => (await status(home).catch(() => undefined))?.update?.phase === 'health-check', 20_000, 'health-check')
+      // The phase is announced before the journal's write lands, so the on-disk journal may still name `switching`
+      // while `status` reports `health-check`; either order recovers the same way.
+      const journalled = JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8')) as Record<string, unknown>
+      expect(journalled).toMatchObject({ v: 1, from: V1, to: V2, previous: V0 })
+      expect(['switching', 'health-check']).toContain(journalled.phase)
+      expect(final(await applying)).toEqual({ ok: true, outcome: 'committed' })
+    } finally {
+      await applying.catch(() => {})
+    }
   })
 
   it('a start after a home process killed in switching before current was written runs the previous version and removes the journal', async () => {

@@ -119,7 +119,7 @@ The home process writes the journal `run/<profile>/update.json`, mode 0600, at t
 - **A killed home process.** Every pointer write is [C1](c01-home-layout.md)'s atomic rename, so `current` always names a whole, installed version. At the next start, step 3 of the start sequence reads the journal:
   - with a phase before `switching`, it removes the journal, and nothing has changed;
   - with `switching` or `health-check` and `current` naming `to`, the start runs the health check on `to`; when it fails, it restores both pointers to their values before the update (`current` to `from`, and `previous` to the journal's `previous`, or removes `previous` when the journal has none), starts again from `from` and logs the rollback;
-  - with `current` naming `from`, the start runs `from` and removes the journal.
+  - with `current` naming `from`, the start restores `previous` to the journal's `previous` (or removes `previous` when the journal has none — the kill between the two pointer writes left it holding `from`), runs `from` and removes the journal.
 - **Installed versions.** A version installed by an interrupted update stays in the store as a non-current version until [C1](c01-home-layout.md)'s retention removes it.
 
 ## Rollback

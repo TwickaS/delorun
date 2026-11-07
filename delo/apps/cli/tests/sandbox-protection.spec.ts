@@ -80,4 +80,19 @@ describe('the CLI profile\'s sandbox protection', () => {
     writeFileSync(patch, '- id: sandbox\n  config:\n    protectedHome: !!js process.env.HOME\n')
     await expect(writeSandboxOverlay(home, 'default', patch, protection)).rejects.toThrow(/with expressions/)
   })
+
+  it('refuses a row that sets the runner itself, naming the key, while unrelated plain settings still apply', async () => {
+    const { home, osHome } = setUp()
+    const protection = await sandboxProtection(home, 'default', { DOCKER_CONFIG: join(base ?? '', 'no-config'), DOCKER_HOST: 'tcp://127.0.0.1:2375' }, osHome)
+    const patch = join(base ?? '', 'cordis.patch.yml')
+    writeFileSync(patch, '- id: sandbox\n  config:\n    runnerCommand: [/my-runner, --wrap]\n')
+    await expect(writeSandboxOverlay(home, 'default', patch, protection)).rejects.toThrow(/configures the sandbox row with runnerCommand; Delo's home protection requires the provider's built-in runner selection/)
+    writeFileSync(patch, '- id: sandbox\n  config:\n    runnerFailureSignatures: [refused]\n')
+    await expect(writeSandboxOverlay(home, 'default', patch, protection)).rejects.toThrow(/configures the sandbox row with runnerFailureSignatures; Delo's home protection requires the provider's built-in runner selection/)
+    // A row that never touches the runner keeps carrying over, its plain settings included.
+    writeFileSync(patch, '- id: sandbox\n  config:\n    probeTimeoutMs: 5000\n')
+    const overlay = await writeSandboxOverlay(home, 'default', patch, protection)
+    const [entry] = parse(readFileSync(overlay, 'utf8')) as [{ id: string, config: Record<string, unknown> }]
+    expect(entry).toEqual({ id: 'sandbox', config: { probeTimeoutMs: 5000, protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS], deniedSockets: protection.deniedSockets } })
+  })
 })
