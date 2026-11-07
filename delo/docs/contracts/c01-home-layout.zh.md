@@ -197,9 +197,9 @@ runtimes/
 
 - **读取豁免。** 受限命令可以读取并执行 `runtimes/`、`skills/` 与 `dsh-runtimes/`。PTC worker 与其他受限进程运行 `runtimes/` 中运行时自带的 `node`，命令运行 `skills/` 中本人的 skill 脚本，桌面应用的工作区依赖从 `dsh-runtimes/` 运行。豁免路径下不写入任何密钥；保存密钥的组件使用 `secrets/`。
 - **可写根目录。** home 从不位于可写根目录之内。工作区根目录或附加可写根目录在解析符号链接后等于 home、位于其内或包含它时，`workspace-write` 以 `HOME_IN_WRITABLE_ROOT` 被拒绝。根目录包含 home 的工作区（例如 `~`）仍可运行 `read-only` 命令。
-- **Docker 套接字。** 该套接字位于 home 之外。Delo 从当前 Docker context 解析其路径：rootful 引擎为 `/var/run/docker.sock`，rootless 引擎为 `$XDG_RUNTIME_DIR/docker.sock`，或 Docker Desktop 的 context 所指的路径。该规则同时覆盖 context 的路径及其解析后的真实路径。端点为 TCP 或 SSH 的 context 使用网络，而没有方言限制网络，因此对它不强制执行 `docker-connect`。
+- **Docker 套接字。** 该套接字位于 home 之外。Delo 从当前 Docker context 解析其路径：rootful 引擎为 `/var/run/docker.sock`，rootless 引擎为 `$XDG_RUNTIME_DIR/docker.sock`，或 Docker Desktop 的 context 所指的路径。该规则同时覆盖 context 的路径及其解析后的真实路径、到达同一套接字的其他每个挂载（例如 WSL 下 Docker Desktop 的 `/mnt/wsl/docker-desktop-bind-mounts/<distro>/docker.sock`），以及 macOS 上 Docker Desktop 位于 `~/Library/Containers/com.docker.docker/Data/` 下的套接字（`docker.raw.sock` 与 `docker.sock`）和 `~/.docker/run/docker.sock`，Delo 把它们与 context 的路径一起列入被拒绝的套接字。端点为 TCP 或 SSH 的 context 使用网络，而没有方言限制网络，因此对它不强制执行 `docker-connect`。
 - **其他套接字。** 其他 `AF_UNIX` 套接字（例如 ssh-agent 套接字、D-Bus 与显示服务器）以及网络，对受限命令仍可访问。
-- **探测。** 每次启动时，home 进程针对 `run/<profile>/probe/` 中的固定样例、它在那里打开的一个套接字以及 Docker 套接字路径，为每条规则运行一个受限探测命令，并记录结果。`delorun verify` 通过 [C15](c15-verification-checks.zh.md) 的 `confinement-rule` 检查报告每条规则；只有当方言能表达某条规则、且本次启动时其探测被拒绝，才把该规则报告为 `enforced`。其他状态是 `not-enforced`（方言无法表达该规则、端点是网络端点，或该平台没有证明它的测试）、`unconfined`（没有沙箱运行，或模式为 `danger-full-access`）和 `unknown`（探测未运行，或因其他原因失败）。 每条沙箱规则的状态都映射为一个验证检查结果：`enforced` 为 `pass`，`not-enforced` 为 `not-enforced`，`unconfined` 为 `fail`，`unknown` 为 `unknown`。
+- **探测。** 每次启动时，home 进程针对 `run/<profile>/probe/` 中的固定样例、它在那里打开的一个套接字以及 Docker 套接字路径，为每条规则运行一个受限探测命令，并记录结果。在 Linux 上，读取与连接探测还会通过本次启动时发现的 home 所在文件系统与 Docker 套接字的其他每个挂载运行（例如 WSLg 下根文件系统在 `/mnt/wslg/distro` 的第二个挂载），只有当其中每一个都被拒绝时，规则才是 `enforced`。`delorun verify` 通过 [C15](c15-verification-checks.zh.md) 的 `confinement-rule` 检查报告每条规则；只有当方言能表达某条规则、且本次启动时其探测被拒绝，才把该规则报告为 `enforced`。其他状态是 `not-enforced`（方言无法表达该规则、端点是网络端点，或该平台没有证明它的测试）、`unconfined`（没有沙箱运行，或模式为 `danger-full-access`）和 `unknown`（探测未运行，或因其他原因失败）。 每条沙箱规则的状态都映射为一个验证检查结果：`enforced` 为 `pass`，`not-enforced` 为 `not-enforced`，`unconfined` 为 `fail`，`unknown` 为 `unknown`。
 - **标注 Docker 模式。** `docker-connect` 不是 `enforced` 时，`delorun verify` 会报告它，setup 的 Docker 模式选项附带这一说明：在此系统上，原生工作区中的命令可以连接 Docker，而 Docker 可以启动挂载此计算机文件的容器。
 - **Landlock 与 rootful 引擎。** 方言为 Landlock、且当前 context 的端点是 rootful 引擎的套接字时，`delorun verify` 把 `docker-connect` 报告为 `not-enforced`，原因为 `dialect-cannot-express`，并给出该套接字的路径。setup（[C11](c11-setup-answers.zh.md)）给出同一路径，说明受限命令可以连接它、这在本机上等同于 root，并提供设置 Docker 的 rootless 引擎并把当前 context 切换到它的选项。
 - **提权提示。** `danger-full-access` 提权的批准提示（无论是命令请求它，还是本人设置该模式）在本人批准之前说明：「完全访问让该命令可以读取 Delo 的 home（包括其中的密钥与令牌），并访问 Docker 监管器与更新通道。」该提示展示给本人，对模型不可见。
@@ -319,6 +319,8 @@ runtimes/
 ### 本约定不能证明的内容
 
 - **Landlock 与套接字。** Landlock 无法拒绝对路径名套接字的连接。在只有 Landlock 的系统上，受限命令能访问 rootful Docker 套接字，这等同于 root；`delorun verify` 会报告它，但在那里没有 Delo 机制能阻止它。home 的通道之所以仍然关闭，只是因为启动令牌不可读。
+- **命令启动后重新创建的套接字。** bwrap 在包装命令时把 `/dev/null` 绑定到被拒绝套接字的路径上；之后在该路径上被删除并重新创建的套接字（例如 Docker 引擎重启之后）是一个新文件，绑定不覆盖它，因此之前已启动的命令不会被拒绝访问它。让受限命令长时间运行的组件（例如终端或后台任务）在被拒绝的套接字重新创建时重新包装或停止这些命令；该组件的契约承担这一要求。
+- **之后新增的挂载与链接。** profile 覆盖包装命令时已存在的、home 所在文件系统与每个被拒绝套接字的其他挂载。命令运行期间新增的挂载，以及在沙箱外为 home 下文件创建的硬链接，不在覆盖范围内。
 - **Landlock 与 home 的上级目录。** Landlock 按目录树授予读取权限，因此 profile 授予从 `/` 到 home 路径旁的每个条目，而不是这些目录本身：受限命令不能列出 `/`、操作系统主目录或这条路径上的任何其他目录，命令启动后在其中新建的条目对它不可读。这些条目在包装命令时列出，因此在启动器应用规则集之前被删除的条目会让启动器拒绝运行；该命令不会运行，无论是否受限。
 - **Windows 上的读取。** windows-acl 不限制读取。home 上的 no-read-up 标签只在 `windows-home-read-label` 通过时才报告为 `enforced`；该标签不成立时，Windows 上的 `home-read` 与 `token-read` 不被强制执行，通道只依靠 `windows-pipe-connect-denied` 所证明的命名管道写拒绝。
 - **Windows 上的通道。** 在 Windows 上，通道是位于 home 文件系统目录树之外的命名管道；保护它们的只有其 DACL 与令牌。
