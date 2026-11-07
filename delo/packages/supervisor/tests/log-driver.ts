@@ -12,7 +12,7 @@ import { ensureHomeTree, writeProtectedFile } from '@delo/home'
 import type { LogsFailure } from '@delo/logs'
 import type { SurfaceDriver } from '../../logs/tests/denial/surfaces.ts'
 import { captureSupervisorOutput, openSupervisorLog, startTokenFile, Supervisor } from '../src/index.ts'
-import { fixtureManifest } from './support.ts'
+import { fixtureManifest, TIMING } from './support.ts'
 
 const PROFILE = 'default'
 
@@ -27,7 +27,7 @@ export const SUPERVISOR_DRIVER: SurfaceDriver = {
     opened.redactor.register(token, 'start-token')
     const supervisor = await Supervisor.start({
       home, profile: PROFILE, token, manifest: fixtureManifest(), pull: 'none', logger: opened.logger,
-      env: { DOCKER_HOST: `unix://${join(home, 'no-docker.sock')}`, DOCKER_CONFIG: join(home, 'no-docker-config') }, osHome: homedir(), seccompDirectory: join(home, 'no-seccomp'),
+      env: { DOCKER_HOST: `unix://${join(home, 'no-docker.sock')}`, DOCKER_CONFIG: join(home, 'no-docker-config') }, osHome: homedir(), seccompDirectory: join(home, 'no-seccomp'), timing: TIMING,
     })
     return {
       location: opened.log.location,

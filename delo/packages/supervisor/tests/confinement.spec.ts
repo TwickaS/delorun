@@ -14,7 +14,6 @@ import { execFile, spawnSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
@@ -63,10 +62,11 @@ afterEach(async () => {
 })
 
 /**
- * Where the specs' homes are created: outside the OS temporary directory, which upstream's profiles replace with a
- * private `/tmp` and so would hide a home there whether or not the dialect expresses C1's rule.
+ * Where the specs' homes are created: a short fixed base outside the OS temporary directory, which upstream's
+ * profiles replace with a private `/tmp` and so would hide a home there whether or not the dialect expresses C1's
+ * rule. It is short so the socket path stays within C1's limit in any checkout.
  */
-const OUTSIDE_TMP = fileURLToPath(new URL('../../../../node_modules/.cache/dsv/', import.meta.url))
+const OUTSIDE_TMP = '/var/tmp'
 
 async function setUp(): Promise<{ readonly home: string, readonly socket: string, readonly tokenFile: string, readonly workspace: string, readonly fixture: string }> {
   temp = await tempHome(OUTSIDE_TMP)

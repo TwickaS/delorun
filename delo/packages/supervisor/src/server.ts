@@ -7,7 +7,9 @@
  *
  * @module @delo/supervisor/server
  */
-import { chmod, lstat, unlink } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { chmod, lstat, rename, unlink } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { createServer, type Server, type Socket } from 'node:net'
 import { PROTECTED_FILE_MODE, SOCKET_PATH_MAX_BYTES } from '@delo/contract-home-layout'
 import {
@@ -35,6 +37,10 @@ export interface ListenOptions {
   readonly handle: RequestHandler
   /** The supervisor's logger. */
   readonly logger: DeloLogger
+  /** The time from connect to the request's first byte, in milliseconds, within C9's 5 seconds for the whole line. */
+  readonly firstByteMs: number
+  /** The shortest time between two records of refused authentications, in milliseconds. */
+  readonly refusalLogIntervalMs: number
 }
 
 /** A listening supervisor socket. */
@@ -58,12 +64,12 @@ function workspaceOf(request: SupervisorRequest): string | undefined {
 }
 
 /**
- * Remove a socket left by an earlier supervisor of this profile. Only a socket is removed; any other file at the path
- * is refused, so the supervisor never deletes a file it did not create.
+ * Check the socket path for a file left by an earlier supervisor of this profile. A socket there is replaced when the
+ * new one is renamed over it; any other file is refused, so the supervisor never replaces a file it did not create.
  * @param path - the socket path.
  * @throws {Error} naming the path when something other than a socket is there.
  */
-async function removeStaleSocket(path: string): Promise<void> {
+async function refuseNonSocket(path: string): Promise<void> {
   let stats
   try {
     stats = await lstat(path)
@@ -72,33 +78,64 @@ async function removeStaleSocket(path: string): Promise<void> {
     throw error
   }
   if (!stats.isSocket()) throw new Error(`${path} exists and is not a socket; remove it before starting the supervisor`)
-  await unlink(path)
+}
+
+/** The refusals of requests without the current token, logged at most once per interval with a count. */
+class RefusalLog {
+  private suppressed = 0
+  private last = Number.NEGATIVE_INFINITY
+
+  /**
+   * @param logger - the supervisor's logger.
+   * @param intervalMs - the shortest time between two records.
+   */
+  constructor(private readonly logger: DeloLogger, private readonly intervalMs: number) {}
+
+  /** Count one refusal and write a record when the interval has passed since the last one. */
+  refused(): void {
+    const now = Date.now()
+    if (now - this.last < this.intervalMs) {
+      this.suppressed += 1
+      return
+    }
+    this.logger.warn('refused a request without the current start token', this.suppressed === 0 ? undefined : { data: { alsoRefusedSinceLastRecord: this.suppressed } })
+    this.last = now
+    this.suppressed = 0
+  }
 }
 
 /**
- * Listen on the supervisor socket.
- * @param options - the path, token check, handler and logger.
+ * Listen on the supervisor socket. The socket is bound under a temporary name in the same directory, set to mode 0600
+ * and renamed into place, so it appears whole at its mode and replaces an earlier supervisor's socket in one step.
+ * Closing removes the path only while it is still this listener's socket, so a supervisor that stops after a newer
+ * one has started leaves the newer socket in place.
+ * @param options - the path, token check, handler, logger and timing.
  * @returns the listener.
  * @throws {HomeLayoutError} `SOCKET_PATH_TOO_LONG` when the path exceeds C1's limit.
+ * @throws {Error} when a file other than a socket is at the path.
  */
 export async function listenSupervisor(options: ListenOptions): Promise<SupervisorListener> {
   const { socketPath, check, handle, logger } = options
   if (Buffer.byteLength(socketPath, 'utf8') > SOCKET_PATH_MAX_BYTES) {
     throw new HomeLayoutError('SOCKET_PATH_TOO_LONG', socketPath, `${socketPath} is longer than ${String(SOCKET_PATH_MAX_BYTES)} bytes; choose a shorter Delo home with DELO_HOME`)
   }
-  await removeStaleSocket(socketPath)
+  await refuseNonSocket(socketPath)
+  const refusals = new RefusalLog(logger, options.refusalLogIntervalMs)
   const sockets = new Set<Socket>()
   let served = 0
 
-  // Input after the request line is discarded, and a peer that has not closed its side within the request deadline
-  // after the response is cut off, so it cannot hold one of the connections.
+  // The connection's slot is released once the response is flushed. Input after the request line is read and
+  // discarded, so closing never resets the peer before it has the response; a peer that has not closed its side by
+  // the first-byte deadline is cut off.
   const answer = (socket: Socket, fields: Record<string, unknown>): void => {
     socket.removeAllListeners('data')
     socket.resume()
-    socket.end(`${JSON.stringify(fields)}\n`)
-    const linger = setTimeout(() => { socket.destroy() }, SUPERVISOR_REQUEST_DEADLINE_MS)
-    linger.unref()
-    socket.once('close', () => { clearTimeout(linger) })
+    socket.end(`${JSON.stringify(fields)}\n`, () => {
+      socket.emit('released')
+      const cutOff = setTimeout(() => { socket.destroy() }, options.firstByteMs)
+      cutOff.unref()
+      socket.once('close', () => { clearTimeout(cutOff) })
+    })
   }
 
   const run = async (socket: Socket, line: string): Promise<void> => {
@@ -112,7 +149,7 @@ export async function listenSupervisor(options: ListenOptions): Promise<Supervis
         return
       }
       const refusal = error
-      if (refusal.code === 'UNAUTHENTICATED') logger.warn('refused a request without the current start token')
+      if (refusal.code === 'UNAUTHENTICATED') refusals.refused()
       else logger.info('refused a request', { data: { outcome: refusal.code, detail: refusal.detail ?? '' } })
       answer(socket, { ...refusal.toFailure() })
       return
@@ -144,7 +181,14 @@ export async function listenSupervisor(options: ListenOptions): Promise<Supervis
       return
     }
     served += 1
-    socket.once('close', () => { served -= 1 })
+    let held = true
+    const release = (): void => {
+      if (!held) return
+      held = false
+      served -= 1
+    }
+    socket.once('released', release)
+    socket.once('close', release)
     let buffered = Buffer.alloc(0)
     let done = false
     const finish = (): void => {
@@ -153,14 +197,23 @@ export async function listenSupervisor(options: ListenOptions): Promise<Supervis
       socket.removeAllListeners('data')
       socket.pause()
     }
-    const deadline = setTimeout(() => {
+    const timeOut = (): void => {
       if (done) return
       finish()
       logger.info('refused a request', { data: { outcome: 'REQUEST_TIMEOUT' } })
       answer(socket, { ...new SupervisorError('REQUEST_TIMEOUT').toFailure() })
-    }, SUPERVISOR_REQUEST_DEADLINE_MS)
+    }
+    // A caller that sends nothing is cut off at the first-byte deadline; one that has started has C9's 5 seconds.
+    const connectedAt = Date.now()
+    let deadline = setTimeout(timeOut, options.firstByteMs)
+    let started = false
     socket.on('data', (chunk: Buffer) => {
       if (done) return
+      if (!started) {
+        started = true
+        clearTimeout(deadline)
+        deadline = setTimeout(timeOut, SUPERVISOR_REQUEST_DEADLINE_MS - (Date.now() - connectedAt))
+      }
       buffered = Buffer.concat([buffered, chunk])
       const newline = buffered.indexOf(0x0a)
       const length = newline === -1 ? buffered.length : newline
@@ -181,14 +234,17 @@ export async function listenSupervisor(options: ListenOptions): Promise<Supervis
     })
   })
 
+  const temporary = join(dirname(socketPath), `.s-${randomBytes(4).toString('hex')}`)
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
-    server.listen(socketPath, () => {
+    server.listen(temporary, () => {
       server.off('error', reject)
       resolve()
     })
   })
-  await chmod(socketPath, PROTECTED_FILE_MODE)
+  await chmod(temporary, PROTECTED_FILE_MODE)
+  await rename(temporary, socketPath)
+  const bound = await lstat(socketPath, { bigint: true })
   server.on('error', (error) => { logger.error('listener error', { err: error }) })
 
   return {
@@ -197,7 +253,14 @@ export async function listenSupervisor(options: ListenOptions): Promise<Supervis
       const closed = new Promise<void>((resolve) => { server.close(() => { resolve() }) })
       for (const socket of sockets) socket.destroy()
       await closed
-      await removeStaleSocket(socketPath)
+      let current
+      try {
+        current = await lstat(socketPath, { bigint: true })
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+        throw error
+      }
+      if (current.dev === bound.dev && current.ino === bound.ino) await unlink(socketPath)
     },
   }
 }

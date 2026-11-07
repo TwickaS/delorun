@@ -18,7 +18,7 @@ import { HELPER_SOCKET_DIR, IMAGES, LABELS, PRESETS, type DockerLimit } from '@d
 import type { FileRef, OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
 import { writeProtectedFile } from '@delo/home'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { homeIdOf } from '../src/index.ts'
+import { homeIdOf, PROBE_COMMANDS } from '../src/index.ts'
 import { ABSENT_DIGEST, fixtureManifest, send, startSupervisor, tempHome, type RunningSupervisor, type TempHome } from './support.ts'
 
 const FIXTURE = fileURLToPath(new URL('fixtures/s2-image', import.meta.url))
@@ -146,6 +146,13 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
     expect(owned(home)).toEqual({ containers: [], networks: [] })
   })
 
+  it('the cap-drop probe fails for a non-root user who keeps the bounding set, which CapEff alone does not show', async (test) => {
+    if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
+    const run = (...flags: string[]): number | null => spawnSync('docker', ['run', '--rm', '--user', '1000:1000', ...flags, TAG, ...PROBE_COMMANDS.capabilities], { stdio: 'ignore', timeout: DOCKER_MS }).status
+    expect(run()).not.toBe(0)
+    expect(run('--cap-drop', 'ALL')).toBe(0)
+  })
+
   it('supervisor-schema-closed: requests naming an image, a mount, an environment variable, a command or an unknown op create no container', async (test) => {
     if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
     const { home, socket, token, parent } = await start(digest)
@@ -165,9 +172,11 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
     const root = join(parent, 'w')
     mkdirSync(root)
     const response = await send(socket, { v: 1, token, op: 'workspace.create', args: { workspaceId: 'w', root, preset: 'small', egress: 'none', allowlistAdditions: [], credentials: 'none' } })
-    expect(response).toMatchObject({ ok: false, error: 'IMAGE_NOT_IN_MANIFEST' })
+    // Where S2 is not offered, the shape refusal comes first; the probe's refusal of the image still shows.
+    const offered = running?.supervisor.current.docker?.engine !== 'docker-desktop'
+    expect(response).toMatchObject({ ok: false, error: offered ? 'IMAGE_NOT_IN_MANIFEST' : 'SHAPE_UNAVAILABLE' })
     expect(running?.supervisor.current.shapes.s2).toMatchObject({ available: false })
-    expect(running?.supervisor.current.docker?.limits.memory.status).toBe('unknown')
+    expect(running?.supervisor.current.docker?.limits.memory).toMatchObject({ status: 'unknown', evidence: expect.stringContaining('IMAGE_NOT_IN_MANIFEST') })
     expect(owned(home)).toEqual({ containers: [], networks: [] })
   })
 

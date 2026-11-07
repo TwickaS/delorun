@@ -13,7 +13,23 @@ import { IMAGES, type SupervisorFailure } from '@delo/contract-runtime-superviso
 import type { FileRef, OciDigest } from '@delo/contract-release-manifest'
 import { ensureHomeTree, writeProtectedFile } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
-import { openSupervisorLog, startTokenFile, Supervisor, type ImagePull, type SupervisorLog, type VerifiedManifest } from '../src/index.ts'
+import { PRESETS, type DockerLimit, type LimitFinding } from '@delo/contract-runtime-supervisor'
+import {
+  EngineError,
+  homeIdOf,
+  loadRootRules,
+  openSupervisorLog,
+  startTokenFile,
+  Supervisor,
+  Workspaces,
+  type CreateBody,
+  type Engine,
+  type ImagePull,
+  type InspectRecord,
+  type SupervisorLog,
+  type SupervisorTiming,
+  type VerifiedManifest,
+} from '../src/index.ts'
 
 /** The CLI profile the specs use. */
 export const PROFILE = 'default'
@@ -73,6 +89,9 @@ export function fixtureManifest(s2: OciDigest = ABSENT_DIGEST, s3: OciDigest = A
   }
 }
 
+/** The deadlines the specs run with. */
+export const TIMING: SupervisorTiming = { engineCallMs: 30_000, pullMs: 600_000, firstByteMs: 1_000, refusalLogIntervalMs: 60_000 }
+
 /** An environment whose Docker endpoint answers nothing. */
 export function noDockerEnv(home: string): Record<string, string> {
   return { DOCKER_HOST: `unix://${join(home, 'no-docker.sock')}`, DOCKER_CONFIG: join(home, 'no-docker-config') }
@@ -100,6 +119,8 @@ export interface StartOptions {
   readonly osHome?: string
   /** The seccomp profile directory; `<home>/seccomp` when omitted. */
   readonly seccompDirectory?: string
+  /** The deadlines; {@link TIMING} when omitted. */
+  readonly timing?: SupervisorTiming
 }
 
 /**
@@ -114,7 +135,7 @@ export async function startSupervisor(home: string, options: StartOptions = {}):
   log.redactor.register(token, 'start-token')
   const supervisor = await Supervisor.start({
     home, profile: PROFILE, token, manifest: options.manifest ?? fixtureManifest(), pull: options.pull ?? 'none',
-    logger: log.logger, env: options.env ?? noDockerEnv(home), osHome: options.osHome ?? homedir(), seccompDirectory: options.seccompDirectory ?? join(home, 'seccomp'),
+    logger: log.logger, env: options.env ?? noDockerEnv(home), osHome: options.osHome ?? homedir(), seccompDirectory: options.seccompDirectory ?? join(home, 'seccomp'), timing: options.timing ?? TIMING,
   })
   return {
     supervisor, log, token,
@@ -164,3 +185,97 @@ export function send(socketPath: string, request: unknown): Promise<Response> {
 
 /** A logger that drops every record. */
 export const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
+
+/** The Docker objects a {@link fakeEngine} holds, and the calls it received. */
+export interface FakeEngineState {
+  /** Containers by name, as their inspect records. */
+  readonly containers: Map<string, InspectRecord>
+  /** Every call, as `METHOD path`. */
+  readonly calls: string[]
+  /** Changes a created container's record, as an engine that does not apply a setting would. */
+  alter?: (name: string, record: InspectRecord) => InspectRecord
+}
+
+/** A digest the fake engine holds the S2 image at. */
+export const FAKE_DIGEST = `sha256:${'d'.repeat(64)}` as OciDigest
+
+/**
+ * The inspect record an engine that applied every setting of a body returns.
+ * @param body - the create body.
+ * @returns the record.
+ */
+export function appliedRecord(body: CreateBody): InspectRecord {
+  return {
+    Id: 'c',
+    Config: { Image: body.Image, User: body.User, Labels: body.Labels, Env: body.Env },
+    State: { Status: 'created', Running: false },
+    HostConfig: { ...body.HostConfig },
+    Mounts: body.HostConfig.Mounts.map(mount => ({ Type: 'bind', Source: mount.Source, Destination: mount.Target })),
+    NetworkSettings: { Networks: { [body.HostConfig.NetworkMode]: {} } },
+  }
+}
+
+/**
+ * An engine in memory that holds the S2 image at {@link FAKE_DIGEST} and creates, inspects, lists, starts and
+ * removes containers.
+ * @param state - its objects and the calls it records.
+ * @returns the engine.
+ */
+export function fakeEngine(state: FakeEngineState): Engine {
+  return {
+    call: (method, path, body) => {
+      state.calls.push(`${method} ${path}`)
+      const name = decodeURIComponent(/^\/containers\/([^/?]+)/.exec(path)?.[1] ?? '')
+      if (path.startsWith('/images/')) return Promise.resolve({ Id: 'sha256:i', RepoDigests: [`${IMAGES.s2}@${FAKE_DIGEST}`] })
+      if (method === 'GET' && path.startsWith('/containers/json')) {
+        return Promise.resolve([...state.containers.entries()].map(([key, record]) => ({ Names: [`/${key}`], Labels: record.Config?.Labels ?? {}, Mounts: (record.Mounts ?? []).map(mount => ({ ...mount })) })))
+      }
+      if (method === 'POST' && path.startsWith('/containers/create')) {
+        const created = decodeURIComponent(/name=([^&]+)/.exec(path)?.[1] ?? '')
+        if (state.containers.has(created)) return Promise.reject(new EngineError(409, `Conflict. The container name "/${created}" is already in use`))
+        const record = appliedRecord(body as CreateBody)
+        state.containers.set(created, state.alter?.(created, record) ?? record)
+        return Promise.resolve({ Id: created })
+      }
+      const record = state.containers.get(name)
+      if (method === 'GET' && path.startsWith('/containers/')) return record === undefined ? Promise.reject(new EngineError(404, `No such container: ${name}`)) : Promise.resolve(record)
+      if (method === 'POST' && path.endsWith('/start') && record !== undefined) {
+        state.containers.set(name, { ...record, State: { Status: 'running', Running: true } })
+        return Promise.resolve(null)
+      }
+      if (method === 'DELETE' && path.startsWith('/containers/')) {
+        if (!state.containers.delete(name)) return Promise.reject(new EngineError(404, `No such container: ${name}`))
+        return Promise.resolve(null)
+      }
+      return Promise.resolve(null)
+    },
+    pull: () => Promise.reject(new EngineError(500, 'the fake engine does not pull')),
+    execExitCode: () => Promise.resolve(0),
+  }
+}
+
+/** Every limit enforced, as a Linux engine that offers S2 reports them. */
+export const ALL_ENFORCED = Object.fromEntries((['cpu', 'memory', 'pids', 'disk', 'cap-drop', 'no-new-privileges', 'read-only-root', 'seccomp', 'user-namespace', 'network-isolation', 'host-gateway-block', 'host-loopback-block', 'egress-allowlist'] as const)
+  .map(limit => [limit, { status: 'enforced', evidence: 'fixture' }])) as Record<DockerLimit, LimitFinding>
+
+/**
+ * The workspace operations over a {@link fakeEngine}, on a machine that offers S2 without a disk quota.
+ * @param home - the Delo home, whose roots file names the parents.
+ * @param state - the fake engine's objects.
+ * @param osHome - the OS home the rules compare with; the real one when omitted.
+ * @param manifestDigest - the S2 digest the verified manifest lists; the one the fake engine holds when omitted.
+ * @returns the workspace operations.
+ */
+export async function fakeWorkspaces(home: string, state: FakeEngineState, osHome: string = homedir(), manifestDigest: OciDigest = FAKE_DIGEST): Promise<Workspaces> {
+  const limits = { ...ALL_ENFORCED, disk: { status: 'not-enforced' as const, evidence: 'fixture' } }
+  return new Workspaces({
+    engine: fakeEngine(state), owner: { homeId: homeIdOf(home), profile: PROFILE }, home, rules: await loadRootRules(home, osHome),
+    manifest: fixtureManifest(manifestDigest), pull: 'none', seccompDirectory: join(home, 'seccomp'),
+    inspection: () => ({
+      docker: { engine: 'docker-engine', version: '29', rootless: false, context: 'default', endpoint: { kind: 'unix', path: '/var/run/docker.sock' }, storageDriver: 'overlay2', limits },
+      shapes: { s2: { available: true, fileWatching: 'supported' }, s3: { available: true, fileWatching: 'supported' } },
+      machine: { cpus: PRESETS.large.cpus, memoryBytes: PRESETS.large.memoryBytes * 2 },
+      platform: 'linux/amd64',
+    }),
+  })
+}

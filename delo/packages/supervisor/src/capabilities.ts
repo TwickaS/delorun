@@ -76,7 +76,8 @@ export interface Inspection {
 
 /** The probe commands, each an argv whose exit code 0 means the property holds inside the container. */
 export const PROBE_COMMANDS = {
-  capabilities: ['sh', '-c', 'grep -Eq "^CapEff:[[:space:]]+0+$" /proc/self/status'],
+  // CapEff is empty for any non-root user; the bounding, permitted and ambient sets show what the container could gain.
+  capabilities: ['sh', '-c', 'for set in CapBnd CapPrm CapEff CapAmb; do grep -Eq "^$set:[[:space:]]+0+$" /proc/self/status || exit 1; done'],
   noNewPrivileges: ['sh', '-c', 'grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/self/status'],
   seccomp: ['sh', '-c', 'grep -Eq "^Seccomp:[[:space:]]+2$" /proc/self/status'],
   readOnlyRoot: ['sh', '-c', 'grep -Eq "^[^ ]+ / [^ ]+ ro[, ]" /proc/mounts'],
@@ -176,7 +177,7 @@ export function limitFindings(evidence: ProbeEvidence): Record<DockerLimit, Limi
     'disk': evidence.diskRefused !== undefined
       ? { status: 'not-enforced', evidence: `HostConfig.StorageOpt refused: ${evidence.diskRefused}` }
       : finding('HostConfig.StorageOpt', host.StorageOpt ?? null, host.StorageOpt?.size !== undefined && host.StorageOpt.size === evidence.body.HostConfig.StorageOpt?.size, exits.disk, 'root filesystem size within the limit'),
-    'cap-drop': finding('HostConfig.CapDrop', host.CapDrop, !differences.has('HostConfig.CapDrop') && !differences.has('HostConfig.CapAdd') && !differences.has('HostConfig.Privileged'), exits.capabilities, 'CapEff zero'),
+    'cap-drop': finding('HostConfig.CapDrop', host.CapDrop, !differences.has('HostConfig.CapDrop') && !differences.has('HostConfig.CapAdd') && !differences.has('HostConfig.Privileged'), exits.capabilities, 'CapBnd, CapPrm, CapEff and CapAmb empty'),
     'no-new-privileges': finding('HostConfig.SecurityOpt', host.SecurityOpt, (host.SecurityOpt ?? []).some(option => /^no-new-privileges(?::true|=true)?$/.test(option)), exits.noNewPrivileges, 'NoNewPrivs 1'),
     'read-only-root': finding('HostConfig.ReadonlyRootfs', host.ReadonlyRootfs, host.ReadonlyRootfs === true, exits.readOnlyRoot, '/ mounted ro'),
     'seccomp': finding('Info.SecurityOptions', security, security.some(option => option.includes('name=seccomp')) && !(host.SecurityOpt ?? []).some(option => /^seccomp[:=]unconfined$/.test(option)), exits.seccomp, 'Seccomp 2'),
@@ -378,7 +379,7 @@ export async function inspectDocker(options: InspectOptions): Promise<Inspection
       }
     } catch (error) {
       if (!(error instanceof SupervisorError)) throw error
-      images[shape] = error.detail ?? error.code
+      images[shape] = error.detail === undefined ? error.code : `${error.code}: ${error.detail}`
     }
   }
   let limits: Record<DockerLimit, LimitFinding>

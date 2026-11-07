@@ -57,17 +57,6 @@ export interface Engine {
   execExitCode(container: string, cmd: readonly string[], timeoutMs: number): Promise<number | undefined>
 }
 
-async function readBody(response: IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of response) {
-    size += (chunk as Buffer).length
-    if (size > MAX_BODY_BYTES) throw new EngineError(response.statusCode ?? 0, 'the response is too large')
-    chunks.push(chunk as Buffer)
-  }
-  return Buffer.concat(chunks).toString('utf8')
-}
-
 function engineError(status: number, body: string): EngineError {
   let parsed: unknown
   try {
@@ -80,36 +69,97 @@ function engineError(status: number, body: string): EngineError {
   return new EngineError(status, typeof message === 'string' ? message : body.trim().slice(0, 500) || `status ${String(status)}`)
 }
 
+/** How long the supervisor waits on the engine. */
+export interface EngineTimeouts {
+  /** The longest one call may take, response body included, in milliseconds. */
+  readonly callMs: number
+  /** The longest one pull may take, in milliseconds. */
+  readonly pullMs: number
+}
+
+/** The longest line of a pull's progress stream the supervisor reads; a progress record is a few hundred bytes. */
+const MAX_PROGRESS_LINE_BYTES = 64 * 1024
+
+/**
+ * Open one request and wait for its response head, within a deadline that also bounds reading the body.
+ * @param socketPath - the endpoint.
+ * @param method - the HTTP method.
+ * @param path - the path after the API version.
+ * @param body - the JSON body, if any.
+ * @param timeoutMs - the deadline for the whole call.
+ * @returns the response, whose body the caller reads before the signal fires, and the deadline's signal.
+ */
+async function open(socketPath: string, method: string, path: string, body: unknown, timeoutMs: number): Promise<{ readonly response: IncomingMessage, readonly signal: AbortSignal }> {
+  const signal = AbortSignal.timeout(timeoutMs)
+  const call = request({ socketPath, method, path: `${API}${path}`, signal, headers: body === undefined ? {} : { 'content-type': 'application/json' } })
+  return new Promise((resolve, reject) => {
+    call.once('response', (response) => { resolve({ response, signal }) })
+    call.once('error', (error: NodeJS.ErrnoException) => {
+      reject(new EngineError(0, signal.aborted ? `${socketPath} did not answer within ${String(timeoutMs)} ms` : `${socketPath} does not answer (${error.code ?? error.message})`))
+    })
+    call.end(body === undefined ? undefined : JSON.stringify(body))
+  })
+}
+
+/**
+ * Read a response's body, reporting a deadline that passes while it arrives as an engine that does not answer.
+ * @param opened - the response and its deadline's signal.
+ * @param each - receives each chunk; it may throw to stop reading.
+ * @param timeoutMs - the call's deadline, for the message.
+ */
+async function consume(opened: { readonly response: IncomingMessage, readonly signal: AbortSignal }, each: (chunk: Buffer) => void, timeoutMs: number): Promise<void> {
+  try {
+    for await (const chunk of opened.response) each(chunk as Buffer)
+  } catch (error) {
+    if (!opened.signal.aborted) throw error
+    throw new EngineError(0, `the engine's response did not finish within ${String(timeoutMs)} ms`)
+  }
+}
+
 /**
  * The engine at a socket or pipe.
  * @param socketPath - the endpoint's Unix socket path or Windows pipe name.
+ * @param timeouts - the deadlines of calls and pulls.
  * @returns its client.
  */
-export function engineAt(socketPath: string): Engine {
-  const send = async (method: string, path: string, body?: unknown): Promise<{ readonly status: number, readonly text: string }> => {
-    const call = request({ socketPath, method, path: `${API}${path}`, headers: body === undefined ? {} : { 'content-type': 'application/json' } })
-    const response = await new Promise<IncomingMessage>((resolve, reject) => {
-      call.once('response', resolve)
-      call.once('error', (error: NodeJS.ErrnoException) => { reject(new EngineError(0, `${socketPath} does not answer (${error.code ?? error.message})`)) })
-      call.end(body === undefined ? undefined : JSON.stringify(body))
-    })
-    return { status: response.statusCode ?? 0, text: await readBody(response) }
-  }
+export function engineAt(socketPath: string, timeouts: EngineTimeouts): Engine {
   const call = async (method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<unknown> => {
-    const { status, text } = await send(method, path, body)
+    const opened = await open(socketPath, method, path, body, timeouts.callMs)
+    const status = opened.response.statusCode ?? 0
+    const chunks: Buffer[] = []
+    let size = 0
+    await consume(opened, (chunk) => {
+      size += chunk.length
+      if (size > MAX_BODY_BYTES) throw new EngineError(status, 'the response is too large')
+      chunks.push(chunk)
+    }, timeouts.callMs)
+    const text = Buffer.concat(chunks).toString('utf8')
     if (status >= 400) throw engineError(status, text)
     return text.length === 0 ? null : JSON.parse(text) as unknown
   }
   return {
     call,
     async pull(repository, digest) {
-      const { status, text } = await send('POST', `/images/create?fromImage=${encodeURIComponent(repository)}&tag=${encodeURIComponent(digest)}`)
-      if (status >= 400) throw engineError(status, text)
-      for (const line of text.split('\n')) {
-        if (line.trim() === '') continue
-        const progress = JSON.parse(line) as { readonly error?: unknown, readonly errorDetail?: { readonly message?: unknown } }
+      const opened = await open(socketPath, 'POST', `/images/create?fromImage=${encodeURIComponent(repository)}&tag=${encodeURIComponent(digest)}`, undefined, timeouts.pullMs)
+      const status = opened.response.statusCode ?? 0
+      let pending = Buffer.alloc(0)
+      const line = (bytes: Buffer): void => {
+        const text = bytes.toString('utf8').trim()
+        if (text === '') return
+        if (status >= 400) throw engineError(status, text)
+        const progress = JSON.parse(text) as { readonly error?: unknown, readonly errorDetail?: { readonly message?: unknown } }
         if (progress.error !== undefined) throw new EngineError(status, typeof progress.errorDetail?.message === 'string' ? progress.errorDetail.message : String(progress.error))
       }
+      await consume(opened, (chunk) => {
+        pending = Buffer.concat([pending, chunk])
+        for (let newline = pending.indexOf(0x0a); newline !== -1; newline = pending.indexOf(0x0a)) {
+          line(pending.subarray(0, newline))
+          pending = pending.subarray(newline + 1)
+        }
+        if (pending.length > MAX_PROGRESS_LINE_BYTES) throw new EngineError(status, 'a pull progress line is too large')
+      }, timeouts.pullMs)
+      line(pending)
+      if (status >= 400) throw engineError(status, `status ${String(status)}`)
     },
     async execExitCode(container, cmd, timeoutMs) {
       const created = await call('POST', `/containers/${encodeURIComponent(container)}/exec`, { Cmd: cmd, AttachStdin: false, AttachStdout: false, AttachStderr: false, Tty: false }) as { readonly Id: string }

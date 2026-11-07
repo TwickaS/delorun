@@ -16,7 +16,7 @@ import { START_TOKEN_LENGTH, type StartToken } from '@delo/contract-home-layout'
 import { z } from 'zod'
 import { captureSupervisorOutput, openSupervisorLog } from './log.ts'
 import { verifiedManifestSchema, type VerifiedManifest } from './manifest.ts'
-import { Supervisor } from './supervisor.ts'
+import { Supervisor, type SupervisorTiming } from './supervisor.ts'
 import type { ImagePull } from './images.ts'
 
 /** The inherited file descriptor that carries the launch line and stays open while the home-process start runs. */
@@ -45,6 +45,8 @@ export interface SupervisorLaunch {
   readonly seccompDirectory: string
   /** The most detailed level the supervisor logs. */
   readonly logLevel: LogLevel
+  /** How long the supervisor waits on the engine and on its callers. */
+  readonly timing: SupervisorTiming
 }
 
 const launchSchema = z.strictObject({
@@ -57,6 +59,12 @@ const launchSchema = z.strictObject({
   imagePull: z.enum(['registry', 'none']),
   seccompDirectory: z.string().refine(isAbsolute, { message: 'an absolute path' }),
   logLevel: z.enum(['error', 'warn', 'info', 'debug']),
+  timing: z.strictObject({
+    engineCallMs: z.number().int().min(1_000).max(600_000),
+    pullMs: z.number().int().min(10_000).max(3_600_000),
+    firstByteMs: z.number().int().min(100).max(5_000),
+    refusalLogIntervalMs: z.number().int().min(1_000).max(3_600_000),
+  }),
 })
 
 /**
@@ -107,19 +115,37 @@ function readLaunchLine(pipe: Socket): Promise<string> {
 
 /**
  * Run the supervisor process: read the launch line, open the log, register the token with its redactor, capture the
- * process's output, start the supervisor and stop it when the launch pipe closes or a termination signal arrives.
+ * process's output, start the supervisor and stop it when the launch pipe closes or a termination signal arrives. The
+ * stop listeners are attached before the first await, so a pipe that closes while the supervisor starts still stops
+ * it, and the previous start's token is never served after its home process has gone.
  * @returns when the supervisor has stopped; the process's exit code is set.
  */
 export async function runSupervisorProcess(): Promise<void> {
   const pipe = new Socket({ fd: LAUNCH_FD, readable: true, writable: false })
+  let stopReason: string | undefined
+  let wake: (() => void) | undefined
+  const stop = (reason: string): void => {
+    stopReason ??= reason
+    wake?.()
+  }
+  pipe.once('end', () => { stop('the home process closed the launch pipe') })
+  pipe.once('close', () => { stop('the launch pipe closed') })
+  pipe.once('error', () => { stop('the launch pipe failed') })
+  process.once('SIGTERM', () => { stop('SIGTERM') })
+  process.once('SIGINT', () => { stop('SIGINT') })
   const launch = parseLaunch(await readLaunchLine(pipe))
+  // The pipe carries nothing after the launch line; reading on lets its end be seen.
+  pipe.resume()
   let failures = 0
   const { log, redactor, logger } = openSupervisorLog({ home: launch.home, profile: launch.profile, startId: launch.startId, level: launch.logLevel, onFailure: () => { failures += 1 } })
   redactor.register(launch.token, 'start-token')
   const restore = captureSupervisorOutput(log)
   let supervisor: Supervisor | undefined
   try {
-    supervisor = await Supervisor.start({ home: launch.home, profile: launch.profile, token: launch.token, manifest: launch.manifest, pull: launch.imagePull, logger, env: process.env, osHome: homedir(), seccompDirectory: launch.seccompDirectory })
+    supervisor = await Supervisor.start({
+      home: launch.home, profile: launch.profile, token: launch.token, manifest: launch.manifest, pull: launch.imagePull, logger, env: process.env,
+      osHome: homedir(), seccompDirectory: launch.seccompDirectory, timing: launch.timing,
+    })
   } catch (error) {
     logger.error('the supervisor could not start', { err: error })
     restore()
@@ -128,17 +154,8 @@ export async function runSupervisorProcess(): Promise<void> {
     process.exitCode = 1
     return
   }
-  await new Promise<void>((resolve) => {
-    const stop = (reason: string): void => {
-      logger.info('stopping', { data: { reason } })
-      resolve()
-    }
-    pipe.once('end', () => { stop('the home process closed the launch pipe') })
-    pipe.once('close', () => { stop('the launch pipe closed') })
-    process.once('SIGTERM', () => { stop('SIGTERM') })
-    process.once('SIGINT', () => { stop('SIGINT') })
-    pipe.resume()
-  })
+  if (stopReason === undefined) await new Promise<void>((resolve) => { wake = resolve })
+  logger.info('stopping', { data: { reason: stopReason ?? 'unknown' } })
   await supervisor.close()
   logger.info('stopped', { data: { logFailures: failures } })
   restore()

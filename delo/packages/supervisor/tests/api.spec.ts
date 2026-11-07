@@ -3,16 +3,14 @@
  * Docker engine: C9's `supervisor-token-required`, `supervisor-schema-closed` (its refusals; the Docker spec adds
  * that no container is created) and `supervisor-roots-refused`.
  */
-import { lstatSync, mkdirSync, readFileSync, symlinkSync } from 'node:fs'
+import { lstatSync, readFileSync, writeFileSync } from 'node:fs'
 import { connect, type Socket } from 'node:net'
-import { homedir } from 'node:os'
 import { join, sep } from 'node:path'
-import { SUPERVISOR_ROOTS_FILE, type StartToken } from '@delo/contract-home-layout'
+import type { StartToken } from '@delo/contract-home-layout'
 import { SUPERVISOR_MAX_CONNECTIONS, SUPERVISOR_REQUEST_MAX_BYTES } from '@delo/contract-runtime-supervisor'
-import { writeProtectedFile } from '@delo/home'
 import { afterEach, describe, expect, it } from 'vitest'
 import { supervisorSocketPath } from '../src/index.ts'
-import { PROFILE, send, sendRaw, startSupervisor, tempHome, writeStartToken, type RunningSupervisor, type TempHome } from './support.ts'
+import { PROFILE, send, sendRaw, startSupervisor, tempHome, TIMING, writeStartToken, type RunningSupervisor, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
 let running: RunningSupervisor | undefined
@@ -28,11 +26,6 @@ async function start(): Promise<{ readonly home: string, readonly socket: string
   running = await startSupervisor(temp.home)
   return { home: temp.home, socket: running.supervisor.socketPath, token: running.token, temp }
 }
-
-const create = (token: unknown, root: string): Record<string, unknown> => ({
-  v: 1, token, op: 'workspace.create',
-  args: { workspaceId: 'ws-1', root, preset: 'small', egress: 'none', allowlistAdditions: [], credentials: 'none' },
-})
 
 describe('the socket', () => {
   it('listens on run/<profile>/supervisor.sock under the Delo home, at mode 0600', async () => {
@@ -50,6 +43,25 @@ describe('the socket', () => {
     await running?.stop()
     running = undefined
     expect(() => lstatSync(socket)).toThrow(/ENOENT/)
+  })
+})
+
+describe('the socket\'s lifetime', () => {
+  it('refuses to start over a file at the socket path that is not a socket', async () => {
+    temp = await tempHome()
+    writeFileSync(join(temp.home, 'run', PROFILE, 'supervisor.sock'), 'not a socket')
+    await expect(startSupervisor(temp.home)).rejects.toThrow(/is not a socket/)
+  })
+
+  it('leaves a newer supervisor\'s socket in place when an older one stops', async () => {
+    temp = await tempHome()
+    const older = await startSupervisor(temp.home)
+    const newer = await startSupervisor(temp.home, { token: await writeStartToken(temp.home) })
+    running = newer
+    await older.stop()
+    const socket = newer.supervisor.socketPath
+    expect(lstatSync(socket).isSocket()).toBe(true)
+    expect(await send(socket, { v: 1, token: newer.token, op: 'capabilities', args: { refresh: false } })).toMatchObject({ ok: true })
   })
 })
 
@@ -139,6 +151,40 @@ describe('framing', () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(4_900)
   })
 
+  it('answers REQUEST_TIMEOUT at the first-byte deadline when nothing arrives', { timeout: 15_000 }, async () => {
+    const { socket } = await start()
+    const started = Date.now()
+    expect(await sendRaw(socket, '')).toEqual({ ok: false, error: 'REQUEST_TIMEOUT' })
+    expect(Date.now() - started).toBeLessThan(TIMING.firstByteMs + 1_500)
+  })
+
+  it('releases a connection\'s slot once its response is written, even when the caller keeps it open', { timeout: 15_000 }, async () => {
+    const { socket } = await start()
+    const held: Socket[] = []
+    try {
+      for (let index = 0; index < SUPERVISOR_MAX_CONNECTIONS; index += 1) {
+        // A half-open caller keeps its side open after the supervisor ends the connection.
+        const connection = connect({ path: socket, allowHalfOpen: true })
+        await new Promise(resolve => connection.once('connect', resolve))
+        connection.on('error', () => { /* the supervisor closes it; the spec only holds it */ })
+        const answered = new Promise(resolve => connection.once('data', resolve))
+        connection.write('{}\n')
+        await answered
+        held.push(connection)
+      }
+      expect(await sendRaw(socket, '{}\n')).toEqual({ ok: false, error: 'UNAUTHENTICATED' })
+    } finally {
+      for (const connection of held) connection.destroy()
+    }
+  })
+
+  it('logs refused authentications at most once per interval, with a count', async () => {
+    const { socket } = await start()
+    for (let index = 0; index < 20; index += 1) await send(socket, { v: 1, token: 'wrong', op: 'workspace.list' })
+    const text = readFileSync(running?.log.log.location.file ?? '', 'utf8')
+    expect(text.split('refused a request without the current start token').length - 1).toBe(1)
+  })
+
   it('answers BUSY to a connection beyond the 32 open ones', { timeout: 15_000 }, async () => {
     const { socket } = await start()
     const held: Socket[] = []
@@ -154,64 +200,5 @@ describe('framing', () => {
     } finally {
       for (const connection of held) connection.destroy()
     }
-  })
-})
-
-describe('supervisor-roots-refused', () => {
-  async function withParents(): Promise<{ readonly socket: string, readonly token: StartToken, readonly home: string, readonly parent: string, readonly outside: string }> {
-    temp = await tempHome()
-    const parent = join(temp.outside, 'projects')
-    mkdirSync(parent, { mode: 0o700 })
-    await writeProtectedFile(join(temp.home, SUPERVISOR_ROOTS_FILE), JSON.stringify({ v: 1, parents: [parent] }))
-    running = await startSupervisor(temp.home)
-    return { socket: running.supervisor.socketPath, token: running.token, home: temp.home, parent, outside: temp.outside }
-  }
-
-  it('refuses /, the OS home directory, the Delo home, a path containing it and a path inside it with ROOT_REFUSED', async () => {
-    const { socket, token, home } = await withParents()
-    const cases = [
-      ['/', 'is the filesystem root'],
-      [homedir(), 'is the OS home directory'],
-      [home, 'is the Delo home'],
-      [join(home, '..'), 'contains the Delo home'],
-      [join(home, 'run'), 'lies inside the Delo home'],
-    ] as const
-    for (const [root, reason] of cases) {
-      const response = await send(socket, create(token, root))
-      expect(response, root).toMatchObject({ ok: false, error: 'ROOT_REFUSED' })
-      expect((response as { readonly detail?: string }).detail, root).toContain(reason)
-    }
-  })
-
-  it('refuses a symbolic link resolving outside every parent and a path outside every parent with ROOT_NOT_UNDER_PARENT', async () => {
-    const { socket, token, parent, outside } = await withParents()
-    const elsewhere = join(outside, 'elsewhere')
-    mkdirSync(elsewhere)
-    const link = join(parent, 'link')
-    symlinkSync(elsewhere, link)
-    expect(await send(socket, create(token, link))).toMatchObject({ ok: false, error: 'ROOT_NOT_UNDER_PARENT', detail: expect.stringContaining(elsewhere) })
-    expect(await send(socket, create(token, elsewhere))).toMatchObject({ ok: false, error: 'ROOT_NOT_UNDER_PARENT' })
-    expect(await send(socket, create(token, parent))).toMatchObject({ ok: false, error: 'ROOT_NOT_UNDER_PARENT' })
-  })
-
-  it('refuses a symbolic link inside a parent that resolves to the Delo home', async () => {
-    const { socket, token, home, parent } = await withParents()
-    const link = join(parent, 'home-link')
-    symlinkSync(home, link)
-    expect(await send(socket, create(token, link))).toMatchObject({ ok: false, error: 'ROOT_REFUSED' })
-  })
-
-  it('refuses every root when setup chose no parent', async () => {
-    const { socket, token, temp: created } = await start()
-    const root = join(created.outside, 'w')
-    mkdirSync(root)
-    expect(await send(socket, create(token, root))).toMatchObject({ ok: false, error: 'ROOT_NOT_UNDER_PARENT' })
-  })
-
-  it('accepts a root strictly inside a parent as far as its Docker step, which needs an engine', async () => {
-    const { socket, token, parent } = await withParents()
-    const root = join(parent, 'w')
-    mkdirSync(root)
-    expect(await send(socket, create(token, root))).toMatchObject({ ok: false, error: 'DOCKER_UNAVAILABLE' })
   })
 })

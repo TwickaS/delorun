@@ -253,7 +253,7 @@ export function workspaceBinds(root: string, helperDir: string): { readonly sour
 export interface InspectRecord {
   readonly Id: string
   readonly Name?: string
-  readonly Config?: { readonly Labels?: Readonly<Record<string, string>> | null, readonly User?: string, readonly Env?: readonly string[] | null }
+  readonly Config?: { readonly Image?: string, readonly Labels?: Readonly<Record<string, string>> | null, readonly User?: string, readonly Env?: readonly string[] | null }
   readonly State?: { readonly Status?: string, readonly Running?: boolean, readonly ExitCode?: number }
   readonly HostConfig?: {
     readonly CapDrop?: readonly string[] | null
@@ -291,6 +291,8 @@ export function hardeningDifferences(record: InspectRecord, body: CreateBody): {
   const expect = (field: string, ok: boolean): void => {
     if (!ok) settings.push(field)
   }
+  expect('Config.Image', record.Config?.Image === body.Image)
+  expect('Config.User', record.Config?.User === body.User)
   expect('HostConfig.CapDrop', (host.CapDrop ?? []).some(cap => cap.toUpperCase() === 'ALL'))
   expect('HostConfig.CapAdd', (host.CapAdd ?? []).length === 0)
   expect('HostConfig.Privileged', host.Privileged === false)

@@ -38,15 +38,16 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 | `imagePull` | `registry` 表示按摘要拉取引擎缺少的已列出镜像；`none` 表示只使用引擎已持有的镜像 |
 | `seccompDirectory` | 存放 manifest 所列 seccomp 配置文件的绝对目录 |
 | `logLevel` | 监管器所记录日志的最详细级别 |
+| `timing` | `engineCallMs`（1 到 600 秒）与 `pullMs`（10 秒到 1 小时），分别是一次 Engine API 调用与一次拉取的截止时间；`firstByteMs`（0.1 到 5 秒），从连接到请求第一个字节的时间；`refusalLogIntervalMs`（1 秒到 1 小时），两条认证拒绝记录之间的最短间隔 |
 
-令牌只通过该管道到达监管器，从不经由命令行或环境变量。管道在本次启动运行期间保持打开；home 进程关闭它或退出时，监管器关闭其套接字并退出，下一次启动会以新令牌启动新的监管器。该次重启期间，容器继续运行。`Supervisor.start` 在一个已持有这些值的进程中运行同一个监管器。
+令牌只通过该管道到达监管器，从不经由命令行或环境变量。管道在本次启动运行期间保持打开；home 进程关闭它或退出时，监管器关闭其套接字并退出，下一次启动会以新令牌启动新的监管器。监管器在读取启动行之前就开始监视该管道，因此监管器启动期间管道关闭时，它同样会停止。该次重启期间，容器继续运行。`Supervisor.start` 在一个已持有这些值的进程中运行同一个监管器。
 
 <a id="the-socket-and-the-token"></a>
 ## 套接字与令牌
 
-- 套接字是路径名套接字 `run/<profile>/supervisor.sock`，绑定后设为模式 0600，位于必须通过 C1 的 0700 检查的运行目录中。超过 103 字节的路径会以 `SOCKET_PATH_TOO_LONG` 被拒绝。该 profile 先前监管器遗留的套接字会被删除；路径上的任何其他文件都会被拒绝。
-- 每个连接携带一行至多 65,536 字节的请求，该行必须在 5 秒内到达（`REQUEST_TIMEOUT`）；第 33 个打开中的连接会收到 `BUSY` 应答。连接在其应答行之后关闭。
-- `StartTokenCheck` 通过定长摘要，以恒定时间比较请求的 `token` 与当前启动的令牌。缺失、错误或属于上一次启动的令牌，以及不是 JSON 对象的行，都只会收到 `UNAUTHENTICATED`，别无其他回应。
+- 套接字是路径名套接字 `run/<profile>/supervisor.sock`，位于必须通过 C1 的 0700 检查的运行目录中。超过 103 字节的路径会以 `SOCKET_PATH_TOO_LONG` 被拒绝。套接字先以临时名称在运行目录中绑定，设为模式 0600，再重命名到位，替换该 profile 先前监管器遗留的套接字；路径上的任何其他文件都会被拒绝。停止时，只有该路径仍是本监管器的套接字（按设备号与 inode 判断）才会删除它，因此较晚停止的旧监管器会保留新监管器的套接字。
+- 每个连接携带一行至多 65,536 字节的请求；其第一个字节必须在 `firstByteMs` 内到达，整行必须在 5 秒内到达（`REQUEST_TIMEOUT`），第 33 个打开中的连接会收到 `BUSY` 应答。应答行一经写出，该连接所占的名额即被释放；调用方在此后 `firstByteMs` 内仍未关闭的连接会被关闭。
+- `StartTokenCheck` 通过定长摘要，以恒定时间比较请求的 `token` 与当前启动的令牌。缺失、错误或属于上一次启动的令牌，以及不是 JSON 对象的行，都只会收到 `UNAUTHENTICATED`，别无其他回应。认证拒绝至多每 `refusalLogIntervalMs` 记录一次日志，并附上未记录的次数。
 - 令牌在读取模式之前检查，因此没有令牌的调用方无法了解 API 的任何信息。
 - `readStartTokenFile` 通过 C1 的受保护文件检查读取令牌文件，供 `delorun` 客户端命令使用。
 
@@ -66,7 +67,7 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 
 `loadRootRules` 在监管器启动时通过 C1 的受保护文件检查读取 `supervisor/roots.json`；文件缺失表示没有父目录，因此每个根目录都会被拒绝。记录若不是 `{"v":1,"parents":[...]}`（父目录至多 16 个），或其父目录未以已存在的规范路径保存，或是 setup 所拒绝的父目录，则会中止本次启动。本包中没有任何代码写入该文件。
 
-`resolveWorkspaceRoot` 使用 `realpath` 解析请求的根目录，并以 `ROOT_REFUSED` 拒绝以下情形：文件系统根目录、操作系统的主目录、Delo home、包含 Delo home 或位于 Delo home 之内的路径、无法解析的路径，以及任何不是本人所拥有目录的对象。未严格位于某个父目录之内的根目录会以 `ROOT_NOT_UNDER_PARENT` 被拒绝。根目录在任何 Docker 调用之前检查，因此在没有 Docker 的机器上同样会被拒绝。
+`resolveWorkspaceRoot` 使用 `realpath` 解析请求的根目录，并按文件身份（根目录及其每个祖先目录的设备号与 inode）比较，因此绑定挂载之类的别名视同它所展示的目录。它以 `ROOT_REFUSED` 拒绝以下情形：文件系统根目录、操作系统的主目录或包含它的路径、Delo home 或包含它或位于其内的路径、位于本监管器所管理的另一个工作区根目录之内或包含该根目录的路径、无法解析的路径，以及任何不是本人所拥有目录的对象。未严格位于某个父目录之内的根目录会以 `ROOT_NOT_UNDER_PARENT` 被拒绝。`recheckMountedRoot` 在每次启动之前运行：已记录的根目录必须仍解析为其自身，并通过同样的规则。
 
 <a id="images-and-the-verified-manifest"></a>
 ## 镜像与已验证的 manifest
@@ -86,7 +87,7 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 | --- | --- | --- |
 | `cpu`、`memory`、`pids` | `NanoCpus`、`Memory` 与 `MemorySwap`，`PidsLimit` | cgroup 的配额与限制 |
 | `disk` | `StorageOpt.size`；拒绝该设置的引擎会给出 `not-enforced` 及其消息 | 根文件系统的大小在限制之内 |
-| `cap-drop`、`no-new-privileges`、`seccomp` | `CapDrop`、`SecurityOpt`，以及引擎的 seccomp 选项 | `/proc/self/status` 中的 `CapEff`、`NoNewPrivs` 与 `Seccomp` |
+| `cap-drop`、`no-new-privileges`、`seccomp` | `CapDrop`、`SecurityOpt`，以及引擎的 seccomp 选项 | `/proc/self/status` 中为空的 `CapBnd`、`CapPrm`、`CapEff` 与 `CapAmb`，以及 `NoNewPrivs` 与 `Seccomp` |
 | `read-only-root`、`user-namespace` | `ReadonlyRootfs`，引擎的 `userns` 或 `rootless` 选项 | `/` 以只读方式挂载；`uid_map` 不是恒等映射 |
 | `network-isolation` | 探测网络为内部网络，且是容器唯一的网络 | 除 `lo` 外的接口上没有默认路由 |
 | `host-gateway-block`、`host-loopback-block` | | 连接监管器在网关地址上打开的监听器，以及经由 `host.docker.internal`、`10.0.2.2` 和网关连接回环监听器，均失败 |
@@ -97,13 +98,17 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 <a id="workspace-containers"></a>
 ## 工作区容器
 
-`workspace.create` 解析根目录，依据引擎所在机器检查预设（`PRESET_OUT_OF_RANGE`），确保 S2 镜像存在，要求 S2 已被提供，并在 home 与 profile 的标签下创建：
+`workspace.create` 要求 S2 已被提供，拒绝凭据转发，解析根目录，依据引擎所在机器检查预设（`PRESET_OUT_OF_RANGE`），确保 S2 镜像存在，并在 home 与 profile 的标签下创建：
 
 - 内部网络 `delo-ws-<12 hex>`；
 - 同名容器，由 `createBody` 构建：丢弃所有能力，设置 `no-new-privileges`，使用所列的 seccomp 配置文件或引擎的默认配置文件，根文件系统只读并带有大小为预设值的 tmpfs `/tmp`，CPU、内存与 PID 限制取自预设，交换空间等于内存，磁盘大小仅在报告确认其已强制执行时设置，使用 init 进程，无重启策略，无设备，不加入宿主的任何命名空间，使用 C9 辅助通道的工作区用户，并且只绑定挂载解析后的根目录（路径相同）以及辅助程序的套接字目录 `run/<profile>/s2/<12 hex>/` 到 `/run/delo-helper`；
 - 除非出站为 `none`，否则还会创建出站代理 `delo-ws-<12 hex>-proxy`，它使用同一摘要的镜像，接入 `delo-ws-<12 hex>-out` 与内部网络，以 C9 的入口 `/usr/local/bin/delo-egress-proxy`（`EGRESS_PROXY_ENTRY`）启动，其模式与主机列表分别在 `DELO_EGRESS_MODE` 与 `DELO_EGRESS_HOSTS` 中给出，并使用工作区的资源限制。
 
 每创建一个容器后，监管器都会将其 inspect 记录与其请求体比较（`hardeningDifferences`）：挂载与解析后的路径不一致时，删除本次创建的全部内容，并以 `ROOT_REFUSED` 拒绝；引擎未应用某项设置时，以 `LIMITS_MISSING` 拒绝。工作区容器的代理变量始终指向该代理，因此在 `none` 下，任何名称都无法解析，也没有任何流量能够发出。容器已存在的工作区以 `WORKSPACE_EXISTS` 拒绝，引擎拒绝的调用以 `ENGINE_REFUSED` 并附引擎的消息拒绝，引擎未应答时以 `DOCKER_UNAVAILABLE` 拒绝。对不带有本 home 与本 profile 标签的容器执行的操作，会以 `NOT_FOUND` 失败。`workspace.remove` 会删除这些容器、两个网络与辅助程序目录，并保持工作区根目录不变。
+
+每次 `workspace.start` 之前，监管器都会再次检查这些容器：所有者标签、经 `recheckMountedRoot` 检查的根目录挂载、辅助程序目录，以及每条 inspect 记录与 `workspace.create` 所构建请求体的比较，包括镜像、用户与每项设置。未通过检查的容器不会启动。容器中的命令会写入辅助程序目录，因此使用该目录的主机端代码（例如 S2 辅助程序的客户端）绝不能跟随其中的路径。
+
+每次 Engine API 调用都有截止时间 `engineCallMs`，每次拉取都有 `pullMs`；超过截止时间的调用为 `DOCKER_UNAVAILABLE`，拉取为 `IMAGE_PULL_FAILED`。拉取的进度流按行读取，因此其长度不受限制。
 
 <a id="the-operational-log"></a>
 ## 运行日志

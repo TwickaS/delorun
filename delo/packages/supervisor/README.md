@@ -37,14 +37,15 @@ The home process ([C19](../../docs/contracts/c19-home-process.md)) owns the star
 | `imagePull` | `registry` to pull a listed image the engine lacks, by digest; `none` to use only images the engine holds |
 | `seccompDirectory` | the absolute directory holding the seccomp profile files the manifest lists |
 | `logLevel` | the most detailed level the supervisor logs |
+| `timing` | `engineCallMs` (1 to 600 seconds) and `pullMs` (10 seconds to 1 hour), the deadlines of an Engine API call and of a pull; `firstByteMs` (0.1 to 5 seconds), the time from connect to a request's first byte; `refusalLogIntervalMs` (1 second to 1 hour), the shortest time between two records of refused authentications |
 
-The token reaches the supervisor only through the pipe, never a command line or an environment variable. The pipe stays open while the start runs; when the home process closes it or dies, the supervisor closes its socket and exits, and the next start launches a new supervisor with the new token. Containers keep running across that restart. `Supervisor.start` runs the same supervisor in a process that already holds these values.
+The token reaches the supervisor only through the pipe, never a command line or an environment variable. The pipe stays open while the start runs; when the home process closes it or dies, the supervisor closes its socket and exits, and the next start launches a new supervisor with the new token. The supervisor watches the pipe from before it reads the launch line, so a pipe that closes while the supervisor starts still stops it. Containers keep running across that restart. `Supervisor.start` runs the same supervisor in a process that already holds these values.
 
 ## The socket and the token
 
-- The socket is the pathname socket `run/<profile>/supervisor.sock`, set to mode 0600 after it binds, in a run directory that must pass C1's 0700 check. A path over 103 bytes is refused with `SOCKET_PATH_TOO_LONG`. A socket left by an earlier supervisor of the profile is removed; any other file at the path is refused.
-- Each connection carries one request line of at most 65,536 bytes, which must arrive within 5 seconds (`REQUEST_TIMEOUT`); a 33rd open connection is answered `BUSY`. The connection closes after its response line.
-- `StartTokenCheck` compares the request's `token` with the current start's token through fixed-length digests in constant time. A missing, wrong or previous start's token, and a line that is not a JSON object, receive `UNAUTHENTICATED` and nothing else.
+- The socket is the pathname socket `run/<profile>/supervisor.sock`, in a run directory that must pass C1's 0700 check. A path over 103 bytes is refused with `SOCKET_PATH_TOO_LONG`. The socket is bound under a temporary name in the run directory, set to mode 0600 and renamed into place, replacing a socket an earlier supervisor of the profile left; any other file at the path is refused. Stopping removes the path only while it is still this supervisor's socket, by device and inode, so an older supervisor that stops late leaves a newer one's socket in place.
+- Each connection carries one request line of at most 65,536 bytes; its first byte must arrive within `firstByteMs` and the whole line within 5 seconds (`REQUEST_TIMEOUT`), and a 33rd open connection is answered `BUSY`. A connection's slot is released as soon as its response line is written, and a connection whose caller has not closed it `firstByteMs` later is closed.
+- `StartTokenCheck` compares the request's `token` with the current start's token through fixed-length digests in constant time. A missing, wrong or previous start's token, and a line that is not a JSON object, receive `UNAUTHENTICATED` and nothing else. Refused authentications are logged at most once per `refusalLogIntervalMs`, with the count of those not logged.
 - The token is checked before the schema is read, so a caller without the token learns nothing about the API.
 - `readStartTokenFile` reads the token file through C1's protected-file check, for `delorun` client commands.
 
@@ -62,7 +63,7 @@ The token reaches the supervisor only through the pipe, never a command line or 
 
 `loadRootRules` reads `supervisor/roots.json` at the supervisor's start through C1's protected-file check; a missing file means no parent, so every root is refused. A record that is not `{"v":1,"parents":[...]}` with at most 16 parents, or whose parent is not stored as an existing canonical path or is one setup refuses, stops the start. Nothing in this package writes the file.
 
-`resolveWorkspaceRoot` resolves the requested root with `realpath` and refuses with `ROOT_REFUSED` the filesystem root, the OS home directory, the Delo home, a path that contains it or lies inside it, a path that does not resolve, and anything that is not a directory the person owns. A root not strictly inside a parent is refused with `ROOT_NOT_UNDER_PARENT`. Roots are checked before any Docker call, so they are refused on a machine without Docker as well.
+`resolveWorkspaceRoot` resolves the requested root with `realpath` and compares it by file identity, the device and inode of the root and of each of its ancestors, so an alias such as a bind mount counts as the directory it shows. It refuses with `ROOT_REFUSED` the filesystem root, the OS home directory or a path containing it, the Delo home or a path containing it or lying inside it, a path inside or containing the root of another workspace this supervisor manages, a path that does not resolve, and anything that is not a directory the person owns. A root not strictly inside a parent is refused with `ROOT_NOT_UNDER_PARENT`. `recheckMountedRoot` runs before every start: a recorded root must still resolve to itself and pass the same rules.
 
 ## Images and the verified manifest
 
@@ -80,7 +81,7 @@ The supervisor depends only on [C2](../../docs/contracts/c02-release-manifest.md
 | --- | --- | --- |
 | `cpu`, `memory`, `pids` | `NanoCpus`, `Memory` and `MemorySwap`, `PidsLimit` | the cgroup's quota and limits |
 | `disk` | `StorageOpt.size`; an engine that refuses it gives `not-enforced` with its message | the root filesystem's size is within the limit |
-| `cap-drop`, `no-new-privileges`, `seccomp` | `CapDrop`, `SecurityOpt`, the engine's seccomp option | `CapEff`, `NoNewPrivs` and `Seccomp` in `/proc/self/status` |
+| `cap-drop`, `no-new-privileges`, `seccomp` | `CapDrop`, `SecurityOpt`, the engine's seccomp option | empty `CapBnd`, `CapPrm`, `CapEff` and `CapAmb`, `NoNewPrivs` and `Seccomp` in `/proc/self/status` |
 | `read-only-root`, `user-namespace` | `ReadonlyRootfs`, the engine's `userns` or `rootless` option | `/` mounted read-only; a `uid_map` that is not the identity |
 | `network-isolation` | the probe network is internal and the container's only network | no default route on an interface other than `lo` |
 | `host-gateway-block`, `host-loopback-block` | | connects to a listener the supervisor opens on the gateway address, and to a loopback listener through `host.docker.internal`, `10.0.2.2` and the gateway, all fail |
@@ -90,13 +91,17 @@ A probe tool that is missing or does not finish gives `unknown`, and so does a g
 
 ## Workspace containers
 
-`workspace.create` resolves the root, checks the preset against the engine's machine (`PRESET_OUT_OF_RANGE`), makes the S2 image present, requires S2 to be offered and creates, under the home's and profile's labels:
+`workspace.create` requires S2 to be offered, refuses credential forwarding, resolves the root, checks the preset against the engine's machine (`PRESET_OUT_OF_RANGE`), makes the S2 image present and creates, under the home's and profile's labels:
 
 - the internal network `delo-ws-<12 hex>`;
 - the container of that name, built by `createBody`: every capability dropped, `no-new-privileges`, the listed seccomp profile or the engine's default, a read-only root with a tmpfs `/tmp` of the preset's size, the preset's CPU, memory and PID limits with swap equal to memory, the disk size where the report found it enforced, an init process, no restart policy, no device, none of the host's namespaces, the workspace user of C9's helper channel, and bind mounts of only the resolved root (at the same path) and the helper's socket directory `run/<profile>/s2/<12 hex>/` at `/run/delo-helper`;
 - unless egress is `none`, the egress proxy `delo-ws-<12 hex>-proxy` from the same digest on `delo-ws-<12 hex>-out` and the internal network, started with C9's entry `/usr/local/bin/delo-egress-proxy` (`EGRESS_PROXY_ENTRY`), its mode and hosts in `DELO_EGRESS_MODE` and `DELO_EGRESS_HOSTS`, and the workspace's resource limits.
 
 After creating each container the supervisor compares its inspect record with its body (`hardeningDifferences`); a mount that differs from the resolved paths removes everything created with `ROOT_REFUSED`, and a setting the engine did not apply with `LIMITS_MISSING`. The workspace container's proxy variables always name the proxy, so under `none` nothing resolves and nothing leaves. A workspace whose container exists is refused with `WORKSPACE_EXISTS`, a call the engine refuses with `ENGINE_REFUSED` and the engine's message, and an engine that does not answer with `DOCKER_UNAVAILABLE`. An operation on a container without this home's and profile's labels fails with `NOT_FOUND`. `workspace.remove` removes the containers, both networks and the helper directory and leaves the workspace root untouched.
+
+Before every `workspace.start` the supervisor checks the containers again: the owner labels, the root mount through `recheckMountedRoot`, the helper directory, and each inspect record against the body `workspace.create` builds, image, user and every setting included. A container that fails is not started. Commands in the container write to the helper directory, so host-side code that uses it, such as the S2 helper's client, must never follow a path inside it.
+
+Every Engine API call has the deadline `engineCallMs` and every pull `pullMs`; a call past its deadline is `DOCKER_UNAVAILABLE` and a pull `IMAGE_PULL_FAILED`. A pull's progress stream is read line by line, so its length is not bounded.
 
 ## The operational log
 

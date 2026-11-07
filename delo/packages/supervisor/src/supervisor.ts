@@ -23,6 +23,18 @@ import { listenSupervisor, type SupervisorListener } from './server.ts'
 import { StartTokenCheck } from './token.ts'
 import { Workspaces } from './workspaces.ts'
 
+/** How long the supervisor waits on the engine and on its callers, from the launch line's validated values. */
+export interface SupervisorTiming {
+  /** The longest one Engine API call may take, in milliseconds. */
+  readonly engineCallMs: number
+  /** The longest one image pull may take, in milliseconds. */
+  readonly pullMs: number
+  /** The time from connect to a request's first byte, in milliseconds. */
+  readonly firstByteMs: number
+  /** The shortest time between two records of refused authentications, in milliseconds. */
+  readonly refusalLogIntervalMs: number
+}
+
 /** What a supervisor starts with; the home process supplies every value at launch. */
 export interface SupervisorOptions {
   /** The resolved Delo home. */
@@ -43,6 +55,8 @@ export interface SupervisorOptions {
   readonly osHome: string
   /** The directory holding the seccomp profile files the manifest lists. */
   readonly seccompDirectory: string
+  /** The deadlines. */
+  readonly timing: SupervisorTiming
 }
 
 /**
@@ -91,7 +105,7 @@ export class Supervisor {
       options.logger.warn('no usable Docker context', { err: error })
     }
     const path = context?.endpoint.path
-    const engine = path !== undefined && (context?.endpoint.kind === 'unix' || context?.endpoint.kind === 'npipe') ? engineAt(path) : undefined
+    const engine = path !== undefined && (context?.endpoint.kind === 'unix' || context?.endpoint.kind === 'npipe') ? engineAt(path, { callMs: options.timing.engineCallMs, pullMs: options.timing.pullMs }) : undefined
     let supervisor: Supervisor | undefined
     const workspaces = new Workspaces({ engine, owner, home: options.home, rules, manifest: options.manifest, pull: options.pull, seccompDirectory: options.seccompDirectory, inspection: () => supervisor?.inspection ?? { shapes: shapesOf(undefined, 'docker-unavailable', {}) } })
     supervisor = new Supervisor(options, owner, context, engine, workspaces)
@@ -101,6 +115,8 @@ export class Supervisor {
       check: new StartTokenCheck(options.token),
       handle: async request => supervisor.dispatch(request),
       logger: options.logger,
+      firstByteMs: options.timing.firstByteMs,
+      refusalLogIntervalMs: options.timing.refusalLogIntervalMs,
     })
     options.logger.info('supervisor listening', { data: { context: context?.name ?? 'none', s2: supervisor.inspection.shapes.s2.reason ?? 'available', s3: supervisor.inspection.shapes.s3.reason ?? 'available' } })
     return supervisor

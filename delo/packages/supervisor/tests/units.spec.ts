@@ -4,23 +4,18 @@
  * findings, including a limit the engine ignored.
  */
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import type { StartToken } from '@delo/contract-home-layout'
-import { GIB, IMAGES, LABELS, PRESETS, type WorkspaceId } from '@delo/contract-runtime-supervisor'
+import { GIB, IMAGES, PRESETS, type WorkspaceId } from '@delo/contract-runtime-supervisor'
 import type { OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
-import { writeProtectedFile } from '@delo/home'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   createBody,
   endpointOf,
   EngineError,
   engineRefusal,
-  homeIdOf,
-  loadRootRules,
   loadSeccompProfile,
-  Workspaces,
   ensureListedImage,
   hardeningDifferences,
   isAllowlistHost,
@@ -40,7 +35,7 @@ import {
   type InspectRecord,
   type ProbeEvidence,
 } from '../src/index.ts'
-import { ABSENT_DIGEST, fixtureManifest, PROFILE, tempHome, writeStartToken, type TempHome } from './support.ts'
+import { ABSENT_DIGEST, appliedRecord, fixtureManifest, PROFILE, tempHome, writeStartToken, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
 afterEach(() => {
@@ -203,14 +198,7 @@ const body = (): CreateBody => createBody({
 })
 
 /** The inspect record an engine that applied every setting returns. */
-function applied(created: CreateBody): InspectRecord {
-  return {
-    Id: 'c',
-    HostConfig: { ...created.HostConfig, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'] },
-    Mounts: created.HostConfig.Mounts.map(mount => ({ Type: 'bind', Source: mount.Source, Destination: mount.Target })),
-    NetworkSettings: { Networks: { 'delo-ws-000000000000': {} } },
-  }
-}
+const applied = appliedRecord
 
 describe('the hardened container', () => {
   it('drops every capability, keeps the engine\'s seccomp profile and sets every C9 setting', () => {
@@ -339,7 +327,7 @@ describe('listed seccomp profiles', () => {
     expect(created.HostConfig.SecurityOpt).toEqual(['no-new-privileges:true', `seccomp=${PROFILE_TEXT}`])
     const record = applied(created)
     expect(hardeningDifferences({ ...record, HostConfig: { ...record.HostConfig, SecurityOpt: created.HostConfig.SecurityOpt } }, created).settings).toEqual([])
-    expect(hardeningDifferences(record, created).settings).toContain('HostConfig.SecurityOpt')
+    expect(hardeningDifferences({ ...record, HostConfig: { ...record.HostConfig, SecurityOpt: ['no-new-privileges:true'] } }, created).settings).toContain('HostConfig.SecurityOpt')
   })
 })
 
@@ -359,40 +347,5 @@ describe('engine refusals', () => {
       execExitCode: () => Promise.resolve(0),
     }
     expect((await refusalOf(async () => ensureListedImage(engine, listedImage(fixtureManifest(digest), 's2', 'linux/amd64'), 'registry'))).code).toBe('IMAGE_PULL_FAILED')
-  })
-
-  it('refuses workspace.create for a workspace whose container exists with WORKSPACE_EXISTS', async () => {
-    temp = await tempHome()
-    const parent = join(temp.outside, 'projects')
-    const root = join(parent, 'w')
-    mkdirSync(root, { recursive: true })
-    await writeProtectedFile(join(temp.home, 'supervisor', 'roots.json'), JSON.stringify({ v: 1, parents: [parent] }))
-    const digest = `sha256:${'c'.repeat(64)}` as OciDigest
-    const owner = { homeId: homeIdOf(temp.home), profile: PROFILE }
-    const engine: Engine = {
-      call: (_method, path) => {
-        if (path.startsWith('/images/')) return Promise.resolve({ Id: 'sha256:i', RepoDigests: [`${IMAGES.s2}@${digest}`] })
-        if (path.startsWith('/containers/')) return Promise.resolve({ Id: 'c', Config: { Labels: { [LABELS.home]: owner.homeId, [LABELS.profile]: PROFILE, [LABELS.workspace]: 'w' } } })
-        return Promise.reject(new EngineError(500, `unexpected ${path}`))
-      },
-      pull: () => Promise.reject(new EngineError(500, 'no pulls')),
-      execExitCode: () => Promise.resolve(0),
-    }
-    const limits = limitFindings({
-      info: {}, inspect: applied(body()), body: body(), network: { Internal: true },
-      exits: { capabilities: 0, noNewPrivileges: 0, seccomp: 0, readOnlyRoot: 0, memory: 0, pids: 0, cpu: 0, userNamespace: 0, noDefaultRoute: 0, disk: 0 },
-      gateway: { skipped: 'x' }, loopback: [],
-    })
-    const workspaces = new Workspaces({
-      engine, owner, home: temp.home, rules: await loadRootRules(temp.home, homedir()), manifest: fixtureManifest(digest), pull: 'none', seccompDirectory: temp.outside,
-      inspection: () => ({
-        docker: { engine: 'docker-engine', version: '29', rootless: false, context: 'default', endpoint: { kind: 'unix', path: '/var/run/docker.sock' }, storageDriver: 'overlay2', limits },
-        shapes: { s2: { available: true, fileWatching: 'supported' }, s3: { available: true, fileWatching: 'supported' } },
-        machine: { cpus: 8, memoryBytes: 32 * GIB },
-        platform: 'linux/amd64',
-      }),
-    })
-    const request = { v: 1 as const, token: 't' as StartToken, op: 'workspace.create' as const, args: { workspaceId: 'w' as WorkspaceId, root, preset: 'small' as const, egress: 'none' as const, allowlistAdditions: [], credentials: 'none' as const } }
-    expect((await refusalOf(async () => workspaces.handle(request))).code).toBe('WORKSPACE_EXISTS')
   })
 })

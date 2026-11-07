@@ -14,7 +14,7 @@ import type { StartToken } from '@delo/contract-home-layout'
 import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it } from 'vitest'
 import { encodeLaunch, supervisorSocketPath } from '../src/index.ts'
-import { fixtureManifest, noDockerEnv, PROFILE, send, tempHome, writeStartToken, type TempHome } from './support.ts'
+import { fixtureManifest, noDockerEnv, PROFILE, TIMING, send, tempHome, writeStartToken, type TempHome } from './support.ts'
 
 const REPOSITORY = fileURLToPath(new URL('../../../../', import.meta.url))
 const MAIN = fileURLToPath(new URL('../src/main.ts', import.meta.url))
@@ -49,7 +49,7 @@ async function launch(home: string, token: StartToken): Promise<Launched> {
   children.push(child)
   const exited = new Promise<number | null>(resolve => child.once('exit', code => { resolve(code) }))
   const pipe = child.stdio[3] as Writable
-  pipe.write(encodeLaunch({ v: 1, home, profile: PROFILE, startId: randomBytes(16).toString('hex'), token, manifest: fixtureManifest(), imagePull: 'none', seccompDirectory: join(home, 'seccomp'), logLevel: 'debug' }))
+  pipe.write(encodeLaunch({ v: 1, home, profile: PROFILE, startId: randomBytes(16).toString('hex'), token, manifest: fixtureManifest(), imagePull: 'none', seccompDirectory: join(home, 'seccomp'), logLevel: 'debug', timing: TIMING }))
   const socket = supervisorSocketPath(home, PROFILE)
   const deadline = Date.now() + START_MS
   while (!existsSync(socket)) {
@@ -84,6 +84,22 @@ describe('the supervisor process', { timeout: 90_000 }, () => {
     pipe.end()
     expect(await exited).toBe(0)
     expect(existsSync(supervisorSocketPath(temp.home, PROFILE))).toBe(false)
+  })
+
+  it('exits, serving no token, when the home process closes the launch pipe right after the launch line', async () => {
+    temp = await tempHome()
+    const home = temp.home
+    const token = await writeStartToken(home)
+    const child = spawn(process.execPath, ['--import', 'tsx/esm', MAIN], { cwd: REPOSITORY, stdio: ['ignore', 'pipe', 'pipe', 'pipe'], env: { ...process.env, ...noDockerEnv(home) } })
+    children.push(child)
+    const exited = new Promise<number | null>(resolve => child.once('exit', code => { resolve(code) }))
+    ;(child.stdio[3] as Writable).end(encodeLaunch({ v: 1, home, profile: PROFILE, startId: randomBytes(16).toString('hex'), token, manifest: fixtureManifest(), imagePull: 'none', seccompDirectory: join(home, 'seccomp'), logLevel: 'debug', timing: TIMING }))
+    expect(await exited).toBe(0)
+    const socket = supervisorSocketPath(home, PROFILE)
+    expect(existsSync(socket)).toBe(false)
+    await expect(send(socket, { v: 1, token, op: 'workspace.list' })).rejects.toMatchObject({ code: 'ENOENT' })
+    const log = readFileSync(resolveSurface({ kind: 'supervisor', home, profile: PROFILE }).file, 'utf8')
+    expect(log).toContain('the home process closed the launch pipe')
   })
 
   it('refuses the previous start\'s token once a new start has launched its supervisor', async () => {
