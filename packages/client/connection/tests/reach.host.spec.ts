@@ -418,7 +418,7 @@ function policyNonce(reply: Reply): string {
   expect(policy).toBe([
     "default-src 'self'", `script-src 'self' 'nonce-${nonce}'`, `style-src-elem 'self' 'nonce-${nonce}'`,
     "style-src-attr 'unsafe-inline'", "img-src 'self' data: blob:", "media-src 'self' data:", "font-src 'self' data:",
-    "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'none'",
+    "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'", "frame-src 'self' blob:", "frame-ancestors 'none'",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'",
   ].join('; '))
   expect(reachContentSecurityPolicy(nonce)).toBe(policy)

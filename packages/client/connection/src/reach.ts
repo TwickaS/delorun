@@ -57,7 +57,7 @@ export function reachContentSecurityPolicy(nonce: string): string {
     "connect-src 'self'",
     "worker-src 'self'",
     "manifest-src 'self'",
-    "frame-src 'self'",
+    "frame-src 'self' blob:",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
