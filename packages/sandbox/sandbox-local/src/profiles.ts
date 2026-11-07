@@ -287,14 +287,14 @@ function grantsExcluding(root: string, excluded: readonly string[]): string[] {
 export function landlockProfileArgs(policy: SandboxPolicy, protection: Protection = NO_PROTECTION): string[] {
   const readWrite = ['/dev/null']
   if (policy.mode === 'workspace-write') {
-    readWrite.push(canonicalPath('/tmp'), ...workspaceWritableRoots(policy))
+    readWrite.push('/tmp', ...workspaceWritableRoots(policy))
   }
   const home = protection.home
   if (home === undefined) return landlockGrantArgs({ readOnly: ['/'], readWrite })
   const excluded = [home, ...protection.homeAliasMounts]
   return landlockGrantArgs({
     readOnly: [...new Set([...grantsExcluding('/', excluded), ...protection.readable.map(entry => entry.source)])],
-    readWrite: [...new Set(readWrite.flatMap(root => grantsExcluding(root, excluded)))],
+    readWrite: [...new Set(readWrite.flatMap(root => grantsExcluding(canonicalPath(root), excluded)))],
   })
 }
 
