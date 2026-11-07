@@ -8,11 +8,13 @@
  * @module @deepseek-ai/dsh-sandbox-local/profiles
  */
 
-import { existsSync, readdirSync, realpathSync } from 'node:fs'
-import { basename, dirname, join, relative, sep } from 'node:path'
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-system/landlock-run'
 import { SandboxUnsupportedPolicyError, canonicalPath, pathWithin, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import { DATA_VOLUME, firmlinkAliases, mountAliases, readMountTable } from './mounts.ts'
+import type { MountEntry } from './mounts.ts'
 
 /** A runner of the local provider's platform chains. */
 export type LocalSandboxRunner = 'bwrap' | 'landlock' | 'seatbelt' | 'windows-acl'
@@ -56,16 +58,21 @@ export interface ReadableEntry {
 export interface Protection {
   /** The canonical protected home, or `undefined` when none is configured. */
   readonly home: string | undefined
-  /** The home's readable entries that exist now and do not lead elsewhere inside the home. */
+  /**
+   * Other paths that reach the home: other mounts of its filesystem (such as a second mount of the root filesystem
+   * or a bind mount) and, on macOS, its Data-volume firmlink spelling. Each is protected like the home.
+   */
+  readonly homeAliases: readonly string[]
+  /** The home's readable entries that exist now and lead neither elsewhere inside the home nor above it. */
   readonly readable: readonly ReadableEntry[]
-  /** Every spelling of every denied socket: as configured, with its directory resolved, and fully resolved. */
+  /** Every spelling of every denied socket: as configured, with its directory resolved, fully resolved, and aliased. */
   readonly socketSpellings: readonly string[]
-  /** The denied sockets' resolved paths that exist now and lie outside the home, which bwrap shadows. */
+  /** The denied sockets' resolved paths and mount aliases that exist now and lie outside the home, which bwrap shadows. */
   readonly shadowedSockets: readonly string[]
 }
 
 /** No protected home and no denied socket: every profile is upstream's. */
-export const NO_PROTECTION: Protection = { home: undefined, readable: [], socketSpellings: [], shadowedSockets: [] }
+export const NO_PROTECTION: Protection = { home: undefined, homeAliases: [], readable: [], socketSpellings: [], shadowedSockets: [] }
 
 /** The provider's validated protection settings: the canonical home, its readable entries and the denied sockets. */
 export interface ProtectionSettings {
@@ -77,22 +84,40 @@ export interface ProtectionSettings {
   readonly deniedSockets: readonly string[]
 }
 
+/** Whether `path` lies inside or above one of the protected paths. */
+function touches(path: string, protectedPaths: readonly string[]): boolean {
+  return protectedPaths.some(entry => pathWithin(path, entry) || pathWithin(entry, path))
+}
+
 /**
- * Resolve the protection for one wrap. Readable entries that do not exist now are left out, because they grant
- * nothing, and so is an entry whose resolved path lies elsewhere inside the home, which would expose that path.
- * Sockets are resolved now, so a socket that appears after the wrap is not shadowed by bwrap.
+ * Resolve the protection for one wrap. The home's mount and firmlink aliases are found now. Readable entries that do
+ * not exist now are left out, because they grant nothing, and so is an entry whose resolved path lies elsewhere
+ * inside the home or one of its aliases, or above one of them, which would expose it. Sockets and their aliases are
+ * resolved now, so a socket that appears after the wrap, or is recreated after it, is not shadowed by bwrap.
  * @param settings - the provider's validated protection settings.
+ * @param mounts - the mount table; read from this process when omitted.
+ * @param dataVolume - where macOS mounts the Data volume that firmlinks point into.
  * @returns the protection the profile builders apply.
+ * @throws {SandboxUnsupportedPolicyError} when the Linux mount table cannot be read.
  */
-export function resolveProtection(settings: ProtectionSettings): Protection {
+export function resolveProtection(
+  settings: ProtectionSettings,
+  mounts: readonly MountEntry[] | undefined = undefined,
+  dataVolume: string = DATA_VOLUME,
+): Protection {
+  if (settings.home === undefined && settings.deniedSockets.length === 0) return NO_PROTECTION
+  const table = mounts ?? readMountTable()
+  const aliasesOf = (path: string): string[] => [...mountAliases(path, table), ...firmlinkAliases(path, dataVolume)]
   const { home } = settings
+  const homeAliases = home === undefined ? [] : aliasesOf(home)
+  const protectedPaths = home === undefined ? [] : [home, ...homeAliases]
   const readable: ReadableEntry[] = []
   if (home !== undefined) {
     for (const entry of settings.readable) {
       const path = join(home, entry)
       if (!existsSync(path)) continue
       const source = canonicalPath(path)
-      if (source !== path && pathWithin(source, home)) continue
+      if (source !== path && touches(source, protectedPaths)) continue
       readable.push({ path, source })
     }
   }
@@ -100,16 +125,20 @@ export function resolveProtection(settings: ProtectionSettings): Protection {
   const shadowedSockets = new Set<string>()
   for (const socket of settings.deniedSockets) {
     const real = canonicalPath(socket)
-    for (const spelling of [socket, join(canonicalPath(dirname(socket)), basename(socket)), real]) socketSpellings.add(spelling)
-    if (existsSync(real) && (home === undefined || !pathWithin(real, home))) shadowedSockets.add(real)
+    const aliases = existsSync(real) ? aliasesOf(real) : []
+    for (const spelling of [socket, join(canonicalPath(dirname(socket)), basename(socket)), real, ...aliases]) socketSpellings.add(spelling)
+    for (const path of existsSync(real) ? [real, ...aliases] : []) {
+      if (!protectedPaths.some(entry => pathWithin(path, entry))) shadowedSockets.add(path)
+    }
   }
-  return { home, readable, socketSpellings: [...socketSpellings], shadowedSockets: [...shadowedSockets] }
+  return { home, homeAliases, readable, socketSpellings: [...socketSpellings], shadowedSockets: [...shadowedSockets] }
 }
 
 /**
- * Build the bwrap profile arguments for one file-effect policy. With a protected home, each denied socket outside it
- * is shadowed by binding `/dev/null` over that one path (never its directory, which holds other sockets), and the
- * home is replaced by an empty tmpfs carrying read-only binds of its readable entries, then remounted read-only.
+ * Build the bwrap profile arguments for one file-effect policy. With a protected home, each denied socket and each of
+ * its mount aliases outside the home is shadowed by binding `/dev/null` over that one path (never its directory,
+ * which holds other sockets), and the home is replaced by an empty tmpfs carrying read-only binds of its readable
+ * entries, then remounted read-only; each alias of the home gets an empty read-only tmpfs too.
  * @param policy - file-effect policy to express as bwrap mounts.
  * @param protection - the protected home and denied sockets.
  * @returns profile arguments before the trailing separator and command argv.
@@ -125,54 +154,82 @@ export function bwrapProfileArgs(policy: SandboxPolicy, protection: Protection =
     args.push('--tmpfs', protection.home)
     for (const entry of protection.readable) args.push('--ro-bind', entry.source, entry.path)
     args.push('--remount-ro', protection.home)
+    for (const alias of protection.homeAliases) args.push('--tmpfs', alias, '--remount-ro', alias)
   }
   return args
 }
 
+/** A directory's device and inode, which Landlock rules attach to whatever path names it. */
+function identity(path: string): string {
+  const stats = statSync(path, { bigint: true })
+  return `${String(stats.dev)}:${String(stats.ino)}`
+}
+
 /**
- * The paths that grant everything beneath `root` except `excluded`: the entries of each directory on the way from
- * `root` to `excluded`, other than the next step towards it. An entry that resolves to the excluded path, to a path
- * inside it or to one of its ancestors is left out, because Landlock follows it and would grant the excluded path.
- * Entries are listed at wrap time, so one created later in those directories is not granted.
+ * The identities of every directory on the way from `/` to each excluded path, the excluded paths included. Landlock
+ * attaches a rule to the inode, not the path, so granting another path to one of these directories (such as `mnt`
+ * inside a second mount of the root filesystem, which is the inode of `/mnt`) would grant the way to an excluded path.
+ * @param excluded - the canonical excluded paths, each existing.
+ * @returns the identities.
+ */
+function identitiesOnTheWay(excluded: readonly string[]): Set<string> {
+  const identities = new Set<string>()
+  for (const path of excluded) {
+    let current = path
+    while (true) {
+      identities.add(identity(current))
+      const parent = dirname(current)
+      if (parent === current) break
+      current = parent
+    }
+  }
+  return identities
+}
+
+/**
+ * The canonical paths that grant everything beneath `root` except the excluded paths: the entries of each directory
+ * on the way from `root` to an excluded path, other than the directories on that way, which are descended into. An
+ * entry that resolves into an excluded path or above one, or that is another path to a directory on the way to one,
+ * is left out, because Landlock follows it and would grant the excluded path. Entries are listed at wrap time, so one
+ * created later in those directories is not granted, and grants name resolved paths, which the launcher opens
+ * without following links, so a path swapped for a link after this listing fails the run.
  * @param root - the canonical root to grant.
- * @param excluded - the canonical path to leave out.
- * @returns the grant paths; `[root]` when `excluded` is outside it, none when they are equal.
+ * @param excluded - the canonical paths to leave out.
+ * @param onTheWay - the identities of the directories on the way to them ({@link identitiesOnTheWay}).
+ * @returns the grant paths; `[root]` when no excluded path is inside it, none when it lies inside an excluded path.
  * @throws {SandboxUnsupportedPolicyError} when a directory on the way cannot be listed.
  */
-function grantsExcluding(root: string, excluded: string): string[] {
-  if (!pathWithin(excluded, root)) return [root]
+function grantsExcluding(root: string, excluded: readonly string[], onTheWay: ReadonlySet<string>): string[] {
+  if (excluded.some(path => pathWithin(root, path))) return []
+  const inside = excluded.filter(path => pathWithin(path, root))
+  if (inside.length === 0) return [root]
+  let entries: string[]
+  try {
+    entries = readdirSync(root)
+  } catch (error) {
+    throw new SandboxUnsupportedPolicyError(`Landlock cannot express the protected home: cannot list ${JSON.stringify(root)}: ${String(error)}`)
+  }
   const grants: string[] = []
-  let directory = root
-  for (const segment of relative(root, excluded).split(sep).filter(part => part !== '')) {
-    const next = join(directory, segment)
-    let entries: string[]
+  for (const entry of entries.sort()) {
+    const path = join(root, entry)
+    let real: string
     try {
-      entries = readdirSync(directory)
-    } catch (error) {
-      throw new SandboxUnsupportedPolicyError(`Landlock cannot express the protected home: cannot list ${JSON.stringify(directory)}: ${String(error)}`)
+      real = realpathSync.native(path)
+    } catch {
+      // A dangling link grants nothing, and the launcher refuses a grant it cannot open.
+      continue
     }
-    for (const entry of entries.sort()) {
-      const path = join(directory, entry)
-      if (path === next) continue
-      let real: string
-      try {
-        real = realpathSync.native(path)
-      } catch {
-        // A dangling link grants nothing, and the launcher refuses a grant it cannot open.
-        continue
-      }
-      if (pathWithin(real, excluded) || pathWithin(excluded, real)) continue
-      grants.push(path)
-    }
-    directory = next
+    const way = onTheWay.has(identity(real))
+    if (!way && !touches(real, excluded)) grants.push(real)
+    else if (real === path && inside.some(target => pathWithin(target, path))) grants.push(...grantsExcluding(path, excluded, onTheWay))
   }
   return grants
 }
 
 /**
  * Build the Landlock launcher grants for one file-effect policy. With a protected home, the read grant of `/` and
- * any write grant that contains the home are replaced by grants of every path beside the way to the home
- * ({@link grantsExcluding}), and the home's readable entries are granted read-only.
+ * any write grant that contains the home or one of its aliases are replaced by grants of every path beside the way
+ * to them ({@link grantsExcluding}), and the home's readable entries are granted read-only by their resolved paths.
  * @param policy - file-effect policy to express as Landlock allow-list grants.
  * @param protection - the protected home; Landlock cannot express the denied sockets.
  * @returns launcher grant arguments before the trailing separator and command argv.
@@ -181,13 +238,15 @@ function grantsExcluding(root: string, excluded: string): string[] {
 export function landlockProfileArgs(policy: SandboxPolicy, protection: Protection = NO_PROTECTION): string[] {
   const readWrite = ['/dev/null']
   if (policy.mode === 'workspace-write') {
-    readWrite.push('/tmp', ...workspaceWritableRoots(policy))
+    readWrite.push(canonicalPath('/tmp'), ...workspaceWritableRoots(policy))
   }
   const home = protection.home
   if (home === undefined) return landlockGrantArgs({ readOnly: ['/'], readWrite })
+  const excluded = [home, ...protection.homeAliases]
+  const onTheWay = identitiesOnTheWay(excluded)
   return landlockGrantArgs({
-    readOnly: [...grantsExcluding('/', home), ...protection.readable.map(entry => entry.path)],
-    readWrite: readWrite.flatMap(root => grantsExcluding(canonicalPath(root), home)),
+    readOnly: [...new Set([...grantsExcluding('/', excluded, onTheWay), ...protection.readable.map(entry => entry.source)])],
+    readWrite: [...new Set(readWrite.flatMap(root => grantsExcluding(root, excluded, onTheWay)))],
   })
 }
 
@@ -203,8 +262,9 @@ function sbplString(path: string): string {
  * so the Seatbelt grant and the in-process fs fence
  * (`@deepseek-ai/dsh-fs-sandbox`) can never drift apart; the helper adds the
  * documented Seatbelt temp areas. With a protected home, later forms deny
- * writes and reads under it (they win over the earlier allows), allow reads of
- * its readable entries, and deny connecting to each denied socket's path literals.
+ * writes, reads, hard links and clones under it and each of its aliases (they
+ * win over the earlier allows), allow reads of its readable entries, and deny
+ * connecting to each denied socket's path literals.
  * @param policy - file-effect policy to express as an SBPL profile.
  * @param protection - the protected home and denied sockets.
  * @returns sandbox-exec arguments before the trailing separator and command argv.
@@ -217,8 +277,11 @@ export function seatbeltProfileArgs(policy: SandboxPolicy, protection: Protectio
   }
   const home = protection.home
   if (home !== undefined) {
-    forms.push(`(deny file-write* (subpath ${sbplString(home)}))`, `(deny file-read* (subpath ${sbplString(home)}))`)
-    forms.push(`(allow file-read-metadata (literal ${sbplString(home)}))`)
+    for (const path of [home, ...protection.homeAliases]) {
+      forms.push(`(deny file-write* (subpath ${sbplString(path)}))`, `(deny file-read* (subpath ${sbplString(path)}))`)
+      forms.push(`(deny file-link file-clone (subpath ${sbplString(path)}))`)
+      forms.push(`(allow file-read-metadata (literal ${sbplString(path)}))`)
+    }
     if (protection.readable.length > 0) {
       forms.push(`(allow file-read* ${protection.readable.map(entry => `(subpath ${sbplString(entry.path)})`).join(' ')})`)
     }

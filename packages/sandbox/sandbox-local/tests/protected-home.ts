@@ -7,11 +7,12 @@ import { execFile, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { expect } from 'vitest'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { Config, LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
+import { mountAliases, readMountTable } from '../src/mounts.ts'
 
 /** Creates a provider with the given config; the e2e file forces its own runner. */
 export type ProviderFactory = (config: Config) => Promise<LocalSandboxProvider>
@@ -30,7 +31,7 @@ export const ROOTFUL_DOCKER_SOCKET = '/var/run/docker.sock'
  */
 const PROBE = `
 const fs = require('node:fs'), net = require('node:net')
-const [op, path] = process.argv.slice(1)
+const [op, path, second] = process.argv.slice(1)
 const done = result => { console.log(result); process.exit(0) }
 const code = error => error.code || 'error'
 if (op === 'connect') {
@@ -44,6 +45,8 @@ if (op === 'connect') {
     else if (op === 'create') fs.writeFileSync(path, 'planted', { flag: 'wx' })
     else if (op === 'change') fs.appendFileSync(path, 'changed')
     else if (op === 'delete') fs.unlinkSync(path)
+    else if (op === 'link') { fs.linkSync(path, second); fs.readFileSync(second) }
+    else if (op === 'clone') { fs.copyFileSync(path, second, fs.constants.COPYFILE_FICLONE_FORCE); fs.readFileSync(second) }
     else throw Object.assign(new Error(op), { code: 'BAD_OP' })
     done('ok')
   } catch (error) { done(code(error)) }
@@ -87,9 +90,9 @@ async function listen(path: string): Promise<string> {
  * @param path - its path.
  * @returns what the probe printed.
  */
-async function probe(provider: LocalSandboxProvider, policy: SandboxPolicy, op: string, path: string): Promise<string> {
-  const confined = await provider.confine([process.execPath, '-e', PROBE, op, path], policy)
-  const { stdout } = await execFileAsync(confined.argv[0] ?? '', confined.argv.slice(1), { encoding: 'utf8', timeout: 30_000 })
+async function probe(provider: LocalSandboxProvider, policy: SandboxPolicy, op: string, path: string, second = '', cwd?: string): Promise<string> {
+  const confined = await provider.confine([process.execPath, '-e', PROBE, op, path, second], policy)
+  const { stdout } = await execFileAsync(confined.argv[0] ?? '', confined.argv.slice(1), { encoding: 'utf8', timeout: 30_000, cwd })
   return stdout.trim()
 }
 
@@ -109,7 +112,7 @@ export interface HomeFixture {
   readonly agentSocket: string
   /** A workspace directory beside the home. */
   readonly workspace: string
-  /** The home-auth key reached through a symbolic link to the home and through one to the home's parent. */
+  /** The home-auth key reached through symbolic links to the home, to the home's parent and to its `secrets/`. */
   readonly aliases: readonly string[]
 }
 
@@ -135,7 +138,12 @@ export async function homeFixture(directory: DirectoryFactory, base: string = ho
   const agentSocket = await listen(join(root, 'a.sock'))
   symlinkSync(home, join(root, 'home-alias'), 'dir')
   symlinkSync(root, join(root, 'parent-alias'), 'dir')
-  const aliases = [join(root, 'home-alias', 'secrets', 'home-auth', 'device.key'), join(root, 'parent-alias', 'h', 'secrets', 'home-auth', 'device.key')]
+  symlinkSync(join(home, 'secrets'), join(root, 'secrets-alias'), 'dir')
+  const aliases = [
+    join(root, 'home-alias', 'secrets', 'home-auth', 'device.key'),
+    join(root, 'parent-alias', 'h', 'secrets', 'home-auth', 'device.key'),
+    join(root, 'secrets-alias', 'home-auth', 'device.key'),
+  ]
   return { home, secret, token, runtimeFile, channelSocket, agentSocket, workspace, aliases }
 }
 
@@ -336,3 +344,143 @@ export async function checkRootlessDockerDenied(
 
 /** The OS temporary directory, where a home lies inside a temp area that `workspace-write` grants. */
 export const TEMP_BASE = tmpdir()
+
+/**
+ * A confined command in a writable workspace beside the home cannot hard-link or clone the home-auth key into the
+ * workspace and read it there.
+ * @param make - the provider factory.
+ * @param directory - the fixture directory factory.
+ * @returns completion.
+ */
+export async function checkHomeLinkDenied(make: ProviderFactory, directory: DirectoryFactory): Promise<void> {
+  const fixture = await homeFixture(directory)
+  const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: fixture.workspace }
+  const provider = await make(protectionConfig(fixture))
+  expect(await probe(provider, policy, 'link', fixture.secret, join(fixture.workspace, 'linked'))).not.toBe('ok')
+  expect(await probe(provider, policy, 'clone', fixture.secret, join(fixture.workspace, 'cloned'))).not.toBe('ok')
+  for (const copy of ['linked', 'cloned']) {
+    const path = join(fixture.workspace, copy)
+    if (existsSync(path)) expect(readFileSync(path, 'utf8')).not.toBe('fixture-key\n')
+  }
+}
+
+/**
+ * A readable entry that is a symbolic link to a directory above the home is dropped, so the home stays unreadable
+ * through it.
+ * @param make - the provider factory.
+ * @param directory - the fixture directory factory.
+ * @returns completion.
+ */
+export async function checkReadableAboveHomeDropped(make: ProviderFactory, directory: DirectoryFactory): Promise<void> {
+  const fixture = await homeFixture(directory)
+  const provider = await make(protectionConfig(fixture))
+  // Created after the provider loaded, so only the wrap-time check can drop it.
+  symlinkSync(dirname(fixture.home), join(fixture.home, 'dsh-runtimes'), 'dir')
+  const through = join(fixture.home, 'dsh-runtimes', basename(fixture.home), relative(fixture.home, fixture.secret))
+  expect(await probe(provider, { mode: 'read-only', workspaceRoot: homedir() }, 'read', through)).not.toBe('ok')
+}
+
+/**
+ * The mount aliases of a fixture home on this host, such as the root filesystem's second mount at
+ * `/mnt/wslg/distro` under WSLg, or why there are none.
+ * @param home - the fixture home.
+ * @returns the aliases, or the reason none exists.
+ */
+export function homeMountAliases(home: string): readonly string[] | string {
+  const aliases = mountAliases(home, readMountTable())
+  return aliases.length > 0 ? aliases : `no other mount of the filesystem holding ${home} on this host`
+}
+
+/**
+ * A confined command cannot read the home-auth key through another mount of the home's filesystem, and a writable
+ * root inside that mount's view of the home is refused; without the protection the key is readable there.
+ * @param make - the provider factory.
+ * @param fixture - a fixture home with at least one mount alias.
+ * @param aliases - the home's mount aliases.
+ * @returns completion.
+ */
+export async function checkHomeMountAliasDenied(make: ProviderFactory, fixture: HomeFixture, aliases: readonly string[]): Promise<void> {
+  const provider = await make(protectionConfig(fixture))
+  const atHome: SandboxPolicy = { mode: 'read-only', workspaceRoot: homedir() }
+  for (const alias of aliases) {
+    const secret = join(alias, relative(fixture.home, fixture.secret))
+    expect(await probe(provider, atHome, 'read', secret)).not.toBe('ok')
+    await expect(provider.confine(['true'], { mode: 'workspace-write', workspaceRoot: join(alias, 'skills') })).rejects.toMatchObject({ code: 'HOME_IN_WRITABLE_ROOT' })
+  }
+  const open = await make({})
+  expect(await probe(open, atHome, 'read', join(aliases[0]!, relative(fixture.home, fixture.secret)))).toBe('ok')
+}
+
+/**
+ * The mount aliases of the real rootful Docker socket on this host, such as Docker Desktop's
+ * `/mnt/wsl/docker-desktop-bind-mounts/<distro>/docker.sock` under WSL, or why there are none.
+ * @returns the aliases, or the reason none exists.
+ */
+export function dockerSocketMountAliases(): readonly string[] | string {
+  const unusable = rootfulDockerUnusable()
+  if (unusable !== undefined) return unusable
+  const aliases = mountAliases(realpathSync.native(ROOTFUL_DOCKER_SOCKET), readMountTable())
+  return aliases.length > 0 ? aliases : `no other mount reaches ${ROOTFUL_DOCKER_SOCKET} on this host`
+}
+
+/**
+ * With only the Docker socket's configured path denied, a confined command cannot connect to it through any of its
+ * mount aliases; without the denial it connects through each.
+ * @param make - the provider factory.
+ * @param directory - the fixture directory factory.
+ * @param aliases - the socket's mount aliases.
+ * @returns completion.
+ */
+export async function checkDockerMountAliasDenied(
+  make: ProviderFactory,
+  directory: DirectoryFactory,
+  aliases: readonly string[],
+): Promise<void> {
+  const fixture = await homeFixture(directory)
+  const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: fixture.workspace }
+  const provider = await make(protectionConfig(fixture, [fixture.channelSocket, ROOTFUL_DOCKER_SOCKET]))
+  for (const alias of aliases) expect(await probe(provider, policy, 'connect', alias)).not.toBe('ok')
+  const open = await make(protectionConfig(fixture))
+  for (const alias of aliases) expect(await probe(open, policy, 'connect', alias)).toBe('ok')
+}
+
+/**
+ * A confined command cannot reach the denied channel socket by another spelling of its path: relative to its working
+ * directory, with a doubled slash, with `/./`, or through a symbolic link in its workspace.
+ * @param make - the provider factory.
+ * @param directory - the fixture directory factory.
+ * @returns completion.
+ */
+export async function checkSocketSpellingsDenied(make: ProviderFactory, directory: DirectoryFactory): Promise<void> {
+  const fixture = await homeFixture(directory)
+  const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: fixture.workspace }
+  const provider = await make(protectionConfig(fixture))
+  const link = join(fixture.workspace, 'socket-link')
+  symlinkSync(fixture.channelSocket, link)
+  const directoryOf = dirname(fixture.channelSocket)
+  const name = basename(fixture.channelSocket)
+  expect(await probe(provider, policy, 'connect', name, '', directoryOf)).not.toBe('ok')
+  expect(await probe(provider, policy, 'connect', `${directoryOf}//${name}`)).not.toBe('ok')
+  expect(await probe(provider, policy, 'connect', `${directoryOf}/./${name}`)).not.toBe('ok')
+  expect(await probe(provider, policy, 'connect', link)).not.toBe('ok')
+  expect(await probe(await make({}), policy, 'connect', link)).toBe('ok')
+}
+
+/**
+ * On macOS, a confined command cannot read the home-auth key through the Data volume's firmlink spelling or through a
+ * case variant of the home's path on a case-insensitive volume.
+ * @param make - the provider factory.
+ * @param directory - the fixture directory factory.
+ * @returns completion.
+ */
+export async function checkMacPathVariantsDenied(make: ProviderFactory, directory: DirectoryFactory): Promise<void> {
+  const fixture = await homeFixture(directory)
+  const provider = await make(protectionConfig(fixture))
+  const atHome: SandboxPolicy = { mode: 'read-only', workspaceRoot: homedir() }
+  const variants = [join('/System/Volumes/Data', fixture.secret), fixture.secret.replace('/h/secrets/', '/H/SECRETS/')]
+  for (const variant of variants) {
+    expect(await probe(provider, atHome, 'read', variant)).not.toBe('ok')
+  }
+  const open = await make({})
+  for (const variant of variants) expect(await probe(open, atHome, 'read', variant)).toBe('ok')
+}

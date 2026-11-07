@@ -17,6 +17,11 @@ import {
   checkHomeWriteDenied,
   checkWritableRootRefused,
   closeServers,
+  checkHomeLinkDenied,
+  checkHomeMountAliasDenied,
+  checkReadableAboveHomeDropped,
+  homeFixture,
+  homeMountAliases,
 } from './protected-home.ts'
 
 /**
@@ -138,6 +143,21 @@ describe.skipIf(!landlockUsable)('sandbox-local: the protected home under real L
   })
   it('writable-root-refused: a workspace-write root that equals, lies inside or contains the home is refused', async () => {
     await checkWritableRootRefused(provider, tempDir)
+  })
+  it('home-read-denied: a hard link or clone of a home file into the workspace is refused', async () => {
+    await checkHomeLinkDenied(provider, tempDir)
+  })
+  it('home-read-denied: a readable entry that links above the home is dropped', async () => {
+    await checkReadableAboveHomeDropped(provider, tempDir)
+  })
+  it('home-read-denied: the home stays unreadable through another mount of its filesystem', async (test) => {
+    const fixture = await homeFixture(tempDir)
+    const aliases = homeMountAliases(fixture.home)
+    if (typeof aliases === 'string') {
+      test.skip(`not run: ${aliases}`)
+      return
+    }
+    await checkHomeMountAliasDenied(provider, fixture, aliases)
   })
   it('landlock-token-unreadable: a socket under the home stays reachable, as reported, while the start token is unreadable', async () => {
     await checkHomeSocketNotEnforced(provider, tempDir)

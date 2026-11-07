@@ -63,13 +63,13 @@ Seatbelt, bwrap, and Landlock include the policy's explicit `additionalWritableR
 
 ### Protected home and denied sockets
 
-With `protectedHome` set, confined commands cannot create, change or delete anything under that directory and, on runners that confine reads, cannot read anything under it except its `protectedHomeReadable` entries. A `workspace-write` call whose workspace root or extra root equals, lies inside or contains the home fails with `HOME_IN_WRITABLE_ROOT` before the command starts; read-only calls in such a workspace still run. With `deniedSockets` set, confined commands cannot connect to those sockets on runners that express the rule, while other Unix sockets and the network stay reachable. Without these fields every profile is the stock one.
+With `protectedHome` set, confined commands cannot create, change or delete anything under that directory and, on runners that confine reads, cannot read anything under it except its `protectedHomeReadable` entries. A `workspace-write` call whose workspace root or extra root equals, lies inside or contains the home fails with `HOME_IN_WRITABLE_ROOT` before the command starts; read-only calls in such a workspace still run. With `deniedSockets` set, confined commands cannot connect to those sockets on runners that express the rule, while other Unix sockets and the network stay reachable. Without these fields every profile is the stock one. At each wrap the provider also finds the other paths that reach the home or a denied socket — other mounts of the same filesystem on Linux, read from `/proc/self/mountinfo` and confirmed by device and inode, and the Data-volume firmlink spelling on macOS — and protects each like the original. A readable entry that leads elsewhere inside the home or above it is dropped, and a denied socket inside a readable entry is refused at load.
 
 | Rule | bwrap | Landlock | Seatbelt | Windows ACL |
 |---|---|---|---|---|
-| Write under the home | Denied: an empty tmpfs over the home, remounted read-only | Denied: no write grant under the home | Denied: `deny file-write*` on the home after the write allows | Denied: the Low-integrity token writes granted roots only |
-| Read under the home | Denied, with readable entries bound read-only | Denied: reads are granted only beside the way to the home, plus readable entries | Denied: `deny file-read*` on the home, readable entries allowed | Not confined |
-| Connect to a denied socket | Denied: `/dev/null` bound over the socket's resolved path, never its directory | Not expressed | Denied: `remote unix-socket` path literals of each spelling | Not expressed |
+| Write under the home | Denied: an empty tmpfs over the home and each alias, remounted read-only | Denied: no write grant under the home | Denied: `deny file-write*` on the home after the write allows | Denied: the Low-integrity token writes granted roots only |
+| Read under the home | Denied, with readable entries bound read-only | Denied: reads are granted only beside the way to the home and its aliases, by resolved paths the launcher opens without following links, never to another path of a directory on that way, plus readable entries | Denied: `deny file-read*`, `file-link` and `file-clone` on the home and its firmlink spelling, readable entries allowed | Not confined |
+| Connect to a denied socket | Denied: `/dev/null` bound over the socket's resolved path and each mount alias, never its directory | Not expressed | Denied: `remote unix-socket` path literals of each spelling | Not expressed |
 
 `RUNNER_PROTECTION` exports this table as booleans per runner, so a consumer can report which rules the selected runner does not enforce. The provider also reports the canonical home as `ctx.sandbox.protectedHome`, which the [filesystem fence](../../fs/fs-sandbox/README.md) reads to refuse writes under it.
 
@@ -87,6 +87,8 @@ A consumer passes absolute paths: the home, the entries under it that commands s
       - /var/run/docker.sock
       - /run/docker.sock
 ```
+
+With Docker Desktop on macOS, the denied sockets also name `~/Library/Containers/com.docker.docker/Data/docker.raw.sock`, `~/Library/Containers/com.docker.docker/Data/docker.sock` and `~/.docker/run/docker.sock`, as absolute paths.
 
 -----
 
@@ -126,6 +128,7 @@ Each runner's kernel speaks its own denial dialect, carried on every wrap as `de
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: runner chain selection, functional probes, per-call wrap, ACL grant lifecycle |
 | [`src/profiles.ts`](src/profiles.ts) | Per-platform profile builders: bwrap mounts, Landlock grants, Seatbelt SBPL, and each runner's protected-home rules |
+| [`src/mounts.ts`](src/mounts.ts) | Mount aliases from `/proc/self/mountinfo` and macOS firmlink spellings of the protected paths |
 
 </details>
 
@@ -165,7 +168,8 @@ These limits define when the provider is a poor fit or needs special operational
 - **Landlock may be partial** — older supported kernel ABIs confine only the access classes they expose, reported as `enforcement: 'partial'` rather than overstated as full.
 - **Seatbelt depends on deprecated `sandbox-exec`** — macOS still ships it, but this provider cannot replace or probe that private policy engine if Apple removes it.
 - **The protected home under Landlock** — Landlock grants reads by directory tree, so each wrap lists the directories on the way from `/` to the home and grants their other entries: those directories cannot be listed, an entry created in them after the wrap is unreadable, and an entry removed between the wrap and the launch makes the launcher refuse the run. Landlock has no right for connecting to a pathname socket, so denied sockets and sockets under the home stay reachable there.
-- **Socket and alias coverage** — bwrap shadows a denied socket only when it exists at the wrap, Seatbelt denies only the listed socket paths, and no runner covers a bind mount or hard link that exposes the home's files at another path.
+- **Socket and alias coverage** — bwrap shadows a denied socket only when it exists at the wrap, and Seatbelt denies only the listed socket paths. Aliases are found at each wrap, so a mount added while a command runs is not covered, and no runner covers a hard link made outside the sandbox to a file under the home.
+- **Sockets recreated after a wrap** — bwrap binds `/dev/null` over the socket file that exists at the wrap; a socket removed and created again at that path, such as after a Docker engine restart, is reachable from commands wrapped before. A consumer that keeps confined commands running for long, such as a terminal or a background job, must rewrap or stop them when a denied socket is recreated.
 - **Runner selection is cached for the provider lifetime** — installing, removing, or repairing a runner requires reloading the plugin before selection changes.
 - **`runnerCommand` is an operator assertion** — a configured custom runner skips functional probes and is assumed to implement the bwrap-compatible profile honestly; if it is itself a Bash script, its interpreter startup runs before that script applies confinement.
 

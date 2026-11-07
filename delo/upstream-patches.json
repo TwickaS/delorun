@@ -2504,12 +2504,12 @@
     {
       "path": "packages/sandbox/sandbox-local/src/profiles.ts",
       "class": "security",
-      "reason": "Protected home and denied sockets (C1's confinement rules): each dialect's profile builder takes a resolved `Protection`: bwrap binds `/dev/null` over each denied socket's resolved path (never its directory) and mounts an empty tmpfs over the home, binds its readable entries read-only and remounts it read-only; Landlock replaces its `/` read grant, and any write grant containing the home, by grants of every entry beside the way to the home, leaving out entries that resolve to the home, inside it or to its ancestors; Seatbelt appends `deny file-write*` and `deny file-read*` on the home after the write allows, allows its readable entries, and denies `network-outbound` to each socket spelling's `remote unix-socket` path literal. `RUNNER_PROTECTION` reports per runner which rules it expresses (Landlock and Windows cannot express the socket rule; Windows does not confine reads). With no protection every profile is byte-identical to upstream's. Lead verdict pending review: stricter only, and off unless configured."
+      "reason": "Protected home and denied sockets (C1's confinement rules): each dialect's profile builder takes a resolved `Protection`: bwrap binds `/dev/null` over each denied socket's resolved path (never its directory) and mounts an empty tmpfs over the home, binds its readable entries read-only and remounts it read-only; Landlock replaces its `/` read grant, and any write grant containing the home, by grants of every entry beside the way to the home, leaving out entries that resolve to the home, inside it or to its ancestors; Seatbelt appends `deny file-write*` and `deny file-read*` on the home after the write allows, allows its readable entries, and denies `network-outbound` to each socket spelling's `remote unix-socket` path literal. `RUNNER_PROTECTION` reports per runner which rules it expresses (Landlock and Windows cannot express the socket rule; Windows does not confine reads). With no protection every profile is byte-identical to upstream's. Lead verdict pending review: stricter only, and off unless configured. Review of #66: each wrap protects the home's mount and firmlink aliases like the home (bwrap: a read-only tmpfs over each; Landlock: left out, together with any other path to a directory on the way, since Landlock rules attach to inodes; Seatbelt: the same denials), shadows each denied socket's mount aliases, drops a readable entry that leads above the home, grants Landlock paths only by resolved path for the launcher's link refusal, and adds `deny file-link file-clone` on the home under Seatbelt."
     },
     {
       "path": "packages/sandbox/sandbox-local/src/index.ts",
       "class": "security",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the validated Config fields `protectedHome` (canonicalised at load, refused when missing, not a directory or `/`), `protectedHomeReadable` (relative entries inside the home, refused without `protectedHome`) and `deniedSockets` (absolute paths); each wrap resolves the protection, refuses a `workspace-write` root that overlaps the home with `HOME_IN_WRITABLE_ROOT` and passes the protection to the selected runner's profile, the `runnerCommand` override included. Re-exports `RUNNER_PROTECTION` and its types. All fields default to none, so the parity composition is unchanged. Lead verdict pending review: stricter only. Overrides `protectedHome` with the canonical configured home."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the validated Config fields `protectedHome` (canonicalised at load, refused when missing, not a directory or `/`), `protectedHomeReadable` (relative entries inside the home, refused without `protectedHome`) and `deniedSockets` (absolute paths); each wrap resolves the protection, refuses a `workspace-write` root that overlaps the home with `HOME_IN_WRITABLE_ROOT` and passes the protection to the selected runner's profile, the `runnerCommand` override included. Re-exports `RUNNER_PROTECTION` and its types. All fields default to none, so the parity composition is unchanged. Lead verdict pending review: stricter only. Overrides `protectedHome` with the canonical configured home. Review of #66: refuses at load a denied socket inside a readable entry, and refuses a writable root that overlaps any alias of the home."
     },
     {
       "path": "packages/sandbox/sandbox/src/roots.ts",
@@ -2524,42 +2524,42 @@
     {
       "path": "packages/sandbox/sandbox-local/tests/protected-home.spec.ts",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): unit cases for each dialect's profile arguments with protection, the per-wrap resolution of readable entries and socket spellings, the Landlock layering (dangling links and aliases of the home or its ancestors left out, an unlistable directory failing closed), the load-time validation of every field, and the `HOME_IN_WRITABLE_ROOT` refusal. Also covers the provider's `protectedHome` getter."
+      "reason": "Protected home and denied sockets (C1's confinement rules): unit cases for each dialect's profile arguments with protection, the per-wrap resolution of readable entries and socket spellings, the Landlock layering (dangling links and aliases of the home or its ancestors left out, an unlistable directory failing closed), the load-time validation of every field, and the `HOME_IN_WRITABLE_ROOT` refusal. Also covers the provider's `protectedHome` getter. Review of #66: covers mountinfo parsing, device naming, alias detection and confirmation, firmlink spellings, aliases in every dialect's profile, Landlock leaving out other paths to the way and links into `secrets/`, and the load-time socket refusal."
     },
     {
       "path": "packages/sandbox/sandbox-local/tests/protected-home.ts",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): shared real-kernel checks for the per-runner e2e files: the home-auth key and start token unreadable from a read-only workspace at `~` (also through symbolic links to the home and its parent), `runtimes/` readable, no create, change or delete under the home (also with the home inside a granted temp area), overlapping writable roots refused, a socket under the home and the real rootful and a rootless Docker socket unreachable while an ssh-agent socket beside it stays reachable, each read and connect case also run without the protection."
+      "reason": "Protected home and denied sockets (C1's confinement rules): shared real-kernel checks for the per-runner e2e files: the home-auth key and start token unreadable from a read-only workspace at `~` (also through symbolic links to the home and its parent), `runtimes/` readable, no create, change or delete under the home (also with the home inside a granted temp area), overlapping writable roots refused, a socket under the home and the real rootful and a rootless Docker socket unreachable while an ssh-agent socket beside it stays reachable, each read and connect case also run without the protection. Review of #66: adds hard-link and clone attempts, a readable entry linking above the home, the home through another mount of its filesystem (WSLg's `/mnt/wslg/distro` where present), the Docker socket through its other mounts (Docker Desktop's WSL bind mount where present), other spellings of a denied socket, and macOS firmlink and case-variant paths."
     },
     {
       "path": "packages/sandbox/sandbox-local/tests/bwrap.e2e.ts",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): runs the shared protected-home and socket checks under real bwrap; the real-path Docker case skips with its reason where no connectable socket exists."
+      "reason": "Protected home and denied sockets (C1's confinement rules): runs the shared protected-home and socket checks under real bwrap; the real-path Docker case skips with its reason where no connectable socket exists. Review of #66: runs the alias, link and readable-entry checks and the socket alias and spelling checks."
     },
     {
       "path": "packages/sandbox/sandbox-local/tests/landlock.e2e.ts",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): runs the shared protected-home checks under real Landlock, and shows that a socket under the home stays reachable there, as `RUNNER_PROTECTION` reports, while the start token is unreadable."
+      "reason": "Protected home and denied sockets (C1's confinement rules): runs the shared protected-home checks under real Landlock, and shows that a socket under the home stays reachable there, as `RUNNER_PROTECTION` reports, while the start token is unreadable. Review of #66: runs the alias, link and readable-entry checks."
     },
     {
       "path": "packages/sandbox/sandbox-local/tests/seatbelt.e2e.ts",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): runs the shared protected-home and socket checks under real Seatbelt on macOS; the real-path Docker case skips with its reason where no connectable socket exists."
+      "reason": "Protected home and denied sockets (C1's confinement rules): runs the shared protected-home and socket checks under real Seatbelt on macOS; the real-path Docker case skips with its reason where no connectable socket exists. Review of #66: runs the alias, link and readable-entry checks and the socket alias and spelling checks, plus the macOS path-variant check."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): documents the three Config fields, the per-runner mechanism table, `RUNNER_PROTECTION`, and the Landlock and alias limitations. Also shows the exact configuration a consumer passes (the home, its readable entries, the channel sockets and the Docker socket's configured and real paths) and `ctx.sandbox.protectedHome`."
+      "reason": "Protected home and denied sockets (C1's confinement rules): documents the three Config fields, the per-runner mechanism table, `RUNNER_PROTECTION`, and the Landlock and alias limitations. Also shows the exact configuration a consumer passes (the home, its readable entries, the channel sockets and the Docker socket's configured and real paths) and `ctx.sandbox.protectedHome`. Review of #66: documents aliases, the dropped readable entries, the load-time socket refusal, Docker Desktop's macOS sockets, and recreated sockets as a consumer requirement."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.zh.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the README.md additions. Also the Chinese counterpart of the consumer configuration example."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the README.md additions. Also the Chinese counterpart of the consumer configuration example. Review of #66: the Chinese counterpart of those additions."
     },
     {
       "path": "packages/sandbox/sandbox-local/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the README.md additions and their Chinese counterpart. Re-recorded again after the consumer configuration example."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the README.md additions and their Chinese counterpart. Re-recorded again after the consumer configuration example. Re-recorded after the review's additions."
     },
     {
       "path": "packages/fs/fs-sandbox/src/index.ts",
@@ -2600,6 +2600,11 @@
       "path": "native/system/test/launcher.test.js",
       "class": "delo-feature",
       "reason": "Protected home (C1): a grant through a link in its last or an earlier component exits 125 without running the command, and the same grant by its resolved path lands."
+    },
+    {
+      "path": "packages/sandbox/sandbox-local/src/mounts.ts",
+      "class": "security",
+      "reason": "Protected home and denied sockets (C1's confinement rules): finds the other paths that reach a protected path: mounts of the same filesystem from `/proc/self/mountinfo` (a mount of the path or a directory above it, or a bind mount of a part of it), each confirmed by device and inode, and the macOS Data-volume firmlink spelling; an unreadable Linux mount table fails the wrap closed. Review of #66 found the home readable through WSLg's `/mnt/wslg/distro` and Docker reachable through Docker Desktop's bind mount of its socket."
     }
   ],
   "retired": []

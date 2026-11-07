@@ -24,7 +24,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join, normalize, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   LAUNCHER_BIN,
@@ -40,6 +40,7 @@ import {
   SandboxUnsupportedPolicyError,
   assertRootsOutsideHome,
   canonicalPath,
+  pathWithin,
   workspaceWritableRoots,
 } from '@deepseek-ai/dsh-sandbox'
 import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
@@ -260,6 +261,14 @@ function protectionSettings(config: Config): ProtectionSettings {
     if (entry === '' || isAbsolute(entry) || normalized === '.' || normalized === '..' || normalized.startsWith(`..${sep}`)) {
       throw new Error(`sandbox-local: protectedHomeReadable entries must be relative paths inside protectedHome: ${JSON.stringify(entry)}`)
     }
+    // bwrap binds a readable entry back over the hidden home, so a denied socket inside one would stay reachable.
+    const path = join(home, entry)
+    const resolvedPath = canonicalPath(path)
+    const socket = deniedSockets.find(candidate => pathWithin(candidate, path)
+      || pathWithin(join(canonicalPath(dirname(candidate)), basename(candidate)), resolvedPath))
+    if (socket !== undefined) {
+      throw new Error(`sandbox-local: deniedSockets entry ${JSON.stringify(socket)} lies inside the readable entry ${JSON.stringify(entry)}, where commands could reach it`)
+    }
   }
   return { home, readable, deniedSockets }
 }
@@ -405,7 +414,10 @@ export class LocalSandboxProvider extends SandboxProvider {
     signal?.throwIfAborted()
     policy = { ...policy, workspaceRoot: canonicalPath(policy.workspaceRoot) }
     const protection = resolveProtection(this.protection)
-    if (protection.home !== undefined) assertRootsOutsideHome(workspaceWritableRoots(policy), protection.home)
+    if (protection.home !== undefined) {
+      const roots = workspaceWritableRoots(policy)
+      for (const path of [protection.home, ...protection.homeAliases]) assertRootsOutsideHome(roots, path)
+    }
     if (this.runnerCommand !== undefined) {
       return Promise.resolve<ConfinedArgv>({
         argv: [...this.runnerCommand, ...bwrapProfileArgs(policy, protection), '--', ...argv],

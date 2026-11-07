@@ -19,6 +19,14 @@ import {
   checkRootlessDockerDenied,
   checkWritableRootRefused,
   closeServers,
+  checkHomeLinkDenied,
+  checkHomeMountAliasDenied,
+  checkReadableAboveHomeDropped,
+  homeFixture,
+  homeMountAliases,
+  checkDockerMountAliasDenied,
+  checkSocketSpellingsDenied,
+  dockerSocketMountAliases,
   rootfulDockerUnusable,
 } from './protected-home.ts'
 
@@ -181,6 +189,32 @@ describe.skipIf(!bwrapUsable)('sandbox-local: the protected home and denied sock
   })
   it('writable-root-refused: a workspace-write root that equals, lies inside or contains the home is refused', async () => {
     await checkWritableRootRefused(provider, tempDir)
+  })
+  it('home-read-denied: a hard link or clone of a home file into the workspace is refused', async () => {
+    await checkHomeLinkDenied(provider, tempDir)
+  })
+  it('home-read-denied: a readable entry that links above the home is dropped', async () => {
+    await checkReadableAboveHomeDropped(provider, tempDir)
+  })
+  it('home-read-denied: the home stays unreadable through another mount of its filesystem', async (test) => {
+    const fixture = await homeFixture(tempDir)
+    const aliases = homeMountAliases(fixture.home)
+    if (typeof aliases === 'string') {
+      test.skip(`not run: ${aliases}`)
+      return
+    }
+    await checkHomeMountAliasDenied(provider, fixture, aliases)
+  })
+  it('docker-socket-connect-denied: the Docker socket is unreachable through its other mounts', async (test) => {
+    const aliases = dockerSocketMountAliases()
+    if (typeof aliases === 'string') {
+      test.skip(`not run: ${aliases}`)
+      return
+    }
+    await checkDockerMountAliasDenied(provider, tempDir, aliases)
+  })
+  it('home-socket-connect-denied: other spellings of a denied socket\'s path are refused too', async () => {
+    await checkSocketSpellingsDenied(provider, tempDir)
   })
   it('home-socket-connect-denied: a socket under the home is unreachable and a fixture ssh-agent socket is reachable', async () => {
     await checkHomeSocketDenied(provider, tempDir)

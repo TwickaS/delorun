@@ -63,13 +63,13 @@ Seatbelt、bwrap 和 Landlock 在 `workspace-write` 下包含策略显式指定�
 
 ### 受保护主目录与被拒绝的套接字
 
-设置 `protectedHome` 后，受限命令不能在该目录下创建、修改或删除任何内容；在限制读取的 runner 上，除 `protectedHomeReadable` 条目外也不能读取其中任何内容。工作区根目录或额外根目录等于、位于或包含主目录的 `workspace-write` 调用会在命令启动前以 `HOME_IN_WRITABLE_ROOT` 失败；在这样的工作区中，只读调用仍会运行。设置 `deniedSockets` 后，在能表达该规则的 runner 上受限命令不能连接这些套接字，其他 Unix 套接字与网络仍可访问。不设置这些字段时，每个 profile 都与原版相同。
+设置 `protectedHome` 后，受限命令不能在该目录下创建、修改或删除任何内容；在限制读取的 runner 上，除 `protectedHomeReadable` 条目外也不能读取其中任何内容。工作区根目录或额外根目录等于、位于或包含主目录的 `workspace-write` 调用会在命令启动前以 `HOME_IN_WRITABLE_ROOT` 失败；在这样的工作区中，只读调用仍会运行。设置 `deniedSockets` 后，在能表达该规则的 runner 上受限命令不能连接这些套接字，其他 Unix 套接字与网络仍可访问。不设置这些字段时，每个 profile 都与原版相同。每次包装时，提供方还会找出到达主目录或被拒绝套接字的其他路径——Linux 上同一文件系统的其他挂载（从 `/proc/self/mountinfo` 读取，并按设备号与 inode 确认），以及 macOS 上 Data 卷的 firmlink 写法——并像原路径一样保护它们。通往主目录内其他位置或主目录之上的可读条目会被丢弃，位于可读条目内的被拒绝套接字会在加载时被拒绝。
 
 | 规则 | bwrap | Landlock | Seatbelt | Windows ACL |
 |---|---|---|---|---|
-| 在主目录下写入 | 拒绝：在主目录上挂载空 tmpfs，并重新挂载为只读 | 拒绝：主目录下没有写授权 | 拒绝：在写允许之后对主目录 `deny file-write*` | 拒绝：Low 完整性令牌只能写入已授权的根目录 |
-| 在主目录下读取 | 拒绝，可读条目以只读方式绑定 | 拒绝：只授予通往主目录路径旁的读取，以及可读条目 | 拒绝：对主目录 `deny file-read*`，允许可读条目 | 不受限制 |
-| 连接被拒绝的套接字 | 拒绝：把 `/dev/null` 绑定到套接字解析后的路径上，从不绑定其目录 | 无法表达 | 拒绝：每种写法的 `remote unix-socket` 路径字面量 | 无法表达 |
+| 在主目录下写入 | 拒绝：在主目录及其每个别名上挂载空 tmpfs，并重新挂载为只读 | 拒绝：主目录下没有写授权 | 拒绝：在写允许之后对主目录 `deny file-write*` | 拒绝：Low 完整性令牌只能写入已授权的根目录 |
+| 在主目录下读取 | 拒绝，可读条目以只读方式绑定 | 拒绝：只授予通往主目录及其别名路径旁的读取，按启动器不跟随链接打开的解析后路径授予，从不授予这条路径上目录的其他路径，以及可读条目 | 拒绝：对主目录及其 firmlink 写法 `deny file-read*`、`file-link` 与 `file-clone`，允许可读条目 | 不受限制 |
+| 连接被拒绝的套接字 | 拒绝：把 `/dev/null` 绑定到套接字解析后的路径及其每个挂载别名上，从不绑定其目录 | 无法表达 | 拒绝：每种写法的 `remote unix-socket` 路径字面量 | 无法表达 |
 
 `RUNNER_PROTECTION` 以每个 runner 的布尔值导出此表，供消费方报告所选 runner 不强制执行哪些规则。提供方还以 `ctx.sandbox.protectedHome` 报告规范化后的主目录，[文件系统围栏](../../fs/fs-sandbox/README.zh.md)读取它来拒绝其下的写入。
 
@@ -87,6 +87,8 @@ Seatbelt、bwrap 和 Landlock 在 `workspace-write` 下包含策略显式指定�
       - /var/run/docker.sock
       - /run/docker.sock
 ```
+
+在 macOS 上使用 Docker Desktop 时，被拒绝的套接字还要以绝对路径列出 `~/Library/Containers/com.docker.docker/Data/docker.raw.sock`、`~/Library/Containers/com.docker.docker/Data/docker.sock` 与 `~/.docker/run/docker.sock`。
 
 -----
 
@@ -126,6 +128,7 @@ Windows 档为每个工作区保留一个确定性写入 SID 和常驻 ACE，同
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：runner 链选择、功能探测、逐调用包装、ACL 授权生命周期 |
 | [`src/profiles.ts`](src/profiles.ts) | 各平台 profile 构建器：bwrap 挂载、Landlock 授权、Seatbelt SBPL，以及每个 runner 的受保护主目录规则 |
+| [`src/mounts.ts`](src/mounts.ts) | 从 `/proc/self/mountinfo` 得到的挂载别名，以及受保护路径在 macOS 上的 firmlink 写法 |
 
 </details>
 
@@ -165,7 +168,8 @@ Windows 档为每个工作区保留一个确定性写入 SID 和常驻 ACE，同
 - **Landlock 可能只实现部分强制执行**——较旧且受支持的内核 ABI 只能限制自身公开的访问类别，因此报告 `enforcement: 'partial'`，不会夸大为完整强制执行。
 - **Seatbelt 依赖已弃用的 `sandbox-exec`**——macOS 仍会提供它，但若 Apple 移除该私有策略引擎，该提供方无法替换或探测。
 - **Landlock 下的受保护主目录**——Landlock 按目录树授予读取，因此每次包装都会列出从 `/` 到主目录路径上的各个目录，并授予其中的其他条目：这些目录本身不能被列出，包装之后在其中新建的条目不可读，而在包装与启动之间被删除的条目会让启动器拒绝运行。Landlock 没有管辖连接路径名套接字的权限，因此被拒绝的套接字和主目录下的套接字在那里仍可访问。
-- **套接字与别名的覆盖范围**——bwrap 只遮蔽包装时已存在的被拒绝套接字，Seatbelt 只拒绝列出的套接字路径，没有 runner 覆盖在其他路径暴露主目录文件的绑定挂载或硬链接。
+- **套接字与别名的覆盖范围**——bwrap 只遮蔽包装时已存在的被拒绝套接字，Seatbelt 只拒绝列出的套接字路径。别名在每次包装时查找，因此命令运行期间新增的挂载不在覆盖范围内，也没有 runner 覆盖在沙箱外为主目录下文件创建的硬链接。
+- **包装后重新创建的套接字**——bwrap 把 `/dev/null` 绑定到包装时存在的套接字文件上；在该路径上被删除并重新创建的套接字（例如 Docker 引擎重启之后）可被之前包装的命令访问。让受限命令长时间运行的消费方（例如终端或后台任务）必须在被拒绝的套接字重新创建时重新包装或停止这些命令。
 - **runner 选择在提供方生命周期内缓存**——安装、移除或修复 runner 后，必须重载插件才能改变选择。
 - **`runnerCommand` 是操作方断言**——配置的自定义 runner 会跳过功能探测，并假定它诚实实现与 bwrap 兼容的 profile；如果它本身是 Bash 脚本，其解释器启动发生在该脚本施加约束之前。
 
