@@ -2360,6 +2360,11 @@
       "path": "scripts/verify-client-packages.spec.ts",
       "class": "delo-feature",
       "reason": "Expects the `.woff2` import among the collected package-asset specifiers and adds a `.woff` import that stays uncollected, because Delo's package-asset media types include `.woff2` (see the `packages/client/modules/src/assets.ts` entry)."
+    },
+    {
+      "path": "scripts/snapshots/translation-prompt-v4/request-response.expected.json",
+      "class": "delo-feature",
+      "reason": "Re-recorded with `DSH_SNAPSHOT=refresh`: the assembled translation prompt embeds `docs/i18n/terminology.md`, which carries Delo's terminology rows and its Delo terms table."
     }
   ],
   "retired": []
