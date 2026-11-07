@@ -1,0 +1,26 @@
+{
+  "name": "@delo/supervisor",
+  "description": "Delo's Docker supervisor (C9): the fixed-schema API on a socket under ~/.delo that accepts only the current start token, the capability report built by inspection, supervisor roots, image checks against the verified release manifest, and hardened workspace containers",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/contract-operational-logs": "workspace:*",
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/contract-runtime-supervisor": "workspace:*",
+    "@delo/home": "workspace:*",
+    "@delo/logs": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-sandbox": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-local": "workspace:*",
+    "@deepseek-ai/node-addon-system": "workspace:~"
+  }
+}

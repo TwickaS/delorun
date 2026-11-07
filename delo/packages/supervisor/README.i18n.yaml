@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/supervisor/README.md
+/:
+  en: 87213c87266e1239
+  zh: 62118030f2c86775
+/delo-supervisor:
+  en: c4c0d5dee49b7d41
+  zh: 5a010d56eb2f42f0
+/delo-supervisor/summary:
+  en: e21435b17d84385a
+  zh: d2e651c6555c2943
+/delo-supervisor/contents:
+  en: b853506c4f496871
+  zh: a8ee2fa0f31bff36
+/delo-supervisor/launching-the-supervisor:
+  en: 3a18eef1ea066c9f
+  zh: 29f7b5b6cef35348
+/delo-supervisor/the-socket-and-the-token:
+  en: 6f3efa6359d3037e
+  zh: bbab0f41ec925f6c
+/delo-supervisor/the-api:
+  en: 7f79d9417868f877
+  zh: 8b53cf86ccc05311
+/delo-supervisor/supervisor-roots:
+  en: b439a96fc8ca9580
+  zh: 1d6d97a38378bd9c
+/delo-supervisor/images-and-the-verified-manifest:
+  en: 9144ef9aa1c903bf
+  zh: 2a31b58ef0bea4fd
+/delo-supervisor/the-capability-report:
+  en: 394e5cafef76d00a
+  zh: 883c08cd33e41a6b
+/delo-supervisor/workspace-containers:
+  en: a8d7e0c46ae6ef3e
+  zh: 0aba32c3e9927406
+/delo-supervisor/the-operational-log:
+  en: 87a5fb2c58d42905
+  zh: 97350acdae5d5558
+/delo-supervisor/not-yet-implemented:
+  en: 15b976df1b4463b0
+  zh: 5da1fa3967e52d1f
+/delo-supervisor/tests:
+  en: 8cf81b004952363b
+  zh: 55ab4cef5544ad2d

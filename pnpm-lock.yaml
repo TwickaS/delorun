@@ -1689,6 +1689,43 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
+  delo/packages/supervisor:
+    dependencies:
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/contract-operational-logs':
+        specifier: workspace:*
+        version: link:../contract-operational-logs
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delo/contract-runtime-supervisor':
+        specifier: workspace:*
+        version: link:../contract-runtime-supervisor
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../logs
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-sandbox':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox
+      '@deepseek-ai/dsh-sandbox-local':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-local
+      '@deepseek-ai/node-addon-system':
+        specifier: workspace:~
+        version: link:../../../native/system/packages/entry
+
   native/system:
     devDependencies:
       '@deepseek-ai/node-addon-system':

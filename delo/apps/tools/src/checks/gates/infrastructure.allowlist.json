@@ -25,6 +25,21 @@
       "path": "delo/apps/tools/src/stack/certificates.ts",
       "value": "2.5.4.3",
       "reason": "The X.520 commonName object identifier in a certificate subject, not an address."
+    },
+    {
+      "path": "delo/packages/supervisor/src/capabilities.ts",
+      "value": "10.0.2.2",
+      "reason": "slirp4netns's fixed address for the machine's loopback inside a rootless engine's container network, which the capability probe tries to reach; a protocol constant, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/supervisor/README.md",
+      "value": "10.0.2.2",
+      "reason": "slirp4netns's fixed address for the machine's loopback inside a rootless engine's container network, which the capability probe tries to reach; a protocol constant, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/supervisor/README.zh.md",
+      "value": "10.0.2.2",
+      "reason": "slirp4netns's fixed address for the machine's loopback inside a rootless engine's container network, which the capability probe tries to reach; a protocol constant, not a deployment's address."
     }
   ]
 }

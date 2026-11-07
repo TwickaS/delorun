@@ -1,0 +1,411 @@
+/**
+ * The `workspace.*` operations of the supervisor API (contract C9, "The supervisor API"): an S2 workspace's
+ * container, its internal network, its egress proxy and the proxy's way out, each created from the S2 image's
+ * listed digest under the owner's labels and checked against its inspect record before it may start. Every value
+ * that reaches the engine is derived from the contract, the setup-time roots and the verified manifest; the request
+ * supplies only the workspace id, the root to resolve, the preset, the egress mode and its additions.
+ *
+ * @module @delo/supervisor/workspaces
+ */
+import { mkdir, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import {
+  ADVANCED_BOUNDS,
+  DEFAULT_EGRESS_HOSTS,
+  LABELS,
+  PRESETS,
+  type CredentialOption,
+  type EgressMode,
+  type PresetName,
+  type ResourceLimits,
+  type SupervisorRequest,
+  type WorkspaceId,
+} from '@delo/contract-runtime-supervisor'
+import { PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
+import { checkPrivateDirectory, runDirectory } from '@delo/home'
+import type { EngineMachine, Inspection } from './capabilities.ts'
+import {
+  createBody,
+  EGRESS_PROXY_ENTRY,
+  hardeningDifferences,
+  labelsOf,
+  networkBody,
+  workspaceBinds,
+  workspaceEnv,
+  workspaceHash,
+  workspaceNames,
+  workspaceUser,
+  type CreateBody,
+  type InspectRecord,
+  type Owner,
+} from './container.ts'
+import { EngineError, isNotFound, type Engine } from './docker/engine.ts'
+import { SupervisorError } from './errors.ts'
+import { ensureListedImage, type ImagePull } from './images.ts'
+import { listedImage, type VerifiedManifest } from './manifest.ts'
+import { resolveWorkspaceRoot, type RootRules } from './roots.ts'
+
+/** What the workspace operations need. */
+export interface WorkspaceContext {
+  /** The engine of the active context, or `undefined` when there is none. */
+  readonly engine: Engine | undefined
+  /** The home and profile whose labels every object carries. */
+  readonly owner: Owner
+  /** The resolved Delo home. */
+  readonly home: string
+  /** The setup-time roots. */
+  readonly rules: RootRules
+  /** The verified manifest. */
+  readonly manifest: VerifiedManifest
+  /** Whether absent images are pulled. */
+  readonly pull: ImagePull
+  /** The latest capability inspection. */
+  readonly inspection: () => Inspection
+}
+
+/** A workspace as `workspace.inspect` and `workspace.list` report it. */
+export interface WorkspaceView {
+  /** The workspace. */
+  readonly workspaceId: WorkspaceId
+  /** The container's name. */
+  readonly container: string
+  /** The container's engine state, such as `created`, `running` or `exited`. */
+  readonly state: string
+  /** The limits in effect, from the container's inspect record. */
+  readonly limits: ResourceLimits
+  /** The egress mode the proxy runs with; `none` when no proxy exists. */
+  readonly egress: EgressMode
+  /** The hosts the proxy allows, under `allowlist`. */
+  readonly allowlist: readonly string[]
+}
+
+/**
+ * The limits of a preset on this machine.
+ * @param preset - the preset.
+ * @param advanced - the Advanced preset's values, given exactly when the preset is `advanced`.
+ * @param machine - the engine's machine.
+ * @returns the limits.
+ * @throws {SupervisorError} `PRESET_OUT_OF_RANGE` naming the first value outside its bound, or a preset whose CPU or
+ *   memory exceeds the machine.
+ */
+export function presetLimits(preset: PresetName, advanced: ResourceLimits | undefined, machine: EngineMachine): ResourceLimits {
+  if (preset !== 'advanced') {
+    const limits = PRESETS[preset]
+    if (limits.cpus > machine.cpus || limits.memoryBytes > machine.memoryBytes) throw new SupervisorError('PRESET_OUT_OF_RANGE', `the ${preset} preset exceeds this machine (${String(machine.cpus)} CPUs, ${String(machine.memoryBytes)} bytes of memory)`)
+    return limits
+  }
+  if (advanced === undefined) throw new SupervisorError('PRESET_OUT_OF_RANGE', 'the advanced preset needs its limits')
+  const bounds: readonly (readonly [keyof ResourceLimits, number, number])[] = [
+    ['cpus', ADVANCED_BOUNDS.minCpus, machine.cpus],
+    ['memoryBytes', ADVANCED_BOUNDS.minMemoryBytes, machine.memoryBytes - ADVANCED_BOUNDS.reservedMemoryBytes],
+    ['diskBytes', ADVANCED_BOUNDS.minDiskBytes, ADVANCED_BOUNDS.maxDiskBytes],
+    ['pids', ADVANCED_BOUNDS.minPids, ADVANCED_BOUNDS.maxPids],
+    ['tmpBytes', ADVANCED_BOUNDS.minTmpBytes, Math.floor(advanced.memoryBytes / 2)],
+  ]
+  for (const [field, low, high] of bounds) {
+    const value = advanced[field]
+    if (value < low || value > high) throw new SupervisorError('PRESET_OUT_OF_RANGE', `limits.${field} ${String(value)} is outside ${String(low)}..${String(high)}`)
+  }
+  return advanced
+}
+
+/**
+ * The hosts the proxy allows under a mode.
+ * @param egress - the mode.
+ * @param additions - the workspace's additions.
+ * @returns the hosts; empty under `open` and `none`.
+ */
+export function allowedHosts(egress: EgressMode, additions: readonly string[]): string[] {
+  return egress === 'allowlist' ? [...new Set([...DEFAULT_EGRESS_HOSTS, ...additions])] : []
+}
+
+/**
+ * The limits a container runs with, from its inspect record.
+ * @param record - the container's inspect record.
+ * @returns the limits.
+ */
+function limitsOf(record: InspectRecord): ResourceLimits {
+  const host = record.HostConfig ?? {}
+  return {
+    cpus: (host.NanoCpus ?? 0) / 1e9,
+    memoryBytes: host.Memory ?? 0,
+    diskBytes: Number(host.StorageOpt?.size ?? 0),
+    pids: host.PidsLimit ?? 0,
+    tmpBytes: Number(/size=(\d+)/.exec(host.Tmpfs?.['/tmp'] ?? '')?.[1] ?? 0),
+  }
+}
+
+/**
+ * The engine's failure as a supervisor refusal: an engine that does not answer is `DOCKER_UNAVAILABLE`, and so is a
+ * call it refused, with the engine's message as the detail.
+ * @param error - the thrown value.
+ * @returns the refusal, or the value itself when it is not an engine failure.
+ */
+function refusalOf(error: unknown): unknown {
+  return error instanceof EngineError ? new SupervisorError('DOCKER_UNAVAILABLE', error.message) : error
+}
+
+/** The `workspace.*` operations over one engine. */
+export class Workspaces {
+  /** @param context - the engine, owner, roots, manifest and inspection. */
+  constructor(private readonly context: WorkspaceContext) {}
+
+  /**
+   * Run one workspace operation.
+   * @param request - an authenticated request whose `op` starts with `workspace.`.
+   * @returns the response line's fields after `ok`.
+   * @throws {SupervisorError} with C9's code.
+   */
+  async handle(request: Extract<SupervisorRequest, { readonly op: `workspace.${string}` }>): Promise<Record<string, unknown>> {
+    try {
+      switch (request.op) {
+        case 'workspace.create': return { workspace: await this.create(request.args) }
+        case 'workspace.start': return { workspace: await this.start(request.args.workspaceId) }
+        case 'workspace.stop': return { workspace: await this.stop(request.args.workspaceId, request.args.mode) }
+        case 'workspace.remove': await this.remove(request.args.workspaceId); return {}
+        case 'workspace.inspect': return { workspace: await this.inspect(request.args.workspaceId) }
+        case 'workspace.list': return { workspaces: await this.list() }
+        case 'workspace.egress': return { workspace: await this.egress(request.args.workspaceId, request.args.egress, request.args.allowlistAdditions) }
+        default: {
+          const unknown: never = request
+          throw new SupervisorError('SCHEMA_VIOLATION', `unknown op ${String((unknown as { readonly op: unknown }).op)}`)
+        }
+      }
+    } catch (error) {
+      throw refusalOf(error)
+    }
+  }
+
+  private get engine(): Engine {
+    if (this.context.engine === undefined) throw new SupervisorError('DOCKER_UNAVAILABLE', this.context.inspection().shapes.s2.reason ?? 'no Docker engine')
+    return this.context.engine
+  }
+
+  private machineOrRefuse(): EngineMachine {
+    const inspection = this.context.inspection()
+    if (inspection.docker === undefined || inspection.machine === undefined) throw new SupervisorError('DOCKER_UNAVAILABLE', inspection.shapes.s2.reason)
+    return inspection.machine
+  }
+
+  private requireS2(): void {
+    const s2 = this.context.inspection().shapes.s2
+    if (s2.available) return
+    if (s2.reason === 'limits-missing') throw new SupervisorError('LIMITS_MISSING', 'a limit S2 requires is not enforced on this machine')
+    throw new SupervisorError('SHAPE_UNAVAILABLE', `s2: ${s2.reason ?? 'unavailable'}`)
+  }
+
+  private helperDirectory(workspaceId: WorkspaceId): string {
+    return join(runDirectory(this.context.home, this.context.owner.profile), 's2', workspaceHash(workspaceId))
+  }
+
+  private async create(args: {
+    readonly workspaceId: WorkspaceId
+    readonly root: string
+    readonly preset: PresetName
+    readonly limits?: ResourceLimits
+    readonly egress: EgressMode
+    readonly allowlistAdditions: readonly string[]
+    readonly credentials: CredentialOption | 'none'
+  }): Promise<WorkspaceView> {
+    const { owner } = this.context
+    const root = await resolveWorkspaceRoot(args.root, this.context.rules)
+    const engine = this.engine
+    const machine = this.machineOrRefuse()
+    const limits = presetLimits(args.preset, args.limits, machine)
+    const image = await ensureListedImage(engine, listedImage(this.context.manifest, 's2', this.context.inspection().platform), this.context.pull)
+    this.requireS2()
+    if (args.credentials !== 'none') throw new SupervisorError('SHAPE_UNAVAILABLE', `credential forwarding (${args.credentials}) is not provided by this supervisor`)
+    const names = workspaceNames(args.workspaceId)
+    if (await this.find(names.container) !== undefined) throw new SupervisorError('DOCKER_UNAVAILABLE', `${names.container} already exists`)
+    const docker = this.context.inspection().docker
+    const diskQuota = docker?.limits.disk.status === 'enforced'
+    const user = workspaceUser(docker?.rootless ?? false)
+    const labels = labelsOf(owner, args.workspaceId)
+    const helperDir = this.helperDirectory(args.workspaceId)
+    await mkdir(helperDir, { recursive: true, mode: PRIVATE_DIR_MODE })
+    await checkPrivateDirectory(helperDir)
+    const created: string[] = []
+    const networks: string[] = []
+    try {
+      await engine.call('POST', '/networks/create', networkBody(names.network, true, labels))
+      networks.push(names.network)
+      const body = createBody({
+        name: names.container, image, labels, user, limits, diskQuota,
+        networks: [names.network], binds: workspaceBinds(root, helperDir), env: workspaceEnv(names.proxy), workingDir: root,
+      })
+      await this.createChecked(names.container, body, created)
+      if (args.egress !== 'none') await this.createProxy(args.workspaceId, args.egress, args.allowlistAdditions, limits, diskQuota, created, networks)
+    } catch (error) {
+      await this.removeObjects(created, networks)
+      await rm(helperDir, { recursive: true, force: true })
+      throw error
+    }
+    return this.inspect(args.workspaceId)
+  }
+
+  /**
+   * Create one container, then compare its inspect record with its body; a container the engine changed is removed.
+   * @param name - the container's name.
+   * @param body - the create body.
+   * @param created - receives the name once the container exists, for the caller's cleanup.
+   */
+  private async createChecked(name: string, body: CreateBody, created: string[]): Promise<void> {
+    await this.engine.call('POST', `/containers/create?name=${encodeURIComponent(name)}`, body)
+    created.push(name)
+    const record = await this.engine.call('GET', `/containers/${encodeURIComponent(name)}/json`) as InspectRecord
+    const { mounts, settings } = hardeningDifferences(record, body)
+    if (mounts.length > 0) throw new SupervisorError('ROOT_REFUSED', `${name}'s mounts differ from the resolved paths: ${mounts.join(', ')}`)
+    if (settings.length > 0) throw new SupervisorError('LIMITS_MISSING', `the engine did not apply ${settings.join(', ')} to ${name}`)
+  }
+
+  private async createProxy(workspaceId: WorkspaceId, egress: Exclude<EgressMode, 'none'>, additions: readonly string[], limits: ResourceLimits, diskQuota: boolean, created: string[], networks: string[]): Promise<void> {
+    const { owner } = this.context
+    const engine = this.engine
+    const names = workspaceNames(workspaceId)
+    const labels = labelsOf(owner, workspaceId)
+    const image = await ensureListedImage(engine, listedImage(this.context.manifest, 's2', this.context.inspection().platform), this.context.pull)
+    if (!networks.includes(names.outNetwork)) {
+      try {
+        await engine.call('POST', '/networks/create', networkBody(names.outNetwork, false, labels))
+      } catch (error) {
+        // The way-out network survives a change of egress mode; any other refusal is the caller's.
+        if (!(error instanceof EngineError) || error.status !== 409) throw error
+      }
+      networks.push(names.outNetwork)
+    }
+    const body = createBody({
+      name: names.proxy, image, labels, user: workspaceUser(this.context.inspection().docker?.rootless ?? false), limits, diskQuota,
+      networks: [names.outNetwork], binds: [], command: [...EGRESS_PROXY_ENTRY.command],
+      env: [`${EGRESS_PROXY_ENTRY.modeVariable}=${egress}`, `${EGRESS_PROXY_ENTRY.hostsVariable}=${allowedHosts(egress, additions).join(',')}`],
+    })
+    await this.createChecked(names.proxy, body, created)
+    await engine.call('POST', `/networks/${encodeURIComponent(names.network)}/connect`, { Container: names.proxy })
+  }
+
+  private async removeObjects(containers: readonly string[], networks: readonly string[]): Promise<void> {
+    for (const name of containers) await this.removeIfPresent(`/containers/${encodeURIComponent(name)}?force=true&v=true`)
+    for (const name of networks) await this.removeIfPresent(`/networks/${encodeURIComponent(name)}`)
+  }
+
+  private async removeIfPresent(path: string): Promise<void> {
+    try {
+      await this.engine.call('DELETE', path)
+    } catch (error) {
+      if (!isNotFound(error)) throw error
+    }
+  }
+
+  /**
+   * The inspect record of a container this supervisor manages, or `undefined` when no container has the name.
+   * @param name - the container's name.
+   * @param workspaceId - the workspace it must belong to, when known.
+   * @returns the record.
+   * @throws {SupervisorError} `NOT_FOUND` when a container has the name but not this home's and profile's labels.
+   */
+  private async find(name: string, workspaceId?: WorkspaceId): Promise<InspectRecord | undefined> {
+    let record: InspectRecord
+    try {
+      record = await this.engine.call('GET', `/containers/${encodeURIComponent(name)}/json`) as InspectRecord
+    } catch (error) {
+      if (isNotFound(error)) return undefined
+      throw error
+    }
+    const labels = record.Config?.Labels ?? {}
+    const owner = this.context.owner
+    if (labels[LABELS.home] !== owner.homeId || labels[LABELS.profile] !== owner.profile || (workspaceId !== undefined && labels[LABELS.workspace] !== workspaceId)) {
+      throw new SupervisorError('NOT_FOUND', `${name} is not a container this supervisor manages`)
+    }
+    return record
+  }
+
+  private async owned(workspaceId: WorkspaceId): Promise<InspectRecord> {
+    const record = await this.find(workspaceNames(workspaceId).container, workspaceId)
+    if (record === undefined) throw new SupervisorError('NOT_FOUND', `no workspace container for ${workspaceId}`)
+    return record
+  }
+
+  private async start(workspaceId: WorkspaceId): Promise<WorkspaceView> {
+    await this.owned(workspaceId)
+    const names = workspaceNames(workspaceId)
+    if (await this.find(names.proxy, workspaceId) !== undefined) await this.engine.call('POST', `/containers/${encodeURIComponent(names.proxy)}/start`)
+    await this.engine.call('POST', `/containers/${encodeURIComponent(names.container)}/start`)
+    return this.inspect(workspaceId)
+  }
+
+  private async stop(workspaceId: WorkspaceId, mode: 'graceful' | 'kill'): Promise<WorkspaceView> {
+    await this.owned(workspaceId)
+    const names = workspaceNames(workspaceId)
+    const proxy = await this.find(names.proxy, workspaceId)
+    for (const name of proxy === undefined ? [names.container] : [names.container, names.proxy]) {
+      try {
+        await this.engine.call('POST', mode === 'graceful' ? `/containers/${encodeURIComponent(name)}/stop?t=10` : `/containers/${encodeURIComponent(name)}/kill`)
+      } catch (error) {
+        // Killing a container that is not running is a stopped container.
+        if (!(error instanceof EngineError) || error.status !== 409) throw error
+      }
+    }
+    return this.inspect(workspaceId)
+  }
+
+  private async remove(workspaceId: WorkspaceId): Promise<void> {
+    await this.owned(workspaceId)
+    const names = workspaceNames(workspaceId)
+    await this.find(names.proxy, workspaceId)
+    await this.removeObjects([names.container, names.proxy], [names.network, names.outNetwork])
+    await rm(this.helperDirectory(workspaceId), { recursive: true, force: true })
+  }
+
+  private async egressOf(workspaceId: WorkspaceId): Promise<{ readonly egress: EgressMode, readonly allowlist: readonly string[] }> {
+    const proxy = await this.find(workspaceNames(workspaceId).proxy, workspaceId)
+    if (proxy === undefined) return { egress: 'none', allowlist: [] }
+    const env = proxy.Config?.Env ?? []
+    const value = (name: string): string => env.find(entry => entry.startsWith(`${name}=`))?.slice(name.length + 1) ?? ''
+    const mode = value(EGRESS_PROXY_ENTRY.modeVariable)
+    const hosts = value(EGRESS_PROXY_ENTRY.hostsVariable)
+    return { egress: mode === 'open' ? 'open' : 'allowlist', allowlist: hosts === '' ? [] : hosts.split(',') }
+  }
+
+  private async inspect(workspaceId: WorkspaceId): Promise<WorkspaceView> {
+    const record = await this.owned(workspaceId)
+    return {
+      workspaceId,
+      container: workspaceNames(workspaceId).container,
+      state: record.State?.Status ?? 'unknown',
+      limits: limitsOf(record),
+      ...await this.egressOf(workspaceId),
+    }
+  }
+
+  private async list(): Promise<WorkspaceView[]> {
+    const { owner } = this.context
+    const filters = JSON.stringify({ label: [`${LABELS.home}=${owner.homeId}`, `${LABELS.profile}=${owner.profile}`, `${LABELS.shape}=s2`] })
+    const rows = await this.engine.call('GET', `/containers/json?all=true&filters=${encodeURIComponent(filters)}`) as readonly { readonly Names?: readonly string[], readonly Labels?: Readonly<Record<string, string>> }[]
+    const views: WorkspaceView[] = []
+    for (const row of rows) {
+      const id = row.Labels?.[LABELS.workspace]
+      if (id === undefined) continue
+      const workspaceId = id as WorkspaceId
+      if (!(row.Names ?? []).includes(`/${workspaceNames(workspaceId).container}`)) continue
+      views.push(await this.inspect(workspaceId))
+    }
+    return views
+  }
+
+  private async egress(workspaceId: WorkspaceId, egress: EgressMode, additions: readonly string[]): Promise<WorkspaceView> {
+    const record = await this.owned(workspaceId)
+    const names = workspaceNames(workspaceId)
+    await this.find(names.proxy, workspaceId)
+    await this.removeIfPresent(`/containers/${encodeURIComponent(names.proxy)}?force=true&v=true`)
+    if (egress !== 'none') {
+      const created: string[] = []
+      try {
+        await this.createProxy(workspaceId, egress, additions, limitsOf(record), record.HostConfig?.StorageOpt?.size !== undefined, created, [])
+        if (record.State?.Running === true) await this.engine.call('POST', `/containers/${encodeURIComponent(names.proxy)}/start`)
+      } catch (error) {
+        await this.removeObjects(created, [])
+        throw error
+      }
+    }
+    return this.inspect(workspaceId)
+  }
+}
