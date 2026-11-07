@@ -113,11 +113,14 @@ export interface ConnectionIndexRequest extends ConnectionTrustRequest {
 export interface ConnectionIndexResponse {
   writeHead(status: number, headers?: Readonly<Record<string, string>>): unknown
   end(body?: string): unknown
+  /** Add a header to the response the caller writes; a response without it receives no rolled cookie on an admitted index request. */
+  setHeader?(name: string, value: string): unknown
 }
 
 /** Outcome of admitting one request: the Peer it speaks for, or the status refusing it. */
 export type PeerAdmission =
-  | { readonly peer: PeerScope }
+  /** `setCookie` is a rolled or rotated credential the authenticator provider issued, which the route adds to its response. */
+  | { readonly peer: PeerScope; readonly setCookie?: string }
   | { readonly rejection: 401 | 403 }
 
 /** Socket admission claims API ownership until its carrier calls release, including failed upgrades. */

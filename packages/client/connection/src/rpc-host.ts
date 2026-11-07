@@ -16,7 +16,7 @@ import { API_PATH } from './api-path.ts'
 import type { BrowserAuth } from './browser-auth.ts'
 import { Peer } from './peer.ts'
 import { LOOPBACK_LISTENER, type Admission } from './authenticator.ts'
-import { openReachListener, type HostConnectionAdmission, type ReachListener, type ReachListenerOptions, type ReachRequests } from './reach.ts'
+import { openReachListener, ReachState, type HostConnectionAdmission, type ReachListener, type ReachListenerOptions } from './reach.ts'
 import type {
   PeerAdmission,
   ConnectionAdmission,
@@ -76,8 +76,8 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
   private disposed = false
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
-  /** Requests a reach listener dispatched, with the Peer its dispatcher admitted each for. */
-  private readonly reachRequests: ReachRequests = new WeakMap()
+  /** What this Connection's reach listeners record: dispatched requests, admitted Peers and open connections. */
+  private readonly reach = new ReachState()
 
   readonly allowsRemoteAuthorities: boolean
 
@@ -136,8 +136,8 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
    * Peer and API HTTP does not depend on an attached socket.
    */
   admit(request: ConnectionTrustRequest): PeerAdmission {
-    if (this.reachRequests.has(request)) {
-      const peer = this.reachRequests.get(request)
+    if (this.reach.requests.has(request)) {
+      const peer = this.reach.requests.get(request)
       return peer === undefined || this.disposed ? { rejection: 401 } : { peer }
     }
     if (!this.isTrusted(request)) return { rejection: 403 }
@@ -157,7 +157,12 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
 
   /** Open one reach listener owned by the Context that read this service. */
   openReachListener(options: ReachListenerOptions): Promise<ReachListener> {
-    return openReachListener(this.ctx, this.reachRequests, options)
+    return openReachListener(this.ctx, this.reach, options)
+  }
+
+  /** Destroy the open reach connections admitted for a session or device. */
+  closeReachConnections(match: { readonly sessionId?: string; readonly deviceId?: string }): number {
+    return this.reach.closeConnections(match)
   }
 
   /** Create one in-process Peer owned by the Context that read this service. */
@@ -198,6 +203,8 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
 
   /**
    * Authenticate and publish a credential before sending the connect redirect.
+   * With an authenticator provider loaded whose loopback policy refuses the
+   * launch token, every request is answered 401.
    * @param request - launch-token request on /connect.
    * @param response - response owned to completion.
    */
@@ -207,21 +214,52 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
       response.end(this.disposed ? 'unauthorized' : 'forbidden')
       return
     }
+    if (!this.acceptsLaunchToken()) {
+      this.browserAuth.writeUnauthorized(request, response)
+      return
+    }
     this.browserAuth.authorizeConnect(request, response,
       this.owner.get('webServer')?.protocol === 'https:', interactions => this.publishPeer(interactions))
+  }
+
+  /** Whether the loaded authenticator provider, if any, lets the loopback listener exchange the launch token. */
+  private acceptsLaunchToken(): boolean {
+    return this.owner.get('authenticator')?.policy(LOOPBACK_LISTENER)?.acceptsLaunchToken !== false
   }
 
   /**
    * Authenticate an index request; native TLS listeners mint Secure cookies.
    * A request a reach listener dispatched is admitted only when its
-   * dispatcher admitted it for a Peer, and is otherwise answered 401.
+   * dispatcher admitted it for a Peer, and is otherwise answered 401. With an
+   * authenticator provider loaded, a loopback request is admitted by the
+   * provider, and the launch-token exchange runs only while the provider's
+   * loopback policy accepts the launch token.
    */
   authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean {
-    if (this.reachRequests.has(request)) {
-      if (this.reachRequests.get(request) !== undefined && !this.disposed) return true
+    if (this.reach.requests.has(request)) {
+      if (this.reach.requests.get(request) !== undefined && !this.disposed) return true
       response.writeHead(401, { 'cache-control': 'no-store', 'content-type': 'application/json; charset=utf-8' })
       response.end(JSON.stringify({ error: 'NOT_SIGNED_IN' }))
       return false
+    }
+    const authenticator = this.owner.get('authenticator')
+    // With a provider loaded, it admits every loopback index request but the launch-token exchange, which its policy may refuse.
+    if (authenticator !== undefined) {
+      /* v8 ignore next -- node:http always sets url on server requests. */
+      const exchange = new URL(request.url ?? '/', 'http://dsh.invalid').searchParams.has('token')
+      if (exchange && !this.acceptsLaunchToken()) {
+        this.browserAuth.writeUnauthorized(request, response)
+        return false
+      }
+      if (!exchange) {
+        const admission = peerAdmission(authenticator.admit(request, LOOPBACK_LISTENER))
+        if ('peer' in admission) {
+          if (admission.setCookie !== undefined) response.setHeader?.('set-cookie', admission.setCookie)
+          return true
+        }
+        this.browserAuth.writeUnauthorized(request, response)
+        return false
+      }
     }
     return this.browserAuth.authorizeIndex(request, response, this.ctx.get('webServer')?.protocol === 'https:')
   }
@@ -299,6 +337,7 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
           res.end(admission.rejection === 401 ? 'unauthorized' : 'forbidden')
           return
         }
+        if (admission.setCookie !== undefined) res.appendHeader('set-cookie', admission.setCookie)
         await bridge(req, res, fetchHandler, admission.peer)
       },
     }
@@ -336,7 +375,7 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
 /** A loopback admission from the authenticator provider, as Connection's Peer admission. */
 function peerAdmission(admission: Admission): PeerAdmission {
   switch (admission.kind) {
-    case 'admitted': return { peer: admission.peer }
+    case 'admitted': return admission.setCookie === undefined ? { peer: admission.peer } : { peer: admission.peer, setCookie: admission.setCookie }
     case 'refused': return { rejection: admission.status === 401 ? 401 : 403 }
     case 'pre-login': return { rejection: 401 }
     default: {

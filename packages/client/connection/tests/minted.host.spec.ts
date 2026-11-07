@@ -38,8 +38,8 @@ async function start(): Promise<Harness> {
   const minted: Harness['minted'] = []
   ctx.on('authenticator/minted', (credential) => { minted.push({ credential, written: written.count }) })
   ctx.webServer.registerFallback((req, res) => {
-    const writeHead = res.writeHead.bind(res) as (...args: unknown[]) => typeof res
-    res.writeHead = ((...args: unknown[]) => {
+    const writeHead = res.writeHead.bind(res)
+    res.writeHead = ((...args: Parameters<typeof writeHead>) => {
       written.count += 1
       return writeHead(...args)
     }) as typeof res.writeHead
@@ -79,12 +79,11 @@ describe('authenticator/minted', () => {
     expect(harness.minted).toHaveLength(1)
     const [{ credential, written } = { credential: undefined, written: -1 }] = harness.minted
     expect(written).toBe(0)
-    expect(credential).toEqual({
+    expect({ kind: credential?.kind, hash: credential?.hash, authority: credential?.authority, peer: credential?.peer }).toEqual({
       kind: 'browser',
       hash: sha256(cookie.value),
       authority: `127.0.0.1:${String(harness.port)}`,
-      issuedAt: expect.any(Number),
-      expiresAt: expect.any(Number),
+      peer: undefined,
     })
     expect(credential?.issuedAt).toBeGreaterThanOrEqual(before)
     expect(credential?.expiresAt).toBe((credential?.issuedAt ?? 0) + 30 * 24 * 60 * 60 * 1000)

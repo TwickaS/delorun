@@ -64,7 +64,7 @@ kind: "package-reference"
 
 ### 附加监听器
 
-`openListener({ id, bind, gate })` 在配置的监听器旁打开一个附加监听器，服务相同的路由、upgrade 路由与回退。`bind` 为 `{ kind: 'loopback' }`，即操作系统分配并由 `address` 报告的 `127.0.0.1` TCP 端口；或者为 `{ kind: 'streams', tls: { cert, key } }`，它没有地址，并在交给 `accept(stream)` 的每条字节流上结束 TLS；两种形式都不接受 host 或 port。`gate(request, kind)` 在任何路由、upgrade handler 或回退运行之前，同步裁决每个请求与 upgrade 请求，并可以移除请求头。`refuse` 写出其状态码、header 与 body；在 upgrade 上则以原始响应写出，随后关闭 socket。`pass` 分发该请求：其 `peer` 作为 Peer 到达 resource，其 `headers` 在路由自身的 `setHeader`、`writeHead` 与 `removeHeader` 调用之后仍然保留；`set-cookie` 值与 `content-security-policy` 与路由自身的值并列发送，而不替换它们。其 `only` 让被指名的路由独自应答，并把拒绝结果发送给其他应答方以及每个 upgrade。门控抛出异常时应答 500；在 upgrade 上则销毁 upgrade socket。附加监听器的 id 在已打开的附加监听器之间唯一。`close()` 停止监听器，并销毁其接受的每个连接，包括已升级的 socket；每个附加监听器也随服务一同关闭。
+`openListener({ id, bind, gate })` 在配置的监听器旁打开一个附加监听器，服务相同的路由、upgrade 路由与回退。`bind` 为 `{ kind: 'loopback' }`，即操作系统分配并由 `address` 报告的 `127.0.0.1` TCP 端口；或者为 `{ kind: 'streams', tls: { cert, key } }`，它没有地址，并在交给 `accept(stream)` 的每条字节流上结束 TLS；两种形式都不接受 host 或 port。`gate(request, kind)` 在任何路由、upgrade handler 或回退运行之前，同步裁决每个请求与 upgrade 请求，并可以移除请求头。`refuse` 写出其状态码、header 与 body；在 upgrade 上则以原始响应写出，随后关闭 socket。`pass` 分发该请求：其 `peer` 作为 Peer 到达 resource，其 `headers` 在路由自身的 `setHeader`、`writeHead` 与 `removeHeader` 调用之后仍然保留；`set-cookie` 值与 `content-security-policy` 与路由自身的值并列发送，而不替换它们。其 `only` 让被指名的路由独自应答，并把拒绝结果发送给其他应答方以及每个 upgrade。附加监听器的每个 upgrade socket 在其门控运行之前都会接收一个错误处理函数并被跟踪；被拒绝的 socket 在其拒绝响应写出后即被销毁，因此连接被重置或半开的客户端既不会引发未捕获的错误，也不会使监听器保持打开。门控抛出异常时应答 500；在 upgrade 上则销毁 upgrade socket。附加监听器的 id 在已打开与正在绑定的附加监听器之间唯一。`close()` 停止监听器，并销毁其接受的每个连接，包括已升级的 socket；每个附加监听器也随服务一同关闭。
 
 ### 回退席位
 

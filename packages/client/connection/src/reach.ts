@@ -90,6 +90,14 @@ export interface HostConnectionAdmission extends HostConnectionHandle {
   builtinAdmission(request: ConnectionTrustRequest): Admission
 
   /**
+   * Destroy every open reach connection that carried a request the provider
+   * admitted for this session or device, streams and upgraded sockets
+   * included, as a session's revocation or a device's removal requires.
+   * @param match - a session id, a device id, or both.
+   * @returns how many connections were destroyed.
+   */
+  closeReachConnections(match: { readonly sessionId?: string; readonly deviceId?: string }): number
+  /**
    * Open one reach listener, owned by the Context that read `ctx.connection`.
    * It needs a loaded `authenticator` provider that serves the listener, and
    * stops when that provider is removed or replaced.
@@ -181,15 +189,31 @@ function header(request: IncomingMessage, name: string): string | undefined {
   return typeof value === 'string' ? value : value?.join(', ')
 }
 
-/** Remove every identity header from both views of a request's headers. */
+/**
+ * Remove every identity header from every view of a request's headers. Both
+ * parsed views are read first, so node:http has cached them before the raw
+ * list shrinks; a view computed later from a shorter raw list throws.
+ */
 function removeIdentityHeaders(request: IncomingMessage): void {
+  const views = [request.headers, request.headersDistinct]
+  for (const view of views) {
+    for (const name of Object.keys(view)) {
+      if (name.startsWith(IDENTITY_HEADER_PREFIX)) Reflect.deleteProperty(view, name)
+    }
+  }
   const raw = request.rawHeaders
   for (let at = raw.length - 2; at >= 0; at -= 2) {
     if (raw[at]?.toLowerCase().startsWith(IDENTITY_HEADER_PREFIX) === true) raw.splice(at, 2)
   }
-  for (const name of Object.keys(request.headers)) {
-    if (name.startsWith(IDENTITY_HEADER_PREFIX)) Reflect.deleteProperty(request.headers, name)
+}
+
+/** How many `Host` header lines a request carries; node:http keeps only the first in its parsed view. */
+function hostLines(request: IncomingMessage): number {
+  let count = 0
+  for (let at = 0; at < request.rawHeaders.length; at += 2) {
+    if (request.rawHeaders[at]?.toLowerCase() === 'host') count += 1
   }
+  return count
 }
 
 function carriesUpstreamCookie(request: IncomingMessage): boolean {
@@ -227,8 +251,51 @@ function refuse(code: ReachRefusalCode): WebGateDecision {
   return { kind: 'refuse', ...refusal(REACH_REFUSAL_STATUS[code], code) }
 }
 
-/** Requests a reach listener dispatched, with the Peer each was admitted for. */
-export type ReachRequests = WeakMap<object, PeerScope | undefined>
+/** Which sessions and devices one open reach connection was admitted for. */
+interface ReachConnection {
+  readonly sessions: Set<string>
+  readonly devices: Set<string>
+}
+
+/** What every reach listener of one Connection records, which Connection's admission reads. */
+export class ReachState {
+  /** Requests a reach listener dispatched, with the Peer each was admitted for, or `undefined` for pre-login. */
+  readonly requests = new WeakMap<object, PeerScope | undefined>()
+  /** Peers a reach dispatcher admitted. */
+  readonly peers = new WeakSet<PeerScope>()
+  /** Open connections that carried an admitted request, with what they were admitted for. */
+  readonly connections = new Map<Duplex, ReachConnection>()
+
+  /**
+   * Destroy every open reach connection that carried a request admitted for the session or the device.
+   * @param match - a session id, a device id, or both.
+   * @returns how many connections were destroyed.
+   */
+  closeConnections(match: { readonly sessionId?: string; readonly deviceId?: string }): number {
+    let closed = 0
+    for (const [socket, connection] of this.connections) {
+      const session = match.sessionId !== undefined && connection.sessions.has(match.sessionId)
+      const device = match.deviceId !== undefined && connection.devices.has(match.deviceId)
+      if (!session && !device) continue
+      this.connections.delete(socket)
+      socket.destroy()
+      closed += 1
+    }
+    return closed
+  }
+
+  /** Record that a connection carried a request admitted for a session and a device. */
+  admitted(socket: Duplex, admission: { readonly sessionId?: string; readonly deviceId?: string }): void {
+    let connection = this.connections.get(socket)
+    if (connection === undefined) {
+      connection = { sessions: new Set(), devices: new Set() }
+      this.connections.set(socket, connection)
+      socket.once('close', () => { this.connections.delete(socket) })
+    }
+    if (admission.sessionId !== undefined) connection.sessions.add(admission.sessionId)
+    if (admission.deviceId !== undefined) connection.devices.add(admission.deviceId)
+  }
+}
 
 /** The dispatcher of one reach listener: the gate the web server calls before any route. */
 class ReachDispatcher {
@@ -238,12 +305,17 @@ class ReachDispatcher {
     private readonly id: string,
     private readonly authenticator: Authenticator,
     private rule: ReachRule,
-    private readonly requests: ReachRequests,
+    private readonly state: ReachState,
   ) {}
 
   /** Refuse every later request; the listener is closing. */
   stop(): void {
     this.stopped = true
+  }
+
+  /** Whether the dispatcher refuses every request because its listener is closing. */
+  get isStopped(): boolean {
+    return this.stopped
   }
 
   /** Replace the rule after the provider announced a policy change. */
@@ -255,8 +327,11 @@ class ReachDispatcher {
     if (this.stopped) return refuse('NOT_SIGNED_IN')
     removeIdentityHeaders(request)
     const rule = this.rule
+    // Only an origin-form target: an absolute or scheme-relative one names an authority the Host rule did not check.
+    const raw = request.url ?? '/'
+    if (!raw.startsWith('/') || raw.startsWith('//')) return refuse('HOST_MISMATCH')
     const host = header(request, 'host')?.toLowerCase()
-    if (host !== rule.host) return refuse('HOST_MISMATCH')
+    if (host !== rule.host || hostLines(request) !== 1) return refuse('HOST_MISMATCH')
     if (rule.sni !== undefined) {
       const servername = (request.socket as Partial<TLSSocket>).servername
       if (typeof servername !== 'string' || servername.toLowerCase() !== rule.sni) return refuse('SNI_MISMATCH')
@@ -272,7 +347,8 @@ class ReachDispatcher {
     const admission = this.authenticator.admit(request, this.id)
     switch (admission.kind) {
       case 'admitted': {
-        this.requests.set(request, admission.peer)
+        this.state.requests.set(request, admission.peer)
+        this.state.admitted(request.socket, admission)
         // A 101 response is written by the upgrade handler, so a rolled cookie waits for the next HTTP request.
         if (admission.setCookie === undefined || kind === 'upgrade') return { kind: 'pass', peer: admission.peer }
         return { kind: 'pass', peer: admission.peer, headers: { 'set-cookie': admission.setCookie } }
@@ -281,7 +357,7 @@ class ReachDispatcher {
         const listed = rule.policy.preLogin.some(route => route.method === admission.route.method && route.path === admission.route.path)
         const route = listed && kind === 'request' ? preLoginTarget(admission.route, request.method, target.pathname) : undefined
         if (route === undefined) return refuse('NOT_SIGNED_IN')
-        this.requests.set(request, undefined)
+        this.state.requests.set(request, undefined)
         return { kind: 'pass', only: { route, refusal: refusal(REACH_REFUSAL_STATUS.NOT_SIGNED_IN, 'NOT_SIGNED_IN') } }
       }
       case 'refused':
@@ -299,12 +375,12 @@ class ReachDispatcher {
  * child fiber that injects `authenticator` and `webServer`, so it closes before
  * either provider is removed or replaced, and it never reopens by itself.
  * @param owner - the Context the listener belongs to.
- * @param requests - the table recording each dispatched request's Peer.
+ * @param reach - what every reach listener of this Connection records.
  * @param options - the listener id and binding.
  * @returns the open listener.
  * @throws when no authenticator is provided, the id is `loopback`, or the policy is not a valid reach policy.
  */
-export async function openReachListener(owner: Context, requests: ReachRequests, options: ReachListenerOptions): Promise<ReachListener> {
+export async function openReachListener(owner: Context, reach: ReachState, options: ReachListenerOptions): Promise<ReachListener> {
   const id = options.listener
   if (id === LOOPBACK_LISTENER) throw new Error('connection: the loopback listener is not a reach listener')
   const opened = Promise.withResolvers<ReachListener>()
@@ -320,7 +396,18 @@ export async function openReachListener(owner: Context, requests: ReachRequests,
     state.started = true
     try {
       const rule = reachRule(id, options.bind, ctx.authenticator.policy(id))
-      const dispatcher = new ReachDispatcher(id, ctx.authenticator, rule, requests)
+      const dispatcher = new ReachDispatcher(id, ctx.authenticator, rule, reach)
+      // Subscribed before the bind, so a policy change while it binds is not missed.
+      ctx.on('authenticator/policy', (changed) => {
+        if (changed !== id) return
+        try {
+          dispatcher.update(reachRule(id, options.bind, ctx.authenticator.policy(id)))
+        } catch (error) {
+          dispatcher.stop()
+          ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+          void fiber.dispose()
+        }
+      })
       let web: WebListener | undefined
       await ctx.effect(async () => {
         const open = await ctx.webServer.openListener({
@@ -338,16 +425,9 @@ export async function openReachListener(owner: Context, requests: ReachRequests,
       /* v8 ignore next -- the effect above assigns it or throws. */
       if (web === undefined) throw new Error(`connection: reach listener ${JSON.stringify(id)} did not open`)
       const bound = web
-      ctx.on('authenticator/policy', (changed) => {
-        if (changed !== id) return
-        try {
-          dispatcher.update(reachRule(id, options.bind, ctx.authenticator.policy(id)))
-        } catch (error) {
-          dispatcher.stop()
-          ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
-          void fiber.dispose()
-        }
-      })
+      // The policy as it stands once bound; a provider that stopped serving it meanwhile gets no listener.
+      if (dispatcher.isStopped) throw new Error(`connection: reach listener ${JSON.stringify(id)} lost its policy while it opened`)
+      dispatcher.update(reachRule(id, options.bind, ctx.authenticator.policy(id)))
       opened.resolve({
         listener: id,
         address: bound.address,

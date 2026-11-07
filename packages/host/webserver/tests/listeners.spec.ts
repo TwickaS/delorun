@@ -167,10 +167,57 @@ describe('additional listeners', () => {
     expect(ran).toEqual([])
   })
 
-  it('refuses a second open listener with the same id', async () => {
+  it('refuses a second open listener with the same id, also while the first is still binding', async () => {
     const { server } = await startServer()
-    await server.openListener({ id: 'reach-a', bind: { kind: 'loopback' }, gate: refuseAll })
+    const both = await Promise.allSettled([
+      server.openListener({ id: 'reach-a', bind: { kind: 'loopback' }, gate: refuseAll }),
+      server.openListener({ id: 'reach-a', bind: { kind: 'loopback' }, gate: refuseAll }),
+    ])
+    expect(both.map(result => result.status)).toEqual(['fulfilled', 'rejected'])
+    expect(String((both[1] as PromiseRejectedResult).reason)).toMatch(/already open/)
     await expect(server.openListener({ id: 'reach-a', bind: { kind: 'loopback' }, gate: refuseAll })).rejects.toThrow(/already open/)
+  })
+
+  it('survives refused upgrades whose clients reset the connection at once', async () => {
+    const { server } = await startServer()
+    const listener = await server.openListener({ id: 'reach-a', bind: { kind: 'loopback' }, gate: refuseAll })
+    const { port } = address(listener)
+    const uncaught: unknown[] = []
+    const record = (error: unknown): void => { uncaught.push(error) }
+    process.on('uncaughtException', record)
+    try {
+      await Promise.all(Array.from({ length: 50 }, async () => {
+        const socket = connect(port, '127.0.0.1')
+        socket.on('error', () => {})
+        await once(socket, 'connect')
+        socket.write('GET /socket HTTP/1.1\r\nHost: reach.test\r\nConnection: Upgrade\r\nUpgrade: dsh-test\r\n\r\n')
+        socket.resetAndDestroy()
+      }))
+      await new Promise(resolve => setTimeout(resolve, 200))
+    } finally {
+      process.off('uncaughtException', record)
+    }
+    expect(uncaught).toEqual([])
+    expect((await get(port, '/handler')).status).toBe(401)
+  })
+
+  it('closes a refused upgrade whose client keeps its half of the connection open, and close settles', async () => {
+    const { server } = await startServer()
+    const refused: Duplex[] = []
+    const listener = await server.openListener({ id: 'reach-a', bind: { kind: 'loopback' }, gate: (req, kind) => {
+      refused.push(req.socket)
+      return refuseAll(req, kind)
+    } })
+    const socket = connect({ port: address(listener).port, host: '127.0.0.1', allowHalfOpen: true })
+    socket.on('error', () => {})
+    await once(socket, 'connect')
+    socket.write('GET /socket HTTP/1.1\r\nHost: reach.test\r\nConnection: Upgrade\r\nUpgrade: dsh-test\r\n\r\n')
+    await once(socket, 'data')
+    await expect.poll(() => refused[0]?.destroyed).toBe(true)
+    const closed = listener.close().then(() => 'closed')
+    const timeout = new Promise(resolve => setTimeout(() => { resolve('timed out') }, 2000))
+    expect(await Promise.race([closed, timeout])).toBe('closed')
+    socket.destroy()
   })
 
   it('ends TLS on streams handed to a streams listener and shows the gate the SNI', async () => {

@@ -171,6 +171,7 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
           res.end(admission.rejection === 401 ? 'unauthorized' : 'forbidden')
           return
         }
+        if (admission.setCookie !== undefined) res.appendHeader('set-cookie', admission.setCookie)
         await webCtx.waterfall('connection/request', req, res, () => bridge(req, res, fetchHandler, admission.peer, maxRequestBodyBytes))
       },
     }

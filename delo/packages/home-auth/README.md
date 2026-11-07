@@ -13,6 +13,7 @@ This package is where `@delo/home-auth`, the authenticator provider of [contract
 ## Contents
 
 - [The admission denial suite](#the-admission-denial-suite)
+- [Notes for the provider](#notes-for-the-provider)
 - [Tests](#tests)
 
 ## The admission denial suite
@@ -28,13 +29,19 @@ The tests are named after C4's denial table:
 | `a pre-login request never reaches the fallback or another route` | An allowlisted path with no registered route is refused rather than served by the fallback. |
 | `a cookie minted with upstream's secret is refused on a reach listener` | A `dsh-auth-*` cookie that upstream minted for the reach listener's own authority, and that admits on the loopback listener, is refused with `UPSTREAM_COOKIE_REFUSED`, also beside a session cookie. |
 | `launch tokens and /connect are refused on a reach listener` | The process launch token in a `token` query and requests for `/connect` are refused, and no cookie is set. |
-| `a loopback Host is refused on a reach listener` | `localhost`, `127.0.0.1` and `[::1]` in `Host` are refused with `HOST_MISMATCH`. |
+| `a loopback Host is refused on a reach listener` | `localhost`, `127.0.0.1` and `[::1]` in `Host` are refused with `HOST_MISMATCH`, on requests and upgrades. |
 | `each listener refuses a Host its rule does not allow` | Each reach listener refuses the other listeners' addresses and a foreign name; the relay listener refuses an SNI other than its name with `SNI_MISMATCH`; the loopback listener refuses a foreign `Host` with upstream's 403. |
 | `an upgrade with a foreign or absent Origin is refused` | An upgrade to `/api/remote.mux` without `Origin`, with another origin or with `null` is refused with `ORIGIN_MISMATCH`; the listener's own origin reaches the upgrade handler. |
-| `removes Tailscale identity headers before admission` | The provider never sees a `Tailscale-*` header on any reach listener. |
+| `removes Tailscale identity headers before admission` | The provider never sees a `Tailscale-*` header on any reach listener, on a request or an upgrade, and the Gateway's WebSocket still accepts the upgrade. |
 | `no reach listener runs without home-auth` | Removing the provider closes every reach listener and its open connections; no reach listener opens without a provider, the loopback listener admits as upstream does, and a replacement provider that serves no reach listener opens none. |
 
 A type-level check holds C4's `Admission` and `ListenerPolicy` types assignable to the upstream seam's, and a spec holds the dispatcher's refusal statuses equal to C4's.
+
+## Notes for the provider
+
+- **Pre-login asset routes.** A handler for `GET /auth/assets/<asset>` resolves the segment against a fixed table of built asset names. It never decodes the segment and then joins it to a directory path, because a decoded `..` or separator would leave the asset directory.
+- **Revocation.** Removing a device or ending a session calls `ctx.connection.closeReachConnections({ deviceId })` or `({ sessionId })` before it returns, so streams and upgraded sockets that carry no Peer, such as `/plugins/events` and plugin upgrade routes, end with the session; disposing the device's Peer ends the streams that speak for it.
+- **Loopback credentials.** Each loopback mint arrives as `authenticator/minted`, and a provider records it before the response that sets it is written.
 
 ## Tests
 

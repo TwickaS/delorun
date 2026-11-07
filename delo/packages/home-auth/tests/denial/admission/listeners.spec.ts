@@ -168,6 +168,8 @@ describe('C4 listener and dispatch denials', () => {
     expect((await suite.loopback.send('/api/remote.mux', { host: TAILNET_HOST, cookie })).status).not.toBe(401)
     for (const endpoint of suite.endpoints) {
       expectRefused(await endpoint.send('/', { cookie }), 'UPSTREAM_COOKIE_REFUSED')
+      const upgrade = await endpoint.send('/api/remote.mux', { cookie: `${SESSION_COOKIE}; ${cookie}`, origin: endpoint.origin }, { upgrade: true })
+      expect({ status: upgrade.status, body: upgrade.body }).toEqual({ status: 401, body: JSON.stringify({ error: 'UPSTREAM_COOKIE_REFUSED' }) })
       expectRefused(await endpoint.send('/fixture-plugin/hello', { cookie: `${SESSION_COOKIE}; ${cookie}` }), 'UPSTREAM_COOKIE_REFUSED')
     }
     expect(suite.fixture.ran).toEqual([])
@@ -181,6 +183,8 @@ describe('C4 listener and dispatch denials', () => {
       expectRefused(await endpoint.send(`/connect?token=${token}&interactions=answer`), 'LAUNCH_TOKEN_REFUSED')
       expectRefused(await endpoint.send('/connect'), 'CONNECT_REFUSED')
       expectRefused(await endpoint.send('/connect', { cookie: SESSION_COOKIE }), 'CONNECT_REFUSED')
+      const upgrade = await endpoint.send(`/api/remote.mux?token=${token}`, { cookie: SESSION_COOKIE, origin: endpoint.origin }, { upgrade: true })
+      expect({ status: upgrade.status, body: upgrade.body }).toEqual({ status: 401, body: JSON.stringify({ error: 'LAUNCH_TOKEN_REFUSED' }) })
     }
   })
 
@@ -188,6 +192,8 @@ describe('C4 listener and dispatch denials', () => {
     for (const endpoint of suite.endpoints) {
       for (const host of ['localhost', '127.0.0.1', '[::1]', `localhost:${String(suite.studio.ctx.webServer.port)}`]) {
         expectRefused(await endpoint.send('/fixture-plugin/hello', { host, cookie: SESSION_COOKIE }), 'HOST_MISMATCH')
+        const upgrade = await endpoint.send('/fixture-plugin/socket', { host, cookie: SESSION_COOKIE, origin: endpoint.origin }, { upgrade: true })
+        expect({ status: upgrade.status, body: upgrade.body }).toEqual({ status: 421, body: JSON.stringify({ error: 'HOST_MISMATCH' }) })
       }
     }
     expect(suite.fixture.ran).toEqual([])
@@ -222,10 +228,13 @@ describe('C4 listener and dispatch denials', () => {
 
   it('removes Tailscale identity headers before admission', async () => {
     suite.provider.seen.length = 0
+    const forged = { 'Tailscale-User-Login': 'owner@example.com', 'TAILSCALE-USER-NAME': 'Owner' }
     for (const endpoint of suite.endpoints) {
-      await endpoint.send('/fixture-plugin/hello', { cookie: SESSION_COOKIE, 'Tailscale-User-Login': 'owner@example.com', 'TAILSCALE-USER-NAME': 'Owner' })
+      await endpoint.send('/fixture-plugin/hello', { cookie: SESSION_COOKIE, ...forged })
+      // The Gateway's WebSocket still accepts an upgrade whose identity headers were removed.
+      expect((await endpoint.send('/api/remote.mux', { cookie: SESSION_COOKIE, origin: endpoint.origin, ...forged }, { upgrade: true })).status).toBe(101)
     }
-    expect(suite.provider.seen.map(entry => entry.listener)).toEqual(REACH_LISTENERS)
+    expect(suite.provider.seen.map(entry => entry.listener)).toEqual(REACH_LISTENERS.flatMap(id => [id, id]))
     for (const { request } of suite.provider.seen) {
       expect(JSON.stringify(request.headers).toLowerCase()).not.toContain('tailscale-')
     }

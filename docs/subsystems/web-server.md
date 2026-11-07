@@ -167,6 +167,15 @@ Host `ctx.connection`: the transport handle with the members for admission provi
 builtinAdmission(request: ConnectionTrustRequest): Admission
 
 /**
+ * Destroy every open reach connection that carried a request the provider
+ * admitted for this session or device, streams and upgraded sockets
+ * included, as a session's revocation or a device's removal requires.
+ * @param match - a session id, a device id, or both.
+ * @returns how many connections were destroyed.
+ */
+closeReachConnections(match: { readonly sessionId?: string; readonly deviceId?: string }): number
+
+/**
  * Open one reach listener, owned by the Context that read `ctx.connection`.
  * It needs a loaded `authenticator` provider that serves the listener, and
  * stops when that provider is removed or replaced.

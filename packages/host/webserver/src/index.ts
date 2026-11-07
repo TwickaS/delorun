@@ -487,7 +487,8 @@ function writeUpgradeRefusal(socket: Duplex, refusal: WebGateRefusal): void {
     if (value === undefined) continue
     for (const item of headerValues(value)) lines.push(`${name}: ${item}`)
   }
-  socket.end(`${lines.join('\r\n')}\r\n\r\n${refusal.body}`)
+  // Destroyed once written: a client that never sends its FIN must not hold the socket open.
+  socket.end(`${lines.join('\r\n')}\r\n\r\n${refusal.body}`, () => { socket.destroy() })
 }
 
 /** Connections one listener owns, so its close reaches every one of them. */
@@ -556,6 +557,8 @@ export class WebServer extends Service {
   private readonly indexTaps: ((html: string) => string)[] = []
   /** Open additional listeners by id; each closes with this service. */
   private readonly additionalListeners = new Map<string, WebListener>()
+  /** Ids of additional listeners that are open or binding. */
+  private readonly listenerIds = new Set<string>()
   private fallback: WebRoute['handler'] | Pick<WebResourceRoute, 'resource'> | undefined
   private server!: Server
   private listenedPort: number | undefined
@@ -755,9 +758,21 @@ export class WebServer extends Service {
    * `streams` TLS material is unusable.
    */
   async openListener(options: WebListenerOptions): Promise<WebListener> {
-    if (this.additionalListeners.has(options.id)) {
+    if (this.listenerIds.has(options.id)) {
       throw new Error(`webserver: listener ${JSON.stringify(options.id)} is already open`)
     }
+    // Reserved before the bind awaits, so a concurrent open of the same id fails.
+    this.listenerIds.add(options.id)
+    try {
+      return await this.bindListener(options)
+    } catch (error) {
+      this.listenerIds.delete(options.id)
+      throw error
+    }
+  }
+
+  /** Bind one additional listener whose id {@link openListener} reserved. */
+  private async bindListener(options: WebListenerOptions): Promise<WebListener> {
     const sockets: ListenerSockets = { upgraded: new Set(), raw: new Set() }
     const listener = this.requestListener(options.gate)
     const bind = options.bind
@@ -773,6 +788,9 @@ export class WebServer extends Service {
       server.on('error', (err) => { this.ctx.logger.warn(err) })
     }
     server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+      // node:http removed its own socket error handler; refused and dispatched sockets alike
+      // get this one, and close destroys them, before the gate runs.
+      this.trackUpgrade(socket, sockets.upgraded)
       let decision: WebGateDecision
       try {
         decision = options.gate(req, 'upgrade')
@@ -789,7 +807,7 @@ export class WebServer extends Service {
         writeUpgradeRefusal(socket, decision.only.refusal)
         return
       }
-      this.dispatchUpgrade(req, socket, head, sockets.upgraded)
+      this.routeUpgrade(req, socket, head)
     })
     let address: WebListener['address']
     if (bind.kind === 'loopback') {
@@ -817,7 +835,11 @@ export class WebServer extends Service {
       close: () => {
         closing ??= (async () => {
           this.additionalListeners.delete(options.id)
-          await closeListener(server, sockets)
+          try {
+            await closeListener(server, sockets)
+          } finally {
+            this.listenerIds.delete(options.id)
+          }
         })()
         return closing
       },
@@ -891,15 +913,26 @@ export class WebServer extends Service {
 
   /** Hand one upgrade request to its exact-path route; a socket no route claims is destroyed. */
   private dispatchUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, upgraded: Set<Duplex>): void {
+    this.trackUpgrade(socket, upgraded)
+    this.routeUpgrade(req, socket, head)
+  }
+
+  /** Own an upgrade socket: log and destroy it on error, and keep it in `upgraded` until it closes. */
+  private trackUpgrade(socket: Duplex, upgraded: Set<Duplex>): void {
     const onError = (error: Error): void => {
       this.ctx.logger.warn(error)
       socket.destroy()
     }
     socket.on('error', onError)
+    upgraded.add(socket)
     socket.once('close', () => {
       socket.off('error', onError)
       upgraded.delete(socket)
     })
+  }
+
+  /** Run the exact-path upgrade route of a tracked socket, or destroy the socket when none matches. */
+  private routeUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
     let route: WebUpgradeRoute | undefined
     try {
       /* v8 ignore next -- node:http always sets url on server requests. */
@@ -913,7 +946,6 @@ export class WebServer extends Service {
       socket.destroy()
       return
     }
-    upgraded.add(socket)
     try {
       Promise.resolve(route.handler(req, socket, head)).catch((error: unknown) => {
         this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))

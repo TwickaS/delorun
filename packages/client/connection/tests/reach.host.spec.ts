@@ -31,6 +31,14 @@ const ADDRESS = 'https://home.example.ts.net'
 const HOST = 'home.example.ts.net'
 const ORIGIN = ADDRESS
 const SESSION = '__Host-delo-session=signed-in'
+/** A second session, of another device. */
+const OTHER_SESSION = '__Host-delo-session=other-device'
+
+/** Identity header names a request or upgrade carried into a route, from every view of its headers. */
+function identityHeadersSeen(req: { headers: object; headersDistinct: object; rawHeaders: string[] }): string[] {
+  return [...Object.keys(req.headers), ...Object.keys(req.headersDistinct), ...req.rawHeaders.filter((_, at) => at % 2 === 0)]
+    .filter(name => name.toLowerCase().startsWith('tailscale-'))
+}
 
 /** A provider that admits one session cookie and serves one reach listener. */
 class TestAuthenticator extends Authenticator {
@@ -38,6 +46,8 @@ class TestAuthenticator extends Authenticator {
   /** A pre-login route returned for every request, listed or not. */
   forcedPreLogin: ListenerPolicy['preLogin'][number] | undefined
   loopback: Admission | undefined
+  /** The loopback listener's policy, when the test gives one. */
+  loopbackPolicy: ListenerPolicy | undefined
   served = true
   private peer: PeerScope | undefined
 
@@ -46,6 +56,7 @@ class TestAuthenticator extends Authenticator {
   }
 
   policy(listener: string): ListenerPolicy | undefined {
+    if (listener === 'loopback') return this.loopbackPolicy
     if (listener !== LISTENER || !this.served) return undefined
     return {
       listener,
@@ -58,11 +69,15 @@ class TestAuthenticator extends Authenticator {
 
   admit(request: ConnectionIndexRequest, listener: string): Admission {
     this.seen.push(request)
-    if (listener !== LISTENER) return this.loopback ?? { kind: 'refused', status: 401, code: 'NOT_SIGNED_IN' }
+    if (listener !== LISTENER) return this.loopback ?? this.ctx.connection.builtinAdmission(request)
     const cookie = request.headers instanceof Headers ? request.headers.get('cookie') : request.headers.cookie
     if (cookie === SESSION) {
       this.peer ??= this.ctx.connection.createPeer({ principal: { kind: 'owner' } })
       return { kind: 'admitted', peer: this.peer, deviceId: 'device', sessionId: 'session', setCookie: `${SESSION}; Path=/; Secure; HttpOnly; SameSite=Strict` }
+    }
+    if (cookie === OTHER_SESSION) {
+      this.peer ??= this.ctx.connection.createPeer({ principal: { kind: 'owner' } })
+      return { kind: 'admitted', peer: this.peer, deviceId: 'other-device', sessionId: 'other-session' }
     }
     if (this.forcedPreLogin !== undefined) return { kind: 'pre-login', route: this.forcedPreLogin }
     const path = new URL(request.url ?? '/', 'http://x').pathname
@@ -79,6 +94,8 @@ class TestAuthenticator extends Authenticator {
 interface Harness {
   readonly ctx: Context
   readonly ran: string[]
+  /** Identity header names the `/socket` upgrade handler saw. */
+  readonly identity: string[]
   readonly provider: TestAuthenticator
   readonly providerFiber: { dispose(): Promise<unknown> }
   readonly reach: ReachListener
@@ -100,6 +117,7 @@ async function start(address = ADDRESS): Promise<Harness> {
   await ctx.plugin(WebServer, { host: '127.0.0.1', port: 0 })
   await ctx.plugin({ inject: [...inject], apply })
   const ran: string[] = []
+  const identity: string[] = []
   ctx.webServer.register({ kind: 'exact', path: '/exact', handler: (_req, res) => { ran.push('exact'); res.end('exact') } })
   ctx.webServer.register({ kind: 'prefix', path: '/plugins', handler: (_req, res) => { ran.push('prefix'); res.end('prefix') } })
   ctx.webServer.register({ kind: 'exact', path: '/auth/sign-in', handler: (_req, res) => { ran.push('sign-in'); res.end('sign-in') } })
@@ -117,9 +135,24 @@ async function start(address = ADDRESS): Promise<Harness> {
     if (!ctx.connection.authorizeIndex(req, res)) return
     res.end(`index rejection=${String(rejection)} socket=${'peer' in socket ? 'peer' : String(socket.rejection)}`)
   } })
-  ctx.webServer.registerUpgrade({ path: '/socket', handler: (_req, socket) => {
+  ctx.webServer.registerUpgrade({ path: '/socket', handler: (req, socket) => {
     ran.push('upgrade')
+    identity.push(...identityHeadersSeen(req))
     socket.end('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: dsh-test\r\n\r\n')
+  } })
+  // An upgrade and a response that stay open, as an event stream and a WebSocket do.
+  ctx.webServer.registerUpgrade({ path: '/held-socket', handler: (_req, socket) => {
+    socket.write('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: dsh-test\r\n\r\n')
+  } })
+  ctx.webServer.register({ kind: 'exact', path: '/stream', handler: (_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.write('data: open\n\n')
+  } })
+  ctx.webServer.register({ kind: 'exact', path: '/index-probe', handler: (req, res) => {
+    if (ctx.connection.authorizeIndex(req, res)) res.end('index')
+  } })
+  ctx.webServer.register({ kind: 'exact', path: '/headers', handler: (req, res) => {
+    res.end(JSON.stringify(identityHeadersSeen(req)))
   } })
   ctx.webServer.registerFallback((_req, res) => { ran.push('fallback'); res.end('fallback') })
   let provider: TestAuthenticator | undefined
@@ -127,7 +160,7 @@ async function start(address = ADDRESS): Promise<Harness> {
   await providerFiber
   if (provider === undefined) throw new Error('provider did not load')
   const reach = await ctx.connection.openReachListener({ listener: LISTENER, bind: { kind: 'loopback' } })
-  return { ctx, ran, provider, providerFiber, reach, loopbackPort: ctx.webServer.port ?? 0 }
+  return { ctx, ran, identity, provider, providerFiber, reach, loopbackPort: ctx.webServer.port ?? 0 }
 }
 
 interface Reply {
@@ -259,6 +292,113 @@ describe('reach listener dispatch', () => {
     // A pre-login request reaches its listed route, where every admission read refuses it.
     expectRefusal(await send(port, '/auth/probe'), 'NOT_SIGNED_IN')
     expect(harness.ran).toEqual(['probe', 'probe'])
+  })
+})
+
+/** A raw request on a new connection; resolves with the first bytes of the reply and the open socket. */
+/** One raw exchange: the reply's first bytes, the still-open socket, and its close. */
+interface RawExchange {
+  readonly reply: string
+  readonly socket: ReturnType<typeof connect>
+  readonly closed: Promise<unknown>
+}
+
+async function raw(port: number, text: string): Promise<RawExchange> {
+  const socket = connect(port, '127.0.0.1')
+  socket.on('error', () => {})
+  const closed = new Promise((resolve) => { socket.once('close', resolve) })
+  await once(socket, 'connect')
+  socket.write(text)
+  const [data] = await once(socket, 'data') as [Buffer]
+  return { reply: String(data), socket, closed }
+}
+
+describe('reach dispatch hardening', () => {
+  it('removes identity headers from every view before a route or an upgrade handler reads them', async () => {
+    const harness = await start()
+    const port = reachPort(harness)
+    const forged = { 'Tailscale-User-Login': 'owner@example.com', 'tailscale-user-name': 'Owner' }
+    const reply = await send(port, '/headers', { cookie: SESSION, ...forged })
+    expect({ status: reply.status, body: reply.body }).toEqual({ status: 200, body: '[]' })
+    expect(await upgrade(port, { cookie: SESSION, origin: ORIGIN, ...forged })).toMatch(/^HTTP\/1\.1 101 /)
+    expect(harness.identity).toEqual([])
+    expect(harness.ran).toEqual(['upgrade'])
+  })
+
+  it('refuses an absolute or scheme-relative request target and a second Host header', async () => {
+    const harness = await start()
+    const port = reachPort(harness)
+    const tail = `Host: ${HOST}\r\nCookie: ${SESSION}\r\nConnection: close\r\n\r\n`
+    for (const line of ['GET http://evil.example/exact HTTP/1.1', `GET https://${HOST}/exact HTTP/1.1`, 'GET //evil.example/exact HTTP/1.1']) {
+      expect((await raw(port, `${line}\r\n${tail}`)).reply).toMatch(/^HTTP\/1\.1 421 [\s\S]*HOST_MISMATCH/)
+    }
+    expect((await raw(port, `GET /exact HTTP/1.1\r\nHost: ${HOST}\r\nHost: evil.example\r\nCookie: ${SESSION}\r\nConnection: close\r\n\r\n`)).reply)
+      .toMatch(/^HTTP\/1\.1 421 [\s\S]*HOST_MISMATCH/)
+    expect(harness.ran).toEqual([])
+  })
+
+  it.each([
+    ['announced while the listener binds', true, false],
+    ['made without an announcement before the listener is bound', false, false],
+    ['announced while the listener binds, even when restored before it is bound', true, true],
+  ])('opens no listener when the provider withdraws the policy, %s', async (_name, announce, restore) => {
+    const harness = await start()
+    await harness.reach.close()
+    const server = harness.ctx.webServer
+    const openListener = server.openListener.bind(server)
+    server.openListener = async (options) => {
+      harness.provider.served = false
+      if (announce) harness.ctx.emit('authenticator/policy', LISTENER)
+      if (restore) harness.provider.served = true
+      return openListener(options)
+    }
+    await expect(harness.ctx.connection.openReachListener({ listener: LISTENER, bind: { kind: 'loopback' } })).rejects.toThrow(/lost its policy|not served/)
+    server.openListener = openListener
+    harness.provider.served = true
+    // Nothing kept the id: the owner can open the listener again.
+    const reopened = await harness.ctx.connection.openReachListener({ listener: LISTENER, bind: { kind: 'loopback' } })
+    expect((await send(reopened.address?.port ?? 0, '/exact', { cookie: SESSION })).body).toBe('exact')
+  })
+
+  it('closes the open streams and upgraded sockets admitted for a session or a device, and no others', async () => {
+    const harness = await start()
+    const port = reachPort(harness)
+    const stream = await raw(port, `GET /stream HTTP/1.1\r\nHost: ${HOST}\r\nCookie: ${SESSION}\r\n\r\n`)
+    const socket = await raw(port, `GET /held-socket HTTP/1.1\r\nHost: ${HOST}\r\nOrigin: ${ORIGIN}\r\nCookie: ${SESSION}\r\nConnection: Upgrade\r\nUpgrade: dsh-test\r\n\r\n`)
+    const other = await raw(port, `GET /stream HTTP/1.1\r\nHost: ${HOST}\r\nCookie: ${OTHER_SESSION}\r\n\r\n`)
+    expect([stream.reply, socket.reply, other.reply].map(reply => reply.split('\r\n')[0])).toEqual(['HTTP/1.1 200 OK', 'HTTP/1.1 101 Switching Protocols', 'HTTP/1.1 200 OK'])
+    expect(harness.ctx.connection.closeReachConnections({ sessionId: 'session' })).toBe(2)
+    await Promise.all([stream.closed, socket.closed])
+    expect(other.socket.destroyed).toBe(false)
+    expect(harness.ctx.connection.closeReachConnections({ sessionId: 'session' })).toBe(0)
+    expect(harness.ctx.connection.closeReachConnections({ deviceId: 'other-device' })).toBe(1)
+    await other.closed
+  })
+})
+
+describe('loopback admission with a provider, beyond the fence', () => {
+  it('adds the provider\'s rolled credential to /api and index responses', async () => {
+    const harness = await start()
+    const loopback = { host: `127.0.0.1:${String(harness.loopbackPort)}` }
+    harness.provider.loopback = { kind: 'admitted', peer: harness.ctx.connection.browserPeer, setCookie: 'dsh-auth-rolled=1; Path=/; HttpOnly' }
+    expect((await send(harness.loopbackPort, `${API_PATH}/session.list`, loopback, 'POST')).headers['set-cookie']).toEqual(['dsh-auth-rolled=1; Path=/; HttpOnly'])
+    const index = await send(harness.loopbackPort, '/index-probe', loopback)
+    expect({ body: index.body, cookie: index.headers['set-cookie'] }).toEqual({ body: 'index', cookie: ['dsh-auth-rolled=1; Path=/; HttpOnly'] })
+  })
+
+  it('admits loopback index requests through the provider, and exchanges the launch token only while its policy accepts it', async () => {
+    const harness = await start()
+    const loopback = { host: `127.0.0.1:${String(harness.loopbackPort)}` }
+    harness.provider.loopback = { kind: 'refused', status: 401, code: 'SESSION_EXPIRED' }
+    expect((await send(harness.loopbackPort, '/index-probe', loopback)).status).toBe(401)
+    harness.provider.loopback = { kind: 'admitted', peer: harness.ctx.connection.browserPeer }
+    expect((await send(harness.loopbackPort, '/index-probe', loopback)).body).toBe('index')
+    const token = new URL(harness.ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(harness.loopbackPort)}/`)).search
+    harness.provider.loopbackPolicy = { listener: 'loopback', scheme: 'http', hostRule: { kind: 'upstream-fence' }, acceptsLaunchToken: false, preLogin: [] }
+    const refusedConnect = await send(harness.loopbackPort, `/connect${token}`, loopback)
+    expect({ status: refusedConnect.status, cookie: refusedConnect.headers['set-cookie'] }).toEqual({ status: 401, cookie: undefined })
+    harness.provider.loopbackPolicy = { listener: 'loopback', scheme: 'http', hostRule: { kind: 'upstream-fence' }, acceptsLaunchToken: true, preLogin: [] }
+    expect((await send(harness.loopbackPort, `/connect${token}`, loopback)).status).toBe(302)
   })
 })
 

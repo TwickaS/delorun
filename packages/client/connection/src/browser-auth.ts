@@ -393,7 +393,12 @@ export class BrowserAuth {
     return payload
   }
 
-  private writeUnauthorized(req: ConnectionIndexRequest, res: ConnectionIndexResponse): void {
+  /**
+   * Answer the minimal 401 every refused index or `/connect` request receives.
+   * @param req - the refused request; a HEAD request receives no body.
+   * @param res - the response, owned to completion.
+   */
+  writeUnauthorized(req: ConnectionIndexRequest, res: ConnectionIndexResponse): void {
     res.writeHead(401, {
       'cache-control': 'no-store',
       'content-type': 'text/plain; charset=utf-8',
