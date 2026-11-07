@@ -28,7 +28,7 @@ describe('GIT_OPTIONS', () => {
 
 describe('GIT_ENV', () => {
   it('removes the names a clone must not inherit and turns the prompts off', () => {
-    for (const name of ['GIT_DIR', 'GIT_CONFIG_COUNT', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_SSL_CAINFO', 'GIT_TRACE2_EVENT', 'GIT_CURL_VERBOSE']) {
+    for (const name of ['GIT_DIR', 'GIT_CONFIG_COUNT', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_SSL_CAINFO', 'GIT_TRACE2_EVENT', 'GIT_CURL_VERBOSE', 'SSL_CERT_FILE', 'SSL_CERT_DIR']) {
       expect(Object.hasOwn(GIT_ENV, name), name).toBe(true)
       expect(GIT_ENV[name], name).toBeUndefined()
     }

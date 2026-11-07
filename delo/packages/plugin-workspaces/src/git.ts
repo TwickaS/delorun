@@ -15,12 +15,15 @@
 
 /**
  * Names a clone drops from git's environment: repository and index pointers, configuration, certificate and transport
- * overrides, proxies, template directories, askpass programs and traces.
+ * overrides, proxies, template directories, askpass programs and traces. `SSL_CERT_FILE` and `SSL_CERT_DIR` are
+ * OpenSSL's own names, which git's TLS layer reads whatever the git configuration says, so a clone without `caFile`
+ * keeps the default bundle the README states instead of the parent process's redirect.
  */
 const CLEARED = [
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
   'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CEILING_DIRECTORIES', 'GIT_NAMESPACE',
   'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_SSL_NO_VERIFY', 'GIT_SSL_CAINFO', 'GIT_SSL_CAPATH', 'GIT_PROXY_SSL_CAINFO', 'GIT_SSL_CERT', 'GIT_SSL_KEY',
+  'SSL_CERT_FILE', 'SSL_CERT_DIR',
   'GIT_ALLOW_PROTOCOL', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR', 'GIT_SSH', 'GIT_SSH_COMMAND', 'GIT_PROXY_COMMAND',
   'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
   'GIT_TRACE', 'GIT_TRACE_CURL', 'GIT_TRACE_CURL_NO_DATA', 'GIT_TRACE_PACKET',
