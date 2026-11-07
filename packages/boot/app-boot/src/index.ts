@@ -14,7 +14,7 @@ export type { StartupCompositionDiagnostic, StartupPluginState, StartupServiceSt
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import * as yaml from 'js-yaml'
 import { Context, type Fiber, type FiberState } from '@deepseek-ai/cordis'
-import Loader, { type Entry, type EntryGroup, type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
+import Loader, { RefusedCodeError, type Entry, type EntryGroup, type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import Include, { applyEntryPatches, entryListSchema, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import Group from '@deepseek-ai/cordis-plugin-group'
 import { dshHomePath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -511,9 +511,11 @@ async function resume(ctx: Context, invalidated: readonly Entry[]): Promise<void
  * loud at boot, never be silently skipped.
  * @param binName - the diagnostic prefix on the thrown error.
  * @param file - absolute path of the patch file.
+ * @param refuseCode - when true, refuse `insert` rows with a
+ *   `RefusedCodeError` (the `Loader.Config.refuseCode` switch).
  * @returns the parsed patches, or `undefined` when the file does not exist.
  */
-export function loadOptionalPatches(binName: string, file: string): PatchOptions[] | undefined {
+export function loadOptionalPatches(binName: string, file: string, refuseCode = false): PatchOptions[] | undefined {
   let content: string
   try {
     content = readFileSync(file, 'utf8')
@@ -521,7 +523,7 @@ export function loadOptionalPatches(binName: string, file: string): PatchOptions
     if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return undefined
     throw new Error(`${binName}: failed to read patches ${file}: ${String(error)}`)
   }
-  return parsePatchList(binName, file, content, 'patches')
+  return parsePatchList(binName, file, content, 'patches', refuseCode)
 }
 
 /**
@@ -531,16 +533,18 @@ export function loadOptionalPatches(binName: string, file: string): PatchOptions
  * is a misconfiguration, not "no overlay".
  * @param binName - the diagnostic prefix on the thrown error.
  * @param file - absolute path of the overlay file.
+ * @param refuseCode - when true, refuse `insert` rows with a
+ *   `RefusedCodeError` (the `Loader.Config.refuseCode` switch).
  * @returns the parsed patch list.
  */
-export function loadOverlayPatches(binName: string, file: string): PatchOptions[] {
+export function loadOverlayPatches(binName: string, file: string, refuseCode = false): PatchOptions[] {
   let content: string
   try {
     content = readFileSync(file, 'utf8')
   } catch (error) {
     throw new Error(`${binName}: failed to read overlay ${file}: ${String(error)}`)
   }
-  return parsePatchList(binName, file, content, 'overlay')
+  return parsePatchList(binName, file, content, 'overlay', refuseCode)
 }
 
 /** Convert inserted filesystem paths to file URLs, anchoring relative paths beside the patch; keep assertion names literal. */
@@ -556,6 +560,25 @@ function anchorInsertedPluginNames(patches: PatchOptions[], file: string): Patch
   return patches
 }
 /**
+ * Refuse `insert` rows when `refuseCode` is on: an inserted row mounts code the
+ * patch list names, which the option forbids. The first offending patch wins
+ * the diagnostic, and the row is never anchored or applied.
+ * @param binName - the diagnostic prefix on the thrown error.
+ * @param file - the source path, quoted in errors.
+ * @param label - what to call this list in errors (`patches`, `overlay`).
+ * @param patches - the parsed patch list.
+ */
+function refuseInsertedRows(binName: string, file: string, label: string, patches: PatchOptions[]): void {
+  patches.forEach((patch, index) => {
+    if (!patch.insert) return
+    throw new RefusedCodeError(
+      `${binName}: refuseCode: ${label} ${file} holds an insert row at patches[${index}].insert (inserted rows are forbidden)`,
+      file, ['patches', index, 'insert'],
+    )
+  })
+}
+
+/**
  * Parse one loader patch list: a top-level YAML array of
  * `@deepseek-ai/cordis-plugin-include` `PatchOptions` (id-targeted config overrides and
  * `insert` lists, `!!js` expressions allowed). Every invalid field or value throws,
@@ -566,10 +589,12 @@ function anchorInsertedPluginNames(patches: PatchOptions[], file: string): Patch
  * @param file - the source path, quoted in errors.
  * @param content - the file's text.
  * @param label - what to call this list in errors (`patches`, `overlay`).
+ * @param refuseCode - when true, refuse `insert` rows with a
+ *   `RefusedCodeError` (the `Loader.Config.refuseCode` switch).
  * @returns the parsed patch list.
  */
 function parsePatchList(
-  binName: string, file: string, content: string, label: string,
+  binName: string, file: string, content: string, label: string, refuseCode = false,
 ): PatchOptions[] {
   let parsed: unknown
   try {
@@ -585,7 +610,9 @@ function parsePatchList(
       throw new Error(`${binName}: ${label} entry ${index + 1} in ${file} must be a mapping (a loader patch entry)`)
     }
   })
-  return anchorInsertedPluginNames(parsed as PatchOptions[], file)
+  const patches = parsed as PatchOptions[]
+  if (refuseCode) refuseInsertedRows(binName, file, label, patches)
+  return anchorInsertedPluginNames(patches, file)
 }
 
 /** One overlay patch list with the source label printed in dump comments. */

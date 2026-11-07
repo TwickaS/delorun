@@ -2824,7 +2824,7 @@
     {
       "path": "vendor/loader/src/config/utils.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the Loader's `!!js` evaluator compiles on its first use instead of when the module loads, so the studio loads under a policy without `'unsafe-eval'`. Recorded as vendor local modification V28. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
+      "reason": "Reach listener Content Security Policy (C4): the Loader's `!!js` evaluator compiles on its first use instead of when the module loads, so the studio loads under a policy without `'unsafe-eval'`. Recorded as vendor local modification V28. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. Code refusal switch: `findJsExpr` walks a raw configuration for the first `!!js` expression node with its path, and `formatConfigPath` renders that path, the walk the `refuseCode` refusal runs before interpolation without evaluating anything."
     },
     {
       "path": "scripts/cordis-loader-lazy-eval.spec.ts",
@@ -2874,7 +2874,7 @@
     {
       "path": "vendor/README.md",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the local-modification log records V28, the Loader's lazily compiled `!!js` evaluator, whose absence upstream keeps a policy without `'unsafe-eval'` from loading the studio. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
+      "reason": "Reach listener Content Security Policy (C4): the local-modification log records V28, the Loader's lazily compiled `!!js` evaluator, whose absence upstream keeps a policy without `'unsafe-eval'` from loading the studio. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. Code refusal switch: the local-modifications log records the loader's `refuseCode` divergence as V29 and moves the next-entry note to V30."
     },
     {
       "path": "packages/api/gateway/tests/gateway.client.spec.ts",
@@ -2885,6 +2885,26 @@
       "path": "packages/api/job-controller/tests/client-apply.client.spec.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): the job controller's client fixture carries `remoteMedia: 'load'` on its ConnectionHandle, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
+    },
+    {
+      "path": "vendor/loader/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Code refusal switch (Delo's C16-unrelated feature switch): the loader config gains `refuseCode` (default `false`), and with it on the `internal/config` hook walks an entry's raw config for `!!js` expression nodes before interpolating and throws the typed `RefusedCodeError` naming the configuration file (the tree base URL and the entry id — parsed YAML carries no line numbers) and the expression's path, without evaluating anything. Off, loading is byte-identical to upstream's."
+    },
+    {
+      "path": "vendor/loader/README.md",
+      "class": "delo-feature",
+      "reason": "Code refusal switch: documents the `refuseCode` option, the typed error's identity and its patch-list forwarding in app boot, and that the option is off by default."
+    },
+    {
+      "path": "packages/boot/app-boot/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does."
+    },
+    {
+      "path": "scripts/loader-refuse-code.spec.ts",
+      "class": "delo-feature",
+      "reason": "Code refusal switch: the canary spec shows a `!!js` config expression failing with the typed error and never running, the expression's path reported through nested config and arrays, insert rows in overlay and optional patch lists failing the same way with a missing file staying no layer, and the option off parsing and loading exactly as upstream does. The enforcement is mutation-tested: removing the two refusal points fails these cases; restoring them passes."
     }
   ],
   "retired": []

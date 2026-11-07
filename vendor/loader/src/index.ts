@@ -5,7 +5,7 @@ import { Entry, type EntryOptions } from './config/entry.ts'
 import { EntryGroup } from './config/group.ts'
 import isolate from './config/isolate.ts'
 import { EntryTree, type EntryChange } from './config/tree.ts'
-import { interpolate } from './config/utils.ts'
+import { findJsExpr, formatConfigPath, interpolate } from './config/utils.ts'
 
 /** Re-export entry node APIs. */
 export * from './config/entry.ts'
@@ -60,12 +60,43 @@ export namespace Loader {
   export interface Config {
     /** Base URL used to resolve relative plugin specifiers and config paths. */
     baseUrl?: string
+    /**
+     * Refuse embedded code in the configurations this loader parses. When on,
+     * the `internal/config` hook walks an entry's raw config for `!!js`
+     * expression nodes before interpolation and throws a typed
+     * `RefusedCodeError` naming the configuration file and the expression's
+     * path, so nothing the option forbids is evaluated. Off by default, which
+     * keeps loading byte-identical to upstream behaviour.
+     */
+    refuseCode?: boolean
   }
 
   /** Intercept config used when other plugins depend on `loader`. */
   export interface Intercept {
     /** Keep dependent plugins pending while loader entries are still loading. */
     await?: boolean
+  }
+}
+
+/**
+ * Typed error thrown when `refuseCode` forbids embedded code in a parsed
+ * configuration: a `!!js` expression node (the Loader's `internal/config` hook)
+ * or a patch `insert` row (the app boot patch parse). The message names the
+ * configuration file — for the Loader, the tree base URL and the entry id, the
+ * strongest identity available at that point, since parsed YAML carries no line
+ * numbers — and the refused node's path inside the configuration.
+ */
+export class RefusedCodeError extends Error {
+  /** File, or `baseUrl#entryId`, of the configuration that holds the refused node. */
+  readonly file: string
+  /** Path of the refused node inside the parsed configuration, from its root. */
+  readonly path: (string | number)[]
+
+  constructor(message: string, file: string, path: (string | number)[]) {
+    super(message)
+    this.name = 'RefusedCodeError'
+    this.file = file
+    this.path = path
   }
 }
 
@@ -106,6 +137,20 @@ export class Loader extends EntryTree {
       if (!fiber.entry || fiber.parent.fiber?.entry === fiber.entry) return config
       // Tree carriers preserve the expressions owned by their child entries.
       if (fiber.runtime?.callback[EntryGroup.key]) return config
+      // `refuseCode` refuses embedded code before interpolation runs: the walk
+      // sees the raw `__jsExpr` nodes, so no expression is evaluated when the
+      // option is on.
+      if (this.config.refuseCode) {
+        const found = findJsExpr(config)
+        if (found) {
+          const { entry } = fiber
+          const file = `${entry.parent.tree.ctx.baseUrl}#${entry.options.id}`
+          throw new RefusedCodeError(
+            `refuseCode: !!js expression at config${formatConfigPath(found.path)} in ${file} (embedded code is forbidden)`,
+            file, found.path,
+          )
+        }
+      }
       return interpolate(fiber.ctx, config)
     })
 

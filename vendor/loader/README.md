@@ -33,6 +33,10 @@ root.loader.update(id, { config: { enabled: false } })
 | `disabled` | Stops the entry and prevents it from starting. |
 | `inject` | Adds required services or intercept config for this entry. |
 
+## Refusing embedded code
+
+`Loader.Config.refuseCode` (default `false`) forbids embedded code in the configurations the loader parses. With the option on, the `internal/config` hook walks an entry's raw config for `!!js` expression nodes before interpolation and throws a typed `RefusedCodeError`, so nothing the option forbids is evaluated. The error names the configuration file — the tree base URL and the entry id, the strongest identity available at that point, since parsed YAML carries no line numbers — and the expression's path inside the config, such as `config.rows[0].host`. Mount the loader with `{ refuseCode: true }` to forbid code in a composition's own files; the option is off by default, which keeps loading byte-identical to upstream behaviour. App boot's patch-list parsing takes the same switch as an argument (`loadOptionalPatches` and `loadOverlayPatches`), where an `insert` row fails with the same error naming the patch file and the row's path.
+
 ## API
 
 | API | Description |
