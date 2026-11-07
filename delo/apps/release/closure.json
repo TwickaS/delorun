@@ -1,5 +1,10 @@
 {
   "schema": "delo.release-closure/1",
   "buildRoot": "/var/tmp/delo-release-build",
-  "deployRoot": "dsh-python-runtime-closure"
+  "deployRoot": "@delo/runtime-closure",
+  "clientTitle": "Delo",
+  "anchor": {
+    "package": "@deepseek-ai/dsh",
+    "bundles": ["@delo/bundle-local"]
+  }
 }

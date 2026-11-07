@@ -6,9 +6,11 @@
  * [--platform <platform>]... [--cache <dir>] [--write-pins] [--attestation-key <file> --attestation <file>]`
  *
  * It exports the commit's tree to the fixed build root `closure.json` names, so absolute paths that bundlers embed
- * are the same on every builder; installs the locked dependencies and builds the artifacts there under
- * `SOURCE_DATE_EPOCH` (the commit's committer time) and `-ffile-prefix-map=<build root>=.`; and for each platform
- * deploys the closure's root package with production dependencies for that platform, substitutes the pinned prebuilt
+ * are the same on every builder; installs the locked dependencies and builds the artifacts, with the client title
+ * `closure.json` names, and Delo's packages there under `SOURCE_DATE_EPOCH` (the commit's committer time) and
+ * `-ffile-prefix-map=<build root>=.`; and for each platform deploys the closure's root package with production
+ * dependencies for that platform, transpiles Delo's packages to JavaScript, has the install anchor declare Delo's
+ * bundles, substitutes the pinned prebuilt
  * native packages, adds the pinned Node and pnpm, checks every native file against `prebuilt-pins.json`, and writes
  * the deterministic archive and its unsigned runtime file list to `--out`; when it built every platform, it also
  * writes the release's SPDX SBOM derived from the archives. It refuses to run under a Node or pnpm
@@ -33,6 +35,7 @@ import { verifyStagedDependencies } from '../../../../scripts/executable-packagi
 import { semanticVersion } from './brands.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
+import { declareAnchorBundles, transpileDeloPackages } from './closure/delo.ts'
 import { stageNode, stagePnpm, substitutePrebuilt } from './closure/sources.ts'
 import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
@@ -112,14 +115,16 @@ const INHERITED = ['PATH', 'HOME', 'USER', 'TMPDIR', 'HTTP_PROXY', 'HTTPS_PROXY'
 /**
  * The environment every build step runs in. Only {@link INHERITED} passes through, so a variable a builder happens to
  * set cannot reach the artifacts; the rest is the recipe's: `SOURCE_DATE_EPOCH`, the prefix map for compiled code,
- * UTC and the C locale, and the commit the client artifacts embed, which the exported tree cannot ask git for.
+ * UTC and the C locale, the commit the client artifacts embed, which the exported tree cannot ask git for, and the
+ * product name the client artifacts present.
  * @param inherited - the builder's environment.
  * @param buildRoot - the fixed build root.
  * @param epoch - the commit's committer time.
  * @param commit - the commit's full id.
+ * @param clientTitle - `closure.json`'s `clientTitle`, passed to the client build as `DSH_CLIENT_TITLE`.
  * @returns the build environment.
  */
-export function buildEnvironment(inherited: NodeJS.ProcessEnv, buildRoot: string, epoch: number, commit: string): NodeJS.ProcessEnv {
+export function buildEnvironment(inherited: NodeJS.ProcessEnv, buildRoot: string, epoch: number, commit: string, clientTitle: string): NodeJS.ProcessEnv {
   const flags = `-ffile-prefix-map=${buildRoot}=.`
   return {
     ...Object.fromEntries(INHERITED.flatMap(name => (inherited[name] === undefined ? [] : [[name, inherited[name]]]))),
@@ -129,6 +134,7 @@ export function buildEnvironment(inherited: NodeJS.ProcessEnv, buildRoot: string
     TZ: 'UTC',
     LC_ALL: 'C',
     DSH_CLIENT_COMMIT_HASH: commit,
+    DSH_CLIENT_TITLE: clientTitle,
   }
 }
 
@@ -152,9 +158,10 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
   if (archive.status !== 0) throw new Error(`git archive ${request.commit} failed: ${archive.stderr.toString('utf8')}`)
   const unpack = spawnSync('tar', ['-x', '-f', '-', '-C', source], { input: archive.stdout })
   if (unpack.status !== 0) throw new Error(`unpacking the commit's tree failed: ${unpack.stderr.toString('utf8')}`)
-  const env = buildEnvironment(process.env, buildRoot, epoch, request.commit)
+  const env = buildEnvironment(process.env, buildRoot, epoch, request.commit, recipe.closure.clientTitle)
   run('pnpm', ['install', '--frozen-lockfile'], source, env)
   run('pnpm', ['run', 'build:artifacts'], source, env)
+  run('pnpm', ['--filter', './delo/packages/*', 'run', 'build'], source, env)
   const results = new Map<RuntimePlatform, ClosureFiles>()
   for (const platform of request.platforms) {
     const stage = join(buildRoot, 'stage', platform)
@@ -171,6 +178,8 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
     for (const name of await readdir(app)) {
       if (!ROOT_PACKAGE_KEPT.includes(name)) await rm(join(app, name), { recursive: true, force: true })
     }
+    await transpileDeloPackages(join(app, 'node_modules'))
+    await declareAnchorBundles(join(app, 'node_modules'), recipe.closure.anchor.package, recipe.closure.anchor.bundles)
     await substitutePrebuilt(recipe.pins.substitutes[platform], join(app, 'node_modules'), request.cache)
     await stageNode(recipe.toolchain, platform, stage, request.cache)
     await stagePnpm(recipe.toolchain, stage, request.cache)

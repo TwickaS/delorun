@@ -61,6 +61,13 @@ export const ClosureRecipe = z.strictObject({
   schema: z.literal('delo.release-closure/1'),
   buildRoot: z.string().regex(/^\/[A-Za-z0-9._/-]+$/u, 'an absolute POSIX path'),
   deployRoot: z.string().min(1),
+  /** The product name the client artifacts are built with, as `DSH_CLIENT_TITLE`. */
+  clientTitle: z.string().min(1).max(64),
+  /** The install anchor upstream's runtime resolution reads, and the Delo bundles it must declare as dependencies. */
+  anchor: z.strictObject({
+    package: z.string().min(1),
+    bundles: z.array(z.string().regex(/^@delo\/[a-z0-9-]+$/u, 'a package in the @delo scope')).min(1),
+  }),
 })
 
 /** {@link ClosureRecipe}'s parsed value. */

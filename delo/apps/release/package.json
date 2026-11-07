@@ -15,10 +15,12 @@
     "ignore": "^7.0.8",
     "semver": "^7.8.5",
     "tar": "^7.5.22",
+    "typescript": "^6.0.3",
     "yaml": "^2.9.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@delo/bundle-local": "workspace:*",
     "@types/semver": "^7.8.0"
   }
 }

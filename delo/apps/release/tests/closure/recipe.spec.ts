@@ -76,8 +76,8 @@ describe('the build toolchain and environment', () => {
     ])
   })
 
-  it('passes only the tool, home and proxy variables of the builder, and sets the recipe\'s own', () => {
-    const env = buildEnvironment({ PATH: '/usr/bin', HOME: '/home/builder', NODE_OPTIONS: '--require /tmp/x.js', DSH_CLIENT_VERSION: '9.9.9', SOURCE_DATE_EPOCH: '1' }, '/var/tmp/delo-release-build', 1_793_981_656, 'a'.repeat(40))
+  it('passes only the tool, home and proxy variables of the builder, and sets the recipe\'s own, with the client title closure.json names', () => {
+    const env = buildEnvironment({ PATH: '/usr/bin', HOME: '/home/builder', NODE_OPTIONS: '--require /tmp/x.js', DSH_CLIENT_VERSION: '9.9.9', DSH_CLIENT_TITLE: 'DeepSeek Harness', SOURCE_DATE_EPOCH: '1' }, '/var/tmp/delo-release-build', 1_793_981_656, 'a'.repeat(40), readRecipe().closure.clientTitle)
     expect(env).toEqual({
       PATH: '/usr/bin',
       HOME: '/home/builder',
@@ -87,6 +87,7 @@ describe('the build toolchain and environment', () => {
       TZ: 'UTC',
       LC_ALL: 'C',
       DSH_CLIENT_COMMIT_HASH: 'a'.repeat(40),
+      DSH_CLIENT_TITLE: 'Delo',
     })
   })
 })

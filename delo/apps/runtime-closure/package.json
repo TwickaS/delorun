@@ -1,0 +1,12 @@
+{
+  "name": "@delo/runtime-closure",
+  "description": "The root package of Delo's runtime closures: upstream's runtime closure with the delorun command and Delo's packages",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@delo/cli": "workspace:*",
+    "dsh-python-runtime-closure": "workspace:*"
+  }
+}

@@ -1312,6 +1312,9 @@ importers:
       tar:
         specifier: ^7.5.22
         version: 7.5.22
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -1319,9 +1322,21 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@delo/bundle-local':
+        specifier: workspace:*
+        version: link:../../packages/bundle-local
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
+
+  delo/apps/runtime-closure:
+    dependencies:
+      '@delo/cli':
+        specifier: workspace:*
+        version: link:../cli
+      dsh-python-runtime-closure:
+        specifier: workspace:*
+        version: link:../../../python/sdk-runtime
 
   delo/apps/tools:
     dependencies:
