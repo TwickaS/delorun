@@ -138,7 +138,7 @@ npm 启动器、安装脚本与桌面应用各自内嵌其构建时最新的根�
 | `published` | 时间戳 | targets 密钥签名它的时间。 |
 | `runtime` | 由平台映射到 `{ "archive": FileRef, "files": FileRef }` 的映射 | 每个运行时归档及其文件列表。 |
 | `desktop` | 由 `mac-arm64`、`mac-x64`、`win-x64` 映射到 `{ "installer": DesktopFileRef, "update": DesktopFileRef, "blockmap": FileRef }` 的映射 | 桌面文件；`DesktopFileRef` 增加 `sha512`，即 electron-updater 比较的标准 base64 SHA-512。在 Windows 上，安装程序同时也是更新文件。 |
-| `images` | `{ "s2": ImageRef, "s3": ImageRef }` | [C9](c09-runtime-supervisor.zh.md) 运行的 Docker 镜像。`ImageRef` 为 `{ "repository", "index": "sha256:<hex>", "platforms": { "linux/amd64": "sha256:<hex>", "linux/arm64": "sha256:<hex>" } }`。 |
+| `images` | `{ "s2": ImageRef, "s3": ImageRef }` | [C9](c09-runtime-supervisor.zh.md) 运行的 Docker 镜像。`ImageRef` 为 `{ "repository", "index": "sha256:<hex>", "platforms": { "linux/amd64": "sha256:<hex>", "linux/arm64": "sha256:<hex>" } }`，并可带可选的 `"seccomp": FileRef`：一个发布文件，存放 [C9](c09-runtime-supervisor.zh.md) 运行该镜像的容器时使用的 seccomp profile。没有它时，容器使用引擎的默认 profile。 |
 | `sbom` | 带 `"format": "SPDX-2.3+json"` 的 `FileRef` | 发布的 SBOM。 |
 | `npm` | `{ "name", "version", "integrity" }` 的列表 | 发布中的每个 npm 包（`delorun`、`create-delorun`）及其 tarball 的 `sha512-` integrity 字符串。 |
 | `install` | `{ "sh": FileRef, "ps1": FileRef }` | 安装脚本；发布说明与 Trust 页面会打印相同的摘要。 |

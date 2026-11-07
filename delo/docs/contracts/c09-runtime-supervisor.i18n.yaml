@@ -27,11 +27,11 @@
   en: 9b775ff93ef6ca8e
   zh: 7c0bb24def1e4146
 /c9-runtime-and-supervisor-interface/containers:
-  en: 4a5e80aa1bc87972
-  zh: 8808bf1406948e2f
+  en: ca39bb0f0b1144b9
+  zh: a10688531d416f5e
 /c9-runtime-and-supervisor-interface/networks-and-egress:
-  en: 8076d5ba0bd85686
-  zh: f9b1daf7e8cdf36e
+  en: 42999a666119bd9f
+  zh: f199607dd0e48a0e
 /c9-runtime-and-supervisor-interface/resource-presets:
   en: 4e23e944823304ea
   zh: 9a2bcdd23dbbc1a5
@@ -51,8 +51,8 @@
   en: c5aa4bc6962309ef
   zh: 2dfec94f545a1563
 /c9-runtime-and-supervisor-interface/images:
-  en: 1f62ba1022069bb9
-  zh: 80828dbc0ffcf50a
+  en: b6124c7ac6276a35
+  zh: 26de59c90eb0cbf6
 /c9-runtime-and-supervisor-interface/the-container-denial-marker:
   en: 4ba5bfb8db42f65f
   zh: 012df69688b7bbd2
@@ -60,8 +60,8 @@
   en: 9e650573f4027231
   zh: 672c78d9f250c864
 /c9-runtime-and-supervisor-interface/errors:
-  en: 87f9b6e54d968f5b
-  zh: b85e842e274ae42e
+  en: 3c787b92eb6c9b26
+  zh: 64840df17c1e9637
 /c9-runtime-and-supervisor-interface/consumers:
   en: d72a5e8f5ebc81f5
   zh: a888f14c0d2adbe2

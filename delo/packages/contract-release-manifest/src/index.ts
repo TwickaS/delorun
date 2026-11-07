@@ -244,6 +244,8 @@ export interface ImageRef {
   readonly index: OciDigest
   /** The per-platform manifest digests. */
   readonly platforms: Readonly<Record<ImagePlatform, OciDigest>>
+  /** The release file holding the seccomp profile the image's containers run under; without it, the engine's default profile. */
+  readonly seccomp?: FileRef
 }
 
 /** One npm package of the release. */

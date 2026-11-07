@@ -100,7 +100,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 - 丢弃全部能力（`--cap-drop ALL`），S3 为其 harness 保留的 `CAP_SETUID` 与 `CAP_SETGID` 除外；
 - `no-new-privileges`；
-- 发布所附带、并由 [C2](c02-release-manifest.zh.md) 的 manifest 按摘要列出的 seccomp profile，它派生自 Docker 的默认 profile；
+- [C2](c02-release-manifest.zh.md) 的 manifest 为该镜像列出的 seccomp profile（其 `ImageRef` 的 `seccomp` 文件），它派生自 Docker 的默认 profile；manifest 未列出时，使用引擎的默认 profile；从不使用 `unconfined`。所列 profile 的文件与其长度和摘要不符时，以 `IMAGE_NOT_IN_MANIFEST` 拒绝创建该容器；
 - 只读的根文件系统，以及大小按预设的 tmpfs `/tmp`；
 - 预设的 CPU、内存与 PID 限制，swap 等于内存；
 - 存储驱动支持时，通过 `--storage-opt size` 施加预设的磁盘限制，否则报告为 `not-enforced`；
@@ -115,10 +115,10 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 - **每个工作区一个网络。** 每个 Docker 工作区都有自己的内部网络 `delo-ws-<12 hex>`，其成员只有该工作区的容器及其出站代理。没有哪个网络以两个工作区为成员，因此任何工作区容器都无法访问另一个工作区的容器。代理还加入第二个网络 `delo-ws-<12 hex>-out`，这是它唯一的出口路由。
 - **主机网关与回环。** 内部网络不给工作区容器任何通往机器的路由。代理拒绝位于机器上的目标。从不向容器添加 `host.docker.internal` 与 `host-gateway` 别名。
-- **出站代理。** 它以自己的入口从 S2 工作区镜像的摘要运行。它是端口 3128 上的 HTTP 代理，为端口 443 提供 `CONNECT`，为端口 80 提供普通 HTTP。它自行解析每个主机，并拒绝以下目标地址：回环、链路本地（`169.254.0.0/16`、`fe80::/10`）、私有（`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`fc00::/7`）、共享（`100.64.0.0/10`）、组播或机器自身的地址。容器的环境把 `HTTP_PROXY`、`HTTPS_PROXY`、`http_proxy` 与 `https_proxy` 设为该代理；忽略这些变量的工具没有出口路由。
+- **出站代理。** 它从 S2 工作区镜像的摘要运行，使用该工作区的资源限制和入口 `/usr/local/bin/delo-egress-proxy`，该入口由镜像提供。监管器在 `DELO_EGRESS_MODE` 中传入出站模式（`allowlist` 或 `open`），在 `DELO_EGRESS_HOSTS` 中传入以逗号分隔的允许主机。它是端口 3128 上的 HTTP 代理，为端口 443 提供 `CONNECT`，为端口 80 提供普通 HTTP。它自行解析每个主机，并拒绝以下目标地址：回环、链路本地（`169.254.0.0/16`、`fe80::/10`）、私有（`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`fc00::/7`）、共享（`100.64.0.0/10`）、组播或机器自身的地址。容器的环境把 `HTTP_PROXY`、`HTTPS_PROXY`、`http_proxy` 与 `https_proxy` 设为该代理；忽略这些变量的工具没有出口路由。
 - **出站模式。** `allowlist`（默认）允许下列主机及该工作区的追加项。`open` 允许每个公网主机，只能由本人为该工作区选择设置。`none` 不启动代理。
 - **默认允许列表。** profile 中所配置模型提供商的主机；npm：`registry.npmjs.org`；PyPI：`pypi.org`、`files.pythonhosted.org`；crates.io：`crates.io`、`static.crates.io`、`index.crates.io`；Go 模块代理：`proxy.golang.org`、`sum.golang.org`；GitHub：`github.com`、`api.github.com`、`codeload.github.com`、`objects.githubusercontent.com`、`raw.githubusercontent.com`、`release-assets.githubusercontent.com`。
-- **追加项。** 本人每个工作区最多可追加 64 个主机，每项是精确主机名或以 `*.` 开头的后缀，最多 253 个字符。IP 地址不能作为追加项。
+- **追加项。** 本人每个工作区最多可追加 64 个主机，每项是精确主机名或以 `*.` 开头的后缀，最多 253 个字符。IP 地址不能作为追加项。运行时提供方把 profile 中所配置模型提供商的主机作为追加项传入，同样计入 64 个的上限。
 - **S3。** 那一个容器有同样的内部网络与代理，模式与允许列表相同。
 
 <a id="resource-presets"></a>
@@ -221,7 +221,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 - **构建。** 每个镜像都在 [C2](c02-release-manifest.zh.md) 的可复现重建范围内，从按摘要固定的基础镜像构建。
 - **签名与摘要。** 发布 manifest（[C2](c02-release-manifest.zh.md)）列出每个镜像的摘要，manifest 的 Ed25519 签名即该镜像的签名；不信任任何镜像仓库侧的签名。
-- **拉取。** 监管器只拉取 `<name>@sha256:<digest>`，摘要取自正在运行的运行时的已校验 manifest，从不按标签拉取，并检查拉取到的镜像的摘要。拉取只访问 `ghcr.io` 与 `pkg-containers.githubusercontent.com`。
+- **拉取。** 监管器只拉取 `<name>@sha256:<digest>`，摘要取自正在运行的运行时的已校验 manifest，从不按标签拉取，并检查拉取到的镜像的摘要；拉取失败时以 `IMAGE_PULL_FAILED` 拒绝。拉取只访问 `ghcr.io` 与 `pkg-containers.githubusercontent.com`。
 - **拒绝。** 监管器以 `IMAGE_NOT_IN_MANIFEST` 拒绝从已校验 manifest 未列出的摘要创建容器。
 
 <a id="the-container-denial-marker"></a>
@@ -270,7 +270,10 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 | `ROOT_REFUSED` | 根目录为 `/`、操作系统 home 或 Delo home，包含 Delo home 或位于其内，不是本人的目录，或创建后其挂载来源不同 |
 | `ROOT_NOT_UNDER_PARENT` | 根目录不严格位于某个 setup 父目录之内 |
 | `IMAGE_NOT_IN_MANIFEST` | 镜像摘要未被已校验 manifest 列出，或拉取到的摘要不同 |
+| `IMAGE_PULL_FAILED` | 拉取所列摘要失败 |
 | `DOCKER_UNAVAILABLE` | 当前 context 上没有 Docker 引擎应答 |
+| `ENGINE_REFUSED` | Docker 引擎拒绝了一次调用；detail 带有引擎的消息 |
+| `WORKSPACE_EXISTS` | `workspace.create` 指定的工作区的容器已经存在 |
 | `LIMITS_MISSING` | 某形态所需的限制在本机未被强制执行 |
 | `PRESET_OUT_OF_RANGE` | Advanced 的某个值超出其范围，或某预设超过机器 |
 | `ADDITIONAL_ROOTS_UNSUPPORTED` | 为 Docker 工作区指定了附加可写根目录 |

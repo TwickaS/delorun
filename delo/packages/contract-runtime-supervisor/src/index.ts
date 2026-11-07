@@ -117,6 +117,19 @@ export const MAX_HOST_LENGTH = 253
 /** The egress proxy's port inside the workspace network. */
 export const EGRESS_PROXY_PORT = 3128
 
+/**
+ * The egress proxy's entry in the S2 workspace image, which the image provides, and the variables the supervisor sets
+ * on the proxy's container: the egress mode (`allowlist` or `open`) and the allowed hosts, comma-separated.
+ */
+export const EGRESS_PROXY_ENTRY = {
+  /** The proxy's argv. */
+  command: ['/usr/local/bin/delo-egress-proxy'],
+  /** The variable holding the egress mode. */
+  modeVariable: 'DELO_EGRESS_MODE',
+  /** The variable holding the allowed hosts, comma-separated. */
+  hostsVariable: 'DELO_EGRESS_HOSTS',
+} as const
+
 /** Destination ranges the egress proxy refuses in every mode, besides the machine's own addresses. */
 export const EGRESS_REFUSED_RANGES = [
   '127.0.0.0/8',
@@ -369,7 +382,10 @@ export type SupervisorErrorCode =
   | 'ROOT_REFUSED'
   | 'ROOT_NOT_UNDER_PARENT'
   | 'IMAGE_NOT_IN_MANIFEST'
+  | 'IMAGE_PULL_FAILED'
   | 'DOCKER_UNAVAILABLE'
+  | 'ENGINE_REFUSED'
+  | 'WORKSPACE_EXISTS'
   | 'LIMITS_MISSING'
   | 'PRESET_OUT_OF_RANGE'
   | 'ADDITIONAL_ROOTS_UNSUPPORTED'

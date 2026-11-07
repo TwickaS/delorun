@@ -30,7 +30,7 @@ The package is a dependency of `delo/packages/supervisor`, `delo/packages/runtim
 - **Runtime provider:** `RUNTIME_PROVIDER_SERVICE`, and the `RuntimeProvider`, `RuntimeKind`, `DockerShape`, `WorkspaceRuntimeRequest`, `WorkspaceRuntimeSpec`, `WorkspaceRuntimeState` and `WorkspaceId` types.
 - **Capability report:** `REQUIRED_LIMITS`, and the `CapabilityReport`, `DockerCapabilities`, `DockerLimit`, `LimitFinding`, `ShapeAvailability` and `ShapeReason` types.
 - **Presets:** `PRESETS`, `DEFAULT_PRESET`, `ADVANCED_BOUNDS`, `GIB` and `MIB`, with the `PresetName` and `ResourceLimits` types.
-- **Egress and credentials:** `DEFAULT_EGRESS`, `DEFAULT_EGRESS_HOSTS`, `MAX_ALLOWLIST_ADDITIONS`, `MAX_HOST_LENGTH`, `EGRESS_PROXY_PORT` and `EGRESS_REFUSED_RANGES`, with the `EgressMode` and `CredentialOption` types.
+- **Egress and credentials:** `DEFAULT_EGRESS`, `DEFAULT_EGRESS_HOSTS`, `MAX_ALLOWLIST_ADDITIONS`, `MAX_HOST_LENGTH`, `EGRESS_PROXY_PORT`, `EGRESS_PROXY_ENTRY` and `EGRESS_REFUSED_RANGES`, with the `EgressMode` and `CredentialOption` types.
 - **Supervisor:** `SUPERVISOR_PROTOCOL_VERSION`, `SUPERVISOR_REQUEST_MAX_BYTES`, `SUPERVISOR_REQUEST_DEADLINE_MS`, `SUPERVISOR_MAX_CONNECTIONS`, `WORKSPACE_ID_MAX_LENGTH`, `ROOT_MAX_BYTES`, `GRACEFUL_STOP_MS`, `MAX_ROOT_PARENTS`, `LABELS` and `NAME_HASH_HEX_DIGITS`, with the `SupervisorRequest`, `SupervisorFailure`, `SupervisorErrorCode` and `SupervisorRoots` types.
 - **Helper channel and S3:** `HELPER_KEY_BYTES`, `HELPER_CHALLENGE_LABEL`, `HELPER_CHALLENGE_TIMEOUT_MS`, `HELPER_SOCKET_DIR`, `AGENT_SOCKET_PATH` and `S3_USERS`.
 - **Images:** `IMAGES`, `IMAGE_BASE` and `IMAGE_PULL_HOSTS`.

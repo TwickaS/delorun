@@ -90,7 +90,7 @@ Every workspace container and the S3 container run with these settings, and the 
 
 - every capability dropped (`--cap-drop ALL`), except S3's `CAP_SETUID` and `CAP_SETGID` for its harness;
 - `no-new-privileges`;
-- the seccomp profile that the release ships and [C2](c02-release-manifest.md)'s manifest lists by digest, derived from Docker's default profile;
+- the seccomp profile that [C2](c02-release-manifest.md)'s manifest lists for the image (the `seccomp` file of its `ImageRef`), derived from Docker's default profile, when the manifest lists one, and otherwise the engine's default profile; never `unconfined`. A listed profile whose file does not match its length and digest refuses the container with `IMAGE_NOT_IN_MANIFEST`;
 - a read-only root filesystem, with a tmpfs `/tmp` of the preset's size;
 - the preset's CPU, memory and PID limits, with swap equal to memory;
 - the preset's disk limit through `--storage-opt size` where the storage driver supports it, otherwise reported `not-enforced`;
@@ -103,10 +103,10 @@ Every workspace container and the S3 container run with these settings, and the 
 
 - **One network per workspace.** Each Docker workspace has its own internal network, `delo-ws-<12 hex>`, whose only members are the workspace's container and its egress proxy. No network has two workspaces as members, so no workspace container can reach another's. The proxy also joins a second network, `delo-ws-<12 hex>-out`, which is its only route out.
 - **Host gateway and loopback.** The internal network gives the workspace container no route to the machine. The proxy refuses destinations on the machine. `host.docker.internal` and the `host-gateway` alias are never added to a container.
-- **The egress proxy.** It runs from the S2 workspace image's digest with its own entry. It is an HTTP proxy on port 3128 that serves `CONNECT` to port 443 and plain HTTP to port 80. It resolves each host itself and refuses a destination address that is loopback, link-local (`169.254.0.0/16`, `fe80::/10`), private (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), shared (`100.64.0.0/10`), multicast or the machine's own. The container's environment sets `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy` and `https_proxy` to the proxy; a tool that ignores them has no route out.
+- **The egress proxy.** It runs from the S2 workspace image's digest with the workspace's resource limits and the entry `/usr/local/bin/delo-egress-proxy`, which the image provides. The supervisor passes the egress mode (`allowlist` or `open`) in `DELO_EGRESS_MODE` and the allowed hosts, comma-separated, in `DELO_EGRESS_HOSTS`. It is an HTTP proxy on port 3128 that serves `CONNECT` to port 443 and plain HTTP to port 80. It resolves each host itself and refuses a destination address that is loopback, link-local (`169.254.0.0/16`, `fe80::/10`), private (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), shared (`100.64.0.0/10`), multicast or the machine's own. The container's environment sets `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy` and `https_proxy` to the proxy; a tool that ignores them has no route out.
 - **Egress modes.** `allowlist` (the default) allows the hosts below and the workspace's additions. `open` allows every public host and is set only by the person's choice for that workspace. `none` starts no proxy.
 - **The default allowlist.** The hosts of the model providers configured in the profile; npm: `registry.npmjs.org`; PyPI: `pypi.org`, `files.pythonhosted.org`; crates.io: `crates.io`, `static.crates.io`, `index.crates.io`; the Go module proxy: `proxy.golang.org`, `sum.golang.org`; GitHub: `github.com`, `api.github.com`, `codeload.github.com`, `objects.githubusercontent.com`, `raw.githubusercontent.com`, `release-assets.githubusercontent.com`.
-- **Additions.** The person may add at most 64 hosts per workspace, each an exact host name or a `*.`-prefixed suffix, at most 253 characters. An IP address is not accepted as an addition.
+- **Additions.** The person may add at most 64 hosts per workspace, each an exact host name or a `*.`-prefixed suffix, at most 253 characters. An IP address is not accepted as an addition. The runtime provider passes the hosts of the model providers configured in the profile as additions, within the same limit of 64.
 - **S3.** The one container has the same internal network and proxy, with the same modes and allowlist.
 
 ## Resource presets
@@ -195,7 +195,7 @@ Under S2, upstream's SSH helper inside each workspace container carries the work
 
 - **Build.** Each image is built from its digest-pinned base within [C2](c02-release-manifest.md)'s reproducible-rebuild scope.
 - **Signature and digest.** The release manifest ([C2](c02-release-manifest.md)) lists each image's digest, and the manifest's Ed25519 signature is the image's signature; no registry-side signature is trusted.
-- **Pull.** The supervisor pulls only `<name>@sha256:<digest>` with the digest from the verified manifest of the running runtime, never a tag, and checks the pulled image's digest. The pull reaches only `ghcr.io` and `pkg-containers.githubusercontent.com`.
+- **Pull.** The supervisor pulls only `<name>@sha256:<digest>` with the digest from the verified manifest of the running runtime, never a tag, and checks the pulled image's digest; a pull that fails is refused with `IMAGE_PULL_FAILED`. The pull reaches only `ghcr.io` and `pkg-containers.githubusercontent.com`.
 - **Refusal.** The supervisor refuses to create a container from a digest that the verified manifest does not list, with `IMAGE_NOT_IN_MANIFEST`.
 
 ## The container denial marker
@@ -238,7 +238,10 @@ A file operation that a container's read-only root refuses is denied by the envi
 | `ROOT_REFUSED` | The root is `/`, the OS home or the Delo home, contains or lies inside the Delo home, is not the person's directory, or its mount source differed after creation |
 | `ROOT_NOT_UNDER_PARENT` | The root is not strictly inside a setup parent |
 | `IMAGE_NOT_IN_MANIFEST` | The image digest is not listed by the verified manifest, or the pulled digest differs |
+| `IMAGE_PULL_FAILED` | Pulling a listed digest failed |
 | `DOCKER_UNAVAILABLE` | No Docker engine answers at the active context |
+| `ENGINE_REFUSED` | The Docker engine refused a call; the detail carries the engine's message |
+| `WORKSPACE_EXISTS` | `workspace.create` named a workspace whose container already exists |
 | `LIMITS_MISSING` | A limit that a shape requires is not enforced on this machine |
 | `PRESET_OUT_OF_RANGE` | An Advanced value is outside its bound, or a preset exceeds the machine |
 | `ADDITIONAL_ROOTS_UNSUPPORTED` | A Docker workspace was given additional writable roots |

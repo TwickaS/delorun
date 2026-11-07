@@ -126,7 +126,7 @@ A scheduled job of the release workflow re-signs it every 24 hours, and the rele
 | `published` | timestamp | When the targets key signed it. |
 | `runtime` | map of platform to `{ "archive": FileRef, "files": FileRef }` | Each runtime archive and its file list. |
 | `desktop` | map of `mac-arm64`, `mac-x64`, `win-x64` to `{ "installer": DesktopFileRef, "update": DesktopFileRef, "blockmap": FileRef }` | Desktop files; `DesktopFileRef` adds `sha512`, the standard base64 SHA-512 electron-updater compares. On Windows the installer is also the update file. |
-| `images` | `{ "s2": ImageRef, "s3": ImageRef }` | The Docker images [C9](c09-runtime-supervisor.md) runs. `ImageRef` is `{ "repository", "index": "sha256:<hex>", "platforms": { "linux/amd64": "sha256:<hex>", "linux/arm64": "sha256:<hex>" } }`. |
+| `images` | `{ "s2": ImageRef, "s3": ImageRef }` | The Docker images [C9](c09-runtime-supervisor.md) runs. `ImageRef` is `{ "repository", "index": "sha256:<hex>", "platforms": { "linux/amd64": "sha256:<hex>", "linux/arm64": "sha256:<hex>" } }`, with an optional `"seccomp": FileRef`: the release file holding the seccomp profile that [C9](c09-runtime-supervisor.md) runs the image's containers under. Without it, they run under the engine's default profile. |
 | `sbom` | `FileRef` with `"format": "SPDX-2.3+json"` | The release's SBOM. |
 | `npm` | list of `{ "name", "version", "integrity" }` | Each npm package of the release (`delorun`, `create-delorun`) with its tarball's `sha512-` integrity string. |
 | `install` | `{ "sh": FileRef, "ps1": FileRef }` | The install scripts; the release notes and the Trust page print the same digests. |
