@@ -37,7 +37,7 @@ description: "约定 C4：上游连接中的准入 seam、回环与远程访问�
 <a id="authenticator"></a>
 ### Authenticator
 
-准入 seam 有三种角色。Service Definition 是 Cordis 服务 `authenticator`，即上游的 `@deepseek-ai/dsh-client-connection` 声明的抽象类 `Authenticator`。其 Service Providers 是上游的默认提供方，它原样重现上游基于启动令牌与 `dsh-auth-*` cookie 的准入；以及 Delo 的 `@delo/home-auth`，它在 Delo 的 profile 中替代默认提供方。其消费方是上游的 `HostConnectionService` 与 web 服务器的分发器。
+准入 seam 有三种角色。Service Definition 是 Cordis 服务 `authenticator`，即上游的 `@deepseek-ai/dsh-client-connection` 声明的抽象类 `Authenticator`。其 Service Providers 是上游的默认提供方，它原样重现上游基于启动令牌与 `dsh-auth-*` cookie 的准入；以及 Delo 的 `@delo/home-auth`，它在 Delo 的 profile 中替代默认提供方。其消费方是上游的 `HostConnectionService` 与同一包中远程访问监听器的分发器。
 
 - **`admit(request, listener)`** 为一个监听器上的一个请求返回一个 `Admission`。它是同步的：它只读取提供方的内存状态，从不等待异步操作、从不执行 I/O，也从不调用会执行这些操作的其他服务。上游的 `admit()` 与 `admitConnection()` 在返回之前调用它。
 - **`policy(listener)`** 返回一个监听器的 `ListenerPolicy`：其声明的协议、其 `Host` 规则、其登录前允许列表，以及是否接受启动令牌。分发器在监听器启动时读取一次策略，并在提供方宣布变更时再次读取。
@@ -185,8 +185,8 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 <a id="consumers"></a>
 ## 消费方
 
-- 上游的 `packages/client/connection`：`Authenticator` Service Definition、其默认提供方，以及按监听器进行的 `admit` 调用。
-- 上游的 `packages/host/webserver`：远程访问监听器、分发顺序、响应头，以及内联元素上的 nonce。
+- 上游的 `packages/client/connection`：`Authenticator` Service Definition、其默认提供方、按监听器进行的 `admit` 调用，以及每个远程访问监听器的分发器，它执行分发顺序。
+- 上游的 `packages/host/webserver`：远程访问监听器的套接字与字节流、在任何路由、upgrade 处理器或回退之前调用分发器的门控（gate）、响应头，以及内联元素上的 nonce。
 - 上游的 `packages/client/modules/src/client/system.ts` 与赋值 `innerHTML` 的上游组件：Trusted Types 策略。
 - `delo/packages/home-auth/`：Delo 的提供方、会话存储、登录前路由与轮换。
 - `delo/packages/reach/`：远程访问监听器的目标，以及中继客户端向 `reach-self-hosted-relay` 的移交。

@@ -37,7 +37,7 @@ Admission decides, for every HTTP request and every upgrade that reaches a home'
 <a id="authenticator"></a>
 ### Authenticator
 
-The admission seam has three roles. The Service Definition is the Cordis service `authenticator`, an abstract class `Authenticator` that upstream's `@deepseek-ai/dsh-client-connection` declares. Its Service Providers are upstream's default provider, which reproduces upstream's launch-token and `dsh-auth-*` cookie admission unchanged, and Delo's `@delo/home-auth`, which replaces it in Delo's profiles. Its consumers are upstream's `HostConnectionService` and the web server's dispatcher.
+The admission seam has three roles. The Service Definition is the Cordis service `authenticator`, an abstract class `Authenticator` that upstream's `@deepseek-ai/dsh-client-connection` declares. Its Service Providers are upstream's default provider, which reproduces upstream's launch-token and `dsh-auth-*` cookie admission unchanged, and Delo's `@delo/home-auth`, which replaces it in Delo's profiles. Its consumers are upstream's `HostConnectionService` and the reach listeners' dispatcher in the same package.
 
 - **`admit(request, listener)`** returns an `Admission` for one request on one listener. It is synchronous: it reads only the provider's in-memory state and never awaits, performs I/O or calls another service that does. Upstream's `admit()` and `admitConnection()` call it before they return.
 - **`policy(listener)`** returns the `ListenerPolicy` of one listener: its declared scheme, its `Host` rule, its pre-login allowlist and whether launch tokens are accepted. The dispatcher reads the policy once when the listener starts and again when the provider announces a change.
@@ -185,8 +185,8 @@ Trusted Types are enforced on reach listeners by the `require-trusted-types-for 
 <a id="consumers"></a>
 ## Consumers
 
-- Upstream's `packages/client/connection`: the `Authenticator` Service Definition, its default provider and the per-listener `admit` calls.
-- Upstream's `packages/host/webserver`: the reach listeners, the dispatch order, the response headers and the nonce on inline elements.
+- Upstream's `packages/client/connection`: the `Authenticator` Service Definition, its default provider, the per-listener `admit` calls, and each reach listener's dispatcher, which applies the dispatch order.
+- Upstream's `packages/host/webserver`: the reach listeners' sockets and streams, the gate that calls the dispatcher before any route, upgrade handler or the fallback, the response headers and the nonce on inline elements.
 - Upstream's `packages/client/modules/src/client/system.ts` and the upstream components that assign `innerHTML`: the Trusted Types policies.
 - `delo/packages/home-auth/`: the Delo provider, the session store, the pre-login routes and rotation.
 - `delo/packages/reach/`: the reach listeners' targets and the relay client's handoff to `reach-self-hosted-relay`.
