@@ -3,12 +3,13 @@
  * holder has signed and before the release is published:
  *
  * `node_modules/.bin/tsx delo/apps/release/src/log-release.ts --root <root file> --manifest <manifest file> --entry
- * <delorun-<version>.manifest.entry.json> --submit <url> --checkpoint <url> --proof <url> --out <bundle file>`
+ * <delorun-<version>.manifest.entry.json> --submit <url> --checkpoint <url> --tiles <url> --out <bundle file>`
  *
  * It submits the Rekor v2 entry request the signing command wrote, waits for a checkpoint that a witness the root lists has
  * cosigned and that covers the entry, and writes `delorun-<version>.manifest.log.json` only when the bundle verifies
- * with the root's log and witness keys. `--proof` holds `{index}` and `{size}` placeholders. It polls every 30
- * seconds, at most 60 times.
+ * with the root's log and witness keys. `--submit` is the log's `/api/v2/log/entries`, `--checkpoint` returns the
+ * witnessed checkpoint as signed-note text, and `--tiles` is the prefix below which the log serves its tiles, from
+ * which the command computes the entry's inclusion proof. It polls every 30 seconds, at most 60 times.
  *
  * @module @delo/release/log-release
  */
@@ -23,16 +24,16 @@ import { readEnvelope } from './sign/schemas.ts'
 import { trustRootChain } from './sign/verify.ts'
 
 async function main(argv: readonly string[]): Promise<number> {
-  const { values } = parseArgs({ args: [...argv], strict: true, options: { root: { type: 'string' }, manifest: { type: 'string' }, entry: { type: 'string' }, submit: { type: 'string' }, checkpoint: { type: 'string' }, proof: { type: 'string' }, out: { type: 'string' } } })
+  const { values } = parseArgs({ args: [...argv], strict: true, options: { root: { type: 'string' }, manifest: { type: 'string' }, entry: { type: 'string' }, submit: { type: 'string' }, checkpoint: { type: 'string' }, tiles: { type: 'string' }, out: { type: 'string' } } })
   try {
-    const { root: rootPath, manifest: manifestPath, entry, submit, checkpoint, proof, out } = values
-    if (rootPath === undefined || manifestPath === undefined || entry === undefined || submit === undefined || checkpoint === undefined || proof === undefined || out === undefined) {
-      throw new Error('pass --root, --manifest, --entry, --submit, --checkpoint, --proof and --out')
+    const { root: rootPath, manifest: manifestPath, entry, submit, checkpoint, tiles, out } = values
+    if (rootPath === undefined || manifestPath === undefined || entry === undefined || submit === undefined || checkpoint === undefined || tiles === undefined || out === undefined) {
+      throw new Error('pass --root, --manifest, --entry, --submit, --checkpoint, --tiles and --out')
     }
     const root = trustRootChain([readFileSync(resolve(rootPath))], Math.floor(Date.now() / 1000)).at(-1)!.metadata
     const manifest = readFileSync(resolve(manifestPath))
     const version = readEnvelope('manifest', manifest).signed.version
-    const bundle = await logRelease({ submit, checkpoint, proof }, root, basename(manifestPath), manifest, version, readEntryRequest(readFileSync(resolve(entry))), 60, () => delay(30_000))
+    const bundle = await logRelease({ submit, checkpoint, tiles }, root, basename(manifestPath), manifest, version, readEntryRequest(readFileSync(resolve(entry))), 60, () => delay(30_000))
     writeFileSync(resolve(out), `${JSON.stringify(bundle, undefined, 2)}\n`, { flag: 'wx', mode: 0o644 })
     console.log(`log-release: ${basename(manifestPath)} is entry ${String(bundle.entry.logIndex)}, witnessed at tree size ${String(bundle.inclusion.treeSize)}`)
     return 0

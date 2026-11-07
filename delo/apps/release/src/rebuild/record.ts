@@ -15,7 +15,7 @@ import { fileDigest } from '../archive/sink.ts'
 import { sha256Hex } from '../brands.ts'
 import { parseRecipeText, RebuildExceptions, Toolchain } from '../closure/config.ts'
 import { closureFileNames } from '../closure/tree.ts'
-import { ImagesRecipe, imagesName, type ReleaseImages } from '../images/build.ts'
+import { ImagesRecipe, imagesName, seccompLicenceName, type ReleaseImages } from '../images/build.ts'
 import { sbomName } from '../sbom/release-sbom.ts'
 
 /** The source signing requires, named in every refusal of contract C2's rebuild rule. */
@@ -88,13 +88,16 @@ export function recordToolchain(toolchain: Toolchain): RebuildRecord['toolchain'
 
 /**
  * The files every rebuild and every comparison must cover: each platform's runtime archive and file list, the
- * release SBOM, the images file, and each seccomp profile the images list.
+ * release SBOM, the images file, and each seccomp profile the images list with the licence published beside it.
  * @param version - the release.
- * @param images - the image references, when known; their seccomp profiles are required then.
+ * @param images - the image references, when known; their seccomp profiles and licences are required then.
  * @returns their names.
  */
 export function requiredOutputs(version: string, images?: ReleaseImages): string[] {
-  const profiles = images === undefined ? [] : [images.s2.seccomp?.name, images.s3.seccomp?.name].filter(name => name !== undefined)
+  const profiles = images === undefined ? [] : (['s2', 's3'] as const).flatMap(image => {
+    const profile = images[image].seccomp
+    return profile === undefined ? [] : [profile.name, seccompLicenceName(version, image)]
+  })
   return [...RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform))), sbomName(version), imagesName(version), ...new Set(profiles)]
 }
 

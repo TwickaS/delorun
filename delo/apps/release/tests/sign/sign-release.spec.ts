@@ -387,6 +387,30 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}.s3.seccomp.json`)
   })
 
+  it('requires, compares and records the licence published beside each seccomp profile', async (test) => {
+    const fixture = await releaseFixture(test)
+    const licence = join(fixture.rebuild, `delorun-${VERSION}.s2.seccomp.LICENSE`)
+    const aside = join(fixture.rebuild, '..', 'aside.LICENSE')
+    renameSync(licence, aside)
+    const partial = fixture.record()
+    expect(partial.stderr).toContain(`lacks delorun-${VERSION}.s2.seccomp.LICENSE`)
+    expect(partial.status).toBe(2)
+    renameSync(aside, licence)
+    writeFileSync(join(fixture.release, `delorun-${VERSION}.s3.seccomp.LICENSE`), 'another licence\n')
+    const differing = fixture.record()
+    expect(differing.stdout).toContain(`delorun-${VERSION}.s3.seccomp.LICENSE`)
+    expect(JSON.parse(readFileSync(fixture.recordPath, 'utf8'))).toMatchObject({ comparison: 'difference' })
+    copyFileSync(join(fixture.rebuild, `delorun-${VERSION}.s3.seccomp.LICENSE`), join(fixture.release, `delorun-${VERSION}.s3.seccomp.LICENSE`))
+    rmSync(fixture.recordPath, { force: true })
+    expect(fixture.record().status).toBe(0)
+    expect((await fixture.sign()).status).toBe(0)
+    const record = JSON.parse(readFileSync(join(fixture.release, `delorun-${VERSION}.rebuild.json`), 'utf8')) as { outputs: Array<{ name: string, sha256: string }> }
+    const published = readFileSync(join(import.meta.dirname, '../../images/seccomp.LICENSE'))
+    for (const image of ['s2', 's3']) {
+      expect(record.outputs).toContainEqual(expect.objectContaining({ name: `delorun-${VERSION}.${image}.seccomp.LICENSE`, sha256: createHash('sha256').update(published).digest('hex') }))
+    }
+  })
+
   it('refuses a seccomp profile whose bytes are not the ones the draft lists, even when the rebuild has the same bytes', async (test) => {
     const fixture = await releaseFixture(test)
     for (const directory of [fixture.release, fixture.rebuild]) writeFileSync(join(directory, `delorun-${VERSION}.s2.seccomp.json`), '{"defaultAction":"SCMP_ACT_ALLOW"}\n')

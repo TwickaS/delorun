@@ -2,8 +2,9 @@
  * Builds the S2 and S3 images of contract C9 within C2's reproducible-rebuild scope: each from the digest-pinned base
  * `images.json` names, for `linux/amd64` and `linux/arm64`, with BuildKit's `rewrite-timestamp` at the release's
  * `SOURCE_DATE_EPOCH`, no cache, and no provenance or SBOM attestation (they record build times and invocation ids).
- * The S3 image carries each platform's Linux runtime closure, extracted read-only. Each image's seccomp profile, the
- * committed file `images.json` names for it, is copied to `delorun-<version>.<image>.seccomp.json`. The OCI index and
+ * The S3 image carries each platform's Linux runtime closure, extracted read-only. Each image's seccomp profile and
+ * its licence, the committed files `images.json` names for it, are copied to `delorun-<version>.<image>.seccomp.json`
+ * and `delorun-<version>.<image>.seccomp.LICENSE`. The OCI index and
  * per-platform manifest digests and the profile's file reference go into `delorun-<version>.images.json`, which the
  * manifest's `images` copies.
  *
@@ -25,8 +26,11 @@ import { sha256Hex } from '../brands.ts'
 import { parseStrictJson } from '../sign/json.ts'
 import { ImageRefSchema } from '../sign/schemas.ts'
 
-/** One image of `images.json`: its repository, and its build context and seccomp profile relative to the recipe directory. */
-const ImageRecipe = z.strictObject({ repository: z.string().min(1), context: z.string().min(1), seccomp: z.string().min(1) })
+/**
+ * One image of `images.json`: its repository, and its build context, seccomp profile and the profile's licence, each
+ * relative to the recipe directory.
+ */
+const ImageRecipe = z.strictObject({ repository: z.string().min(1), context: z.string().min(1), seccomp: z.strictObject({ profile: z.string().min(1), licence: z.string().min(1) }) })
 
 /** `images.json`: the base by digest and each image's repository, build context and seccomp profile. */
 export const ImagesRecipe = z.strictObject({
@@ -171,6 +175,16 @@ export function seccompName(version: string, image: 's2' | 's3'): string {
   return `delorun-${version}.${image}.seccomp.json`
 }
 
+/**
+ * The release file name of the licence published beside an image's seccomp profile.
+ * @param version - the release.
+ * @param image - `s2` or `s3`.
+ * @returns `delorun-<version>.<image>.seccomp.LICENSE`.
+ */
+export function seccompLicenceName(version: string, image: 's2' | 's3'): string {
+  return `delorun-${version}.${image}.seccomp.LICENSE`
+}
+
 /** The images file's fields that the manifest's `images` copies; the rest are the builder and the Debian packages. */
 const ImagesFileImages = z.looseObject({ s2: ImageRefSchema, s3: ImageRefSchema })
 
@@ -190,18 +204,20 @@ export async function readReleaseImages(directory: string, version: string): Pro
 }
 
 /**
- * Copy each image's committed seccomp profile into the output as its release file.
+ * Copy each image's committed seccomp profile and its licence into the output as their release files.
  * @param recipe - the image recipe.
  * @param out - the build output.
  * @param version - the release.
  * @returns each image's profile reference.
- * @throws Error when a profile is missing or its release file exists.
+ * @throws Error when a profile or licence is missing or its release file exists.
  */
 export async function writeSeccompProfiles(recipe: ImagesRecipe, out: string, version: string): Promise<Record<'s2' | 's3', FileRef>> {
   const refs: Partial<Record<'s2' | 's3', FileRef>> = {}
   for (const name of ['s2', 's3'] as const) {
-    const bytes = await readFile(join(RECIPE_DIR, recipe.images[name].seccomp))
+    const bytes = await readFile(join(RECIPE_DIR, recipe.images[name].seccomp.profile))
+    const licence = await readFile(join(RECIPE_DIR, recipe.images[name].seccomp.licence))
     await writeFile(join(out, seccompName(version, name)), bytes, { flag: 'wx', mode: 0o644 })
+    await writeFile(join(out, seccompLicenceName(version, name)), licence, { flag: 'wx', mode: 0o644 })
     refs[name] = { name: seccompName(version, name), length: bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
   }
   return { s2: refs.s2!, s3: refs.s3! }
@@ -295,8 +311,8 @@ export interface ImageBuildRequest {
  * Build both images and write the images file.
  * @param request - the recipe, directories, release and epoch.
  * @returns the two image references.
- * @throws Error when Docker fails, a Linux closure is missing, or the images file or a seccomp profile's release file
- * exists.
+ * @throws Error when Docker fails, a Linux closure is missing, or the images file or a seccomp profile's or licence's
+ * release file exists.
  */
 export async function buildImages(request: ImageBuildRequest): Promise<ReleaseImages> {
   const work = await mkdtemp(join(tmpdir(), 'delo-images-'))

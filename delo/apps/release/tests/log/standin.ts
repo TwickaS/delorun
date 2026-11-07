@@ -3,12 +3,13 @@
  * 6962 log that, like Rekor v2, accepts `hashedrekord` v0.0.2 requests only with `PKIX_ED25519_PH` key details, builds
  * the entry body from them and signs checkpoints with a throwaway Ed25519 note key, and a witness that cosigns a
  * checkpoint with a throwaway cosignature key. The stand-in does not check the request's signature; the bundle
- * verifier does.
+ * verifier does. The log serves its tree as C2SP `tlog-tiles` do, and can stop serving each partial tile whose full tile
+ * exists, as a log may.
  */
 import { generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { RELEASE_LOG_ENTRY_KEY_DETAILS, type HashedRekordRequest, type ReleaseLogBundle } from '@delo/contract-release-log'
 import { entryBody } from '../../src/log/entry.ts'
-import { inclusionProof, leafHash, treeRoot } from '../../src/log/merkle.ts'
+import { inclusionProof, leafHash, nodeHash, treeRoot } from '../../src/log/merkle.ts'
 import { checkpointBody, NOTE_COSIGNATURE, NOTE_ED25519, signatureLine, verifierKey } from '../../src/log/note.ts'
 
 /** An in-memory log. */
@@ -18,6 +19,10 @@ export class LogStandIn {
   readonly vkey = verifierKey(this.origin, NOTE_ED25519, this.key)
   private readonly leaves: Buffer[] = []
   private readonly bodies: Buffer[] = []
+  /** Whether the log still serves a partial tile once its full tile exists. */
+  keepsReplacedPartials = true
+  /** Every tile path asked for, in order. */
+  readonly tileRequests: string[] = []
 
   /**
    * Accept a request as Rekor v2 does: refuse key details other than Ed25519ph and append the body built from it.
@@ -58,6 +63,47 @@ export class LogStandIn {
   checkpoint(): string {
     const body = checkpointBody(this.origin, this.leaves.length, treeRoot(this.leaves))
     return `${body}\n${signatureLine(this.origin, this.key, body)}`
+  }
+
+  /**
+   * Append leaf hashes directly, to grow the tree quickly in tile specs.
+   * @param count - how many leaves to add; each is the leaf hash of its index's decimal text.
+   */
+  grow(count: number): void {
+    for (let index = 0; index < count; index++) this.append(Buffer.from(String(this.leaves.length)))
+  }
+
+  /**
+   * Answer a tile request as a tile server does.
+   * @param path - the path below the tile prefix.
+   * @returns the tile's bytes, or `undefined` for a tile the log does not serve.
+   */
+  tile(path: string): Buffer | undefined {
+    this.tileRequests.push(path)
+    const match = /^tile\/(\d+)\/((?:x\d{3}\/)*\d{3})(?:\.p\/(\d+))?$/u.exec(path)
+    if (match === null) return undefined
+    const level = Number(match[1])
+    const index = Number(match[2]!.replaceAll('x', '').replaceAll('/', ''))
+    const width = match[3] === undefined ? 256 : Number(match[3])
+    if (match[3] !== undefined && (width < 1 || width > 255)) return undefined
+    const hashes = this.level(level * 8)
+    if (match[3] !== undefined && !this.keepsReplacedPartials && hashes.length >= (index + 1) * 256) return undefined
+    const tile = hashes.slice(index * 256, index * 256 + width)
+    return tile.length === width ? Buffer.concat(tile) : undefined
+  }
+
+  private levels: { size: number, hashes: Buffer[][] } = { size: -1, hashes: [] }
+
+  /** The hashes of every complete subtree at a tree level, for the current size. */
+  private level(height: number): Buffer[] {
+    if (this.levels.size !== this.leaves.length) this.levels = { size: this.leaves.length, hashes: [this.leaves] }
+    while (this.levels.hashes.length <= height) {
+      const below = this.levels.hashes.at(-1)!
+      const next: Buffer[] = []
+      for (let position = 0; position + 1 < below.length; position += 2) next.push(nodeHash(below[position]!, below[position + 1]!))
+      this.levels.hashes.push(next)
+    }
+    return this.levels.hashes[height]!
   }
 
   /**

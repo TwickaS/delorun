@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { builderProblems, imageDebianPackages, imagesName, ociImageRef, readImagesRecipe, readReleaseImages, writeSeccompProfiles } from '../../src/images/build.ts'
+import { builderProblems, imageDebianPackages, imagesName, ociImageRef, readImagesRecipe, readReleaseImages, seccompLicenceName, writeSeccompProfiles } from '../../src/images/build.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { compareOutputs } from '../../src/rebuild/compare.ts'
 import { spdxDocument } from '../../src/sbom/spdx.ts'
@@ -40,17 +40,19 @@ describe('image digests', () => {
     expect(recipe.images.s3.repository).toBe('ghcr.io/delo-run/delo-harness-s3')
   })
 
-  it('copies each image\'s committed seccomp profile, Docker\'s default profile, into the output as a release file', async (test) => {
+  it('copies each image\'s committed seccomp profile, Docker\'s default profile, and its licence into the output as release files', async (test) => {
     const out = scratch(test)
     const recipe = readImagesRecipe()
-    expect(recipe.images.s2.seccomp).toBe('images/seccomp.json')
-    expect(recipe.images.s3.seccomp).toBe('images/seccomp.json')
+    for (const image of ['s2', 's3'] as const) expect(recipe.images[image].seccomp).toEqual({ profile: 'images/seccomp.json', licence: 'images/seccomp.LICENSE' })
     const profile = readFileSync(join(import.meta.dirname, '../../images/seccomp.json'))
+    const licence = readFileSync(join(import.meta.dirname, '../../images/seccomp.LICENSE'))
+    expect(licence.toString('utf8')).toContain('Apache License')
     expect(JSON.parse(profile.toString('utf8'))).toMatchObject({ defaultAction: 'SCMP_ACT_ERRNO' })
     const refs = await writeSeccompProfiles(recipe, out, '0.1.0')
     for (const image of ['s2', 's3'] as const) {
       expect(refs[image]).toEqual({ name: `delorun-0.1.0.${image}.seccomp.json`, length: profile.byteLength, sha256: createHash('sha256').update(profile).digest('hex') })
       expect(readFileSync(join(out, refs[image].name)).equals(profile)).toBe(true)
+      expect(readFileSync(join(out, seccompLicenceName('0.1.0', image))).equals(licence)).toBe(true)
     }
     await expect(writeSeccompProfiles(recipe, out, '0.1.0')).rejects.toThrow(/EEXIST/u)
   })
