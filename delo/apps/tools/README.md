@@ -196,6 +196,7 @@ Each check has a budget, its resident memory at the peak and its CPUs, which the
 | `tests:web-changed` | The reached Chromium e2e specs under `apps/web/tests`, run on the official client build, up to 12 specs ([`checks/web.ts`](src/checks/web.ts)) | 5 GiB, 8 CPUs, alone, 1200 s | `changed` |
 | `generate:native` | Upstream's native system addon (`pnpm run build:native-system`) | 1 GiB, 2 CPUs | none: `--only generate:native` |
 | `docs-site` | Delo's documentation website builds, and its dead-link check passes ([`delo/apps/docs`](../docs/README.md)); refuses to run until the site's dependencies are installed ([`check-docs-site.ts`](src/check-docs-site.ts)) | 2 GiB, 2 CPUs, 900 s | `changed`, `full` |
+| `generated:notices` | The committed `THIRD_PARTY_NOTICES.md` matches what upstream's generator writes from the installed manifests (`scripts/gen-third-party-notices.ts --check`); selected by a change to any `package.json`, the lockfile, the notices or the generator | 1 GiB, 1 CPU, 120 s | `changed`, `full` |
 | `parity-switches` | C16's registry against the switch fields, the parity overlay and the model-visible contributions, and the switch sweep ([`check-parity-switches.ts`](src/parity/composition/check-parity-switches.ts)) | 0.5 GiB, 1 CPU | `changed` for Delo code or an upstream edit, `full` |
 | `parity-replay` | Upstream's recorded-session replay (`pnpm run test:snapshot`) with `DSH_SNAPSHOT_PATCH` naming the parity overlay | 0.6 GiB per worker, 5 CPUs, alone | `changed` for Delo code or an upstream edit, `full` |
 

@@ -127,7 +127,7 @@ describe('the catalog', () => {
 
 describe('selection', () => {
   it('runs every default check with no target, and neither the changed-upstream lane nor the opt-in native build', () => {
-    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'tests:fork', 'tests:snapshots', 'parity-switches', 'parity-replay'])
+    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'generated:notices', 'tests:fork', 'tests:snapshots', 'parity-switches', 'parity-replay'])
     expect(CHECKS.find(check => check.id === 'generate:native')?.tiers).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['generate:native'] }))).toEqual(['generate:native'])
   })
@@ -248,6 +248,23 @@ describe('the parity checks', () => {
     }
     for (const path of ['delo/docs/contracts/c16-parity-composition.md', 'delo/apps/tools/README.i18n.yaml', 'docs/architecture.md']) expect(parity([path])).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, targets: ['delo/packages/control-protocol/src/messages.ts'] }))).not.toContain('parity-replay')
+  })
+})
+
+describe('the third-party notices check', () => {
+  const selected = (paths: string[]) => ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'b', paths } }))
+
+  it('runs upstream\'s generator in its check mode, with the manifests, the lockfile and the notices as inputs', () => {
+    expect(CHECKS.find(check => check.id === 'generated:notices')).toMatchObject({
+      command: ['node_modules/.bin/tsx', 'scripts/gen-third-party-notices.ts', '--check'],
+      tiers: ['changed', 'full'],
+    })
+    expect(BUDGETS.checks['generated:notices']).toEqual({ memoryGiB: 1, seconds: 120 })
+  })
+
+  it('is selected by a change to any manifest, the lockfile, the notices or their generator, and by no other change', () => {
+    for (const path of ['pnpm-lock.yaml', 'package.json', 'delo/apps/cli/package.json', 'packages/core/session/package.json', 'THIRD_PARTY_NOTICES.md', 'scripts/gen-third-party-notices.ts']) expect(selected([path])).toContain('generated:notices')
+    for (const path of ['delo/apps/cli/src/main.ts', 'packages/core/session/src/index.ts', 'docs/architecture.md']) expect(selected([path])).not.toContain('generated:notices')
   })
 })
 

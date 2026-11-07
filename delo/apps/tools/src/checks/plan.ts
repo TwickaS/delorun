@@ -195,6 +195,18 @@ const TEST_ENV = ['LANG', 'LC_ALL', 'TZ']
 export const DOCS_SITE_DIR = 'delo/apps/docs'
 /** The check that builds the documentation website and its dead-link check. */
 export const DOCS_SITE_ID = 'docs-site'
+
+/** The check that the committed `THIRD_PARTY_NOTICES.md` matches what upstream's generator writes from the installed manifests. */
+export const NOTICES_ID = 'generated:notices'
+
+/**
+ * Whether a changed path can change the third-party notices: a manifest, the lockfile, the notices file or its generator.
+ * @param path - a changed path, relative to the repository root.
+ * @returns whether the notices check must run.
+ */
+export function affectsNotices(path: string): boolean {
+  return path === 'pnpm-lock.yaml' || path === 'package.json' || path.endsWith('/package.json') || path === 'THIRD_PARTY_NOTICES.md' || path.startsWith('scripts/gen-third-party-notices')
+}
 /** C16's parity overlay, which the parity replay hands to every snapshot adapter through `DSH_SNAPSHOT_PATCH`. */
 const PARITY_OVERLAY = { DSH_SNAPSHOT_PATCH: PARITY_OVERLAY_PATH }
 
@@ -318,6 +330,18 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       inputs: [`${DOCS_SITE_DIR}/**`, 'delo/docs/**', 'delo/apps/release/package.json'],
       tiers: ['changed', 'full'],
       cpus: 2,
+    },
+    // Upstream's notices spec runs only in upstream's suite, so a Delo dependency added without regenerating the file passed every other check.
+    {
+      id: NOTICES_ID,
+      group: 'generate',
+      title: 'The committed third-party notices match the installed manifests (`scripts/gen-third-party-notices.ts --check`)',
+      cwd: '',
+      command: ['node_modules/.bin/tsx', 'scripts/gen-third-party-notices.ts', '--check'],
+      needs: [],
+      inputs: ['pnpm-lock.yaml', '**/package.json', 'THIRD_PARTY_NOTICES.md', 'scripts/gen-third-party-notices.ts'],
+      tiers: ['changed', 'full'],
+      cpus: 1,
     },
     { id: 'generate:native', group: 'generate', title: 'The host\'s native system addon, which upstream\'s suite loads (`pnpm run build:native-system`)', cwd: '', command: ['pnpm', 'run', '--silent', 'build:native-system'], needs: [], tiers: [], cpus: 2 },
     {
@@ -562,6 +586,9 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     } else if (check.id === 'tests:snapshots') {
       const upstream = paths.find(path => !path.startsWith('delo/') && affectsUpstreamRuntime(path))
       if (upstream !== undefined) pick(check, `upstream-owned code changed (${upstream})`)
+    } else if (check.id === NOTICES_ID) {
+      const manifest = paths.find(affectsNotices)
+      if (manifest !== undefined) pick(check, `a manifest, the lockfile or the notices changed (${manifest})`)
     } else if (check.id === DOCS_SITE_ID) {
       const site = paths.find(path => path.startsWith(`${DOCS_SITE_DIR}/`) || path.startsWith('delo/docs/') || path === 'delo/apps/release/package.json')
       if (site !== undefined) pick(check, `the documentation site or its pages changed (${site})`)
