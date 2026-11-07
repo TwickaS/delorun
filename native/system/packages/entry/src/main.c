@@ -103,6 +103,23 @@ struct landlock_path_beneath_attr {
 #define __NR_landlock_add_rule 445
 #define __NR_landlock_restrict_self 446
 #endif
+#ifndef __NR_openat2
+#define __NR_openat2 437
+#endif
+
+/*
+ * openat2(2)'s `struct open_how` and the one resolve flag the launcher uses,
+ * verbatim from the kernel's UAPI (Linux 5.6, older than every Landlock
+ * kernel). RESOLVE_NO_SYMLINKS refuses a symbolic link in any component, so a
+ * grant root that was swapped for a link after the caller checked it fails
+ * the open instead of granting the link's target.
+ */
+struct open_how {
+  uint64_t flags;
+  uint64_t mode;
+  uint64_t resolve;
+};
+#define RESOLVE_NO_SYMLINKS 0x04
 
 /*
  * Every fatal launcher error prints `landlock-run: <message>` to stderr
@@ -192,11 +209,13 @@ static uint64_t fs_mask_for_abi(long abi) {
 
 /* Add one path-beneath rule; 0 on success, else the exit code. */
 static int add_rule(int ruleset_fd, const char *path, uint64_t access) {
-  int path_fd = open(path, O_PATH | O_CLOEXEC);
+  struct open_how how = { .flags = O_PATH | O_CLOEXEC, .mode = 0, .resolve = RESOLVE_NO_SYMLINKS };
+  int path_fd = (int)syscall(__NR_openat2, AT_FDCWD, path, &how, sizeof how);
   if (path_fd < 0) {
-    /* Fail closed on an unopenable grant root: silently narrowing the
-     * granted set would be safe, but running with a profile the caller did
-     * not get is not worth the ambiguity. */
+    /* Fail closed on an unopenable grant root, including one that names a
+     * symbolic link in any component: silently narrowing the granted set
+     * would be safe, but running with a profile the caller did not get is
+     * not worth the ambiguity. */
     fprintf(stderr, "landlock-run: cannot open rule path: %s: %s\n", path, strerror(errno));
     return EXIT_LAUNCHER_FAILURE;
   }

@@ -134,4 +134,24 @@ const expectedNotice = enforcement === 'partial' ? `${PARTIAL_NOTICE}\n` : '';
   assert.ok(!fs.existsSync(marker), 'the command must never run when the launcher fails');
 }
 
+// --- fail closed: a grant naming a symbolic link, in its last or an earlier component, is refused ---
+{
+  const work = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nalr-launcher-link-')));
+  const target = path.join(work, 'target');
+  fs.mkdirSync(target);
+  fs.symlinkSync(target, path.join(work, 'link'));
+  fs.symlinkSync(work, path.join(work, 'parent-link'));
+  const marker = path.join(target, 'written');
+  for (const grant of [path.join(work, 'link'), path.join(work, 'parent-link', 'target')]) {
+    const linked = run(['--rw', grant, '--', '/bin/sh', '-c', `echo x > ${marker}`]);
+    assert.equal(linked.status, LAUNCHER_FAILURE_EXIT, linked.stderr);
+    assert.match(linked.stderr, /cannot open rule path/);
+    assert.ok(!fs.existsSync(marker), 'a grant through a link must not run the command');
+  }
+  const direct = run(['--ro', '/', '--rw', target, '--', '/bin/sh', '-c', `echo x > ${marker}`]);
+  assert.equal(direct.status, 0, direct.stderr);
+  assert.ok(fs.existsSync(marker), 'the same grant without the link lands');
+  fs.rmSync(work, { recursive: true, force: true });
+}
+
 console.log('launcher.test: ok');

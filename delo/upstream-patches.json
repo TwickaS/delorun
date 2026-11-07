@@ -2585,6 +2585,21 @@
       "path": "packages/fs/fs-sandbox/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the protected-home sentences."
+    },
+    {
+      "path": "native/system/packages/entry/src/main.c",
+      "class": "security",
+      "reason": "Protected home (C1), review of #66: `landlock-run` opens every grant root with `openat2(RESOLVE_NO_SYMLINKS)` instead of `open(O_PATH)`, so a grant path swapped for a symbolic link between the caller's check and the launch fails the run (exit 125, `cannot open rule path`) instead of granting the link's target; the review won a write grant on the home in 1 of 52 races without it. `struct open_how` and the flag are defined locally, as the Landlock UAPI is. Callers must pass resolved paths; sandbox-local does. Stricter only; the CLI contract changes, so the native package family needs a version bump and release note before it ships."
+    },
+    {
+      "path": "native/system/docs/cli-contract.md",
+      "class": "delo-feature",
+      "reason": "Protected home (C1): states that grant paths must name no symbolic link in any component and that such a grant fails closed with exit 125."
+    },
+    {
+      "path": "native/system/test/launcher.test.js",
+      "class": "delo-feature",
+      "reason": "Protected home (C1): a grant through a link in its last or an earlier component exits 125 without running the command, and the same grant by its resolved path lands."
     }
   ],
   "retired": []
