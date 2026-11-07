@@ -383,6 +383,11 @@ describe('the machine budget', () => {
     expect(env).toEqual({ PATH: '/usr/bin', HOME: '/home/me', TMPDIR: '/dev/shm/run', TMP: '/dev/shm/run', TEMP: '/dev/shm/run', NO_COLOR: '1', FORCE_COLOR: '0' })
   })
 
+  it('hands checks no ambient NODE_ENV, so the invoking shell\'s value cannot pick React\'s production build in the client lane', () => {
+    const env = checkEnvironment({ PATH: '/usr/bin', NODE_ENV: 'production', HOME: '/home/me' }, '/dev/shm/run')
+    expect(env).not.toHaveProperty('NODE_ENV')
+  })
+
   it('confines checks to the Linux side of WSL: no Windows PATH directories, no WSL interop variables', () => {
     const env = checkEnvironment({ PATH: '/usr/bin:/mnt/c/Windows/system32:/usr/local/bin', WSL_DISTRO_NAME: 'Ubuntu', WSL_INTEROP: '/run/WSL/1_interop', WSLENV: 'X', DISPLAY: ':0', NoDefaultCurrentDirectoryInExePath: '1' }, '/tmp/run')
     expect(env['PATH']).toBe('/usr/bin:/usr/local/bin')

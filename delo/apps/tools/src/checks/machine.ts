@@ -170,18 +170,23 @@ function confineToLinux(env: NodeJS.ProcessEnv): void {
 
 /**
  * The environment every check inherits: this process's, without git's
- * repository variables, confined to the Linux side of WSL, with the run's
- * scratch directory as the temporary directory and without colour. Git exports
- * `GIT_DIR`, `GIT_INDEX_FILE` and others to a hook's processes; a test that
- * runs git in a fixture repository would otherwise act on this repository
- * instead, as a pre-push run once did when upstream fixtures set `core.bare`
- * and `user.name` in its config.
+ * repository variables and without the invoking shell's `NODE_ENV`, confined
+ * to the Linux side of WSL, with the run's scratch directory as the temporary
+ * directory and without colour. Git exports `GIT_DIR`, `GIT_INDEX_FILE` and
+ * others to a hook's processes; a test that runs git in a fixture repository
+ * would otherwise act on this repository instead, as a pre-push run once did
+ * when upstream fixtures set `core.bare` and `user.name` in its config. An
+ * inherited `NODE_ENV` would decide how CommonJS dependencies resolve in the
+ * test lanes: React's entry then loads its production build, whose `act`
+ * throws under @testing-library/react. Unset, vitest defaults it to `test`,
+ * the value upstream's CI specs run under; build tools keep their own
+ * production defaults.
  * @param env - the environment to start from.
  * @param scratch - the run's scratch directory.
  * @returns a new environment.
  */
 export function checkEnvironment(env: NodeJS.ProcessEnv, scratch: string): NodeJS.ProcessEnv {
-  const clean: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('GIT_')))
+  const clean: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('GIT_') && name !== 'NODE_ENV'))
   confineToLinux(clean)
   return { ...clean, TMPDIR: scratch, TMP: scratch, TEMP: scratch, NO_COLOR: '1', FORCE_COLOR: '0' }
 }
