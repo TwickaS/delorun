@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { contentId } from '../src/checks/cache.ts'
 import type { Planned } from '../src/checks/plan.ts'
 import { runPlan } from '../src/checks/run.ts'
+import { prePushBase } from '../src/run-checks.ts'
 import { findTreePass, readTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreePassWrite } from '../src/checks/tree-pass.ts'
 
 const temporary: string[] = []
@@ -308,5 +309,30 @@ describe('the tree pass record', () => {
     expect(treePassEnabled({ noCache: false }, { CI: '1' })).toBe(false)
     expect(treePassEnabled({ noCache: false }, { DELO_FULL_GATE: '1' })).toBe(false)
     expect(treePassEnabled({ noCache: false }, { DELO_FULL_GATE: '0' })).toBe(true)
+  })
+})
+
+describe('the v5 fast-forward after a branch push', () => {
+  it('is covered by the record a branch push left for the same tree, measured from the merge base with origin/v5', async () => {
+    const root = makeRepo()
+    const base = headOf(root)
+    git(root, ['checkout', '-q', '-b', 'feature'])
+    writeFileSync(join(root, 'src', 'a.txt'), 'first\n')
+    git(root, ['commit', '-q', '-am', 'first'])
+    const previousTip = headOf(root)
+    writeFileSync(join(root, 'src', 'a.txt'), 'second\n')
+    git(root, ['commit', '-q', '-am', 'second'])
+    const head = headOf(root)
+    // The branch was pushed once at `previousTip`; the gate measures from the v5 merge base, not that tip.
+    expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${previousTip}\n`, 'v5', false)).toBe(base)
+    const plan = [check('a', PASS), check('boundary', PASS, { history: true })]
+    const facts = factsFor(root)
+    expect((await runAndRecord(root, plan, facts)).recorded).toBe(true)
+
+    git(root, ['checkout', '-q', 'v5'])
+    git(root, ['merge', '-q', '--ff-only', 'feature'])
+    expect(prePushBase(root, `refs/heads/v5 ${head} refs/heads/v5 ${base}\n`, 'v5', false)).toBe(base)
+    expect(lookup(root, plan, facts)).toMatchObject({ hit: true })
+    expect(lookup(root, [...plan, check('extra', PASS)], facts)).toEqual({ hit: false, reason: 'the record has no extra' })
   })
 })

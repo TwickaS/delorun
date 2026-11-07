@@ -12,8 +12,9 @@
  * - `--pre-commit` runs the repository gates marked `staged` over the staged
  *   paths, and `git diff --cached --check`, within a budget of five seconds
  *   (`budgets.json`).
- * - `--pre-push` runs what changed since the remote branch's tip, or, for a new
- *   branch, since its merge base with `v5`; the full gate when a pushed ref is
+ * - `--pre-push` runs what changed since the older of the remote branch's tip and
+ *   its merge base with `origin/v5` (or, for a new branch without `origin/v5`, its
+ *   merge base with `v5`); the full gate when a pushed ref is
  *   not `HEAD` or `DELO_FULL_GATE=1` is set.
  * - `--changed` (`pnpm check`) runs what changed since `--base` (default `v5`).
  * - No argument runs the full gate (`pnpm check:full` adds `--no-cache`).
@@ -48,7 +49,7 @@ import { catalog, criticalPath, select, selectPreCommit, type Budgets, type Chec
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { readWebSpecs } from './checks/web.ts'
-import { git, repositoryRoot } from './git.ts'
+import { git, repositoryRoot, runGit } from './git.ts'
 
 /** Where the runner keeps its state, relative to the repository root. */
 const CACHE_DIR = 'node_modules/.cache/delo-checks'
@@ -202,29 +203,48 @@ const ZERO = /^0+$/
 
 /**
  * The commit a push's checks start from, from the lines git's pre-push hook reads (`<local ref> <local sha> <remote ref> <remote sha>`).
+ * A push of `v5` starts from the remote `v5` tip. A push of any other branch starts from the older of its remote tip and its
+ * merge base with `origin/v5`, so the record it leaves covers the later fast-forward of `v5` to the same tree.
  * @param root - the repository root.
  * @param input - the hook's standard input.
- * @param base - the integration branch a new branch is measured from.
+ * @param base - the integration branch a new branch is measured from when `origin/v5` is absent.
  * @param fullGate - whether the environment asks for the full gate.
- * @returns the remote branch's tip, or a new branch's merge base with `base`; undefined for the full gate.
+ * @returns the start commit; undefined for the full gate.
  */
 export function prePushBase(root: string, input: string, base: string, fullGate: boolean): string | undefined {
   if (fullGate) return undefined
   const head = git(root, ['rev-parse', 'HEAD']).trim()
   const pushes = lines(input).map(line => line.split(' ')).filter(fields => fields.length === 4 && !ZERO.test(fields[1] ?? ''))
   if (pushes.length !== 1 || pushes[0]?.[1] !== head) return undefined
-  const remote = pushes[0][3] ?? ''
-  if (!ZERO.test(remote)) {
-    // A remote tip this clone lacks, such as one pushed from elsewhere, cannot be diffed against.
-    try {
-      git(root, ['cat-file', '-e', `${remote}^{commit}`])
-      return remote
-    } catch (error) {
-      void error
-      return undefined
-    }
-  }
-  return git(root, ['merge-base', base, 'HEAD']).trim()
+  const [, , remoteRef = '', remote = ''] = pushes[0]
+  // A remote tip this clone lacks, such as one pushed from elsewhere, cannot be diffed against.
+  const tip = ZERO.test(remote) || !commitExists(root, remote) ? undefined : remote
+  const v5Base = remoteRef === 'refs/heads/v5' ? undefined : mergeBase(root, 'origin/v5')
+  if (v5Base === undefined) return tip ?? (ZERO.test(remote) ? mergeBase(root, base) : undefined)
+  // The older of the two starts the wider range, which the later fast-forward of v5 needs.
+  if (tip !== undefined && runGit(root, ['merge-base', '--is-ancestor', tip, v5Base]).status === 0) return tip
+  return v5Base
+}
+
+/**
+ * Whether a revision names a commit this clone has.
+ * @param root - the repository root.
+ * @param ref - the revision.
+ * @returns true when `ref^{commit}` resolves.
+ */
+function commitExists(root: string, ref: string): boolean {
+  return runGit(root, ['cat-file', '-e', `${ref}^{commit}`]).status === 0
+}
+
+/**
+ * The merge base of a ref and HEAD.
+ * @param root - the repository root.
+ * @param ref - the ref to merge with HEAD.
+ * @returns the merge base, or undefined when the ref does not exist or shares no history with HEAD.
+ */
+function mergeBase(root: string, ref: string): string | undefined {
+  const run = runGit(root, ['merge-base', ref, 'HEAD'])
+  return run.status === 0 ? run.stdout.trim() : undefined
 }
 
 /**
