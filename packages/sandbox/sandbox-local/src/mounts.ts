@@ -72,6 +72,14 @@ export function deviceName(dev: bigint): string {
   return `${String(major)}:${String(minor)}`
 }
 
+/** One other path that reaches a protected path, and the mount it is reached through. */
+export interface MountAlias {
+  /** The alias path. */
+  readonly path: string
+  /** The mount point of the mount that reaches it. */
+  readonly mountPoint: string
+}
+
 /** A stat that reports absence as `undefined`. */
 function statOf(path: string): BigIntStats | undefined {
   try {
@@ -89,9 +97,10 @@ function statOf(path: string): BigIntStats | undefined {
  * `path` itself is not an alias, because it is reached through `path`.
  * @param path - a canonical path.
  * @param mounts - the mount table.
- * @returns the aliases, without `path` itself; none when `path` does not exist or its mount is not in the table.
+ * @returns the aliases with the mounts that reach them, without `path` itself; none when `path` does not exist or its
+ *   mount is not in the table.
  */
-export function mountAliases(path: string, mounts: readonly MountEntry[]): string[] {
+export function mountAliases(path: string, mounts: readonly MountEntry[]): MountAlias[] {
   const own = statOf(path)
   if (own === undefined) return []
   const device = deviceName(own.dev)
@@ -102,7 +111,7 @@ export function mountAliases(path: string, mounts: readonly MountEntry[]): strin
   }
   if (containing === undefined) return []
   const inFilesystem = posix.join(containing.root, posix.relative(containing.mountPoint, path))
-  const aliases = new Set<string>()
+  const aliases = new Map<string, MountAlias>()
   for (const entry of mounts) {
     if (entry.device !== device) continue
     // A mount of the path or of a directory above it reaches the path itself; a mount of a directory inside it
@@ -114,9 +123,11 @@ export function mountAliases(path: string, mounts: readonly MountEntry[]): strin
     if (candidate === original || pathWithin(candidate, path)) continue
     const found = statOf(candidate)
     const expected = covers ? own : statOf(original)
-    if (found !== undefined && expected !== undefined && found.dev === expected.dev && found.ino === expected.ino) aliases.add(candidate)
+    if (found !== undefined && expected !== undefined && found.dev === expected.dev && found.ino === expected.ino) {
+      aliases.set(candidate, { path: candidate, mountPoint: entry.mountPoint })
+    }
   }
-  return [...aliases]
+  return [...aliases.values()]
 }
 
 /** Where macOS mounts the Data volume; `/Users`, `/private` and the other firmlinked paths reach it under here. */

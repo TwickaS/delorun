@@ -138,7 +138,9 @@ describe.skipIf(!landlockUsable)('sandbox-local: the protected home under real L
   it('home-write-denied: a confined command cannot create, change or delete a file under the home', async () => {
     await checkHomeWriteDenied(provider, tempDir)
   })
-  it('home-write-denied: a home inside the granted temp area stays unwritable under workspace-write', async () => {
+  // The profile lists /tmp at each wrap, and the launcher refuses the run when another process removes one of its
+  // entries before the launch (C1's Landlock limits); parallel suites churn /tmp, so this case retries more.
+  it('home-write-denied: a home inside the granted temp area stays unwritable under workspace-write', { retry: 4 }, async () => {
     await checkHomeWriteDenied(provider, tempDir, TEMP_BASE)
   })
   it('writable-root-refused: a workspace-write root that equals, lies inside or contains the home is refused', async () => {

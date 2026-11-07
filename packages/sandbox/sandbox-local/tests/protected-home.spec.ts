@@ -124,6 +124,8 @@ describe('resolveProtection with aliases', () => {
     symlinkSync(home, join(data, home), 'dir')
     const protection = resolveProtection({ home, readable: [], deniedSockets: [] }, aliasMount(home, alias), data)
     expect(protection.homeAliases).toEqual([join(alias, basename(home)), join(data, home)])
+    // Landlock leaves out the whole second mount, and the firmlink spelling itself.
+    expect(protection.homeAliasMounts).toEqual([alias, join(data, home)])
   })
 
   it('shadows a denied socket at each of its mount aliases outside the home', () => {
@@ -189,19 +191,19 @@ describe('mount aliases', () => {
     const alias = join(root, 'second-mount')
     symlinkSync(dirname(home), alias, 'dir')
     const table = aliasMount(home, alias)
-    expect(mountAliases(home, table)).toEqual([join(alias, basename(home))])
+    expect(mountAliases(home, table)).toEqual([{ path: join(alias, basename(home)), mountPoint: alias }])
     // A mount whose candidate is another directory is stale or overmounted: left out.
     const other = join(root, 'other')
     mkdirSync(join(other, basename(home)), { recursive: true })
     const stale: MountEntry = { device: table[0]!.device, root: dirname(home), mountPoint: other }
-    expect(mountAliases(home, [...table, stale])).toEqual([join(alias, basename(home))])
+    expect(mountAliases(home, [...table, stale]).map(entry => entry.path)).toEqual([join(alias, basename(home))])
     expect(mountAliases(join(root, 'missing'), table)).toEqual([])
     expect(mountAliases(home, [{ device: '0:0', root: '/', mountPoint: '/' }])).toEqual([])
     // A bind mount of a directory inside the path reaches that part of it; one mounted inside the path itself, or of
     // a missing directory, is not an alias.
     const secretsBind = join(root, 'secrets-bind')
     symlinkSync(join(home, 'secrets'), secretsBind, 'dir')
-    expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'secrets'), mountPoint: secretsBind }])).toEqual([secretsBind])
+    expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'secrets'), mountPoint: secretsBind }])).toEqual([{ path: secretsBind, mountPoint: secretsBind }])
     expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'secrets'), mountPoint: join(home, 'runtimes') }])).toEqual([])
     expect(mountAliases(home, [table[0]!, { device: table[0]!.device, root: join(home, 'missing'), mountPoint: secretsBind }])).toEqual([])
     // The deepest mount containing the path decides its path inside the filesystem, whatever the table's order.
@@ -222,7 +224,7 @@ describe('mount aliases', () => {
 
 describe('bwrap profile', () => {
   it('shadows each denied socket path and hides the home under a read-only tmpfs with its readable entries bound', () => {
-    const protection: Protection = { home: '/h', homeAliases: ['/mnt/distro/h'], readable: [{ path: '/h/runtimes', source: '/h/runtimes' }], socketSpellings: [], shadowedSockets: ['/run/docker.sock'] }
+    const protection: Protection = { home: '/h', homeAliases: ['/mnt/distro/h'], homeAliasMounts: ['/mnt/distro'], readable: [{ path: '/h/runtimes', source: '/h/runtimes' }], socketSpellings: [], shadowedSockets: ['/run/docker.sock'] }
     expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)).toEqual([
       ...BASE,
       '--ro-bind', '/dev/null', '/run/docker.sock',
@@ -281,7 +283,7 @@ describe('landlock profile', () => {
     mkdirSync(join(mirror, 'inner'), { recursive: true })
     symlinkSync(home, join(mirror, 'inner', 'h'), 'dir')
     mkdirSync(join(mirror, 'inner', 'beside'))
-    const protection: Protection = { ...resolveIsolated({ home, readable: [], deniedSockets: [] }), homeAliases: [join(mirror, 'inner', 'h')] }
+    const protection: Protection = { ...resolveIsolated({ home, readable: [], deniedSockets: [] }), homeAliasMounts: [join(mirror, 'inner', 'h')] }
     const args = landlockProfileArgs({ mode: 'workspace-write', workspaceRoot: workspace }, protection)
     const grants = args.filter((_arg, index) => index % 2 === 1)
     const readOnly = args.flatMap((arg, index) => arg === '--ro' ? [args[index + 1]] : [])
@@ -299,6 +301,7 @@ describe('seatbelt profile', () => {
     const protection: Protection = {
       home: '/h',
       homeAliases: ['/System/Volumes/Data/h'],
+      homeAliasMounts: ['/System/Volumes/Data/h'],
       readable: [{ path: '/h/runtimes', source: '/h/runtimes' }],
       socketSpellings: ['/var/run/docker.sock', '/private/var/run/docker.sock'],
       shadowedSockets: [],

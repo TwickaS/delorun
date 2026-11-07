@@ -68,7 +68,7 @@ Seatbelt、bwrap 和 Landlock 在 `workspace-write` 下包含策略显式指定�
 | 规则 | bwrap | Landlock | Seatbelt | Windows ACL |
 |---|---|---|---|---|
 | 在主目录下写入 | 拒绝：在主目录及其每个别名上挂载空 tmpfs，并重新挂载为只读 | 拒绝：主目录下没有写授权 | 拒绝：在写允许之后对主目录 `deny file-write*` | 拒绝：Low 完整性令牌只能写入已授权的根目录 |
-| 在主目录下读取 | 拒绝，可读条目以只读方式绑定 | 拒绝：只授予通往主目录及其别名路径旁的读取，按启动器不跟随链接打开的解析后路径授予，从不授予这条路径上目录的其他路径，以及可读条目 | 拒绝：对主目录及其 firmlink 写法 `deny file-read*`、`file-link` 与 `file-clone`，允许可读条目 | 不受限制 |
+| 在主目录下读取 | 拒绝，可读条目以只读方式绑定 | 拒绝：只授予通往主目录路径旁的读取，整体排除到达它的其他每个挂载，按启动器不跟随链接打开的解析后路径授予，以及可读条目 | 拒绝：对主目录及其 firmlink 写法 `deny file-read*`、`file-link` 与 `file-clone`，允许可读条目 | 不受限制 |
 | 连接被拒绝的套接字 | 拒绝：把 `/dev/null` 绑定到套接字解析后的路径及其每个挂载别名上，从不绑定其目录 | 无法表达 | 拒绝：每种写法的 `remote unix-socket` 路径字面量 | 无法表达 |
 
 `RUNNER_PROTECTION` 以每个 runner 的布尔值导出此表，供消费方报告所选 runner 不强制执行哪些规则。提供方还以 `ctx.sandbox.protectedHome` 报告规范化后的主目录，[文件系统围栏](../../fs/fs-sandbox/README.zh.md)读取它来拒绝其下的写入。

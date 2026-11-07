@@ -387,7 +387,7 @@ export async function checkReadableAboveHomeDropped(make: ProviderFactory, direc
  * @returns the aliases, or the reason none exists.
  */
 export function homeMountAliases(home: string): readonly string[] | string {
-  const aliases = mountAliases(home, readMountTable())
+  const aliases = mountAliases(home, readMountTable()).map(alias => alias.path)
   return aliases.length > 0 ? aliases : `no other mount of the filesystem holding ${home} on this host`
 }
 
@@ -419,7 +419,7 @@ export async function checkHomeMountAliasDenied(make: ProviderFactory, fixture: 
 export function dockerSocketMountAliases(): readonly string[] | string {
   const unusable = rootfulDockerUnusable()
   if (unusable !== undefined) return unusable
-  const aliases = mountAliases(realpathSync.native(ROOTFUL_DOCKER_SOCKET), readMountTable())
+  const aliases = mountAliases(realpathSync.native(ROOTFUL_DOCKER_SOCKET), readMountTable()).map(alias => alias.path)
   return aliases.length > 0 ? aliases : `no other mount reaches ${ROOTFUL_DOCKER_SOCKET} on this host`
 }
 
