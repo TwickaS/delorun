@@ -25,7 +25,7 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 | 测试 | 证明什么 |
 | --- | --- |
 | `every route and upgrade answers 401 before sign-in on each reach listener` | 启动后的 web 组合注册的每条精确路由、前缀路由、upgrade 路由以及回退，以及 fixture 插件的每条路由，在每个远程访问监听器上登录前都应答 401，且没有任何 fixture handler 运行；携带会话时，同一 fixture 路由与 upgrade 则会运行。 |
-| `a plugin route is pre-login only when the profile lists it` | 提供方作为 pre-login 应答的 fixture 路由，在监听器策略列出它之前会被拒绝，在列表被移除后会再次被拒绝。 |
+| `a plugin route is pre-login only when the profile lists it` | 提供方作为登录前请求应答的 fixture 路由，在监听器策略列出它之前会被拒绝，在列表被移除后会再次被拒绝。 |
 | `a pre-login request never reaches the fallback or another route` | 一条位于允许列表中、却没有注册路由的路径会被拒绝，而不是由回退应答。 |
 | `a cookie minted with upstream's secret is refused on a reach listener` | 上游以其密钥为远程访问监听器自身的 authority 签发、且在回环监听器上可以准入的 `dsh-auth-*` cookie，在远程访问监听器上会以 `UPSTREAM_COOKIE_REFUSED` 被拒绝，即使同时带有会话 cookie 也是如此。 |
 | `launch tokens and /connect are refused on a reach listener` | 在 `token` 查询参数中携带的进程启动令牌，以及对 `/connect` 的请求，都会被拒绝，且不设置任何 cookie。 |

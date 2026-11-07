@@ -253,6 +253,8 @@
 | relay data plane | 中继数据面 | | | 转发加密字节的无状态直通服务器 |
 | self-hosted relay | 自托管中继 | | | 由本人运行的同一中继数据面 |
 | studio address | studio 地址 | | | 能够访问 home 的 studio 的地址 |
+| gate | 门控 | 门控（gate） | 网关、闸门 | 附加监听器在任何路由、upgrade 处理器或回退之前裁决每个请求的函数 |
+| pre-login | 登录前 | | 预登录 | 远程访问监听器在登录之前即可处理的请求、路由或允许列表 |
 | end-to-end encrypted reach | 端到端加密远程访问 | 端到端加密远程访问（end-to-end encrypted reach） | 零信任（指 Delo 中继） | TLS 在本人的 home 上终止的远程访问 |
 | certificate alert | 证书告警 | | | 公开证书日志显示未申请证书时的阻断性警告 |
 | owner code | 所有者验证码 | 所有者验证码（owner code） | | home 为第一台设备认领而打印的一次性代码 |
