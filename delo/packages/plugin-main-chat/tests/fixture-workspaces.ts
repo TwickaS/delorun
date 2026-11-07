@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { WorkspaceId } from '@deepseek-ai/dsh-workspace'
-import { WorkspaceRefusedError, type CreateRequest, type DeloWorkspaces, type ImportRequest, type InstructionsRequest, type InstructionsResponse, type TrashEntry, type WorkspacesListing } from '../src/index.ts'
+import { WorkspaceRefusedError, type CreateRequest, type DeloWorkspaces, type ImportRequest, type InstructionsRequest, type InstructionsResponse, type TrashEntry, type WorkspacesListing } from '@delo/plugin-workspaces/service'
 
 /** One fixture workspace, as the workspace registry stand-in lists it. */
 export interface FixtureWorkspace {

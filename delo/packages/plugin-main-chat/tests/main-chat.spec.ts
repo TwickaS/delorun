@@ -13,6 +13,8 @@ import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { ApprovalRequestId } from '@deepseek-ai/dsh-user-approval'
 import { pluginRecordOf, SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool, type ToolExecutionToken } from '@deepseek-ai/dsh-tools'
+import { WorkspaceId } from '@deepseek-ai/dsh-workspace'
+import type { DeloWorkspaces, TrashEntry, WorkspacesListing } from '@delo/plugin-workspaces/service'
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as MainChat from '../src/index.ts'
@@ -97,23 +99,25 @@ async function setup(options: { readonly listed?: Listed[], readonly reportBytes
   // Delo's workspaces service: files by workspace id, the trash, the imports, and each change it was asked for.
   const files = new Map<string, string>()
   const changes: unknown[] = []
-  const trash = [{ id: '00000000-0000-4000-8000-000000000001', directory: 'old', trashedAt: 1, deleteAt: Date.UTC(2026, 10, 30), workspaces: [{ title: 'Old', path: `${ROOT}/old` }] }]
+  const entry = { id: '00000000-0000-4000-8000-000000000001', directory: 'old', deleteAt: Date.UTC(2026, 10, 30), workspaces: [{ title: 'Old', path: `${ROOT}/old` }] } satisfies TrashEntry
+  const listing = { imports: [{ id: '00000000-0000-4000-8000-000000000002', directory: 'site', url: 'https://github.com/person/site.git', state: 'cloning', progress: null, reason: null }], trash: [entry] } satisfies WorkspacesListing
   const revisionOf = (text: string | undefined): string | null => (text === undefined ? null : createHash('sha256').update(text).digest('hex'))
-  if (options.workspacesService !== false) ctx.provide('deloWorkspaces', {
-    list: () => Promise.resolve({ workspaces: [], imports: [{ id: '00000000-0000-4000-8000-000000000002', directory: 'site', url: 'https://github.com/person/site.git', state: 'cloning', progress: null, reason: null, workspace: null, startedAt: 1, endedAt: null }], trash, trashDays: 30 }),
-    create: (request: unknown) => { changes.push(['create', request]); return Promise.resolve({ workspaces: ['ws-new'] }) },
-    startImport: (request: { readonly directory?: string }) => { changes.push(['import', request]); return Promise.resolve({ import: '00000000-0000-4000-8000-000000000003', directory: request.directory ?? 'site' }) },
-    instructions: (workspace: string) => Promise.resolve({ path: `${ROOT}/${workspace}/AGENTS.md`, text: files.get(workspace) ?? null, revision: revisionOf(files.get(workspace)), maxBytes: 65_536 }),
-    setInstructions: (request: { readonly workspace: string, readonly text: string, readonly revision: string | null }) => {
+  const deloWorkspaces: DeloWorkspaces = {
+    list: () => Promise.resolve(listing),
+    create: (request) => { changes.push(['create', request]); return Promise.resolve({ workspaces: [WorkspaceId('ws-new')] }) },
+    startImport: (request) => { changes.push(['import', request]); return Promise.resolve({ import: '00000000-0000-4000-8000-000000000003', directory: request.directory ?? 'site' }) },
+    instructions: (workspace) => Promise.resolve({ path: `${ROOT}/${workspace}/AGENTS.md`, text: files.get(workspace) ?? null, revision: revisionOf(files.get(workspace)), maxBytes: 65_536 }),
+    setInstructions: (request) => {
       if (request.revision !== revisionOf(files.get(request.workspace))) return Promise.reject(new WorkspaceRefusedError('conflict', 'the file changed since it was read'))
       changes.push(['instructions', request.workspace])
       if (request.text === '') files.delete(request.workspace)
       else files.set(request.workspace, request.text)
       return Promise.resolve()
     },
-    trash: (request: unknown) => { changes.push(['trash', request]); return Promise.resolve({ ...trash[0], id: '00000000-0000-4000-8000-000000000004', directory: 'app' }) },
-    restore: (request: unknown) => { changes.push(['restore', request]); return Promise.resolve({ workspaces: ['ws-old'] }) },
-  })
+    trash: (request) => { changes.push(['trash', request]); return Promise.resolve({ ...entry, id: '00000000-0000-4000-8000-000000000004', directory: 'app' }) },
+    restore: (request) => { changes.push(['restore', request]); return Promise.resolve({ workspaces: [WorkspaceId('ws-old')] }) },
+  }
+  if (options.workspacesService !== false) ctx.provide('deloWorkspaces', deloWorkspaces)
   // The person's answers to approval questions, in order, and the questions.
   const answers: string[] = []
   const asked: { readonly toolName: string, readonly reason?: string | undefined }[] = []
