@@ -20,7 +20,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { isAbsolute, join, parse, relative, sep } from 'node:path'
+import { isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import { ItemRetainer, TextRetainer } from '@deepseek-ai/dsh-output-retention'
@@ -28,6 +28,8 @@ import type { RetainedItems } from '@deepseek-ai/dsh-output-retention'
 import type { SubprocessHandle, SubprocessOutcome, SubprocessOutputRead, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
+import { canonicalPath, protectedReadGuard } from '@deepseek-ai/dsh-sandbox'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 
 /**
  * Default cap on the complete raw `rg` stdout the tools will parse (the
@@ -73,13 +75,15 @@ export const SEARCH_META_MAX_BYTES = 65_536
  * `--json`); `SEARCH_RAW_OUTPUT_OVERFLOW` — raw `rg` output exceeded
  * `rawOutputMaxBytes` or stayed truncated after that requested stdout budget;
  * `SEARCH_ABORTED` — the cooperative tool timeout or caller cancellation cut
- * the search short.
+ * the search short; `SEARCH_SANDBOX_DENIED` — the search root lies under the
+ * sandbox provider's protected home.
  */
 export type SearchErrorCode =
   | 'SEARCH_INVALID_PATTERN'
   | 'SEARCH_FAILED'
   | 'SEARCH_RAW_OUTPUT_OVERFLOW'
   | 'SEARCH_ABORTED'
+  | 'SEARCH_SANDBOX_DENIED'
 
 /**
  * Typed search failure. Extends {@link HarnessError} so it carries a stable
@@ -284,6 +288,37 @@ export async function runRipgrep(
   }
   const text = completeStdout(toolName, stdout, rawOutputMaxBytes)
   return { stdout: text, noMatches: outcome.exitCode === 1, workdir }
+}
+
+/**
+ * The sandbox provider's protected-read check for one finished search. A search root under the protected home is
+ * refused; under a root that contains it, each output path, which ripgrep prints beneath the root without following
+ * links below it, is mapped to its canonical path beneath the resolved root and the protected ones are dropped.
+ * @param ctx - the plugin context.
+ * @param exec - the tool run, whose session decides the sandbox mode.
+ * @param toolName - `glob` or `grep`, for the error.
+ * @param workdir - the directory ripgrep ran in.
+ * @param searchPath - the requested search root, or the workdir when omitted.
+ * @returns a predicate that is true for an output path to keep.
+ * @throws {SearchError} `SEARCH_SANDBOX_DENIED` when the root is protected.
+ */
+export function protectedSearchFilter(
+  ctx: Context,
+  exec: ToolExecution,
+  toolName: string,
+  workdir: string,
+  searchPath: string | undefined,
+): (outputPath: string) => boolean {
+  const reads = ctx.get('sandbox')?.protectedReads
+  if (reads === undefined) return () => true
+  const mode = ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
+  const refused = protectedReadGuard(reads, mode)
+  const root = resolve(workdir, searchPath ?? '.')
+  const canonicalRoot = canonicalPath(root)
+  if (refused(canonicalRoot)) {
+    throw new SearchError(`${toolName} cannot search "${searchPath ?? '.'}": file access denied under the protected home`, 'SEARCH_SANDBOX_DENIED')
+  }
+  return outputPath => !refused(join(canonicalRoot, relative(root, resolve(workdir, outputPath))))
 }
 
 /**

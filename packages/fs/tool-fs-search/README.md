@@ -76,7 +76,7 @@ Node deployments receive the `@vscode/ripgrep` platform package on supported mac
 
 ### Failures and recovery
 
-Search failures carry the package-owned codes `SEARCH_INVALID_PATTERN` (ripgrep rejected the regex or glob), `SEARCH_FAILED` (a failed launch, inaccessible target, signal kill, or malformed `--json` output), `SEARCH_RAW_OUTPUT_OVERFLOW` (raw output over the cap), and `SEARCH_ABORTED` (cooperative timeout or caller cancellation). Exit 0 is success with results and exit 1 is a successful empty search; model argument mistakes stay ordinary tool argument errors.
+Search failures carry the package-owned codes `SEARCH_INVALID_PATTERN` (ripgrep rejected the regex or glob), `SEARCH_FAILED` (a failed launch, inaccessible target, signal kill, or malformed `--json` output), `SEARCH_RAW_OUTPUT_OVERFLOW` (raw output over the cap), and `SEARCH_ABORTED` (cooperative timeout or caller cancellation). When the mounted `ctx.sandbox` provider reports `protectedReads`, a search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under it, outside its readable entries, are left out of a wider search, unless the call runs under `danger-full-access`. Exit 0 is success with results and exit 1 is a successful empty search; model argument mistakes stay ordinary tool argument errors.
 
 -----
 

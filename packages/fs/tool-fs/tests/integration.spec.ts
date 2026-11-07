@@ -10,7 +10,7 @@ import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { mountAgentLoopTestDependencies, provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -18,6 +18,8 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { PtcRuntime, type PtcRunRequest, type PtcRunResult, type PtcRunSpec } from '@deepseek-ai/dsh-ptc-runtime'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
+import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ProtectedReads } from '@deepseek-ai/dsh-sandbox'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { FsVersion } from '@deepseek-ai/dsh-fs'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -641,5 +643,69 @@ describe('current working directory', () => {
     } finally {
       await ctx.fiber.dispose()
     }
+  })
+})
+
+/** A sandbox provider stand-in that reports protected reads; it never confines anything. */
+class ProtectingProvider extends SandboxProvider {
+  static reads: ProtectedReads | undefined
+  override get protectedReads(): ProtectedReads | undefined {
+    return ProtectingProvider.reads
+  }
+  /* v8 ignore next 3 -- the read tools never confine; only protectedReads is read. */
+  confine(): Promise<ConfinedArgv> {
+    throw new Error('not used')
+  }
+}
+
+describe('the sandbox provider\'s protected home', () => {
+  let home: string
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'dsh-tool-fs-protected-'))
+    home = join(dir, '.delo')
+    await mkdir(join(home, 'secrets'), { recursive: true })
+    await mkdir(join(home, 'runtimes'), { recursive: true })
+    await mkdir(join(dir, 'sub'))
+    await mkdir(join(dir, 'other-mount', 'secrets'), { recursive: true })
+    await writeFile(join(home, 'secrets', 'key'), 'secret-key\n')
+    await writeFile(join(dir, 'other-mount', 'secrets', 'key'), 'secret-key\n')
+    await writeFile(join(home, 'runtimes', 'tool.txt'), 'runtime\n')
+    await symlink(home, join(dir, 'home-link'), 'dir')
+    await symlink(join(home, 'secrets'), join(dir, 'secrets-link'), 'dir')
+    const canonical = await realpath(dir)
+    ProtectingProvider.reads = {
+      roots: [join(canonical, '.delo'), join(canonical, 'other-mount')],
+      readable: [join(canonical, '.delo', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
+    }
+    ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(LocalFileSystem, { cwd: dir })
+    await ctx.plugin(ProtectingProvider)
+    fiber = await ctx.plugin(ToolFs)
+  })
+
+  it('refuses reading under the home, through a link, `..` or another mount of it, and reads readable entries', async () => {
+    for (const path of ['.delo/secrets/key', 'home-link/secrets/key', 'secrets-link/key', 'sub/../.delo/secrets/key', 'other-mount/secrets/key']) {
+      const result = await call('read', { file_path: path })
+      expect(result).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
+      expect(text(result)).not.toContain('secret-key')
+    }
+    expect(text(await call('read', { file_path: '.delo/runtimes/tool.txt' }))).toContain('runtime')
+  })
+
+  it('reads under the home in a session under danger-full-access', async () => {
+    ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
+    expect(text(await call('read', { file_path: '.delo/secrets/key' }))).toContain('secret-key')
+    // An agentless call resolves the deployment's policy.
+    const agentless = await executeToolFixture(ctx, { signal: testToolSignal, callId: ToolCallId('agentless-read'), name: 'read', arguments: { file_path: join(home, 'secrets', 'key') } })
+    expect(text(agentless)).toContain('secret-key')
+  })
+
+  it('reads under the home when the provider protects nothing', async () => {
+    ProtectingProvider.reads = undefined
+    expect(text(await call('read', { file_path: '.delo/secrets/key' }))).toContain('secret-key')
   })
 })

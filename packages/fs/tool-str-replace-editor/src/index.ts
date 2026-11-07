@@ -9,7 +9,7 @@ import z from '@deepseek-ai/schemastery'
 import { FsError } from '@deepseek-ai/dsh-fs'
 import type { FsInfo, FsTarget, FsWriteIntent } from '@deepseek-ai/dsh-fs'
 import { truncateWithoutSplittingSurrogatePair } from '@deepseek-ai/dsh-output-retention'
-import { sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
+import { protectedReadGuard, sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -87,16 +87,32 @@ class MutationPolicy {
   }
 }
 
+/**
+ * Resolve a model-supplied absolute path, refusing one under the sandbox provider's protected home, which every
+ * command of this tool reads.
+ * @param ctx - the plugin context.
+ * @param path - the model-supplied path.
+ * @param exec - the tool run, whose session decides the sandbox mode.
+ * @returns the resolved target.
+ * @throws {FsError} `FS_SANDBOX_DENIED` for a protected path.
+ */
 async function resolveTarget(
   ctx: Context,
   path: string,
-  signal: AbortSignal,
+  exec: ToolRunContext,
 ): Promise<FsTarget> {
   if (path.trim().length === 0) throw new Error('path must be a non-empty string')
   if (!isAbsolute(path)) {
     throw new Error(`The path ${path} is not an absolute path, it should start with \`/\`. Maybe you meant /${path}?`)
   }
-  return ctx.fs.resolve(path, { signal })
+  const target = await ctx.fs.resolve(path, { signal: exec.signal })
+  const reads = ctx.get('sandbox')?.protectedReads
+  if (reads === undefined) return target
+  const mode = ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
+  if (protectedReadGuard(reads, mode)(target.targetKey)) {
+    throw new FsError(`cannot read "${target.displayPath}": file access denied under the protected home`, 'FS_SANDBOX_DENIED')
+  }
+  return target
 }
 
 async function statExisting(
@@ -222,7 +238,7 @@ async function viewPath(
   maxOutputChars: number,
   exec: ToolRunContext,
 ): Promise<string> {
-  const target = await resolveTarget(ctx, path, exec.signal)
+  const target = await resolveTarget(ctx, path, exec)
   const info = await statExisting(ctx, target, 'view', exec)
   if (info.type === 'directory') {
     if (viewRange !== undefined) {
@@ -247,7 +263,7 @@ async function createFile(
 ): Promise<string> {
   const content = requiredForCommand(fileText, 'file_text', 'create')
   const sandboxPolicy = policy.resolve(exec)
-  const target = await resolveTarget(ctx, path, exec.signal)
+  const target = await resolveTarget(ctx, path, exec)
   if (await ctx.fs.stat(target, exec.signal) !== undefined) {
     throw new Error(`File already exists at: ${target.displayPath}. Cannot overwrite files using command \`create\`.`)
   }
@@ -285,7 +301,7 @@ async function replaceInFile(
     throw new Error('Parameter `new_str` must be omitted or contain a string for command: str_replace')
   }
   const sandboxPolicy = policy.resolve(exec)
-  const target = await resolveTarget(ctx, path, exec.signal)
+  const target = await resolveTarget(ctx, path, exec)
   const intent = await ctx.waterfall('fs/edit-intent', target, exec, () => undefined)
   const oldValue = requiredForCommand(oldStr, 'old_str', 'str_replace', false)
   const newValue = newStr ?? ''
@@ -338,7 +354,7 @@ async function insertInFile(
   if (insertLine === undefined) throw new Error('Parameter `insert_line` is required for command: insert')
   const value = requiredForCommand(newStr, 'new_str', 'insert')
   const sandboxPolicy = policy.resolve(exec)
-  const target = await resolveTarget(ctx, path, exec.signal)
+  const target = await resolveTarget(ctx, path, exec)
   const intent = await ctx.waterfall('fs/edit-intent', target, exec, () => undefined)
   const info = await statExisting(ctx, target, 'insert', exec)
   if (info.type !== 'file') {

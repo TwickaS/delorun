@@ -14,7 +14,7 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -23,6 +23,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@deepseek-ai/dsh-tools'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
+import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ProtectedReads } from '@deepseek-ai/dsh-sandbox'
 
 const testToolSignal = new AbortController().signal
 
@@ -298,5 +300,94 @@ describe('search tools over the real subprocess service + the packaged rg', () =
       expect(text(result)).toContain('subprocess failed before reporting an outcome')
       expect(text(result)).not.toContain('could not start')
     })
+  })
+})
+
+/** A sandbox provider stand-in that reports protected reads; it never confines anything. */
+class ProtectingProvider extends SandboxProvider {
+  static reads: ProtectedReads | undefined
+  override get protectedReads(): ProtectedReads | undefined {
+    return ProtectingProvider.reads
+  }
+  /* v8 ignore next 3 -- the search tools never confine; only protectedReads is read. */
+  confine(): Promise<ConfinedArgv> {
+    throw new Error('not used')
+  }
+}
+
+describe('search tools and the sandbox provider\'s protected home', () => {
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'dsh-search-protected-'))
+    const home = join(dir, '.delo')
+    await mkdir(join(home, 'secrets'), { recursive: true })
+    await mkdir(join(home, 'runtimes'), { recursive: true })
+    await mkdir(join(dir, 'sub'))
+    await mkdir(join(dir, 'other-mount', 'secrets'), { recursive: true })
+    await writeFile(join(home, 'secrets', 'key.txt'), 'needle secret\n')
+    await writeFile(join(dir, 'other-mount', 'secrets', 'key.txt'), 'needle secret\n')
+    await writeFile(join(home, 'runtimes', 'tool.txt'), 'needle runtime\n')
+    await writeFile(join(dir, 'sub', 'work.txt'), 'needle work\n')
+    await symlink(home, join(dir, 'home-link'), 'dir')
+    const canonical = await realpath(dir)
+    ProtectingProvider.reads = {
+      roots: [join(canonical, '.delo'), join(canonical, 'other-mount')],
+      readable: [join(canonical, '.delo', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
+    }
+    ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(LocalSubprocessRuntime)
+    await ctx.plugin(ProtectingProvider)
+    await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: true })
+  })
+
+  afterEach(async () => {
+    await ctx.fiber.dispose()
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('glob and grep over a workspace that contains the home leave out protected paths and keep readable entries', async () => {
+    const globbed = text(await call('glob', { pattern: '**/*.txt' }, agent()))
+    expect(globbed).toContain(join('sub', 'work.txt'))
+    expect(globbed).toContain(join('.delo', 'runtimes', 'tool.txt'))
+    expect(globbed).not.toContain('key.txt')
+    expect(globbed).not.toContain('other-mount')
+    // grep skips hidden directories, so the visible stand-in for another mount of the home shows the filter.
+    const grepped = text(await call('grep', { pattern: 'needle' }, agent()))
+    expect(grepped).toContain('needle work')
+    expect(grepped).not.toContain('needle secret')
+    expect(grepped).not.toContain('other-mount')
+    expect(text(await call('grep', { pattern: 'needle', path: '.delo/runtimes' }, agent()))).toContain('needle runtime')
+  })
+
+  it.each(['.delo', '.delo/secrets', 'home-link', 'sub/../.delo', 'other-mount'])('refuses glob and grep rooted at %s', async (path) => {
+    for (const [name, args] of [['glob', { pattern: '**/*', path }], ['grep', { pattern: 'needle', path }]] as const) {
+      const result = await call(name, args, agent())
+      expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
+      expect(text(result)).not.toContain('needle secret')
+    }
+  })
+
+  it('refuses a search with no path in a session whose workspace is the home', async () => {
+    const result = await call('glob', { pattern: '**/*' }, { session: { header: { id: 'session-home', cwd: join(dir, '.delo') } } })
+    expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
+    expect(text(result)).toContain('cannot search "."')
+  })
+
+  it('searches under the home in a session under danger-full-access', async () => {
+    const modes: string[] = []
+    ctx.provide('sandboxPolicy', { resolve: () => { modes.push('resolved'); return { mode: 'danger-full-access' } } } as never)
+    expect(text(await call('grep', { pattern: 'needle', path: 'other-mount' }, agent()))).toContain('needle secret')
+    expect(modes).toEqual(['resolved'])
+    // An agentless call resolves the deployment's policy.
+    await call('glob', { pattern: '**/*.txt', path: join(dir, 'sub') })
+    expect(modes).toEqual(['resolved', 'resolved'])
+  })
+
+  it('searches under the home when the provider protects nothing', async () => {
+    ProtectingProvider.reads = undefined
+    expect(text(await call('grep', { pattern: 'needle', path: '.delo' }, agent()))).toContain('needle secret')
   })
 })

@@ -9,7 +9,7 @@ import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { SandboxProtectedRootError, assertRootsOutsideHome, canonicalPath, pathWithin, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { SandboxProtectedRootError, assertRootsOutsideHome, canonicalPath, pathWithin, protectedReadGuard, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
 
 /** Every temp root created by this file, removed after each test. */
 const roots: string[] = []
@@ -123,5 +123,25 @@ describe('assertRootsOutsideHome', () => {
 
   it('accepts roots beside the home', () => {
     expect(() => { assertRootsOutsideHome(['/u/project', '/u/.delo-other', '/tmp'], '/u/.delo') }).not.toThrow()
+  })
+})
+
+describe('protectedReadGuard', () => {
+  const reads = { roots: ['/u/.delo', '/mnt/distro/u/.delo'], readable: ['/u/.delo/runtimes', '/mnt/distro/u/.delo/runtimes'] }
+
+  it('refuses paths under every root except the readable entries', () => {
+    const refused = protectedReadGuard(reads, 'workspace-write')
+    expect(refused('/u/.delo')).toBe(true)
+    expect(refused('/u/.delo/secrets/key')).toBe(true)
+    expect(refused('/mnt/distro/u/.delo/run/start-token')).toBe(true)
+    expect(refused('/u/.delo/runtimes/0.1.0/node')).toBe(false)
+    expect(refused('/u/.delo-other/key')).toBe(false)
+    expect(refused('/u/project/a.ts')).toBe(false)
+    expect(protectedReadGuard(reads, 'read-only')('/u/.delo/secrets/key')).toBe(true)
+  })
+
+  it('refuses nothing under danger-full-access or without protected reads', () => {
+    expect(protectedReadGuard(reads, 'danger-full-access')('/u/.delo/secrets/key')).toBe(false)
+    expect(protectedReadGuard(undefined, 'read-only')('/u/.delo/secrets/key')).toBe(false)
   })
 })

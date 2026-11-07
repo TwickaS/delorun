@@ -5,6 +5,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import { expect, it, vi } from 'vitest'
 import { FsError } from '@deepseek-ai/dsh-fs'
+import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ProtectedReads } from '@deepseek-ai/dsh-sandbox'
 import { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import { executeModelToolFixture, executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import type { PtcRunRequest, PtcRunSpec } from '@deepseek-ai/dsh-ptc-runtime'
@@ -202,4 +204,26 @@ it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('retains com
     expect(await t.bytes('first')).toBe('new\n')
     await expect(t.bytes('last')).rejects.toMatchObject({ code: 'ENOENT' })
   } finally { await chmod(locked, 0o755) }
+})
+
+it('refuses a patch whose target lies under the sandbox provider\'s protected home before reading it', async () => {
+  const t = await setup()
+  await mkdir(resolve(t.workspace, 'home'))
+  await t.file('home/key', 'old\n')
+  class ProtectingProvider extends SandboxProvider {
+    override get protectedReads(): ProtectedReads {
+      return { roots: [resolve(t.workspace, 'home')], readable: [] }
+    }
+    /* v8 ignore next 3 -- the patch tool never confines; only protectedReads is read. */
+    confine(): Promise<ConfinedArgv> {
+      throw new Error('not used')
+    }
+  }
+  await t.ctx.plugin(ProtectingProvider)
+  const readText = vi.spyOn(t.ctx.fs, 'readText')
+  const result = await call(t, patch(update('home/key')))
+  expect(result.isError).toBe(true)
+  expect(JSON.stringify(result.content)).toContain('protected home')
+  expect(readText).not.toHaveBeenCalled()
+  expect(await t.bytes('home/key')).toBe('old\n')
 })

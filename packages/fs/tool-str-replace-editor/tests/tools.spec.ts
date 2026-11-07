@@ -1,6 +1,6 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -14,6 +14,8 @@ import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as FsPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
+import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ProtectedReads } from '@deepseek-ai/dsh-sandbox'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
@@ -663,5 +665,82 @@ describe('tool-str-replace-editor', () => {
     expect(() => {
       ToolStrReplaceEditor.apply(new Context(), { description: ' ' })
     }).toThrow('description must be non-empty')
+  })
+})
+
+/** A sandbox provider stand-in that reports protected reads; it never confines anything. */
+class ProtectingProvider extends SandboxProvider {
+  static reads: ProtectedReads | undefined
+  override get protectedReads(): ProtectedReads | undefined {
+    return ProtectingProvider.reads
+  }
+  /* v8 ignore next 3 -- the read tools never confine; only protectedReads is read. */
+  confine(): Promise<ConfinedArgv> {
+    throw new Error('not used')
+  }
+}
+
+/**
+ * A protected home inside `root` with a secret and a readable entry, a link to it, a link to its `secrets/`, and a
+ * directory standing in for another mount of it, registered with {@link ProtectingProvider}.
+ */
+async function protectedHomeFixture(root: string) {
+  const home = join(root, '.delo')
+  await mkdir(join(home, 'secrets'), { recursive: true })
+  await mkdir(join(home, 'runtimes'), { recursive: true })
+  await mkdir(join(root, 'sub'), { recursive: true })
+  await writeFile(join(home, 'secrets', 'key'), 'secret-key\n')
+  await writeFile(join(home, 'runtimes', 'tool.txt'), 'runtime\n')
+  await symlink(home, join(root, 'home-link'), 'dir')
+  await symlink(join(home, 'secrets'), join(root, 'secrets-link'), 'dir')
+  const alias = join(root, 'other-mount')
+  await mkdir(join(alias, 'secrets'), { recursive: true })
+  await writeFile(join(alias, 'secrets', 'key'), 'secret-key\n')
+  const canonical = await realpath(root)
+  ProtectingProvider.reads = {
+    roots: [join(canonical, '.delo'), join(canonical, 'other-mount')],
+    readable: [join(canonical, '.delo', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
+  }
+  return { home, alias }
+}
+
+describe('the sandbox provider\'s protected home', () => {
+  it('refuses viewing or editing under the home, through a link, `..` or another mount of it, and keeps readable entries', async () => {
+    const { ctx, root, owner } = await setup({}, { sandboxMode: 'workspace-write' })
+    const { home, alias } = await protectedHomeFixture(root)
+    await ctx.plugin(ProtectingProvider)
+    for (const path of [
+      join(home, 'secrets', 'key'),
+      home,
+      join(root, 'home-link', 'secrets', 'key'),
+      join(root, 'secrets-link', 'key'),
+      join(root, 'sub', '..', '.delo', 'secrets', 'key'),
+      join(alias, 'secrets', 'key'),
+    ]) {
+      const result = await call(ctx, owner, { command: 'view', path })
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('protected home')
+    }
+    const edit = await call(ctx, owner, { command: 'str_replace', path: join(home, 'secrets', 'key'), old_str: 'secret', new_str: 'x' })
+    expect(edit.isError).toBe(true)
+    expect(await readFile(join(home, 'secrets', 'key'), 'utf8')).toBe('secret-key\n')
+    expect(text(await call(ctx, owner, { command: 'view', path: join(home, 'runtimes', 'tool.txt') }))).toContain('runtime')
+  })
+
+  it('reads under the home under danger-full-access, and without a provider that protects it', async () => {
+    const { ctx, root, owner } = await setup({}, { sandboxMode: 'danger-full-access' })
+    const { home } = await protectedHomeFixture(root)
+    await ctx.plugin(ProtectingProvider)
+    expect(text(await call(ctx, owner, { command: 'view', path: join(home, 'secrets', 'key') }))).toContain('secret-key')
+    // An agentless call resolves the deployment's mode.
+    expect(text(await call(ctx, undefined, { command: 'view', path: join(home, 'secrets', 'key') }))).toContain('secret-key')
+    // Without a sandbox policy service the protected home is refused.
+    const unconfined = await setup()
+    await protectedHomeFixture(unconfined.root)
+    await unconfined.ctx.plugin(ProtectingProvider)
+    expect(text(await call(unconfined.ctx, unconfined.owner, { command: 'view', path: join(unconfined.root, '.delo', 'secrets', 'key') }))).toContain('protected home')
+    const plain = await setup({}, { sandboxMode: 'workspace-write' })
+    await protectedHomeFixture(plain.root)
+    expect(text(await call(plain.ctx, plain.owner, { command: 'view', path: join(plain.root, '.delo', 'secrets', 'key') }))).toContain('secret-key')
   })
 })

@@ -45,7 +45,7 @@ kind: "package-reference"
 
 ### 围栏行为
 
-有效模式来自调用会话的覆盖值或升级授权，两者都未生效时才回退到部署默认值。`read-only` 以结构化 `FS_SANDBOX_DENIED` 拒绝所有变更。`workspace-write` 只允许目标规范化后位于工作区根目录、显式额外可写根目录或平台临时区域（`/tmp`、`os.tmpdir()`）之下的变更——与 Seatbelt profile 授权的可写集合相同。当挂载的 `ctx.sandbox` 提供方报告 `protectedHome` 时，`workspace-write` 还会拒绝其下的每个目标，即使它位于工作区内，使写入工具不能写入受限命令无法写入的位置；没有该目录时围栏不变。其下的读取不受围栏限制。`danger-full-access` 不加围栏直接委托。
+有效模式来自调用会话的覆盖值或升级授权，两者都未生效时才回退到部署默认值。`read-only` 以结构化 `FS_SANDBOX_DENIED` 拒绝所有变更。`workspace-write` 只允许目标规范化后位于工作区根目录、显式额外可写根目录或平台临时区域（`/tmp`、`os.tmpdir()`）之下的变更——与 Seatbelt profile 授权的可写集合相同。当挂载的 `ctx.sandbox` 提供方报告 `protectedHome` 时，`workspace-write` 还会拒绝其下的每个目标，即使它位于工作区内，使写入工具不能写入受限命令无法写入的位置；没有该目录时围栏不变。本提供方不限制读取；面向模型的读取与搜索工具通过提供方的 `protectedReads` 拒绝主目录下的读取。`danger-full-access` 不加围栏直接委托。
 
 ### 可观察的成功与失败
 

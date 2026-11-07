@@ -8,6 +8,7 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { remediateFsError } from '../error.ts'
 import type { FsSandboxController } from '../sandbox.ts'
+import { refuseProtectedRead } from '../read-target.ts'
 import { sessionResolveOptions } from '../session-cwd.ts'
 import type { PatchExecutionRequest, PatchFailure, PatchOperationRecord, PatchPlan, PlannedOperation } from './types.ts'
 
@@ -26,6 +27,8 @@ export async function planPatch(
   const targets = new Map<FsTargetKey, FsTarget>()
   const resolve = async (path: string): Promise<FsTarget> => {
     const target = await ctx.fs.resolve(path, await sessionResolveOptions(ctx, exec))
+    // The preflight reads each target before any write, so a protected one is refused here.
+    refuseProtectedRead(ctx, exec, target, request.sandboxPolicy?.mode)
     const prior = targets.get(target.targetKey)
     if (prior) return prior
     targets.set(target.targetKey, target)

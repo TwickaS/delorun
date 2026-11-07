@@ -10,7 +10,8 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { LocalSandboxProvider, RUNNER_PROTECTION, pathAliasCoverage } from '@deepseek-ai/dsh-sandbox-local'
 import type { Config } from '@deepseek-ai/dsh-sandbox-local'
 import { ALIAS_UNRELIABLE_FILESYSTEMS, DATA_VOLUME, aliasCoverage, deviceName, firmlinkAliases, mountAliases, parseMountInfo, readMountTable } from '../src/mounts.ts'
@@ -248,6 +249,28 @@ describe('alias coverage', () => {
     expect(resolveProtection(settings, [{ device, root: '/', mountPoint: '/', fsType: 'ext4' }], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('complete')
     expect(resolveProtection(settings, [{ device, root: '/', mountPoint: '/', fsType: 'overlay' }], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('unknown')
     expect(resolveProtection({ home: undefined, readable: [], deniedSockets: [socket] }, [], NO_DATA_VOLUME, 'linux').aliasCoverage).toBe('unknown')
+  })
+
+  it('reports protected reads: the home, its aliases and the readable entries under each', async () => {
+    const { home } = fixture()
+    const sandbox = await provider({ protectedHome: home, protectedHomeReadable: ['runtimes', 'missing'] })
+    const reads = sandbox.protectedReads
+    expect(reads?.roots[0]).toBe(home)
+    expect(reads?.readable).toContain(join(home, 'runtimes'))
+    expect(reads?.readable).not.toContain(join(home, 'missing'))
+    expect((await provider({})).protectedReads).toBeUndefined()
+    // The Service Definition's default protects nothing.
+    class Plain extends SandboxProvider {
+      /* v8 ignore next 3 -- never confines; only the defaults are read. */
+      confine(): Promise<ConfinedArgv> {
+        throw new Error('not used')
+      }
+    }
+    const ctx = new Context()
+    contexts.push(ctx)
+    await ctx.plugin(Plain)
+    expect(ctx.sandbox.protectedReads).toBeUndefined()
+    expect(ctx.sandbox.protectedHome).toBeUndefined()
   })
 
   it('is reported by the provider and for any path on this host', async () => {

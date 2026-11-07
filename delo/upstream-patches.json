@@ -129,7 +129,7 @@
     {
       "path": "pnpm-lock.yaml",
       "class": "delo-feature",
-      "reason": "Lockfile importers for Delo's workspace packages; regenerate with pnpm install on an upstream merge, never hand-merge. Includes `@delo/cli`'s dependency on `@deepseek-ai/dsh-sandbox-local` for setup's dialect report."
+      "reason": "Lockfile importers for Delo's workspace packages; regenerate with pnpm install on an upstream merge, never hand-merge. Includes `@delo/cli`'s dependency on `@deepseek-ai/dsh-sandbox-local` for setup's dialect report. Includes the tool-fs-search sandbox dependencies."
     },
     {
       "path": "scripts/verify-export-jsdoc.ts",
@@ -1639,7 +1639,7 @@
     {
       "path": "packages/sandbox/sandbox/src/index.ts",
       "class": "delo-feature",
-      "reason": "Container denial marker: exports `denialMarkers`, `environmentDenialMarker` and `denialOf`, and adds the optional `ConfinedArgv.environmentDenialSignatures` seam. No upstream export is removed or renamed. Protected home: also exports `assertRootsOutsideHome`, `pathWithin` and `SandboxProtectedRootError` from `roots.ts`. Adds the `SandboxProvider.protectedHome` getter (undefined by default) that in-process enforcers read."
+      "reason": "Container denial marker: exports `denialMarkers`, `environmentDenialMarker` and `denialOf`, and adds the optional `ConfinedArgv.environmentDenialSignatures` seam. No upstream export is removed or renamed. Protected home: also exports `assertRootsOutsideHome`, `pathWithin` and `SandboxProtectedRootError` from `roots.ts`. Adds the `SandboxProvider.protectedHome` getter (undefined by default) that in-process enforcers read. Adds the `protectedReads` getter and `ProtectedReads` type, and exports `protectedReadGuard`."
     },
     {
       "path": "packages/sandbox/sandbox/tests/escalation.spec.ts",
@@ -1654,17 +1654,17 @@
     {
       "path": "packages/sandbox/sandbox/README.md",
       "class": "delo-feature",
-      "reason": "Container denial marker: documents the environment marker in the model-visible section and that consumers classify it with the switch on. Protected home: documents `assertRootsOutsideHome` and `pathWithin` in the writable-roots section. Also documents the `protectedHome` getter among the seam's rules."
+      "reason": "Container denial marker: documents the environment marker in the model-visible section and that consumers classify it with the switch on. Protected home: documents `assertRootsOutsideHome` and `pathWithin` in the writable-roots section. Also documents the `protectedHome` getter among the seam's rules. Documents `protectedReads` and `protectedReadGuard`."
     },
     {
       "path": "packages/sandbox/sandbox/README.zh.md",
       "class": "delo-feature",
-      "reason": "Container denial marker: the Chinese counterpart of the environment-marker sentence added to README.md. Protected home: the Chinese counterpart of the `assertRootsOutsideHome` paragraph. Also the Chinese counterpart of the `protectedHome` rule."
+      "reason": "Container denial marker: the Chinese counterpart of the environment-marker sentence added to README.md. Protected home: the Chinese counterpart of the `assertRootsOutsideHome` paragraph. Also the Chinese counterpart of the `protectedHome` rule. Also their Chinese counterpart."
     },
     {
       "path": "packages/sandbox/sandbox/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Container denial marker: the consistency record re-recorded after the environment-marker sentence was added to README.md and its Chinese counterpart. Re-recorded again after the `assertRootsOutsideHome` paragraph."
+      "reason": "Container denial marker: the consistency record re-recorded after the environment-marker sentence was added to README.md and its Chinese counterpart. Re-recorded again after the `assertRootsOutsideHome` paragraph. Re-recorded after them."
     },
     {
       "path": "packages/sandbox/sandbox-local/tests/local.spec.ts",
@@ -2509,22 +2509,22 @@
     {
       "path": "packages/sandbox/sandbox-local/src/index.ts",
       "class": "security",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the validated Config fields `protectedHome` (canonicalised at load, refused when missing, not a directory or `/`), `protectedHomeReadable` (relative entries inside the home, refused without `protectedHome`) and `deniedSockets` (absolute paths); each wrap resolves the protection, refuses a `workspace-write` root that overlaps the home with `HOME_IN_WRITABLE_ROOT` and passes the protection to the selected runner's profile, the `runnerCommand` override included. Re-exports `RUNNER_PROTECTION` and its types. All fields default to none, so the parity composition is unchanged. Lead verdict pending review: stricter only. Overrides `protectedHome` with the canonical configured home. Review of #66: refuses at load a denied socket inside a readable entry, and refuses a writable root that overlaps any alias of the home. Adds `aliasCoverage()` on the provider and the exported `pathAliasCoverage(path)` and `ALIAS_UNRELIABLE_FILESYSTEMS`, so setup and verification report alias-dependent rules as unknown rather than enforced."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the validated Config fields `protectedHome` (canonicalised at load, refused when missing, not a directory or `/`), `protectedHomeReadable` (relative entries inside the home, refused without `protectedHome`) and `deniedSockets` (absolute paths); each wrap resolves the protection, refuses a `workspace-write` root that overlaps the home with `HOME_IN_WRITABLE_ROOT` and passes the protection to the selected runner's profile, the `runnerCommand` override included. Re-exports `RUNNER_PROTECTION` and its types. All fields default to none, so the parity composition is unchanged. Lead verdict pending review: stricter only. Overrides `protectedHome` with the canonical configured home. Review of #66: refuses at load a denied socket inside a readable entry, and refuses a writable root that overlaps any alias of the home. Adds `aliasCoverage()` on the provider and the exported `pathAliasCoverage(path)` and `ALIAS_UNRELIABLE_FILESYSTEMS`, so setup and verification report alias-dependent rules as unknown rather than enforced. Overrides `protectedReads` with the home, its aliases and the readable entries under each."
     },
     {
       "path": "packages/sandbox/sandbox/src/roots.ts",
       "class": "security",
-      "reason": "Protected home and denied sockets (C1's confinement rules): adds `pathWithin` (segment-wise containment of canonical paths) and `assertRootsOutsideHome`, which throws `SandboxProtectedRootError` with code `HOME_IN_WRITABLE_ROOT` for a writable root that equals, lies inside or contains the protected home. Upstream's root derivations are unchanged. Lead verdict pending review: stricter only, called only when a home is configured."
+      "reason": "Protected home and denied sockets (C1's confinement rules): adds `pathWithin` (segment-wise containment of canonical paths) and `assertRootsOutsideHome`, which throws `SandboxProtectedRootError` with code `HOME_IN_WRITABLE_ROOT` for a writable root that equals, lies inside or contains the protected home. Upstream's root derivations are unchanged. Lead verdict pending review: stricter only, called only when a home is configured. Adds `protectedReadGuard`, the check model-facing read tools apply to each canonical path."
     },
     {
       "path": "packages/sandbox/sandbox/tests/roots.spec.ts",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): covers `pathWithin` by path segment and `assertRootsOutsideHome` refusing a root that equals, lies inside or contains the home and accepting roots beside it."
+      "reason": "Protected home and denied sockets (C1's confinement rules): covers `pathWithin` by path segment and `assertRootsOutsideHome` refusing a root that equals, lies inside or contains the home and accepting roots beside it. Covers `protectedReadGuard`."
     },
     {
       "path": "packages/sandbox/sandbox-local/tests/protected-home.spec.ts",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): unit cases for each dialect's profile arguments with protection, the per-wrap resolution of readable entries and socket spellings, the Landlock layering (dangling links and aliases of the home or its ancestors left out, an unlistable directory failing closed), the load-time validation of every field, and the `HOME_IN_WRITABLE_ROOT` refusal. Also covers the provider's `protectedHome` getter. Review of #66: covers mountinfo parsing, device naming, alias detection and confirmation, firmlink spellings, aliases in every dialect's profile, Landlock leaving out other paths to the way and links into `secrets/`, and the load-time socket refusal. Covers alias coverage with faked mount tables: each unreliable filesystem type, a device the table does not list, and the provider's report."
+      "reason": "Protected home and denied sockets (C1's confinement rules): unit cases for each dialect's profile arguments with protection, the per-wrap resolution of readable entries and socket spellings, the Landlock layering (dangling links and aliases of the home or its ancestors left out, an unlistable directory failing closed), the load-time validation of every field, and the `HOME_IN_WRITABLE_ROOT` refusal. Also covers the provider's `protectedHome` getter. Review of #66: covers mountinfo parsing, device naming, alias detection and confirmation, firmlink spellings, aliases in every dialect's profile, Landlock leaving out other paths to the way and links into `secrets/`, and the load-time socket refusal. Covers alias coverage with faked mount tables: each unreliable filesystem type, a device the table does not list, and the provider's report. Covers `protectedReads` and the Service Definition's defaults."
     },
     {
       "path": "packages/sandbox/sandbox-local/tests/protected-home.ts",
@@ -2574,17 +2574,17 @@
     {
       "path": "packages/fs/fs-sandbox/README.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): documents that `workspace-write` denies targets under the provider's `protectedHome` and that reads there are not fenced."
+      "reason": "Protected home and denied sockets (C1's confinement rules): documents that `workspace-write` denies targets under the provider's `protectedHome` and that reads there are not fenced. States that the read and search tools, not this provider, fence reads under the home."
     },
     {
       "path": "packages/fs/fs-sandbox/README.zh.md",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the protected-home sentences."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the Chinese counterpart of the protected-home sentences. Also the Chinese counterpart of that statement."
     },
     {
       "path": "packages/fs/fs-sandbox/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the protected-home sentences."
+      "reason": "Protected home and denied sockets (C1's confinement rules): the consistency record re-recorded after the protected-home sentences. Re-recorded after it."
     },
     {
       "path": "native/system/packages/entry/src/main.c",
@@ -2635,6 +2635,116 @@
       "path": "native/system/packages/darwin-arm64/package.json",
       "class": "security",
       "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): re-recorded after the search read-fence sentence."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/README.md",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): documents `SEARCH_SANDBOX_DENIED` and the filtered results."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): the Chinese counterpart of the search read-fence sentence."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/package.json",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): adds `@deepseek-ai/dsh-sandbox` and `@deepseek-ai/dsh-sandbox-policy` peer and development dependencies for the read fence."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/src/glob.ts",
+      "class": "security",
+      "reason": "Protected home, read fence (review of #66): applies `protectedSearchFilter` to glob results."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/src/grep.ts",
+      "class": "security",
+      "reason": "Protected home, read fence (review of #66): applies `protectedSearchFilter` to grep matches."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/src/search-core.ts",
+      "class": "security",
+      "reason": "Protected home, read fence (review of #66): `protectedSearchFilter` refuses a glob or grep root under the sandbox provider's `protectedReads` with the new `SEARCH_SANDBOX_DENIED` and drops results under it from a wider search, unless the call runs under `danger-full-access`. Without protected reads nothing changes."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/tests/integration.spec.ts",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): covers glob and grep leaving out protected results, refusing roots at the home, inside it, through a link, `..` and another mount of it, a session whose workspace is the home, `danger-full-access` (also agentless) and no protected reads."
+    },
+    {
+      "path": "packages/fs/tool-fs-search/tsconfig.json",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): references the sandbox and sandbox-policy projects for the read fence."
+    },
+    {
+      "path": "packages/fs/tool-fs/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): re-recorded after the read-check paragraph."
+    },
+    {
+      "path": "packages/fs/tool-fs/README.md",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): documents the protected-home read check of `read`, `read_image` and `apply_patch`."
+    },
+    {
+      "path": "packages/fs/tool-fs/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): the Chinese counterpart of the read-check paragraph."
+    },
+    {
+      "path": "packages/fs/tool-fs/src/patch/plan.ts",
+      "class": "security",
+      "reason": "Protected home, read fence (review of #66): `apply_patch` applies the protected-read refusal to every target before its preflight reads them."
+    },
+    {
+      "path": "packages/fs/tool-fs/src/read-target.ts",
+      "class": "security",
+      "reason": "Protected home, read fence (review of #66): `refuseProtectedRead` refuses a model-facing read or patch target under the sandbox provider's `protectedReads` (the home and its aliases, outside the readable entries) with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; `read` and `read_image` apply it after resolving. Without protected reads nothing changes."
+    },
+    {
+      "path": "packages/fs/tool-fs/src/sandbox.ts",
+      "class": "security",
+      "reason": "Protected home, read fence (review of #66): `mapError` passes a `FS_SANDBOX_DENIED` through unchanged when no policy is stamped, which the protected-read refusal raises without a confining backend, instead of failing on the missing mode."
+    },
+    {
+      "path": "packages/fs/tool-fs/tests/apply-patch.spec.ts",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): covers `apply_patch` refusing a protected target before any read."
+    },
+    {
+      "path": "packages/fs/tool-fs/tests/integration.spec.ts",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): covers `read` refusing the home's secret directly, through a link to the home, a link to `secrets/`, `..` and another mount of it, reading a readable entry, and reading under `danger-full-access` (also agentless) or without protected reads."
+    },
+    {
+      "path": "packages/fs/tool-str-replace-editor/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): re-recorded after the read-check sentence."
+    },
+    {
+      "path": "packages/fs/tool-str-replace-editor/README.md",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): documents the protected-home read check."
+    },
+    {
+      "path": "packages/fs/tool-str-replace-editor/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): the Chinese counterpart of the read-check sentence."
+    },
+    {
+      "path": "packages/fs/tool-str-replace-editor/src/index.ts",
+      "class": "security",
+      "reason": "Protected home, read fence (review of #66): every command resolves its path through the protected-read refusal, so `view` cannot read or list under the protected home and its aliases outside the readable entries, unless the call runs under `danger-full-access`."
+    },
+    {
+      "path": "packages/fs/tool-str-replace-editor/tests/tools.spec.ts",
+      "class": "delo-feature",
+      "reason": "Protected home, read fence (review of #66): covers `view` and `str_replace` refusals directly, through links, `..` and another mount, the readable entry, `danger-full-access` (also agentless), no policy service, and no protected reads."
     }
   ],
   "retired": []

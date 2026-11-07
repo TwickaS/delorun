@@ -119,9 +119,9 @@ export class FsSandboxController {
    * WHILE keeping the structured `FS_SANDBOX_DENIED` code — `ToolRuntime`
    * populates `result.error` only for `HarnessError` instances, so a plain
    * `Error` would strip the code retry/observers key off. Any other error
-   * passes through unchanged. A `FS_SANDBOX_DENIED` only arises under a
-   * confining backend, which always advertises the escalation fields, so the
-   * hint always applies here.
+   * passes through unchanged, and so does a denial with no stamped policy,
+   * which only the protected-home read refusal raises without a confining
+   * backend.
    * @param error - the error thrown by the mutation.
    * @param policy - the policy stamped onto the call (names the mode in the marker).
    * @returns the error to throw — the marker `FsError` for a sandbox denial, else the original.
@@ -135,10 +135,10 @@ export class FsSandboxController {
    */
   mapError(error: unknown, policy: SandboxExecutionPolicy | undefined): unknown
   mapError(error: unknown, policy: SandboxExecutionPolicy | undefined): unknown {
-    if (!(error instanceof FsError) || error.code !== 'FS_SANDBOX_DENIED') return error
-    // A FS_SANDBOX_DENIED only arises under a confining backend, whose tool
-    // path always resolves a policy before mutation.
-    const mode = (policy as SandboxExecutionPolicy).mode
+    // Without a confining backend no policy is stamped; a protected-home read
+    // refusal can still arise there and keeps its own text.
+    if (!(error instanceof FsError) || error.code !== 'FS_SANDBOX_DENIED' || policy === undefined) return error
+    const mode = policy.mode
     return new FsError(`${sandboxDenialMarker(mode)}\n${escalationHintMarker('operation')}`, 'FS_SANDBOX_DENIED', { cause: error })
   }
 }

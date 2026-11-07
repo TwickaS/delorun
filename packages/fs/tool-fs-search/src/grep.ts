@@ -17,7 +17,7 @@ import type { GenericCallView, SearchResultView, ToolResult } from '@deepseek-ai
 import type { RetainedItems } from '@deepseek-ai/dsh-output-retention'
 import type { SpillRef } from '@deepseek-ai/dsh-spill'
 import type { GrepMatch } from './search-core.ts'
-import { SearchError, previewLine, retainGrepMatches, runRipgrep, toWorkdirRelative, trySaveFormattedResult } from './search-core.ts'
+import { SearchError, previewLine, retainGrepMatches, runRipgrep, protectedSearchFilter, toWorkdirRelative, trySaveFormattedResult } from './search-core.ts'
 import { grepSearchMeta, searchViewFromMeta } from './presentation.ts'
 import { acceptedDirectCallValue } from './direct-call.ts'
 
@@ -323,10 +323,12 @@ export function applyGrepTool(ctx: Context, caps: GrepToolCaps): void {
     async execute(args, exec) {
       const input = parseGrepArgs(args)
       const run = await runRipgrep(ctx, exec, 'grep', buildGrepCommand(input), caps.rawOutputMaxBytes, caps.graceMs, caps.stderrMaxBytes)
+      const keep = protectedSearchFilter(ctx, exec, 'grep', run.workdir, input.path)
       if (run.noMatches) return { matches: [] }
 
       const all: GrepMatch[] = []
       for (const raw of parseGrepMatches(run.stdout)) {
+        if (!keep(raw.path)) continue
         const match: GrepMatch = {
           path: toWorkdirRelative(raw.path, run.workdir),
           lineNumber: raw.lineNumber,

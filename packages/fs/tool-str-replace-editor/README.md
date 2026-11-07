@@ -52,7 +52,7 @@ A backend, optionally the policy plugin, then the tool; the editor composes with
 
 ### Failures and recovery
 
-A metadata miss from `view`, `str_replace`, or `insert` records confirmed absence before returning `FS_NOT_FOUND`, so a later `create` can recover an externally deleted path through the mounted policy's guarded-create flow; absence never authorizes `str_replace` or `insert`. Guarded mutations inherit the policy plugin's codes and remedies — `FS_NOT_OBSERVED` (read the file, then retry), `FS_STALE_VERSION` (re-read, then retry) — and sandbox denials surface as the `[sandbox: file access denied under <mode> mode]` marker. Paths must be absolute; a relative path is refused with a hint.
+A metadata miss from `view`, `str_replace`, or `insert` records confirmed absence before returning `FS_NOT_FOUND`, so a later `create` can recover an externally deleted path through the mounted policy's guarded-create flow; absence never authorizes `str_replace` or `insert`. Guarded mutations inherit the policy plugin's codes and remedies — `FS_NOT_OBSERVED` (read the file, then retry), `FS_STALE_VERSION` (re-read, then retry) — and sandbox denials surface as the `[sandbox: file access denied under <mode> mode]` marker. Paths must be absolute; a relative path is refused with a hint. Every command applies the protected-home read check to its resolved path. When the mounted `ctx.sandbox` provider reports `protectedReads`, a target under the protected home or another path that reaches it, outside its readable entries, is refused with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; plugins that read through `ctx.fs` directly are not affected.
 
 -----
 

@@ -21,7 +21,16 @@ export {
   validateEscalationArgs,
 } from './escalation.ts'
 export type { EscalationApproval, EscalationApprover, EscalationOutcome, EscalationRequest } from './escalation.ts'
-export { assertRootsOutsideHome, canonicalPath, pathWithin, workspaceWritableRoots, writableRoots, SandboxInvalidRootError, SandboxProtectedRootError } from './roots.ts'
+export {
+  assertRootsOutsideHome,
+  canonicalPath,
+  pathWithin,
+  protectedReadGuard,
+  workspaceWritableRoots,
+  writableRoots,
+  SandboxInvalidRootError,
+  SandboxProtectedRootError,
+} from './roots.ts'
 
 /**
  * File-effect policy for confined processes. `read-only` permits only required
@@ -210,6 +219,24 @@ export abstract class SandboxProvider extends Service {
   get protectedHome(): string | undefined {
     return undefined
   }
+
+  /**
+   * The paths in-process read tools must not read, as far as the provider keeps confined executions from reading
+   * them: the protected home and every other path that reaches it, with the readable entries under each. Read on
+   * every access, so a tool reads it once per call.
+   * @returns the protected reads, or `undefined` when the provider protects none.
+   */
+  get protectedReads(): ProtectedReads | undefined {
+    return undefined
+  }
+}
+
+/** Canonical paths in-process read tools must not read ({@link SandboxProvider.protectedReads}). */
+export interface ProtectedReads {
+  /** The protected home and the other paths that reach it. */
+  readonly roots: readonly string[]
+  /** The readable entries under each root, which stay readable. */
+  readonly readable: readonly string[]
 }
 
 export default SandboxProvider

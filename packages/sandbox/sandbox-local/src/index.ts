@@ -24,7 +24,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, normalize, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   LAUNCHER_BIN,
@@ -43,7 +43,7 @@ import {
   pathWithin,
   workspaceWritableRoots,
 } from '@deepseek-ai/dsh-sandbox'
-import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ConfinedSandboxMode, ProtectedReads, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { AclWriteGrant, assertTempRootOutsideWorkspace, registerAclDiagnosisSkill, tempWriteSid, workspaceWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
@@ -410,6 +410,20 @@ export class LocalSandboxProvider extends SandboxProvider {
    */
   override get protectedHome(): string | undefined {
     return this.protection.home
+  }
+
+  /**
+   * The home and its aliases found now, with the resolved readable entries under each.
+   * @returns the protected reads, or `undefined` when no home is configured.
+   * @throws {SandboxUnsupportedPolicyError} when the Linux mount table cannot be read.
+   */
+  override get protectedReads(): ProtectedReads | undefined {
+    const protection = resolveProtection(this.protection)
+    const home = protection.home
+    if (home === undefined) return undefined
+    const roots = [home, ...protection.homeAliases]
+    const entries = protection.readable.map(entry => relative(home, entry.path))
+    return { roots, readable: roots.flatMap(root => entries.map(entry => join(root, entry))) }
   }
 
   /**

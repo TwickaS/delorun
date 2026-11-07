@@ -19,7 +19,7 @@ import { realpathSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
-import type { SandboxExecutionPolicy } from './index.ts'
+import type { ProtectedReads, SandboxExecutionPolicy, SandboxMode } from './index.ts'
 
 /** An explicit directory grant cannot be enforced without changing the caller's selected path. */
 export class SandboxInvalidRootError extends HarnessError {
@@ -133,4 +133,17 @@ export function assertRootsOutsideHome(roots: readonly string[], home: string): 
   for (const root of roots) {
     if (pathWithin(root, home) || pathWithin(home, root)) throw new SandboxProtectedRootError(root, home)
   }
+}
+
+/**
+ * The check a model-facing read tool applies to each canonical path it would read, list or search: refused when it
+ * lies under a protected root and under none of the readable entries. `danger-full-access` reads everything, as
+ * confined commands in that mode do.
+ * @param reads - the provider's {@link ProtectedReads}, read once for the call; `undefined` protects nothing.
+ * @param mode - the calling session's resolved sandbox mode.
+ * @returns a predicate that is true for a path the tool must refuse.
+ */
+export function protectedReadGuard(reads: ProtectedReads | undefined, mode: SandboxMode): (path: string) => boolean {
+  if (reads === undefined || mode === 'danger-full-access') return () => false
+  return path => reads.roots.some(root => pathWithin(path, root)) && !reads.readable.some(entry => pathWithin(path, entry))
 }
