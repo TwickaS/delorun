@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["tests"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../packages/boot/app-boot" },
+    { "path": "../../../packages/client/connection/tsconfig.host.json" },
+    { "path": "../../../packages/host/webserver" },
+    { "path": "../../../packages/typert/protocol" }
+  ]
+}

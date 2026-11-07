@@ -15,6 +15,8 @@ import { isRemoteAuthority, isTrustedApiRequest } from './api-request-trust.ts'
 import { API_PATH } from './api-path.ts'
 import type { BrowserAuth } from './browser-auth.ts'
 import { Peer } from './peer.ts'
+import { LOOPBACK_LISTENER, type Admission } from './authenticator.ts'
+import { openReachListener, type HostConnectionAdmission, type ReachListener, type ReachListenerOptions, type ReachRequests } from './reach.ts'
 import type {
   PeerAdmission,
   ConnectionAdmission,
@@ -29,7 +31,6 @@ import type {
   ConnectionRpcResult,
   ConnectionRequestRejection,
   ConnectionTrustRequest,
-  HostConnectionHandle,
   HostConnectionRpc,
 } from './rpc.ts'
 
@@ -61,13 +62,13 @@ interface ConnectionServerResponse {
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** Host Connection transport and RPC registrations. */
-    connection: HostConnectionHandle
+    /** Host Connection transport, RPC registrations and reach listeners. */
+    connection: HostConnectionAdmission
   }
 }
 
 /** Host Connection service whose channel registrations belong to the caller fiber. */
-export class HostConnectionService extends Service implements HostConnectionHandle {
+export class HostConnectionService extends Service implements HostConnectionAdmission {
   /** The Peer every authenticated browser connection shares. */
   readonly browserPeer: PeerScope
   private readonly peers = new Map<PeerId, PeerRecord>()
@@ -75,6 +76,8 @@ export class HostConnectionService extends Service implements HostConnectionHand
   private disposed = false
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
+  /** Requests a reach listener dispatched, with the Peer its dispatcher admitted each for. */
+  private readonly reachRequests: ReachRequests = new WeakMap()
 
   readonly allowsRemoteAuthorities: boolean
 
@@ -125,15 +128,36 @@ export class HostConnectionService extends Service implements HostConnectionHand
     return 'rejection' in admission ? admission.rejection : undefined
   }
 
-  /** Browser requests share an owner Peer; API HTTP does not depend on an attached socket. */
+  /**
+   * Admit one request. A request a reach listener dispatched speaks for the
+   * Peer its dispatcher admitted. Any other request is a loopback request: it
+   * passes the Host/Origin fence, then the `authenticator` provider when one is
+   * loaded, else the built-in admission, where browser requests share an owner
+   * Peer and API HTTP does not depend on an attached socket.
+   */
   admit(request: ConnectionTrustRequest): PeerAdmission {
+    if (this.reachRequests.has(request)) {
+      const peer = this.reachRequests.get(request)
+      return peer === undefined || this.disposed ? { rejection: 401 } : { peer }
+    }
     if (!this.isTrusted(request)) return { rejection: 403 }
     if (this.disposed) return { rejection: 401 }
+    const authenticator = this.owner.get('authenticator')
+    return peerAdmission(authenticator === undefined ? this.builtinAdmission(request) : authenticator.admit(request, LOOPBACK_LISTENER))
+  }
+
+  /** Connection's built-in loopback admission: the signed browser cookie's shared owner Peer, or a live API Peer. */
+  builtinAdmission(request: ConnectionTrustRequest): Admission {
     const secure = this.owner.get('webServer')?.protocol === 'https:'
-    if (this.browserAuth.isAuthenticated(request, secure)) return { peer: this.browserPeer }
+    if (this.browserAuth.isAuthenticated(request, secure)) return { kind: 'admitted', peer: this.browserPeer }
     const id = this.browserAuth.authenticateApi(request, secure)
     const record = id === undefined ? undefined : this.peers.get(id)
-    return record === undefined ? { rejection: 401 } : { peer: record.peer }
+    return record === undefined ? { kind: 'refused', status: 401, code: 'NOT_SIGNED_IN' } : { kind: 'admitted', peer: record.peer }
+  }
+
+  /** Open one reach listener owned by the Context that read this service. */
+  openReachListener(options: ReachListenerOptions): Promise<ReachListener> {
+    return openReachListener(this.ctx, this.reachRequests, options)
   }
 
   /** Create one in-process Peer owned by the Context that read this service. */
@@ -189,8 +213,16 @@ export class HostConnectionService extends Service implements HostConnectionHand
 
   /**
    * Authenticate an index request; native TLS listeners mint Secure cookies.
+   * A request a reach listener dispatched is admitted only when its
+   * dispatcher admitted it for a Peer, and is otherwise answered 401.
    */
   authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean {
+    if (this.reachRequests.has(request)) {
+      if (this.reachRequests.get(request) !== undefined && !this.disposed) return true
+      response.writeHead(401, { 'cache-control': 'no-store', 'content-type': 'application/json; charset=utf-8' })
+      response.end(JSON.stringify({ error: 'NOT_SIGNED_IN' }))
+      return false
+    }
     return this.browserAuth.authorizeIndex(request, response, this.ctx.get('webServer')?.protocol === 'https:')
   }
 
@@ -298,6 +330,19 @@ export class HostConnectionService extends Service implements HostConnectionHand
         this.interceptors.delete(channel)
       }
     }, `client-connection: ${channel} rpc interceptor`)
+  }
+}
+
+/** A loopback admission from the authenticator provider, as Connection's Peer admission. */
+function peerAdmission(admission: Admission): PeerAdmission {
+  switch (admission.kind) {
+    case 'admitted': return { peer: admission.peer }
+    case 'refused': return { rejection: admission.status === 401 ? 401 : 403 }
+    case 'pre-login': return { rejection: 401 }
+    default: {
+      const unknown: never = admission
+      throw new Error(`connection: unknown admission ${JSON.stringify(unknown)}`)
+    }
   }
 }
 

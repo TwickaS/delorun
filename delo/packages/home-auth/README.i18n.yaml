@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/home-auth/README.md
+/:
+  en: 9c331bb7ca1548ca
+  zh: db0bd3656a64d5d0
+/delo-home-auth:
+  en: 1b3021e6d8bf195b
+  zh: 994c8d4269c69ba6
+/delo-home-auth/summary:
+  en: 2342376dc3f6038e
+  zh: 6202c9c69cb37d6e
+/delo-home-auth/contents:
+  en: 58b32dcb17e24bab
+  zh: 94b77ff835ae1b34
+/delo-home-auth/the-admission-denial-suite:
+  en: 46f1f21cc590ce72
+  zh: 3a807b7826f82da7
+/delo-home-auth/tests:
+  en: 9c0ca3e7960b4f62
+  zh: 6f8e2b895d0e7c3e

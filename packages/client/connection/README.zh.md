@@ -15,6 +15,7 @@ kind: "package-reference"
 
 - [使用本包](#use-this-package)
 - [浏览器认证与请求信任](#browser-authentication-and-request-trust)
+- [准入提供方与远程访问监听器](#admission-providers-and-reach-listeners)
 - [Connection generation](#connection-generation)
 - [模型体验](#model-experience)
 - [已知限制与暂缓事项](#known-limitations-and-deferred-work)
@@ -51,6 +52,15 @@ HTTPS cookie 名称与签名 audience 包含 `https:` scheme，因此即使 host
 仅供 API 使用的 `GET /connect?token=...&interactions=answer|none` 立即创建 principal 为 owner 的 Peer，返回 302、Mux 目标地址与签名 API Cookie。API 连接默认 `none`，非法或重复声明返回 400。HTTP 可先于 WebSocket 建立。一条 API socket 负责清理：重复关联返回 409，关闭时移除其 Peer，之后使用该 Cookie 的 HTTP 被拒绝。已受理 unary 调用保留请求级取消，但 Peer 释放后 `invocation.peer.ctx` 不再接受新的 effect 注册。API 调用方将 Cookie 与浏览器存储分开；两者使用相同的 authority 专属 Cookie 名称。
 
 通过认证的共享 HTTP 请求在传输请求体之前经过 `connection/request` waterfall。监听器可以拒绝新请求，或等待 `next()` 直到响应完成；释放所属 fiber 会移除准入行为。Desktop 使用此扩展点，在已批准的安装期间锁住新的 API 工作，而不取消已接纳的工作。客户端断开会中止处理函数的信号；桥接器停止写入 socket，并排空剩余响应块。WebSocket 流仍由 API Gateway 负责。
+
+<a id="admission-providers-and-reach-listeners"></a>
+## 准入提供方与远程访问监听器
+
+`Authenticator` 是 admission seam 的 Service Definition，以 `ctx.authenticator` 提供。提供方继承该类：`admit(request, listener)` 同步地根据内存中的状态返回 `admitted`（附带 Peer）、`pre-login`（附带一条路由）或 `refused`（附带状态码与代码）；`policy(listener)` 返回该监听器声明的协议、`Host` 规则、启动令牌接受情况与 pre-login 路由，对不服务的监听器返回 `undefined`；`authenticator/policy` 通报策略变更。在没有插件提供 `authenticator` 时，回环监听器使用 `ctx.connection.builtinAdmission(request)` 准入，即上文所述的启动令牌与签名 cookie 准入，行为保持不变，且任何远程访问监听器都无法打开。加载提供方后，回环监听器仍先执行 `Host`/`Origin` 栅栏，然后调用 `admit(request, 'loopback')`；提供方可以把回环决定委托给 `builtinAdmission`。
+
+`ctx.connection.openReachListener({ listener, bind })` 通过 Web 服务器的 `openListener` 打开一个远程访问监听器：`bind` 为 `loopback`（操作系统分配端口的 `127.0.0.1` TCP 端口），或为 `streams`（在调用方交入的字节流上结束 TLS）；两种形式都不接受 host 或 port。仅当已加载提供方并且它为该监听器返回有效的远程访问策略时，监听器才会打开。该策略须满足：协议为 `https`、不带启动令牌、`https` origin 不指向回环主机、回环绑定使用 `equals-address`、`streams` 绑定使用 `equals-bound-name-and-sni`，且预登录路径的唯一占位符仅为末尾的 `<…>` 段。监听器运行在注入 `authenticator` 的 fiber 中，因此它会在提供方被移除或替换之前关闭，并连同其已接受的每个连接一并关闭；它不会自行重新打开。当提供方对该监听器的策略变为无效或不存在，以及打开它的 Context 被 dispose（资源释放）时，它也会停止。
+
+在任何路由、upgrade handler 或回退运行之前，远程访问监听器的分发器对每个请求与 upgrade 请求按顺序执行以下步骤：移除名称以 `tailscale-` 开头的请求头；拒绝 `Host` 与策略地址不符的请求，返回 `421 HOST_MISMATCH`，并在 `streams` 监听器上拒绝 SNI 与地址主机名不符的请求，返回 `421 SNI_MISMATCH`；拒绝 `Origin` 与地址不符、带有 `Sec-Fetch-Site: cross-site` 的请求，或不带 `Origin` 的 upgrade，返回 `403 ORIGIN_MISMATCH`；拒绝带 `token` 查询参数的请求（返回 `401 LAUNCH_TOKEN_REFUSED`）、`/connect` 请求（返回 `401 CONNECT_REFUSED`）以及带有任何 `dsh-auth-*` cookie 的请求（返回 `401 UPSTREAM_COOKIE_REFUSED`）；然后调用 `admit`。获准的请求携带其 Peer 分发，该 Peer 由 `admit`、`admitConnection`、`requestRejection` 与 `authorizeIndex` 针对该请求返回，并附带提供方的 `setCookie`，upgrade 除外。`pre-login` 请求只有在策略列出该路由、方法匹配且不是 upgrade 时，才会到达其指名的路由；其他请求以及 `refused` 的准入结果，都以对应状态码与 `{"error":"<code>"}` 应答，且不分发任何内容。`REACH_REFUSAL_STATUS` 列出分发器的各代码。
 
 <a id="connection-generation"></a>
 ## Connection generation

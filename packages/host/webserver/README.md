@@ -60,7 +60,11 @@ Set `compression: 'gzip'` to wrap eligible socket-backed responses without chang
 
 `register(route)` adds a named `exact` or `prefix` HTTP route, `registerUpgrade(route)` adds an upgrade route for an exact pathname, and both return a disposer that removes the registration. A duplicate path within either table throws — route patterns are a composition-level contract, so a collision is a misconfiguration. HTTP matching is exact over the whole table, then longest prefix, then the fallback; upgrades match exactly and unmatched connections are closed.
 
-A named route may give `resource(request, peer?)` instead of `handler`: a function from a Fetch `Request` to a `Response`. Over HTTP only `GET` and `HEAD` reach it — any other method is answered 405 with `Allow: GET, HEAD` and its body is never read — and the request carries no Peer, the client's headers, and a URL that is the request target resolved against a placeholder origin; the client's authority stays only in the `host` header. The response is written back with backpressure and the gzip decision a handler's response gets; `HEAD` sends no body, and a client disconnect aborts `request.signal` and cancels the body. `readResource(request, peer)` returns the response the same URL would receive over HTTP, computed by the resource for `peer` (a `HEAD` read returns no body): it follows the HTTP match order, answers 404 when the path belongs to a handler or reaches a fallback that is unclaimed or a handler, answers 405 for a method other than `GET` or `HEAD`, and checks no cookie, Host, or Origin, so its caller admits the reader first.
+A named route may give `resource(request, peer?)` instead of `handler`: a function from a Fetch `Request` to a `Response`. Over HTTP only `GET` and `HEAD` reach it — any other method is answered 405 with `Allow: GET, HEAD` and its body is never read — and the request carries no Peer unless an additional listener's gate passed one, the client's headers, and a URL that is the request target resolved against a placeholder origin; the client's authority stays only in the `host` header. The response is written back with backpressure and the gzip decision a handler's response gets; `HEAD` sends no body, and a client disconnect aborts `request.signal` and cancels the body. `readResource(request, peer)` returns the response the same URL would receive over HTTP, computed by the resource for `peer` (a `HEAD` read returns no body): it follows the HTTP match order, answers 404 when the path belongs to a handler or reaches a fallback that is unclaimed or a handler, answers 405 for a method other than `GET` or `HEAD`, and checks no cookie, Host, or Origin, so its caller admits the reader first.
+
+### Additional listeners
+
+`openListener({ id, bind, gate })` opens a listener beside the configured one, serving the same routes, upgrade routes and fallback. `bind` is `{ kind: 'loopback' }`, a TCP port on `127.0.0.1` the operating system assigns and `address` reports, or `{ kind: 'streams', tls: { cert, key } }`, which has no address and ends TLS on each byte stream handed to `accept(stream)`; neither form takes a host or port. `gate(request, kind)` decides every request and upgrade request synchronously before any route, upgrade handler or the fallback runs, and may remove request headers. `refuse` writes its status, headers and body, on an upgrade as the raw response before the socket closes. `pass` dispatches the request: its `peer` reaches a resource as the Peer, its `headers` stay pinned through the route's own `setHeader`, `writeHead` and `removeHeader` calls, with `set-cookie` values and `content-security-policy` sent beside the route's rather than replacing them, and its `only` lets just the named route answer, sending its refusal to any other responder and to every upgrade. A gate that throws is answered 500, or the upgrade socket is destroyed. Ids are unique among open additional listeners. `close()` stops the listener and destroys every connection it accepted, upgraded sockets included; every additional listener also closes with the service.
 
 ### The fallback seat
 
@@ -92,7 +96,7 @@ The package is a plain route registry whose only harness vocabulary is the Peer 
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `WebServer` service: route tables, fallback seat, index rendering, matching, TLS listener, lifecycle |
+| [`src/index.ts`](src/index.ts) | `WebServer` service: route tables, fallback seat, index rendering, matching, TLS listener, gated additional listeners, lifecycle |
 | [`src/injections.ts`](src/injections.ts) | Structured `IndexInjection` rows and `renderIndexInjections` row rendering |
 | [`tests/tls-fixture.ts`](tests/tls-fixture.ts) | Generated TLS material for TLS-listener tests; another suite may materialize the same pair |
 
@@ -129,7 +133,7 @@ None; this package neither assembles nor sends a provider request.
 These limits define where the server is intentionally minimal. They are current package constraints, not a task backlog.
 
 - **No certificate lifecycle** — `tls` serves the PEM files present at activation: the carrier never provisions, renews, or watches them, and it applies Node's default TLS policy. Replacing a certificate takes a reload.
-- **No server-wide authentication or origin policy** — route owners such as `dsh-client-connection` enforce their own request policy. Binding a non-loopback address still exposes unprotected routes and static assets to that network.
+- **No server-wide authentication or origin policy on the configured listener** — route owners such as `dsh-client-connection` enforce their own request policy. Binding a non-loopback address still exposes unprotected routes and static assets to that network. Only an additional listener's gate decides every request before dispatch.
 - **Socket options are fixed** — config selects the bind host and port, while backlog and other socket settings remain internal until a deployment needs them.
 
 <a id="dev-note"></a>

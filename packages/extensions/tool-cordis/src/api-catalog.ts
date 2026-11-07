@@ -555,6 +555,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'authenticator',
+    summary: 'Admission provider.',
+    description: 'Admission provider. Subclass it and load the subclass as a plugin; it registers as `ctx.authenticator`, one provider per context. Connection\'s loopback admission calls admit after its `Host` and `Origin` fence, and each reach listener\'s dispatcher calls it after the reach checks.\n\nProviders must keep these rules:\n\n- admit is synchronous and reads only in-memory state; a provider whose state is not loaded yet refuses.\n- policy returns a policy only for listeners the provider serves. A reach listener opens only while its provider returns a policy for it, and closes when that provider is removed or replaced.\n- Each change to a returned policy is announced with `authenticator/policy`.\n- A `setCookie` on an upgrade request is never sent, because the upgrade handler writes the response; a provider rolls a session only on a request without an `Upgrade` header.',
+    methods: [
+      {
+        signature: 'abstract admit(request: ConnectionIndexRequest, listener: string): Admission',
+        description: 'Admit one request on one listener.',
+        parameters: [{ name: 'request', description: 'the request\'s headers, method and target.' }, { name: 'listener', description: 'the listener that received it.' }],
+        returns: 'the admission.',
+      },
+      {
+        signature: 'abstract policy(listener: string): ListenerPolicy | undefined',
+        description: 'The policy of one listener.',
+        parameters: [{ name: 'listener', description: 'a listener id.' }],
+        returns: 'the policy, or `undefined` when this provider does not serve the listener.',
+      },
+    ],
+  },
+  {
     key: 'authorization',
     summary: '`ctx.authorization`: a registry of credential-obtaining flows, one attempt at a time per key.',
     description: '`ctx.authorization`: a registry of credential-obtaining flows, one attempt at a time per key.',
@@ -784,70 +803,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'connection',
-    summary: 'Host `ctx.connection` members consumed by transport-independent adapters.',
-    description: 'Host `ctx.connection` members consumed by transport-independent adapters.',
+    summary: 'Host `ctx.connection`: the transport handle with the members for admission providers and reach listeners.',
+    description: 'Host `ctx.connection`: the transport handle with the members for admission providers and reach listeners.',
     methods: [
       {
-        signature: 'readonly rpc: HostConnectionRpc',
-        description: 'Generic RPC channel registry.',
-        parameters: [],
+        signature: 'builtinAdmission(request: ConnectionTrustRequest): Admission',
+        description: 'Connection\'s built-in loopback admission, which applies while no `authenticator` provider is loaded and which a provider may delegate its loopback decisions to: a valid signed browser cookie admits the shared owner Peer, a valid API cookie admits its live API Peer, and anything else is refused 401. It applies no Host or Origin fence; Connection applies the fence before it calls the provider.',
+        parameters: [{ name: 'request', description: 'the loopback request\'s headers.' }],
+        returns: 'the admission.',
       },
       {
-        signature: 'readonly fetch: HostConnectionFetch',
-        description: 'Exact Fetch routes for streaming or browser-native responses.',
-        parameters: [],
-      },
-      {
-        signature: 'readonly browserPeer: PeerScope',
-        description: 'The owner Peer every authenticated browser connection shares.',
-        parameters: [],
-      },
-      {
-        signature: 'readonly allowsRemoteAuthorities: boolean',
-        description: 'Whether this deployment accepts authorities beyond loopback: true only when a validated `trustedHosts` entry names a non-loopback hostname.',
-        parameters: [],
-      },
-      {
-        signature: 'createSharedFetchHandler(channel: \'/api\'): ConnectionFetchHandler',
-        description: 'Compose exact Fetch routes and the shared-channel RPC interceptor.',
-        parameters: [{ name: 'channel', description: 'shared channel mounted by Connection.' }],
-        returns: 'Fetch handler for trusted, authenticated requests.',
-      },
-      {
-        signature: 'requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection',
-        description: 'Apply Connection\'s Host/Origin checks and browser authentication to another Web route.',
-        parameters: [{ name: 'request', description: 'request headers from the HTTP or upgrade request.' }],
-        returns: 'rejection status, or undefined when the route may accept the request.',
-      },
-      {
-        signature: 'admit(request: ConnectionTrustRequest): PeerAdmission',
-        description: 'Admit an HTTP request against its signed browser or API credential and live Peer.',
-        parameters: [{ name: 'request', description: 'request headers from the HTTP or upgrade request.' }],
-        returns: 'the credential\'s Peer, or the rejection status.',
-      },
-      {
-        signature: 'createPeer(options: { readonly principal: Principal; readonly interactions?: \'answer\' | \'none\' }): PeerScope',
-        description: 'Create an independent in-process Peer, disposed with the Context that read `ctx.connection`.',
-        parameters: [{ name: 'options', description: 'fixed principal and optional interaction participation (default `answer`).' }],
-        returns: 'a new Peer distinct from every other Peer.',
-      },
-      {
-        signature: 'admitConnection(request: ConnectionTrustRequest): ConnectionAdmission',
-        description: 'Claim a physical socket for an API Peer; browser sockets share their owner Peer.',
-        parameters: [{ name: 'request', description: 'authenticated upgrade request headers.' }],
-        returns: 'the Peer and idempotent release, or 409 for duplicate API ownership. The carrier releases on socket termination or failed upgrade; release removes API admission synchronously without cancelling independent HTTP calls.',
-      },
-      {
-        signature: 'authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean',
-        description: 'Authenticate one frontend index request, owning a token redirect or 401. The cookie this mints is `Secure` when the mounted Web carrier serves TLS, which only that listener\'s protocol decides.',
-        parameters: [{ name: 'request', description: 'root or configured-index HTTP request.' }, { name: 'response', description: 'response owned when the result is false.' }],
-        returns: 'true only when the frontend may serve index.html.',
-      },
-      {
-        signature: 'authenticatedUrl(baseUrl: string): string',
-        description: 'Add the fresh process token to an ordinary Web application URL.',
-        parameters: [{ name: 'baseUrl', description: 'clean application URL whose authority and mount are preserved.' }],
-        returns: 'tokenized URL for initial login; a mount proxy strips its prefix before {@link authorizeIndex}.',
+        signature: 'openReachListener(options: ReachListenerOptions): Promise<ReachListener>',
+        description: 'Open one reach listener, owned by the Context that read `ctx.connection`. It needs a loaded `authenticator` provider that serves the listener, and stops when that provider is removed or replaced.',
+        parameters: [{ name: 'options', description: 'the reach listener id and its binding.' }],
+        returns: 'the open listener.',
       },
     ],
   },
@@ -4492,6 +4461,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the disposer removing the transform.',
       },
       {
+        signature: 'async openListener(options: WebListenerOptions): Promise<WebListener>',
+        description: 'Open an additional listener beside the configured one. It serves the same routes, upgrade routes and fallback, and its gate decides every request and upgrade request before any of them runs. A `loopback` listener has bound its port when the promise settles. The listener closes with this service; the caller owns closing it earlier, as an effect of its own Context.',
+        parameters: [{ name: 'options', description: 'the listener\'s id, binding and gate.' }],
+        returns: 'the open listener.',
+        throws: ['when another open additional listener has the same id, or the `streams` TLS material is unusable.'],
+      },
+      {
         signature: 'applyIndexTaps(html: string): string',
         description: 'Run an index.html body through the registered taps in registration order — called by the fallback owner on every index response it renders.',
         parameters: [{ name: 'html', description: 'the raw index.html body.' }],
@@ -4942,6 +4918,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Ask composed answerers for one decision.',
     description: 'Ask composed answerers for one decision. Return an outcome to claim the request or call `next()` to delegate. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.',
     parameters: [{ name: 'req', description: 'pending approval request.' }],
+  },
+  {
+    name: 'authenticator/policy',
+    mode: 'emit',
+    signature: '\'authenticator/policy\'(listener: string): void',
+    summary: 'The provider changed the policy of one listener.',
+    description: 'The provider changed the policy of one listener. An open reach listener reads the policy again, and stops when the provider no longer serves it.',
+    parameters: [{ name: 'listener', description: 'id of the listener whose policy changed.' }],
   },
   {
     name: 'authorization/settled',
@@ -5576,6 +5560,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AdapterRegistrationHandle {\n    (): void;\n    replace(providers: string[]): void;\n}',
   },
   {
+    name: 'Admission',
+    declaration: 'export type Admission = {\n    readonly kind: \'admitted\';\n    readonly peer: PeerScope;\n    readonly deviceId?: string;\n    readonly sessionId?: string;\n    readonly setCookie?: string;\n} | {\n    readonly kind: \'pre-login\';\n    readonly route: PreLoginRoute;\n} | {\n    readonly kind: \'refused\';\n    readonly status: 401 | 403 | 421;\n    readonly code: string;\n};',
+  },
+  {
     name: 'AdmittedPromptContentPart',
     declaration: 'export type AdmittedPromptContentPart = {\n    readonly type: \'text\';\n    readonly text: string;\n} | {\n    readonly type: \'image\';\n    readonly attachment: ImageAttachmentRef;\n} | {\n    readonly type: \'file\';\n    readonly attachment: FileAttachmentRef;\n};',
   },
@@ -6024,56 +6012,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ConfinedSandboxMode = Exclude<SandboxMode, \'danger-full-access\'>;',
   },
   {
-    name: 'ConnectionAdmission',
-    declaration: 'export type ConnectionAdmission = {\n    readonly peer: PeerScope;\n    readonly release: () => Promise<void>;\n} | {\n    readonly rejection: 401 | 403 | 409;\n};',
-  },
-  {
-    name: 'ConnectionFetchHandler',
-    declaration: 'export interface ConnectionFetchHandler {\n    requestBodyMode(request: {\n        readonly method: string;\n        readonly url: URL;\n    }): ConnectionRequestBodyMode;\n    fetch(request: Request, peer: PeerScope): Promise<Response>;\n}',
-  },
-  {
-    name: 'ConnectionFetchMethod',
-    declaration: 'export type ConnectionFetchMethod = \'GET\' | \'HEAD\' | \'POST\';',
-  },
-  {
-    name: 'ConnectionFetchRoute',
-    declaration: 'export interface ConnectionFetchRoute {\n    readonly path: string;\n    readonly methods: readonly ConnectionFetchMethod[];\n    readonly requestBody: ConnectionRequestBodyMode;\n    readonly fetch: (request: Request) => Promise<Response>;\n}',
-  },
-  {
     name: 'ConnectionIndexRequest',
     declaration: 'export interface ConnectionIndexRequest extends ConnectionTrustRequest {\n    readonly method?: string | undefined;\n    readonly url?: string | undefined;\n}',
   },
   {
-    name: 'ConnectionIndexResponse',
-    declaration: 'export interface ConnectionIndexResponse {\n    writeHead(status: number, headers?: Readonly<Record<string, string>>): unknown;\n    end(body?: string): unknown;\n}',
-  },
-  {
-    name: 'ConnectionRequestBodyMode',
-    declaration: 'export type ConnectionRequestBodyMode = \'buffered\' | \'streaming\';',
-  },
-  {
-    name: 'ConnectionRequestRejection',
-    declaration: 'export type ConnectionRequestRejection = 401 | 403 | undefined;',
-  },
-  {
-    name: 'ConnectionRpcAttachment',
-    declaration: 'export interface ConnectionRpcAttachment {\n    readonly path: readonly (string | number)[];\n    readonly bytes: Uint8Array;\n}',
-  },
-  {
-    name: 'ConnectionRpcEndpointMatcher',
-    declaration: 'export type ConnectionRpcEndpointMatcher = (endpoint: string) => boolean;',
-  },
-  {
     name: 'ConnectionRpcFailure',
     declaration: 'export interface ConnectionRpcFailure {\n    readonly code: string;\n    readonly message: string;\n    readonly details: object;\n}',
-  },
-  {
-    name: 'ConnectionRpcHandler',
-    declaration: 'export type ConnectionRpcHandler = (endpoint: string, payload: unknown, signal: AbortSignal, peer: PeerScope) => Promise<ConnectionRpcHandlerResult>;',
-  },
-  {
-    name: 'ConnectionRpcHandlerResult',
-    declaration: 'export type ConnectionRpcHandlerResult = {\n    readonly ok: true;\n    readonly value: unknown;\n    readonly attachments?: readonly ConnectionRpcAttachment[];\n} | {\n    readonly ok: false;\n    readonly error: ConnectionRpcFailure;\n};',
   },
   {
     name: 'ConnectionRpcResult',
@@ -6282,6 +6226,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DailyScheduleRecord',
     declaration: 'export interface DailyScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'daily\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly time: string;\n    readonly timeZone: string;\n    readonly scheduledAt: string;\n}',
+  },
+  {
+    name: 'DeclaredScheme',
+    declaration: 'export type DeclaredScheme = \'http\' | \'https\';',
   },
   {
     name: 'DeepSeekLlmApiExtensionMap',
@@ -6772,12 +6720,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface HookRegistration {\n    catch(handler: AnyHook): void;\n}',
   },
   {
-    name: 'HostConnectionFetch',
-    declaration: 'export interface HostConnectionFetch {\n    register(route: ConnectionFetchRoute): () => Promise<void>;\n}',
-  },
-  {
-    name: 'HostConnectionRpc',
-    declaration: 'export interface HostConnectionRpc {\n    handle(channel: string, handler: ConnectionRpcHandler): () => Promise<void>;\n    intercept(channel: \'/api\', matches: ConnectionRpcEndpointMatcher, handler: ConnectionRpcHandler): () => Promise<void>;\n}',
+    name: 'HostRule',
+    declaration: 'export type HostRule = {\n    readonly kind: \'upstream-fence\';\n} | {\n    readonly kind: \'equals-address\';\n    readonly address: string;\n} | {\n    readonly kind: \'equals-bound-name-and-sni\';\n    readonly address: string;\n};',
   },
   {
     name: 'ImageAttachmentLimits',
@@ -7006,6 +6950,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'KvUnitDescriptor',
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n    readonly layout?: \'single\' | \'per-record\';\n    readonly compatibleVersions?: readonly number[];\n}',
+  },
+  {
+    name: 'ListenerPolicy',
+    declaration: 'export interface ListenerPolicy {\n    readonly listener: string;\n    readonly scheme: DeclaredScheme;\n    readonly hostRule: HostRule;\n    readonly acceptsLaunchToken: boolean;\n    readonly preLogin: readonly PreLoginRoute[];\n}',
   },
   {
     name: 'ListVersionsOptions',
@@ -7528,10 +7476,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PatchHunk {\n    lineNumber: number;\n    context?: string;\n    oldLines: string[];\n    newLines: string[];\n    isEndOfFile: boolean;\n}',
   },
   {
-    name: 'PeerAdmission',
-    declaration: 'export type PeerAdmission = {\n    readonly peer: PeerScope;\n} | {\n    readonly rejection: 401 | 403;\n};',
-  },
-  {
     name: 'PeerId',
     declaration: 'export type PeerId = Branded<\'PeerId\'>;',
   },
@@ -7682,6 +7626,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PostToolDecision',
     declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
+  },
+  {
+    name: 'PreLoginRoute',
+    declaration: 'export interface PreLoginRoute {\n    readonly method: \'GET\' | \'POST\';\n    readonly path: string;\n}',
   },
   {
     name: 'PreparedAdapterCall',
@@ -7934,6 +7882,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'QueueAction',
     declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n};',
+  },
+  {
+    name: 'ReachListener',
+    declaration: 'export interface ReachListener {\n    readonly listener: string;\n    readonly address: WebListener[\'address\'];\n    accept(stream: Duplex): void;\n    readonly closed: Promise<void>;\n    close(): Promise<void>;\n}',
+  },
+  {
+    name: 'ReachListenerOptions',
+    declaration: 'export interface ReachListenerOptions {\n    readonly listener: string;\n    readonly bind: WebListenerBind;\n}',
   },
   {
     name: 'ReadFileLine',
@@ -10124,6 +10080,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WebFetchResultView {\n    card: \'web\';\n    kind: \'fetch\';\n    title?: string;\n    url: string;\n    statusCode: number;\n    truncated: boolean;\n}',
   },
   {
+    name: 'WebGateDecision',
+    declaration: 'export type WebGateDecision = {\n    readonly kind: \'pass\';\n    readonly peer?: PeerScope;\n    readonly headers?: OutgoingHttpHeaders;\n    readonly only?: {\n        readonly route: {\n            readonly kind: WebRouteKind;\n            readonly path: string;\n        };\n        readonly refusal: WebGateRefusal;\n    };\n} | ({\n    readonly kind: \'refuse\';\n} & WebGateRefusal);',
+  },
+  {
+    name: 'WebGateRefusal',
+    declaration: 'export interface WebGateRefusal {\n    readonly status: number;\n    readonly headers?: OutgoingHttpHeaders;\n    readonly body: string;\n}',
+  },
+  {
     name: 'WebhookDeliveryId',
     declaration: 'export type WebhookDeliveryId = Branded<\'WebhookDeliveryId\'>;',
   },
@@ -10154,6 +10118,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WebhookSourceId',
     declaration: 'export type WebhookSourceId = Branded<\'WebhookSourceId\'>;',
+  },
+  {
+    name: 'WebListener',
+    declaration: 'export interface WebListener {\n    readonly id: string;\n    readonly address: {\n        readonly host: \'127.0.0.1\';\n        readonly port: number;\n    } | undefined;\n    accept(stream: Duplex): void;\n    close(): Promise<void>;\n}',
+  },
+  {
+    name: 'WebListenerBind',
+    declaration: 'export type WebListenerBind = {\n    readonly kind: \'loopback\';\n} | {\n    readonly kind: \'streams\';\n    readonly tls: {\n        readonly cert: string;\n        readonly key: string;\n    };\n};',
+  },
+  {
+    name: 'WebListenerGate',
+    declaration: 'export type WebListenerGate = (request: IncomingMessage, kind: \'request\' | \'upgrade\') => WebGateDecision;',
+  },
+  {
+    name: 'WebListenerOptions',
+    declaration: 'export interface WebListenerOptions {\n    readonly id: string;\n    readonly bind: WebListenerBind;\n    readonly gate: WebListenerGate;\n}',
   },
   {
     name: 'WebResource',

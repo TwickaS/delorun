@@ -1594,6 +1594,33 @@ importers:
         specifier: workspace:*
         version: link:../contract-home-layout
 
+  delo/packages/home-auth:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:*
+        version: link:../../../packages/typert/protocol
+      '@delo/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
+      '@delo/contract-admission':
+        specifier: workspace:*
+        version: link:../contract-admission
+      '@delo/tools':
+        specifier: workspace:*
+        version: link:../../apps/tools
+
   delo/packages/logs:
     dependencies:
       '@delo/contract-home-layout':

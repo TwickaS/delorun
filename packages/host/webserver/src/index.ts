@@ -10,8 +10,8 @@
  */
 
 import { readFile } from 'node:fs/promises'
-import { createServer } from 'node:http'
-import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse, Server } from 'node:http'
+import { createServer, STATUS_CODES } from 'node:http'
+import type { IncomingMessage, OutgoingHttpHeader, OutgoingHttpHeaders, ServerResponse, Server } from 'node:http'
 import { createServer as createSecureServer } from 'node:https'
 import { isIP, type AddressInfo } from 'node:net'
 import { resolve } from 'node:path'
@@ -59,7 +59,8 @@ export interface WebRoute {
 
 /**
  * Answers one GET or HEAD request with a Fetch response. An HTTP request
- * arrives without a Peer and carries the client's headers; an in-process
+ * carries the client's headers and arrives without a Peer, except on an
+ * additional listener whose gate passed it with one; an in-process
  * {@link WebServer.readResource} read passes the Peer its caller admitted.
  */
 export type WebResource = (request: Request, peer?: PeerScope) => Promise<Response>
@@ -92,6 +93,90 @@ export interface TlsConfig {
   /** Private key file for the chain's leaf certificate; unencrypted PEM. */
   keyFile: string
 }
+
+/**
+ * How an additional listener receives connections. No form names a host or a
+ * port: a `loopback` listener binds `127.0.0.1` on a port the operating
+ * system assigns, and a `streams` listener has no address at all.
+ */
+export type WebListenerBind =
+  /** A TCP port on `127.0.0.1` that the operating system assigns. */
+  | { readonly kind: 'loopback' }
+  /**
+   * No address: the owner hands in byte streams it accepted elsewhere through
+   * {@link WebListener.accept}, and the listener ends TLS on each with this
+   * PEM certificate chain and unencrypted PEM key.
+   */
+  | { readonly kind: 'streams'; readonly tls: { readonly cert: string; readonly key: string } }
+
+/** A gate's refusal: the status, headers and body written instead of any route. */
+export interface WebGateRefusal {
+  readonly status: number
+  readonly headers?: OutgoingHttpHeaders
+  readonly body: string
+}
+
+/**
+ * A listener gate's decision for one request or upgrade request.
+ * - `pass` dispatches it to the matching route, upgrade handler or fallback.
+ *   `peer` is handed to a resource as the Peer the gate admitted. `headers`
+ *   are pinned on the response: a route's value for the same header is
+ *   replaced, except that `set-cookie` values are added to the route's and a
+ *   `content-security-policy` is sent beside the route's, so both apply.
+ *   `only` names the one registered route that may answer: any other route,
+ *   the fallback, and every upgrade receive `only.refusal`.
+ * - `refuse` answers with the refusal; on an upgrade it writes the status line,
+ *   headers and body to the socket and closes it.
+ */
+export type WebGateDecision =
+  | {
+    readonly kind: 'pass'
+    readonly peer?: PeerScope
+    readonly headers?: OutgoingHttpHeaders
+    readonly only?: {
+      readonly route: { readonly kind: WebRouteKind; readonly path: string }
+      readonly refusal: WebGateRefusal
+    }
+  }
+  | ({ readonly kind: 'refuse' } & WebGateRefusal)
+
+/**
+ * Decides every request and upgrade request an additional listener receives,
+ * synchronously, before any route, upgrade handler or the fallback runs. It
+ * may remove request headers. A gate that throws is answered with 500, or the
+ * upgrade socket is destroyed, and nothing is dispatched.
+ */
+export type WebListenerGate = (request: IncomingMessage, kind: 'request' | 'upgrade') => WebGateDecision
+
+/** One additional listener's identity, binding and gate. */
+export interface WebListenerOptions {
+  /** Unique among the open additional listeners. */
+  readonly id: string
+  readonly bind: WebListenerBind
+  readonly gate: WebListenerGate
+}
+
+/** An open additional listener. It serves the same routes as the configured listener. */
+export interface WebListener {
+  readonly id: string
+  /** The bound address of a `loopback` listener; `undefined` for `streams`. */
+  readonly address: { readonly host: '127.0.0.1'; readonly port: number } | undefined
+  /**
+   * Hand one accepted byte stream to a `streams` listener, which ends TLS on it.
+   * @param stream - a connected duplex stream carrying TLS records.
+   * @throws for a `loopback` listener or after {@link close}.
+   */
+  accept(stream: Duplex): void
+  /**
+   * Stop accepting and destroy every connection this listener accepted,
+   * upgraded sockets included. Idempotent.
+   * @returns a promise settling once every connection has closed.
+   */
+  close(): Promise<void>
+}
+
+/** Bind host of every `loopback` additional listener. */
+const LOOPBACK_LISTENER_HOST = '127.0.0.1'
 
 /** Web server listen, TLS, and response-compression config. */
 export interface Config {
@@ -346,6 +431,87 @@ async function writeResponse(res: ServerResponse, response: Response, head: bool
   }
 }
 
+/** Headers a gate shares with the route: both values are sent rather than the gate's replacing the route's. */
+const SHARED_GATE_HEADERS = new Set(['set-cookie', 'content-security-policy'])
+
+/** A header value as node:http's `setHeader` and `writeHead` accept it. */
+type HeaderValue = OutgoingHttpHeader | readonly string[]
+
+function headerValues(value: HeaderValue): string[] {
+  return typeof value === 'object' ? value.map(String) : [String(value)]
+}
+
+/** Merge one route-supplied header with the gate's pinned value for the same name. */
+function pinnedValue(name: string, route: HeaderValue, gate: OutgoingHttpHeader): HeaderValue {
+  return SHARED_GATE_HEADERS.has(name) ? [...headerValues(route), ...headerValues(gate)] : gate
+}
+
+/**
+ * Pin a gate's headers on one response: set them now, and keep them through
+ * the route's own `setHeader`, `writeHead` and `removeHeader` calls by the
+ * rule {@link WebGateDecision} states.
+ */
+function pinHeaders(res: ServerResponse, headers: OutgoingHttpHeaders): void {
+  const pinned = new Map<string, OutgoingHttpHeader>()
+  for (const [name, value] of Object.entries(headers)) {
+    if (value === undefined) continue
+    pinned.set(name.toLowerCase(), value)
+    res.setHeader(name, value)
+  }
+  if (pinned.size === 0) return
+  // node:http's writeHead passes its header object through `setHeader` once any
+  // header is set, so these two wrappers cover writeHead too.
+  const setHeader = res.setHeader.bind(res)
+  res.setHeader = (name, value) => {
+    const gate = pinned.get(name.toLowerCase())
+    return setHeader(name, gate === undefined ? value : pinnedValue(name.toLowerCase(), value, gate))
+  }
+  const removeHeader = res.removeHeader.bind(res)
+  res.removeHeader = (name) => {
+    removeHeader(name)
+    const gate = pinned.get(name.toLowerCase())
+    if (gate !== undefined) setHeader(name, gate)
+  }
+}
+
+/** Write a gate refusal over HTTP. */
+function writeRefusal(res: ServerResponse, refusal: WebGateRefusal): void {
+  res.writeHead(refusal.status, { ...refusal.headers, 'content-length': Buffer.byteLength(refusal.body) })
+  res.end(refusal.body)
+}
+
+/** Write a gate refusal as the raw response to an upgrade request, then close the socket. */
+function writeUpgradeRefusal(socket: Duplex, refusal: WebGateRefusal): void {
+  const lines = [`HTTP/1.1 ${String(refusal.status)} ${STATUS_CODES[refusal.status] ?? ''}`]
+  for (const [name, value] of Object.entries({ ...refusal.headers, 'content-length': Buffer.byteLength(refusal.body), connection: 'close' })) {
+    if (value === undefined) continue
+    for (const item of headerValues(value)) lines.push(`${name}: ${item}`)
+  }
+  socket.end(`${lines.join('\r\n')}\r\n\r\n${refusal.body}`)
+}
+
+/** Connections one listener owns, so its close reaches every one of them. */
+interface ListenerSockets {
+  /** Sockets an upgrade handler took over; node:http no longer tracks them. */
+  readonly upgraded: Set<Duplex>
+  /** Raw TLS connections, tracked from accept because node:http tracks them only after the handshake. */
+  readonly raw: Set<Duplex>
+}
+
+/** Close a server and destroy every connection it owns. */
+async function closeListener(server: Server, sockets: ListenerSockets): Promise<void> {
+  const serverClosed = new Promise<void>((resolve) => {
+    // A `streams` server never listened; its close callback receives ERR_SERVER_NOT_RUNNING.
+    server.close(() => { resolve() })
+  })
+  server.closeAllConnections()
+  const socketsClosed = [...sockets.upgraded, ...sockets.raw].map(socket => new Promise<void>((resolve) => {
+    socket.once('close', () => { resolve() })
+    socket.destroy()
+  }))
+  await Promise.all([serverClosed, ...socketsClosed])
+}
+
 /**
  * The browser HTTP carrier service. Activation loads any configured TLS
  * material, then listens immediately; a material or listen failure rejects
@@ -388,6 +554,8 @@ export class WebServer extends Service {
    */
   private readonly tlsConnections = new Set<Duplex>()
   private readonly indexTaps: ((html: string) => string)[] = []
+  /** Open additional listeners by id; each closes with this service. */
+  private readonly additionalListeners = new Map<string, WebListener>()
   private fallback: WebRoute['handler'] | Pick<WebResourceRoute, 'resource'> | undefined
   private server!: Server
   private listenedPort: number | undefined
@@ -526,39 +694,7 @@ export class WebServer extends Service {
 
   /** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
   async [Service.init](): Promise<void> {
-    const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
-      requests; the field is only optional on the client-side IncomingMessage type */
-      const target = new URL(req.url ?? '/', 'http://x')
-      const responder = this.responderFor(target.pathname)
-      if (responder === undefined) {
-        res.writeHead(404)
-        res.end()
-        return
-      }
-      if (typeof responder === 'function') await responder(req, res)
-      else if ('resource' in responder) await this.serveResource(req, res, target, responder.resource)
-      else await responder.handler(req, res)
-    }
-    // Last-resort guard: handle() rejecting would otherwise be an unhandled
-    // rejection killing the process on one malformed request (bad %-escape,
-    // client dropping mid-body). Per-request failures log and answer 400 —
-    // never a process exit.
-    const listener = (req: IncomingMessage, res: ServerResponse): void => {
-      const next = (): void => {
-        void handle(req, res).catch((err: unknown) => {
-          this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))
-          if (res.headersSent) {
-            res.destroy()
-            return
-          }
-          res.writeHead(400)
-          res.end()
-        })
-      }
-      if (this.gzip === undefined) next()
-      else this.gzip(req, res, next)
-    }
+    const listener = this.requestListener()
     const tls = this.tlsConfig
     // Disposal waits for in-flight acquisition and closes any listener it produces.
     await this.ctx.effect(async () => {
@@ -582,38 +718,7 @@ export class WebServer extends Service {
         })
       }
       this.server.on('upgrade', (req, socket, head) => {
-        const onError = (error: Error): void => {
-          this.ctx.logger.warn(error)
-          socket.destroy()
-        }
-        socket.on('error', onError)
-        socket.once('close', () => {
-          socket.off('error', onError)
-          this.upgradedSockets.delete(socket)
-        })
-        let route: WebUpgradeRoute | undefined
-        try {
-          /* v8 ignore next -- node:http always sets url on server requests. */
-          route = this.upgrades.get(new URL(req.url ?? '/', 'http://x').pathname)
-        } catch (error) {
-          this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
-          socket.destroy()
-          return
-        }
-        if (route === undefined) {
-          socket.destroy()
-          return
-        }
-        this.upgradedSockets.add(socket)
-        try {
-          Promise.resolve(route.handler(req, socket, head)).catch((error: unknown) => {
-            this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
-            socket.destroy()
-          })
-        } catch (error) {
-          this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
-          socket.destroy()
-        }
+        this.dispatchUpgrade(req, socket, head, this.upgradedSockets)
       })
 
       await new Promise<void>((resolve, reject) => {
@@ -630,17 +735,194 @@ export class WebServer extends Service {
       // connection joins that table only after its handshake. The service owns both
       // kinds with the other connections, so it tracks and destroys them explicitly.
       return async () => {
-        const serverClosed = new Promise<void>((resolve) => {
-          this.server.close(() => { resolve() })
-        })
-        this.server.closeAllConnections()
-        const socketsClosed = [...this.upgradedSockets, ...this.tlsConnections].map(socket => new Promise<void>((resolve) => {
-          socket.once('close', () => { resolve() })
-          socket.destroy()
-        }))
-        await Promise.all([serverClosed, ...socketsClosed])
+        await Promise.all([
+          closeListener(this.server, { upgraded: this.upgradedSockets, raw: this.tlsConnections }),
+          ...[...this.additionalListeners.values()].map(open => open.close()),
+        ])
       }
     }, 'webServer.listen')
+  }
+
+  /**
+   * Open an additional listener beside the configured one. It serves the same
+   * routes, upgrade routes and fallback, and its gate decides every request and
+   * upgrade request before any of them runs. A `loopback` listener has bound its
+   * port when the promise settles. The listener closes with this service; the
+   * caller owns closing it earlier, as an effect of its own Context.
+   * @param options - the listener's id, binding and gate.
+   * @returns the open listener.
+   * @throws when another open additional listener has the same id, or the
+   * `streams` TLS material is unusable.
+   */
+  async openListener(options: WebListenerOptions): Promise<WebListener> {
+    if (this.additionalListeners.has(options.id)) {
+      throw new Error(`webserver: listener ${JSON.stringify(options.id)} is already open`)
+    }
+    const sockets: ListenerSockets = { upgraded: new Set(), raw: new Set() }
+    const listener = this.requestListener(options.gate)
+    const bind = options.bind
+    let server: Server
+    if (bind.kind === 'loopback') {
+      server = createServer(listener)
+    } else {
+      try {
+        server = createSecureServer({ cert: bind.tls.cert, key: bind.tls.key }, listener)
+      } catch (error) {
+        throw new Error(`webserver: listener ${JSON.stringify(options.id)} TLS material is not a usable certificate and key pair: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      server.on('error', (err) => { this.ctx.logger.warn(err) })
+    }
+    server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+      let decision: WebGateDecision
+      try {
+        decision = options.gate(req, 'upgrade')
+      } catch (error) {
+        this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+        socket.destroy()
+        return
+      }
+      if (decision.kind === 'refuse') {
+        writeUpgradeRefusal(socket, decision)
+        return
+      }
+      if (decision.only !== undefined) {
+        writeUpgradeRefusal(socket, decision.only.refusal)
+        return
+      }
+      this.dispatchUpgrade(req, socket, head, sockets.upgraded)
+    })
+    let address: WebListener['address']
+    if (bind.kind === 'loopback') {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject)
+        server.listen(0, LOOPBACK_LISTENER_HOST, () => {
+          server.off('error', reject)
+          server.on('error', (err) => { this.ctx.logger.error(err) })
+          resolve()
+        })
+      })
+      address = { host: LOOPBACK_LISTENER_HOST, port: (server.address() as AddressInfo).port }
+    }
+    let closing: Promise<void> | undefined
+    const open: WebListener = {
+      id: options.id,
+      address,
+      accept: (stream) => {
+        if (bind.kind !== 'streams') throw new Error(`webserver: listener ${JSON.stringify(options.id)} binds a port and accepts no streams`)
+        if (closing !== undefined) throw new Error(`webserver: listener ${JSON.stringify(options.id)} is closed`)
+        sockets.raw.add(stream)
+        stream.once('close', () => { sockets.raw.delete(stream) })
+        server.emit('connection', stream)
+      },
+      close: () => {
+        closing ??= (async () => {
+          this.additionalListeners.delete(options.id)
+          await closeListener(server, sockets)
+        })()
+        return closing
+      },
+    }
+    this.additionalListeners.set(options.id, open)
+    return open
+  }
+
+  /**
+   * The node:http request listener of one listener. A gate, when given, decides
+   * each request before gzip and dispatch. Per-request failures log and answer
+   * 400 rather than end the process: handle() rejecting on one malformed request
+   * (bad %-escape, client dropping mid-body) would otherwise be an unhandled rejection.
+   */
+  private requestListener(gate?: WebListenerGate): (req: IncomingMessage, res: ServerResponse) => void {
+    return (req, res) => {
+      let decision: WebGateDecision | undefined
+      if (gate !== undefined) {
+        try {
+          decision = gate(req, 'request')
+        } catch (error) {
+          this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+          res.writeHead(500)
+          res.end()
+          return
+        }
+        if (decision.kind === 'refuse') {
+          writeRefusal(res, decision)
+          return
+        }
+        if (decision.headers !== undefined) pinHeaders(res, decision.headers)
+      }
+      const pass = decision
+      const next = (): void => {
+        void this.dispatchRequest(req, res, pass).catch((err: unknown) => {
+          this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))
+          if (res.headersSent) {
+            res.destroy()
+            return
+          }
+          res.writeHead(400)
+          res.end()
+        })
+      }
+      if (this.gzip === undefined) next()
+      else this.gzip(req, res, next)
+    }
+  }
+
+  /** Dispatch one request to its responder, within the bounds of a gate's `pass`. */
+  private async dispatchRequest(req: IncomingMessage, res: ServerResponse, pass: WebGateDecision | undefined): Promise<void> {
+    /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
+    requests; the field is only optional on the client-side IncomingMessage type */
+    const target = new URL(req.url ?? '/', 'http://x')
+    const responder = this.responderFor(target.pathname)
+    const only = pass?.kind === 'pass' ? pass.only : undefined
+    if (only !== undefined && (typeof responder !== 'object' || !('kind' in responder) || responder.kind !== only.route.kind || responder.path !== only.route.path)) {
+      writeRefusal(res, only.refusal)
+      return
+    }
+    if (responder === undefined) {
+      res.writeHead(404)
+      res.end()
+      return
+    }
+    const peer = pass?.kind === 'pass' ? pass.peer : undefined
+    if (typeof responder === 'function') await responder(req, res)
+    else if ('resource' in responder) await this.serveResource(req, res, target, responder.resource, peer)
+    else await responder.handler(req, res)
+  }
+
+  /** Hand one upgrade request to its exact-path route; a socket no route claims is destroyed. */
+  private dispatchUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, upgraded: Set<Duplex>): void {
+    const onError = (error: Error): void => {
+      this.ctx.logger.warn(error)
+      socket.destroy()
+    }
+    socket.on('error', onError)
+    socket.once('close', () => {
+      socket.off('error', onError)
+      upgraded.delete(socket)
+    })
+    let route: WebUpgradeRoute | undefined
+    try {
+      /* v8 ignore next -- node:http always sets url on server requests. */
+      route = this.upgrades.get(new URL(req.url ?? '/', 'http://x').pathname)
+    } catch (error) {
+      this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+      socket.destroy()
+      return
+    }
+    if (route === undefined) {
+      socket.destroy()
+      return
+    }
+    upgraded.add(socket)
+    try {
+      Promise.resolve(route.handler(req, socket, head)).catch((error: unknown) => {
+        this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+        socket.destroy()
+      })
+    } catch (error) {
+      this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+      socket.destroy()
+    }
   }
 
   /**
@@ -666,13 +948,20 @@ export class WebServer extends Service {
   /**
    * Answer one HTTP exchange from a resource. Only GET and HEAD reach it;
    * any other method receives 405 and its request body is never read. The
-   * request becomes a Fetch `Request` without a Peer whose URL is the request
+   * request becomes a Fetch `Request`, passed with the Peer a listener gate
+   * admitted it for, if any, whose URL is the request
    * target resolved against a placeholder origin, as the match reads it; the
    * client's authority stays only in the `host` header. The connection
    * closing before this method ends the response aborts the request signal
    * and cancels the response body.
    */
-  private async serveResource(req: IncomingMessage, res: ServerResponse, target: URL, resource: WebResource): Promise<void> {
+  private async serveResource(
+    req: IncomingMessage,
+    res: ServerResponse,
+    target: URL,
+    resource: WebResource,
+    peer: PeerScope | undefined,
+  ): Promise<void> {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { allow: RESOURCE_METHODS })
       res.end()
@@ -691,7 +980,8 @@ export class WebServer extends Service {
     }
     res.on('close', onClose)
     try {
-      const response = await resource(new Request(target, { method: req.method, headers, signal: abort.signal }))
+      const request = new Request(target, { method: req.method, headers, signal: abort.signal })
+      const response = await (peer === undefined ? resource(request) : resource(request, peer))
       await writeResponse(res, response, req.method === 'HEAD', abort.signal)
       if (!abort.signal.aborted) {
         ended = true

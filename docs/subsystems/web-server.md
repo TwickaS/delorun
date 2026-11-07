@@ -103,7 +103,7 @@ No composition can bind every interface at once: the unspecified address is reje
 
 ## The service
 
-`WebServer` (`ctx.webServer`) listens immediately on activation; a listen failure (EADDRINUSE…) rejects initialization, and the boot process reports the failed fiber. The `tls` pair is read once before the listener binds, and an unreadable, empty, or mismatched pair rejects initialization the same way instead of falling back to HTTP. `register(route)` adds one named route and returns its disposer; a duplicate `(kind, path)` throws because route patterns are a composition-level contract and a collision is a misconfiguration. Gzip wraps eligible socket-backed responses inside the server, so handlers keep direct `ServerResponse` ownership, and a resource hands the service a `Response` to write back. Existing content encodings, `Cache-Control: no-transform`, ranges, SSE, ZIP, and the packaged `.gz` Worker image remain identity responses. `collectIndexInjections(peer)` gathers structured `IndexInjection` rows over one `webserver/index-inject` emit that passes the Peer the page speaks for, and `renderIndex(html, peer)` renders them into successful root and configured index responses before applying the raw `tapIndex(transform)` escape-hatch transforms in registration order; [dsh-client-modules](../../packages/client/modules) answers the event with the boot manifest rows. `port` reads the listening port, including the port assigned by the OS when `config.port` is 0, and `protocol` reports the scheme the listener serves (`http:` or `https:`).
+`WebServer` (`ctx.webServer`) listens immediately on activation; a listen failure (EADDRINUSE…) rejects initialization, and the boot process reports the failed fiber. The `tls` pair is read once before the listener binds, and an unreadable, empty, or mismatched pair rejects initialization the same way instead of falling back to HTTP. `register(route)` adds one named route and returns its disposer; a duplicate `(kind, path)` throws because route patterns are a composition-level contract and a collision is a misconfiguration. Gzip wraps eligible socket-backed responses inside the server, so handlers keep direct `ServerResponse` ownership, and a resource hands the service a `Response` to write back. Existing content encodings, `Cache-Control: no-transform`, ranges, SSE, ZIP, and the packaged `.gz` Worker image remain identity responses. `collectIndexInjections(peer)` gathers structured `IndexInjection` rows over one `webserver/index-inject` emit that passes the Peer the page speaks for, and `renderIndex(html, peer)` renders them into successful root and configured index responses before applying the raw `tapIndex(transform)` escape-hatch transforms in registration order; [dsh-client-modules](../../packages/client/modules) answers the event with the boot manifest rows. `port` reads the listening port, including the port assigned by the OS when `config.port` is 0, and `protocol` reports the scheme the listener serves (`http:` or `https:`). `openListener({ id, bind, gate })` opens an additional listener on the same routes, bound to an OS-assigned port on `127.0.0.1` or to byte streams its owner hands in, whose gate decides every request and upgrade request before any route, upgrade handler or the fallback; [dsh-client-connection](../../packages/client/connection/README.md#admission-providers-and-reach-listeners) opens reach listeners through it.
 
 A request whose handling throws (a malformed %-escape hitting `decodeURIComponent`, a client dropping mid-body) is logged as a warning and answered 400 — or the socket destroyed when headers are already out — never a process exit. Disposal pairs `close()` with `closeAllConnections()` because a handler may hold its response open (SSE) and such connections never end on their own; without the force-close, teardown would hang. A TLS socket counts as a connection only after its handshake, so the server tracks raw TLS sockets beside upgraded ones and destroys both at disposal. The package never prints: the URL line belongs to the shell. Per-package operational detail, including the dev-mode bundle watch pipeline, stays in the [README](../../packages/host/webserver/README.md).
 
@@ -115,72 +115,68 @@ A request whose handling throws (a malformed %-escape hitting `decodeURIComponen
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
-<a id="ctxconnection--hostconnectionhandle"></a>
+<a id="ctxauthenticator--authenticator-abstract-seam"></a>
 
-### `ctx.connection` — `HostConnectionHandle`
+### `ctx.authenticator` — `Authenticator` (abstract seam)
 
-Host `ctx.connection` members consumed by transport-independent adapters.
+Admission provider. Subclass it and load the subclass as a plugin; it registers as `ctx.authenticator`, one provider per context. Connection's loopback admission calls admit after its `Host` and `Origin` fence, and each reach listener's dispatcher calls it after the reach checks.
+
+Providers must keep these rules:
+
+- admit is synchronous and reads only in-memory state; a provider whose state is not loaded yet refuses.
+- policy returns a policy only for listeners the provider serves. A reach listener opens only while its provider returns a policy for it, and closes when that provider is removed or replaced.
+- Each change to a returned policy is announced with `authenticator/policy`.
+- A `setCookie` on an upgrade request is never sent, because the upgrade handler writes the response; a provider rolls a session only on a request without an `Upgrade` header.
 
 ```ts cordis-catalog
 /**
- * Compose exact Fetch routes and the shared-channel RPC interceptor.
- * @param channel - shared channel mounted by Connection.
- * @returns Fetch handler for trusted, authenticated requests.
+ * Admit one request on one listener.
+ * @param request - the request's headers, method and target.
+ * @param listener - the listener that received it.
+ * @returns the admission.
  */
-createSharedFetchHandler(channel: '/api'): ConnectionFetchHandler
+abstract admit(request: ConnectionIndexRequest, listener: string): Admission
 
 /**
- * Apply Connection's Host/Origin checks and browser authentication to
- * another Web route.
- * @param request - request headers from the HTTP or upgrade request.
- * @returns rejection status, or undefined when the route may accept the request.
+ * The policy of one listener.
+ * @param listener - a listener id.
+ * @returns the policy, or `undefined` when this provider does not serve the listener.
  */
-requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection
-
-/**
- * Admit an HTTP request against its signed browser or API credential and live Peer.
- * @param request - request headers from the HTTP or upgrade request.
- * @returns the credential's Peer, or the rejection status.
- */
-admit(request: ConnectionTrustRequest): PeerAdmission
-
-/**
- * Create an independent in-process Peer, disposed with the Context that read `ctx.connection`.
- * @param options - fixed principal and optional interaction participation (default `answer`).
- * @returns a new Peer distinct from every other Peer.
- */
-createPeer(options: { readonly principal: Principal; readonly interactions?: 'answer' | 'none' }): PeerScope
-
-/**
- * Claim a physical socket for an API Peer; browser sockets share their owner Peer.
- * @param request - authenticated upgrade request headers.
- * @returns the Peer and idempotent release, or 409 for duplicate API ownership.
- * The carrier releases on socket termination or failed upgrade; release removes
- * API admission synchronously without cancelling independent HTTP calls.
- */
-admitConnection(request: ConnectionTrustRequest): ConnectionAdmission
-
-/**
- * Authenticate one frontend index request, owning a token redirect or 401.
- * The cookie this mints is `Secure` when the mounted Web carrier serves TLS,
- * which only that listener's protocol decides.
- * @param request - root or configured-index HTTP request.
- * @param response - response owned when the result is false.
- * @returns true only when the frontend may serve index.html.
- */
-authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean
-
-/**
- * Add the fresh process token to an ordinary Web application URL.
- * @param baseUrl - clean application URL whose authority and mount are preserved.
- * @returns tokenized URL for initial login; a mount proxy strips its prefix before {@link authorizeIndex}.
- */
-authenticatedUrl(baseUrl: string): string
+abstract policy(listener: string): ListenerPolicy | undefined
 ```
 
-Types: [Principal](typert.md)
+Source: [`packages/client/connection/src/authenticator.ts`](../../packages/client/connection/src/authenticator.ts)
 
-Source: [`packages/client/connection/src/rpc.ts`](../../packages/client/connection/src/rpc.ts)
+<a id="ctxconnection--hostconnectionadmission"></a>
+
+### `ctx.connection` — `HostConnectionAdmission`
+
+Host `ctx.connection`: the transport handle with the members for admission providers and reach listeners.
+
+```ts cordis-catalog
+/**
+ * Connection's built-in loopback admission, which applies while no
+ * `authenticator` provider is loaded and which a provider may delegate its
+ * loopback decisions to: a valid signed browser cookie admits the shared
+ * owner Peer, a valid API cookie admits its live API Peer, and anything else
+ * is refused 401. It applies no Host or Origin fence; Connection applies the
+ * fence before it calls the provider.
+ * @param request - the loopback request's headers.
+ * @returns the admission.
+ */
+builtinAdmission(request: ConnectionTrustRequest): Admission
+
+/**
+ * Open one reach listener, owned by the Context that read `ctx.connection`.
+ * It needs a loaded `authenticator` provider that serves the listener, and
+ * stops when that provider is removed or replaced.
+ * @param options - the reach listener id and its binding.
+ * @returns the open listener.
+ */
+openReachListener(options: ReachListenerOptions): Promise<ReachListener>
+```
+
+Source: [`packages/client/connection/src/reach.ts`](../../packages/client/connection/src/reach.ts)
 
 <a id="ctxwebapp--webapp"></a>
 
@@ -267,6 +263,19 @@ async readResource(request: Request, peer: PeerScope): Promise<Response>
 tapIndex(transform: (html: string) => string): () => void
 
 /**
+ * Open an additional listener beside the configured one. It serves the same
+ * routes, upgrade routes and fallback, and its gate decides every request and
+ * upgrade request before any of them runs. A `loopback` listener has bound its
+ * port when the promise settles. The listener closes with this service; the
+ * caller owns closing it earlier, as an effect of its own Context.
+ * @param options - the listener's id, binding and gate.
+ * @returns the open listener.
+ * @throws when another open additional listener has the same id, or the
+ * `streams` TLS material is unusable.
+ */
+async openListener(options: WebListenerOptions): Promise<WebListener>
+
+/**
  * Run an index.html body through the registered taps in registration order
  * — called by the fallback owner on every index response it renders.
  * @param html - the raw index.html body.
@@ -295,6 +304,28 @@ renderIndex(html: string, peer: PeerScope): string
 ```
 
 Source: [`packages/host/webserver/src/index.ts`](../../packages/host/webserver/src/index.ts)
+
+<a id="authenticator-events"></a>
+
+### `authenticator/*` events
+
+<a id="authenticatorpolicy--emit"></a>
+
+#### `authenticator/policy` — emit
+
+The provider changed the policy of one listener. An open reach listener reads the policy again, and stops when the provider no longer serves it.
+
+```ts cordis-catalog
+/**
+ * The provider changed the policy of one listener. An open reach listener
+ * reads the policy again, and stops when the provider no longer serves it.
+ * @param listener - id of the listener whose policy changed.
+ * @mode emit
+ */
+'authenticator/policy'(listener: string): void
+```
+
+Source: [`packages/client/connection/src/authenticator.ts`](../../packages/client/connection/src/authenticator.ts)
 
 <a id="connection-events"></a>
 

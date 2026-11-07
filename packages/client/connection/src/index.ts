@@ -52,6 +52,22 @@ export {
   serverResponseSchema,
 } from './rpc-schema.ts'
 export { HostConnectionService } from './rpc-host.ts'
+export {
+  Authenticator,
+  LOOPBACK_LISTENER,
+  type Admission,
+  type DeclaredScheme,
+  type HostRule,
+  type ListenerPolicy,
+  type PreLoginRoute,
+} from './authenticator.ts'
+export {
+  REACH_REFUSAL_STATUS,
+  type HostConnectionAdmission,
+  type ReachListener,
+  type ReachListenerOptions,
+  type ReachRefusalCode,
+} from './reach.ts'
 
 export { API_PATH } from './api-path.ts'
 

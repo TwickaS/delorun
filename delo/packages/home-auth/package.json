@@ -1,0 +1,18 @@
+{
+  "name": "@delo/home-auth",
+  "description": "Delo's sign-in for reach (C4, C5, C14): the authenticator provider, its session store and pre-login routes, and the admission denial suite",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@delo/bundle-local": "workspace:*",
+    "@delo/contract-admission": "workspace:*",
+    "@delo/tools": "workspace:*",
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*"
+  }
+}
