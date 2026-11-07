@@ -193,7 +193,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 - **根目录文件。** `supervisor/roots.json`（[C1](c01-home-layout.zh.md)，权限 0600）保存 `{"v":1,"parents":["<absolute path>", ...]}`，最多 16 个父目录。只有 `delorun setup` 在本人的终端中写入它；没有 Host API、工具或配置行写入它。监管器在启动时读取它。
 - **父目录。** 每个父目录以其规范绝对路径保存。setup 拒绝 `/`、操作系统 home 目录、Delo home、任何包含 Delo home 的路径以及任何位于其内的路径。
-- **工作区根目录。** 在 `workspace.create` 时，监管器自行用 `realpath` 解析 `root`。根目录为 `/`、操作系统 home 目录或 Delo home，包含操作系统 home 目录，包含 Delo home 或位于其内，位于它所管理的另一个工作区的根目录之内或包含该根目录，或不是本人所有的目录时，以 `ROOT_REFUSED` 拒绝；根目录不严格位于某个父目录之内时，以 `ROOT_NOT_UNDER_PARENT` 拒绝。路径按文件身份比较，因此某目录的别名视同该目录。
+- **工作区根目录。** 在 `workspace.create` 时，监管器自行用 `realpath` 解析 `root`。根目录为 `/`、操作系统 home 目录或 Delo home，包含操作系统 home 目录，包含 Delo home 或位于其内，位于引擎上另一个带有 Delo 标签的工作区容器（无论其 home 与 profile）的根目录之内或包含该根目录，或不是本人所有的目录时，以 `ROOT_REFUSED` 拒绝；根目录不严格位于某个父目录之内时，以 `ROOT_NOT_UNDER_PARENT` 拒绝。路径按文件身份比较，因此某目录的别名视同该目录。
 - **每次启动之前。** 每次 `workspace.start` 时，监管器再次检查该工作区的容器：每个容器都必须带有其 home 与 profile 的标签，根目录挂载的来源必须仍解析为其自身并通过上述每条规则（`ROOT_REFUSED`），[容器](#containers)的每项设置都必须仍然生效（`LIMITS_MISSING`）。未通过检查的容器不会启动。
 - **挂载。** S2 容器的绑定挂载是解析后的工作区根目录、该工作区的辅助程序套接字目录，以及工作区转发 agent 时该 agent 的套接字。S3 容器的挂载是解析后的各工作区根目录、保存其 Delo home 的卷以及机器的 `~/.delo/run/<profile>/s3/`。不挂载其他任何主机路径。创建容器后，监管器把检查到的挂载来源与解析后的路径比较，有任何差异就以 `ROOT_REFUSED` 删除该容器。
 - **谁能修改根目录。** 凡 [C1](c01-home-layout.zh.md) 的 `home-write` 规则成立之处，受限命令都无法写入该文件；上游的进程内文件工具限于可写根目录，而可写根目录从不包括 home。在 `danger-full-access` 下运行的命令或工具可以写入它。
