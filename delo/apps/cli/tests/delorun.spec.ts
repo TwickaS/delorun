@@ -7,6 +7,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE } from '@delo/bundle-local/profile'
+import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
+import { parse } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
@@ -248,7 +250,15 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     const seen: { options: RunProfileOptions, dshHome: string | undefined }[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: context }, recording(seen))).toBeUndefined()
     expect(seen).toHaveLength(1)
-    expect(seen[0]).toMatchObject({ dshHome: deloHome, options: { profile: 'default', patchFiles: [], args: [] } })
+    const overlay = join(deloHome, 'run', 'default', 'sandbox.patch.yml')
+    expect(seen[0]).toMatchObject({ dshHome: deloHome, options: { profile: 'default', patchFiles: [overlay], args: [] } })
+    // C1's confinement on the profile's sandbox row: the home, its read exemptions and both channels' sockets.
+    expect(parse(readFileSync(overlay, 'utf8'))).toEqual([{ id: 'sandbox', config: expect.objectContaining({
+      protectedHome: deloHome,
+      protectedHomeReadable: [...READ_EXEMPTIONS],
+      deniedSockets: expect.arrayContaining([join(deloHome, 'run', 'default', 'update.sock'), join(deloHome, 'run', 'default', 'supervisor.sock')]),
+    }) }])
+    expect(lstatSync(overlay).mode & 0o777).toBe(0o600)
     expect(seen[0]!.options.resolvedProfile?.profile.layers.map(layer => layer.packageName)).toEqual(DELO_PROFILE_BUNDLES)
     expect(process.env.DELO_HOME).toBe(deloHome)
     expect(process.env.DELO_PROFILE).toBe('default')
@@ -324,15 +334,26 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     readonly message?: string
     readonly rows: readonly BootedRow[]
     readonly sessionLogEnabled: unknown
+    readonly runner?: string
+    readonly confined?: ConfinementAttempt
+    readonly unconfined?: ConfinementAttempt
+  }
+
+  /** What the workspace command of `--probe-confinement` reports. */
+  interface ConfinementAttempt {
+    readonly home: string
+    readonly token: string
+    readonly connect: string
+    readonly answer?: string
   }
 
   /**
    * Run the start driver against the fixture home.
    * @returns its exit status and report.
    */
-  function startDriver(): { status: number | null, report: DriverReport, stderr: string } {
+  function startDriver(...args: string[]): { status: number | null, report: DriverReport, stderr: string } {
     const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DSH_|DELO_|NODE_PATH$)/.test(name)))
-    const result = spawnSync(process.execPath, ['--import', TSX_LOADER, DRIVER], {
+    const result = spawnSync(process.execPath, ['--import', TSX_LOADER, DRIVER, ...args], {
       cwd: osHome, env: { ...inherited, HOME: osHome, USERPROFILE: osHome }, encoding: 'utf8', timeout: 150_000,
     })
     const line = result.stdout.trim().split('\n').at(-1) ?? ''
@@ -349,6 +370,31 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     expect(started.status).toBe(0)
     expect(started.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ name: LOCAL_BUNDLE, state: 'active', disabled: false })
     expect(started.report.sessionLogEnabled).toBe(false)
+  })
+
+  it('update-channel-connect-denied: a workspace command under the started profile cannot read the home or reach the update channel', (test) => {
+    // A home outside the OS temporary directory, which upstream's profiles replace with a private /tmp whether or not C1's rule holds.
+    rmSync(osHome, { recursive: true, force: true })
+    mkdirSync('/var/tmp', { recursive: true })
+    osHome = realpathSync(mkdtempSync(join('/var/tmp', 'delorun-cli-')))
+    deloHome = join(osHome, '.delo')
+    dshHome = join(osHome, '.dsh')
+    expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
+    const started = startDriver('--probe-confinement')
+    expect(started.report.outcome, started.stderr).toBe('started')
+    // The same command unconfined reads the home and the token and is answered: the confinement, not the host, denies it.
+    expect(started.report.unconfined).toEqual({ home: 'ok', token: 'ok', connect: 'ok', answer: 'ok' })
+    const confined = started.report.confined
+    if (started.report.runner === 'bwrap') {
+      expect(confined?.home).not.toBe('ok')
+      expect(confined?.token).not.toBe('ok')
+      expect(confined?.connect).not.toBe('ok')
+    } else if (started.report.runner?.endsWith('landlock-run') === true) {
+      expect(confined).toEqual({ home: 'EACCES', token: 'EACCES', connect: 'ok', answer: 'UNAUTHENTICATED' })
+    } else {
+      test.skip(`not run: this host's sandbox runner is ${String(started.report.runner)}, neither bwrap nor Landlock`)
+    }
+    expect(existsSync(join(deloHome, 'run', 'default', 'sandbox.patch.yml'))).toBe(false)
   })
 
   it('refuses to start when delo-privacy fails to import, while the bundle\'s privacy rows still apply', () => {

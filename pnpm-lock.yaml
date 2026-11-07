@@ -1278,6 +1278,9 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../../packages/logs
+      '@delo/supervisor':
+        specifier: workspace:*
+        version: link:../../packages/supervisor
       yaml:
         specifier: ^2.9.0
         version: 2.9.0

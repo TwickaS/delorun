@@ -2,10 +2,11 @@
  * C19's `update-channel-connect-denied` and `update-channel-landlock`: what a confined workspace command can do with
  * the update channel's socket and the start token.
  *
- * - Through upstream's sandbox provider, each dialect this host runs is tested as the product confines commands. A
- *   dialect whose profile in this tree does not yet express C1's `home-read` rule (Delo's sandbox profiles add it per
- *   dialect) is skipped with that reason, found by a probe that reads a fixture under the home; where the rule holds,
- *   the assertions run and must pass. Landlock is skipped where its launcher is not usable on the host.
+ * - Through upstream's sandbox provider, configured as the home process configures the CLI profile's (the home
+ *   protected with C1's read exemptions, the channel's socket denied), each dialect this host runs is tested as the
+ *   product confines commands; each case first shows that a confined command cannot read a fixture under the home.
+ *   Landlock is skipped where its launcher is not usable on the host. `delo/apps/cli`'s real-runner spec runs the
+ *   same command under the started profile itself.
  * - With C1's bwrap mechanism applied as the contract states it (an empty tmpfs over the home), the spec shows the
  *   home process's half: the socket and the token file lie where that mechanism hides them, so the command can
  *   neither connect nor read the token, while the same command without the mechanism can do both.
@@ -18,6 +19,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import { launcherPath } from '@deepseek-ai/node-addon-system/landlock-run'
+import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { startTokenFile } from '@delo/home'
 import { afterEach, describe, expect, it } from 'vitest'
 import { updateSocketPath } from '../src/index.ts'
@@ -104,13 +106,16 @@ const landlockUsable = landlockProbe.status === 0
 const LANDLOCK_NOTE = landlockUsable ? '' : ` (not run on this host: upstream's landlock-run launcher is not usable here: ${landlockProbe.error?.message ?? String(landlockProbe.stderr).trim()})`
 
 /**
- * A provider confined to one dialect.
+ * A provider confined to one dialect, configured as the home process configures the CLI profile's: the home protected
+ * with C1's read exemptions, and the update channel's socket denied.
  * @param dialect - bwrap, or Landlock with bwrap's probe forced off.
+ * @param home - the Delo home.
+ * @param socket - the update channel's socket.
  * @returns the provider.
  */
-async function provider(dialect: 'bwrap' | 'landlock'): Promise<LocalSandboxProvider> {
+async function provider(dialect: 'bwrap' | 'landlock', home: string, socket: string): Promise<LocalSandboxProvider> {
   ctx = new Context()
-  await ctx.plugin(LocalSandboxProvider, {})
+  await ctx.plugin(LocalSandboxProvider, { protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS], deniedSockets: [socket] })
   const sandbox = ctx.sandbox as LocalSandboxProvider
   sandbox.internals = dialect === 'bwrap' ? { probeLandlock: () => 'unusable' } : { probeBwrap: () => false }
   return sandbox
@@ -134,14 +139,11 @@ describe('update-channel-connect-denied: C1\'s bwrap mechanism over the update c
 })
 
 describe('update-channel-connect-denied through upstream\'s sandbox provider (bwrap)', { timeout: 60_000 }, () => {
-  it.skipIf(!bwrapUsable)('a confined workspace command cannot connect to the update channel or read the start token', async (test) => {
-    const { socket, tokenFile, workspace, fixture } = await setUp()
-    const prefix = await confinedPrefix(await provider('bwrap'), workspace)
+  it.skipIf(!bwrapUsable)('a confined workspace command cannot connect to the update channel or read the start token', async () => {
+    const { home, socket, tokenFile, workspace, fixture } = await setUp()
+    const prefix = await confinedPrefix(await provider('bwrap', home, socket), workspace)
     expect(prefix[0]).toBe('bwrap')
-    if (await run([...prefix, process.execPath, '-e', READ, fixture]) === 'ok') {
-      test.skip('this tree\'s bwrap profile does not express C1\'s home-read rule yet (Delo\'s sandbox profiles, WP2.14): a confined command reads a fixture under the home')
-      return
-    }
+    expect(await run([...prefix, process.execPath, '-e', READ, fixture])).not.toBe('ok')
     const result = await attempt(prefix, socket, tokenFile)
     expect(result.read).not.toBe('ok')
     expect(result.connect).not.toBe('ok')
@@ -149,13 +151,10 @@ describe('update-channel-connect-denied through upstream\'s sandbox provider (bw
 })
 
 describe('update-channel-landlock through upstream\'s sandbox provider', { timeout: 60_000 }, () => {
-  it.skipIf(!landlockUsable)(`a confined workspace command connects to the channel, cannot read the token and is refused UNAUTHENTICATED${LANDLOCK_NOTE}`, async (test) => {
-    const { socket, tokenFile, workspace, fixture } = await setUp()
-    const prefix = await confinedPrefix(await provider('landlock'), workspace)
-    if (await run([...prefix, process.execPath, '-e', READ, fixture]) === 'ok') {
-      test.skip('this tree\'s Landlock profile does not express C1\'s home-read rule yet (Delo\'s sandbox profiles, WP2.14): a confined command reads a fixture under the home')
-      return
-    }
+  it.skipIf(!landlockUsable)(`a confined workspace command connects to the channel, cannot read the token and is refused UNAUTHENTICATED${LANDLOCK_NOTE}`, async () => {
+    const { home, socket, tokenFile, workspace, fixture } = await setUp()
+    const prefix = await confinedPrefix(await provider('landlock', home, socket), workspace)
+    expect(await run([...prefix, process.execPath, '-e', READ, fixture])).not.toBe('ok')
     expect(await attempt(prefix, socket, tokenFile)).toEqual({ read: 'EACCES', connect: 'ok', response: { ok: false, error: 'UNAUTHENTICATED' } })
   })
 })

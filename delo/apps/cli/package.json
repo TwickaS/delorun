@@ -23,6 +23,7 @@
     "@delo/home": "workspace:*",
     "@delo/home-process": "workspace:*",
     "@delo/logs": "workspace:*",
+    "@delo/supervisor": "workspace:*",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },

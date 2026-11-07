@@ -16,7 +16,8 @@
  * @module @delo/cli/start
  */
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
@@ -31,6 +32,7 @@ import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type Co
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, refuseSkippedDeloBundles, type BootedRow, type RowState } from './delo-bundles.ts'
 import { hasCliProfile } from './profile.ts'
+import { removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, writeSandboxOverlay } from './sandbox-protection.ts'
 
 /** What the foreground start calls outside this module; specs replace them. */
 export interface StartDependencies {
@@ -195,7 +197,10 @@ export async function startForeground(request: StartRequest, dependencies: Start
     request.output.stdout(`Delo is already running for the profile ${request.profile}${holder === undefined ? '' : ` (process ${String(holder.pid)}, started ${holder.startedAt})`}.\n`)
     return EXIT.ok
   }
-  dependencies.onExit(closeLog)
+  dependencies.onExit(() => {
+    closeLog()
+    rmSync(sandboxOverlayPath(request.home, request.profile), { force: true })
+  })
   return undefined
 }
 
@@ -203,6 +208,8 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * Load the CLI profile and boot it: the home process's Host.
  * @param request - the home, profile, studio choice and output.
  * @param dependencies - the profile preparation, runner and environment loader.
+ * The profile boots with C1's confinement on its sandbox row ([sandbox protection](./sandbox-protection.ts)), whose
+ * overlay exists while the Host runs.
  * @returns the running Host. Its chats are not yet fed by the Host's update plugin, so they count none.
  * @throws {CliError} when the profile skipped a Delo bundle, fails to boot, or a row of a Delo bundle did not activate.
  */
@@ -215,28 +222,35 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     if (error instanceof CliError) throw error
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
   }
+  const environment = dependencies.loadEnvironment()
+  const overlay = await writeSandboxOverlay(request.home, request.profile, resolvedProfile.profile.patchPath, await sandboxProtection(request.home, request.profile, process.env, homedir()))
   let booted: BootedProfile
   try {
     booted = await dependencies.runProfile({
-      environment: dependencies.loadEnvironment(),
+      environment,
       profile: request.profile,
       resolvedProfile,
-      patchFiles: [],
+      patchFiles: [overlay],
       args: request.open ? [] : ['--no-open'],
     })
   } catch (error) {
+    await removeSandboxOverlay(request.home, request.profile)
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} failed to start: ${error instanceof Error ? error.message : String(error)}`)
   }
   const inactive = inactiveDeloRows(booted.rows(), deloRowIds(resolvedProfile.profile))
   if (inactive.length > 0) {
     await booted.shutdown(EXIT.failed)
+    await removeSandboxOverlay(request.home, request.profile)
     throw inactiveRowsRefusal(request.profile, inactive)
   }
   return {
     chats: new CountingChatGate(),
     disabledPlugins: () => [],
     healthy: () => Promise.resolve(true),
-    close: async () => booted.shutdown(EXIT.ok),
+    close: async () => {
+      await booted.shutdown(EXIT.ok)
+      await removeSandboxOverlay(request.home, request.profile)
+    },
   }
 }
 

@@ -77,6 +77,8 @@ Setup 按顺序执行各步骤：创建 CLI profile；把输入的密钥以 0600
 
 `delorun start --foreground` 与不带选项的 `delorun` 通过 `HomeProcess.start` 在本进程中运行 home 进程：它获取 `run/<profile>/home.lock`，写入新的启动令牌，在更新通道 `run/<profile>/update.sock` 上监听，并通过上游的 profile 运行器引导该 profile，使其作为 Host 运行。它写入 `home-<profile>` 运行日志；在前台运行时，终端还会显示其输出。无论有多少次启动，恰好只有一次持有该锁，包括取代已死亡持有者留下的锁。存活的持有者通过更新通道被询问状态：有回应时，第二次启动会打印正在运行的进程并以 0 退出；2 秒内无回应时，本次启动以 `HOME_UNRESPONSIVE` 停止。无论以何种方式结束进程，锁、令牌文件与套接字都会随之移除；被 `SIGKILL` 杀死的进程会留下它们，下一次启动会将其替换。
 
+启动时，profile 带着 C1 的隔离配置启动上游的本地沙箱提供方（行 `sandbox`）：`protectedHome` 为规范化后的 Delo home，`protectedHomeReadable` 为 C1 的读取豁免，`deniedSockets` 为 `run/<profile>/` 下更新通道与监管器的套接字，当前 Docker 上下文的套接字及其真实路径，以及存在时 Docker Desktop 在 macOS 上位于 `~/Library/Containers/com.docker.docker/Data/` 与 `~/.docker/run/` 下的套接字；因此在方言强制这些规则之处，受限的工作区命令无法读取 home 或令牌，也无法连接任一通道。这些设置通过覆盖补丁 `run/<profile>/sandbox.patch.yml`（模式 0600）传递，该文件在 Host 运行期间存在；profile 自身补丁中该行的其他设置会被保留（包括其自身的 `deniedSockets`），若该行的设置是无法沿用的表达式，启动会拒绝。
+
 不带 `--foreground` 的 `delorun start` 会以脱离终端的方式启动 `delorun start --foreground`，标准输入关闭，其输出写入日志，并最多等待 120 秒使 home 进程报告 `running`。若 home 进程先行退出或未及时报告 `running`，则报告失败，并给出其日志的位置。`delorun stop` 与 `delorun status` 读取令牌文件，并通过更新通道发送 `stop` 或 `status`；若没有存活的锁持有者，`stop` 会打印 Delo 未在运行并以 0 退出，`status` 则以 3 退出。
 
 本构建尚无运行时仓库，因此其 home 进程拒绝更新请求；其 Host 不统计运行中的 chat，因此 `stop` 不会等待任何 chat（[home 进程的 seams](../../packages/home-process/README.zh.md#seams-for-other-packages)）。

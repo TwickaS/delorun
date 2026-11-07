@@ -46,7 +46,7 @@ description: "@delo/home-process 包，供 delorun 与运行时仓库的维护�
 
 `listenUpdateChannel` 以 C19 的限制提供 `@delo/home` 的令牌通道：每个连接的一行请求至多 16,384 字节，且必须在 5 秒内到达（`REQUEST_TOO_LARGE`、`REQUEST_TIMEOUT`），同时打开的连接至多 8 个（`BUSY`）。在读取该行的其他任何内容之前，先以恒定时间比较令牌；缺失、格式错误、错误或属于上一次启动的令牌，只收到 `UNAUTHENTICATED`，别无其他字段，且被拒绝的请求至多每秒记录一次，日志中不含所提交的值。`checkUpdateRequest` 随后依据封闭模式检查：未知的 `op`、任意深度的未知字段、不为 1 的 `v`，或超出其类型的取值，均以 `SCHEMA_VIOLATION` 拒绝，因此一个请求至多指定一个版本，从不指定路径、归档、URL 或命令。请求在调用方断开连接后仍继续运行，且该调用方的连接不再计入 8 个之中。
 
-`sendHomeRequest` 是 `delorun` 的客户端：发送请求时读取令牌文件，并重试 `BUSY` 应答。`updateChannelProbe` 是锁所用的持有者探测。Host 只能通过启动时收到的 `UpdateChannelAccess` 访问通道，该对象将令牌保存在内存中；studio 的 "Update now" 与回滚都经由它。
+在 C1 规则生效之处，受限命令既无法到达通道，也无法读取令牌：`delorun` 启动 CLI profile 时，将上游的本地沙箱提供方设置为保护 home 并拒绝连接通道的套接字（[CLI 的启动](../../apps/cli/README.zh.md#the-home-process)）；在 Landlock 下，受限命令可以连接，但无法读取令牌，因此其请求以 `UNAUTHENTICATED` 失败。`sendHomeRequest` 是 `delorun` 的客户端：发送请求时读取令牌文件，并重试 `BUSY` 应答。`updateChannelProbe` 是锁所用的持有者探测。Host 只能通过启动时收到的 `UpdateChannelAccess` 访问通道，该对象将令牌保存在内存中；studio 的 "Update now" 与回滚都经由它。
 
 <a id="the-update-handshake"></a>
 ## 更新握手
@@ -102,11 +102,11 @@ description: "@delo/home-process 包，供 delorun 与运行时仓库的维护�
 ## 尚未实现的部分
 
 - 上表所列的运行时仓库、profile 历史以及 Host 的 chat 门控。在 chat 门控落地之前，`delorun stop` 不会等待运行中的 chat。
-- 第 8 步的隔离探测及其结果，以及 `delorun verify` 对无法执行 C1 规则的方言的报告。
+- 第 8 步的隔离探测及其结果，以及 `delorun verify` 对无法执行 C1 规则的方言的报告。home 进程自身尚不包装任何受限命令；探测落地后，若 Landlock 的包装因通往 home 的路径上的条目在包装与启动之间发生变化而以退出码 125 被拒绝，会先重试一次再报告。
 - 登录时启动（`--at-login`）、`delorun status --follow`、`delorun update` 与 `delorun recover`。
 - 采用 C1 DACL 的 Windows 命名管道：通道只在 Unix 套接字上监听。
 
 <a id="tests"></a>
 ## 测试
 
-`node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/home-process` 运行规范：每个 profile 一个 home 进程，每次启动的令牌及对上一次启动令牌的拒绝，封闭模式与限制，等待运行中 chat 的更新，`abort-if-busy` 与 `update.cancel`，在 `waiting` 与 `health-check` 阶段被杀死的请求方，健康检查失败后的回滚，中断的更新，桌面应用的独立性，Host 访问通道的途径，监管器的启动，以及假时钟下的排空超时。隔离规范会经由上游的沙箱提供方，运行宿主提供的每种沙箱方言；对于 profile（Delo 的沙箱 profile）尚未表达 C1 的 `home-read` 规则的方言，以及启动器不可用的 Landlock，规范会跳过并给出原因。另一个规范依约定所述应用 C1 的 bwrap 机制，以证明套接字与令牌文件位于它所隐藏的位置。
+`node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/home-process` 运行规范：每个 profile 一个 home 进程，每次启动的令牌及对上一次启动令牌的拒绝，封闭模式与限制，等待运行中 chat 的更新，`abort-if-busy` 与 `update.cancel`，在 `waiting` 与 `health-check` 阶段被杀死的请求方，健康检查失败后的回滚，中断的更新，桌面应用的独立性，Host 访问通道的途径，监管器的启动，以及假时钟下的排空超时。隔离规范经由上游的沙箱提供方运行宿主提供的每种沙箱方言，其配置与 `delorun` 为 CLI profile 所做的配置相同（以 C1 的读取豁免保护 home，拒绝连接通道的套接字）；启动器不可用时，Landlock 规范会跳过并给出原因。另一个规范依约定所述应用 C1 的 bwrap 机制，以证明套接字与令牌文件位于它所隐藏的位置。`delo/apps/cli` 的真实运行器规范在已启动的 CLI profile 下运行同一拒绝检查。
