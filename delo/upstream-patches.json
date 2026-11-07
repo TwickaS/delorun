@@ -2350,6 +2350,16 @@
       "path": "apps/web/vite.config.ts",
       "class": "delo-feature",
       "reason": "The build title variable DSH_CLIENT_TITLE also names the iOS home-screen title and the built web manifest, so Delo's build sets the product name in every place the page presents it. Default values are unchanged."
+    },
+    {
+      "path": "scripts/client-bundle-css.spec.ts",
+      "class": "delo-feature",
+      "reason": "Takes `.woff` as the unsupported font in the package-asset import and stylesheet `url()` rejections and lists `.woff2` in the expected message, because Delo's package-asset media types include `.woff2` (see the `packages/client/modules/src/assets.ts` entry)."
+    },
+    {
+      "path": "scripts/verify-client-packages.spec.ts",
+      "class": "delo-feature",
+      "reason": "Expects the `.woff2` import among the collected package-asset specifiers and adds a `.woff` import that stays uncollected, because Delo's package-asset media types include `.woff2` (see the `packages/client/modules/src/assets.ts` entry)."
     }
   ],
   "retired": []

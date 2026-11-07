@@ -306,6 +306,7 @@ describe('package assets', () => {
       "import type Art from './assets/type-only.webp'",
       "import styles from './View.module.css'",
       "import font from './assets/font.woff2'",
+      "import legacyFont from './assets/font.woff'",
       "import raw from './assets/raw.svg?raw'",
       "import shared from '@deepseek-ai/dsh-client-other/assets/shared.svg'",
       "import rooted from '/assets/rooted.svg'",
@@ -316,6 +317,7 @@ describe('package assets', () => {
       './assets/photo.jpeg',
       './assets/lazy.jpg',
       './assets/legacy.svg',
+      './assets/font.woff2',
     ])
   })
 

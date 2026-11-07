@@ -269,13 +269,13 @@ describe('client bundle package asset imports', () => {
   })
 
   it('ignores imports and modules that are not supported assets', async () => {
-    const root = await assetPackage({ 'src/client/index.ts': '', 'src/client/assets/font.woff2': 'font' })
+    const root = await assetPackage({ 'src/client/index.ts': '', 'src/client/assets/font.woff': 'font' })
     const { resolveId, load } = hooks(browserPlugins(root)('dsh-package-asset'))
     const importer = join(root, 'src/client/index.ts')
     const context = recordingContext()
 
     expect(resolveId('./index.ts', importer)).toBeNull()
-    expect(resolveId('./assets/font.woff2', importer)).toBeNull()
+    expect(resolveId('./assets/font.woff', importer)).toBeNull()
     expect(resolveId('./assets/whale.png', undefined)).toBeNull()
     expect(await load.call(context, importer)).toBeNull()
     expect(await load.call(context, 'whale.png')).toBeNull()
@@ -484,13 +484,13 @@ describe('client bundle stylesheet url()', () => {
   })
 
   it.each([
-    ['./assets/font.woff2', 'is not a supported asset; supported extensions: .svg, .png, .webp, .jpg, .jpeg'],
+    ['./assets/font.woff', 'is not a supported asset; supported extensions: .svg, .png, .webp, .jpg, .jpeg, .woff2'],
     ['./whale.png', 'is outside src/client/assets; move the asset there'],
     ['./assets/missing.png', 'cannot resolve asset'],
   ])('rejects url(%s)', async (url, message) => {
     const root = await assetPackage({
       'src/client/whale.png': WHALE,
-      'src/client/assets/font.woff2': 'font',
+      'src/client/assets/font.woff': 'font',
       'src/client/View.module.css': `.x { background: url(${url}); }`,
     })
 
