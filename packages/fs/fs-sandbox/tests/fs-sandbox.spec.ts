@@ -18,7 +18,8 @@ import { FsError, FsTargetKey } from '@deepseek-ai/dsh-fs'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { SandboxedFileSystem } from '@deepseek-ai/dsh-fs-sandbox'
 import { assertWorkspaceOutsideTemp, outsideTempWorkspaceParent } from '../../../../scripts/snapshot-workspace-parent.ts'
 
@@ -286,5 +287,77 @@ describe('patch, delete, and move fences', () => {
       expect(await readFile(outsidePath, 'utf8')).toBe('patched\n')
       expect(await fs.deleteFile(out)).toEqual({ before: 'patched\n' })
     }
+  })
+})
+
+/** A sandbox provider stand-in that reports a protected home; it never confines anything. */
+class ProtectingProvider extends SandboxProvider {
+  static home: string | undefined
+  override get protectedHome(): string | undefined {
+    return ProtectingProvider.home
+  }
+  /* v8 ignore next 3 -- the fence never confines; only protectedHome is read. */
+  confine(): Promise<ConfinedArgv> {
+    throw new Error('not used')
+  }
+}
+
+/** A provider that keeps the Service Definition's default: no protected home. */
+class PlainProvider extends SandboxProvider {
+  /* v8 ignore next 3 -- the fence never confines; only protectedHome is read. */
+  confine(): Promise<ConfinedArgv> {
+    throw new Error('not used')
+  }
+}
+
+describe('the sandbox provider\'s protected home', () => {
+  /** A workspace that contains the home, as a workspace at `~` contains `~/.delo`. */
+  let home: string
+  beforeEach(async () => {
+    home = join(workspace, '.delo')
+    await mkdir(join(home, 'secrets'), { recursive: true })
+    await writeFile(join(home, 'secrets', 'key'), 'key\n')
+  })
+
+  async function bootWith(mode: SandboxMode, provider: typeof ProtectingProvider | typeof PlainProvider): Promise<void> {
+    await boot(mode)
+    ProtectingProvider.home = home
+    await ctx.plugin(provider)
+  }
+
+  it('denies writing, editing, patching, deleting and moving under the home from a workspace that contains it', async () => {
+    await bootWith('workspace-write', ProtectingProvider)
+    const planted = join(home, 'planted')
+    const key = await target(join(home, 'secrets', 'key'))
+    const beside = join(workspace, 'beside')
+    await writeFile(beside, 'beside\n')
+    await expect(fs.writeText(await target(planted), 'x')).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED', message: expect.stringContaining('protected home') })
+    await expect(fs.editText(key, { oldString: 'key', newString: 'changed', replaceAll: false })).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
+    await expect(fs.patchText(key, [])).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
+    await expect(fs.deleteFile(key)).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
+    await expect(fs.moveFile(await target(beside), await target(planted), {})).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
+    await expect(fs.moveFile(key, await target(join(workspace, 'stolen')), {})).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
+    expect(existsSync(planted)).toBe(false)
+    expect(await readFile(join(home, 'secrets', 'key'), 'utf8')).toBe('key\n')
+    // The rest of the workspace stays writable.
+    expect(await fs.writeText(await target(join(workspace, 'allowed')), 'ok')).toBeDefined()
+  })
+
+  it('denies a write reaching the home through a symbolic link in the workspace', async () => {
+    await bootWith('workspace-write', ProtectingProvider)
+    await symlink(home, join(workspace, 'alias'), 'dir')
+    await expect(fs.writeText(await target(join(workspace, 'alias', 'planted')), 'x')).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
+    expect(existsSync(join(home, 'planted'))).toBe(false)
+  })
+
+  it('leaves the fence unchanged when the provider protects no home', async () => {
+    await bootWith('workspace-write', PlainProvider)
+    expect(await fs.writeText(await target(join(home, 'planted')), 'x')).toBeDefined()
+    expect(await readFile(join(home, 'planted'), 'utf8')).toBe('x')
+  })
+
+  it('lets danger-full-access write under the home, as confined commands under that mode can', async () => {
+    await bootWith('danger-full-access', ProtectingProvider)
+    expect(await fs.writeText(await target(join(home, 'planted')), 'x')).toBeDefined()
   })
 })

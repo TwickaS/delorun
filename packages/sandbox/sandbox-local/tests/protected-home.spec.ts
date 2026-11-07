@@ -183,6 +183,8 @@ describe('provider protection config', () => {
     const { root, home, workspace } = fixture()
     symlinkSync(home, join(root, 'home-link'), 'dir')
     const sandbox = await provider({ protectedHome: join(root, 'home-link') })
+    expect(sandbox.protectedHome).toBe(home)
+    expect((await provider({})).protectedHome).toBeUndefined()
     expect((await sandbox.confine(['true'], { mode: 'read-only', workspaceRoot: workspace })).argv).toEqual(expect.arrayContaining(['--tmpfs', home]))
   })
 

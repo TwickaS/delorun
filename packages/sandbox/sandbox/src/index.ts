@@ -200,6 +200,16 @@ export abstract class SandboxProvider extends Service {
    *   the selected backend achieves for it.
    */
   abstract confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv>
+
+  /**
+   * The canonical directory that confined executions may neither write nor read, as far as the backend expresses
+   * each rule, or `undefined` when the provider protects none. In-process enforcers, such as the filesystem fence,
+   * refuse mutations under it, so a tool cannot write where a confined command cannot.
+   * @returns the protected directory, or `undefined`.
+   */
+  get protectedHome(): string | undefined {
+    return undefined
+  }
 }
 
 export default SandboxProvider

@@ -20,8 +20,9 @@
  * Per-call policy: `read-only` denies every mutation; `workspace-write` allows
  * a mutation only when the target canonicalizes under the policy's workspace
  * root, an explicit additional writable root, or a platform temp area from the
- * shared `writableRoots` policy; `danger-full-access` delegates unfenced. A
- * denial throws the structured `FS_SANDBOX_DENIED`.
+ * shared `writableRoots` policy, and not under the sandbox provider's
+ * `protectedHome` when one is mounted and configured; `danger-full-access`
+ * delegates unfenced. A denial throws the structured `FS_SANDBOX_DENIED`.
  *
  * @module @deepseek-ai/dsh-fs-sandbox
  */
@@ -164,6 +165,10 @@ export class SandboxedFileSystem extends LocalFileSystem {
     // symlink ancestor swapped since the tool resolved this target), and the
     // mutation delegates with THIS fresh target — never the stale one.
     const fresh = await this.resolve(target.displayPath)
+    const home = this.ctx.get('sandbox')?.protectedHome
+    if (home !== undefined && await isPathUnder(fresh.targetKey, home)) {
+      throw new FsError(`cannot write "${target.displayPath}": file access denied under the protected home`, 'FS_SANDBOX_DENIED')
+    }
     let contained = false
     for (const root of writableRoots(policy)) {
       if (await isPathUnder(fresh.targetKey, root)) {

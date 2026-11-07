@@ -381,6 +381,14 @@ export class LocalSandboxProvider extends SandboxProvider {
   }
 
   /**
+   * The configured `protectedHome`, canonicalized at load.
+   * @returns the protected directory, or `undefined` when none is configured.
+   */
+  override get protectedHome(): string | undefined {
+    return this.protection.home
+  }
+
+  /**
    * Wrap `argv` in the selected runner's invocation for `policy` — the configured
    * `runnerCommand` when present (the operator's assertion, no probe), else the platform
    * chain's runner speaking its own profile dialect.
