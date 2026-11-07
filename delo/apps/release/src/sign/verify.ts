@@ -74,7 +74,7 @@ function utcText(now: number): string {
  * @throws VerificationError when the file does not read or verify, or its dates are out of order or beyond the
  * lifetime limit.
  */
-function readRoot(bytes: Uint8Array): TrustedRoot {
+export function readRoot(bytes: Uint8Array): TrustedRoot {
   const envelope = readEnvelope('root', bytes)
   const root = envelope.signed
   const lifetime = seconds(root.expires) - seconds(root.issued)

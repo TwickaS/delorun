@@ -5,6 +5,9 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "exports": {
+    "./sign/*": "./src/sign/*.ts"
+  },
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@delo/contract-release-log": "workspace:*",

@@ -1835,6 +1835,30 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
 
+  delo/packages/runtime-store:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delo/contract-verification-checks':
+        specifier: workspace:*
+        version: link:../contract-verification-checks
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../logs
+      '@delo/release':
+        specifier: workspace:*
+        version: link:../../apps/release
+
   delo/packages/supervisor:
     dependencies:
       '@delo/contract-home-layout':
