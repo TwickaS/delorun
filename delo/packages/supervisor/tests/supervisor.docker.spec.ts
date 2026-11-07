@@ -9,12 +9,13 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SUPERVISOR_ROOTS_FILE } from '@delo/contract-home-layout'
 import { HELPER_SOCKET_DIR, IMAGES, LABELS, PRESETS, type DockerLimit } from '@delo/contract-runtime-supervisor'
-import type { OciDigest } from '@delo/contract-release-manifest'
+import type { FileRef, OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
 import { writeProtectedFile } from '@delo/home'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { homeIdOf } from '../src/index.ts'
@@ -72,13 +73,25 @@ afterAll(() => {
   spawnSync('docker', ['image', 'rm', TAG], { stdio: 'ignore' })
 }, DOCKER_MS)
 
-async function start(manifestDigest: OciDigest | undefined): Promise<{ readonly home: string, readonly socket: string, readonly token: string, readonly parent: string }> {
+/**
+ * The running supervisor, read through a call so a spec that stops and restarts it keeps its declared type.
+ * @returns the running supervisor, if any.
+ */
+const current = (): RunningSupervisor | undefined => running
+
+/** A seccomp profile for the fixture: Docker's own default is not needed to show the listed profile reaches the engine. */
+const PROFILE_TEXT = '{"defaultAction":"SCMP_ACT_ALLOW","syscalls":[{"names":["keyctl","add_key","request_key"],"action":"SCMP_ACT_ERRNO"}]}'
+
+async function start(manifestDigest: OciDigest | undefined, seccomp?: { readonly listed: FileRef, readonly text: string }): Promise<{ readonly home: string, readonly socket: string, readonly token: string, readonly parent: string }> {
   temp = await tempHome()
   homes.push(temp.home)
   const parent = join(temp.outside, 'projects')
   mkdirSync(parent, { mode: 0o700 })
   await writeProtectedFile(join(temp.home, SUPERVISOR_ROOTS_FILE), JSON.stringify({ v: 1, parents: [parent] }))
-  running = await startSupervisor(temp.home, { manifest: fixtureManifest(manifestDigest), env: process.env, pull: 'none' })
+  const seccompDirectory = join(temp.outside, 'seccomp')
+  mkdirSync(seccompDirectory)
+  if (seccomp !== undefined) writeFileSync(join(seccompDirectory, seccomp.listed.name), seccomp.text)
+  running = await startSupervisor(temp.home, { manifest: fixtureManifest(manifestDigest, undefined, seccomp?.listed), env: process.env, pull: 'none', seccompDirectory })
   return { home: temp.home, socket: running.supervisor.socketPath, token: running.token, parent }
 }
 
@@ -115,6 +128,21 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
     for (const [limit, check] of Object.entries(matches)) {
       if (!check()) expect(limits[limit as DockerLimit].status, `${limit} differs from the inspect record`).not.toBe('enforced')
     }
+    expect(owned(home)).toEqual({ containers: [], networks: [] })
+  })
+
+  it('runs the probe under the seccomp profile the manifest lists, and refuses a listed profile whose file differs', async (test) => {
+    if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
+    const listed: FileRef = { name: 's2.seccomp.json', length: Buffer.byteLength(PROFILE_TEXT), sha256: createHash('sha256').update(PROFILE_TEXT).digest('hex') as Sha256Hex }
+    const { socket, token } = await start(digest, { listed, text: PROFILE_TEXT })
+    expect(await send(socket, { v: 1, token, op: 'capabilities', args: { refresh: true } })).toMatchObject({ ok: true })
+    expect(running?.supervisor.current.probe?.HostConfig?.SecurityOpt).toContain(`seccomp=${PROFILE_TEXT}`)
+    expect(running?.supervisor.current.docker?.limits.seccomp.status).toBe('enforced')
+    await running?.stop()
+    running = undefined
+    const { home } = await start(digest, { listed, text: PROFILE_TEXT.replace('keyctl', 'ptrace') })
+    expect(current()?.supervisor.current.shapes.s2).toMatchObject({ available: false })
+    expect(current()?.supervisor.current.docker?.limits.seccomp.status).toBe('unknown')
     expect(owned(home)).toEqual({ containers: [], networks: [] })
   })
 

@@ -10,7 +10,6 @@
 export { connectCommand, engineKind, inspectDocker, limitFindings, PROBE_COMMANDS, PROBE_ENTRY, shapesOf, type EngineInfo, type EngineMachine, type EngineVersion, type Inspection, type InspectOptions, type NetworkRecord, type ProbeEvidence } from './capabilities.ts'
 export {
   createBody,
-  EGRESS_PROXY_ENTRY,
   hardeningDifferences,
   homeIdOf,
   labelsOf,
@@ -37,8 +36,9 @@ export { encodeLaunch, LAUNCH_FD, LAUNCH_MAX_BYTES, parseLaunch, runSupervisorPr
 export { captureSupervisorOutput, openSupervisorLog, SUPERVISOR_LOGGER, type SupervisorLog, type SupervisorLogOptions } from './log.ts'
 export { imagePlatform, listedImage, verifiedManifestSchema, type ListedImage, type VerifiedManifest } from './manifest.ts'
 export { loadRootRules, resolveWorkspaceRoot, type RootRules } from './roots.ts'
+export { loadSeccompProfile, SECCOMP_PROFILE_MAX_BYTES } from './seccomp.ts'
 export { decodeRequest, isAllowlistHost } from './schema.ts'
 export { listenSupervisor, type ListenOptions, type RequestHandler, type SupervisorListener } from './server.ts'
 export { Supervisor, supervisorSocketPath, type SupervisorOptions } from './supervisor.ts'
 export { parseStartToken, readStartTokenFile, StartTokenCheck, startTokenFile } from './token.ts'
-export { allowedHosts, presetLimits, Workspaces, type WorkspaceContext, type WorkspaceView } from './workspaces.ts'
+export { allowedHosts, engineRefusal, presetLimits, Workspaces, type WorkspaceContext, type WorkspaceView } from './workspaces.ts'

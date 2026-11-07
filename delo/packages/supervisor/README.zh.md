@@ -36,6 +36,7 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 | `token` | 本次启动的令牌 |
 | `manifest` | home 进程为所运行的运行时验证过的发布 manifest 中的 `images` 条目 |
 | `imagePull` | `registry` 表示按摘要拉取引擎缺少的已列出镜像；`none` 表示只使用引擎已持有的镜像 |
+| `seccompDirectory` | 存放 manifest 所列 seccomp 配置文件的绝对目录 |
 | `logLevel` | 监管器所记录日志的最详细级别 |
 
 令牌只通过该管道到达监管器，从不经由命令行或环境变量。管道在本次启动运行期间保持打开；home 进程关闭它或退出时，监管器关闭其套接字并退出，下一次启动会以新令牌启动新的监管器。该次重启期间，容器继续运行。`Supervisor.start` 在一个已持有这些值的进程中运行同一个监管器。
@@ -73,7 +74,8 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 监管器只依赖 [C2](../../docs/contracts/c02-release-manifest.zh.md) 的类型：它以 `VerifiedManifest` 输入接收已验证的 manifest，其 `images` 由 home 进程在发布校验器检查 manifest 之后、于启动时发送。验证签名、时间戳或日志条目不是本包的职责，也没有任何请求会指定镜像。
 
 - `listedImage` 按引擎平台的摘要取 C9 的仓库，并以 `IMAGE_NOT_IN_MANIFEST` 拒绝指定其他仓库的条目，或指定的平台没有摘要的条目。
-- `ensureListedImage` 以 `<repository>@<digest>` 查找镜像；镜像不存在且 `imagePull` 为 `registry` 时，精确拉取该引用。以下情形会以 `IMAGE_NOT_IN_MANIFEST` 拒绝：拉取关闭时镜像不存在、拉取失败，以及镜像记录的摘要中不包含 manifest 所列任何摘要的情形。容器只从该引用创建，从不使用标签。
+- `ensureListedImage` 以 `<repository>@<digest>` 查找镜像；镜像不存在且 `imagePull` 为 `registry` 时，精确拉取该引用。拉取失败以 `IMAGE_PULL_FAILED` 拒绝；以下情形以 `IMAGE_NOT_IN_MANIFEST` 拒绝：拉取关闭时镜像不存在，以及镜像记录的摘要中不包含 manifest 所列任何摘要的情形。容器只从该引用创建，从不使用标签。
+- manifest 为镜像列出 `seccomp` 文件时，`loadSeccompProfile` 从 `seccompDirectory` 读取它；名称不是单个路径段、文件不存在，或其长度或 SHA-256 不符时，以 `IMAGE_NOT_IN_MANIFEST` 拒绝。该镜像的每个容器（包括探测容器）都在该配置文件下运行；没有列出时，在引擎的默认配置文件下运行，从不使用 `unconfined`。
 
 <a id="the-capability-report"></a>
 ## 能力报告
@@ -98,10 +100,10 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 `workspace.create` 解析根目录，依据引擎所在机器检查预设（`PRESET_OUT_OF_RANGE`），确保 S2 镜像存在，要求 S2 已被提供，并在 home 与 profile 的标签下创建：
 
 - 内部网络 `delo-ws-<12 hex>`；
-- 同名容器，由 `createBody` 构建：丢弃所有能力，设置 `no-new-privileges`，保留引擎的 seccomp 配置文件，根文件系统只读并带有大小为预设值的 tmpfs `/tmp`，CPU、内存与 PID 限制取自预设，交换空间等于内存，磁盘大小仅在报告确认其已强制执行时设置，使用 init 进程，无重启策略，无设备，不加入宿主的任何命名空间，使用 C9 辅助通道的工作区用户，并且只绑定挂载解析后的根目录（路径相同）以及辅助程序的套接字目录 `run/<profile>/s2/<12 hex>/` 到 `/run/delo-helper`；
-- 除非出站为 `none`，否则还会创建出站代理 `delo-ws-<12 hex>-proxy`，它使用同一摘要的镜像，接入 `delo-ws-<12 hex>-out` 与内部网络，以入口 `EGRESS_PROXY_ENTRY` 启动，其模式与主机列表分别在 `DELO_EGRESS_MODE` 与 `DELO_EGRESS_HOSTS` 中给出。
+- 同名容器，由 `createBody` 构建：丢弃所有能力，设置 `no-new-privileges`，使用所列的 seccomp 配置文件或引擎的默认配置文件，根文件系统只读并带有大小为预设值的 tmpfs `/tmp`，CPU、内存与 PID 限制取自预设，交换空间等于内存，磁盘大小仅在报告确认其已强制执行时设置，使用 init 进程，无重启策略，无设备，不加入宿主的任何命名空间，使用 C9 辅助通道的工作区用户，并且只绑定挂载解析后的根目录（路径相同）以及辅助程序的套接字目录 `run/<profile>/s2/<12 hex>/` 到 `/run/delo-helper`；
+- 除非出站为 `none`，否则还会创建出站代理 `delo-ws-<12 hex>-proxy`，它使用同一摘要的镜像，接入 `delo-ws-<12 hex>-out` 与内部网络，以 C9 的入口 `/usr/local/bin/delo-egress-proxy`（`EGRESS_PROXY_ENTRY`）启动，其模式与主机列表分别在 `DELO_EGRESS_MODE` 与 `DELO_EGRESS_HOSTS` 中给出，并使用工作区的资源限制。
 
-每创建一个容器后，监管器都会将其 inspect 记录与其请求体比较（`hardeningDifferences`）：挂载与解析后的路径不一致时，删除本次创建的全部内容，并以 `ROOT_REFUSED` 拒绝；引擎未应用某项设置时，以 `LIMITS_MISSING` 拒绝。工作区容器的代理变量始终指向该代理，因此在 `none` 下，任何名称都无法解析，也没有任何流量能够发出。对不带有本 home 与本 profile 标签的容器执行的操作，会以 `NOT_FOUND` 失败。`workspace.remove` 会删除这些容器、两个网络与辅助程序目录，并保持工作区根目录不变。
+每创建一个容器后，监管器都会将其 inspect 记录与其请求体比较（`hardeningDifferences`）：挂载与解析后的路径不一致时，删除本次创建的全部内容，并以 `ROOT_REFUSED` 拒绝；引擎未应用某项设置时，以 `LIMITS_MISSING` 拒绝。工作区容器的代理变量始终指向该代理，因此在 `none` 下，任何名称都无法解析，也没有任何流量能够发出。容器已存在的工作区以 `WORKSPACE_EXISTS` 拒绝，引擎拒绝的调用以 `ENGINE_REFUSED` 并附引擎的消息拒绝，引擎未应答时以 `DOCKER_UNAVAILABLE` 拒绝。对不带有本 home 与本 profile 标签的容器执行的操作，会以 `NOT_FOUND` 失败。`workspace.remove` 会删除这些容器、两个网络与辅助程序目录，并保持工作区根目录不变。
 
 <a id="the-operational-log"></a>
 ## 运行日志
@@ -113,7 +115,6 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)）持有启动�
 
 - S2 辅助程序（`helper.start`）、S3 容器（`s3.*`）与凭据转发，在对应形态加入它们之前，均以 `SHAPE_UNAVAILABLE` 拒绝。
 - 出站代理程序由 S2 镜像提供；在镜像随附该程序之前，代理容器不会启动，`egress-allowlist` 被报告为 `unknown`。
-- C9 所称发布随附的 seccomp 配置文件未列于 C2 的 manifest 中，因此容器保留引擎的默认配置文件，且该配置文件从不被禁用。
 - 采用 C1 DACL 的 Windows 命名管道：监管器只在 Unix 套接字上监听。
 
 <a id="tests"></a>

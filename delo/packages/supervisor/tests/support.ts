@@ -10,7 +10,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { StartToken } from '@delo/contract-home-layout'
 import { IMAGES, type SupervisorFailure } from '@delo/contract-runtime-supervisor'
-import type { OciDigest } from '@delo/contract-release-manifest'
+import type { FileRef, OciDigest } from '@delo/contract-release-manifest'
 import { ensureHomeTree, writeProtectedFile } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
 import { openSupervisorLog, startTokenFile, Supervisor, type ImagePull, type SupervisorLog, type VerifiedManifest } from '../src/index.ts'
@@ -61,12 +61,13 @@ export const ABSENT_DIGEST = `sha256:${'0'.repeat(64)}` as OciDigest
  * A verified manifest naming C9's repositories at the given digests.
  * @param s2 - the S2 image's digest, used for its index and both platforms.
  * @param s3 - the S3 image's digest.
+ * @param s2Seccomp - the S2 image's listed seccomp profile file, if any.
  * @returns the manifest's image entries.
  */
-export function fixtureManifest(s2: OciDigest = ABSENT_DIGEST, s3: OciDigest = ABSENT_DIGEST): VerifiedManifest {
+export function fixtureManifest(s2: OciDigest = ABSENT_DIGEST, s3: OciDigest = ABSENT_DIGEST, s2Seccomp?: FileRef): VerifiedManifest {
   return {
     images: {
-      s2: { repository: IMAGES.s2, index: s2, platforms: { 'linux/amd64': s2, 'linux/arm64': s2 } },
+      s2: { repository: IMAGES.s2, index: s2, platforms: { 'linux/amd64': s2, 'linux/arm64': s2 }, ...s2Seccomp === undefined ? {} : { seccomp: s2Seccomp } },
       s3: { repository: IMAGES.s3, index: s3, platforms: { 'linux/amd64': s3, 'linux/arm64': s3 } },
     },
   }
@@ -97,6 +98,8 @@ export interface StartOptions {
   readonly pull?: ImagePull
   /** The OS home; the real one when omitted. */
   readonly osHome?: string
+  /** The seccomp profile directory; `<home>/seccomp` when omitted. */
+  readonly seccompDirectory?: string
 }
 
 /**
@@ -111,7 +114,7 @@ export async function startSupervisor(home: string, options: StartOptions = {}):
   log.redactor.register(token, 'start-token')
   const supervisor = await Supervisor.start({
     home, profile: PROFILE, token, manifest: options.manifest ?? fixtureManifest(), pull: options.pull ?? 'none',
-    logger: log.logger, env: options.env ?? noDockerEnv(home), osHome: options.osHome ?? homedir(),
+    logger: log.logger, env: options.env ?? noDockerEnv(home), osHome: options.osHome ?? homedir(), seccompDirectory: options.seccompDirectory ?? join(home, 'seccomp'),
   })
   return {
     supervisor, log, token,

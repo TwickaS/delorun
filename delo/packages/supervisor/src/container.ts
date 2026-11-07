@@ -103,19 +103,6 @@ export function labelsOf(owner: Owner, workspaceId: WorkspaceId | undefined): Re
   }
 }
 
-/**
- * The entry of the egress proxy in the S2 workspace image, and the variables that carry its mode and hosts. C9
- * states that the proxy runs from the S2 image's digest with its own entry; the image provides this program.
- */
-export const EGRESS_PROXY_ENTRY = {
-  /** The proxy's argv. */
-  command: ['/usr/local/bin/delo-egress-proxy'],
-  /** The variable holding the egress mode. */
-  modeVariable: 'DELO_EGRESS_MODE',
-  /** The variable holding the allowed hosts, comma-separated. */
-  hostsVariable: 'DELO_EGRESS_HOSTS',
-} as const
-
 /** The variables a workspace container's tools read for the proxy. */
 export const PROXY_VARIABLES = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'] as const
 
@@ -141,6 +128,8 @@ export interface ContainerPlan {
   readonly command?: readonly string[]
   /** Variables derived from the contract; never a request's value. */
   readonly env: readonly string[]
+  /** The seccomp profile the verified manifest lists for the image, as checked JSON text; the engine's default when absent. */
+  readonly seccomp?: string
   /** The working directory, if any. */
   readonly workingDir?: string
 }
@@ -196,7 +185,7 @@ export function createBody(plan: ContainerPlan): CreateBody {
       CapDrop: ['ALL'],
       CapAdd: [],
       Privileged: false,
-      SecurityOpt: ['no-new-privileges:true'],
+      SecurityOpt: ['no-new-privileges:true', ...plan.seccomp === undefined ? [] : [`seccomp=${plan.seccomp}`]],
       ReadonlyRootfs: true,
       Tmpfs: { '/tmp': `rw,nosuid,nodev,size=${String(plan.limits.tmpBytes)}` },
       NanoCpus: Math.round(plan.limits.cpus * 1e9),
@@ -305,7 +294,10 @@ export function hardeningDifferences(record: InspectRecord, body: CreateBody): {
   expect('HostConfig.CapDrop', (host.CapDrop ?? []).some(cap => cap.toUpperCase() === 'ALL'))
   expect('HostConfig.CapAdd', (host.CapAdd ?? []).length === 0)
   expect('HostConfig.Privileged', host.Privileged === false)
-  expect('HostConfig.SecurityOpt', (host.SecurityOpt ?? []).some(option => /^no-new-privileges(?::true|=true)?$/.test(option)) && !(host.SecurityOpt ?? []).some(option => /^seccomp[:=]unconfined$/.test(option)))
+  const listedProfile = body.HostConfig.SecurityOpt.find(option => option.startsWith('seccomp='))
+  expect('HostConfig.SecurityOpt', (host.SecurityOpt ?? []).some(option => /^no-new-privileges(?::true|=true)?$/.test(option))
+    && !(host.SecurityOpt ?? []).some(option => /^seccomp[:=]unconfined$/.test(option))
+    && (listedProfile === undefined || (host.SecurityOpt ?? []).includes(listedProfile)))
   expect('HostConfig.ReadonlyRootfs', host.ReadonlyRootfs === true)
   expect('HostConfig.NanoCpus', host.NanoCpus === body.HostConfig.NanoCpus)
   expect('HostConfig.Memory', host.Memory === body.HostConfig.Memory)

@@ -35,6 +35,7 @@ The home process ([C19](../../docs/contracts/c19-home-process.md)) owns the star
 | `token` | this start's token |
 | `manifest` | the `images` entries of the release manifest the home process verified for the running runtime |
 | `imagePull` | `registry` to pull a listed image the engine lacks, by digest; `none` to use only images the engine holds |
+| `seccompDirectory` | the absolute directory holding the seccomp profile files the manifest lists |
 | `logLevel` | the most detailed level the supervisor logs |
 
 The token reaches the supervisor only through the pipe, never a command line or an environment variable. The pipe stays open while the start runs; when the home process closes it or dies, the supervisor closes its socket and exits, and the next start launches a new supervisor with the new token. Containers keep running across that restart. `Supervisor.start` runs the same supervisor in a process that already holds these values.
@@ -68,7 +69,8 @@ The token reaches the supervisor only through the pipe, never a command line or 
 The supervisor depends only on [C2](../../docs/contracts/c02-release-manifest.md)'s types: it takes the verified manifest as the `VerifiedManifest` input, whose `images` the home process sends at launch after the release verifier has checked the manifest. Verifying a signature, a timestamp or a log entry is not this package's job, and no request names an image.
 
 - `listedImage` takes C9's repository at the engine platform's digest, and refuses with `IMAGE_NOT_IN_MANIFEST` an entry naming another repository or a platform without a digest.
-- `ensureListedImage` looks the image up as `<repository>@<digest>`, pulls exactly that reference when it is absent and `imagePull` is `registry`, and refuses with `IMAGE_NOT_IN_MANIFEST` an absent image when pulling is off, a failed pull, and an image whose recorded digests include none the manifest lists. Containers are created from that reference only, never a tag.
+- `ensureListedImage` looks the image up as `<repository>@<digest>`, pulls exactly that reference when it is absent and `imagePull` is `registry`, refuses a failed pull with `IMAGE_PULL_FAILED`, and refuses with `IMAGE_NOT_IN_MANIFEST` an absent image when pulling is off and an image whose recorded digests include none the manifest lists. Containers are created from that reference only, never a tag.
+- `loadSeccompProfile` reads the image's `seccomp` file, when the manifest lists one, from `seccompDirectory` and refuses with `IMAGE_NOT_IN_MANIFEST` a name that is not one path segment, a missing file, or one whose length or SHA-256 differs. Every container of the image, the probe included, runs under that profile; without one, under the engine's default profile, never `unconfined`.
 
 ## The capability report
 
@@ -91,10 +93,10 @@ A probe tool that is missing or does not finish gives `unknown`, and so does a g
 `workspace.create` resolves the root, checks the preset against the engine's machine (`PRESET_OUT_OF_RANGE`), makes the S2 image present, requires S2 to be offered and creates, under the home's and profile's labels:
 
 - the internal network `delo-ws-<12 hex>`;
-- the container of that name, built by `createBody`: every capability dropped, `no-new-privileges`, the engine's seccomp profile kept, a read-only root with a tmpfs `/tmp` of the preset's size, the preset's CPU, memory and PID limits with swap equal to memory, the disk size where the report found it enforced, an init process, no restart policy, no device, none of the host's namespaces, the workspace user of C9's helper channel, and bind mounts of only the resolved root (at the same path) and the helper's socket directory `run/<profile>/s2/<12 hex>/` at `/run/delo-helper`;
-- unless egress is `none`, the egress proxy `delo-ws-<12 hex>-proxy` from the same digest on `delo-ws-<12 hex>-out` and the internal network, started with the entry `EGRESS_PROXY_ENTRY` and its mode and hosts in `DELO_EGRESS_MODE` and `DELO_EGRESS_HOSTS`.
+- the container of that name, built by `createBody`: every capability dropped, `no-new-privileges`, the listed seccomp profile or the engine's default, a read-only root with a tmpfs `/tmp` of the preset's size, the preset's CPU, memory and PID limits with swap equal to memory, the disk size where the report found it enforced, an init process, no restart policy, no device, none of the host's namespaces, the workspace user of C9's helper channel, and bind mounts of only the resolved root (at the same path) and the helper's socket directory `run/<profile>/s2/<12 hex>/` at `/run/delo-helper`;
+- unless egress is `none`, the egress proxy `delo-ws-<12 hex>-proxy` from the same digest on `delo-ws-<12 hex>-out` and the internal network, started with C9's entry `/usr/local/bin/delo-egress-proxy` (`EGRESS_PROXY_ENTRY`), its mode and hosts in `DELO_EGRESS_MODE` and `DELO_EGRESS_HOSTS`, and the workspace's resource limits.
 
-After creating each container the supervisor compares its inspect record with its body (`hardeningDifferences`); a mount that differs from the resolved paths removes everything created with `ROOT_REFUSED`, and a setting the engine did not apply with `LIMITS_MISSING`. The workspace container's proxy variables always name the proxy, so under `none` nothing resolves and nothing leaves. An operation on a container without this home's and profile's labels fails with `NOT_FOUND`. `workspace.remove` removes the containers, both networks and the helper directory and leaves the workspace root untouched.
+After creating each container the supervisor compares its inspect record with its body (`hardeningDifferences`); a mount that differs from the resolved paths removes everything created with `ROOT_REFUSED`, and a setting the engine did not apply with `LIMITS_MISSING`. The workspace container's proxy variables always name the proxy, so under `none` nothing resolves and nothing leaves. A workspace whose container exists is refused with `WORKSPACE_EXISTS`, a call the engine refuses with `ENGINE_REFUSED` and the engine's message, and an engine that does not answer with `DOCKER_UNAVAILABLE`. An operation on a container without this home's and profile's labels fails with `NOT_FOUND`. `workspace.remove` removes the containers, both networks and the helper directory and leaves the workspace root untouched.
 
 ## The operational log
 
@@ -104,7 +106,6 @@ After creating each container the supervisor compares its inspect record with it
 
 - The S2 helper (`helper.start`), the S3 container (`s3.*`) and credential forwarding are refused with `SHAPE_UNAVAILABLE` until their shapes add them.
 - The egress proxy program is the S2 image's; until the image ships it, the proxy container does not start, and `egress-allowlist` is reported `unknown`.
-- The seccomp profile C9 says the release ships is not listed in C2's manifest, so containers keep the engine's default profile, which is never disabled.
 - Windows named pipes with C1's DACL: the supervisor listens only on a Unix socket.
 
 ## Tests

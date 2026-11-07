@@ -9,6 +9,7 @@
  * @module @delo/supervisor/launch
  */
 import { homedir } from 'node:os'
+import { isAbsolute } from 'node:path'
 import { Socket } from 'node:net'
 import type { LogLevel } from '@delo/contract-operational-logs'
 import { START_TOKEN_LENGTH, type StartToken } from '@delo/contract-home-layout'
@@ -40,6 +41,8 @@ export interface SupervisorLaunch {
   readonly manifest: VerifiedManifest
   /** Whether absent listed images are pulled from the registry. */
   readonly imagePull: ImagePull
+  /** The absolute directory holding the seccomp profile files the manifest lists, from the running runtime's release. */
+  readonly seccompDirectory: string
   /** The most detailed level the supervisor logs. */
   readonly logLevel: LogLevel
 }
@@ -52,6 +55,7 @@ const launchSchema = z.strictObject({
   token: z.string().regex(new RegExp(`^[A-Za-z0-9_-]{${String(START_TOKEN_LENGTH)}}$`)),
   manifest: verifiedManifestSchema,
   imagePull: z.enum(['registry', 'none']),
+  seccompDirectory: z.string().refine(isAbsolute, { message: 'an absolute path' }),
   logLevel: z.enum(['error', 'warn', 'info', 'debug']),
 })
 
@@ -115,7 +119,7 @@ export async function runSupervisorProcess(): Promise<void> {
   const restore = captureSupervisorOutput(log)
   let supervisor: Supervisor | undefined
   try {
-    supervisor = await Supervisor.start({ home: launch.home, profile: launch.profile, token: launch.token, manifest: launch.manifest, pull: launch.imagePull, logger, env: process.env, osHome: homedir() })
+    supervisor = await Supervisor.start({ home: launch.home, profile: launch.profile, token: launch.token, manifest: launch.manifest, pull: launch.imagePull, logger, env: process.env, osHome: homedir(), seccompDirectory: launch.seccompDirectory })
   } catch (error) {
     logger.error('the supervisor could not start', { err: error })
     restore()

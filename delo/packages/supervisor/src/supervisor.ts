@@ -41,6 +41,8 @@ export interface SupervisorOptions {
   readonly env: Readonly<Record<string, string | undefined>>
   /** The OS home directory, which no workspace root may be. */
   readonly osHome: string
+  /** The directory holding the seccomp profile files the manifest lists. */
+  readonly seccompDirectory: string
 }
 
 /**
@@ -91,7 +93,7 @@ export class Supervisor {
     const path = context?.endpoint.path
     const engine = path !== undefined && (context?.endpoint.kind === 'unix' || context?.endpoint.kind === 'npipe') ? engineAt(path) : undefined
     let supervisor: Supervisor | undefined
-    const workspaces = new Workspaces({ engine, owner, home: options.home, rules, manifest: options.manifest, pull: options.pull, inspection: () => supervisor?.inspection ?? { shapes: shapesOf(undefined, 'docker-unavailable', {}) } })
+    const workspaces = new Workspaces({ engine, owner, home: options.home, rules, manifest: options.manifest, pull: options.pull, seccompDirectory: options.seccompDirectory, inspection: () => supervisor?.inspection ?? { shapes: shapesOf(undefined, 'docker-unavailable', {}) } })
     supervisor = new Supervisor(options, owner, context, engine, workspaces)
     await supervisor.refresh()
     supervisor.listener = await listenSupervisor({
@@ -125,7 +127,7 @@ export class Supervisor {
         return { shapes: shapesOf(undefined, this.context === undefined ? 'docker-unavailable' : 'docker-endpoint-network', {}) }
       }
       try {
-        return await inspectDocker({ engine: this.engine, context: this.context, manifest: this.options.manifest, pull: this.options.pull, owner: this.owner })
+        return await inspectDocker({ engine: this.engine, context: this.context, manifest: this.options.manifest, pull: this.options.pull, owner: this.owner, seccompDirectory: this.options.seccompDirectory })
       } catch (error) {
         if (!(error instanceof EngineError)) throw error
         this.options.logger.warn('the Docker engine failed during inspection', { err: error })

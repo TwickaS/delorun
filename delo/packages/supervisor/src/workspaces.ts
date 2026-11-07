@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import {
   ADVANCED_BOUNDS,
   DEFAULT_EGRESS_HOSTS,
+  EGRESS_PROXY_ENTRY,
   LABELS,
   PRESETS,
   type CredentialOption,
@@ -26,7 +27,6 @@ import { checkPrivateDirectory, runDirectory } from '@delo/home'
 import type { EngineMachine, Inspection } from './capabilities.ts'
 import {
   createBody,
-  EGRESS_PROXY_ENTRY,
   hardeningDifferences,
   labelsOf,
   networkBody,
@@ -44,6 +44,7 @@ import { SupervisorError } from './errors.ts'
 import { ensureListedImage, type ImagePull } from './images.ts'
 import { listedImage, type VerifiedManifest } from './manifest.ts'
 import { resolveWorkspaceRoot, type RootRules } from './roots.ts'
+import { loadSeccompProfile } from './seccomp.ts'
 
 /** What the workspace operations need. */
 export interface WorkspaceContext {
@@ -61,6 +62,8 @@ export interface WorkspaceContext {
   readonly pull: ImagePull
   /** The latest capability inspection. */
   readonly inspection: () => Inspection
+  /** The directory holding the seccomp profile files the manifest lists. */
+  readonly seccompDirectory: string
 }
 
 /** A workspace as `workspace.inspect` and `workspace.list` report it. */
@@ -136,13 +139,14 @@ function limitsOf(record: InspectRecord): ResourceLimits {
 }
 
 /**
- * The engine's failure as a supervisor refusal: an engine that does not answer is `DOCKER_UNAVAILABLE`, and so is a
- * call it refused, with the engine's message as the detail.
+ * The engine's failure as a supervisor refusal: an engine that does not answer is `DOCKER_UNAVAILABLE`, and a call it
+ * refused is `ENGINE_REFUSED`, with the engine's message as the detail.
  * @param error - the thrown value.
  * @returns the refusal, or the value itself when it is not an engine failure.
  */
-function refusalOf(error: unknown): unknown {
-  return error instanceof EngineError ? new SupervisorError('DOCKER_UNAVAILABLE', error.message) : error
+export function engineRefusal(error: unknown): unknown {
+  if (!(error instanceof EngineError)) return error
+  return new SupervisorError(error.status === 0 ? 'DOCKER_UNAVAILABLE' : 'ENGINE_REFUSED', error.message)
 }
 
 /** The `workspace.*` operations over one engine. */
@@ -172,7 +176,7 @@ export class Workspaces {
         }
       }
     } catch (error) {
-      throw refusalOf(error)
+      throw engineRefusal(error)
     }
   }
 
@@ -194,6 +198,17 @@ export class Workspaces {
     throw new SupervisorError('SHAPE_UNAVAILABLE', `s2: ${s2.reason ?? 'unavailable'}`)
   }
 
+  /**
+   * The S2 image's reference, present in the engine, and its listed seccomp profile.
+   * @returns the reference and the profile's text, if the manifest lists one.
+   */
+  private async s2Image(): Promise<{ readonly image: string, readonly seccomp?: string }> {
+    const listed = listedImage(this.context.manifest, 's2', this.context.inspection().platform)
+    const seccomp = listed.seccomp === undefined ? undefined : await loadSeccompProfile(this.context.seccompDirectory, listed.seccomp)
+    const image = await ensureListedImage(this.engine, listed, this.context.pull)
+    return seccomp === undefined ? { image } : { image, seccomp }
+  }
+
   private helperDirectory(workspaceId: WorkspaceId): string {
     return join(runDirectory(this.context.home, this.context.owner.profile), 's2', workspaceHash(workspaceId))
   }
@@ -212,11 +227,11 @@ export class Workspaces {
     const engine = this.engine
     const machine = this.machineOrRefuse()
     const limits = presetLimits(args.preset, args.limits, machine)
-    const image = await ensureListedImage(engine, listedImage(this.context.manifest, 's2', this.context.inspection().platform), this.context.pull)
+    const { image, seccomp } = await this.s2Image()
     this.requireS2()
     if (args.credentials !== 'none') throw new SupervisorError('SHAPE_UNAVAILABLE', `credential forwarding (${args.credentials}) is not provided by this supervisor`)
     const names = workspaceNames(args.workspaceId)
-    if (await this.find(names.container) !== undefined) throw new SupervisorError('DOCKER_UNAVAILABLE', `${names.container} already exists`)
+    if (await this.find(names.container) !== undefined) throw new SupervisorError('WORKSPACE_EXISTS', `${names.container} already exists`)
     const docker = this.context.inspection().docker
     const diskQuota = docker?.limits.disk.status === 'enforced'
     const user = workspaceUser(docker?.rootless ?? false)
@@ -232,6 +247,7 @@ export class Workspaces {
       const body = createBody({
         name: names.container, image, labels, user, limits, diskQuota,
         networks: [names.network], binds: workspaceBinds(root, helperDir), env: workspaceEnv(names.proxy), workingDir: root,
+        ...seccomp === undefined ? {} : { seccomp },
       })
       await this.createChecked(names.container, body, created)
       if (args.egress !== 'none') await this.createProxy(args.workspaceId, args.egress, args.allowlistAdditions, limits, diskQuota, created, networks)
@@ -263,7 +279,7 @@ export class Workspaces {
     const engine = this.engine
     const names = workspaceNames(workspaceId)
     const labels = labelsOf(owner, workspaceId)
-    const image = await ensureListedImage(engine, listedImage(this.context.manifest, 's2', this.context.inspection().platform), this.context.pull)
+    const { image, seccomp } = await this.s2Image()
     if (!networks.includes(names.outNetwork)) {
       try {
         await engine.call('POST', '/networks/create', networkBody(names.outNetwork, false, labels))
@@ -277,6 +293,7 @@ export class Workspaces {
       name: names.proxy, image, labels, user: workspaceUser(this.context.inspection().docker?.rootless ?? false), limits, diskQuota,
       networks: [names.outNetwork], binds: [], command: [...EGRESS_PROXY_ENTRY.command],
       env: [`${EGRESS_PROXY_ENTRY.modeVariable}=${egress}`, `${EGRESS_PROXY_ENTRY.hostsVariable}=${allowedHosts(egress, additions).join(',')}`],
+      ...seccomp === undefined ? {} : { seccomp },
     })
     await this.createChecked(names.proxy, body, created)
     await engine.call('POST', `/networks/${encodeURIComponent(names.network)}/connect`, { Container: names.proxy })

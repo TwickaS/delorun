@@ -4,16 +4,23 @@
  * findings, including a limit the engine ignored.
  */
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import type { StartToken } from '@delo/contract-home-layout'
-import { GIB, IMAGES, PRESETS, type WorkspaceId } from '@delo/contract-runtime-supervisor'
-import type { OciDigest } from '@delo/contract-release-manifest'
+import { GIB, IMAGES, LABELS, PRESETS, type WorkspaceId } from '@delo/contract-runtime-supervisor'
+import type { OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
+import { writeProtectedFile } from '@delo/home'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   createBody,
   endpointOf,
   EngineError,
+  engineRefusal,
+  homeIdOf,
+  loadRootRules,
+  loadSeccompProfile,
+  Workspaces,
   ensureListedImage,
   hardeningDifferences,
   isAllowlistHost,
@@ -301,5 +308,91 @@ describe('shapes', () => {
     expect(shapesOf(docker('docker-engine'), undefined, { s3: 'unlisted' }).s3.reason).toBe('image-unverified')
     expect(shapesOf({ ...docker('docker-engine'), endpoint: { kind: 'tcp' } }, undefined, {}).s2.reason).toBe('docker-endpoint-network')
     expect(shapesOf(undefined, 'docker-unavailable', {}).s3.reason).toBe('docker-unavailable')
+  })
+})
+
+describe('listed seccomp profiles', () => {
+  const PROFILE_TEXT = '{"defaultAction":"SCMP_ACT_ALLOW","syscalls":[{"names":["keyctl"],"action":"SCMP_ACT_ERRNO"}]}'
+  const listed = (name: string, text: string = PROFILE_TEXT) => ({ name, length: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex') as Sha256Hex })
+
+  it('reads a profile that matches its listed length and digest', async () => {
+    temp = await tempHome()
+    writeFileSync(join(temp.outside, 's2.seccomp.json'), PROFILE_TEXT)
+    expect(await loadSeccompProfile(temp.outside, listed('s2.seccomp.json'))).toBe(PROFILE_TEXT)
+  })
+
+  it('refuses a profile whose bytes, length or name do not match, or that is missing, with IMAGE_NOT_IN_MANIFEST', async () => {
+    temp = await tempHome()
+    const dir = temp.outside
+    writeFileSync(join(dir, 'p.json'), PROFILE_TEXT.replace('ERRNO', 'ALLOW'))
+    const cases = [
+      listed('p.json'),
+      { ...listed('p.json', PROFILE_TEXT.replace('ERRNO', 'ALLOW')), length: 3 },
+      listed('../p.json', PROFILE_TEXT.replace('ERRNO', 'ALLOW')),
+      listed('absent.json'),
+    ]
+    for (const entry of cases) expect((await refusalOf(async () => loadSeccompProfile(dir, entry))).code, entry.name).toBe('IMAGE_NOT_IN_MANIFEST')
+  })
+
+  it('passes a listed profile to the engine and requires the inspect record to carry it', () => {
+    const created = createBody({ name: 'n', image: 'i', labels: {}, user: { uid: 1, gid: 1 }, limits: PRESETS.small, diskQuota: false, networks: ['n'], binds: [], env: [], seccomp: PROFILE_TEXT })
+    expect(created.HostConfig.SecurityOpt).toEqual(['no-new-privileges:true', `seccomp=${PROFILE_TEXT}`])
+    const record = applied(created)
+    expect(hardeningDifferences({ ...record, HostConfig: { ...record.HostConfig, SecurityOpt: created.HostConfig.SecurityOpt } }, created).settings).toEqual([])
+    expect(hardeningDifferences(record, created).settings).toContain('HostConfig.SecurityOpt')
+  })
+})
+
+describe('engine refusals', () => {
+  it('maps an engine that does not answer to DOCKER_UNAVAILABLE and a refused call to ENGINE_REFUSED with its message', () => {
+    expect(engineRefusal(new EngineError(0, 'no answer'))).toMatchObject({ code: 'DOCKER_UNAVAILABLE' })
+    expect(engineRefusal(new EngineError(500, 'conflict in the engine'))).toMatchObject({ code: 'ENGINE_REFUSED', detail: 'docker engine: conflict in the engine' })
+    const other = new Error('x')
+    expect(engineRefusal(other)).toBe(other)
+  })
+
+  it('refuses a failed pull of a listed digest with IMAGE_PULL_FAILED', async () => {
+    const digest = `sha256:${'b'.repeat(64)}` as OciDigest
+    const engine: Engine = {
+      call: () => Promise.reject(new EngineError(404, 'no such image')),
+      pull: () => Promise.reject(new EngineError(500, 'manifest unknown')),
+      execExitCode: () => Promise.resolve(0),
+    }
+    expect((await refusalOf(async () => ensureListedImage(engine, listedImage(fixtureManifest(digest), 's2', 'linux/amd64'), 'registry'))).code).toBe('IMAGE_PULL_FAILED')
+  })
+
+  it('refuses workspace.create for a workspace whose container exists with WORKSPACE_EXISTS', async () => {
+    temp = await tempHome()
+    const parent = join(temp.outside, 'projects')
+    const root = join(parent, 'w')
+    mkdirSync(root, { recursive: true })
+    await writeProtectedFile(join(temp.home, 'supervisor', 'roots.json'), JSON.stringify({ v: 1, parents: [parent] }))
+    const digest = `sha256:${'c'.repeat(64)}` as OciDigest
+    const owner = { homeId: homeIdOf(temp.home), profile: PROFILE }
+    const engine: Engine = {
+      call: (_method, path) => {
+        if (path.startsWith('/images/')) return Promise.resolve({ Id: 'sha256:i', RepoDigests: [`${IMAGES.s2}@${digest}`] })
+        if (path.startsWith('/containers/')) return Promise.resolve({ Id: 'c', Config: { Labels: { [LABELS.home]: owner.homeId, [LABELS.profile]: PROFILE, [LABELS.workspace]: 'w' } } })
+        return Promise.reject(new EngineError(500, `unexpected ${path}`))
+      },
+      pull: () => Promise.reject(new EngineError(500, 'no pulls')),
+      execExitCode: () => Promise.resolve(0),
+    }
+    const limits = limitFindings({
+      info: {}, inspect: applied(body()), body: body(), network: { Internal: true },
+      exits: { capabilities: 0, noNewPrivileges: 0, seccomp: 0, readOnlyRoot: 0, memory: 0, pids: 0, cpu: 0, userNamespace: 0, noDefaultRoute: 0, disk: 0 },
+      gateway: { skipped: 'x' }, loopback: [],
+    })
+    const workspaces = new Workspaces({
+      engine, owner, home: temp.home, rules: await loadRootRules(temp.home, homedir()), manifest: fixtureManifest(digest), pull: 'none', seccompDirectory: temp.outside,
+      inspection: () => ({
+        docker: { engine: 'docker-engine', version: '29', rootless: false, context: 'default', endpoint: { kind: 'unix', path: '/var/run/docker.sock' }, storageDriver: 'overlay2', limits },
+        shapes: { s2: { available: true, fileWatching: 'supported' }, s3: { available: true, fileWatching: 'supported' } },
+        machine: { cpus: 8, memoryBytes: 32 * GIB },
+        platform: 'linux/amd64',
+      }),
+    })
+    const request = { v: 1 as const, token: 't' as StartToken, op: 'workspace.create' as const, args: { workspaceId: 'w' as WorkspaceId, root, preset: 'small' as const, egress: 'none' as const, allowlistAdditions: [], credentials: 'none' as const } }
+    expect((await refusalOf(async () => workspaces.handle(request))).code).toBe('WORKSPACE_EXISTS')
   })
 })

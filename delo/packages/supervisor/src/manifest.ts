@@ -7,7 +7,7 @@
  * @module @delo/supervisor/manifest
  */
 import { IMAGES, type DockerShape } from '@delo/contract-runtime-supervisor'
-import type { ImagePlatform, OciDigest, ReleaseManifest } from '@delo/contract-release-manifest'
+import type { FileRef, ImagePlatform, OciDigest, ReleaseManifest } from '@delo/contract-release-manifest'
 import { z } from 'zod'
 import { SupervisorError } from './errors.ts'
 
@@ -32,11 +32,14 @@ export interface ListedImage {
   readonly listed: readonly OciDigest[]
   /** `<repository>@<digest>`, the only reference the supervisor passes to the engine. */
   readonly reference: string
+  /** The seccomp profile file the manifest lists for the image, if any. */
+  readonly seccomp?: FileRef
 }
 
 const OCI_DIGEST = /^sha256:[0-9a-f]{64}$/
 const digest = z.string().regex(OCI_DIGEST)
-const imageRef = z.strictObject({ repository: z.string(), index: digest, platforms: z.strictObject({ 'linux/amd64': digest, 'linux/arm64': digest }) })
+const fileRef = z.strictObject({ name: z.string().min(1), length: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), sha256: z.string().regex(/^[0-9a-f]{64}$/) })
+const imageRef = z.strictObject({ repository: z.string(), index: digest, platforms: z.strictObject({ 'linux/amd64': digest, 'linux/arm64': digest }), seccomp: fileRef.optional() })
 
 /** The JSON validation of the image entries the home process sends at launch. */
 export const verifiedManifestSchema = z.strictObject({ images: z.strictObject({ s2: imageRef, s3: imageRef }) })
@@ -76,5 +79,5 @@ export function listedImage(manifest: VerifiedManifest, shape: DockerShape, plat
   for (const value of [entry.index, chosen]) {
     if (!OCI_DIGEST.test(value)) throw new SupervisorError('IMAGE_NOT_IN_MANIFEST', `the manifest's ${shape} digest ${value} is not a sha256 digest`)
   }
-  return { shape, repository: entry.repository, digest: chosen, listed: [entry.index, chosen], reference: `${entry.repository}@${chosen}` }
+  return { shape, repository: entry.repository, digest: chosen, listed: [entry.index, chosen], reference: `${entry.repository}@${chosen}`, ...entry.seccomp === undefined ? {} : { seccomp: entry.seccomp } }
 }

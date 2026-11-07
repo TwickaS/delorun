@@ -49,7 +49,7 @@ async function launch(home: string, token: StartToken): Promise<Launched> {
   children.push(child)
   const exited = new Promise<number | null>(resolve => child.once('exit', code => { resolve(code) }))
   const pipe = child.stdio[3] as Writable
-  pipe.write(encodeLaunch({ v: 1, home, profile: PROFILE, startId: randomBytes(16).toString('hex'), token, manifest: fixtureManifest(), imagePull: 'none', logLevel: 'debug' }))
+  pipe.write(encodeLaunch({ v: 1, home, profile: PROFILE, startId: randomBytes(16).toString('hex'), token, manifest: fixtureManifest(), imagePull: 'none', seccompDirectory: join(home, 'seccomp'), logLevel: 'debug' }))
   const socket = supervisorSocketPath(home, PROFILE)
   const deadline = Date.now() + START_MS
   while (!existsSync(socket)) {

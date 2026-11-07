@@ -27,6 +27,7 @@ import { EngineError, type Engine } from './docker/engine.ts'
 import { SupervisorError } from './errors.ts'
 import { ensureListedImage, type ImagePull } from './images.ts'
 import { imagePlatform, listedImage, type VerifiedManifest } from './manifest.ts'
+import { loadSeccompProfile } from './seccomp.ts'
 
 /** The fields of the engine's `info` the report reads. */
 export interface EngineInfo {
@@ -247,6 +248,8 @@ export interface InspectOptions {
   readonly pull: ImagePull
   /** The home and profile the probe's labels name. */
   readonly owner: Owner
+  /** The directory holding the seccomp profile files the manifest lists. */
+  readonly seccompDirectory: string
 }
 
 function listen(host: string): Promise<Server> {
@@ -286,9 +289,10 @@ async function removeQuietly(engine: Engine, path: string): Promise<void> {
  * @param options - the engine and owner.
  * @param info - the engine's info.
  * @param image - the listed image's reference.
+ * @param seccomp - the image's listed seccomp profile text, if any.
  * @returns the evidence.
  */
-async function probe(options: InspectOptions, info: EngineInfo, image: string): Promise<ProbeEvidence> {
+async function probe(options: InspectOptions, info: EngineInfo, image: string, seccomp: string | undefined): Promise<ProbeEvidence> {
   const { engine, owner } = options
   const suffix = randomBytes(6).toString('hex')
   const name = `delo-probe-${owner.homeId}-${suffix}`
@@ -301,7 +305,7 @@ async function probe(options: InspectOptions, info: EngineInfo, image: string): 
   try {
     await engine.call('POST', '/networks/create', networkBody(name, true, labels))
     networkCreated = true
-    const plan = { name, image, labels, user: workspaceUser(rootless), limits: PRESETS.small, networks: [name], binds: [], command: [...PROBE_ENTRY], env: [] }
+    const plan = { name, image, labels, user: workspaceUser(rootless), limits: PRESETS.small, networks: [name], binds: [], command: [...PROBE_ENTRY], env: [], ...seccomp === undefined ? {} : { seccomp } }
     let body = createBody({ ...plan, diskQuota: true })
     let diskRefused: string | undefined
     try {
@@ -363,10 +367,15 @@ export async function inspectDocker(options: InspectOptions): Promise<Inspection
   const machine = { cpus: info.NCPU ?? 0, memoryBytes: info.MemTotal ?? 0 }
   const images: Partial<Record<DockerShape, string>> = {}
   let s2Image: string | undefined
+  let s2Seccomp: string | undefined
   for (const shape of ['s2', 's3'] as const) {
     try {
       const listed = listedImage(options.manifest, shape, platform)
-      if (shape === 's2') s2Image = await ensureListedImage(engine, listed, options.pull)
+      const seccomp = listed.seccomp === undefined ? undefined : await loadSeccompProfile(options.seccompDirectory, listed.seccomp)
+      if (shape === 's2') {
+        s2Image = await ensureListedImage(engine, listed, options.pull)
+        s2Seccomp = seccomp
+      }
     } catch (error) {
       if (!(error instanceof SupervisorError)) throw error
       images[shape] = error.detail ?? error.code
@@ -378,7 +387,7 @@ export async function inspectDocker(options: InspectOptions): Promise<Inspection
     limits = unprobed(images.s2 ?? 'the S2 image is not verified')
   } else {
     try {
-      const evidence = await probe(options, info, s2Image)
+      const evidence = await probe(options, info, s2Image, s2Seccomp)
       limits = limitFindings(evidence)
       probeRecord = evidence.inspect
     } catch (error) {
