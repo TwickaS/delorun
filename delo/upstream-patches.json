@@ -2589,7 +2589,7 @@
     {
       "path": "native/system/packages/entry/src/main.c",
       "class": "security",
-      "reason": "Protected home (C1), review of #66: `landlock-run` opens every grant root with `openat2(RESOLVE_NO_SYMLINKS)` instead of `open(O_PATH)`, so a grant path swapped for a symbolic link between the caller's check and the launch fails the run (exit 125, `cannot open rule path`) instead of granting the link's target; the review won a write grant on the home in 1 of 52 races without it. `struct open_how` and the flag are defined locally, as the Landlock UAPI is. Callers must pass resolved paths; sandbox-local does. Stricter only; the CLI contract changes, so the native package family moves to 0.2.0 with a release note (lead decision on #66)."
+      "reason": "Protected home (C1), review of #66: `landlock-run` opens every grant root with `openat2(RESOLVE_NO_SYMLINKS)` instead of `open(O_PATH)`, so a grant path swapped for a symbolic link between the caller's check and the launch fails the run (exit 125, `cannot open rule path`) instead of granting the link's target; the review won a write grant on the home in 1 of 52 races without it. `struct open_how` and the flag are defined locally, as the Landlock UAPI is. Callers must pass resolved paths; sandbox-local does. Stricter only; the CLI contract changes, so the native package family moves to 0.2.0 with a release note (lead decision on #66). Review of #66: takes `struct open_how` and `RESOLVE_NO_SYMLINKS` from <linux/openat2.h> when the toolchain has it and defines them otherwise, guarded."
     },
     {
       "path": "native/system/docs/cli-contract.md",

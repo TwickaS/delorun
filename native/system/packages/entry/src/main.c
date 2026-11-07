@@ -108,18 +108,29 @@ struct landlock_path_beneath_attr {
 #endif
 
 /*
- * openat2(2)'s `struct open_how` and the one resolve flag the launcher uses,
- * verbatim from the kernel's UAPI (Linux 5.6, older than every Landlock
- * kernel). RESOLVE_NO_SYMLINKS refuses a symbolic link in any component, so a
- * grant root that was swapped for a link after the caller checked it fails
- * the open instead of granting the link's target.
+ * openat2(2)'s `struct open_how` and the one resolve flag the launcher uses
+ * (Linux 5.6, older than every Landlock kernel), from the kernel's UAPI header
+ * when the toolchain has it and otherwise defined verbatim here.
+ * RESOLVE_NO_SYMLINKS refuses a symbolic link in any component, so a grant
+ * root that was swapped for a link after the caller checked it fails the open
+ * instead of granting the link's target.
  */
+#if defined(__has_include)
+#if __has_include(<linux/openat2.h>)
+#include <linux/openat2.h>
+#define HAVE_LINUX_OPENAT2_H 1
+#endif
+#endif
+#ifndef HAVE_LINUX_OPENAT2_H
 struct open_how {
   uint64_t flags;
   uint64_t mode;
   uint64_t resolve;
 };
+#endif
+#ifndef RESOLVE_NO_SYMLINKS
 #define RESOLVE_NO_SYMLINKS 0x04
+#endif
 
 /*
  * Every fatal launcher error prints `landlock-run: <message>` to stderr
