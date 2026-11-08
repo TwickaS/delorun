@@ -1931,6 +1931,58 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/mcp/mcp-client
 
+  delo/packages/plugin-permission-defaults:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-permission-presets':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/permission-presets
+      '@deepseek-ai/dsh-sandbox':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-policy
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-projection
+      '@deepseek-ai/dsh-shell':
+        specifier: workspace:*
+        version: link:../../../packages/shell/shell
+      '@deepseek-ai/dsh-tool-bash':
+        specifier: workspace:*
+        version: link:../../../packages/shell/tool-bash
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/tool-testkit
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/user-approval
+
   delo/packages/plugin-schedule-consent:
     dependencies:
       zod:

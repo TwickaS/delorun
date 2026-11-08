@@ -23,7 +23,7 @@ import { z as zod } from 'zod'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { SANDBOX_MODES, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import { SANDBOX_MODES, SandboxModeRefusedError, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this service reads), without a value dependency on the seam.
 import type {} from '@deepseek-ai/dsh-shell'
@@ -403,9 +403,13 @@ export class PermissionPresetService extends TypertRemoteService {
 
   /**
    * Record a changed preset, then update each changed knob through its own
-   * setter. Selecting the effective preset again appends nothing.
+   * setter. Selecting the effective preset again appends nothing. A mounted
+   * mode guard runs before the record, so a refused switch appends nothing
+   * either and the session keeps the knobs it had.
    * @param session - the session the switch belongs to.
    * @param name - the preset to switch to; unknown names throw.
+   * @throws {SandboxModeRefusedError} when the mounted mode guard refuses the
+   *   preset's sandbox mode.
    */
   set(session: Session, name: string): void {
     this.apply(session, name, (policy) => { setApprovalPolicy(session, policy) })
@@ -417,6 +421,13 @@ export class PermissionPresetService extends TypertRemoteService {
     if (name === AUTO_PRESET) this.autoAdmit?.()
     const current = this.current(session)
     const knobs = this.permissionState(session)
+    // The consent layer's optional mode guard runs BEFORE anything is appended:
+    // a refused switch leaves the log exactly as it was — no preset identity and
+    // no knob event — so the session keeps resolving the mode it already had.
+    if (spec.sandbox !== (knobs.sandbox ?? this.ctx.shell.sandboxMode)) {
+      const reason = this.ctx.get('sandboxModeGuard')?.(session, spec.sandbox)
+      if (reason !== undefined) throw new SandboxModeRefusedError(reason)
+    }
     const updateKnobs = (): void => {
       if (spec.sandbox !== (knobs.sandbox ?? this.ctx.shell.sandboxMode)) {
         setSandboxMode(session, spec.sandbox)

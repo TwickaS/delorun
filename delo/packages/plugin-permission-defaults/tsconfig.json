@@ -1,0 +1,28 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "tests"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/schemastery" },
+    { "path": "../../../packages/core/agent" },
+    { "path": "../../../packages/core/session" },
+    { "path": "../../../packages/session/session-projection" },
+    { "path": "../../../packages/core/tools" },
+    { "path": "../../../packages/interaction/permission-presets" },
+    { "path": "../../../packages/interaction/user-approval" },
+    { "path": "../../../packages/sandbox/sandbox" },
+    { "path": "../../../packages/sandbox/sandbox-policy" },
+    { "path": "../../../packages/shell/shell" },
+    { "path": "../../../packages/shell/tool-bash" },
+    { "path": "../../../packages/test-support/agent-loop-testkit" },
+    { "path": "../../../packages/test-support/tool-testkit" }
+  ]
+}

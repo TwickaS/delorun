@@ -100,13 +100,23 @@ export const PARITY_SWITCHES = [
   },
   {
     id: 'permission_defaults',
-    state: 'planned',
-    plannedBy: 'WP2.13',
+    state: 'built',
     registeredBy: '@delo/plugin-permission-defaults',
     defaultValue: true,
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-permission-defaults',
+    field: {
+      module: '@delo/plugin-permission-defaults',
+      source: 'delo/packages/plugin-permission-defaults/src/index.ts',
+      key: 'enabled',
+    },
+    // The plugin registers everything behind the switch: off, it mounts no
+    // service, no guard and no seed, so these are the files whose runtime
+    // behaviour the switch turns off at its parity value.
+    sources: [
+      'delo/packages/plugin-permission-defaults/src/index.ts',
+    ],
   },
   {
     id: 'fetch_guard',

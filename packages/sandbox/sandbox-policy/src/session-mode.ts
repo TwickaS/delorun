@@ -54,8 +54,15 @@ export const SANDBOX_MODES: readonly SandboxMode[] = ['read-only', 'workspace-wr
  * reason when the switch must not happen, or undefined to allow it.
  */
 export interface SandboxModeGuard {
-  /** The guard's verdict: the refusal reason when the switch must not happen, or undefined to allow it. */
-  (): string | undefined
+  /**
+   * The guard's verdict on one pending switch. The guard reads the switch
+   * itself, because a consent depends on both the session it applies to and
+   * the mode it would set.
+   * @param session - the session the switch applies to.
+   * @param mode - the mode the switch would set.
+   * @returns the refusal reason when the switch must not happen, or undefined to allow it.
+   */
+  (session: Session, mode: SandboxMode): string | undefined
 }
 
 /**
@@ -83,13 +90,14 @@ export class SandboxModeRefusedError extends Error {
  * @param mode - the mode every subsequent confined call in this session runs
  *   under (until the next switch).
  * @param hook - the optional mode-switch guard: returns the refusal reason to
- *   refuse the switch, or undefined to allow it. A refusal throws
+ *   refuse the switch, or undefined to allow it. It reads the session and the
+ *   mode being set, so a consent can depend on both. A refusal throws
  *   {@link SandboxModeRefusedError} carrying that reason and appends NO
  *   `sandbox/mode` event.
  */
 export function setSandboxMode(session: Session, mode: SandboxMode, hook?: SandboxModeGuard): void {
   if (hook !== undefined) {
-    const reason = hook()
+    const reason = hook(session, mode)
     if (reason !== undefined) throw new SandboxModeRefusedError(reason)
   }
   session.append('sandbox/mode', { mode })
