@@ -29,6 +29,7 @@ export const DEFAULT_PARITY: Readonly<Partial<Record<ParitySwitchId, string>>> =
   studio_additions: 'no shipped profile or bundle mounts the main chat, whose row the studio bundle adds with the switch on',
   mcp_add_consent: 'no shipped profile or bundle mounts the plugin, so no row of the root tree holds it; the parity composition leaves the mcpAddConsent service unmounted, and the mcp-client starts every configured server as upstream does',
   instruction_layer_consent: 'no shipped profile or bundle mounts the plugin, so no row of the root tree holds it; the parity composition leaves the writeConsent service unmounted, and the mutating tools run unasked, as upstream runs them',
+  scheduled_task_consent: 'no shipped profile or bundle mounts the consent plugin, whose row a composition adds with the switch on',
 }
 
 /** One overlay row, as parsed. */

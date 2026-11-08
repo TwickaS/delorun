@@ -190,13 +190,24 @@ export const PARITY_SWITCHES = [
   },
   {
     id: 'scheduled_task_consent',
-    state: 'planned',
-    plannedBy: 'WP2.19',
-    registeredBy: 'Delo edit of upstream schedule tools',
+    state: 'built',
+    registeredBy: '@delo/plugin-schedule-consent',
     defaultValue: true,
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-scheduled-task-consent',
+    field: {
+      module: '@delo/plugin-schedule-consent',
+      source: 'delo/packages/plugin-schedule-consent/src/index.ts',
+      key: 'enabled',
+    },
+    sources: [
+      'packages/schedule/schedule/src/index.ts',
+      'packages/schedule/schedule/src/runtime.ts',
+      'packages/schedule/schedule/src/storage.ts',
+      'packages/schedule/schedule/src/types.ts',
+      'packages/schedule/tool-schedule/src/index.ts',
+    ],
   },
   {
     id: 'instruction_layer_consent',
