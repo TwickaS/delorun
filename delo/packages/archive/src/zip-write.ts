@@ -2,13 +2,19 @@
  * The ZIP writer of contract C8's archive format v1. It writes stored and
  * deflated entries, records each entry's Unix mode so a reader can tell a
  * plain file from a link, and finishes with the central directory and the
- * end-of-central-directory record in one buffer. A writer in this package
- * declares every size it actually writes; the declared-size and mode options
- * exist so a spec can build the malformed archive that a refusal must catch.
+ * end-of-central-directory record in one buffer. When it chooses the form
+ * itself it keeps the entry inside the format's compression ratio, because an
+ * archive an import would refuse for its ratio is not a usable export; a
+ * caller that names `deflate` gets the smaller form whatever its ratio is,
+ * which is how a spec builds the bomb a refusal must catch. A writer in this
+ * package declares every size it actually writes; the declared-size and mode
+ * options exist so a spec can build the malformed archive that a refusal must
+ * catch.
  *
  * @module @delo/archive/zip-write
  */
 import { deflateRawSync } from 'node:zlib'
+import { ARCHIVE_LIMITS } from '@delo/contract-archive-and-trash'
 import {
   ZIP_CENTRAL_HEADER_SIGNATURE,
   ZIP_COMPRESSION_DEFLATE,
@@ -36,7 +42,12 @@ export interface ZipEntryInput {
   readonly name: string
   /** The entry's uncompressed bytes. */
   readonly bytes: Uint8Array
-  /** The compression to use; by default the writer deflates and keeps whichever form is smaller. */
+  /**
+   * The compression to use. `store` stores the bytes, `deflate` deflates when
+   * that is smaller whatever the ratio, and the default deflates when that is
+   * smaller and stays inside the format's compression ratio, storing the entry
+   * otherwise.
+   */
   readonly method?: 'store' | 'deflate'
   /** The full Unix mode to record, including its file-type bits; a regular file by default. */
   readonly unixMode?: number
@@ -136,8 +147,12 @@ export class ZipWriter {
     this.taken.add(entry.name)
     const name = new TextEncoder().encode(entry.name)
     const deflated = entry.method === 'store' ? undefined : new Uint8Array(deflateRawSync(entry.bytes))
-    const method = deflated !== undefined && deflated.length < entry.bytes.length ? ZIP_COMPRESSION_DEFLATE : ZIP_COMPRESSION_STORED
-    const data = method === ZIP_COMPRESSION_DEFLATE ? deflated! : entry.bytes
+    // A deflated entry that expands past the format's ratio is one an import refuses, so the writer keeps the deflated form only inside the ratio unless the caller named `deflate` to build the refusal's fixture.
+    const withinRatio = deflated !== undefined
+      && deflated.length < entry.bytes.length
+      && (entry.method === 'deflate' || entry.bytes.length <= deflated.length * ARCHIVE_LIMITS.maxCompressionRatio)
+    const method = withinRatio ? ZIP_COMPRESSION_DEFLATE : ZIP_COMPRESSION_STORED
+    const data = withinRatio ? deflated! : entry.bytes
     const localHeaderOffset = this.sink.size
     const crc = crc32(entry.bytes)
     const flags = ZIP_FLAG_UTF8_NAME

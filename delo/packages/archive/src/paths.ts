@@ -8,7 +8,7 @@
  *
  * @module @delo/archive/paths
  */
-import { isAbsolute, relative, resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { ArchiveError } from './errors.ts'
 
 /**
@@ -128,7 +128,8 @@ export function checkPathCollisions(paths: readonly string[]): void {
 export function resolveInside(destination: string, path: string): string {
   const absolute = resolve(destination, path)
   const inside = relative(destination, absolute)
-  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) {
+  // A name that begins with two dots is only outside the destination when the whole segment is `..`: `..foo` is one file name inside it.
+  if (inside === '' || inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
     throw new ArchiveError('ARCHIVE_PATH_REJECTED', `the archive path ${JSON.stringify(path)} resolves outside the destination directory`)
   }
   return absolute

@@ -43,7 +43,7 @@ export async function writeStaging(root: string, entries: readonly StagedEntry[]
     // Not recursive: a root that exists already belongs to someone else, and reusing it would put this import's files beside theirs.
     await mkdir(root, { mode: STAGING_DIRECTORY_MODE })
   } catch (error: unknown) {
-    throw stagingFailure(root, error)
+    throw stagingFailure(undefined, error)
   }
   for (const entry of entries) {
     const target = resolveInside(root, entry.path)
@@ -69,13 +69,15 @@ export async function removeStaging(root: string): Promise<void> {
 }
 
 /**
- * The refusal that wraps a staging failure, named by the system's error code
- * rather than by the path.
- * @param subject - the staging root or the entry path that could not be written.
+ * The refusal that wraps a staging failure, named by the entry path or by the
+ * system's error code, and never by an absolute host path: the message a
+ * person reads names the archive's own entry and the reason.
+ * @param subject - the entry path that could not be written, or absent when the staging root itself could not be created.
  * @param error - the failure.
  * @returns the refusal, for the caller to throw.
  */
-function stagingFailure(subject: string, error: unknown): ArchiveError {
+function stagingFailure(subject: string | undefined, error: unknown): ArchiveError {
   const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'unexpected error'
-  return new ArchiveError('ARCHIVE_STAGING_FAILED', `the staging directory could not hold ${JSON.stringify(subject)} (${code})`)
+  if (subject === undefined) return new ArchiveError('ARCHIVE_STAGING_FAILED', `the staging root could not be created (${code})`)
+  return new ArchiveError('ARCHIVE_STAGING_FAILED', `the staging directory could not hold the entry ${JSON.stringify(subject)} (${code})`)
 }

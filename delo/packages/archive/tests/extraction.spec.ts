@@ -137,6 +137,14 @@ describe('the path rules of an extraction', () => {
     expect(resolveInside(destination, 'objects/deadbeef')).toBe(join(destination, 'objects/deadbeef'))
   })
 
+  it('resolves a name that only begins with two dots inside the destination, because it is one file name', () => {
+    const destination = join(scratch!.root, 'destination')
+
+    expect(resolveInside(destination, '..foo')).toBe(join(destination, '..foo'))
+    expect(resolveInside(destination, 'objects/..foo')).toBe(join(destination, 'objects/..foo'))
+    expect(syncRefusalOf(() => resolveInside(destination, '../..foo')).message).toContain('resolves outside')
+  })
+
   it('refuses to stage an entry that resolves outside the staging root, and writes nothing there', async () => {
     const root = join(scratch!.stagingParent, 'staging-root')
     const outside = join(scratch!.stagingParent, 'outside.txt')
@@ -175,6 +183,17 @@ describe('the entry-type rules of an extraction', () => {
   it('refuses a symbolic link, which an extraction never follows', async () => {
     const { refusal, staged } = await importRefusal(buildArchive({
       extra: [{ name: 'notes.txt', bytes: utf8('../../.ssh/id_ed25519'), unixMode: 0o120777 }],
+    }))
+
+    expect(refusal.code).toBe('ARCHIVE_LINK_REJECTED')
+    expect(refusal.message).toContain('symbolic link')
+    expect(staged).toEqual([])
+  })
+
+  it('refuses a symbolic link the manifest lists as an object, not only one the manifest omits', async () => {
+    const target = utf8('../../.ssh/id_ed25519')
+    const { refusal, staged } = await importRefusal(buildArchive({
+      objects: [{ kind: 'attachment', bytes: target, unixMode: 0o120777 }],
     }))
 
     expect(refusal.code).toBe('ARCHIVE_LINK_REJECTED')
@@ -272,14 +291,21 @@ describe('the size bounds of an extraction', () => {
   })
 
   it('refuses an entry whose declared size is larger than its bytes', async () => {
-    const { refusal } = await importRefusal(buildArchive({ customisationDeclaredSize: 4096 }))
+    // 200 bytes is a declaration the ratio limit allows, so the check reaches the bytes and finds them shorter than the declaration.
+    const { refusal } = await importRefusal(buildArchive({ customisationDeclaredSize: 200 }))
 
     expect(refusal.code).toBe('ARCHIVE_TRUNCATED')
   })
 
+  it('refuses an entry whose declared size breaks the ratio limit before it reads the bytes', async () => {
+    const { refusal } = await importRefusal(buildArchive({ customisationDeclaredSize: 4096 }))
+
+    expect(refusal.code).toBe('ARCHIVE_RATIO_EXCEEDED')
+  })
+
   it('refuses an object whose compression ratio passes the ratio of the format', async () => {
     const bomb = utf8('a'.repeat(20_000))
-    const { refusal, staged } = await importRefusal(buildArchive({ objects: [{ kind: 'chat-generation', bytes: bomb }] }))
+    const { refusal, staged } = await importRefusal(buildArchive({ objects: [{ kind: 'chat-generation', bytes: bomb, method: 'deflate' }] }))
 
     expect(ARCHIVE_LIMITS.maxCompressionRatio).toBe(100)
     expect(refusal.code).toBe('ARCHIVE_RATIO_EXCEEDED')
@@ -302,6 +328,7 @@ describe('the staging directory of an extraction', () => {
 
     expect(refusal.code).toBe('ARCHIVE_STAGING_FAILED')
     expect(refusal.message).toContain('EEXIST')
+    expect(refusal.message).not.toContain(scratch!.root)
   })
 
   it('never replaces a file the import did not write', async () => {

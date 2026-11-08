@@ -32,7 +32,13 @@ export {
 } from './zip-format.ts'
 export { ZipArchive, type ZipReadLimits } from './zip-read.ts'
 export { ZipWriter, type ZipEntryInput } from './zip-write.ts'
-export { checkEntrySizes, type ArchiveSizeLimits, type DeclaredEntrySize } from './limits.ts'
+export {
+  checkContainerDeclarations,
+  checkEntrySizes,
+  checkManifestDeclarations,
+  type ArchiveSizeLimits,
+  type DeclaredEntrySize,
+} from './limits.ts'
 export {
   CUSTOMISATION_PATH,
   MANIFEST_PATH,

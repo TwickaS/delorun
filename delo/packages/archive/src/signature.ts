@@ -6,7 +6,10 @@
  * a signature that fails: the contract's denial test says such an archive
  * imports, and imports labelled. The verified state therefore needs both a
  * signature that verifies and a key the home vouches for — one it already
- * holds, or one the person confirmed by its fingerprint.
+ * holds, or one the person confirmed by its fingerprint. A confirmation names
+ * the key itself, never the identifier alone: `homeKeyId` is a string the
+ * archive carries, so an impostor key that reuses a confirmed identifier would
+ * otherwise pass the check.
  *
  * @module @delo/archive/signature
  */
@@ -41,6 +44,8 @@ export interface SignatureCheckInput {
   readonly trustedPublicKeys?: readonly string[] | undefined
   /** The key identifier the person confirmed by its fingerprint at import, when they did. */
   readonly confirmedHomeKeyId?: string | undefined
+  /** The base64url key the person confirmed by its fingerprint at import, which is what the confirmation binds. */
+  readonly confirmedPublicKey?: string | undefined
 }
 
 /** The two keys of one Ed25519 key pair, in the encodings the archive uses. */
@@ -114,8 +119,11 @@ export function verifyArchiveSignature(input: { readonly manifestBytes: Uint8Arr
 
 /**
  * Check one archive's signature and report the state the diff screen and the
- * import report show.
- * @param input - the manifest bytes, the origin, the signature and the keys the home vouches for.
+ * import report show. The confirmation the person gave at import binds to the
+ * key: `confirmedPublicKey` alone vouches for the origin key, and
+ * `confirmedHomeKeyId` narrows the confirmation to an identifier it was given
+ * with.
+ * @param input - the manifest bytes, the origin, the signature, the keys the home vouches for and the confirmation the person gave.
  * @returns `verified` only when the signature verifies and its key is vouched for, and `unverified` with the reason otherwise.
  */
 export function checkArchiveSignature(input: SignatureCheckInput): SignatureCheck {
@@ -130,7 +138,9 @@ export function checkArchiveSignature(input: SignatureCheckInput): SignatureChec
     throw error
   }
   const vouched = input.trustedPublicKeys ?? []
-  const confirmed = input.confirmedHomeKeyId === input.origin.homeKeyId
+  // The confirmation is bound to the key, not to the identifier: `homeKeyId` is an unauthenticated string the archive carries, so another key that reuses a confirmed identifier would otherwise be shown as verified.
+  const confirmed = input.confirmedPublicKey === input.origin.publicKey
+    && (input.confirmedHomeKeyId === undefined || input.confirmedHomeKeyId === input.origin.homeKeyId)
   if (!confirmed && !vouched.includes(input.origin.publicKey)) return { state: 'unverified', reason: 'key-not-trusted' }
   return { state: 'verified' }
 }

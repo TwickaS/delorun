@@ -84,6 +84,7 @@ export function parseManifest(bytes: Uint8Array): ArchiveManifest {
   const entries = requireArray(document.entries, `${MANIFEST_PATH} entries`).map((entry, index) => parseEntry(entry, index))
   const listed = new Set(entries.map(entry => entry.path))
   const workspaces = requireArray(document.workspaces, `${MANIFEST_PATH} workspaces`).map((workspace, index) => parseWorkspace(workspace, index, listed))
+  checkWorkspaceIdentifiers(workspaces)
   return { formatVersion: ARCHIVE_FORMAT_VERSION, createdBy, exportedAt, origin, workspaces, entries }
 }
 
@@ -178,6 +179,32 @@ function parseWorkspace(value: unknown, index: number, listed: ReadonlySet<strin
     chats: references(workspace.chats, `${MANIFEST_PATH} workspaces[${String(index)}] chats`, listed),
     attachments: references(workspace.attachments, `${MANIFEST_PATH} workspaces[${String(index)}] attachments`, listed),
     objects: references(workspace.objects, `${MANIFEST_PATH} workspaces[${String(index)}] objects`, listed),
+  }
+}
+
+/**
+ * Check every workspace identifier of one manifest for the two collisions an
+ * import cannot stage: two workspaces that name one identifier, whose staged
+ * directories would overwrite each other, and two that differ only in letter
+ * case, which collide on a case-insensitive file system.
+ * @param workspaces - every workspace the manifest declares, in its order.
+ * @throws ArchiveError `ARCHIVE_PATH_REJECTED` for a repeated identifier and `ARCHIVE_CASE_COLLISION` for an identifier that differs from an earlier one only in letter case.
+ */
+function checkWorkspaceIdentifiers(workspaces: readonly ArchiveWorkspace[]): void {
+  const seen = new Map<string, string>()
+  for (const { id } of workspaces) {
+    const folded = id.toLowerCase()
+    const previous = seen.get(folded)
+    if (previous === id) {
+      throw new ArchiveError('ARCHIVE_PATH_REJECTED', `${MANIFEST_PATH} declares the workspace identifier ${JSON.stringify(id)} twice`)
+    }
+    if (previous !== undefined) {
+      throw new ArchiveError(
+        'ARCHIVE_CASE_COLLISION',
+        `${MANIFEST_PATH} declares the workspace identifiers ${JSON.stringify(previous)} and ${JSON.stringify(id)}, which differ only in letter case`,
+      )
+    }
+    seen.set(folded, id)
   }
 }
 

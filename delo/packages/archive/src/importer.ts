@@ -2,9 +2,13 @@
  * The import path of contract C8. An import validates the whole archive before
  * it writes anything, in the order the contract names: the manifest, the
  * checksums, the paths, the entries, the limits, the customisation and the
- * signature. Only a fully validated archive is staged, and each workspace is
- * published from the staging directory by one rename that never replaces an
- * existing workspace. An identifier that already exists is given a new one.
+ * signature. The sizes the central directory declares are checked first of
+ * all, before the first read, because a read allocates what its record
+ * declares: an archive that breaks a limit on its declarations is refused
+ * rather than inflated into memory and refused afterwards. Only a fully
+ * validated archive is staged, and each workspace is published from the
+ * staging directory by one rename that never replaces an existing workspace.
+ * An identifier that already exists is given a new one.
  *
  * @module @delo/archive/importer
  */
@@ -14,7 +18,7 @@ import { join } from 'node:path'
 import type { ArchiveManifest } from '@delo/contract-archive-and-trash'
 import { ArchiveError } from './errors.ts'
 import { customisationDiff, parseCustomisation, type CustomisationDiffRow } from './customisation.ts'
-import { checkEntrySizes, type DeclaredEntrySize } from './limits.ts'
+import { checkContainerDeclarations, checkManifestDeclarations } from './limits.ts'
 import { CUSTOMISATION_PATH, MANIFEST_PATH, OBJECTS_DIRECTORY, parseManifest, SIGNATURE_PATH } from './manifest.ts'
 import { checkPathCollisions } from './paths.ts'
 import { checkArchiveSignature, parseSignature, type SignatureReason, type SignatureState } from './signature.ts'
@@ -129,8 +133,10 @@ export interface ArchiveImporterConfig {
   readonly store: ArchiveWorkspaceStore
   /** The base64url Ed25519 keys this home vouches for. */
   readonly trustedPublicKeys?: readonly string[] | undefined
-  /** The home key identifier the person confirmed by its fingerprint at import. */
+  /** The home key identifier the person confirmed by its fingerprint at import, which narrows the confirmation to that identifier. */
   readonly confirmedHomeKeyId?: string | undefined
+  /** The base64url key the person confirmed by its fingerprint at import: the confirmation binds this key, and the identifier alone vouches for nothing. */
+  readonly confirmedPublicKey?: string | undefined
   /** The identifier generator for a workspace whose archive identifier is taken; a UUID by default. */
   readonly newId?: (() => string) | undefined
 }
@@ -173,25 +179,24 @@ export class ArchiveImporter {
    */
   async import(bytes: Uint8Array, options: { readonly source?: string } = {}): Promise<ArchiveImportReport> {
     const archive = ZipArchive.open(bytes)
-    const manifest = parseManifest(archive.read(MANIFEST_PATH))
+    // The declarations come before the first read: every read allocates what its central-directory record declares, so a bomb is refused on its sizes rather than inflated into memory and refused afterwards.
+    checkContainerDeclarations(archive)
+    const manifestBytes = archive.read(MANIFEST_PATH)
+    const manifest = parseManifest(manifestBytes)
+    checkManifestDeclarations(manifest)
     const contents = this.verifyChecksums(archive, manifest)
     archive.checkPaths()
     checkPathCollisions(manifest.entries.map(entry => entry.path))
     this.verifyEntries(archive, manifest)
-    checkEntrySizes(manifest.entries.map(entry => ({ path: entry.path, uncompressedSize: entry.size })))
-    checkEntrySizes(archive.entries.map(record => ({
-      path: record.name,
-      uncompressedSize: record.uncompressedSize,
-      compressedSize: record.compressedSize,
-    }) satisfies DeclaredEntrySize))
     const customisation = parseCustomisation(contents.get(CUSTOMISATION_PATH)!)
     const signature = archive.names().includes(SIGNATURE_PATH) ? parseSignature(archive.read(SIGNATURE_PATH)) : undefined
     const check = checkArchiveSignature({
-      manifestBytes: contents.get(MANIFEST_PATH)!,
+      manifestBytes,
       origin: manifest.origin,
       signature,
       trustedPublicKeys: this.config.trustedPublicKeys,
       confirmedHomeKeyId: this.config.confirmedHomeKeyId,
+      confirmedPublicKey: this.config.confirmedPublicKey,
     })
     const source = options.source ?? manifest.origin.homeKeyId
     const workspaces = await this.publish(manifest, contents)
@@ -270,7 +275,9 @@ export class ArchiveImporter {
 
   /**
    * Stage every workspace and publish each one with one rename. The staging
-   * root is removed whatever the publication did.
+   * root is filled and published inside one try, and it is removed whatever
+   * the staging write or a publication did, so a refusal that lands after the
+   * first staged file leaves no chat content on disk.
    * @param manifest - the validated manifest.
    * @param contents - every validated document and object, by path.
    * @returns the published workspaces, in the archive's order.
@@ -304,9 +311,9 @@ export class ArchiveImporter {
         })
       }
     }
-    await writeStaging(root, staged)
     const published: ImportedWorkspace[] = []
     try {
+      await writeStaging(root, staged)
       for (const workspace of manifest.workspaces) {
         const id = await this.allocate(workspace.id)
         try {

@@ -1,17 +1,26 @@
 /**
- * The export path of contract C8. An export streams each object into the
- * archive under its SHA-256 and records its digest and size in the manifest,
- * and it warns the person about the secrets it finds in chat history before it
- * writes anything: the scan runs first, and an unconfirmed export returns the
- * findings with no archive at all. The export reports the kind of secret it
- * found and never the secret itself, so the warning cannot become the leak it
- * warns about.
+ * The export path of contract C8. An export writes each object into the archive
+ * under its SHA-256 and records its digest and size in the manifest, and it
+ * warns the person about the secrets it finds in chat history before it writes
+ * anything: the scan runs first, and an unconfirmed export returns the findings
+ * with no archive at all. The export reports the kind of secret it found and
+ * never the secret itself, so the warning cannot become the leak it warns
+ * about. It builds the archive in one buffer rather than streaming it to a
+ * file, and a finished archive is held to the size and ratio limits an import
+ * applies, so an export never hands back a file its own import refuses.
+ *
+ * The export reads the workspaces, chats and attachment contents a caller hands
+ * it. Walking a home's stores to find them, and the guarantee that an export
+ * visits only the workspaces it names, belongs to the driver that calls this
+ * module, which this package does not yet carry.
  *
  * @module @delo/archive/exporter
  */
 import { createHash } from 'node:crypto'
 import { ARCHIVE_CUSTOMISATION_SCHEMA_VERSION, ARCHIVE_FORMAT_VERSION, type ArchiveCustomisation, type ArchiveEntry, type ArchiveManifest, type ArchiveOrigin, type ArchiveSignature, type ArchiveWorkspace } from '@delo/contract-archive-and-trash'
+import { checkContainerDeclarations } from './limits.ts'
 import { CUSTOMISATION_PATH, MANIFEST_PATH, OBJECTS_DIRECTORY, SIGNATURE_PATH } from './manifest.ts'
+import { ZipArchive } from './zip-read.ts'
 import { ZipWriter } from './zip-write.ts'
 
 /** The kinds of secret an export warns about. */
@@ -108,6 +117,7 @@ export function findSecrets(workspaces: readonly ExportWorkspace[]): SecretFindi
  * @param input - the workspaces, the customisation, the origin and the person's confirmation.
  * @returns the archive bytes, or the findings that stopped the export.
  * @throws Error when a customisation object carries another schema version than the writer writes.
+ * @throws ArchiveError when the finished archive breaks a size or ratio limit an import applies, so a caller never receives a file its own import refuses.
  */
 export function exportArchive(input: ArchiveExportInput): ArchiveExportResult {
   const warnings = findSecrets(input.workspaces)
@@ -162,5 +172,8 @@ export function exportArchive(input: ArchiveExportInput): ArchiveExportResult {
     const signature = input.sign(manifestBytes)
     writer.add({ name: SIGNATURE_PATH, bytes: new TextEncoder().encode(JSON.stringify(signature, null, 2)) })
   }
-  return { cancelled: false, warnings, bytes: writer.finish() }
+  const bytes = writer.finish()
+  // The export promises an archive its own import accepts, so the finished container is re-opened and held to the declared sizes and ratios an import checks before it reads anything.
+  checkContainerDeclarations(ZipArchive.open(bytes))
+  return { cancelled: false, warnings, bytes }
 }

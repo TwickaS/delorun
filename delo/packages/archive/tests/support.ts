@@ -5,7 +5,7 @@
  * the archives the refusals are read from — a valid manifest and customisation
  * document, plus whatever hostile entry the spec under test adds beside them.
  */
-import { createHash } from 'node:crypto'
+import { createHash, generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
@@ -13,13 +13,17 @@ import {
   ARCHIVE_CUSTOMISATION_SCHEMA_VERSION,
   ARCHIVE_FORMAT_VERSION,
   type ArchiveEntry,
+  type ArchiveOrigin,
   type ArchiveWorkspace,
 } from '@delo/contract-archive-and-trash'
 import {
   CUSTOMISATION_PATH,
   MANIFEST_PATH,
   OBJECTS_DIRECTORY,
+  SIGNATURE_PATH,
   ZipWriter,
+  encodePublicKey,
+  signManifest,
   type ArchiveWorkspaceStore,
   type ZipEntryInput,
 } from '../src/index.ts'
@@ -32,6 +36,23 @@ export const HOME_PUBLIC_KEY = Buffer.alloc(32, 7).toString('base64url')
 
 /** The UTF-8 encoder the fixtures write their documents with. */
 const ENCODER = new TextEncoder()
+
+/** One Ed25519 key pair a fixture archive is signed with. */
+export interface FixtureKey {
+  /** The base64url public key, which a manifest's `origin` carries. */
+  readonly publicKey: string
+  /** The private key, which signs the fixture's manifest. */
+  readonly privateKey: KeyObject
+}
+
+/**
+ * Generate one Ed25519 key pair, in the encodings an archive's origin and signature use.
+ * @returns the key pair.
+ */
+export function makeKey(): FixtureKey {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519')
+  return { publicKey: encodePublicKey(publicKey), privateKey }
+}
 
 /**
  * The SHA-256 of one byte sequence, in the lowercase hexadecimal the format uses.
@@ -57,6 +78,22 @@ export interface FixtureObject {
   readonly kind: ArchiveEntry['kind']
   /** The object's bytes. */
   readonly bytes: Uint8Array
+  /** The compression the writer uses, which a spec sets to `deflate` to build an entry over the format's ratio. */
+  readonly method?: 'store' | 'deflate'
+  /** The Unix mode the entry records, which a spec sets to build a link or another special file. */
+  readonly unixMode?: number
+  /**
+   * The uncompressed size the writer declares instead of the real one, which is
+   * how a spec builds an entry whose declaration breaks a limit its bytes do
+   * not.
+   */
+  readonly declaredUncompressedSize?: number
+  /**
+   * The stored size the writer declares instead of the real one, which is how a
+   * spec builds an entry whose declaration passes the ratio limit while its
+   * declared size breaks another one.
+   */
+  readonly declaredCompressedSize?: number
 }
 
 /** The facts one fixture archive is built from. */
@@ -71,12 +108,17 @@ export interface FixtureArchive {
   readonly extra?: readonly ZipEntryInput[]
   /** The uncompressed size the writer declares for the customisation entry, when it should not be the real one. */
   readonly customisationDeclaredSize?: number
+  /** The origin the manifest declares; by default the fixture home key, which no private key signs for. */
+  readonly origin?: ArchiveOrigin
+  /** The key the fixture signs its manifest with, which adds `signature.json` to the archive. */
+  readonly sign?: { readonly homeKeyId: string, readonly privateKey: KeyObject }
 }
 
 /**
  * Build one archive: the customisation document, every object under its
- * digest, the manifest that lists them, and the spec's extra entries.
- * @param fixture - the objects, the workspaces, the customisation document and the extra entries.
+ * digest, the manifest that lists them, the signature when the fixture signs,
+ * and the spec's extra entries.
+ * @param fixture - the objects, the workspaces, the customisation document, the origin, the signing key and the extra entries.
  * @returns the archive's bytes.
  */
 export function buildArchive(fixture: FixtureArchive = {}): Uint8Array {
@@ -90,7 +132,7 @@ export function buildArchive(fixture: FixtureArchive = {}): Uint8Array {
     formatVersion: ARCHIVE_FORMAT_VERSION,
     createdBy: 'delo-archive-fixture',
     exportedAt: '2026-01-01T00:00:00Z',
-    origin: { homeKeyId: HOME_KEY_ID, publicKey: HOME_PUBLIC_KEY },
+    origin: fixture.origin ?? { homeKeyId: HOME_KEY_ID, publicKey: HOME_PUBLIC_KEY },
     workspaces: fixture.workspaces ?? [],
     entries,
   }
@@ -101,8 +143,21 @@ export function buildArchive(fixture: FixtureArchive = {}): Uint8Array {
     bytes: customisation,
     ...fixture.customisationDeclaredSize === undefined ? {} : { declaredUncompressedSize: fixture.customisationDeclaredSize },
   })
-  for (const object of objects) writer.add({ name: `${OBJECTS_DIRECTORY}/${sha256(object.bytes)}`, bytes: object.bytes })
+  for (const object of objects) {
+    writer.add({
+      name: `${OBJECTS_DIRECTORY}/${sha256(object.bytes)}`,
+      bytes: object.bytes,
+      ...object.method === undefined ? {} : { method: object.method },
+      ...object.unixMode === undefined ? {} : { unixMode: object.unixMode },
+      ...object.declaredUncompressedSize === undefined ? {} : { declaredUncompressedSize: object.declaredUncompressedSize },
+      ...object.declaredCompressedSize === undefined ? {} : { declaredCompressedSize: object.declaredCompressedSize },
+    })
+  }
   writer.add({ name: MANIFEST_PATH, bytes: manifestBytes })
+  if (fixture.sign !== undefined) {
+    const signature = signManifest(manifestBytes, fixture.sign.homeKeyId, fixture.sign.privateKey)
+    writer.add({ name: SIGNATURE_PATH, bytes: utf8(JSON.stringify(signature, null, 2)) })
+  }
   for (const entry of fixture.extra ?? []) writer.add(entry)
   return writer.finish()
 }

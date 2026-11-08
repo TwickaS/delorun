@@ -3,12 +3,17 @@
  * archive's central directory declares and the sizes its manifest declares, so
  * an archive cannot pass a limit by declaring a small size in one place and a
  * large one in the other. The entry count, the per-entry size, the total size
- * and the compression ratio each have their own refusal.
+ * and the compression ratio each have their own refusal. The central
+ * directory's declarations are checked before an archive reads any entry, so a
+ * bomb is refused on what it declares rather than inflated into memory and
+ * refused afterwards.
  *
  * @module @delo/archive/limits
  */
+import type { ArchiveManifest } from '@delo/contract-archive-and-trash'
 import { ARCHIVE_LIMITS } from '@delo/contract-archive-and-trash'
 import { ArchiveError } from './errors.ts'
+import type { ZipArchive } from './zip-read.ts'
 
 /** The sizes one entry declares. */
 export interface DeclaredEntrySize {
@@ -67,4 +72,31 @@ export function checkEntrySizes(entries: readonly DeclaredEntrySize[], limits: A
       )
     }
   }
+}
+
+/**
+ * Check the sizes one open archive's central directory declares, before any
+ * entry is read. A read allocates what its record declares, so an archive that
+ * breaks the per-entry, total or ratio limit on its declarations is refused
+ * here rather than after the bytes it declares exist in memory.
+ * @param archive - the open archive, whose central directory declares each entry's stored and uncompressed size.
+ * @throws ArchiveError `ARCHIVE_TOO_MANY_ENTRIES`, `ARCHIVE_ENTRY_TOO_LARGE`, `ARCHIVE_TOTAL_TOO_LARGE` or `ARCHIVE_RATIO_EXCEEDED` from {@link checkEntrySizes}.
+ */
+export function checkContainerDeclarations(archive: ZipArchive): void {
+  checkEntrySizes(archive.entries.map(record => ({
+    path: record.name,
+    uncompressedSize: record.uncompressedSize,
+    compressedSize: record.compressedSize,
+  }) satisfies DeclaredEntrySize))
+}
+
+/**
+ * Check the sizes one manifest declares for its entries. An import runs it as
+ * part of its limits step, beside the central directory's declarations, so an
+ * archive cannot pass a limit in one place and break it in the other.
+ * @param manifest - the validated manifest, whose entries declare each document's size.
+ * @throws ArchiveError `ARCHIVE_TOO_MANY_ENTRIES`, `ARCHIVE_ENTRY_TOO_LARGE` or `ARCHIVE_TOTAL_TOO_LARGE` from {@link checkEntrySizes}.
+ */
+export function checkManifestDeclarations(manifest: ArchiveManifest): void {
+  checkEntrySizes(manifest.entries.map(entry => ({ path: entry.path, uncompressedSize: entry.size })))
 }
