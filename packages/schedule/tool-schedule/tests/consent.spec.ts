@@ -34,7 +34,7 @@ type Setup = Awaited<ReturnType<typeof setup>>
 
 /** Approve every ask and record the request the pipeline audited. */
 function approving(test: Setup) {
-  const request = vi.fn(async () => 'allowed-once' as const)
+  const request = vi.fn(async (_ask: { readonly toolName: string; readonly reason: string }) => 'allowed-once' as const)
   test.ctx.provide('approval', { request } as unknown as ApprovalService)
   return request
 }
@@ -62,7 +62,7 @@ describe('Schedule consent approval naming', () => {
     askPolicy(test)
     await call(test, 'schedule_create', TASK)
     expect(request).toHaveBeenCalledOnce()
-    expect(request.mock.calls[0]?.[0]).toMatchObject({ toolName: 'schedule_create', reason: ASK_REASON })
+    expect(request.mock.calls.at(0)?.at(0)).toMatchObject({ toolName: 'schedule_create', reason: ASK_REASON })
   })
 
   it('names the created effect on a schedule_create approval', async () => {
@@ -73,10 +73,10 @@ describe('Schedule consent approval naming', () => {
     await call(test, 'schedule_create', TASK)
     expect(request).toHaveBeenCalledOnce()
     expect(nameEffect).toHaveBeenCalledOnce()
-    expect(nameEffect.mock.calls[0]?.[0]).toEqual({
-      tool: 'schedule_create', recurrence: DAILY, targetSession: test.agent.session, targetPreset: undefined,
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+      tool: 'schedule_create', recurrence: DAILY, targetSessionId: test.agent.session.id, targetPreset: undefined,
     } satisfies ScheduleEffect)
-    expect(request.mock.calls[0]?.[0]?.reason).toBe(`${ASK_REASON} ${NAMED}`)
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(`${ASK_REASON} ${NAMED}`)
   })
 
   it('names the stored rule on a schedule_edit approval that restates none', async () => {
@@ -88,8 +88,8 @@ describe('Schedule consent approval naming', () => {
     askPolicy(test)
     await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
     expect(nameEffect).toHaveBeenCalledOnce()
-    expect(nameEffect.mock.calls[0]?.[0]).toEqual({
-      tool: 'schedule_edit', recurrence: DAILY, targetSession: test.agent.session, targetPreset: undefined,
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+      tool: 'schedule_edit', recurrence: DAILY, targetSessionId: test.agent.session.id, targetPreset: undefined,
     } satisfies ScheduleEffect)
   })
 
@@ -98,7 +98,7 @@ describe('Schedule consent approval naming', () => {
     const request = approving(test)
     askPolicy(test)
     await call(test, 'schedule_create', TASK)
-    expect(request.mock.calls[0]?.[0]?.reason).toBe(ASK_REASON)
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(ASK_REASON)
   })
 
   it('consults the consent only at approval time', async () => {

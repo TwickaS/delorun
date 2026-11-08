@@ -7,7 +7,7 @@ declare module '@deepseek-ai/dsh-llm' {
     'schedule': { kind: 'schedule' } & ContextFormed
   }
 }
-import { SessionId, type SessionId as SessionIdType } from '@deepseek-ai/dsh-session'
+import { SessionId, type Session, type SessionId as SessionIdType } from '@deepseek-ai/dsh-session'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionPersistenceNotFoundError } from '@deepseek-ai/dsh-session-persistence'
@@ -23,7 +23,7 @@ import { formatScheduleLocalTime } from './domain.ts'
 import { appendDelivery } from './delivery-history.ts'
 import type { ScheduleTask } from './storage.ts'
 import type {
-  DeliveryRetentionBounds, ScheduleDeliveryReceipt, ScheduleDeliveryVerdict, ScheduleId, SchedulePermissionPresets,
+  DeliveryRetentionBounds, ScheduleDeliveryReceipt, ScheduleDeliveryVerdict, ScheduleId,
   ScheduleSessionCreateSpec,
 } from './types.ts'
 
@@ -67,6 +67,12 @@ function batchSessionOf(task: ScheduleTask): SessionIdType | undefined {
 }
 
 /** Owns at most one timer across recomputations; delivery and management share the serialized operation. */
+/** The preset read the consent seam makes when a deployment composes the permission-preset service. */
+export interface SchedulePermissionPresets {
+  /** The permission preset one Session currently runs under. */
+  current(session: Session): string
+}
+
 export class ScheduleRuntime {
   private timer: ReturnType<typeof setTimeout> | undefined
   private running: Promise<void> | undefined
@@ -360,7 +366,7 @@ export class ScheduleRuntime {
     const verdict = consent.reviewDelivery({
       creationPreset: task.creationPreset,
       currentPreset: (this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined)?.current(target.agent.session),
-      targetSession: target.agent.session,
+      targetSessionId: target.agent.session.id,
     })
     return verdict.kind === 'refuse' ? verdict : undefined
   }

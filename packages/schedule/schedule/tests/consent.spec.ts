@@ -21,11 +21,11 @@ async function setup(options: {
   seed?: Parameters<typeof seedTasks>[1]
 } = {}) {
   const test = await harness({
-    beforeService: async (ctx, facility) => {
+    beforeService: async (_ctx, facility) => {
       if (options.seed !== undefined) await seedTasks(facility, options.seed)
     },
-    onContext: (ctx) => {
-      if (options.consent !== undefined) ctx.provide('scheduleConsent', options.consent)
+    onContext: (ctxOn) => {
+      if (options.consent !== undefined) ctxOn.provide('scheduleConsent', options.consent)
     },
   })
   active.push(test)
@@ -105,7 +105,7 @@ it('delivers when the consent allows and hands it the creation and current prese
   expect(reviews).toHaveLength(1)
   expect(reviews[0]?.creationPreset).toBe('wide')
   expect(reviews[0]?.currentPreset).toBe('wide')
-  expect(reviews[0]?.targetSession).toBe(target.session)
+  expect(reviews[0]?.targetSessionId).toBe(target.session.id)
   expect(await test.service.view({ id: created.id })).toMatchObject({
     status: 'ended', lastDelivery: { targetSessionId: target.session.id },
   })
@@ -126,7 +126,7 @@ it('reviews with absent presets when no preset service is composed', async () =>
   expect(reviews).toHaveLength(1)
   expect(reviews[0]?.creationPreset).toBeUndefined()
   expect(reviews[0]?.currentPreset).toBeUndefined()
-  expect(reviews[0]?.targetSession).toBe(target.session)
+  expect(reviews[0]?.targetSessionId).toBe(target.session.id)
   expect(await test.service.view({ id: created.id })).toMatchObject({ status: 'ended' })
 })
 

@@ -4,7 +4,6 @@
  * @module @deepseek-ai/dsh-schedule/types
  */
 
-import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { Branded } from '@deepseek-ai/dsh-brand'
@@ -596,20 +595,14 @@ export interface ScheduleExecutionPendingResult {
 /** Task state after a manual delivery, or a non-mutating miss or refusal. */
 export type ScheduleRunResult = ScheduleCatalogEntry | ScheduleNotFoundResult | ScheduleExecutionPendingResult
 
-/** The preset read the consent seam makes when a deployment composes the permission-preset service. */
-export interface SchedulePermissionPresets {
-  /** The permission preset one Session currently runs under. */
-  current(session: Session): string
-}
-
 /** The effect one approved Schedule management call creates, which a consent may name. */
 export interface ScheduleEffect {
   /** The tool whose approval asks. */
   readonly tool: 'schedule_create' | 'schedule_edit'
   /** The recurrence the call arms or keeps, as the caller wrote it. */
   readonly recurrence: string
-  /** The Session the deliveries reach; undefined while the target opens a new Session at its first delivery. */
-  readonly targetSession: Session | undefined
+  /** Id of the Session the deliveries reach; undefined while the target opens a new Session at its first delivery. */
+  readonly targetSessionId: string | undefined
   /** The permission preset that Session runs under at approval time; a created target inherits the caller's. */
   readonly targetPreset: string | undefined
 }
@@ -620,8 +613,8 @@ export interface ScheduleDeliveryReview {
   readonly creationPreset: string | undefined
   /** The permission preset the target Session runs under now; undefined when no preset service is composed. */
   readonly currentPreset: string | undefined
-  /** The Session the delivery would wake. */
-  readonly targetSession: Session
+  /** Id of the Session the delivery would wake. */
+  readonly targetSessionId: string
 }
 
 /** One reviewed delivery: deliver it, or refuse it with the reason the refusal surfaces. */

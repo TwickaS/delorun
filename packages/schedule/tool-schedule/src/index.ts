@@ -21,8 +21,9 @@ import {
   DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, MAX_TITLE_LENGTH, MIN_EVERY_INTERVAL_SECONDS, ScheduleId, ScheduleInputError,
   formatScheduleLocalTime,
 } from '@deepseek-ai/dsh-schedule'
+import type { SchedulePermissionPresets } from '@deepseek-ai/dsh-schedule'
 import type {
-  InternalScheduleError, ScheduleEditRequest, ScheduleEffect, SchedulePermissionPresets, ScheduleRecord,
+  InternalScheduleError, ScheduleEditRequest, ScheduleEffect, ScheduleRecord,
   ScheduleTargetRequest, ScheduleToolError,
   ScheduleCatalogEntry, ScheduleDeliveryReceipt, SubagentSessionError,
 } from '@deepseek-ai/dsh-schedule'
@@ -299,13 +300,13 @@ function targetFacts(
   ctx: Context,
   agent: Agent,
   target: typeof TARGET_CHOICES[number],
-): { readonly targetSession: ScheduleEffect['targetSession']; readonly targetPreset: string | undefined } {
+): { readonly targetSessionId: ScheduleEffect['targetSessionId']; readonly targetPreset: string | undefined } {
   const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
   // A created target opens its Session at the first delivery and inherits the caller's permission preset.
   if (target !== 'this_session') {
-    return { targetSession: undefined, targetPreset: presets?.current(agent.session) }
+    return { targetSessionId: undefined, targetPreset: presets?.current(agent.session) }
   }
-  return { targetSession: agent.session, targetPreset: presets?.current(agent.session) }
+  return { targetSessionId: agent.session.id, targetPreset: presets?.current(agent.session) }
 }
 
 /**
@@ -322,7 +323,7 @@ async function consentEffect(ctx: Context, exec: ToolExecution, agent: Agent): P
   if (args === undefined || typeof args !== 'object') return undefined
   const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
   let recurrence: string | undefined
-  let facts: { readonly targetSession: ScheduleEffect['targetSession']; readonly targetPreset: string | undefined }
+  let facts: { readonly targetSessionId: ScheduleEffect['targetSessionId']; readonly targetPreset: string | undefined }
   if (exec.name === 'schedule_create') {
     if (typeof args.rrule !== 'string') return undefined
     recurrence = args.rrule
@@ -338,15 +339,15 @@ async function consentEffect(ctx: Context, exec: ToolExecution, agent: Agent): P
       ? targetFacts(ctx, agent, args.target as typeof TARGET_CHOICES[number])
       : stored.target.kind === 'session'
         ? {
-          targetSession: ctx.agents.get(stored.target.sessionId)?.session,
+          targetSessionId: stored.target.sessionId,
           targetPreset: presets?.current(ctx.agents.get(stored.target.sessionId)?.session ?? agent.session),
         }
-        : { targetSession: undefined, targetPreset: undefined }
+        : { targetSessionId: undefined, targetPreset: undefined }
   }
   return {
     tool: exec.name,
     recurrence,
-    ...facts.targetSession === undefined ? {} : { targetSession: facts.targetSession } as ScheduleEffect,
+    ...facts.targetSessionId === undefined ? {} : { targetSessionId: facts.targetSessionId },
     targetPreset: facts.targetPreset,
   } as ScheduleEffect
 }

@@ -11,7 +11,7 @@ import { delegationDepthOf } from '@deepseek-ai/dsh-subagent'
 import { SessionId as toSessionId, type SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionActivity } from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
-import { ScheduleRuntime, type ScheduleRuntimeLimits } from './runtime.ts'
+import { ScheduleRuntime, type SchedulePermissionPresets, type ScheduleRuntimeLimits } from './runtime.ts'
 import { scheduleDomain, scheduleTaskSchema, type ScheduleTask } from './storage.ts'
 import { deliveryHistoryPage } from './delivery-history.ts'
 import { createScheduleRecord, updateScheduleRecord } from './update.ts'
@@ -21,12 +21,13 @@ import {
 import type {
   ScheduleCatalogEntry, ScheduleCreateRequest, ScheduleDeleteInactiveResult, ScheduleDeliveryHistoryRequest,
   ScheduleDeliveryHistoryResult, ScheduleEditRequest, ScheduleEditResult, ScheduleListRequest,
-  ScheduleListResult, SchedulePatch, SchedulePermissionPresets, ScheduleRecord, ScheduleRunRequest, ScheduleRunResult,
+  ScheduleListResult, SchedulePatch, ScheduleRecord, ScheduleRunRequest, ScheduleRunResult,
   ScheduleSessionCreateSpec, ScheduleTarget, ScheduleTargetRequest, ScheduleViewRequest, ScheduleViewResult,
 } from './types.ts'
 export type * from './client.ts'
 export { scheduleDomain } from './storage.ts'
 export type { ScheduleTask } from './storage.ts'
+export type { SchedulePermissionPresets } from './runtime.ts'
 export type { RecurringOccurrence } from './domain.ts'
 export { formatScheduleLocalTime } from './domain.ts'
 export {
