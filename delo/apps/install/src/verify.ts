@@ -1,0 +1,236 @@
+/**
+ * Contract C2's client verification, steps 1 to 4, and step 5's digest checks, as the install path runs them before
+ * anything lands under `~/.delo/runtimes/`: the root chain from the root a launcher embeds, the timestamp's signature,
+ * lifetime, expiry and version against the stored one, the channel's manifest by the timestamp's digest and the
+ * targets signature, the platform's file list, the archive's digest, and contract C18's release-log bundle. Every
+ * refusal is {@link InstallError}: a signature, digest or freshness failure is `INSTALL_VERIFY_FAILED`, and a
+ * release-log failure is `RELEASE_LOG_FAILED` with C18's reason code.
+ *
+ * @module @delo/install/verify
+ */
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import {
+  RELEASE_FILE_SIZE_LIMITS,
+  type FileRef,
+  type ReleaseChannel,
+  type ReleaseManifest,
+  type RootMetadata,
+  type RuntimeFileList,
+  type RuntimePlatform,
+  type SemanticVersion,
+  type TimestampMetadata,
+} from '@delo/contract-release-manifest'
+import { LogVerificationError, readBundle, verifyBundle, type VerifiedBundle } from '@delo/release/log/bundle'
+import { readRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifyTimestamp, type TrustedRoot } from '@delo/release/sign/verify'
+import { InstallError, messageOf } from './errors.ts'
+import type { StoredTimestamp } from './state.ts'
+
+/** Why a C2 check refused, as an {@link InstallError}. */
+function refused(source: string, error: unknown): InstallError {
+  return error instanceof InstallError ? error : new InstallError('INSTALL_VERIFY_FAILED', source, messageOf(error), { cause: error })
+}
+
+/**
+ * The version of the root a timestamp names, read from the unsigned field that decides which root file to fetch. It
+ * is a fetch hint only: nothing installs until {@link verifyTimestampUnderRoots} verifies the signature over it.
+ * @param timestamp - the timestamp file's bytes.
+ * @returns its `signed.root.version`.
+ * @throws {InstallError} `RELEASE_METADATA_INVALID` when the file is not JSON naming a positive integer version.
+ */
+export function rootVersionOf(timestamp: Uint8Array): number {
+  let version: unknown
+  try {
+    const envelope: unknown = JSON.parse(Buffer.from(timestamp).toString('utf8'))
+    version = typeof envelope === 'object' && envelope !== null
+      ? (envelope as { readonly signed?: { readonly root?: { readonly version?: unknown } } }).signed?.root?.version
+      : undefined
+  } catch (error) {
+    throw new InstallError('RELEASE_METADATA_INVALID', 'timestamp', `timestamp.json is not JSON: ${messageOf(error)}`, { cause: error })
+  }
+  if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) {
+    throw new InstallError('RELEASE_METADATA_INVALID', 'timestamp', 'timestamp.json names no root version')
+  }
+  return version
+}
+
+/**
+ * The version of the newest root in a chain, which is how far a launcher's trust has come and the version every walk
+ * starts from.
+ * @param roots - the root files, oldest first.
+ * @returns the newest root's version.
+ * @throws {InstallError} `NO_TRUSTED_ROOT` when the chain is empty; `INSTALL_VERIFY_FAILED` when its newest file does
+ *   not verify with its own root threshold.
+ */
+export function newestRootVersion(roots: readonly Uint8Array[]): number {
+  if (roots.length === 0) throw new InstallError('NO_TRUSTED_ROOT', 'root', 'the launcher embeds no root, so no release can be verified')
+  try {
+    return readRoot(roots.at(-1)!).metadata.version
+  } catch (error) {
+    throw refused('root', error)
+  }
+}
+
+/** What verifying a timestamp needs. */
+export interface TimestampRequest {
+  /** The root files, oldest first: the root the launcher embeds and each root it walked to, which must be contiguous. */
+  readonly roots: readonly Uint8Array[]
+  /** `timestamp.json`'s bytes. */
+  readonly timestamp: Uint8Array
+  /** The client's clock in Unix seconds. */
+  readonly now: number
+  /** The newest timestamp verified before, when the client stored one. */
+  readonly stored?: StoredTimestamp
+}
+
+/** A verified root chain and timestamp. */
+export interface RootAndTimestamp {
+  /** The chain, oldest first; the last entry is the trusted root. */
+  readonly chain: readonly TrustedRoot[]
+  /** The trusted root: the newest of the chain. */
+  readonly root: TrustedRoot
+  /** The verified timestamp. */
+  readonly timestamp: TimestampMetadata
+}
+
+/**
+ * Verify contract C2's steps 1 and 2: the root chain from the embedded root, its expiry against the clock, then the
+ * timestamp's signature, its three-day lifetime, its expiry and its version against the stored one.
+ * @param request - the chain, the timestamp, the clock and the stored timestamp.
+ * @returns the trusted root and the timestamp.
+ * @throws {InstallError} `INSTALL_VERIFY_FAILED` naming the failed rule, which includes an expired root, an expired or
+ *   replayed timestamp, and a chain that skips a version.
+ */
+export function verifyTimestampUnderRoots(request: TimestampRequest): RootAndTimestamp {
+  let chain: TrustedRoot[]
+  try {
+    chain = trustRootChain(request.roots, request.now)
+  } catch (error) {
+    throw refused('root', error)
+  }
+  const root = chain.at(-1)!
+  let timestamp: TimestampMetadata
+  try {
+    timestamp = verifyTimestamp(root, request.timestamp, request.now, request.stored)
+  } catch (error) {
+    throw refused('timestamp.json', error)
+  }
+  return { chain, root, timestamp }
+}
+
+/** What verifying a channel's release needs. */
+export interface ReleaseRequest {
+  /** The trusted root. */
+  readonly root: RootMetadata
+  /** The verified timestamp. */
+  readonly timestamp: TimestampMetadata
+  /** The channel whose current release is installed. */
+  readonly channel: ReleaseChannel
+  /** The manifest file's bytes. */
+  readonly manifest: Uint8Array
+  /** The release-log bundle's bytes. */
+  readonly bundle: Uint8Array
+  /** The version a person asked for, when one was named. */
+  readonly target?: SemanticVersion
+}
+
+/** A verified release, with the log facts its online check starts from. */
+export interface VerifiedChannelRelease {
+  /** The manifest. */
+  readonly manifest: ReleaseManifest
+  /** The log checkpoint the verified bundle carries. */
+  readonly log: VerifiedBundle
+}
+
+/**
+ * Verify contract C2's step 3 and contract C18's bundle: the manifest is the file the fresh timestamp names for the
+ * channel, its targets threshold signs it, the version a person asked for is that release, and the bundle's entry,
+ * inclusion proof and witness cosignature verify with the trusted root.
+ * @param request - the root, the timestamp, the channel, the manifest, the bundle and the requested version.
+ * @returns the manifest and the bundle's checkpoint facts.
+ * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the manifest is not the channel's or does not verify;
+ *   `RELEASE_NOT_OFFERED` when a requested version is not the release the timestamp names; `RELEASE_LOG_FAILED` when
+ *   the bundle fails C18's checks.
+ */
+export function verifyChannelRelease(request: ReleaseRequest): VerifiedChannelRelease {
+  let manifest: ReleaseManifest
+  try {
+    manifest = verifyChannelManifest(request.root, request.timestamp, request.channel, request.manifest)
+  } catch (error) {
+    throw refused(`${request.channel} manifest`, error)
+  }
+  if (request.target !== undefined && manifest.version !== request.target) {
+    throw new InstallError('RELEASE_NOT_OFFERED', `${request.channel} manifest`, `the ${request.channel} channel names release ${manifest.version}, not ${request.target}; a release the fresh timestamp does not name is not installed`)
+  }
+  let bundle
+  try {
+    bundle = readBundle(request.bundle)
+  } catch (error) {
+    throw new InstallError('RELEASE_LOG_FAILED', 'release-log bundle', `the release-log bundle does not read: ${messageOf(error)}`, { cause: error })
+  }
+  try {
+    return { manifest, log: verifyBundle(request.root, request.manifest, manifest.version, bundle) }
+  } catch (error) {
+    if (error instanceof LogVerificationError) {
+      throw new InstallError('RELEASE_LOG_FAILED', 'release-log bundle', `${error.failure}: ${error.message}`, { cause: error })
+    }
+    throw new InstallError('RELEASE_LOG_FAILED', 'release-log bundle', messageOf(error), { cause: error })
+  }
+}
+
+/** What verifying a platform's file list needs. */
+export interface FileListRequest {
+  /** The trusted root. */
+  readonly root: RootMetadata
+  /** The verified manifest. */
+  readonly manifest: ReleaseManifest
+  /** The platform. */
+  readonly platform: RuntimePlatform
+  /** The file list's bytes. */
+  readonly bytes: Uint8Array
+}
+
+/**
+ * Verify contract C2's step 5 for the file list: its length and SHA-256 against the manifest's reference and its
+ * targets signature, which names the same release and platform.
+ * @param request - the root, the manifest, the platform and the file list's bytes.
+ * @returns the verified file list.
+ * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the bytes are not the manifest's or do not verify.
+ */
+export function verifyPlatformFiles(request: FileListRequest): RuntimeFileList {
+  if (request.bytes.byteLength > RELEASE_FILE_SIZE_LIMITS.files) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', `${request.platform} file list`, `the file list has ${String(request.bytes.byteLength)} bytes, above its limit of ${String(RELEASE_FILE_SIZE_LIMITS.files)}`)
+  }
+  try {
+    return verifyFileList(request.root, request.manifest, request.platform, request.bytes)
+  } catch (error) {
+    throw refused(`${request.platform} file list`, error)
+  }
+}
+
+/**
+ * Check a downloaded file against its signed reference, before anything is extracted from it (contract C2, "an
+ * archive whose SHA-256 differs from the manifest is refused before extraction"). The digest is computed while the
+ * file is read, so a 1 GiB archive is never held in memory.
+ * @param ref - the reference the manifest carries.
+ * @param path - the downloaded file.
+ * @returns the file's length and digest, as checked.
+ * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the length or SHA-256 differs from the reference.
+ */
+export async function verifyDownloadedFile(ref: FileRef, path: string): Promise<{ readonly length: number, readonly sha256: string }> {
+  const hash = createHash('sha256')
+  let length = 0
+  for await (const chunk of createReadStream(path)) {
+    const bytes = chunk as Buffer
+    length += bytes.byteLength
+    hash.update(bytes)
+  }
+  const sha256 = hash.digest('hex')
+  if (length !== ref.length) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', ref.name, `${ref.name} has ${String(length)} bytes; the manifest lists ${String(ref.length)}`)
+  }
+  if (sha256 !== ref.sha256) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', ref.name, `${ref.name} has SHA-256 ${sha256}; the manifest lists ${ref.sha256}`)
+  }
+  return { length, sha256 }
+}

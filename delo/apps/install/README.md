@@ -1,0 +1,84 @@
+---
+description: "Delo's install path: the release files a launcher fetches over HTTPS, contract C2's client verification steps 1 to 5, contract C18's bundle and online log check, and the extraction of a verified archive into the runtime store's staging directory."
+---
+
+# @delo/install
+
+English | [中文](README.zh.md)
+
+## Summary
+
+`@delo/install` is the install path behind the `delorun` launcher of [`@delo/npm-launcher`](../npm-launcher/README.md). It fetches a release's files over HTTPS from the hosts contract C1 lists, verifies every one of them before anything is unpacked, and writes the runtime archive into the runtime store's staging directory. The store publishes what this package prepares: nothing here switches `current`, and a refused install leaves no directory under `~/.delo/runtimes/`.
+
+## Contents
+
+- [Downloads](#downloads)
+- [Verification](#verification)
+- [The release log](#the-release-log)
+- [Extraction](#extraction)
+- [What a home remembers](#what-a-home-remembers)
+- [Failures](#failures)
+- [Development](#development)
+
+<a id="downloads"></a>
+
+## Downloads
+
+`Downloader` is contract C1's download rule, and one instance serves one install. It fetches over HTTPS from the release hosts contract C1 lists, follows a redirect only to those hosts and at most five times, allows 30 seconds for a connection to open and 60 seconds without a byte, and holds a file to its limit while its body arrives rather than after it has been read. `bytes` keeps a small metadata file in memory; `file` writes an archive to a new file at mode 0600, hashing it as it arrives and removing it when anything fails.
+
+<a id="verification"></a>
+
+## Verification
+
+`verify.ts` runs contract C2's client verification, and no step of it is skipped before the archive is extracted:
+
+1. The root chain from the root the launcher embeds, each root verified by the version before it, with the newest held to its own threshold and expiry.
+2. The timestamp's signature, its lifetime, its expiry and its version against the one this home stored, which refuses a replay.
+3. The channel's manifest, by the digest the fresh timestamp names and the targets threshold's signature, and the version a person asked for when they named one.
+4. The platform's file list, held to the manifest's length and SHA-256 and to its own signature.
+5. The archive itself, held to the manifest's length and SHA-256 as it is read from disk.
+
+`LauncherChannel` is the composition the launcher drives: `resolve` names and verifies a release and records what it proved under `trust/`, and `fill` downloads that release's archive and file list, checks both against the manifest, and extracts into the staging directory the store made.
+
+<a id="the-release-log"></a>
+
+## The release log
+
+`runOnlineCheck` is contract C18's check against the current log. It reads the log's latest checkpoint and requires the log's own signature plus the root's witness threshold of cosignatures no older than 24 hours. It then proves consistency from the checkpoint the verified bundle carries, or the newer one this home stored, to the latest, and stores the latest. An unreachable log leaves the release `unchecked` and a verifiable failure leaves it `failed`; `requireVerifiedLog` refuses an install in both states, so a release that cannot be checked against the log never installs. `createTilesLogService` reads a tlog-tiles shard through the same downloader, so the host rule covers the log's answers too.
+
+<a id="extraction"></a>
+
+## Extraction
+
+`extractArchive` accepts exactly the files the signed list names, at the list's length, SHA-256 and mode. An entry type the archive format forbids, a path the list does not name, a path that would land outside the staging directory, a repeated path and a length or digest the list contradicts each stop the extraction, and a listed file the archive lacks stops it too. The staging directory is left for the caller to remove, and nothing is written outside it.
+
+<a id="what-a-home-remembers"></a>
+
+## What a home remembers
+
+Three files under `trust/` are the rollback protection an install keeps, and each is written at mode 0600 through a temporary file: the newest root that verified, the newest timestamp that verified, and the newest log checkpoint that verified. A later install refuses a timestamp below the stored one and a checkpoint below the stored one, and a file that does not read, belongs to another user or is laxer than 0600 refuses the install with `TRUST_STATE_INVALID` rather than being replaced.
+
+<a id="failures"></a>
+
+## Failures
+
+Every refusal is an `InstallError`, which `isInstallError` tests for:
+
+| Code | What it means |
+| --- | --- |
+| `DOWNLOAD_REFUSED` | The URL is not HTTPS, names a host outside contract C1's list, or redirects to one |
+| `DOWNLOAD_FAILED` | The connection did not open or stalled, the answer was not 200, or the file passed its limit |
+| `INSTALL_VERIFY_FAILED` | A signature, digest, length or version check failed |
+| `ARCHIVE_REFUSED` | The archive holds an entry its format forbids or its signed list does not name |
+| `RELEASE_LOG_FAILED` | Contract C18's bundle or online check failed verifiably |
+| `RELEASE_LOG_UNCHECKED` | The online check could not run, and an install needs it |
+| `RELEASE_NOT_OFFERED` | The version a person named is not the release the fresh timestamp names |
+| `RELEASE_METADATA_INVALID` | A release file does not read at all |
+| `TRUST_STATE_INVALID` | A file under `trust/` does not read |
+| `NO_TRUSTED_ROOT` | The launcher supplied no root, so nothing can be verified |
+
+<a id="development"></a>
+
+## Development
+
+The package's tests are in `tests/`, and they serve the releases they verify from local bytes rather than from the network. Run them with the repository's Vitest configuration: `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/install`.

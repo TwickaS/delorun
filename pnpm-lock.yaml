@@ -1307,6 +1307,61 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
+  delo/apps/install:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../../packages/contract-home-layout
+      '@delo/contract-release-log':
+        specifier: workspace:*
+        version: link:../../packages/contract-release-log
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../../packages/contract-release-manifest
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../../packages/home
+      '@delo/release':
+        specifier: workspace:*
+        version: link:../release
+      '@delo/runtime-store':
+        specifier: workspace:*
+        version: link:../../packages/runtime-store
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
+
+  delo/apps/npm-launcher:
+    dependencies:
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../../packages/contract-home-layout
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../../packages/contract-release-manifest
+      '@delo/contract-verification-checks':
+        specifier: workspace:*
+        version: link:../../packages/contract-verification-checks
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../../packages/home
+      '@delo/install':
+        specifier: workspace:*
+        version: link:../install
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../../packages/logs
+      '@delo/runtime-store':
+        specifier: workspace:*
+        version: link:../../packages/runtime-store
+
   delo/apps/release:
     dependencies:
       '@deepseek-ai/dsh-brand':

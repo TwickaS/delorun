@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/apps/npm-launcher/README.md
+/:
+  en: a076cb6fe455c7a5
+  zh: 000eb4e750a17c27
+/delo-npm-launcher:
+  en: 46030caf9b49b86d
+  zh: 694a5fb4c326f7ae
+/delo-npm-launcher/summary:
+  en: 6c32fb6ec882e46b
+  zh: a39a9dbd9472053f
+/delo-npm-launcher/contents:
+  en: 7a4fa00ed23a0f67
+  zh: f9e4af8ff7081718
+/delo-npm-launcher/commands:
+  en: d7df3f8e721ef64d
+  zh: 7e12604ab20a1820
+/delo-npm-launcher/the-launch-flow:
+  en: c24383d37f4f9a16
+  zh: c51a9ceef3f0ac95
+/delo-npm-launcher/the-roots-it-ships:
+  en: 34d912cb8375b816
+  zh: 57fa74035ba7a2d9
+/delo-npm-launcher/refusals:
+  en: 8bdabdf5a7d591ab
+  zh: 03e07d77adba98c6
+/delo-npm-launcher/exit-codes:
+  en: 73531e09b7f69509
+  zh: 94a0125df8e61a81
+/delo-npm-launcher/development:
+  en: 538840e3b16fdcdc
+  zh: 34d77e3d53c3bc76

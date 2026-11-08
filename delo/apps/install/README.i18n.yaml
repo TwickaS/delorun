@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/apps/install/README.md
+/:
+  en: 76c047602c315330
+  zh: 81825a0091a43549
+/delo-install:
+  en: a780ba8a4d589a55
+  zh: d18aa671ec7a942e
+/delo-install/summary:
+  en: 4ebd0724c92c6348
+  zh: 2ce20ddd1ca7ad34
+/delo-install/contents:
+  en: 2b904b95367ef5cf
+  zh: 36c43810d3ad0e6c
+/delo-install/downloads:
+  en: 7c4646abe10c3629
+  zh: 83faeaa1b8a20ba9
+/delo-install/verification:
+  en: b4dc1030b3df6165
+  zh: 3975538240de15a0
+/delo-install/the-release-log:
+  en: 2d4527fb047ad6b4
+  zh: 19c2a1556efe37ab
+/delo-install/extraction:
+  en: f791faf726830400
+  zh: 124ae5121e33981f
+/delo-install/what-a-home-remembers:
+  en: 3eea8a3567737060
+  zh: fe758cffd7165c03
+/delo-install/failures:
+  en: eef305630a4aa7ed
+  zh: f9dc3143428d3461
+/delo-install/development:
+  en: e8473b80e95dbd9b
+  zh: de06fe76b42c5c4d

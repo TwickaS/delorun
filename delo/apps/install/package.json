@@ -1,0 +1,24 @@
+{
+  "name": "@delo/install",
+  "description": "Delo's install path: the release files a launcher fetches over HTTPS from contract C1's hosts, contract C2's client verification steps 1 to 5, contract C18's bundle and online log check, and the extraction of a verified runtime archive into a staging directory",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/contract-release-log": "workspace:*",
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/home": "workspace:*",
+    "@delo/release": "workspace:*",
+    "@delo/runtime-store": "workspace:*",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
+  }
+}

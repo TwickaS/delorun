@@ -1,0 +1,23 @@
+{
+  "name": "@delo/npm-launcher",
+  "description": "The Delo launcher npm serves as `delorun`: it verifies and installs the release its channel names through @delo/install, refuses a runtime it cannot verify, and starts the installed runtime through its own Node executable (contract C1's launch protocol 1)",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "delorun": "tsx src/bin.ts"
+  },
+  "dependencies": {
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/contract-verification-checks": "workspace:*",
+    "@delo/home": "workspace:*",
+    "@delo/install": "workspace:*",
+    "@delo/logs": "workspace:*",
+    "@delo/runtime-store": "workspace:*"
+  }
+}
