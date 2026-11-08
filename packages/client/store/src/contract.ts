@@ -94,9 +94,11 @@ export interface StoreHandle<T, A extends ActionsDecl<T>> {
   readonly spec: StoreSpec<T, A>
   /**
    * Create a live engine instance (framework machinery and tests only).
-   * @param scopeKey - session id for session-scope instances; suffixes the
-   * persist key so per-session instances persist independently (root-scope
-   * instances omit it).
+   * @param scopeKey - session id for session-scope instances; the persisted
+   * key joins the active connection's host id with it (`persist.host.scope`,
+   * contract C10) so per-session instances persist independently per
+   * connection (root-scope instances omit it and persist under the host
+   * alone).
    * @returns a fresh instance seeded from `spec.init()`.
    */
   create(scopeKey?: string): StoreInstance<T, A>

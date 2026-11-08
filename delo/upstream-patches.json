@@ -374,7 +374,7 @@
     {
       "path": "packages/client/ui-conversation/README.md",
       "class": "delo-feature",
-      "reason": "Documents the three Send-circle custom properties that the input bar reads and their fallbacks."
+      "reason": "Documents the three Send-circle custom properties that the input bar reads and their fallbacks, and the draft entry's host-qualified persisted key (contract C10)."
     },
     {
       "path": "packages/client/ui-model-selection/src/client/ModelSelect.tsx",
@@ -604,12 +604,12 @@
     {
       "path": "packages/client/ui-conversation/README.zh.md",
       "class": "delo-feature",
-      "reason": "Chinese counterpart of the conversation README; it documents the Send circle's custom properties."
+      "reason": "Chinese counterpart of the conversation README; it documents the Send circle's custom properties and the draft entry's host-qualified persisted key (contract C10)."
     },
     {
       "path": "packages/client/ui-conversation/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Consistency record re-recorded after the conversation README's Send-circle paragraph and its Chinese counterpart changed."
+      "reason": "Consistency record re-recorded after the conversation README's Send-circle paragraph and its Chinese counterpart changed, and again after its host-qualified draft-persistence sentence (contract C10)."
     },
     {
       "path": "packages/client/ui-model-selection/README.zh.md",
@@ -1094,17 +1094,17 @@
     {
       "path": "packages/client/ui-sidebar-right/README.md",
       "class": "delo-feature",
-      "reason": "Documents presentsFullscreen, which reports whether the expanded right column covers the main column."
+      "reason": "Documents presentsFullscreen, which reports whether the expanded right column covers the main column, and the host-qualified layout key (contract C10)."
     },
     {
       "path": "packages/client/ui-sidebar-right/README.zh.md",
       "class": "delo-feature",
-      "reason": "Chinese counterpart of the sidebar-right README, which documents presentsFullscreen."
+      "reason": "Chinese counterpart of the sidebar-right README, which documents presentsFullscreen and the host-qualified layout key (contract C10)."
     },
     {
       "path": "packages/client/ui-sidebar-right/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Consistency record re-recorded after the sidebar-right README presentsFullscreen sentence and its Chinese counterpart changed."
+      "reason": "Consistency record re-recorded after the sidebar-right README's presentsFullscreen and host-qualified layout-key sentences and their Chinese counterparts changed."
     },
     {
       "path": "packages/client/ui-sidebar-right/src/client/service.ts",
@@ -1214,17 +1214,17 @@
     {
       "path": "packages/client/ui-workspace/README.md",
       "class": "delo-feature",
-      "reason": "Documents the one-list view: its shelves, view defaults, hidden Sessions and the sidebar.workspaces.list occupant."
+      "reason": "Documents the one-list view: its shelves, view defaults, hidden Sessions and the sidebar.workspaces.list occupant, and the view record's host-qualified persisted key (contract C10)."
     },
     {
       "path": "packages/client/ui-workspace/README.zh.md",
       "class": "delo-feature",
-      "reason": "Chinese counterpart of the Workspace browser README, which documents the one-list view and the list occupant."
+      "reason": "Chinese counterpart of the Workspace browser README, which documents the one-list view, the list occupant and the view record's host-qualified persisted key (contract C10)."
     },
     {
       "path": "packages/client/ui-workspace/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Consistency record re-recorded after the Workspace browser README one-list paragraphs and their Chinese counterparts changed."
+      "reason": "Consistency record re-recorded after the Workspace browser README's one-list and host-qualified view-record paragraphs and their Chinese counterparts changed."
     },
     {
       "path": "packages/client/ui-workspace/src/client/contract/slots.ts",
@@ -2910,6 +2910,106 @@
       "path": "packages/session-query/session-query-sqlite/src/index.ts",
       "class": "delo-feature",
       "reason": "Trash purge (C8): the engine gains one `forgetSessions` method, which removes the named sessions' rows from both indexed sources in one transaction, bumps the generation so a stale cursor cannot resolve, and rebuilds the file with VACUUM, so no byte of a purged chat stays in the full-text index, not even in a freed page. Search behaviour, the schema and every other method stand unchanged."
+    },
+    {
+      "path": "packages/client/store/src/contract.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): the create() contract documents the persisted key the engine composes from the persist name, the active connection's host id and the caller's scope."
+    },
+    {
+      "path": "packages/client/store/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): defineStore composes every persisted key as the persist name, the active connection's host id and the caller's scope, and the engine exports the host id source and the key composer the writing packages share."
+    },
+    {
+      "path": "packages/client/store/src/persistence-host.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): the module carries the active connection's host id, validates its canonical lowercase UUID version 4 form, and composes the host-qualified keys; until the studio names a host id the bare stock shape remains and no entry is migrated."
+    },
+    {
+      "path": "packages/client/store/tests/persistence-host.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): covers the host id validation, the key composition, two connections with one upstream id keeping separate browser state, the scoped cleanup, and the unmigrated bare stock shape."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/ConversationWidthControls.tsx",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): the transcript width preference is read and written under the host-qualified key."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/stores.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): the draft and View preference readers read the host-qualified key the engine writes for the Session."
+    },
+    {
+      "path": "packages/client/ui-conversation/tests/conversation-store.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): covers the per-connection draft and View reads and the stock entry that stays unread and unmigrated."
+    },
+    {
+      "path": "packages/client/ui-schedule/src/client/recent-time-zones.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): the recent time zones are read and written under the host-qualified key."
+    },
+    {
+      "path": "packages/client/ui-schedule/src/client/task-tab-bindings.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): each Session's task tab bindings are read and written under the host-qualified key, with the upstream id appended unparsed."
+    },
+    {
+      "path": "packages/client/ui-schedule/tests/recent-time-zones.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): covers the per-connection storage and the stock entry that stays unread and unmigrated."
+    },
+    {
+      "path": "packages/client/ui-schedule/tests/task-tab-bindings.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): covers the host-qualified Session document key and the per-connection isolation."
+    },
+    {
+      "path": "packages/client/ui-sidebar-right/src/client/persistence.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): each Session's sidebar layout is read, written and cleared under the host-qualified key."
+    },
+    {
+      "path": "packages/client/ui-sidebar-right/tests/persistence.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): covers the per-connection layout storage and the scoped cleanup."
+    },
+    {
+      "path": "packages/client/ui-user-questions/tests/question-draft-store.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): covers two connections with one Session id keeping separate drafts."
+    },
+    {
+      "path": "packages/client/store/README.md",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): documents that every persisted key joins the active connection's host id and that an entry written without a host id is not read or migrated."
+    },
+    {
+      "path": "packages/client/store/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the store README's host-qualified persisted-key sentence (contract C10)."
+    },
+    {
+      "path": "packages/client/store/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the store README's host-qualified persisted-key sentence and its Chinese counterpart changed."
+    },
+    {
+      "path": "packages/client/ui-schedule/README.md",
+      "class": "delo-feature",
+      "reason": "Host-qualified persisted browser keys (C10): documents that the task tab bindings and the recent time zones carry the active connection's host id and that an entry written without one is not read or migrated."
+    },
+    {
+      "path": "packages/client/ui-schedule/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Chinese counterpart of the schedule README's host-qualified persisted-key sentence (contract C10)."
+    },
+    {
+      "path": "packages/client/ui-schedule/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Consistency record re-recorded after the schedule README's host-qualified persisted-key sentence and its Chinese counterpart changed."
     }
   ],
   "retired": []

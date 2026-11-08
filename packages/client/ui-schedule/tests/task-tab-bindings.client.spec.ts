@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** Task tab bindings recover the task one restored tab page last showed. */
 import { afterEach, expect, it, vi } from 'vitest'
+import { setPersistenceHostId } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ScheduleId } from '@deepseek-ai/dsh-schedule/client'
 import { TaskTabBindings, type TaskTabPage, type TaskTabTarget } from '../src/client/task-tab-bindings.ts'
@@ -32,6 +33,7 @@ function storedKey(): string {
 }
 
 afterEach(() => {
+  setPersistenceHostId(undefined)
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   localStorage.clear()
@@ -42,6 +44,23 @@ it('recovers the task a tab page last showed after a new window loads', () => {
   expect(bindings.read(session, page('tab1'))).toBeUndefined()
   bindings.write(session, page('tab1'), target('task-1'))
   expect(new TaskTabBindings().read(session, page('tab1'))).toEqual(target('task-1'))
+})
+
+it('keys each Session document under the active connection\'s host id', () => {
+  const hostA = '0b9e8c52-6a17-4b8e-9a2f-1d3c5e7f9a01'
+  const hostB = 'c2f4a6d8-3e50-4f19-b7a2-8c0e2d4b6f83'
+  setPersistenceHostId(hostA)
+
+  const bindings = new TaskTabBindings()
+  bindings.write(session, page('tab1'), target('task-1'))
+  expect(localStorage.getItem(`dsh.schedule.task-tab.v1.${hostA}.${session}`)).not.toBeNull()
+  expect(localStorage.getItem(`dsh.schedule.task-tab.v1.${session}`)).toBeNull()
+  expect(new TaskTabBindings().read(session, page('tab1'))).toEqual(target('task-1'))
+
+  // Another connection sharing one browser origin reads none of this state;
+  // the upstream id after the fixed-length host id is never parsed.
+  setPersistenceHostId(hostB)
+  expect(new TaskTabBindings().read(session, page('tab1'))).toBeUndefined()
 })
 
 it('keeps one entry per tab page and one document per Session', () => {

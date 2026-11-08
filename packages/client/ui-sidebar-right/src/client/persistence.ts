@@ -1,5 +1,6 @@
 /** Validated current-layout snapshots; undo history belongs to the live window. */
 import { z } from 'zod'
+import { qualifiedPersistKey } from '@deepseek-ai/dsh-client-store'
 import { EMPTY_HISTORY, type LayoutState } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SurfaceState } from './stores.ts'
 
@@ -57,13 +58,13 @@ function validateReferences(value: z.infer<typeof surface>): void {
 
 /**
  * Restore one validated Session layout with a fresh in-window undo history.
- * @param sessionId - storage scope.
+ * @param sessionId - storage scope, under the active connection's host id.
  * @returns the saved surface, or undefined when absent, inaccessible or invalid.
  */
 export function readSidebarLayout(sessionId: string): SurfaceState | undefined {
   if (typeof localStorage === 'undefined') return undefined
   let raw: string | null
-  try { raw = localStorage.getItem(`${sidebarPersistence}.${sessionId}`) }
+  try { raw = localStorage.getItem(qualifiedPersistKey(sidebarPersistence, sessionId)) }
   catch (_storageUnavailable) { return undefined }
   if (raw === null) return undefined
   try {
@@ -80,22 +81,22 @@ export function readSidebarLayout(sessionId: string): SurfaceState | undefined {
 
 /**
  * Persist current layout and identity allocation without retaining undo entries.
- * @param sessionId - storage scope.
+ * @param sessionId - storage scope, under the active connection's host id.
  * @param surface - current in-memory surface.
  */
 export function writeSidebarLayout(sessionId: string, surface: SurfaceState): void {
   if (typeof localStorage === 'undefined') return
   const saved = { bySession: { [sessionId]: { layout: surface.layout, minted: surface.minted } } }
-  try { localStorage.setItem(`${sidebarPersistence}.${sessionId}`, JSON.stringify(saved)) }
+  try { localStorage.setItem(qualifiedPersistKey(sidebarPersistence, sessionId), JSON.stringify(saved)) }
   catch (error) { console.error('Sidebar layout persistence failed:', error) }
 }
 
 /**
  * Remove only one Session's persisted layout.
- * @param sessionId - storage scope to discard.
+ * @param sessionId - storage scope to discard, under the active connection's host id.
  */
 export function clearSidebarLayout(sessionId: string): void {
   if (typeof localStorage === 'undefined') return
-  try { localStorage.removeItem(`${sidebarPersistence}.${sessionId}`) }
+  try { localStorage.removeItem(qualifiedPersistKey(sidebarPersistence, sessionId)) }
   catch (_storageUnavailable) { /* The invalid layout is still excluded from this window. */ }
 }

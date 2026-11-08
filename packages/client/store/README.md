@@ -31,7 +31,7 @@ None; the stores neither assemble nor send model requests.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Persistence is browser-local** — persisted stores use JSON in `localStorage`; non-browser runtimes disable persistence, and the package provides no cross-device synchronization.
+- **Persistence is browser-local** — persisted stores use JSON in `localStorage`; non-browser runtimes disable persistence, and the package provides no cross-device synchronization. Every persisted key joins the active connection's host id (contract C10), so two connections sharing one browser origin keep separate state; until the studio names a host id the bare persist name remains, and an entry written without a host id is not read or migrated.
 - **Web-shell build input** — the static ESM retains third-party imports for Vite; independent consumers supply its development dependencies ([dependency rules](../AGENTS.md#dependency-declaration)). The build defaults to production; `NODE_ENV=development` enables development checks. Wholesale `set()` freezes snapshots only outside production; `update()` retains Immer's automatic freezing.
 
 

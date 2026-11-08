@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { setPersistenceHostId } from '@deepseek-ai/dsh-client-store'
 import type {
   SessionListState, SessionProjectionMap, SessionSummary,
 } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -946,6 +947,30 @@ describe('createWorkspaceViewStore', () => {
     const snapshot = store.getSnapshot()
     expect(snapshot.groupExpansion).toEqual({ '': true, alpha: true })
     expect(snapshot.sessionOrderByAccount).toEqual({ alpha: ['alpha-session'] })
+  })
+
+  it('persists under the active connection\'s host id, isolated per connection', () => {
+    const hostA = '0b9e8c52-6a17-4b8e-9a2f-1d3c5e7f9a01'
+    const hostB = 'c2f4a6d8-3e50-4f19-b7a2-8c0e2d4b6f83'
+    const values = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value) },
+      removeItem: (key: string) => { values.delete(key) },
+    })
+    try {
+      setPersistenceHostId(hostA)
+      createWorkspaceViewStore().create().actions.setGroupBy('flat')
+      expect(values.has(`dsh.workspace.view.v5.${hostA}`)).toBe(true)
+      expect(values.has('dsh.workspace.view.v5')).toBe(false)
+
+      // Another connection sharing one browser origin reads none of this state.
+      setPersistenceHostId(hostB)
+      expect(createWorkspaceViewStore().create().getSnapshot().groupBy).toBeUndefined()
+    } finally {
+      setPersistenceHostId(undefined)
+      vi.unstubAllGlobals()
+    }
   })
 })
 

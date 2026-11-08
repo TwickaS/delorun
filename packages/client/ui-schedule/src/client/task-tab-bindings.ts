@@ -20,6 +20,7 @@
  */
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ScheduleId } from '@deepseek-ai/dsh-schedule/client'
+import { qualifiedPersistKey } from '@deepseek-ai/dsh-client-store'
 
 /** The Sidebar fields that identify one task tab page across a reload. */
 export interface TaskTabPage {
@@ -45,8 +46,8 @@ interface StoredEntry extends TaskTabTarget {
   readonly contentId: string
 }
 
-/** Storage prefix; one key per Session holds that Session's entries. */
-const PREFIX = 'dsh.schedule.task-tab.v1.'
+/** Storage persist name; one host-qualified key per Session holds that Session's entries. */
+const PERSIST_NAME = 'dsh.schedule.task-tab.v1'
 
 /**
  * The committed tab ids of one Session, read when an entry is stored so a closed
@@ -187,7 +188,7 @@ export class TaskTabBindings {
     if (typeof localStorage === 'undefined') return new Map()
     let raw: string | null
     try {
-      raw = localStorage.getItem(PREFIX + sessionId)
+      raw = localStorage.getItem(qualifiedPersistKey(PERSIST_NAME, sessionId))
     } catch (_storageUnavailable) {
       return new Map()
     }
@@ -213,7 +214,7 @@ export class TaskTabBindings {
     this.memory.set(sessionId, kept)
     if (typeof localStorage === 'undefined') return
     try {
-      const key = PREFIX + sessionId
+      const key = qualifiedPersistKey(PERSIST_NAME, sessionId)
       if (kept.size === 0) localStorage.removeItem(key)
       else localStorage.setItem(key, JSON.stringify(Object.fromEntries(kept)))
     } catch (error) {

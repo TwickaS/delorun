@@ -1,16 +1,21 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setPersistenceHostId } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { DraftSnapshot } from '../src/client/contract/draft-editor.ts'
 import { createConversationStore, readConversationDraft, readConversationViewPreference } from '../src/client/stores.ts'
 
 const KEY = 'dsh.conversation'
+/** Two connections' host ids; each is a canonical lowercase UUID version 4. */
+const HOST_A = '0b9e8c52-6a17-4b8e-9a2f-1d3c5e7f9a01'
+const HOST_B = 'c2f4a6d8-3e50-4f19-b7a2-8c0e2d4b6f83'
 
 beforeEach(() => {
   localStorage.clear()
 })
 
 afterEach(() => {
+  setPersistenceHostId(undefined)
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -160,5 +165,37 @@ describe('createConversationStore', () => {
       expect(readConversationViewPreference(sessionId)).toBeNull()
       expect(read.mock.calls).toEqual([[`${KEY}.${sessionId}`], [`${KEY}.${sessionId}`]])
     } finally { read.mockRestore() }
+  })
+})
+
+describe('host-qualified persisted keys', () => {
+  it('persists and reads each Session under the active connection\'s host id', () => {
+    setPersistenceHostId(HOST_A)
+    const sessionId = 'sess-1' as SessionId
+    const store = createConversationStore().create(sessionId)
+    store.actions.setDraft('draft for one')
+    store.actions.setView('chat')
+
+    expect(localStorage.getItem(`${KEY}.${HOST_A}.sess-1`)).not.toBeNull()
+    expect(localStorage.getItem(`${KEY}.sess-1`)).toBeNull()
+    expect(readConversationViewPreference(sessionId)).toBe('chat')
+    expect(readConversationDraft(sessionId).text).toBe('draft for one')
+
+    // Another connection sharing one browser origin reads none of this state.
+    setPersistenceHostId(HOST_B)
+    expect(readConversationViewPreference(sessionId)).toBeNull()
+    expect(readConversationDraft(sessionId)).toEqual({ text: '', references: [] })
+  })
+
+  it('does not migrate a stock entry written without a host id', () => {
+    const sessionId = 'stock' as SessionId
+    const raw = JSON.stringify({ draft: 'stock draft', view: 'chat' })
+    localStorage.setItem(`${KEY}.${sessionId}`, raw)
+
+    setPersistenceHostId(HOST_A)
+    expect(readConversationDraft(sessionId)).toEqual({ text: '', references: [] })
+    expect(readConversationViewPreference(sessionId)).toBeNull()
+    // The unread entry is left in place, not rewritten or removed.
+    expect(localStorage.getItem(`${KEY}.${sessionId}`)).toBe(raw)
   })
 })

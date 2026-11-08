@@ -1,5 +1,6 @@
 /** Per-Session layout recovery precedes resource-body rendering. */
 import { afterEach, expect, it, vi } from 'vitest'
+import { setPersistenceHostId } from '@deepseek-ai/dsh-client-store'
 import { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
@@ -7,7 +8,11 @@ import { createSidebarRightStore } from '../src/client/stores.ts'
 import { createSidebarRightController } from '../src/client/service.ts'
 import { SidebarRightTabRegistry } from '../src/client/tab-registry.ts'
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+afterEach(() => {
+  setPersistenceHostId(undefined)
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 function storage() {
   const values = new Map<string, string>()
@@ -94,4 +99,26 @@ it('starts from an empty layout when stored JSON is corrupt and keeps working wh
   vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('Storage full') })
   instance.actions.setExpanded(sessionId, true)
   expect(instance.getSnapshot().bySession[sessionId]!.layout.expanded).toBe(true)
+})
+
+it('persists and restores each Session under the active connection\'s host id', () => {
+  const values = storage()
+  const hostA = '0b9e8c52-6a17-4b8e-9a2f-1d3c5e7f9a01'
+  const hostB = 'c2f4a6d8-3e50-4f19-b7a2-8c0e2d4b6f83'
+  setPersistenceHostId(hostA)
+  const first = createSidebarRightStore(seed).create(sessionId)
+  first.actions.openContent(sessionId, { kind: 'text', contentId: 'file:h', title: 'h' }, () => {})
+
+  expect(values.has(`dsh.sidebar-right.v1.${hostA}.${sessionId}`)).toBe(true)
+  expect(values.has(`dsh.sidebar-right.v1.${sessionId}`)).toBe(false)
+  expect(createSidebarRightStore(seed).create(sessionId).getSnapshot().bySession[sessionId]).toBeDefined()
+
+  // Another connection sharing one browser origin reads none of this state.
+  setPersistenceHostId(hostB)
+  expect(createSidebarRightStore(seed).create(sessionId).getSnapshot()).toEqual({ bySession: {} })
+
+  // Clearing removes exactly this connection's entry.
+  setPersistenceHostId(hostA)
+  first.clearPersisted()
+  expect(values.has(`dsh.sidebar-right.v1.${hostA}.${sessionId}`)).toBe(false)
 })

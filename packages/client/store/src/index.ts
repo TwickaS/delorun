@@ -14,6 +14,12 @@ import { freeze, produce } from 'immer'
 import type {
   ActionsDecl, BakedActions, ObservableSnapshot, StoreHandle, StoreInstance, StoreSpec,
 } from './contract.ts'
+import { qualifiedPersistKey } from './persistence-host.ts'
+
+// The active connection's host id and the host-qualified persisted-key algebra
+// (contract C10) travel with the engine, so every persistence surface composes
+// one shared key shape.
+export { persistenceHostId, qualifiedPersistKey, setPersistenceHostId } from './persistence-host.ts'
 
 // Store contract types are ui-slots authority; re-exported beside the engine
 // so store consumers get one import path.
@@ -192,7 +198,9 @@ export interface EngineStoreHandle<T, A extends ActionsDecl<T>> extends StoreHan
    * instance per handle x scope key; tests wanting isolation use distinct
    * scope keys or persist-free declarations (multi-create freedom is a
    * feature there, so create() deliberately does not dedupe or throw).
-   * @param scopeKey - session id for session-scope instances; omitted for root scope.
+   * @param scopeKey - session id for session-scope instances; the persisted
+   * key joins the active connection's host id with it (contract C10);
+   * omitted for root scope.
    * @returns the engine instance.
    */
   create(scopeKey?: string): EngineStoreInstance<T, A>
@@ -219,9 +227,13 @@ export function defineStore<T, A extends ActionsDecl<T>>(
   return {
     spec: decl,
     create(scopeKey?: string): EngineStoreInstance<T, A> {
+      // The persisted key joins the host id of the active connection with the
+      // caller's scope (contract C10): `<persist>.<hostId>[.<scopeKey>]`. A
+      // session-scoped instance passes the session id; a root-scope instance
+      // omits it and persists under the host alone.
       const persistKey = decl.persist === undefined
         ? undefined
-        : scopeKey === undefined ? decl.persist : `${decl.persist}.${scopeKey}`
+        : qualifiedPersistKey(decl.persist, scopeKey)
       const store = createSnapshotStore<T>(
         decl.init(),
         persistKey !== undefined ? { persist: { name: persistKey } } : undefined)

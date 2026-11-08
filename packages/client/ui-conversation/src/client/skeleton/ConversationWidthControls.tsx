@@ -1,8 +1,9 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
+import { qualifiedPersistKey } from '@deepseek-ai/dsh-client-store'
 import type { ConversationWidthControlsProps } from '../contract/slots.ts'
 import css from './ConversationRoot.module.css'
 
-/** localStorage key for the dragged transcript width preference (px). */
+/** localStorage persist name for the dragged transcript width preference (px), host-scoped per connection. */
 const WIDTH_PREF_KEY = 'dsh.conversation.contentWidth'
 /** Floor for a dragged content width; matches the layout center-column minimum. */
 const CONTENT_MIN = 640
@@ -14,7 +15,7 @@ const FALLBACK_WHEEL_LINE_PX = 16
 
 /** Read a valid persisted width preference, or null when absent or corrupt. */
 function readWidthPreference(): number | null {
-  const raw = localStorage.getItem(WIDTH_PREF_KEY)
+  const raw = localStorage.getItem(qualifiedPersistKey(WIDTH_PREF_KEY))
   if (raw === null) return null
   const value = Number(raw)
   return Number.isFinite(value) && value > 0 ? value : null
@@ -162,7 +163,7 @@ export function ConversationWidthControls({ container, phase }: ConversationWidt
   }, [container])
   const onCommit = useCallback((width: number): void => {
     if (container === null) return
-    localStorage.setItem(WIDTH_PREF_KEY, `${resolveContentWidth(container.offsetWidth, width)}`)
+    localStorage.setItem(qualifiedPersistKey(WIDTH_PREF_KEY), `${resolveContentWidth(container.offsetWidth, width)}`)
   }, [container])
   const onEnd = useCallback((): void => {
     if (container !== null) publishWidths(container)

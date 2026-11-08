@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setPersistenceHostId } from '@deepseek-ai/dsh-client-store'
 import { loadRecentTimeZones, rememberTimeZone } from '../src/client/recent-time-zones.ts'
 
-afterEach(() => { localStorage.clear() })
+afterEach(() => {
+  setPersistenceHostId(undefined)
+  localStorage.clear()
+})
 
 describe('recent time zones', () => {
   it('seeds the device zone and UTC without inferring location from language', () => {
@@ -42,5 +46,24 @@ describe('recent time zones', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('persists per connection under the host id and leaves stock entries unread', () => {
+    const hostA = '0b9e8c52-6a17-4b8e-9a2f-1d3c5e7f9a01'
+    const hostB = 'c2f4a6d8-3e50-4f19-b7a2-8c0e2d4b6f83'
+    setPersistenceHostId(hostA)
+
+    const recent = rememberTimeZone(['UTC'], 'Asia/Tokyo')
+    expect(localStorage.getItem(`dsh.schedule.recent-time-zones.v1.${hostA}`)).toBe(JSON.stringify(recent))
+    expect(localStorage.getItem('dsh.schedule.recent-time-zones.v1')).toBeNull()
+    expect(loadRecentTimeZones('Asia/Shanghai')).toEqual(recent)
+
+    // Another connection sharing one browser origin reads none of this state.
+    setPersistenceHostId(hostB)
+    expect(loadRecentTimeZones('Asia/Shanghai')).toEqual(['Asia/Shanghai', 'UTC'])
+
+    // A stock entry written without a host id is not migrated: it is not read.
+    localStorage.setItem('dsh.schedule.recent-time-zones.v1', JSON.stringify(['Europe/Berlin']))
+    expect(loadRecentTimeZones('Asia/Shanghai')).toEqual(['Asia/Shanghai', 'UTC'])
   })
 })
