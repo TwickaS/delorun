@@ -200,13 +200,27 @@ export const PARITY_SWITCHES = [
   },
   {
     id: 'instruction_layer_consent',
-    state: 'planned',
-    plannedBy: 'the instruction-layer approval package (A101)',
+    state: 'built',
     registeredBy: 'Delo approval for instruction-layer files',
     defaultValue: true,
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-instruction-layer-consent',
+    field: {
+      module: '@delo/plugin-instruction-consent',
+      source: 'delo/packages/plugin-instruction-consent/src/index.ts',
+      key: 'enabled',
+    },
+    // The consent reaches the model through the approval ask and the typed
+    // refusal the dispatch throws, not through a registration; these files are
+    // the ones whose runtime behaviour the switch turns off at its parity
+    // value.
+    sources: [
+      'packages/fs/tool-fs/src/consent.ts',
+      'packages/fs/tool-fs/src/index.ts',
+      'packages/fs/tool-fs/src/sandbox.ts',
+      'packages/sandbox/sandbox-policy/src/session-mode.ts',
+    ],
   },
   {
     id: 'mcp_add_consent',

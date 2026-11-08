@@ -1,0 +1,6 @@
+# This plugin as a bundle of its own, so upstream's plugin manager can install it into a stock harness. The row has no
+# config: the switch defaults to off, and Delo's composition mounts the plugin with `enabled: true` when the asking
+# surface of Delo's composition lands.
+- insert:
+    - id: delo-instruction-consent
+      name: '@delo/plugin-instruction-consent'
