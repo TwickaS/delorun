@@ -19,6 +19,7 @@ import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { DEFAULT_MAX_INSTRUCTION_BYTES, RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
+import { McpConsentRefusedError } from './consent.ts'
 import { registerServerContext } from './server-context.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
@@ -26,6 +27,8 @@ import type {} from '@deepseek-ai/dsh-tools'
 export { createMcpToolDefinition } from './tools.ts'
 export type { McpResult, McpToolDefinitionOptions } from './tools.ts'
 export type { ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
+export { McpAddConsent, McpConsentRefusedError } from './consent.ts'
+export type { McpConsentDecision, McpServerCommand } from './consent.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'mcp-client'
@@ -156,6 +159,25 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // construction that bypassed Schemastery) rejects THIS instance before any
   // effect registers.
   const reconnect = resolveReconnectPolicy(config.reconnect, `mcp-client(${config.serverName}): reconnect`)
+
+  // Optional add-time consent seam: a stdio server command runs as a local
+  // child process outside the agent sandbox, so when a consent service is
+  // mounted, the configured command is reviewed at every boot and the server
+  // does not start until the review allows it. Without the service — or for a
+  // Streamable HTTP server, which starts no local command — startup is
+  // exactly upstream's. A refusal fails THIS instance at load, which leaves
+  // the server stopped with the typed reason.
+  const consent = ctx.get('mcpAddConsent')
+  if (consent !== undefined && config.transport === 'stdio') {
+    const decision = await consent.review({
+      serverName: config.serverName,
+      command: config.command,
+      args: config.args,
+    })
+    if (!decision.allow) {
+      throw new McpConsentRefusedError(config.serverName, config.command, config.args, decision.reason)
+    }
+  }
 
   // Reserve the namespace next: a duplicate `serverName` fails THIS instance
   // at load with an actionable error and leaves the earlier instance intact.
