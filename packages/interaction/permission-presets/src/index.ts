@@ -461,7 +461,10 @@ export class PermissionPresetService extends TypertRemoteService {
       session.append('permission/preset', { preset: effective })
     }
     if (sandbox === null) {
-      setSandboxMode(session, this.ctx.shell.sandboxMode as SandboxMode)
+      // The consent layer's optional mode guard runs inside the setter: a
+      // refusal throws and no `sandbox/mode` event is pinned. Unmounted, the
+      // getter returns undefined and the switch behaves as before.
+      setSandboxMode(session, this.ctx.shell.sandboxMode as SandboxMode, this.ctx.get('sandboxModeGuard'))
     }
     if (approval === null) {
       setApprovalPolicy(session, this.ctx.approval.config.policy ?? 'ask')

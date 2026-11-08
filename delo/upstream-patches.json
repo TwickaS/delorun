@@ -3055,6 +3055,26 @@
       "path": "packages/mcp/mcp-client/tests/consent.spec.ts",
       "class": "security",
       "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): covers the seam. A server starts exactly as upstream does with no service mounted, a held review starts no child process and registers no tool until it allows, a refusal leaves the server stopped with the typed reason as the load failure and as the typed error without failing the startup path when not fatal, the service reviews the command at every boot so a changed command reaches it again, and a Streamable HTTP server is never held."
+    },
+    {
+      "path": "packages/fs/tool-fs/src/consent.ts",
+      "class": "security",
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the write-commit consent lets a plugin require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream."
+    },
+    {
+      "path": "packages/fs/tool-fs/src/index.ts",
+      "class": "security",
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream."
+    },
+    {
+      "path": "packages/fs/tool-fs/tests/tools.spec.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the write-commit consent lets a plugin require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream."
+    },
+    {
+      "path": "packages/sandbox/sandbox-policy/src/session-mode.ts",
+      "class": "security",
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream."
     }
   ],
   "retired": []

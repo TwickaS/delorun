@@ -1,7 +1,8 @@
 /**
  * Tests for the sandbox-policy home: the deployment default (mode +
  * workspaceRoot) the service exposes, and the per-session `sandbox/mode`
- * override kit (fold + write path) every enforcing capability reads.
+ * override kit (fold + write path, with its optional switch guard) every
+ * enforcing capability reads.
  */
 
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
@@ -11,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
-import SandboxPolicyService, { SANDBOX_MODES, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import SandboxPolicyService, { SANDBOX_MODES, SandboxModeRefusedError, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt, { renderContextSnapshot, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 
@@ -317,5 +318,32 @@ describe('the sandbox/mode session kit', () => {
     const modeEvents = session.snapshotEvents().filter(e => e.type === 'sandbox/mode')
     expect(modeEvents).toHaveLength(1)
     expect(modeEvents[0]?.data).toEqual({ mode: 'danger-full-access' })
+  })
+
+  it('a refusing hook throws the typed refusal carrying the reason and appends no sandbox/mode event', () => {
+    const session = Session.create(SessionId('sess-guard-refused'))
+    expect(() => setSandboxMode(session, 'danger-full-access', () => 'the user kept the session read-only'))
+      .toThrow(SandboxModeRefusedError)
+    let refused: unknown
+    try {
+      setSandboxMode(session, 'danger-full-access', () => 'the user kept the session read-only')
+    } catch (error) {
+      refused = error
+    }
+    expect(refused).toBeInstanceOf(SandboxModeRefusedError)
+    expect((refused as SandboxModeRefusedError).reason).toBe('the user kept the session read-only')
+    expect(session.snapshotEvents().filter(e => e.type === 'sandbox/mode')).toEqual([])
+  })
+
+  it('an absent or allowing hook switches exactly as before the guard', () => {
+    const allowing = Session.create(SessionId('sess-guard-allowing'))
+    setSandboxMode(allowing, 'read-only', () => undefined)
+    const hookless = Session.create(SessionId('sess-guard-absent'))
+    setSandboxMode(hookless, 'read-only')
+    for (const session of [allowing, hookless]) {
+      const modeEvents = session.snapshotEvents().filter(e => e.type === 'sandbox/mode')
+      expect(modeEvents).toHaveLength(1)
+      expect(modeEvents[0]?.data).toEqual({ mode: 'read-only' })
+    }
   })
 })

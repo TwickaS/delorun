@@ -17,6 +17,9 @@ import { applyReadImageTool } from './read-image.ts'
 import { READ_MAX_BYTES, READ_MAX_LINE_LENGTH } from './read-render.ts'
 import { FsSandboxController } from './sandbox.ts'
 
+export { FS_CONSENT_DENIED, WriteConsentRefusedError, reviewWriteConsent } from './consent.ts'
+export type { WriteConsentDiff, WriteConsentRequest, WriteConsentReview, WriteConsentService, WriteConsentTool } from './consent.ts'
+
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-fs'
 

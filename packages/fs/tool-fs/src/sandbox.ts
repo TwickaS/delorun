@@ -16,6 +16,7 @@ import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandb
 import { ESCALATION_TARGETS, approveEscalation, escalationHintMarker, sandboxDenialMarker, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import { FsError } from '@deepseek-ai/dsh-fs'
+import { reviewWriteConsent } from './consent.ts'
 
 /** The two escalation arguments a mutating tool may carry (advertised only under a confining backend). */
 export interface FsEscalationArgs {
@@ -84,8 +85,16 @@ export class FsSandboxController {
    * @param exec - the tool-execution context (agent, callId, signal).
    * @returns the policy to pass to the mutation, or undefined for an
    *   unsandboxed backend.
+   * @throws a consent refusal when the optional `writeConsent` service
+   *   requires consent for the mutation and the ask is refused; the
+   *   escalation checks and the mutation itself do not run.
    */
   async resolvePolicy(toolName: string, args: FsEscalationArgs, exec: ToolExecution): Promise<SandboxExecutionPolicy | undefined> {
+    // The instruction-layer consent gate runs first: a review that requires
+    // consent asks before anything else, and a refusal leaves the file
+    // unchanged. Without the service this returns immediately. The spread
+    // hands the gate the full argument object, not just the escalation view.
+    await reviewWriteConsent(this.ctx, toolName, { ...args }, exec)
     const standingPolicy = this.policy?.resolve({ ...exec.agent ? { session: exec.agent.session } : {} })
     if (args.sandbox_permissions !== undefined && args.sandbox_permissions === standingPolicy?.mode) return standingPolicy
     const justification = args.sandbox_permissions === undefined && args.justification?.trim() === ''

@@ -31,7 +31,8 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 
-export { SANDBOX_MODES, setSandboxMode } from './session-mode.ts'
+export { SANDBOX_MODES, SandboxModeRefusedError, setSandboxMode } from './session-mode.ts'
+export type { SandboxModeGuard } from './session-mode.ts'
 
 /** Preserve execution-world spelling; enforcing providers resolve filesystem identity on their host. */
 function resolveWorkspaceRoot(path: string): string {

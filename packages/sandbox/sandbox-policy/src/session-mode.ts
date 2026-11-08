@@ -21,6 +21,13 @@
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Optional {@link SandboxModeGuard} a consent layer may provide; `ctx.get` returns undefined while none is mounted. */
+    sandboxModeGuard: SandboxModeGuard
+  }
+}
+
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
@@ -42,6 +49,32 @@ declare module '@deepseek-ai/dsh-session/types' {
 export const SANDBOX_MODES: readonly SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access']
 
 /**
+ * The optional mode-switch guard a consent layer mounts on the context: it
+ * runs before a `sandbox/mode` event is appended and returns the refusal
+ * reason when the switch must not happen, or undefined to allow it.
+ */
+export interface SandboxModeGuard {
+  /** The guard's verdict: the refusal reason when the switch must not happen, or undefined to allow it. */
+  (): string | undefined
+}
+
+/**
+ * A mode switch a mounted {@link SandboxModeGuard} refused. The message is
+ * the guard's reason; the refusal is typed so the caller that surfaces it to
+ * the model can branch on the class rather than on message text.
+ */
+export class SandboxModeRefusedError extends Error {
+  /** The guard's refusal reason, worded for the caller that attempted the switch. */
+  readonly reason: string
+
+  constructor(reason: string) {
+    super(`sandbox-mode switch refused: ${reason}`)
+    this.name = 'SandboxModeRefusedError'
+    this.reason = reason
+  }
+}
+
+/**
  * THE write path for a session's sandbox-mode override: appends exactly one
  * `sandbox/mode` event — the switch IS its event; nothing mutates mode state
  * out of band. Takes effect on the session's next confined call (bash or fs)
@@ -49,7 +82,15 @@ export const SANDBOX_MODES: readonly SandboxMode[] = ['read-only', 'workspace-wr
  * @param session - the session the override belongs to.
  * @param mode - the mode every subsequent confined call in this session runs
  *   under (until the next switch).
+ * @param hook - the optional mode-switch guard: returns the refusal reason to
+ *   refuse the switch, or undefined to allow it. A refusal throws
+ *   {@link SandboxModeRefusedError} carrying that reason and appends NO
+ *   `sandbox/mode` event.
  */
-export function setSandboxMode(session: Session, mode: SandboxMode): void {
+export function setSandboxMode(session: Session, mode: SandboxMode, hook?: SandboxModeGuard): void {
+  if (hook !== undefined) {
+    const reason = hook()
+    if (reason !== undefined) throw new SandboxModeRefusedError(reason)
+  }
   session.append('sandbox/mode', { mode })
 }

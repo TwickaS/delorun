@@ -33,6 +33,7 @@ import { STREAM_MIN_SIZE } from '../src/read.ts'
 import { formatReadOutput } from '../src/read-render.ts'
 import type { FileReadOutcome } from '../src/read-render.ts'
 import { sessionResolveOptions } from '../src/session-cwd.ts'
+import type { WriteConsentService } from '../src/consent.ts'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
@@ -842,6 +843,50 @@ describe('read caps are plugin config', () => {
   })
 })
 
+/** A fake agent whose session records appends (the approval audit trail), mid-turn, carrying the given events for the fold. */
+function escalationAgent(records: Array<{ type: string; data?: Record<string, unknown> }> = []): object {
+  const id = SessionId('sess-fs-esc')
+  const events: Array<{
+    type: string
+    seq: ReturnType<typeof SessionSeq>
+    time: number
+    data: Record<string, unknown>
+  }> = [
+    { type: 'turn/start', seq: SessionSeq(0), time: 0, data: { turn: 1 } },
+    ...records.map((record, index) => ({
+      type: record.type,
+      seq: SessionSeq(index + 1),
+      time: index + 1,
+      data: record.data ?? {},
+    })),
+  ]
+  return {
+    id,
+    session: {
+      id,
+      header: { version: 0, id, createdAt: 0, cwd: '/session-project', isSeeded: false },
+      inheritedEventCount: SessionLogOffset(0),
+      firstLiveSeq: SessionLogOffset(0),
+      get seq() { return SessionLogOffset(events.length) },
+      eventAt: (seq: ReturnType<typeof SessionSeq>) => events[seq],
+      snapshotEvents: (
+        fromSeq = SessionLogOffset(0),
+        toSeqExclusive = SessionLogOffset(events.length),
+      ) => events.slice(fromSeq, toSeqExclusive),
+      append: (type: string, data: Record<string, unknown>) => {
+        const event = {
+          type,
+          seq: SessionSeq(events.length),
+          time: events.length,
+          data,
+        }
+        events.push(event)
+        return event
+      },
+    },
+  }
+}
+
 describe('sandbox escalation API (write/edit)', () => {
   /** A confining fake `ctx.fs`: reports a default mode, records each per-call policy, and can arm a sandbox denial. */
   class SandboxingFakeFs extends FakeFs {
@@ -885,50 +930,6 @@ describe('sandbox escalation API (write/edit)', () => {
     if (opts.approval === true) await ctx.plugin(ApprovalService)
     await ctx.plugin(ToolFs)
     return { ctx, fs: ctx.fs as SandboxingFakeFs }
-  }
-
-  /** A fake agent whose session records appends (the approval audit trail), mid-turn, carrying the given events for the fold. */
-  function escalationAgent(records: Array<{ type: string; data?: Record<string, unknown> }> = []): object {
-    const id = SessionId('sess-fs-esc')
-    const events: Array<{
-      type: string
-      seq: ReturnType<typeof SessionSeq>
-      time: number
-      data: Record<string, unknown>
-    }> = [
-      { type: 'turn/start', seq: SessionSeq(0), time: 0, data: { turn: 1 } },
-      ...records.map((record, index) => ({
-        type: record.type,
-        seq: SessionSeq(index + 1),
-        time: index + 1,
-        data: record.data ?? {},
-      })),
-    ]
-    return {
-      id,
-      session: {
-        id,
-        header: { version: 0, id, createdAt: 0, cwd: '/session-project', isSeeded: false },
-        inheritedEventCount: SessionLogOffset(0),
-        firstLiveSeq: SessionLogOffset(0),
-        get seq() { return SessionLogOffset(events.length) },
-        eventAt: (seq: ReturnType<typeof SessionSeq>) => events[seq],
-        snapshotEvents: (
-          fromSeq = SessionLogOffset(0),
-          toSeqExclusive = SessionLogOffset(events.length),
-        ) => events.slice(fromSeq, toSeqExclusive),
-        append: (type: string, data: Record<string, unknown>) => {
-          const event = {
-            type,
-            seq: SessionSeq(events.length),
-            time: events.length,
-            data,
-          }
-          events.push(event)
-          return event
-        },
-      },
-    }
   }
 
   function fsSchema(ctx: Context, name: 'write' | 'edit') {
@@ -1141,6 +1142,93 @@ describe('sandbox escalation API (write/edit)', () => {
     const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'x', sandbox_permissions: 'workspace-write', justification: 'why' }, escalationAgent())
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('not available in this composition')
+  })
+})
+
+describe('write consent seam (write/edit/apply_patch)', () => {
+  async function setupConsent(opts: { review?: WriteConsentService['review'] } = {}) {
+    const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(FakeFs)
+    await ctx.plugin(FsPolicy)
+    if (opts.review !== undefined) ctx.provide('writeConsent', { review: opts.review })
+    await ctx.plugin(ApprovalService)
+    await ctx.plugin(ToolFs)
+    return { ctx, fs: ctx.fs as FakeFs }
+  }
+
+  it('a required-consent review asks through ctx.approval and a grant lets the mutation run', async () => {
+    const note = 'This write reaches outside the session workspace; allow it?'
+    const review = vi.fn(() => ({ required: true as const, note }))
+    const agent = escalationAgent()
+    const { ctx, fs } = await setupConsent({ review })
+    try {
+      const approval = vi.fn(() => Promise.resolve('allowed-once' as const))
+      ctx.on('approval/request', approval)
+      const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, agent)
+      expect(result.isError, text(result)).toBe(false)
+      expect(fs.files.get('key:a.txt')).toBe('x')
+      expect(review).toHaveBeenCalledTimes(1)
+      expect(review).toHaveBeenCalledWith({ tool: 'write', path: '/session-project/a.txt', diff: { old: null, new: 'x' } })
+      expect(approval).toHaveBeenCalledTimes(1)
+      expect(approval.mock.calls.at(0)?.at(0)).toMatchObject({ toolName: 'write', reason: note })
+      // The ask is audited on the session log as the asked/decided pair.
+      const session = (agent as { session: { snapshotEvents(): Array<{ type: string; data: Record<string, unknown> }> } }).session
+      const audit = session.snapshotEvents().filter(event => event.type.startsWith('approval/'))
+      expect(audit.map(event => event.type)).toEqual(['approval/asked', 'approval/decided'])
+      expect(audit[1]?.data).toMatchObject({ outcome: 'allowed-once' })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('a review verdict that does not require consent proceeds and never asks', async () => {
+    const review = vi.fn(() => ({ required: false as const }))
+    const { ctx, fs } = await setupConsent({ review })
+    try {
+      const approval = vi.fn(() => Promise.resolve('allowed-once' as const))
+      ctx.on('approval/request', approval)
+      const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, escalationAgent())
+      expect(result.isError, text(result)).toBe(false)
+      expect(fs.files.get('key:a.txt')).toBe('x')
+      expect(review).toHaveBeenCalledTimes(1)
+      expect(approval).not.toHaveBeenCalled()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('a refused consent ask leaves the file unchanged with the typed refusal', async () => {
+    const { ctx, fs } = await setupConsent({ review: () => ({ required: true, note: 'needs consent' }) })
+    try {
+      ctx.on('approval/request', () => Promise.resolve('rejected' as const))
+      const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, escalationAgent())
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('the user refused the write to "/session-project/a.txt"')
+      expect(result.error?.info).toEqual({ name: 'WriteConsentRefusedError', code: 'FS_CONSENT_DENIED' })
+      expect(fs.files.size).toBe(0)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('without a writeConsent service the mutating tools run unchanged and never ask', async () => {
+    const { ctx, fs } = await setupConsent()
+    try {
+      const approval = vi.fn(() => Promise.resolve('allowed-once' as const))
+      ctx.on('approval/request', approval)
+      const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, escalationAgent())
+      expect(result.isError, text(result)).toBe(false)
+      expect(fs.files.get('key:a.txt')).toBe('x')
+      expect(approval).not.toHaveBeenCalled()
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 })
 
