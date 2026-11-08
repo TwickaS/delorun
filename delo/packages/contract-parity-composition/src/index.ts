@@ -110,13 +110,24 @@ export const PARITY_SWITCHES = [
   },
   {
     id: 'fetch_guard',
-    state: 'planned',
-    plannedBy: 'the fetch guard package (A100)',
+    state: 'built',
     registeredBy: '@delo/plugin-fetch-guard',
     defaultValue: true,
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-fetch-guard',
+    field: {
+      module: '@delo/plugin-fetch-guard',
+      source: 'delo/packages/plugin-fetch-guard/src/index.ts',
+      key: 'enabled',
+    },
+    // The refusal reaches the model through the provider's typed error, not
+    // through a registration; these files are the ones whose runtime behaviour
+    // the switch turns off at its parity value.
+    sources: [
+      'packages/web/web-fetch-http/src/provider.ts',
+      'packages/web/web-fetch-http/src/index.ts',
+    ],
   },
   {
     id: 'preset_inspect',

@@ -16,7 +16,12 @@
 #                           sandbox-policy's mode and workspace root, which a
 #                           row here would erase;
 #   doctor                  only the doctor profile mounts the app, and the
-#                           replay starts no doctor process.
+#                           replay starts no doctor process;
+#   fetch_guard             no shipped profile or bundle mounts the plugin, so
+#                           no row of the root tree holds it; the parity
+#                           composition leaves the fetchGuard service
+#                           unmounted, and the provider reads its absence per
+#                           hop and runs unguarded.
 #
 # The overlay also mounts @delo/bundle-local, the bundle Delo's CLI profiles
 # add after upstream's web template: the last block restates that bundle's
@@ -29,8 +34,8 @@
 # is left out too: C16 gives it upstream's value. Desktop analytics keeps Delo's
 # `false`. The Privacy section and the Delo sidebar brand are present and
 # disabled, because recorded web scenarios compare upstream's interface output
-# and brand. The studio bundle, the permission
-# defaults and the fetch guard are planned, and the preset default keeps
+# and brand. The studio bundle and the permission
+# defaults are planned, and the preset default keeps
 # upstream's value (`standard`).
 
 - id: tool-plugin-manager

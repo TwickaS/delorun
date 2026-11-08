@@ -29,12 +29,45 @@ export interface HttpFetchLimits {
 /** Stable id this provider registers under. */
 export const LOCAL_FETCH_PROVIDER_ID = 'http'
 
+/**
+ * One resolved address of a fetch destination's hostname, as `node:dns`
+ * reports it: the literal address and its IP family (4 or 6).
+ */
+export interface FetchGuardAddress {
+  /** The resolved IP literal. */
+  readonly address: string
+  /** The address family, 4 or 6. */
+  readonly family: number
+}
+
+/**
+ * Optional pre-connection guard over this provider's destinations. Mounted as
+ * the `fetchGuard` service, it is consulted before EVERY hop — the initial
+ * request and each redirect target — with the hop's URL and the addresses its
+ * hostname resolved to. A throw refuses the hop: the error propagates as this
+ * provider's failure, and the model reads it verbatim as the typed refusal, so
+ * implementations should raise a typed error naming the host and the reason.
+ * With no service mounted the provider behaves exactly as it does unguarded.
+ */
+export interface FetchGuard {
+  /** Refuse the destination by throwing; resolve to allow it. */
+  check(url: URL, addresses: readonly FetchGuardAddress[]): Promise<void>
+}
+
 /** The anonymous HTTP(S) fetch provider. */
 export class HttpFetchProvider implements WebFetchProvider {
   readonly id = LOCAL_FETCH_PROVIDER_ID
 
-  /** @param limits - resolved transport and response limits. */
-  constructor(private readonly limits: HttpFetchLimits) {}
+  /**
+   * @param limits - resolved transport and response limits.
+   * @param resolveGuard - reads the optionally mounted `fetchGuard` service at
+   *   each hop; `undefined` (or a lookup that answers `undefined`) runs the
+   *   provider unguarded, byte-identical to upstream's.
+   */
+  constructor(
+    private readonly limits: HttpFetchLimits,
+    private readonly resolveGuard?: () => FetchGuard | undefined,
+  ) {}
 
   /** No credentials to check — an anonymous fetcher is always usable. */
   available(): boolean {
@@ -99,6 +132,10 @@ export class HttpFetchProvider implements WebFetchProvider {
 
   /** Send one GET through the process-wide dispatcher, which applies the installed proxy policy. */
   private async requestOnce(url: URL, signal: AbortSignal): Promise<Response> {
+    // The guard classifies each hop before its connection opens. It sits outside
+    // the transport translation below on purpose: a refusal propagates as the
+    // guard's typed error — the model-facing refusal — not as a network failure.
+    await this.checkFetchGuard(url)
     const headers = {
       'user-agent': this.limits.userAgent,
       'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8',
@@ -110,6 +147,25 @@ export class HttpFetchProvider implements WebFetchProvider {
     } catch (error: unknown) {
       throw translateAbortOrNetwork(error, signal)
     }
+  }
+
+  /**
+   * Consult the mounted `fetchGuard` (if any) about this hop's destination. The
+   * hostname is resolved first so the guard classifies the addresses the
+   * connection would actually use, never just the name; an IP literal skips the
+   * lookup. Only mounted guards resolve and classify — with none, no lookup and
+   * no call happen and the provider is byte-identical to upstream's.
+   */
+  private async checkFetchGuard(url: URL): Promise<void> {
+    const guard = this.resolveGuard?.()
+    if (guard === undefined) return
+    let addresses: readonly FetchGuardAddress[]
+    try {
+      addresses = await resolveAddresses(url.hostname)
+    } catch (error: unknown) {
+      throw new WebError(`web fetch failed: ${String(error)}`, 'WEB_PROVIDER_ERROR', { cause: error })
+    }
+    await guard.check(url, addresses)
   }
 
   /** Read, byte-cap, classify, and decode the final response body. */
@@ -218,6 +274,20 @@ export class HttpFetchProvider implements WebFetchProvider {
 /** HTTP redirect status codes that carry a `Location`. */
 function isRedirectStatus(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308
+}
+
+/**
+ * Resolve a hostname to every address the connection could use. An IP literal
+ * resolves to itself without a lookup; otherwise `node:dns` resolves all
+ * addresses in the order the resolver returned them. The Node-only import is
+ * dynamic so browser-worker startup stays free of it.
+ */
+async function resolveAddresses(hostname: string): Promise<readonly FetchGuardAddress[]> {
+  const { isIP } = await import('node:net')
+  const literal = isIP(hostname)
+  if (literal !== 0) return [{ address: hostname, family: literal }]
+  const dns = await import('node:dns')
+  return await dns.promises.lookup(hostname, { all: true, verbatim: true })
 }
 
 /** Resolve a (possibly relative) `Location` against the current URL. */

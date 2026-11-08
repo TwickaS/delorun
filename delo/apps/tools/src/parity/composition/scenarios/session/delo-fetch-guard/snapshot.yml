@@ -1,0 +1,8 @@
+version: 1
+scenario: delo-fetch-guard
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delo-fetch-guard
+  pin: true

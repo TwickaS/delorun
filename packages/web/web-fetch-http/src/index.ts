@@ -9,7 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
 import { HttpFetchProvider } from './provider.ts'
-import type { HttpFetchLimits } from './provider.ts'
+import type { FetchGuard, HttpFetchLimits } from './provider.ts'
 
 const MAX_NODE_TIMER_DELAY_MS = 2_147_483_647
 
@@ -17,7 +17,7 @@ export {
   LOCAL_FETCH_PROVIDER_ID,
   HttpFetchProvider,
 } from './provider.ts'
-export type { HttpFetchLimits } from './provider.ts'
+export type { FetchGuard, FetchGuardAddress, HttpFetchLimits } from './provider.ts'
 
 /** Default `User-Agent`: an explicit product agent, never a browser disguise. */
 export const DEFAULT_USER_AGENT = 'deepseek-harness/0.0.1 (+https://github.com/deepseek-ai)'
@@ -25,7 +25,12 @@ export const DEFAULT_USER_AGENT = 'deepseek-harness/0.0.1 (+https://github.com/d
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'web-fetch-http'
 
-/** The web seam this provider registers into. */
+/**
+ * The web seam this provider registers into. The optional `fetchGuard` service is
+ * deliberately NOT here — it is absent unless a guard plugin is mounted — so it
+ * is read per hop with `ctx.get()` (the tool-fs-search `spillStore` pattern):
+ * without one, no lookup and no check run and the provider is upstream's.
+ */
 export const inject = ['web']
 
 /** Plugin config: the provider's transport and size limits plus its `User-Agent` (all defaulted). */
@@ -90,5 +95,8 @@ export function apply(ctx: Context, config: Config): void {
     maxRedirects: resolved.maxRedirects,
     userAgent: resolved.userAgent,
   }
-  ctx.web.registerFetchProvider(new HttpFetchProvider(limits))
+  // The guard is resolved per hop, never captured: mounting or unmounting a
+  // `fetchGuard` service takes effect on the next request without reloading
+  // this plugin, and an unmounted guard leaves the provider unguarded.
+  ctx.web.registerFetchProvider(new HttpFetchProvider(limits, () => ctx.get('fetchGuard') as FetchGuard | undefined))
 }

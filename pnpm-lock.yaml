@@ -1704,6 +1704,25 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/core/tools
 
+  delo/packages/plugin-fetch-guard:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-web':
+        specifier: workspace:*
+        version: link:../../../packages/web/web
+      '@deepseek-ai/dsh-web-fetch-http':
+        specifier: workspace:*
+        version: link:../../../packages/web/web-fetch-http
+      undici:
+        specifier: 8.11.2
+        version: 8.11.2
+
   delo/packages/plugin-main-chat:
     dependencies:
       '@deepseek-ai/schemastery':

@@ -1,0 +1,24 @@
+{
+  "name": "@delo/plugin-fetch-guard",
+  "description": "Delo's fetch guard (the fetchGuard service): the optional pre-connection guard the HTTP fetch provider consults on every hop, refusing loopback, link-local, private-network and unique-local destinations with a typed reason",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./guard": "./src/guard.ts"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-web-fetch-http": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-web": "workspace:*",
+    "@deepseek-ai/dsh-web-fetch-http": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "undici": "8.11.2"
+  }
+}

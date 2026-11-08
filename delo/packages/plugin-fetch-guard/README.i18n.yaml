@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/plugin-fetch-guard/README.md
+/:
+  en: 1e1552e6e7a283b7
+  zh: fcb9c5358cda7da1
+/delo-plugin-fetch-guard:
+  en: 9bd171dd545d0ddd
+  zh: 36f45a50c47d8d5c
+/delo-plugin-fetch-guard/summary:
+  en: 38a378985d05ae7b
+  zh: f6c2ca7b119ac57f
+/delo-plugin-fetch-guard/contents:
+  en: 73a8b921c70b4cb6
+  zh: 03d8dbbafebdd50b
+/delo-plugin-fetch-guard/contract:
+  en: 19caf1032e84cbe7
+  zh: 76b9592d414b2940
+/delo-plugin-fetch-guard/configuration:
+  en: aa642a2a64448e68
+  zh: 9a372563a341bee8
+/delo-plugin-fetch-guard/known-limitations:
+  en: 0afbd319c6335276
+  zh: 60f0f45c2185f22a
+/delo-plugin-fetch-guard/tests:
+  en: 4de4068cd57289ce
+  zh: 55e849366b764d2b
