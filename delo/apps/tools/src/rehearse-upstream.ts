@@ -8,14 +8,14 @@
  *
  * @module @delo/tools/rehearse-upstream
  */
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
-import { devNull, tmpdir } from 'node:os'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { changedSince, hunkCount } from './check-fork-boundary.ts'
 import { divergence, isForkOwned, MANIFEST_PATH, parseManifest, type Patch, type PatchManifest } from './fork-boundary.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
+import { SCRATCH_CONFIG, SCRATCH_IDENTITY, withScratchWorktree } from './scratch-worktree.ts'
 
 /** The growth floors the divergence budget names: the caps until the first release's baseline is recorded. */
 export const GROWTH_FLOORS = { entries: 20, hunks: 150 } as const
@@ -113,11 +113,8 @@ export interface Rehearsal {
   readonly absorbed: readonly AbsorbedEntry[]
 }
 
-/** Git configuration for every command in the scratch worktree: no hooks, no recorded resolutions, plain markers. */
-const SCRATCH_CONFIG = ['-c', `core.hooksPath=${devNull}`, '-c', 'rerere.enabled=false', '-c', 'merge.conflictStyle=merge'] as const
-
-/** An identity for the merge, which git requires even though the rehearsal never commits. */
-const SCRATCH_IDENTITY = ['-c', 'user.name=Delo rehearsal', '-c', 'user.email=rehearsal@delo.invalid'] as const
+/** The prefix of the rehearsal's scratch directory, which the specs look for when they check for residue. */
+export const SCRATCH_PREFIX = 'delo-rehearse-'
 
 const USAGE = 'usage: rehearse-upstream.ts --tag <tag>'
 
@@ -179,7 +176,7 @@ export function rehearse(spec: RehearsalSpec): Rehearsal {
       .filter(patch => current.hunks.has(patch.path) && !atTag.hunks.has(patch.path))
       .map(patch => ({ path: patch.path, class: patch.class, hunks: current.hunks.get(patch.path) ?? 0 }))
     return { spec, tagCommit, conflicts, current: current.counts, atTag: atTag.counts, absorbed }
-  })
+  }, SCRATCH_PREFIX)
 }
 
 /**
@@ -258,48 +255,6 @@ export function formatRehearsal(rehearsal: Rehearsal): string[] {
     : 'caps: the floors of 20 entries and 150 hunks; the first release\'s baseline is not recorded')
   lines.push('generated entries are not separated: the ledger marks none, so every entry is counted')
   return lines
-}
-
-/**
- * Create a scratch worktree detached at a commit, run a body in it, and remove it whatever the outcome.
- * @param root - the checkout whose repository the worktree is added to.
- * @param head - the commit to detach at.
- * @param body - the work to run with the worktree's path.
- * @returns the body's result.
- * @throws the body's error, or an Error naming the leftover worktree when removal fails.
- */
-function withScratchWorktree<T>(root: string, head: string, body: (tree: string) => T): T {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'delo-rehearse-')))
-  const tree = join(directory, 'tree')
-  let outcome: { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown }
-  try {
-    git(root, [...SCRATCH_CONFIG, 'worktree', 'add', '--detach', '--quiet', tree, head])
-    outcome = { ok: true, value: body(tree) }
-  } catch (error) {
-    outcome = { ok: false, error }
-  }
-  const leftover = removeScratchWorktree(root, directory, tree)
-  if (leftover !== undefined) throw new Error(outcome.ok ? leftover : `${errorText(outcome.error)}; ${leftover}`)
-  if (!outcome.ok) throw outcome.error
-  return outcome.value
-}
-
-/**
- * Remove a scratch worktree's registration and its temporary directory.
- * @param root - the checkout the worktree was added to.
- * @param directory - the temporary directory that holds the worktree.
- * @param tree - the worktree's path.
- * @returns a message when the registration remains, or undefined when the worktree is gone.
- */
-function removeScratchWorktree(root: string, directory: string, tree: string): string | undefined {
-  const removal = isRegisteredWorktree(root, tree) ? runGit(root, ['worktree', 'remove', '--force', tree]) : undefined
-  rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
-  if (!isRegisteredWorktree(root, tree)) return undefined
-  return `scratch worktree ${tree} is still registered (${removal?.stderr.trim() ?? 'not removed'}); run \`git worktree prune\``
-}
-
-function isRegisteredWorktree(root: string, tree: string): boolean {
-  return git(root, ['worktree', 'list', '--porcelain', '-z']).split('\0').includes(`worktree ${tree}`)
 }
 
 /**

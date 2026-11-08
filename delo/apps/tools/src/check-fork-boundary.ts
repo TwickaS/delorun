@@ -19,6 +19,7 @@ import {
   type PatchManifest,
 } from './fork-boundary.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
+import { digestErrors, headDigests } from './ledger-digests.ts'
 
 /** The outcome of checking one repository against its ledger. */
 export interface CheckResult {
@@ -139,7 +140,8 @@ export function historyErrors(root: string, manifest: PatchManifest): string[] {
 
 /**
  * Run every ledger rule against a repository: the ledger parses, its pinned commit is in the clone and in HEAD's
- * history, every changed upstream path is listed or fork-owned, and every listed patch still differs from upstream.
+ * history, every changed upstream path is listed or fork-owned, every listed patch still differs from upstream, and
+ * every recorded digest matches the file at HEAD.
  * @param root - the repository root.
  * @returns the ledger, the violations, and the divergence when the pinned commit is in the clone.
  */
@@ -162,7 +164,11 @@ export function checkRepository(root: string): CheckResult {
   const files = new Set(nulSeparated(git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])))
   return {
     manifest,
-    errors: [...historyErrors(root, manifest), ...forkBoundaryErrors(manifest, changed, files)],
+    errors: [
+      ...historyErrors(root, manifest),
+      ...forkBoundaryErrors(manifest, changed, files),
+      ...digestErrors(manifest, headDigests(root, manifest.patches.map(patch => patch.path))),
+    ],
     divergence: measureDivergence(root, manifest, changed),
   }
 }

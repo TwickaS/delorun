@@ -24,6 +24,7 @@ const manifestSchema = z.strictObject({
     path: z.string().min(1),
     class: z.enum(['delo-feature', 'generic-fix', 'security']),
     reason: z.string(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/u, { error: 'must be the SHA-256 digest of the file at HEAD, in lowercase hexadecimal' }).optional(),
   })),
   retired: z.array(z.strictObject({
     path: z.string().min(1),

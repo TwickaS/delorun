@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { describe, expect, it, type TestContext } from 'vitest'
 import { checkRepository, formatDivergence } from '../src/check-fork-boundary.ts'
 import { forkBoundaryErrors, isForkOwned, manifestErrors, parseManifest } from '../src/fork-boundary.ts'
+import { patchDigest } from '../src/ledger-digests.ts'
 
 const UPSTREAM = { repository: 'https://example.invalid/upstream.git', ref: 'v1' }
 const NOTE_RULE = '.agents/notes/**/*-delo-*'
@@ -113,6 +114,18 @@ describe('divergence ledger checks', () => {
     expect(checkRepository(repo.root).errors).toEqual([
       'upstream.ts: listed patch no longer differs from upstream; remove the entry',
     ])
+  })
+
+  it('fails a recorded digest that no longer matches the file at HEAD, and passes one that does', (test) => {
+    const repo = fixture(test)
+    const base = repo.commit({ 'upstream.ts': 'a\n' })
+    const entry = (sha256: string) => ledgerText(base, [{ path: 'upstream.ts', class: 'delo-feature', reason: 'edit', sha256 }])
+    repo.commit({ 'upstream.ts': 'b\n', 'delo/upstream-patches.json': entry(patchDigest('a\n')) })
+    expect(checkRepository(repo.root).errors).toEqual([
+      `upstream.ts: recorded sha256 ${patchDigest('a\n')}, but the file is ${patchDigest('b\n')}`,
+    ])
+    repo.commit({ 'delo/upstream-patches.json': entry(patchDigest('b\n')) })
+    expect(checkRepository(repo.root).errors).toEqual([])
   })
 
   it('treats a Delo agent note as fork-owned by its -delo- name, and an upstream note as unlisted', (test) => {
@@ -233,5 +246,12 @@ describe('ledger parsing', () => {
       .toThrow(/retired\.0\.reason/)
     expect(() => parseManifest(JSON.stringify({ ...base, extra: true }))).toThrow(/extra/)
     expect(() => parseManifest('{')).toThrow(/not valid JSON/)
+  })
+
+  it('accepts a recorded digest of the ledger schema and refuses one that is not a SHA-256', () => {
+    const sha256 = patchDigest('a\n')
+    expect(parseManifest(JSON.stringify({ ...base, patches: [{ path: 'a.ts', class: 'delo-feature', reason: 'edit', sha256 }] })).patches[0]?.sha256).toBe(sha256)
+    expect(() => parseManifest(JSON.stringify({ ...base, patches: [{ path: 'a.ts', class: 'delo-feature', reason: 'edit', sha256: 'ABC' }] })))
+      .toThrow(/patches\.0\.sha256/)
   })
 })

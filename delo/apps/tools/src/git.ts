@@ -19,16 +19,41 @@ export interface GitRun {
   readonly stderr: string
 }
 
+/** The outcome of one git invocation whose standard output is kept as bytes. */
+export interface GitBytesRun {
+  /** The exit status, or null when git ended by a signal. */
+  readonly status: number | null
+  /** Standard output, as git wrote it. */
+  readonly stdout: Buffer
+  /** Standard error, decoded as UTF-8. */
+  readonly stderr: string
+}
+
 /**
  * Run git and return its status and both output streams without throwing on a nonzero status.
  * @param cwd - the directory to run in.
  * @param args - git's arguments.
+ * @param input - text written to git's standard input; omitted to leave the stream closed.
  * @returns the exit status and the captured output.
  */
-export function runGit(cwd: string, args: readonly string[]): GitRun {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: MAX_BUFFER })
+export function runGit(cwd: string, args: readonly string[], input?: string): GitRun {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: MAX_BUFFER, ...input === undefined ? {} : { input } })
   if (result.error !== undefined) throw result.error
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+}
+
+/**
+ * Run git with its standard output kept as bytes, for content whose digest must be computed over exactly the
+ * bytes git holds rather than a decoded form of them.
+ * @param cwd - the directory to run in.
+ * @param args - git's arguments.
+ * @param input - text written to git's standard input; omitted to leave the stream closed.
+ * @returns the exit status, the captured bytes and git's error text.
+ */
+export function runGitBytes(cwd: string, args: readonly string[], input?: string): GitBytesRun {
+  const result = spawnSync('git', args, { cwd, maxBuffer: MAX_BUFFER, ...input === undefined ? {} : { input } })
+  if (result.error !== undefined) throw result.error
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr.toString('utf8') }
 }
 
 /**

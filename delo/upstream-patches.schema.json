@@ -36,7 +36,12 @@
             "description": "delo-feature: serves a Delo feature; generic-fix: a fix upstream could take; security: moves an approval, a refusal or an escalation, and carries a lead verdict.",
             "enum": ["delo-feature", "generic-fix", "security"]
           },
-          "reason": { "type": "string", "minLength": 1 }
+          "reason": { "type": "string", "minLength": 1 },
+          "sha256": {
+            "description": "SHA-256 of the file's bytes at HEAD, in lowercase hexadecimal. The upstream update path carries an entry forward only when its file still has this digest, and the boundary gate refuses a recorded digest that no longer matches.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
         }
       }
     },
