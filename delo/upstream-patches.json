@@ -2905,6 +2905,11 @@
       "path": "scripts/loader-refuse-code.spec.ts",
       "class": "delo-feature",
       "reason": "Code refusal switch: the canary spec shows a `!!js` config expression failing with the typed error and never running, the expression's path reported through nested config and arrays, insert rows in overlay and optional patch lists failing the same way with a missing file staying no layer, and the option off parsing and loading exactly as upstream does. The enforcement is mutation-tested: removing the two refusal points fails these cases; restoring them passes."
+    },
+    {
+      "path": "packages/session-query/session-query-sqlite/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Trash purge (C8): the engine gains one `forgetSessions` method, which removes the named sessions' rows from both indexed sources in one transaction, bumps the generation so a stale cursor cannot resolve, and rebuilds the file with VACUUM, so no byte of a purged chat stays in the full-text index, not even in a freed page. Search behaviour, the schema and every other method stand unchanged."
     }
   ],
   "retired": []

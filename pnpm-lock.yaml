@@ -1896,6 +1896,18 @@ importers:
         specifier: workspace:~
         version: link:../../../native/system/packages/entry
 
+  delo/packages/trash:
+    dependencies:
+      '@delo/contract-archive-and-trash':
+        specifier: workspace:*
+        version: link:../contract-archive-and-trash
+      '@delo/contract-host-qualified-keys':
+        specifier: workspace:*
+        version: link:../contract-host-qualified-keys
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../logs
+
   native/system:
     devDependencies:
       '@deepseek-ai/node-addon-system':

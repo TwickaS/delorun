@@ -324,6 +324,52 @@ export class SqliteSessionQueryEngine extends SessionQueryEngine {
     })
   }
 
+  /**
+   * Remove every indexed row of the named sessions in one transaction and
+   * rebuild the index file, so C8's purge leaves none of the item's content in
+   * the full-text index — not even the bytes a freed page would keep — and a
+   * cursor over the removed corpus cannot resolve again.
+   * @param ids - the sessions whose rows the purge removes.
+   */
+  async forgetSessions(ids: readonly SessionId[]): Promise<void> {
+    if (this.config.openAt === 'never' || ids.length === 0) return
+    await this._serialized(undefined, async () => {
+      await this._ensureReady(undefined)
+      const db = this._requireDb()
+      let began = false
+      try {
+        db.exec('BEGIN IMMEDIATE')
+        began = true
+        for (const id of ids) {
+          this._deleteSession('persisted', id)
+          this._deleteSession('live', id)
+        }
+        db.prepare('UPDATE search_state SET global_generation = ? WHERE singleton = 1')
+          .run(this._globalGeneration + 1)
+        db.exec('COMMIT')
+        began = false
+      } catch (error: unknown) {
+        /* v8 ignore next 5 -- a BEGIN failure has no transaction to roll back; the wrapper below reports it. */
+        if (began) {
+          try {
+            db.exec('ROLLBACK')
+          } catch {
+            // The original SQLite failure remains the actionable cause.
+          }
+        }
+        throw new SessionQueryError(
+          `session-search purge of ${ids.length} session(s) failed: ${errorMessage(error)}`,
+          'SESSION_QUERY_INDEX_FAILED',
+          { cause: error },
+        )
+      }
+      // A deleted row's text can sit in a freed page until the file is rebuilt.
+      db.exec('VACUUM')
+      this._globalGeneration += 1
+      this._localGeneration = Math.max(this._localGeneration, this._globalGeneration)
+    })
+  }
+
   /** Close the database after every accepted operation reaches quiescence. */
   close(): Promise<void> {
     this._closePromise ??= this._close()
