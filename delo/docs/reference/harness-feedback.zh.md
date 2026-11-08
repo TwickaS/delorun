@@ -19,3 +19,13 @@
 **应改为怎样做。** 由所有者在本机执行 `sudo npx playwright install-deps webkit`；然后从 `delo/apps/tools/src/checks/web.ts` 中移除 WebKit 排除。所有者已推迟本机的修复。
 
 **状态：** `worked around`：在本机修复落地之前，该通道只运行 Chromium。
+
+### 2026-11-07 · #2 插件管理器端到端规范的团队对话框在本机超时
+
+**发生了什么。** `apps/web/tests/plugin-manager.e2e.ts:1215` 等待 智能体团队 对话框中的“Team 暂不可用”文本时超时（30 秒 `locator.waitFor`）。把工作区的全部改动 stash 之后，同一棵树上仍然复现同样的失败，因此在途的改动都不是原因；该端到端运行的是 app-boot 已构建的 `lib/`。
+
+**付出的代价。** 只要变更的包到达 app-boot（例如 loader 的 `refuseCode` 改动），`tests:web-changed` 就会选中这条规范，把一个本应直接跳过的通道变成失败。
+
+**应改为怎样做。** 在依赖这条规范之前，先在本机诊断团队对话框的可用状态；在此之前，凡是变更集到达该规范的推送，都可以使用 `DELO_PUSH_SKIP=tests:web-changed`，以本条目为理由，并在拉取请求中写明跳过。
+
+**状态：** `open`。

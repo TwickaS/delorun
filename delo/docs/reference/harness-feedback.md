@@ -19,3 +19,13 @@ A running board of friction met while working in this harness and this repositor
 **What to do instead.** Owner action: run `sudo npx playwright install-deps webkit` on this host, then remove the WebKit exclusion from `delo/apps/tools/src/checks/web.ts`. The owner has deferred the host fix.
 
 **Status:** `worked around`: the lane runs Chromium only until the host fix lands.
+
+### 2026-11-07 · #2 The plugin-manager e2e's team dialog times out on this host
+
+**What happened.** `apps/web/tests/plugin-manager.e2e.ts:1215` times out waiting for the 智能体团队 dialog's "Team 暂不可用" text (30 s `locator.waitFor`). The failure reproduces with every working-tree change stashed, on the same tree, so no in-flight change causes it; the e2e runs app-boot's built `lib/`.
+
+**What it cost.** `tests:web-changed` selects the spec whenever a changed package reaches app-boot (as the loader `refuseCode` change does), turning a lane that would otherwise decline into one that fails.
+
+**What to do instead.** Diagnose the team dialog's availability state on this host before relying on that spec; until then, a push whose changed set reaches this spec may use `DELO_PUSH_SKIP=tests:web-changed` with this entry as the reason, naming the skip in the pull request.
+
+**Status:** `open`.
