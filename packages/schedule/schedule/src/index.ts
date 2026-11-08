@@ -21,8 +21,8 @@ import {
 import type {
   ScheduleCatalogEntry, ScheduleCreateRequest, ScheduleDeleteInactiveResult, ScheduleDeliveryHistoryRequest,
   ScheduleDeliveryHistoryResult, ScheduleEditRequest, ScheduleEditResult, ScheduleListRequest,
-  ScheduleListResult, SchedulePatch, ScheduleRecord, ScheduleRunRequest, ScheduleRunResult, ScheduleSessionCreateSpec,
-  ScheduleTarget, ScheduleTargetRequest, ScheduleViewRequest, ScheduleViewResult,
+  ScheduleListResult, SchedulePatch, SchedulePermissionPresets, ScheduleRecord, ScheduleRunRequest, ScheduleRunResult,
+  ScheduleSessionCreateSpec, ScheduleTarget, ScheduleTargetRequest, ScheduleViewRequest, ScheduleViewResult,
 } from './types.ts'
 export type * from './client.ts'
 export { scheduleDomain } from './storage.ts'
@@ -112,6 +112,29 @@ export const MAX_LIST_LIMIT = 500
 
 /** Stable refusal text for a target Session that a delegated child owns. */
 const SUBAGENT_SESSION_REFUSAL = 'This Session belongs to subagent routing, which never receives reminder delivery.'
+
+/**
+ * Read the permission preset a new task captures at creation: the preset of the target Session when one is live,
+ * otherwise the acting Session's preset, which a created target inherits. Absent when no preset service is composed
+ * or neither Session is live.
+ * @param presets - The composed permission-preset service, when one is.
+ * @param agents - The live Agent registry.
+ * @param target - Destination after the change.
+ * @param actorSessionId - Session of the acting Agent, or undefined for a human caller.
+ * @returns The captured preset, or undefined.
+ */
+function creationPresetOf(
+  presets: SchedulePermissionPresets | undefined,
+  agents: Context['agents'],
+  target: ScheduleTarget,
+  actorSessionId: SessionId | undefined,
+): string | undefined {
+  if (presets === undefined) return undefined
+  const sessionId = target.kind === 'session' ? target.sessionId : actorSessionId
+  if (sessionId === undefined) return undefined
+  const agent = agents.get(sessionId)
+  return agent === undefined ? undefined : presets.current(agent.session)
+}
 
 /** Management change announced to involved Sessions. */
 type ScheduleChangeKind = 'created' | 'updated' | 'deleted'
@@ -393,9 +416,14 @@ export class ScheduleService extends TypertRemoteService {
       await this.validateTarget(target, signal)
       signal?.throwIfAborted()
       const createdAt = new Date(now).toISOString()
+      const creationPreset = creationPresetOf(
+        this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined,
+        this.ctx.agents, target, actorSessionId,
+      )
       const task = scheduleTaskSchema.parse({
         record, target, involvedSessionIds: involved(actorSessionId, target, []), status: 'active',
         createdAt, updatedAt: createdAt,
+        ...(creationPreset === undefined ? {} : { creationPreset }),
         deliveryHistory: { records: [], earlierRecordsUnavailable: false, earlierRecordsPruned: false },
       })
       await domain.table('tasks').put(id, task)

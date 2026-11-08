@@ -16,14 +16,15 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { delegationDepthOf } from '@deepseek-ai/dsh-subagent'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { GenericCallView, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { GenericCallView, ToolExecution, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import {
   DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, MAX_TITLE_LENGTH, MIN_EVERY_INTERVAL_SECONDS, ScheduleId, ScheduleInputError,
   formatScheduleLocalTime,
 } from '@deepseek-ai/dsh-schedule'
 import type {
-  InternalScheduleError, ScheduleEditRequest, ScheduleTargetRequest, ScheduleToolError,
-  ScheduleCatalogEntry, ScheduleDeliveryReceipt, ScheduleRecord, SubagentSessionError,
+  InternalScheduleError, ScheduleEditRequest, ScheduleEffect, SchedulePermissionPresets, ScheduleRecord,
+  ScheduleTargetRequest, ScheduleToolError,
+  ScheduleCatalogEntry, ScheduleDeliveryReceipt, SubagentSessionError,
 } from '@deepseek-ai/dsh-schedule'
 
 /** Plugin name registered with the Loader. */
@@ -281,6 +282,75 @@ function present(title: string, kind: 'read' | 'other', rawInput?: unknown): Gen
   return { card: 'generic', title, kind, ...rawInput === undefined ? {} : { rawInput } }
 }
 
+/** The rule text a consent names, from a stored record the caller does not restate. */
+function recurrenceText(record: ScheduleRecord): string {
+  switch (record.kind) {
+    case 'rrule': return record.rrule
+    case 'cron': return record.expression
+    case 'daily': return `daily at ${record.time} (${record.timeZone})`
+    case 'weekly': return `weekly at ${record.time} (${record.timeZone})`
+    case 'every': return `every ${record.everySeconds} seconds`
+    default: return record.scheduledAt
+  }
+}
+
+/** The target facts a consent names, resolved from one model target choice. */
+function targetFacts(
+  ctx: Context,
+  agent: Agent,
+  target: typeof TARGET_CHOICES[number],
+): { readonly targetSession: ScheduleEffect['targetSession']; readonly targetPreset: string | undefined } {
+  const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
+  // A created target opens its Session at the first delivery and inherits the caller's permission preset.
+  if (target !== 'this_session') {
+    return { targetSession: undefined, targetPreset: presets?.current(agent.session) }
+  }
+  return { targetSession: agent.session, targetPreset: presets?.current(agent.session) }
+}
+
+/**
+ * Build the effect one Schedule management call creates, for the consent to name. An update that
+ * restates no rule names the stored rule, so the approval always carries the recurrence the task
+ * keeps; a task that cannot be read leaves the approval unnamed.
+ * @param ctx - Scope whose `schedule` service stores the tasks.
+ * @param exec - Pending management call with its parsed arguments.
+ * @param agent - Calling root Agent.
+ * @returns The effect, or undefined when the call names no readable effect.
+ */
+async function consentEffect(ctx: Context, exec: ToolExecution, agent: Agent): Promise<ScheduleEffect | undefined> {
+  const args = exec.arguments as { rrule?: unknown; target?: unknown; id?: unknown } | undefined
+  if (args === undefined || typeof args !== 'object') return undefined
+  const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
+  let recurrence: string | undefined
+  let facts: { readonly targetSession: ScheduleEffect['targetSession']; readonly targetPreset: string | undefined }
+  if (exec.name === 'schedule_create') {
+    if (typeof args.rrule !== 'string') return undefined
+    recurrence = args.rrule
+    facts = targetFacts(ctx, agent, typeof args.target === 'string'
+      ? args.target as typeof TARGET_CHOICES[number]
+      : 'new_once')
+  } else {
+    if (typeof args.id !== 'string') return undefined
+    const stored = await ctx.schedule.view({ id: ScheduleId(args.id) })
+    if (!('kind' in stored) || stored.kind === undefined) return undefined
+    recurrence = typeof args.rrule === 'string' ? args.rrule : recurrenceText(stored)
+    facts = typeof args.target === 'string'
+      ? targetFacts(ctx, agent, args.target as typeof TARGET_CHOICES[number])
+      : stored.target.kind === 'session'
+        ? {
+          targetSession: ctx.agents.get(stored.target.sessionId)?.session,
+          targetPreset: presets?.current(ctx.agents.get(stored.target.sessionId)?.session ?? agent.session),
+        }
+        : { targetSession: undefined, targetPreset: undefined }
+  }
+  return {
+    tool: exec.name,
+    recurrence,
+    ...facts.targetSession === undefined ? {} : { targetSession: facts.targetSession } as ScheduleEffect,
+    targetPreset: facts.targetPreset,
+  } as ScheduleEffect
+}
+
 /** Stable error for failures not safe to expose. */
 function internalError(): InternalScheduleError {
   return { code: 'internal_error', message: 'The schedule operation failed.' }
@@ -344,11 +414,12 @@ function targetFor(agent: Agent, target: typeof TARGET_CHOICES[number]): Schedul
  *
  * Each call acts for the Agent that dispatched it, so a mount outside an
  * agent scope still registers the tools but every call without a caller Agent
- * is refused as an internal failure.
+ * is refused as an internal failure. The consent naming reads the live Agent
+ * registry to resolve a stored target's Session, so registration waits for it.
  * @param ctx - Context owning the tool and system-prompt registries and the Host Schedule service.
  */
 export function apply(ctx: Context): void {
-  ctx.inject(['schedule'], registerScheduleTools)
+  ctx.inject(['schedule', 'agents'], registerScheduleTools)
 }
 
 /**
@@ -363,6 +434,22 @@ function registerScheduleTools(ctx: Context): void {
       || ctx.tools.get('schedule_edit', scope) !== undefined
       ? MANAGEMENT_AUTHORIZATION
       : '',
+  })
+
+  // The consent seam is resolved per call, so a plugin that mounts or disposes it mid-session
+  // changes only the later approvals. Only an `ask` decision is named: allow and deny stay as
+  // the policy resolved them, and a consent failure fails the call like any pre-execute policy.
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    const gate = await next()
+    if (gate.kind !== 'ask' || (exec.name !== 'schedule_create' && exec.name !== 'schedule_edit')) return gate
+    const consent = ctx.get('scheduleConsent')
+    const agent = exec.agent
+    if (consent === undefined || agent === undefined) return gate
+    const effect = await consentEffect(ctx, exec, agent)
+    if (effect === undefined) return gate
+    const named = consent.nameEffect(effect)
+    if (named === undefined || named.length === 0) return gate
+    return { ...gate, reason: gate.reason === undefined ? named : `${gate.reason} ${named}` }
   })
 
   // Plugin configuration is fixed for the life of the Host service, so the description is read once.

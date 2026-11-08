@@ -75,6 +75,12 @@ export const scheduleTaskSchema = z.object({
   lastDelivery: deliveryReceiptSchema.optional(),
   deliveryHistory: deliveryHistorySchema.optional(),
   pendingDelivery: z.object({ targetSessionId: sessionIdSchema }).strict().optional(),
+  /**
+   * The permission preset the task captured at creation, read from the consent
+   * seam's facts; absent when no preset service was composed or the preset was
+   * not resolvable. The delivery review reads it as the creation preset.
+   */
+  creationPreset: z.string().min(1).exactOptional(),
 }).strict().transform(({ sessionId, target: savedTarget, lastDelivery, deliveryHistory, ...task }, context) => {
   const binding = savedTarget === undefined && sessionId !== undefined ? sessionIdSchema.safeParse(sessionId) : undefined
   if (binding?.success === false) {

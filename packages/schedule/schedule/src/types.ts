@@ -1,8 +1,10 @@
 /**
- * Durable and model-facing Schedule value types.
+ * Durable and model-facing Schedule value types, plus the optional consent seam
+ * the Schedule tools and delivery runtime read opportunistically.
  * @module @deepseek-ai/dsh-schedule/types
  */
 
+import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { Branded } from '@deepseek-ai/dsh-brand'
@@ -594,12 +596,63 @@ export interface ScheduleExecutionPendingResult {
 /** Task state after a manual delivery, or a non-mutating miss or refusal. */
 export type ScheduleRunResult = ScheduleCatalogEntry | ScheduleNotFoundResult | ScheduleExecutionPendingResult
 
+/** The preset read the consent seam makes when a deployment composes the permission-preset service. */
+export interface SchedulePermissionPresets {
+  /** The permission preset one Session currently runs under. */
+  current(session: Session): string
+}
+
+/** The effect one approved Schedule management call creates, which a consent may name. */
+export interface ScheduleEffect {
+  /** The tool whose approval asks. */
+  readonly tool: 'schedule_create' | 'schedule_edit'
+  /** The recurrence the call arms or keeps, as the caller wrote it. */
+  readonly recurrence: string
+  /** The Session the deliveries reach; undefined while the target opens a new Session at its first delivery. */
+  readonly targetSession: Session | undefined
+  /** The permission preset that Session runs under at approval time; a created target inherits the caller's. */
+  readonly targetPreset: string | undefined
+}
+
+/** The facts of one due delivery a consent reviews before the delivery wakes its Session. */
+export interface ScheduleDeliveryReview {
+  /** The permission preset the task captured at creation; undefined when the task stores none. */
+  readonly creationPreset: string | undefined
+  /** The permission preset the target Session runs under now; undefined when no preset service is composed. */
+  readonly currentPreset: string | undefined
+  /** The Session the delivery would wake. */
+  readonly targetSession: Session
+}
+
+/** One reviewed delivery: deliver it, or refuse it with the reason the refusal surfaces. */
+export type ScheduleDeliveryVerdict =
+  | { readonly kind: 'allow' }
+  | { readonly kind: 'refuse'; readonly reason: string }
+
+/**
+ * Optional consent seam over the Schedule tools, resolved opportunistically with
+ * `ctx.get('scheduleConsent')`: a deployment that composes no consent keeps
+ * upstream's approval text and delivery behaviour at every consumer. Delo's C16
+ * switch `scheduled_task_consent` mounts one.
+ */
+export interface ScheduleConsentService {
+  /**
+   * Name what one `schedule_create` or `schedule_edit` approval would create.
+   * The returned text joins the approval, and `undefined` adds nothing.
+   */
+  nameEffect(schedule: ScheduleEffect): string | undefined
+  /** Review one due delivery before it wakes its Session. */
+  reviewDelivery(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict
+}
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** The Schedule request failed validation before it was stored. */
     'schedule/input-invalid': { readonly code: ScheduleInputErrorCode }
     /** A delivery or run reached a `session` target that the Workspace registry lists as archived. */
     'schedule/target-archived': { readonly sessionId: SessionId }
+    /** A due delivery was refused by the composed Schedule consent. */
+    'schedule/consent-refused': { readonly reason: string }
   }
 }
 
@@ -632,5 +685,13 @@ declare module '@deepseek-ai/cordis' {
      * @mode emit
      */
     'schedule/changed'(): void
+  }
+  interface Context {
+    /**
+     * Optional consent seam over the Schedule tools; absent unless a plugin
+     * provides it. Every consumer reads it opportunistically with
+     * `ctx.get('scheduleConsent')` and keeps upstream's behaviour when it is.
+     */
+    scheduleConsent: ScheduleConsentService
   }
 }

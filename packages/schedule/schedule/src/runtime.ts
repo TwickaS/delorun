@@ -22,7 +22,10 @@ import {
 import { formatScheduleLocalTime } from './domain.ts'
 import { appendDelivery } from './delivery-history.ts'
 import type { ScheduleTask } from './storage.ts'
-import type { DeliveryRetentionBounds, ScheduleDeliveryReceipt, ScheduleId, ScheduleSessionCreateSpec } from './types.ts'
+import type {
+  DeliveryRetentionBounds, ScheduleDeliveryReceipt, ScheduleDeliveryVerdict, ScheduleId, SchedulePermissionPresets,
+  ScheduleSessionCreateSpec,
+} from './types.ts'
 
 /** Largest delay Node timers represent without clamping. */
 export const MAX_TIMER_DELAY_MS = 2_147_483_647
@@ -151,6 +154,7 @@ export class ScheduleRuntime {
       }
       const target = await this.resolveTarget(task)
       if (this.stopping) throw new Error('Schedule runtime is stopping')
+      await this.reviewDelivery(task, target)
       // Sample the occurrence after Session restoration, which can take longer than one recurrence interval.
       const occurrenceAt = new Date(Date.now()).toISOString()
       const held = task.target.kind !== 'new' ? [id] : []
@@ -249,6 +253,8 @@ export class ScheduleRuntime {
       const now = Date.now()
       // Session restoration can span a wall-clock rollback; future members keep their timer obligation.
       admitted = admitted.filter(member => Date.parse(member.record.scheduledAt) <= now)
+      admitted = await this.screenDelivery(admitted, target)
+      if (admitted.length === 0) return []
       const deliveries = admitted.map(task => ({
         task, occurrence: isRecurringScheduleRecord(task.record)
           ? resolveRecurringOccurrence(task.record, now) : { occurrenceAt: task.record.scheduledAt },
@@ -299,6 +305,64 @@ export class ScheduleRuntime {
   /** Whether the Workspace registry lists this Session as archived; without a registry, no Session is archived. */
   private archived(sessionId: SessionIdType): boolean {
     return this.ctx.get('workspaceRegistry')?.archivedSessionIds.includes(sessionId) ?? false
+  }
+
+  /**
+   * Review one delivery through the optional consent seam, resolved opportunistically with
+   * `ctx.get('scheduleConsent')`: without a consent this is a no-op and delivery is exactly
+   * upstream's. A refusal never delivers: the task pauses so no later occurrence retries it,
+   * and the refusal surfaces as the typed `schedule/consent-refused` error.
+   * @param task - Due task whose delivery is pending.
+   * @param target - Resolved delivery target and its live Agent.
+   * @throws RemoteError `schedule/consent-refused` carrying the consent's reason.
+   */
+  private async reviewDelivery(task: ScheduleTask, target: DeliveryTarget): Promise<void> {
+    const verdict = this.consentVerdict(task, target)
+    if (verdict === undefined) return
+    await this.commit({ ...task, status: 'paused', updatedAt: new Date(Date.now()).toISOString() })
+    throw new RemoteError('schedule/consent-refused', verdict.reason, { reason: verdict.reason })
+  }
+
+  /**
+   * Screen one due group through the consent seam before the shared message is built; a refused
+   * member pauses instead of delivering, and the remaining members keep one message.
+   * @param group - Due members of one delivery message.
+   * @param target - Resolved delivery target and its live Agent.
+   * @returns The members whose delivery the consent allows.
+   */
+  private async screenDelivery(group: readonly ScheduleTask[], target: DeliveryTarget): Promise<readonly ScheduleTask[]> {
+    const kept: ScheduleTask[] = []
+    for (const task of group) {
+      const verdict = this.consentVerdict(task, target)
+      if (verdict === undefined) {
+        kept.push(task)
+        continue
+      }
+      await this.commit({ ...task, status: 'paused', updatedAt: new Date(Date.now()).toISOString() })
+      this.ctx.logger.warn(`schedule: delivery of task "${task.record.id}" was refused (schedule_consent_refused): ${verdict.reason}`)
+    }
+    return kept
+  }
+
+  /**
+   * Ask the optional consent service about one pending delivery, or `undefined` when no consent is
+   * composed or it allows the delivery.
+   * @param task - Due task whose delivery is pending.
+   * @param target - Resolved delivery target and its live Agent.
+   * @returns The refusal, or undefined when the delivery may proceed.
+   */
+  private consentVerdict(
+    task: ScheduleTask,
+    target: DeliveryTarget,
+  ): Extract<ScheduleDeliveryVerdict, { readonly kind: 'refuse' }> | undefined {
+    const consent = this.ctx.get('scheduleConsent')
+    if (consent === undefined) return undefined
+    const verdict = consent.reviewDelivery({
+      creationPreset: task.creationPreset,
+      currentPreset: (this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined)?.current(target.agent.session),
+      targetSession: target.agent.session,
+    })
+    return verdict.kind === 'refuse' ? verdict : undefined
   }
 
   /**

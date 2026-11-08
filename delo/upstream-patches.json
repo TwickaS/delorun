@@ -3080,6 +3080,41 @@
       "path": "packages/sandbox/sandbox-policy/src/session-mode.ts",
       "class": "security",
       "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream."
+    },
+    {
+      "path": "packages/schedule/schedule/src/types.ts",
+      "class": "delo-feature",
+      "reason": "Scheduled-task consent seam (C16 switch `scheduled_task_consent`): the optional consent types — the management effect a consent may name, the delivery review and its verdict, the `ScheduleConsentService` seam resolved opportunistically with `ctx.get('scheduleConsent')`, the context slot and the typed `schedule/consent-refused` error. Types only: with no consent composed, every consumer keeps upstream's behaviour."
+    },
+    {
+      "path": "packages/schedule/schedule/src/storage.ts",
+      "class": "delo-feature",
+      "reason": "Scheduled-task consent seam: a stored task gains the optional `creationPreset`, the permission preset captured at creation; it is absent when no preset service is composed or neither Session is live, so stored tasks keep upstream's shape."
+    },
+    {
+      "path": "packages/schedule/schedule/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Scheduled-task consent seam: task creation captures the creation preset — the target Session's preset when one is live, otherwise the acting Session's, which a created target inherits — when the permission-preset service is composed; without it, creation stores exactly upstream's task."
+    },
+    {
+      "path": "packages/schedule/schedule/src/runtime.ts",
+      "class": "delo-feature",
+      "reason": "Scheduled-task consent seam: before a due delivery wakes its Session the runtime asks the composed consent, on the single-delivery path before the message and on the grouped path member by member; a refusal pauses the task without delivering, so no later occurrence retries it, and the single path reports the typed `schedule/consent-refused` error. With no consent composed, delivery is exactly upstream's."
+    },
+    {
+      "path": "packages/schedule/tool-schedule/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Scheduled-task consent seam: an `ask` approval of `schedule_create` or `schedule_edit` names the effect it would create — the recurrence, restated or read from the stored task, the target Session and its preset — through the composed consent, appended to the policy's reason; allow and deny stay as the policy resolved them, and with no consent composed the approval text is upstream's. Tool registration also waits for the `agents` facility, which resolves a stored target's live Session."
+    },
+    {
+      "path": "packages/schedule/schedule/tests/consent.spec.ts",
+      "class": "delo-feature",
+      "reason": "Scheduled-task consent seam: the delivery spec shows a due task delivering exactly upstream with no consent composed, a refused delivery pausing with nobody woken and the reason logged, a manual run refusing with the typed error, the review receiving the creation and current presets, the absent-preset case, and a due group screened member by member with the refused member paused while the rest share one message. The delivery check is mutation-tested: removing it fails five of these cases, restoring it passes."
+    },
+    {
+      "path": "packages/schedule/tool-schedule/tests/consent.spec.ts",
+      "class": "delo-feature",
+      "reason": "Scheduled-task consent seam: the approval spec shows an ask staying unnamed with no consent composed, a created effect named on `schedule_create`, an edit that restates no rule naming the stored one, a consent that names nothing leaving the approval unchanged, and the consent consulted only at approval time."
     }
   ],
   "retired": []
