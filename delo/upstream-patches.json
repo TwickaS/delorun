@@ -3020,6 +3020,26 @@
       "path": "vendor/loader/src/index.ts",
       "class": "delo-feature",
       "reason": "Code refusal switch (Delo's C16-unrelated feature switch): the loader config gains `refuseCode` (default `false`), and with it on the `internal/config` hook walks an entry's raw config for `!!js` expression nodes before interpolating and throws the typed `RefusedCodeError` naming the configuration file (the tree base URL and the entry id — parsed YAML carries no line numbers) and the expression's path, without evaluating anything. Off, loading is byte-identical to upstream's."
+    },
+    {
+      "path": "packages/client/connection/tests/reach-csp.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Reach Trusted Types (C4, WP5.1 PR 3): the specs for the default policy and the loader routed paths; a client spec runs under a jsdom environment with a stubbed trustedTypes factory, and the feature-detection case keeps upstream behaviour where the API is absent."
+    },
+    {
+      "path": "packages/client/modules/src/client/manifest.ts",
+      "class": "security",
+      "reason": "Reach Trusted Types (C4, WP5.1 PR 3): the page boots the default delo-plugin-loader policy beside the nonce shim, feature-detected, and the plugin loader routes its HTML and script-URL paths through it; a community plugin raw innerHTML assignment renders with its scripts removed."
+    },
+    {
+      "path": "packages/client/modules/src/client/system.ts",
+      "class": "security",
+      "reason": "Reach Trusted Types (C4, WP5.1 PR 3): the page boots the default delo-plugin-loader policy beside the nonce shim, feature-detected, and the plugin loader routes its HTML and script-URL paths through it; a community plugin raw innerHTML assignment renders with its scripts removed."
+    },
+    {
+      "path": "packages/client/modules/tests/trusted-types.client.spec.ts",
+      "class": "delo-feature",
+      "reason": "Reach Trusted Types (C4, WP5.1 PR 3): the specs for the default policy and the loader routed paths; a client spec runs under a jsdom environment with a stubbed trustedTypes factory, and the feature-detection case keeps upstream behaviour where the API is absent."
     }
   ],
   "retired": []

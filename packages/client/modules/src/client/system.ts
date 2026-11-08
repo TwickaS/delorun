@@ -12,11 +12,39 @@ import type {
   ClientModuleSystemOptions,
 } from './manifest.ts'
 
-/** Default bundle-load hook: same-origin external classic script. */
+/**
+ * The page boot's Trusted Types stash (`page-policy`), read structurally: the
+ * `delo-plugin-loader` policy the loader assigns `script.src` through, and the
+ * registry that keeps the script URL allowlist current with this system's boot
+ * manifest. Absent on pages whose boot did not create the policies.
+ */
+interface TrustedTypesStash {
+  readonly pluginLoader?: { createScriptURL(input: string): string | null }
+  register(manifest: BootManifest): void
+}
+
+/** The page's stash when `page-policy` created the Trusted Types policies. */
+function trustedTypesStash(): TrustedTypesStash | undefined {
+  return (globalThis as { __DSH_TRUSTED_TYPES__?: TrustedTypesStash }).__DSH_TRUSTED_TYPES__
+}
+
+/** Default bundle-load hook: same-origin external classic script, its `src` assigned through the page's
+ * `delo-plugin-loader` policy when the page created one, the raw URL otherwise (a browser without Trusted Types). */
 const defaultLoadBundle = (url: string): Promise<void> => new Promise((resolve, reject) => {
   const el = document.createElement('script')
   el.async = true
-  el.src = url
+  const pluginLoaderPolicy = trustedTypesStash()?.pluginLoader
+  if (pluginLoaderPolicy === undefined) {
+    el.src = url
+  } else {
+    const trusted = pluginLoaderPolicy.createScriptURL(url)
+    if (trusted === null) {
+      // The policy refused the URL: the bundle load fails before any request.
+      reject(new Error(`client-modules: bundle script ${url} refused by the delo-plugin-loader policy`))
+      return
+    }
+    el.src = trusted
+  }
   el.addEventListener('load', () => {
     el.remove()
     resolve()
@@ -140,6 +168,8 @@ export class ClientModuleSystem implements ClientModuleLoader {
     for (const row of options.manifest.modules) {
       this.graphRows.set(row.id, row)
     }
+    // The page's script URL allowlist follows the client module registry's current boot manifest.
+    trustedTypesStash()?.register(options.manifest)
 
     const bootstrapId = stripClientSuffix(options.bootstrapModule.id)
     this.bootstrapIds.add(bootstrapId)
@@ -445,6 +475,7 @@ export class ClientModuleSystem implements ClientModuleLoader {
       }
     }
     this.manifest = manifest
+    trustedTypesStash()?.register(manifest)
   }
 
   /** Retain live Loader modules and their transitive requests before evicting unreferenced graph records. */

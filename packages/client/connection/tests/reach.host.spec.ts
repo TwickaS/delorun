@@ -420,6 +420,7 @@ function policyNonce(reply: Reply): string {
     "style-src-attr 'unsafe-inline'", "img-src 'self' data: blob:", "media-src 'self' data:", "font-src 'self' data:",
     "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'", "frame-src 'self' blob:", "frame-ancestors 'none'",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'",
+    "require-trusted-types-for 'script'", 'trusted-types default delo-plugin-loader',
   ].join('; '))
   expect(reachContentSecurityPolicy(nonce)).toBe(policy)
   return nonce

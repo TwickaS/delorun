@@ -411,6 +411,16 @@ export interface DshWindow {
   __DSH_BOOT__?: unknown
   /** HTML-installed facade: a pending registration queue, then the live module-system target. */
   __ModuleLoader__?: ClientModuleLoaderTarget
+  /**
+   * The page boot's Trusted Types stash (C4), created by `@deepseek-ai/dsh-client-web/page-policy`
+   * when the browser supports Trusted Types: `pluginLoader` is the `delo-plugin-loader`
+   * policy the default bundle transport assigns `script.src` through, and `register` keeps
+   * the policy's script URL allowlist current with the module registry's boot manifest.
+   */
+  __DSH_TRUSTED_TYPES__?: {
+    readonly pluginLoader?: { createScriptURL(input: string): string | null }
+    register(manifest: Pick<BootManifest, 'modules'>): void
+  }
 }
 
 /** Per-module bookkeeping in {@link ClientModuleLoader.loadCache} (flat module-graph boundary). */

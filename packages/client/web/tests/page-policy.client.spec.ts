@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
 import { config } from 'zod'
-import { installStyleNonce } from '../src/page-policy.ts'
+import { installStyleNonce, installTrustedTypes, pluginScriptUrl, registerPluginScriptBundles, sanitiseHtml } from '../src/page-policy.ts'
 
 /** Mark the scripts of `doc` that carry a `nonce` attribute; jsdom does not reflect it into the property browsers expose. */
 function exposeNonces(doc: Document): void {
@@ -20,10 +20,31 @@ function page(scripts: string): Document {
 
 const create = document.createElement
 
+/** A Trusted Types policy factory that records the policies it is asked to create. */
+function policyFactory(): {
+  created: Array<{ name: string; definition: Record<string, unknown> }>
+  trustedTypes: Parameters<typeof installTrustedTypes>[0]['trustedTypes'] & object
+} {
+  const created: Array<{ name: string; definition: Record<string, unknown> }> = []
+  return {
+    created,
+    trustedTypes: {
+      createPolicy: (name: string, definition: Record<string, unknown>) => {
+        created.push({ name, definition })
+        return definition
+      },
+    } as Parameters<typeof installTrustedTypes>[0]['trustedTypes'] & object,
+  }
+}
+
+const stashGlobal = globalThis as { __DSH_TRUSTED_TYPES__?: unknown }
+
 afterEach(() => {
   document.createElement = create
   document.head.innerHTML = ''
   config({ jitless: false })
+  delete stashGlobal.__DSH_TRUSTED_TYPES__
+  registerPluginScriptBundles({ modules: [] })
 })
 
 it('stamps the nonce of the page\'s first nonced script on every created <style> element and on nothing else', () => {
@@ -55,4 +76,70 @@ it('on evaluation, stamps style nonces and makes zod jitless only on a page with
   await import('../src/page-policy.ts')
   expect(document.createElement('style').nonce).toBe('served')
   expect(config().jitless).toBe(true)
+})
+
+it('creates the default and delo-plugin-loader policies with the names C4 states and stashes the loader policy', () => {
+  const { created, trustedTypes } = policyFactory()
+  const stash = installTrustedTypes({ trustedTypes })
+  expect(created.map(policy => policy.name)).toEqual(['default', 'delo-plugin-loader'])
+  const [fallback, loader] = created
+  expect(Object.keys(fallback?.definition ?? {}).sort()).toEqual(['createHTML', 'createScript', 'createScriptURL'])
+  expect(Object.keys(loader?.definition ?? {})).toEqual(['createScriptURL'])
+  expect(stash?.pluginLoader).toBe(loader?.definition)
+  expect(stashGlobal.__DSH_TRUSTED_TYPES__).toBe(stash)
+})
+
+it('leaves a page without Trusted Types support unchanged', () => {
+  expect(installTrustedTypes({})).toBeUndefined()
+  expect(stashGlobal.__DSH_TRUSTED_TYPES__).toBeUndefined()
+})
+
+it('the default policy sanitises HTML: scripts, event handlers, javascript: URLs and iframe srcdoc go, the rest stays', () => {
+  const clean = sanitiseHtml(
+    '<p title="kept">hi</p><script>bad()</script><SCRIPT>also()</SCRIPT>'
+    + '<img src="/kept.png" onerror="x()"><a href=" javascript:evil() ">link</a>'
+    + '<a href="/kept">kept</a><a href="java\tscript:evil()">tabbed</a>'
+    + '<iframe srcdoc="<b>framed</b>" name="kept"></iframe>',
+  )
+  expect(clean).not.toContain('<script')
+  expect(clean).not.toContain('onerror')
+  expect(clean).not.toContain('javascript:')
+  expect(clean).not.toContain('srcdoc')
+  expect(clean).toContain('<p title="kept">hi</p>')
+  expect(clean).toContain('<img src="/kept.png">')
+  expect(clean).toContain('<a href="/kept">kept</a>')
+  expect(clean).toContain('<iframe name="kept">')
+})
+
+it('createScript always refuses, and both policies apply the same script URL rule', () => {
+  const { created, trustedTypes } = policyFactory()
+  installTrustedTypes({ trustedTypes })
+  const [fallback, loader] = created
+  expect(fallback?.definition.createScript).toBeTypeOf('function')
+  expect((fallback?.definition.createScript as (input: string) => string | null)('eval("x")')).toBeNull()
+  expect(fallback?.definition.createScriptURL).toBe(loader?.definition.createScriptURL)
+})
+
+it('createScriptURL admits only same-origin plugin bundle URLs the registered boot manifest lists', () => {
+  registerPluginScriptBundles({
+    modules: [
+      { id: 'a', url: 'plugins/??a/client.js&rev=1' },
+      { id: '@scope/b', url: 'plugins/??@scope/b/client.js&rev=1' },
+    ],
+  })
+  // The page's origin is jsdom's default; the row URLs are app-directory-relative, as the host composes them.
+  expect(pluginScriptUrl('plugins/??a/client.js&rev=1')).toBe('plugins/??a/client.js&rev=1')
+  expect(pluginScriptUrl('plugins/a/client.js?rev=1')).toBe('plugins/a/client.js?rev=1')
+  expect(pluginScriptUrl('/plugins/a/client.hmr3.js?rev=2')).toBe('/plugins/a/client.hmr3.js?rev=2')
+  expect(pluginScriptUrl('/plugins/@scope/b/client.js?rev=1')).toBe('/plugins/@scope/b/client.js?rev=1')
+  expect(pluginScriptUrl('https://evil.test/plugins/a/client.js')).toBeNull()
+  expect(pluginScriptUrl('/plugins/notlisted/client.js?rev=1')).toBeNull()
+  expect(pluginScriptUrl('/plugins/a/assets/icon.svg')).toBeNull()
+  expect(pluginScriptUrl('/plugins/a/other.js?rev=1')).toBeNull()
+  expect(pluginScriptUrl('/app.js')).toBeNull()
+  expect(pluginScriptUrl('not a url')).toBeNull()
+})
+
+it('createScriptURL refuses every plugin URL until a boot manifest is registered', () => {
+  expect(pluginScriptUrl('/plugins/a/client.js?rev=1')).toBeNull()
 })
