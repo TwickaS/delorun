@@ -12,6 +12,17 @@ export const MANIFEST_PATH = 'delo/upstream-patches.json'
 
 const commitId = z.string().regex(/^[0-9a-f]{40}$/u, { error: 'must be a full 40-character lowercase commit id' })
 
+/**
+ * A path inside the repository. An entry names a file the update path reads with `git cat-file`, writes into a scratch
+ * worktree and digests, so a path that is absolute, that climbs out of the repository with a `..` segment, or that
+ * carries a control character is refused: the object store's batch protocol cannot read such a path back, and the
+ * digest it answers for would be another file's.
+ */
+const repoPath = z.string().min(1).refine(
+  path => !path.startsWith('/') && !path.split('/').includes('..') && !/\p{Cc}/u.test(path),
+  { error: 'must be a repository-relative path: no leading `/`, no `..` segment and no control character' },
+)
+
 const manifestSchema = z.strictObject({
   $schema: z.string().optional(),
   upstream: z.strictObject({
@@ -21,13 +32,13 @@ const manifestSchema = z.strictObject({
   }),
   forkOwned: z.array(z.string().min(1)).min(1),
   patches: z.array(z.strictObject({
-    path: z.string().min(1),
+    path: repoPath,
     class: z.enum(['delo-feature', 'generic-fix', 'security']),
     reason: z.string(),
     sha256: z.string().regex(/^[0-9a-f]{64}$/u, { error: 'must be the SHA-256 digest of the file at HEAD, in lowercase hexadecimal' }).optional(),
   })),
   retired: z.array(z.strictObject({
-    path: z.string().min(1),
+    path: repoPath,
     reason: z.literal('absorbed'),
     upstreamCommit: commitId,
     hunks: z.number().int().nonnegative(),

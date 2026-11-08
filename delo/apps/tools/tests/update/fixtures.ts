@@ -45,6 +45,13 @@ export interface UpdateOptions {
   readonly ref?: string
   /** The commit the ledger records for the pin, when a spec needs it to disagree with the tag. */
   readonly commit?: string
+  /**
+   * Run in the fork after its edits and ledger are committed and before `v2` is merged, for a spec that needs history
+   * between the two: a ledger entry dropped, a file deleted, a patch edited after it was recorded, or a merge resolved
+   * in the release's favour. It may commit, and it may merge `v2` itself, in which case the fixture's own merge finds
+   * the release already in `HEAD`.
+   */
+  readonly between?: (fork: Scratch) => void
 }
 
 /** A fixture's repositories and the pin they were built from. */
@@ -90,6 +97,7 @@ export function updateFixture(test: TestContext, files: UpdateFiles, options: Up
     retired: [],
   }
   fork.commit({ 'delo/upstream-patches.json': `${JSON.stringify(ledger, null, 2)}\n` })
+  options.between?.(fork)
   if (options.merge === true) fork.run(['merge', '-q', '--no-ff', '-m', 'release v2', 'v2'])
   const temp = mkdtempSync(join(tmpdir(), 'delo-update-spec-'))
   test.onTestFinished(() => rmSync(temp, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }))

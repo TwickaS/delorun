@@ -8,7 +8,7 @@
  */
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { devNull, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { git, runGit } from './git.ts'
 
 /** Git configuration for every command in a scratch worktree: no hooks, no recorded resolutions, plain markers. */
@@ -40,6 +40,31 @@ export function withScratchWorktree<T>(root: string, head: string, body: (tree: 
   if (leftover !== undefined) throw new Error(outcome.ok ? leftover : `${errorText(outcome.error)}; ${leftover}`)
   if (!outcome.ok) throw outcome.error
   return outcome.value
+}
+
+/**
+ * Remove the scratch worktrees a killed run left registered in the checkout. A run that is stopped between adding its
+ * worktree and removing it cannot clean up after itself, and the registration it leaves behind belongs to a temporary
+ * directory nobody will look at again; the next run sweeps it before adding one of its own. Only worktrees under the
+ * system's temporary directory whose name carries the prefix are touched, so a worktree a person made is left alone.
+ * @param root - the checkout the worktrees were added to.
+ * @param prefix - the name prefix of the temporary directory, as {@link withScratchWorktree} was given it.
+ * @returns the worktree directories that were swept; empty when the checkout holds none.
+ * @throws Error when git fails or the registration survives the sweep.
+ */
+export function sweepScratchWorktrees(root: string, prefix: string): string[] {
+  const temporary = join(realpathSync(tmpdir()), prefix)
+  const leaked = git(root, ['worktree', 'list', '--porcelain', '-z']).split('\0')
+    .filter(entry => entry.startsWith('worktree '))
+    .map(entry => entry.slice('worktree '.length))
+    .filter(tree => dirname(tree).startsWith(temporary))
+  if (leaked.length === 0) return []
+  // The directory goes first: prune drops a registration whose worktree is missing, and nothing else here is touched.
+  for (const tree of leaked) rmSync(dirname(tree), { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+  git(root, ['worktree', 'prune'])
+  const remaining = leaked.filter(tree => isRegisteredWorktree(root, tree))
+  if (remaining.length > 0) throw new Error(`scratch worktrees ${remaining.join(', ')} are still registered; run \`git worktree prune\``)
+  return leaked
 }
 
 /**

@@ -1,9 +1,11 @@
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { Patch, PatchManifest } from '../../src/fork-boundary.ts'
 import { MANIFEST_PATH, parseManifest } from '../../src/fork-boundary.ts'
 import { digestErrors, patchDigest } from '../../src/ledger-digests.ts'
 import { carriedLedger, verifyApplied } from '../../src/upstream-update.ts'
-import { scratchRepo } from '../gates/support.ts'
+import { scratchRepo, type Scratch } from '../gates/support.ts'
 import { checkoutState, lines } from '../rehearse/fixtures.ts'
 import {
   checkBoundary,
@@ -29,6 +31,17 @@ const GATE = 'src/gate.ts'
  */
 function patch(path: string, kind: Patch['class'] = 'delo-feature'): Patch {
   return { path, class: kind, reason: `reason for ${path}` }
+}
+
+/**
+ * Rewrite the fork's ledger in the fork and commit it, as the history before the release merge.
+ * @param fork - the fork.
+ * @param edit - what to change in the parsed ledger.
+ */
+function rewriteLedger(fork: Scratch, edit: (ledger: PatchManifest) => void): void {
+  const ledger = JSON.parse(readFileSync(join(fork.root, MANIFEST_PATH), 'utf8')) as PatchManifest
+  edit(ledger)
+  fork.commit({ [MANIFEST_PATH]: `${JSON.stringify(ledger, null, 2)}\n` })
 }
 
 /**
@@ -107,6 +120,163 @@ describe('carrying the patch set onto a later tag', () => {
     const ledger = ledgerOf(fixture)
     expect(ledger.patches).toEqual([])
     expect(ledger.retired).toEqual([{ path: B, reason: 'absorbed', upstreamCommit: fixture.target, hunks: 1 }])
+  }, PROCESS_TIMEOUT_MS)
+})
+
+describe('the state the ledger describes', () => {
+  it('refuses a ledger entry dropped before the release merge, instead of writing the ledger that would lose it', (test) => {
+    const fixture = updateFixture(test, {
+      base: { [A]: lines(30), [B]: lines(30) },
+      tag: { [A]: lines(30, { 20: 'upstream 20' }), [B]: lines(30, { 10: 'upstream 10' }) },
+      fork: { [A]: lines(30, { 5: 'delo 5' }), [B]: lines(30, { 3: 'delo 3' }) },
+      patches: [patch(A), patch(B)],
+    }, {
+      merge: true,
+      between: fork => rewriteLedger(fork, ledger => {
+        ledger.patches = ledger.patches.filter(entry => entry.path !== B)
+      }),
+    })
+    const before = ledgerOf(fixture)
+    expect(before.patches.map(entry => entry.path)).toEqual([A])
+    const result = runUpdate(fixture, ['--tag', 'v2', '--write'])
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain(`upstream-update: ledger-inconsistent: ${B}: modified upstream file is not listed in ${MANIFEST_PATH}`)
+    expect(ledgerOf(fixture)).toEqual(before)
+    expect(leftoverScratch(fixture)).toEqual([])
+  }, PROCESS_TIMEOUT_MS)
+
+  it('refuses a digest that drifted before the release merge, instead of recording the drifted file', (test) => {
+    const fixture = updateFixture(test, CARRIES, {
+      merge: true,
+      between: fork => { fork.commit({ [A]: lines(30, { 5: 'delo 5, edited after the record' }) }) },
+    })
+    const before = ledgerOf(fixture)
+    const result = runUpdate(fixture, ['--tag', 'v2', '--write'])
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain(`upstream-update: checksum-drift: ${A}: recorded sha256 `)
+    expect(result.output).toContain('re-record it with `upstream-update.ts --record`')
+    expect(ledgerOf(fixture)).toEqual(before)
+    expect(before.upstream.ref).toBe('v1')
+  }, PROCESS_TIMEOUT_MS)
+
+  it('refuses a checksum the ledger never recorded once the release merge is in HEAD', (test) => {
+    const fixture = updateFixture(test, CARRIES, { record: false, merge: true })
+    const result = runUpdate(fixture, ['--tag', 'v2', '--write'])
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain(`upstream-update: checksum-unrecorded: 1 of 1 listed patches record no sha256, starting with ${A}`)
+    expect(ledgerOf(fixture).upstream.ref).toBe('v1')
+    expect(ledgerOf(fixture).patches[0]?.sha256).toBeUndefined()
+  }, PROCESS_TIMEOUT_MS)
+
+  it('carries a security patch a merge resolved in the release\'s favour instead of retiring it as absorbed', (test) => {
+    const fixture = updateFixture(test, {
+      base: { [GATE]: lines(30) },
+      tag: { [GATE]: lines(30, { 20: 'upstream 20' }) },
+      fork: { [GATE]: lines(30, { 5: 'delo 5' }) },
+      patches: [patch(GATE, 'security')],
+    }, {
+      merge: true,
+      between: fork => {
+        // The release merge is resolved in upstream's favour, so the fork's own change to the file is dropped from HEAD.
+        fork.run(['merge', '-q', '--no-ff', '--no-commit', 'v2'])
+        fork.run(['checkout', 'v2', '--', GATE])
+        fork.run(['commit', '-q', '-m', 'release v2, resolved in upstream\'s favour'])
+      },
+    })
+    const result = runUpdate(fixture, ['--tag', 'v2'])
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).toContain('carried: 1 entry, 1 hunk')
+    expect(result.output).toContain(`  ${GATE} (security, 1 hunk, sha256 `)
+    expect(result.output).toContain(', measured at the pre-merge state')
+    expect(result.output).not.toContain('absorbed by v2')
+  }, PROCESS_TIMEOUT_MS)
+
+  it('credits an absorbed entry with the hunks it had at the pin, not the hunks the release added beside them', (test) => {
+    const fixture = updateFixture(test, {
+      base: { [B]: lines(30) },
+      tag: { [B]: lines(30, { 3: 'delo 3', 25: 'upstream 25' }) },
+      fork: { [B]: lines(30, { 3: 'delo 3' }) },
+      patches: [patch(B)],
+    }, { merge: true })
+    const result = runUpdate(fixture, ['--tag', 'v2'])
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).toContain('absorbed by v2 (retired): 1 entry, 1 hunk at the pin')
+  }, PROCESS_TIMEOUT_MS)
+})
+
+describe('a listed patch that would delete its file', () => {
+  /** A patch set whose listed entry for `A` is left behind when the fork deletes the file. */
+  const DELETED: { readonly files: UpdateFiles; readonly between: (fork: Scratch) => void } = {
+    files: {
+      base: { [A]: lines(30), [B]: lines(30) },
+      tag: { [B]: lines(30, { 10: 'upstream 10' }) },
+      fork: { [B]: lines(30, { 3: 'delo 3' }) },
+      patches: [patch(A), patch(B)],
+    },
+    between: fork => {
+      fork.run(['rm', '-q', A])
+      fork.commit({})
+    },
+  }
+
+  it('refuses it with its own code instead of a checksum the file cannot answer for', (test) => {
+    const fixture = updateFixture(test, DELETED.files, { between: DELETED.between })
+    const result = runUpdate(fixture, ['--tag', 'v2'])
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain(`upstream-update: patch-deletes-file: ${A} is listed in ${MANIFEST_PATH}, but HEAD holds no file there`)
+    expect(result.output).not.toContain('checksum-drift')
+  }, PROCESS_TIMEOUT_MS)
+
+  it('refuses it the same way once the release merge is in HEAD, instead of failing on the missing file', (test) => {
+    const fixture = updateFixture(test, DELETED.files, { between: DELETED.between, merge: true })
+    const result = runUpdate(fixture, ['--tag', 'v2', '--write'])
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain(`upstream-update: patch-deletes-file: ${A} is listed in ${MANIFEST_PATH}, but the pre-merge state `)
+    expect(result.output).not.toContain('ENOENT')
+    expect(ledgerOf(fixture).upstream.ref).toBe('v1')
+  }, PROCESS_TIMEOUT_MS)
+})
+
+describe('the ledger path rule', () => {
+  /**
+   * A ledger whose one listed entry names a path.
+   * @param path - the path.
+   * @returns the ledger's JSON text.
+   */
+  function ledgerWith(path: string): string {
+    return JSON.stringify({
+      upstream: { repository: 'https://example.invalid/upstream.git', ref: 'v1', commit: '0'.repeat(40) },
+      forkOwned: ['delo/'],
+      patches: [{ path, class: 'delo-feature', reason: 'a reason' }],
+      retired: [],
+    })
+  }
+
+  it('refuses a listed path that is absolute, climbs out of the repository, or carries a control character', () => {
+    for (const path of ['/etc/passwd', '../outside.md', 'docs/../a.md', 'docs/a.md\n', 'docs/\ta.md', '..']) {
+      expect(() => parseManifest(ledgerWith(path)), path).toThrow(/repository-relative path/)
+    }
+    expect(parseManifest(ledgerWith(A)).patches[0]?.path).toBe(A)
+    const retired = { path: '../outside.md', reason: 'absorbed', upstreamCommit: '0'.repeat(40), hunks: 1 }
+    expect(() => parseManifest(JSON.stringify({ ...JSON.parse(ledgerWith(A)), patches: [], retired: [retired] })))
+      .toThrow(/repository-relative path/)
+  })
+
+  it('refuses a ledger naming such a path before any check reads the object store', (test) => {
+    const fixture = updateFixture(test, {
+      base: { [A]: lines(30) },
+      tag: { [A]: lines(30, { 20: 'upstream 20' }) },
+      fork: { [A]: lines(30, { 5: 'delo 5' }) },
+      patches: [patch(A)],
+    }, {
+      between: fork => rewriteLedger(fork, ledger => {
+        ledger.patches = [{ ...patch('../outside.md'), sha256: 'a'.repeat(64) }]
+      }),
+    })
+    const result = runUpdate(fixture, ['--tag', 'v2'])
+    expect(result.status, result.output).toBe(2)
+    expect(result.output).toContain('upstream-update: ledger-invalid:')
+    expect(result.output).toContain('repository-relative path')
   }, PROCESS_TIMEOUT_MS)
 })
 
@@ -315,5 +485,18 @@ describe('the command line', () => {
     const result = runUpdate(fixture, ['--tag', 'v2'])
     expect(result.status, result.output).toBe(1)
     expect(checkoutState(fixture.fork)).toEqual(before)
+  }, PROCESS_TIMEOUT_MS)
+
+  it('sweeps a worktree a killed run left registered in the clone', (test) => {
+    const fixture = updateFixture(test, CARRIES)
+    const leaked = join(fixture.temp, 'delo-update-killed', 'tree')
+    mkdirSync(dirname(leaked), { recursive: true })
+    fixture.fork.run(['worktree', 'add', '--detach', '--quiet', leaked, 'v2'])
+    expect(fixture.fork.run(['worktree', 'list', '--porcelain'])).toContain(leaked)
+    const result = runUpdate(fixture, ['--tag', 'v2'])
+    expect(result.status, result.output).toBe(0)
+    expect(fixture.fork.run(['worktree', 'list', '--porcelain'])).not.toContain('delo-update-killed')
+    expect(existsSync(leaked)).toBe(false)
+    expect(leftoverScratch(fixture)).toEqual([])
   }, PROCESS_TIMEOUT_MS)
 })

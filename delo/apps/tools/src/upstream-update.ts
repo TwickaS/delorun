@@ -15,17 +15,23 @@
  * bumped: the tag must already be in the clone, because the release merge is a separate, owner-approved action
  * (`rehearse-upstream.ts` measures that merge against the divergence budget).
  *
+ * The ledger and the checksum record describe the checkout before the release merge, so the path measures that state
+ * once, at the start of a run, and reads everything else from it: the ledger's shape, the recorded digests, the patch
+ * text and the hunks at the pin. Once the merge is in `HEAD` that state is the fork's own side of the merge, found by
+ * walking first parents; measuring `HEAD` instead would read the release's own changes as the fork's, and trusting a
+ * clean `git diff` against the tag would record a dropped patch as absorbed.
+ *
  * @module @delo/tools/upstream-update
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { changedSince, hunkCount } from './check-fork-boundary.ts'
+import { changedBetween, changedSince, hunkCount, treeFiles } from './check-fork-boundary.ts'
 import { forkBoundaryErrors, MANIFEST_PATH, manifestErrors, parseManifest, type PatchManifest } from './fork-boundary.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
-import { digestErrors, headDigests, patchDigest, unrecorded, worktreeDigests } from './ledger-digests.ts'
-import { SCRATCH_CONFIG, withScratchWorktree } from './scratch-worktree.ts'
+import { commitDigests, digestDefects, digestErrors, patchDigest, unrecorded, worktreeDigests } from './ledger-digests.ts'
+import { SCRATCH_CONFIG, sweepScratchWorktrees, withScratchWorktree } from './scratch-worktree.ts'
 
 /** The prefix of the update path's scratch directory, which the specs look for when they check for residue. */
 export const SCRATCH_PREFIX = 'delo-update-'
@@ -38,8 +44,10 @@ export type RefusalCode =
   | 'baseline-tag-missing'
   | 'baseline-commit-mismatch'
   | 'ledger-inconsistent'
+  | 'measurement-failed'
   | 'checksum-unrecorded'
   | 'checksum-drift'
+  | 'patch-deletes-file'
   | 'patch-does-not-apply'
   | 'verification-failed'
   | 'merge-not-landed'
@@ -75,6 +83,18 @@ export interface Baseline {
   readonly commit: string
 }
 
+/**
+ * The state the ledger and its checksum record describe: the checkout as it stood before the release merge. A run
+ * measures it once and threads it through every check and every patch it reads, so no check can be skipped or read the
+ * release's own changes as the fork's because the merge is already in `HEAD`.
+ */
+export interface Measured {
+  /** The commit whose tree the ledger describes: `HEAD` before the merge, the fork's own side of it after. */
+  readonly commit: string
+  /** True while that commit is `HEAD`, so the checkout's uncommitted work is part of what the ledger describes too. */
+  readonly checkout: boolean
+}
+
 /** A listed patch that still differs from the target. */
 export interface CarriedEntry {
   /** Repository-relative path. */
@@ -105,6 +125,8 @@ export interface UpdatePlan {
   readonly targetCommit: string
   /** The checkout's `HEAD` when the plan was made. */
   readonly head: string
+  /** The state the ledger and the patch set were measured against, which is `head` until the release merge lands. */
+  readonly measured: Measured
   /** The ledger's pin before the update. */
   readonly baseline: Baseline
   /** The listed patches that still differ from the target, in ledger order. */
@@ -199,28 +221,44 @@ export function resolveBaseline(root: string, manifest: PatchManifest): { readon
 }
 
 /**
- * Check that the ledger describes the checkout the patch set is measured in: every difference from the pin is a listed
+ * Check that the ledger describes the state the patch set is measured in: every difference from the pin is a listed
  * entry, every listed entry still differs, and no entry is both retired and still different. A bump starts from a
  * coherent ledger, so this refuses before anything is applied.
  * @param root - the repository root.
  * @param manifest - the ledger at `HEAD`.
- * @returns one refusal per violation of the ledger's rules; empty when the ledger describes the checkout.
+ * @param measured - the state the ledger describes, from {@link measuredState}.
+ * @returns one refusal per violation of the ledger's rules; empty when the ledger describes the measured state.
  */
-export function checkLedger(root: string, manifest: PatchManifest): Refusal[] {
-  const changed = changedSince(root, manifest.upstream.commit)
-  const files = new Set(git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']).split('\0').filter(path => path.length > 0))
-  return [...manifestErrors(manifest), ...forkBoundaryErrors(manifest, changed, files)]
+export function checkLedger(root: string, manifest: PatchManifest, measured: Measured): Refusal[] {
+  const pin = manifest.upstream.commit
+  const changed = measured.checkout ? changedSince(root, pin) : changedBetween(root, pin, measured.commit)
+  return [...manifestErrors(manifest), ...forkBoundaryErrors(manifest, changed, filesOf(root, measured))]
     .map(message => ({ code: 'ledger-inconsistent' as const, message: `${message}; the ledger must describe the checkout before the patch set is carried` }))
 }
 
 /**
- * Check the checksum record: every listed patch must record a digest, and every recorded digest must match the file at
- * `HEAD`. Without a complete record the patch set cannot be carried, because a changed file would travel unnoticed.
+ * Every path present in the measured state, which the ledger rules use to spot compiled output beside its source. The
+ * checkout brings its untracked files along; a commit measured behind the merge brings what its tree holds.
+ * @param root - the repository root.
+ * @param measured - the state the ledger describes.
+ * @returns the paths, repository-relative with `/` separators.
+ */
+function filesOf(root: string, measured: Measured): Set<string> {
+  if (!measured.checkout) return treeFiles(root, measured.commit)
+  return new Set(git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']).split('\0').filter(path => path.length > 0))
+}
+
+/**
+ * Check the checksum record: every listed patch must record a digest, and every recorded digest must match the file in
+ * the measured state. Without a complete record the patch set cannot be carried, because a changed file would travel
+ * unnoticed; a listed path the measured state holds no file for is refused on its own, because no entry may delete the
+ * file it names.
  * @param root - the repository root.
  * @param manifest - the ledger at `HEAD`.
- * @returns one refusal for the unrecorded entries and one per drifted digest; empty when the record holds.
+ * @param measured - the state the ledger describes, from {@link measuredState}.
+ * @returns one refusal for the unrecorded entries, one per listed path with no file, and one per drifted digest.
  */
-export function checkDigests(root: string, manifest: PatchManifest): Refusal[] {
+export function checkDigests(root: string, manifest: PatchManifest, measured: Measured): Refusal[] {
   const refusals: Refusal[] = []
   const missing = unrecorded(manifest)
   if (missing.length > 0) {
@@ -231,34 +269,58 @@ export function checkDigests(root: string, manifest: PatchManifest): Refusal[] {
       ...missing[0] === undefined ? {} : { path: missing[0] },
     })
   }
-  for (const error of digestErrors(manifest, headDigests(root, manifest.patches.map(patch => patch.path)))) {
-    refusals.push({ code: 'checksum-drift', message: `${error}; re-record it with \`upstream-update.ts --record\` once the change is reviewed` })
+  const digests = commitDigests(root, measured.commit, manifest.patches.map(patch => patch.path))
+  for (const defect of digestDefects(manifest, digests)) {
+    if (defect.kind === 'missing') {
+      refusals.push({
+        code: 'patch-deletes-file',
+        path: defect.path,
+        message: `${defect.path} is listed in ${MANIFEST_PATH}, but ${where(measured)} holds no file there; a listed patch must edit the file it`
+          + ' names, so restore it, or drop the entry and let upstream own the path',
+      })
+      continue
+    }
+    refusals.push({
+      code: 'checksum-drift',
+      message: `${defect.path}: recorded sha256 ${defect.recorded}, but the file is ${defect.actual};`
+        + ' re-record it with `upstream-update.ts --record` once the change is reviewed',
+    })
   }
   return refusals
 }
 
 /**
- * The patch text that turns a file at the pin into the fork's version at `HEAD`.
+ * Name the measured state in a message a person can act on.
+ * @param measured - the state the ledger describes.
+ * @returns `HEAD`, or the pre-merge commit's short id when the release merge is in `HEAD`.
+ */
+function where(measured: Measured): string {
+  return measured.checkout ? 'HEAD' : `the pre-merge state ${measured.commit.slice(0, 12)}`
+}
+
+/**
+ * The patch text that turns a file at the pin into the fork's version of it in the measured state.
  * @param root - the repository root.
  * @param baseline - the commit the ledger pins.
- * @param head - the checkout's `HEAD`.
+ * @param commit - the commit holding the fork's version, which is the measured state and not `HEAD` once a release merge
+ * is in `HEAD`: a patch taken across the merge would carry the release's own changes as the fork's.
  * @param path - the upstream path.
  * @returns the diff, binary-safe and without renames, so that `git apply` reproduces the content exactly.
  */
-function patchText(root: string, baseline: string, head: string, path: string): string {
-  return git(root, ['diff', '--binary', '--no-renames', '--no-color', '--no-ext-diff', baseline, head, '--', path])
+function patchText(root: string, baseline: string, commit: string, path: string): string {
+  return git(root, ['diff', '--binary', '--no-renames', '--no-color', '--no-ext-diff', baseline, commit, '--', path])
 }
 
 /**
  * The hunks a listed patch has at the pin, which a retired entry records as the credit against the divergence budget.
  * @param root - the repository root.
  * @param baseline - the commit the ledger pins.
- * @param head - the checkout's `HEAD`.
+ * @param commit - the commit holding the fork's version, the measured state, for the reason {@link patchText} gives.
  * @param path - the upstream path.
  * @returns the number of `@@` headers in the patch.
  */
-function hunksAtPin(root: string, baseline: string, head: string, path: string): number {
-  return git(root, ['diff', '--no-color', '--no-ext-diff', '--no-renames', '--unified=0', baseline, head, '--', path])
+function hunksAtPin(root: string, baseline: string, commit: string, path: string): number {
+  return git(root, ['diff', '--no-color', '--no-ext-diff', '--no-renames', '--unified=0', baseline, commit, '--', path])
     .split('\n').filter(line => line.startsWith('@@')).length
 }
 
@@ -357,23 +419,29 @@ export function carryForward(root: string, tag: string, write = false): UpdateOu
   const { baseline, refusals: pinRefusals } = resolveBaseline(root, manifest)
   // A pin that does not resolve leaves nothing to measure the checkout against, so only that refusal is reported.
   if (baseline === undefined) return { refusals: pinRefusals }
-  // The ledger and its checksum record describe the checkout before the release merge. Once the merge is in HEAD they
-  // describe the release's own changes too, so only the pre-merge state is held to them.
-  const landed = isAncestor(root, targetCommit, head)
-  const refusals: Refusal[] = landed ? [] : [...checkLedger(root, manifest), ...checkDigests(root, manifest)]
-  if (refusals.length > 0) return { refusals }
   const pinned = baseline
+  // The ledger and its checksum record describe the checkout as it stood before the release merge, so that state is
+  // measured once here and read by every check and every patch below. Once the merge is in HEAD this is the fork's own
+  // side of it: the same run that lands the merge is the run whose checks would otherwise be skipped, and a patch taken
+  // across the merge would carry the release's changes as the fork's.
+  const measured = measuredState(root, head, pinned, targetCommit)
+  const ledgerRefusals = guarded(() => checkLedger(root, manifest, measured))
+  if (ledgerRefusals.length > 0) return { refusals: ledgerRefusals }
+  // Only a ledger that holds is asked for its digests: a path the object store cannot read back would otherwise be
+  // answered for by another file's content.
+  const digestRefusals = guarded(() => checkDigests(root, manifest, measured))
+  if (digestRefusals.length > 0) return { refusals: digestRefusals }
+
+  // A run that was killed cannot remove its own scratch worktree, so the next run sweeps what the clone still
+  // registers before it adds one of its own.
+  sweepScratchWorktrees(root, SCRATCH_PREFIX)
 
   const applied = withScratchWorktree(root, targetCommit, (tree): { refusals: Refusal[]; carried?: CarriedEntry[]; absorbed?: RetiredEntry[]; ledger?: string } => {
     const failures: Refusal[] = []
-    const absorbed: RetiredEntry[] = []
     for (const patch of manifest.patches) {
-      // A patch the target already holds needs no application; that entry is absorbed, as the rehearsal counts it.
-      if (runGit(root, ['diff', '--quiet', targetCommit, head, '--', patch.path]).status === 0) {
-        absorbed.push({ path: patch.path, hunks: hunksAtPin(root, pinned.commit, head, patch.path) })
-        continue
-      }
-      const run = applyPatch(tree, patchText(root, pinned.commit, head, patch.path))
+      // The entry's patch is the fork's own change at the pin, and it is applied to the target in every case: whether
+      // the release absorbed the change is then a fact about the applied tree, not an inference from the merge.
+      const run = applyPatch(tree, patchText(root, pinned.commit, measured.commit, patch.path))
       if (run.status === 0) continue
       failures.push({
         code: 'patch-does-not-apply',
@@ -386,11 +454,28 @@ export function carryForward(root: string, tag: string, write = false): UpdateOu
     if (failures.length > 0) return { refusals: failures }
     const changes = new Map(changedSince(tree, targetCommit).map(change => [change.path, change]))
     const carried: CarriedEntry[] = []
+    const absorbed: RetiredEntry[] = []
+    const deleted: Refusal[] = []
     for (const patch of manifest.patches) {
       const change = changes.get(patch.path)
-      if (change === undefined) continue
+      // A patch the target already holds leaves the file identical to the target's, which is what absorption means.
+      if (change === undefined) {
+        absorbed.push({ path: patch.path, hunks: hunksAtPin(root, pinned.commit, measured.commit, patch.path) })
+        continue
+      }
+      // A listed patch edits the file it names; no entry may delete one, and a deleted path holds no content to record.
+      if (change.status === 'deleted') {
+        deleted.push({
+          code: 'patch-deletes-file',
+          path: patch.path,
+          message: `${patch.path}: applying its patch to ${tag} deletes the file; a listed patch must edit the file it names,`
+            + ' so reconcile the release by hand',
+        })
+        continue
+      }
       carried.push({ path: patch.path, class: patch.class, sha256: patchDigest(readFileSync(join(tree, patch.path))), hunks: hunkCount(tree, targetCommit, change) })
     }
+    if (deleted.length > 0) return { refusals: deleted }
     const rendered = carriedLedger(manifest, tag, targetCommit, carried, absorbed)
     const verified = verifyApplied(parseManifest(rendered.ledger), tree, targetCommit, manifest.patches.map(patch => patch.path), absorbed)
     return { refusals: [...rendered.refusals, ...verified], carried, absorbed, ledger: rendered.ledger }
@@ -403,6 +488,7 @@ export function carryForward(root: string, tag: string, write = false): UpdateOu
     tag,
     targetCommit,
     head,
+    measured,
     baseline: pinned,
     carried: applied.carried,
     absorbed: applied.absorbed,
@@ -410,6 +496,65 @@ export function carryForward(root: string, tag: string, write = false): UpdateOu
   }
   if (!write) return { refusals: [], plan }
   return { refusals: writeBack(root, plan), plan }
+}
+
+/**
+ * Measure the state the ledger and the checksum record describe, once. While the release merge is not in `HEAD` that
+ * state is the checkout itself, uncommitted work included; once it is, the state is the fork's own side of the merge,
+ * which is found by walking first parents down to the commit that brought the release in.
+ * @param root - the repository root.
+ * @param head - the checkout's `HEAD`.
+ * @param baseline - the ledger's pin, the oldest state its entries can describe, where the walk stops.
+ * @param targetCommit - the release the patch set is carried onto.
+ * @returns the measured state.
+ */
+export function measuredState(root: string, head: string, baseline: Baseline, targetCommit: string): Measured {
+  if (!isAncestor(root, targetCommit, head)) return { commit: head, checkout: true }
+  return { commit: forkSide(root, head, baseline.commit, targetCommit), checkout: false }
+}
+
+/**
+ * The fork's own state before the release merge: the side of the commit that brought the release into `head`. Merging
+ * the release into the fork makes the release an ancestor of `head`, so `git merge-base head <tag>` answers the release
+ * itself; the state the ledger describes sits one first-parent step below the merge, and this walks to it, past the
+ * merge commit and any commit made on top of it since.
+ *
+ * A release that arrives by fast-forward is the one case with no such step: there the fork's own tree and the release's
+ * are the same commit, and that commit is the state the ledger describes.
+ * @param root - the repository root.
+ * @param head - the commit the release merge landed in.
+ * @param pin - the ledger's pin, where the walk stops.
+ * @param targetCommit - the release the patch set is carried onto.
+ * @returns the commit whose tree the ledger describes.
+ */
+function forkSide(root: string, head: string, pin: string, targetCommit: string): string {
+  let cursor = head
+  while (cursor !== pin) {
+    const fields = git(root, ['rev-list', '--parents', '-n', '1', cursor]).trim().split(' ')
+    const first = fields[1]
+    if (first === undefined) return cursor
+    if (!isAncestor(root, targetCommit, first)) return fields.length > 2 ? first : cursor
+    cursor = first
+  }
+  return cursor
+}
+
+/**
+ * Run one check, turning a failure inside it into a refusal. The checks shell out to git and read the object store, so
+ * a failure there is a refusal the run reports rather than an exception that ends it without a code.
+ * @param check - the check to run.
+ * @returns the check's refusals, or one refusal naming the failure.
+ */
+function guarded(check: () => Refusal[]): Refusal[] {
+  try {
+    return check()
+  } catch (error) {
+    return [{
+      code: 'measurement-failed',
+      message: `the pre-merge state could not be measured: ${error instanceof Error ? error.message : String(error)};`
+        + ' repair the checkout and run the same command again',
+    }]
+  }
 }
 
 /**
@@ -450,7 +595,7 @@ export function writeBack(root: string, plan: UpdatePlan): Refusal[] {
  */
 export function recordDigests(root: string): readonly Refusal[] {
   const manifest = headManifest(root)
-  const digests = headDigests(root, manifest.patches.map(patch => patch.path))
+  const digests = commitDigests(root, 'HEAD', manifest.patches.map(patch => patch.path))
   const refusals: Refusal[] = []
   const patches: PatchManifest['patches'] = []
   for (const patch of manifest.patches) {
@@ -477,7 +622,8 @@ export function recordDigests(root: string): readonly Refusal[] {
  */
 export function formatPlan(plan: UpdatePlan): string[] {
   const lines = [
-    `carry-forward onto ${plan.tag} (${plan.targetCommit}) from pin ${plan.baseline.ref} (${plan.baseline.commit}) at HEAD ${plan.head}`,
+    `carry-forward onto ${plan.tag} (${plan.targetCommit}) from pin ${plan.baseline.ref} (${plan.baseline.commit}) at HEAD ${plan.head}`
+      + `${plan.measured.commit === plan.head ? '' : `, measured at the pre-merge state ${plan.measured.commit.slice(0, 12)}`}`,
     `carried: ${counted(plan.carried.length, 'entry', 'entries')}, ${counted(hunksOf(plan.carried), 'hunk')}`,
   ]
   for (const entry of plan.carried) lines.push(`  ${entry.path} (${entry.class}, ${counted(entry.hunks, 'hunk')}, sha256 ${entry.sha256.slice(0, 12)})`)

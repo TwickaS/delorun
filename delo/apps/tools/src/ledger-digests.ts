@@ -22,24 +22,25 @@ export function patchDigest(bytes: Uint8Array | string): string {
 }
 
 /**
- * The digest of every named path's content at `HEAD`, read in one `git cat-file --batch` run so that a ledger of
+ * The digest of every named path's content at one commit, read in one `git cat-file --batch` run so that a ledger of
  * hundreds of entries costs one process rather than one per entry.
  * @param root - the repository root.
+ * @param commit - the commit to read the content from, which is `HEAD` unless a caller measures an earlier state.
  * @param paths - repository-relative paths, in the order they are looked up.
- * @returns the digest of each path that `HEAD` holds; a path that `HEAD` does not hold is absent from the map.
+ * @returns the digest of each path the commit holds; a path it does not hold is absent from the map.
  * @throws Error when git fails or answers with a header this reader cannot read.
  */
-export function headDigests(root: string, paths: readonly string[]): Map<string, string> {
+export function commitDigests(root: string, commit: string, paths: readonly string[]): Map<string, string> {
   const digests = new Map<string, string>()
   if (paths.length === 0) return digests
-  const run = runGitBytes(root, ['cat-file', '--batch'], `${paths.map(path => `HEAD:${path}`).join('\n')}\n`)
+  const run = runGitBytes(root, ['cat-file', '--batch'], `${paths.map(path => `${commit}:${path}`).join('\n')}\n`)
   if (run.status !== 0) throw new Error(`git cat-file --batch exited ${String(run.status)}: ${run.stderr.trim()}`)
   let offset = 0
   for (const path of paths) {
     const header = readHeader(run.stdout, offset)
     const size = Number(header.fields[2])
     if (header.fields.length !== 3 || header.fields[1] !== 'blob' || !Number.isSafeInteger(size)) {
-      // `HEAD:<path>` that names no object answers `<name> missing`; a path HEAD lacks has no digest to compare.
+      // `<commit>:<path>` that names no object answers `<name> missing`; a path the commit lacks has no digest.
       offset = header.contentStart
       continue
     }
@@ -70,24 +71,62 @@ export function worktreeDigests(tree: string, paths: readonly string[]): Map<str
 }
 
 /**
+ * One recorded digest the content a caller read does not answer for. The kind is kept apart from the message so that a
+ * caller can report a path the commit holds no file for under its own code: a listed patch may not delete its file.
+ */
+export type DigestDefect =
+  | {
+    /** The listed path. */
+    readonly path: string
+    /** The content differs from the record. */
+    readonly kind: 'mismatch'
+    /** The digest the entry records. */
+    readonly recorded: string
+    /** The digest the content has. */
+    readonly actual: string
+  }
+  | {
+    /** The listed path. */
+    readonly path: string
+    /** The commit holds no file at the path, so there is no content to digest. */
+    readonly kind: 'missing'
+    /** The digest the entry records. */
+    readonly recorded: string
+  }
+
+/**
  * Compare the digest each entry records with the digest its file has.
  * @param manifest - the parsed ledger.
  * @param digests - the digest of the files the caller read, by path.
- * @returns one message per recorded digest that differs, and one per recorded digest whose path the caller holds no
+ * @returns one defect per recorded digest that differs, and one per recorded digest whose path the caller holds no
  * content for; an entry that records no digest is reported by {@link unrecorded}, not here.
  */
-export function digestErrors(manifest: PatchManifest, digests: ReadonlyMap<string, string>): string[] {
-  const errors: string[] = []
+export function digestDefects(manifest: PatchManifest, digests: ReadonlyMap<string, string>): DigestDefect[] {
+  const defects: DigestDefect[] = []
   for (const patch of manifest.patches) {
-    if (patch.sha256 === undefined) continue
+    const recorded = patch.sha256
+    if (recorded === undefined) continue
     const actual = digests.get(patch.path)
     if (actual === undefined) {
-      errors.push(`${patch.path}: recorded sha256 ${patch.sha256} cannot be checked, because the path holds no file to read`)
+      defects.push({ path: patch.path, kind: 'missing', recorded })
       continue
     }
-    if (actual !== patch.sha256) errors.push(`${patch.path}: recorded sha256 ${patch.sha256}, but the file is ${actual}`)
+    if (actual !== recorded) defects.push({ path: patch.path, kind: 'mismatch', recorded, actual })
   }
-  return errors
+  return defects
+}
+
+/**
+ * Report the defects of the checksum record as messages.
+ * @param manifest - the parsed ledger.
+ * @param digests - the digest of the files the caller read, by path.
+ * @returns one message per recorded digest that differs, and one per recorded digest whose path the caller holds no
+ * content for.
+ */
+export function digestErrors(manifest: PatchManifest, digests: ReadonlyMap<string, string>): string[] {
+  return digestDefects(manifest, digests).map(defect => defect.kind === 'missing'
+    ? `${defect.path}: recorded sha256 ${defect.recorded} cannot be checked, because the path holds no file to read`
+    : `${defect.path}: recorded sha256 ${defect.recorded}, but the file is ${defect.actual}`)
 }
 
 /**

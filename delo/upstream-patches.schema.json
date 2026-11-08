@@ -6,6 +6,14 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["upstream", "forkOwned", "patches", "retired"],
+  "$defs": {
+    "repoPath": {
+      "description": "A path inside the repository: no leading `/`, no `..` segment and no control character. The update path reads the file through the object store's batch protocol, which cannot read a path back otherwise.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![\\s\\S]*(?:^|/)\\.\\.(?:$|/))[^\\u0000-\\u001F\\u007F]+$"
+    }
+  },
   "properties": {
     "$schema": { "type": "string" },
     "upstream": {
@@ -31,7 +39,7 @@
         "additionalProperties": false,
         "required": ["path", "class", "reason"],
         "properties": {
-          "path": { "type": "string", "minLength": 1 },
+          "path": { "$ref": "#/$defs/repoPath" },
           "class": {
             "description": "delo-feature: serves a Delo feature; generic-fix: a fix upstream could take; security: moves an approval, a refusal or an escalation, and carries a lead verdict.",
             "enum": ["delo-feature", "generic-fix", "security"]
@@ -53,7 +61,7 @@
         "additionalProperties": false,
         "required": ["path", "reason", "upstreamCommit", "hunks"],
         "properties": {
-          "path": { "type": "string", "minLength": 1 },
+          "path": { "$ref": "#/$defs/repoPath" },
           "reason": { "const": "absorbed" },
           "upstreamCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
           "hunks": { "type": "integer", "minimum": 0 }

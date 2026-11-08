@@ -19,7 +19,7 @@ import {
   type PatchManifest,
 } from './fork-boundary.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
-import { digestErrors, headDigests } from './ledger-digests.ts'
+import { commitDigests, digestErrors } from './ledger-digests.ts'
 
 /** The outcome of checking one repository against its ledger. */
 export interface CheckResult {
@@ -50,23 +50,54 @@ export function readManifest(root: string): PatchManifest {
 }
 
 /**
- * Collect every path that differs from the upstream commit, including uncommitted and untracked files.
- * @param root - the repository root.
- * @param commit - the pinned upstream commit.
- * @returns the changed paths with their status; untracked paths are marked.
+ * Read the pairs a NUL-separated `git diff --name-status` prints: a status code and the path it names.
+ * @param tracked - the command's output, split at its NULs.
+ * @returns the changed paths with their status.
  */
-export function changedSince(root: string, commit: string): ChangedPath[] {
-  const tracked = nulSeparated(git(root, ['diff', '--name-status', '--no-renames', '-z', commit]))
+function nameStatus(tracked: readonly string[]): ChangedPath[] {
   const changed: ChangedPath[] = []
   for (let index = 0; index + 1 < tracked.length; index += 2) {
     const code = tracked[index] ?? ''
     const path = tracked[index + 1] ?? ''
     changed.push({ path, status: code.startsWith('A') ? 'added' : code.startsWith('D') ? 'deleted' : 'modified' })
   }
+  return changed
+}
+
+/**
+ * Collect every path that differs from the upstream commit, including uncommitted and untracked files.
+ * @param root - the repository root.
+ * @param commit - the pinned upstream commit.
+ * @returns the changed paths with their status; untracked paths are marked.
+ */
+export function changedSince(root: string, commit: string): ChangedPath[] {
+  const changed = nameStatus(nulSeparated(git(root, ['diff', '--name-status', '--no-renames', '-z', commit])))
   for (const path of nulSeparated(git(root, ['ls-files', '--others', '--exclude-standard', '-z']))) {
     changed.push({ path, status: 'added', untracked: true })
   }
   return changed
+}
+
+/**
+ * Collect every path that differs between two commits. A ledger written for a state a commit holds is measured this
+ * way, rather than through the working tree, because the state it describes is a commit and not the checkout.
+ * @param root - the repository root.
+ * @param from - the older commit, the ledger's pin.
+ * @param to - the newer commit, the state the ledger describes.
+ * @returns the changed paths with their status.
+ */
+export function changedBetween(root: string, from: string, to: string): ChangedPath[] {
+  return nameStatus(nulSeparated(git(root, ['diff', '--name-status', '--no-renames', '-z', from, to])))
+}
+
+/**
+ * Every path one commit's tree holds.
+ * @param root - the repository root.
+ * @param commit - the commit to list.
+ * @returns the paths, repository-relative with `/` separators.
+ */
+export function treeFiles(root: string, commit: string): Set<string> {
+  return new Set(nulSeparated(git(root, ['ls-tree', '--name-only', '-r', '-z', commit])))
 }
 
 /**
@@ -167,7 +198,7 @@ export function checkRepository(root: string): CheckResult {
     errors: [
       ...historyErrors(root, manifest),
       ...forkBoundaryErrors(manifest, changed, files),
-      ...digestErrors(manifest, headDigests(root, manifest.patches.map(patch => patch.path))),
+      ...digestErrors(manifest, commitDigests(root, 'HEAD', manifest.patches.map(patch => patch.path))),
     ],
     divergence: measureDivergence(root, manifest, changed),
   }
