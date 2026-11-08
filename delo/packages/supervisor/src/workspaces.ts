@@ -20,12 +20,14 @@ import {
   type EgressMode,
   type PresetName,
   type ResourceLimits,
+  type SupervisorErrorCode,
   type SupervisorRequest,
   type WorkspaceId,
 } from '@delo/contract-runtime-supervisor'
 import { PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { checkPrivateDirectory, runDirectory } from '@delo/home'
 import type { EngineMachine, Inspection } from './capabilities.ts'
+import { confineContainer, dockerSocketPaths, networkFindings, refusedMounts, requireConfined, type ConfinementExpectation } from './confine.ts'
 import {
   createBody,
   hardeningDifferences,
@@ -71,7 +73,7 @@ export interface WorkspaceView {
   readonly workspaceId: WorkspaceId
   /** The container's name. */
   readonly container: string
-  /** The container's engine state, such as `created`, `running` or `exited`. */
+  /** The container's engine state, such as `created`, `running`, `exited` or, once the gate retired it, `failed`. */
   readonly state: string
   /** The limits in effect, from the container's inspect record. */
   readonly limits: ResourceLimits
@@ -79,6 +81,16 @@ export interface WorkspaceView {
   readonly egress: EgressMode
   /** The hosts the proxy allows, under `allowlist`. */
   readonly allowlist: readonly string[]
+  /** C9's code of the check that retired the container; present only while `state` is `failed`. */
+  readonly reason?: SupervisorErrorCode
+}
+
+/** A workspace whose container the gate stopped and removed, with what `workspace.inspect` reports for it. */
+interface Retired {
+  /** The code the gate refused it with. */
+  readonly code: SupervisorErrorCode
+  /** The view to report, which carries the limits and the egress the container last had. */
+  readonly view: WorkspaceView
 }
 
 /**
@@ -176,6 +188,13 @@ export function engineRefusal(error: unknown): unknown {
 
 /** The `workspace.*` operations over one engine. */
 export class Workspaces {
+  /**
+   * The workspaces the gate retired: a container that failed its health or confinement check is stopped and removed,
+   * and this start reports it as `failed` with the code until the workspace is created again. A retired workspace is
+   * never started, so a container the machine altered cannot come back into use.
+   */
+  private readonly retired = new Map<WorkspaceId, Retired>()
+
   /** @param context - the engine, owner, roots, manifest and inspection. */
   constructor(private readonly context: WorkspaceContext) {}
 
@@ -236,6 +255,89 @@ export class Workspaces {
 
   private helperDirectory(workspaceId: WorkspaceId): string {
     return join(runDirectory(this.context.rules.deloHome, this.context.owner.profile), 's2', workspaceHash(workspaceId))
+  }
+
+  /**
+   * What a workspace's container must show the confinement gate: its resolved paths, the machine's homes and Docker
+   * sockets, and the limits and user it runs with.
+   * @param workspaceId - the workspace.
+   * @param root - its canonical root.
+   * @param limits - its limits.
+   * @returns the expectation.
+   */
+  private expectation(workspaceId: WorkspaceId, root: string, limits: ResourceLimits): ConfinementExpectation {
+    const docker = this.context.inspection().docker
+    const socket = docker?.endpoint.kind === 'unix' ? docker.endpoint.path : undefined
+    return {
+      root,
+      helperDir: this.helperDirectory(workspaceId),
+      deloHome: this.context.rules.deloHome,
+      osHome: this.context.rules.osHome,
+      dockerSockets: dockerSocketPaths(socket, this.context.rules.osHome, this.context.rules.uid),
+      limits,
+      user: workspaceUser(docker?.rootless ?? false),
+      network: workspaceNames(workspaceId).network,
+    }
+  }
+
+  /**
+   * Refuse a container whose mounts or network are not the ones C9 allows, before anything starts in it.
+   * @param name - the container's name.
+   * @param record - its inspect record.
+   * @param expectation - the workspace's resolved paths.
+   * @throws {SupervisorError} `ROOT_REFUSED` for a mount C9 forbids, `LIMITS_MISSING` for another network.
+   */
+  private requireIsolated(name: string, record: InspectRecord, expectation: ConfinementExpectation): void {
+    const mounts = refusedMounts(record, expectation)
+    if (mounts.length > 0) throw new SupervisorError('ROOT_REFUSED', `${name} mounts what C9 forbids: ${mounts.join('; ')}`)
+    const network = networkFindings(record, expectation.network)
+    if (network.length > 0) throw new SupervisorError('LIMITS_MISSING', `${name} is not on its own internal network: ${network.join('; ')}`)
+  }
+
+  /**
+   * Gate a workspace container just started, and retire it when it fails: the container must still run, and every
+   * setting and probe of contract C9's containers section must hold. A container that fails is stopped, its objects and
+   * the helper's directory removed, and the workspace reported with the code so that nothing reuses it.
+   * @param workspaceId - the workspace.
+   * @param view - the workspace as it was just started, which the report keeps.
+   * @param limits - the limits it runs with.
+   * @throws {SupervisorError} `ENGINE_REFUSED` for a container that did not stay running, `ROOT_REFUSED` or
+   *   `LIMITS_MISSING` for a failed or unconfirmed check.
+   */
+  private async gate(workspaceId: WorkspaceId, view: WorkspaceView, limits: ResourceLimits): Promise<void> {
+    const names = workspaceNames(workspaceId)
+    let refusal: SupervisorError
+    try {
+      const record = await this.owned(workspaceId)
+      if (record.State?.Running !== true) throw new SupervisorError('ENGINE_REFUSED', `${names.container} did not stay running (state ${record.State?.Status ?? 'unknown'})`)
+      const root = (record.Mounts ?? []).find(mount => mount.Type === 'bind' && mount.Destination !== HELPER_SOCKET_DIR)?.Source ?? ''
+      const expectation = this.expectation(workspaceId, root, limits)
+      this.requireIsolated(names.container, record, expectation)
+      const body = this.workspaceBody(workspaceId, root, limits, record.HostConfig?.StorageOpt?.size !== undefined, await this.s2Image())
+      const read = async (): Promise<InspectRecord> => this.engine.call('GET', `/containers/${encodeURIComponent(names.container)}/json`) as Promise<InspectRecord>
+      // The probes run first and the record is read after them, so a container the machine altered while they ran is
+      // reported as it is, and a mount that appeared behind the pre-start check is still found.
+      requireConfined(await confineContainer({ engine: this.engine, container: names.container, read, body, expectation }))
+      return
+    } catch (error) {
+      if (!(error instanceof SupervisorError)) throw error
+      refusal = error
+    }
+    this.retired.set(workspaceId, { code: refusal.code, view: { ...view, state: 'failed', reason: refusal.code } })
+    await this.retire(workspaceId)
+    throw refusal
+  }
+
+  /**
+   * Stop and remove everything a workspace built, so a container the gate refused can never be started again; the
+   * workspace's own files are untouched.
+   * @param workspaceId - the workspace.
+   */
+  private async retire(workspaceId: WorkspaceId): Promise<void> {
+    const names = workspaceNames(workspaceId)
+    for (const name of [names.container, names.proxy]) await this.removeIfPresent(`/containers/${encodeURIComponent(name)}?force=true&v=true`)
+    await this.removeObjects([], [names.network, names.outNetwork])
+    await rm(this.helperDirectory(workspaceId), { recursive: true, force: true })
   }
 
   /**
@@ -334,6 +436,7 @@ export class Workspaces {
       await rm(helperDir, { recursive: true, force: true })
       throw error
     }
+    this.retired.delete(args.workspaceId)
     return this.inspect(args.workspaceId)
   }
 
@@ -415,7 +518,8 @@ export class Workspaces {
 
   /**
    * Check a workspace's containers before they start: the owner labels, the root mount's source, which must still
-   * resolve to itself and pass every root rule, the helper directory, and every setting `workspace.create` asked for.
+   * resolve to itself and pass every root rule, the mounts and the network C9 allows, the helper directory, and every
+   * setting `workspace.create` asked for.
    * @param workspaceId - the workspace.
    * @throws {SupervisorError} `NOT_FOUND`, `ROOT_REFUSED`, `LIMITS_MISSING` or an image refusal.
    */
@@ -433,6 +537,7 @@ export class Workspaces {
     const image = await this.s2Image()
     const limits = limitsOf(record)
     const diskQuota = record.HostConfig?.StorageOpt?.size !== undefined
+    this.requireIsolated(names.container, record, this.expectation(workspaceId, root, limits))
     requireMatch(names.container, record, this.workspaceBody(workspaceId, root, limits, diskQuota, image))
     const proxy = await this.find(names.proxy, workspaceId)
     if (proxy === undefined) return
@@ -444,9 +549,13 @@ export class Workspaces {
   private async start(workspaceId: WorkspaceId): Promise<WorkspaceView> {
     await this.verifyBeforeStart(workspaceId)
     const names = workspaceNames(workspaceId)
+    const limits = limitsOf(await this.owned(workspaceId))
     if (await this.find(names.proxy, workspaceId) !== undefined) await this.engine.call('POST', `/containers/${encodeURIComponent(names.proxy)}/start`)
     await this.engine.call('POST', `/containers/${encodeURIComponent(names.container)}/start`)
-    return this.inspect(workspaceId)
+    const view = await this.inspect(workspaceId)
+    // The container is gated after it starts: what the machine shows from inside it decides whether the workspace runs.
+    await this.gate(workspaceId, view, limits)
+    return view
   }
 
   private async stop(workspaceId: WorkspaceId, mode: 'graceful' | 'kill'): Promise<WorkspaceView> {
@@ -465,11 +574,14 @@ export class Workspaces {
   }
 
   private async remove(workspaceId: WorkspaceId): Promise<void> {
-    await this.owned(workspaceId)
+    // A workspace the gate retired has no container left; removing it clears the report and anything it left behind.
+    const retired = this.retired.has(workspaceId)
+    if (!retired) await this.owned(workspaceId)
     const names = workspaceNames(workspaceId)
-    await this.find(names.proxy, workspaceId)
+    if (!retired) await this.find(names.proxy, workspaceId)
     await this.removeObjects([names.container, names.proxy], [names.network, names.outNetwork])
     await rm(this.helperDirectory(workspaceId), { recursive: true, force: true })
+    this.retired.delete(workspaceId)
   }
 
   private async egressOf(workspaceId: WorkspaceId): Promise<{ readonly egress: EgressMode, readonly allowlist: readonly string[] }> {
@@ -478,7 +590,14 @@ export class Workspaces {
   }
 
   private async inspect(workspaceId: WorkspaceId): Promise<WorkspaceView> {
-    const record = await this.owned(workspaceId)
+    const record = await this.find(workspaceNames(workspaceId).container, workspaceId)
+    const retired = this.retired.get(workspaceId)
+    // A container the gate retired is gone from the engine, and the workspace is reported failed until it is created
+    // again: a workspace whose container the machine altered never reports a usable runtime.
+    if (record === undefined) {
+      if (retired !== undefined) return retired.view
+      throw new SupervisorError('NOT_FOUND', `no workspace container for ${workspaceId}`)
+    }
     return {
       workspaceId,
       container: workspaceNames(workspaceId).container,

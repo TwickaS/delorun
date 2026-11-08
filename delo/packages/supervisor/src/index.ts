@@ -9,6 +9,27 @@
  */
 export { connectCommand, engineKind, inspectDocker, limitFindings, PROBE_COMMANDS, PROBE_ENTRY, shapesOf, type EngineInfo, type EngineMachine, type EngineVersion, type Inspection, type InspectOptions, type NetworkRecord, type ProbeEvidence } from './capabilities.ts'
 export {
+  allowedMounts,
+  confineContainer,
+  CONFINEMENT_CHECKS,
+  CONFINEMENT_PROBE_MS,
+  confinementProbes,
+  confinementReport,
+  dockerSocketPaths,
+  isWithin,
+  networkFindings,
+  probeContainer,
+  probeFinding,
+  refusedMounts,
+  requireConfined,
+  writableBinds,
+  type ConfinementCheck,
+  type ConfinementExpectation,
+  type ConfinementFinding,
+  type ConfinementReport,
+  type ConfinementStatus,
+} from './confine.ts'
+export {
   createBody,
   hardeningDifferences,
   homeIdOf,

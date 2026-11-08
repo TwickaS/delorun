@@ -13,12 +13,13 @@ import { IMAGES, type SupervisorFailure } from '@delo/contract-runtime-superviso
 import type { FileRef, OciDigest } from '@delo/contract-release-manifest'
 import { ensureHomeTree, startTokenFile, writeProtectedFile } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
-import { PRESETS, type DockerLimit, type LimitFinding } from '@delo/contract-runtime-supervisor'
+import { PRESETS, type DockerCapabilities, type DockerLimit, type LimitFinding } from '@delo/contract-runtime-supervisor'
 import {
   EngineError,
   homeIdOf,
   loadRootRules,
   openSupervisorLog,
+  shapesOf,
   Supervisor,
   Workspaces,
   type CreateBody,
@@ -193,6 +194,13 @@ export interface FakeEngineState {
   readonly calls: string[]
   /** Changes a created container's record, as an engine that does not apply a setting would. */
   alter?: (name: string, record: InspectRecord) => InspectRecord
+  /**
+   * Answers an exec inside a container with its exit code, as a container whose probes show something would; `0` when
+   * omitted. It may change the container's record first, as a machine that alters a running container does.
+   */
+  exec?: (container: string, cmd: readonly string[], state: FakeEngineState) => Promise<number | undefined> | number | undefined
+  /** The state a start leaves, as an engine that runs a container which exits at once does; `running` when omitted. */
+  startState?: InspectRecord['State']
 }
 
 /** A digest the fake engine holds the S2 image at. */
@@ -248,7 +256,7 @@ export function fakeEngine(state: FakeEngineState): Engine {
       const record = state.containers.get(name)
       if (method === 'GET' && path.startsWith('/containers/')) return record === undefined ? Promise.reject(new EngineError(404, `No such container: ${name}`)) : Promise.resolve(record)
       if (method === 'POST' && path.endsWith('/start') && record !== undefined) {
-        state.containers.set(name, { ...record, State: { Status: 'running', Running: true } })
+        state.containers.set(name, { ...record, State: state.startState ?? { Status: 'running', Running: true } })
         return Promise.resolve(null)
       }
       if (method === 'DELETE' && path.startsWith('/containers/')) {
@@ -258,13 +266,22 @@ export function fakeEngine(state: FakeEngineState): Engine {
       return Promise.resolve(null)
     },
     pull: () => Promise.reject(new EngineError(500, 'the fake engine does not pull')),
-    execExitCode: () => Promise.resolve(0),
+    execExitCode: (container, cmd) => Promise.resolve(state.exec === undefined ? 0 : state.exec(container, cmd, state)),
   }
 }
 
 /** Every limit enforced, as a Linux engine that offers S2 reports them. */
 export const ALL_ENFORCED = Object.fromEntries((['cpu', 'memory', 'pids', 'disk', 'cap-drop', 'no-new-privileges', 'read-only-root', 'seccomp', 'user-namespace', 'network-isolation', 'host-gateway-block', 'host-loopback-block', 'egress-allowlist'] as const)
   .map(limit => [limit, { status: 'enforced', evidence: 'fixture' }])) as Record<DockerLimit, LimitFinding>
+
+/** The options of {@link fakeWorkspaces}. */
+export interface FakeWorkspaceOptions {
+  /**
+   * The limits the machine does not enforce, which leaves S2 unoffered with `limits-missing` when one of them is a
+   * limit S2 requires; none when omitted, as a machine that enforces every required limit.
+   */
+  readonly unenforced?: readonly DockerLimit[]
+}
 
 /**
  * The workspace operations over a {@link fakeEngine}, on a machine that offers S2 without a disk quota.
@@ -273,16 +290,20 @@ export const ALL_ENFORCED = Object.fromEntries((['cpu', 'memory', 'pids', 'disk'
  * @param osHome - the OS home the rules compare with; the real one when omitted.
  * @param manifestDigest - the S2 digest the verified manifest lists; the one the fake engine holds when omitted.
  * @param profile - the CLI profile whose labels the workspaces carry.
+ * @param options - the limits the machine does not enforce; every required one when omitted.
  * @returns the workspace operations.
  */
-export async function fakeWorkspaces(home: string, state: FakeEngineState, osHome: string = homedir(), manifestDigest: OciDigest = FAKE_DIGEST, profile: string = PROFILE): Promise<Workspaces> {
-  const limits = { ...ALL_ENFORCED, disk: { status: 'not-enforced' as const, evidence: 'fixture' } }
+export async function fakeWorkspaces(home: string, state: FakeEngineState, osHome: string = homedir(), manifestDigest: OciDigest = FAKE_DIGEST, profile: string = PROFILE, options: FakeWorkspaceOptions = {}): Promise<Workspaces> {
+  // As the supervisor derives them, so the fake reports S2 unoffered exactly where the real shapes do.
+  const unenforced = { status: 'not-enforced' as const, evidence: 'fixture' }
+  const limits = { ...ALL_ENFORCED, disk: unenforced, ...Object.fromEntries((options.unenforced ?? []).map(limit => [limit, unenforced])) }
+  const docker: DockerCapabilities = { engine: 'docker-engine', version: '29', rootless: false, context: 'default', endpoint: { kind: 'unix', path: '/var/run/docker.sock' }, storageDriver: 'overlay2', limits }
   return new Workspaces({
     engine: fakeEngine(state), owner: { homeId: homeIdOf(home), profile }, rules: await loadRootRules(home, osHome),
     manifest: fixtureManifest(manifestDigest), pull: 'none', seccompDirectory: join(home, 'seccomp'),
     inspection: () => ({
-      docker: { engine: 'docker-engine', version: '29', rootless: false, context: 'default', endpoint: { kind: 'unix', path: '/var/run/docker.sock' }, storageDriver: 'overlay2', limits },
-      shapes: { s2: { available: true, fileWatching: 'supported' }, s3: { available: true, fileWatching: 'supported' } },
+      docker,
+      shapes: shapesOf(docker, undefined, {}),
       machine: { cpus: PRESETS.large.cpus, memoryBytes: PRESETS.large.memoryBytes * 2 },
       platform: 'linux/amd64',
     }),

@@ -275,7 +275,7 @@ export interface InspectRecord {
     readonly UsernsMode?: string
     readonly Tmpfs?: Readonly<Record<string, string>> | null
   }
-  readonly Mounts?: readonly { readonly Type?: string, readonly Source?: string, readonly Destination?: string }[] | null
+  readonly Mounts?: readonly { readonly Type?: string, readonly Source?: string, readonly Destination?: string, readonly ReadOnly?: boolean }[] | null
   readonly NetworkSettings?: { readonly Networks?: Readonly<Record<string, { readonly Gateway?: string, readonly IPAddress?: string }>> | null }
 }
 

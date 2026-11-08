@@ -1,0 +1,250 @@
+/**
+ * The S2 confinement gate's own parts, without a Docker engine: the mounts and the network C9 allows, the probe
+ * commands of one workspace, and the typed refusal of every way a container can fail the gate.
+ *
+ * Each `it` names, in its last line of prose, the check whose removal makes it fail, so the suite is a ledger of the
+ * refusals the gate keeps rather than a description of the code beside it.
+ */
+import { HELPER_SOCKET_DIR, PRESETS } from '@delo/contract-runtime-supervisor'
+import { afterEach, describe, expect, it } from 'vitest'
+import {
+  allowedMounts,
+  confineContainer,
+  CONFINEMENT_CHECKS,
+  confinementProbes,
+  createBody,
+  dockerSocketPaths,
+  isWithin,
+  networkFindings,
+  probeFinding,
+  refusedMounts,
+  requireConfined,
+  SupervisorError,
+  writableBinds,
+  workspaceBinds,
+  type ConfinementExpectation,
+  type ConfinementReport,
+  type CreateBody,
+  type Engine,
+  type InspectRecord,
+} from '../src/index.ts'
+import { appliedRecord, tempHome, type TempHome } from './support.ts'
+
+let temp: TempHome | undefined
+afterEach(() => {
+  temp?.remove()
+  temp = undefined
+})
+
+const ROOT = '/p/w'
+const HELPER = '/h/run/default/s2/0123456789ab'
+const DELO_HOME = '/h'
+const OS_HOME = '/home/p'
+
+const expectation = (overrides: Partial<ConfinementExpectation> = {}): ConfinementExpectation => ({
+  root: ROOT,
+  helperDir: HELPER,
+  deloHome: DELO_HOME,
+  osHome: OS_HOME,
+  dockerSockets: ['/var/run/docker.sock'],
+  limits: PRESETS.small,
+  user: { uid: 1000, gid: 1000 },
+  network: 'delo-ws-0123456789ab',
+  ...overrides,
+})
+
+const body = (binds = workspaceBinds(ROOT, HELPER)): CreateBody => createBody({
+  name: 'delo-ws-0123456789ab', image: `ghcr.io/delo-run/delo-workspace-s2@sha256:${'a'.repeat(64)}`,
+  labels: {}, user: { uid: 1000, gid: 1000 }, limits: PRESETS.small, diskQuota: false, networks: ['delo-ws-0123456789ab'], binds, env: [],
+})
+
+/** A record with one more bind mount than C9 allows. */
+function withMount(record: InspectRecord, source: string, destination: string, extra: { readonly Type?: string, readonly ReadOnly?: boolean } = {}): InspectRecord {
+  return { ...record, Mounts: [...record.Mounts ?? [], { Type: extra.Type ?? 'bind', Source: source, Destination: destination, ...extra.ReadOnly === undefined ? {} : { ReadOnly: extra.ReadOnly } }] }
+}
+
+/** A report whose every probe passed, for the refusal specs to spoil. */
+const passing = (): ConfinementReport => ({
+  mounts: [],
+  network: [],
+  settings: [],
+  probes: Object.fromEntries(CONFINEMENT_CHECKS.map(check => [check, { status: 'pass', evidence: 'sh exit 0' }])) as ConfinementReport['probes'],
+})
+
+function refusal(run: () => void): SupervisorError {
+  try {
+    run()
+  } catch (error) {
+    if (error instanceof SupervisorError) return error
+    throw error
+  }
+  throw new Error('expected a refusal')
+}
+
+describe('the paths a container may reach', () => {
+  it('treats a path as inside another only at a directory boundary', () => {
+    expect(isWithin('/a/b', '/a')).toBe(true)
+    expect(isWithin('/a', '/a')).toBe(true)
+    expect(isWithin('/ab', '/a')).toBe(false)
+    expect(isWithin('/a/b/c', '/a/b')).toBe(true)
+  })
+
+  it('names the active context\'s socket and the places an engine keeps one, once each', () => {
+    const paths = dockerSocketPaths('/run/user/1000/docker.sock', OS_HOME, 1000)
+    expect(paths).toContain('/run/user/1000/docker.sock')
+    expect(paths).toContain('/var/run/docker.sock')
+    expect(paths).toContain(`${OS_HOME}/.docker/run/docker.sock`)
+    expect(new Set(paths).size).toBe(paths.length)
+    // A network endpoint has no socket path of its own; the well-known places remain.
+    expect(dockerSocketPaths(undefined, OS_HOME, undefined)).toEqual(['/var/run/docker.sock', '/run/docker.sock', `${OS_HOME}/.docker/run/docker.sock`])
+  })
+})
+
+describe('the mounts C9 allows', () => {
+  it('allows exactly the resolved root at its own path and the helper\'s socket directory', () => {
+    expect([...allowedMounts(expectation())]).toEqual([[ROOT, ROOT], [HELPER, HELPER_SOCKET_DIR]])
+    expect(refusedMounts(appliedRecord(body()), expectation())).toEqual([])
+    // Removing the helper's directory from the allowed set makes its recorded mount a refusal.
+    expect(refusedMounts(appliedRecord(body(workspaceBinds(ROOT, '/elsewhere'))), expectation())).toEqual([expect.stringContaining("not the workspace root or the helper's socket directory")])
+  })
+
+  it('refuses a mount of the Delo home, a path inside it, the OS home, a Docker socket and a system directory', () => {
+    const record = appliedRecord(body())
+    const cases: readonly (readonly [string, string, string])[] = [
+      [DELO_HOME, DELO_HOME, 'a path in the Delo home'],
+      [`${DELO_HOME}/secrets`, '/secrets', 'a path in the Delo home'],
+      [OS_HOME, OS_HOME, 'the OS home directory or a path containing it'],
+      ['/', '/host', 'the OS home directory or a path containing it'],
+      ['/var/run/docker.sock', '/var/run/docker.sock', 'a Docker socket'],
+      ['/usr', '/usr', 'a system directory'],
+      ['/opt/other', '/opt/other', "not the workspace root or the helper's socket directory"],
+    ]
+    for (const [source, destination, reason] of cases) {
+      const refused = refusedMounts(withMount(record, source, destination), expectation())
+      expect(refused, `${source} at ${destination}`).toEqual([expect.stringContaining(reason)])
+    }
+  })
+
+  it('refuses a volume mount, a tmpfs outside /tmp and the root at another path', () => {
+    const record = appliedRecord(body())
+    expect(refusedMounts(withMount(record, 'vol-1', '/data', { Type: 'volume' }), expectation())).toEqual([expect.stringContaining('not a bind mount')])
+    expect(refusedMounts(withMount(record, 'tmpfs', '/mnt', { Type: 'tmpfs' }), expectation())).toEqual([expect.stringContaining('a tmpfs outside /tmp')])
+    expect(refusedMounts(withMount(record, ROOT, '/elsewhere'), expectation())).toEqual([expect.stringContaining(`belongs at ${ROOT}`)])
+  })
+
+  it('names every bind a container writes on the host besides the root and the helper\'s directory', () => {
+    const record = withMount(appliedRecord(body()), '/opt/extra', '/extra')
+    expect(writableBinds(record, expectation())).toEqual(['/opt/extra'])
+    // A read-only mount of the same path is not a way to write the machine.
+    expect(writableBinds(withMount(appliedRecord(body()), '/opt/extra', '/extra', { ReadOnly: true }), expectation())).toEqual([])
+  })
+})
+
+describe('the network a container joins', () => {
+  it('accepts only its own internal network', () => {
+    const record = appliedRecord(body())
+    expect(networkFindings(record, 'delo-ws-0123456789ab')).toEqual([])
+    expect(networkFindings({ ...record, HostConfig: { ...record.HostConfig, NetworkMode: 'host' } }, 'delo-ws-0123456789ab')).toEqual([expect.stringContaining('not the workspace network')])
+    expect(networkFindings({ ...record, NetworkSettings: { Networks: { 'delo-ws-0123456789ab': {}, bridge: {} } } }, 'delo-ws-0123456789ab')).toEqual([expect.stringContaining('NetworkSettings.Networks')])
+    expect(networkFindings({ ...record, HostConfig: { ...record.HostConfig, PidMode: 'host' } }, 'delo-ws-0123456789ab')).toEqual(['HostConfig.PidMode is host'])
+  })
+})
+
+describe('the probes', () => {
+  it('runs one command per checked property and passes each the workspace\'s own paths and limits', () => {
+    const probes = confinementProbes(expectation())
+    expect(Object.keys(probes).sort()).toEqual([...CONFINEMENT_CHECKS].sort())
+    for (const [check, argv] of Object.entries(probes)) {
+      expect(argv[0], check).toBe('sh')
+      expect(argv.every(part => typeof part === 'string' && part.length > 0), check).toBe(true)
+    }
+    // The workspace's own limits, not a preset's: a hard-coded Small would put another number here.
+    const advanced = confinementProbes(expectation({ limits: { ...PRESETS.small, memoryBytes: 6 * 1024 ** 3, pids: 777, cpus: 3 } }))
+    expect(advanced.memory.at(-1)).toBe(String(6 * 1024 ** 3))
+    expect(advanced.pids.at(-1)).toBe('777')
+    expect(advanced.cpu.at(-1)).toBe(String(3e9))
+    // The paths a probe reads are the resolved ones: the workspace root, the helper's directory and the homes.
+    expect(probes['workspace-root-writable'].at(-1)).toBe(ROOT)
+    expect(probes['writable-mounts'].slice(-2)).toEqual([ROOT, HELPER])
+    expect(probes['delo-home-hidden']).toContain(DELO_HOME)
+    expect(probes['docker-socket-hidden']).toContain('/var/run/docker.sock')
+    expect(probes.user.at(-1)).toBe('1000')
+  })
+
+  it('reads an exit code as pass, fail or unconfirmed, never as pass when no code arrived', () => {
+    expect(probeFinding(['sh', '-c', 'true'], 0).status).toBe('pass')
+    expect(probeFinding(['sh', '-c', 'true'], 1).status).toBe('fail')
+    expect(probeFinding(['sh', '-c', 'true'], 127).status).toBe('unconfirmed')
+    expect(probeFinding(['sh', '-c', 'true'], undefined).status).toBe('unconfirmed')
+    expect(probeFinding(['sh', '-c', 'true'], undefined).evidence).toContain('did not finish')
+  })
+})
+
+describe('the refusal of a container that fails the gate', () => {
+  it('refuses a forbidden mount with ROOT_REFUSED and a setting with LIMITS_MISSING', () => {
+    expect(refusal(() => { requireConfined({ ...passing(), mounts: ['bind /h at /h: a path in the Delo home'] }) }).code).toBe('ROOT_REFUSED')
+    expect(refusal(() => { requireConfined({ ...passing(), settings: ['HostConfig.Memory'] }) }).code).toBe('LIMITS_MISSING')
+    expect(refusal(() => { requireConfined({ ...passing(), network: ['HostConfig.NetworkMode="host" is not the workspace network'] }) }).code).toBe('LIMITS_MISSING')
+  })
+
+  it('names the property a probe showed failing, and refuses a property no probe confirmed', () => {
+    const failed = refusal(() => { requireConfined({ ...passing(), probes: { ...passing().probes, capabilities: { status: 'fail', evidence: 'sh exit 1' } } }) })
+    expect(failed.code).toBe('LIMITS_MISSING')
+    expect(failed.detail).toContain('capabilities')
+    const unconfirmed = refusal(() => { requireConfined({ ...passing(), probes: { ...passing().probes, memory: { status: 'unconfirmed', evidence: 'sh exit 127' } } }) })
+    expect(unconfirmed.code).toBe('LIMITS_MISSING')
+    expect(unconfirmed.detail).toContain('unconfirmed for memory')
+  })
+
+  it('passes a container whose every property holds', () => {
+    expect(() => { requireConfined(passing()) }).not.toThrow()
+  })
+})
+
+describe('reading a container', () => {
+  /** An engine that answers every exec with one exit code, recording the commands it ran. */
+  const engine = (exit: number | undefined, seen: string[]): Engine => ({
+    call: () => Promise.resolve(null),
+    pull: () => Promise.reject(new Error('the spec never pulls')),
+    execExitCode: (_container, cmd) => {
+      seen.push(cmd.join(' '))
+      return Promise.resolve(exit)
+    },
+  })
+
+  it('runs one exec per checked property and passes every finding through', async () => {
+    const seen: string[] = []
+    const report = await confineContainer({ engine: engine(0, seen), container: 'c', read: () => Promise.resolve(appliedRecord(body())), body: body(), expectation: expectation() })
+    expect(seen).toHaveLength(CONFINEMENT_CHECKS.length)
+    expect(Object.values(report.probes).every(finding => finding.status === 'pass')).toBe(true)
+    expect(report).toMatchObject({ mounts: [], network: [], settings: [] })
+    // One probed property at a time: a gate that ran fewer would leave a property unproven.
+    expect(new Set(seen).size).toBe(CONFINEMENT_CHECKS.length)
+  })
+
+  it('reports a property the container fails and one the engine could not answer for', async () => {
+    const failed = await confineContainer({ engine: engine(1, []), container: 'c', read: () => Promise.resolve(appliedRecord(body())), body: body(), expectation: expectation() })
+    expect(Object.values(failed.probes).every(finding => finding.status === 'fail')).toBe(true)
+    const unanswered = await confineContainer({ engine: engine(undefined, []), container: 'c', read: () => Promise.resolve(appliedRecord(body())), body: body(), expectation: expectation() })
+    expect(Object.values(unanswered.probes).every(finding => finding.status === 'unconfirmed')).toBe(true)
+  })
+
+  it('reads the record too: a mount and a setting the engine added are found without a probe', async () => {
+    const record = withMount(appliedRecord(body()), DELO_HOME, DELO_HOME)
+    const report = await confineContainer({ engine: engine(0, []), container: 'c', read: () => Promise.resolve(record), body: body(), expectation: expectation() })
+    expect(refusal(() => { requireConfined(report) }).code).toBe('ROOT_REFUSED')
+    const unhardened: InspectRecord = { ...appliedRecord(body()), HostConfig: { ...appliedRecord(body()).HostConfig, CapDrop: [] } }
+    const settings = await confineContainer({ engine: engine(0, []), container: 'c', read: () => Promise.resolve(unhardened), body: body(), expectation: expectation() })
+    expect(refusal(() => { requireConfined(settings) }).detail).toContain('HostConfig.CapDrop')
+  })
+})
+
+describe('the Delo home on the machine', () => {
+  it('refuses a container that mounts a directory inside the Delo home, which the helper\'s directory alone may', async () => {
+    temp = await tempHome()
+    const helperDir = `${temp.home}/run/default/s2/0123456789ab`
+    const inside = expectation({ deloHome: temp.home, helperDir })
+    const record = withMount(appliedRecord(body(workspaceBinds(ROOT, helperDir))), `${temp.home}/secrets`, '/secrets')
+    expect(refusedMounts(record, inside)).toEqual([expect.stringContaining('a path in the Delo home')])
+  })
+})
