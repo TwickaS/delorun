@@ -1,5 +1,5 @@
 ---
-description: "Delo 的远程访问登录，供 admission seam 的维护者使用：C4、C5 与 C14 所描述的 authenticator 提供方，以及在 Delo 所发布 web 组合上证明 C4 监听器与分发规则的拒绝测试套件。"
+description: "Delo 的远程访问登录，供 admission seam 的维护者使用：在 home 受保护记录之上的所有者认领与设备列表、C4、C5 与 C14 所描述的 authenticator 提供方，以及在 Delo 所发布 web 组合上证明 C4 监听器与分发规则的拒绝测试套件。"
 ---
 
 # @delo/home-auth
@@ -8,13 +8,26 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 
 ## 摘要
 
-本包承载 [约定 C4](../../docs/contracts/c04-admission.zh.md#authenticator) 的 authenticator 提供方 `@delo/home-auth`，同时包含 [约定 C5](../../docs/contracts/c05-device-approval.zh.md) 的所有者认领与设备批准、[约定 C14](../../docs/contracts/c14-oidc-passkeys.zh.md) 的身份因子，以及 C4 的服务端远程访问会话。它目前不含提供方代码。它包含 C4 的准入拒绝测试套件，用于证明准入 seam 的上游一半：上游的 connection 声明 `Authenticator` Service Definition，并通过 `ctx.connection.openReachListener` 打开远程访问监听器；web 服务器在任何路由、upgrade 或回退之前，运行每个远程访问监听器的分发器。约定的标识符、代码与限制来自 [`@delo/contract-admission`](../contract-admission/README.zh.md)。
+本包承载 [约定 C4](../../docs/contracts/c04-admission.zh.md#authenticator) 的 authenticator 提供方 `@delo/home-auth`，同时包含 [约定 C5](../../docs/contracts/c05-device-approval.zh.md) 的所有者认领与设备批准、[约定 C14](../../docs/contracts/c14-oidc-passkeys.zh.md) 的身份因子，以及 C4 的服务端远程访问会话。前半部分是所有者认领与设备列表：`~/.delo/secrets/home-auth/` 下的记录、应答这些记录的路由，以及结束设备在线会话的移除。后半部分是 C4 的准入拒绝测试套件，用于证明准入 seam 的上游一半：上游的 connection 声明 `Authenticator` Service Definition，并通过 `ctx.connection.openReachListener` 打开远程访问监听器；web 服务器在任何路由、upgrade 或回退之前，运行每个远程访问监听器的分发器。约定的标识符、代码与限制来自 [`@delo/contract-admission`](../contract-admission/README.zh.md)。
 
 ## 目录
 
+- [所有者认领与设备列表](#the-owner-claim-and-device-list)
 - [准入拒绝测试套件](#the-admission-denial-suite)
 - [给提供方的说明](#notes-for-the-provider)
 - [测试](#tests)
+
+<a id="the-owner-claim-and-device-list"></a>
+## 所有者认领与设备列表
+
+`src/home-auth.ts` 是 `~/.delo/secrets/home-auth/` 之上的协调者，`src/service.ts` 把它作为 `homeAuth` 服务挂载，并在 `ctx.effect()` 内把 `POST /auth/owner/claim`、`GET /auth/devices` 与 `POST /auth/devices/remove` 注册到 web 服务器。下面每条规则都由 `tests/` 下的一个 spec 固定：
+
+- **所有者验证码**（`owner-code.json`）。128 位随机数写成 26 个 base32 字符，只打印一次，并且只以 SHA-256 摘要保存。验证码只能使用一次，并在打印后 10 分钟过期；错误的验证码会保留原有的验证码，新的验证码则取代它。
+- **认领**（`owner.json`、`devices.json`）。只接受回环访问，且即使没有任何分发器标记请求，`Host` 指向远程访问地址也会被拒绝。一个 home 只有一个所有者：持有效新验证码的第二个认领者会以 `ALREADY_OWNED` 被拒绝，第一个所有者保有自己的 home；同时发起的两个认领会串行执行，因此恰好一个赢得所有者席位。验证码在写入任何记录之前就被消耗，因此认领过 home 的验证码不会再认领第二个 home。
+- **设备列表**。所有者与每一台受信任设备，不含密钥材料。未认领的 home 会以 `NO_OWNER` 拒绝列表与移除，而不是像拥有空设备列表那样应答。
+- **会话**（`sessions.json`）。令牌只下发一次，并以作为记录键的 SHA-256 摘要保存，因此复制该文件无法让任何人登录。
+- **移除**。删除设备记录、使其令牌的每个在线会话失效，并通过 `ctx.connection.closeReachConnections({ deviceId })` 关闭这些会话准入的远程访问连接，全部在返回之前完成；没有记录的设备同样会结束其会话。
+- **记录**。每个文件都经 [约定 C1](../../docs/contracts/c01-home-layout.zh.md) 的受保护文件检查读取，因此其他用户可以读取的文件，或不是本包 JSON 的文件，会以 `STORE_INVALID` 拒绝，而不是被当作空内容读取并让一次认领覆盖它。
 
 <a id="the-admission-denial-suite"></a>
 ## 准入拒绝测试套件
@@ -42,6 +55,7 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 ## 给提供方的说明
 
 - **登录前资产路由。** 处理 `GET /auth/assets/<asset>` 的 handler 会把该段与一张固定的已构建资产名表进行匹配。它从不先解码该段再把它拼接到目录路径上，因为解码后的 `..` 或分隔符会使路径离开资产目录。
+- **认领的到达。** 认领路由在读取请求体之前就判断请求从何处到达，其拒绝语句会点名回环监听器与 SSH 端口转发；远程访问监听器在任何路由被查询之前，通过 `reachClaimRefusal()` 应答同样的拒绝。
 - **撤销。** 移除设备或结束会话时，会在返回之前调用 `ctx.connection.closeReachConnections({ deviceId })` 或 `({ sessionId })`，使不携带 Peer 的流与已升级的 socket（例如 `/plugins/events` 与插件 upgrade 路由）随会话一同结束；对设备的 Peer 执行 dispose（资源释放），会结束替它发言的流。
 - **回环凭据。** 每次回环签发都以 `authenticator/minted` 到达，提供方在写出设置该凭据的响应之前记录它。
 

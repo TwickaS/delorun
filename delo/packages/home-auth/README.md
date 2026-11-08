@@ -1,5 +1,5 @@
 ---
-description: "Delo's sign-in for reach, for maintainers of the admission seam: the authenticator provider that C4, C5 and C14 describe, and the denial suite that proves C4's listener and dispatch rules over Delo's shipped web composition."
+description: "Delo's sign-in for reach, for maintainers of the admission seam: the owner claim and device list over a home's protected records, the authenticator provider that C4, C5 and C14 describe, and the denial suite that proves C4's listener and dispatch rules over Delo's shipped web composition."
 ---
 
 # @delo/home-auth
@@ -8,13 +8,25 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package is where `@delo/home-auth`, the authenticator provider of [contract C4](../../docs/contracts/c04-admission.md#authenticator), lives: the owner claim and device approval of [C5](../../docs/contracts/c05-device-approval.md), the identity factors of [C14](../../docs/contracts/c14-oidc-passkeys.md), and the server-side reach sessions of C4. It holds no provider code yet. It holds C4's admission denial suite, which proves the upstream half of the seam: upstream's connection declares the `Authenticator` Service Definition and opens reach listeners with `ctx.connection.openReachListener`, and the web server runs each reach listener's dispatcher before any route, upgrade or the fallback. The contract's identifiers, codes and limits come from [`@delo/contract-admission`](../contract-admission/README.md).
+This package is where `@delo/home-auth`, the authenticator provider of [contract C4](../../docs/contracts/c04-admission.md#authenticator), lives: the owner claim and device approval of [C5](../../docs/contracts/c05-device-approval.md), the identity factors of [C14](../../docs/contracts/c14-oidc-passkeys.md), and the server-side reach sessions of C4. The first half is the owner claim and device list: the records under `~/.delo/secrets/home-auth/`, the routes that answer them, and the removal that ends a device's live sessions. The second half is C4's admission denial suite, which proves the upstream half of the seam: upstream's connection declares the `Authenticator` Service Definition and opens reach listeners with `ctx.connection.openReachListener`, and the web server runs each reach listener's dispatcher before any route, upgrade or the fallback. The contract's identifiers, codes and limits come from [`@delo/contract-admission`](../contract-admission/README.md).
 
 ## Contents
 
+- [The owner claim and device list](#the-owner-claim-and-device-list)
 - [The admission denial suite](#the-admission-denial-suite)
 - [Notes for the provider](#notes-for-the-provider)
 - [Tests](#tests)
+
+## The owner claim and device list
+
+`src/home-auth.ts` is the coordinator over `~/.delo/secrets/home-auth/`, and `src/service.ts` mounts it as the `homeAuth` service, which registers `POST /auth/owner/claim`, `GET /auth/devices` and `POST /auth/devices/remove` with the web server inside `ctx.effect()`. Each rule below is what one spec under `tests/` pins:
+
+- **The owner code** (`owner-code.json`). 128 bits written as 26 base32 characters, printed once and kept only as a SHA-256 digest. A code is single-use and expires 10 minutes after it was printed; a wrong code leaves the outstanding one in place, and a new code replaces it.
+- **The claim** (`owner.json`, `devices.json`). Loopback only, and a `Host` naming a reach address is refused even when nothing stamped the request. One home has one owner: a second claimant with a fresh valid code is refused with `ALREADY_OWNED` and the first owner keeps the home, and two claims that race are serialised, so exactly one wins the owner seat. The code is consumed before a record is written, so a code that claimed a home never claims a second one.
+- **The device list**. The owner and every trusted device, without key material. An unclaimed home refuses the listing and the removal with `NO_OWNER`, rather than answering as if it had an empty device list.
+- **The sessions** (`sessions.json`). A token is handed out once and kept as the SHA-256 digest that keys its record, so a copy of the file signs nobody in.
+- **The removal**. Deletes the device's record, invalidates every live session of its tokens, and closes the reach connections those sessions admitted through `ctx.connection.closeReachConnections({ deviceId })`, all before it returns; a device with no record still has its sessions ended.
+- **The records**. Every file is read through [contract C1](../../docs/contracts/c01-home-layout.md)'s protected-file check, so a file another user can read, or one that is not this package's JSON, refuses with `STORE_INVALID` instead of reading as empty and letting a claim replace it.
 
 ## The admission denial suite
 
@@ -40,6 +52,7 @@ A type-level check holds C4's `Admission` and `ListenerPolicy` types assignable 
 ## Notes for the provider
 
 - **Pre-login asset routes.** A handler for `GET /auth/assets/<asset>` resolves the segment against a fixed table of built asset names. It never decodes the segment and then joins it to a directory path, because a decoded `..` or separator would leave the asset directory.
+- **The claim's arrival.** The claim route decides where the request arrived before it reads the body, and its refusal names the loopback listener and SSH port forwarding; a reach listener answers the same refusal through `reachClaimRefusal()` before any route is consulted.
 - **Revocation.** Removing a device or ending a session calls `ctx.connection.closeReachConnections({ deviceId })` or `({ sessionId })` before it returns, so streams and upgraded sockets that carry no Peer, such as `/plugins/events` and plugin upgrade routes, end with the session; disposing the device's Peer ends the streams that speak for it.
 - **Loopback credentials.** Each loopback mint arrives as `authenticator/minted`, and a provider records it before the response that sets it is written.
 

@@ -8,12 +8,14 @@
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["tests"],
+  "include": ["src", "tests"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/schemastery" },
     { "path": "../../../packages/boot/app-boot" },
     { "path": "../../../packages/client/connection/tsconfig.host.json" },
     { "path": "../../../packages/host/webserver" },
-    { "path": "../../../packages/typert/protocol" }
+    { "path": "../../../packages/typert/protocol" },
+    { "path": "../../../packages/util/brand" }
   ]
 }

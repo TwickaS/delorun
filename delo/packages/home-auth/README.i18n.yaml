@@ -3,23 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/packages/home-auth/README.md
 /:
-  en: 9c331bb7ca1548ca
-  zh: db0bd3656a64d5d0
+  en: ba788f35bae17c99
+  zh: 521ebb74e3fe3673
 /delo-home-auth:
   en: 1b3021e6d8bf195b
   zh: 994c8d4269c69ba6
 /delo-home-auth/summary:
-  en: 2342376dc3f6038e
-  zh: 6202c9c69cb37d6e
+  en: 51b236a2a1e6d422
+  zh: a3cff580fe080293
 /delo-home-auth/contents:
-  en: 794d418ead501a71
-  zh: e7ee54005f37d5be
+  en: 114e039c45d57336
+  zh: a13137792486aedd
+/delo-home-auth/the-owner-claim-and-device-list:
+  en: 792a8efba750bd03
+  zh: d9f44ca4b3f99e2e
 /delo-home-auth/the-admission-denial-suite:
   en: 569b692a69479412
   zh: 3ceba4ee69b60ede
 /delo-home-auth/notes-for-the-provider:
-  en: c0d31516bfd4079d
-  zh: 6d9349d83f21e5d5
+  en: 57d9d410dbf7b6fa
+  zh: c0e9e9448eb87838
 /delo-home-auth/tests:
   en: 9c0ca3e7960b4f62
   zh: 6f8e2b895d0e7c3e

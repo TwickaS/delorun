@@ -1710,10 +1710,26 @@ importers:
         version: link:../contract-home-layout
 
   delo/packages/home-auth:
-    devDependencies:
+    dependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-admission':
+        specifier: workspace:*
+        version: link:../contract-admission
+      '@delo/contract-device-approval':
+        specifier: workspace:*
+        version: link:../contract-device-approval
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+    devDependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
@@ -1729,9 +1745,6 @@ importers:
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
-      '@delo/contract-admission':
-        specifier: workspace:*
-        version: link:../contract-admission
       '@delo/tools':
         specifier: workspace:*
         version: link:../../apps/tools
