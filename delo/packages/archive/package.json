@@ -1,0 +1,14 @@
+{
+  "name": "@delo/archive",
+  "description": "The archive format v1 reader, writer, validator and import path of contract C8: staging validation, the path, link, device, size and ratio refusals, the closed customisation schema, the signature state, the atomic publication and the export with its secrets warning",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@delo/contract-archive-and-trash": "workspace:*"
+  }
+}
