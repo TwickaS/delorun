@@ -34,6 +34,7 @@ This app is the `delorun` command. Before any upstream code runs, it resolves an
 | `delorun doctor [--port <n>]` | Checks the home, the Docker engine, the DeepSeek API key's format and the studio's port, one line per check; it contacts no model, starts no container and runs no command except the read-only `docker version` probe |
 | `delorun plugin …` | Upstream's `dsh plugin …`, unchanged, against the Delo home |
 | `delorun headless …` | Upstream's `dsh headless …`, unchanged, against the Delo home |
+| `delorun --version [--json]` | Prints `Delo <delo>` and `DSH <dsh>`, the version of Delo and the version of the DSH it runs on; `--json` prints `{"delo":…,"dsh":…}` as one line. `-v` is the same as `--version` |
 
 Exit codes: 0 done, 1 failed, 2 a wrong command line, 3 no home process runs for the profile (`status`). A failure prints one line on standard error that starts with C1's error code, such as `HOME_MODE`, and ends with the command that fixes it where one exists.
 
@@ -42,6 +43,7 @@ Exit codes: 0 done, 1 failed, 2 a wrong command line, 3 no home process runs for
 - **Resolution.** The home is `DELO_HOME` when it is set and not blank, otherwise `~/.delo`; `@delo/home` refuses the homes C1 forbids with `HOME_INVALID` or `HOME_IS_DSH_HOME`.
 - **`DSH_HOME`.** `delorun` sets `DSH_HOME` and `DELO_HOME` to the home and `DELO_PROFILE` to the profile before any upstream code runs, so upstream, its `.env` layers and every child process use the Delo home. An inherited `DSH_HOME` is ignored, and `delorun status` names it.
 - **`~/.dsh`.** `delorun` never reads, writes or migrates upstream's home.
+- **`DELO_VERSION`.** Every invocation exports Delo's own version as `DELO_VERSION` before any upstream code runs, so the start preflight and the plugin manager check a plugin's `engines.delo` against this Delo ([contract C17](../../docs/contracts/c17-plugin-versions.md)); every child process inherits it. A plugin that requires a Delo this one is not, or whose `engines.delo` is not a range, is refused at install and disabled at start, and the message names both the Delo and the DSH version. A plugin that declares no `engines.delo` is unaffected.
 - **The tree.** Every command except `status` creates the home's tree at mode 0700 with `ensureHomeTree` and stops with `HOME_MODE` and the fix `chmod 700 <path>` when the home, `secrets/` or `run/<profile>/` is laxer. `delorun` changes no mode itself.
 
 ## Profiles

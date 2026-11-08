@@ -10,10 +10,12 @@
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
  * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
+ * | `delorun --version [--json]` | Delo's version and the DSH version it runs on (contract C17; [version](./version.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |
  *
- * Every invocation but `--help` first prunes the home's expired operational logs (contract C20;
- * [startup pruning](./logs/startup.ts)). Every command resolves the Delo home, `DELO_HOME` or `~/.delo`, and every
+ * Every invocation but `--help` and `--version` first prunes the home's expired operational logs (contract C20;
+ * [startup pruning](./logs/startup.ts)), and every one exports Delo's version as `DELO_VERSION` before any
+ * upstream module runs (contract C17; [version](./version.ts)). Every command resolves the Delo home, `DELO_HOME` or `~/.delo`, and every
  * command but `status` creates its tree at mode 0700 and refuses a laxer one
  * before upstream code runs. Exit codes are {@link EXIT}'s.
  *
@@ -31,6 +33,7 @@ import { doctorCommand } from './doctor/index.ts'
 import { logsCommand } from './logs/command.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
+import { applyDeloVersionEnvironment, DeloVersionError, versionCommand } from './version.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
 export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, doctorCommand, logsCommand, pluginCommand, headlessCommand]
@@ -51,6 +54,7 @@ function usage(): string {
     ...COMMANDS.map(command => `  ${command.name.padEnd(width)}  ${command.summary}`),
     '',
     'The home is ~/.delo, or DELO_HOME; the CLI profile is default, or DELO_PROFILE or --profile.',
+    'delorun --version prints Delo\'s and DSH\'s versions; --json prints them as one JSON line.',
     'Exit codes: 0 done, 1 failed, 2 wrong command line, 3 the home process is not running.',
     '',
   ].join('\n')
@@ -86,6 +90,8 @@ export async function main(argv: readonly string[], context: CommandContext = {
       context.stdout(usage())
       return EXIT.ok
     }
+    if (first === '--version' || first === '-v') return versionCommand(rest, context)
+    applyDeloVersionEnvironment()
     await pruneLogsAtStart(context, Date.now())
     if (first === undefined || first.startsWith('-')) return await bare(argv, context)
     const command = COMMANDS.find(candidate => candidate.name === first)
@@ -101,12 +107,16 @@ export async function main(argv: readonly string[], context: CommandContext = {
  * @param error - the failure.
  * @param context - the output.
  * @returns its exit code.
- * @throws the error itself when it is neither a {@link CliError} nor a {@link HomeLayoutError}.
+ * @throws the error itself when it is neither a {@link CliError}, a {@link DeloVersionError} nor a {@link HomeLayoutError}.
  */
 function report(error: unknown, context: CommandContext): ExitCode {
   if (error instanceof CliError) {
     context.stderr(`${error.message}\n`)
     return error.exit
+  }
+  if (error instanceof DeloVersionError) {
+    context.stderr(`${error.message}\n`)
+    return EXIT.failed
   }
   if (error instanceof HomeLayoutError) {
     context.stderr(`delorun: ${error.message}\n`)

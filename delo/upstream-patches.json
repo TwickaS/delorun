@@ -734,7 +734,12 @@
     {
       "path": "packages/boot/app-boot/src/index.ts",
       "class": "delo-feature",
-      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does."
+      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delo axis from `./plugin-compatibility.ts`: `DELO_VERSION_ENV`, `evaluateDeloRequirement`, `getDeloRuntimeVersion` and the `DeloRequirement` type."
+    },
+    {
+      "path": "packages/boot/app-boot/src/plugin-compatibility.ts",
+      "class": "delo-feature",
+      "reason": "Contract C17's second version axis: `evaluateDeloRequirement` checks a plugin's `engines.delo` range against Delo's version, which `getDeloRuntimeVersion` reads from `DELO_VERSION`, the variable Delo's CLI exports (`delo/apps/cli/src/version.ts`) before any module runs. `evaluatePluginCompatibility` reports the Delo result beside the dsh requirements, so the install, the start preflight and the update report refuse or disable a plugin whose range this Delo does not satisfy, or whose declaration is not a string, and the warning names both versions. With `DELO_VERSION` unset, as on stock DSH, the Delo axis is not evaluated and every result is byte-identical to upstream's."
     },
     {
       "path": "packages/boot/config-editor/README.i18n.yaml",

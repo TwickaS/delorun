@@ -36,6 +36,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 | `delorun doctor [--port <n>]` | 检查 Delo home、Docker 引擎、DeepSeek API 密钥的格式以及 studio 的端口，每项检查输出一行；不联系任何模型，不启动容器，也不运行任何命令，只有只读的 `docker version` 探测例外 |
 | `delorun plugin …` | 上游的 `dsh plugin …`，不作改动，针对 Delo home 运行 |
 | `delorun headless …` | 上游的 `dsh headless …`，不作改动，针对 Delo home 运行 |
+| `delorun --version [--json]` | 打印 `Delo <delo>` 与 `DSH <dsh>`，即 Delo 的版本和它所运行于的 DSH 的版本；`--json` 以一行打印 `{"delo":…,"dsh":…}`。`-v` 与 `--version` 相同 |
 
 退出码：0 表示完成，1 表示失败，2 表示命令行错误，3 表示该 profile 没有 home 进程在运行（`status`）。失败时，标准错误输出一行，以 C1 的错误代码开头，例如 `HOME_MODE`，并在存在修复命令时以该命令结尾。
 
@@ -46,6 +47,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 - **解析。** 当 `DELO_HOME` 已设置且非空白时，home 即为它，否则为 `~/.delo`；`@delo/home` 拒绝约定 C1 所禁止的 home，错误代码为 `HOME_INVALID` 或 `HOME_IS_DSH_HOME`。
 - **`DSH_HOME`。** 在任何上游代码运行之前，`delorun` 会把 `DSH_HOME` 与 `DELO_HOME` 设为该 home，把 `DELO_PROFILE` 设为该 profile，因此上游、其 `.env` 层以及每个子进程都使用 Delo home。已继承的 `DSH_HOME` 会被忽略，`delorun status` 会将其指出。
 - **`~/.dsh`。** `delorun` 从不读取、写入或迁移上游的 home。
+- **`DELO_VERSION`。** 每次调用都会在任何上游代码运行之前把 Delo 自身的版本导出为 `DELO_VERSION`，因此启动前的预检与插件管理器会用正在运行的 Delo 检查插件的 `engines.delo`（[约定 C17](../../docs/contracts/c17-plugin-versions.zh.md)）；每个子进程都会继承它。要求另一个 Delo 版本的插件，或其 `engines.delo` 不是范围的插件，会在安装时被拒绝、在启动时被停用，消息中写明 Delo 与 DSH 两个版本。未声明 `engines.delo` 的插件不受影响。
 - **目录树。** 除 `status` 外，每个命令都会以 0700 模式通过 `ensureHomeTree` 创建 home 的目录树；当 home、`secrets/` 或 `run/<profile>/` 的模式更宽松时，它以 `HOME_MODE` 停止，并给出修复命令 `chmod 700 <path>`。`delorun` 自身不修改任何模式。
 
 <a id="profiles"></a>

@@ -1266,6 +1266,12 @@ importers:
       '@delo/contract-operational-logs':
         specifier: workspace:*
         version: link:../../packages/contract-operational-logs
+      '@delo/contract-plugin-versions':
+        specifier: workspace:*
+        version: link:../../packages/contract-plugin-versions
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../../packages/contract-release-manifest
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../../packages/contract-setup-answers
@@ -1281,6 +1287,9 @@ importers:
       '@delo/supervisor':
         specifier: workspace:*
         version: link:../../packages/supervisor
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -1294,6 +1303,9 @@ importers:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../../packages/util/launch-environment
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
   delo/apps/release:
     dependencies:
