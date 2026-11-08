@@ -1984,6 +1984,40 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
 
+  delo/packages/release-verify:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/contract-release-log':
+        specifier: workspace:*
+        version: link:../contract-release-log
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delo/contract-verification-checks':
+        specifier: workspace:*
+        version: link:../contract-verification-checks
+      '@noble/curves':
+        specifier: ^2.4.0
+        version: 2.4.0
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
+
   delo/packages/runtime-store:
     dependencies:
       '@deepseek-ai/dsh-brand':
