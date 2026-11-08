@@ -416,7 +416,12 @@ export async function listenTokenSocket<R>(options: TokenSocketOptions<R>): Prom
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
         throw error
       }
-      if (isOurs(current)) await unlink(socketPath)
+      if (isOurs(current)) await unlink(socketPath).catch((cleanupError: unknown) => {
+        // ENOENT: the successor's adoption or a concurrent cleanup removed it between the lstat and the unlink; any
+        // other failure keeps its own report.
+        if ((cleanupError as NodeJS.ErrnoException).code === 'ENOENT') return
+        throw cleanupError
+      })
     },
     removeSocketSync() {
       let current
@@ -426,7 +431,13 @@ export async function listenTokenSocket<R>(options: TokenSocketOptions<R>): Prom
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
         throw error
       }
-      if (isOurs(current)) unlinkSync(socketPath)
+      if (isOurs(current)) {
+        try {
+          unlinkSync(socketPath)
+        } catch (cleanupError) {
+          if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') throw cleanupError
+        }
+      }
     },
   }
 }
