@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/plugin-mcp-consent/README.md
+/:
+  en: dd98b1437b92e285
+  zh: b95765e52d6df4cb
+/delo-plugin-mcp-consent:
+  en: 856300bc97a3b549
+  zh: 7361ab941aaf7923
+/delo-plugin-mcp-consent/summary:
+  en: 1a2e094ea040e3f5
+  zh: 8b3d6a8f873602c1
+/delo-plugin-mcp-consent/contents:
+  en: 8bc096ffae54d223
+  zh: d49ed81601876652
+/delo-plugin-mcp-consent/the-service:
+  en: 8fb7e881540325d2
+  zh: 6c127d023b497a1f
+/delo-plugin-mcp-consent/the-acceptance-store:
+  en: 89cf2eeb84331063
+  zh: cb57086cd6d33f27
+/delo-plugin-mcp-consent/reviews:
+  en: 1debd1d7a518e4d4
+  zh: d0f46f6ece271b09
+/delo-plugin-mcp-consent/recording-an-acceptance:
+  en: 8406cf4e9f544605
+  zh: 534423567dc57561
+/delo-plugin-mcp-consent/the-mcp-add-consent-switch:
+  en: c714ef3ea575a700
+  zh: e90dac9057e7fe71
+/delo-plugin-mcp-consent/development:
+  en: 98e3eb81c0d00e45
+  zh: c1bff0516bec4834

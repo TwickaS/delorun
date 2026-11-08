@@ -1,0 +1,8 @@
+version: 1
+scenario: delo-mcp-add-consent
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delo-mcp-add-consent
+  pin: true

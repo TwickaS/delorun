@@ -1,0 +1,26 @@
+{
+  "name": "@delo/plugin-mcp-consent",
+  "description": "Delo's MCP add-time consent (mcpAddConsent): the acceptance store under the home's protected state that lets an accepted stdio server command start and holds every other command until the person accepts it",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./store": "./src/store.ts"
+  },
+  "dependencies": {
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/home": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-mcp-client": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-mcp-client": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  }
+}

@@ -210,13 +210,24 @@ export const PARITY_SWITCHES = [
   },
   {
     id: 'mcp_add_consent',
-    state: 'planned',
-    plannedBy: 'the MCP add-time consent package (A101)',
+    state: 'built',
     registeredBy: 'Delo MCP server add flow',
     defaultValue: true,
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-mcp-add-consent',
+    field: {
+      module: '@delo/plugin-mcp-consent',
+      source: 'delo/packages/plugin-mcp-consent/src/index.ts',
+      key: 'enabled',
+    },
+    // The gate reaches the model through the server start the review holds,
+    // not through a registration; these files are the ones whose runtime
+    // behaviour the switch turns off at its parity value.
+    sources: [
+      'packages/mcp/mcp-client/src/consent.ts',
+      'packages/mcp/mcp-client/src/index.ts',
+    ],
   },
   {
     id: 'container_denial_marker',

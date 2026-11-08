@@ -1,0 +1,10 @@
+# C16 switch mcp_add_consent on: the mcpAddConsent service is mounted, so an
+# mcp-client consults the acceptance store before it starts a stdio server —
+# a command the person accepted starts at once, and every other review holds
+# the server stopped and asks. Without this row the plugin mounts nothing and
+# every configured server starts exactly as upstream starts it.
+- insert:
+    - id: delo-mcp-consent
+      name: '@delo/plugin-mcp-consent'
+      config:
+        enabled: true

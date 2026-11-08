@@ -82,8 +82,9 @@ describe('the real tree', () => {
     // Every model-visible contribution must sit in a built switch's sources. A
     // switch may also name a file whose runtime behaviour it gates when the
     // visible effect is a tool result text rather than a registration (the
-    // fetch guard's refusal flows through the provider's error), so the
-    // sources union is a superset, never a subset.
+    // fetch guard's refusal flows through the provider's error; the MCP
+    // consent's gate holds the server stopped before its tools register), so
+    // the sources union is a superset, never a subset.
     const contributionFiles = new Set(scan.contributions.map(contribution => contribution.path))
     const sourceFiles = new Set<string>(built.flatMap(entry => [...entry.sources]))
     for (const file of contributionFiles) expect(sourceFiles.has(file), file).toBe(true)
@@ -183,7 +184,7 @@ describe('the parity overlay', () => {
     const rows = parseOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
-    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'fetch_guard', 'preset_inspect', 'sandbox_protected_reads', 'studio_additions'])
+    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'fetch_guard', 'mcp_add_consent', 'preset_inspect', 'sandbox_protected_reads', 'studio_additions'])
   })
 
   it('fails a switch left on, a key that is no switch, and a row that sets more than config', () => {
