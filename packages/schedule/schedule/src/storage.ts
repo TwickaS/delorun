@@ -81,6 +81,11 @@ export const scheduleTaskSchema = z.object({
    * not resolvable. The delivery review reads it as the creation preset.
    */
   creationPreset: z.string().min(1).exactOptional(),
+  /**
+   * The refusal the composed consent recorded when it paused this task: the reason it gave and
+   * the canonical UTC time. Absent while no refusal stands, and cleared by a delivery or an edit.
+   */
+  consentRefusal: z.object({ reason: z.string().min(1), refusedAt: instantSchema }).strict().exactOptional(),
 }).strict().transform(({ sessionId, target: savedTarget, lastDelivery, deliveryHistory, ...task }, context) => {
   const binding = savedTarget === undefined && sessionId !== undefined ? sessionIdSchema.safeParse(sessionId) : undefined
   if (binding?.success === false) {

@@ -3,14 +3,23 @@ import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import type { ScheduleConsentService, ScheduleEffect } from '@deepseek-ai/dsh-schedule'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import { ScheduleId } from '@deepseek-ai/dsh-schedule'
+import type {
+  ScheduleConsentService, ScheduleDeliveryReview, ScheduleDeliveryVerdict, ScheduleEffect,
+} from '@deepseek-ai/dsh-schedule'
 import { agentFor, harness, mountToolSchedule } from './harness.ts'
+import { taskTable, type HarnessAgent } from '../../schedule/tests/harness.ts'
 
 const NOW = '2026-09-16T00:00:00.000Z'
+const ONCE = 'DTSTART:20260916T000001Z\nRRULE:FREQ=DAILY;COUNT=1'
 const DAILY = 'DTSTART:20260916T010000Z\nRRULE:FREQ=DAILY'
 const TASK = { title: 'Queue check', prompt: 'Check the queue', rrule: DAILY, target: 'this_session' }
 const ASK_REASON = 'ask policy'
 const NAMED = 'The recurring prompt would deliver to this session under its current preset.'
+const REFUSAL = 'the target Session moved wider than the creation preset'
+const DEPLOYMENT_DEFAULT = 'workspace-write'
+const CALLER_PRESET = 'auto'
 
 const tests: Awaited<ReturnType<typeof harness>>[] = []
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(NOW)) })
@@ -20,9 +29,49 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
-async function setup(options: { consent?: ScheduleConsentService } = {}) {
+/** The preset reader a deployment composes: a Session's preset pin plus the default a fresh Session runs. */
+interface Presets {
+  readonly defaultPreset: string
+  current(session: { id: string }): string
+}
+
+/**
+ * Build the preset reader a case provides.
+ * @param current - Preset each live Session runs.
+ * @param defaultPreset - Preset `permission-presets` pins into every fresh Session.
+ * @returns The reader a case provides as `permissionPresets`.
+ */
+function presetsOf(current: (session: { id: string }) => string = () => CALLER_PRESET, defaultPreset = DEPLOYMENT_DEFAULT): Presets {
+  return { defaultPreset, current }
+}
+
+/**
+ * Build the preset reader a deployment composes: each named Session keeps its pinned preset, and a
+ * Session the entries do not name — a chat a delivery just opened — runs the deployment default.
+ * @param entries - Presets of the Sessions that start with one, keyed by Session identity.
+ * @param defaultPreset - The preset `permission-presets` pins into every fresh Session.
+ * @returns The reader a case provides as `permissionPresets`.
+ */
+function presetBook(entries: Record<string, string> = {}, defaultPreset = DEPLOYMENT_DEFAULT): Presets {
+  const pins = new Map(Object.entries(entries))
+  return { defaultPreset, current: session => pins.get(session.id) ?? defaultPreset }
+}
+
+/**
+ * The delivery rule `@delo/plugin-schedule-consent` implements, restated for the same reason as the
+ * naming rule: a delivery may proceed only while the chat it reaches still runs the preset its
+ * approval captured.
+ * @param review - The captured preset and the preset the target chat runs now.
+ * @returns The verdict.
+ */
+function presetReview(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict {
+  return review.creationPreset === review.currentPreset ? { kind: 'allow' } : { kind: 'refuse', reason: REFUSAL }
+}
+
+async function setup(options: { consent?: ScheduleConsentService; presets?: Presets } = {}) {
   const test = await harness({ onContext: (ctx) => {
     if (options.consent !== undefined) ctx.provide('scheduleConsent', options.consent)
+    if (options.presets !== undefined) ctx.provide('permissionPresets', options.presets)
   } })
   tests.push(test)
   const agent = agentFor(test.ctx, 'original')
@@ -53,6 +102,21 @@ async function call(test: Setup, name: string, args: unknown) {
   })
   expect(result.isError, JSON.stringify(result.content)).toBe(false)
   return result.value
+}
+
+/**
+ * The naming rule `@delo/plugin-schedule-consent` implements, restated because an upstream spec cannot
+ * import the fork's plugin: the recurrence, the chat the deliveries reach, and that chat's preset.
+ * @param schedule - The effect the approved call would create.
+ * @returns The sentence the approval states, or undefined when the effect names no recurrence.
+ */
+function nameConsentEffect(schedule: ScheduleEffect): string | undefined {
+  if (schedule.recurrence === '') return undefined
+  const target = schedule.targetSessionId === undefined
+    ? 'a new chat that its first delivery opens'
+    : `the chat ${schedule.targetSessionId}`
+  const preset = schedule.targetPreset === undefined ? '' : `, which runs the ${schedule.targetPreset} permission preset`
+  return `The task delivers on "${schedule.recurrence}" into ${target}${preset}.`
 }
 
 describe('Schedule consent approval naming', () => {
@@ -108,5 +172,155 @@ describe('Schedule consent approval naming', () => {
     await call(test, 'schedule_create', TASK)
     await call(test, 'schedule_list', {})
     expect(nameEffect).not.toHaveBeenCalled()
+  })
+
+  it('names the deployment default for a stored target that opens its own chat', async () => {
+    const nameEffect = vi.fn(() => NAMED)
+    const test = await setup({
+      consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) },
+      presets: presetsOf(),
+    })
+    approving(test)
+    const created = await test.service.create({
+      title: 'Queue check', prompt: 'Check the queue', timing: { kind: 'rrule', rrule: DAILY },
+      target: { kind: 'new_once' },
+    }, test.agent.session.id)
+    askPolicy(test)
+    await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+      tool: 'schedule_edit', recurrence: DAILY, targetSessionId: undefined, targetPreset: DEPLOYMENT_DEFAULT,
+    } satisfies ScheduleEffect)
+  })
+
+  it('names no preset for a stored target chat that holds no live Agent', async () => {
+    const nameEffect = vi.fn(() => NAMED)
+    const test = await setup({
+      consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) },
+      presets: presetsOf(() => CALLER_PRESET),
+    })
+    approving(test)
+    const created = await test.service.create({
+      title: 'Queue check', prompt: 'Check the queue', timing: { kind: 'rrule', rrule: DAILY },
+      target: { kind: 'session', sessionId: SessionId('other') },
+    }, test.agent.session.id)
+    askPolicy(test)
+    await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
+    // The caller's preset belongs to another chat, so the approval states no preset at all.
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+      tool: 'schedule_edit', recurrence: DAILY, targetSessionId: 'other', targetPreset: undefined,
+    } satisfies ScheduleEffect)
+  })
+
+  it('leaves a delete approval unnamed, so it states no delivery', async () => {
+    const nameEffect = vi.fn(() => NAMED)
+    const test = await setup({ consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) } })
+    const request = approving(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    nameEffect.mockClear()
+    askPolicy(test)
+    await call(test, 'schedule_edit', { id: created.id, action: 'delete' })
+    // A delete arms nothing, so nothing is named and the ask keeps the policy's own reason.
+    expect(nameEffect).not.toHaveBeenCalled()
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(ASK_REASON)
+  })
+
+  it('names the real effect sentence at the tool call site', async () => {
+    const test = await setup({
+      consent: { nameEffect: nameConsentEffect, reviewDelivery: () => ({ kind: 'allow' }) },
+      presets: presetsOf(),
+    })
+    const request = approving(test)
+    askPolicy(test)
+
+    await call(test, 'schedule_create', { ...TASK, target: 'new' })
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(`${ASK_REASON} The task delivers on "${DAILY}" `
+      + `into a new chat that its first delivery opens, which runs the ${DEPLOYMENT_DEFAULT} permission preset.`)
+
+    await call(test, 'schedule_create', TASK)
+    expect(request.mock.calls.at(1)?.at(0)?.reason).toBe(`${ASK_REASON} The task delivers on "${DAILY}" `
+      + `into the chat ${test.agent.session.id}, which runs the ${CALLER_PRESET} permission preset.`)
+  })
+})
+
+describe('Schedule consent creation baseline', () => {
+  it('captures the deployment default for a chat the call opens, in the approval and the stored task, and allows its first delivery', async () => {
+    const reviews: ScheduleDeliveryReview[] = []
+    const nameEffect = vi.fn(nameConsentEffect)
+    const test = await setup({
+      consent: {
+        nameEffect,
+        reviewDelivery: (review) => {
+          reviews.push(review)
+          return presetReview(review)
+        },
+      },
+      // The caller runs `auto`; every chat a delivery opens is pinned to `workspace-write`.
+      presets: presetBook({ original: CALLER_PRESET }),
+    })
+    const request = approving(test)
+    askPolicy(test)
+    const opened: HarnessAgent[] = []
+    test.resolve.mockImplementation(async (sessionId) => {
+      const agent = agentFor(test.ctx, sessionId)
+      opened.push(agent)
+      return { agent }
+    })
+
+    const created = await call(test, 'schedule_create', { ...TASK, rrule: ONCE, target: 'new' }) as { id: string }
+
+    // The approval names the preset the chat this call opens will run, not the caller's.
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+      tool: 'schedule_create', recurrence: ONCE, targetSessionId: undefined, targetPreset: DEPLOYMENT_DEFAULT,
+    } satisfies ScheduleEffect)
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toContain(`which runs the ${DEPLOYMENT_DEFAULT} permission preset`)
+    // The task stores that same default, so its baseline is the preset its deliveries will meet.
+    expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({ creationPreset: DEPLOYMENT_DEFAULT })
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // The first delivery reaches the opened chat, which runs the captured default, so the consent allows it.
+    expect(reviews).toHaveLength(1)
+    expect(reviews[0]).toMatchObject({ creationPreset: DEPLOYMENT_DEFAULT, currentPreset: DEPLOYMENT_DEFAULT })
+    expect(opened.at(0)?.followup).toHaveBeenCalledOnce()
+    expect(await call(test, 'schedule_view', { id: created.id })).toMatchObject({ id: created.id, status: 'ended' })
+  })
+})
+
+describe('Schedule consent manual run', () => {
+  it('refuses a manual run through the consent with the typed schedule/consent-refused error', async () => {
+    const reviews: ScheduleDeliveryReview[] = []
+    const test = await setup({ consent: {
+      nameEffect: () => undefined,
+      reviewDelivery: (review) => {
+        reviews.push(review)
+        return { kind: 'refuse', reason: REFUSAL }
+      },
+    } })
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    test.resolve.mockResolvedValue({ agent: test.agent })
+
+    await expect(test.service.run({ id: ScheduleId(created.id) })).rejects.toMatchObject({
+      code: 'schedule/consent-refused', details: { reason: REFUSAL }, message: REFUSAL,
+    })
+    // The gate runs before the message, so the chat is never woken and the task states why it stopped.
+    expect(reviews).toHaveLength(1)
+    expect(reviews[0]).toMatchObject({ targetSessionId: test.agent.session.id })
+    expect(test.agent.followup).not.toHaveBeenCalled()
+    expect(await test.service.view({ id: ScheduleId(created.id) })).toMatchObject({
+      status: 'paused', consentRefusal: { reason: REFUSAL },
+    })
+  })
+
+  it('keeps the recorded refusal out of the model-facing task', async () => {
+    const test = await setup({ consent: {
+      nameEffect: () => undefined,
+      reviewDelivery: () => ({ kind: 'refuse', reason: REFUSAL }),
+    } })
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    test.resolve.mockResolvedValue({ agent: test.agent })
+    // A refused run records why the task paused on the Host task; the model-facing task carries no such field,
+    // which the view result proves because the tool's output schema admits exactly the declared fields.
+    await expect(test.service.run({ id: ScheduleId(created.id) })).rejects.toThrow(REFUSAL)
+    expect(await call(test, 'schedule_view', { id: created.id })).toMatchObject({ id: created.id, kind: 'rrule' })
   })
 })

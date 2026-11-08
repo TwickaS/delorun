@@ -473,6 +473,11 @@ export type ScheduleCatalogEntry = ScheduleRecord & {
   readonly deliveryFloorEndsAt?: string
   /** Most recent durably acknowledged inbox delivery, when available. */
   readonly lastDelivery?: ScheduleDeliveryReceipt
+  /**
+   * The refusal the composed consent recorded when it paused this task: why the delivery was
+   * refused, and when. A later delivery, edit, or deletion clears it.
+   */
+  readonly consentRefusal?: ScheduleConsentRefusal
 }
 
 /** Host task creation request. */
@@ -594,6 +599,14 @@ export interface ScheduleExecutionPendingResult {
 
 /** Task state after a manual delivery, or a non-mutating miss or refusal. */
 export type ScheduleRunResult = ScheduleCatalogEntry | ScheduleNotFoundResult | ScheduleExecutionPendingResult
+
+/** The refusal a composed consent recorded when it paused one task's delivery. */
+export interface ScheduleConsentRefusal {
+  /** The reason the consent gave, verbatim, so the paused task states why it stopped. */
+  readonly reason: string
+  /** Canonical UTC time the refusal paused the task. */
+  readonly refusedAt: string
+}
 
 /** The effect one approved Schedule management call creates, which a consent may name. */
 export interface ScheduleEffect {

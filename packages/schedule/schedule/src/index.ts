@@ -115,25 +115,26 @@ export const MAX_LIST_LIMIT = 500
 const SUBAGENT_SESSION_REFUSAL = 'This Session belongs to subagent routing, which never receives reminder delivery.'
 
 /**
- * Read the permission preset a new task captures at creation: the preset of the target Session when one is live,
- * otherwise the acting Session's preset, which a created target inherits. Absent when no preset service is composed
- * or neither Session is live.
+ * Read the permission preset a task is approved under: the preset of the target Session when one is
+ * live, otherwise — for a target that opens its own Session — the deployment default that the
+ * permission-preset service pins into every fresh Session. Absent when no preset service is composed
+ * or the target Session is not live.
+ *
+ * A created Session runs the deployment default, not the acting Session's preset, so capturing the
+ * caller's preset there would store a baseline no delivery of that Session could ever match.
  * @param presets - The composed permission-preset service, when one is.
  * @param agents - The live Agent registry.
  * @param target - Destination after the change.
- * @param actorSessionId - Session of the acting Agent, or undefined for a human caller.
  * @returns The captured preset, or undefined.
  */
 function creationPresetOf(
   presets: SchedulePermissionPresets | undefined,
   agents: Context['agents'],
   target: ScheduleTarget,
-  actorSessionId: SessionId | undefined,
 ): string | undefined {
   if (presets === undefined) return undefined
-  const sessionId = target.kind === 'session' ? target.sessionId : actorSessionId
-  if (sessionId === undefined) return undefined
-  const agent = agents.get(sessionId)
+  if (target.kind !== 'session') return presets.defaultPreset
+  const agent = agents.get(target.sessionId)
   return agent === undefined ? undefined : presets.current(agent.session)
 }
 
@@ -419,7 +420,7 @@ export class ScheduleService extends TypertRemoteService {
       const createdAt = new Date(now).toISOString()
       const creationPreset = creationPresetOf(
         this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined,
-        this.ctx.agents, target, actorSessionId,
+        this.ctx.agents, target,
       )
       const task = scheduleTaskSchema.parse({
         record, target, involvedSessionIds: involved(actorSessionId, target, []), status: 'active',
@@ -612,13 +613,34 @@ export class ScheduleService extends TypertRemoteService {
         await this.validateTarget(effectiveTarget, signal)
         signal?.throwIfAborted()
       }
-      const task = revisedTask(current, request.patch, target, actorSessionId, Date.now())
+      const task = this.reapproved(revisedTask(current, request.patch, target, actorSessionId, Date.now()))
       await tasks.put(request.id, task)
       this.emitChanged()
       this.runtime?.requestDrive()
       this.queueNotification(task, actorSessionId, 'updated')
       return this.entry(task)
     })
+  }
+
+  /**
+   * Refresh the management baselines of an edited task the way creation captures them.
+   *
+   * An edit is a fresh approval of the task, so the preset its deliveries are reviewed against
+   * becomes the one its effective target runs now — the live target Session's preset, or the
+   * deployment default when the target opens a Session at delivery — instead of the preset captured
+   * when the task was created. The same edit settles any refusal the consent recorded, because the
+   * person has re-approved the task.
+   * @param revised - The updated task before its management baselines are refreshed.
+   * @returns The task to store.
+   */
+  private reapproved(revised: ScheduleTask): ScheduleTask {
+    const { consentRefusal: _settled, ...task } = revised
+    const creationPreset = creationPresetOf(
+      this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined,
+      this.ctx.agents, task.target,
+    )
+    // An unreadable target preset keeps the stored baseline instead of clearing it.
+    return creationPreset === undefined ? task : { ...task, creationPreset }
   }
 
   /**
@@ -725,6 +747,7 @@ export class ScheduleService extends TypertRemoteService {
       ...(this.runtime?.isExecutionActive(task.record.id) === true ? { executionActive: true as const } : {}),
       ...(floorEnd === undefined ? {} : { deliveryFloorEndsAt: new Date(floorEnd).toISOString() }),
       ...(task.lastDelivery === undefined ? {} : { lastDelivery: task.lastDelivery }),
+      ...(task.consentRefusal === undefined ? {} : { consentRefusal: task.consentRefusal }),
     }
   }
 

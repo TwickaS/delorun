@@ -23,7 +23,7 @@ import {
 } from '@deepseek-ai/dsh-schedule'
 import type { SchedulePermissionPresets } from '@deepseek-ai/dsh-schedule'
 import type {
-  InternalScheduleError, ScheduleEditRequest, ScheduleEffect, ScheduleRecord,
+  InternalScheduleError, ScheduleEditRequest, ScheduleEffect, ScheduleRecord, ScheduleTarget,
   ScheduleTargetRequest, ScheduleToolError,
   ScheduleCatalogEntry, ScheduleDeliveryReceipt, SubagentSessionError,
 } from '@deepseek-ai/dsh-schedule'
@@ -269,7 +269,7 @@ type ModelTask = ScheduleRecord & Pick<ScheduleCatalogEntry, 'target' | 'status'
 /** Preserve timing, destination, and edit revision while withholding Host bookkeeping. */
 function modelTask(task: ScheduleCatalogEntry): ModelTask {
   const { involvedSessionIds: _involved, createdAt: _created, executionActive: _execution,
-    deliveryFloorEndsAt: _floor, lastDelivery, ...record } = task
+    deliveryFloorEndsAt: _floor, consentRefusal: _refusal, lastDelivery, ...record } = task
   return {
     ...record, scheduledAtLocal: formatScheduleLocalTime(task, task.scheduledAt),
     ...lastDelivery === undefined ? {} : { lastDelivery: {
@@ -295,35 +295,75 @@ function recurrenceText(record: ScheduleRecord): string {
   }
 }
 
-/** The target facts a consent names, resolved from one model target choice. */
+/** The target facts a consent names: the chat the deliveries reach and the preset it runs. */
+interface TargetFacts {
+  readonly targetSessionId: ScheduleEffect['targetSessionId']
+  readonly targetPreset: string | undefined
+}
+
+/** The facts of a destination that opens its own Session: no chat yet, and the preset that chat will run. */
+function createdFacts(presets: SchedulePermissionPresets | undefined): TargetFacts {
+  // A created Session is pinned to the deployment default, not to the caller's preset, so that is
+  // the preset the approval names and the preset the first delivery will actually run.
+  return { targetSessionId: undefined, targetPreset: presets?.defaultPreset }
+}
+
+/**
+ * The target facts a consent names, resolved from one model target choice.
+ * @param ctx - Scope whose preset service knows the presets.
+ * @param agent - Calling root Agent.
+ * @param target - Model target choice of the pending call.
+ * @returns The chat the deliveries reach and the preset it runs.
+ */
 function targetFacts(
   ctx: Context,
   agent: Agent,
   target: typeof TARGET_CHOICES[number],
-): { readonly targetSessionId: ScheduleEffect['targetSessionId']; readonly targetPreset: string | undefined } {
+): TargetFacts {
   const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
-  // A created target opens its Session at the first delivery and inherits the caller's permission preset.
-  if (target !== 'this_session') {
-    return { targetSessionId: undefined, targetPreset: presets?.current(agent.session) }
-  }
+  if (target !== 'this_session') return createdFacts(presets)
   return { targetSessionId: agent.session.id, targetPreset: presets?.current(agent.session) }
+}
+
+/**
+ * The target facts of a stored destination the pending call keeps.
+ *
+ * A stored Session target with no live Agent runs no readable preset: the approval names none
+ * rather than the caller's, which is a different chat's. A stored destination that opens its own
+ * Session names the deployment default the created Session will be pinned to.
+ * @param ctx - Scope whose live Agent registry supplies a stored target's Session.
+ * @param presets - The composed preset service, when one is.
+ * @param target - Destination stored on the task.
+ * @returns The chat the deliveries reach and the preset it runs.
+ */
+function storedFacts(
+  ctx: Context,
+  presets: SchedulePermissionPresets | undefined,
+  target: ScheduleTarget,
+): TargetFacts {
+  if (target.kind !== 'session') return createdFacts(presets)
+  const agent = ctx.agents.get(target.sessionId)
+  return { targetSessionId: target.sessionId, targetPreset: agent === undefined ? undefined : presets?.current(agent.session) }
 }
 
 /**
  * Build the effect one Schedule management call creates, for the consent to name. An update that
  * restates no rule names the stored rule, so the approval always carries the recurrence the task
- * keeps; a task that cannot be read leaves the approval unnamed.
+ * keeps; a task that cannot be read leaves the approval unnamed, and a delete creates no effect to
+ * name at all.
  * @param ctx - Scope whose `schedule` service stores the tasks.
  * @param exec - Pending management call with its parsed arguments.
  * @param agent - Calling root Agent.
  * @returns The effect, or undefined when the call names no readable effect.
  */
 async function consentEffect(ctx: Context, exec: ToolExecution, agent: Agent): Promise<ScheduleEffect | undefined> {
-  const args = exec.arguments as { rrule?: unknown; target?: unknown; id?: unknown } | undefined
+  const args = exec.arguments as { rrule?: unknown; target?: unknown; id?: unknown; action?: unknown } | undefined
   if (args === undefined || typeof args !== 'object') return undefined
+  // A delete only removes the task: nothing starts delivering, so the approval states nothing.
+  if (exec.name === 'schedule_edit' && args.action === 'delete') return undefined
   const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
   let recurrence: string | undefined
-  let facts: { readonly targetSessionId: ScheduleEffect['targetSessionId']; readonly targetPreset: string | undefined }
+  let facts: TargetFacts
   if (exec.name === 'schedule_create') {
     if (typeof args.rrule !== 'string') return undefined
     recurrence = args.rrule
@@ -337,12 +377,7 @@ async function consentEffect(ctx: Context, exec: ToolExecution, agent: Agent): P
     recurrence = typeof args.rrule === 'string' ? args.rrule : recurrenceText(stored)
     facts = typeof args.target === 'string'
       ? targetFacts(ctx, agent, args.target as typeof TARGET_CHOICES[number])
-      : stored.target.kind === 'session'
-        ? {
-          targetSessionId: stored.target.sessionId,
-          targetPreset: presets?.current(ctx.agents.get(stored.target.sessionId)?.session ?? agent.session),
-        }
-        : { targetSessionId: undefined, targetPreset: undefined }
+      : storedFacts(ctx, presets, stored.target)
   }
   return {
     tool: exec.name,

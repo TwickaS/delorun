@@ -67,10 +67,15 @@ function batchSessionOf(task: ScheduleTask): SessionIdType | undefined {
 }
 
 /** Owns at most one timer across recomputations; delivery and management share the serialized operation. */
-/** The preset read the consent seam makes when a deployment composes the permission-preset service. */
+/** The preset reads the consent seam makes when a deployment composes the permission-preset service. */
 export interface SchedulePermissionPresets {
   /** The permission preset one Session currently runs under. */
   current(session: Session): string
+  /**
+   * The permission preset a Session opened now runs under: the deployment default that the
+   * permission-preset service pins into every fresh Session, which a created target inherits.
+   */
+  readonly defaultPreset: string
 }
 
 export class ScheduleRuntime {
@@ -325,8 +330,20 @@ export class ScheduleRuntime {
   private async reviewDelivery(task: ScheduleTask, target: DeliveryTarget): Promise<void> {
     const verdict = this.consentVerdict(task, target)
     if (verdict === undefined) return
-    await this.commit({ ...task, status: 'paused', updatedAt: new Date(Date.now()).toISOString() })
+    await this.commit(this.refused(task, verdict.reason))
     throw new RemoteError('schedule/consent-refused', verdict.reason, { reason: verdict.reason })
+  }
+
+  /**
+   * Pause one task for a refused delivery, recording the reason the consent gave so the paused
+   * task states why it stopped instead of leaving it in the log alone.
+   * @param task - Task whose delivery the consent refused.
+   * @param reason - The consent's refusal reason.
+   * @returns The paused value to commit.
+   */
+  private refused(task: ScheduleTask, reason: string): ScheduleTask {
+    const refusedAt = new Date(Date.now()).toISOString()
+    return { ...task, status: 'paused', consentRefusal: { reason, refusedAt }, updatedAt: refusedAt }
   }
 
   /**
@@ -344,7 +361,7 @@ export class ScheduleRuntime {
         kept.push(task)
         continue
       }
-      await this.commit({ ...task, status: 'paused', updatedAt: new Date(Date.now()).toISOString() })
+      await this.commit(this.refused(task, verdict.reason))
       this.ctx.logger.warn(`schedule: delivery of task "${task.record.id}" was refused (schedule_consent_refused): ${verdict.reason}`)
     }
     return kept
@@ -458,8 +475,10 @@ export class ScheduleRuntime {
 
   /** Apply one receipt to the target, involved Sessions, and history while keeping the scheduled occurrence. */
   private delivered(task: ScheduleTask, receipt: ScheduleDeliveryReceipt): ScheduleTask {
+    // A delivery that reaches its target settles any earlier refusal the task recorded.
+    const { consentRefusal: _cleared, ...keeping } = task
     return {
-      ...task,
+      ...keeping,
       target: task.target.kind === 'new_once' ? { kind: 'session', sessionId: receipt.targetSessionId } : task.target,
       // Each delivery of a `new` target creates a Session; recording them all would grow the task without bound.
       involvedSessionIds: task.target.kind === 'new'

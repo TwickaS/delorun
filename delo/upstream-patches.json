@@ -3084,37 +3084,37 @@
     {
       "path": "packages/schedule/schedule/src/types.ts",
       "class": "delo-feature",
-      "reason": "Scheduled-task consent seam (C16 switch `scheduled_task_consent`): the optional consent types — the management effect a consent may name, the delivery review and its verdict, the `ScheduleConsentService` seam resolved opportunistically with `ctx.get('scheduleConsent')`, the context slot and the typed `schedule/consent-refused` error. Types only: with no consent composed, every consumer keeps upstream's behaviour."
+      "reason": "Scheduled-task consent seam (C16 switch `scheduled_task_consent`): the optional consent types — the management effect a consent may name, the delivery review and its verdict, the refusal a consent records on a task it paused and its projection into the catalog entry, the `ScheduleConsentService` seam resolved opportunistically with `ctx.get('scheduleConsent')`, the context slot and the typed `schedule/consent-refused` error. Types only: with no consent composed, every consumer keeps upstream's behaviour."
     },
     {
       "path": "packages/schedule/schedule/src/storage.ts",
       "class": "delo-feature",
-      "reason": "Scheduled-task consent seam: a stored task gains the optional `creationPreset`, the permission preset captured at creation; it is absent when no preset service is composed or neither Session is live, so stored tasks keep upstream's shape."
+      "reason": "Scheduled-task consent seam: a stored task gains the optional `creationPreset`, the permission preset captured at creation or re-captured by the edit that re-approves it, and the optional `consentRefusal`, the reason and instant a refusal paused it; both are absent when nothing recorded them, so stored tasks keep upstream's shape."
     },
     {
       "path": "packages/schedule/schedule/src/index.ts",
       "class": "delo-feature",
-      "reason": "Scheduled-task consent seam: task creation captures the creation preset — the target Session's preset when one is live, otherwise the acting Session's, which a created target inherits — when the permission-preset service is composed; without it, creation stores exactly upstream's task."
+      "reason": "Scheduled-task consent seam: task creation captures the creation preset — the target Session's preset when one is live, otherwise the deployment default that a created Session is pinned to, which is what the first delivery of that Session will run — when the permission-preset service is composed; an update edit re-captures it from the effective target and settles a recorded refusal, so a re-approved task is reviewed against the preset the approval named; without the service, creation and edits store exactly upstream's task."
     },
     {
       "path": "packages/schedule/schedule/src/runtime.ts",
       "class": "delo-feature",
-      "reason": "Scheduled-task consent seam: before a due delivery wakes its Session the runtime asks the composed consent, on the single-delivery path before the message and on the grouped path member by member; a refusal pauses the task without delivering, so no later occurrence retries it, and the single path reports the typed `schedule/consent-refused` error. With no consent composed, delivery is exactly upstream's."
+      "reason": "Scheduled-task consent seam: before a due delivery wakes its Session the runtime asks the composed consent, on the single-delivery path before the message and on the grouped path member by member; a refusal pauses the task without delivering and records the consent's reason and instant on the task, so no later occurrence retries it and the paused task states why it stopped; the single path reports the typed `schedule/consent-refused` error, a delivery that reaches its target settles the recorded refusal, and the preset shim also reads the deployment default a newly opened Session runs. With no consent composed, delivery is exactly upstream's."
     },
     {
       "path": "packages/schedule/tool-schedule/src/index.ts",
       "class": "delo-feature",
-      "reason": "Scheduled-task consent seam: an `ask` approval of `schedule_create` or `schedule_edit` names the effect it would create — the recurrence, restated or read from the stored task, the target Session and its preset — through the composed consent, appended to the policy's reason; allow and deny stay as the policy resolved them, and with no consent composed the approval text is upstream's. Tool registration also waits for the `agents` facility, which resolves a stored target's live Session."
+      "reason": "Scheduled-task consent seam: an `ask` approval of `schedule_create` or `schedule_edit` names the effect it would create — the recurrence, restated or read from the stored task, the target Session and its preset — through the composed consent, appended to the policy's reason; a created target names the deployment default its opened Session will run, a stored target Session with no live Agent names no preset rather than the caller's, and a delete names nothing because it arms nothing. Allow and deny stay as the policy resolved them, the model-facing task still carries no Host bookkeeping, and with no consent composed the approval text is upstream's. Tool registration also waits for the `agents` facility, which resolves a stored target's live Session."
     },
     {
       "path": "packages/schedule/schedule/tests/consent.spec.ts",
       "class": "delo-feature",
-      "reason": "Scheduled-task consent seam: the delivery spec shows a due task delivering exactly upstream with no consent composed, a refused delivery pausing with nobody woken and the reason logged, a manual run refusing with the typed error, the review receiving the creation and current presets, the absent-preset case, and a due group screened member by member with the refused member paused while the rest share one message. The delivery check is mutation-tested: removing it fails five of these cases, restoring it passes."
+      "reason": "Scheduled-task consent seam: the delivery spec shows a due task delivering exactly upstream with no consent composed, a refused delivery pausing with nobody woken, the reason logged and recorded on the task and its catalog entry, a manual run refusing with the typed error and delivering once the consent allows it again, the review receiving the creation and current presets, the absent-preset case, a created target capturing the deployment default rather than the caller's preset (the Remote-created path included), an edit re-capturing that baseline, and a due group screened member by member with the refused member paused while the rest share one message. The delivery check is mutation-tested: removing the due-delivery call fails four of these cases and removing the manual-run call fails two of them, restoring either passes."
     },
     {
       "path": "packages/schedule/tool-schedule/tests/consent.spec.ts",
       "class": "delo-feature",
-      "reason": "Scheduled-task consent seam: the approval spec shows an ask staying unnamed with no consent composed, a created effect named on `schedule_create`, an edit that restates no rule naming the stored one, a consent that names nothing leaving the approval unchanged, and the consent consulted only at approval time."
+      "reason": "Scheduled-task consent seam: the approval spec shows an ask staying unnamed with no consent composed, a created effect named on `schedule_create`, an edit that restates no rule naming the stored one, a consent that names nothing leaving the approval unchanged, and the consent consulted only at approval time. It names the deployment default for a target that opens its chat and for a stored one that does, names no preset for a stored chat with no live Agent, leaves a delete unnamed, and runs the real naming sentence through the tool call site. A created target whose caller runs a non-default preset captures that default in the approval naming and in the stored `creationPreset`, and its first delivery is allowed; a manual run is refused through `reviewDelivery` with the typed `schedule/consent-refused` error and wakes nobody, while the recorded refusal stays out of the model-facing task."
     }
   ],
   "retired": []
