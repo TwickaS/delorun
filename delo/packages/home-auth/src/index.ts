@@ -5,8 +5,10 @@
  * - {@link HomeAuth} — the coordinator: claim, owner, device list, revocation and the sessions a revocation ends.
  * - {@link HomeAuthService} — the same behind Cordis as the `homeAuth` service, with the routes registered.
  * - The claim route, the device list route and the removal route, and the refusal a reach listener answers a claim
- *   with.
- * - The stores of the secrets directory, the typed refusal and the secret primitives.
+ *   with; the arrival helpers that decide whether a request came from the loopback listener and which address a claim
+ *   records.
+ * - The stores of the secrets directory with the bounds on the records they hold, the typed refusal and the secret
+ *   primitives.
  *
  * @module @delo/home-auth
  */
@@ -35,6 +37,12 @@ export {
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, type StampedRequest } from './arrival.ts'
 export {
+  LOOPBACK_STUDIO_ADDRESS,
+  isForeignFetchSite,
+  isSameLoopbackOrigin,
+  loopbackAddressOf,
+} from './arrival.ts'
+export {
   HOME_AUTH_HTTP_STATUS,
   HOME_AUTH_LOCAL_CODES,
   HomeAuthError,
@@ -44,8 +52,16 @@ export {
 } from './errors.ts'
 export { AttemptLimiter, type AttemptLimiterOptions } from './rate-limit.ts'
 export { OwnerCodeStore, type IssuedOwnerCode, type OwnerCodeRecord, type OwnerCodeStoreOptions } from './owner-code.ts'
-export { DeviceStore } from './devices.ts'
-export { SESSIONS_FILE, SessionStore, type OpenSessionRequest, type OpenedSession, type SessionRecord, type SessionStoreOptions } from './sessions.ts'
+export { DeviceStore, MAX_TRUSTED_DEVICES } from './devices.ts'
+export {
+  MAX_LIVE_SESSIONS_PER_DEVICE,
+  SESSIONS_FILE,
+  SessionStore,
+  type OpenSessionRequest,
+  type OpenedSession,
+  type SessionRecord,
+  type SessionStoreOptions,
+} from './sessions.ts'
 export {
   claimLabelOf,
   deviceIdOf,

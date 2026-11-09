@@ -1,7 +1,8 @@
 /**
- * The routes the owner's claim and the device list answer on, over a real HTTP server on a loopback port: the claim
- * that arrives on a reach listener is refused before its body is read, an unclaimed home refuses the device list with
- * `NO_OWNER`, and a removal is the end of a device's sessions.
+ * The routes the owner's claim and the device list answer on, over a real HTTP server on a loopback port: the claim and
+ * both device routes refuse a request whose `Host` names another address before reading the body, the removal refuses a
+ * page on another origin, an unclaimed home refuses the device list with `NO_OWNER`, and a removal is the end of a
+ * device's sessions.
  *
  * The test server plays the part of both listeners: a request under `?reach` is stamped with a reach listener, as a
  * reach dispatcher stamps the requests it forwards, and every other request arrives unstamped, as the loopback
@@ -10,9 +11,11 @@
  * Each test's comment names the check whose removal makes that test fail, so the suite is also the mutation record.
  */
 import { once } from 'node:events'
+import { readFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { connect } from 'node:net'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ListenerId, StudioAddress } from '@delo/contract-admission'
@@ -22,7 +25,7 @@ import { deviceIdOf } from '../src/records.ts'
 import {
   claimHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, OWNER_CLAIM_PATH, reachClaimRefusal, removeDeviceHandler,
 } from '../src/routes.ts'
-import { homeFixture, keyOf } from './fixtures/home.ts'
+import { claimOf, homeFixture, keyOf } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('http://127.0.0.1:3080')
 const HOUR = 60 * 60 * 1000
@@ -105,16 +108,22 @@ async function raw(port: number, head: readonly string[], body = ''): Promise<Re
  * @param port - the server's port.
  * @param path - the request target, query included.
  * @param message - the body.
- * @param host - the `Host` header.
+ * @param options - the `Host` header, and any further headers the request carries.
  * @returns the reply.
  */
-function postJson(port: number, path: string, message: unknown, host = `127.0.0.1:${String(port)}`): Promise<Reply> {
+function postJson(
+  port: number,
+  path: string,
+  message: unknown,
+  options: { readonly host?: string; readonly headers?: readonly string[] } = {},
+): Promise<Reply> {
   const body = JSON.stringify(message)
   return raw(port, [
     `POST ${path} HTTP/1.1`,
-    `Host: ${host}`,
+    `Host: ${options.host ?? `127.0.0.1:${String(port)}`}`,
     'Content-Type: application/json',
     `Content-Length: ${String(Buffer.byteLength(body))}`,
+    ...(options.headers ?? []),
     'Connection: close',
   ], body)
 }
@@ -174,11 +183,53 @@ describe('the claim route', () => {
       const issued = await home.auth.issueOwnerCode()
       const reply = await postJson(server.port, OWNER_CLAIM_PATH, {
         v: 1, ownerCode: issued.code, devicePublicKey: keyOf(1), label: 'This computer',
-      }, 'home.example.ts.net')
+      }, { host: 'home.example.ts.net' })
       // Pins the Host half of the arrival check: an unstamped request is loopback only if its Host says so.
       expect(reply.status).toBe(403)
       expect(json(reply)).toMatchObject({ error: 'OWNER_CLAIM_LOOPBACK_ONLY' })
       await expect(home.auth.owner()).resolves.toBeUndefined()
+    } finally {
+      await server.close()
+      await home.dispose()
+    }
+  })
+
+  it('records the loopback listener\'s own origin, whatever spelling of loopback the claim used', async () => {
+    const home = await homeFixture()
+    const server = await serve(home.auth)
+    try {
+      const issued = await home.auth.issueOwnerCode()
+      const reply = await postJson(server.port, OWNER_CLAIM_PATH, {
+        v: 1, ownerCode: issued.code, devicePublicKey: keyOf(1), label: 'This computer',
+      }, { host: 'LOCALHOST:3080' })
+      expect(reply.status).toBe(201)
+      expect(json(reply)).toMatchObject({ device: { address: 'http://127.0.0.1:3080' } })
+      const file = JSON.parse(await readFile(join(home.directory, 'devices.json'), 'utf8')) as { devices: { address: string }[] }
+      // Pins the address a claim records: the header's own spelling would bind the device to `localhost`, and the studio
+      // opened at `127.0.0.1` would then be an address the device was never approved for.
+      expect(file.devices[0]?.address).toBe('http://127.0.0.1:3080')
+    } finally {
+      await server.close()
+      await home.dispose()
+    }
+  })
+
+  it('refuses a claim whose Host is no loopback authority', async () => {
+    const home = await homeFixture()
+    const server = await serve(home.auth)
+    try {
+      const issued = await home.auth.issueOwnerCode()
+      // A URL parser reads userinfo, a path or a fragment as the loopback host; none of them is an authority a device may
+      // be bound to, so the claim is refused instead of recording the header as the device's address.
+      for (const host of ['user@127.0.0.1:3080', '127.0.0.1:3080/x', '127.0.0.1:3080#x']) {
+        const reply = await postJson(server.port, OWNER_CLAIM_PATH, {
+          v: 1, ownerCode: issued.code, devicePublicKey: keyOf(1), label: 'This computer',
+        }, { host })
+        expect(reply.status).toBe(400)
+        expect(json(reply)).toMatchObject({ error: 'BAD_REQUEST' })
+      }
+      await expect(home.auth.owner()).resolves.toBeUndefined()
+      await expect(home.auth.ownerCodeOutstanding()).resolves.toBe(true)
     } finally {
       await server.close()
       await home.dispose()
@@ -283,6 +334,94 @@ describe('the device routes', () => {
       expect(reply.status).toBe(400)
       expect(json(reply)).toMatchObject({ error: 'BAD_REQUEST' })
       await expect(home.auth.devices()).resolves.toMatchObject({ devices: [{ id: deviceIdOf(keyOf(1)) }] })
+    } finally {
+      await server.close()
+      await home.dispose()
+    }
+  })
+
+  it('refuses the device list whose Host names a reach address', async () => {
+    const home = await homeFixture()
+    const server = await serve(home.auth)
+    try {
+      const issued = await home.auth.issueOwnerCode()
+      const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
+      const reply = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, 'Host: home.example.ts.net', 'Connection: close'])
+      // Pins the arrival fence of the device list: a page on a name that resolves to 127.0.0.1 reads the owner and every
+      // device without it, which hands the home's records to a site the person never opened.
+      expect(reply.status).toBe(421)
+      expect(json(reply)).toMatchObject({ error: 'HOST_MISMATCH' })
+      expect(reply.body).not.toContain(claimed.device.id)
+      // The same request under the loopback Host is answered, so the refusal is the arrival and not the store.
+      const loopback = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
+      expect(loopback.status).toBe(200)
+      expect(json(loopback)).toMatchObject({ owner: { firstDeviceId: claimed.device.id }, devices: [{ id: claimed.device.id }] })
+    } finally {
+      await server.close()
+      await home.dispose()
+    }
+  })
+
+  it('refuses a removal whose Host names a reach address, before it reads the body', async () => {
+    const home = await homeFixture()
+    const server = await serve(home.auth)
+    try {
+      const issued = await home.auth.issueOwnerCode()
+      const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
+      const session = await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+      // A body of 4096 bytes that never finishes: a route that read it first would hold the response until the socket
+      // closed, and this test would time out with no reply.
+      const reply = await raw(server.port, [
+        `POST ${DEVICE_REMOVE_PATH} HTTP/1.1`,
+        'Host: evil.example',
+        'Content-Type: application/json',
+        'Content-Length: 4096',
+      ], '{"v":1,"deviceId":"')
+      // Pins the arrival fence of the removal: without it a name that resolves to 127.0.0.1 destroys the device record
+      // and its live session, which is a lockout of the home's own owner.
+      expect(reply.status).toBe(421)
+      expect(json(reply)).toMatchObject({ error: 'HOST_MISMATCH' })
+      await expect(home.auth.devices()).resolves.toMatchObject({ devices: [{ id: claimed.device.id }] })
+      await expect(home.auth.sessionOf(session.token)).resolves.toMatchObject({ deviceId: claimed.device.id })
+    } finally {
+      await server.close()
+      await home.dispose()
+    }
+  })
+
+  it('refuses a removal that a page on another origin sent', async () => {
+    const home = await homeFixture()
+    const server = await serve(home.auth)
+    try {
+      const issued = await home.auth.issueOwnerCode()
+      const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
+      const session = await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+      const foreign = await postJson(server.port, DEVICE_REMOVE_PATH, { v: 1, deviceId: claimed.device.id }, {
+        headers: ['Origin: https://evil.example'],
+      })
+      // Pins the Origin half of the removal's fence: a cross-site form or fetch keeps the loopback `Host` its page
+      // addressed, and only its Origin says whose page asked.
+      expect(foreign.status).toBe(403)
+      expect(json(foreign)).toMatchObject({ error: 'ORIGIN_MISMATCH' })
+      const crossSite = await postJson(server.port, DEVICE_REMOVE_PATH, { v: 1, deviceId: claimed.device.id }, {
+        headers: ['Origin: https://evil.example', 'Sec-Fetch-Site: cross-site'],
+      })
+      expect(crossSite.status).toBe(403)
+      expect(json(crossSite)).toMatchObject({ error: 'ORIGIN_MISMATCH' })
+      const neighbour = await postJson(server.port, DEVICE_REMOVE_PATH, { v: 1, deviceId: claimed.device.id }, {
+        headers: [`Origin: http://127.0.0.1:${String(server.port + 1)}`],
+      })
+      // Another port on loopback is another origin too: the check compares the request's own origin rather than asking
+      // whether the header names some loopback address.
+      expect(neighbour.status).toBe(403)
+      await expect(home.auth.sessionOf(session.token)).resolves.toMatchObject({ deviceId: claimed.device.id })
+      const own = await postJson(server.port, DEVICE_REMOVE_PATH, { v: 1, deviceId: claimed.device.id }, {
+        headers: [`Origin: http://127.0.0.1:${String(server.port)}`, 'Sec-Fetch-Site: same-origin'],
+      })
+      // Pins the same-origin path: the studio's own removal still answers with the headers a browser sends.
+      expect(own.status).toBe(200)
+      expect(json(own)).toMatchObject({ removed: true, sessions: 1 })
+      await expect(home.auth.sessionOf(session.token)).resolves.toBeUndefined()
     } finally {
       await server.close()
       await home.dispose()

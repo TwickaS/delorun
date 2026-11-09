@@ -10,13 +10,36 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ListenerId, StudioAddress } from '@delo/contract-admission'
-import type { Base64Url, DevicePublicKeyJwk } from '@delo/contract-device-approval'
+import { DEVICE_APPROVAL_VERSION, type Base64Url, type DevicePublicKeyJwk } from '@delo/contract-device-approval'
 import { HomeAuth, type ClaimRequest } from '../../src/home-auth.ts'
+import { deviceIdOf, type DeviceRecord } from '../../src/records.ts'
 
 /** The secret a fixture key is filled with, so two fixtures differ without any randomness. */
 export function keyOf(fill: number): DevicePublicKeyJwk {
   const coordinate = (value: number): string => Buffer.alloc(32, value).toString('base64url')
   return { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>(coordinate(fill)), y: brandString<Base64Url>(coordinate(fill + 100)) }
+}
+
+/**
+ * A device record a store holds, as a claim or an approval would write one.
+ * @param fill - the fill of the fixture key the record names.
+ * @param address - the studio address the device is trusted on.
+ * @param overrides - fields to replace, such as the address a spec rewrites.
+ * @returns the record.
+ */
+export function recordOf(fill: number, address: StudioAddress, overrides: Partial<DeviceRecord> = {}): DeviceRecord {
+  return {
+    v: DEVICE_APPROVAL_VERSION,
+    id: deviceIdOf(keyOf(fill)),
+    publicKey: keyOf(fill),
+    address,
+    label: `Device ${String(fill)}`,
+    platform: '',
+    approvedAt: 0,
+    approvedBy: null,
+    lastSignInAt: null,
+    ...overrides,
+  }
 }
 
 /** A temporary secrets directory, removed when the fixture is disposed. */

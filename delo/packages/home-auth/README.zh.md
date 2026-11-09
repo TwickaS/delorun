@@ -23,10 +23,12 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 `src/home-auth.ts` 是 `~/.delo/secrets/home-auth/` 之上的协调者，`src/service.ts` 把它作为 `homeAuth` 服务挂载，并在 `ctx.effect()` 内把 `POST /auth/owner/claim`、`GET /auth/devices` 与 `POST /auth/devices/remove` 注册到 web 服务器。下面每条规则都由 `tests/` 下的一个 spec 固定：
 
 - **所有者验证码**（`owner-code.json`）。128 位随机数写成 26 个 base32 字符，只打印一次，并且只以 SHA-256 摘要保存。验证码只能使用一次，并在打印后 10 分钟过期；错误的验证码会保留原有的验证码，新的验证码则取代它。
-- **认领**（`owner.json`、`devices.json`）。只接受回环访问，且即使没有任何分发器标记请求，`Host` 指向远程访问地址也会被拒绝。一个 home 只有一个所有者：持有效新验证码的第二个认领者会以 `ALREADY_OWNED` 被拒绝，第一个所有者保有自己的 home；同时发起的两个认领会串行执行，因此恰好一个赢得所有者席位。验证码在写入任何记录之前就被消耗，因此认领过 home 的验证码不会再认领第二个 home。
-- **设备列表**。所有者与每一台受信任设备，不含密钥材料。未认领的 home 会以 `NO_OWNER` 拒绝列表与移除，而不是像拥有空设备列表那样应答。
-- **会话**（`sessions.json`）。令牌只下发一次，并以作为记录键的 SHA-256 摘要保存，因此复制该文件无法让任何人登录。
-- **移除**。删除设备记录、使其令牌的每个在线会话失效，并通过 `ctx.connection.closeReachConnections({ deviceId })` 关闭这些会话准入的远程访问连接，全部在返回之前完成；没有记录的设备同样会结束其会话。
+- **认领**（`owner.json`、`devices.json`）。只接受回环访问，且即使没有任何分发器标记请求，`Host` 指向远程访问地址也会被拒绝。认领记录的是监听器自身的 origin `http://127.0.0.1:3080`，无论请求使用哪种回环写法——`localhost`、`127.0.0.1`、`[::1]`、`.localhost` 名称、带或不带端口、经由 SSH 端口转发——并且会以 `BAD_REQUEST` 拒绝根本不是 authority 的 `Host`，因此攻击者写入的请求头永远不会成为设备的地址。一个 home 只有一个所有者：持有效新验证码的第二个认领者会以 `ALREADY_OWNED` 被拒绝，第一个所有者保有自己的 home；同时发起的两个认领会串行执行，因此恰好一个赢得所有者席位。验证码在写入任何记录之前就被消耗，因此认领过 home 的验证码不会再认领第二个 home；而记录了设备却没有所有者的 home 会以 `STORE_INVALID` 拒绝认领，而不是接管这些设备。
+- **设备路由的到达。** `GET /auth/devices` 与 `POST /auth/devices/remove` 只在回环监听器上应答：两者都在读取任何内容之前判断到达，`Host` 指向其他地址会以 `421 HOST_MISMATCH` 被拒绝；移除还会以 `403 ORIGIN_MISMATCH` 拒绝来自其他 origin 的页面——`Origin` 不是请求自身的 origin，或 `Sec-Fetch-Site` 指向外部。正是这一点，使一个由解析到 `127.0.0.1` 的名称所提供的页面（DNS rebinding）无法读取 home 的记录或移除设备，也使跨站表单无法提交移除。
+- **设备列表**。所有者与每一台受信任设备，不含密钥材料。未认领的 home 会以 `NO_OWNER` 拒绝列表与移除，而不是像拥有空设备列表那样应答。所有者记录与设备列表会相互核对，因此被复制过来、指名本 home 未记录的设备的 `owner.json` 会以 `STORE_INVALID` 失败而不是成为所有者，任何列表、会话或移除都不会替它行事。
+- **会话**（`sessions.json`）。令牌只下发一次，并以作为记录键的 SHA-256 摘要保存，因此复制该文件无法让任何人登录。会话只会为已记录、且记录地址与请求一致的设备签发：没有所有者的 home 以 `NO_OWNER` 拒绝，无法读取的所有者记录以 `STORE_INVALID` 拒绝，本 home 未记录的密钥——另一个 home 的设备、位于其他地址的设备，或刚被撤销的设备——以 `DEVICE_NOT_TRUSTED` 拒绝。只有当设备仍按其会话地址被记录时，会话才被视为在线，因此设备记录已消失的令牌不会再应答任何内容，即使它自己的记录仍然存在。
+- **移除**。删除设备记录、使其令牌的每个在线会话失效，并通过 `ctx.connection.closeReachConnections({ deviceId })` 关闭这些会话准入的远程访问连接，全部在返回之前完成；没有记录的设备同样会结束其会话。**轮换尚未实现。** C5 的“移除”还会轮换 home 的其他每个会话，而本 home 尚无可以兑换轮换后令牌的令牌轮换路由，因此一次移除恰好结束被移除设备的会话，并保留其他每台设备的会话。轮换属于登录路由；在那之前，结束另一台设备的会话会把个人并未触碰的设备登出，而本包没有任何路由要求这样做（`leaves another device's sessions live` 这个 spec 固定了这一偏差）。
+- **限制**。一个 home 最多信任 32 台设备（`DEVICE_LIMIT_REACHED`，`429`），一台设备最多持有 16 个在线会话（`SESSION_LIMIT_REACHED`，`429`）；在统计上限之前会先丢弃已过期的会话记录，因此在会话过期后再次登录的设备永远不会被它们拒绝。
 - **记录**。每个文件都经 [约定 C1](../../docs/contracts/c01-home-layout.zh.md) 的受保护文件检查读取，因此其他用户可以读取的文件，或不是本包 JSON 的文件，会以 `STORE_INVALID` 拒绝，而不是被当作空内容读取并让一次认领覆盖它。
 
 <a id="the-admission-denial-suite"></a>
@@ -56,6 +58,7 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 
 - **登录前资产路由。** 处理 `GET /auth/assets/<asset>` 的 handler 会把该段与一张固定的已构建资产名表进行匹配。它从不先解码该段再把它拼接到目录路径上，因为解码后的 `..` 或分隔符会使路径离开资产目录。
 - **认领的到达。** 认领路由在读取请求体之前就判断请求从何处到达，其拒绝语句会点名回环监听器与 SSH 端口转发；远程访问监听器在任何路由被查询之前，通过 `reachClaimRefusal()` 应答同样的拒绝。
+- **设备路由的到达。** 列表与移除在读取任何内容之前判断到达，两者都会拒绝 `Host` 指向其他地址的请求；移除还会拒绝来自其他 origin 的页面。两条路由都尚未读取 home-auth 的会话 cookie：本包没有为 studio 签发该 cookie 的路由，而 C5 中“处于在线会话中的受信任设备”所指的设备界面属于远程访问 UI，因此在那个界面落地之前，回环到达——加上移除的 origin 校验——就是这两条路由提供的保证。也正因如此，远程访问监听器的已认证请求目前不会到达这两条路由中的任何一条。
 - **撤销。** 移除设备或结束会话时，会在返回之前调用 `ctx.connection.closeReachConnections({ deviceId })` 或 `({ sessionId })`，使不携带 Peer 的流与已升级的 socket（例如 `/plugins/events` 与插件 upgrade 路由）随会话一同结束；对设备的 Peer 执行 dispose（资源释放），会结束替它发言的流。
 - **回环凭据。** 每次回环签发都以 `authenticator/minted` 到达，提供方在写出设置该凭据的响应之前记录它。
 

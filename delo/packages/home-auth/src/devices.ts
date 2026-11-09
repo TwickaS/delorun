@@ -14,6 +14,13 @@ import { HomeAuthError } from './errors.ts'
 import { readStoreFile, writeStoreFile } from './files.ts'
 import { deviceRecordsOf, type DeviceRecord } from './records.ts'
 
+/**
+ * The most devices one home trusts: 32, which is more than a person's own computers, phones and browsers and few enough
+ * that the store and the sessions it carries stay small. C5 bounds a home's pending requests and a device's unused
+ * challenges; this is the same kind of bound over the records a home keeps for good.
+ */
+export const MAX_TRUSTED_DEVICES = 32
+
 /** The one list of trusted devices of a home. */
 export class DeviceStore {
   /**
@@ -40,15 +47,27 @@ export class DeviceStore {
   }
 
   /**
-   * Add one device record, refusing a second record for the same id.
+   * Add one device record, refusing a second record for the same id and a list that is full.
+   *
+   * The bound is a bound on the file rather than on trust: every record is a key the home must keep and, with C5's
+   * sessions, a device whose sessions stay live, so an unbounded list is an unbounded store that a run of approvals can
+   * fill. A person with more devices than the bound removes one first.
    * @param record - the record to add.
    * @throws {HomeAuthError} `DEVICE_NOT_TRUSTED` when the id is already recorded, which no caller may reach: a claim
    *   refuses a home that has an owner, and an approval refuses a request for a known device.
+   * @throws {HomeAuthError} `DEVICE_LIMIT_REACHED` when this home already trusts {@link MAX_TRUSTED_DEVICES} devices.
    */
   async add(record: DeviceRecord): Promise<void> {
     const records = await this.list()
     if (records.some(candidate => candidate.id === record.id)) {
       throw new HomeAuthError('DEVICE_NOT_TRUSTED', 'a device with this key is recorded already', { deviceId: record.id })
+    }
+    if (records.length >= MAX_TRUSTED_DEVICES) {
+      throw new HomeAuthError(
+        'DEVICE_LIMIT_REACHED',
+        `A home trusts at most ${String(MAX_TRUSTED_DEVICES)} devices. Remove one on the home's own computer before approving another`,
+        { limit: MAX_TRUSTED_DEVICES },
+      )
     }
     await this.write([...records, record])
   }

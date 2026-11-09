@@ -19,6 +19,13 @@ import { SESSION_TOKEN_BYTES, hashSecret, newSecret, systemRandom, type RandomBy
 /** The store file's name under `~/.delo/secrets/home-auth/`, mode 0600. */
 export const SESSIONS_FILE = 'sessions.json'
 
+/**
+ * The most live sessions one device may hold: 16, more than the browsers and tabs a person signs in from and few enough
+ * that one leaked device key cannot fill the store. C5 bounds a device's unused challenges at 5 and a home's pending
+ * requests at 5; this is the same kind of bound over the sessions a device mints by signing in.
+ */
+export const MAX_LIVE_SESSIONS_PER_DEVICE = 16
+
 /** One live session. */
 export interface SessionRecord {
   /** The device the session speaks for. */
@@ -76,14 +83,30 @@ export class SessionStore {
 
   /**
    * Mint a session token, record the session under its digest, and hand the token back once.
+   *
+   * Records whose lifetime has passed are dropped before the bound is counted, so a device that signs in again after its
+   * sessions expired is never refused by them, and the file does not keep a dead record for every sign-in ever made.
    * @param request - the device, the address and the lifetime.
    * @returns the session id and the token.
+   * @throws {HomeAuthError} `SESSION_LIMIT_REACHED` when the device already holds
+   *   {@link MAX_LIVE_SESSIONS_PER_DEVICE} live sessions.
    */
   async open(request: OpenSessionRequest): Promise<OpenedSession> {
     const token = newSecret(SESSION_TOKEN_BYTES, this.random)
     const sessionId = hashSecret(token)
     const at = this.now()
     const sessions = await this.read()
+    for (const [id, record] of Object.entries(sessions)) {
+      if (record.expiresAt <= at) delete sessions[id]
+    }
+    const live = Object.values(sessions).filter(record => record.deviceId === request.deviceId).length
+    if (live >= MAX_LIVE_SESSIONS_PER_DEVICE) {
+      throw new HomeAuthError(
+        'SESSION_LIMIT_REACHED',
+        `A device holds at most ${String(MAX_LIVE_SESSIONS_PER_DEVICE)} sessions at once. Close a browser tab or sign out on that device before signing in again`,
+        { limit: MAX_LIVE_SESSIONS_PER_DEVICE, deviceId: request.deviceId },
+      )
+    }
     sessions[sessionId] = {
       deviceId: request.deviceId,
       address: request.address,

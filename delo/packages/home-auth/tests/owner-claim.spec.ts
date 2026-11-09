@@ -4,7 +4,7 @@
  *
  * Each test's comment names the check whose removal makes that test fail, so the suite is also the mutation record.
  */
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, stat, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ListenerId } from '@delo/contract-admission'
@@ -128,6 +128,39 @@ describe('claiming a home', () => {
     try {
       // Pins "a home with no outstanding code refuses every code": a missing record must not read as a match.
       await expect(home.auth.claim(claimOf('A'.repeat(26)))).rejects.toMatchObject({ code: 'OWNER_CODE_INVALID' })
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('refuses the code that claimed the home once its records are gone', async () => {
+    const home = await homeFixture()
+    try {
+      const issued = await home.auth.issueOwnerCode()
+      await home.auth.claim(claimOf(issued.code))
+      // `devices reset` deletes the owner record and every device record; the code must not claim the home a second
+      // time after that. `ALREADY_OWNED` would answer the replay while the owner record stands, so the records go first
+      // and the code's own single use is what this test reads.
+      await unlink(join(home.directory, 'owner.json'))
+      await unlink(join(home.directory, 'devices.json'))
+      // Pins the consumption of a code at the claim: a code kept after use claims the home again here.
+      await expect(home.auth.claim(claimOf(issued.code))).rejects.toMatchObject({ code: 'OWNER_CODE_INVALID' })
+      await expect(home.auth.owner()).resolves.toBeUndefined()
+      await expect(stat(join(home.directory, 'devices.json'))).rejects.toThrow(/ENOENT/)
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('reports no outstanding code once a claim used it', async () => {
+    const home = await homeFixture()
+    try {
+      const issued = await home.auth.issueOwnerCode()
+      await expect(home.auth.ownerCodeOutstanding()).resolves.toBe(true)
+      await home.auth.claim(claimOf(issued.code))
+      // Pins "a claim spends the code": a code left outstanding would be a second claim waiting to happen.
+      await expect(home.auth.ownerCodeOutstanding()).resolves.toBe(false)
+      await expect(stat(join(home.directory, 'owner-code.json'))).rejects.toThrow(/ENOENT/)
     } finally {
       await home.dispose()
     }

@@ -10,7 +10,9 @@
  *   happen under one queue, so two claims racing cannot both win the owner seat.
  * - An owner code is single-use and expires; a wrong, used or expired code receives `OWNER_CODE_INVALID`.
  * - Every owner-only operation refuses with `NO_OWNER` on a home nobody has claimed, rather than acting on an empty
- *   list.
+ *   list, and refuses with `STORE_INVALID` when `owner.json` and `devices.json` disagree about which home they describe.
+ * - A session is minted only for a recorded device at the address it is trusted on, and stays live only while that record
+ *   is there, so a revoked device's token answers nothing even if its session record survives.
  * - Revoking a device removes its record, invalidates every live session of its tokens and closes the reach connections
  *   those sessions admitted, before the call returns.
  *
@@ -223,14 +225,24 @@ export class HomeAuth {
 
   /**
    * The owner record, refusing a home that nobody has claimed.
+   *
+   * The owner record and the device list are cross-checked here too, so every owner-only operation that starts with this
+   * call refuses records that describe different homes: a copied `owner.json` naming a first device this home does not
+   * record is a `STORE_INVALID` failure rather than an owner, and no listing, session or removal acts for it. A home
+   * whose devices were all removed is consistent, because a removed device leaves no record to disagree with.
    * @returns the record.
    * @throws {HomeAuthError} `NO_OWNER` when the home has no owner: the refusal every owner-only operation starts with,
    *   so an unclaimed home never answers as if it had an empty owner and an empty device list.
+   * @throws {HomeAuthError} `STORE_INVALID` when `owner.json` names a first device that `devices.json` does not record.
    */
   async assertOwner(): Promise<OwnerRecord> {
     const owner = await this.owner()
     if (owner === undefined) {
       throw new HomeAuthError('NO_OWNER', 'This home has no owner yet. Claim it on the home\'s own computer with the owner code that `delorun setup` printed')
+    }
+    const records = await this.deviceStore.list()
+    if (records.length > 0 && !records.some(record => record.id === owner.firstDeviceId)) {
+      throw new HomeAuthError('STORE_INVALID', 'owner.json names a first device that devices.json does not record')
     }
     return owner
   }
@@ -253,6 +265,11 @@ export class HomeAuth {
   /**
    * Revoke a device: remove its record, invalidate every live session of its tokens, and close the reach connections
    * those sessions admitted. A device that has no record changes nothing but still has its sessions ended.
+   *
+   * The sessions of every other device are left live: C5's "Removal" also rotates them, and this home does not rotate a
+   * session yet (see the README's note on rotation), so a removal ends exactly the removed device's sessions and
+   * invalidates no other credential. Until rotation exists, a removal is the one operation whose blast radius is the
+   * device it names.
    * @param deviceId - the device.
    * @returns what was removed, invalidated and closed.
    * @throws {HomeAuthError} `NO_OWNER` for an unclaimed home, which closes no connection and removes nothing.
@@ -269,20 +286,48 @@ export class HomeAuth {
 
   /**
    * Mint a session token for a device and record the session under its digest.
+   *
+   * A session speaks for a trusted device at the address it is trusted on and nothing else, so the home refuses to mint
+   * one for an id it does not record, for a device recorded at another address, and for a home with no owner at all. The
+   * check runs in the same queue as a revocation, so a removal that has started cannot be outrun by a mint that read the
+   * device a moment earlier.
    * @param request - the device, the address and the lifetime.
    * @returns the session id and the token, which no store keeps.
+   * @throws {HomeAuthError} `NO_OWNER` for an unclaimed home; `STORE_INVALID` for a store file that is not this
+   *   package's JSON; `DEVICE_NOT_TRUSTED` when no record names this device for this address.
    */
   async openSession(request: OpenSessionRequest): Promise<OpenedSession> {
-    return this.sessions.open(request)
+    return this.serial(async () => {
+      await this.assertOwner()
+      const device = await this.deviceStore.find(request.deviceId)
+      if (device === undefined || device.address !== request.address) {
+        throw new HomeAuthError(
+          'DEVICE_NOT_TRUSTED',
+          'This home does not trust that device on that address. Approve the device on the address it signs in on',
+          { deviceId: request.deviceId, address: request.address },
+        )
+      }
+      return this.sessions.open(request)
+    })
   }
 
   /**
    * The live session a token names.
+   *
+   * A session is live while its token is unexpired and its device is still recorded at the session's address. The device
+   * record is what a revocation deletes, so a token minted for a device the home no longer trusts stops answering even
+   * when its record survived — a session store that was written by hand, or one whose record the fast path of a removal
+   * missed, still answers with no session.
    * @param token - the token as presented.
-   * @returns the record, or undefined for an unknown or expired token.
+   * @returns the record, or undefined for an unknown or expired token, or for a device that is no longer trusted at the
+   *   session's address.
    */
   async sessionOf(token: string): Promise<SessionRecord | undefined> {
-    return this.sessions.authenticate(token)
+    const session = await this.sessions.authenticate(token)
+    if (session === undefined) return undefined
+    const device = await this.deviceStore.find(session.deviceId)
+    if (device === undefined || device.address !== session.address) return undefined
+    return session
   }
 
   /**
@@ -308,11 +353,19 @@ export class HomeAuth {
    * @param label - the validated label.
    * @param publicKey - the validated device public key.
    * @returns the records written.
+   * @throws {HomeAuthError} `ALREADY_OWNED` for a home that has an owner; `STORE_INVALID` when the home records trusted
+   *   devices but no owner, which no claim may append to; `OWNER_CODE_INVALID` for a wrong, used or expired code.
    */
   private async claimSerially(request: ClaimRequest, label: string, publicKey: DevicePublicKeyJwk): Promise<ClaimResult> {
     const existing = await this.owner()
     if (existing !== undefined) {
       throw new HomeAuthError('ALREADY_OWNED', 'This home has an owner already', { firstDeviceId: existing.firstDeviceId })
+    }
+    // A home with no owner records no device: a device list that is not empty belongs to an owner whose record is gone,
+    // and appending to it would make this claim the owner of devices the person never approved here.
+    const records = await this.deviceStore.list()
+    if (records.length > 0) {
+      throw new HomeAuthError('STORE_INVALID', 'devices.json records trusted devices for a home that owner.json says has no owner')
     }
     const device: DeviceRecord = {
       v: DEVICE_APPROVAL_VERSION,
@@ -336,8 +389,7 @@ export class HomeAuth {
       firstDeviceId: device.id,
       identities: [],
     }
-    const records = await this.deviceStore.list()
-    await this.deviceStore.write([...records, device])
+    await this.deviceStore.write([device])
     try {
       await writeStoreFile(join(this.directory, HOME_AUTH_FILES.owner), owner)
     } catch (error) {

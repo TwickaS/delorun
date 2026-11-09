@@ -2,9 +2,10 @@
  * The typed failure every home-auth check raises: contract C5's error code, the HTTP status the route answers with,
  * and the sentence a person reads.
  *
- * A refusal is a value of a contract's code set, so a caller can branch on it without reading a message. Two codes are
- * this package's own, for the message problems no contract names: `BAD_REQUEST` for a malformed message or a wrong
- * method, and `STORE_INVALID` for a store file that cannot be read as this package's JSON.
+ * A refusal is a value of a contract's code set, so a caller can branch on it without reading a message. This package's
+ * own codes cover what no contract names: `BAD_REQUEST` for a malformed message or a wrong method, `STORE_INVALID` for a
+ * store file that cannot be read as this package's JSON, and the two resource limits of a home's own records,
+ * `DEVICE_LIMIT_REACHED` and `SESSION_LIMIT_REACHED`, which are answered with `429` as C5's limits are.
  *
  * @module @delo/home-auth/errors
  */
@@ -12,7 +13,13 @@ import { ADMISSION_REFUSAL_CODES, ADMISSION_REFUSAL_STATUS, type AdmissionRefusa
 import type { DeviceApprovalErrorCode } from '@delo/contract-device-approval'
 
 /** Codes this package answers with that neither contract names. */
-export const HOME_AUTH_LOCAL_CODES = ['BAD_REQUEST', 'METHOD_NOT_ALLOWED', 'STORE_INVALID'] as const
+export const HOME_AUTH_LOCAL_CODES = [
+  'BAD_REQUEST',
+  'METHOD_NOT_ALLOWED',
+  'STORE_INVALID',
+  'DEVICE_LIMIT_REACHED',
+  'SESSION_LIMIT_REACHED',
+] as const
 
 /** One code of {@link HOME_AUTH_LOCAL_CODES}. */
 export type HomeAuthLocalCode = (typeof HOME_AUTH_LOCAL_CODES)[number]
@@ -22,7 +29,7 @@ export type HomeAuthErrorCode = DeviceApprovalErrorCode | AdmissionRefusalCode |
 
 /**
  * The HTTP status of each code this package answers over HTTP. C5's table gives the first group, C4's refusal table the
- * two claim refusals, and this package's own codes the last three. Codes C5 reserves for the command line and the
+ * four arrival and claim refusals, and this package's own codes the rest. Codes C5 reserves for the command line and the
  * desktop app are absent because no route raises them.
  */
 export const HOME_AUTH_HTTP_STATUS = {
@@ -42,9 +49,13 @@ export const HOME_AUTH_HTTP_STATUS = {
   RECOVERY_NEEDS_FACTOR: 403,
   RECOVERY_KIT_INVALID: 403,
   OWNER_CLAIM_LOOPBACK_ONLY: ADMISSION_REFUSAL_STATUS.OWNER_CLAIM_LOOPBACK_ONLY,
+  HOST_MISMATCH: ADMISSION_REFUSAL_STATUS.HOST_MISMATCH,
+  ORIGIN_MISMATCH: ADMISSION_REFUSAL_STATUS.ORIGIN_MISMATCH,
   BAD_REQUEST: 400,
   METHOD_NOT_ALLOWED: 405,
   STORE_INVALID: 500,
+  DEVICE_LIMIT_REACHED: 429,
+  SESSION_LIMIT_REACHED: 429,
 } as const satisfies Partial<Record<HomeAuthErrorCode, number>>
 
 /** {@link HOME_AUTH_HTTP_STATUS} as a lookup over every code, so a code with no status reads as `undefined`. */

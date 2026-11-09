@@ -2,20 +2,24 @@
  * The routes the owner's claim and the device list answer on: `POST /auth/owner/claim`, `GET /auth/devices` and
  * `POST /auth/devices/remove`, plus the refusal a reach listener answers a claim with.
  *
- * The claim route decides the arrival before it reads the body, which C5 requires: a claim that did not arrive on the
- * loopback listener is answered `403 OWNER_CLAIM_LOOPBACK_ONLY` with a sentence naming the loopback listener and SSH
- * port forwarding, whatever its body holds. The device list and the removal are owner-only, so an unclaimed home
- * answers `403 NO_OWNER` rather than an empty list.
+ * Every one of the three routes decides where its request arrived before it reads the body: a request that did not arrive
+ * on the loopback listener, or that arrived under a `Host` naming another address, is refused. For the claim, C5 requires
+ * `403 OWNER_CLAIM_LOOPBACK_ONLY` and a sentence naming the loopback listener and SSH port forwarding, whatever the body
+ * holds; the device list and the removal answer the same kind of refusal with `421 HOST_MISMATCH`, and the removal
+ * additionally refuses a browser request that came from another origin with `403 ORIGIN_MISMATCH`. Without those checks a
+ * page on another site reaches the home's records through a name that resolves to `127.0.0.1` — DNS rebinding — or posts
+ * the removal across sites. The device list and the removal are owner-only, so an unclaimed home answers `403 NO_OWNER`
+ * rather than an empty list.
  *
  * @module @delo/home-auth/routes
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { DeviceId, StudioAddress } from '@delo/contract-admission'
+import type { DeviceId } from '@delo/contract-admission'
 import { DEVICE_APPROVAL_VERSION } from '@delo/contract-device-approval'
 import { HomeAuth } from './home-auth.ts'
 import { HomeAuthError, refusalBody } from './errors.ts'
-import { isLoopbackHost } from './arrival.ts'
+import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from './arrival.ts'
 import { isRecord } from './files.ts'
 import { devicePublicKeyOf } from './records.ts'
 
@@ -33,6 +37,15 @@ export const MAX_BODY_BYTES = 16 * 1024
 
 /** The sentence a claim that did not arrive on loopback is answered with, which C5 requires to name loopback and SSH port forwarding. */
 const LOOPBACK_ONLY_SENTENCE = 'Claim the home on its own computer, at the loopback listener, or through SSH port forwarding to it; a reach address cannot claim a home'
+
+/** The sentence the device routes answer a request that did not arrive on the loopback listener with. */
+const DEVICE_ROUTE_SENTENCE = 'Read and remove devices on the home\'s own computer, at the loopback listener, or through SSH port forwarding to it; this route answers no other address'
+
+/** The sentence a removal that came from another origin is answered with. */
+const FOREIGN_ORIGIN_SENTENCE = 'Remove a device from the studio open on the home itself; a page on another address cannot remove one'
+
+/** The sentence a claim whose `Host` is no loopback authority is answered with. */
+const NO_AUTHORITY_SENTENCE = 'A claim names the loopback listener\'s own address as its Host, such as 127.0.0.1:3080'
 
 /** A request handler, as the web server takes it. */
 export type RouteHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
@@ -62,6 +75,14 @@ export function claimHandler(auth: HomeAuth): RouteHandler {
       sendError(response, new HomeAuthError('OWNER_CLAIM_LOOPBACK_ONLY', LOOPBACK_ONLY_SENTENCE))
       return
     }
+    // The address a claim records is the listener's own origin, whatever spelling of loopback the request used. A header
+    // that is no authority at all — userinfo, a path, a query, an impossible port — is refused before the body is read,
+    // so a header an attacker wrote is never written to the device record.
+    const address = loopbackAddressOf(arrival.host)
+    if (address === undefined) {
+      sendError(response, new HomeAuthError('BAD_REQUEST', NO_AUTHORITY_SENTENCE))
+      return
+    }
     if (request.method !== 'POST') {
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'Claim the home with a POST to /auth/owner/claim'))
       return
@@ -82,7 +103,7 @@ export function claimHandler(auth: HomeAuth): RouteHandler {
         ownerCode: message.ownerCode,
         devicePublicKey: devicePublicKeyOf(message.devicePublicKey, 'BAD_REQUEST'),
         label: message.label,
-        address: studioAddressOf(arrival.host),
+        address,
       })
       sendJson(response, 201, {
         owner: { claimedAt: claim.owner.claimedAt, firstDeviceId: claim.owner.firstDeviceId },
@@ -101,6 +122,9 @@ export function claimHandler(auth: HomeAuth): RouteHandler {
  */
 export function devicesHandler(auth: HomeAuth): RouteHandler {
   return async (request, response) => {
+    // The listing names the owner and every device, so it answers on the loopback listener only, under a `Host` that
+    // names it: a rebinding name reaches this port while its `Host` still says whose page asked.
+    if (!arrivedOnLoopback(request, response)) return
     if (request.method !== 'GET') {
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'Read the device list with a GET to /auth/devices'))
       return
@@ -120,10 +144,14 @@ export function devicesHandler(auth: HomeAuth): RouteHandler {
  */
 export function removeDeviceHandler(auth: HomeAuth): RouteHandler {
   return async (request, response) => {
+    // Removing a device ends its sessions, so the arrival is decided before anything is read: a foreign `Host` is a
+    // rebinding name, and a foreign `Origin` or a cross-site fetch is a page the person never asked to remove anything.
+    if (!arrivedOnLoopback(request, response)) return
     if (request.method !== 'POST') {
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'Remove a device with a POST to /auth/devices/remove'))
       return
     }
+    if (!cameFromOwnOrigin(request, response)) return
     try {
       const message = await readMessage(request, response)
       if (message === undefined) return
@@ -140,13 +168,41 @@ export function removeDeviceHandler(auth: HomeAuth): RouteHandler {
 }
 
 /**
- * The studio address a loopback claim binds its device to: the request's own authority over plain HTTP, because the
- * loopback listener serves HTTP.
- * @param host - the request's `Host` header.
- * @returns the address as an origin.
+ * Answer a request that did not arrive on the loopback listener under a `Host` naming it, which both device routes
+ * require: the loopback listener is the only place this home claims, lists and removes devices, and the `Host` answer is
+ * what keeps a page on another origin, reached through a name that resolves to `127.0.0.1`, away from the records.
+ * @param request - the request.
+ * @param response - the response, answered with the refusal when the arrival is foreign.
+ * @returns whether the route may answer the request.
  */
-function studioAddressOf(host: string | undefined): StudioAddress {
-  return brandString<StudioAddress>(`http://${(host ?? '127.0.0.1').toLowerCase()}`)
+function arrivedOnLoopback(request: IncomingMessage, response: ServerResponse): boolean {
+  const host = request.headers.host
+  if (HomeAuth.arrivalOf(request).listener !== 'loopback' || !isLoopbackHost(host) || loopbackAddressOf(host) === undefined) {
+    sendError(response, new HomeAuthError('HOST_MISMATCH', DEVICE_ROUTE_SENTENCE))
+    return false
+  }
+  return true
+}
+
+/**
+ * Answer a state-changing request that a browser sent from another origin, or from a site the person did not open the
+ * studio on: `Origin` must be the request's own loopback origin and `Sec-Fetch-Site` must not name a foreign one. A
+ * client that sends neither header is a program rather than a page.
+ * @param request - the request.
+ * @param response - the response, answered with the refusal when the origin is foreign.
+ * @returns whether the route may answer the request.
+ */
+function cameFromOwnOrigin(request: IncomingMessage, response: ServerResponse): boolean {
+  if (isForeignFetchSite(request.headers['sec-fetch-site'])) {
+    sendError(response, new HomeAuthError('ORIGIN_MISMATCH', FOREIGN_ORIGIN_SENTENCE))
+    return false
+  }
+  const origin = request.headers.origin
+  if (origin !== undefined && !isSameLoopbackOrigin(origin, request.headers.host)) {
+    sendError(response, new HomeAuthError('ORIGIN_MISMATCH', FOREIGN_ORIGIN_SENTENCE))
+    return false
+  }
+  return true
 }
 
 /**

@@ -11,10 +11,11 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
+import { DeviceStore } from '../src/devices.ts'
 import { HomeAuth } from '../src/home-auth.ts'
 import { SESSIONS_FILE } from '../src/sessions.ts'
 import { hashSecret } from '../src/secret.ts'
-import { claimOf, homeFixture, keyOf } from './fixtures/home.ts'
+import { claimOf, homeFixture, keyOf, recordOf } from './fixtures/home.ts'
 import { deviceIdOf } from '../src/records.ts'
 
 const ADDRESS = brandString<StudioAddress>('http://127.0.0.1:3080')
@@ -95,9 +96,17 @@ describe('revoking a device', () => {
     try {
       const firstDevice = await claimed(home)
       const secondDevice = deviceIdOf(keyOf(9))
+      // A session is minted only for a device the home records at the address it signs in on, so the second device is
+      // recorded first, as an approval records one.
+      await new DeviceStore({ file: join(home.directory, 'devices.json') }).add(recordOf(9, ADDRESS))
       const kept = await home.auth.openSession({ deviceId: secondDevice, address: ADDRESS, lifetimeMs: HOUR })
       await home.auth.openSession({ deviceId: firstDevice, address: ADDRESS, lifetimeMs: HOUR })
       // Pins the per-device filter: revoking every session instead of this device's makes the kept session fail.
+      //
+      // This test also holds the one deviation from C5's "Removal" that the README records: C5 says a removal "rotates
+      // every other session", and this home does not rotate a session yet, so a removal ends exactly the removed device's
+      // sessions and every other device keeps signing in. Rotation arrives with the sign-in routes that redeem a rotated
+      // token; until then ending another device's session is a behaviour no contract asks this package for.
       await expect(home.auth.revokeDevice(firstDevice)).resolves.toMatchObject({ sessions: 1 })
       await expect(home.auth.sessionOf(kept.token)).resolves.toMatchObject({ deviceId: secondDevice })
     } finally {
