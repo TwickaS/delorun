@@ -1179,25 +1179,25 @@
       "path": "packages/client/connection/src/index.ts",
       "class": "security",
       "reason": "Admission seam (C4): exports the `Authenticator` Service Definition, its types including `MintedCredential`, emits `authenticator/minted` from `BrowserAuth`'s mint callback, `LOOPBACK_LISTENER`, the reach listener types and `REACH_REFUSAL_STATUS`. The `/api` route adds a provider's `setCookie` to its response. For a Peer admitted on a reach listener, the index injections add the `__DSH_REMOTE_MEDIA__` global with the value `placeholder`; `reachContentSecurityPolicy` is exported. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
-      "sha256": "42bb799c9256ae24c93264b0a9a5dd387cb61a37f146a1b82acdf2fd297de6d0"
+      "sha256": "67e0f143618ef7e098c8a42b95ebe1c3114781870716f93fa1b591702f5f156c"
     },
     {
       "path": "packages/client/connection/src/reach.ts",
       "class": "security",
       "reason": "Admission seam (C4): reach listeners. `openReachListener` opens one only while an authenticator provider serves a valid reach policy for it, in a fiber that injects `authenticator`, so it closes before the provider is removed or replaced and never reopens by itself. Its dispatcher removes `tailscale-*` headers, refuses a foreign or loopback `Host`, a foreign SNI, a foreign or absent upgrade `Origin`, the launch token, `/connect` and `dsh-auth-*` cookies, then admits through the provider, sending a pre-login request only to its listed route. `builtinAdmission` exposes Connection's built-in loopback admission for providers to delegate to. The dispatcher also refuses a non-origin-form target and a second `Host` line, removes identity headers from the parsed, distinct and raw header views, records each admitted connection's session and device for `closeReachConnections`, and applies a policy change announced while the listener binds. Every reach response, refusals included, carries C4's security headers and a Content Security Policy with a fresh nonce, which the pass decision hands to the index renderer; the policy allows no string evaluation, images only from the origin, `data:` and `blob:`, and `no-store` covers `/auth/` and `/api`. The dispatcher records each admitted Peer so Connection can tell reach Peers apart. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges.",
-      "sha256": "f52e5c839803b533f168410bab88ff93b40a4eacbfa7e1cffd97a50a401adcf9"
+      "sha256": "887be1d44838590a51fed08a4339fc6f6dc8ecfd5488e9031a05058fcd2d6bf9"
     },
     {
       "path": "packages/client/connection/src/rpc-host.ts",
       "class": "security",
       "reason": "Admission seam (C4): `admit` returns the dispatcher's Peer for a request a reach listener dispatched and refuses one it admitted as pre-login; a loopback request keeps the Host/Origin fence and then goes to the loaded authenticator provider, or to `builtinAdmission`, upstream's cookie admission unchanged, when none is loaded. `authorizeIndex` answers a reach request by its dispatcher's admission. `ctx.connection` gains `builtinAdmission` and `openReachListener`. A provider's `setCookie` reaches the RPC-channel response, `closeReachConnections` ends the reach connections of a session or device, and with a provider loaded the loopback index is admitted by it and the launch-token exchange at the root and `/connect` runs only while its loopback policy accepts the token. `isReachPeer` reports whether a Peer was admitted on a reach listener. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges.",
-      "sha256": "98f452a085b6e645bc80a6b899268430787079c43930d967aac49109cab5b3ab"
+      "sha256": "c518c6f83aa0282d3198009eeb87dfd0c4514cd8e45dc0200e09602aa06924a8"
     },
     {
       "path": "packages/client/connection/src/rpc.ts",
       "class": "security",
       "reason": "Admission seam (C4): `PeerAdmission`'s admitted result carries the provider's `setCookie`, and `ConnectionIndexResponse` may offer `setHeader`, through which an admitted loopback index response receives it. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges.",
-      "sha256": "65a9e14defd94609337c2f15e05dde901eda44e87257811a566851d1239ce2de"
+      "sha256": "a563769a1651fc44f634b5668c96f69e3657be094c88e31b4fb6279195949c79"
     },
     {
       "path": "packages/client/connection/tests/minted.host.spec.ts",
@@ -1215,7 +1215,7 @@
       "path": "packages/client/connection/tests/reach.host.spec.ts",
       "class": "security",
       "reason": "Admission seam (C4): proves the reach dispatcher's refusals and their order over a real web server, that every route, upgrade, `/api` and the fallback answer 401 before sign-in, that pre-login requests reach only their listed route, that a listener opens only with a provider serving a valid reach policy and closes and stays closed when its provider is removed or replaced, and that loopback admission keeps the fence before a loaded provider. It also proves identity-header removal from every view on requests and upgrades, the refusal of non-origin-form targets and duplicate `Host` lines, that a policy withdrawn while binding opens no listener, that `closeReachConnections` ends exactly the matching streams and upgraded sockets, and that loopback index and `/connect` requests consult a loaded provider and receive its `setCookie`. Covers the reach response headers, the full policy text and a fresh nonce per response, on admitted, pre-login and refused responses and refused upgrades. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges.",
-      "sha256": "2b25110f025c7d06d0a16eb48daaa7be795d4b6fd0c323d9561ebf0b9c8c1b02"
+      "sha256": "8b2be067f66814a8a75ed3f740b2c2a618937fd63d0774aa21df27e14bf9222f"
     },
     {
       "path": "packages/client/connection/tsconfig.host.json",
@@ -2565,19 +2565,19 @@
       "path": "packages/fs/tool-fs-search/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Protected home, read fence (review of #66): re-recorded after the search read-fence sentence.",
-      "sha256": "1d75bddcf6e6fefa4115284aed82fa9b9baa855dab563f126151315666e33bf8"
+      "sha256": "1230b1254b0d70144b32cd8d96a0d3ac47bc09f3798c6d87e49ec85582c258d2"
     },
     {
       "path": "packages/fs/tool-fs-search/README.md",
       "class": "delo-feature",
       "reason": "Protected home, read fence (review of #66): documents `SEARCH_SANDBOX_DENIED` and the filtered results.",
-      "sha256": "b4f1e3464a81cc518b444b9ba5ff03026800c54d3c3bce17958adeddc4d13cf6"
+      "sha256": "6ca46a95fec9481ae7accb6fbaea4b5aa1b1894206a3e3f15f7d56c7ae14227a"
     },
     {
       "path": "packages/fs/tool-fs-search/README.zh.md",
       "class": "delo-feature",
       "reason": "Protected home, read fence (review of #66): the Chinese counterpart of the search read-fence sentence.",
-      "sha256": "549364f19008444a39f5021b4b152ebe3af13bd6d95854e42d7583bffad35035"
+      "sha256": "44feb306b2f09d9ef7b5d691a803c60fa3c2618c5d91af427bd18fa6dca5dc6f"
     },
     {
       "path": "packages/fs/tool-fs-search/package.json",
@@ -2613,7 +2613,7 @@
       "path": "packages/fs/tool-fs-search/tests/integration.spec.ts",
       "class": "delo-feature",
       "reason": "Protected home, read fence (review of #66): covers glob and grep leaving out protected results, refusing roots at the home, inside it, through a link, `..` and another mount of it, a session whose workspace is the home, `danger-full-access` (also agentless) and no protected reads.",
-      "sha256": "13efc88accfe624feb45ceb54da0bafd5a462244b237d40beadd918c845ba115"
+      "sha256": "e0bbdec4184fc1668474606f81f69f9cb6ee64f5b20739bf00817b57e9a60fcf"
     },
     {
       "path": "packages/fs/tool-fs-search/tsconfig.json",
@@ -2643,13 +2643,13 @@
       "path": "packages/fs/tool-fs/src/consent.ts",
       "class": "security",
       "reason": "Instruction-layer consent seam (WP2.15, A101): the write-commit consent lets a plugin require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream.",
-      "sha256": "23f1d739ef31e1ad1344ffe2e11604db7538d6230be28559b1aebf7d59e442d1"
+      "sha256": "914f8c7405a5039c70ec42cd97238e5689075393d6413d62d3753c18dabf0995"
     },
     {
       "path": "packages/fs/tool-fs/src/index.ts",
       "class": "security",
       "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream.",
-      "sha256": "35a5adb189b83b7ff4d5e251502d1dee29c59e663d4b4c362e2b9abd37db20c9"
+      "sha256": "22f97345c7c1ee9ace77fb2afa307b60fe1f420410e11ab5b857a3effcc64eff"
     },
     {
       "path": "packages/fs/tool-fs/src/patch/plan.ts",
@@ -2667,13 +2667,13 @@
       "path": "packages/fs/tool-fs/src/sandbox.ts",
       "class": "security",
       "reason": "Protected home, read fence (review of #66): `mapError` passes a `FS_SANDBOX_DENIED` through unchanged when no policy is stamped, which the protected-read refusal raises without a confining backend, instead of failing on the missing mode.",
-      "sha256": "18499afe87550ffefe7cf490ac9ca15181a62e081e5eb9a76cba1835cb4dd623"
+      "sha256": "b23b55ac98c25d89b21c9c5a91db7dda3911a0ef6657a13357ef3bceada7854b"
     },
     {
       "path": "packages/fs/tool-fs/tests/apply-patch.spec.ts",
       "class": "delo-feature",
       "reason": "Protected home, read fence (review of #66): covers `apply_patch` refusing a protected target before any read.",
-      "sha256": "80480ba2e62fd26835b7a3cabd012b05072b287a404bd12b99822393ce33b7b2"
+      "sha256": "f89c68f27a678c40dd45e3b83ae3066c569d5a8920062be87c2c91b89483d296"
     },
     {
       "path": "packages/fs/tool-fs/tests/integration.spec.ts",
@@ -2685,7 +2685,7 @@
       "path": "packages/fs/tool-fs/tests/tools.spec.ts",
       "class": "delo-feature",
       "reason": "Instruction-layer consent seam (WP2.15, A101): the write-commit consent lets a plugin require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream.",
-      "sha256": "42edd9df8ba6bcc4840989b3eea75b3a9577faf9e0ee760199501ba2747ed68a"
+      "sha256": "ff76d88dd0348d230c7d81c557f10e13c7f8b730d0acebfb6d2eb0814bcd70b5"
     },
     {
       "path": "packages/fs/tool-str-replace-editor/README.i18n.yaml",
@@ -2715,7 +2715,7 @@
       "path": "packages/fs/tool-str-replace-editor/tests/tools.spec.ts",
       "class": "delo-feature",
       "reason": "Protected home, read fence (review of #66): covers `view` and `str_replace` refusals directly, through links, `..` and another mount, the readable entry, `danger-full-access` (also agentless), no policy service, and no protected reads.",
-      "sha256": "a102254334b22ef8efe5fe68c28e876960b9a7f3ea64e774c48a4c380521f681"
+      "sha256": "779b16398cdd8700f60c39f06e58fbc7baf163f961e3fd104d8893e1774dad01"
     },
     {
       "path": "packages/host/open-in-app/src/resolver.ts",
@@ -3105,7 +3105,7 @@
       "path": "packages/schedule/schedule/src/index.ts",
       "class": "delo-feature",
       "reason": "Scheduled-task consent seam: task creation captures the creation preset — the target Session's preset when one is live, otherwise the deployment default that a created Session is pinned to, which is what the first delivery of that Session will run — when the permission-preset service is composed; an update edit re-captures it from the effective target and settles a recorded refusal, so a re-approved task is reviewed against the preset the approval named; without the service, creation and edits store exactly upstream's task.",
-      "sha256": "7683d22930ded401ccd11c9fbee3f205efdc0e09041d27c636b697277806a2d7"
+      "sha256": "efa044dafa9dbe09bf60f1afcec39295940a7714295b2c579baae9249d7ad1b5"
     },
     {
       "path": "packages/schedule/schedule/src/runtime.ts",
@@ -3123,25 +3123,25 @@
       "path": "packages/schedule/schedule/src/types.ts",
       "class": "delo-feature",
       "reason": "Scheduled-task consent seam (C16 switch `scheduled_task_consent`): the optional consent types — the management effect a consent may name, the delivery review and its verdict, the refusal a consent records on a task it paused and its projection into the catalog entry, the `ScheduleConsentService` seam resolved opportunistically with `ctx.get('scheduleConsent')`, the context slot and the typed `schedule/consent-refused` error. Types only: with no consent composed, every consumer keeps upstream's behaviour.",
-      "sha256": "d131cc059652396812a7685e5c022530bd5f25bac97c8e9d6318dd161b817a67"
+      "sha256": "bb5c86d2c93d55aaa34410ac2a346613bce2e4005941c931c948e5ab0919539a"
     },
     {
       "path": "packages/schedule/schedule/tests/consent.spec.ts",
       "class": "delo-feature",
       "reason": "Scheduled-task consent seam: the delivery spec shows a due task delivering exactly upstream with no consent composed, a refused delivery pausing with nobody woken, the reason logged and recorded on the task and its catalog entry, a manual run refusing with the typed error and delivering once the consent allows it again, the review receiving the creation and current presets, the absent-preset case, a created target capturing the deployment default rather than the caller's preset (the Remote-created path included), an edit re-capturing that baseline, and a due group screened member by member with the refused member paused while the rest share one message. The delivery check is mutation-tested: removing the due-delivery call fails four of these cases and removing the manual-run call fails two of them, restoring either passes.",
-      "sha256": "6b21d0c957757240308a123c7763a4a100a182841bdad41aaeec759fcfb110b8"
+      "sha256": "334d38bc108bf95ff6db4d83eec867ac783a5442184466e067118c0826723171"
     },
     {
       "path": "packages/schedule/tool-schedule/src/index.ts",
       "class": "delo-feature",
       "reason": "Scheduled-task consent seam: an `ask` approval of `schedule_create` or `schedule_edit` names the effect it would create — the recurrence, restated or read from the stored task, the target Session and its preset — through the composed consent, appended to the policy's reason; a created target names the deployment default its opened Session will run, a stored target Session with no live Agent names no preset rather than the caller's, and a delete names nothing because it arms nothing. Allow and deny stay as the policy resolved them, the model-facing task still carries no Host bookkeeping, and with no consent composed the approval text is upstream's. Tool registration also waits for the `agents` facility, which resolves a stored target's live Session.",
-      "sha256": "948fafbd59e4ce435004f1df30a5ce2c5c20c47b8ab930aaeca90eb1abeac514"
+      "sha256": "393c0ecd08f772b52c25044124eb8883384d668c7bcf044c71e019bea8c04025"
     },
     {
       "path": "packages/schedule/tool-schedule/tests/consent.spec.ts",
       "class": "delo-feature",
       "reason": "Scheduled-task consent seam: the approval spec shows an ask staying unnamed with no consent composed, a created effect named on `schedule_create`, an edit that restates no rule naming the stored one, a consent that names nothing leaving the approval unchanged, and the consent consulted only at approval time. It names the deployment default for a target that opens its chat and for a stored one that does, names no preset for a stored chat with no live Agent, leaves a delete unnamed, and runs the real naming sentence through the tool call site. A created target whose caller runs a non-default preset captures that default in the approval naming and in the stored `creationPreset`, and its first delivery is allowed; a manual run is refused through `reviewDelivery` with the typed `schedule/consent-refused` error and wakes nobody, while the recorded refusal stays out of the model-facing task.",
-      "sha256": "3fb2647976d728851b88768622952150494e01c784b296009875c379ac7ec93b"
+      "sha256": "93a9e60ae26ac2333dcab97039a539eea4a153bb1f82eb85ec14622cac6cd226"
     },
     {
       "path": "packages/sdk/server/tests/permission-parity.spec.ts",
@@ -3525,13 +3525,13 @@
       "path": "packages/web/web-fetch-http/src/provider.ts",
       "class": "security",
       "reason": "web_fetch guard seam (A100): the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted; without it the provider is byte-identical to upstream.",
-      "sha256": "63aef7a95bbee97ad70f38928adb7724186d0329149208c4eb75e335a1aa9f98"
+      "sha256": "7a5832438dcaa38f50232ad764102457740a0467ccda9232f3f6337baa3b88aa"
     },
     {
       "path": "pnpm-lock.yaml",
       "class": "delo-feature",
       "reason": "Lockfile importers for Delo's workspace packages; regenerate with pnpm install on an upstream merge, never hand-merge. Includes `@delo/cli`'s dependency on `@deepseek-ai/dsh-sandbox-local` for setup's dialect report. Includes the tool-fs-search sandbox dependencies.",
-      "sha256": "f0792c6031f2dfe92b583a4b8457874ec9b194a2965c501c501d5d7248b63e5c"
+      "sha256": "04adb5447bf372a1fff6630ee1f55c38db8a6bb0125ee63485f7e5e037b228a2"
     },
     {
       "path": "pnpm-workspace.yaml",
@@ -3968,107 +3968,128 @@
     {
       "path": "packages/client/connection/src/api-request-trust.ts",
       "class": "security",
-      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot — with exactly one Host line in the raw header list, and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot — with exactly one Host line in the raw header list, and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "f25242318b9f949281fa0edc438ace05835c30d6367cfb3d66ab51d61ea05621"
     },
     {
       "path": "packages/client/connection/tests/api-request-trust.host.spec.ts",
       "class": "security",
-      "reason": "Specs of the tightened /api trust fence: every Host spelling the URL parser would repair, a repeated Host line node:http keeps only the first of, a state-changing /api request that states no origin, and the cross-site arrival a route declares for a navigation only. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Specs of the tightened /api trust fence: every Host spelling the URL parser would repair, a repeated Host line node:http keeps only the first of, a state-changing /api request that states no origin, and the cross-site arrival a route declares for a navigation only. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "237ffe3e55b08c580503af1a742371783491098aaf37a7fad5f68378a5db424e"
     },
     {
       "path": "packages/client/connection/tests/fetch-routes.host.spec.ts",
       "class": "security",
-      "reason": "Spec of the exact-route media-type gate: a body arriving with any media type but the route's own is refused, which the streaming upload route relies on. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Spec of the exact-route media-type gate: a body arriving with any media type but the route's own is refused, which the streaming upload route relies on. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "f05b33975564667c318423ca02418c7c7a1d51b53e5e07b1b26441f13aa3662d"
     },
     {
       "path": "packages/client/connection/tests/node-half.host.spec.ts",
       "class": "security",
-      "reason": "Harness of the node-half specs: a JSON POST carries the Origin a browser attaches, so the specs exercise the origin-account rule rather than the path a non-browser client takes. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Harness of the node-half specs: a JSON POST carries the Origin a browser attaches, so the specs exercise the origin-account rule rather than the path a non-browser client takes. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "1a104f0f8d3b2b2a20e1edf348ef1b1ea347c663db5ea695fab4829f16b9c94f"
     },
     {
       "path": "packages/client/file-upload/src/index.ts",
       "class": "security",
-      "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "310def93d68cd7324dcc5529a561688ac279701ed2eb3f89380329ca05e12774"
     },
     {
       "path": "packages/client/hmr/package.json",
       "class": "security",
-      "reason": "Development dependency on @deepseek-ai/dsh-client-connection for the Context merge the transport now reads; the peer set is unchanged. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Development dependency on @deepseek-ai/dsh-client-connection for the Context merge the transport now reads; the peer set is unchanged. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "12459b4814bc9bc84b6cdb8f954e01b69d1dd999b8865d4909fa84d9f8299409"
     },
     {
       "path": "packages/client/hmr/src/index.ts",
       "class": "security",
-      "reason": "The /plugins/events SSE stream names the module graph, the plugin inventory and the release commit, so every request asks the composition's `connection` fence for a rejection before the channel opens: a rebound page carrying the attacker's authority reads nothing, nor does an unauthenticated caller. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "The /plugins/events SSE stream names the module graph, the plugin inventory and the release commit, so every request asks the composition's `connection` fence for a rejection before the channel opens: a rebound page carrying the attacker's authority reads nothing, nor does an unauthenticated caller. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "9a2146cd93d0c4513411c3a672bd229b786fdf494f434bf0626e3e418212a3d0"
     },
     {
       "path": "packages/client/hmr/tests/node-half.client.spec.ts",
       "class": "security",
-      "reason": "Specs of the gated event stream: a refused authority gets the fence's status and no frame, the loopback authority streams, and the mount helper's fence type takes the request. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Specs of the gated event stream: a refused authority gets the fence's status and no frame, the loopback authority streams, and the mount helper's fence type takes the request. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "50babfeb575d2cc90a745b557c6a9e785bb940e5e9fae33584786e9f2a9cb7be"
     },
     {
       "path": "packages/client/hmr/tsconfig.json",
       "class": "security",
-      "reason": "Project reference to the connection package's host project, which declares the `connection` Context merge this package's route handler reads. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Project reference to the connection package's host project, which declares the `connection` Context merge this package's route handler reads. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "440b6d3aa8dea7750d00c421b77b6a5d3e3f0ce7e36f1f2abeed3f0f8de72f44"
     },
     {
       "path": "packages/client/modules/src/index.ts",
       "class": "security",
-      "reason": "The /plugins bundle route serves the plugin inventory, so an HTTP request — which arrives with no admitted Peer — asks the composition's `connection` fence before any bundle bytes are read, while an in-process read keeps its caller's Peer. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "The /plugins bundle route serves the plugin inventory, so an HTTP request — which arrives with no admitted Peer — asks the composition's `connection` fence before any bundle bytes are read, while an in-process read keeps its caller's Peer. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "246cc74cbe22db5ec8d1e60a50555034bb60c85945217da9d4b1f05e1b1dfc45"
     },
     {
       "path": "packages/client/modules/tests/node-half.client.spec.ts",
       "class": "security",
-      "reason": "Spec of the gated bundle route: a request over HTTP without an admitted Peer takes the fence's refusal before a bundle is read. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Spec of the gated bundle route: a request over HTTP without an admitted Peer takes the fence's refusal before a bundle is read. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "175076e97d0240e58f760c22b960b3eac8af8be3178ffb02b2b2491ce433dc9a"
     },
     {
       "path": "packages/client/modules/tests/package-assets.client.spec.ts",
       "class": "security",
-      "reason": "Composition of the carrier spec: provides an admitting `connection` service, which the bundle route now injects. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Composition of the carrier spec: provides an admitting `connection` service, which the bundle route now injects. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "b5e21df2ef3627f2c02a089493b9685c5ccfe8b4551ffd5716893265930ce076"
     },
     {
       "path": "packages/host/frontend-static/src/index.ts",
       "class": "security",
-      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "36fc8a466462f9715408937d2cbb76933089bb4f386c513c534adc9722315c9b"
     },
     {
       "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
       "class": "security",
-      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. Lead verdict: pending; no lead review of this change is recorded yet."
+      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "bbbde1a5077c40ef425145fa968cec797392a792c65e5dc00924882862088e9b"
     },
     {
       "path": "packages/web/web-fetch-http/package.json",
       "class": "security",
-      "reason": "web_fetch guard pin (B3): promotes `@deepseek-ai/dsh-http-proxy` from a development dependency to a dependency, because the provider now asks the installed proxy policy whether a hop is tunnelled before it pins the guard's approved addresses; the dependency itself was already there."
+      "reason": "web_fetch guard pin (B3): promotes `@deepseek-ai/dsh-http-proxy` from a development dependency to a dependency, because the provider now asks the installed proxy policy whether a hop is tunnelled before it pins the guard's approved addresses; the dependency itself was already there.",
+      "sha256": "99c21a40e028bc094a9b80dc88a9402f3e8a9fb6af8ea0bec9a5b7e68c80fa03"
     },
     {
       "path": "packages/web/web-fetch-http/tests/proxy.spec.ts",
       "class": "security",
-      "reason": "web_fetch guard pin (B3): proves a hop with a mounted guard and an installed proxy keeps the proxy dispatcher rather than the pinned agent, so the pin applies to a direct connection only and the person's proxy is never bypassed."
+      "reason": "web_fetch guard pin (B3): proves a hop with a mounted guard and an installed proxy keeps the proxy dispatcher rather than the pinned agent, so the pin applies to a direct connection only and the person's proxy is never bypassed.",
+      "sha256": "dc1348471da94085717ec4c1d33ca80686ce3a833523a775d3a48172fa42a3c8"
     },
     {
       "path": "packages/web/web-fetch-http/tsconfig.json",
       "class": "security",
-      "reason": "web_fetch guard pin (B3): the project reference to `../../util/http-proxy`, whose proxy policy the provider reads before it chooses a dispatcher."
+      "reason": "web_fetch guard pin (B3): the project reference to `../../util/http-proxy`, whose proxy policy the provider reads before it chooses a dispatcher.",
+      "sha256": "2923379a708373d358a8cfc62798a192d2211c50a6c16d77807edad5d8170984"
     },
     {
       "path": "packages/context/agent-instructions/src/config.ts",
       "class": "delo-feature",
-      "reason": "Instruction-layer consent: the loader exports its own default instruction file names (`AGENTS.md`, `CLAUDE.md` and their `.local.md` overlays) instead of keeping them module-private, so the consent over instruction writes reads that list rather than restating a name; a default the loader adds is then a name the consent reviews. The loader reads the same constants, so behaviour is unchanged."
+      "reason": "Instruction-layer consent: the loader exports its own default instruction file names (`AGENTS.md`, `CLAUDE.md` and their `.local.md` overlays) instead of keeping them module-private, so the consent over instruction writes reads that list rather than restating a name; a default the loader adds is then a name the consent reviews. The loader reads the same constants, so behaviour is unchanged.",
+      "sha256": "e6bf50f6ebb826df6f952e2e75598aea9dfed7f342419dc240dbeae83fee536b"
     },
     {
       "path": "packages/context/agent-instructions/src/index.ts",
       "class": "delo-feature",
-      "reason": "Instruction-layer consent: the package re-exports the default instruction file name lists from `config.ts` so a consumer outside the package can read them. Re-export only; no behaviour changes."
+      "reason": "Instruction-layer consent: the package re-exports the default instruction file name lists from `config.ts` so a consumer outside the package can read them. Re-export only; no behaviour changes.",
+      "sha256": "be1f5538d239f9d88287e7c66a623b6ff4f36567149ac2143e1e80d020bb76f1"
     },
     {
       "path": "packages/skill/skill/src/index.ts",
       "class": "delo-feature",
-      "reason": "Instruction-layer consent: `SkillProvider` gains an optional `configuredRoots()`, and `SkillRegistry` implements it over the registered providers, so a consent over skill writes classifies a target against the roots the deployment's providers actually read, a configured custom directory included. A provider that names no roots contributes none."
+      "reason": "Instruction-layer consent: `SkillProvider` gains an optional `configuredRoots()`, and `SkillRegistry` implements it over the registered providers, so a consent over skill writes classifies a target against the roots the deployment's providers actually read, a configured custom directory included. A provider that names no roots contributes none.",
+      "sha256": "eead6b7416ae8a81e6fc861538ad0d5ebed7771fd82c4f183e1f4ecc8dd44ffa"
     },
     {
       "path": "packages/skill/skill-filesystem/src/index.ts",
       "class": "delo-feature",
-      "reason": "Instruction-layer consent: the filesystem skill provider names its project skill directories and home store as exported constants and implements `configuredRoots()`, which reports the roots its configuration names without a workspace — the custom directories, the two default home stores and the bundled root. Discovery reads the same constants, so a configured root and a reviewed root cannot drift."
+      "reason": "Instruction-layer consent: the filesystem skill provider names its project skill directories and home store as exported constants and implements `configuredRoots()`, which reports the roots its configuration names without a workspace — the custom directories, the two default home stores and the bundled root. Discovery reads the same constants, so a configured root and a reviewed root cannot drift.",
+      "sha256": "7a15704d643bfec3fdb2995af6c7e01c420b5c4061be8e0a5fb63d754565ceab"
     }
   ],
   "retired": []

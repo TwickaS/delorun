@@ -210,7 +210,7 @@ describe('C4 listener and dispatch denials', () => {
     expectRefused(await suite.relay.send('/fixture-plugin/hello', { cookie: SESSION_COOKIE }, { servername: 'other.example.org' }), 'SNI_MISMATCH')
     // The loopback listener keeps upstream's fence: a foreign Host is refused, a loopback one is not.
     expect((await suite.loopback.send('/api/session.list', { host: 'evil.example' }, { method: 'POST' })).status).toBe(403)
-    expect((await suite.loopback.send('/api/session.list', {}, { method: 'POST' })).status).toBe(401)
+    expect((await suite.loopback.send('/api/session.list', { origin: suite.loopback.origin }, { method: 'POST' })).status).toBe(401)
     expect(suite.fixture.ran).toEqual([])
   })
 
@@ -259,7 +259,7 @@ describe('C4 listener and dispatch denials', () => {
     }
     // Without a provider no reach listener opens, and the loopback listener admits as upstream does.
     await expect(ctx.connection.openReachListener({ listener: 'reach-tailscale-private', bind: { kind: 'loopback' } })).rejects.toThrow(/needs an authenticator provider/)
-    expect((await suite.loopback.send('/api/session.list', {}, { method: 'POST' })).status).toBe(401)
+    expect((await suite.loopback.send('/api/session.list', { origin: suite.loopback.origin }, { method: 'POST' })).status).toBe(401)
     // A replacement that does not serve reach listeners leaves them all closed.
     await ctx.plugin({ inject: ['connection'], apply: (providerCtx: Context) => {
       const replacement = new StandInHomeAuth(providerCtx)
