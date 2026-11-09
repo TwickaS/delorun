@@ -878,23 +878,26 @@
     {
       "path": "packages/boot/app-boot/README.i18n.yaml",
       "class": "security",
-      "reason": "Re-records the `/use-this-package/profiles` section hashes of both README sides after the `.env` refusal bullet changed in each, so the bilingual pairing gate reports the pair consistent."
+      "reason": "Re-records the `/use-this-package/profiles` section hashes of both README sides after the `.env` refusal bullet changed in each, so the bilingual pairing gate reports the pair consistent.",
+      "sha256": "fa99832975f28442fa99d9c8b0d94b0f1c5907c91d50eb57991dc024cffeff90"
     },
     {
       "path": "packages/boot/app-boot/README.md",
       "class": "security",
-      "reason": "Documents the Harness-home `.env` refusal beside the existing layer rules: the file must be the user's own owner-only regular file, and the bullet names the `chmod 600` fix."
+      "reason": "Documents the Harness-home `.env` refusal beside the existing layer rules: the file must be the user's own owner-only regular file, and the bullet names the `chmod 600` fix.",
+      "sha256": "39062f879e9080cde860b1f40c213eb7c5371ac5db716df8079405bccdc6042a"
     },
     {
       "path": "packages/boot/app-boot/README.zh.md",
       "class": "security",
-      "reason": "The Chinese counterpart of the Harness-home `.env` refusal bullet."
+      "reason": "The Chinese counterpart of the Harness-home `.env` refusal bullet.",
+      "sha256": "5edc142b087ecde22b86dee66873096e06b22582899eb981c492f0cf3d5bc58e"
     },
     {
       "path": "packages/boot/app-boot/src/index.ts",
       "class": "delo-feature",
       "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delo axis from `./plugin-compatibility.ts`: `DELO_VERSION_ENV`, `evaluateDeloRequirement`, `getDeloRuntimeVersion` and the `DeloRequirement` type.",
-      "sha256": "484356ada5cff8d48fe726c2df997b65e79adb8b183b0ae48dd7107efe536fba"
+      "sha256": "83df5e4e51beb08ec6a6eff8da5d03445a59290cb3b19fb6878be50bc5b8f17c"
     },
     {
       "path": "packages/boot/app-boot/src/plugin-compatibility.ts",
@@ -905,7 +908,8 @@
     {
       "path": "packages/boot/app-boot/tests/app-boot.spec.ts",
       "class": "security",
-      "reason": "Proves the Harness-home `.env` refusals: a 0644 file, a symbolic link and a foreign owner each stop boot, a 0600 file loads, and every existing home-layer fixture writes its file at 0600."
+      "reason": "Proves the Harness-home `.env` refusals: a 0644 file, a symbolic link and a foreign owner each stop boot, a 0600 file loads, and every existing home-layer fixture writes its file at 0600.",
+      "sha256": "567a82b8404710a9f5840592593b0cb00b2f14d095492408eba8e10833c486d9"
     },
     {
       "path": "packages/boot/config-editor/README.i18n.yaml",
@@ -2764,12 +2768,14 @@
     {
       "path": "packages/identity/anonymous-user-id/src/index.ts",
       "class": "security",
-      "reason": "F13: the anonymous user id is written at 0600 and the harness home this module creates at 0700, so an upstream-only run that never runs Delo's `ensureHomeTree` leaves neither readable by another local user."
+      "reason": "F13: the anonymous user id is written at 0600 and the harness home this module creates at 0700, so an upstream-only run that never runs Delo's `ensureHomeTree` leaves neither readable by another local user.",
+      "sha256": "281d30b7ea728ed19e03b3c1126fc940b095c6d27870ece87047c9a92c599811"
     },
     {
       "path": "packages/identity/anonymous-user-id/tests/anonymous-user-id.spec.ts",
       "class": "security",
-      "reason": "Pins the id file's 0600 mode and the created home's 0700 mode with a 0022 umask."
+      "reason": "Pins the id file's 0600 mode and the created home's 0700 mode with a 0022 umask.",
+      "sha256": "b6d8edcd8e373383494d785c8a0b704f0cd77e92d2554daf5ad661c301158279"
     },
     {
       "path": "packages/interaction/permission-presets/README.i18n.yaml",
@@ -2816,7 +2822,8 @@
     {
       "path": "packages/mcp/mcp-client/src/transport.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): the stdio child environment is built by one exported merge, `buildChildEnv`, over the subprocess seam's `scrubbedParentEnv()`, so an MCP server inherits the value-shape pass (URL user information, webhook URLs, PEM private key blocks, credential-file paths and agent sockets) and the explicit denylist. A credential reaches the child only through the configured `env`, which merges after the scrub."
+      "reason": "Ambient credential scrub (H3): the stdio child environment is built by one exported merge, `buildChildEnv`, over the subprocess seam's `scrubbedParentEnv()`, so an MCP server inherits the value-shape pass (URL user information, webhook URLs, PEM private key blocks, credential-file paths and agent sockets) and the explicit denylist. A credential reaches the child only through the configured `env`, which merges after the scrub.",
+      "sha256": "9587550aa2ce67f2e5cea3aa09105e6afafac844de7cadf34d413aaa7c3a5837"
     },
     {
       "path": "packages/mcp/mcp-client/tests/consent.spec.ts",
@@ -2827,7 +2834,8 @@
     {
       "path": "packages/mcp/mcp-client/tests/mcp-client.spec.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): `buildChildEnv` drops an ambient credential-shaped name, a denylisted name and a credential-shaped value, and the configured `env` remains the only pass-through — a denylisted name with an agent-socket value reaches the child because the config named it."
+      "reason": "Ambient credential scrub (H3): `buildChildEnv` drops an ambient credential-shaped name, a denylisted name and a credential-shaped value, and the configured `env` remains the only pass-through — a denylisted name with an agent-socket value reaches the child because the config named it.",
+      "sha256": "8a891a97f02b9750594332e045dcfe436928ca388200810eb2c03c5fe92a895a"
     },
     {
       "path": "packages/preset/agent-preset-registry/README.i18n.yaml",
@@ -2881,31 +2889,31 @@
       "path": "packages/ptc-runtime/ptc-runtime-node/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Container denial marker: the consistency record re-recorded after the environment-classification sentence was added to README.md and its Chinese counterpart.",
-      "sha256": "e5b24a9fec561879c191d033ee3388cbbf46f752ef210d808e2c7192adc4af17"
+      "sha256": "e566ce24f877c2b5d9e34848f1004c1a75a22c092fb5127cb7fb030a44ebca4c"
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/README.md",
       "class": "delo-feature",
       "reason": "Container denial marker: documents the environment classification and the switch beside `result.sandbox`.",
-      "sha256": "9a5843377f099d148235f5d4fead790e23cc3d71a72f675be43547a45de89575"
+      "sha256": "3242c3bdf68dd01714978a81aa0c0db514eda4c9ebcec67c1f39e1e8d51aac79"
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/README.zh.md",
       "class": "delo-feature",
       "reason": "Container denial marker: the Chinese counterpart of the environment-classification sentence added to README.md.",
-      "sha256": "3c09b3cd6f0227b5876d22e1b41a2301b40262780bcdb52f42b71bc402b8f708"
+      "sha256": "88dc6d3fc10567bdbd4c744faf4bf750774aad7e6f967050e35e994ddd9ebaa3"
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/src/worker.ts",
       "class": "security",
       "reason": "Container denial marker: the Node worker classifies a failed program against the wrap's policy signatures first and then the environment signatures fixed at confinement from the switch, none with it off; a `sandbox-unavailable` failure is never a denial, as upstream. Lead verdict: required by the lead's WP1.6c PTC decision (A114, A115) and C9 requirement 12; equal to stock for policy denials and stricter for environment ones.",
-      "sha256": "66b4fdae454e2fffbca925564bdcd1928fce3dece097fd9a25506f3f6d4dbafb"
+      "sha256": "4e9c0fdca8a723630fe3a5e19ce606a8992f5efec10a59a5ddeefc671268aac1"
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/tests/host-failures.spec.ts",
       "class": "delo-feature",
       "reason": "Container denial marker: covers environment-only classification with the switch on, the switch off, and a policy signature outranking the same environment text.",
-      "sha256": "6d8c1720c9b9f5752761ce05102f24213ca82ed8418a14bbd7788c3d6d1022e4"
+      "sha256": "0728517d91902c4c2bacd1e46728282bda63f85dc16fad5d879e4f21ffbc45a4"
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/tests/setup.ts",
@@ -3150,57 +3158,68 @@
     {
       "path": "packages/session/session-persistence-jsonl/src/generation.ts",
       "class": "security",
-      "reason": "Session-log append tolerance (security review R6): the concurrent-migration check decodes the competing current generation and compares the decoded Session id and event count, instead of accepting any target whose bytes begin with the migrated generation without ever decoding the appended tail. A target whose append is torn, foreign or unreadable is now refused, and a target holding the expected Session plus complete appended events is still tolerated. Lead verdict: the independent audit's R6 finding authorizes the change."
+      "reason": "Session-log append tolerance (security review R6): the concurrent-migration check decodes the competing current generation and compares the decoded Session id and event count, instead of accepting any target whose bytes begin with the migrated generation without ever decoding the appended tail. A target whose append is torn, foreign or unreadable is now refused, and a target holding the expected Session plus complete appended events is still tolerated. Lead verdict: the independent audit's R6 finding authorizes the change.",
+      "sha256": "f750a92adebd12cf2a14cb6a64b0cc24ba7b81f556068ef25b56fe8819d37166"
     },
     {
       "path": "packages/session/session-persistence-jsonl/src/zstd-private-decoder.ts",
       "class": "security",
-      "reason": "Session-log Zstandard bound (security review R5): the synchronous private decoder's per-frame plaintext ceiling becomes the session-log bound where that is lower than the process-wide Buffer maximum, so a crafted frame with a huge compression ratio is refused by this decoder as the public one refuses it. Lead verdict: the independent audit's R5 finding authorizes the change."
+      "reason": "Session-log Zstandard bound (security review R5): the synchronous private decoder's per-frame plaintext ceiling becomes the session-log bound where that is lower than the process-wide Buffer maximum, so a crafted frame with a huge compression ratio is refused by this decoder as the public one refuses it. Lead verdict: the independent audit's R5 finding authorizes the change.",
+      "sha256": "4d72e2743fd5e78f17389ef89019eccb23e2f01d5f3cbc64a84e4753ac8bd7b0"
     },
     {
       "path": "packages/session/session-persistence-jsonl/src/zstd-public-decoder.ts",
       "class": "security",
-      "reason": "Session-log Zstandard bound (security review R5): the public one-shot decoder passes the session-log plaintext bound to `zstdDecompressSync`, so a frame that would expand past it fails validation instead of being allocated. Lead verdict: the independent audit's R5 finding authorizes the change."
+      "reason": "Session-log Zstandard bound (security review R5): the public one-shot decoder passes the session-log plaintext bound to `zstdDecompressSync`, so a frame that would expand past it fails validation instead of being allocated. Lead verdict: the independent audit's R5 finding authorizes the change.",
+      "sha256": "8fe013637720756e53966f0588ef347f8ac0099971f857aa962d29764501b86a"
     },
     {
       "path": "packages/session/session-persistence-jsonl/src/zstd.ts",
       "class": "security",
-      "reason": "Session-log Zstandard bound (security review R5): declares `MAX_FRAME_PLAINTEXT_BYTES` (64 MiB) and applies it to one-shot frame decompression and to torn-final-frame prefix recovery, so no decode path expands a crafted frame without a limit. Upstream's frame scanning, compression options and decoder factory are unchanged. Lead verdict: the independent audit's R5 finding authorizes the change."
+      "reason": "Session-log Zstandard bound (security review R5): declares `MAX_FRAME_PLAINTEXT_BYTES` (64 MiB) and applies it to one-shot frame decompression and to torn-final-frame prefix recovery, so no decode path expands a crafted frame without a limit. Upstream's frame scanning, compression options and decoder factory are unchanged. Lead verdict: the independent audit's R5 finding authorizes the change.",
+      "sha256": "8a08dee4f5813ab48c97b437b175c7a7dbefca4d62ba061059d4768d5c2cc846"
     },
     {
       "path": "packages/session/session-persistence-jsonl/tests/generation.spec.ts",
       "class": "security",
-      "reason": "Session-log append tolerance (security review R6): covers a target that begins with the migrated generation byte for byte but whose appended material never completes a frame or a JSONL line, in both encodings, and that is now refused rather than accepted. Lead verdict: the independent audit's R6 finding authorizes the change."
+      "reason": "Session-log append tolerance (security review R6): covers a target that begins with the migrated generation byte for byte but whose appended material never completes a frame or a JSONL line, in both encodings, and that is now refused rather than accepted. Lead verdict: the independent audit's R6 finding authorizes the change.",
+      "sha256": "28ff95750974aca92153b8c40c2ea3544d9bd93b28c857b55c0d623f0750f370"
     },
     {
       "path": "packages/session/session-persistence-jsonl/tests/zstd.spec.ts",
       "class": "security",
-      "reason": "Session-log Zstandard bound (security review R5): covers a 2 KiB frame that expands past the plaintext bound, refused by the one-shot decompressor and by both synchronous decoders. Lead verdict: the independent audit's R5 finding authorizes the change."
+      "reason": "Session-log Zstandard bound (security review R5): covers a 2 KiB frame that expands past the plaintext bound, refused by the one-shot decompressor and by both synchronous decoders. Lead verdict: the independent audit's R5 finding authorizes the change.",
+      "sha256": "c61fad78799dcff2aaa4e3bdeb26b7ac9dc282bd7e20f06c0f29d8c24091d885"
     },
     {
       "path": "packages/session/session-projection-cache/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Trash purge (C8): the consistency record re-recorded after the `forget(id)` paragraph was added to README.md and its Chinese counterpart."
+      "reason": "Trash purge (C8): the consistency record re-recorded after the `forget(id)` paragraph was added to README.md and its Chinese counterpart.",
+      "sha256": "572aa992662d1f5ee91eea73fa2596ae3349a8c526af3a4543d0fc87bc6d9cc6"
     },
     {
       "path": "packages/session/session-projection-cache/README.md",
       "class": "delo-feature",
-      "reason": "Trash purge (C8): documents `forget(id)`, the cache's only delete face, which removes a session's record from the domain and its document from the medium and drops its write-behind bookkeeping."
+      "reason": "Trash purge (C8): documents `forget(id)`, the cache's only delete face, which removes a session's record from the domain and its document from the medium and drops its write-behind bookkeeping.",
+      "sha256": "37c744af2f3ff76866fe2cf534a7dd813b93cbc77d69d3689a32bd614bdaa9d3"
     },
     {
       "path": "packages/session/session-projection-cache/README.zh.md",
       "class": "delo-feature",
-      "reason": "Trash purge (C8): the Chinese counterpart of the `forget(id)` paragraph added to README.md."
+      "reason": "Trash purge (C8): the Chinese counterpart of the `forget(id)` paragraph added to README.md.",
+      "sha256": "fe4028a5c3543979e64259d8ec369a44f23192373dfd0f9e16b42c385b79b35c"
     },
     {
       "path": "packages/session/session-projection-cache/src/index.ts",
       "class": "delo-feature",
-      "reason": "Trash purge (C8): adds `SessionProjectionCache.forget(id)`, which clears the session's dirty state and deletes its stored record, so a purge reaches the cached title, first message, plan, goal and todos. Upstream's other methods and exports are unchanged."
+      "reason": "Trash purge (C8): adds `SessionProjectionCache.forget(id)`, which clears the session's dirty state and deletes its stored record, so a purge reaches the cached title, first message, plan, goal and todos. Upstream's other methods and exports are unchanged.",
+      "sha256": "5affd6f9d161cd8410f64fcfc6523780cc0e4fc60c5fdf0c14aed80e422dce4f"
     },
     {
       "path": "packages/session/session-projection-cache/tests/cache.spec.ts",
       "class": "delo-feature",
-      "reason": "Trash purge (C8): covers `forget(id)` removing the record from memory and the medium for a cold record, and a pending interval flush of a live session writing nothing back after the forget."
+      "reason": "Trash purge (C8): covers `forget(id)` removing the record from memory and the medium for a cold record, and a pending interval flush of a live session writing nothing back after the forget.",
+      "sha256": "19faaf7392ced28c7d15d6dd60a08ffbd2ec8b0f024d725e5780c54b00cacf6d"
     },
     {
       "path": "packages/session/session-projection/README.i18n.yaml",
@@ -3391,42 +3410,50 @@
     {
       "path": "packages/spill/spill-local/package.json",
       "class": "security",
-      "reason": "Declares `@deepseek-ai/dsh-home-paths` (`privateRoot` resolves `$DSH_HOME`) and the test-only `@deepseek-ai/dsh-sandbox-local` the confinement spec wraps a command through."
+      "reason": "Declares `@deepseek-ai/dsh-home-paths` (`privateRoot` resolves `$DSH_HOME`) and the test-only `@deepseek-ai/dsh-sandbox-local` the confinement spec wraps a command through.",
+      "sha256": "ec733faaaf3d473133d72c8dcfaa261cd69d037fb3c14dca983c1338bdd7623b"
     },
     {
       "path": "packages/spill/spill-local/src/index.ts",
       "class": "security",
-      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses."
+      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses.",
+      "sha256": "ed0c50adea4ae4c4d501bbf00cfc5e83bed488515c9ca392fb515bfd15992bc6"
     },
     {
       "path": "packages/spill/spill-local/src/store.ts",
       "class": "security",
-      "reason": "F2: the default spill root is the home's own `<home>/spill`, created 0700 from `$DSH_HOME`, instead of `mkdtemp` under the OS temp dir. The temp dir is granted to every confined command, so a spill written there was readable from inside any home's sandbox, and `discoverDefaultRoots` listed every home's roots. The temp root stays only for a home that cannot host the spill directory."
+      "reason": "F2: the default spill root is the home's own `<home>/spill`, created 0700 from `$DSH_HOME`, instead of `mkdtemp` under the OS temp dir. The temp dir is granted to every confined command, so a spill written there was readable from inside any home's sandbox, and `discoverDefaultRoots` listed every home's roots. The temp root stays only for a home that cannot host the spill directory.",
+      "sha256": "d1504869f620059e20af8fa34ea56bfd6a388d5579f12f911a97659d95697c33"
     },
     {
       "path": "packages/spill/spill-local/tests/spill-local.spec.ts",
       "class": "security",
-      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill."
+      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill.",
+      "sha256": "d6c65d54303a6ae579cb74aa486686b52f8dc41bb9a26e2ee596a84eefe6539c"
     },
     {
       "path": "packages/spill/spill-local/tests/spill-root-confinement.spec.ts",
       "class": "security",
-      "reason": "A denial spec against a real runner: under the home-protected profile a confined command reads a workspace control file and cannot read the spilled tool output beside it."
+      "reason": "A denial spec against a real runner: under the home-protected profile a confined command reads a workspace control file and cannot read the spilled tool output beside it.",
+      "sha256": "830a96a8e530552a0f3ad6f5c9470044f210471a3e8593f9658bcb3fac599ac0"
     },
     {
       "path": "packages/spill/spill-local/tsconfig.json",
       "class": "security",
-      "reason": "The `home-paths` project reference for the new import."
+      "reason": "The `home-paths` project reference for the new import.",
+      "sha256": "4b05c063775a8d81f95dae01da25e7697914b1608ba65dd80e54f364e2255081"
     },
     {
       "path": "packages/subprocess/subprocess/src/index.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `GOOGLE_APPLICATION_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a webhook URL, a PEM private key block, a credential-file path or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through."
+      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `GOOGLE_APPLICATION_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a webhook URL, a PEM private key block, a credential-file path or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through.",
+      "sha256": "6c16afcc083f3087339f16fbacb4a81c3bff95fe1cdc8c1d9ffe029b5eef245c"
     },
     {
       "path": "packages/subprocess/subprocess/tests/env.spec.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive."
+      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive.",
+      "sha256": "367d25ac1af264de94d8a3b5044cf360192a202ec49044934d703fd4fe642b74"
     },
     {
       "path": "packages/test-support/client-runtime/tests/assembly-vitest.client.spec.ts",
@@ -3504,7 +3531,7 @@
       "path": "pnpm-lock.yaml",
       "class": "delo-feature",
       "reason": "Lockfile importers for Delo's workspace packages; regenerate with pnpm install on an upstream merge, never hand-merge. Includes `@delo/cli`'s dependency on `@deepseek-ai/dsh-sandbox-local` for setup's dialect report. Includes the tool-fs-search sandbox dependencies.",
-      "sha256": "9044285410bacdd5cdd266869b050357990afcd9f675c0ce82fdbcf124e24e73"
+      "sha256": "f0792c6031f2dfe92b583a4b8457874ec9b194a2965c501c501d5d7248b63e5c"
     },
     {
       "path": "pnpm-workspace.yaml",
