@@ -89,29 +89,51 @@ export function checkArchivePath(path: string): string {
 }
 
 /**
- * Check every path of one archive at once for the two collisions contract C8
- * refuses: two entries that differ only in letter case, which overwrite each
- * other on a case-insensitive file system, and two entries that are literally
- * one path, which overwrite each other everywhere.
+ * The key two archive paths are compared under: the path in Unicode NFC and lower case. NFC is the form a path takes
+ * when a recipient's file system or the archive's producer names the same text with composed or decomposed characters
+ * (`é` as one code point or as `e` and a combining accent), and a file system that normalises on write, as macOS's
+ * does, maps the two forms onto one file. Case folding covers the file systems that ignore letter case.
+ * @param path - the archive path.
+ * @returns the key.
+ */
+function collisionKey(path: string): string {
+  return path.normalize('NFC').toLowerCase()
+}
+
+/**
+ * Check every path of one archive at once for the collisions contract C8 refuses: two entries that differ only in
+ * letter case, which overwrite each other on a case-insensitive file system, two entries that are literally one path,
+ * which overwrite each other everywhere, and two entries that differ only in Unicode normalisation, which one file
+ * system's normalisation collapses onto one name. A path is checked by {@link checkArchivePath} first, so a refused
+ * path is reported as the rule it breaks rather than as a collision.
  * @param paths - every path the archive declares, in archive order.
- * @throws ArchiveError `ARCHIVE_PATH_REJECTED` for a repeated path, `ARCHIVE_CASE_COLLISION` for a case-only difference, and the refusal of {@link checkArchivePath} for a path that breaks a rule.
+ * @throws ArchiveError `ARCHIVE_PATH_REJECTED` for a repeated path or a normalisation-only difference, `ARCHIVE_CASE_COLLISION` for a case-only difference, and the refusal of {@link checkArchivePath} for a path that breaks a rule.
  */
 export function checkPathCollisions(paths: readonly string[]): void {
   const seen = new Map<string, string>()
   for (const path of paths) {
     checkArchivePath(path)
-    const folded = path.toLowerCase()
-    const previous = seen.get(folded)
+    const key = collisionKey(path)
+    const previous = seen.get(key)
     if (previous === path) {
       throw new ArchiveError('ARCHIVE_PATH_REJECTED', `the archive lists the entry ${JSON.stringify(path)} twice`)
     }
     if (previous !== undefined) {
+      // Equal once normalised: the two names are one name on a normalising file system. Otherwise they differ in letter
+      // case, which is the collision contract C8 names, even when the case difference and a normalisation difference
+      // come together.
+      if (previous.normalize('NFC') === path.normalize('NFC')) {
+        throw new ArchiveError(
+          'ARCHIVE_PATH_REJECTED',
+          `the archive holds ${JSON.stringify(previous)} and ${JSON.stringify(path)}, which differ only in Unicode normalisation and name one file once normalised to NFC`,
+        )
+      }
       throw new ArchiveError(
         'ARCHIVE_CASE_COLLISION',
         `the archive holds ${JSON.stringify(previous)} and ${JSON.stringify(path)}, which differ only in letter case`,
       )
     }
-    seen.set(folded, path)
+    seen.set(key, path)
   }
 }
 

@@ -2497,6 +2497,36 @@
       "reason": "Trash purge (C8): the engine gains one `forgetSessions` method, which removes the named sessions' rows from both indexed sources in one transaction, bumps the generation so a stale cursor cannot resolve, and rebuilds the file with VACUUM, so no byte of a purged chat stays in the full-text index, not even in a freed page. Search behaviour, the schema and every other method stand unchanged."
     },
     {
+      "path": "packages/session/session-persistence-jsonl/src/generation.ts",
+      "class": "security",
+      "reason": "Session-log append tolerance (security review R6): the concurrent-migration check decodes the competing current generation and compares the decoded Session id and event count, instead of accepting any target whose bytes begin with the migrated generation without ever decoding the appended tail. A target whose append is torn, foreign or unreadable is now refused, and a target holding the expected Session plus complete appended events is still tolerated. Lead verdict: the independent audit's R6 finding authorizes the change."
+    },
+    {
+      "path": "packages/session/session-persistence-jsonl/src/zstd-private-decoder.ts",
+      "class": "security",
+      "reason": "Session-log Zstandard bound (security review R5): the synchronous private decoder's per-frame plaintext ceiling becomes the session-log bound where that is lower than the process-wide Buffer maximum, so a crafted frame with a huge compression ratio is refused by this decoder as the public one refuses it. Lead verdict: the independent audit's R5 finding authorizes the change."
+    },
+    {
+      "path": "packages/session/session-persistence-jsonl/src/zstd-public-decoder.ts",
+      "class": "security",
+      "reason": "Session-log Zstandard bound (security review R5): the public one-shot decoder passes the session-log plaintext bound to `zstdDecompressSync`, so a frame that would expand past it fails validation instead of being allocated. Lead verdict: the independent audit's R5 finding authorizes the change."
+    },
+    {
+      "path": "packages/session/session-persistence-jsonl/src/zstd.ts",
+      "class": "security",
+      "reason": "Session-log Zstandard bound (security review R5): declares `MAX_FRAME_PLAINTEXT_BYTES` (64 MiB) and applies it to one-shot frame decompression and to torn-final-frame prefix recovery, so no decode path expands a crafted frame without a limit. Upstream's frame scanning, compression options and decoder factory are unchanged. Lead verdict: the independent audit's R5 finding authorizes the change."
+    },
+    {
+      "path": "packages/session/session-persistence-jsonl/tests/generation.spec.ts",
+      "class": "security",
+      "reason": "Session-log append tolerance (security review R6): covers a target that begins with the migrated generation byte for byte but whose appended material never completes a frame or a JSONL line, in both encodings, and that is now refused rather than accepted. Lead verdict: the independent audit's R6 finding authorizes the change."
+    },
+    {
+      "path": "packages/session/session-persistence-jsonl/tests/zstd.spec.ts",
+      "class": "security",
+      "reason": "Session-log Zstandard bound (security review R5): covers a 2 KiB frame that expands past the plaintext bound, refused by the one-shot decompressor and by both synchronous decoders. Lead verdict: the independent audit's R5 finding authorizes the change."
+    },
+    {
       "path": "packages/session/session-projection/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Late session projection keys: the consistency record re-recorded after the `onRegistered` sentence was added to README.md and its Chinese counterpart."

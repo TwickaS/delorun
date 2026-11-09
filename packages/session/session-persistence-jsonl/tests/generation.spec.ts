@@ -1228,6 +1228,34 @@ describe('JSONL immutable generation publication', () => {
     },
   )
 
+  it.each(['none', 'zstd'] as const)(
+    'refuses a %s target whose bytes begin with the migrated generation but whose append does not decode',
+    async (compression) => {
+      const root = await tempRoot()
+      const request = options(root, compression)
+      const source = compression === 'zstd'
+        ? await encodeZstd(0, [event0])
+        : Buffer.from(line(header(0)) + line(event0))
+      const expected = compression === 'zstd'
+        ? await encodeZstd(SESSION_FORMAT_VERSION, [event0])
+        : Buffer.from(line(header(SESSION_FORMAT_VERSION)) + line(event0))
+      // The prefix is the migrated generation byte for byte; the tail is an append that never completed.
+      const torn = compression === 'zstd'
+        ? (await compressZstdFrame(line(event1))).subarray(0, 5)
+        : Buffer.from('{"type":"turn/end"')
+      const winner = Buffer.concat([expected, torn])
+      await writeFile(request.sourcePath, source)
+      await writeFile(request.currentPath, winner)
+
+      // Before the decoded-content check, the byte prefix alone accepted this target: nothing decoded the tail.
+      await expect(ensureJsonlGenerationCurrent(request)).rejects.toBeInstanceOf(JsonlGenerationTargetConflictError)
+
+      expect(await readFile(request.currentPath)).toEqual(winner)
+      expect(await readFile(request.sourcePath)).toEqual(source)
+      expect((await readdir(root)).every(name => !name.includes('.tmp'))).toBe(true)
+    },
+  )
+
   it('accepts an identical regular hardlink target', async () => {
     const root = await tempRoot()
     const request = options(root)

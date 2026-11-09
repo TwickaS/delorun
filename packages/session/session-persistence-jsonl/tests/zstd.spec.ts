@@ -13,8 +13,8 @@ import {
   generationLogPath, logPath, scanLog, sessionDir, toHeaderLine, type JsonlCompression,
 } from '../src/format.ts'
 import {
-  compressZstdFrame, createZstdFrameDecoder, decompressZstdFrame, decompressZstdPrefix, scanZstdFrames,
-  type ZstdFrameDecoder,
+  MAX_FRAME_PLAINTEXT_BYTES, compressZstdFrame, createZstdFrameDecoder, decompressZstdFrame, decompressZstdPrefix,
+  scanZstdFrames, type ZstdFrameDecoder,
 } from '../src/zstd.ts'
 import { NodePrivateZstdFrameDecoder } from '../src/zstd-private-decoder.ts'
 import { PublicZstdFrameDecoder } from '../src/zstd-public-decoder.ts'
@@ -232,6 +232,29 @@ describe('Zstandard frame structure', () => {
     const decoder = createZstdFrameDecoder()
     expect(decoder).toBeInstanceOf(PublicZstdFrameDecoder)
     decoder.close()
+  })
+
+  it('refuses a frame whose plaintext passes the session-log bound, whichever decoder decodes it', async () => {
+    // A small frame that expands past the bound: a log this process did not write can carry one, and decoding it must
+    // fail at the bound instead of allocating the expansion.
+    const bomb = await compressZstdFrame(Buffer.alloc(MAX_FRAME_PLAINTEXT_BYTES + 1))
+    expect(bomb.length).toBeLessThan(1024 * 1024)
+    const ranges = scanZstdFrames(bomb).frames
+    expect(ranges).toHaveLength(1)
+
+    await expect(decompressZstdFrame(bomb)).rejects.toThrow(/Cannot create a Buffer larger/u)
+    const factories: Array<() => ZstdFrameDecoder> = [() => new PublicZstdFrameDecoder()]
+    const privateDecoder = NodePrivateZstdFrameDecoder.create()
+    if (privateDecoder !== undefined) factories.push(() => NodePrivateZstdFrameDecoder.create()!)
+    for (const create of factories) {
+      const decoder = create()
+      try {
+        // Both decoders refuse it: the public one as the frame failing validation, the private one by its own bound.
+        expect(() => Array.from(decoder.decode(bomb, ranges))).toThrow(/corrupt Zstandard session log|exceeds/u)
+      } finally {
+        decoder.close()
+      }
+    }
   })
 
   it('enforces decoder lifecycle and checksum errors through both implementations', async () => {

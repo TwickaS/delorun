@@ -207,7 +207,9 @@ export function inclusionProof(index: number, hashes: readonly Buffer[]): Buffer
  * @returns the proof's hashes.
  */
 function subProof(first: number, hashes: readonly Buffer[], complete: boolean): Buffer[] {
-  if (hashes.length === 1) return complete ? [] : [...hashes]
+  // SUBPROOF(m, D[m], true) is empty and SUBPROOF(m, D[m], false) is {MTH(D[m])}: the recursion stops when the run of
+  // leaves is the older tree itself, whatever its size, not only when it is one leaf.
+  if (first === hashes.length) return complete ? [] : [treeRoot(hashes)]
   const split = splitAt(hashes.length)
   return first <= split
     ? [...subProof(first, hashes.slice(0, split), complete), treeRoot(hashes.slice(split))]

@@ -518,6 +518,19 @@ async function verifyCurrentGeneration(
     if (digest !== expectedPrefix.digest) {
       throw new Error('target bytes do not begin with the migrated generation')
     }
+    // Tolerate an append only on what the target decodes to, not on the prefix alone: the physical bytes after the
+    // migrated generation must be complete, checksummed frames of this encoding holding the expected Session and at
+    // least its events. A prefix match by itself accepted a target whose appended tail was torn, foreign or unreadable,
+    // because nothing ever decoded it.
+    const generation = decodeCurrentGeneration(bytes, compression)
+    if (generation.meta.id !== expectedId) {
+      throw new Error(`current session generation contains id "${generation.meta.id}", expected "${expectedId}"`)
+    }
+    if (generation.events.length < expectedEventCount) {
+      throw new Error(
+        `current session generation contains ${generation.events.length} events, expected at least ${expectedEventCount}`,
+      )
+    }
     return { identity: after, bytes: expectedPrefix.bytes, digest }
   }
   if (identity(before) !== identity(after)) {

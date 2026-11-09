@@ -7,6 +7,7 @@
  * @module @delo/release-verify/merkle
  */
 import { createHash } from 'node:crypto'
+import { MAX_PROOF_HASHES } from '@delo/contract-release-log'
 
 /** The prefix RFC 6962 hashes a leaf with. */
 const LEAF_PREFIX = Buffer.from([0x00])
@@ -67,50 +68,56 @@ export function rootFromInclusionProof(index: number, size: number, leaf: Uint8A
 
 /**
  * Whether a consistency proof shows that the tree at `firstSize` is a prefix of the tree at `secondSize`
- * (RFC 6962, 2.1.2, as the log serves it).
+ * (RFC 6962, 2.1.2, verified by RFC 9162's consistency-proof algorithm, section 2.1.4).
  *
- * The proof is the audit path of the older tree's rightmost leaf in the newer tree, with that leaf's hash first, except
- * when the older tree is that one leaf: the shape SUBPROOF(m, D[n], true) has when it runs down to the leaf rather than
- * stopping at a known subtree root. The client therefore recomputes both roots from the proof instead of trusting
- * either: the path must reproduce the newer root at that leaf's index, and the left siblings along it, folded in order,
- * must reproduce the older root.
+ * The proof is PROOF(m, D[n]) as the log serves it: the roots of the known subtrees between the older tree and the
+ * newer one, not an audit path of the older tree's rightmost leaf. When the older size is an exact power of two the
+ * proof omits the older root, because PROOF ends at SUBPROOF(m, D[m], true) = {}; the walk therefore starts from the
+ * older root the client already holds. The first hash of any other proof is the root of the rightmost subtree the
+ * recursion reached, which for an even older size is a two-or-more-leaf subtree rather than a leaf. The walk climbs
+ * both roots together, taking a proof hash as the left child of both while the older tree's last index is odd or the
+ * older and newer last indices meet, and as the right child of the newer root alone otherwise.
  * @param firstSize - the size of the older tree.
  * @param firstRoot - the older tree's root hash.
  * @param secondSize - the size of the newer tree.
  * @param secondRoot - the newer tree's root hash.
- * @param proof - the consistency proof's hashes, the older tree's rightmost leaf hash first.
+ * @param proof - the consistency proof's hashes, oldest subtree first.
  * @returns `true` when the proof verifies.
  */
 export function verifyConsistencyProof(firstSize: number, firstRoot: Uint8Array, secondSize: number, secondRoot: Uint8Array, proof: readonly Uint8Array[]): boolean {
   if (!Number.isSafeInteger(firstSize) || !Number.isSafeInteger(secondSize)) return false
-  if (firstSize <= 0 || firstSize > secondSize) return false
+  if (firstSize <= 0 || firstSize > secondSize || proof.length > MAX_PROOF_HASHES) return false
   // A tree against itself needs no proof, only the same root.
-  if (firstSize === secondSize && proof.length === 0) return Buffer.from(firstRoot).equals(Buffer.from(secondRoot))
-  // A one-leaf tree's rightmost leaf is its root, which the client already holds; every other tree hands it over first.
-  const seed = firstSize === 1 ? Buffer.from(firstRoot) : proof[0]
+  if (firstSize === secondSize) return proof.length === 0 && Buffer.from(firstRoot).equals(Buffer.from(secondRoot))
+  // A power-of-two older tree's root is the start of the proof the client already holds; the log leaves it out.
+  const path = (firstSize & (firstSize - 1)) === 0 ? [Buffer.from(firstRoot), ...proof] : [...proof]
+  const seed = path[0]
   if (seed === undefined) return false
-  const path = firstSize === 1 ? proof : proof.slice(1)
-  const leafIndex = firstSize - 1
-  const computedSecond = rootFromInclusionProof(leafIndex, secondSize, seed, path)
-  if (computedSecond === undefined || !computedSecond.equals(Buffer.from(secondRoot))) return false
-  // The older tree's root is the same leaf, folded with the left siblings the path meets on the way up, and nothing
-  // else: a sibling to the right lies past the older tree's last leaf, so it belongs to the newer tree alone.
+  // The walking indices are the last leaf of each tree: an odd one means both roots take one more left child.
+  let first = firstSize - 1
+  let second = secondSize - 1
+  while (first % 2 === 1) {
+    first = Math.floor(first / 2)
+    second = Math.floor(second / 2)
+  }
   let computedFirst: Buffer = Buffer.from(seed)
-  let index = leafIndex
-  let last = secondSize - 1
-  for (const sibling of path) {
-    if (last === 0) return false
-    if (index % 2 === 1 || index === last) {
-      computedFirst = nodeHash(sibling, computedFirst)
-      if (index % 2 === 0) {
-        while (index !== 0 && index % 2 === 0) {
-          index = Math.floor(index / 2)
-          last = Math.floor(last / 2)
+  let computedSecond: Buffer = Buffer.from(seed)
+  for (const hash of path.slice(1)) {
+    if (second === 0) return false
+    if (first % 2 === 1 || first === second) {
+      computedFirst = nodeHash(hash, computedFirst)
+      computedSecond = nodeHash(hash, computedSecond)
+      if (first % 2 === 0) {
+        while (first !== 0 && first % 2 === 0) {
+          first = Math.floor(first / 2)
+          second = Math.floor(second / 2)
         }
       }
+    } else {
+      computedSecond = nodeHash(computedSecond, hash)
     }
-    index = Math.floor(index / 2)
-    last = Math.floor(last / 2)
+    first = Math.floor(first / 2)
+    second = Math.floor(second / 2)
   }
-  return last === 0 && computedFirst.equals(Buffer.from(firstRoot))
+  return second === 0 && computedFirst.equals(Buffer.from(firstRoot)) && computedSecond.equals(Buffer.from(secondRoot))
 }
