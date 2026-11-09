@@ -24,7 +24,7 @@ export const DEFAULT_PARITY: Readonly<Partial<Record<ParitySwitchId, string>>> =
   preset_inspect: 'its row sits in each Web preset\'s plugin list, which a patch reaches only by replacing the whole preset row',
   container_denial_marker: 'the bundles and the root configurations set sandbox-policy\'s mode and workspace root, which a row would erase',
   sandbox_protected_reads: 'the bundles set the search tools\' over-cap sampling choice, which a row would erase',
-  fetch_guard: 'no shipped profile or bundle mounts the plugin, so no row of the root tree holds it; the parity composition leaves the fetchGuard service unmounted, and the provider reads its absence per hop and runs unguarded',
+  fetch_guard: '@delo/bundle-local mounts the plugin on, and the parity form of its row is that row disabled, so the parity composition leaves the fetchGuard service unmounted and the provider reads its absence per hop: a recorded fetch scenario calls loopback fixtures, which the guard refuses',
   doctor: 'only the doctor profile mounts the app, and the replay starts no doctor process',
   studio_additions: 'no shipped profile or bundle mounts the main chat, whose row the studio bundle adds with the switch on',
   mcp_add_consent: 'no shipped profile or bundle mounts the plugin, so no row of the root tree holds it; the parity composition leaves the mcpAddConsent service unmounted, and the mcp-client starts every configured server as upstream does',

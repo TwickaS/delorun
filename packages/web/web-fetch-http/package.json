@@ -34,13 +34,13 @@
     "@deepseek-ai/dsh-web": "workspace:*"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-http-proxy": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "undici": "8.11.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-timeout": "workspace:*",
-    "@deepseek-ai/dsh-web": "workspace:*",
-    "@deepseek-ai/dsh-http-proxy": "workspace:*"
+    "@deepseek-ai/dsh-web": "workspace:*"
   }
 }

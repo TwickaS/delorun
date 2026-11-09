@@ -93,6 +93,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     reason: 'The browser half of this bundle: the Privacy section in Settings, the Delo sidebar brand, and Delo\'s own preview notice.',
     parity: { kind: 'disabled', reason: 'Recorded web scenarios compare upstream\'s interface output, which has no Privacy section, shows upstream\'s brand and shows upstream\'s preview notice.' },
   },
+  {
+    id: 'fetch-guard',
+    kind: 'added',
+    reason: 'web_fetch refuses loopback, link-local, private-network, unique-local, shared, multicast and reserved targets before each connection opens, so a page cannot make the fetch reach a service on the person\'s own machine or network.',
+    parity: { kind: 'disabled', reason: 'Recorded fetch scenarios call loopback fixtures, which the guard refuses; the row is present and disabled, so their replay keeps upstream\'s unguarded fetch.' },
+  },
 ]
 
 /** One patch of a Cordis patch file, as parsed. */

@@ -59,3 +59,16 @@
 - insert:
     - id: delo-privacy
       name: '@delo/bundle-local'
+
+# web_fetch's pre-connection guard (C16 switch fetch_guard). Its Config default
+# is the parity value, off; Delo's composition mounts it on, because a page that
+# a model reads must not be able to make the fetch reach a service on the
+# person's own machine or network, and because the guard's spec proves refusals
+# only where the composition mounts it. The guard's schema keeps the default
+# `false`, and the parity overlay disables this row, so a stock fetch scenario
+# replays unguarded.
+- insert:
+    - id: fetch-guard
+      name: '@delo/plugin-fetch-guard'
+      config:
+        enabled: true

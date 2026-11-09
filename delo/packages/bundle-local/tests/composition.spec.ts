@@ -104,6 +104,18 @@ describe('a Delo CLI profile', () => {
     }
   })
 
+  it('mounts the web_fetch guard on, so the composed profile refuses a private-network destination', () => {
+    // The shipped composition is the one that carries the protection: the guard
+    // plugin's Config default is the parity value, off, and only a row that
+    // mounts it on makes the composed profile refuse anything. The refusal
+    // itself is proven where it runs, against the mounted plugin and provider
+    // (`delo/packages/plugin-fetch-guard/tests`).
+    const guard = home.rows(DELO_PROFILE).filter(row => row.id === 'fetch-guard')
+    expect(guard).toHaveLength(1)
+    expect(guard[0]).toMatchObject({ name: '@delo/plugin-fetch-guard', config: { enabled: true } })
+    expect(guard[0]?.disabled).toBeUndefined()
+  })
+
   it('composes upstream\'s web profile except the listed rows', () => {
     const upstream = dumpConfig(UPSTREAM_TEMPLATE).rows.map(({ row }) => row)
     const delo = dumpConfig(DELO_PROFILE).rows.map(({ row }) => row)

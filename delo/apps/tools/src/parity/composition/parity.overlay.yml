@@ -17,11 +17,12 @@
 #                           row here would erase;
 #   doctor                  only the doctor profile mounts the app, and the
 #                           replay starts no doctor process;
-#   fetch_guard             no shipped profile or bundle mounts the plugin, so
-#                           no row of the root tree holds it; the parity
-#                           composition leaves the fetchGuard service
-#                           unmounted, and the provider reads its absence per
-#                           hop and runs unguarded.
+#   fetch_guard             the bundle mounts the guard on, and this overlay
+#                           mounts its row disabled: the parity composition
+#                           leaves the fetchGuard service unmounted, and the
+#                           provider reads its absence per hop and runs
+#                           unguarded. A recorded fetch scenario calls loopback
+#                           fixtures, which the guard refuses;
 #
 # The overlay also mounts @delo/bundle-local, the bundle Delo's CLI profiles
 # add after upstream's web template: the last block restates that bundle's
@@ -53,4 +54,11 @@
 - insert:
     - id: delo-privacy
       name: '@delo/bundle-local'
+      disabled: true
+
+- insert:
+    - id: fetch-guard
+      name: '@delo/plugin-fetch-guard'
+      config:
+        enabled: true
       disabled: true

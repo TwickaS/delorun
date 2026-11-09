@@ -46,6 +46,7 @@ kind: "package-bundle"
 | `ui-settings-account` | 改变 | `disabled: true`：没有账户菜单项、登录对话框与账户分区 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `ui-settings-models` | 改变 | `config.welcomeNotice: false`：上游的预览提示关闭；`credentialOnboarding` 保持上游的值 | `welcomeNotice: true` | 沿用上游的组合：覆盖层省略该行 |
 | `delo-privacy` | 新增 | “隐私”分区（位于设置中）、Delo 侧栏品牌（产品名称的文字形式，不显示标志），以及 Delo 自己的预览提示 | 无 | 存在且已禁用，因为录制的 Web 场景比较的是上游的界面输出、品牌与提示 |
+| `fetch-guard` | 新增 | `config.enabled: true`：`web_fetch` 在每次连接建立之前拒绝回环、链路本地、私有网络、唯一本地、共享、组播与保留目的地，并把连接钉在守卫批准的地址上 | 无 | 存在且已禁用，因为录制的抓取场景调用回环 fixture，而守卫会拒绝它们 |
 
 [对等覆盖层](../../apps/tools/src/parity/composition/parity.overlay.yml) 以该形式重述本组合包的 patch，从而挂载本组合包；[`parityPatches`](src/rows.ts) 从本组合包的 `cordis.patch.yml` 推导出该形式，覆盖层与之不一致时，`parity-switches` 失败。Delo 的组合不向 DeepSeek 的反馈收集端发送任何内容：`session-telemetry-otel` 已禁用，反馈界面已隐藏，因为 Delo 目前还没有反馈的去处。上游自己的组合保留它们，对等组合沿用上游的行。没有任何行指明 Delo 主机。
 

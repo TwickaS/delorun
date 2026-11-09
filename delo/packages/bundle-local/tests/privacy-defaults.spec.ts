@@ -156,6 +156,8 @@ describe('a Delo CLI profile', () => {
     expect(destinations.filter(host => host?.includes('delo') === true)).toEqual([])
     const deloRows = rows.filter(row => strings([row.name]).some(name => name.startsWith('@delo/')))
     expect(deloRows.map(row => row.id)).toEqual(LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id))
-    expect(deloRows.map(row => row.name)).toEqual(deloRows.map(() => LOCAL_BUNDLE))
+    // Each row names the Delo package that writes it: the bundle writes all but
+    // the fetch-guard row, which the guard plugin writes for its C16 switch.
+    expect(deloRows.map(row => row.name)).toEqual(deloRows.map(row => row.id === 'fetch-guard' ? '@delo/plugin-fetch-guard' : LOCAL_BUNDLE))
   })
 })

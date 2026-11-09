@@ -1480,6 +1480,9 @@ importers:
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
+      '@delo/plugin-fetch-guard':
+        specifier: workspace:*
+        version: link:../plugin-fetch-guard
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -18639,6 +18642,9 @@ importers:
 
   packages/web/web-fetch-http:
     dependencies:
+      '@deepseek-ai/dsh-http-proxy':
+        specifier: workspace:*
+        version: link:../../util/http-proxy
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -18649,9 +18655,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
-      '@deepseek-ai/dsh-http-proxy':
-        specifier: workspace:*
-        version: link:../../util/http-proxy
       '@deepseek-ai/dsh-timeout':
         specifier: workspace:*
         version: link:../../util/timeout

@@ -50,7 +50,8 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-official-bundles": "workspace:*",
-    "@delo/contract-setup-answers": "workspace:*"
+    "@delo/contract-setup-answers": "workspace:*",
+    "@delo/plugin-fetch-guard": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~"
