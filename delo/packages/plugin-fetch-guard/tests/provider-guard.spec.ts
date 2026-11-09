@@ -4,8 +4,10 @@
  * proves the whole chain: the provider resolves the hop's hostname with
  * `node:dns` before the connection, hands the addresses to the mounted
  * `fetchGuard`, and a refusal propagates as the guard's typed error before
- * undici's `fetch` is ever called. `node:dns` and `undici` are mocked, so no
- * connection is attempted: the network is never touched.
+ * undici's `fetch` is ever called. A hop the guard approves is sent on the
+ * agent that pins the connection to the approved addresses, so the transport
+ * cannot resolve the name a second time. `node:dns` and `undici` are mocked, so
+ * no connection is attempted: the network is never touched.
  *
  * A mount-harness note the diagnosis of WP2.18 turned up: cordis unregisters a
  * provided service eagerly — synchronously at the `dispose()` call, before the
@@ -23,7 +25,26 @@ import { LOCAL_FETCH_PROVIDER_ID, type FetchGuard, type FetchGuardAddress } from
 import { FetchGuardService } from '../src/index.ts'
 import { FetchGuardRefusedError } from '../src/guard.ts'
 
-vi.mock('undici', () => ({ fetch: vi.fn() }))
+/** Every pinned agent the provider built, in creation order, and whether it released each. */
+const agents = vi.hoisted(() => [] as Array<{ options: { connect?: { lookup?: (...args: never[]) => void } }, destroyed: boolean }>)
+
+vi.mock('undici', () => ({
+  fetch: vi.fn(),
+  Agent: class {
+    readonly options: { connect?: { lookup?: (...args: never[]) => void } }
+
+    destroyed = false
+
+    constructor(options: { connect?: { lookup?: (...args: never[]) => void } }) {
+      this.options = options
+      agents.push(this)
+    }
+
+    async destroy(): Promise<void> {
+      this.destroyed = true
+    }
+  },
+}))
 
 /** The mocked transport: one entry per hop the provider would have connected. */
 const fetchMock = vi.mocked(undiciFetch)
@@ -59,6 +80,7 @@ function ok(body: string): UndiciResponse {
 
 beforeEach(() => {
   fetchMock.mockReset()
+  agents.splice(0, agents.length)
   lookup = vi.spyOn(dns.promises, 'lookup') as unknown as Mock<LookupAll>
 })
 
@@ -133,6 +155,38 @@ describe('the provider seam with the guard mounted and on', () => {
     expect(new URL(String(fetchMock.mock.calls[0]?.[0])).hostname).toBe('guard-public.test')
   })
 
+  it('sends the approved hop on the agent pinning the connection to the approved addresses', async () => {
+    const ctx = await mount('enabled')
+    lookup.mockResolvedValue([{ address: '203.0.113.10', family: 4 }, { address: '2001:db8::10', family: 6 }])
+    fetchMock.mockResolvedValue(ok('served'))
+    await ctx.web.fetch({ url: 'http://guard-pinned.test:8080/' })
+    const [agent] = agents
+    expect(agent).toBeDefined()
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ dispatcher: agent })
+    // The agent resolves the name itself, from the approved set only: the
+    // transport never asks the system resolver a second time. Each call below
+    // shapes its answer the way `node:net` asks: the address list under `all`,
+    // the single address string plus its family otherwise.
+    type AgentLookup = (hostname: string, options: Record<string, unknown>, callback: (error: Error | null, address?: unknown, family?: number) => void) => void
+    const agentLookup = agent?.options.connect?.lookup as unknown as AgentLookup | undefined
+    const pinned = async (options: Record<string, unknown>, hostname = 'guard-pinned.test'): Promise<unknown> =>
+      await new Promise((resolve, reject) => {
+        agentLookup?.(hostname, options, (error, address, family) => {
+          if (error !== null) reject(error)
+          else resolve(address === undefined ? family : address)
+        })
+      })
+    expect(await pinned({ all: true })).toEqual([{ address: '203.0.113.10', family: 4 }, { address: '2001:db8::10', family: 6 }])
+    // Without `all`, node's resolver contract is the single address string plus its family.
+    expect(await pinned({ family: 6 })).toEqual('2001:db8::10')
+    expect(await pinned({ family: 4 })).toEqual('203.0.113.10')
+    // A family no approved address carries falls back to the approved set rather than failing the hop.
+    expect(await pinned({ all: true, family: 0 })).toEqual([{ address: '203.0.113.10', family: 4 }, { address: '2001:db8::10', family: 6 }])
+    await expect(pinned({ all: true }, 'never-approved.test')).rejects.toThrow('no address was approved')
+    // The agent lives for one fetch: the provider releases it when the fetch ends.
+    expect(agent?.destroyed).toBe(true)
+  })
+
   it('checks a redirect hop: a hostname rebinding to a refused address refuses the second hop before it connects', async () => {
     const ctx = await mount('enabled')
     lookup.mockImplementationOnce(async () => [{ address: '203.0.113.10', family: 4 }])
@@ -182,11 +236,13 @@ describe('the provider seam with the switch off', () => {
     expect(result.statusCode).toBe(200)
     expect(lookup).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('dispatcher')
+    expect(agents).toEqual([])
   })
 })
 
 describe('the provider seam with no guard mounted', () => {
-  it('runs unguarded: no lookup and no check happen', async () => {
+  it('runs unguarded: no lookup, no check and no pinning happen', async () => {
     const ctx = await mount('absent')
     expect(ctx.get('fetchGuard')).toBeUndefined()
     fetchMock.mockResolvedValue(ok('served'))
@@ -194,5 +250,7 @@ describe('the provider seam with no guard mounted', () => {
     expect(result.statusCode).toBe(200)
     expect(lookup).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('dispatcher')
+    expect(agents).toEqual([])
   })
 })

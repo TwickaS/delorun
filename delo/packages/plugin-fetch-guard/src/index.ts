@@ -2,11 +2,12 @@
  * @delo/plugin-fetch-guard: the optional `fetchGuard` service that the HTTP
  * fetch provider consults before every hop. When the switch is on, the service
  * refuses the destinations of Delo's contract — loopback, link-local,
- * private-network and IPv6 unique-local addresses, and the unspecified IPv4
- * address — with a typed refusal the model reads; every other address is
- * allowed. When the switch is off — the parity value — the plugin provides no
- * service: the provider reads its absence per hop and runs unguarded, with no
- * per-hop resolution, byte-identical to upstream's fetch.
+ * private-network, unique-local, shared (carrier-grade NAT), multicast and
+ * reserved addresses, and the unspecified address — with a typed refusal the
+ * model reads; every other address is allowed. When the switch is off — the
+ * parity value — the plugin provides no service: the provider reads its absence
+ * per hop and runs unguarded, with no per-hop resolution, byte-identical to
+ * upstream's fetch.
  *
  * The service is deliberately optional at its consumer: the provider reads it
  * per hop with `ctx.get()`, so mounting or unmounting this plugin changes the
@@ -33,9 +34,10 @@ export const inject = []
 /** The fetch guard plugin's configuration. */
 export interface Config {
   /**
-   * Refuse loopback, link-local, private-network and IPv6 unique-local
-   * destinations, and the unspecified address, before each connection opens.
-   * On, the plugin provides the `fetchGuard` service. Off — Delo's C16 switch
+   * Refuse loopback, link-local, private-network, unique-local, shared,
+   * multicast and reserved destinations, and the unspecified address, before
+   * each connection opens. On, the plugin provides the `fetchGuard` service and
+   * the shipped composition mounts it that way. Off — Delo's C16 switch
    * `fetch_guard`, the parity value — it provides no service, and `web_fetch`
    * behaves as stock's.
    */

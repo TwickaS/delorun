@@ -9,7 +9,8 @@
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import type { Response } from 'undici'
+import type { LookupFunction } from 'node:net'
+import type { Agent, Dispatcher, Response } from 'undici'
 import { classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
 
 /** Resolved provider limits (the plugin's schemastery Config supplies defaults). */
@@ -54,6 +55,91 @@ export interface FetchGuard {
   check(url: URL, addresses: readonly FetchGuardAddress[]): Promise<void>
 }
 
+/**
+ * The addresses a mounted guard approved for ONE fetch's hops, and the
+ * transport that pins that fetch's connections to them. A guard that approved
+ * `node:dns`'s answer while the socket resolved the name a second time would
+ * guard nothing — a resolver that rebinds between the two lookups would still
+ * connect where the guard never looked — so the connection is made on an agent
+ * whose resolver returns exactly the approved addresses, and a host with no
+ * approved address cannot connect at all.
+ */
+class PinnedConnections {
+  /** The approved addresses of each host this fetch has asked to reach, by hostname. */
+  private readonly approved = new Map<string, readonly FetchGuardAddress[]>()
+
+  /** The agent pinning this fetch's connections, created on its first direct hop. */
+  private agent: Agent | undefined
+
+  /**
+   * Record the addresses the guard approved for one hop.
+   * @param hostname - the hop's hostname, as the URL spells it.
+   * @param addresses - the approved addresses, in resolution order.
+   */
+  approve(hostname: string, addresses: readonly FetchGuardAddress[]): void {
+    this.approved.set(hostname, addresses)
+  }
+
+  /**
+   * The transport this hop must be sent on: the pinned agent for a direct
+   * connection, the process's proxy dispatcher when the installed proxy policy
+   * routes this URL (the proxy resolves the target itself, so there is no
+   * address of ours to pin), or `undefined` when the hop was never approved and
+   * the process-wide dispatcher already routes it.
+   * @param url - the hop's destination.
+   * @returns the dispatcher to send the hop on, or undefined for the default one.
+   */
+  async dispatcherFor(url: URL): Promise<Dispatcher | undefined> {
+    if (!this.approved.has(url.hostname)) return undefined
+    // Node-only, like the transport itself: a browser worker never reaches a hop.
+    const { proxyRouteFor } = await import('@deepseek-ai/dsh-http-proxy')
+    const route = proxyRouteFor(url)
+    if (route.proxied) return route.dispatcher
+    if (this.agent === undefined) {
+      const { Agent } = await import('undici')
+      this.agent = new Agent({ connect: { lookup: pinnedLookup(this.approved) } })
+    }
+    return this.agent
+  }
+
+  /** Release the pinned agent, once its response is read or cancelled. */
+  async close(): Promise<void> {
+    const agent = this.agent
+    this.agent = undefined
+    /* v8 ignore next -- destroy() of a live agent resolves; a best-effort release has nothing to report. */
+    await agent?.destroy().catch(() => {})
+  }
+}
+
+/**
+ * A `node:dns`-shaped resolver for a pinned agent: it answers with exactly the
+ * addresses the guard approved for the hostname the connection asked about, in
+ * the resolution order the guard saw, and fails the connection for any other
+ * hostname. `node:net` asks with `all: true` under its happy-eyeballs default,
+ * and with a family filter when the caller pinned one.
+ * @param approved - the approved addresses of each host this fetch reaches.
+ * @returns the resolver to hand to the agent's `connect.lookup`.
+ */
+function pinnedLookup(approved: ReadonlyMap<string, readonly FetchGuardAddress[]>): LookupFunction {
+  return (hostname, options, callback): void => {
+    const addresses = approved.get(hostname)
+    if (addresses === undefined || addresses.length === 0) {
+      callback(new WebError(`no address was approved for ${JSON.stringify(hostname)}`, 'WEB_PROVIDER_ERROR'), [])
+      return
+    }
+    const family = addresses.filter(address => options.family === undefined || address.family === options.family)
+    const usable = family.length > 0 ? family : addresses
+    if (options.all === true) {
+      callback(null, usable.map(address => ({ address: address.address, family: address.family })))
+      return
+    }
+    const first = usable[0]
+    /* v8 ignore next -- usable is never empty: it falls back to a non-empty approved set. */
+    if (first === undefined) return
+    callback(null, first.address, first.family)
+  }
+}
+
 /** The anonymous HTTP(S) fetch provider. */
 export class HttpFetchProvider implements WebFetchProvider {
   readonly id = LOCAL_FETCH_PROVIDER_ID
@@ -80,16 +166,23 @@ export class HttpFetchProvider implements WebFetchProvider {
     // One signal stops both the request and body read. The deadline's TimeoutReason later
     // distinguishes this provider's timeout from caller or outer-deadline cancellation.
     using d = deadline(signal, this.limits.timeoutMs, 'WEB_FETCH_TIMEOUT')
-    return await this.followAndRead(request.url, d.signal)
+    // One pinned transport per fetch: a hop's approved addresses live for this
+    // call, and the agent holding the connection is released when it ends.
+    const pinned = new PinnedConnections()
+    try {
+      return await this.followAndRead(request.url, d.signal, pinned)
+    } finally {
+      await pinned.close()
+    }
   }
 
   /** Follow same-origin redirects up to the hop cap, then read the final response. */
-  private async followAndRead(initialUrl: string, signal: AbortSignal): Promise<WebFetchResult> {
+  private async followAndRead(initialUrl: string, signal: AbortSignal, pinned: PinnedConnections): Promise<WebFetchResult> {
     let currentUrl = validateFetchUrl(initialUrl)
     let redirectsFollowed = 0
 
     for (;;) {
-      const response = await this.requestOnce(currentUrl, signal)
+      const response = await this.requestOnce(currentUrl, signal, pinned)
       if (isRedirectStatus(response.status)) {
         // Enforce the redirect budget before validating the next hop.
         if (redirectsFollowed >= this.limits.maxRedirects) {
@@ -130,12 +223,16 @@ export class HttpFetchProvider implements WebFetchProvider {
     }
   }
 
-  /** Send one GET through the process-wide dispatcher, which applies the installed proxy policy. */
-  private async requestOnce(url: URL, signal: AbortSignal): Promise<Response> {
+  /**
+   * Send one GET through the dispatcher the hop calls for: the process-wide one,
+   * which applies the installed proxy policy, or the pinned agent the guard's
+   * approved addresses select for a direct hop.
+   */
+  private async requestOnce(url: URL, signal: AbortSignal, pinned: PinnedConnections): Promise<Response> {
     // The guard classifies each hop before its connection opens. It sits outside
     // the transport translation below on purpose: a refusal propagates as the
     // guard's typed error — the model-facing refusal — not as a network failure.
-    await this.checkFetchGuard(url)
+    await this.checkFetchGuard(url, pinned)
     const headers = {
       'user-agent': this.limits.userAgent,
       'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8',
@@ -143,7 +240,8 @@ export class HttpFetchProvider implements WebFetchProvider {
     try {
       // Keep the Node-only transport out of browser-worker startup; a real request loads it here.
       const { fetch } = await import('undici')
-      return await fetch(url, { method: 'GET', redirect: 'manual', headers, signal })
+      const dispatcher = await pinned.dispatcherFor(url)
+      return await fetch(url, { method: 'GET', redirect: 'manual', headers, signal, ...dispatcher === undefined ? {} : { dispatcher } })
     } catch (error: unknown) {
       throw translateAbortOrNetwork(error, signal)
     }
@@ -153,10 +251,13 @@ export class HttpFetchProvider implements WebFetchProvider {
    * Consult the mounted `fetchGuard` (if any) about this hop's destination. The
    * hostname is resolved first so the guard classifies the addresses the
    * connection would actually use, never just the name; an IP literal skips the
-   * lookup. Only mounted guards resolve and classify — with none, no lookup and
-   * no call happen and the provider is byte-identical to upstream's.
+   * lookup. Only mounted guards resolve and classify — with none, no lookup, no
+   * call and no pinning happen and the provider is byte-identical to upstream's.
+   * The addresses a guard approves are then the only ones the hop may connect
+   * to, so a resolver that answers this lookup and the connection's differently
+   * cannot carry the hop somewhere the guard never saw.
    */
-  private async checkFetchGuard(url: URL): Promise<void> {
+  private async checkFetchGuard(url: URL, pinned: PinnedConnections): Promise<void> {
     const guard = this.resolveGuard?.()
     if (guard === undefined) return
     let addresses: readonly FetchGuardAddress[]
@@ -166,6 +267,7 @@ export class HttpFetchProvider implements WebFetchProvider {
       throw new WebError(`web fetch failed: ${String(error)}`, 'WEB_PROVIDER_ERROR', { cause: error })
     }
     await guard.check(url, addresses)
+    pinned.approve(url.hostname, addresses)
   }
 
   /** Read, byte-cap, classify, and decode the final response body. */

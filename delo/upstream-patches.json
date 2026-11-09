@@ -4034,6 +4034,21 @@
       "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
       "class": "security",
       "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/web/web-fetch-http/package.json",
+      "class": "security",
+      "reason": "web_fetch guard pin (B3): promotes `@deepseek-ai/dsh-http-proxy` from a development dependency to a dependency, because the provider now asks the installed proxy policy whether a hop is tunnelled before it pins the guard's approved addresses; the dependency itself was already there."
+    },
+    {
+      "path": "packages/web/web-fetch-http/tests/proxy.spec.ts",
+      "class": "security",
+      "reason": "web_fetch guard pin (B3): proves a hop with a mounted guard and an installed proxy keeps the proxy dispatcher rather than the pinned agent, so the pin applies to a direct connection only and the person's proxy is never bypassed."
+    },
+    {
+      "path": "packages/web/web-fetch-http/tsconfig.json",
+      "class": "security",
+      "reason": "web_fetch guard pin (B3): the project reference to `../../util/http-proxy`, whose proxy policy the provider reads before it chooses a dispatcher."
     }
   ],
   "retired": []

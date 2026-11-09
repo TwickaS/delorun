@@ -5,11 +5,13 @@
  * the classifier always sees the addresses the connection would actually use —
  * never just the name.
  *
- * The refusal matrix is Delo's contract: loopback, link-local, RFC1918 private
- * and IPv6 unique-local destinations and the unspecified IPv4 address are
- * refused; every other address is allowed. An address the classifier cannot
- * parse is refused too — a guard that cannot tell where a connection would go
- * must not wave it through.
+ * The refusal matrix is Delo's contract: loopback, link-local, RFC1918 private,
+ * unique-local, shared (carrier-grade NAT), multicast and reserved destinations,
+ * and the unspecified address, are refused; every other address is allowed. An
+ * IPv6 destination that reaches an IPv4 address — mapped, compatible or NAT64 —
+ * is classified as that IPv4 address, so the translator is no way around the
+ * matrix. An address the classifier cannot parse is refused too — a guard that
+ * cannot tell where a connection would go must not wave it through.
  *
  * @module @delo/plugin-fetch-guard/guard
  */
@@ -24,7 +26,13 @@ export type FetchGuardRefusalCode =
   | 'private'
   /** An IPv6 unique-local address: `fc00::/7`. */
   | 'unique-local'
-  /** The unspecified IPv4 address `0.0.0.0`. */
+  /** A shared (carrier-grade NAT) address: `100.64.0.0/10`, which carries a tailnet and its API. */
+  | 'shared'
+  /** A multicast address: `224.0.0.0/4` or `ff00::/8`. */
+  | 'multicast'
+  /** A reserved address: `240.0.0.0/4`, which holds the broadcast address `255.255.255.255`. */
+  | 'reserved'
+  /** The unspecified address, `0.0.0.0` or `::`, which names no destination at all. */
   | 'unspecified'
   /** An address the classifier could not parse, refused rather than allowed. */
   | 'unclassifiable'
@@ -52,7 +60,10 @@ const REASONS: Record<FetchGuardRefusalCode, string> = {
   'link-local': 'a link-local address',
   private: 'a private-network address',
   'unique-local': 'an IPv6 unique-local address',
-  unspecified: 'the unspecified address (0.0.0.0)',
+  shared: 'a shared (carrier-grade NAT) address',
+  multicast: 'a multicast address',
+  reserved: 'a reserved address',
+  unspecified: 'the unspecified address (0.0.0.0 or ::)',
   unclassifiable: 'an address the fetch guard could not classify',
 }
 
@@ -89,8 +100,10 @@ function parseIpv4(address: string): readonly [number, number, number, number] |
 
 /**
  * The refusal of one IPv4 address under the matrix: the unspecified address,
- * the loopback range, the RFC1918 private ranges and the link-local range are
- * refused; every other address is allowed.
+ * the loopback range, the RFC1918 private ranges, the link-local range, the
+ * shared (carrier-grade NAT) range, the multicast range and the reserved range
+ * — which holds the broadcast address `255.255.255.255` — are refused; every
+ * other address is allowed.
  * @param octets - the four octets.
  * @returns the refusal code, or undefined when the address is allowed.
  */
@@ -102,6 +115,13 @@ function ipv4Refusal(octets: readonly number[]): FetchGuardRefusalCode | undefin
   if (first === 172 && (second & 0xf0) === 16) return 'private'
   if (first === 192 && second === 168) return 'private'
   if (first === 169 && second === 254) return 'link-local'
+  // 100.64.0.0/10 is shared address space: a carrier-grade NAT range, and the
+  // range a Tailscale tailnet and its API address (100.100.100.100) live in.
+  if (first === 100 && (second & 0xc0) === 64) return 'shared'
+  // 224.0.0.0/4 is multicast; 240.0.0.0/4 is reserved and holds the broadcast
+  // address. Neither names a host a fetch could want.
+  if ((first & 0xf0) === 0xe0) return 'multicast'
+  if ((first & 0xf0) === 0xf0) return 'reserved'
   return undefined
 }
 
@@ -150,22 +170,36 @@ function parseIpv6(address: string): Uint8Array | undefined {
 }
 
 /**
- * The refusal of one IPv6 address under the matrix: `::1`, `fc00::/7` and
- * `fe80::/10` are refused. An IPv4-mapped (`::ffff:a.b.c.d`) or IPv4-compatible
- * (`::a.b.c.d`) destination connects as the IPv4 address its low half spells,
- * in hex or dotted quad alike, so it is classified as that IPv4 address — the
- * `::1` check runs first, because `::1` and `::0.0.0.1` are one address and
- * `0.0.0.1` alone would be allowed. Every other address is allowed.
+ * The refusal of one IPv6 address under the matrix: the unspecified address
+ * (`::`, including `::0.0.0.0`), `::1`, `fc00::/7`, `fe80::/10` and `ff00::/8`
+ * are refused. An IPv4-mapped (`::ffff:a.b.c.d`), IPv4-compatible (`::a.b.c.d`)
+ * or NAT64 (`64:ff9b::a.b.c.d`) destination connects as the IPv4 address its low
+ * half spells, in hex or dotted quad alike, so it is classified as that IPv4
+ * address — the `::1` check runs first, because `::1` and `::0.0.0.1` are one
+ * address and `0.0.0.1` alone would be allowed. Every other address is allowed.
  * @param bytes - the 16 bytes of the address.
  * @returns the refusal code, or undefined when the address is allowed.
  */
 function ipv6Refusal(bytes: Uint8Array): FetchGuardRefusalCode | undefined {
   const zero = (from: number, to: number): boolean => bytes.slice(from, to).every(byte => byte === 0)
+  const lowHalf = (): FetchGuardRefusalCode | undefined => ipv4Refusal([bytes[12] ?? 0, bytes[13] ?? 0, bytes[14] ?? 0, bytes[15] ?? 0])
+  // `::` names no destination, and `::0.0.0.0` spells the same address. The
+  // check runs before the IPv4-compatible branch, whose `!zero(12, 16)` test
+  // would otherwise let an all-zero low half fall through.
+  if (zero(0, 16)) return 'unspecified'
   if (zero(0, 15) && bytes[15] === 1) return 'loopback'
-  if (zero(0, 10) && bytes[10] === 0xff && bytes[11] === 0xff) return ipv4Refusal([bytes[12] ?? 0, bytes[13] ?? 0, bytes[14] ?? 0, bytes[15] ?? 0])
-  if (zero(0, 12) && !zero(12, 16)) return ipv4Refusal([bytes[12] ?? 0, bytes[13] ?? 0, bytes[14] ?? 0, bytes[15] ?? 0])
+  if (zero(0, 10) && bytes[10] === 0xff && bytes[11] === 0xff) return lowHalf()
+  // `64:ff9b::/96` is the well-known NAT64 prefix: a v6-only network reaches the
+  // IPv4 address its low 32 bits spell through the translator. Classifying that
+  // address is what keeps the translator from being a way around the matrix — a
+  // NAT64 destination to a refused address is refused — while a NAT64
+  // destination to a public one stays reachable, which is how such a network
+  // reaches the IPv4 web at all.
+  if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b && zero(4, 12)) return lowHalf()
+  if (zero(0, 12) && !zero(12, 16)) return lowHalf()
   if (((bytes[0] ?? 0) & 0xfe) === 0xfc) return 'unique-local'
   if ((bytes[0] ?? 0) === 0xfe && ((bytes[1] ?? 0) & 0xc0) === 0x80) return 'link-local'
+  if ((bytes[0] ?? 0) === 0xff) return 'multicast'
   return undefined
 }
 

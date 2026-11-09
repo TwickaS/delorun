@@ -125,6 +125,76 @@
       "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "10.0.0.9",
       "reason": "The web_fetch guard refuses private, loopback and link-local ranges (A100); these boundary and dns-fixture addresses prove the ranges edges are not refused by mistake, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/src/guard.ts",
+      "value": "100.100.100.100",
+      "reason": "The web_fetch guard refuses the shared (carrier-grade NAT) range (B4); the comment names where a tailnet and its API live, so the range's reason is auditable. Not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/src/guard.ts",
+      "value": "240.0.0.0",
+      "reason": "The web_fetch guard refuses the reserved range (B4); the comment names the range and the broadcast address it holds. Not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/README.md",
+      "value": "240.0.0.0",
+      "reason": "The refusal matrix documented in the package's contract names the reserved range (B4) and the broadcast address it holds. Not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/README.zh.md",
+      "value": "240.0.0.0",
+      "reason": "The Chinese counterpart of the refusal matrix documented in the package's contract names the reserved range (B4) and the broadcast address it holds. Not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "100.64.0.1",
+      "reason": "The web_fetch guard refuses the shared (carrier-grade NAT) range (B4); these fixtures are the refusal matrix itself, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "100.100.100.100",
+      "reason": "The web_fetch guard refuses the shared (carrier-grade NAT) range (B4); these fixtures are the refusal matrix itself, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "100.127.255.255",
+      "reason": "The web_fetch guard refuses the shared (carrier-grade NAT) range (B4); these fixtures are the refusal matrix itself, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "224.0.0.1",
+      "reason": "The web_fetch guard refuses the multicast range (B4); these fixtures are the refusal matrix itself, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "239.255.255.255",
+      "reason": "The web_fetch guard refuses the multicast range (B4); these fixtures are the refusal matrix itself, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "240.0.0.0",
+      "reason": "The web_fetch guard refuses the reserved range (B4); these fixtures are the refusal matrix itself, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "240.0.0.1",
+      "reason": "The web_fetch guard refuses the reserved range (B4); these fixtures are the refusal matrix itself, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "100.63.255.255",
+      "reason": "The web_fetch guard refuses the shared (carrier-grade NAT) range (B4); these boundary addresses prove the widened range's edges are not refused by mistake, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "100.128.0.0",
+      "reason": "The web_fetch guard refuses the shared (carrier-grade NAT) range (B4); these boundary addresses prove the widened range's edges are not refused by mistake, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "223.255.255.255",
+      "reason": "The web_fetch guard refuses the multicast range (B4); these boundary addresses prove the widened range's edges are not refused by mistake, not a deployment address."
     }
   ]
 }
