@@ -110,10 +110,22 @@ describe('divergence ledger checks', () => {
   it('fails a stale entry whose path no longer differs from upstream', (test) => {
     const repo = fixture(test)
     const base = repo.commit({ 'upstream.ts': 'a\n' })
-    repo.commit({ 'delo/upstream-patches.json': ledgerText(base, [{ path: 'upstream.ts', class: 'delo-feature', reason: 'edit' }]) })
+    repo.commit({ 'delo/upstream-patches.json': ledgerText(base, [{ path: 'upstream.ts', class: 'delo-feature', reason: 'edit', sha256: patchDigest('a\n') }]) })
     expect(checkRepository(repo.root).errors).toEqual([
       'upstream.ts: listed patch no longer differs from upstream; remove the entry',
     ])
+  })
+
+  it('fails a listed patch whose checksum the ledger does not record, and passes it once recorded', (test) => {
+    const repo = fixture(test)
+    const base = repo.commit({ 'upstream.ts': 'a\n' })
+    const entry = (patch: object) => ledgerText(base, [patch])
+    repo.commit({ 'upstream.ts': 'b\n', 'delo/upstream-patches.json': entry({ path: 'upstream.ts', class: 'delo-feature', reason: 'edit' }) })
+    expect(checkRepository(repo.root).errors).toEqual([
+      `upstream.ts: the ledger records no sha256 for this patch; run \`upstream-update.ts --record\` and commit the ledger`,
+    ])
+    repo.commit({ 'delo/upstream-patches.json': entry({ path: 'upstream.ts', class: 'delo-feature', reason: 'edit', sha256: patchDigest('b\n') }) })
+    expect(checkRepository(repo.root).errors).toEqual([])
   })
 
   it('fails a recorded digest that no longer matches the file at HEAD, and passes one that does', (test) => {
@@ -150,7 +162,7 @@ describe('divergence ledger checks', () => {
     const absorbed = repo.commit({ 'upstream.ts': 'ONE\ntwo\nTHREE\n' })
     repo.run(['checkout', '-q', 'main'])
     repo.write({ 'upstream.ts': 'ONE\ntwo\nTHREE\n' })
-    repo.commit({ 'delo/upstream-patches.json': ledgerText(base, [{ path: 'upstream.ts', class: 'delo-feature', reason: 'edit' }]) })
+    repo.commit({ 'delo/upstream-patches.json': ledgerText(base, [{ path: 'upstream.ts', class: 'delo-feature', reason: 'edit', sha256: patchDigest('ONE\ntwo\nTHREE\n') }]) })
     const before = checkRepository(repo.root)
     expect(before.errors).toEqual([])
     expect(before.divergence).toEqual({ entries: 1, hunks: 2, retired: [] })

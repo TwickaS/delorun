@@ -44,7 +44,7 @@ English | [中文](README.zh.md)
 
 ## The release log
 
-`runOnlineCheck` is contract C18's check against the current log. It reads the log's latest checkpoint and requires the log's own signature plus the root's witness threshold of cosignatures no older than 24 hours. It then proves consistency from the checkpoint the verified bundle carries, or the newer one this home stored, to the latest, and stores the latest. An unreachable log leaves the release `unchecked` and a verifiable failure leaves it `failed`; `requireVerifiedLog` refuses an install in both states, so a release that cannot be checked against the log never installs. `createTilesLogService` reads a tlog-tiles shard through the same downloader, so the host rule covers the log's answers too.
+`runOnlineCheck` is contract C18's check against the current log. It reads the log's latest checkpoint and requires the log's own signature plus the root's witness threshold of cosignatures no older than 24 hours. It then proves consistency from the checkpoint the verified bundle carries, or the newer one this home stored, to the latest, and stores the latest. An unreachable log leaves the release `unchecked` and a verifiable failure leaves it `failed`; `requireVerifiedLog` refuses an install in both states, so a release that cannot be checked against the log never installs. `createTilesLogService` reads a tlog-tiles shard through the downloader, under a host list of its own: `hosts` names the log's origin and the witness network's checkpoint distributor, and the release-file rule stays contract C1's, so neither list has to name the other's hosts. A log whose origin is not one of its own hosts, or an answer that redirects out of them, is refused with `DOWNLOAD_REFUSED`.
 
 <a id="extraction"></a>
 

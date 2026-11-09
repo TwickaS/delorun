@@ -85,7 +85,7 @@ describe('the host rule', () => {
   it('refuses a host contract C1 does not list', async () => {
     const downloader = new Downloader()
     const error = await refusal(downloader.bytes('https://example.test/timestamp.json', 1_024), 'DOWNLOAD_REFUSED')
-    expect(error.detail).toContain('not a release host')
+    expect(error.detail).toContain('not an allowed host')
   })
 
   it('refuses a redirect to a host outside the list, before the redirect is followed', async () => {

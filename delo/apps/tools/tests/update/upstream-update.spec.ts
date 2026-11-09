@@ -204,6 +204,66 @@ describe('the state the ledger describes', () => {
   }, PROCESS_TIMEOUT_MS)
 })
 
+describe('measuring the state the ledger describes', () => {
+  // The ledger's pin is always an ancestor of HEAD, and a tag at or below the pin is in HEAD's history already, so
+  // reading "the release is in HEAD" as a landed merge measured the pin: the patch set vanished, 0 paths differed, and
+  // every entry looked absorbed.
+  it('measures HEAD when the tag is the ledger’s own pin and HEAD merely descends from it', (test) => {
+    const fixture = updateFixture(test, CARRIES)
+    const result = runUpdate(fixture, ['--tag', 'v1'])
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).toContain(`carry-forward onto v1 (${fixture.pin}) from pin v1 (${fixture.pin}) at HEAD `)
+    expect(result.output).toContain('carried: 1 entry, 1 hunk')
+    expect(result.output).not.toContain('measured at the pre-merge state')
+    expect(result.output).not.toContain('absorbed by v1')
+  }, PROCESS_TIMEOUT_MS)
+
+  it('catches a patch the ledger dropped when HEAD merely descends from the pin, instead of seeing no difference', (test) => {
+    const fixture = updateFixture(test, {
+      base: { [A]: lines(30), [B]: lines(30) },
+      tag: { [A]: lines(30, { 20: 'upstream 20' }) },
+      fork: { [A]: lines(30, { 5: 'delo 5' }), [B]: lines(30, { 3: 'delo 3' }) },
+      patches: [patch(A), patch(B)],
+    }, {
+      between: fork => rewriteLedger(fork, ledger => {
+        ledger.patches = ledger.patches.filter(entry => entry.path !== B)
+      }),
+    })
+    const result = runUpdate(fixture, ['--tag', 'v1', '--write'])
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain(`upstream-update: ledger-inconsistent: ${B}: modified upstream file is not listed in ${MANIFEST_PATH}`)
+    expect(result.output).not.toContain('listed patch no longer differs')
+    expect(ledgerOf(fixture).patches.map(entry => entry.path)).toEqual([A])
+  }, PROCESS_TIMEOUT_MS)
+
+  it('measures the fork’s own side once a real release merge is in HEAD', (test) => {
+    const fixture = updateFixture(test, CARRIES, { merge: true })
+    const side = fixture.fork.run(['rev-parse', 'HEAD^1'])
+    const result = runUpdate(fixture, ['--tag', 'v2'])
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).toContain(`measured at the pre-merge state ${side.slice(0, 12)}`)
+    expect(result.output).toContain('carried: 1 entry, 1 hunk')
+  }, PROCESS_TIMEOUT_MS)
+
+  it('refuses when the walk from HEAD reaches the pin, instead of measuring the pin as the fork’s side', (test) => {
+    const fixture = updateFixture(test, CARRIES, {
+      between: fork => {
+        const ledger = readFileSync(join(fork.root, MANIFEST_PATH), 'utf8')
+        // The release is merged into the pin itself, so no commit of the fork's sits above the pin to measure.
+        fork.run(['reset', '-q', '--hard', 'v1'])
+        fork.run(['merge', '-q', '--no-ff', '-m', 'release v2', 'v2'])
+        fork.commit({ [MANIFEST_PATH]: ledger })
+      },
+    })
+    const result = runUpdate(fixture, ['--tag', 'v2', '--write'])
+    expect(result.status, result.output).toBe(1)
+    expect(result.output).toContain('upstream-update: merge-side-missing: the walk from HEAD reaches the pin ')
+    expect(result.output).toContain('measuring the pin would show every listed patch as absorbed')
+    expect(ledgerOf(fixture).upstream.ref).toBe('v1')
+    expect(leftoverScratch(fixture)).toEqual([])
+  }, PROCESS_TIMEOUT_MS)
+})
+
 describe('a listed patch that would delete its file', () => {
   /** A patch set whose listed entry for `A` is left behind when the fork deletes the file. */
   const DELETED: { readonly files: UpdateFiles; readonly between: (fork: Scratch) => void } = {

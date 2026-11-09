@@ -19,7 +19,7 @@ import {
   type PatchManifest,
 } from './fork-boundary.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
-import { commitDigests, digestErrors } from './ledger-digests.ts'
+import { commitDigests, digestErrors, unrecorded } from './ledger-digests.ts'
 
 /** The outcome of checking one repository against its ledger. */
 export interface CheckResult {
@@ -170,9 +170,20 @@ export function historyErrors(root: string, manifest: PatchManifest): string[] {
 }
 
 /**
+ * Report every listed entry whose checksum the ledger does not record. The record is what makes a changed patch
+ * detectable, so an entry without a digest is a violation in its own right: a gate that only compared recorded digests
+ * would pass a ledger whose entries record none at all, and a patch could change under it unnoticed.
+ * @param manifest - the parsed ledger.
+ * @returns one message per listed entry without a recorded digest.
+ */
+function unrecordedErrors(manifest: PatchManifest): string[] {
+  return unrecorded(manifest).map(path => `${path}: the ledger records no sha256 for this patch; run \`upstream-update.ts --record\` and commit the ledger`)
+}
+
+/**
  * Run every ledger rule against a repository: the ledger parses, its pinned commit is in the clone and in HEAD's
- * history, every changed upstream path is listed or fork-owned, every listed patch still differs from upstream, and
- * every recorded digest matches the file at HEAD.
+ * history, every changed upstream path is listed or fork-owned, every listed patch still differs from upstream, every
+ * listed patch records a digest, and every recorded digest matches the file at HEAD.
  * @param root - the repository root.
  * @returns the ledger, the violations, and the divergence when the pinned commit is in the clone.
  */
@@ -198,6 +209,7 @@ export function checkRepository(root: string): CheckResult {
     errors: [
       ...historyErrors(root, manifest),
       ...forkBoundaryErrors(manifest, changed, files),
+      ...unrecordedErrors(manifest),
       ...digestErrors(manifest, commitDigests(root, 'HEAD', manifest.patches.map(patch => patch.path))),
     ],
     divergence: measureDivergence(root, manifest, changed),

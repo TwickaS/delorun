@@ -4,6 +4,10 @@
  * timeouts, and a byte limit enforced while the body arrives rather than after it. A refusal of the rule is C1's
  * `DOWNLOAD_REFUSED`; a connection, stall, status or size failure is `DOWNLOAD_FAILED`.
  *
+ * A rule covers one service. {@link RELEASE_HOSTS} is contract C1's, for release files; another service that the same
+ * launcher reads, such as the release log of contract C18, takes its own rule through {@link Downloader.withHosts}, so
+ * that neither list has to name the other's hosts and neither widens the other.
+ *
  * @module @delo/install/download
  */
 import { createHash } from 'node:crypto'
@@ -14,9 +18,12 @@ import { InstallError, messageOf } from './errors.ts'
 type Fetch = typeof globalThis.fetch
 type FetchResponse = Awaited<ReturnType<Fetch>>
 
-/** Where a release file may be fetched from. */
-export interface ReleaseHosts {
-  /** The one scheme a release file travels over. */
+/**
+ * Where one service's files may be fetched from. One rule covers one service: contract C1's release files and contract
+ * C18's release log have a rule each, and neither rule names the other's hosts.
+ */
+export interface HostRule {
+  /** The one scheme this service's files travel over. */
   readonly scheme: string
   /** The hosts a request may name, its redirects included. */
   readonly hosts: readonly string[]
@@ -25,7 +32,7 @@ export interface ReleaseHosts {
 }
 
 /** Contract C1's download rule: HTTPS to the release and GitHub asset hosts, redirects included. */
-export const RELEASE_HOSTS: ReleaseHosts = { scheme: 'https:', hosts: RELEASE_DOWNLOAD_HOSTS, maxRedirects: 5 }
+export const RELEASE_HOSTS: HostRule = { scheme: 'https:', hosts: RELEASE_DOWNLOAD_HOSTS, maxRedirects: 5 }
 
 /** The two timeouts contract C1 sets on a download. */
 export interface DownloadTimings {
@@ -41,7 +48,7 @@ export const RELEASE_TIMINGS: DownloadTimings = { connectMs: DOWNLOAD_CONNECT_TI
 /** What a {@link Downloader} needs. */
 export interface DownloaderOptions {
   /** The hosts and redirects allowed; {@link RELEASE_HOSTS} by default. */
-  readonly hosts?: ReleaseHosts
+  readonly hosts?: HostRule
   /** The two timeouts; {@link RELEASE_TIMINGS} by default. */
   readonly timings?: DownloadTimings
   /** The fetch to use, this process's by default. */
@@ -79,10 +86,11 @@ function writeRefused(url: string, path: string, error: unknown): InstallError {
 }
 
 /**
- * Contract C1's downloader. One instance serves one install, so a release's files share its host rule and timings.
+ * Contract C1's downloader. One instance serves one service's files, so they share its host rule and timings; a caller
+ * that fetches from another service takes {@link Downloader.withHosts} rather than widening this rule.
  */
 export class Downloader {
-  private readonly hosts: ReleaseHosts
+  private readonly hosts: HostRule
   private readonly timings: DownloadTimings
   private readonly fetch: Fetch
   private readonly openFile: typeof openFile
@@ -95,6 +103,16 @@ export class Downloader {
     this.timings = options.timings ?? RELEASE_TIMINGS
     this.fetch = options.fetch ?? globalThis.fetch
     this.openFile = options.openFile ?? openFile
+  }
+
+  /**
+   * Another service's downloader: this one's fetch, timings and file opener, under the given host rule. The rule is a
+   * value rather than a widening, so the downloader this was taken from keeps refusing the hosts the new rule names.
+   * @param hosts - the rule the derived downloader applies.
+   * @returns a downloader whose rule is the one given and whose fetch and timeouts are this one's.
+   */
+  withHosts(hosts: HostRule): Downloader {
+    return new Downloader({ hosts, timings: this.timings, fetch: this.fetch, openFile: this.openFile })
   }
 
   /**
@@ -216,10 +234,10 @@ export class Downloader {
       throw new InstallError('DOWNLOAD_REFUSED', url, 'the URL does not parse', { cause: error })
     }
     if (parsed.protocol !== this.hosts.scheme) {
-      throw new InstallError('DOWNLOAD_REFUSED', url, `release files travel over ${this.hosts.scheme}, not ${parsed.protocol}`)
+      throw new InstallError('DOWNLOAD_REFUSED', url, `a download travels over ${this.hosts.scheme}, not ${parsed.protocol}`)
     }
     if (!this.hosts.hosts.includes(parsed.hostname.toLowerCase())) {
-      throw new InstallError('DOWNLOAD_REFUSED', url, `${parsed.hostname} is not a release host; release files come from ${this.hosts.hosts.join(', ')}`)
+      throw new InstallError('DOWNLOAD_REFUSED', url, `${parsed.hostname} is not an allowed host; downloads come from ${this.hosts.hosts.join(', ')}`)
     }
   }
 

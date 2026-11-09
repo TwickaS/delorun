@@ -7,10 +7,10 @@
  * @module @delo/install
  */
 export { bundleFileName, LauncherChannel, RELEASE_SOURCE, type LauncherChannelOptions, type ReleaseSource } from './channel.ts'
-export { Downloader, RELEASE_HOSTS, RELEASE_TIMINGS, type Downloaded, type DownloaderOptions, type DownloadTimings, type ReleaseHosts } from './download.ts'
+export { Downloader, RELEASE_HOSTS, RELEASE_TIMINGS, type Downloaded, type DownloaderOptions, type DownloadTimings, type HostRule } from './download.ts'
 export { InstallError, isInstallError, messageOf, type InstallErrorCode, type InstallLayoutCode } from './errors.ts'
 export { extractArchive, extractionPath, type ExtractRequest } from './extract.ts'
-export { CHECKPOINT_MAX_BYTES, createTilesLogService, requireVerifiedLog, runOnlineCheck, type LogService, type OnlineCheckRequest, type OnlineCheckResult, type TilesLogOptions } from './log.ts'
+export { CHECKPOINT_MAX_BYTES, createTilesLogService, LOG_MAX_REDIRECTS, requireVerifiedLog, runOnlineCheck, type LogService, type OnlineCheckRequest, type OnlineCheckResult, type TilesLogOptions } from './log.ts'
 export {
   readStoredCheckpoint,
   readStoredRootBytes,

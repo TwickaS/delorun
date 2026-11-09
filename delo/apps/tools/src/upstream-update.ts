@@ -45,6 +45,7 @@ export type RefusalCode =
   | 'baseline-commit-mismatch'
   | 'ledger-inconsistent'
   | 'measurement-failed'
+  | 'merge-side-missing'
   | 'checksum-unrecorded'
   | 'checksum-drift'
   | 'patch-deletes-file'
@@ -423,8 +424,11 @@ export function carryForward(root: string, tag: string, write = false): UpdateOu
   // The ledger and its checksum record describe the checkout as it stood before the release merge, so that state is
   // measured once here and read by every check and every patch below. Once the merge is in HEAD this is the fork's own
   // side of it: the same run that lands the merge is the run whose checks would otherwise be skipped, and a patch taken
-  // across the merge would carry the release's changes as the fork's.
-  const measured = measuredState(root, head, pinned, targetCommit)
+  // across the merge would carry the release's changes as the fork's. A history that names no such side refuses here,
+  // before a check can read the pin as the state and call the patch set absorbed.
+  const state = measuredState(root, head, pinned, targetCommit)
+  if (state.measured === undefined) return { refusals: state.refusals }
+  const measured = state.measured
   const ledgerRefusals = guarded(() => checkLedger(root, manifest, measured))
   if (ledgerRefusals.length > 0) return { refusals: ledgerRefusals }
   // Only a ledger that holds is asked for its digests: a path the object store cannot read back would otherwise be
@@ -502,15 +506,48 @@ export function carryForward(root: string, tag: string, write = false): UpdateOu
  * Measure the state the ledger and the checksum record describe, once. While the release merge is not in `HEAD` that
  * state is the checkout itself, uncommitted work included; once it is, the state is the fork's own side of the merge,
  * which is found by walking first parents down to the commit that brought the release in.
+ *
+ * The merge is in `HEAD` only when the release arrived with it, which is what the pin rules out: a fork's pin is always
+ * an ancestor of `HEAD`, and a tag at or below the pin is in `HEAD`'s history already. Reading that as a landed merge
+ * walked the first parents down to the pin, measured the pin's own tree, and so saw none of the patch set — every entry
+ * then looked absorbed and the run would have retired the lot.
  * @param root - the repository root.
  * @param head - the checkout's `HEAD`.
  * @param baseline - the ledger's pin, the oldest state its entries can describe, where the walk stops.
  * @param targetCommit - the release the patch set is carried onto.
- * @returns the measured state.
+ * @returns the measured state, or one refusal when it cannot be named.
  */
-export function measuredState(root: string, head: string, baseline: Baseline, targetCommit: string): Measured {
-  if (!isAncestor(root, targetCommit, head)) return { commit: head, checkout: true }
-  return { commit: forkSide(root, head, baseline.commit, targetCommit), checkout: false }
+export function measuredState(root: string, head: string, baseline: Baseline, targetCommit: string): MeasuredState {
+  if (!isAncestor(root, targetCommit, head) || isAncestor(root, targetCommit, baseline.commit)) {
+    return { measured: { commit: head, checkout: true }, refusals: [] }
+  }
+  return forkSide(root, head, baseline.commit, targetCommit)
+}
+
+/** What measuring the state the ledger describes found. */
+export interface MeasuredState {
+  /** The state the ledger describes, absent when the history cannot name it. */
+  readonly measured?: Measured
+  /** One refusal when `HEAD` holds the release with no fork commit above the pin to measure; empty otherwise. */
+  readonly refusals: readonly Refusal[]
+}
+
+/**
+ * The refusal for a walk that reaches the pin: there the history holds the release above the pin itself, so the only
+ * state the walk can name is the pin, which has none of the fork's changes. A run that measured it would see no
+ * differing path, classify every entry as absorbed and retire the whole patch set.
+ * @param pin - the commit the walk stopped at.
+ * @param targetCommit - the release the walk looked for.
+ * @returns the refusal.
+ */
+function pinReached(pin: string, targetCommit: string): Refusal {
+  return {
+    code: 'merge-side-missing',
+    path: MANIFEST_PATH,
+    message: `the walk from HEAD reaches the pin ${pin} without passing a fork commit that lacks the release ${targetCommit},`
+      + ' so the state the ledger describes is not in this history: measuring the pin would show every listed patch as absorbed;'
+      + ' land the release on the fork\'s own side with a merge commit (git merge --no-ff), or correct upstream.commit in the ledger',
+  }
 }
 
 /**
@@ -525,18 +562,24 @@ export function measuredState(root: string, head: string, baseline: Baseline, ta
  * @param head - the commit the release merge landed in.
  * @param pin - the ledger's pin, where the walk stops.
  * @param targetCommit - the release the patch set is carried onto.
- * @returns the commit whose tree the ledger describes.
+ * @returns the commit whose tree the ledger describes, or the refusal for a walk that reaches the pin.
  */
-function forkSide(root: string, head: string, pin: string, targetCommit: string): string {
+function forkSide(root: string, head: string, pin: string, targetCommit: string): MeasuredState {
   let cursor = head
   while (cursor !== pin) {
     const fields = git(root, ['rev-list', '--parents', '-n', '1', cursor]).trim().split(' ')
     const first = fields[1]
-    if (first === undefined) return cursor
-    if (!isAncestor(root, targetCommit, first)) return fields.length > 2 ? first : cursor
+    if (first === undefined) return { measured: { commit: cursor, checkout: false }, refusals: [] }
+    if (!isAncestor(root, targetCommit, first)) {
+      const side = fields.length > 2 ? first : cursor
+      // The pin is where the walk stops and the oldest state the entries can describe, so a side that is the pin names
+      // no fork commit at all: the release sits on the pin, and the ledger's state is not in this history.
+      if (side === pin) return { refusals: [pinReached(pin, targetCommit)] }
+      return { measured: { commit: side, checkout: false }, refusals: [] }
+    }
     cursor = first
   }
-  return cursor
+  return { refusals: [pinReached(pin, targetCommit)] }
 }
 
 /**
