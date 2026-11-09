@@ -162,6 +162,10 @@ export interface PatternCanaries {
   readonly urlPassword: string
   readonly urlToken: string
   readonly envSecret: string
+  /** The secret path of a webhook endpoint. */
+  readonly webhookPath: string
+  /** The path of a file that holds credentials. */
+  readonly credentialPath: string
   /** The body lines of a PEM private key, between its BEGIN and END lines. */
   readonly pemBody: readonly string[]
 }
@@ -186,6 +190,8 @@ export function patternCanaries(): PatternCanaries {
     urlPassword: randomFrom(ALNUM, 24),
     urlToken: randomFrom(ALNUM, 30),
     envSecret: randomFrom(ALNUM, 28),
+    webhookPath: [randomFrom(ALNUM, 9), randomFrom(ALNUM, 24)].join('/'),
+    credentialPath: ['/home', `ci-${randomFrom('abcdef0123456789', 8)}`, '.aws', 'credentials'].join('/'),
     pemBody: Array.from({ length: 4 }, () => randomBytes(48).toString('base64')),
   }
 }
@@ -208,7 +214,7 @@ export function patternSecrets(canaries: PatternCanaries): string[] {
   return [
     canaries.providerKey, canaries.githubToken, canaries.githubPat, canaries.awsKeyId, canaries.jwt, canaries.slackToken,
     canaries.ownerCode, canaries.bearer, canaries.basic, canaries.cookie, canaries.urlPassword, canaries.urlToken,
-    canaries.envSecret, ...canaries.pemBody,
+    canaries.envSecret, canaries.webhookPath, canaries.credentialPath, ...canaries.pemBody,
   ]
 }
 
@@ -231,6 +237,8 @@ export function patternLines(canaries: PatternCanaries): string[] {
     `fetch https://account:${canaries.urlPassword}@git.example.invalid/repo.git failed`,
     `GET https://api.example.invalid/v1/items?page=2&access_token=${canaries.urlToken}#top`,
     `export DEPLOY_TOKEN=${canaries.envSecret}`,
+    `POST https://hooks.example.invalid/services/T000/B000/${canaries.webhookPath}`,
+    `GOOGLE_APPLICATION_CREDENTIALS=${canaries.credentialPath}`,
     pemLine('BEGIN'),
     ...canaries.pemBody,
     pemLine('END'),

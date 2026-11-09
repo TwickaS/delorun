@@ -15,6 +15,8 @@ export type PatternKind =
   | 'basic'
   | 'url-userinfo'
   | 'url-parameter'
+  | 'webhook-url'
+  | 'credential-file-path'
   | 'private-key'
   | 'provider-key'
   | 'github-token'
@@ -113,6 +115,16 @@ const PATTERNS: readonly Pattern[] = [
   {
     regex: new RegExp(String.raw`([?&;])([^=&;#\s]*(?:token|key|secret|password|code|sig)[^=&;#\s]*)=${NOT_A_MARKER}[^&;#\s"'<>]+`, 'gi'),
     replace: (_match, separator = '', name = '') => `${separator}${name}=${redactionMarker('url-parameter')}`,
+  },
+  // A webhook endpoint — a `hooks.` host or a `/webhook(s)` path — whose path is the secret that authorises the post.
+  {
+    regex: /\b[a-z][a-z0-9+.-]*:\/\/(?:hooks\.[^\s"'<>]+|[^\s"'<>]*[/.]webhooks?[/.][^\s"'<>]*)/gi,
+    replace: () => redactionMarker('webhook-url'),
+  },
+  // The path of a file that holds credentials, whatever precedes it.
+  {
+    regex: /(^|[\s"'`=(])[~A-Za-z0-9._/\\-]*(?:\.aws[/\\]credentials|\.netrc|\.npmrc|\.pgpass|\.git-credentials|\.docker[/\\]config\.json|application_default_credentials\.json|id_(?:rsa|dsa|ecdsa|ed25519)|[^/\\\s"']*service[_-]?account[^/\\\s"']*\.json)/gi,
+    replace: (_match, lead = '') => `${lead}${redactionMarker('credential-file-path')}`,
   },
   { regex: /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}/g, replace: () => redactionMarker('provider-key') },
   { regex: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g, replace: () => redactionMarker('github-token') },

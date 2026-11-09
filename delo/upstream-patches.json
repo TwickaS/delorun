@@ -3887,6 +3887,26 @@
       "class": "delo-feature",
       "reason": "Code refusal switch (Delo's C16-unrelated feature switch): the loader config gains `refuseCode` (default `false`), and with it on the `internal/config` hook walks an entry's raw config for `!!js` expression nodes before interpolating and throws the typed `RefusedCodeError` naming the configuration file (the tree base URL and the entry id — parsed YAML carries no line numbers) and the expression's path, without evaluating anything. Off, loading is byte-identical to upstream's.",
       "sha256": "d19b74849ceceea2b670df67c8b5ee307581c164a2b66bb585ff9eed47f1ca41"
+    },
+    {
+      "path": "packages/subprocess/subprocess/src/index.ts",
+      "class": "security",
+      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `GOOGLE_APPLICATION_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a webhook URL, a PEM private key block, a credential-file path or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through."
+    },
+    {
+      "path": "packages/subprocess/subprocess/tests/env.spec.ts",
+      "class": "security",
+      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive."
+    },
+    {
+      "path": "packages/mcp/mcp-client/src/transport.ts",
+      "class": "security",
+      "reason": "Ambient credential scrub (H3): the stdio child environment is built by one exported merge, `buildChildEnv`, over the subprocess seam's `scrubbedParentEnv()`, so an MCP server inherits the value-shape pass (URL user information, webhook URLs, PEM private key blocks, credential-file paths and agent sockets) and the explicit denylist. A credential reaches the child only through the configured `env`, which merges after the scrub."
+    },
+    {
+      "path": "packages/mcp/mcp-client/tests/mcp-client.spec.ts",
+      "class": "security",
+      "reason": "Ambient credential scrub (H3): `buildChildEnv` drops an ambient credential-shaped name, a denylisted name and a credential-shaped value, and the configured `env` remains the only pass-through — a denylisted name with an agent-socket value reaches the child because the config named it."
     }
   ],
   "retired": []
