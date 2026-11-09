@@ -8,13 +8,14 @@
  */
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { ROOT_FILE_NAME_PATTERN } from '@delo/contract-home-layout'
 import { InstallError, messageOf, newestRootVersion } from '@delo/install'
 
 /** The directory of a launcher package that holds its roots, relative to the package. */
 export const ROOTS_DIRECTORY = 'roots'
 
-/** A shipped root file's name: `<n>.root.json`. */
-const ROOT_FILE = /^([1-9][0-9]*)\.root\.json$/u
+/** A shipped root file's name: `<n>.root.json`, the name a stored root of the walked chain repeats. */
+const ROOT_FILE = new RegExp(ROOT_FILE_NAME_PATTERN, 'u')
 
 /**
  * Read the root files a launcher ships, oldest first.

@@ -102,6 +102,22 @@ function adoptRoot(trusted: TrustedRoot, bytes: Uint8Array): TrustedRoot {
 }
 
 /**
+ * Walk a chain of root files, each signed by the trusted root's root role and by its own, and by no other: the first
+ * as the caller holds it, such as the root embedded at build time, each later one exactly the next version. It does not
+ * read the clock, so a start check can hold a stored root to the walk without refusing an expired one.
+ * @param files - the root files, oldest first; the first is the root the caller already trusts.
+ * @returns every root of the chain, oldest first.
+ * @throws VerificationError when a file does not verify, a version is skipped, or a root's dates are out of order or
+ *   beyond the lifetime limit.
+ */
+export function walkRootChain(files: readonly Uint8Array[]): TrustedRoot[] {
+  if (files.length === 0) throw new VerificationError('no root file to trust')
+  const chain = [readRoot(files[0]!)]
+  for (const bytes of files.slice(1)) chain.push(adoptRoot(chain.at(-1)!, bytes))
+  return chain
+}
+
+/**
  * Trust a chain of root files: the first as the caller holds it, such as the root embedded at build time, each later
  * one as the next version, and the newest checked against the clock, as installs and updates require.
  * @param files - the root files, oldest first; the first is the root the caller already trusts.
@@ -110,9 +126,7 @@ function adoptRoot(trusted: TrustedRoot, bytes: Uint8Array): TrustedRoot {
  * @throws VerificationError when a file does not verify, a version is skipped, or the newest root has expired.
  */
 export function trustRootChain(files: readonly Uint8Array[], now: number): TrustedRoot[] {
-  if (files.length === 0) throw new VerificationError('no root file to trust')
-  const chain = [readRoot(files[0]!)]
-  for (const bytes of files.slice(1)) chain.push(adoptRoot(chain.at(-1)!, bytes))
+  const chain = walkRootChain(files)
   const newest = chain.at(-1)!.metadata
   if (now > seconds(newest.expires) + CLOCK_TOLERANCE_SECONDS) {
     throw new VerificationError(`root ${String(newest.version)} expired at ${newest.expires}; this machine's clock reads ${utcText(now)}. A newer root must verify before installs and updates`)

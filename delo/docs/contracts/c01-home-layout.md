@@ -68,7 +68,7 @@ Delo adds the entries marked Delo at the top of the home. Every other entry is u
 
 The operational logs that [C20](c20-operational-logs.md) defines live in per-surface directories under upstream's `logs/`, beside upstream's `startup-*.log` reports.
 
-- **`trust/`.** `root.json` is the newest root that verified, `timestamp.json` the newest timestamp that verified, whose `version` is the highest one stored ([C2](c02-release-manifest.md)), and `checkpoint.json` the latest log checkpoint that verified ([C18](c18-release-log.md)). Each is replaced atomically and never with an older version; the CLI launcher and the desktop updater share them.
+- **`trust/`.** `root.json` is the newest root that verified, `timestamp.json` the newest timestamp that verified, whose `version` is the highest one stored ([C2](c02-release-manifest.md)), and `checkpoint.json` the latest log checkpoint that verified ([C18](c18-release-log.md)). Each is replaced atomically and never with an older version; the CLI launcher and the desktop updater share them. `roots/<n>.root.json` holds one file per root version an install walked, oldest first, which is the proof a start holds a stored root newer than every root the launcher ships to ([C2](c02-release-manifest.md#key-rotation)).
 - **`status/`.** `cli-home.json` and `desktop-host.json` are the status records of [C3](c03-update-report.md); each installation writes only its own record and reads the other.
 - **`catalogue/`.** `index.json` and `revocations.json` are the newest catalogue index and revocation list that verified, and `state.json` holds each one's `sequence` and fetch time ([C13](c13-catalogue-revocation.md)).
 

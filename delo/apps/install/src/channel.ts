@@ -29,7 +29,7 @@ import { Downloader } from './download.ts'
 import { InstallError } from './errors.ts'
 import { extractArchive } from './extract.ts'
 import { requireVerifiedLog, runOnlineCheck, type LogService } from './log.ts'
-import { readStoredCheckpoint, readStoredTimestamp, writeStoredCheckpoint, writeStoredTimestamp, writeTrustedRoot, type StoredCheckpoint } from './state.ts'
+import { readStoredCheckpoint, readStoredTimestamp, writeStoredCheckpoint, writeStoredRootChain, writeStoredTimestamp, writeTrustedRoot, type StoredCheckpoint } from './state.ts'
 import { newestRootVersion, rootVersionOf, verifyChannelRelease, verifyDownloadedFile, verifyPlatformFiles, verifyTimestampUnderRoots, type VerifiedChannelRelease } from './verify.ts'
 
 /**
@@ -121,6 +121,7 @@ export class LauncherChannel implements RuntimeChannel {
     const stored = await readStoredTimestamp(this.options.home)
     const { root, timestamp } = verifyTimestampUnderRoots({ roots, timestamp: stamp.bytes, now, ...stored === undefined ? {} : { stored } })
     await writeTrustedRoot(this.options.home, roots.at(-1)!)
+    await writeStoredRootChain(this.options.home, roots)
     await writeStoredTimestamp(this.options.home, stamp.bytes)
     const pointer = timestamp.channels[this.options.channel]
     const version = asVersion(pointer.release)

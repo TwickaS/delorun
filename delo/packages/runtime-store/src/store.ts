@@ -230,12 +230,14 @@ export class RuntimeStore {
         let problems
         try {
           release = verifyRelease(this.paths, request.root, request.version, bytes)
+          // Seal the staged tree before it is hashed: the digest a person's machine installs must be the digest of
+          // bytes nobody could change, so no writable window may sit between the hash and the mode that closes it.
+          await setInstalledModes(staging, release.files)
           problems = await checkTree(staging, release.files)
         } catch (error) {
           throw new RuntimeStoreError('INSTALL_VERIFY_FAILED', staging, `release ${request.version} does not verify: ${(error as Error).message}`, [], { cause: error })
         }
         if (problems.length > 0) throw new RuntimeStoreError('INSTALL_VERIFY_FAILED', staging, `the staged runtime ${request.version} differs from its signed file list: ${describeProblems(problems)}`)
-        await setInstalledModes(staging, release.files)
         const files = this.paths.releaseFiles(request.version)
         await writeStoreFile(files.manifest, bytes.manifest)
         await writeStoreFile(files.files, bytes.files)

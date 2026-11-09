@@ -56,9 +56,9 @@ English | [中文](README.zh.md)
 
 ## What a home remembers
 
-Three files under `trust/` are the rollback protection an install keeps, and each is written at mode 0600 through a temporary file: the newest root that verified, the newest timestamp that verified, and the newest log checkpoint that verified. A later install refuses a timestamp below the stored one and a checkpoint below the stored one, and a file that does not read, belongs to another user or is laxer than 0600 refuses the install with `TRUST_STATE_INVALID` rather than being replaced.
+Three files under `trust/` are the rollback protection an install keeps, and each is written at mode 0600 through a temporary file: the newest root that verified, the newest timestamp that verified, and the newest log checkpoint that verified. Beside them, `trust/roots/<n>.root.json` keeps the chain an install walked, one file per root version, oldest first. A later install refuses a timestamp below the stored one and a checkpoint below the stored one, and a file that does not read, belongs to another user or is laxer than 0600 refuses the install with `TRUST_STATE_INVALID` rather than being replaced.
 
-The stored root is also what a start anchors on, so `readStoredRootBytes` reads it back and `verifyStoredRoot` holds it to the roots the launcher ships: at a version the launcher ships, the stored root must be that very root, keys and roles included, and one older than the oldest shipped root is refused. A stored root newer than every shipped root is the newest version a verified rotation walked to, which only an install writes. Nothing else about the stored root is taken on trust.
+The stored root is also what a start anchors on, so `readStoredRootBytes` reads it back and `verifyStoredRoot` holds it to the roots the launcher ships: at a version the launcher ships, the stored root must be that very root, keys and roles included, and one older than the oldest shipped root is refused. A stored root newer than every shipped root is trusted only when the chain an install walked reaches it from a shipped root, every version signed by the previous root's keys and by its own; a root that no shipped root leads to is refused, so a file a restore or a sync leaves under `trust/` cannot become an anchor. Nothing else about the stored root is taken on trust.
 
 <a id="failures"></a>
 

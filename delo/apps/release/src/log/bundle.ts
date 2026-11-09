@@ -103,15 +103,19 @@ export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: 
     throw new LogVerificationError('entry-signature-invalid', `the log entry's key details are ${signature.verifier.keyDetails}, not ${RELEASE_LOG_ENTRY_KEY_DETAILS}`)
   }
   let signerId: string
+  let unreadable = ''
   try {
     signerId = keyIdOf(rawPublicKey(createPublicKey({ key: Buffer.from(signature.verifier.publicKey.rawBytes, 'base64'), format: 'der', type: 'spki' })))
   } catch (error) {
-    // A key-parsing error: an unreadable public key matches no targets key, and the refusal below reports that.
-    signerId = error instanceof Error ? '' : ''
+    // A key-parsing error: an unreadable public key matches no targets key, and the refusal below names why.
+    signerId = ''
+    unreadable = error instanceof Error ? error.message : String(error)
   }
   const targets = targetsKeysFor(root, version).find(key => key.keyid === signerId)
   if (targets === undefined || !verifyEd25519ph(targets.key, manifest, Buffer.from(signature.content, 'base64'))) {
-    throw new LogVerificationError('entry-signature-invalid', 'the log entry has no Ed25519ph signature over the manifest by a targets key valid for the release')
+    throw new LogVerificationError('entry-signature-invalid', unreadable === ''
+      ? 'the log entry has no Ed25519ph signature over the manifest by a targets key valid for the release'
+      : `the log entry has no Ed25519ph signature over the manifest by a targets key valid for the release: its verifier key does not parse (${unreadable})`)
   }
   const computed = rootFromInclusionProof(bundle.inclusion.logIndex, bundle.inclusion.treeSize, leafHash(body), bundle.inclusion.hashes.map((hash: string) => Buffer.from(hash, 'hex')))
   if (bundle.inclusion.logIndex !== bundle.entry.logIndex || computed === undefined || computed.toString('hex') !== bundle.inclusion.rootHash) {

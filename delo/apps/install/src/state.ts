@@ -7,10 +7,11 @@
  *
  * @module @delo/install/state
  */
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE, TRUST_FILES } from '@delo/contract-home-layout'
+import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE, ROOT_FILE_NAME_PATTERN, TRUST_FILES, TRUST_ROOTS_DIRECTORY } from '@delo/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delo/home'
+import { readRoot } from '@delo/release/sign/verify'
 import { InstallError, messageOf } from './errors.ts'
 
 /** The newest timestamp a client verified: its version and its bytes, which an equal version must repeat. */
@@ -128,6 +129,88 @@ export async function readStoredRootBytes(home: string): Promise<Uint8Array | un
  */
 export async function writeTrustedRoot(home: string, bytes: Uint8Array): Promise<void> {
   await writeTrustFile(home, TRUST_FILES.root, bytes)
+}
+
+/** The directory under `trust/` that holds the chain an install walked, `trust/roots/<n>.root.json`. */
+const TRUST_ROOTS = (home: string): string => join(home, DELO_HOME_ENTRIES.trust, TRUST_ROOTS_DIRECTORY)
+
+/** One filed root's name: `<n>.root.json`, where `n` is its version. */
+const ROOT_FILE_NAME = new RegExp(ROOT_FILE_NAME_PATTERN, 'u')
+
+/**
+ * The path of one root of the chain an install walked.
+ * @param home - the resolved Delo home.
+ * @param version - the root's version.
+ * @returns the absolute path.
+ */
+function trustRootFile(home: string, version: number): string {
+  return join(TRUST_ROOTS(home), `${String(version)}.root.json`)
+}
+
+/**
+ * Read the chain of roots an install walked, `trust/roots/<n>.root.json`, oldest first. It is what a stored root newer
+ * than every root a launcher ships is held to: the start path walks it from a shipped root, so a file a restore or a
+ * sync placed under `trust/` is not a root this launcher trusts on its own.
+ * @param home - the resolved Delo home.
+ * @returns the root files, oldest first; empty when no install walked a chain.
+ * @throws {InstallError} `TRUST_STATE_INVALID` when the directory or one of its roots is a link, belongs to another
+ *   user or is laxer than 0600.
+ */
+export async function readStoredRootChain(home: string): Promise<readonly Uint8Array[]> {
+  const directory = TRUST_ROOTS(home)
+  let names: string[]
+  try {
+    names = await readdir(directory)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw new InstallError('TRUST_STATE_INVALID', directory, `the walked root chain cannot be read: ${messageOf(error)}`, { cause: error })
+  }
+  const roots = names
+    .map(name => ROOT_FILE_NAME.exec(name))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map(match => ({ version: Number(match[1]), name: match[0] }))
+    .sort((left, right) => left.version - right.version)
+  const chain: Uint8Array[] = []
+  for (const root of roots) {
+    const path = join(directory, root.name)
+    try {
+      chain.push(await readProtectedFile(path))
+    } catch (error) {
+      throw new InstallError('TRUST_STATE_INVALID', path, `the walked root chain cannot be read: ${messageOf(error)}`, { cause: error })
+    }
+  }
+  return chain
+}
+
+/**
+ * Store the chain of roots an install walked, so a later start can prove that a stored root newer than every root its
+ * launcher ships descends from one the launcher ships. Each file is named for its version and written at mode 0600.
+ * @param home - the resolved Delo home.
+ * @param roots - the root files the install verified, oldest first.
+ * @throws {InstallError} `TRUST_STATE_INVALID` when a root does not read, or a file cannot be written.
+ */
+export async function writeStoredRootChain(home: string, roots: readonly Uint8Array[]): Promise<void> {
+  if (roots.length === 0) return
+  const directory = TRUST_ROOTS(home)
+  try {
+    await mkdir(directory, { recursive: true, mode: PRIVATE_DIR_MODE })
+  } catch (error) {
+    throw new InstallError('TRUST_STATE_INVALID', directory, `the walked root chain cannot be written: ${messageOf(error)}`, { cause: error })
+  }
+  for (const bytes of roots) {
+    let version: number
+    try {
+      version = readRoot(bytes).metadata.version
+    } catch (error) {
+      throw new InstallError('TRUST_STATE_INVALID', directory, `a root of the walked chain does not read, so the chain cannot be stored: ${messageOf(error)}`, { cause: error })
+    }
+    const path = trustRootFile(home, version)
+    try {
+      await writeProtectedFile(path, bytes)
+    } catch (error) {
+      throw new InstallError('TRUST_STATE_INVALID', path, `the walked root chain cannot be written: ${messageOf(error)}`, { cause: error })
+    }
+  }
 }
 
 /**
