@@ -1,14 +1,14 @@
 /**
  * Git merge driver for the divergence ledger. Git runs it as `node_modules/.bin/tsx delo/apps/tools/src/ledger-merge.ts %O %A %B`
- * with the base, ours and theirs versions, and it writes the merge to ours. Entries merge by `path`, so branches that list
- * different paths merge without a conflict. An entry that both sides changed differently is wrapped in conflict markers, and
- * the command exits 1. The rules are in the tools README.
+ * with the base, ours and theirs versions, and it writes the merge to ours. Entries merge by `path` and path rules by
+ * `pattern`, so branches that list different paths or add different rules merge without a conflict. An entry or rule that
+ * both sides changed differently is wrapped in conflict markers, and the command exits 1. The rules are in the tools README.
  *
  * @module @delo/tools/ledger-merge
  */
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { manifestErrors, parseManifest, type Patch, type PatchManifest, type RetiredEntry } from './fork-boundary.ts'
+import { manifestErrors, parseManifest, type Patch, type PatchManifest, type PathRule, type RetiredEntry } from './fork-boundary.ts'
 
 /** The outcome of merging three ledger versions. */
 export interface LedgerMerge {
@@ -21,12 +21,13 @@ export interface LedgerMerge {
 /** The fields the merge reads from the base version. */
 interface Ancestor {
   readonly $schema?: string | undefined
+  readonly rules: readonly PathRule[]
   readonly patches: readonly Patch[]
   readonly retired: readonly RetiredEntry[]
 }
 
 /** The base of a merge in which both sides added the file, which git passes as an empty file. */
-const EMPTY_ANCESTOR: Ancestor = { patches: [], retired: [] }
+const EMPTY_ANCESTOR: Ancestor = { rules: [], patches: [], retired: [] }
 
 /**
  * One merged element. A conflict keeps each side's value, and undefined marks a side that removed the element.
@@ -46,6 +47,7 @@ interface MergedLedger {
   readonly schema: Merged<string> | undefined
   readonly upstream: Merged<PatchManifest['upstream']>
   readonly forkOwned: readonly string[]
+  readonly rules: readonly Merged<PathRule>[]
   readonly patches: readonly Merged<Patch>[]
   readonly retired: readonly Merged<RetiredEntry>[]
 }
@@ -55,9 +57,10 @@ const INDENT = '  '
 /**
  * Merge three versions of the divergence ledger.
  *
- * Entries merge by `path`: an entry changed on one side takes that side's value, and identical changes on both sides merge
- * once. An entry that both sides changed differently is a conflict. `forkOwned` is the ordered union of both sides, and
- * `upstream` must be equal on both sides. A non-empty version is parsed with the ledger parser; an empty base is an empty
+ * Entries merge by `path` and rules by `pattern`: an element changed on one side takes that side's value, and identical
+ * changes on both sides merge once. An element that both sides changed differently is a conflict, so two sides that add
+ * one pattern with different kinds or reasons conflict. An entry without `sha256` merges as any other. `forkOwned` is the
+ * ordered union of both sides, and `upstream` must be equal on both sides. A non-empty version is parsed with the ledger parser; an empty base is an empty
  * ledger. A conflict leaves markers around the conflicting elements; a failed validation leaves the merged text unmarked.
  *
  * @param baseText - the ancestor's JSON text, empty when both sides added the file.
@@ -115,32 +118,53 @@ function mergeLedger(ancestor: Ancestor, ours: PatchManifest, theirs: PatchManif
         theirs: theirs.upstream,
       },
     forkOwned: [...new Set([...ours.forkOwned, ...theirs.forkOwned])],
-    patches: mergeByPath('patches', ancestor.patches, ours.patches, theirs.patches),
-    retired: mergeByPath('retired', ancestor.retired, ours.retired, theirs.retired),
+    rules: mergeByKey('rules', patternOf, ancestor.rules, ours.rules, theirs.rules),
+    patches: mergeByKey('patches', pathOf, ancestor.patches, ours.patches, theirs.patches),
+    retired: mergeByKey('retired', pathOf, ancestor.retired, ours.retired, theirs.retired),
   }
 }
 
 /**
- * Merge two lists of entries keyed by `path`. Our entries keep their order, and the entries only their side has follow in
- * their order.
- * @param section - the ledger field the entries belong to, named in conflict messages.
- * @param ancestor - the base entries.
- * @param ours - our side's entries.
- * @param theirs - their side's entries.
- * @returns the merged elements in order, without the entries that the merge keeps neither of.
+ * The key an entry merges by.
+ * @param entry - a patch or retired entry.
+ * @returns its path.
  */
-function mergeByPath<T extends { readonly path: string }>(
+function pathOf(entry: { readonly path: string }): string {
+  return entry.path
+}
+
+/**
+ * The key a rule merges by.
+ * @param rule - a path rule.
+ * @returns its pattern.
+ */
+function patternOf(rule: PathRule): string {
+  return rule.pattern
+}
+
+/**
+ * Merge two lists of elements keyed by one field. Our elements keep their order, and the elements only their side has
+ * follow in their order.
+ * @param section - the ledger field the elements belong to, named in conflict messages.
+ * @param keyOf - the element's key, its `path` or its `pattern`.
+ * @param ancestor - the base elements.
+ * @param ours - our side's elements.
+ * @param theirs - their side's elements.
+ * @returns the merged elements in order, without the elements that the merge keeps neither of.
+ */
+function mergeByKey<T>(
   section: string,
+  keyOf: (element: T) => string,
   ancestor: readonly T[],
   ours: readonly T[],
   theirs: readonly T[],
 ): Merged<T>[] {
-  const ancestorByPath = indexByPath(ancestor)
-  const oursByPath = indexByPath(ours)
-  const theirsByPath = indexByPath(theirs)
-  const paths = [...oursByPath.keys(), ...[...theirsByPath.keys()].filter(path => !oursByPath.has(path))]
-  return paths.flatMap((path) => {
-    const merged = decide(`${section} entry ${path}`, ancestorByPath.get(path), oursByPath.get(path), theirsByPath.get(path))
+  const ancestorByKey = indexBy(ancestor, keyOf)
+  const oursByKey = indexBy(ours, keyOf)
+  const theirsByKey = indexBy(theirs, keyOf)
+  const keys = [...oursByKey.keys(), ...[...theirsByKey.keys()].filter(key => !oursByKey.has(key))]
+  return keys.flatMap((key) => {
+    const merged = decide(`${section} entry ${key}`, ancestorByKey.get(key), oursByKey.get(key), theirsByKey.get(key))
     return merged === undefined ? [] : [merged]
   })
 }
@@ -194,38 +218,43 @@ function conflictReason(ancestor: unknown, ours: unknown, theirs: unknown): stri
 }
 
 /**
- * Index entries by their path. A repeated path keeps its last entry; `repeatedErrors` reports the repetition.
- * @param entries - the entries to index.
- * @returns the entries keyed by path.
+ * Index elements by their key. A repeated key keeps its last element; `repeatedErrors` reports the repetition.
+ * @param elements - the elements to index.
+ * @param keyOf - the element's key.
+ * @returns the elements by key.
  */
-function indexByPath<T extends { readonly path: string }>(entries: readonly T[]): Map<string, T> {
-  return new Map(entries.map((entry): [string, T] => [entry.path, entry]))
+function indexBy<T>(elements: readonly T[], keyOf: (element: T) => string): Map<string, T> {
+  return new Map(elements.map((element): [string, T] => [keyOf(element), element]))
 }
 
 /**
- * Report each list that names one path more than once within the same list.
+ * Report each list that names one key more than once within the same list.
  * @param ledger - the version's fields.
  * @param side - the version's name in the messages.
- * @returns one message per repeated path.
+ * @returns one message per repeated key.
  */
 function repeatedErrors(ledger: Ancestor, side: string): string[] {
-  return [...repeatedPaths(`${side} patches`, ledger.patches), ...repeatedPaths(`${side} retired`, ledger.retired)]
+  return [
+    ...repeatedKeys(`${side} rules`, ledger.rules.map(patternOf)),
+    ...repeatedKeys(`${side} patches`, ledger.patches.map(pathOf)),
+    ...repeatedKeys(`${side} retired`, ledger.retired.map(pathOf)),
+  ]
 }
 
 /**
- * Report each path that one list names more than once.
+ * Report each key that one list names more than once.
  * @param label - the list's name in the messages, such as `ours patches`.
- * @param entries - the list's entries.
- * @returns one message per repeated path.
+ * @param keys - the keys of the list's elements, in order.
+ * @returns one message per repeated key.
  */
-function repeatedPaths(label: string, entries: readonly { readonly path: string }[]): string[] {
+function repeatedKeys(label: string, keys: readonly string[]): string[] {
   const seen = new Set<string>()
   const repeated = new Set<string>()
-  for (const { path } of entries) {
-    if (seen.has(path)) repeated.add(path)
-    seen.add(path)
+  for (const key of keys) {
+    if (seen.has(key)) repeated.add(key)
+    seen.add(key)
   }
-  return [...repeated].map(path => `${label} lists ${path} more than once`)
+  return [...repeated].map(key => `${label} lists ${key} more than once`)
 }
 
 /**
@@ -247,7 +276,7 @@ function renderedErrors(text: string): string[] {
  * @returns one message per conflict, in field order.
  */
 function conflictMessages(merged: MergedLedger): string[] {
-  const elements: ReadonlyArray<Merged<unknown> | undefined> = [merged.schema, merged.upstream, ...merged.patches, ...merged.retired]
+  const elements: ReadonlyArray<Merged<unknown> | undefined> = [merged.schema, merged.upstream, ...merged.rules, ...merged.patches, ...merged.retired]
   return elements.flatMap(element => element?.kind === 'conflict' ? [`${element.label}: ${element.reason}`] : [])
 }
 
@@ -257,11 +286,12 @@ function conflictMessages(merged: MergedLedger): string[] {
  * @returns the ledger text, with each conflicting element between git's conflict markers.
  */
 function renderLedger(merged: MergedLedger): string {
-  const { schema, upstream, forkOwned, patches, retired } = merged
+  const { schema, upstream, forkOwned, rules, patches, retired } = merged
   const fields: Array<(comma: boolean) => string[]> = []
   if (schema !== undefined) fields.push(comma => elementLines(schema, '$schema', INDENT, comma))
   fields.push(comma => elementLines(upstream, 'upstream', INDENT, comma))
   fields.push(comma => listLines('forkOwned', forkOwned.map((entry): Merged<string> => ({ kind: 'value', value: entry })), comma))
+  fields.push(comma => listLines('rules', rules, comma))
   fields.push(comma => listLines('patches', patches, comma))
   fields.push(comma => listLines('retired', retired, comma))
   const body = fields.flatMap((render, index) => render(index < fields.length - 1))

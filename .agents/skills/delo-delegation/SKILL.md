@@ -77,7 +77,7 @@ These answers apply to every brief without being restated:
 - On a `pnpm-lock.yaml` conflict, take the base's version and run `pnpm install`; never hand-merge it.
 - Keep plugin compatibility with stock: never remove or rename an upstream export, slot, tool action or public prop; add a deprecated alias instead.
 - A Delo addition the model can see sits behind its own validated `Config` switch that defaults to its parity value and is registered in the parity composition's switch registry.
-- Every changed or added upstream file has a ledger entry; a file that moves a gate is class `security` and its reason ends with the lead's verdict.
+- Every changed or added upstream source file has a ledger entry, and every other changed upstream file an entry or a path rule; `ledger-record.ts` writes entries and digests. A file that moves a gate is a class `security` entry whatever rule matches it, and its reason ends with the lead's verdict.
 - A failure in a file the package does not own is reported with its evidence, not fixed in passing; a failure the package's change causes is fixed in the package.
 - Never `--no-verify`, never a live provider without the owner's budget, never a deploy.
 

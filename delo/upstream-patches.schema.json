@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Delo-Run/delo/blob/v5/delo/upstream-patches.schema.json",
   "title": "Delo divergence ledger",
-  "description": "Every file outside Delo's own trees that differs from the upstream commit, with the reason and its class.",
+  "description": "Every file outside Delo's own trees that differs from the upstream commit: upstream source files as entries with a reason and a class, and every other file covered by a path rule.",
   "type": "object",
   "additionalProperties": false,
   "required": ["upstream", "forkOwned", "patches", "retired"],
@@ -32,6 +32,25 @@
       "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true
     },
+    "rules": {
+      "description": "Path rules: each covers the differing paths its glob matches that are not upstream source. Only an exact `generated` rule may name a source file, and no rule covers a path under `vendor/`.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pattern", "kind", "reason"],
+        "properties": {
+          "pattern": {
+            "description": "A glob over repository-relative paths, matched whole and case-sensitively by `path.posix.matchesGlob`: `*` within one segment, `**` across segments, neither matching a segment that starts with `.`.",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![/!])(?![\\s\\S]*(?:^|/)\\.\\.(?:$|/))[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "kind": { "enum": ["tests", "recorded-sessions", "translations", "documentation", "tooling", "generated"] },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "patches": {
       "type": "array",
       "items": {
@@ -44,13 +63,21 @@
             "description": "delo-feature: serves a Delo feature; generic-fix: a fix upstream could take; security: moves an approval, a refusal or an escalation, and carries a lead verdict.",
             "enum": ["delo-feature", "generic-fix", "security"]
           },
+          "feature": {
+            "description": "The kebab-case id of the feature a delo-feature or generic-fix entry serves, listed in the divergence index. A security entry names none.",
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
           "reason": { "type": "string", "minLength": 1 },
           "sha256": {
-            "description": "SHA-256 of the file's bytes at HEAD, in lowercase hexadecimal. The upstream update path carries an entry forward only when its file still has this digest, and the boundary gate refuses a recorded digest that no longer matches.",
+            "description": "SHA-256 of a security entry's file, in lowercase hexadecimal, written by ledger-record.ts. The upstream update path carries a security entry forward only when its file still has this digest, and the boundary gate refuses a recorded digest that no longer matches. Other classes record none.",
             "type": "string",
             "pattern": "^[0-9a-f]{64}$"
           }
-        }
+        },
+        "if": { "properties": { "class": { "const": "security" } } },
+        "then": { "required": ["sha256"], "not": { "required": ["feature"] } },
+        "else": { "required": ["feature"], "not": { "required": ["sha256"] } }
       }
     },
     "retired": {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Patch } from '../../src/fork-boundary.ts'
+import type { Patch, PathRule } from '../../src/fork-boundary.ts'
 import {
   budgetCaps,
   budgetFailures,
@@ -31,8 +31,13 @@ const GATE = 'src/gate.ts'
  * @returns the patch.
  */
 function patch(path: string, kind: Patch['class'] = 'delo-feature'): Patch {
-  return { path, class: kind, reason: `reason for ${path}` }
+  return kind === 'security'
+    ? { path, class: kind, reason: `reason for ${path}`, sha256: '0'.repeat(64) }
+    : { path, class: kind, feature: 'a-feature', reason: `reason for ${path}` }
 }
+
+/** A rule for the documentation pages of the fixtures. */
+const DOCS_RULE: PathRule = { pattern: 'docs/**/*.md', kind: 'documentation', reason: 'pages that document Delo changes' }
 
 /**
  * Run a rehearsal of `v2` in a fixture and check that it left the fork as it found it.
@@ -69,10 +74,51 @@ describe('the rehearsal command', () => {
     expect(result.output).toContain('conflicted paths: none')
     expect(result.output).toContain('conflicted hunks: 0 of 1 ledger hunk at v2 (0 %), limit 15 %')
     expect(result.output).toContain('  delo-feature: 1 → 1 entries (0), 1 → 1 hunks (0)')
+    expect(result.output).toContain('  ruled: 0 → 0 entries (0), 0 → 0 hunks (0)')
     expect(result.output).toContain('  total: 1 → 1 entries (0, cap 20), 1 → 1 hunks (0, cap 150)')
     expect(result.output).toContain('caps: the floors of 20 entries and 150 hunks; the first release\'s baseline is not recorded')
-    expect(result.output).toContain('generated entries are not separated: the ledger marks none, so every entry is counted')
+    expect(result.output).toContain('generated paths are counted with the rule-covered paths under ruled, not separated')
     expect(result.output).toContain('rehearse-upstream: v2 merges within the divergence budget')
+  }, PROCESS_TIMEOUT_MS)
+
+  it('counts the paths a rule covers as ruled, and a conflict in one under ruled', (test) => {
+    const result = rehearseFixture(test, {
+      base: { [A]: lines(30), [B]: lines(30) },
+      tag: { [B]: lines(30, { 3: 'upstream 3' }) },
+      fork: { [A]: lines(30, { 5: 'delo 5' }), [B]: lines(30, { 3: 'delo 3' }) },
+      patches: [],
+      rules: [DOCS_RULE],
+    })
+    expect(result.output).toContain(`conflicted paths: 1\n  ${B} (ruled, 1 hunk)`)
+    expect(result.output).toContain('  ruled: 2 → 2 entries (0), 2 → 3 hunks (+1)')
+    expect(result.output).toContain('  unlisted: 0 → 0 entries (0), 0 → 0 hunks (0)')
+  }, PROCESS_TIMEOUT_MS)
+
+  it('rehearses a branch already in the clone with --ref, without fetching', (test) => {
+    const fixture = rehearsalFixture(test, {
+      base: { [A]: lines(30) },
+      tag: { [A]: lines(30, { 20: 'upstream 20' }) },
+      fork: { [A]: lines(30, { 5: 'delo 5' }) },
+      patches: [patch(A)],
+    })
+    fixture.fork.run(['fetch', '-q', '--no-tags', fixture.upstream.root, 'refs/tags/v2:refs/remotes/upstream/master'])
+    const commit = fixture.fork.run(['rev-parse', 'upstream/master^{commit}'])
+    const before = checkoutState(fixture.fork)
+    const result = rehearseIn(fixture, ['--ref', 'upstream/master'])
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).toContain(`rehearsal merge of upstream/master (${commit}) from this clone into HEAD `)
+    expect(result.output).toContain('rehearse-upstream: upstream/master merges within the divergence budget')
+    expect(checkoutState(fixture.fork)).toEqual(before)
+    expect(leftoverScratch(fixture)).toEqual([])
+  }, PROCESS_TIMEOUT_MS)
+
+  it('exits 2 for a --ref that names no commit in the clone, or one that starts with a dash', (test) => {
+    const fixture = rehearsalFixture(test, { base: { [A]: lines(30) }, tag: {}, fork: {}, patches: [] })
+    for (const ref of ['upstream/missing', '--output=x']) {
+      const result = rehearseIn(fixture, [`--ref=${ref}`])
+      expect(result.status, result.output).toBe(2)
+      expect(result.output).toContain(`rehearse-upstream: ${ref} names no commit in this clone; fetch it first or pass --tag`)
+    }
   }, PROCESS_TIMEOUT_MS)
 
   it('credits an entry whose change the tag absorbs', (test) => {
@@ -145,11 +191,13 @@ describe('the rehearsal command', () => {
     expect(leftoverScratch(fixture)).toEqual([])
   }, PROCESS_TIMEOUT_MS)
 
-  it('exits 2 with a usage line without --tag', (test) => {
+  it('exits 2 with a usage line without --tag or --ref, with both, or with an unknown option', (test) => {
     const fixture = rehearsalFixture(test, { base: { [A]: lines(30) }, tag: {}, fork: {}, patches: [] })
-    const result = rehearseIn(fixture, [])
-    expect(result.status).toBe(2)
-    expect(result.output).toContain('usage: rehearse-upstream.ts --tag <tag>')
+    for (const args of [[], ['--tag', 'v2', '--ref', 'main'], ['--tag', ''], ['--branch', 'main']]) {
+      const result = rehearseIn(fixture, args)
+      expect(result.status, args.join(' ')).toBe(2)
+      expect(result.output).toContain('usage: rehearse-upstream.ts --tag <tag> | --ref <ref>')
+    }
   }, PROCESS_TIMEOUT_MS)
 })
 
@@ -161,7 +209,7 @@ const ZERO: Count = { entries: 0, hunks: 0 }
  * @returns the counts.
  */
 function counts(feature: Count): ClassCounts {
-  return { 'delo-feature': feature, 'generic-fix': ZERO, security: ZERO, unlisted: ZERO }
+  return { 'delo-feature': feature, 'generic-fix': ZERO, security: ZERO, ruled: ZERO, unlisted: ZERO }
 }
 
 /**
@@ -175,17 +223,17 @@ function measured(current: Count, atTag: Count, caps = budgetCaps(undefined)): R
   return {
     spec: {
       root: '/fork',
-      tag: 'v2',
+      target: { kind: 'tag', name: 'v2' },
       repository: '/upstream',
       pin: { ref: 'v1', commit: '0'.repeat(40) },
       head: '1'.repeat(40),
-      manifest: { upstream: { repository: '/upstream', ref: 'v1', commit: '0'.repeat(40) }, forkOwned: ['delo/'], patches: [], retired: [] },
+      manifest: { upstream: { repository: '/upstream', ref: 'v1', commit: '0'.repeat(40) }, forkOwned: ['delo/'], rules: [], patches: [], retired: [] },
       caps,
     },
-    tagCommit: '2'.repeat(40),
+    targetCommit: '2'.repeat(40),
     conflicts: [],
     current: counts(current),
-    atTag: counts(atTag),
+    atTarget: counts(atTag),
     absorbed: [],
   }
 }

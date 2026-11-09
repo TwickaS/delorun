@@ -9,10 +9,13 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 
 ## Modules
 
-- `src/fork-boundary.ts` holds the ledger schema, the matcher for fork-owned paths and globs, the boundary errors and the divergence total.
-- `src/check-fork-boundary.ts` is the command-line gate. It reads the ledger, checks the repository against it, and prints the count with `--count`.
-- `src/ledger-merge.ts` is git's merge driver for the ledger. It merges the entries by path, and the rules are in the divergence ledger section below.
-- `src/rehearse-upstream.ts` is the rehearsal merge. It merges an upstream tag in a scratch worktree and holds the result to the divergence budget, as the rehearsal merge section below describes.
+- `src/fork-boundary.ts` holds the ledger schema, the upstream source predicate, the matchers for fork-owned paths and path rules, the entry and rule errors, the boundary errors and the divergence total.
+- `src/check-fork-boundary.ts` is the command-line gate. It reads the ledger, checks the repository against it, prints each path rule's coverage, and prints the count with `--count`.
+- `src/ledger-record.ts` writes the ledger: stub entries, removals of entries that no longer differ, and security digests, as the divergence ledger section below describes.
+- `src/ledger-digests.ts` computes and compares the digests of security entries.
+- `src/ledger-merge.ts` is git's merge driver for the ledger. It merges the entries by path and the rules by pattern, and the rules are in the divergence ledger section below.
+- `src/rehearse-upstream.ts` is the rehearsal merge. It merges an upstream tag or a local ref in a scratch worktree and holds the result to the divergence budget, as the rehearsal merge section below describes.
+- `src/upstream-update.ts` carries the listed patches onto a later upstream tag in a scratch worktree and writes the carried ledger once the release merge is in `HEAD`.
 - `src/check-commits.ts` is the commit standard: a Conventional Commits subject, a DCO sign-off, and a changelog fragment or a `Changelog: none (<reason>)` trailer. It checks one message with `--message <file>`, the form a `commit-msg` hook passes.
 - `src/checks/types.ts` and `src/checks/gates/index.ts` describe each gate as one command that the check runner executes.
 - `src/checks/gates/` holds the gate modules and their data: licence, secrets, personal data, infrastructure, DCO, documentation times and the documentation checks.
@@ -31,23 +34,37 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 
 ## The divergence ledger
 
-[`delo/upstream-patches.json`](../../upstream-patches.json) records how this tree differs from upstream.
+[`delo/upstream-patches.json`](../../upstream-patches.json) records how this tree differs from upstream; the [divergence index](../../docs/reference/divergence/README.md) defines upstream source, the path rules, the classes and the feature ids.
 `upstream.commit` pins the upstream commit that the differences are measured against.
 `forkOwned` lists paths and globs that Delo owns outright. `*` matches within one path segment and `**` across segments. An entry covers the paths it matches and every path below a matching directory.
-`patches` lists each upstream path that Delo edits, adds or deletes, with its `class` (`delo-feature`, `generic-fix` or `security`) and a `reason`.
+`rules` lists path rules, each with a `pattern`, a `kind` and a `reason`. A rule covers the differing paths its glob matches that are not upstream source; only an exact `generated` rule may name a source file, and no rule covers a path under `vendor/`. Patterns are matched whole and case-sensitively by `path.posix.matchesGlob`, whose `*` and `**` do not match a segment that starts with `.`.
+`patches` lists each upstream path that needs an entry, with its `class` (`delo-feature`, `generic-fix` or `security`) and a `reason`. A `security` entry records the `sha256` of its file; any other entry names its `feature` and records no digest.
 `retired` lists entries whose change upstream absorbed. Each names the upstream commit that absorbed it and the hunks it had.
 
 The checker fails when:
 
 - the ledger does not parse, or a patch lacks its class or reason;
+- a reason or feature is `TODO`, a feature is not a kebab-case id, a security entry records no digest or names a feature, or another entry records a digest or names no feature;
+- a rule is a bare `**`, repeats a pattern, has no reason, or matches a source path in the tree or one of the checker's source probes that it may not cover, naming the pattern and that path;
+- a non-security entry names a path that a rule also covers;
 - the pinned commit is not in the clone or is not an ancestor of HEAD;
 - an absorbing commit is not in the history of the pinned commit;
-- an upstream path differs from the pinned commit and is neither fork-owned nor listed;
+- an upstream path differs from the pinned commit and is neither fork-owned, listed nor covered by a rule, which an upstream source file never is;
+- a source file that a `generated` rule covers does not hold `Generated by scripts/` in its first five lines;
 - a listed patch no longer differs from the pinned commit;
 - a retired entry still differs from the pinned commit;
+- a security entry's recorded digest differs from its file at HEAD;
 - a fork-owned tree holds a compiled twin of a TypeScript source.
 
-`--count` prints the listed entries and their hunks. A hunk is one `@@` header of `git diff --unified=0` against the pinned commit, and an untracked file counts as one hunk. Retired entries are credited and listed separately; they are not part of the count.
+It prints how many differing paths each rule covers, and a warning line for a rule that covers none; such a rule does not fail the check. `--count` prints the listed entries and their hunks, and the rule-covered paths and their hunks. A hunk is one `@@` header of `git diff --unified=0` against the pinned commit, and an untracked file counts as one hunk. Retired entries are credited and listed separately; they are not part of the count.
+
+[`src/ledger-record.ts`](src/ledger-record.ts) writes the ledger, so no person or agent writes entries or digests by hand:
+
+```sh
+node_modules/.bin/tsx delo/apps/tools/src/ledger-record.ts [--check]
+```
+
+It compares the working tree with the pinned commit. It adds a stub entry, class `delo-feature` with `TODO` as its feature and reason, for each differing path that neither an entry nor a rule covers; removes each entry whose path no longer differs; and re-records the digest of each security entry whose file changed, printing the old and new digest. It exits 3 when it re-recorded a security digest, because the changed file needs the lead's re-review, 1 when a security entry holds no file to digest, and 2 for a bad command line or an unusable ledger. `--check` changes nothing and exits 1 when a run would change the ledger. Agents run only `--check`; the lead runs the writing form when merging a lane, fills each stub's class, feature and reason, and writes the path rules.
 
 [`src/ledger-merge.ts`](src/ledger-merge.ts) is git's merge driver for the ledger, and [`.gitattributes`](../../../.gitattributes) routes `delo/upstream-patches.json` to it. Each clone configures the driver once, and every worktree of that clone shares the setting:
 
@@ -55,21 +72,22 @@ The checker fails when:
 git config merge.delo-ledger.driver 'node_modules/.bin/tsx delo/apps/tools/src/ledger-merge.ts %O %A %B'
 ```
 
-Without the setting, git merges the ledger as text. With it, the driver merges entries by `path`. An entry that one side changed takes that side's version, and so does an entry that one side removed while the other side left it alone. An entry that both sides added or changed identically is kept once. `forkOwned` is the ordered union of both sides, `upstream` must match on both sides, and `$schema` merges as one entry does. An entry that the sides changed differently stays in conflict, including an entry that one side removed while the other changed it: the driver wraps only those entries in conflict markers, names each on standard error, and exits 1. It also exits 1, after writing the merge, when the result fails the ledger parser or the entry rules. `forkOwned` keeps an entry while either side still lists it, so an entry leaves the ledger only when both sides have removed it.
+Without the setting, git merges the ledger as text. With it, the driver merges entries by `path` and rules by `pattern`. An entry or rule that one side changed takes that side's version, and so does one that one side removed while the other side left it alone. An entry or rule that both sides added or changed identically is kept once, so the rules are the union of both sides by pattern. An entry without `sha256` merges as any other. `forkOwned` is the ordered union of both sides, `upstream` must match on both sides, and `$schema` merges as one entry does. An entry or rule that the sides changed differently stays in conflict, including one that one side removed while the other changed it and one pattern that both sides added with different kinds or reasons: the driver wraps only those elements in conflict markers, names each on standard error, and exits 1. It also exits 1, after writing the merge, when the result fails the ledger parser or the entry rules. `forkOwned` keeps an entry while either side still lists it, so an entry leaves the ledger only when both sides have removed it.
 
 ## The rehearsal merge
 
-[`src/rehearse-upstream.ts`](src/rehearse-upstream.ts) rehearses the merge of an upstream tag and holds the result to the [divergence budget](../../docs/reference/divergence/README.md#divergence-budget). Run it from the repository root:
+[`src/rehearse-upstream.ts`](src/rehearse-upstream.ts) rehearses the merge of an upstream commit and holds the result to the [divergence budget](../../docs/reference/divergence/README.md#divergence-budget). Run it from the repository root with exactly one of `--tag` and `--ref`:
 
 ```sh
 node_modules/.bin/tsx delo/apps/tools/src/rehearse-upstream.ts --tag <tag>
+node_modules/.bin/tsx delo/apps/tools/src/rehearse-upstream.ts --ref <ref>
 ```
 
-It reads the ledger at `HEAD`, fetches the tag from the ledger's `upstream.repository`, and adds a scratch worktree in a temporary directory, detached at `HEAD`. There it merges the tag's commit without committing, with hooks and recorded resolutions off, and it removes the scratch worktree whatever the outcome. The fetch writes only the scratch worktree's `FETCH_HEAD`, so the checkout's refs, branches, index and working tree stay unchanged, and its uncommitted changes are not measured.
+It reads the ledger at `HEAD` and adds a scratch worktree in a temporary directory, detached at `HEAD`. `--tag` fetches the tag from the ledger's `upstream.repository`; the fetch writes only the scratch worktree's `FETCH_HEAD`. `--ref` takes a commit or branch the clone already holds, such as `upstream/master`, and fetches nothing. In the scratch worktree it merges that commit without committing, with hooks and recorded resolutions off, and it removes the scratch worktree whatever the outcome. The checkout's refs, branches, index and working tree stay unchanged, and its uncommitted changes are not measured.
 
-It prints the conflicted paths with their class and conflict regions, and the conflicted hunks as a share of the ledger's hunks at the tag. It then prints, for each class (`delo-feature`, `generic-fix`, `security`), the entries and hunks measured against the pin and against the tag with their growth, and the total beside the caps. A differing path that no entry lists is counted as `unlisted`. A conflicted file is measured with its conflict markers, so a conflict region usually counts as two hunks at the tag. An entry that differs from the pin but not from the tag is absorbed by the tag: it is listed as credited, and the count at the tag leaves it out. Until the first release's baseline is recorded, the caps are the budget's floors, 20 entries and 150 hunks. The ledger marks no entry as generated, so every entry is counted, and the output says so.
+It prints the conflicted paths with their class and conflict regions, and the conflicted hunks as a share of the ledger's hunks at the merged commit. It then prints, for each class (`delo-feature`, `generic-fix`, `security`, `ruled`, `unlisted`), the entries and hunks measured against the pin and against the merged commit with their growth, and the total beside the caps. A differing path that no entry lists is counted as `ruled` when a path rule covers it, so the growth of rule-covered paths is measured too, and as `unlisted` otherwise. A conflicted file is measured with its conflict markers, so a conflict region usually counts as two hunks at the merged commit. An entry that differs from the pin but not from the merged commit is absorbed: it is listed as credited, and the count at the merged commit leaves it out. Until the first release's baseline is recorded, the caps are the budget's floors, 20 entries and 150 hunks. Generated paths are counted under `ruled`, and the output says so.
 
-It exits 1, with one line per failure, when the total growth in entries or in hunks exceeds its cap, when the conflicted hunks exceed 15 % of the ledger's hunks at the tag, and for each conflicted `security`-class file, because the ledger records no maintainer decision. It exits 2 with a usage line when `--tag` is missing, and with git's error when the fetch or the merge fails.
+It exits 1, with one line per failure, when the total growth in entries or in hunks exceeds its cap, when the conflicted hunks exceed 15 % of the ledger's hunks at the merged commit, and for each conflicted `security`-class file, because the ledger records no maintainer decision. It exits 2 with a usage line unless exactly one non-empty `--tag` or `--ref` is given, when the ref names no commit in the clone, and with git's error when the fetch or the merge fails.
 
 ## The gates
 

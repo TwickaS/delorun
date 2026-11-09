@@ -1,7 +1,7 @@
 import { readFileSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, type TestContext } from 'vitest'
-import { parseManifest, type Patch, type RetiredEntry } from '../src/fork-boundary.ts'
+import { parseManifest, type Patch, type PathRule, type RetiredEntry } from '../src/fork-boundary.ts'
 import { mergeLedgerTexts } from '../src/ledger-merge.ts'
 import { REPO, runTsx, scratchRepo, type Scratch } from './gates/support.ts'
 
@@ -23,7 +23,17 @@ const MOVED_COMMIT = 'fedcba9876543210fedcba9876543210fedcba98'
  * @returns the entry.
  */
 function patch(path: string, reason = `reason for ${path}`): Patch {
-  return { path, class: 'delo-feature', reason }
+  return { path, class: 'delo-feature', feature: 'a-feature', reason }
+}
+
+/**
+ * A path rule whose reason names its pattern unless a reason is given.
+ * @param pattern - the rule's glob.
+ * @param reason - the rule's reason.
+ * @returns the rule.
+ */
+function rule(pattern: string, reason = `reason for ${pattern}`): PathRule {
+  return { pattern, kind: 'documentation', reason }
 }
 
 /**
@@ -49,12 +59,14 @@ function ledgerText(
     readonly upstream?: typeof UPSTREAM
     readonly forkOwned?: readonly string[]
     readonly schema?: string
+    readonly rules?: readonly PathRule[]
   } = {},
 ): string {
   const document = {
     ...(options.schema === undefined ? {} : { $schema: options.schema }),
     upstream: options.upstream ?? UPSTREAM,
     forkOwned: options.forkOwned ?? ['delo/'],
+    rules: options.rules ?? [],
     patches,
     retired: options.retired ?? [],
   }
@@ -142,12 +154,14 @@ describe('mergeLedgerTexts', () => {
       '    {',
       '      "path": "docs/a.md",',
       '      "class": "delo-feature",',
+      '      "feature": "a-feature",',
       '      "reason": "ours"',
       '    },',
       '=======',
       '    {',
       '      "path": "docs/a.md",',
       '      "class": "delo-feature",',
+      '      "feature": "a-feature",',
       '      "reason": "theirs"',
       '    },',
       '>>>>>>> theirs',
@@ -165,6 +179,39 @@ describe('mergeLedgerTexts', () => {
     )
     expect(merge.errors).toEqual([])
     expect(parseManifest(merge.text).forkOwned).toEqual(['delo/', 'ours/', 'theirs/'])
+  })
+
+  it('unions the path rules of both sides by pattern', () => {
+    const base = ledgerText([], { rules: [rule('docs/**/*.md')] })
+    const merge = mergeLedgerTexts(
+      base,
+      ledgerText([], { rules: [rule('docs/**/*.md'), rule('**/README.md')] }),
+      ledgerText([], { rules: [rule('docs/**/*.md'), rule('*.md')] }),
+    )
+    expect(merge.errors).toEqual([])
+    expect(parseManifest(merge.text).rules.map(entry => entry.pattern)).toEqual(['docs/**/*.md', '**/README.md', '*.md'])
+  })
+
+  it('conflicts when both sides add one pattern with different fields', () => {
+    const merge = mergeLedgerTexts(
+      ledgerText([]),
+      ledgerText([], { rules: [rule('**/README.md', 'ours')] }),
+      ledgerText([], { rules: [{ ...rule('**/README.md', 'ours'), kind: 'tooling' }] }),
+    )
+    expect(merge.errors).toEqual(['rules entry **/README.md: added with different values on both sides'])
+    expect(merge.text).toContain('<<<<<<< ours\n    {\n      "pattern": "**/README.md",')
+  })
+
+  it('reports a version whose rules repeat a pattern', () => {
+    const merge = mergeLedgerTexts(BASE, ledgerText([A, B], { rules: [rule('*.md'), rule('*.md', 'again')] }), BASE)
+    expect(merge.errors).toContain('ours rules lists *.md more than once')
+  })
+
+  it('merges a security entry with a digest beside entries that record none', () => {
+    const gate: Patch = { path: 'src/gate.ts', class: 'security', reason: 'moves a gate', sha256: 'a'.repeat(64) }
+    const merge = mergeLedgerTexts(BASE, ledgerText([A, B, gate]), ledgerText([A, B, C]))
+    expect(merge.errors).toEqual([])
+    expect(parseManifest(merge.text).patches).toEqual([A, B, gate, C])
   })
 
   it('merges retired entries by path, as it merges patches', () => {
@@ -329,12 +376,14 @@ describe('the driver in git', () => {
       '    {',
       '      "path": "docs/a.md",',
       '      "class": "delo-feature",',
+      '      "feature": "a-feature",',
       '      "reason": "x"',
       '    },',
       '=======',
       '    {',
       '      "path": "docs/a.md",',
       '      "class": "delo-feature",',
+      '      "feature": "a-feature",',
       '      "reason": "y"',
       '    },',
       '>>>>>>> theirs',

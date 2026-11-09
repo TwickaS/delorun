@@ -1,16 +1,16 @@
 /**
- * The upstream update path: carry Delo's patch set from the ledger's pin onto a later upstream tag, and verify the
+ * The upstream update path: carry Delo's listed patches from the ledger's pin onto a later upstream tag, and verify the
  * result before the ledger records it. Run from anywhere inside the repository:
  *
  * ```sh
- * node_modules/.bin/tsx delo/apps/tools/src/upstream-update.ts --record
  * node_modules/.bin/tsx delo/apps/tools/src/upstream-update.ts --tag <tag> [--write]
  * ```
  *
- * `--record` writes the SHA-256 digest of every listed patch's content at `HEAD` into the ledger, which is the record
- * a carry-forward holds each entry to. `--tag` resolves the tag in the clone, applies every listed patch to that tag's
- * commit in a scratch worktree, retires the entries the tag already absorbed, renders the ledger that describes the
- * result, and checks that ledger against the applied tree; `--write` writes it once the release merge is in `HEAD`.
+ * `--tag` resolves the tag in the clone, applies every listed patch to that tag's commit in a scratch worktree, retires
+ * the entries the tag already absorbed, renders the ledger that describes the result, and checks that ledger against
+ * the applied tree; `--write` writes it once the release merge is in `HEAD`. A security entry is carried only when its
+ * file still has the digest the ledger records, which `ledger-record.ts` writes. Paths that a path rule covers are not
+ * carried as patches: the release merge brings them, and the rules carry over unchanged.
  * A refusal is reported with its code and the checkout is left unchanged. Nothing is fetched and no version is
  * bumped: the tag must already be in the clone, because the release merge is a separate, owner-approved action
  * (`rehearse-upstream.ts` measures that merge against the divergence budget).
@@ -28,9 +28,9 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { changedBetween, changedSince, hunkCount, treeFiles } from './check-fork-boundary.ts'
-import { forkBoundaryErrors, MANIFEST_PATH, manifestErrors, parseManifest, type PatchManifest } from './fork-boundary.ts'
+import { forkBoundaryErrors, MANIFEST_PATH, manifestErrors, parseManifest, type Patch, type PatchManifest } from './fork-boundary.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
-import { commitDigests, digestDefects, digestErrors, patchDigest, unrecorded, worktreeDigests } from './ledger-digests.ts'
+import { commitDigests, digestDefects, digestErrors, patchDigest, securityPaths, worktreeDigests } from './ledger-digests.ts'
 import { SCRATCH_CONFIG, sweepScratchWorktrees, withScratchWorktree } from './scratch-worktree.ts'
 
 /** The prefix of the update path's scratch directory, which the specs look for when they check for residue. */
@@ -46,7 +46,6 @@ export type RefusalCode =
   | 'ledger-inconsistent'
   | 'measurement-failed'
   | 'merge-side-missing'
-  | 'checksum-unrecorded'
   | 'checksum-drift'
   | 'patch-deletes-file'
   | 'patch-does-not-apply'
@@ -66,14 +65,12 @@ export interface Refusal {
   readonly path?: string
 }
 
-/** What the command line asks for: one of the two modes, and whether a carry-forward writes the ledger. */
+/** What the command line asks for: the tag to carry the patch set onto, and whether the run writes the ledger. */
 export interface UpdateRequest {
-  /** Record the digest of every listed patch at `HEAD`, and change nothing else. */
-  readonly record?: boolean
   /** The upstream tag to carry the patch set onto. */
-  readonly tag?: string
+  readonly tag: string
   /** Write the carried ledger into the checkout; without it the command reports what it would write. */
-  readonly write?: boolean
+  readonly write: boolean
 }
 
 /** The ledger's upstream pin. */
@@ -102,8 +99,8 @@ export interface CarriedEntry {
   readonly path: string
   /** The entry's class. */
   readonly class: PatchManifest['patches'][number]['class']
-  /** The digest of the patch's content in the applied tree, which the carried ledger records. */
-  readonly sha256: string
+  /** The digest of a security entry's content in the applied tree, which the carried ledger records; absent for the other classes. */
+  readonly sha256?: string
   /** The hunks the patch has against the target, as `git diff --unified=0` splits them. */
   readonly hunks: number
 }
@@ -158,7 +155,7 @@ export class UpstreamUpdateError extends Error {
   }
 }
 
-const USAGE = 'usage: upstream-update.ts --record | --tag <tag> [--write]'
+const USAGE = 'usage: upstream-update.ts --tag <tag> [--write]'
 
 /**
  * Read the ledger at `HEAD`, so a run measures the committed patch set rather than a working tree in flux.
@@ -223,7 +220,7 @@ export function resolveBaseline(root: string, manifest: PatchManifest): { readon
 
 /**
  * Check that the ledger describes the state the patch set is measured in: every difference from the pin is a listed
- * entry, every listed entry still differs, and no entry is both retired and still different. A bump starts from a
+ * entry or covered by a path rule, every listed entry still differs, and no entry is both retired and still different. A bump starts from a
  * coherent ledger, so this refuses before anything is applied.
  * @param root - the repository root.
  * @param manifest - the ledger at `HEAD`.
@@ -233,7 +230,7 @@ export function resolveBaseline(root: string, manifest: PatchManifest): { readon
 export function checkLedger(root: string, manifest: PatchManifest, measured: Measured): Refusal[] {
   const pin = manifest.upstream.commit
   const changed = measured.checkout ? changedSince(root, pin) : changedBetween(root, pin, measured.commit)
-  return [...manifestErrors(manifest), ...forkBoundaryErrors(manifest, changed, filesOf(root, measured))]
+  return forkBoundaryErrors(manifest, changed, filesOf(root, measured))
     .map(message => ({ code: 'ledger-inconsistent' as const, message: `${message}; the ledger must describe the checkout before the patch set is carried` }))
 }
 
@@ -250,41 +247,34 @@ function filesOf(root: string, measured: Measured): Set<string> {
 }
 
 /**
- * Check the checksum record: every listed patch must record a digest, and every recorded digest must match the file in
- * the measured state. Without a complete record the patch set cannot be carried, because a changed file would travel
- * unnoticed; a listed path the measured state holds no file for is refused on its own, because no entry may delete the
- * file it names.
+ * Check the listed files and the checksum record: every listed path must hold a file in the measured state, because no
+ * entry may delete the file it names, and every digest a security entry records must match its file there, because a
+ * changed security file would otherwise travel without the lead's review. `manifestErrors` has already refused a
+ * security entry that records no digest.
  * @param root - the repository root.
  * @param manifest - the ledger at `HEAD`.
  * @param measured - the state the ledger describes, from {@link measuredState}.
- * @returns one refusal for the unrecorded entries, one per listed path with no file, and one per drifted digest.
+ * @returns one refusal per listed path with no file, and one per drifted digest.
  */
 export function checkDigests(root: string, manifest: PatchManifest, measured: Measured): Refusal[] {
   const refusals: Refusal[] = []
-  const missing = unrecorded(manifest)
-  if (missing.length > 0) {
+  const digests = commitDigests(root, measured.commit, manifest.patches.map(patch => patch.path))
+  for (const patch of manifest.patches) {
+    if (digests.has(patch.path)) continue
     refusals.push({
-      code: 'checksum-unrecorded',
-      message: `${String(missing.length)} of ${String(manifest.patches.length)} listed patches record no sha256, starting with ${missing[0] ?? ''};`
-        + ' run `upstream-update.ts --record` and commit the ledger before carrying the patch set',
-      ...missing[0] === undefined ? {} : { path: missing[0] },
+      code: 'patch-deletes-file',
+      path: patch.path,
+      message: `${patch.path} is listed in ${MANIFEST_PATH}, but ${where(measured)} holds no file there; a listed patch must edit the file it`
+        + ' names, so restore it, or drop the entry and let upstream own the path',
     })
   }
-  const digests = commitDigests(root, measured.commit, manifest.patches.map(patch => patch.path))
   for (const defect of digestDefects(manifest, digests)) {
-    if (defect.kind === 'missing') {
-      refusals.push({
-        code: 'patch-deletes-file',
-        path: defect.path,
-        message: `${defect.path} is listed in ${MANIFEST_PATH}, but ${where(measured)} holds no file there; a listed patch must edit the file it`
-          + ' names, so restore it, or drop the entry and let upstream own the path',
-      })
-      continue
-    }
+    if (defect.kind === 'missing') continue
     refusals.push({
       code: 'checksum-drift',
+      path: defect.path,
       message: `${defect.path}: recorded sha256 ${defect.recorded}, but the file is ${defect.actual};`
-        + ' re-record it with `upstream-update.ts --record` once the change is reviewed',
+        + ' the lead reviews the change, then `ledger-record.ts` re-records the digest',
     })
   }
   return refusals
@@ -338,7 +328,8 @@ function applyPatch(tree: string, text: string): { readonly status: number | nul
 
 /**
  * Render the ledger that describes the release merge, and check that its text is one the ledger parser and the entry
- * rules accept.
+ * rules accept. Each carried entry keeps its feature and reason, a security entry records its digest in the applied
+ * tree, and the path rules carry over unchanged.
  * @param manifest - the ledger at `HEAD`.
  * @param tag - the target tag.
  * @param targetCommit - the commit the tag names.
@@ -349,11 +340,20 @@ function applyPatch(tree: string, text: string): { readonly status: number | nul
 export function carriedLedger(
   manifest: PatchManifest, tag: string, targetCommit: string, carried: readonly CarriedEntry[], absorbed: readonly RetiredEntry[],
 ): { readonly ledger: string; readonly refusals: Refusal[] } {
-  const reasons = new Map(manifest.patches.map(patch => [patch.path, patch.reason]))
+  const listed = new Map(manifest.patches.map(patch => [patch.path, patch]))
   const carriedManifest: PatchManifest = {
     ...manifest,
     upstream: { ...manifest.upstream, ref: tag, commit: targetCommit },
-    patches: carried.map(entry => ({ path: entry.path, class: entry.class, reason: reasons.get(entry.path) ?? '', sha256: entry.sha256 })),
+    patches: carried.map((entry): Patch => {
+      const patch = listed.get(entry.path)
+      return {
+        path: entry.path,
+        class: entry.class,
+        ...patch?.feature === undefined ? {} : { feature: patch.feature },
+        reason: patch?.reason ?? '',
+        ...entry.sha256 === undefined ? {} : { sha256: entry.sha256 },
+      }
+    }),
     retired: [
       ...manifest.retired,
       ...absorbed.map(entry => ({ path: entry.path, reason: 'absorbed' as const, upstreamCommit: targetCommit, hunks: entry.hunks })),
@@ -380,9 +380,9 @@ function ledgerDefects(ledger: string, manifest: PatchManifest): Refusal[] {
 }
 
 /**
- * Verify a carried patch set describes the applied tree: every difference from the target is a listed entry, every
- * listed entry still differs, every carried digest matches the applied file, and no listed patch vanished from both
- * lists.
+ * Verify a carried patch set describes the applied tree: every difference from the target is a listed entry or covered
+ * by a path rule, every listed entry still differs, every carried security digest matches the applied file, and no listed patch vanished from
+ * both lists.
  * @param manifest - the carried ledger, re-read as a reader would read it.
  * @param tree - the scratch worktree with the patch set applied.
  * @param targetCommit - the commit the target tag names.
@@ -395,7 +395,7 @@ export function verifyApplied(
 ): Refusal[] {
   const changed = changedSince(tree, targetCommit)
   const files = new Set(git(tree, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']).split('\0').filter(path => path.length > 0))
-  const digests = worktreeDigests(tree, manifest.patches.map(patch => patch.path))
+  const digests = worktreeDigests(tree, securityPaths(manifest))
   const accounted = new Set([...manifest.patches.map(patch => patch.path), ...absorbed.map(entry => entry.path)])
   const dropped = listed.filter(path => !accounted.has(path))
   return [
@@ -477,7 +477,12 @@ export function carryForward(root: string, tag: string, write = false): UpdateOu
         })
         continue
       }
-      carried.push({ path: patch.path, class: patch.class, sha256: patchDigest(readFileSync(join(tree, patch.path))), hunks: hunkCount(tree, targetCommit, change) })
+      carried.push({
+        path: patch.path,
+        class: patch.class,
+        ...patch.class === 'security' ? { sha256: patchDigest(readFileSync(join(tree, patch.path))) } : {},
+        hunks: hunkCount(tree, targetCommit, change),
+      })
     }
     if (deleted.length > 0) return { refusals: deleted }
     const rendered = carriedLedger(manifest, tag, targetCommit, carried, absorbed)
@@ -631,34 +636,6 @@ export function writeBack(root: string, plan: UpdatePlan): Refusal[] {
 }
 
 /**
- * Record the digest of every listed patch at `HEAD` in the ledger.
- * @param root - the repository root.
- * @returns the refusals, and no ledger; one refusal per listed path that `HEAD` does not hold.
- * @throws UpstreamUpdateError when the ledger at `HEAD` is unusable.
- */
-export function recordDigests(root: string): readonly Refusal[] {
-  const manifest = headManifest(root)
-  const digests = commitDigests(root, 'HEAD', manifest.patches.map(patch => patch.path))
-  const refusals: Refusal[] = []
-  const patches: PatchManifest['patches'] = []
-  for (const patch of manifest.patches) {
-    const digest = digests.get(patch.path)
-    if (digest === undefined) {
-      refusals.push({
-        code: 'verification-failed',
-        path: patch.path,
-        message: `${patch.path} is listed in the ledger but HEAD holds no file there; commit the change or remove the entry`,
-      })
-      continue
-    }
-    patches.push({ ...patch, sha256: digest })
-  }
-  if (refusals.length > 0) return refusals
-  writeFileSync(join(root, MANIFEST_PATH), `${JSON.stringify({ ...manifest, patches }, null, 2)}\n`)
-  return []
-}
-
-/**
  * Format a carry-forward as the lines the command prints.
  * @param plan - the verified carry-forward.
  * @returns the merge it describes, the carried entries with their digests, the absorbed entries, and the verification.
@@ -669,7 +646,10 @@ export function formatPlan(plan: UpdatePlan): string[] {
       + `${plan.measured.commit === plan.head ? '' : `, measured at the pre-merge state ${plan.measured.commit.slice(0, 12)}`}`,
     `carried: ${counted(plan.carried.length, 'entry', 'entries')}, ${counted(hunksOf(plan.carried), 'hunk')}`,
   ]
-  for (const entry of plan.carried) lines.push(`  ${entry.path} (${entry.class}, ${counted(entry.hunks, 'hunk')}, sha256 ${entry.sha256.slice(0, 12)})`)
+  for (const entry of plan.carried) {
+    const digest = entry.sha256 === undefined ? '' : `, sha256 ${entry.sha256.slice(0, 12)}`
+    lines.push(`  ${entry.path} (${entry.class}, ${counted(entry.hunks, 'hunk')}${digest})`)
+  }
   if (plan.absorbed.length > 0) {
     lines.push(`absorbed by ${plan.tag} (retired): ${counted(plan.absorbed.length, 'entry', 'entries')}, ${counted(hunksOf(plan.absorbed), 'hunk')} at the pin`)
     for (const entry of plan.absorbed) lines.push(`  ${entry.path}`)
@@ -711,41 +691,34 @@ function refuse(refusals: readonly Refusal[]): number {
 /**
  * Run the command line.
  * @param argv - the arguments, without the script.
- * @returns the exit status: 0 when the mode finished, 1 for a refusal, 2 for a bad command line or an unusable input.
+ * @returns the exit status: 0 when the carry-forward finished, 1 for a refusal, 2 for a bad command line or an unusable input.
  */
 export function main(argv: readonly string[]): number {
   let request: UpdateRequest
   try {
     const { values } = parseArgs({
       args: [...argv],
-      options: { record: { type: 'boolean', default: false }, tag: { type: 'string' }, write: { type: 'boolean', default: false } },
+      options: { tag: { type: 'string' }, write: { type: 'boolean', default: false } },
       strict: true,
       allowPositionals: false,
     })
-    request = { record: values.record, write: values.write, ...values.tag === undefined ? {} : { tag: values.tag } }
+    if (values.tag === undefined) {
+      console.error(USAGE)
+      return 2
+    }
+    request = { tag: values.tag, write: values.write }
   } catch (error) {
     console.error(`upstream-update: ${error instanceof Error ? error.message : String(error)}`)
     console.error(USAGE)
     return 2
   }
-  // The two modes are exclusive, and recording is the only thing `--record` does.
-  if ((request.record === true) === (request.tag !== undefined) || (request.record === true && request.write === true)) {
-    console.error(USAGE)
-    return 2
-  }
   try {
     const root = repositoryRoot(process.cwd())
-    if (request.record === true) {
-      const refusals = recordDigests(root)
-      if (refusals.length > 0) return refuse(refusals)
-      console.log(`upstream-update: recorded the sha256 of every listed patch in ${MANIFEST_PATH}`)
-      return 0
-    }
-    const outcome = carryForward(root, request.tag ?? '', request.write === true)
+    const outcome = carryForward(root, request.tag, request.write)
     if (outcome.plan !== undefined && outcome.refusals.length === 0) for (const line of formatPlan(outcome.plan)) console.log(line)
     if (outcome.refusals.length > 0) return refuse(outcome.refusals)
-    console.log(request.write === true
-      ? `upstream-update: ${MANIFEST_PATH} now pins ${request.tag ?? ''}`
+    console.log(request.write
+      ? `upstream-update: ${MANIFEST_PATH} now pins ${request.tag}`
       : 'upstream-update: dry run; pass --write once the release merge is in HEAD to record it')
     return 0
   } catch (error) {

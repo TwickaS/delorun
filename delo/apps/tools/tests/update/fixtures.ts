@@ -1,13 +1,13 @@
 /**
  * Fixtures for the upstream update path: an upstream repository with the pinned tag `v1` and a later tag `v2`, and a
- * fork whose ledger pins `v1`, lists the fork's edits and records the digest of each one, so no spec reaches the
- * network. A fixture can merge `v2` into the fork, which is the state `--write` records.
+ * fork whose ledger pins `v1`, lists the fork's edits and records the digest of each security entry, so no spec reaches
+ * the network. A fixture can merge `v2` into the fork, which is the state `--write` records.
  */
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { TestContext } from 'vitest'
-import type { Patch, PatchManifest } from '../../src/fork-boundary.ts'
+import type { Patch, PatchManifest, PathRule } from '../../src/fork-boundary.ts'
 import { patchDigest } from '../../src/ledger-digests.ts'
 import { REPO, runTsx, scratchRepo, type Scratch } from '../gates/support.ts'
 
@@ -33,11 +33,13 @@ export interface UpdateFiles {
   readonly fork: Record<string, string>
   /** The fork ledger's patches. */
   readonly patches: readonly Patch[]
+  /** The fork ledger's path rules; none when absent. */
+  readonly rules?: readonly PathRule[]
 }
 
 /** How a fixture departs from a coherent, recorded, unmerged patch set. */
 export interface UpdateOptions {
-  /** Record each patch's digest in the ledger; default true. */
+  /** Record each security entry's digest in the ledger; default true. */
   readonly record?: boolean
   /** Merge `v2` into the fork, the state `--write` records. */
   readonly merge?: boolean
@@ -87,12 +89,13 @@ export function updateFixture(test: TestContext, files: UpdateFiles, options: Up
   // The release tag is in the clone before the update path runs; fetching it is the owner-approved release merge's step.
   fork.run(['fetch', '-q', '--no-tags', upstream.root, 'refs/tags/v2:refs/tags/v2'])
   fork.commit(files.fork)
-  const patches = files.patches.map(patch => options.record === false
+  const patches = files.patches.map(patch => options.record === false || patch.class !== 'security'
     ? patch
     : { ...patch, sha256: patchDigest(readFileSync(join(fork.root, patch.path))) })
   const ledger = {
     upstream: { repository: upstream.root, ref: options.ref ?? 'v1', commit: options.commit ?? pin },
     forkOwned: ['delo/'],
+    rules: files.rules ?? [],
     patches,
     retired: [],
   }

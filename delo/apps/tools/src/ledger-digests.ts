@@ -1,8 +1,8 @@
 /**
- * The checksum record of the divergence ledger: the SHA-256 digest of every listed upstream file at `HEAD`, recorded
- * on the entry in `delo/upstream-patches.json`. The record makes a patch set reviewable and portable: the upstream
- * update path carries an entry forward only when the file it would carry is the one the ledger recorded, and the
- * boundary gate refuses a recorded digest that no longer matches.
+ * The checksum record of the divergence ledger: the SHA-256 digest of every `security`-class file, recorded on its entry
+ * in `delo/upstream-patches.json`. The digest binds the lead's verdict to the content it reviewed: the upstream update
+ * path carries a security entry forward only when its file is the one the ledger recorded, and the boundary gate refuses
+ * a recorded digest that no longer matches. Entries of the other classes record no digest.
  *
  * @module @delo/tools/ledger-digests
  */
@@ -95,17 +95,26 @@ export type DigestDefect =
   }
 
 /**
- * Compare the digest each entry records with the digest its file has.
+ * The paths of the `security`-class entries, the only entries that record a digest.
+ * @param manifest - the parsed ledger.
+ * @returns the paths, in ledger order.
+ */
+export function securityPaths(manifest: PatchManifest): string[] {
+  return manifest.patches.filter(patch => patch.class === 'security').map(patch => patch.path)
+}
+
+/**
+ * Compare the digest each `security`-class entry records with the digest its file has.
  * @param manifest - the parsed ledger.
  * @param digests - the digest of the files the caller read, by path.
  * @returns one defect per recorded digest that differs, and one per recorded digest whose path the caller holds no
- * content for; an entry that records no digest is reported by {@link unrecorded}, not here.
+ * content for; a security entry that records no digest is a ledger defect that `manifestErrors` reports, not one here.
  */
 export function digestDefects(manifest: PatchManifest, digests: ReadonlyMap<string, string>): DigestDefect[] {
   const defects: DigestDefect[] = []
   for (const patch of manifest.patches) {
     const recorded = patch.sha256
-    if (recorded === undefined) continue
+    if (patch.class !== 'security' || recorded === undefined) continue
     const actual = digests.get(patch.path)
     if (actual === undefined) {
       defects.push({ path: patch.path, kind: 'missing', recorded })
@@ -127,15 +136,6 @@ export function digestErrors(manifest: PatchManifest, digests: ReadonlyMap<strin
   return digestDefects(manifest, digests).map(defect => defect.kind === 'missing'
     ? `${defect.path}: recorded sha256 ${defect.recorded} cannot be checked, because the path holds no file to read`
     : `${defect.path}: recorded sha256 ${defect.recorded}, but the file is ${defect.actual}`)
-}
-
-/**
- * The entries whose checksum the ledger does not record.
- * @param manifest - the parsed ledger.
- * @returns the paths without a recorded digest, in ledger order.
- */
-export function unrecorded(manifest: PatchManifest): string[] {
-  return manifest.patches.filter(patch => patch.sha256 === undefined).map(patch => patch.path)
 }
 
 /**

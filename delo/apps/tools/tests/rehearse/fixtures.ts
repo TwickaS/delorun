@@ -7,7 +7,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { TestContext } from 'vitest'
-import type { Patch } from '../../src/fork-boundary.ts'
+import type { Patch, PathRule } from '../../src/fork-boundary.ts'
 import { REPO, runTsx, scratchRepo, type Scratch } from '../gates/support.ts'
 
 /** The command under test. */
@@ -59,6 +59,8 @@ export interface FixtureFiles {
   readonly fork: Record<string, string>
   /** The fork ledger's patches. */
   readonly patches: readonly Patch[]
+  /** The fork ledger's path rules; none when absent. */
+  readonly rules?: readonly PathRule[]
 }
 
 /**
@@ -79,6 +81,7 @@ export function rehearsalFixture(test: TestContext, files: FixtureFiles): Rehear
   const ledger = {
     upstream: { repository: upstream.root, ref: 'v1', commit: pin },
     forkOwned: ['delo/'],
+    rules: files.rules ?? [],
     patches: files.patches,
     retired: [],
   }
