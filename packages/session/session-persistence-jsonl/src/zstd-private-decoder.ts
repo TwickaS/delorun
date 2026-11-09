@@ -5,7 +5,18 @@
 
 import { constants as bufferConstants } from 'node:buffer'
 import { createZstdDecompress } from 'node:zlib'
-import type { ZstdFrameDecoder, ZstdFrameRange } from './zstd.ts'
+import { MAX_FRAME_PLAINTEXT_BYTES, type ZstdFrameDecoder, type ZstdFrameRange } from './zstd.ts'
+
+/**
+ * The plaintext bound of one frame: the session-log limit, and the process-wide Buffer maximum where that is lower.
+ * The public decoder applies the same limit, so a frame is refused whichever decoder the runtime offers. It is read
+ * lazily because `zstd.ts` imports this module for the shared decoder factory, so the constant is not initialized yet
+ * when this module's top level runs.
+ * @returns the most plaintext one frame may produce.
+ */
+function maxFrameOutputBytes(): number {
+  return Math.min(MAX_FRAME_PLAINTEXT_BYTES, bufferConstants.MAX_LENGTH)
+}
 
 const DECODE_CHUNK_SIZE = 1024 * 1024
 
@@ -146,9 +157,9 @@ export class NodePrivateZstdFrameDecoder implements ZstdFrameDecoder {
       const produced = this.output.length - outputAfter
       if (produced > 0) {
         outputBytes += produced
-        /* v8 ignore next -- Buffer cannot materialize a frame beyond its own process-wide maximum length. */
-        if (outputBytes > bufferConstants.MAX_LENGTH) {
-          throw new Error(`Zstandard frame output exceeds ${bufferConstants.MAX_LENGTH} bytes`)
+        /* v8 ignore next -- only a frame expanding past 64 MiB reaches the bound, which one spec builds. */
+        if (outputBytes > maxFrameOutputBytes()) {
+          throw new Error(`Zstandard frame output exceeds ${maxFrameOutputBytes()} bytes`)
         }
       }
 

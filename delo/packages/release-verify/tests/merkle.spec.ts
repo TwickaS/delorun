@@ -6,6 +6,9 @@
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
+// The log side's own verifier, read by path: a differential against the implementation the log serves proofs with, not
+// a second copy of the client's walk. It is a spec-only import, so the package keeps no dependency on the release app.
+import { verifyConsistency as referenceVerify } from '../../../apps/release/src/log/merkle.ts'
 import { leafHash, nodeHash, rootFromInclusionProof, verifyConsistencyProof } from '../src/merkle.ts'
 import { consistencyProof, inclusionProof, treeRoot } from './fixtures.ts'
 
@@ -90,5 +93,54 @@ describe('the consistency proof', () => {
   it('refuses a proof that names the newer root hash as the older one', () => {
     const hashes = leaves(5)
     expect(verifyConsistencyProof(2, treeRoot(hashes), 5, treeRoot(hashes), consistencyProof(2, hashes))).toBe(false)
+  })
+})
+
+describe('the consistency proof against RFC 6962 PROOF', () => {
+  // The release app serves these proofs and verifies them with its own walk, which the audit found correct. Comparing
+  // the client's verifier against that implementation, rather than against a copy of itself, is what this block is for.
+  it('agrees with the release log\'s verifier on every genuine proof between every pair of sizes up to 64', () => {
+    let verified = 0
+    for (let second = 2; second <= 64; second++) {
+      const hashes = leaves(second)
+      const secondRoot = treeRoot(hashes)
+      for (let first = 1; first < second; first++) {
+        const firstRoot = treeRoot(hashes.slice(0, first))
+        const proof = consistencyProof(first, hashes)
+        const ours = verifyConsistencyProof(first, firstRoot, second, secondRoot, proof)
+        const reference = referenceVerify(first, second, firstRoot, secondRoot, proof)
+        expect({ first, second, ours, reference }).toEqual({ first, second, ours: true, reference: true })
+        verified += 1
+      }
+    }
+    // Every ordered pair of distinct sizes up to 64: 64 * 63 / 2.
+    expect(verified).toBe(2016)
+  })
+
+  it('accepts the 4-to-8 proof the fixed walk is a regression for', () => {
+    const hashes = leaves(8)
+    const proof = consistencyProof(4, hashes)
+    expect(proof.map(hash => hash.toString('hex'))).toEqual([treeRoot(hashes.slice(4, 8)).toString('hex')])
+    expect(verifyConsistencyProof(4, treeRoot(hashes.slice(0, 4)), 8, treeRoot(hashes), proof)).toBe(true)
+  })
+
+  it('is bound to the proof\'s own shapes: a hash removed, added or reordered refuses', () => {
+    const hashes = leaves(8)
+    const secondRoot = treeRoot(hashes)
+    for (const first of [1, 2, 3, 4, 5, 6, 7]) {
+      const firstRoot = treeRoot(hashes.slice(0, first))
+      const proof = consistencyProof(first, hashes)
+      expect(verifyConsistencyProof(first, firstRoot, 8, secondRoot, proof.slice(1))).toBe(false)
+      expect(verifyConsistencyProof(first, firstRoot, 8, secondRoot, [...proof, ...proof.slice(-1)])).toBe(false)
+      if (proof.length > 1) {
+        expect(verifyConsistencyProof(first, firstRoot, 8, secondRoot, [...proof].reverse())).toBe(false)
+      }
+    }
+  })
+
+  it('refuses a proof longer than the contract\'s bound', () => {
+    const hashes = leaves(8)
+    const proof = consistencyProof(4, hashes)
+    expect(verifyConsistencyProof(4, treeRoot(hashes.slice(0, 4)), 8, treeRoot(hashes), [...Array.from({ length: 65 }, () => proof[0]!)])).toBe(false)
   })
 })

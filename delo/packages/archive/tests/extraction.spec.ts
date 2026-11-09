@@ -170,6 +170,17 @@ describe('the path rules of an extraction', () => {
     expect(syncRefusalOf(() => checkPathCollisions(['objects/a', 'objects/a'])).message).toContain('twice')
   })
 
+  it('refuses two entries that differ only in Unicode normalisation, which one file system folds onto one name', () => {
+    const composed = 'objects/caf\u00e9.txt'
+    const decomposed = 'objects/cafe\u0301.txt'
+    expect(composed).not.toBe(decomposed)
+    expect(composed.normalize('NFC')).toBe(decomposed.normalize('NFC'))
+    expect(syncRefusalOf(() => checkPathCollisions([composed, decomposed])).code).toBe('ARCHIVE_PATH_REJECTED')
+    expect(syncRefusalOf(() => checkPathCollisions([decomposed, composed])).message).toContain('Unicode normalisation')
+    // A case-only difference that is also a normalisation difference is still the case collision contract C8 names.
+    expect(syncRefusalOf(() => checkPathCollisions([composed, 'OBJECTS/CAF\u00c9.TXT'])).code).toBe('ARCHIVE_CASE_COLLISION')
+  })
+
   it('refuses the device names that a path resolves to a device rather than a file', async () => {
     expect(syncRefusalOf(() => checkArchivePath('nul')).message).toContain('reserved device')
     expect(syncRefusalOf(() => checkArchivePath('con.txt')).message).toContain('reserved device')

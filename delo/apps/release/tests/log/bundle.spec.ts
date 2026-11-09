@@ -208,6 +208,30 @@ describe('release-log bundle checks, each on its own', () => {
     expect(verifySignature(verifier, note.body, line)).toBe(true)
     expect(verifySignature(verifier, note.body, { ...line, keyHash: Buffer.alloc(line.keyHash.byteLength) })).toBe(false)
   })
+
+  it('refuses a bundle that covers the release manifest but names another file', () => {
+    const { root, bundle } = setup()
+    const good = bundle()
+    // The digest is the release's own: only the name says another file, which contract C2 never let the client verify.
+    expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', { ...good, manifest: { ...good.manifest, name: 'delorun-0.1.1.manifest.json' } }))).toBe('manifest-digest-mismatch')
+  })
+
+  it('refuses a release version no targets key can be shown valid for, instead of failing on the comparison', () => {
+    const { root, bundle } = setup()
+    expect(failure(() => verifyBundle(root, MANIFEST, 'not-a-version', bundle()))).toBe('entry-signature-invalid')
+  })
+
+  it('requires one listed cosignature even when the trusted root carries no witness threshold', () => {
+    const { keys, log, witness, bundle } = setup()
+    const root = rootFile(keys, {
+      log: { origin: log.origin, vkey: log.vkey },
+      witnesses: { keys: [{ name: witness.name, vkey: witness.vkey }], threshold: 0 },
+    }).metadata
+    const good = bundle()
+    const unsigned = good.checkpoint.split('\n').filter(line => !line.startsWith(`— ${witness.name} `)).join('\n')
+    expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', { ...good, checkpoint: unsigned }))).toBe('witness-cosignature-missing')
+    expect(verifyBundle(root, MANIFEST, '0.1.0', good).cosigned).toBe(1_793_981_700)
+  })
 })
 
 describe('the log entry', () => {

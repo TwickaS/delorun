@@ -13,6 +13,16 @@ import { NodePrivateZstdFrameDecoder } from './zstd-private-decoder.ts'
 import { PublicZstdFrameDecoder } from './zstd-public-decoder.ts'
 
 const ZSTD_MAGIC = 0xFD2FB528
+
+/**
+ * The most plaintext one session-log Zstandard frame may expand to. A frame holds one header line or one durable
+ * append batch, and a batch is one persistence write of the session's events; this is far above any batch the seam
+ * writes and far below the multi-gigabyte expansion a crafted frame with a huge compression ratio would otherwise cost
+ * the reader that decodes a log it did not write. Every decoder path bounds its output by it, so the limit does not
+ * depend on which Node decoder the runtime offers.
+ */
+export const MAX_FRAME_PLAINTEXT_BYTES = 64 * 1024 * 1024
+
 const zstdCompressAsync = promisify(zstdCompress)
 const zstdDecompressAsync = promisify(zstdDecompress)
 const CHECKSUM_OPTIONS: ZstdOptions = {
@@ -20,6 +30,20 @@ const CHECKSUM_OPTIONS: ZstdOptions = {
 }
 const INCOMPLETE_FRAME_OPTIONS: ZstdOptions = {
   finishFlush: constants.ZSTD_e_flush,
+}
+
+/**
+ * The decoder options of a complete frame: the plaintext bound, so a frame that would expand further fails instead
+ * of allocating it.
+ */
+const BOUNDED_FRAME_OPTIONS: ZstdOptions = {
+  maxOutputLength: MAX_FRAME_PLAINTEXT_BYTES,
+}
+
+/** The decoder options of a torn final frame's available prefix, bounded like a complete frame. */
+const BOUNDED_PREFIX_OPTIONS: ZstdOptions = {
+  ...INCOMPLETE_FRAME_OPTIONS,
+  maxOutputLength: MAX_FRAME_PLAINTEXT_BYTES,
 }
 
 /** Byte range occupied by one structurally complete Zstandard frame. */
@@ -113,12 +137,13 @@ export async function compressZstdFrame(input: Buffer | string): Promise<Buffer>
 }
 
 /**
- * Decompress one complete frame and validate its checksum.
+ * Decompress one complete frame and validate its checksum. The plaintext is bounded by
+ * {@link MAX_FRAME_PLAINTEXT_BYTES}: a frame that expands further fails instead of being allocated.
  * @param input - one structurally complete Zstandard frame.
  * @returns the frame plaintext.
  */
 export async function decompressZstdFrame(input: Buffer): Promise<Buffer> {
-  return zstdDecompressAsync(input)
+  return zstdDecompressAsync(input, BOUNDED_FRAME_OPTIONS)
 }
 
 /** Common lifecycle for interchangeable synchronous multi-frame decoders. */
@@ -147,10 +172,12 @@ export function createZstdFrameDecoder(): ZstdFrameDecoder {
 /**
  * Recover available plaintext from a structurally incomplete final frame.
  * `ZSTD_e_flush` deliberately suppresses final-frame and checksum completion;
- * callers must establish the torn frame boundary before using this helper.
+ * callers must establish the torn frame boundary before using this helper. The
+ * recovered plaintext is bounded by {@link MAX_FRAME_PLAINTEXT_BYTES} like a
+ * complete frame's.
  * @param input - available bytes from a known incomplete Zstandard frame.
  * @returns plaintext produced from the available input.
  */
 export async function decompressZstdPrefix(input: Buffer): Promise<Buffer> {
-  return zstdDecompressAsync(input, INCOMPLETE_FRAME_OPTIONS)
+  return zstdDecompressAsync(input, BOUNDED_PREFIX_OPTIONS)
 }

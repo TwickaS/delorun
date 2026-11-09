@@ -8,9 +8,10 @@
  * @module @delo/release/log/bundle
  */
 import { createHash, createPublicKey } from 'node:crypto'
-import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_BUNDLE_SIZE_LIMIT, RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, RELEASE_LOG_ENTRY_KEY_DETAILS, MAX_PROOF_HASHES, type ReleaseLogBundle, type ReleaseLogFailure } from '@delo/contract-release-log'
+import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_BUNDLE_SIZE_LIMIT, RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, RELEASE_LOG_ENTRY_KEY_DETAILS, MAX_PROOF_HASHES, WITNESS_THRESHOLD, type ReleaseLogBundle, type ReleaseLogFailure } from '@delo/contract-release-log'
 import type { RootMetadata } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import semver from 'semver'
 import { z } from 'zod'
 import { keyIdOf, rawPublicKey } from '../sign/envelope.ts'
 import { parseStrictJson } from '../sign/json.ts'
@@ -75,6 +76,11 @@ export interface VerifiedBundle {
 
 /**
  * Verify a bundle offline, in contract C18's five steps.
+ *
+ * The three refusals this verifier shares with `@delo/release-verify`, which is the client's own strict verifier: the
+ * bundle must name the release's manifest file `delorun-<version>.manifest.json`, the release version must be a
+ * semantic version before any targets key is compared with it, and the witness threshold has the contract's floor of
+ * one, so a root that carries no threshold still needs a listed witness's cosignature.
  * @param root - the client's trusted root.
  * @param manifest - the manifest file's bytes, already verified under contract C2.
  * @param version - the manifest's release version.
@@ -83,6 +89,16 @@ export interface VerifiedBundle {
  * @throws LogVerificationError naming the failed step's reason code.
  */
 export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: string, bundle: ReleaseLogBundle): VerifiedBundle {
+  if (semver.valid(version) === null) {
+    // Contract C18 has no code of its own for a version no key can be shown valid for; it is a step 2 failure.
+    throw new LogVerificationError('entry-signature-invalid', `release version ${JSON.stringify(version)} is not a semantic version, so no targets key can be shown valid for it`)
+  }
+  // Contract C2 names the release's manifest file, so a bundle naming another file covers another manifest whatever
+  // digest it carries.
+  const name = `delorun-${version}.manifest.json`
+  if (bundle.manifest.name !== name) {
+    throw new LogVerificationError('manifest-digest-mismatch', `the bundle names ${JSON.stringify(bundle.manifest.name)}, not the release's manifest file ${JSON.stringify(name)}`)
+  }
   const digest = createHash('sha256').update(manifest).digest('hex')
   if (bundle.manifest.sha256 !== digest) throw new LogVerificationError('manifest-digest-mismatch', `the bundle covers manifest ${bundle.manifest.sha256}, not ${digest}`)
   const body = Buffer.from(bundle.entry.body, 'base64')
@@ -142,8 +158,12 @@ export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: 
       if (typeof time === 'number') cosigned.set(witness.vkey, Math.max(time, cosigned.get(witness.vkey) ?? 0))
     }
   }
-  if (cosigned.size < root.witnesses.threshold) {
-    throw new LogVerificationError('witness-cosignature-missing', `the checkpoint has ${String(cosigned.size)} valid cosignatures from listed witnesses; ${String(root.witnesses.threshold)} are required`)
+  // The contract fixes the client's witness threshold at one, so a root that carries none requires one cosignature
+  // anyway: a threshold of zero would accept a checkpoint no listed witness ever saw. `Math.max` of no values is
+  // `-Infinity`, so a checkpoint with no valid cosignature is refused before any newest cosigning time is read.
+  const threshold = Math.max(root.witnesses.threshold, WITNESS_THRESHOLD)
+  if (cosigned.size === 0 || cosigned.size < threshold) {
+    throw new LogVerificationError('witness-cosignature-missing', `the checkpoint has ${String(cosigned.size)} valid cosignatures from listed witnesses; ${String(threshold)} are required`)
   }
   return { treeSize: checkpoint.size, rootHash: checkpoint.rootHash, cosigned: Math.max(...cosigned.values()) }
 }
