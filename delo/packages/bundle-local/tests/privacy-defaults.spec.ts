@@ -120,7 +120,7 @@ describe('a Delo CLI profile', () => {
   it('lists the two upstream opt-in rows it turns off, and the rows it removes or overrides', () => {
     expect(LOCAL_ROWS.filter(row => row.kind === 'changed').map(row => row.id).sort())
       .toEqual([
-        SETUP_OPT_IN_ROWS.desktopAnalytics, 'command-feedback', 'deepseek-account', 'session-telemetry-otel',
+        SETUP_OPT_IN_ROWS.desktopAnalytics, 'command-feedback', 'deepseek-account', 'sandbox', 'session-telemetry-otel',
         SETUP_OPT_IN_ROWS.sessionLogUpload, 'ui-message-feedback', 'ui-settings-account', 'ui-settings-models',
       ].sort())
   })
@@ -156,6 +156,14 @@ describe('a Delo CLI profile', () => {
     expect(destinations.filter(host => host?.includes('delo') === true)).toEqual([])
     const deloRows = rows.filter(row => strings([row.name]).some(name => name.startsWith('@delo/')))
     expect(deloRows.map(row => row.id)).toEqual(LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id))
-    expect(deloRows.map(row => row.name)).toEqual(deloRows.map(() => LOCAL_BUNDLE))
+    // The bundle's own browser half, and each consent and guard plugin it mounts.
+    expect(deloRows.map(row => row.name)).toEqual([
+      LOCAL_BUNDLE,
+      '@delo/plugin-instruction-consent',
+      '@delo/plugin-mcp-consent',
+      '@delo/plugin-permission-defaults',
+      '@delo/plugin-schedule-consent',
+      '@delo/plugin-fetch-guard',
+    ])
   })
 })

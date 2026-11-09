@@ -57,6 +57,8 @@ Delo changes the following upstream defaults on purpose. The parity composition 
 | `preset_inspect` (`preset_inspect`) | On, and switchable | Off | The tool is model-visible and absent from the base tag. |
 | Doctor (`doctor`) | On, and switchable | Off | The doctor is a command the person runs, not a model-visible tool; it is absent from the base tag. |
 
+DeepSeek session-log upload is off in every profile that mounts `@delo/bundle-local`: `delorun`'s CLI profile, and any other profile that adds the bundle. A profile that does not mount it keeps the plugin's own default, on: upstream's bare `dsh` launcher on the `web` profile, which Delo also ships, still uploads the session log, and the recorded-session replay keeps upstream's value for the corpora whose replay layer does not turn it off. The difference is the entry point, not a switch — Delo writes the row from a bundle it delivers, and edits no upstream default for a profile it does not run.
+
 <a id="switch-registry"></a>
 ### Switch registry
 
@@ -122,7 +124,9 @@ The parity composition is a test composition. Shipped profiles do not select it,
 Requirements:
 
 - The parity overlay loads only when the replay lane sets `DSH_SNAPSHOT_PATCH`. No shipped profile, no person's configuration and no command-line option selects it.
-- In the parity composition, `permission_defaults`, `fetch_guard`, `scheduled_task_consent`, `instruction_layer_consent`, `mcp_add_consent` and `container_denial_marker` are off, and their protections are absent there. The default composition keeps each on.
+- In the parity composition, `permission_defaults`, `fetch_guard`, `scheduled_task_consent`, `instruction_layer_consent`, `mcp_add_consent` and `container_denial_marker` are off, and their protections are absent there.
+- The composition a person runs mounts the consent plugins on: `@delo/bundle-local`, the one Delo layer a CLI profile adds, inserts the rows `delo-instruction-consent`, `delo-mcp-consent`, `delo-permission-defaults`, `delo-schedule-consent` and `delo-fetch-guard` with their switch on, and the parity overlay restates those same five rows disabled, so the parity composition mounts none of them. `container_denial_marker` is a field of upstream's `sandbox-policy` row, which no shipped layer sets, so each composition runs its Config default, off.
+- The shipped sandbox row protects the Delo home: `@delo/bundle-local` sets its `protectedHome` to the harness home, which is the Delo home for every runtime process, with C1's read exemptions, so a confined command cannot read the consent stores under `<home>/secrets`; `delorun start` adds that profile's channel sockets as `deniedSockets`. The parity overlay leaves the row to upstream's composition, so the replay runs upstream's confinement.
 - `plugin_manager_read_exemption` exempts only the five read actions. Every write action still requires the `danger-full-access` escalation.
 - A container denial is never answered with escalation guidance, and a policy denial from `bwrap` is never labelled `environment`.
 - A model-authored write to an instruction-layer file, a scheduled task delivering into a full-access workspace and an added MCP server each wait for their consent before any effect.
@@ -144,6 +148,7 @@ Denial tests:
 | `container denial carries no escalation guidance` | A denial inside a container returns the environment marker and no escalation guidance in every permission mode of the default composition. |
 | `bwrap policy denial is never labelled environment` | A `Read-only file system` denial from `bwrap` is not labelled `environment`. |
 | `parity overlay is not selected by a person's configuration` | A shipped profile started with the overlay file present and without `DSH_SNAPSHOT_PATCH` does not load the overlay. |
+| `confined command cannot read the home's secrets` | Under the sandbox row the default composition ships, a workspace command cannot read a canary under `<home>/secrets`, while the same command unconfined reads it and a file under a read exemption stays readable. |
 
 Replay proofs, which show that a switch off restores upstream's output and are not denial tests:
 

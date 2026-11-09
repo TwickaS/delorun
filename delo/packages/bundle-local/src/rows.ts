@@ -15,7 +15,7 @@ export type LocalRowParity =
   | { readonly kind: 'as-written'; readonly reason: string }
   /** The row as upstream's layers compose it: the parity overlay leaves this bundle's patch of it out. */
   | { readonly kind: 'upstream'; readonly reason: string }
-  /** The inserted row, present and disabled. */
+  /** The inserted row, present and disabled: the parity composition mounts nothing of it. */
   | { readonly kind: 'disabled'; readonly reason: string }
 
 /** One row of the composition that `@delo/bundle-local` changes or adds, with the reason the change exists. */
@@ -58,6 +58,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
   },
   {
+    id: 'sandbox',
+    kind: 'changed',
+    reason: 'The sandbox row carries C1\'s home protection: `protectedHome` is the Delo home, with C1\'s read exemptions, so a confined command cannot read the consent stores under its `secrets/` directory; upstream mounts the row with no protected home.',
+    parity: { kind: 'upstream', reason: 'The replay runs upstream\'s confinement: the overlay leaves the row out, so the provider protects no home and a recorded scenario that reads the harness home replays as it was recorded.' },
+  },
+  {
     id: 'command-feedback',
     kind: 'changed',
     reason: 'The /feedback command is hidden, because it sends through the disabled feedback exporter and Delo has no feedback destination yet.',
@@ -92,6 +98,36 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     kind: 'added',
     reason: 'The browser half of this bundle: the Privacy section in Settings, the Delo sidebar brand, and Delo\'s own preview notice.',
     parity: { kind: 'disabled', reason: 'Recorded web scenarios compare upstream\'s interface output, which has no Privacy section, shows upstream\'s brand and shows upstream\'s preview notice.' },
+  },
+  {
+    id: 'delo-instruction-consent',
+    kind: 'added',
+    reason: 'The C16 switch `instruction_layer_consent` on: a model-authored write to a skill, a preset or an `AGENTS.md` asks, with the effect and the diff, before it commits; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: upstream\'s write path runs unasked, as the recorded scenarios ran it.' },
+  },
+  {
+    id: 'delo-mcp-consent',
+    kind: 'added',
+    reason: 'The C16 switch `mcp_add_consent` on: a stdio MCP server command starts only once the acceptance store holds an acceptance for it; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the mcpAddConsent service is absent, so every configured server starts as upstream starts it.' },
+  },
+  {
+    id: 'delo-permission-defaults',
+    kind: 'added',
+    reason: 'The C16 switch `permission_defaults` on: a new workspace starts on the safer preset, and full access needs one consent per workspace, whose `sandboxModeGuard` is the one provider of that seam (A135); the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the deployment default reaches every new chat and every mode switch is recorded, as upstream records it.' },
+  },
+  {
+    id: 'delo-schedule-consent',
+    kind: 'added',
+    reason: 'The C16 switch `scheduled_task_consent` on: an approved schedule_create or schedule_edit names the recurrence and its target, and a due delivery is refused when the target chat left the preset the approval named; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the scheduleConsent service is absent, so approvals and deliveries keep upstream\'s text and behaviour.' },
+  },
+  {
+    id: 'delo-fetch-guard',
+    kind: 'added',
+    reason: 'The C16 switch `fetch_guard` on: `web_fetch` refuses loopback, link-local, private-network and unique-local destinations with a typed reason; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the fetchGuard service is absent, so the recorded fetch scenarios call their loopback fixtures as they did.' },
   },
 ]
 

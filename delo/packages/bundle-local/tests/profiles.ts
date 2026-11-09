@@ -35,10 +35,13 @@ export interface TestHome {
 /**
  * Create a temporary Harness home with a Delo CLI profile, whose bundle list is {@link DELO_PROFILE_BUNDLES} and which
  * links this package under its `node_modules`, and upstream's web profile from its shipped template.
+ * @param base - the directory the home is created under; the OS temporary directory by default. A spec whose subject
+ *   is the sandbox's protection creates the home outside that directory, which upstream's profiles replace with a
+ *   private `/tmp`.
  * @returns the home.
  */
-export function createTestHome(): TestHome {
-  const dir = mkdtempSync(join(tmpdir(), 'delo-bundle-local-'))
+export function createTestHome(base?: string): TestHome {
+  const dir = mkdtempSync(join(base ?? tmpdir(), 'delo-bundle-local-'))
   const delo = join(dir, 'profiles', DELO_PROFILE)
   initProfile(delo, DELO_PROFILE_BUNDLES)
   const link = join(delo, 'node_modules', LOCAL_BUNDLE)

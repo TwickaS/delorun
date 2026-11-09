@@ -1480,6 +1480,21 @@ importers:
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
+      '@delo/plugin-fetch-guard':
+        specifier: workspace:*
+        version: link:../plugin-fetch-guard
+      '@delo/plugin-instruction-consent':
+        specifier: workspace:*
+        version: link:../plugin-instruction-consent
+      '@delo/plugin-mcp-consent':
+        specifier: workspace:*
+        version: link:../plugin-mcp-consent
+      '@delo/plugin-permission-defaults':
+        specifier: workspace:*
+        version: link:../plugin-permission-defaults
+      '@delo/plugin-schedule-consent':
+        specifier: workspace:*
+        version: link:../plugin-schedule-consent
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -1487,6 +1502,9 @@ importers:
       '@deepseek-ai/cordis-plugin-include':
         specifier: workspace:~
         version: link:../../../vendor/include
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:~
+        version: link:../../../vendor/loader
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
@@ -1520,6 +1538,9 @@ importers:
       '@deepseek-ai/dsh-deepseek-llm-api-extensions':
         specifier: workspace:*
         version: link:../../../packages/llm/deepseek-llm-api-extensions
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
       '@deepseek-ai/dsh-host-product-telemetry-otel':
         specifier: workspace:*
         version: link:../../../packages/host/product-telemetry-otel
@@ -1535,12 +1556,21 @@ importers:
       '@deepseek-ai/dsh-otel':
         specifier: workspace:*
         version: link:../../../packages/telemetry/otel
+      '@deepseek-ai/dsh-sandbox':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox
+      '@deepseek-ai/dsh-sandbox-local':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-local
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session
       '@deepseek-ai/dsh-session-log-deepseek':
         specifier: workspace:*
         version: link:../../../packages/session/session-log-deepseek
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31

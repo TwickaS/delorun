@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 摘要
 
-`@delo/bundle-local` 是 Delo 的 CLI profile 在上游的 `web` profile 模板之后加入的组合包。它的 patch 保存 Delo 的本地集成行，每一行的理由都列在 [`LOCAL_ROWS`](src/rows.ts) 中，因此 Delo 的 CLI profile 在组合上游的 web profile 时，只改变或新增这些行，其他一概不变。它关闭上游的两个选择加入项，即 DeepSeek 的会话日志上传与桌面端分析，并新增设置中的“隐私”分区；本人在该分区中经同意对话框后打开每一项，也可以再次关闭（[C11](../../docs/contracts/c11-setup-answers.zh.md)）。Delo 的基础设施插件到达时，会各自添加自己的行。
+`@delo/bundle-local` 是 Delo 的 CLI profile 在上游的 `web` profile 模板之后加入的组合包。它的 patch 保存 Delo 的本地集成行，每一行的理由都列在 [`LOCAL_ROWS`](src/rows.ts) 中，因此 Delo 的 CLI profile 在组合上游的 web profile 时，只改变或新增这些行，其他一概不变。它关闭上游的两个选择加入项，即 DeepSeek 的会话日志上传与桌面端分析，并新增设置中的“隐私”分区；本人在该分区中经同意对话框后打开每一项，也可以再次关闭（[C11](../../docs/contracts/c11-setup-answers.zh.md)）。它以开启状态挂载 Delo 的同意与防护插件——指令层写入同意、MCP 添加时同意、带一次完全访问同意的按工作区权限默认值、定时任务同意，以及抓取防护——并在上游的 sandbox 行上设置 C1 的主目录保护，因此受限命令无法读取主目录 `secrets/` 下的同意存储。
 
 ## 目录
 
@@ -41,11 +41,17 @@ kind: "package-bundle"
 | `deepseek-account` | 改变 | `disabled: true`：没有 DeepSeek 账户登录、Platform、用量或充值页面；`llm-deepseek-account` 在没有账户的情况下保持不可用 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `product-analytics` | 改变 | `config.enabled: false`，重申上游的 `appVersion`，并保留上游的 `disabled` 条件，因此该行只在桌面 profile 中挂载，并且在 Delo CLI profile 中不接受任何事件 | `config.enabled: true` | 与此处所写相同；回放不挂载桌面端 Host |
 | `session-telemetry-otel` | 改变 | `disabled: true`：反馈时不再把会话日志前缀发往 DeepSeek 的收集端 | 已启用，`FEEDBACK_ONLY` | 沿用上游的组合：覆盖层省略该行 |
+| `sandbox` | 改变 | `config.protectedHome` 是 harness 主目录（C1 对每个运行时进程都把它设为 Delo 主目录），并带上 C1 的读取豁免（`runtimes`、`skills`、`dsh-runtimes`）：受限命令无法读取 `<home>/secrets` 下的同意存储 | 该行以裸配置挂载，因此提供方不保护任何主目录 | 沿用上游的组合：覆盖层省略该行，因此回放运行上游的限闭 |
 | `command-feedback` | 改变 | `disabled: true`：没有 `/feedback` 命令 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `ui-message-feedback` | 改变 | `disabled: true`：没有赞、踩以及反馈对话框；上游没有打开外部页面的行 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `ui-settings-account` | 改变 | `disabled: true`：没有账户菜单项、登录对话框与账户分区 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `ui-settings-models` | 改变 | `config.welcomeNotice: false`：上游的预览提示关闭；`credentialOnboarding` 保持上游的值 | `welcomeNotice: true` | 沿用上游的组合：覆盖层省略该行 |
 | `delo-privacy` | 新增 | “隐私”分区（位于设置中）、Delo 侧栏品牌（产品名称的文字形式，不显示标志），以及 Delo 自己的预览提示 | 无 | 存在且已禁用，因为录制的 Web 场景比较的是上游的界面输出、品牌与提示 |
+| `delo-instruction-consent` | 新增 | `@delo/plugin-instruction-consent`，`config.enabled: true`：模型发起的、对技能、预设或 `AGENTS.md` 的写入会先说明影响并展示 diff，然后才提交 | 无 | 存在且已禁用：开关的对等取值为关闭，因此写入路径不经询问直接执行 |
+| `delo-mcp-consent` | 新增 | `@delo/plugin-mcp-consent`，`config.enabled: true`：stdio MCP 服务器命令只有在接受记录中存有对应接受项之后才会启动 | 无 | 存在且已禁用：开关的对等取值，因此每个已配置的服务器都按上游的方式启动 |
+| `delo-permission-defaults` | 新增 | `@delo/plugin-permission-defaults`，`config.enabled: true`：新工作区从更安全的预设起步，完全访问需要每个工作区一次同意，而该插件是该接缝唯一的 `sandboxModeGuard` | 无 | 存在且已禁用：开关的对等取值，因此部署默认值作用于每个新对话，且每次模式切换都被记录 |
+| `delo-schedule-consent` | 新增 | `@delo/plugin-schedule-consent`，`config.enabled: true`：批准时会指明重复规则与目标，并且当目标对话离开了批准时指定的预设，到期投递会被拒绝 | 无 | 存在且已禁用：开关的对等取值，因此批准与投递保持上游的文本与行为 |
+| `delo-fetch-guard` | 新增 | `@delo/plugin-fetch-guard`，`config.enabled: true`：`web_fetch` 以带类型的原因拒绝回环、链路本地、私有网络与唯一本地目的地 | 无 | 存在且已禁用：开关的对等取值，因此录制的抓取场景按原样调用其回环 fixture |
 
 [对等覆盖层](../../apps/tools/src/parity/composition/parity.overlay.yml) 以该形式重述本组合包的 patch，从而挂载本组合包；[`parityPatches`](src/rows.ts) 从本组合包的 `cordis.patch.yml` 推导出该形式，覆盖层与之不一致时，`parity-switches` 失败。Delo 的组合不向 DeepSeek 的反馈收集端发送任何内容：`session-telemetry-otel` 已禁用，反馈界面已隐藏，因为 Delo 目前还没有反馈的去处。上游自己的组合保留它们，对等组合沿用上游的行。没有任何行指明 Delo 主机。
 
@@ -67,7 +73,8 @@ kind: "package-bundle"
 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/bundle-local` 运行本包的 spec，它们导入上游已构建的包，因此需要 `pnpm run build:artifacts`；构建产物缺失时，Delo 的检查运行器会启动它。
 
 - [`composition.spec.ts`](tests/composition.spec.ts) 在临时的 `DSH_HOME` 下构建一个 Delo CLI profile，并通过上游真实的 `dsh --profile <name> --dump-config` 读取它：列表中的每个组合包都已加载，且没有一个被跳过；转储结果中，每一行都位于一个标注之下，该标注的写入者是列表中的组合包，第一个标注之前不打印任何内容，stderr 上也没有任何输出，并且列出的恰是本组合包所写入的 `LOCAL_ROWS` 各行；组合结果与上游的 `web` profile 逐行相同，但 `LOCAL_ROWS` 中的行例外，它们按各项的说明，或就地改变，或添加在上游各行之后。 它还把已启用的行所指明的 DeepSeek 主机限定在列出的例外之内：没有已启用的 `deepseek-account` 行；除模型 API 外，只有反馈导出器的收集端，而它仍是一个待决定事项。 它还把每个已启用行所指明的 DeepSeek 主机限定为：只有 `api.deepseek.com`（使用用户自己密钥的模型提供方 API）可以出现，反馈导出器、账户界面与反馈界面均不被组合。
-- [`privacy-defaults.spec.ts`](tests/privacy-defaults.spec.ts) 使用各 profile 所组合的行挂载上游自身的插件，并针对本地网络 fixture（测试前置数据）运行。在 Delo CLI profile 的各行下，发往 mock DeepSeek API 的任何模型请求体都不携带 `dsh_session_log`，本地 OTLP 收集器也收不到任何分析记录；在上游 web profile 的各行下，同样的 fixture 会收到两者。组合中没有任何字符串（包括 `!!js` 表达式）指向 Delo 主机，且唯一指明 Delo 包的行就是本组合包新增的各行。
+- [`privacy-defaults.spec.ts`](tests/privacy-defaults.spec.ts) 使用各 profile 所组合的行挂载上游自身的插件，并针对本地网络 fixture（测试前置数据）运行。在 Delo CLI profile 的各行下，发往 mock DeepSeek API 的任何模型请求体都不携带 `dsh_session_log`，本地 OTLP 收集器也收不到任何分析记录；在上游 web profile 的各行下，同样的 fixture 会收到两者。组合中没有任何字符串（包括 `!!js` 表达式）指向 Delo 主机，且指明 Delo 包的行只有本组合包自身的浏览器半边与它挂载的五个同意与防护插件。
+- [`confinement.spec.ts`](tests/confinement.spec.ts) 读取组合后的 `sandbox` 行，并用它配置上游的本地沙箱提供方：该行的 `protectedHome` 是 Delo 主目录，`protectedHomeReadable` 是 C1 的读取豁免，并且由该提供方限闭的工作区命令无法读取 `<home>/secrets` 下的金丝雀文件；同一命令不受限时能读到它，读取豁免下的文件也仍然可读。主目录位于操作系统临时目录之外（上游的 profile 会把该目录替换为私有的 `/tmp`），因此拒绝来自受保护的主目录，而不是来自那个私有目录。
 - [`notice.client.spec.tsx`](tests/notice.client.spec.tsx) 渲染 Delo 的预览提示：它陈述 Delo 自己的状态，在每个浏览器上每个提示版本只显示一次，确认后报告其引导步骤已完成。
 - [`privacy-section.client.spec.tsx`](tests/privacy-section.client.spec.tsx) 渲染该分区（并验证插件注册侧栏品牌 occupant）：每个选择加入项只有在对话框中点击“打开”之后才会打开，且只写入自己的行，并可通过同一开关再次关闭；“取消”不写入任何内容；写入失败时保留已接受的值；profile 未提供的桌面端分析行会显示其原因；该插件注册该分区，并把每个选择加入项写入其上游的行。
 - `apps/web/tests/delo-privacy-consent.e2e.ts` 构建本包，以它作为 profile 组合包启动 studio，针对 mock DeepSeek API 运行，并在 Chromium 中操作该分区：第一次模型请求不携带会话日志；桌面端分析与会话日志上传各自在同意后单独打开；下一次请求携带会话日志；再从该分区关闭上传后，其后的请求便不再携带会话日志。

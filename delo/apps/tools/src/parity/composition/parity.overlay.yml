@@ -17,14 +17,15 @@
 #                           row here would erase;
 #   doctor                  only the doctor profile mounts the app, and the
 #                           replay starts no doctor process;
-#   fetch_guard             no shipped profile or bundle mounts the plugin, so
-#                           no row of the root tree holds it; the parity
-#                           composition leaves the fetchGuard service
+#   fetch_guard             the switch is off because its row of
+#                           @delo/bundle-local is restated disabled below, so
+#                           no row of the root tree mounts the plugin; the
+#                           parity composition leaves the fetchGuard service
 #                           unmounted, and the provider reads its absence per
 #                           hop and runs unguarded.
 #
 # The overlay also mounts @delo/bundle-local, the bundle Delo's CLI profiles
-# add after upstream's web template: the last block restates that bundle's
+# add after upstream's web template: the last blocks restate that bundle's
 # patch, each row in the parity form its LOCAL_ROWS entry gives
 # (delo/packages/bundle-local/src/rows.ts), and `parity-switches` fails when
 # the two differ. The session-log upload row is left out: C16 gives it
@@ -34,7 +35,11 @@
 # is left out too: C16 gives it upstream's value. Desktop analytics keeps Delo's
 # `false`. The Privacy section and the Delo sidebar brand are present and
 # disabled, because recorded web scenarios compare upstream's interface output
-# and brand. The studio bundle and the permission
+# and brand. The sandbox row is left out, so the replay runs upstream's
+# confinement with no protected home. The five consent and guard rows are
+# present and disabled: the shipped composition mounts each with its switch on,
+# and a disabled row mounts nothing, which is each switch's parity value. The
+# studio bundle and the permission
 # defaults are planned, and the preset default keeps
 # upstream's value (`standard`).
 
@@ -53,4 +58,35 @@
 - insert:
     - id: delo-privacy
       name: '@delo/bundle-local'
+      disabled: true
+
+- insert:
+    - id: delo-instruction-consent
+      name: '@delo/plugin-instruction-consent'
+      config:
+        enabled: true
+      disabled: true
+
+    - id: delo-mcp-consent
+      name: '@delo/plugin-mcp-consent'
+      config:
+        enabled: true
+      disabled: true
+
+    - id: delo-permission-defaults
+      name: '@delo/plugin-permission-defaults'
+      config:
+        enabled: true
+      disabled: true
+
+    - id: delo-schedule-consent
+      name: '@delo/plugin-schedule-consent'
+      config:
+        enabled: true
+      disabled: true
+
+    - id: delo-fetch-guard
+      name: '@delo/plugin-fetch-guard'
+      config:
+        enabled: true
       disabled: true
