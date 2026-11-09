@@ -147,6 +147,8 @@ async function composeHost(): Promise<Host> {
     },
   })
   await context.plugin(WebServer, { host: '127.0.0.1', port: 0 })
+  // The composition's fence; this spec compares carriers, so it admits every request.
+  context.provide('connection', { requestRejection: () => undefined } as never)
   await context.plugin(ClientModuleRegistry)
   const service = context.get('clientModules')!
   const port = context.webServer.port!

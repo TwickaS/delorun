@@ -7,6 +7,7 @@
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -40,6 +41,7 @@ async function loadComposition(): Promise<Context> {
   await writeFile(join(dist, 'preview.html'), '<body>preview</body>')
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
   await writeFile(join(dist, 'manifest.webmanifest'), '{}')
+  await writeFile(join(dist, 'favicon.svg'), '<svg/>')
   await writeFile(join(dist, 'icon-192.png'), 'PNG')
   await mkdir(join(dist, 'empty'))
   const configPath = join(root, 'cordis.yml')
@@ -100,6 +102,48 @@ async function request(
   }
 }
 
+/** GET (by default) one path with an exact `Host` header; returns status, content-type, and the body. */
+async function raw(
+  port: number | undefined,
+  path: string,
+  headers: Record<string, string>,
+): Promise<{ status: number; type: string | null; body: string }> {
+  if (port === undefined) throw new Error('frontend-static test: the listener has not bound a port')
+  type Reply = { status: number; headers: Record<string, string | string[] | undefined>; body: string }
+  const response = await new Promise<Reply>((resolve, reject) => {
+    const outgoing = httpRequest({ host: '127.0.0.1', port, path, method: 'GET', headers, setHost: false, agent: false }, (incoming) => {
+      let body = ''
+      incoming.setEncoding('utf8')
+      incoming.on('data', (chunk: string) => { body += chunk })
+      incoming.on('end', () => { resolve({ status: incoming.statusCode ?? 0, headers: incoming.headers, body }) })
+    })
+    outgoing.on('error', reject)
+    outgoing.end()
+  })
+  const type = response.headers['content-type']
+  return { status: response.status, type: typeof type === 'string' ? type : null, body: response.body }
+}
+
+/** Exchange the launch token for the owner's browser cookie. */
+async function signIn(loaded: Context): Promise<{
+  readonly exchange: Response
+  readonly authenticated: (init?: RequestInit) => RequestInit
+}> {
+  const launchUrl = loaded.connection.authenticatedUrl(`http://127.0.0.1:${String(loaded.webServer.port)}`)
+  const exchange = await fetch(launchUrl, { redirect: 'manual' })
+  const setCookie = exchange.headers.get('set-cookie')
+  if (setCookie === null) throw new Error('authenticated frontend did not set a cookie')
+  const cookie = setCookie.split(';', 1)[0]!
+  return {
+    exchange,
+    authenticated: (init?: RequestInit): RequestInit => {
+      const headers = new Headers(init?.headers)
+      headers.set('cookie', cookie)
+      return { ...init, headers }
+    },
+  }
+}
+
 describe('real Loader composition', () => {
   it('serves explicit index entries and files while preserving HTTP error semantics', { timeout: 60_000 }, async () => {
     const loaded = await loadComposition()
@@ -109,18 +153,9 @@ describe('real Loader composition', () => {
     expect(unloaded).toEqual([])
     const server = loaded.webServer
     const port = server.port
-    const launchUrl = loaded.connection.authenticatedUrl(`http://127.0.0.1:${String(port)}`)
-    const exchange = await fetch(launchUrl, { redirect: 'manual' })
+    const { exchange, authenticated } = await signIn(loaded)
     expect(exchange.status).toBe(303)
     expect(exchange.headers.get('location')).toBe('./')
-    const setCookie = exchange.headers.get('set-cookie')
-    if (setCookie === null) throw new Error('authenticated frontend did not set a cookie')
-    const cookie = setCookie.split(';', 1)[0]!
-    const authenticated = (init?: RequestInit): RequestInit => {
-      const headers = new Headers(init?.headers)
-      headers.set('cookie', cookie)
-      return { ...init, headers }
-    }
 
     expect(await request(port, '/')).toMatchObject({
       status: 401,
@@ -129,24 +164,33 @@ describe('real Loader composition', () => {
     })
 
     // Real assets with their MIME types; a live rebuild is served on the next read.
-    expect(await request(port, '/app.js')).toMatchObject({ status: 200, type: 'text/javascript; charset=utf-8', body: 'export {}' })
+    // Every dist file but the install-time ones is part of the signed-in
+    // application: the same fence the index passes binds its bytes.
+    expect(await request(port, '/app.js')).toMatchObject({ status: 401, body: 'unauthorized' })
+    expect(await raw(port, '/app.js', { host: 'evil.example' })).toMatchObject({ status: 403, body: 'forbidden' })
+    expect(await raw(port, '/app.js', { host: `127.0.0.1:${String(port)}`, origin: 'http://evil.example' }))
+      .toMatchObject({ status: 403 })
+    // The files a launcher reads before sign-in stay public, whatever the authority.
+    expect(await raw(port, '/favicon.svg', { host: 'evil.example' })).toMatchObject({ status: 200, body: '<svg/>' })
     expect(await request(port, '/manifest.webmanifest')).toMatchObject({
       status: 200,
       type: 'application/manifest+json',
       body: '{}',
     })
+    expect(await request(port, '/app.js', authenticated())).toMatchObject({ status: 200, type: 'text/javascript; charset=utf-8', body: 'export {}' })
     // The install icons are images; a launcher must not receive them as octet-stream.
     expect(await request(port, '/icon-192.png')).toMatchObject({ status: 200, type: 'image/png', body: 'PNG' })
-    expect(await request(port, '/app.js', { method: 'HEAD' })).toEqual({
+    expect(await request(port, '/favicon.svg')).toMatchObject({ status: 200, type: 'image/svg+xml', body: '<svg/>' })
+    expect(await request(port, '/app.js', authenticated({ method: 'HEAD' }))).toEqual({
       status: 200,
       type: 'text/javascript; charset=utf-8',
       body: '',
     })
     await writeFile(join(root!, 'dist', 'app.js'), 'export const rebuilt = true')
-    expect(await request(port, '/app.js')).toMatchObject({ status: 200, body: 'export const rebuilt = true' })
+    expect(await request(port, '/app.js', authenticated())).toMatchObject({ status: 200, body: 'export const rebuilt = true' })
 
     // Unknown extension ships as octet-stream.
-    expect(await request(port, '/blob.bin')).toMatchObject({ status: 200, type: 'application/octet-stream', body: 'BLOB' })
+    expect(await request(port, '/blob.bin', authenticated())).toMatchObject({ status: 200, type: 'application/octet-stream', body: 'BLOB' })
 
     // Only the root and index path render index.html through registered taps.
     const untap = server.tapIndex(html => html.replace('<head>', '<head><script>window.__T__=1</script>'))
@@ -193,7 +237,9 @@ describe('real Loader composition', () => {
     }
 
     // Ordinary unknown paths and static-resource misses are empty 404s for
-    // both GET and HEAD; neither class can be mistaken for the HTML shell.
+    // both GET and HEAD; neither class can be mistaken for the HTML shell. A
+    // signed-in caller is answered the miss: the fence runs before the read, so
+    // an unauthorised caller learns nothing about which files exist.
     const ordinaryMisses = ['/no/such/route', '/empty', '/app.js/child']
     const assetMisses = [
       '/missing.js',
@@ -204,11 +250,12 @@ describe('real Loader composition', () => {
       '/missing.manifest',
     ]
     for (const path of [...ordinaryMisses, ...assetMisses]) {
-      const get = await request(port, path)
-      const head = await request(port, path, { method: 'HEAD' })
+      const get = await request(port, path, authenticated())
+      const head = await request(port, path, authenticated({ method: 'HEAD' }))
       expect(get).toEqual({ status: 404, type: null, body: '' })
       expect(head).toEqual(get)
     }
+    expect(await request(port, '/missing.js')).toMatchObject({ status: 401, body: 'unauthorized' })
     expect(await request(port, '/api/no/such/route', authenticated())).toEqual({
       status: 404,
       type: 'text/plain;charset=UTF-8',
@@ -219,7 +266,7 @@ describe('real Loader composition', () => {
     // malformed filesystem target still reaches the webserver's 400 guard.
     expect((await request(port, '/..%2f..%2fetc%2fpasswd')).status).toBe(403)
     expect((await request(port, '/app.js', { method: 'POST' })).status).toBe(405)
-    expect((await request(port, '/bad%00path')).status).toBe(400)
+    expect((await request(port, '/bad%00path', authenticated())).status).toBe(400)
 
     // HMR safety: disposing the frontend row releases the fallback seat (the
     // unclaimed webserver answers 404) and the seat is claimable again.
@@ -272,14 +319,16 @@ describe('real Loader composition', () => {
   it('lets browsers revalidate every file except the index', { timeout: 60_000 }, async () => {
     const loaded = await loadComposition()
     const base = `http://127.0.0.1:${String(loaded.webServer.port)}`
-    const first = await fetch(`${base}/app.js`)
+    // A dist file is served to the signed-in browser, which revalidates it like any other resource.
+    const { authenticated } = await signIn(loaded)
+    const first = await fetch(`${base}/app.js`, authenticated())
     const etag = first.headers.get('etag')
     if (etag === null) throw new Error('a dist file carried no ETag')
     expect(etag).toMatch(/^W\/"[A-Za-z0-9_-]+"$/)
     expect(first.headers.get('cache-control')).toBe('no-cache')
     expect(await first.text()).toBe('export {}')
 
-    const revalidated = await fetch(`${base}/app.js`, { headers: { 'if-none-match': etag } })
+    const revalidated = await fetch(`${base}/app.js`, authenticated({ headers: { 'if-none-match': etag } }))
     expect([revalidated.status, revalidated.headers.get('etag'), revalidated.headers.get('cache-control')]).toEqual([304, etag, 'no-cache'])
     expect(await revalidated.text()).toBe('')
     // An in-process read revalidates the same way.
@@ -289,13 +338,13 @@ describe('real Loader composition', () => {
 
     // New content under the same name changes the ETag, so the stale copy is replaced.
     await writeFile(join(root!, 'dist', 'app.js'), 'export const rebuilt = true')
-    const rebuilt = await fetch(`${base}/app.js`, { headers: { 'if-none-match': etag } })
+    const rebuilt = await fetch(`${base}/app.js`, authenticated({ headers: { 'if-none-match': etag } }))
     expect(rebuilt.status).toBe(200)
     expect(rebuilt.headers.get('etag')).not.toBe(etag)
     expect(await rebuilt.text()).toBe('export const rebuilt = true')
 
     // Only the rendered index carries no cache headers; another HTML file revalidates.
-    const html = await fetch(`${base}/preview.html`)
+    const html = await fetch(`${base}/preview.html`, authenticated())
     expect([html.status, html.headers.get('cache-control')]).toEqual([200, 'no-cache'])
     expect(html.headers.get('etag')).toMatch(/^W\//)
     expect(await html.text()).toBe('<body>preview</body>')

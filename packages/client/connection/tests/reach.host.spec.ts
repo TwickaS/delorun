@@ -381,8 +381,10 @@ describe('loopback admission with a provider, beyond the fence', () => {
   it('adds the provider\'s rolled credential to /api and index responses', async () => {
     const harness = await start()
     const loopback = { host: `127.0.0.1:${String(harness.loopbackPort)}` }
+    // A browser attaches Origin to every non-GET request; the fence requires it of a state-changing /api call.
+    const loopbackPost = { ...loopback, origin: `http://127.0.0.1:${String(harness.loopbackPort)}` }
     harness.provider.loopback = { kind: 'admitted', peer: harness.ctx.connection.browserPeer, setCookie: 'dsh-auth-rolled=1; Path=/; HttpOnly' }
-    expect((await send(harness.loopbackPort, `${API_PATH}/session.list`, loopback, 'POST')).headers['set-cookie']).toEqual(['dsh-auth-rolled=1; Path=/; HttpOnly'])
+    expect((await send(harness.loopbackPort, `${API_PATH}/session.list`, loopbackPost, 'POST')).headers['set-cookie']).toEqual(['dsh-auth-rolled=1; Path=/; HttpOnly'])
     const index = await send(harness.loopbackPort, '/index-probe', loopback)
     expect({ body: index.body, cookie: index.headers['set-cookie'] }).toEqual({ body: 'index', cookie: ['dsh-auth-rolled=1; Path=/; HttpOnly'] })
   })

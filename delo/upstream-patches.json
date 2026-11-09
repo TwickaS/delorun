@@ -3964,6 +3964,76 @@
       "class": "delo-feature",
       "reason": "Code refusal switch (Delo's C16-unrelated feature switch): the loader config gains `refuseCode` (default `false`), and with it on the `internal/config` hook walks an entry's raw config for `!!js` expression nodes before interpolating and throws the typed `RefusedCodeError` naming the configuration file (the tree base URL and the entry id — parsed YAML carries no line numbers) and the expression's path, without evaluating anything. Off, loading is byte-identical to upstream's.",
       "sha256": "d19b74849ceceea2b670df67c8b5ee307581c164a2b66bb585ff9eed47f1ca41"
+    },
+    {
+      "path": "packages/client/connection/src/api-request-trust.ts",
+      "class": "security",
+      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot — with exactly one Host line in the raw header list, and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/connection/tests/api-request-trust.host.spec.ts",
+      "class": "security",
+      "reason": "Specs of the tightened /api trust fence: every Host spelling the URL parser would repair, a repeated Host line node:http keeps only the first of, a state-changing /api request that states no origin, and the cross-site arrival a route declares for a navigation only. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/connection/tests/fetch-routes.host.spec.ts",
+      "class": "security",
+      "reason": "Spec of the exact-route media-type gate: a body arriving with any media type but the route's own is refused, which the streaming upload route relies on. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/connection/tests/node-half.host.spec.ts",
+      "class": "security",
+      "reason": "Harness of the node-half specs: a JSON POST carries the Origin a browser attaches, so the specs exercise the origin-account rule rather than the path a non-browser client takes. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/file-upload/src/index.ts",
+      "class": "security",
+      "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/hmr/package.json",
+      "class": "security",
+      "reason": "Development dependency on @deepseek-ai/dsh-client-connection for the Context merge the transport now reads; the peer set is unchanged. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/hmr/src/index.ts",
+      "class": "security",
+      "reason": "The /plugins/events SSE stream names the module graph, the plugin inventory and the release commit, so every request asks the composition's `connection` fence for a rejection before the channel opens: a rebound page carrying the attacker's authority reads nothing, nor does an unauthenticated caller. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/hmr/tests/node-half.client.spec.ts",
+      "class": "security",
+      "reason": "Specs of the gated event stream: a refused authority gets the fence's status and no frame, the loopback authority streams, and the mount helper's fence type takes the request. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/hmr/tsconfig.json",
+      "class": "security",
+      "reason": "Project reference to the connection package's host project, which declares the `connection` Context merge this package's route handler reads. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/modules/src/index.ts",
+      "class": "security",
+      "reason": "The /plugins bundle route serves the plugin inventory, so an HTTP request — which arrives with no admitted Peer — asks the composition's `connection` fence before any bundle bytes are read, while an in-process read keeps its caller's Peer. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/modules/tests/node-half.client.spec.ts",
+      "class": "security",
+      "reason": "Spec of the gated bundle route: a request over HTTP without an admitted Peer takes the fence's refusal before a bundle is read. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/modules/tests/package-assets.client.spec.ts",
+      "class": "security",
+      "reason": "Composition of the carrier spec: provides an admitting `connection` service, which the bundle route now injects. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/host/frontend-static/src/index.ts",
+      "class": "security",
+      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
+      "class": "security",
+      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. Lead verdict: pending; no lead review of this change is recorded yet."
     }
   ],
   "retired": []

@@ -30,6 +30,7 @@ import type {
   ConnectionRpcHandler,
   ConnectionRpcResult,
   ConnectionRequestRejection,
+  ConnectionTrustOptions,
   ConnectionTrustRequest,
   HostConnectionRpc,
 } from './rpc.ts'
@@ -37,6 +38,10 @@ import type {
 const INVALID_REQUEST_RPC_ID = RpcId('invalid-request')
 const CHANNEL_PATTERN = /^\/[A-Za-z0-9._~-]+$/
 const ENDPOINT_SEGMENT_PATTERN = /^[A-Za-z0-9_$.-]+$/
+/** Media type every exact route requires of a request body unless it declares its own. */
+const JSON_MEDIA_TYPE = 'application/json'
+/** A media type essence without parameters or wildcards (`type/subtype`). */
+const MEDIA_TYPE_ESSENCE = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/
 
 interface PeerRecord {
   readonly peer: Peer
@@ -51,6 +56,8 @@ interface ConnectionRpcInterceptor {
 interface RegisteredFetchRoute {
   readonly methods: ReadonlySet<string>
   readonly requestBody: ConnectionFetchRoute['requestBody']
+  /** Essence of the media type a body-carrying request must declare. */
+  readonly requestMediaType: string
   readonly fetch: ConnectionFetchRoute['fetch']
 }
 
@@ -123,8 +130,8 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
   }
 
   /** Apply the Host/Origin fence and require an authenticated live Peer. */
-  requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection {
-    const admission = this.admit(request)
+  requestRejection(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): ConnectionRequestRejection {
+    const admission = this.admit(request, options)
     return 'rejection' in admission ? admission.rejection : undefined
   }
 
@@ -135,12 +142,12 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
    * loaded, else the built-in admission, where browser requests share an owner
    * Peer and API HTTP does not depend on an attached socket.
    */
-  admit(request: ConnectionTrustRequest): PeerAdmission {
+  admit(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): PeerAdmission {
     if (this.reach.requests.has(request)) {
       const peer = this.reach.requests.get(request)
       return peer === undefined || this.disposed ? { rejection: 401 } : { peer }
     }
-    if (!this.isTrusted(request)) return { rejection: 403 }
+    if (!this.isTrusted(request, options)) return { rejection: 403 }
     if (this.disposed) return { rejection: 401 }
     const authenticator = this.owner.get('authenticator')
     return peerAdmission(authenticator === undefined ? this.builtinAdmission(request) : authenticator.admit(request, LOOPBACK_LISTENER))
@@ -200,9 +207,9 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
     }
   }
 
-  private isTrusted(request: ConnectionTrustRequest): boolean {
+  private isTrusted(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): boolean {
     const carrier = this.owner.get('webServer')
-    return isTrustedApiRequest(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:')
+    return isTrustedApiRequest(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:', options)
   }
 
   private publishPeer(interactions: ConnectionInteractions): PeerId {
@@ -299,6 +306,12 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
           // Exact routes bypass Gateway access checks, so only the owner reaches them.
           // oxlint-disable-next-line typescript/no-unnecessary-condition -- other packages merge non-owner kinds into PrincipalMap.
           if (peer.principal.kind !== 'owner') return Promise.resolve(new Response('forbidden', { status: 403 }))
+          // An exact route is a named endpoint a cross-site page can address
+          // directly, so it carries the same media-type gate the shared channel
+          // applies: a body the browser sends without a preflight (`text/plain`)
+          // never reaches a route that did not declare that type.
+          const refusal = mediaTypeRejection(request, route.requestMediaType)
+          if (refusal !== undefined) return Promise.resolve(refusal)
           return route.fetch(request)
         }
         const endpoint = endpointFromPath(channel, pathname)
@@ -319,6 +332,7 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
     const registered: RegisteredFetchRoute = {
       methods: new Set(route.methods),
       requestBody: route.requestBody,
+      requestMediaType: route.requestMediaType ?? JSON_MEDIA_TYPE,
       fetch: route.fetch,
     }
     return owner.effect(() => {
@@ -503,4 +517,26 @@ function assertFetchRoute(route: ConnectionFetchRoute): void {
   if (methods.size !== route.methods.length) {
     throw new Error(`connection: exact Fetch route ${JSON.stringify(route.path)} repeats a method`)
   }
+  if (route.requestMediaType !== undefined && !MEDIA_TYPE_ESSENCE.test(route.requestMediaType)) {
+    throw new Error(`connection: exact Fetch route ${JSON.stringify(route.path)} declares a malformed media type`)
+  }
+}
+
+/**
+ * The 415 refusing a request whose declared media type is not the route's, or
+ * undefined to dispatch it. A request carrying no body declares nothing and has
+ * no content type to interpret, so it passes: a bodyless POST is a named
+ * action. Every other request must declare exactly the route's essence, because
+ * a CORS-safelisted `text/plain` body reaches a cross-site target without a
+ * preflight.
+ * @param request - one exact-route request.
+ * @param expected - the route's media type essence.
+ * @returns the refusal response, or undefined when the route may read the request.
+ */
+function mediaTypeRejection(request: Request, expected: string): Response | undefined {
+  if (request.method === 'GET' || request.method === 'HEAD') return undefined
+  const declared = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  if (declared === expected) return undefined
+  if (declared === undefined && request.body === null) return undefined
+  return new Response(`content type must be ${expected}`, { status: 415 })
 }

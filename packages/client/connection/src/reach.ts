@@ -16,6 +16,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WebGateDecision, WebGateRefusal, WebListener, WebListenerBind, WebRouteKind } from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { LOOPBACK_LISTENER, type Admission, type Authenticator, type ListenerPolicy, type PreLoginRoute } from './authenticator.ts'
+import { countHostLines } from './api-request-trust.ts'
 import type { ConnectionTrustRequest, HostConnectionHandle } from './rpc.ts'
 import { CONNECT_PATH } from './connect-protocol.ts'
 import { isLoopbackHostname } from './loopback-hostname.ts'
@@ -262,11 +263,7 @@ function removeIdentityHeaders(request: IncomingMessage): void {
 
 /** How many `Host` header lines a request carries; node:http keeps only the first in its parsed view. */
 function hostLines(request: IncomingMessage): number {
-  let count = 0
-  for (let at = 0; at < request.rawHeaders.length; at += 2) {
-    if (request.rawHeaders[at]?.toLowerCase() === 'host') count += 1
-  }
-  return count
+  return countHostLines(request.rawHeaders)
 }
 
 function carriesUpstreamCookie(request: IncomingMessage): boolean {

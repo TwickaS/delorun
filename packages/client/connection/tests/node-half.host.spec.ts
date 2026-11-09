@@ -58,10 +58,14 @@ function fakeRequest(headers: Record<string, string>, url = `${API_PATH}/session
   return request
 }
 
-/** JSON POST carrying a complete client-request envelope. */
+/** JSON POST carrying a complete client-request envelope, with the Origin a browser attaches to it. */
 function fakePost(headers: Record<string, string>, url: string, body: unknown): IncomingMessage {
   const request = Readable.from([Buffer.from(JSON.stringify(body))]) as IncomingMessage
-  Object.assign(request, { url, method: 'POST', headers: { 'content-type': 'application/json', ...headers } })
+  Object.assign(request, {
+    url,
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: `http://${headers.host ?? 'localhost'}`, ...headers },
+  })
   return request
 }
 

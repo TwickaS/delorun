@@ -64,6 +64,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'upstream', reason: 'The replay runs upstream\'s confinement: the overlay leaves the row out, so the provider protects no home and a recorded scenario that reads the harness home replays as it was recorded.' },
   },
   {
+    id: 'tool-fs-search',
+    kind: 'changed',
+    reason: 'Searching the machine no longer reaches Delo\'s own home: `protectedReads` is on, so `glob` and `grep` refuse a path under it as the file tools already do; upstream leaves the fence off.',
+    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value, the fence\'s own default, off; the overlay does not restate the row.' },
+  },
+  {
     id: 'command-feedback',
     kind: 'changed',
     reason: 'The /feedback command is hidden, because it sends through the disabled feedback exporter and Delo has no feedback destination yet.',

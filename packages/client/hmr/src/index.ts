@@ -5,14 +5,19 @@
  * `clientModules.rebuilt(id)`, and serves the `/plugins/events` SSE channel
  * broadcasting graph/rebuilt frames to the browser half (src/client/).
  * The Web composition mounts this transport for live graph updates;
- * a development rebuild watcher also supplies bundle changes.
+ * a development rebuild watcher also supplies bundle changes. The stream names
+ * the module graph, the plugin inventory and the release commit, so every
+ * request to it asks the composition's `connection` fence for a rejection
+ * first: the Host fence refuses a rebound page reading the stream with the
+ * attacker's authority, and authentication refuses an unauthenticated one.
  */
 import { statSync } from 'node:fs'
-import type { ServerResponse } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-// Type imports carry the clientModules/webServer Context merges.
+// Type imports carry the clientModules/webServer/connection Context merges.
 import type { ClientArtifactBaseline } from '@deepseek-ai/dsh-client-modules'
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { PluginsEventFrame } from './events.ts'
 import { EVENTS_ENDPOINT } from './events.ts'
@@ -23,8 +28,8 @@ export { EVENTS_ENDPOINT } from './events.ts'
 /** Cordis plugin name. */
 export const name = 'client-hmr'
 
-/** Required services: the client graph and Web route registry. */
-export const inject = ['clientModules', 'webServer']
+/** Required services: the client graph, the Web route registry, and the trust fence guarding the stream. */
+export const inject = ['clientModules', 'webServer', 'connection']
 
 /** Plugin config, validated by the same-named schemastery schema. */
 export interface Config {
@@ -181,7 +186,16 @@ export function apply(ctx: Context, config: Config): void {
     const disposeRoute = ctx.webServer.register({
       kind: 'exact',
       path: EVENTS_ENDPOINT,
-      handler: (req, res) => {
+      handler: (req: IncomingMessage, res: ServerResponse) => {
+        // The stream carries the module graph, the plugin inventory and the
+        // release commit; the composition's fence decides who may read it
+        // before the channel opens, exactly as the routes beside it do.
+        const rejection = ctx.connection.requestRejection(req)
+        if (rejection !== undefined) {
+          res.writeHead(rejection)
+          res.end()
+          return
+        }
         // Named routes match ahead of the carrier's method gate; keep the old
         // global 405 semantics for non-GET hits on this endpoint.
         if (req.method !== 'GET' && req.method !== 'HEAD') {

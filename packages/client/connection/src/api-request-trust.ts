@@ -12,10 +12,16 @@
  * the webserver config; this fence never establishes identity.
  */
 
+import { API_PATH } from './api-path.ts'
 import { isLoopbackHostname } from './loopback-hostname.ts'
-import type { ConnectionTrustRequest } from './rpc.ts'
+import type { ConnectionTrustOptions, ConnectionTrustRequest } from './rpc.ts'
 
-function header(headers: ConnectionTrustRequest['headers'], name: string): string | undefined {
+type TrustHeaders = ConnectionTrustRequest['headers']
+
+/** Methods whose requests a browser sends without a body, so without any browser account of their origin. */
+const BODYLESS_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+function header(headers: TrustHeaders, name: string): string | undefined {
   if (headers instanceof Headers) return headers.get(name) ?? undefined
   const value = headers[name]
   return typeof value === 'string' ? value : undefined
@@ -34,6 +40,81 @@ function parseAuthority(authority: string, scheme: 'http:' | 'https:' = 'http:')
   } catch {
     return undefined
   }
+}
+
+/**
+ * Whether text is a bare authority exactly as an HTTP client writes it, so
+ * {@link parseAuthority} reads it instead of repairing it. Parsing accepts
+ * spellings the fence must not trust: user information (`evil@localhost`
+ * authorizes `localhost`), surrounding and embedded whitespace or control
+ * characters (WHATWG strips tabs and newlines anywhere in a URL), an IPv4
+ * address's trailing dot, and non-ASCII host text (percent-decoded or mapped
+ * by the host parser). Each of those names one authority to a browser and
+ * another to this fence, so they are refused before parsing.
+ * @param authority - a `Host` header value.
+ * @returns true for printable ASCII host[:port] text with no user information and no trailing dot.
+ */
+function isBareAuthority(authority: string): boolean {
+  // Printable ASCII without space: every whitespace and control spelling fails here.
+  if (!/^[\x21-\x7E]+$/.test(authority) || authority.includes('@')) return false
+  return !authority.endsWith('.')
+}
+
+/**
+ * How many `Host` header lines a raw header list carries.
+ * @param rawHeaders - alternating name/value lines, as node:http reports them.
+ * @returns the number of `Host` lines.
+ */
+export function countHostLines(rawHeaders: readonly string[]): number {
+  let lines = 0
+  for (let at = 0; at < rawHeaders.length; at += 2) {
+    if (rawHeaders[at]?.toLowerCase() === 'host') lines += 1
+  }
+  return lines
+}
+
+/**
+ * Whether the request carries exactly one `Host` line. node:http keeps only
+ * the first `Host` in its parsed view, so a repeated line is invisible there
+ * while a downstream hop, a proxy, or a second parser may read the other one;
+ * a raw list is the only witness. A Fetch `Headers` merges repeats into one
+ * comma-joined value, which the authority check already refuses.
+ */
+function hasOneHostLine(request: ConnectionTrustRequest): boolean {
+  return request.rawHeaders === undefined || countHostLines(request.rawHeaders) === 1
+}
+
+/**
+ * Whether a request target reaches the shared `/api` channel.
+ * @param url - the request target, relative or absolute; undefined when the carrier reports none.
+ * @returns true for `/api` and every path below it; an absent target counts as `/api`,
+ *   because the channel this fence guards is the only caller.
+ */
+function isApiTarget(url: string | undefined): boolean {
+  if (url === undefined) return true
+  const path = url.startsWith('/') ? url.split('?', 1)[0] ?? url : new URL(url, 'http://dsh.invalid').pathname
+  return path === API_PATH || path.startsWith(`${API_PATH}/`)
+}
+
+/**
+ * Whether the request must carry a browser's own account of its origin: a
+ * state-changing request on the `/api` channel. Browsers label every fetch
+ * with Fetch-Metadata and attach `Origin` to every non-GET request, so a
+ * missing `Origin` with no marker names a caller this page is not — and
+ * `same-site` names another origin on the same site, which for a loopback
+ * listener is another local port whose page the browser sends credentialed
+ * requests for without a preflight. The Origin fence is blind when `Origin`
+ * is absent, so the marker has to decide.
+ */
+function needsOriginAccount(request: ConnectionTrustRequest): boolean {
+  const method = request.method?.toUpperCase()
+  if (method === undefined || BODYLESS_METHODS.has(method)) return false
+  return isApiTarget(request.url)
+}
+
+/** Whether a request is a browser document navigation, whose response the initiator's page cannot read. */
+function isDocumentNavigation(headers: TrustHeaders): boolean {
+  return header(headers, 'sec-fetch-mode') === 'navigate'
 }
 
 /**
@@ -112,17 +193,20 @@ function isBindAddressAuthority(hostUrl: URL, bindHost: string | undefined): boo
 
 /**
  * Decide whether one /api request may reach the RPC bridge.
- * @param request - Node HTTP or Fetch request facts (headers).
+ * @param request - Node HTTP or Fetch request facts (headers, and the method and target when the carrier reports them).
  * @param trustedHosts - non-loopback authorities this deployment serves: exact `host:port`, or port-less `host` matching any port.
  * @param bindHost - the listener's own bind IP literal, accepted on any port independently of `trustedHosts`.
  * @param protocol - listener protocol for default Host ports; HTTP when no Web carrier is mounted.
- * @returns true when the Host is ours (loopback, the bind address, or trusted) and any attached browser markers are same-origin.
+ * @param options - route-level allowances; the defaults apply every check.
+ * @returns true when the Host is ours (loopback, the bind address, or trusted), it appears
+ *   exactly once, and any attached browser markers are same-origin.
  */
 export function isTrustedApiRequest(
   request: ConnectionTrustRequest,
   trustedHosts: readonly string[],
   bindHost?: string,
   protocol: 'http:' | 'https:' = 'http:',
+  options: ConnectionTrustOptions = {},
 ): boolean {
   // Host fence (DNS-rebinding defense), applied to every request: the browser
   // fills Host from the URL it believes it is talking to, so a rebound page
@@ -132,22 +216,28 @@ export function isTrustedApiRequest(
   // Fetch-Metadata, indistinguishable from curl, and its response is readable
   // by the rebound page.
   const host = header(request.headers, 'host')
-  if (host === undefined) return false
+  if (host === undefined || !isBareAuthority(host) || !hasOneHostLine(request)) return false
   const hostUrl = parseAuthority(host, protocol)
   if (hostUrl === undefined) return false
   if (!isLoopbackHostname(hostUrl.hostname)
     && !isTrustedAuthority(hostUrl, trustedHosts, protocol)
     && !isBindAddressAuthority(hostUrl, bindHost)) return false
+  const site = header(request.headers, 'sec-fetch-site')
   // Cross-site fence: modern browsers label the initiator relationship on
   // every fetch; an explicit cross-site marker is refused regardless of Origin.
-  if (header(request.headers, 'sec-fetch-site') === 'cross-site') return false
+  // An arrival route may accept it on a document navigation: the response is
+  // the new document, which the initiator's page cannot read, and the Host and
+  // Origin fences still bind the request.
+  const arrival = site === 'cross-site' && options.crossSiteArrival === true && isDocumentNavigation(request.headers)
+  if (site === 'cross-site' && !arrival) return false
   // Origin fence: when a browser attaches an Origin it must be exactly this
   // authority (compared through the same normalization as the Host). Absent
-  // Origin is fine — the Host fence above already bound the request. The
-  // literal "null" (sandboxed iframes, file: pages) is an opaque origin, refused.
+  // Origin is fine for a read — the Host fence above already bound the request.
+  // The literal "null" (sandboxed iframes, file: pages) is an opaque origin, refused.
   const origin = header(request.headers, 'origin')
-  if (origin === undefined) return true
-  return isSameAuthorityOrigin(origin, host)
+  if (origin !== undefined && !isSameAuthorityOrigin(origin, host)) return false
+  if (!needsOriginAccount(request)) return true
+  return origin !== undefined || site === 'same-origin' || site === 'none'
 }
 
 /**

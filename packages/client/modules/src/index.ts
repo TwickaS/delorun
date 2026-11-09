@@ -637,6 +637,19 @@ window.__ModuleLoader__={
 }
 
 /**
+ * The trust surface this package's Web route consumes; the browser-side
+ * connection package owns the full type, so it is named locally.
+ */
+interface PluginsConnection {
+  requestRejection(request: { readonly headers: Headers }): 401 | 403 | undefined
+}
+
+/** The composition's connection service, which guards the bundle route; the carrier injects it. */
+function pluginsConnectionOf(webCtx: Context): PluginsConnection {
+  return Reflect.get(webCtx, 'connection') as PluginsConnection
+}
+
+/**
  * The web plugin table service: incremental `dsh.client` scan + wire composition
  * + bundle and package-asset route + index injection rows. Construction runs
  * the activation scan synchronously — a malformed declaration or missing bundle among the
@@ -702,11 +715,19 @@ export class ClientModuleRegistry extends Service {
 
     const registerWebCarrier = (webCtx: Context): void => {
       webCtx.effect(
-        () => webCtx.webServer.register({ kind: 'prefix', path: PLUGIN_ROUTE, resource: request => this.fetchBundle(request) }),
+        () => webCtx.webServer.register({
+          kind: 'prefix',
+          path: PLUGIN_ROUTE,
+          // An HTTP request arrives with no admitted Peer, so the
+          // composition's `connection` fence decides before a bundle's bytes
+          // are read: the bundles name the plugin inventory, like the gated
+          // index beside them.
+          resource: (request, peer) => peer === undefined ? this.fetchOverHttp(webCtx, request) : this.fetchBundle(request),
+        }),
         'client-modules: bundle route',
       )
     }
-    ctx.inject(['webServer'], registerWebCarrier)
+    ctx.inject(['webServer', 'connection'], registerWebCarrier)
     ctx.on('webserver/index-inject', (table) => {
       table.push(...bootInjections(this.composed))
     })
@@ -750,6 +771,22 @@ export class ClientModuleRegistry extends Service {
       status: resource.status,
       ...(resource.headers === undefined ? {} : { headers: resource.headers }),
     })
+  }
+
+  /**
+   * Answer one `/plugins` resource request the Web carrier received over HTTP.
+   * A request a listener gate admitted arrives with its Peer and never reaches
+   * here; the rest ask the composition's `connection` fence first, which
+   * refuses a rebound authority or a caller the browser cookie does not admit
+   * before any bundle bytes are read.
+   * @param webCtx - the carrier Context the route belongs to.
+   * @param request - the `/plugins` resource request.
+   * @returns the fence's refusal, or the bundle response.
+   */
+  private async fetchOverHttp(webCtx: Context, request: Request): Promise<Response> {
+    const rejection = pluginsConnectionOf(webCtx).requestRejection(request)
+    if (rejection !== undefined) return new Response(rejection === 401 ? 'unauthorized' : 'forbidden', { status: rejection })
+    return this.fetchBundle(request)
   }
 
   /**

@@ -98,16 +98,38 @@ export type RpcMessage = ClientRequest | ServerResponse
 export interface ConnectionTrustRequest {
   /** Request headers supplied by either the Fetch or node:http representation. */
   readonly headers: Headers | Readonly<Record<string, string | readonly string[] | undefined>>
+  /**
+   * Alternating name/value header lines, when the carrier has them: node:http's
+   * parsed view keeps only the first `Host`, so a repeated line is visible only
+   * here.
+   */
+  readonly rawHeaders?: readonly string[] | undefined
+  /** Request method, when the carrier reports it; the fence reads it to decide whether the request changes state. */
+  readonly method?: string | undefined
+  /** Request target, when the carrier reports it; the fence reads it to decide whether the request reaches `/api`. */
+  readonly url?: string | undefined
+}
+
+/**
+ * Allowances one arrival route declares about its own traffic. Every check
+ * applies by default; each field names a shape the route is reached with, never
+ * a caller it trusts.
+ */
+export interface ConnectionTrustOptions {
+  /**
+   * Accept a `sec-fetch-site: cross-site` marker on a document navigation. An
+   * arrival route (an OAuth callback a foreign site redirects the browser to)
+   * is reached exactly that way, and the navigated response is a document its
+   * initiator cannot read. The Host and Origin fences still apply.
+   */
+  readonly crossSiteArrival?: boolean
 }
 
 /** HTTP status returned before dispatch, or undefined when the request may proceed. */
 export type ConnectionRequestRejection = 401 | 403 | undefined
 
 /** Root/index request facts used by the browser-token exchange. */
-export interface ConnectionIndexRequest extends ConnectionTrustRequest {
-  readonly method?: string | undefined
-  readonly url?: string | undefined
-}
+export interface ConnectionIndexRequest extends ConnectionTrustRequest {}
 
 /** Root/index response operations owned by the browser-token exchange. */
 export interface ConnectionIndexResponse {
@@ -160,6 +182,14 @@ export interface ConnectionFetchRoute {
   readonly methods: readonly ConnectionFetchMethod[]
   /** Buffered requests obey the configured JSON cap; streaming requests arrive with backpressure and no aggregate cap. */
   readonly requestBody: ConnectionRequestBodyMode
+  /**
+   * Essence of the media type a body-carrying request to this route must
+   * declare, defaulting to `application/json`. The exact-route gate refuses any
+   * other declared type, so a cross-site page cannot reach the route with a
+   * CORS-safelisted body (`text/plain`) the browser sends without a preflight.
+   * A route that reads raw bytes declares its own type here.
+   */
+  readonly requestMediaType?: string | undefined
   /**
    * Handle one request after the physical carrier has applied its trust and
    * authentication policy. Only owner Peers reach an exact route; the shared
@@ -231,9 +261,10 @@ export interface HostConnectionHandle {
    * Apply Connection's Host/Origin checks and browser authentication to
    * another Web route.
    * @param request - request headers from the HTTP or upgrade request.
+   * @param options - allowances the route declares about its own arrival traffic.
    * @returns rejection status, or undefined when the route may accept the request.
    */
-  requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection
+  requestRejection(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): ConnectionRequestRejection
 
   /**
    * Admit an HTTP request against its signed browser or API credential and live Peer.
