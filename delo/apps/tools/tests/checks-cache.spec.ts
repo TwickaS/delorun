@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createPassCache, passCacheEnabled, type PassCache } from '../src/checks/cache.ts'
 import type { Planned } from '../src/checks/plan.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
-import { prePushBase, withoutSeparator } from '../src/run-checks.ts'
+import { main, prePushBase, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
 
 const ZERO = '0'.repeat(40)
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -261,4 +261,30 @@ describe('the --plan mode', () => {
     expect(existsSync(join(root, 'node_modules', '.cache', 'delo-checks', 'report.json'))).toBe(false)
     expect(existsSync(join(root, 'node_modules', '.cache', 'delo-checks', 'pass'))).toBe(false)
   }, 60_000)
+})
+
+describe('the gate tier of a run', () => {
+  const sha = 'a'.repeat(40)
+  const zero = '0'.repeat(40)
+  const push = (remoteRef: string, local = sha): string => `refs/heads/x ${local} ${remoteRef} ${zero}\n`
+
+  it('is the merge tier for a push of the trunk, alone or with another ref, and the agent tier for any other branch', () => {
+    expect(TRUNK_REF).toBe('refs/heads/v5')
+    expect(pushTier(push('refs/heads/lane'), {})).toBe('agent')
+    expect(pushTier(push(TRUNK_REF), {})).toBe('merge')
+    expect(pushTier(push('refs/heads/lane') + push(TRUNK_REF), {})).toBe('merge')
+    expect(pushTier('', {})).toBe('agent')
+  })
+
+  it('does not count the deletion of the trunk, and takes the merge tier from DELO_TIER=merge', () => {
+    expect(pushTier(push(TRUNK_REF, zero), {})).toBe('agent')
+    expect(pushTier(push('refs/heads/lane'), { DELO_TIER: 'merge' })).toBe('merge')
+    expect(pushTier(push('refs/heads/lane'), { DELO_TIER: 'agent' })).toBe('agent')
+  })
+
+  it('is a usage error when --tier has another value, or comes with --pre-commit or the full gate', async () => {
+    await expect(main(['--changed', '--tier', 'full'])).rejects.toThrow('--tier takes agent or merge, got full')
+    await expect(main(['--pre-commit', '--tier', 'merge'])).rejects.toThrow('does not apply to --pre-commit or the full gate')
+    await expect(main(['--tier', 'merge'])).rejects.toThrow('does not apply to --pre-commit or the full gate')
+  })
 })

@@ -5,7 +5,7 @@
  * the worktrees of a clone, and a record of one Node major never serves another.
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -84,7 +84,7 @@ function treesOf(root: string): string {
  * @returns the facts.
  */
 function factsFor(root: string, overrides: Partial<RunFacts> = {}): RunFacts {
-  return { lockfile: contentId(root, 'pnpm-lock.yaml'), node: 'v24.9.0', pnpm: () => '11.28.5', env: {}, ...overrides }
+  return { lockfile: contentId(root, 'pnpm-lock.yaml'), node: 'v24.9.0', pnpm: () => '11.28.5', env: {}, tier: 'agent', ...overrides }
 }
 
 /**
@@ -143,6 +143,31 @@ function treeOf(root: string): string {
 }
 
 describe('the tree pass record', () => {
+  it('serves an agent-tier run from either tier\'s pass, and a merge-tier run only from a merge-tier pass', async () => {
+    const plan = [check('a', PASS)]
+    const agentRoot = makeRepo()
+    await runAndRecord(agentRoot, plan, factsFor(agentRoot))
+    expect(lookup(agentRoot, plan, factsFor(agentRoot))).toMatchObject({ hit: true })
+    expect(lookup(agentRoot, plan, factsFor(agentRoot, { tier: 'merge' }))).toEqual({ hit: false, reason: 'the record is an agent-tier pass and this run needs the merge tier' })
+    const mergeRoot = makeRepo()
+    await runAndRecord(mergeRoot, plan, factsFor(mergeRoot, { tier: 'merge' }))
+    expect(readTreePass(treesOf(mergeRoot), treeOf(mergeRoot), 'v24.9.0')?.tier).toBe('merge')
+    expect(lookup(mergeRoot, plan, factsFor(mergeRoot, { tier: 'merge' }))).toMatchObject({ hit: true })
+    expect(lookup(mergeRoot, plan, factsFor(mergeRoot))).toMatchObject({ hit: true })
+  })
+
+  it('reads a record written without a tier as an agent-tier pass', async () => {
+    const root = makeRepo()
+    const plan = [check('a', PASS)]
+    await runAndRecord(root, plan, factsFor(root))
+    const path = treePassPath(treesOf(root), treeOf(root), 'v24.9.0')
+    const { tier, ...old } = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    expect(tier).toBe('agent')
+    writeFileSync(path, JSON.stringify(old))
+    expect(readTreePass(treesOf(root), treeOf(root), 'v24.9.0')?.tier).toBe('agent')
+    expect(lookup(root, plan, factsFor(root, { tier: 'merge' }))).toMatchObject({ hit: false })
+  })
+
   it('records a passing run with its facts, leaves it under the tree through a rename, and covers a repeat of the same tree', async () => {
     const root = makeRepo()
     const plan = [check('a', PASS), check('b', PASS, { env: ['TZ'] })]
@@ -155,6 +180,7 @@ describe('the tree pass record', () => {
       head: headOf(root),
       rangeBase: headOf(root),
       passedAt: '2026-11-06T07:00:00.000Z',
+      tier: 'agent',
       checks: ['a', 'b'],
       scopes: {},
       lockfile: contentId(root, 'pnpm-lock.yaml'),

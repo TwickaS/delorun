@@ -117,6 +117,13 @@ describe('the web lane inventory', () => {
 })
 
 describe('the web lane selection', () => {
+  it('is left to the merge tier: the agent tier omits it, and the merge tier plans it', () => {
+    const tree = treeOf(capped(1))
+    const plan = (tier: 'agent' | 'merge') => select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'v5', paths: ['packages/client/ui-cap/src/index.ts'] }, tier, only: [], skip: [] }).map(check => check.id)
+    expect(plan('merge')).toContain(WEB_CHECK_ID)
+    expect(plan('agent')).not.toContain(WEB_CHECK_ID)
+  })
+
   it('selects the specs mapped to a changed client package', () => {
     expect(selectWebLane(inventory(), ['packages/client/ui-status/src/panel.ts'], PACKAGES, false).specs).toEqual(['apps/web/tests/status-panel.e2e.ts'])
   })

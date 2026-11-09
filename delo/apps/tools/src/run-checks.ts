@@ -7,7 +7,12 @@
  * node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts [paths...] [options]
  * ```
  *
- * The tiers, which `lefthook.yml` and `pnpm check` use:
+ * A change run has a gate tier. The agent tier, the default, leaves out the merge-only checks (`Check.mergeOnly`: the
+ * recorded-session replays, the web lane and the Docker lane); the merge tier runs them too, and only its pass lets a commit
+ * reach the trunk. `--tier agent|merge` chooses it. A push takes the merge tier when a pushed ref is `refs/heads/v5` or
+ * `DELO_TIER=merge` is set.
+ *
+ * The invocations, which `lefthook.yml` and `pnpm check` use:
  *
  * - `--pre-commit` runs the repository gates marked `staged` over the staged
  *   paths, and `git diff --cached --check`, within a budget of five seconds
@@ -16,7 +21,7 @@
  *   its merge base with `origin/v5` (or, for a new branch without `origin/v5`, its
  *   merge base with `v5`); the full gate when a pushed ref is
  *   not `HEAD` or `DELO_FULL_GATE=1` is set.
- * - `--changed` (`pnpm check`) runs what changed since `--base` (default `v5`).
+ * - `--changed` (`pnpm check`, and `pnpm check:merge` with `--tier merge`) runs what changed since `--base` (default `v5`).
  * - No argument runs the full gate (`pnpm check:full` adds `--no-cache`).
  *
  * Paths narrow a run to the checks of the packages they lie in and of the
@@ -45,7 +50,7 @@ import { z } from 'zod'
 import { contentId, createPassCache, passCacheEnabled, type PassCache } from './checks/cache.ts'
 import { GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
-import { catalog, criticalPath, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
+import { catalog, criticalPath, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type GateTier, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { readWebSpecs } from './checks/web.ts'
@@ -59,6 +64,8 @@ const IN_SCOPE = 'DELO_CHECKS_SCOPE'
 const GIB = 1024 ** 3
 /** The ref a change is measured from when no `--base` names one: the integration branch. */
 const DEFAULT_BASE = 'v5'
+/** The remote ref of the trunk, `DEFAULT_BASE`: a push of it needs the merge tier. */
+export const TRUNK_REF = `refs/heads/${DEFAULT_BASE}`
 const REPORT = `${CACHE_DIR}/report.json`
 /** Where each check's last duration is kept, for the order of the next run. */
 const DURATIONS = `${CACHE_DIR}/durations.json`
@@ -222,11 +229,23 @@ export function prePushBase(root: string, input: string, base: string, fullGate:
   const [, , remoteRef = '', remote = ''] = pushes[0]
   // A remote tip this clone lacks, such as one pushed from elsewhere, cannot be diffed against.
   const tip = ZERO.test(remote) || !commitExists(root, remote) ? undefined : remote
-  const v5Base = remoteRef === 'refs/heads/v5' ? undefined : mergeBase(root, 'origin/v5')
+  const v5Base = remoteRef === TRUNK_REF ? undefined : mergeBase(root, 'origin/v5')
   if (v5Base === undefined) return tip ?? (ZERO.test(remote) ? mergeBase(root, base) : undefined)
   // The older of the two starts the wider range, which the later fast-forward of v5 needs.
   if (tip !== undefined && runGit(root, ['merge-base', '--is-ancestor', tip, v5Base]).status === 0) return tip
   return v5Base
+}
+
+/**
+ * The tier a push needs: the merge tier when any pushed ref is the trunk or `DELO_TIER=merge` is set, otherwise the agent tier.
+ * @param input - the hook's standard input, `<local ref> <local sha> <remote ref> <remote sha>` per line.
+ * @param env - the environment the run starts with.
+ * @returns the tier.
+ */
+export function pushTier(input: string, env: NodeJS.ProcessEnv): GateTier {
+  if (env['DELO_TIER'] === 'merge') return 'merge'
+  const trunk = lines(input).some(line => line.split(' ')[2] === TRUNK_REF && !ZERO.test(line.split(' ')[1] ?? ''))
+  return trunk ? 'merge' : 'agent'
 }
 
 /**
@@ -454,10 +473,15 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
       'workers': { type: 'string' },
       'no-scope': { type: 'boolean', default: false },
       'no-cache': { type: 'boolean', default: false },
+      'tier': { type: 'string' },
     },
   })
   const tiers = [values['pre-commit'], values['pre-push'], values.changed].filter(flag => flag).length
   if (tiers > 1) throw new Error('--pre-commit, --pre-push and --changed each select a tier; give one of them')
+  if (values.tier !== undefined && values.tier !== 'agent' && values.tier !== 'merge') throw new Error(`--tier takes agent or merge, got ${values.tier}`)
+  if (values.tier !== undefined && (values['pre-commit'] || !(values['pre-push'] || values.changed || values.base !== undefined || positionals.length > 0))) {
+    throw new Error('--tier applies to --changed, --base, explicit paths and --pre-push; it does not apply to --pre-commit or the full gate')
+  }
   const root = repositoryRoot(process.cwd())
   const budget = cgroupBudget(availableParallelism(), totalmem(), name => readFileSync(join('/sys/fs/cgroup', name), 'utf8'))
   const memory = runMemoryBytes(budget.memoryBytes)
@@ -500,6 +524,9 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const fullGate = values['pre-push'] && env['DELO_FULL_GATE'] === '1'
   let plan: Planned[]
   let mode: string
+  // The gate tier of a change run; the pre-commit tier and the full gate have none.
+  let gateTier: GateTier | undefined
+  let left: string[] = []
   // The base a pre-push run measures from and the changed paths it selects by; the tree pass below reads both.
   let pushBase: string | undefined
   let changed: { readonly base: string, readonly paths: string[] } | undefined
@@ -513,8 +540,13 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     changed = values.changed || values.base !== undefined || pushBase !== undefined ? { base, paths: changedPaths(root, base) } : undefined
     // Under `pnpm --filter`, a script runs in its package; `INIT_CWD` is where it was invoked.
     const targets = positionals.map(path => relative(root, resolve(process.env['INIT_CWD'] ?? process.cwd(), path)))
-    plan = select(checks, tree, { targets, ...changed === undefined ? {} : { changed }, only: list(values.only), skip: list(values.skip) })
+    const fullRun = changed === undefined && targets.length === 0
+    gateTier = fullRun || fullGate ? undefined : values.tier ?? (pushInput === undefined ? 'agent' : pushTier(pushInput, env))
+    const selection = { targets, ...changed === undefined ? {} : { changed }, ...gateTier === undefined ? {} : { tier: gateTier }, only: list(values.only), skip: list(values.skip) }
+    plan = select(checks, tree, selection)
+    left = leftForMerge(checks, tree, selection)
     mode = changed === undefined ? (targets.length === 0 ? 'full gate' : `targets ${targets.join(', ')}`) : `${String(changed.paths.length)} paths changed since ${changed.base}`
+    if (gateTier !== undefined) mode += `, ${gateTier} tier`
     if (values['pre-push']) console.log(pushBase === undefined ? 'delo checks: the full gate for this push' : `delo checks: what changed since ${pushBase.slice(0, 10)} for this push (DELO_FULL_GATE=1 for the full gate)`)
   }
   const cache = passCacheEnabled({ noCache: values['no-cache'], fullGate }, env)
@@ -532,6 +564,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
       console.log(`      budget: ${budgetText(check)}`)
       console.log(`      ${commandText(check)}`)
     }
+    if (left.length > 0) console.log(`  left for the merge tier: ${left.join(', ')}`)
     const tierSeconds = values['pre-commit'] ? budgets.tiers['pre-commit']?.seconds : undefined
     if (tierSeconds !== undefined) console.log(`  the pre-commit tier's budget: ${String(tierSeconds)} s`)
     return 0
@@ -541,7 +574,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const measuresHead = values['pre-push'] ? pushBase !== undefined : changed !== undefined
   const treeRecords = treeRecordsDir(root)
   const treeRecordsOn = measuresHead && treePassEnabled({ noCache: values['no-cache'] }, env)
-  const facts: RunFacts = { lockfile: contentId(root, 'pnpm-lock.yaml'), node: process.version, pnpm: () => pnpmVersionOf(root), env }
+  const facts: RunFacts = { lockfile: contentId(root, 'pnpm-lock.yaml'), node: process.version, pnpm: () => pnpmVersionOf(root), env, tier: gateTier ?? 'merge' }
   // Whether the record covers this run, which then starts nothing; `announce` names the reason a record does not cover it.
   const covered = (state: TreeState | undefined, announce: boolean): boolean => {
     if (state?.clean !== true) return false
@@ -578,6 +611,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   mkdirSync(logDir, { recursive: true })
   mkdirSync(join(root, CACHE_DIR, 'tsbuildinfo'), { recursive: true })
   console.log(`delo checks: ${String(plan.length)} checks, ${mode}, ${header}; temporary files in ${scratch}`)
+  if (left.length > 0) console.log(`delo checks: left for the merge tier: ${left.join(', ')}`)
 
   const started = performance.now()
   const durations = readDurations(root)

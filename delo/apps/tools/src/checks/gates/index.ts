@@ -73,6 +73,6 @@ export const GATES: readonly GateCheck[] = [
     id: 'gates:docs',
     title: 'Upstream documentation checks over delo/docs',
     command: [TSX, `${GATE_DIR}/docs.ts`],
-    inputs: ['**/*.md', '**/*.i18n.yaml', 'scripts/**', 'packages/**', 'tsconfig*.json'],
+    inputs: ['**/*.md', '**/*.i18n.yaml', 'scripts/**', 'packages/**', 'tsconfig*.json', `${GATE_DIR}/docs.ts`],
   },
 ]

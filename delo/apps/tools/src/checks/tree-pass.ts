@@ -4,6 +4,9 @@
  * its checks, the scope each narrowed check ran over, the lockfile, Node and pnpm versions and the environment variables
  * the checks read, and the HEAD commit and range base the run measured.
  *
+ * A record names the gate tier it passed (`GateTier`); a record without one is an agent-tier pass. An agent-tier pass serves
+ * only an agent-tier run, because only the merge tier lets a commit reach the trunk; a merge-tier pass serves both.
+ *
  * The record covers a planned check when it names the check with a scope that includes the planned scope. A check that
  * reads commits beyond the tree (`Check.history`, such as the range gates) is covered only at the HEAD commit and range
  * base the record was made at, because commit messages and history are not part of the tree. A dirty working tree
@@ -20,7 +23,7 @@ import { z } from 'zod'
 import { git, runGit } from '../git.ts'
 import { passCacheEnabled } from './cache.ts'
 import { RANGE_BASE } from './gates/index.ts'
-import type { Check } from './plan.ts'
+import type { Check, GateTier } from './plan.ts'
 import type { Result } from './run.ts'
 
 /** A commit or tree id as git prints it, in SHA-1 or SHA-256 form. */
@@ -32,6 +35,7 @@ const TreePassFile = z.object({
   head: ObjectId,
   rangeBase: ObjectId.nullable(),
   passedAt: z.string(),
+  tier: z.enum(['agent', 'merge']).default('agent'),
   checks: z.array(z.string()),
   scopes: z.record(z.string(), z.array(z.string())),
   lockfile: z.string(),
@@ -68,6 +72,8 @@ export interface RunFacts {
   readonly pnpm: () => string
   /** The environment the checks run in; the variables the planned checks list are compared by value. */
   readonly env: NodeJS.ProcessEnv
+  /** The tier the run is for; a record of a lower tier does not cover it. */
+  readonly tier: GateTier
 }
 
 /** A finished run, for {@link recordTreePass}. */
@@ -199,6 +205,7 @@ export function findTreePass(dir: string, state: TreeState, plan: readonly Check
  * @returns the first mismatch, or undefined when the record covers the plan.
  */
 function uncovered(record: TreePass, state: TreeState, plan: readonly Check[], facts: RunFacts): string | undefined {
+  if (facts.tier === 'merge' && record.tier !== 'merge') return 'the record is an agent-tier pass and this run needs the merge tier'
   if (record.lockfile !== facts.lockfile) return 'the lockfile changed'
   if (record.node !== facts.node) return 'the Node version changed'
   for (const name of envNames(plan)) {
@@ -274,6 +281,7 @@ export function recordTreePass(dir: string, run: TreePassRun, facts: RunFacts, n
     head: before.head,
     rangeBase: before.rangeBase,
     passedAt: now.toISOString(),
+    tier: facts.tier,
     checks: plan.map(check => check.id).sort(),
     scopes,
     lockfile: facts.lockfile,

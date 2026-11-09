@@ -16,6 +16,13 @@ import type { GateCheck } from './types.ts'
  */
 export type Tier = 'pre-commit' | 'changed' | 'full'
 
+/**
+ * How much of a change's checks a run pays for. The `agent` tier is what a lane's agent runs while it works and what a push
+ * of a non-trunk branch runs: every selected check except the merge-only ones. The `merge` tier adds the merge-only checks,
+ * and only its pass lets a commit reach the trunk.
+ */
+export type GateTier = 'agent' | 'merge'
+
 /** One check's budget from `budgets.json`. */
 export interface BudgetEntry {
   /** Resident memory at the check's peak, in GiB; multiplied by its CPUs when `perWorker` is set. */
@@ -51,6 +58,8 @@ export interface Check {
    * environment `pnpm run` gives a script ({@link readsPnpmScriptEnvironment}).
    */
   readonly pnpmScript?: boolean
+  /** Runs only in the merge tier and the full gate, or when `--only` names it; the agent tier leaves it out. */
+  readonly mergeOnly?: true
   /** The tiers that select the check by default. */
   readonly tiers: readonly Tier[]
   /** The CPUs it keeps busy, which the runner budgets. */
@@ -150,6 +159,8 @@ export interface Selection {
   readonly targets: readonly string[]
   /** Paths changed since `base`; set, it selects by change and the fork suite runs the packages a change reaches. */
   readonly changed?: { readonly base: string; readonly paths: readonly string[] }
+  /** The tier of a change run. Absent or `merge` selects every merge-only check a change reaches; `agent` leaves them out unless `only` names them. The full gate ignores it. */
+  readonly tier?: GateTier
   /** Check ids or groups to keep; empty keeps all. */
   readonly only: readonly string[]
   /** Check ids or groups to drop. */
@@ -374,6 +385,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     ...tree.packages.some(pkg => pkg.dockerSpecs === true)
       ? [{
           id: DOCKER_CHECK_ID,
+          mergeOnly: true,
           group: 'tests',
           title: 'Every `*.docker.spec.ts` spec, against the Docker engine of the active context (`delo/vitest.docker.config.ts`)',
           cwd: '',
@@ -404,6 +416,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     // The lane has no declared inputs, so it always runs when a change reaches it: its verdict reads the official build, which no cache key covers.
     {
       id: WEB_CHECK_ID,
+      mergeOnly: true,
       group: 'tests',
       title: 'The reached Chromium e2e specs under `apps/web/tests`, run after the official client build',
       cwd: '',
@@ -414,6 +427,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     },
     {
       id: 'tests:snapshots',
+      mergeOnly: true,
       group: 'tests',
       title: 'Upstream\'s keyless recorded-session replay (`pnpm run test:snapshot`), which Delo\'s upstream patches must keep passing',
       cwd: '',
@@ -437,6 +451,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     // The replay declares no inputs, so it runs whenever a selection picks it: its result is upstream's recorded output against the whole tree.
     {
       id: 'parity-replay',
+      mergeOnly: true,
       group: 'parity',
       title: 'Upstream\'s recorded-session replay (`pnpm run test:snapshot`) through C16\'s parity overlay: Delo with its additions switched off reproduces the base tag\'s expected output',
       cwd: '',
@@ -598,6 +613,7 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
       continue
     }
     if (!check.tiers.includes('changed')) continue
+    if (check.mergeOnly === true && selection.tier === 'agent') continue
     if (check.id === 'boundary') pick(check, 'always: it reads everything that differs from upstream in seconds')
     else if (check.group === 'gates') pick(check, 'always: a repository gate reads the change in seconds')
     else if (check.id === 'jsdoc' && (touchedDirs.size > 0 || forkWide.length > 0)) pick(check, 'a fork package\'s sources may have changed')
@@ -653,6 +669,19 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     const planned = plan.get(check.id)
     return planned === undefined ? [] : [planned]
   })
+}
+
+/**
+ * The merge-only checks a change reaches that the agent tier leaves out, for the plan to name.
+ * @param checks - the catalog.
+ * @param tree - the fork's packages.
+ * @param selection - the selection; only an `agent` tier leaves anything out.
+ * @returns the ids, in catalog order.
+ */
+export function leftForMerge(checks: readonly Check[], tree: ForkTree, selection: Selection): string[] {
+  if (selection.tier !== 'agent') return []
+  const kept = new Set(select(checks, tree, selection).map(check => check.id))
+  return select(checks, tree, { ...selection, tier: 'merge' }).filter(check => check.mergeOnly === true && !kept.has(check.id)).map(check => check.id)
 }
 
 /**

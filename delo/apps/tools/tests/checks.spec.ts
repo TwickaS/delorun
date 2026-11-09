@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
-import { affectsParity, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
+import { affectsParity, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
@@ -217,6 +217,47 @@ describe('selection', () => {
     expect([...withDependents(packages, new Set(['@delo/a']))].sort()).toEqual(['@delo/a', '@delo/b', '@delo/c'])
     expect(packageDirOf('delo/apps/cell/src/x.ts')).toBe('delo/apps/cell')
     expect(packageDirOf('delo/vitest.config.ts')).toBeUndefined()
+  })
+})
+
+describe('the gate tiers', () => {
+  const MERGE_ONLY = ['tests:snapshots', 'parity-replay']
+  const dockerTree: ForkTree = { ...TREE, packages: TREE.packages.map(pkg => pkg.name === '@delo/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
+  const upstreamChange = { base: 'v5', paths: ['packages/core/session/src/index.ts'] }
+
+  it('marks the replays, the web lane and the Docker lane merge-only, and no other check', () => {
+    const marked = catalog(dockerTree, HOST).filter(check => check.mergeOnly === true).map(check => check.id)
+    expect(marked).toEqual(['tests:docker', 'tests:web-changed', 'tests:snapshots', 'parity-replay'])
+  })
+
+  it('leaves each merge-only check out of the agent tier and names it, and the merge tier selects it', () => {
+    const checks = catalog(dockerTree, HOST)
+    const changed = { base: 'v5', paths: ['packages/core/session/src/index.ts', 'delo/packages/providers/src/index.ts'] }
+    const agent = ids(select(checks, dockerTree, { ...NONE, changed, tier: 'agent' }))
+    const merge = ids(select(checks, dockerTree, { ...NONE, changed, tier: 'merge' }))
+    for (const id of [...MERGE_ONLY, 'tests:docker']) {
+      expect(agent).not.toContain(id)
+      expect(merge).toContain(id)
+    }
+    expect(agent).toContain('parity-switches')
+    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'agent' })).toEqual(['tests:docker', 'tests:snapshots', 'parity-replay'])
+    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'merge' })).toEqual([])
+    expect(ids(select(checks, dockerTree, { ...NONE, changed }))).toEqual(merge)
+  })
+
+  it('still runs a merge-only check that --only names, in either tier', () => {
+    for (const tier of ['agent', 'merge'] as const) {
+      expect(ids(select(CHECKS, TREE, { ...NONE, changed: upstreamChange, only: ['parity-replay'], tier }))).toContain('parity-replay')
+    }
+  })
+
+  it('runs the full gate in whole whatever the tier says', () => {
+    expect(ids(select(CHECKS, TREE, { ...NONE, tier: 'agent' }))).toEqual(ids(select(CHECKS, TREE, NONE)))
+    expect(leftForMerge(CHECKS, TREE, { ...NONE, tier: 'agent' })).toEqual([])
+  })
+
+  it('declares the documentation gate\'s own source among its inputs, so an edit to the gate reruns it', () => {
+    expect(GATES.find(gate => gate.id === 'gates:docs')?.inputs).toContain('delo/apps/tools/src/checks/gates/docs.ts')
   })
 })
 
