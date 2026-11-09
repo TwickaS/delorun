@@ -8,8 +8,18 @@ import yaml from 'js-yaml'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
+import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, LOCAL_ROWS, UPSTREAM_TEMPLATE } from '../src/profile.ts'
 import { createTestHome, DELO_PROFILE, INSTALL_ANCHOR, REPO, type TestHome } from './profiles.ts'
+
+/** The consent and guard rows this bundle mounts, with the row id each entry carries. */
+const MOUNTED_PLUGINS = [
+  { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent' },
+  { id: 'delo-mcp-consent', name: '@delo/plugin-mcp-consent' },
+  { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults' },
+  { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent' },
+  { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard' },
+] as const
 
 /** One composed row and the `# ==` label the dump printed above it. */
 interface DumpedRow {
@@ -102,6 +112,22 @@ describe('a Delo CLI profile', () => {
     for (const id of ['session-telemetry-otel', 'command-feedback', 'ui-message-feedback', 'ui-settings-account']) {
       expect(rows.filter(row => row.id === id && row.disabled !== true), id).toEqual([])
     }
+  })
+
+  it('mounts each consent and guard plugin Delo delivers with its switch on', () => {
+    const rows = home.rows(DELO_PROFILE)
+    for (const row of MOUNTED_PLUGINS) {
+      expect(rows.filter(entry => entry.id === row.id && entry.disabled !== true && entry.name === row.name && entry.config?.['enabled'] === true), row.id).toHaveLength(1)
+    }
+  })
+
+  it('protects the Delo home on the sandbox row, so a confined command cannot read its secrets', () => {
+    const sandbox = home.rows(DELO_PROFILE).find(row => row.id === 'sandbox')
+    // `dshHomePath` is the harness home, which C1 sets to the Delo home for every runtime process.
+    expect(sandbox?.config).toMatchObject({
+      protectedHome: { __jsExpr: 'dshHomePath()' },
+      protectedHomeReadable: [...READ_EXEMPTIONS],
+    })
   })
 
   it('composes upstream\'s web profile except the listed rows', () => {

@@ -57,6 +57,8 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 | `preset_inspect`（`preset_inspect`） | 开启，且可切换 | 关闭 | 该工具对模型可见，并且不存在于基线标签中。 |
 | doctor（`doctor`） | 开启，且可切换 | 关闭 | doctor 是由人运行的命令，而非对模型可见的工具；它不存在于基线标签中。 |
 
+DeepSeek 会话日志上传在每个挂载了 `@delo/bundle-local` 的 profile 中都处于关闭状态：`delorun` 的 CLI profile，以及任何添加了该 bundle 的其他 profile。未挂载它的 profile 保留插件自身的默认值，即开启：Delo 同样交付的上游裸 `dsh` 启动器运行 `web` profile 时仍会上传会话日志，录制会话回放对回放层未将其关闭的那部分语料也保留上游的取值。差异在入口点，而不在开关——Delo 从自己交付的 bundle 写入该行，不为它不运行的 profile 修改任何上游默认值。
+
 <a id="switch-registry"></a>
 ### 开关注册表
 
@@ -122,7 +124,9 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 要求：
 
 - 只有回放通道设置 `DSH_SNAPSHOT_PATCH` 时，对等覆盖层才会加载。任何正式 profile、人的配置与命令行选项都不会选择它。
-- 在对等组合中，`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent` 与 `container_denial_marker` 处于关闭状态，其保护在该组合中不存在。Delo 的默认组合会让每一项保持开启。
+- 在对等组合中，`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent` 与 `container_denial_marker` 处于关闭状态，其保护在该组合中不存在。
+- 人实际运行的组合会挂载这些同意插件：`@delo/bundle-local`（CLI profile 唯一添加的 Delo 层）插入 `delo-instruction-consent`、`delo-mcp-consent`、`delo-permission-defaults`、`delo-schedule-consent` 与 `delo-fetch-guard` 五行并开启其开关，对等覆盖层则把这五行原样重述为 disabled，因此对等组合一个都不挂载。`container_denial_marker` 是上游 `sandbox-policy` 行的字段，没有任何交付层设置它，因此两种组合都运行其 Config 默认值，即关闭。
+- 交付的 sandbox 行保护 Delo 主目录：`@delo/bundle-local` 把它的 `protectedHome` 设为 harness 主目录（对每个运行时进程而言即 Delo 主目录），并带上 C1 的读取豁免，因此受限命令无法读取 `<home>/secrets` 下的同意存储；`delorun start` 再把该 profile 的通道套接字加入 `deniedSockets`。对等覆盖层把该行留给上游的组合，因此回放运行的是上游的限闭。
 - `plugin_manager_read_exemption` 只豁免五个只读动作。每个写入动作仍需要 `danger-full-access` 提权。
 - 容器内的拒绝永远不会附带提权指引，`bwrap` 的策略拒绝永远不会被标为 `environment`。
 - 模型发起的、对指令层文件的写入、将定时任务投递到完全访问工作区，以及添加 MCP 服务器，都须先等待其同意，才会产生任何效果。
@@ -144,6 +148,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 | `container denial carries no escalation guidance` | 在默认组合的每种权限模式下，容器内的拒绝都返回环境标记，且不附带提权指引。 |
 | `bwrap policy denial is never labelled environment` | 来自 `bwrap` 的 `Read-only file system` 拒绝不会被标为 `environment`。 |
 | `parity overlay is not selected by a person's configuration` | 在存在覆盖层文件但未设置 `DSH_SNAPSHOT_PATCH` 的情况下启动的正式 profile，不会加载该覆盖层。 |
+| `confined command cannot read the home's secrets` | 在默认组合交付的 sandbox 行之下，工作区命令无法读取 `<home>/secrets` 下的金丝雀文件；同一命令不受限时能读到它，且读取豁免下的文件仍然可读。 |
 
 回放证明，用以表明关闭开关会恢复上游的输出，它们不是拒绝测试：
 

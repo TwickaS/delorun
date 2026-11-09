@@ -205,6 +205,16 @@ describe('the parity overlay', () => {
 
 describe('the parity overlay\'s mount of @delo/bundle-local', () => {
   const bundle = readFileSync(join(ROOT, LOCAL_BUNDLE_PATCH_PATH), 'utf8')
+  /** The five consent and guard rows in the parity form the overlay's third patch restates them. */
+  const CONSENT_INSERT = {
+    insert: [
+      { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent', config: { enabled: true }, disabled: true },
+      { id: 'delo-mcp-consent', name: '@delo/plugin-mcp-consent', config: { enabled: true }, disabled: true },
+      { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults', config: { enabled: true }, disabled: true },
+      { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent', config: { enabled: true }, disabled: true },
+      { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
+    ],
+  }
 
   it('restates the bundle\'s patch in its parity form', () => {
     const { localBundle } = readOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
@@ -212,6 +222,15 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
     expect(localBundle).toEqual([
       { id: 'product-analytics', config: { enabled: false, appVersion: { __jsExpr: 'process.env.DSH_CLIENT_VERSION' } } },
       { insert: [{ id: 'delo-privacy', name: '@delo/bundle-local', disabled: true }] },
+      {
+        insert: [
+          { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent', config: { enabled: true }, disabled: true },
+          { id: 'delo-mcp-consent', name: '@delo/plugin-mcp-consent', config: { enabled: true }, disabled: true },
+          { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults', config: { enabled: true }, disabled: true },
+          { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent', config: { enabled: true }, disabled: true },
+          { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
+        ],
+      },
     ])
   })
 
@@ -219,12 +238,14 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
     const { localBundle } = readOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
     expect(localBundleErrors(localBundle.slice(0, 1), bundle)).toEqual([
       'parity overlay: @delo/bundle-local patch 1 is nothing, not its parity form {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}',
+      `parity overlay: @delo/bundle-local patch 2 is nothing, not its parity form ${JSON.stringify(CONSENT_INSERT)}`,
     ])
     // The session-log row's parity form is upstream's composition, so restating it overrides the replay's root configuration.
     expect(localBundleErrors([{ id: 'session-log-deepseek', config: { enabled: false } }, ...localBundle], bundle)).toEqual([
       'parity overlay: @delo/bundle-local patch 0 is {"id":"session-log-deepseek","config":{"enabled":false}}, not its parity form {"id":"product-analytics","config":{"enabled":false,"appVersion":{"__jsExpr":"process.env.DSH_CLIENT_VERSION"}}}',
       'parity overlay: @delo/bundle-local patch 1 is {"id":"product-analytics","config":{"enabled":false,"appVersion":{"__jsExpr":"process.env.DSH_CLIENT_VERSION"}}}, not its parity form {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}',
-      'parity overlay: @delo/bundle-local patch 2 is {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}, not its parity form nothing',
+      'parity overlay: @delo/bundle-local patch 2 is {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}, not its parity form ' + JSON.stringify(CONSENT_INSERT),
+      `parity overlay: @delo/bundle-local patch 3 is ${JSON.stringify(CONSENT_INSERT)}, not its parity form nothing`,
     ])
     expect(localBundleErrors(localBundle, `${bundle}\n- id: web-search-deepseek\n  config: {}\n`)).toEqual([
       `${LOCAL_BUNDLE_PATCH_PATH}: @delo/bundle-local writes row "web-search-deepseek", which LOCAL_ROWS does not list`,

@@ -46,6 +46,21 @@
     credentialOnboarding: true
     welcomeNotice: false
 
+# C1's home protection on upstream's sandbox provider. The row is mounted bare
+# by the base bundle, and `protectedHome` defaults to unset there, so a confined
+# command reads the whole harness home — the consent stores under `secrets/`
+# included. `dshHomePath` is the harness home, which C1 sets to the Delo home
+# for every runtime process; the readable entries are C1's read exemptions,
+# which hold no secret. `delorun start` keeps adding that profile's channel
+# sockets as `deniedSockets` in `run/<profile>/sandbox.patch.yml`.
+- id: sandbox
+  config:
+    protectedHome: !!js dshHomePath()
+    protectedHomeReadable:
+      - runtimes
+      - skills
+      - dsh-runtimes
+
 # Desktop analytics is off until the person turns it on (C11). The row keeps
 # the web bundle's `disabled` condition, so it mounts only in the desktop
 # profile; `appVersion` restates the web bundle's value.
@@ -59,3 +74,39 @@
 - insert:
     - id: delo-privacy
       name: '@delo/bundle-local'
+
+# Delo's consent and guard plugins, each mounted with the C16 switch its Config
+# declares on (the plugin's default is the parity value, off). This bundle is
+# the only Delo layer a CLI profile adds, so without these rows no shipped
+# composition mounts any of them: a model-authored write to an instruction
+# layer, an added stdio MCP server, a full-access mode switch, a scheduled
+# delivery into a moved workspace and a fetch of a private address each ran
+# unguarded. The rows come after upstream's, and before the profile's own patch
+# and every row a person adds, so an MCP server a person configures boots after
+# the consent service is registered. `permission_defaults` alone provides the
+# sandbox-mode guard (A135): `instruction-consent` takes no part of that slot.
+- insert:
+    - id: delo-instruction-consent
+      name: '@delo/plugin-instruction-consent'
+      config:
+        enabled: true
+
+    - id: delo-mcp-consent
+      name: '@delo/plugin-mcp-consent'
+      config:
+        enabled: true
+
+    - id: delo-permission-defaults
+      name: '@delo/plugin-permission-defaults'
+      config:
+        enabled: true
+
+    - id: delo-schedule-consent
+      name: '@delo/plugin-schedule-consent'
+      config:
+        enabled: true
+
+    - id: delo-fetch-guard
+      name: '@delo/plugin-fetch-guard'
+      config:
+        enabled: true

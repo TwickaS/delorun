@@ -50,7 +50,12 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-official-bundles": "workspace:*",
-    "@delo/contract-setup-answers": "workspace:*"
+    "@delo/contract-setup-answers": "workspace:*",
+    "@delo/plugin-fetch-guard": "workspace:*",
+    "@delo/plugin-instruction-consent": "workspace:*",
+    "@delo/plugin-mcp-consent": "workspace:*",
+    "@delo/plugin-permission-defaults": "workspace:*",
+    "@delo/plugin-schedule-consent": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~"
@@ -58,6 +63,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/cordis-plugin-include": "workspace:~",
+    "@deepseek-ai/cordis-plugin-loader": "workspace:~",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-client-locale": "workspace:*",
     "@deepseek-ai/dsh-client-product-analytics": "workspace:*",
@@ -69,13 +75,17 @@
     "@deepseek-ai/dsh-client-ui-sidebar": "workspace:*",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-deepseek-llm-api-extensions": "workspace:*",
+    "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-host-product-telemetry-otel": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-llm-deepseek-api-key": "workspace:*",
     "@deepseek-ai/dsh-llm-mock-server": "workspace:*",
     "@deepseek-ai/dsh-otel": "workspace:*",
+    "@deepseek-ai/dsh-sandbox": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-local": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-log-deepseek": "workspace:*",
+    "@delo/contract-home-layout": "workspace:*",
     "@types/react": "~18.3.1",
     "js-yaml": "^4.3.2",
     "react": "^18.2.0",

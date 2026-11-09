@@ -24,13 +24,13 @@ export const DEFAULT_PARITY: Readonly<Partial<Record<ParitySwitchId, string>>> =
   preset_inspect: 'its row sits in each Web preset\'s plugin list, which a patch reaches only by replacing the whole preset row',
   container_denial_marker: 'the bundles and the root configurations set sandbox-policy\'s mode and workspace root, which a row would erase',
   sandbox_protected_reads: 'the bundles set the search tools\' over-cap sampling choice, which a row would erase',
-  fetch_guard: 'no shipped profile or bundle mounts the plugin, so no row of the root tree holds it; the parity composition leaves the fetchGuard service unmounted, and the provider reads its absence per hop and runs unguarded',
+  fetch_guard: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the fetchGuard service unmounted, and the provider reads its absence per hop and runs unguarded',
   doctor: 'only the doctor profile mounts the app, and the replay starts no doctor process',
   studio_additions: 'no shipped profile or bundle mounts the main chat, whose row the studio bundle adds with the switch on',
-  mcp_add_consent: 'no shipped profile or bundle mounts the plugin, so no row of the root tree holds it; the parity composition leaves the mcpAddConsent service unmounted, and the mcp-client starts every configured server as upstream does',
-  permission_defaults: 'no shipped profile or bundle mounts the plugin, so no row of the root tree holds it; the parity composition leaves the permissionDefaults service and its sandbox-mode guard unmounted, so the deployment default reaches every new chat and every mode switch is recorded, as upstream records it',
-  instruction_layer_consent: 'no shipped profile or bundle mounts the plugin, so no row of the root tree holds it; the parity composition leaves the writeConsent service unmounted, and the mutating tools run unasked, as upstream runs them',
-  scheduled_task_consent: 'no shipped profile or bundle mounts the consent plugin, whose row a composition adds with the switch on',
+  mcp_add_consent: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the mcpAddConsent service unmounted, and the mcp-client starts every configured server as upstream does',
+  permission_defaults: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the permissionDefaults service and its sandbox-mode guard unmounted, so the deployment default reaches every new chat and every mode switch is recorded, as upstream records it',
+  instruction_layer_consent: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the writeConsent service unmounted, and the mutating tools run unasked, as upstream runs them',
+  scheduled_task_consent: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the consent plugin; the parity composition leaves the scheduleConsent service unmounted, and approvals and deliveries keep upstream\'s text and behaviour',
 }
 
 /** One overlay row, as parsed. */
