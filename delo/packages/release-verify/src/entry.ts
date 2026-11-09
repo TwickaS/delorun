@@ -149,17 +149,42 @@ export function verifyEd25519ph(rawKey: Uint8Array, message: Uint8Array, signatu
 }
 
 /**
+ * Refuse a release version that is not a semantic version: a retired key's last release is compared with it, and a
+ * comparison of a version this client cannot read would raise instead of refusing.
+ * @param version - the release's version.
+ * @throws ReleaseLogRefusalError `entry-key-untrusted` when the version is not a semantic version, because no targets
+ * key's validity for that release can be shown.
+ */
+export function requireReleaseVersion(version: string): void {
+  if (semver.valid(version) === null) {
+    throw refuse('entry-key-untrusted', `release version ${JSON.stringify(version)} is not a semantic version, so no targets key can be shown valid for it`)
+  }
+}
+
+/**
  * The targets keys that may verify a release: the active key, and each retired key whose last release is at or above
  * the release's version. A revoked key verifies nothing, so a release never verifies with it.
+ *
+ * A version that is not a semantic version, and a retired key whose last release is not one either, are refused rather
+ * than compared: `semver.lte` raises a `TypeError` on either, which is no verdict a start can record, and a key whose
+ * retirement point cannot be read is trusted for nothing.
  * @param root - the trusted root.
  * @param version - the release's version.
  * @returns the keys with their ids.
- * @throws ReleaseLogRefusalError `entry-key-untrusted` when a listed key is not a 32-byte base64 Ed25519 key or is
- * listed under an id that is not its own digest.
+ * @throws ReleaseLogRefusalError `entry-key-untrusted` when the version or a retired key's last release is not a
+ * semantic version, when a listed key is not a 32-byte base64 Ed25519 key, or when a key is listed under an id that is
+ * not its own digest.
  */
 export function targetsKeysFor(root: RootMetadata, version: string): readonly { readonly keyid: KeyId, readonly rawKey: Buffer }[] {
-  const allowed = root.roles.targets.keys.filter(key => key.status === 'active'
-    || (key.status === 'retired' && key.lastRelease !== undefined && semver.lte(version, key.lastRelease)))
+  requireReleaseVersion(version)
+  const allowed = root.roles.targets.keys.filter((key) => {
+    if (key.status === 'active') return true
+    if (key.status !== 'retired' || key.lastRelease === undefined) return false
+    if (semver.valid(key.lastRelease) === null) {
+      throw refuse('entry-key-untrusted', `retired targets key ${key.keyid} names a last release ${JSON.stringify(key.lastRelease)} that is not a semantic version`)
+    }
+    return semver.lte(version, key.lastRelease)
+  })
   return allowed.map((key) => {
     const entry: PublicKey | undefined = root.keys[key.keyid]
     if (entry === undefined) throw refuse('entry-key-untrusted', `the trusted root names targets key ${key.keyid} without listing it`)

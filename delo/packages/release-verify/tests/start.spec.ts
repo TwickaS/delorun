@@ -121,6 +121,17 @@ describe('a verifiable failure', () => {
     expect(result.refusal).toBe('checkpoint-rolled-back')
   })
 
+  it('records `failed` instead of rejecting when the release version is not a semantic version', async () => {
+    const fixture = scenario()
+    for (const mode of VERIFICATION_MODES) {
+      const result = await checkAtStart(input(fixture, { version: 'v0.1', mode }))
+      expect(result.state).toBe('failed')
+      expect(result.stop).toBe(true)
+      expect(result.refusal).toBe('entry-key-untrusted')
+      expect(result.detail).toContain('not a semantic version')
+    }
+  })
+
   it('records `unchecked` when the distributor is unreachable, which is not a failure', async () => {
     const fixture = scenario()
     const transport = new FixtureTransport()

@@ -9,9 +9,12 @@
  * This module holds no network code. A caller passes a {@link ReleaseLogTransport}, so a test drives every answer from
  * recorded fixtures and the launcher passes its own transport, which contract C18's owner gates.
  *
+ * The root is a precondition, as it is in `bundle.ts`: the caller reads it under contract C2 first, which checks its
+ * signature, its `expires` against the clock, and that the log verifier key's name is the log origin.
+ *
  * @module @delo/release-verify/online
  */
-import { MAX_PROOF_HASHES, MAX_WITNESSED_CHECKPOINT_AGE_SECONDS } from '@delo/contract-release-log'
+import { MAX_PROOF_HASHES, MAX_WITNESSED_CHECKPOINT_AGE_SECONDS, WITNESS_THRESHOLD } from '@delo/contract-release-log'
 import type { RootMetadata } from '@delo/contract-release-manifest'
 import { advanceCheckpoint, storedCheckpoint, type StoredCheckpoint } from './checkpoint.ts'
 import { refuse, ReleaseLogRefusalError, type ReleaseLogRefusal } from './errors.ts'
@@ -89,8 +92,13 @@ function readLatest(root: RootMetadata, note: string): { readonly size: number, 
       if (typeof time === 'number') cosigned.set(witness.vkey, Math.max(time, cosigned.get(witness.vkey) ?? 0))
     }
   }
-  if (cosigned.size < root.witnesses.threshold) {
-    throw refuse('witness-cosignature-missing', `the latest checkpoint has ${String(cosigned.size)} valid cosignatures from the root's witnesses; ${String(root.witnesses.threshold)} are required`)
+  // The contract fixes the client's witness threshold at 1, so a root that carries none requires one cosignature
+  // anyway: a threshold of 0 would accept a checkpoint no listed witness ever saw.
+  const threshold = Math.max(root.witnesses.threshold, WITNESS_THRESHOLD)
+  // `Math.max` of no values is `-Infinity`, which the age check below would read as a cosignature infinitely old; a
+  // checkpoint with no valid cosignature is one refusal, taken before any newest cosigning time.
+  if (cosigned.size === 0 || cosigned.size < threshold) {
+    throw refuse('witness-cosignature-missing', `the latest checkpoint has ${String(cosigned.size)} valid cosignatures from the root's witnesses; ${String(threshold)} are required`)
   }
   return { size: checkpoint.size, rootHash: checkpoint.rootHash, cosigned: Math.max(...cosigned.values()) }
 }
@@ -118,11 +126,15 @@ export async function checkOnline(input: OnlineCheckInput): Promise<OnlineVerdic
   if (age > MAX_WITNESSED_CHECKPOINT_AGE_SECONDS) {
     return { ok: false, kind: 'stale', detail: `the newest witness cosignature is ${String(age)} seconds old, over the ${String(MAX_WITNESSED_CHECKPOINT_AGE_SECONDS)}-second limit` }
   }
-  const from = input.stored
+  // The stored record may only raise the rollback floor. A record below the bundle's verified tree would let the log
+  // serve a tree the bundle already proved larger and the record move backwards (R7), so it is not the tree to prove
+  // consistency from: the bundle's verified tree is the floor, and the record counts only when it is at or above it.
+  const from = input.stored !== undefined && input.stored.treeSize >= input.bundle.treeSize ? input.stored : undefined
   const fromSize = from?.treeSize ?? input.bundle.treeSize
   const fromRoot = from === undefined ? input.bundle.rootHash : Buffer.from(from.rootHash, 'hex')
   if (latest.size < fromSize) {
-    return { ok: false, kind: 'failed', refusal: 'checkpoint-rolled-back', detail: `the latest checkpoint is tree size ${String(latest.size)}, below the checkpoint the client holds at ${String(fromSize)}` }
+    const below = from === undefined ? 'the bundle\'s verified tree' : 'the checkpoint the client stored'
+    return { ok: false, kind: 'failed', refusal: 'checkpoint-rolled-back', detail: `the latest checkpoint is tree size ${String(latest.size)}, below ${below} at ${String(fromSize)}` }
   }
   let proof: readonly string[]
   try {

@@ -115,6 +115,12 @@ describe('step 1: the bundle covers the manifest the client verified', () => {
     expect(refusal(fixture, fixture.bundle, Buffer.from('another manifest'))).toBe('manifest-digest-mismatch')
   })
 
+  it('refuses a bundle that names another file than the release\'s manifest file', () => {
+    const fixture = scenario()
+    expect(refusal(fixture, { ...fixture.bundle, manifest: { ...fixture.bundle.manifest, name: 'delorun-0.2.0.manifest.json' } })).toBe('manifest-digest-mismatch')
+    expect(refusal(fixture, { ...fixture.bundle, manifest: { ...fixture.bundle.manifest, name: '../delorun-0.1.0.manifest.json' } })).toBe('manifest-digest-mismatch')
+  })
+
   it('refuses an entry whose hashedrekord names another digest, though its signature covers the manifest', () => {
     const fixture = scenario()
     const log = fixture.log
@@ -155,7 +161,20 @@ describe('step 2: the entry is the manifest\'s, signed by a trusted targets key'
     expect(refusalOf(() => verifyBundle(revoked, VERSION, MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
     const retired = { ...fixture.root, roles: { ...fixture.root.roles, targets: { keys: [{ keyid: id, status: 'retired' as const, lastRelease: brandString<SemanticVersion>(VERSION) }], threshold: 1 } } }
     expect(refusalOf(() => verifyBundle(retired, VERSION, MANIFEST, fixture.bundle))).toBeUndefined()
-    expect(refusalOf(() => verifyBundle(retired, '0.2.0', MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
+    const later = { ...fixture.bundle, manifest: { ...fixture.bundle.manifest, name: 'delorun-0.2.0.manifest.json' } }
+    expect(refusalOf(() => verifyBundle(retired, '0.2.0', MANIFEST, later))).toBe('entry-key-untrusted')
+  })
+
+  it('refuses a version or a retired last release that is not a semantic version, instead of raising a TypeError', () => {
+    const fixture = scenario()
+    const id = keyIdOf(rawPublic(fixture.keys.targets))
+    const retired = { ...fixture.root, roles: { ...fixture.root.roles, targets: { keys: [{ keyid: id, status: 'retired' as const, lastRelease: brandString<SemanticVersion>('v1.2') }], threshold: 1 } } }
+    expect(refusalOf(() => verifyBundle(retired, VERSION, MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
+    expect(refusalOf(() => verifyBundle(fixture.root, 'v0.1', MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
+    // The same refusals as a verdict, which is what a start records as `failed` instead of propagating an error.
+    const bytes = Buffer.from(JSON.stringify(fixture.bundle))
+    expect(checkBundle(retired, VERSION, MANIFEST, bytes)).toMatchObject({ ok: false, refusal: 'entry-key-untrusted' })
+    expect(checkBundle(fixture.root, 'v0.1', MANIFEST, bytes)).toMatchObject({ ok: false, refusal: 'entry-key-untrusted' })
   })
 })
 
@@ -277,6 +296,15 @@ describe('step 5: the root\'s threshold of listed witnesses cosigned', () => {
     const root = { ...fixture.root, witnesses: { keys: [{ name: fixture.witness.name, vkey: fixture.witness.vkey }], threshold: 2 } }
     const twice = fixture.witness.cosign(fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT), COSIGNED_AT + 1)
     expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, { ...fixture.bundle, checkpoint: twice }))).toBe('witness-cosignature-missing')
+  })
+
+  it('requires one cosignature whatever threshold the root carries, and reads a finite cosigning time', () => {
+    const fixture = scenario()
+    const zero = { ...fixture.root, witnesses: { ...fixture.root.witnesses, threshold: 0 } }
+    // A threshold of 0 would satisfy `0 < 0`, and the newest cosigning time of no cosignature is `-Infinity`, which the
+    // online check reads as infinitely old; the contract's client value is 1, so the unsigned checkpoint is refused.
+    expect(refusalOf(() => verifyBundle(zero, VERSION, MANIFEST, { ...fixture.bundle, checkpoint: fixture.log.checkpoint() }))).toBe('witness-cosignature-missing')
+    expect(verifyBundle(zero, VERSION, MANIFEST, fixture.bundle).cosigned).toBe(COSIGNED_AT)
   })
 
   it('does not count a cosignature by another key wearing a listed witness\'s name', () => {

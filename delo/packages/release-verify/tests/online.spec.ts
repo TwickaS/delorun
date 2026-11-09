@@ -10,7 +10,7 @@ import { MAX_PROOF_HASHES, MAX_WITNESSED_CHECKPOINT_AGE_SECONDS } from '@delo/co
 import { storedCheckpoint, type StoredCheckpoint } from '../src/checkpoint.ts'
 import type { VerifiedBundle } from '../src/bundle.ts'
 import { checkOnline, LogUnreachableError, type OnlineVerdict } from '../src/online.ts'
-import { consistencyProof, COSIGNED_AT, FixtureTransport, scenario, treeRoot, type Scenario } from './fixtures.ts'
+import { consistencyProof, COSIGNED_AT, FixtureTransport, NOTE_SIGNATURE, scenario, signatureLine, treeRoot, type Scenario } from './fixtures.ts'
 
 /** The client's clock, a minute after the fixture checkpoint's cosignature. */
 const NOW = COSIGNED_AT + 60
@@ -121,6 +121,17 @@ describe('the latest checkpoint the distributor serves', () => {
     expect(verdict).toMatchObject({ ok: false, kind: 'failed', refusal: 'witness-cosignature-missing' })
   })
 
+  it('requires one cosignature whatever threshold the root carries, instead of reading an infinitely old checkpoint', async () => {
+    const fixture = scenario()
+    const root = { ...fixture.root, witnesses: { ...fixture.root.witnesses, threshold: 0 } }
+    const transport = new FixtureTransport()
+    transport.note = fixture.log.checkpoint()
+    // A threshold of 0 would satisfy `0 < 0`, and the newest cosigning time of no cosignature is `-Infinity`, which
+    // the age check below would read as stale rather than as the missing cosignature it is.
+    const verdict = await checkOnline({ root, bundle: verified(fixture), stored: undefined, transport, now: NOW })
+    expect(verdict).toMatchObject({ ok: false, kind: 'failed', refusal: 'witness-cosignature-missing' })
+  })
+
   it('refuses one that is not a signed note', async () => {
     const fixture = scenario()
     const verdict = await online(fixture, (transport) => { transport.note = 'not a signed note' })
@@ -160,5 +171,31 @@ describe('consistency with the tree the client holds', () => {
     const stored = storedCheckpoint(fixture.log.origin, fixture.bundle.inclusion.treeSize, Buffer.alloc(32, 4), 'a stored note', COSIGNED_AT)
     const verdict = await online(fixture, (transport) => { transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT) }, stored)
     expect(verdict).toMatchObject({ ok: false, kind: 'failed', refusal: 'consistency-proof-invalid' })
+  })
+
+  it('proves from the bundle\'s verified tree, not from a stored record below it', async () => {
+    const fixture = scenario()
+    const stored = storedCheckpoint(fixture.log.origin, 1, fixture.log.leafHashes[0]!, 'a stored note', COSIGNED_AT)
+    const transport = new FixtureTransport()
+    transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
+    const verdict = await checkOnline({ root: fixture.root, bundle: verified(fixture), stored, transport, now: NOW })
+    // The stored record lowers the floor, so the proof starts from the bundle's tree of 3, not the record's 1.
+    expect(verdict.ok).toBe(true)
+    expect(transport.asked).toEqual([{ first: 3, second: 3 }])
+  })
+
+  it('c18-checkpoint-rollback-refused: refuses a latest checkpoint below the bundle\'s tree, though the stored record is lower still', async () => {
+    const fixture = scenario()
+    const stored = storedCheckpoint(fixture.log.origin, 1, fixture.log.leafHashes[0]!, 'a stored note', COSIGNED_AT)
+    // The log serves a two-leaf tree: above the stored record's 1, below the bundle's verified 3.
+    const body = `${fixture.log.origin}\n2\n${treeRoot(fixture.log.leafHashes.slice(0, 2)).toString('base64')}\n`
+    const note = `${body}\n${signatureLine(fixture.log.origin, NOTE_SIGNATURE, fixture.log.key, body)}`
+    const transport = new FixtureTransport()
+    transport.note = fixture.witness.cosign(note, COSIGNED_AT)
+    transport.proof = consistencyProof(1, fixture.log.leafHashes.slice(0, 2)).map(hash => hash.toString('hex'))
+    const verdict = await checkOnline({ root: fixture.root, bundle: verified(fixture), stored, transport, now: NOW })
+    // Taking the record's 1 as the floor would let the proof from 1 to 2 verify and the record move backwards from 3.
+    expect(verdict).toMatchObject({ ok: false, kind: 'failed', refusal: 'checkpoint-rolled-back' })
+    expect(transport.asked).toEqual([])
   })
 })

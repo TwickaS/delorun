@@ -4,6 +4,12 @@
  * check proves consistency from it at the next start, so the record never moves backwards — a smaller or another tree
  * is refused (R7) — and it carries the signed note so the next check starts from what the witnesses saw.
  *
+ * The record is trusted by file mode, not by a signature of its own: it is written at mode 0600 under the home's 0700
+ * `trust/` directory (contract C1), and its note is checked to be the tree the record names, so a record that reads is
+ * one this client wrote or one written with the home's permissions. Whoever can write the file can set the floor the
+ * online check proves from, and that is the home's protection rather than this module's. A record that does not read is
+ * no record: the caller starts from the bundle's own checkpoint instead.
+ *
  * @module @delo/release-verify/checkpoint
  */
 import { z } from 'zod'
