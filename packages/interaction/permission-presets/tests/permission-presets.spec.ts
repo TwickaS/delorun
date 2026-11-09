@@ -10,6 +10,7 @@ import type { ApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import PermissionPresetService, {
   AUTO_PRESET, CUSTOM_PRESET,
 } from '@deepseek-ai/dsh-permission-presets'
+import { SandboxModeRefusedError } from '@deepseek-ai/dsh-sandbox-policy'
 import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 
 const configurations = new WeakMap<Context, Awaited<ReturnType<typeof liveConfig>>>()
@@ -131,8 +132,8 @@ describe('PermissionPresetService', () => {
     ctx.permissionPresets.set(session, AUTO_PRESET)
     expect(admissions).toBe(1)
     expect(session.snapshotEvents().map(event => [event.type, event.data])).toEqual([
-      ['permission/preset', { preset: AUTO_PRESET }],
       ['sandbox/mode', { mode: 'danger-full-access' }],
+      ['permission/preset', { preset: AUTO_PRESET }],
     ])
     expect(ctx.permissionPresets.current(session)).toBe(AUTO_PRESET)
 
@@ -167,15 +168,15 @@ describe('PermissionPresetService', () => {
 
     ctx.permissionPresets.set(session, 'danger-full-access')
     expect(session.snapshotEvents().slice(baselineLength).map(event => [event.type, event.data])).toEqual([
-      ['permission/preset', { preset: 'danger-full-access' }],
       ['approval/policy', { policy: 'never' }],
+      ['permission/preset', { preset: 'danger-full-access' }],
     ])
     expect(ctx.permissionPresets.current(session)).toBe('danger-full-access')
 
     ctx.permissionPresets.set(session, AUTO_PRESET)
     expect(session.snapshotEvents().slice(baselineLength + 2).map(event => [event.type, event.data])).toEqual([
-      ['permission/preset', { preset: AUTO_PRESET }],
       ['approval/policy', { policy: 'ask' }],
+      ['permission/preset', { preset: AUTO_PRESET }],
     ])
     expect(ctx.permissionPresets.current(session)).toBe(AUTO_PRESET)
 
@@ -224,14 +225,16 @@ describe('PermissionPresetService', () => {
     expect(ctx.permissionPresets.current(session)).toBe('danger-full-access')
   })
 
-  it('set() writes through: one preset event plus both knob events', async () => {
+  it('set() writes through: one preset event plus both knob events, the identity last', async () => {
     const ctx = await mounted()
     const session = freshSession('sess-set')
     ctx.permissionPresets.set(session, 'danger-full-access')
+    // The identity is appended after the mode is set, so a refusal from the
+    // mode seam's guard leaves neither event.
     expect(session.snapshotEvents().map(e => [e.type, e.data])).toEqual([
-      ['permission/preset', { preset: 'danger-full-access' }],
       ['sandbox/mode', { mode: 'danger-full-access' }],
       ['approval/policy', { policy: 'never' }],
+      ['permission/preset', { preset: 'danger-full-access' }],
     ])
   })
 
@@ -252,9 +255,51 @@ describe('PermissionPresetService', () => {
     ctx.permissionPresets.set(session, 'danger-full-access')
     const tail = session.snapshotEvents().slice(4)
     expect(tail.map(e => [e.type, e.data])).toEqual([
-      ['permission/preset', { preset: 'danger-full-access' }],
       ['sandbox/mode', { mode: 'danger-full-access' }],
+      ['permission/preset', { preset: 'danger-full-access' }],
     ])
+  })
+
+  it('a mounted mode guard refuses the switch before anything is appended: no preset identity, no mode event', async () => {
+    const ctx = await mounted()
+    const asked: Array<[string, SandboxMode]> = []
+    ctx.provide('sandboxModeGuard', (session, mode) => {
+      asked.push([session.id, mode])
+      return 'the person kept this session in the sandbox'
+    })
+    const session = freshSession('sess-guard-refused')
+    let refusal: unknown
+    try {
+      ctx.permissionPresets.set(session, 'danger-full-access')
+    } catch (error) {
+      refusal = error
+    }
+    expect(refusal).toBeInstanceOf(SandboxModeRefusedError)
+    expect((refusal as Error).name).toBe('SandboxModeRefusedError')
+    // The guard reads the switch itself: this session, this mode. A refused
+    // switch appends no `permission/preset` identity and no `sandbox/mode`
+    // event, so the session keeps the preset it resolved before the call.
+    expect(asked).toEqual([['sess-guard-refused', 'danger-full-access']])
+    expect(session.snapshotEvents()).toEqual([])
+    expect(ctx.permissionPresets.current(session)).toBe('workspace-write')
+  })
+
+  it('consults the guard for a selection that keeps the mode and drops the approval policy', async () => {
+    const ctx = await mounted({ config: { presets: {
+      'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
+      'quiet-write': { sandbox: 'workspace-write', approval: 'never' },
+    } } })
+    const asked: Array<[string, SandboxMode]> = []
+    ctx.provide('sandboxModeGuard', (session, mode) => {
+      asked.push([session.id, mode])
+      return 'dropping the approval prompt needs a consent of its own'
+    })
+    const session = freshSession('sess-approval-drop')
+    // The selection changes no mode, and the guard still runs: the consent
+    // covers the whole preset, so the approval drop is not a way around it.
+    expect(() => ctx.permissionPresets.set(session, 'quiet-write')).toThrow(SandboxModeRefusedError)
+    expect(asked).toEqual([['sess-approval-drop', 'workspace-write']])
+    expect(session.snapshotEvents()).toEqual([])
   })
 
   it('rejects composition over a non-confining executor at load', async () => {

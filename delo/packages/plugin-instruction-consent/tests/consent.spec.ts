@@ -2,13 +2,13 @@
  * Specs of `@delo/plugin-instruction-consent`: the classifier's targets — the
  * skill stores of every scope, the preset declaration files, the folder and
  * home `AGENTS.md` — the review notes' effect text and verbatim diff, the
- * `writeConsent` review's verdicts, and the switch that mounts both services
- * or nothing.
+ * `writeConsent` review's verdicts, and the switch that mounts the service or
+ * nothing.
  */
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { classifyTarget, reviewNote } from '../src/classify.ts'
-import { allowEveryModeChange, apply, Config, InstructionConsent } from '../src/index.ts'
+import { apply, Config, InstructionConsent } from '../src/index.ts'
 
 /** The environment the classifier's homes resolve from in this suite. */
 const ENV = { DSH_HOME: '/home/person/.delo', DSH_AGENTS_HOME: '/home/person/.agents' }
@@ -130,20 +130,21 @@ describe('the instruction_layer_consent switch', () => {
     expect(Config()).toEqual({ enabled: false })
   })
 
-  it('mounts both services when on, and the mounted guard refuses no mode change', () => {
+  it('mounts the writeConsent service when on, and leaves the one mode-guard slot to its owner', () => {
     const ctx = new Context()
     try {
       apply(ctx, { enabled: true })
       expect(ctx.get('writeConsent')).toBeInstanceOf(InstructionConsent)
-      const guard = ctx.get('sandboxModeGuard') as unknown as (() => string | undefined) | undefined
-      expect(guard).toBe(allowEveryModeChange)
-      expect(guard?.()).toBeUndefined()
+      // A135: the session-mode seam keeps one provider, the full-access consent
+      // of @delo/plugin-permission-defaults, so this plugin mounts no guard. The
+      // seam itself is proven by sandbox-policy's own spec.
+      expect(ctx.get('sandboxModeGuard')).toBeUndefined()
     } finally {
       void ctx.fiber.dispose()
     }
   })
 
-  it('mounts nothing when off, so both seams read as unmounted', () => {
+  it('mounts nothing when off, so the seam reads as unmounted', () => {
     const ctx = new Context()
     try {
       apply(ctx, { enabled: false })

@@ -335,6 +335,21 @@ describe('the sandbox/mode session kit', () => {
     expect(session.snapshotEvents().filter(e => e.type === 'sandbox/mode')).toEqual([])
   })
 
+  it('reads the switch itself: the hook receives this session and this mode, and a refusal appends nothing', () => {
+    const session = Session.create(SessionId('sess-guard-arguments'))
+    const calls: Array<readonly [Session, string]> = []
+    expect(() => setSandboxMode(session, 'workspace-write', (guarded, mode) => {
+      calls.push([guarded, mode])
+      return 'the workspace has no consent for that mode'
+    })).toThrow(SandboxModeRefusedError)
+    // A consent depends on both halves of the switch, so the seam forwards the
+    // session it applies to and the mode it would set — nothing else, once.
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.[0]).toBe(session)
+    expect(calls[0]?.[1]).toBe('workspace-write')
+    expect(session.snapshotEvents().filter(e => e.type === 'sandbox/mode')).toEqual([])
+  })
+
   it('an absent or allowing hook switches exactly as before the guard', () => {
     const allowing = Session.create(SessionId('sess-guard-allowing'))
     setSandboxMode(allowing, 'read-only', () => undefined)

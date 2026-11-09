@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/packages/plugin-instruction-consent/README.md
 /delo-plugin-instruction-consent:
-  en: 19cd3f155a9f36dc
-  zh: 28f97bed52bb6b21
+  en: b32f4d2501f9f15a
+  zh: 8c5bceefdfc646e6
 /delo-plugin-instruction-consent/what-it-provides:
-  en: 5b996b9d4fd3abcb
-  zh: 44b9e193e383baeb
+  en: 0cd6d36fe9bab971
+  zh: 46f77a3421c6c03a
 /delo-plugin-instruction-consent/configuration:
   en: 1475270227681229
   zh: 44de76e362844c6f

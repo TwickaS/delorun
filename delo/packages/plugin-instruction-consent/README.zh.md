@@ -1,15 +1,16 @@
 # @delo/plugin-instruction-consent
 
-指令层同意（WP2.15，A101）： seams 背后的服务，防止模型在未经批准的情况下改写个人的指令层文件——技能、预设和工作区的 `AGENTS.md`。
+指令层同意（WP2.15，A101）： seam 背后的服务，防止模型在未经批准的情况下改写个人的指令层文件——技能、预设和工作区的 `AGENTS.md`。
 
 
 [English](README.md) | 中文
 ## 提供什么
 
 - `writeConsent` —— 写入工具在模型撰写的文件提交前咨询它。目标被归类为指令层文件的写入需要一次批准，批准文本说明这些指令会在该范围的每次未来对话中加载，并附上差异；拒绝则文件保持不变。
-- `sandboxModeGuard` —— 模式变更钩子；挂载它是为了证明 seam 可用。Delo 的组成在 1.0 中不拒绝任何模式变更。
 
-这些服务不理会权限预设：同意适用于每个预设，包括完全访问。个人在 studio 自己的编辑器中做的写入不会触发新的询问——seam 只看到模型撰写的写入。
+会话模式 seam 的 `sandboxModeGuard` 不由本插件提供：该 seam 只有一个提供者，即 [`@delo/plugin-permission-defaults`](../plugin-permission-defaults/README.zh.md) 的完全访问同意（A135）。一个不拒绝任何切换的 guard 证明不了 seam 自身规格尚未证明的任何事情。
+
+该服务不理会权限预设：同意适用于每个预设，包括完全访问。个人在 studio 自己的编辑器中做的写入不会触发新的询问——seam 只看到模型撰写的写入。
 
 ## 配置
 

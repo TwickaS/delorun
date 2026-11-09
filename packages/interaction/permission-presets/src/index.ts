@@ -1,13 +1,14 @@
 /**
  * User-facing permission presets over the independent sandbox-mode and
- * approval-policy knobs. A switch records the selected preset, then writes
- * changed knobs through their canonical setters. Execution, prompt narration,
- * and replay keep reading their knob folds. The preset event preserves user
- * intent when two presets share a bundle. The Auto review integration may
- * publish one fixed, current-session-only preset with a synchronous admission
- * check; settings defaults remain limited to the configured table. The read
- * side exposes a process catalog plus the current-value-only `permissions`
- * Session projection; the write side ships as the `/permission` command.
+ * approval-policy knobs. A switch writes the changed knobs through their
+ * canonical setters, then records the selected preset. Execution, prompt
+ * narration, and replay keep reading their knob folds. The preset event
+ * preserves user intent when two presets share a bundle. The Auto review
+ * integration may publish one fixed, current-session-only preset with a
+ * synchronous admission check; settings defaults remain limited to the
+ * configured table. The read side exposes a process catalog plus the
+ * current-value-only `permissions` Session projection; the write side ships as
+ * the `/permission` command.
  *
  * @module dsh-permission-presets
  */
@@ -46,9 +47,10 @@ declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
      * Records the selected preset as durable, log-only user intent. The knob
-     * events follow in the same turn and control execution; this event stays
-     * out of the model transcript and lets the permission projection unit
-     * preserve a selection when bundles match.
+     * events precede it in the same turn and control execution; this event
+     * stays out of the model transcript and lets the permission projection unit
+     * preserve a selection when bundles match. It is appended last, so a switch
+     * a consent layer refuses leaves neither the knob event nor this record.
      */
     'permission/preset': { preset: string }
   }
@@ -402,10 +404,10 @@ export class PermissionPresetService extends TypertRemoteService {
   }
 
   /**
-   * Record a changed preset, then update each changed knob through its own
-   * setter. Selecting the effective preset again appends nothing. A mounted
-   * mode guard runs before the record, so a refused switch appends nothing
-   * either and the session keeps the knobs it had.
+   * Update each changed knob through its own setter, then record the changed
+   * preset. Selecting the effective preset again appends nothing. A mounted
+   * mode guard runs before anything is appended, so a refused switch appends
+   * nothing either and the session keeps the knobs it had.
    * @param session - the session the switch belongs to.
    * @param name - the preset to switch to; unknown names throw.
    * @throws {SandboxModeRefusedError} when the mounted mode guard refuses the
@@ -415,29 +417,34 @@ export class PermissionPresetService extends TypertRemoteService {
     this.apply(session, name, (policy) => { setApprovalPolicy(session, policy) })
   }
 
-  /** Apply one preset through its durable identity and canonical knob setters. */
+  /**
+   * Apply one preset through its canonical knob setters and its durable
+   * identity. The identity is appended last, after every knob event it stands
+   * for is committed, so a switch that throws partway leaves neither the knob
+   * event nor the record of an intent the session did not take on.
+   */
   private apply(session: Session, name: string, setApproval: (policy: ApprovalPolicy) => void): void {
     const spec = this.resolve(name)
     if (name === AUTO_PRESET) this.autoAdmit?.()
     const current = this.current(session)
     const knobs = this.permissionState(session)
-    // The consent layer's optional mode guard runs BEFORE anything is appended:
-    // a refused switch leaves the log exactly as it was — no preset identity and
-    // no knob event — so the session keeps resolving the mode it already had.
+    const guard = this.ctx.get('sandboxModeGuard')
     if (spec.sandbox !== (knobs.sandbox ?? this.ctx.shell.sandboxMode)) {
-      const reason = this.ctx.get('sandboxModeGuard')?.(session, spec.sandbox)
+      // The mode write goes through the seam's one write path WITH the guard,
+      // so a consent layer refuses the switch before `sandbox/mode` is
+      // appended: the guard is the chokepoint, not a second opinion beside it.
+      setSandboxMode(session, spec.sandbox, guard)
+    } else {
+      // The selection keeps the mode and may still drop the approval policy.
+      // The consent covers the whole preset, so the guard runs for that drop
+      // too, before anything is appended.
+      const reason = guard?.(session, spec.sandbox)
       if (reason !== undefined) throw new SandboxModeRefusedError(reason)
     }
-    const updateKnobs = (): void => {
-      if (spec.sandbox !== (knobs.sandbox ?? this.ctx.shell.sandboxMode)) {
-        setSandboxMode(session, spec.sandbox)
-      }
-      if (spec.approval !== (knobs.approval ?? this.ctx.approval.config.policy ?? 'ask')) {
-        setApproval(spec.approval)
-      }
+    if (spec.approval !== (knobs.approval ?? this.ctx.approval.config.policy ?? 'ask')) {
+      setApproval(spec.approval)
     }
     if (current !== name) session.append('permission/preset', { preset: name })
-    updateKnobs()
   }
 
   /**

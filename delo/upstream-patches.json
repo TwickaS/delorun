@@ -2269,12 +2269,12 @@
     {
       "path": "packages/interaction/permission-presets/src/index.ts",
       "class": "delo-feature",
-      "reason": "Per-workspace permission defaults: `PermissionPresetService.unset(session)` reads whether a session holds no preset, sandbox mode or approval policy and was never seeded, the seam a distribution's per-workspace defaults read before the first choice is pinned. `pinInitialPermission` calls it for the same predicate, so a new session still pins the configured default exactly as upstream does. It is not a Remote and sets no default. The `tool-ask-user` direct-tool hunks (E3) are left out."
+      "reason": "Per-workspace permission defaults: `PermissionPresetService.unset(session)` reads whether a session holds no preset, sandbox mode or approval policy and was never seeded, the seam a distribution's per-workspace defaults read before the first choice is pinned. `pinInitialPermission` calls it for the same predicate, so a new session still pins the configured default exactly as upstream does. It is not a Remote and sets no default. `apply()` is the guard's chokepoint: it consults the mounted `sandboxModeGuard` for the whole selection before anything is appended — so a preset that keeps the mode and drops the approval policy is covered too — passes the hook to `setSandboxMode` so the mode event itself is guarded, and appends the `permission/preset` identity last, after the knob events it stands for, so a refusal leaves neither event. The `tool-ask-user` direct-tool hunks (E3) are left out."
     },
     {
       "path": "packages/interaction/permission-presets/tests/permission-presets.spec.ts",
       "class": "delo-feature",
-      "reason": "Per-workspace permission defaults: covers `unset` on a fresh session, after a `workspace-write` preset and on a seeded session."
+      "reason": "Per-workspace permission defaults: covers `unset` on a fresh session, after a `workspace-write` preset and on a seeded session, the guarded write path (a mounted refusing guard appends no preset identity and no mode event; the guard is consulted for a selection that keeps the mode and drops the approval policy), and the write order that puts the preset identity after the knob events."
     },
     {
       "path": "packages/preset/agent-preset-registry/README.i18n.yaml",
@@ -2439,7 +2439,7 @@
     {
       "path": "packages/sandbox/sandbox-policy/tests/policy.spec.ts",
       "class": "delo-feature",
-      "reason": "Container denial marker: covers the switch off by default, the signatures it passes on and off, an unchanged policy context, and the load-time rejection of a non-boolean value."
+      "reason": "Container denial marker: covers the switch off by default, the signatures it passes on and off, an unchanged policy context, and the load-time rejection of a non-boolean value. Permissions review: also proves the session-mode seam from the seam's own package — a refusing hook receives exactly the session and the mode the switch would set, and appends no `sandbox/mode` event."
     },
     {
       "path": "packages/sandbox/sandbox/README.i18n.yaml",
@@ -3115,6 +3115,61 @@
       "path": "packages/schedule/tool-schedule/tests/consent.spec.ts",
       "class": "delo-feature",
       "reason": "Scheduled-task consent seam: the approval spec shows an ask staying unnamed with no consent composed, a created effect named on `schedule_create`, an edit that restates no rule naming the stored one, a consent that names nothing leaving the approval unchanged, and the consent consulted only at approval time. It names the deployment default for a target that opens its chat and for a stored one that does, names no preset for a stored chat with no live Agent, leaves a delete unnamed, and runs the real naming sentence through the tool call site. A created target whose caller runs a non-default preset captures that default in the approval naming and in the stored `creationPreset`, and its first delivery is allowed; a manual run is refused through `reviewDelivery` with the typed `schedule/consent-refused` error and wakes nobody, while the recorded refusal stays out of the model-facing task."
+    },
+    {
+      "path": "packages/sdk/server/tests/permission-parity.spec.ts",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the command window follows the fixed preset write path, which appends the preset identity after the knob events it stands for, so it reads `command/run`, `sandbox/mode`, `approval/policy`, the approval policy's inbox splice, `permission/preset`, `command/done`."
+    },
+    {
+      "path": "snapshots/sdk/command-identity/session.v4.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the recorded `/permission` switch keeps the fixed write order, which appends the preset identity after the knob events it stands for; refreshed keylessly from the committed model replay, and every other byte is unchanged."
+    },
+    {
+      "path": "snapshots/sdk/permission-switch/session.v4.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the recorded `/permission` switch keeps the fixed write order, which appends the preset identity after the knob events it stands for; refreshed keylessly from the committed model replay, and every other byte is unchanged."
+    },
+    {
+      "path": "snapshots/session/headless-auto-review/session.v4.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the recorded Auto selection keeps the fixed write order, which appends the preset identity after the knob event it stands for. The identity moved and every other byte is unchanged."
+    },
+    {
+      "path": "snapshots/session/session-sandbox-root/session.v4.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the recorded `workspace-write` selection keeps the fixed write order, which appends the preset identity after the knob events it stands for. The identity moved and every other byte is unchanged."
+    },
+    {
+      "path": "snapshots/web/approval-composer/session.v3.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the recorded `/permission read-only` switch keeps the fixed write order, which appends the preset identity after the mode it stands for. The identity moved and every other byte is unchanged; the scenario's Chromium replay proves the fixture."
+    },
+    {
+      "path": "snapshots/web/approval-composer/session.v4.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the current writer output of the same scenario, with the same reordered preset identity and every other byte unchanged."
+    },
+    {
+      "path": "snapshots/web/permission-policy-context/session.v3.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the four recorded `/permission` switches keep the fixed write order, which appends the preset identity after the knob events it stands for. The identities moved and nothing else changed; the scenario's own Chromium replay proves the fixture."
+    },
+    {
+      "path": "snapshots/web/permission-policy-context/session.v4.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the current writer output of the same scenario, with the same four reordered preset identities and every other byte unchanged."
+    },
+    {
+      "path": "snapshots/web/ptc-escalation-approved/session.v3.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the recorded `/permission read-only` switch keeps the fixed write order, which appends the preset identity after the mode it stands for. The identity moved and every other byte is unchanged; the scenario's Chromium replay proves the fixture."
+    },
+    {
+      "path": "snapshots/web/ptc-escalation-approved/session.v4.jsonl",
+      "class": "delo-feature",
+      "reason": "Per-workspace permission defaults: the current writer output of the same scenario, with the same reordered preset identity and every other byte unchanged."
     }
   ],
   "retired": []

@@ -122,7 +122,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 要求：
 
 - 只有回放通道设置 `DSH_SNAPSHOT_PATCH` 时，对等覆盖层才会加载。任何正式 profile、人的配置与命令行选项都不会选择它。
-- 在对等组合中，`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent` 与 `container_denial_marker` 处于关闭状态，其保护在该组合中不存在。Delo 的默认组合会让每一项保持开启。
+- 在对等组合中，`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent` 与 `container_denial_marker` 处于关闭状态，其保护在该组合中不存在。Delo 的默认组合会让每一项保持开启。
 - `plugin_manager_read_exemption` 只豁免五个只读动作。每个写入动作仍需要 `danger-full-access` 提权。
 - 容器内的拒绝永远不会附带提权指引，`bwrap` 的策略拒绝永远不会被标为 `environment`。
 - 模型发起的、对指令层文件的写入、将定时任务投递到完全访问工作区，以及添加 MCP 服务器，都须先等待其同意，才会产生任何效果。

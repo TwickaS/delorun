@@ -1,7 +1,7 @@
 # C16 switch instruction_layer_consent on: the mounted writeConsent service asks
 # before a model-authored write to a skill, a preset or an AGENTS.md commits,
-# with the effect and the diff in the ask, and the mounted sandboxModeGuard
-# refuses no sandbox/mode change.
+# with the effect and the diff in the ask. The sandboxModeGuard is not this
+# plugin's: its one slot belongs to the full-access consent (A135).
 - id: instruction-consent
   name: '@delo/plugin-instruction-consent'
   config:

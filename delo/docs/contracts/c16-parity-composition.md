@@ -122,7 +122,7 @@ The parity composition is a test composition. Shipped profiles do not select it,
 Requirements:
 
 - The parity overlay loads only when the replay lane sets `DSH_SNAPSHOT_PATCH`. No shipped profile, no person's configuration and no command-line option selects it.
-- In the parity composition, `fetch_guard`, `scheduled_task_consent`, `instruction_layer_consent`, `mcp_add_consent` and `container_denial_marker` are off, and their protections are absent there. The default composition keeps each on.
+- In the parity composition, `permission_defaults`, `fetch_guard`, `scheduled_task_consent`, `instruction_layer_consent`, `mcp_add_consent` and `container_denial_marker` are off, and their protections are absent there. The default composition keeps each on.
 - `plugin_manager_read_exemption` exempts only the five read actions. Every write action still requires the `danger-full-access` escalation.
 - A container denial is never answered with escalation guidance, and a policy denial from `bwrap` is never labelled `environment`.
 - A model-authored write to an instruction-layer file, a scheduled task delivering into a full-access workspace and an added MCP server each wait for their consent before any effect.

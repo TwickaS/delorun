@@ -217,10 +217,11 @@ export class PermissionDefaults extends Service {
   /**
    * The one write path a surface uses to choose a workspace's preset. Full
    * access asks the person once for that workspace
-   * ({@link fullAccessNote}); the safer preset never asks. A granted ask is
-   * recorded before the preset is applied, so the guard lets the switch
-   * through; a refused or unanswerable ask records nothing and the session
-   * keeps the preset it had.
+   * ({@link fullAccessNote}); the safer preset never asks, and explicitly
+   * choosing it withdraws the workspace's earlier grant, so a later full-access
+   * selection asks again. A granted ask is recorded before the preset is
+   * applied, so the guard lets the switch through; a refused or unanswerable
+   * ask records nothing and the session keeps the preset it had.
    * @param agent - the chat the choice was made in; its workspace is the one
    *   the consent covers, and it carries the approval ask.
    * @param preset - the preset to select for the workspace.
@@ -275,9 +276,11 @@ export class PermissionDefaults extends Service {
   }
 
   /**
-   * Record a workspace's preset in the store, keeping any earlier grant: a
-   * workspace that already granted full access keeps that grant when the person
-   * goes back to the safer preset, so returning to full access asks nothing.
+   * Record a workspace's preset in the store. The full-access grant follows the
+   * choice: choosing full access records the consent's time, and choosing the
+   * safer preset explicitly withdraws it, so returning to full access asks
+   * again. A grant is the person's answer for that folder, and going back to
+   * the sandbox is that answer changed.
    * @param workspace - the workspace key.
    * @param preset - the preset to record.
    * @returns when the store holds the entry.
@@ -292,7 +295,7 @@ export class PermissionDefaults extends Service {
       const next = new Map(this.entries)
       next.set(workspace, {
         preset,
-        fullAccessGrantedAt: previous?.fullAccessGrantedAt ?? (preset === FULL_ACCESS_PRESET ? Date.now() : null),
+        fullAccessGrantedAt: preset === FULL_ACCESS_PRESET ? previous?.fullAccessGrantedAt ?? Date.now() : null,
       })
       await writePermissionStore(permissionStorePath((await resolveDeloHome(process.env)).path), next)
       this.entries = next

@@ -205,8 +205,8 @@ describe('the full-access consent', () => {
     expect(asks).toHaveLength(2)
   })
 
-  it('never asks for the safer preset, and keeps a grant when the person goes back to it', async () => {
-    const { ctx, harness, asks, workspace } = await mounted()
+  it('never asks for the safer preset, and withdraws the grant when the person goes back to it', async () => {
+    const { ctx, harness, asks, workspace, home } = await mounted()
     const defaults = ctx.get('permissionDefaults') as PermissionDefaults
     const agent = await harness.create(SessionId('chat-back'), {}, { cwd: workspace })
     await defaults.select(agent, SAFER_PRESET)
@@ -214,8 +214,14 @@ describe('the full-access consent', () => {
     await defaults.select(agent, FULL_ACCESS_PRESET)
     await defaults.select(agent, SAFER_PRESET)
     expect(knobs(ctx, agent.session)).toMatchObject({ preset: SAFER_PRESET, sandbox: SAFER_PRESET })
+    // Choosing the safer preset is an answer, so the workspace's grant is no
+    // longer standing: the store records no grant time and the next full-access
+    // selection asks again.
+    expect(defaults.granted(workspace)).toBe(false)
+    const stored = JSON.parse(readFileSync(permissionStorePath(home), 'utf8')) as { workspaces: Record<string, { preset: string, fullAccessGrantedAt: number | null }> }
+    expect(stored.workspaces[workspaceKey(workspace)]).toEqual({ preset: SAFER_PRESET, fullAccessGrantedAt: null })
     await defaults.select(agent, FULL_ACCESS_PRESET)
-    expect(asks).toHaveLength(1)
+    expect(asks).toHaveLength(2)
   })
 
   it('refuses a chat with no workspace folder, which has no per-workspace permission', async () => {

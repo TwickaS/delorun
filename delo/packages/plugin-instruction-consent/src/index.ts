@@ -11,21 +11,18 @@
  * an instruction-layer file. A declined ask leaves the file unchanged, and a
  * target that is no instruction-layer file never asks.
  *
- * The plugin also mounts the optional `sandboxModeGuard` of the
- * `@deepseek-ai/dsh-sandbox-policy` session-mode seam, so both seams of the
- * instruction-layer consent are provable together: in Delo 1.0 a sandbox-mode
- * change is refused by no composition, so the mounted guard answers
- * `undefined` for every switch and the session log records the change exactly
- * as upstream records it.
+ * The `@deepseek-ai/dsh-sandbox-policy` session-mode seam's one provider is
+ * the full-access consent of `@delo/plugin-permission-defaults` (A135): this
+ * plugin takes no part of that slot, because a guard that refuses no switch
+ * would prove nothing the seam's own spec does not already prove.
  *
  * Every registration sits behind the C16 switch `instruction_layer_consent`
  * ([`Config.enabled`]), off by default: off, or without a mounted provider, a
- * write commits and a mode switch appends its event exactly as upstream does.
+ * write commits exactly as upstream does.
  * @module @delo/plugin-instruction-consent
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Service } from '@deepseek-ai/cordis'
-import type { SandboxModeGuard } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import type { WriteConsentRequest, WriteConsentReview, WriteConsentService } from '@deepseek-ai/dsh-tool-fs/src/consent.ts'
 import z from '@deepseek-ai/schemastery'
 import { classifyTarget, reviewNote } from './classify.ts'
@@ -41,10 +38,9 @@ export interface Config {
   /**
    * C16 switch `instruction_layer_consent`: whether the plugin provides the
    * `writeConsent` service, whose review asks before a model-authored write to
-   * an instruction-layer file commits, and the `sandboxModeGuard`, which
-   * refuses no sandbox-mode change. Off, the parity value and the default, the
-   * plugin provides nothing and every write commits and every mode switch
-   * appends its event exactly as upstream does. Delo's composition turns it on.
+   * an instruction-layer file commits. Off, the parity value and the default,
+   * the plugin provides nothing and every write commits exactly as upstream
+   * does. Delo's composition turns it on.
    */
   readonly enabled: boolean
 }
@@ -87,29 +83,16 @@ export class InstructionConsent extends Service implements WriteConsentService {
 }
 
 /**
- * The `sandboxModeGuard` Delo's composition mounts: it refuses no mode change.
- * The guard exists so the session-mode seam is provable — a refusing guard
- * would leave no `sandbox/mode` event in the log — while Delo 1.0 refuses no
- * sandbox-mode change, so the mounted guard answers `undefined` for every
- * switch and the change is recorded exactly as upstream records it.
- * @returns undefined, which allows the switch.
- */
-export function allowEveryModeChange(): undefined {
-  return undefined
-}
-
-/**
  * Mount the plugin. On, it provides the `writeConsent` service the mutating
- * tools consult before a mutation commits, and the `sandboxModeGuard` the
- * mode-switch write path resolves before it appends a `sandbox/mode` event.
- * Off — the parity value — it provides nothing, so `ctx.get('writeConsent')`
- * and `ctx.get('sandboxModeGuard')` answer `undefined` and every write
- * commits and every mode switch appends its event exactly as upstream does.
+ * tools consult before a mutation commits. Off — the parity value — it
+ * provides nothing, so `ctx.get('writeConsent')` answers `undefined` and every
+ * write commits exactly as upstream does. The session-mode guard is not this
+ * plugin's to provide: its one slot belongs to the full-access consent of
+ * `@delo/plugin-permission-defaults` (A135).
  * @param ctx - the plugin context.
  * @param config - the switch, defaulted by the schema above.
  */
 export function apply(ctx: Context, config: Config): void {
   if (!config.enabled) return
   new InstructionConsent(ctx)
-  ctx.provide('sandboxModeGuard', allowEveryModeChange satisfies SandboxModeGuard)
 }
