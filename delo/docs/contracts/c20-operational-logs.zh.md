@@ -88,7 +88,7 @@ description: "约定 C20：每个 Delo 进程写入其运行日志的位置，�
 | 期限检查 | 机器上任一 Delo 进程启动时、有 Delo 进程运行期间每 3,600 秒一次，以及执行 `delorun logs --prune` 时 |
 
 - **轮转。** 在某次写入会使活动文件超过 10 MiB 之前，写入方把 `<name>.log.3` 重命名为 `<name>.log.4`，再依次把编号更小的文件向上重命名，把活动文件重命名为 `<name>.log.1`，然后打开新的活动文件。超出 `.4` 的轮转文件被删除。因此每个入口最多占用 50 MiB。
-- **期限。** 每次期限检查时，入口中最早记录早于 14 天的每个文件都被删除；该文件是活动文件时，先轮转再删除。任一 Delo 进程启动时，都会清理它能访问的每个本地入口的过期文件，因此已停止的 home 进程的日志同样会被清理；`delorun logs --prune` 按需执行清理。
+- **期限。** 每次期限检查时，入口中最早记录早于 14 天的每个文件都被删除；该文件是活动文件时，先轮转再删除。上游的 `logs/startup-*.log` 报告也按其自身的最后写入时间计入期限，因为报告没有可用于判定日期的记录。任一 Delo 进程启动时，都会清理它能访问的每个本地入口的过期文件以及这些报告，因此已停止的 home 进程的日志同样会被清理；`delorun logs --prune` 按需执行清理。
 - **上限（Delo 运行期间）。** 机器上有 Delo 进程运行期间，一条记录在它满 14 天后的第一次期限检查时被删除，最多晚 3,600 秒。没有 Delo 进程运行期间，过期记录保留到某个 Delo 进程启动或执行 `delorun logs --prune` 为止。
 - **会话日志** 从不按这些规则轮转或删除。
 
@@ -100,7 +100,7 @@ description: "约定 C20：每个 Delo 进程写入其运行日志的位置，�
 
 1. **已知值。** 进程持有或读取的每个密钥值都在加载时向脱敏器登记：模型与提供方密钥、启动令牌、会话密钥、cookie 值、所有者验证码、设备与中继密钥、S2 辅助通道密钥，以及被转发的部署密钥与令牌。至少 8 个字符的已登记值的每次出现都被替换为 `[redacted:<kind>]`，包括其 base64、base64url、十六进制与 URL 编码形式。
 2. **结构化字段。** 序列化之前，名称包含 `key`、`token`、`secret`、`password`、`passwd`、`cookie`、`credential`、`authorization` 或 `session`（不区分大小写）的每个对象键的值都被替换为 `[redacted]`。本约定指定的 id（`sessionId`、`startId`、`workspaceId`）不受此规则影响。
-3. **模式。** 匹配以下形式的文本被替换为 `[redacted:<kind>]`：`Authorization`、`Proxy-Authorization`、`Cookie` 或 `Set-Cookie` 头的值；`Bearer` 或 `Basic` 凭据；URL 中的用户信息；名称包含 `token`、`key`、`secret`、`password`、`code` 或 `sig` 的 URL 查询参数的值；PEM 私钥块；以 `sk-` 开头的提供方密钥；以 `ghp_`、`gho_`、`ghu_`、`ghs_`、`ghr_` 或 `github_pat_` 开头的 GitHub 令牌；以 `AKIA` 开头的 AWS 访问密钥 id；JSON Web Token；以 `xox` 开头的 Slack 令牌；位于非字母数字字符之间、恰好由 26 个 `A`–`Z` 与 `2`–`7` 字符组成的串，即所有者验证码的形式；以及名称包含 `KEY`、`TOKEN`、`SECRET`、`PASSWORD` 或 `COOKIE` 的 `NAME=value` 对的值。
+3. **模式。** 匹配以下形式的文本被替换为 `[redacted:<kind>]`：`Authorization`、`Proxy-Authorization`、`Cookie` 或 `Set-Cookie` 头的值；`Bearer` 或 `Basic` 凭据；URL 中的用户信息；名称包含 `token`、`key`、`secret`、`password`、`code` 或 `sig` 的 URL 查询参数的值；PEM 私钥块，以及文本中不含 `BEGIN` 行的密钥主体，即两行或更多每行 64 个字符的 base64；以 `sk-` 开头的提供方密钥；以 `ghp_`、`gho_`、`ghu_`、`ghs_`、`ghr_` 或 `github_pat_` 开头的 GitHub 令牌；以 `AKIA` 开头的 AWS 访问密钥 id；JSON Web Token；以 `xox` 开头的 Slack 令牌；位于非字母数字字符之间、恰好由 26 个 base32 字符组成的串，可大写或小写、可连续或按空格或连字符分组，即所有者验证码被粘贴时的各种拼写；其中不含数字、不分组的小写串视为普通单词而保留；以及名称包含 `KEY`、`TOKEN`、`SECRET`、`PASSWORD` 或 `COOKIE` 的 `NAME=value` 对的值。
 4. **错误。** 错误的消息与堆栈经过第 1 步与第 3 步；错误自身的属性经过第 2 步。
 
 <a id="delorun-logs"></a>

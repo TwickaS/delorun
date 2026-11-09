@@ -47,11 +47,12 @@ description: "Delo 的回收站（约定 C8）：chat 或工作区的删除、�
 
 - 通过索引接缝移除 `session-query-sqlite` 的 SQLite FTS5 全文索引中该条目的行；
 - 每个 chat 的会话目录，包括其中的每一代，外加删除与清除之间又在原位置出现的任何一代；
+- 每个 chat 在 `<home>/storages/session_projcache/sessions` 下的投影缓存文档，包括缓存在丢弃无效记录时移开的副本，因为该文档保存该 chat 缓存的标题、第一条消息、计划、目标与待办；
 - 版本化附件根目录下该条目的附件对象；
 - `spill` 存储中该条目的 spill 目录；
 - 在执行清除的浏览器中，按 host 限定键约定、该条目在每个 host 作用域下的草稿条目。
 
-报告会列出清除触及的每个存储。
+报告会列出清除触及的每个存储。存储根目录本身是符号链接、或位于符号链接之下的，会被以 `TRASH_STORE_REFUSED` 拒绝而不会被跟随，因此在 home 中预置的链接无法让清除删除它所指定存储之外的内容。
 
 <a id="the-clear-logs-offer"></a>
 

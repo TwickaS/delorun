@@ -56,11 +56,39 @@ interface Pattern {
 /** Values already replaced by an earlier step, which a later pattern leaves alone. */
 const NOT_A_MARKER = String.raw`(?!["']?\[redacted)`
 
+/**
+ * Whether a base32 run is an owner code rather than ordinary prose. The contract's code is 26 base32 characters,
+ * which a person may paste in either case and in groups. A run of letters only in lower case is a word — English
+ * prose reaches 26 letters without much trouble — whereas a code carries a digit with probability
+ * 1 − (26/32)^26 ≈ 0.995, so a digit, an upper-case letter or a group separator marks the run as a code. A run
+ * separated by spaces or hyphens counts only when its groups are even: every group but the last has one width,
+ * because a code is pasted in blocks of one size while the words of a sentence are not. `task-runner finished 3
+ * steps in` is 26 base32 characters with a digit, and the even-group rule is what keeps it out.
+ * @param match - the run the pattern matched, separators included.
+ * @returns whether it is a code.
+ */
+function isOwnerCode(match: string): boolean {
+  const groups = match.split(/[- ]/)
+  if (groups.length > 1) {
+    const [width] = groups.map(group => group.length)
+    const even = width !== undefined && width >= 2 && groups.slice(0, -1).every(group => group.length === width)
+    return even && /[2-7]/.test(match)
+  }
+  return /[2-7]/.test(match) || /[A-Z]/.test(match)
+}
+
 /** The step-3 forms, in the order they apply. Each regex is global, so `String.replace` replaces every match. */
 const PATTERNS: readonly Pattern[] = [
   // A PEM private key block; an unterminated block is redacted to the end of the text.
   {
     regex: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g,
+    replace: () => redactionMarker('private-key'),
+  },
+  // A key body whose BEGIN line is not in the record, as a truncated capture or a pasted body leaves it: two or more
+  // 64-character base64 lines. One such line alone stays, because a single line is not evidence of a key and a
+  // capture may well hold one.
+  {
+    regex: /(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{64}(?:\r?\n[A-Za-z0-9+/]{64})+(?:\r?\n[A-Za-z0-9+/]{1,63})?(?:\r?\n-----END [A-Z0-9 ]*PRIVATE KEY-----)?/g,
     replace: () => redactionMarker('private-key'),
   },
   // The value of an Authorization, Proxy-Authorization, Cookie or Set-Cookie header, as a header line or a JSON field.
@@ -91,8 +119,12 @@ const PATTERNS: readonly Pattern[] = [
   { regex: /\bAKIA[0-9A-Z]{16}\b/g, replace: () => redactionMarker('aws-key-id') },
   { regex: /\beyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]*/g, replace: () => redactionMarker('jwt') },
   { regex: /\bxox[a-z]-[A-Za-z0-9-]{8,}/g, replace: () => redactionMarker('slack-token') },
-  // An owner code: exactly 26 characters of the base32 alphabet between non-alphanumeric characters.
-  { regex: /(?<![A-Za-z0-9])[A-Z2-7]{26}(?![A-Za-z0-9])/g, replace: () => redactionMarker('owner-code') },
+  // An owner code in any spelling the person may paste: the contract's 26 base32 characters, compact or in groups
+  // separated by a space or a hyphen, in either case.
+  {
+    regex: /(?<![A-Za-z0-9])[A-Za-z2-7](?:[- ]?[A-Za-z2-7]){25}(?![A-Za-z0-9])/g,
+    replace: match => isOwnerCode(match) ? redactionMarker('owner-code') : match,
+  },
   // A NAME=value pair whose name contains KEY, TOKEN, SECRET, PASSWORD or COOKIE.
   {
     regex: new RegExp(String.raw`\b([A-Za-z_][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Za-z0-9_]*)=${NOT_A_MARKER}("[^"\r\n]*"|'[^'\r\n]*'|[^\s"'&;]+)`, 'gi'),

@@ -44,7 +44,7 @@ description: "Delo 运行日志包，供写入 C20 日志的入口的维护者�
 <a id="redaction"></a>
 ## 脱敏
 
-`Redactor.text` 应用 C20 的第 1 步与第 3 步：每个长度至少为 8 个字符的已登记值，以及其 base64、base64url、十六进制、URL 编码与 JSON 转义形式，不区分大小写进行匹配，包括较长编码中在每个字节对齐位置都保持不变的 base64 编码部分；随后是列出的形式，从头部值与 URL 凭据，到形如所有者验证码的连续字符串与 `NAME=value` 对。`Redactor.fields` 在结构化值序列化之前应用第 2 步，`Redactor.error` 应用第 4 步。已登记的值替换为 `[redacted:<kind>]`，列出的形式替换为 `[redacted:<pattern>]`，名称表明为机密的字段替换为 `[redacted]`。脱敏只捕获已登记的值与列出的形式；C20 说明了它无法捕获的内容。
+`Redactor.text` 应用 C20 的第 1 步与第 3 步：每个长度至少为 8 个字符的已登记值，以及其 base64、base64url、十六进制、URL 编码与 JSON 转义形式，不区分大小写进行匹配，包括较长编码中在每个字节对齐位置都保持不变的 base64 编码部分；随后是列出的形式，从头部值与 URL 凭据，到可大写或小写、可分组的所有者验证码串与 `NAME=value` 对，以及文本中不含 `BEGIN` 行、由两行或更多每行 64 个字符的 base64 组成的密钥主体。`Redactor.fields` 在结构化值序列化之前应用第 2 步，`Redactor.error` 应用第 4 步。已登记的值替换为 `[redacted:<kind>]`，列出的形式替换为 `[redacted:<pattern>]`，名称表明为机密的字段替换为 `[redacted]`。脱敏只捕获已登记的值与列出的形式；C20 说明了它无法捕获的内容。
 
 <a id="captured-output"></a>
 ## 捕获的输出
@@ -54,7 +54,7 @@ description: "Delo 运行日志包，供写入 C20 日志的入口的维护者�
 <a id="rotation-and-retention"></a>
 ## 轮转与保留
 
-写入方在某次写入会使活动文件超过 10 MiB 之前进行轮转：`.3` 重命名为 `.4`，`.2` 重命名为 `.3`，`.1` 重命名为 `.2`，活动文件重命名为 `.1`，并删除旧的 `.4` 以及更靠后的文件。若某个写入方的活动文件被另一进程轮转、清理、清空或删除，它会继续写入其路径上当前的文件。`pruneSurface` 与 `pruneLocalSurfaces` 会删除每个最早记录早于 14 天的文件，并先将已过期的活动文件轮转走。`clearSurface`、`clearStartupReports` 与 `clearLocalLogs` 是 `delorun logs --clear` 与清除所提供选项对应的清空操作：轮转文件与上游的 `startup-*.log` 报告被删除，活动文件则原地清空。这些函数只作用于入口自身的 `<name>.log` 与 `<name>.log.<n>` 文件以及启动报告，拒绝符号链接，并且从不触及 `sessions/`。
+写入方在某次写入会使活动文件超过 10 MiB 之前进行轮转：`.3` 重命名为 `.4`，`.2` 重命名为 `.3`，`.1` 重命名为 `.2`，活动文件重命名为 `.1`，并删除旧的 `.4` 以及更靠后的文件。若某个写入方的活动文件被另一进程轮转、清理、清空或删除，它会继续写入其路径上当前的文件。`pruneSurface` 与 `pruneLocalSurfaces` 会删除每个最早记录早于 14 天的文件，并先将已过期的活动文件轮转走；`pruneStartupReports` 按各自最后写入时间删除超过同一窗口的上游 `startup-*.log` 报告，因为报告没有可用于判定日期的记录。`clearSurface`、`clearStartupReports` 与 `clearLocalLogs` 是 `delorun logs --clear` 与清除所提供选项对应的清空操作：轮转文件与上游的 `startup-*.log` 报告被删除，活动文件则原地清空。这些函数只作用于入口自身的 `<name>.log` 与 `<name>.log.<n>` 文件以及启动报告，拒绝符号链接，并且从不触及 `sessions/`。
 
 <a id="reading"></a>
 ## 读取

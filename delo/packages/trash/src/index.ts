@@ -26,8 +26,10 @@ export {
   type TrashItemKind,
 } from './store.ts'
 export {
+  PROJECTION_CACHE_UNIT,
   removeAttachments,
   removeDraftEntries,
+  removeProjectionCache,
   removeSessionDirectory,
   removeSpill,
   removeStrayGenerations,

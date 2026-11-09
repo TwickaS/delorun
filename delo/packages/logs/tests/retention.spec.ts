@@ -1,10 +1,10 @@
 /**
- * Retention: the age check deletes each file whose oldest record is older than 14 days, at a process start, on its
- * interval and on demand; the clear effect empties active files in place and deletes rotated files and upstream's
- * startup reports; session logs and other files are never touched.
+ * Retention: the age check deletes each file whose oldest record is older than 14 days and upstream's startup
+ * reports past that window, at a process start, on its interval and on demand; the clear effect empties active files
+ * in place and deletes rotated files and upstream's startup reports; session logs and other files are never touched.
  */
 import { AGE_CHECK_INTERVAL_MS, RETENTION_MS } from '@delo/contract-operational-logs'
-import { existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearLocalLogs, clearSurface, localSurfaces, oldestRecordTime, pruneLocalSurfaces, pruneSurface, resolveSurface, rotatedFile, startAgeChecks, startupReports } from '../src/index.ts'
@@ -53,11 +53,26 @@ describe('the age check', () => {
     expect(existsSync(rotatedFile(location, 1))).toBe(true)
 
     const report2 = pruneLocalSurfaces(temp.home, start + 30 * DAY)
-    expect([...report2.deleted].sort()).toEqual([location.file, rotatedFile(location, 1)].sort())
+    expect([...report2.deleted].sort()).toEqual([location.file, rotatedFile(location, 1), report].sort())
     expect(existsSync(location.file)).toBe(false)
     expect(readFileSync(session, 'utf8')).toContain('turn/start')
-    expect(existsSync(report)).toBe(true)
+    expect(existsSync(report)).toBe(false)
     expect(readFileSync(stray, 'utf8')).toBe('kept')
+  })
+
+  it('deletes an old startup report and keeps one inside the window', () => {
+    temp = tempHome()
+    mkdirSync(join(temp.home, 'logs'), { recursive: true, mode: 0o700 })
+    const { report } = seedHome(temp.home)
+    const fresh = join(temp.home, 'logs', 'startup-today.log')
+    writeFileSync(fresh, 'WARNING: raw diagnostics\n', { mode: 0o600 })
+    const now = Date.now()
+
+    const report1 = pruneLocalSurfaces(temp.home, now)
+
+    expect(report1.deleted).toEqual([report])
+    expect(existsSync(report)).toBe(false)
+    expect(existsSync(fresh)).toBe(true)
   })
 
   it('rotates an expired active file away from a running writer, which continues in a new file', () => {
@@ -99,6 +114,24 @@ describe('the age check', () => {
     writeFileSync(location.file, 'not json\n')
     utimesSync(location.file, new Date('2020-01-01'), new Date('2020-01-01'))
     expect(oldestRecordTime(location.file)).toBeLessThanOrEqual(Date.parse('2026-11-01'))
+  })
+
+  it('refuses a symbolic link planted at logs/ and touches nothing it points to', () => {
+    temp = tempHome()
+    const outside = join(temp.home, 'outside')
+    mkdirSync(join(outside, 'home-default'), { recursive: true, mode: 0o700 })
+    const log = join(outside, 'home-default', 'home.log')
+    writeFileSync(log, `${JSON.stringify({ ts: '2020-01-01T00:00:00.000Z', level: 'info', surface: 'home-default', msg: 'old' })}\n`, { mode: 0o600 })
+    utimesSync(log, new Date('2020-01-01'), new Date('2020-01-01'))
+    rmSync(join(temp.home, 'logs'), { recursive: true, force: true })
+    symlinkSync(outside, join(temp.home, 'logs'))
+
+    const aged = pruneLocalSurfaces(temp.home, Date.now())
+    const cleared = clearLocalLogs(temp.home)
+
+    expect(aged.failures.map(failure => failure.code)).toEqual(['HOME_MODE'])
+    expect(cleared.failures.map(failure => failure.code)).toEqual(['HOME_MODE'])
+    expect(readFileSync(log, 'utf8')).toContain('old')
   })
 
   it('reports a refused surface and still prunes the others', () => {

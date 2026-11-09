@@ -948,3 +948,42 @@ describe('SessionProjectionCache summary reads', () => {
     expect(cache.cachedSnapshot(headerOf(SessionId('summary-absent')), summaryKeys)).toBeUndefined()
   })
 })
+
+describe('SessionProjectionCache forget', () => {
+  it('removes the record from the domain and its document from the medium', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-projcache-'))
+    roots.push(root)
+    const id = SessionId('forget-cold')
+    await seedRecord(root, 'forget-cold', {
+      'cache-test/marks': { ver: 1, seq: SessionSeq(1), val: { marks: ['purged'] } },
+      title: { ver: 1, seq: SessionSeq(1), val: 'a cached title the purge must not leave behind' },
+    })
+    const { cache } = await harness({ root })
+    expect(cache.cachedSnapshot(headerOf(id))).toEqual({ asOfSeq: 1, values: { 'cache-test/marks': { marks: ['purged'] } } })
+
+    await expect(cache.forget(id)).resolves.toBe(true)
+
+    // The memory and the medium agree: neither serves the forgotten row, and
+    // the chat's content is not left on disk for a cold read to seed from.
+    expect(cache.cachedSnapshot(headerOf(id))).toBeUndefined()
+    expect(await storedRecord(root, id)).toBeUndefined()
+    await expect(cache.forget(id)).resolves.toBe(false)
+  }, 20_000)
+
+  it('drops the write-behind bookkeeping, so a pending interval flush cannot restore the record', async () => {
+    const { ctx, root, cache } = await harness({ config: { writeEveryEvents: 100, writeIntervalMs: 60_000 } })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const id = SessionId('forget-live')
+    const created = whenWritten(ctx, id)
+    const { session } = await ownedSession(ctx, id)
+    await created
+    // The mark is throttled: the interval trigger is armed and holds the only
+    // pending write for this Session.
+    mark(session, ['would come back'])
+    await cache.forget(id)
+    await vi.advanceTimersByTimeAsync(60_000 * 3)
+
+    expect(await storedRecord(root, id)).toBeUndefined()
+    expect(cache.cachedSnapshot(headerOf(id))).toBeUndefined()
+  }, 20_000)
+})

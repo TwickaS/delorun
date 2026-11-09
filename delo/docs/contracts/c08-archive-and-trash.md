@@ -148,6 +148,7 @@ A purge removes the item from each store that holds its content.
 
 - The item's rows in the SQLite FTS5 full-text index of `session-query-sqlite`.
 - The session directory of each chat in the item, with every generation in it, which is every `session*.jsonl.zstd` file.
+- The projection cache's stored document for each chat in the item, which holds the cached title, first message, plan, goal and todos of that chat, and the copy the cache moved aside when it discarded an invalid record.
 - The attachments of the item.
 - The spill files of the item in the `spill` storage.
 - The draft entries of the item in the browser that performs the purge, under every host scope, as the host-qualified keys contract sets.
@@ -187,7 +188,7 @@ Requirements:
 - Imported presets cannot raise a permission above the person's own presets.
 - Imported skills start disabled, and imported chats start untrusted.
 - An import never overwrites a workspace or chat.
-- Trash keeps secrets until purged, and a purge removes the content from every store listed in this contract.
+- Trash keeps secrets until purged, and a purge removes the content from every store listed in this contract. A symbolic link planted at a store's root, or at the directory that holds a versioned root, is refused rather than followed, so a purge deletes nothing outside the store it names.
 - Export warns about secrets in chat history before it writes the archive.
 
 Denial tests:
@@ -205,6 +206,8 @@ Denial tests:
 | `imported chat stays out of model context until trusted` | An untrusted chat shows its banner, and its history is absent from every model request until the person marks it trusted. |
 | `import into an existing identifier never overwrites` | An import whose identifier exists writes a new workspace and leaves the existing one unchanged. |
 | `canary is absent from the index and every generation after purge` | After purge, the canary text is absent from the full-text index and from every session generation of the chat. |
+| `purge refuses a symbolic link at a store` | A link planted at the attachment store is refused with `TRASH_STORE_REFUSED`, and the file it points to is unchanged. |
+| `purge leaves no cached title or first message on disk` | After purge, the chat's projection-cache document is absent, so no cached title, first message, plan, goal or todo of the chat remains on disk. |
 | `purge with clear-logs chosen leaves no canary residue anywhere` | After purge with the clear offer accepted, the canary text is absent from every store and every log file. |
 | `purge without clear-logs leaves residue only in retained process logs` | After purge without the clear offer, the canary text remains only in process logs inside their 14-day retention. |
 | `export warns about secrets found in chat history` | An export of a chat with a planted secret shows a warning before it writes the archive. |
