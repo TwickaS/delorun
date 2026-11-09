@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/update/README.md
+/:
+  en: 237c45c1b2dd0cb2
+  zh: d888f9b0dea77022
+/delo-update:
+  en: aacc7c985e1bbd81
+  zh: fad903c499abe1de
+/delo-update/summary:
+  en: 13c60589935cfd37
+  zh: f0e6647f83a1351e
+/delo-update/contents:
+  en: 8c836df8408d5551
+  zh: 93ad225d64b33e9a
+/delo-update/what-the-report-decides:
+  en: 9744042858259254
+  zh: 8f4913c68f5e0dff
+/delo-update/the-two-version-axes:
+  en: d010be9aa9fa6844
+  zh: 4e5a9da76d926d18
+/delo-update/bundles-and-rows:
+  en: af170cb618ede452
+  zh: 5e41466d73817d08
+/delo-update/both-installations:
+  en: a76d8f4446a41056
+  zh: bbe497dc5726aada
+/delo-update/confirming-without-asking:
+  en: 92d8c245ccf6dc77
+  zh: 0550cbdfa61b1b66
+/delo-update/the-sentences:
+  en: c5430ba515393c7d
+  zh: 50c22348fbc38bed
+/delo-update/seams-for-other-packages:
+  en: 3c9d75a7684a33ea
+  zh: c51e87dd2bf83d5e
+/delo-update/not-yet-implemented:
+  en: 0f75a4c1c01e9180
+  zh: f7e3bb8fc68d19cc
+/delo-update/tests:
+  en: c69f9a831aa9afdf
+  zh: a21f2a6b9a37000f

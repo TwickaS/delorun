@@ -2195,6 +2195,28 @@ importers:
         specifier: workspace:*
         version: link:../logs
 
+  delo/packages/update:
+    dependencies:
+      '@delo/contract-plugin-versions':
+        specifier: workspace:*
+        version: link:../contract-plugin-versions
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delo/contract-update-report':
+        specifier: workspace:*
+        version: link:../contract-update-report
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
+
   native/system:
     devDependencies:
       '@deepseek-ai/node-addon-system':
