@@ -9,6 +9,7 @@
  * @module @delo/supervisor/container
  */
 import { createHash } from 'node:crypto'
+import { basename } from 'node:path'
 import {
   EGRESS_PROXY_PORT,
   HELPER_SOCKET_DIR,
@@ -111,6 +112,30 @@ export const LIMITS_LABEL = 'delo.limits'
 
 /** The files every engine mounts itself, at these destinations. They are the engine's, not a host path a container chose. */
 export const ENGINE_FILE_MOUNTS: readonly string[] = ['/etc/hosts', '/etc/hostname', '/etc/resolv.conf']
+
+/** One bind mount as the records carry it. */
+export interface MountRecord {
+  readonly Type?: string
+  readonly Source?: string
+  readonly Destination?: string
+  readonly ReadOnly?: boolean
+}
+
+/**
+ * Whether one bind is the engine's own copy of a fixed file, which is not a host path a container chose: its
+ * destination is one of {@link ENGINE_FILE_MOUNTS} and the mount itself looks like the engine's copy — read-only, the
+ * same path on both sides, or a source named after the file, as an engine's per-container `.../containers/<id>/hosts`
+ * is at `/etc/hosts`. The destination alone earns nothing: a bind of any other host path at `/etc/hosts` is a mount
+ * like any other, which is why the gates check a mount's source before they ask this.
+ * @param mount - one mount of an inspect record.
+ * @returns true for the engine's own fixed file.
+ */
+export function engineFileBind(mount: MountRecord): boolean {
+  const source = mount.Source ?? ''
+  const destination = mount.Destination ?? ''
+  if (!ENGINE_FILE_MOUNTS.includes(destination)) return false
+  return mount.ReadOnly === true || source === destination || basename(source) === basename(destination)
+}
 
 /**
  * The limits a container runs with, from its inspect record's own fields.
@@ -394,9 +419,10 @@ export function hardeningDifferences(record: InspectRecord, body: CreateBody): {
   expect('HostConfig.Tmpfs', host.Tmpfs?.['/tmp'] === body.HostConfig.Tmpfs['/tmp'])
   if (body.HostConfig.StorageOpt !== undefined) expect('HostConfig.StorageOpt', host.StorageOpt?.size === body.HostConfig.StorageOpt.size)
   const wanted = body.HostConfig.Mounts.map(mount => `${mount.Source}:${mount.Target}`).sort()
-  // The engine mounts its own files beside the container's: they are the engine's, so they are neither asked for nor
-  // a difference from the resolved paths.
-  const found = (record.Mounts ?? []).filter(mount => mount.Type === 'bind' && !ENGINE_FILE_MOUNTS.includes(mount.Destination ?? '')).map(mount => `${mount.Source ?? ''}:${mount.Destination ?? ''}`).sort()
+  // The engine mounts its own copies of fixed files beside the container's: they are the engine's, so they are neither
+  // asked for nor a difference from the resolved paths. A bind that only borrows one of their destinations is not one
+  // of them, so it is a difference like any other unrequested mount.
+  const found = (record.Mounts ?? []).filter(mount => mount.Type === 'bind' && !engineFileBind(mount)).map(mount => `${mount.Source ?? ''}:${mount.Destination ?? ''}`).sort()
   const unexpected = (record.Mounts ?? []).filter(mount => mount.Type !== 'bind' && mount.Type !== 'tmpfs').map(mount => `${mount.Type ?? 'unknown'}:${mount.Destination ?? ''}`)
   const mounts = [...found.filter(mount => !wanted.includes(mount)), ...wanted.filter(mount => !found.includes(mount)), ...unexpected]
   return { mounts, settings }

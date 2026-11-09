@@ -18,7 +18,7 @@
  * @module @delo/supervisor/confine
  */
 import { HELPER_SOCKET_DIR, type ResourceLimits } from '@delo/contract-runtime-supervisor'
-import { ENGINE_FILE_MOUNTS, hardeningDifferences, type ContainerUser, type CreateBody, type InspectRecord } from './container.ts'
+import { ENGINE_FILE_MOUNTS, engineFileBind, hardeningDifferences, type ContainerUser, type CreateBody, type InspectRecord } from './container.ts'
 import type { Engine } from './docker/engine.ts'
 import { SupervisorError } from './errors.ts'
 
@@ -159,8 +159,6 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
       refused.push(`${named}: not a bind mount`)
       continue
     }
-    // The engine mounts its own files at fixed destinations; they are the engine's, not a host path the container chose.
-    if (ENGINE_FILE_MOUNTS.includes(destination)) continue
     if (allowed.get(source) === destination) continue
     if (allowed.has(source)) {
       refused.push(`${named}: ${source} belongs at ${allowed.get(source) ?? ''}`)
@@ -172,7 +170,11 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
       refused.push(`${named}: a Docker socket`)
     } else if (SYSTEM_DIRECTORIES.includes(source)) {
       refused.push(`${named}: a system directory`)
-    } else {
+    } else if (!engineFileBind(mount)) {
+      // The engine's own copies of the fixed files are the one bind left that needs no allowance. The destination
+      // alone is not enough — the checks above run first, so a bind of the Delo home, the OS home, a socket or a
+      // system directory at /etc/hosts is refused like any other — and {@link engineFileBind} asks for the shape of
+      // the engine's own copy.
       refused.push(`${named}: not the workspace root or the helper's socket directory`)
     }
   }
@@ -181,7 +183,9 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
 
 /**
  * The bind mounts a container writes on the host: the workspace root, and the helper's socket directory, which holds the
- * helper's sockets alone. A mount of anything else that is writable is a second way into the machine.
+ * helper's sockets alone. A mount of anything else that is writable is a second way into the machine, the engine's own
+ * copies of its fixed files excepted — and only when the mount is one of those ({@link engineFileBind}), never for
+ * having borrowed their destination.
  * @param record - the container's inspect record.
  * @param expectation - the workspace's resolved paths.
  * @returns the writable bind sources other than those two.
@@ -189,7 +193,7 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
 export function writableBinds(record: InspectRecord, expectation: ConfinementExpectation): string[] {
   return (record.Mounts ?? [])
     .filter(mount => mount.Type === 'bind' && mount.ReadOnly !== true)
-    .filter(mount => !ENGINE_FILE_MOUNTS.includes(mount.Destination ?? ''))
+    .filter(mount => !engineFileBind(mount))
     .map(mount => mount.Source ?? '')
     .filter(source => source !== expectation.root && source !== expectation.helperDir)
 }

@@ -58,6 +58,16 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
   },
   {
+    id: 'tool-fs-search',
+    kind: 'changed',
+    reason: 'The search tools honour the sandbox provider\'s protected reads (`protectedReads` on), so `glob` and `grep` refuse the Delo home and leave its paths out of a wider search, as `read` and `read_image` already do; upstream leaves the fence off.',
+    parity: {
+      kind: 'upstream',
+      reason: 'C16\'s changed default takes upstream\'s value, which is the switch\'s Config default: the overlay cannot restate '
+        + 'this row, because a row replaces the whole config and the bundles set the search tools\' required over-cap sampling choice.',
+    },
+  },
+  {
     id: 'command-feedback',
     kind: 'changed',
     reason: 'The /feedback command is hidden, because it sends through the disabled feedback exporter and Delo has no feedback destination yet.',

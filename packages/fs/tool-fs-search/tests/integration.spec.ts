@@ -417,7 +417,7 @@ describe('the protectedReads switch (C16 sandbox_protected_reads)', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('keeps stock behaviour with the field false (the default): protected paths stay in the results and a protected root is searched', async () => {
+  it('keeps stock behaviour with the field false, the Config default the parity composition rests on', async () => {
     await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: true })
     const globbed = text(await call('glob', { pattern: '**/*.txt' }, agent()))
     expect(globbed).toContain(join('.delo', 'secrets', 'key.txt'))
@@ -438,5 +438,56 @@ describe('the protectedReads switch (C16 sandbox_protected_reads)', () => {
     expect(grepped).not.toContain('needle secret')
     expect(await call('glob', { pattern: '**/*', path: '.delo' }, agent())).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
     expect(await call('grep', { pattern: 'needle', path: '.delo' }, agent())).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
+    // Removing the fence from glob.ts and grep.ts makes every refusal and every omission above disappear.
+  })
+
+  it('protects the home with the configuration the shipped composition resolves to', async () => {
+    // `@delo/bundle-local`'s `tool-fs-search` row, as the composition of a Delo CLI profile resolves it: the over-cap
+    // sampling choice the bundles set, and the fence on. The row, not the Config default, is what makes the shipped
+    // search tools refuse the home — a bare mount keeps upstream's stock behaviour.
+    await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: false, protectedReads: true })
+    const globbed = text(await call('glob', { pattern: '**/*.txt' }, agent()))
+    expect(globbed).toContain(join('sub', 'work.txt'))
+    expect(globbed).not.toContain('key.txt')
+    const grepped = text(await call('grep', { pattern: 'needle' }, agent()))
+    expect(grepped).toContain('needle work')
+    expect(grepped).not.toContain('needle secret')
+    for (const [name, args] of [['glob', { pattern: '**/*', path: '.delo' }], ['grep', { pattern: 'needle', path: '.delo' }]] as const) {
+      const refused = await call(name, args, agent())
+      expect(refused).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
+      expect(text(refused)).not.toContain('needle secret')
+      expect(text(refused)).not.toContain('key.txt')
+    }
+    // This is the audit's case: with this configuration dropped to the Config default, both tools print the secret.
+  })
+})
+
+describe('the protectedReads switch without a sandbox provider', () => {
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'dsh-search-no-provider-'))
+    await mkdir(join(dir, '.delo', 'secrets'), { recursive: true })
+    await mkdir(join(dir, 'sub'))
+    await writeFile(join(dir, '.delo', 'secrets', 'key.txt'), 'needle secret\n')
+    await writeFile(join(dir, 'sub', 'work.txt'), 'needle work\n')
+    ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(LocalSubprocessRuntime)
+  })
+
+  afterEach(async () => {
+    await ctx.fiber.dispose()
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('searches everywhere the session reaches with the field true, because no provider reports a protected home', async () => {
+    // A composition without a sandbox provider (no `ctx.sandbox`) reports nothing to protect, so the switch cannot
+    // refuse or filter anything: the search tools keep working exactly as they do with the field false.
+    await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: false, protectedReads: true })
+    expect(text(await call('glob', { pattern: '**/*.txt' }, agent()))).toContain(join('.delo', 'secrets', 'key.txt'))
+    expect(text(await call('grep', { pattern: 'needle', path: '.delo' }, agent()))).toContain('needle secret')
+    expect(text(await call('grep', { pattern: 'needle' }, agent()))).toContain('needle work')
   })
 })

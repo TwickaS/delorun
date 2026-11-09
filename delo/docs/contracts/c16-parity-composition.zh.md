@@ -77,6 +77,7 @@ Delo 有意变更了以下上游默认值。对等组合把每一项设为其对
 | `instruction_layer_consent` | Delo 对指令层文件的审批 | 开 | 关 | 模型发起的、对 skill、预设或 `AGENTS.md` 的写入所需的审批，它写明效果并展示差异。 |
 | `mcp_add_consent` | Delo 的 MCP 服务器添加流程 | 开 | 关 | 同意书，写明添加的 MCP 服务器将运行的命令。 |
 | `container_denial_marker` | Delo 对上游容器拒绝报告的编辑 | 开 | 关 | 容器内拒绝时的环境拒绝标记。 |
+| `sandbox_protected_reads` | Delo 对上游 `glob` 与 `grep` 工具的编辑 | 开，由 `@delo/bundle-local` 的 `tool-fs-search` 行设置 | 关，即该字段的 Config 默认值 | 搜索工具是否遵循沙箱提供方的受保护读取：以 Delo 主目录为根的搜索被拒绝，其路径从范围更大的搜索中略去，与 `read`、`read_image` 已有的拒绝一致。 |
 
 注册表条目的 `defaultValue` 适用于 Delo 的默认组合，`parityValue` 适用于对等组合。由配置设定每个开关的取值。由上游编辑注册的开关，是上游新增的 hook 或配置字段，其所控制的行为位于 `delo/` 之下。
 

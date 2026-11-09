@@ -74,7 +74,7 @@ kind: "package-reference"
 <a id="protected-reads"></a>
 ### 受保护读取
 
-可选的 `protectedReads` 键决定两个工具是否遵循所挂载 `ctx.sandbox` 提供方的受保护读取。默认值为 `false`，两个工具保持 stock 行为：即使提供方报告了受保护读取，它们也会搜索会话可达的任何位置。Delo 的默认组合会将其开启。为 `true` 时，以受保护主目录或到达它的其他路径为根的搜索以 `SEARCH_SANDBOX_DENIED` 失败，范围更大的搜索会略去受保护主目录之下、可读条目之外的结果，除非该调用在 `danger-full-access` 下运行。
+可选的 `protectedReads` 键决定两个工具是否遵循所挂载 `ctx.sandbox` 提供方的受保护读取。默认值为 `false`，即回放组合所依赖的 parity 值，两个工具此时保持 stock 行为：即使提供方报告了受保护读取，它们也会搜索会话可达的任何位置。关闭它要以对话记录为代价：对包含受保护主目录的目录执行一次 `glob` 或 `grep`，就会列出该主目录中的文件并打印匹配行——包括密钥文件的内容——而 `read` 与 `read_image` 会拒绝同一路径。Delo 的 CLI 配置文件在 `@delo/bundle-local` 的 `tool-fs-search` 行中把它设为 `true`。为 `true` 时，以受保护主目录或到达它的其他路径为根的搜索以 `SEARCH_SANDBOX_DENIED` 失败，范围更大的搜索会略去受保护主目录之下、可读条目之外的结果，除非该调用在 `danger-full-access` 下运行。
 
 ### 部署要求
 

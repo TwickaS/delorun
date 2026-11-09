@@ -2099,17 +2099,17 @@
     {
       "path": "packages/fs/tool-fs-search/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Protected home, read fence (review of #66): re-recorded after the search read-fence sentence."
+      "reason": "Protected home, read fence (review of #66): re-recorded after the search read-fence sentence, and again after the section learned what leaving the switch off costs and where Delo's profiles turn it on."
     },
     {
       "path": "packages/fs/tool-fs-search/README.md",
       "class": "delo-feature",
-      "reason": "Protected home, read fence (review of #66): documents `SEARCH_SANDBOX_DENIED` and the filtered results."
+      "reason": "Protected home, read fence (review of #66): documents `SEARCH_SANDBOX_DENIED` and the filtered results, and the protected-reads section states what leaving the switch off costs and that Delo's CLI profiles set it in `@delo/bundle-local`."
     },
     {
       "path": "packages/fs/tool-fs-search/README.zh.md",
       "class": "delo-feature",
-      "reason": "Protected home, read fence (review of #66): the Chinese counterpart of the search read-fence sentence."
+      "reason": "Protected home, read fence (review of #66): the Chinese counterpart of the search read-fence sentence and of the cost of leaving the switch off."
     },
     {
       "path": "packages/fs/tool-fs-search/package.json",
@@ -2129,7 +2129,7 @@
     {
       "path": "packages/fs/tool-fs-search/src/index.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): adds the `Config` field `protectedReads`, the switch field of the protected-read fence (Delo's C16 switch `sandbox_protected_reads`); the tools honour the sandbox provider's protected reads only while it is on. Lead verdict: kept; the field gates the search tools's honouring of the provider's protected reads, its default false keeps a bare profile at stock behaviour, the parity composition rests on that default, and the switch-state specs prove both sides."
+      "reason": "Protected home, read fence (review of #66): adds the `Config` field `protectedReads`, the switch field of the protected-read fence (Delo's C16 switch `sandbox_protected_reads`); the tools honour the sandbox provider's protected reads only while it is on. Lead verdict: kept; the field gates the search tools's honouring of the provider's protected reads, its default false keeps a bare profile at stock behaviour, the parity composition rests on that default, and the switch-state specs prove both sides. Delo's own composition turns it on in the `tool-fs-search` row of `@delo/bundle-local`, because only that layer can set it without the parity overlay erasing the bundles' required over-cap sampling choice."
     },
     {
       "path": "packages/fs/tool-fs-search/src/search-core.ts",
