@@ -2,6 +2,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, expect, it, type TestContext } from 'vitest'
+import { DOC_CHECKS, outcome, type DocCheck } from '../../src/checks/gates/docs.ts'
 import { REPO, runTsx } from './support.ts'
 
 /**
@@ -149,4 +150,19 @@ describe('the documentation gate\'s upstream checks, on planted violations in fi
     })
     expect(run(sound, 'doc-typecheck.ts').status).toBe(0)
   }, 120_000)
+})
+
+describe('the documentation gate\'s verdicts', () => {
+  it('reports a report-only check that exits non-zero, and does not fail a normal check that does', () => {
+    const reportOnly: DocCheck = { title: 'bilingual pairs', scripts: [], reportOnly: true }
+    const normal: DocCheck = { title: 'word budgets', scripts: [] }
+    expect(outcome(reportOnly, 1)).toBe('reported')
+    expect(outcome(reportOnly, 0)).toBe('passed')
+    expect(outcome(normal, 1)).toBe('failed')
+    expect(outcome(normal, 0)).toBe('passed')
+  })
+
+  it('marks exactly one upstream check report-only, the bilingual pairs check', () => {
+    expect(DOC_CHECKS.filter((check) => check.reportOnly === true).map((check) => check.title)).toEqual(['bilingual pairs'])
+  })
 })

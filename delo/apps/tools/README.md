@@ -85,9 +85,21 @@ It exits 1, with one line per failure, when the total growth in entries or in hu
 | `gates:commits` | no | The commit standard over the range, with the changelog rule. |
 | `gates:changelog` | no | Each commit of the range that changes a product file adds a changelog fragment under `delo/changelog/unreleased/` or carries a reasoned `Changelog: none` trailer, and every fragment there parses. |
 | `gates:doc-times` | no | A line the range adds to a Markdown file under `delo/` carries no deadline, quarter, schedule estimate or promise of timing. |
-| `gates:docs` | no | Upstream's bilingual-pair, word-budget, hard-wrap, relative-link and TypeScript-fence checks over `delo/docs/`. |
+| `gates:docs` | no | Upstream's bilingual-pair, word-budget, hard-wrap, relative-link and TypeScript-fence checks over `delo/docs/`. The bilingual-pair check is report-only while authoring is English-only: its findings print, and its failure does not fail the gate ([translation command](#translation-command-specified-not-built)). |
 
 The [gates workflow](../../../.github/workflows/gates.yml) runs each gate on pull requests and on pushes to `v5` and `main`, and passes each pull request's base or each push's previous tip as the range. Its personal-data step checks the lines the range adds and the commit metadata against the committed hashes only.
+
+## Translation command (specified, not built)
+
+Authoring is English-only. A page's Chinese counterpart (`*.zh.md`) and its consistency record (`*.i18n.yaml`) are written in one translation pass, so the bilingual-pair check of `gates:docs` reports a missing or out-of-date pair without failing the gate.
+
+The command is `node_modules/.bin/tsx delo/apps/tools/src/translate-docs.ts [--check] [path…]`. It is not in the repository yet.
+
+- It finds every in-scope source whose `.zh.md` is missing or whose record is out of date, using the same discovery as upstream's pairing check.
+- For each source, it writes the Chinese counterpart with a model, line-aligned as [docs/i18n/README.md](../../../docs/i18n/README.md) requires, and then records the pair with `scripts/verify-translation-pairing.ts --write`.
+- `--check` lists what it would write and exits 0.
+- It needs a model key, and only the lead runs it, never a lane agent.
+- When it has run and its list is empty, remove `reportOnly` from the bilingual-pairs entry in [`docs.ts`](src/checks/gates/docs.ts), so the pairing check fails a change again.
 
 ## Workflows
 
