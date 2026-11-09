@@ -22,5 +22,8 @@
     "@deepseek-ai/dsh-sandbox": "workspace:*",
     "@deepseek-ai/dsh-sandbox-local": "workspace:*",
     "@deepseek-ai/node-addon-system": "workspace:~"
+  },
+  "delo": {
+    "state": "experimental"
   }
 }

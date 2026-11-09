@@ -31,5 +31,8 @@
     "@deepseek-ai/dsh-skill-filesystem": "workspace:*",
     "@deepseek-ai/dsh-tool-fs": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

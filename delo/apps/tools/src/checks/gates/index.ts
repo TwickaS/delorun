@@ -25,6 +25,12 @@ export const GATES: readonly GateCheck[] = [
     inputs: ['delo/**/package.json', 'LICENSE'],
   },
   {
+    id: 'gates:package-states',
+    title: 'Every Delo package records a state that agrees with what the shipped roots reach',
+    command: [TSX, `${GATE_DIR}/package-states.ts`],
+    inputs: ['delo/packages/*/package.json', 'delo/apps/*/package.json', `${GATE_DIR}/package-states.ts`],
+  },
+  {
     id: 'gates:secrets',
     title: 'No secrets in the staged or changed paths',
     command: [TSX, `${GATE_DIR}/secrets.ts`],

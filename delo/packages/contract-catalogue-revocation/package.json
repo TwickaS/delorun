@@ -11,5 +11,8 @@
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@delo/contract-release-manifest": "workspace:*"
+  },
+  "delo": {
+    "state": "parked"
   }
 }

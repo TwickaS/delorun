@@ -20,5 +20,8 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-schedule": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

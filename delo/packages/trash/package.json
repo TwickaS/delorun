@@ -12,5 +12,9 @@
     "@delo/contract-archive-and-trash": "workspace:*",
     "@delo/contract-host-qualified-keys": "workspace:*",
     "@delo/logs": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped",
+    "unreached": "data-safety"
   }
 }

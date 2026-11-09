@@ -10,5 +10,9 @@
   },
   "dependencies": {
     "@delo/contract-archive-and-trash": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped",
+    "unreached": "data-safety"
   }
 }

@@ -19,5 +19,8 @@
     "@delo/install": "workspace:*",
     "@delo/logs": "workspace:*",
     "@delo/runtime-store": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

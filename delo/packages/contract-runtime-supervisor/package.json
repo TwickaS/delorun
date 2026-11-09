@@ -11,5 +11,8 @@
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@delo/contract-home-layout": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

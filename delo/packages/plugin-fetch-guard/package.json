@@ -20,5 +20,8 @@
     "@deepseek-ai/dsh-web-fetch-http": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "undici": "8.11.2"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

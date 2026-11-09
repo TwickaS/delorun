@@ -20,5 +20,9 @@
     "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-host-webserver": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped",
+    "unreached": "reach"
   }
 }

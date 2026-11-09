@@ -16,5 +16,8 @@
     "@delo/home": "workspace:*",
     "@delo/logs": "workspace:*",
     "@delo/release": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

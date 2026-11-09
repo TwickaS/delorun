@@ -10,5 +10,8 @@
   },
   "dependencies": {
     "@delo/contract-reach-providers": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

@@ -10,5 +10,8 @@
   },
   "dependencies": {
     "@delo/contract-release-manifest": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

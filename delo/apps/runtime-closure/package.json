@@ -8,5 +8,9 @@
   "dependencies": {
     "@delo/cli": "workspace:*",
     "dsh-python-runtime-closure": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped",
+    "unreached": "release"
   }
 }

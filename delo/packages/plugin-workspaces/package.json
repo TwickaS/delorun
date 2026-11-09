@@ -31,5 +31,9 @@
     "@deepseek-ai/dsh-subprocess": "workspace:*",
     "@deepseek-ai/dsh-workspace": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "delo": {
+    "state": "experimental",
+    "unreached": "studio"
   }
 }

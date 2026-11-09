@@ -27,5 +27,8 @@
   "devDependencies": {
     "@delo/bundle-local": "workspace:*",
     "@types/semver": "^7.8.0"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

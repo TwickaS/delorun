@@ -22,5 +22,8 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-mcp-client": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

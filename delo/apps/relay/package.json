@@ -22,5 +22,8 @@
   "devDependencies": {
     "@types/ws": "^8.18.1",
     "selfsigned": "^4.0.1"
+  },
+  "delo": {
+    "state": "parked"
   }
 }

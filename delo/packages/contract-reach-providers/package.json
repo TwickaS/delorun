@@ -10,5 +10,8 @@
   },
   "dependencies": {
     "@delo/contract-admission": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }
