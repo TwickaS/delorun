@@ -13,6 +13,7 @@ export { extractArchive, extractionPath, type ExtractRequest } from './extract.t
 export { CHECKPOINT_MAX_BYTES, createTilesLogService, requireVerifiedLog, runOnlineCheck, type LogService, type OnlineCheckRequest, type OnlineCheckResult, type TilesLogOptions } from './log.ts'
 export {
   readStoredCheckpoint,
+  readStoredRootBytes,
   readStoredTimestamp,
   trustFile,
   writeStoredCheckpoint,
@@ -27,10 +28,12 @@ export {
   verifyChannelRelease,
   verifyDownloadedFile,
   verifyPlatformFiles,
+  verifyStoredRoot,
   verifyTimestampUnderRoots,
   type FileListRequest,
   type ReleaseRequest,
   type RootAndTimestamp,
+  type StoredRootRequest,
   type TimestampRequest,
   type VerifiedChannelRelease,
 } from './verify.ts'

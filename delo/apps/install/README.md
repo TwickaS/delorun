@@ -24,7 +24,7 @@ English | [中文](README.zh.md)
 
 ## Downloads
 
-`Downloader` is contract C1's download rule, and one instance serves one install. It fetches over HTTPS from the release hosts contract C1 lists, follows a redirect only to those hosts and at most five times, allows 30 seconds for a connection to open and 60 seconds without a byte, and holds a file to its limit while its body arrives rather than after it has been read. `bytes` keeps a small metadata file in memory; `file` writes an archive to a new file at mode 0600, hashing it as it arrives and removing it when anything fails.
+`Downloader` is contract C1's download rule, and one instance serves one install. It fetches over HTTPS from the release hosts contract C1 lists, follows a redirect only to those hosts and at most five times, allows 30 seconds for a connection to open and 60 seconds without a byte, and holds a file to its limit while its body arrives rather than after it has been read. `bytes` keeps a small metadata file in memory; `file` writes an archive to a new file at mode 0600, hashing it as it arrives and removing it when anything fails, a file that cannot be created, written to completion (a disk that fills raises `ENOSPC`, a file-size limit `EFBIG`) or closed included — the write is the same `DOWNLOAD_FAILED` refusal, never a raw file-system error.
 
 <a id="verification"></a>
 
@@ -58,6 +58,8 @@ English | [中文](README.zh.md)
 
 Three files under `trust/` are the rollback protection an install keeps, and each is written at mode 0600 through a temporary file: the newest root that verified, the newest timestamp that verified, and the newest log checkpoint that verified. A later install refuses a timestamp below the stored one and a checkpoint below the stored one, and a file that does not read, belongs to another user or is laxer than 0600 refuses the install with `TRUST_STATE_INVALID` rather than being replaced.
 
+The stored root is also what a start anchors on, so `readStoredRootBytes` reads it back and `verifyStoredRoot` holds it to the roots the launcher ships: at a version the launcher ships, the stored root must be that very root, keys and roles included, and one older than the oldest shipped root is refused. A stored root newer than every shipped root is the newest version a verified rotation walked to, which only an install writes. Nothing else about the stored root is taken on trust.
+
 <a id="failures"></a>
 
 ## Failures
@@ -67,7 +69,7 @@ Every refusal is an `InstallError`, which `isInstallError` tests for:
 | Code | What it means |
 | --- | --- |
 | `DOWNLOAD_REFUSED` | The URL is not HTTPS, names a host outside contract C1's list, or redirects to one |
-| `DOWNLOAD_FAILED` | The connection did not open or stalled, the answer was not 200, or the file passed its limit |
+| `DOWNLOAD_FAILED` | The connection did not open or stalled, the answer was not 200, the file passed its limit, or the file cannot be created, written to completion or closed |
 | `INSTALL_VERIFY_FAILED` | A signature, digest, length or version check failed |
 | `ARCHIVE_REFUSED` | The archive holds an entry its format forbids or its signed list does not name |
 | `RELEASE_LOG_FAILED` | Contract C18's bundle or online check failed verifiably |

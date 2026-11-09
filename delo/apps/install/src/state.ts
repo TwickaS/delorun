@@ -112,6 +112,16 @@ export async function writeStoredTimestamp(home: string, bytes: Uint8Array): Pro
 }
 
 /**
+ * Read the newest trusted root's file, `trust/root.json`, which a start check anchors on.
+ * @param home - the resolved Delo home.
+ * @returns its bytes, or `undefined` when no root was stored.
+ * @throws {InstallError} `TRUST_STATE_INVALID` when the file is a link, belongs to another user or is laxer than 0600.
+ */
+export async function readStoredRootBytes(home: string): Promise<Uint8Array | undefined> {
+  return readTrustFile(trustFile(home, TRUST_FILES.root))
+}
+
+/**
  * Store the newest trusted root, `trust/root.json`, which the runtime store's start check reads (contract C1).
  * @param home - the resolved Delo home.
  * @param bytes - the newest root file's bytes, as verified.

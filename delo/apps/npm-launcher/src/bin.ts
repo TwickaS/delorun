@@ -25,6 +25,31 @@ export const PROFILE_FLAG = '--profile'
 /** The launcher's own flag for the release to install, which it keeps. */
 export const RELEASE_FLAG = '--release'
 
+/** The argument that ends the launcher's own options: every argument after it is the runtime's. */
+export const TERMINATOR = '--'
+
+/**
+ * The variables a launch never inherits: Node's own module hooks and the dynamic loader's, which a process could use
+ * to install code into the runtime's Node before it starts. None of them is a launch protocol variable, so the
+ * runtime's environment is the inherited one without these.
+ */
+const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|LD_.*|DYLD_.*)$/u
+
+/**
+ * The environment a runtime starts with: this process's, without the variables that would load code into the
+ * runtime's Node or its dynamic loader, and with the launch protocol's own variables in place of any inherited value.
+ * @param inherited - the environment this process was given.
+ * @param set - the variables launch protocol 1 sets.
+ * @returns the variables to start the runtime with, each a string.
+ */
+export function launchEnvironment(inherited: NodeJS.ProcessEnv, set: Readonly<Record<string, string>>): Record<string, string> {
+  const environment: Record<string, string> = {}
+  for (const [name, value] of Object.entries(inherited)) {
+    if (value !== undefined && !DROPPED_ENV.test(name)) environment[name] = value
+  }
+  return { ...environment, ...set }
+}
+
 /** The version check the launcher runs until the person's `integrity.mode` is read here; the check stops a start in every mode. */
 export const LAUNCHER_MODE: VerificationMode = 'enforce'
 
@@ -41,7 +66,9 @@ export interface LauncherCommandLine {
 }
 
 /**
- * Split the launcher's own options from the runtime's arguments.
+ * Split the launcher's own options from the runtime's arguments. The first `--` ends the launcher's options: every
+ * argument after it reaches the runtime unchanged, so a runtime option that shares a name with one of the launcher's
+ * (`--release`, `--profile`) is the runtime's. The `--` itself is the launcher's and is not passed on.
  * @param argv - the arguments after the script.
  * @returns the parsed line.
  * @throws {Error} when a flag that takes a value has none.
@@ -53,6 +80,10 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
   const runtimeArgs: string[] = []
   for (let at = 0; at < argv.length; at++) {
     const argument = argv[at]!
+    if (argument === TERMINATOR) {
+      runtimeArgs.push(...argv.slice(at + 1))
+      break
+    }
     if (argument === '--help' || argument === '-h') {
       help = true
     } else if (argument === RELEASE_FLAG || argument.startsWith(`${RELEASE_FLAG}=`)) {
@@ -84,15 +115,16 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
  */
 export function usage(): string {
   return [
-    'Usage: delorun [--profile <name>] [--release <version>] [arguments for delorun]',
+    'Usage: delorun [--profile <name>] [--release <version>] [--] [arguments for delorun]',
     '',
     'Runs Delo from the runtime this computer has installed, or installs the release your channel',
     'publishes first. An install checks the release against its signed manifest and the release log',
     'and installs nothing when either check fails; a start with a runtime installed needs no network.',
     '',
     '  --profile <name>   the CLI profile; default is profiles/default',
-    '  --release <version>  install this release instead of the channel\'s current one',
+    '  --release <version>  install this release instead of the channel\'s current one, when no runtime is installed',
     '  --help             this text',
+    '  --                 end the launcher\'s options; everything after it is passed to delorun',
     '',
     'Every other argument is passed to delorun unchanged.',
     '',
@@ -100,12 +132,13 @@ export function usage(): string {
 }
 
 /**
- * Start a runtime and share this process's standard streams with it.
+ * Start a runtime and share this process's standard streams with it, with the environment
+ * {@link launchEnvironment} builds.
  * @param command - the command the store built for launch protocol 1.
  * @returns the runtime's exit status, or `1` when it ended without one.
  */
 export function spawnRuntime(command: LaunchCommand): Promise<number> {
-  const child = spawnSync(command.command, [...command.args], { stdio: 'inherit', env: { ...process.env, ...command.env } })
+  const child = spawnSync(command.command, [...command.args], { stdio: 'inherit', env: launchEnvironment(process.env, command.env) })
   return Promise.resolve(child.status ?? LAUNCHER_EXIT.failed)
 }
 
@@ -157,6 +190,9 @@ export async function main(argv: readonly string[], context: { readonly env: Nod
     const home = await resolveDeloHome(context.env)
     await ensureHomeTree(home.path, profile)
     const downloader = new Downloader()
+    // The roots this launcher ships anchor both halves of a run: an install walks from them, and a start trusts the
+    // root this home stored only when it is one of them.
+    const roots = await readEmbeddedRoots(dirname(dirname(fileURLToPath(import.meta.url))))
     return await runLauncher({
       home: home.path,
       profile,
@@ -167,11 +203,12 @@ export async function main(argv: readonly string[], context: { readonly env: Nod
       channel: new LauncherChannel({
         home: home.path,
         platform,
-        roots: await readEmbeddedRoots(dirname(dirname(fileURLToPath(import.meta.url)))),
+        roots,
         channel: 'stable',
         log: createTilesLogService({ origin: RELEASE_LOG_TILES_ORIGIN, downloader }),
         downloader,
       }),
+      roots,
       logger,
       spawn: spawnRuntime,
       output: context.output,

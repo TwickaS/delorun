@@ -15,7 +15,8 @@ export type InstallLayoutCode = Extract<HomeLayoutErrorCode, 'DOWNLOAD_REFUSED' 
  *
  * - C1's `DOWNLOAD_REFUSED`: a URL that is not HTTPS, names a host outside contract C1's list, or redirects to one.
  * - C1's `INSTALL_VERIFY_FAILED`: a signature, digest or length check of contract C2 failed.
- * - `DOWNLOAD_FAILED`: a connection that did not open or stalled, a response other than 200, or a file above its limit.
+ * - `DOWNLOAD_FAILED`: a connection that did not open or stalled, a response other than 200, a file above its limit,
+ *   or a file that cannot be created, written to completion or closed.
  * - `ARCHIVE_REFUSED`: the archive holds an entry its format forbids or its signed file list does not name.
  * - `RELEASE_LOG_FAILED`: contract C18's bundle or online check failed verifiably.
  * - `RELEASE_LOG_UNCHECKED`: the online check could not run, such as when the log is unreachable; an install needs it.

@@ -1,11 +1,12 @@
 /**
  * Contract C1's download rule, as the install path enforces it: a URL that is not a release host is refused before a
  * request leaves the process, a redirect out of the list is refused at the hop, and a download that cannot open,
- * answers a status other than 200, stalls or passes its limit fails without leaving a file behind.
+ * answers a status other than 200, stalls, passes its limit or cannot be written to disk fails without leaving a file
+ * behind — always with the download refusal, never a raw `fs` error.
  */
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, open as openFile, readdir, rm, type FileHandle } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -166,6 +167,29 @@ describe('a download into a file', () => {
       sha256: '742f3750eed6191c78e0403ca38be50570904c70565569e91e9c90dd674062cc',
     })
     expect(await readdir(directory)).toEqual(['archive.tar.gz'])
+  })
+
+  it('refuses with the download refusal when the disk fills mid-write, and removes the file', async () => {
+    const body = Buffer.alloc(4_096, 1)
+    const origin = await standIn((request, response) => {
+      void request
+      response.writeHead(200, { 'content-length': String(body.byteLength) }).end(body)
+    })
+    const directory = await scratch()
+    const path = join(directory, 'archive.tar.gz')
+    // A filesystem that fills fails the write, not the open: the refusal must still be the package's own.
+    const full = Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' })
+    const downloader = new Downloader({
+      hosts: LOOPBACK,
+      timings: TIMINGS,
+      openFile: (async (target: string, flags: string, mode: number) => {
+        const real = await openFile(target, flags, mode)
+        return { write: () => Promise.reject(full), close: () => real.close() } as unknown as FileHandle
+      }) as unknown as typeof openFile,
+    })
+    const error = await refusal(downloader.file(`${origin}/archive.tar.gz`, 8_192, path), 'DOWNLOAD_FAILED')
+    expect(error.detail).toContain('ENOSPC')
+    expect(await readdir(directory)).toEqual([])
   })
 })
 

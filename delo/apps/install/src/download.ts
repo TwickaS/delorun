@@ -46,6 +46,8 @@ export interface DownloaderOptions {
   readonly timings?: DownloadTimings
   /** The fetch to use, this process's by default. */
   readonly fetch?: Fetch
+  /** The file opener a download into a file writes through; {@link openFile} by default. */
+  readonly openFile?: typeof openFile
 }
 
 /** A file a download produced. */
@@ -64,12 +66,26 @@ interface Open {
 }
 
 /**
+ * The refusal for a file that opened but could not be written to completion, such as a filesystem that filled
+ * (`ENOSPC`) or a file that passed its size limit (`EFBIG`): the same typed refusal a file that cannot be created
+ * raises, so no raw `fs` error reaches a caller.
+ * @param url - the URL the body came from.
+ * @param path - the file being written.
+ * @param error - what the write raised.
+ * @returns the refusal, or the error itself when it is already one.
+ */
+function writeRefused(url: string, path: string, error: unknown): InstallError {
+  return error instanceof InstallError ? error : new InstallError('DOWNLOAD_FAILED', url, `${path} cannot be written: ${messageOf(error)}`, { cause: error })
+}
+
+/**
  * Contract C1's downloader. One instance serves one install, so a release's files share its host rule and timings.
  */
 export class Downloader {
   private readonly hosts: ReleaseHosts
   private readonly timings: DownloadTimings
   private readonly fetch: Fetch
+  private readonly openFile: typeof openFile
 
   /**
    * @param options - the hosts, the timings and the fetch; contract C1's values by default.
@@ -78,6 +94,7 @@ export class Downloader {
     this.hosts = options.hosts ?? RELEASE_HOSTS
     this.timings = options.timings ?? RELEASE_TIMINGS
     this.fetch = options.fetch ?? globalThis.fetch
+    this.openFile = options.openFile ?? openFile
   }
 
   /**
@@ -104,7 +121,8 @@ export class Downloader {
    * @param limit - its largest allowed length in bytes.
    * @param path - the file to write; it must not exist.
    * @returns the answering URL, the length and the SHA-256 of what was written.
-   * @throws {InstallError} `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED`, as {@link Downloader.bytes} does.
+   * @throws {InstallError} `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED`, as {@link Downloader.bytes} does; a file that
+   *   cannot be created, written to completion or closed is the same `DOWNLOAD_FAILED`.
    */
   async file(url: string, limit: number, path: string): Promise<{ readonly url: string, readonly length: number, readonly sha256: string }> {
     const open = await this.open(url)
@@ -113,19 +131,29 @@ export class Downloader {
     // call created, and a file another call already wrote is never removed.
     let out: FileHandle
     try {
-      out = await openFile(path, 'wx', 0o600)
+      out = await this.openFile(path, 'wx', 0o600)
     } catch (error) {
       open.controller.abort()
-      throw new InstallError('DOWNLOAD_FAILED', open.url, `${path} cannot be written: ${messageOf(error)}`, { cause: error })
+      throw writeRefused(open.url, path, error)
     }
     let written = 0
     try {
       for await (const chunk of this.chunks(open, limit)) {
         written += chunk.byteLength
         hash.update(chunk)
-        await out.write(chunk)
+        // A full filesystem or a file-size limit fails here rather than at the open, so the write is wrapped too:
+        // a caller sees one typed refusal, never a raw `fs` error.
+        try {
+          await out.write(chunk)
+        } catch (error) {
+          throw writeRefused(open.url, path, error)
+        }
       }
-      await out.close()
+      try {
+        await out.close()
+      } catch (error) {
+        throw writeRefused(open.url, path, error)
+      }
       return { url: open.url, length: written, sha256: hash.digest('hex') }
     } catch (error) {
       await out.close().catch(() => undefined)

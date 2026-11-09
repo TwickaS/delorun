@@ -22,6 +22,7 @@ import {
   type TimestampMetadata,
 } from '@delo/contract-release-manifest'
 import { LogVerificationError, readBundle, verifyBundle, type VerifiedBundle } from '@delo/release/log/bundle'
+import { canonicalJson, toJsonValue } from '@delo/release/sign/json'
 import { readRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifyTimestamp, type TrustedRoot } from '@delo/release/sign/verify'
 import { InstallError, messageOf } from './errors.ts'
 import type { StoredTimestamp } from './state.ts'
@@ -233,4 +234,55 @@ export async function verifyDownloadedFile(ref: FileRef, path: string): Promise<
     throw new InstallError('INSTALL_VERIFY_FAILED', ref.name, `${ref.name} has SHA-256 ${sha256}; the manifest lists ${ref.sha256}`)
   }
   return { length, sha256 }
+}
+
+/** What trusting the root a home stored for a start needs. */
+export interface StoredRootRequest {
+  /** `trust/root.json`'s bytes, the root this home last verified. */
+  readonly stored: Uint8Array
+  /** The root files the launcher ships, oldest first: the only roots it trusts. */
+  readonly shipped: readonly Uint8Array[]
+  /** The stored root's path, which a refusal names. */
+  readonly source: string
+}
+
+/**
+ * Trust the root a home stored for a start, by the roots the launcher ships (contract C1: trust comes only through
+ * the launcher's own roots). The stored root must be signed by its own root threshold, and at a version the launcher
+ * ships it must be that very root: a root of the same version whose keys or roles differ is an unrelated root that
+ * signs unrelated releases, so it is refused rather than handed to the start check. A stored root newer than every
+ * shipped root is the newest version a verified rotation walked to, which only an install writes.
+ * @param request - the stored root, the shipped roots and the stored root's path.
+ * @returns the stored root, as trusted.
+ * @throws {InstallError} `NO_TRUSTED_ROOT` when the launcher ships no root; `INSTALL_VERIFY_FAILED` when the stored
+ *   root does not verify, is older than the oldest shipped root, or differs from the shipped root of its version.
+ */
+export function verifyStoredRoot(request: StoredRootRequest): TrustedRoot {
+  const shipped = request.shipped.map((bytes) => {
+    try {
+      return readRoot(bytes)
+    } catch (error) {
+      throw refused(request.source, error)
+    }
+  })
+  if (shipped.length === 0) throw new InstallError('NO_TRUSTED_ROOT', request.source, 'the launcher ships no root, so no stored root can be checked against one')
+  let stored: TrustedRoot
+  try {
+    stored = readRoot(request.stored)
+  } catch (error) {
+    throw refused(request.source, error)
+  }
+  const version = stored.metadata.version
+  const same = shipped.find(root => root.metadata.version === version)
+  if (same !== undefined) {
+    if (canonicalJson(toJsonValue(same.metadata)) !== canonicalJson(toJsonValue(stored.metadata))) {
+      throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, and it is not the root this launcher ships for version ${String(version)}: its keys or roles differ, so the releases it signs are not this launcher's`)
+    }
+    return stored
+  }
+  const oldest = Math.min(...shipped.map(root => root.metadata.version))
+  if (version < oldest) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, older than root ${String(oldest)}, the oldest this launcher ships; a root never moves backwards`)
+  }
+  return stored
 }
