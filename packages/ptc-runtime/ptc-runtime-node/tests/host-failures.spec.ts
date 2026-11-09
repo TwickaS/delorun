@@ -220,6 +220,39 @@ describe('Node runtime host failures', () => {
     })
   })
 
+  it('reports the worker\'s own status when its channel ends while it is still exiting', async () => {
+    // A worker that is already on its way out closes its channel first. Terminating it as soon as the
+    // channel ends would report this harness's SIGTERM instead of the worker's own status, and the gap
+    // between the two widens with host load; the harness gives the worker its grace to finish first.
+    const h = await setup({ graceMs: 2_000 })
+    h.spawn.mockImplementation(() => {
+      setTimeout(() => {
+        h.control.push(null)
+        setTimeout(() => {
+          h.stdout.end()
+          h.stderr.end()
+          h.direct.resolve({ exitCode: 7, signal: null })
+        }, 50)
+      }, 0)
+      return h.handle
+    })
+    expect((await h.start(request, NO_INITIAL_FRAME)).error).toEqual({
+      kind: 'worker-exit', message: 'Node process exited (7, signal null)',
+    })
+  })
+
+  it('signals a worker whose channel ends and that does not exit within the grace', async () => {
+    const h = await setup({ graceMs: 25 })
+    h.spawn.mockImplementation(() => {
+      setTimeout(() => { h.control.push(null) }, 0)
+      return h.handle
+    })
+    expect((await h.start(request, NO_INITIAL_FRAME)).error).toEqual({
+      kind: 'worker-exit', message: 'Node process exited (0, signal null)',
+    })
+    expect(h.terminate).toHaveBeenCalled()
+  })
+
   it('reports startup transport loss when the direct process outcome rejects', async () => {
     const h = await setup()
     h.spawn.mockImplementation(() => {
@@ -235,7 +268,7 @@ describe('Node runtime host failures', () => {
   it.each<Config>([{}, { executionMode: 'persistent-in-memory' },
     { executionMode: 'vm-script' }, { executionMode: 'vm-script', scriptPersistence: true },
   ])('reports control loss and awaits process cleanup in %j', async (config) => {
-    const h = await setup(config)
+    const h = await setup({ graceMs: 50, ...config })
     const cleaning = Promise.withResolvers<undefined>()
     const cleaned = Promise.withResolvers<boolean>()
     h.waitForExit.mockImplementation(() => { cleaning.resolve(undefined); return cleaned.promise })
