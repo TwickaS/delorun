@@ -34,6 +34,15 @@
 - id: session-telemetry-otel
   disabled: true
 
+# The search tools' protected-read fence, on: with the sandbox row Delo's start configures, `glob` and `grep` refuse a
+# search rooted under the Delo home and leave its paths out of a wider search, as `read` and `read_image` already do.
+# Upstream ships the fence off, so a bare profile keeps searching the whole machine and prints what it finds there. A
+# patch replaces the targeted row's whole `config`, so this row restates upstream's over-cap sampling choice.
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    protectedReads: true
+
 # The /feedback command and the message feedback surface (Like, Dislike and the dialog) send through that exporter.
 # Upstream offers no row that opens an external page, so Delo's composition hides both instead.
 - id: command-feedback

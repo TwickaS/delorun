@@ -19,7 +19,7 @@
  * @module @delo/supervisor/confine
  */
 import { HELPER_CHANNEL_DIR, HELPER_SOCKET_DIR, type ResourceLimits } from '@delo/contract-runtime-supervisor'
-import { ENGINE_FILE_MOUNTS, hardeningDifferences, helperChannelDirectory, type ContainerUser, type CreateBody, type InspectRecord } from './container.ts'
+import { ENGINE_FILE_MOUNTS, engineFileBind, hardeningDifferences, helperChannelDirectory, type ContainerUser, type CreateBody, type InspectRecord } from './container.ts'
 import type { Engine } from './docker/engine.ts'
 import { SupervisorError } from './errors.ts'
 
@@ -177,8 +177,6 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
       refused.push(`${named}: not a bind mount`)
       continue
     }
-    // The engine mounts its own files at fixed destinations; they are the engine's, not a host path the container chose.
-    if (ENGINE_FILE_MOUNTS.includes(destination)) continue
     if (allowed.get(source) === destination) {
       // The helper's directory is the one allowed mount the container must only read: a writable one there is the
       // workspace's second way into the machine, beside the channel it was given.
@@ -195,7 +193,9 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
       refused.push(`${named}: a Docker socket`)
     } else if (SYSTEM_DIRECTORIES.includes(source)) {
       refused.push(`${named}: a system directory`)
-    } else {
+    } else if (!engineFileBind(mount)) {
+      // The engine's own copies of the fixed files are the one bind left that needs no allowance; the destination
+      // alone earns nothing, because the checks above run first.
       refused.push(`${named}: not the workspace root or the helper's socket directory`)
     }
   }
@@ -213,7 +213,7 @@ export function writableBinds(record: InspectRecord, expectation: ConfinementExp
   const written = [expectation.root, helperChannelDirectory(expectation.helperDir)]
   return (record.Mounts ?? [])
     .filter(mount => mount.Type === 'bind' && mount.ReadOnly !== true)
-    .filter(mount => !ENGINE_FILE_MOUNTS.includes(mount.Destination ?? ''))
+    .filter(mount => !engineFileBind(mount))
     .map(mount => mount.Source ?? '')
     .filter(source => !written.includes(source))
 }

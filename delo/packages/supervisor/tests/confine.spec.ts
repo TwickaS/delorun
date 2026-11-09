@@ -172,10 +172,41 @@ describe('the mounts C9 allows', () => {
       ['/var/lib/docker/containers/1/resolv.conf', '/etc/resolv.conf'],
     ]
     const record = engineFiles.reduce((acc, [source, destination]) => withMount(acc, source, destination), appliedRecord(body()))
-    // Refusing the engine's own files would refuse every container a native engine creates.
+    // Refusing the engine's own files would refuse every container a native engine creates: an engine writes them
+    // read-write, at a per-container source named after the fixed file.
     expect(refusedMounts(record, expectation())).toEqual([])
     expect(writableBinds(record, expectation())).toEqual([])
     expect(hardeningDifferences(record, body())).toEqual({ mounts: [], settings: [] })
+    // A read-only bind and the same path on both sides are the engine's copies however their source is spelled.
+    expect(refusedMounts(withMount(appliedRecord(body()), '/somewhere/else', '/etc/hosts', { ReadOnly: true }), expectation())).toEqual([])
+    expect(refusedMounts(withMount(appliedRecord(body()), '/etc/hosts', '/etc/hosts'), expectation())).toEqual([])
+  })
+
+  it('refuses a bind that only borrows an engine file\'s destination, whatever it points at', () => {
+    const cases: readonly (readonly [string, string, string])[] = [
+      // The audit's case: the Delo home itself, and a path inside it, at a destination no check used to reach.
+      [DELO_HOME, '/etc/hosts', 'a path in the Delo home'],
+      [`${DELO_HOME}/secrets`, '/etc/hostname', 'a path in the Delo home'],
+      // The machine's Docker socket, at the destination that carried the exemption.
+      ['/var/run/docker.sock', '/etc/hosts', 'a Docker socket'],
+      // The OS home and a system directory, which the destination alone never covered.
+      [OS_HOME, '/etc/resolv.conf', 'the OS home directory or a path containing it'],
+      ['/etc', '/etc/hosts', 'a system directory'],
+      // The workspace root belongs at its own path, an engine destination or not.
+      [ROOT, '/etc/hosts', `belongs at ${ROOT}`],
+      // Any other host path is a mount C9 does not list.
+      ['/opt/extra', '/etc/hosts', "not the workspace root or the helper's socket directory"],
+    ]
+    for (const [source, destination, reason] of cases) {
+      const record = withMount(appliedRecord(body()), source, destination)
+      expect(refusedMounts(record, expectation()), `${source} at ${destination}`).toEqual([expect.stringContaining(reason)])
+      // The other two halves of the gate see it too: a borrowed destination hides neither the writable mount nor the
+      // difference from what the start asked for. The root is the one source they know by path instead of by mount.
+      if (source === ROOT) continue
+      expect(writableBinds(record, expectation()), `${source} at ${destination}`).toEqual([source])
+      expect(hardeningDifferences(record, body()).mounts, `${source} at ${destination}`).toEqual([`${source}:${destination}`])
+    }
+    // Keying the engine-file allowance on the destination alone, as the gate did, makes every case pass.
   })
 })
 

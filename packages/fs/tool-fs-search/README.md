@@ -74,7 +74,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 <a id="protected-reads"></a>
 ### Protected reads
 
-The optional `protectedReads` key gates whether the tools honour the mounted `ctx.sandbox` provider's protected reads. It defaults to `false`, and both tools keep stock behaviour: they search everywhere the session reaches, even when the provider reports protected reads. Delo's default composition turns it on. With it `true`, a search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under the protected home, outside its readable entries, are left out of a wider search, unless the call runs under `danger-full-access`.
+The optional `protectedReads` key gates whether the tools honour the mounted `ctx.sandbox` provider's protected reads. It defaults to `false`, the parity value the replay composition rests on, and both tools then keep stock behaviour: they search everywhere the session reaches, even when the provider reports protected reads. Turning it off costs the transcript: a `glob` or `grep` over a directory that contains the protected home lists that home's files and prints their matched lines — a key file's contents included — where `read` and `read_image` refuse the same path. Delo's CLI profiles set it to `true` in the `tool-fs-search` row of `@delo/bundle-local`. With it `true`, a search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under the protected home, outside its readable entries, are left out of a wider search, unless the call runs under `danger-full-access`.
 
 ### Deployment requirement
 

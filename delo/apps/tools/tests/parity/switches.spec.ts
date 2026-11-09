@@ -11,11 +11,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { PARITY_OVERLAY_PATH, PARITY_SWITCHES, type BuiltParitySwitch, type ParitySwitchEntry } from '@delo/contract-parity-composition'
 import { report, scanParity } from '../../src/parity/composition/check-parity-switches.ts'
 import { changedLines, contributionErrors, findContributions } from '../../src/parity/composition/contributions.ts'
-import { DEFAULT_PARITY, LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parseOverlay, readOverlay } from '../../src/parity/composition/overlay.ts'
+import { DEFAULT_PARITY, LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parseOverlay, parsePatchFile, readOverlay } from '../../src/parity/composition/overlay.ts'
 import { registryErrors, scenarioName, switchMarkers } from '../../src/parity/composition/switches.ts'
 import { STAGED_ROOT, sweep, sweepLine } from '../../src/parity/composition/sweep.ts'
 
 const ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
+/** The bundle whose rows name the module of every upstream entry the compositions share. */
+const BASE_PATCH_PATH = 'packages/bundle/base/cordis.patch.yml'
 const roots: string[] = []
 
 afterEach(() => {
@@ -97,6 +99,35 @@ describe('the real tree', () => {
       else expect(entry.scenario).toBeUndefined()
     }
     expect(PARITY_SWITCHES.find(entry => entry.id === 'doctor')).toMatchObject({ state: 'built', modelVisible: false })
+  })
+
+  it('declares the value the shipped composition gives every switch its rows set', () => {
+    // `defaultValue` is what Delo's default composition does, and the Config default is the parity value. Nothing held
+    // the two together: this switch's entry claimed the change was on while no shipped row set it, so the search tools
+    // kept their stock behaviour in the composition Delo ships. The shipped rows are where the claim is made, and the
+    // base bundle is where a row id's module is written.
+    const rowsOf = (path: string): Record<string, unknown>[] => parsePatchFile(readFileSync(join(ROOT, path), 'utf8'), path)
+      .flatMap(row => Array.isArray(row['insert']) ? row['insert'].filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null) : [row])
+    const moduleOf = new Map([...rowsOf(BASE_PATCH_PATH), ...rowsOf(LOCAL_BUNDLE_PATCH_PATH)]
+      .flatMap(row => typeof row['id'] === 'string' && typeof row['name'] === 'string' ? [[row['id'], row['name']] as const] : []))
+    const shipped = rowsOf(LOCAL_BUNDLE_PATCH_PATH)
+      .flatMap((row) => {
+        const name = typeof row['id'] === 'string' ? moduleOf.get(row['id']) : undefined
+        if (name === undefined) return []
+        return Object.entries((row['config'] ?? {}) as Record<string, unknown>).map(([key, value]) => ({ name, key, value }))
+      })
+    const covered = PARITY_SWITCHES.filter(entry => entry.state === 'built').flatMap(entry => shipped
+      .filter(row => row.name === entry.field.module && row.key === entry.field.key)
+      .map(row => ({ id: entry.id, value: row.value, declared: entry.defaultValue })))
+    // A row may be restated per profile; one switch is still one claim. The consent plugins are inserted rows, so the
+    // map above reads their id and name from the local patch too.
+    expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
+      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'sandbox_protected_reads',
+      'scheduled_task_consent',
+    ])
+    for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
+    // The switch itself, spelled out: the fence is off in the parity composition and on in the one Delo ships.
+    expect(PARITY_SWITCHES.find(entry => entry.id === 'sandbox_protected_reads')).toMatchObject({ state: 'built', defaultValue: true, parityValue: false })
   })
 })
 

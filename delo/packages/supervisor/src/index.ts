@@ -33,6 +33,7 @@ export {
 export {
   createBody,
   ENGINE_FILE_MOUNTS,
+  engineFileBind,
   hardeningDifferences,
   helperChannelDirectory,
   homeIdOf,
@@ -53,6 +54,7 @@ export {
   type ContainerUser,
   type CreateBody,
   type InspectRecord,
+  type MountRecord,
   type NetworkBody,
   type Owner,
   type WorkspaceNames,
