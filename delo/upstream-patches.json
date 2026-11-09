@@ -2319,27 +2319,27 @@
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/README.i18n.yaml",
       "class": "delo-feature",
-      "reason": "Container denial marker: the consistency record re-recorded after the environment-classification sentence was added to README.md and its Chinese counterpart."
+      "reason": "Container denial marker: the consistency record re-recorded after the environment-classification sentence was added to README.md and its Chinese counterpart. Worker exit race: the consistency record re-recorded after the grace-before-signal sentence was added to README.md and its Chinese counterpart."
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/README.md",
       "class": "delo-feature",
-      "reason": "Container denial marker: documents the environment classification and the switch beside `result.sandbox`."
+      "reason": "Container denial marker: documents the environment classification and the switch beside `result.sandbox`. Worker exit race: documents that a worker whose control channel ends while the process still runs gets `graceMs` to exit on its own before it is signalled, so an already-exiting process reports its own status."
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/README.zh.md",
       "class": "delo-feature",
-      "reason": "Container denial marker: the Chinese counterpart of the environment-classification sentence added to README.md."
+      "reason": "Container denial marker: the Chinese counterpart of the environment-classification sentence added to README.md. Worker exit race: the Chinese counterpart of the grace-before-signal sentence added to README.md."
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/src/worker.ts",
       "class": "security",
-      "reason": "Container denial marker: the Node worker classifies a failed program against the wrap's policy signatures first and then the environment signatures fixed at confinement from the switch, none with it off; a `sandbox-unavailable` failure is never a denial, as upstream. Lead verdict: required by the lead's WP1.6c PTC decision (A114, A115) and C9 requirement 12; equal to stock for policy denials and stricter for environment ones."
+      "reason": "Container denial marker: the Node worker classifies a failed program against the wrap's policy signatures first and then the environment signatures fixed at confinement from the switch, none with it off; a `sandbox-unavailable` failure is never a denial, as upstream. Lead verdict: required by the lead's WP1.6c PTC decision (A114, A115) and C9 requirement 12; equal to stock for policy denials and stricter for environment ones. Worker exit race: the failure callback no longer signals the managed range the moment the control channel ends; it waits for the process to exit on its own within `graceMs` and signals only after that, so a worker that is already exiting is reported with its own exit status instead of this harness's SIGTERM on a loaded host. Applies to both the generic-fix race and the classification above."
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/tests/host-failures.spec.ts",
       "class": "delo-feature",
-      "reason": "Container denial marker: covers environment-only classification with the switch on, the switch off, and a policy signature outranking the same environment text."
+      "reason": "Container denial marker: covers environment-only classification with the switch on, the switch off, and a policy signature outranking the same environment text. Worker exit race: a channel that ends while the worker is still exiting reports the worker's own status, a channel that ends with no exit is still signalled after the grace, and the control-loss cases configure the short grace they exercise."
     },
     {
       "path": "packages/ptc-runtime/ptc-runtime-node/tests/setup.ts",

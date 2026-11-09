@@ -242,6 +242,25 @@ export class ProgramWorker {
     return this.controlFailure === undefined ? message : `${message}; control channel failed: ${this.controlFailure}`
   }
 
+  /**
+   * Stop a worker whose control channel ended, after letting it finish exiting on its own.
+   * The channel also ends when the worker itself is on its way out, and a signal delivered in that window makes the
+   * managed range report this harness's SIGTERM in place of the worker's own exit status — a difference that widens
+   * with host load. Waiting for the worker's own exit first keeps the reported status the worker's own on every host;
+   * a worker that has not exited within the configured grace is still signalled, so a broken channel never leaks one.
+   * @param handle - The managed process that owned the ended channel.
+   * @returns Completion after the process exited on its own or was signalled.
+   */
+  private async terminateUnlessExited(handle: SubprocessHandle): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const exited = await new Promise<boolean>((resolve) => {
+      const settle = (outcome: boolean): void => { clearTimeout(timer); resolve(outcome) }
+      timer = setTimeout(() => { settle(false) }, this.config.graceMs)
+      handle.done.then(() => { settle(true) }, () => { settle(false) })
+    })
+    if (!exited && !this.closed && this.exitOutcome === undefined) handle.terminate()
+  }
+
   private exitMessage(outcome: SubprocessOutcome): string {
     return this.withControlFailure(`Node process exited (${String(outcome.exitCode)}, signal ${String(outcome.signal)})${this.stderr ? `: ${this.stderr}` : ''}`)
   }
@@ -321,7 +340,7 @@ export class ProgramWorker {
       if (kind === 'protocol') this.fail('protocol', error.message)
       else {
         if (kind === 'io') this.controlFailure = error.message
-        setImmediate(() => { if (!this.closed && this.exitOutcome === undefined) handle.terminate() })
+        void this.terminateUnlessExited(handle)
       }
     })
     void handle.done.then(async (outcome) => {
