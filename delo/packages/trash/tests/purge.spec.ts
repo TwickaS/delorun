@@ -4,11 +4,12 @@
  * the spill files and the browser drafts; the purge states that fragments may
  * remain in the process logs until C20's retention, and without the
  * log-clearing offer the canary stays there; with the offer chosen, the canary
- * is absent from every process log, current and rotated.
+ * is absent from every process log, current and rotated; a symbolic link planted at a store is refused
+ * rather than followed.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PURGE_RESIDUE_MAX_DAYS } from '@delo/contract-archive-and-trash'
 import { TrashService, attachmentObjectPath, spillSessionDirectoryPath } from '../src/index.ts'
@@ -19,6 +20,7 @@ import {
   IndexFixture,
   grepTree,
   makeTree,
+  plantProjectionCache,
   plantSession,
   plantSurfaceLog,
   type TrashTree,
@@ -44,6 +46,7 @@ function service(): TrashService {
     root: tree!.trashRoot,
     stores: {
       sessionsRoot: tree!.sessionsRoot,
+      storagesRoot: tree!.storagesRoot,
       spillRoots: [tree!.spillRoot],
       attachmentsRoot: tree!.attachmentsRoot,
       logsHome: tree!.logsHome,
@@ -61,6 +64,7 @@ function service(): TrashService {
  */
 function poisonChat(sessionId: string, cwd: string): { sessionId: string; cwd: string; attachments: string[] } {
   plantSession(tree!, sessionId, cwd, [0, 4])
+  plantProjectionCache(tree!, sessionId)
   index!.plant(sessionId, `${CANARY} indexed document of ${sessionId}`)
   const attachmentBytes = Buffer.from(`${CANARY} attachment bytes of ${sessionId}`, 'utf8')
   const digest = createHash('sha256').update(attachmentBytes).digest('hex')
@@ -88,6 +92,7 @@ function expectStoresClean(item: TrashItem): void {
   expect(grepTree(tree!.sessionsRoot, CANARY)).toEqual([])
   expect(grepTree(tree!.spillRoot, CANARY)).toEqual([])
   expect(grepTree(tree!.attachmentsRoot, CANARY)).toEqual([])
+  expect(grepTree(tree!.storagesRoot, CANARY)).toEqual([])
   expect(existsSync(join(tree!.trashRoot, 'items', item.id))).toBe(false)
 }
 
@@ -106,6 +111,7 @@ describe('purge', () => {
 
     expect(report.removedFrom).toContain('full-text-index')
     expect(report.removedFrom).toContain('session-generations')
+    expect(report.removedFrom).toContain('projection-cache')
     expect(report.removedFrom).toContain('attachments')
     expect(report.removedFrom).toContain('spill')
     expect(report.removedFrom).toContain('browser-drafts')
@@ -167,6 +173,48 @@ describe('purge', () => {
     expect(drafts.get(`dsh.workspace.view.v5.${HOST_A}.ws-purge`)).toBeUndefined()
     expect(drafts.get(`dsh.workspace.view.v5.${HOST_B}.ws-purge`)).toBeUndefined()
     expect(drafts.get(`dsh.workspace.view.v5.${HOST_A}.ws-keep`)).toBe('{"tab":"tests"}')
+  })
+
+  it('leaves no cached title, first message, plan, goal or todo on disk after a purge', async () => {
+    tree = makeTree()
+    index = new IndexFixture(tree.indexPath)
+    drafts = new DraftStorageFixture()
+    const sessionId = 'ses-purge-cache'
+    plantSession(tree, sessionId, '/home/person/proj-purge', [0])
+    const document = plantProjectionCache(tree, sessionId)
+    const other = plantProjectionCache(tree, 'ses-other-chat')
+    const item = await service().deleteChat({ sessionId, cwd: '/home/person/proj-purge' })
+    // The cache document outlives the delete: only the purge reaches it.
+    expect(existsSync(document)).toBe(true)
+
+    const report = await service().purge(item.id)
+
+    expect(report.removedFrom).toContain('projection-cache')
+    // The document and the invalid-record backup the domain moves aside both held the values.
+    expect(existsSync(document)).toBe(false)
+    expect(existsSync(`${document}.bak.20260101T000000000Z`)).toBe(false)
+    expect(readdirSync(join(tree.storagesRoot, 'session_projcache', 'sessions'))).toEqual(['ses-other-chat.json', 'ses-other-chat.json.bak.20260101T000000000Z'])
+    // Another chat's cached document is not the purged item's and stays.
+    expect(existsSync(other)).toBe(true)
+  })
+
+  it('refuses a symbolic link planted at the attachment store and leaves what it points to alone', async () => {
+    tree = makeTree()
+    index = new IndexFixture(tree.indexPath)
+    drafts = new DraftStorageFixture()
+    const input = poisonChat('ses-link-store', '/home/user/proj-link')
+    const item = await service().deleteChat(input)
+    // A link in the place the home gives the attachment store, with an object of the item's behind it.
+    const outside = join(tree.logsHome, '..', 'outside-attachments')
+    const outsideObject = attachmentObjectPath(join(outside, 'v1'), input.attachments[0]!)
+    mkdirSync(join(outsideObject, '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(outsideObject, 'attachment bytes elsewhere', { mode: 0o600 })
+    rmSync(dirname(tree.attachmentsRoot), { recursive: true, force: true })
+    symlinkSync(outside, dirname(tree.attachmentsRoot))
+
+    await expect(service().purge(item.id)).rejects.toMatchObject({ code: 'TRASH_STORE_REFUSED' })
+
+    expect(existsSync(outsideObject)).toBe(true)
   })
 
   it('refuses to purge an id the trash does not hold', async () => {

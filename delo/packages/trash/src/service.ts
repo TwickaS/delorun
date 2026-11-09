@@ -15,6 +15,7 @@ import { PURGE_RESIDUE_MAX_DAYS, TRASH_RETENTION_DAYS } from '@delo/contract-arc
 import {
   removeAttachments,
   removeDraftEntries,
+  removeProjectionCache,
   removeSessionDirectory,
   removeSpill,
   removeStrayGenerations,
@@ -38,6 +39,7 @@ import {
 export type PurgeStore =
   | 'full-text-index'
   | 'session-generations'
+  | 'projection-cache'
   | 'attachments'
   | 'spill'
   | 'browser-drafts'
@@ -65,6 +67,11 @@ export interface PurgeReport {
 export interface TrashStores {
   /** The JSONL session-persistence root, which holds every chat's session directory. */
   readonly sessionsRoot?: string
+  /**
+   * The storage backend's root, `<home>/storages`, which holds the projection
+   * cache's per-session checkpoint documents under `session_projcache/sessions/`.
+   */
+  readonly storagesRoot?: string
   /** The configured spill roots. */
   readonly spillRoots?: readonly string[]
   /** The versioned attachment root, `<home>/attachments/v1`. */
@@ -199,10 +206,10 @@ export class TrashService {
 
   /**
    * Purge one item permanently: the full-text index rows, the session
-   * directories with every generation, the attachments, the spill files, the
-   * browser draft entries and the trash's own copy all go in one purge, and
-   * the report states the log residue or, with the offer accepted, clears the
-   * affected log files.
+   * directories with every generation, the chat's projection-cache document,
+   * the attachments, the spill files, the browser draft entries and the
+   * trash's own copy all go in one purge, and the report states the log
+   * residue or, with the offer accepted, clears the affected log files.
    * @param itemId - the item to purge.
    * @param options - `clearLogs` accepts the log-clearing offer.
    * @returns the purge report.
@@ -225,6 +232,10 @@ export class TrashService {
         await removeSessionDirectory(sessionsRoot, chat.id)
       }
       removedFrom.push('session-generations')
+    }
+    if (this.stores.storagesRoot !== undefined && item.sessionIds.length > 0) {
+      await removeProjectionCache(this.stores.storagesRoot, item.sessionIds)
+      removedFrom.push('projection-cache')
     }
     if (this.stores.attachmentsRoot !== undefined && item.attachments.length > 0) {
       await removeAttachments(this.stores.attachmentsRoot, item.attachments)

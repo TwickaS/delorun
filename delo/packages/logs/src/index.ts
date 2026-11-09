@@ -18,6 +18,7 @@ export {
   localSurfaces,
   oldestRecordTime,
   pruneLocalSurfaces,
+  pruneStartupReports,
   pruneSurface,
   startAgeChecks,
   startupReports,

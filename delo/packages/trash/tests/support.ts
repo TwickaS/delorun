@@ -25,6 +25,8 @@ export interface TrashTree {
   trashRoot: string
   /** The JSONL session-persistence root. */
   sessionsRoot: string
+  /** The storage backend's root, which holds the projection cache's documents. */
+  storagesRoot: string
   /** The spill root. */
   spillRoot: string
   /** The versioned attachment root. */
@@ -43,13 +45,14 @@ export function makeTree(): TrashTree {
   const tree: TrashTree = {
     trashRoot: join(base, 'home', 'trash'),
     sessionsRoot: join(base, 'sessions'),
+    storagesRoot: join(base, 'home', 'storages'),
     spillRoot: join(base, 'spill'),
     attachmentsRoot: join(base, 'home', 'attachments', 'v1'),
     logsHome: join(base, 'home'),
     indexPath: join(base, 'index', 'query.sqlite'),
     remove: () => rmSync(base, { recursive: true, force: true }),
   }
-  for (const dir of [tree.trashRoot, tree.sessionsRoot, tree.spillRoot, tree.attachmentsRoot, join(tree.logsHome, 'logs'), join(tree.logsHome, 'trash')]) {
+  for (const dir of [tree.trashRoot, tree.sessionsRoot, tree.storagesRoot, tree.spillRoot, tree.attachmentsRoot, join(tree.logsHome, 'logs'), join(tree.logsHome, 'trash')]) {
     mkdirSync(dir, { recursive: true, mode: 0o700 })
   }
   return tree
@@ -180,6 +183,49 @@ export class DraftStorageFixture implements DraftStorage {
   get(key: string): string | undefined {
     return this.entries.get(key)
   }
+}
+
+/**
+ * The persisted projection-cache document of one session, as the storage
+ * backend's per-record layout publishes it: `<storages>/session_projcache/sessions/<id>.json`.
+ * @param tree - the scratch tree.
+ * @param sessionId - the chat's session id.
+ * @returns the document's path.
+ */
+export function projectionCacheDocument(tree: TrashTree, sessionId: string): string {
+  return join(tree.storagesRoot, 'session_projcache', 'sessions', `${sessionId}.json`)
+}
+
+/**
+ * Plant one chat's projection-cache document: the checkpoint rows the cache
+ * folded for the session, which hold the title, the first message, the plan,
+ * the goal and the todos. The domain moves an invalid record aside as
+ * `<id>.json.bak.<stamp>`, which holds the same values, so one is planted too.
+ * @param tree - the scratch tree.
+ * @param sessionId - the chat's session id.
+ * @returns the document's path.
+ */
+export function plantProjectionCache(tree: TrashTree, sessionId: string): string {
+  const path = projectionCacheDocument(tree, sessionId)
+  mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
+  const row = (seq: number, value: unknown): { ver: number; seq: number; val: unknown } => ({ ver: 1, seq, val: value })
+  const document = {
+    version: 7,
+    record: {
+      identity: { formatVersion: 1, createdAt: 1, cwd: '/home/user/proj-purge', isSeeded: false, inheritedEventCount: 0 },
+      rows: {
+        title: row(2, `${CANARY} title of ${sessionId}`),
+        'first-message': row(1, { text: `${CANARY} first message of ${sessionId}` }),
+        plan: row(3, { steps: [`${CANARY} plan step`] }),
+        goal: row(4, { text: `${CANARY} goal` }),
+        todos: row(5, [{ text: `${CANARY} todo`, done: false }]),
+      },
+    },
+  }
+  const text = `${JSON.stringify(document, null, 2)}\n`
+  writeFileSync(path, text, { mode: 0o600 })
+  writeFileSync(`${path}.bak.20260101T000000000Z`, text, { mode: 0o600 })
+  return path
 }
 
 /**

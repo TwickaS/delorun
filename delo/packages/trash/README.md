@@ -39,11 +39,12 @@ One directory per item under the trash root, `<home>/trash`: the item's record `
 
 - the item's rows in the SQLite FTS5 full-text index of `session-query-sqlite`, through the index seam;
 - the session directory of each chat, with every generation in it, plus any generation that reappeared at an origin between the delete and the purge;
+- each chat's projection-cache document under `<home>/storages/session_projcache/sessions`, including the copy the cache moved aside when it discarded an invalid record, because that document holds the chat's cached title, first message, plan, goal and todos;
 - the item's attachment objects under the versioned attachment root;
 - the item's spill directories in the `spill` storage;
 - the item's draft entries in the browser that performs the purge, under every host scope, as the host-qualified keys contract sets.
 
-The report names every store the purge reached.
+The report names every store the purge reached. A store root that is a symbolic link, or that sits under one, is refused with `TRASH_STORE_REFUSED` instead of followed, so a link planted in the home cannot make a purge delete outside the store it names.
 
 ## The clear-logs offer
 

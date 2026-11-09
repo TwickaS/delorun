@@ -148,6 +148,7 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 
 - `session-query-sqlite` 的 SQLite FTS5 全文索引中该条目的行。
 - 条目中每个 chat 的会话目录，包括其中的每一代，即每个 `session*.jsonl.zstd` 文件。
+- 条目中每个 chat 的投影缓存存储文档，其中保存该 chat 的缓存标题、第一条消息、计划、目标与待办，以及缓存在丢弃无效记录时移开的副本。
 - 条目的附件。
 - `spill` 存储中该条目的 spill 文件。
 - 在执行清除的浏览器中，按 host 限定键约定，该条目在每个 host 作用域下的草稿条目。
@@ -187,7 +188,7 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 - 导入的预设不能把权限提升到本人自有预设之上。
 - 导入的 skill 以禁用状态开始，导入的 chat 以未受信任状态开始。
 - 导入从不覆盖工作区或 chat。
-- 回收站在清除之前保留条目中的密钥，清除会把内容从本约定列出的每个存储中移除。
+- 回收站在清除之前保留条目中的密钥，清除会把内容从本约定列出的每个存储中移除。预置在存储根目录、或承载版本化根目录的目录上的符号链接会被拒绝而不会被跟随，因此清除不会删除它所指定存储之外的任何内容。
 - 导出在写入归档之前，会就 chat 历史中的密钥发出警告。
 
 拒绝测试：
@@ -205,6 +206,8 @@ description: "约定 C8：归档格式 v1 及其 manifest（元数据清单）�
 | `imported chat stays out of model context until trusted` | 未受信任的 chat 显示其横幅，且在本人将其标记为受信任之前，其历史不出现在任何模型请求中。 |
 | `import into an existing identifier never overwrites` | 标识符已存在的导入会写入一个新工作区，并使已有的工作区保持不变。 |
 | `canary is absent from the index and every generation after purge` | 清除之后，canary 文本不出现在全文索引中，也不出现在该 chat 的任何会话代次中。 |
+| `purge refuses a symbolic link at a store` | 预置在附件存储上的符号链接被以 `TRASH_STORE_REFUSED` 拒绝，其指向的文件保持不变。 |
+| `purge leaves no cached title or first message on disk` | 清除之后，该 chat 的投影缓存文档不存在，因此该 chat 的缓存标题、第一条消息、计划、目标与待办都不再留在磁盘上。 |
 | `purge with clear-logs chosen leaves no canary residue anywhere` | 接受清理提议并清除之后，canary 文本不出现在任何存储与任何日志文件中。 |
 | `purge without clear-logs leaves residue only in retained process logs` | 未接受清理提议并清除之后，canary 文本只残留在保留期内的运行日志中。 |
 | `export warns about secrets found in chat history` | 对含有植入密钥的 chat 导出，会在写入归档之前显示警告。 |

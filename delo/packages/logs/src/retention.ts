@@ -7,7 +7,7 @@
  * @module @delo/logs/retention
  */
 import { AGE_CHECK_INTERVAL_MS, RECORD_MAX_BYTES, RETENTION_MS } from '@delo/contract-operational-logs'
-import { closeSync, constants, ftruncateSync, openSync, readdirSync, readSync, unlinkSync } from 'node:fs'
+import { closeSync, constants, ftruncateSync, openSync, readdirSync, readSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkPrivateDirectorySync } from '@delo/home'
 import { isLogsFailure, LogsError, type LogsFailure } from './errors.ts'
@@ -152,11 +152,30 @@ export function pruneSurface(location: SurfaceLocation, now: number): RetentionR
 export function localSurfaces(home: string): SurfaceLocation[] {
   const logs = join(home, 'logs')
   if (lstatOrMissing(logs) === undefined) return []
+  if (logsRootRefusal(home) !== undefined) return []
   return readdirSync(logs, { withFileTypes: true })
     .filter(entry => !entry.isFile())
     .map(entry => surfaceOfDirectory(home, entry.name))
     .filter(location => location !== undefined)
     .sort((a, b) => a.surface.localeCompare(b.surface))
+}
+
+/**
+ * C1's refusal of the home's `logs` directory, or `undefined` when it is a directory of its own. A symbolic link
+ * planted in its place would send every read, empty and delete of the age check and the clear effect wherever it
+ * points, so both report the refusal and touch nothing under it.
+ * @param home - the Delo home.
+ * @returns the refusal, or `undefined` when the directory is absent or private.
+ */
+function logsRootRefusal(home: string): LogsFailure | undefined {
+  const logs = join(home, 'logs')
+  if (lstatOrMissing(logs) === undefined) return undefined
+  try {
+    checkPrivateDirectorySync(logs)
+    return undefined
+  } catch (error: unknown) {
+    return isLogsFailure(error) ? error : failureOf(error, logs)
+  }
 }
 
 function merge(reports: readonly RetentionReport[]): RetentionReport {
@@ -168,14 +187,16 @@ function merge(reports: readonly RetentionReport[]): RetentionReport {
 }
 
 /**
- * The age check over every local surface of a home, which every Delo process runs as it starts and `delorun logs
- * --prune` runs on demand; the logs of a stopped process are pruned too.
+ * The age check over every local surface of a home and upstream's startup reports, which every Delo process runs as
+ * it starts and `delorun logs --prune` runs on demand; the logs of a stopped process are pruned too.
  * @param home - the Delo home.
  * @param now - the time of the check.
  * @returns the files deleted and any failure; a refused surface is reported and the others are still pruned.
  */
 export function pruneLocalSurfaces(home: string, now: number): RetentionReport {
-  return merge(localSurfaces(home).map(location => pruneSurface(location, now)))
+  const refusal = logsRootRefusal(home)
+  if (refusal !== undefined) return { deleted: [], emptied: [], failures: [refusal] }
+  return merge([...localSurfaces(home).map(location => pruneSurface(location, now)), pruneStartupReports(home, now)])
 }
 
 /** The options of {@link startAgeChecks}. */
@@ -281,11 +302,37 @@ export function clearStartupReports(home: string): RetentionReport {
 }
 
 /**
+ * Delete upstream's startup reports that are older than the retention window. A report holds no records of its own,
+ * so its age is the file's own last write, the same fallback the age check takes for a surface file whose records
+ * carry no time. Without this pass a report upstream wrote once stays for the life of the home, which is why the age
+ * check reaches them too.
+ * @param home - the Delo home.
+ * @param now - the time of the check.
+ * @returns the reports deleted and any failure.
+ */
+export function pruneStartupReports(home: string, now: number): RetentionReport {
+  const deleted: string[] = []
+  const failures: LogsFailure[] = []
+  for (const path of startupReports(home)) {
+    try {
+      if (now - statSync(path).mtimeMs < RETENTION_MS) continue
+      unlinkSync(path)
+      deleted.push(path)
+    } catch (error: unknown) {
+      failures.push(failureOf(error, path))
+    }
+  }
+  return { deleted, emptied: [], failures }
+}
+
+/**
  * The clear effect over every local surface and upstream's startup reports, which `delorun logs --clear` without a
  * surface and purge's offer run, because captured records do not always carry a session id.
  * @param home - the Delo home.
  * @returns everything deleted and emptied, and any failure.
  */
 export function clearLocalLogs(home: string): RetentionReport {
+  const refusal = logsRootRefusal(home)
+  if (refusal !== undefined) return { deleted: [], emptied: [], failures: [refusal] }
   return merge([...localSurfaces(home).map(clearSurface), clearStartupReports(home)])
 }

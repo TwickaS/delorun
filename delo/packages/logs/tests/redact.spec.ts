@@ -112,6 +112,29 @@ describe('step 3: listed forms', () => {
     expect(redactor.text(`key: ${pemLine('BEGIN')}\n${body.join('\n')}`)).toBe('key: [redacted:private-key]')
   })
 
+  it('redacts a key body whose BEGIN line the record does not hold', () => {
+    const redactor = new Redactor()
+    const body = patternCanaries().pemBody
+    // The body swallows the line after it, as a body's last, short line is part of the block.
+    expect(redactor.text(`pasted:\n${body.join('\n')}\ndone`)).toBe('pasted:\n[redacted:private-key]')
+    // One 64-character line is not evidence of a key: a capture may hold one without a body to go with it.
+    expect(redactor.text(body[0]!)).toBe(body[0])
+  })
+
+  it('redacts an owner code in either case and in groups, and leaves a lower-case word alone', () => {
+    const redactor = new Redactor()
+    const code = 'GEZDGNBVGY3TQOJQGEZDGNBVGY'
+    const grouped = code.match(/.{1,4}/g)!.join('-')
+    const unevenTail = `${code.slice(0, 20).match(/.{4}/g)!.join('-')}-${code.slice(20)}`
+    for (const spelling of [code, code.toLowerCase(), grouped, unevenTail, `${code.slice(0, 13)} ${code.slice(13)}`]) {
+      expect(redactor.text(`approve ${spelling} now`), spelling).toBe('approve [redacted:owner-code] now')
+    }
+    // A run of 26 lower-case letters with no digit is a word, not a code.
+    expect(redactor.text('abcdefghijklmnopqrstuvwxyz')).toBe('abcdefghijklmnopqrstuvwxyz')
+    // So is a sentence whose words happen to spell 26 base32 characters and carry a digit.
+    expect(redactor.text('task-runner finished 3 steps in')).toBe('task-runner finished 3 steps in')
+  })
+
   it('leaves ordinary text alone', () => {
     const redactor = new Redactor()
     const text = 'task-runner finished 3 steps in 120 ms; see https://example.invalid/docs?page=2'

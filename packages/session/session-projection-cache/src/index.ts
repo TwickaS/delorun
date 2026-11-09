@@ -273,6 +273,28 @@ export class SessionProjectionCache extends Service {
   }
 
   /**
+   * Forget one session's checkpoint: remove its record from the domain's
+   * memory and its document from the medium, and drop the session's
+   * write-behind bookkeeping so a pending throttled flush cannot write the
+   * forgotten values back. This is the cache's only delete entry point; a
+   * caller uses it when the session's content must not stay on disk (a purge
+   * under C8), because a checkpoint row is the cache's copy of what the chat
+   * displayed.
+   * @param id - the session whose record goes.
+   * @returns whether a stored record was removed.
+   */
+  async forget(id: SessionId): Promise<boolean> {
+    // The session object keys the dirty map, so the reset needs the record's
+    // own session rather than the id alone.
+    for (const [session, state] of this.dirty) {
+      if (session.id !== id) continue
+      if (state.timer !== undefined) clearTimeout(state.timer)
+      this.dirty.delete(session)
+    }
+    return await this.requireTable().delete(id)
+  }
+
+  /**
    * Cold-read one session's projections from its complete log. Each unit is
    * seeded from the identity-checked cached rows — the registry skips `apply`
    * for the already-folded prefix (events at or below the row's `seq`) — and

@@ -3230,6 +3230,31 @@
       "path": "snapshots/web/ptc-escalation-approved/session.v4.jsonl",
       "class": "delo-feature",
       "reason": "Per-workspace permission defaults: the current writer output of the same scenario, with the same reordered preset identity and every other byte unchanged."
+    },
+    {
+      "path": "packages/session/session-projection-cache/README.i18n.yaml",
+      "class": "delo-feature",
+      "reason": "Trash purge (C8): the consistency record re-recorded after the `forget(id)` paragraph was added to README.md and its Chinese counterpart."
+    },
+    {
+      "path": "packages/session/session-projection-cache/README.md",
+      "class": "delo-feature",
+      "reason": "Trash purge (C8): documents `forget(id)`, the cache's only delete face, which removes a session's record from the domain and its document from the medium and drops its write-behind bookkeeping."
+    },
+    {
+      "path": "packages/session/session-projection-cache/README.zh.md",
+      "class": "delo-feature",
+      "reason": "Trash purge (C8): the Chinese counterpart of the `forget(id)` paragraph added to README.md."
+    },
+    {
+      "path": "packages/session/session-projection-cache/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Trash purge (C8): adds `SessionProjectionCache.forget(id)`, which clears the session's dirty state and deletes its stored record, so a purge reaches the cached title, first message, plan, goal and todos. Upstream's other methods and exports are unchanged."
+    },
+    {
+      "path": "packages/session/session-projection-cache/tests/cache.spec.ts",
+      "class": "delo-feature",
+      "reason": "Trash purge (C8): covers `forget(id)` removing the record from memory and the medium for a cold record, and a pending interval flush of a live session writing nothing back after the forget."
     }
   ],
   "retired": []
