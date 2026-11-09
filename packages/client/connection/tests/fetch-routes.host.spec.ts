@@ -91,6 +91,45 @@ describe('Connection exact Fetch routes', () => {
     await disposeFiber()
   })
 
+  it('refuses an exact route a body arrives at with any media type but the route\'s own', async () => {
+    const { connection, dispose: disposeFiber } = await mounted()
+    const route = vi.fn(async (request: Request) => Response.json({ method: request.method }))
+    const dispose = connection.fetch.register({
+      path: '/api/session.export', methods: ['GET', 'POST'], requestBody: 'buffered', fetch: route,
+    })
+    const disposeBytes = connection.fetch.register({
+      path: '/api/file.upload', methods: ['POST'], requestBody: 'streaming', requestMediaType: 'application/octet-stream', fetch: route,
+    })
+    const shared = connection.createSharedFetchHandler('/api')
+    const send = (path: string, init: RequestInit): Promise<Response> => shared.fetch(new Request(`http://host${path}`, init), connection.browserPeer)
+
+    // A cross-site page reaches a named route with a body the browser sends without a preflight.
+    const plain = await send('/api/session.export', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{"a":1}' })
+    expect(plain.status).toBe(415)
+    expect(await plain.text()).toBe('content type must be application/json')
+    // A body with no declared type is the same refusal, and the route never runs.
+    expect((await send('/api/session.export', { method: 'POST', body: 'x' })).status).toBe(415)
+    expect(route).not.toHaveBeenCalled()
+    // The declared type, parameters aside, reaches the route; a bodyless POST has no content to interpret.
+    expect((await send('/api/session.export', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: '{}' })).status).toBe(200)
+    expect((await send('/api/session.export', { method: 'POST' })).status).toBe(200)
+    // A read carries no body, so the gate never asks it for a type.
+    expect((await send('/api/session.export', { method: 'GET' })).status).toBe(200)
+    // A route that reads raw bytes names its own type instead of JSON.
+    expect((await send('/api/file.upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: 'BLOB' })).status).toBe(200)
+    expect((await send('/api/file.upload', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status).toBe(415)
+
+    // A declared media type must be a bare essence; a parameterized or wildcard one fails the load.
+    for (const requestMediaType of ['json', 'application/json; charset=utf-8', 'application/*']) {
+      expect(() => connection.fetch.register({
+        path: '/api/session.export.other', methods: ['POST'], requestBody: 'buffered', requestMediaType, fetch: route,
+      })).toThrow('declares a malformed media type')
+    }
+    await disposeBytes()
+    await dispose()
+    await disposeFiber()
+  })
+
   it('refuses exact routes to non-owner Peers while the RPC interceptor still receives them', async () => {
     const { connection, dispose: disposeFiber } = await mounted()
     const route = vi.fn(async () => new Response('route'))

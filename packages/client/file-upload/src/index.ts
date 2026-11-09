@@ -81,6 +81,8 @@ export class FileUploads extends TypertRemoteService {
         path: FILE_UPLOAD_PATH,
         methods: ['POST'],
         requestBody: 'streaming',
+        // Raw bytes, not JSON: the exact-route gate refuses every other declared type.
+        requestMediaType: 'application/octet-stream',
         fetch: request => handleFileUploadHttp(this, request),
       }),
       'file-upload: streaming route',

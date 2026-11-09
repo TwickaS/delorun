@@ -89,10 +89,40 @@ function fakeHttpServer(routes: WebRoute[]): WebServer {
   return fake as WebServer
 }
 
-async function mount(clientModuleHost: FakeHost, webServer: WebServer) {
+/** One loopback authority every admitted request presents. */
+const LOOPBACK_AUTHORITY = '127.0.0.1:3080'
+
+/**
+ * The composition's `connection` fence, stubbed to the two decisions this
+ * route depends on: an authority that is not the loopback listener, or an
+ * Origin that names another one, is refused 403, and a loopback request is
+ * admitted. The real provider is `@deepseek-ai/dsh-client-connection`, whose
+ * own specs prove the fence; this stub proves the route asks it.
+ */
+function loopbackFence(): { requestRejection: (request: IncomingMessage) => 401 | 403 | undefined } {
+  return {
+    requestRejection: (request) => {
+      if (request.headers.host !== LOOPBACK_AUTHORITY) return 403
+      const origin = request.headers.origin
+      return origin !== undefined && origin !== `http://${LOOPBACK_AUTHORITY}` ? 403 : undefined
+    },
+  }
+}
+
+/** Admit every request, for the specs that observe watches rather than the stream. */
+function admitAll(): { requestRejection: (request: IncomingMessage) => 401 | 403 | undefined } {
+  return { requestRejection: () => undefined }
+}
+
+async function mount(
+  clientModuleHost: FakeHost,
+  webServer: WebServer,
+  connection: { requestRejection: (request: IncomingMessage) => 401 | 403 | undefined } = admitAll(),
+) {
   const ctx = new Context()
   ctx.provide('clientModules', clientModuleHost)
   ctx.provide('webServer', webServer)
+  ctx.provide('connection', connection as never)
   const fiber = ctx.plugin(
     { inject: [...inject], Config, apply },
     { pollIntervalMs: POLL_MS },
@@ -254,6 +284,43 @@ describe('hmr node half', () => {
 })
 
 
+it('refuses the event stream to an authority the fence rejects and streams to the loopback one', async () => {
+  const bundle = join(dir, 'fence.js')
+  writeFileSync(bundle, 'v1')
+  const routes: WebRoute[] = []
+  const fiber = await mount(fakeClientModuleHost(new Map([['fence', bundle]])), fakeHttpServer(routes), loopbackFence())
+  const route = routes[0]!
+  const answer = async (headers: Record<string, string>): Promise<{ status?: number; lines: string[] }> => {
+    const lines: string[] = []
+    const state: { status?: number } = {}
+    const response = Object.assign(new EventEmitter(), {
+      writeHead: vi.fn((status: number) => { state.status = status }),
+      write: (line: string) => { lines.push(line) },
+      destroy: vi.fn(),
+      end: vi.fn(),
+    })
+    try {
+      await route.handler({ method: 'GET', headers } as IncomingMessage, response as unknown as ServerResponse)
+    } finally { response.emit('close') }
+    return { ...state, lines }
+  }
+  try {
+    // The stream names the module graph, the plugin inventory and the release
+    // commit: a rebound page carrying the attacker's authority reads nothing.
+    expect(await answer({ host: 'evil.example' })).toEqual({ status: 403, lines: [] })
+    // A page that reached this listener by another authority is refused too.
+    expect(await answer({ host: LOOPBACK_AUTHORITY, origin: 'http://evil.example' })).toEqual({ status: 403, lines: [] })
+    // The loopback page still streams.
+    const admitted = await answer({ host: LOOPBACK_AUTHORITY, origin: `http://${LOOPBACK_AUTHORITY}` })
+    expect(admitted.status).toBe(200)
+    expect(admitted.lines[0]).toBe(': connected\n\n')
+    expect((JSON.parse(admitted.lines[1]!.slice(6)) as { graph: WebBootGraph }).graph.entries.map(row => row.id)).toEqual(['fence'])
+  } finally {
+    await fiber.dispose()
+  }
+})
+
+
 it('broadcasts the desired graph without waiting for Host activation or cleanup', async () => {
   const ctx = new Context()
   await ctx.plugin(Loader)
@@ -264,6 +331,7 @@ it('broadcasts the desired graph without waiting for Host activation or cleanup'
   const routes: WebRoute[] = []
   ctx.provide('clientModules', host)
   ctx.provide('webServer', fakeHttpServer(routes))
+  ctx.provide('connection', admitAll() as never)
   let release!: () => void
   let cleaned!: () => void
   let started!: () => void

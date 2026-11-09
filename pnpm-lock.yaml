@@ -4418,6 +4418,9 @@ importers:
       '@deepseek-ai/cordis-plugin-loader':
         specifier: workspace:~
         version: link:../../../vendor/loader
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../connection
       '@deepseek-ai/dsh-client-modules':
         specifier: workspace:*
         version: link:../modules

@@ -947,6 +947,11 @@
       "reason": "Admission seam (C4): the Chinese counterpart of the admission section in README.md. It also documents `authenticator/minted`. It also carries the review-hardening sentences."
     },
     {
+      "path": "packages/client/connection/src/api-request-trust.ts",
+      "class": "security",
+      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot — with exactly one Host line in the raw header list, and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
       "path": "packages/client/connection/src/authenticator.ts",
       "class": "security",
       "reason": "Admission seam (C4): the `Authenticator` Service Definition (`ctx.authenticator`) with its synchronous `admit(request, listener)` and `policy(listener)`, the `authenticator/policy` event, and the admission and policy types, which C4's `@delo/contract-admission` types are assignable to. It also declares `authenticator/minted` and `MintedCredential`, the announcement of each loopback credential Connection mints, by hash and never by value. No upstream composition provides it, so Connection keeps its built-in admission. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges."
@@ -982,9 +987,24 @@
       "reason": "Admission seam (C4): `PeerAdmission`'s admitted result carries the provider's `setCookie`, and `ConnectionIndexResponse` may offer `setHeader`, through which an admitted loopback index response receives it. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges."
     },
     {
+      "path": "packages/client/connection/tests/api-request-trust.host.spec.ts",
+      "class": "security",
+      "reason": "Specs of the tightened /api trust fence: every Host spelling the URL parser would repair, a repeated Host line node:http keeps only the first of, a state-changing /api request that states no origin, and the cross-site arrival a route declares for a navigation only. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/connection/tests/fetch-routes.host.spec.ts",
+      "class": "security",
+      "reason": "Spec of the exact-route media-type gate: a body arriving with any media type but the route's own is refused, which the streaming upload route relies on. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
       "path": "packages/client/connection/tests/minted.host.spec.ts",
       "class": "security",
       "reason": "Admission seam (C4, loopback credential records): proves that each launch-token exchange and each `/connect` mint announces `authenticator/minted` once, before the response is written, with the hash of the cookie value and never the value, and that requests minting nothing announce nothing. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges."
+    },
+    {
+      "path": "packages/client/connection/tests/node-half.host.spec.ts",
+      "class": "security",
+      "reason": "Harness of the node-half specs: a JSON POST carries the Origin a browser attaches, so the specs exercise the origin-account rule rather than the path a non-browser client takes. Lead verdict: pending; no lead review of this change is recorded yet."
     },
     {
       "path": "packages/client/connection/tests/reach.host.spec.ts",
@@ -995,6 +1015,31 @@
       "path": "packages/client/connection/tsconfig.host.json",
       "class": "delo-feature",
       "reason": "Admission seam (C4): adds `src/authenticator.ts` and `src/reach.ts` to the Host face's program."
+    },
+    {
+      "path": "packages/client/file-upload/src/index.ts",
+      "class": "security",
+      "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/hmr/package.json",
+      "class": "security",
+      "reason": "Development dependency on @deepseek-ai/dsh-client-connection for the Context merge the transport now reads; the peer set is unchanged. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/hmr/src/index.ts",
+      "class": "security",
+      "reason": "The /plugins/events SSE stream names the module graph, the plugin inventory and the release commit, so every request asks the composition's `connection` fence for a rejection before the channel opens: a rebound page carrying the attacker's authority reads nothing, nor does an unauthenticated caller. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/hmr/tests/node-half.client.spec.ts",
+      "class": "security",
+      "reason": "Specs of the gated event stream: a refused authority gets the fence's status and no frame, the loopback authority streams, and the mount helper's fence type takes the request. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/hmr/tsconfig.json",
+      "class": "security",
+      "reason": "Project reference to the connection package's host project, which declares the `connection` Context merge this package's route handler reads. Lead verdict: pending; no lead review of this change is recorded yet."
     },
     {
       "path": "packages/client/locale/README.i18n.yaml",
@@ -1040,6 +1085,21 @@
       "path": "packages/client/modules/src/assets.ts",
       "class": "security",
       "reason": "Adds `.woff2` to the client package-asset media types, so a client plugin can ship its own fonts through the package-asset route as it ships images. Delo's theme serves its typefaces this way. Lead verdict: kept; adds one passive font media type (font/woff2) to the asset allowlist."
+    },
+    {
+      "path": "packages/client/modules/src/index.ts",
+      "class": "security",
+      "reason": "The /plugins bundle route serves the plugin inventory, so an HTTP request — which arrives with no admitted Peer — asks the composition's `connection` fence before any bundle bytes are read, while an in-process read keeps its caller's Peer. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/modules/tests/node-half.client.spec.ts",
+      "class": "security",
+      "reason": "Spec of the gated bundle route: a request over HTTP without an admitted Peer takes the fence's refusal before a bundle is read. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/client/modules/tests/package-assets.client.spec.ts",
+      "class": "security",
+      "reason": "Composition of the carrier spec: provides an admitting `connection` service, which the bundle route now injects. Lead verdict: pending; no lead review of this change is recorded yet."
     },
     {
       "path": "packages/client/store/README.i18n.yaml",
@@ -2210,6 +2270,16 @@
       "path": "packages/fs/tool-str-replace-editor/tests/tools.spec.ts",
       "class": "delo-feature",
       "reason": "Protected home, read fence (review of #66): covers `view` and `str_replace` refusals directly, through links, `..` and another mount, the readable entry, `danger-full-access` (also agentless), no policy service, and no protected reads."
+    },
+    {
+      "path": "packages/host/frontend-static/src/index.ts",
+      "class": "security",
+      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. Lead verdict: pending; no lead review of this change is recorded yet."
+    },
+    {
+      "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
+      "class": "security",
+      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. Lead verdict: pending; no lead review of this change is recorded yet."
     },
     {
       "path": "packages/host/open-in-app/src/resolver.ts",

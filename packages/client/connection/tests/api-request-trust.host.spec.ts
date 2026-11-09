@@ -158,4 +158,84 @@ describe('isTrustedApiRequest', () => {
     expect(isTrustedApiRequest(request({ ...markers, host: '127.0.0.999' }), [])).toBe(false)
     expect(isTrustedApiRequest(request({ ...markers, host: '128.0.0.1' }), [])).toBe(false)
   })
+
+  it('refuses every Host spelling the URL parser would repair', () => {
+    // WHATWG parsing reads user information, strips whitespace and control
+    // characters anywhere in a URL, and drops an IPv4 address's trailing dot:
+    // each spelling names one authority to the parser and another to a browser.
+    for (const host of [
+      'evil@localhost',
+      '127.0.0.1:3080@evil.example',
+      '127.0.0.1.',
+      'localhost.',
+      '127.0.0.1\t',
+      '\n127.0.0.1 ',
+      '127.0.0.1\r',
+      '127.0.0.1\x00',
+      '127.0.0.1:3080 ',
+      '127.0.0.1:30\x2080',
+      'ｌｏｃａｌｈｏｓｔ',
+    ]) {
+      expect(isTrustedApiRequest(request({ host }), []), JSON.stringify(host)).toBe(false)
+    }
+    // The unrounded spellings keep working.
+    for (const host of ['127.0.0.1', '127.0.0.1:3080', 'localhost', '[::1]:3080']) {
+      expect(isTrustedApiRequest(request({ host }), []), host).toBe(true)
+    }
+  })
+
+  it('refuses a repeated Host line, which node:http keeps only the first of', () => {
+    const headers = { host: '127.0.0.1:3080' }
+    expect(isTrustedApiRequest({ headers, rawHeaders: ['host', '127.0.0.1:3080', 'cookie', 'a=1'] }, [])).toBe(true)
+    // The parsed view holds the first line; a second one names another authority.
+    expect(isTrustedApiRequest({
+      headers,
+      rawHeaders: ['Host', '127.0.0.1:3080', 'Host', 'evil.example'],
+    }, [])).toBe(false)
+    // A Fetch Headers merges repeats into one comma-joined value.
+    expect(isTrustedApiRequest({ headers: new Headers([['host', '127.0.0.1:3080'], ['host', 'evil.example']]) }, [])).toBe(false)
+  })
+
+  it('requires a state-changing /api request to say where it came from', () => {
+    const call = (headers: Record<string, string>, url = '/api/goals/set'): boolean =>
+      isTrustedApiRequest({ headers, method: 'POST', url }, [])
+    // A page on another loopback port is same-site, not same-origin: the
+    // browser sends its credentialed POST without a preflight, and the Origin
+    // fence is blind when no Origin arrives.
+    expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'same-site' })).toBe(false)
+    expect(call({ host: '127.0.0.1:3080' })).toBe(false)
+    // Either account of the origin satisfies the rule.
+    expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'same-origin' })).toBe(true)
+    expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'none' })).toBe(true)
+    expect(call({ host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080' })).toBe(true)
+    // A presenting Origin still has to name this authority.
+    expect(call({ host: '127.0.0.1:3080', origin: 'http://127.0.0.1:9999' })).toBe(false)
+    // A read, and a request outside the channel, need no such account.
+    expect(isTrustedApiRequest({ headers: { host: '127.0.0.1:3080' }, method: 'GET', url: '/api/session.list' }, [])).toBe(true)
+    expect(isTrustedApiRequest({ headers: { host: '127.0.0.1:3080' }, method: 'POST', url: '/connect?token=t' }, [])).toBe(true)
+    expect(isTrustedApiRequest({
+      headers: { host: '127.0.0.1:3080' },
+      method: 'POST',
+      url: 'http://127.0.0.1:3080/connect?token=t',
+    }, [])).toBe(true)
+    // An unreported target counts as the channel this fence guards, and an
+    // absolute one resolves to its path.
+    expect(isTrustedApiRequest({ headers: { host: '127.0.0.1:3080' }, method: 'POST' }, [])).toBe(false)
+    expect(call({ host: '127.0.0.1:3080' }, 'http://127.0.0.1:3080/api/goals/set')).toBe(false)
+  })
+
+  it('accepts a cross-site arrival only where the route declares one, and only for a navigation', () => {
+    const arrival = { host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' }
+    const redirect = { headers: arrival, method: 'GET', url: '/oauth/callback?code=c&state=s' }
+    // A foreign site redirects the browser here: the default fence refuses the marker.
+    expect(isTrustedApiRequest(redirect, [])).toBe(false)
+    expect(isTrustedApiRequest(redirect, [], undefined, 'http:', { crossSiteArrival: true })).toBe(true)
+    // The Host fence keeps binding the arrival.
+    expect(isTrustedApiRequest({ ...redirect, headers: { ...arrival, host: 'evil.example' } }, [], undefined, 'http:', { crossSiteArrival: true })).toBe(false)
+    // A subresource request is not a navigation, so the allowance never covers it.
+    expect(isTrustedApiRequest({
+      ...redirect,
+      headers: { ...arrival, 'sec-fetch-mode': 'no-cors' },
+    }, [], undefined, 'http:', { crossSiteArrival: true })).toBe(false)
+  })
 })

@@ -83,6 +83,7 @@ it.each([false, true])('tracks the Web carrier lifetime when server-first is %s'
   const ctx = new Context()
   contexts.push({ ctx })
   ctx.provide('loader', { entries: () => [] })
+  ctx.provide('connection', admitAll() as never)
   const routes = new Set<WebRoute>()
   const mountServer = () => ctx.plugin((serverCtx) => {
     serverCtx.provide('webServer', {
@@ -130,6 +131,22 @@ it('publishes this package version and the build commit as the Host release in e
   expect((await mount(undefined)).release).toEqual({ version })
 })
 
+/** The composition's connection fence, stubbed to admit every request. */
+function admitAll(): { requestRejection: () => undefined } {
+  return { requestRejection: () => undefined }
+}
+
+/**
+ * The same fence, stubbed to the decisions the bundle route depends on: only
+ * the loopback authority is admitted. The real provider is
+ * `@deepseek-ai/dsh-client-connection`, whose own specs prove the fence; this
+ * stub proves the route asks it.
+ */
+const LOOPBACK_AUTHORITY = '127.0.0.1:3080'
+function loopbackFence(): { requestRejection: (request: Request) => 401 | 403 | undefined } {
+  return { requestRejection: request => request.headers.get('host') === LOOPBACK_AUTHORITY ? undefined : 403 }
+}
+
 /** Create a resolvable package whose client export points at the returned path. */
 function writePackage(
   packageName: string,
@@ -165,6 +182,7 @@ function constructWithRoute(
     entryBaseUrl?: string
     internal?: NonNullable<Context['loader']['internal']>
     onEntries?: () => void
+    connection?: unknown
   } = {},
 ): { context: Context; service: ClientModuleRegistry; route: Promise<WebResourceRoute> } {
   const ctx = new Context()
@@ -195,6 +213,7 @@ function constructWithRoute(
     tapIndex: () => () => {},
   }
   ctx.provide('webServer', webServer as WebServer)
+  ctx.provide('connection', (options.connection ?? admitAll()) as never)
   const service = new ClientModuleRegistry(ctx)
   owned.ready = route.promise
   return { context: ctx, service, route: route.promise }
@@ -206,13 +225,14 @@ function construct(packageNames: string[]): ClientModuleRegistry {
 }
 
 /** Invoke the registered plugin resource and capture status, headers, and bytes. */
-async function routeRequest(route: Promise<WebResourceRoute>, url: string, method = 'GET'): Promise<{
+async function routeRequest(route: Promise<WebResourceRoute>, url: string, method = 'GET', host = LOOPBACK_AUTHORITY): Promise<{
   status: number
   headers: Record<string, string>
   body: Buffer
 }> {
   const { resource } = await route
-  const response = await resource(new Request(new URL(url, 'http://localhost/'), { method }))
+  // The carrier leaves the client's authority in the `host` header alone.
+  const response = await resource(new Request(new URL(url, 'http://localhost/'), { method, headers: { host } }))
   return { status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) }
 }
 
@@ -681,6 +701,24 @@ describe('client bundle activation', () => {
     expect(String(thrown)).toContain('  other failures:')
     expect(String(thrown)).toContain('EISDIR')
     expect(String(thrown)).not.toContain('pnpm run build')
+  })
+
+  it('asks the connection fence before it serves a bundle over HTTP', async () => {
+    const packageName = '@fixture/fenced-bundle'
+    const clientPath = writePackage(packageName)
+    mkdirSync(dirname(clientPath), { recursive: true })
+    writeFileSync(clientPath, 'module.exports = {}\n')
+    const { service, route } = constructWithRoute([packageName], { connection: loopbackFence() })
+    const bundleUrl = service.graph().entries[0]!.url
+
+    // A rebound page reads no bundle while the gated index beside it names one.
+    expect((await routeRequest(route, bundleUrl, 'GET', 'evil.example')).status).toBe(403)
+    // The loopback browser is served, and an in-process read for an admitted
+    // Peer skips a fence its caller already applied.
+    expect((await routeRequest(route, bundleUrl)).status).toBe(200)
+    const peer = { principal: { kind: 'owner' } } as Parameters<WebResourceRoute['resource']>[1]
+    const inProcess = await (await route).resource(new Request(new URL(bundleUrl, 'http://localhost/')), peer)
+    expect(inProcess.status).toBe(200)
   })
 
   it('falls back to a generated-file map when an authored map is malformed', async () => {

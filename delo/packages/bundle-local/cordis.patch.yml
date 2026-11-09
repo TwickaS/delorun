@@ -14,6 +14,14 @@
   config:
     enabled: false
 
+# Searching the machine must not reach Delo's own home: the search tools' protected-read fence is on, so `glob` and
+# `grep` refuse a path under it as the file tools already do (C16 switch sandbox_protected_reads). A patch replaces
+# the targeted row's whole `config`, so the bundles' over-cap sampling choice is restated.
+- id: tool-fs-search
+  config:
+    sampleOverCapGlobResults: false
+    protectedReads: true
+
 # DeepSeek's account and Platform sign-in (browser PKCE to platform.deepseek.com, account details, Usage and Top-up pages)
 # is removed from Delo's CLI profiles: the first release has no DeepSeek account service. The row stays in upstream's
 # composition for parity, and llm-deepseek-account, which needs a signed-in account, stays inert without it. The
