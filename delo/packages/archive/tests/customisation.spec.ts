@@ -71,7 +71,7 @@ describe('a customisation document whose decoded strings read as expressions', (
   })
 
   it('refuses a `!!` that does not start the string', () => {
-    refusal(document(themeRow('{"css":"delo !!js process.exit(1)"}')))
+    refusal(document(themeRow('{"css":"delo \\u0021\\u0021js process.exit(1)"}')))
   })
 
   it('refuses a tag decoded into a key, not only into a value', () => {
