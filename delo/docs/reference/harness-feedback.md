@@ -29,3 +29,13 @@ A running board of friction met while working in this harness and this repositor
 **What to do instead.** Diagnose the team dialog's availability state on this host before relying on that spec; until then, a push whose changed set reaches this spec may use `DELO_PUSH_SKIP=tests:web-changed` with this entry as the reason, naming the skip in the pull request.
 
 **Status:** `open`.
+
+### 2026-11-09 · #3 A fresh worktree's suites fail on the missing native system addon
+
+**What happened.** After `git worktree add` and `node delo/apps/tools/src/setup-worktree.ts`, there is no `native/system/packages/linux-x64/bin/glibc/system.node`: the addon is git-ignored and the setup builds nothing native. `tests:snapshots`, `tests:fork` and `parity-replay` then fail most of their tests with `dsh: Cannot find module '…/native/system/packages/linux-x64/bin/glibc/system.node'`: 168 of the 186 tests of `snapshots/session/headless.snapshot.ts` alone, most of them with that line. `tests:upstream-changed` fails the same way on a spec that loads it (`packages/session/session-persistence-jsonl/tests/lease.spec.ts`: 17 of 19).
+
+**What it cost.** A fresh worktree could not run the lanes its change reaches until the addon was built by hand. The failure names a module path, not the missing step, so it reads as a broken tree rather than a missing prerequisite, and the only record of the step was the prerequisites line of the parity baseline. `tests:snapshots` alone reports 200+ failures, which hides every real one.
+
+**What to do instead.** `pnpm run build:native-system` builds the host's addon in about a second. The lanes that load it now declare `generate:native` in their needs ([`plan.ts`](../../apps/tools/src/checks/plan.ts)), so `pnpm check` builds it before the first lane that loads it, with no manual step, and a tree that loses the addon is rebuilt on the next run because the check declares no inputs.
+
+**Status:** `fixed`: every lane that loads the addon carries the build as a need, and [`checks-native-system.spec.ts`](../../apps/tools/tests/checks-native-system.spec.ts) asserts it.

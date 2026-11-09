@@ -204,6 +204,9 @@ export const DOCS_SITE_ID = 'docs-site'
 /** The check that the committed `THIRD_PARTY_NOTICES.md` matches what upstream's generator writes from the installed manifests. */
 export const NOTICES_ID = 'generated:notices'
 
+/** The check that builds the host's native system addon, which upstream's suites load and git ignores. */
+export const NATIVE_CHECK_ID = 'generate:native'
+
 /**
  * Whether a changed path can change the third-party notices: a manifest, the lockfile, the notices file or its generator.
  * @param path - a changed path, relative to the repository root.
@@ -283,6 +286,11 @@ function draft(tree: ForkTree, host: Host): Draft[] {
   const { workers, cacheDir } = host
   // Lanes that execute upstream's built code wait for a build when it is missing or stale, instead of failing every scenario on it.
   const built = host.staleRuntime.length > 0 ? ['build:artifacts'] : []
+  // The lanes that run a suite upstream prepares with `build:native-system` (`pnpm run test`, whose script is that build and
+  // `vitest run`, and the snapshot gate that needs the whole build). The addon is git-ignored, so a fresh worktree that ran
+  // `setup-worktree.ts` has none, and every scenario fails with `Cannot find module …/system.node`; declaring the build as the
+  // lane's need pulls it into the plan whatever the tier selects, and rebuilds it on any later run whose tree lost it.
+  const upstreamSuiteNeeds = [NATIVE_CHECK_ID, ...built]
   const checks: Draft[] = [
     { id: 'boundary', group: 'boundary', title: 'Every difference from upstream is fork-owned or a listed patch', cwd: '', command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-fork-boundary.ts'], needs: [], inputs: ['**'], history: true, tiers: ['changed', 'full'], cpus: 1 },
   ]
@@ -348,14 +356,15 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       tiers: ['changed', 'full'],
       cpus: 1,
     },
-    { id: 'generate:native', group: 'generate', title: 'The host\'s native system addon, which upstream\'s suite loads (`pnpm run build:native-system`)', cwd: '', command: ['pnpm', 'run', '--silent', 'build:native-system'], needs: [], tiers: [], cpus: 2 },
+    // No tier selects it: a lane that loads the addon declares it as a need, and `--only generate:native` builds it alone.
+    { id: NATIVE_CHECK_ID, group: 'generate', title: 'The host\'s native system addon, which upstream\'s suites load (`pnpm run build:native-system`)', cwd: '', command: ['pnpm', 'run', '--silent', 'build:native-system'], needs: [], tiers: [], cpus: 2 },
     {
       id: 'tests:fork',
       group: 'tests',
       title: 'Every `delo/apps/*/tests` and `delo/packages/*/tests` spec (`delo/vitest.config.ts`)',
       cwd: '',
       command: [VITEST, 'run', '--config', FORK_CONFIG, `--maxWorkers=${String(workers.fork)}`],
-      needs: built,
+      needs: upstreamSuiteNeeds,
       inputs: ['delo/**', ...UPSTREAM_CODE],
       env: TEST_ENV,
       tiers: ['changed', 'full'],
@@ -388,7 +397,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       pnpmScript: true,
       inputs: UPSTREAM_CODE,
       env: TEST_ENV,
-      needs: built,
+      needs: upstreamSuiteNeeds,
       tiers: ['changed'],
       cpus: Math.min(workers.upstream, UPSTREAM_CHANGED_WORKERS),
     },
@@ -410,7 +419,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       cwd: '',
       command: ['pnpm', 'run', '--silent', 'test:snapshot'],
       environment: { DSH_SNAPSHOT_MAX_CONCURRENCY: String(SNAPSHOT_CONCURRENCY) },
-      needs: built,
+      needs: upstreamSuiteNeeds,
       tiers: ['changed', 'full'],
       cpus: SNAPSHOT_CONCURRENCY,
     },
@@ -433,7 +442,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       cwd: '',
       command: ['pnpm', 'run', '--silent', 'test:snapshot'],
       environment: { ...PARITY_OVERLAY, DSH_SNAPSHOT_MAX_CONCURRENCY: String(SNAPSHOT_CONCURRENCY) },
-      needs: built,
+      needs: upstreamSuiteNeeds,
       tiers: ['changed', 'full'],
       cpus: SNAPSHOT_CONCURRENCY,
     },

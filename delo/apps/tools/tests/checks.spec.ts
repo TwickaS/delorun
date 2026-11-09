@@ -121,13 +121,13 @@ describe('the catalog', () => {
     const stale = catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] })
     expect(stale.find(check => check.id === 'build:artifacts')).toMatchObject({ command: ['pnpm', 'run', '--silent', 'build:artifacts'], needs: [], tiers: ['changed', 'full'] })
     expect(stale.find(check => check.id === 'build:artifacts')?.environment).toBeUndefined()
-    for (const id of ['tests:snapshots', 'tests:upstream-changed', 'tests:fork']) expect(stale.find(check => check.id === id)?.needs).toEqual(['build:artifacts'])
+    for (const id of ['tests:snapshots', 'tests:upstream-changed', 'tests:fork']) expect(stale.find(check => check.id === id)?.needs).toEqual(['generate:native', 'build:artifacts'])
   })
 })
 
 describe('selection', () => {
-  it('runs every default check with no target, and neither the changed-upstream lane nor the opt-in native build', () => {
-    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'generated:notices', 'tests:fork', 'tests:snapshots', 'parity-switches', 'parity-replay'])
+  it('runs every default check with no target, and neither the changed-upstream lane nor the native build by a tier of its own', () => {
+    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'generated:notices', 'generate:native', 'tests:fork', 'tests:snapshots', 'parity-switches', 'parity-replay'])
     expect(CHECKS.find(check => check.id === 'generate:native')?.tiers).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['generate:native'] }))).toEqual(['generate:native'])
   })
@@ -140,7 +140,7 @@ describe('selection', () => {
 
   it('narrows a target to its package\'s programs and specs, its dependents\' programs, the boundary and the JSDoc check', () => {
     const plan = select(CHECKS, TREE, { ...NONE, targets: ['delo/packages/control-protocol/src/messages.ts'] })
-    expect(ids(plan)).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'tests:fork'])
+    expect(ids(plan)).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'generate:native', 'tests:fork'])
     expect(plan.find(check => check.id === 'typecheck:delo:cell')?.reason).toBe('delo/apps/cell depends on a changed package')
     expect(plan.find(check => check.id === 'tests:fork')?.command.slice(-1)).toEqual(['delo/packages/control-protocol/'])
   })
@@ -246,9 +246,9 @@ describe('the pre-commit tier', () => {
 describe('the parity checks', () => {
   it('replay upstream\'s scenarios through the overlay with no inputs, so a selection always runs them, after a stale build', () => {
     const replay = CHECKS.find(check => check.id === 'parity-replay')
-    expect(replay).toMatchObject({ group: 'parity', command: ['pnpm', 'run', '--silent', 'test:snapshot'], environment: { DSH_SNAPSHOT_PATCH: PARITY_OVERLAY_PATH, DSH_SNAPSHOT_MAX_CONCURRENCY: '5' }, needs: [], exclusive: true })
+    expect(replay).toMatchObject({ group: 'parity', command: ['pnpm', 'run', '--silent', 'test:snapshot'], environment: { DSH_SNAPSHOT_PATCH: PARITY_OVERLAY_PATH, DSH_SNAPSHOT_MAX_CONCURRENCY: '5' }, needs: ['generate:native'], exclusive: true })
     expect(replay?.inputs).toBeUndefined()
-    expect(catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] }).find(check => check.id === 'parity-replay')?.needs).toEqual(['build:artifacts'])
+    expect(catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] }).find(check => check.id === 'parity-replay')?.needs).toEqual(['generate:native', 'build:artifacts'])
     expect(CHECKS.find(check => check.id === 'parity-switches')?.command).toEqual(['node_modules/.bin/tsx', 'delo/apps/tools/src/parity/composition/check-parity-switches.ts'])
   })
 
@@ -327,7 +327,8 @@ describe('the changed-upstream lane', () => {
   })
 
   it('hands the changed-upstream lane pnpm\'s script environment even when no other planned check runs pnpm', () => {
-    const plan = select(CHECKS, TREE, { ...NONE, only: ['tests:upstream-changed'], changed: { base: 'base', paths: ['packages/core/session/src/index.ts'] } })
+    // The native build runs pnpm too, so it is skipped here to leave the lane alone in the plan.
+    const plan = select(CHECKS, TREE, { ...NONE, only: ['tests:upstream-changed'], skip: ['generate:native'], changed: { base: 'base', paths: ['packages/core/session/src/index.ts'] } })
     expect(plan.map(check => check.id)).toEqual(['tests:upstream-changed'])
     expect(plan.some(readsPnpmScriptEnvironment)).toBe(true)
     expect(readsPnpmScriptEnvironment({ command: ['pnpm', 'run', 'typecheck'] })).toBe(true)
