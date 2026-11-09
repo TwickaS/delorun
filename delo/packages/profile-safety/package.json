@@ -1,0 +1,21 @@
+{
+  "name": "@delo/profile-safety",
+  "description": "Delo's profile safety (contract C3): the carry check an update runs before it changes anything, the extended profile history, undo and restore with their approval list, eject, safe mode and `delorun recover`",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-atomic-write": "workspace:*",
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@delo/contract-plugin-versions": "workspace:*",
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/contract-update-report": "workspace:*",
+    "yaml": "^2.9.0"
+  }
+}

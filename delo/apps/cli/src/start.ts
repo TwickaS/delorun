@@ -32,6 +32,7 @@ import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type Co
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, refuseSkippedDeloBundles, type BootedRow, type RowState } from './delo-bundles.ts'
 import { hasCliProfile } from './profile.ts'
+import { safeModeNotice, safeModeStart } from './safe-mode.ts'
 import { removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, writeSandboxOverlay } from './sandbox-protection.ts'
 
 /** What the foreground start calls outside this module; specs replace them. */
@@ -224,13 +225,19 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   const environment = dependencies.loadEnvironment()
   const overlay = await writeSandboxOverlay(request.home, request.profile, resolvedProfile.profile.patchPath, await sandboxProtection(request.home, request.profile, process.env, homedir()))
+  // Safe mode boots the same profile with its third-party layers and rows left out, and edits none of its files.
+  const safe = safeModeStart({ home: request.home, profile: request.profile, resolvedProfile })
+  if (safe !== undefined) {
+    request.output.stdout(safeModeNotice(safe))
+    resolvedProfile = safe.resolvedProfile
+  }
   let booted: BootedProfile
   try {
     booted = await dependencies.runProfile({
       environment,
       profile: request.profile,
       resolvedProfile,
-      patchFiles: [overlay],
+      patchFiles: [overlay, ...safe === undefined ? [] : safe.patchFiles],
       args: request.open ? [] : ['--no-open'],
     })
   } catch (error) {

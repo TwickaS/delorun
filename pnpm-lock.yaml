@@ -1284,6 +1284,9 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../../packages/logs
+      '@delo/profile-safety':
+        specifier: workspace:*
+        version: link:../../packages/profile-safety
       '@delo/supervisor':
         specifier: workspace:*
         version: link:../../packages/supervisor
@@ -2087,6 +2090,33 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
+
+  delo/packages/profile-safety:
+    dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../../packages/util/atomic-write
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
+      '@delo/contract-plugin-versions':
+        specifier: workspace:*
+        version: link:../contract-plugin-versions
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delo/contract-update-report':
+        specifier: workspace:*
+        version: link:../contract-update-report
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   delo/packages/release-verify:
     dependencies:
