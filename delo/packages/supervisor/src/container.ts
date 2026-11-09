@@ -103,6 +103,81 @@ export function labelsOf(owner: Owner, workspaceId: WorkspaceId | undefined): Re
   }
 }
 
+/**
+ * The label carrying the limits a container was created with, as JSON: the supervisor's own record beside C9's
+ * ownership labels, so a limit the machine changed afterwards is compared with what was asked and not with itself.
+ */
+export const LIMITS_LABEL = 'delo.limits'
+
+/** The files every engine mounts itself, at these destinations. They are the engine's, not a host path a container chose. */
+export const ENGINE_FILE_MOUNTS: readonly string[] = ['/etc/hosts', '/etc/hostname', '/etc/resolv.conf']
+
+/**
+ * The limits a container runs with, from its inspect record's own fields.
+ * @param record - the container's inspect record.
+ * @returns the limits the engine reports.
+ */
+export function limitsOf(record: InspectRecord): ResourceLimits {
+  const host = record.HostConfig ?? {}
+  return {
+    cpus: (host.NanoCpus ?? 0) / 1e9,
+    memoryBytes: host.Memory ?? 0,
+    diskBytes: Number(host.StorageOpt?.size ?? 0),
+    pids: host.PidsLimit ?? 0,
+    tmpBytes: Number(/size=(\d+)/.exec(host.Tmpfs?.['/tmp'] ?? '')?.[1] ?? 0),
+  }
+}
+
+/**
+ * The limits a container records in {@link LIMITS_LABEL} that it was created with.
+ * @param record - the container's inspect record.
+ * @returns the recorded limits, or `undefined` when the label is absent or not the five whole numbers.
+ */
+export function recordedLimits(record: InspectRecord): ResourceLimits | undefined {
+  const text = record.Config?.Labels?.[LIMITS_LABEL]
+  if (text === undefined) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (_notJson) {
+    return undefined
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined
+  const value = parsed as Readonly<Record<string, unknown>>
+  const whole = (field: string, least: number): number | undefined => {
+    const entry = value[field]
+    return typeof entry === 'number' && Number.isInteger(entry) && entry >= least ? entry : undefined
+  }
+  const cpus = whole('cpus', 1)
+  const memoryBytes = whole('memoryBytes', 1)
+  const diskBytes = whole('diskBytes', 0)
+  const pids = whole('pids', 1)
+  const tmpBytes = whole('tmpBytes', 1)
+  if (cpus === undefined || memoryBytes === undefined || diskBytes === undefined || pids === undefined || tmpBytes === undefined) return undefined
+  return { cpus, memoryBytes, diskBytes, pids, tmpBytes }
+}
+
+/**
+ * Where a container's own limits differ from the ones it records it was created with: the fields behind C9's CPU,
+ * memory, disk, PID and `/tmp` limits, each named with what it holds and what it must hold.
+ * @param record - the container's inspect record.
+ * @param limits - the limits recorded at its creation.
+ * @returns one entry per differing field; empty when the container still runs with them.
+ */
+export function limitDifferences(record: InspectRecord, limits: ResourceLimits): string[] {
+  const host = record.HostConfig ?? {}
+  const actual = limitsOf(record)
+  const differences: string[] = []
+  if (actual.cpus !== limits.cpus) differences.push(`HostConfig.NanoCpus=${String(host.NanoCpus ?? 0)} is not ${String(limits.cpus)} CPUs`)
+  if (actual.memoryBytes !== limits.memoryBytes) differences.push(`HostConfig.Memory=${String(actual.memoryBytes)} is not ${String(limits.memoryBytes)} bytes`)
+  if ((host.MemorySwap ?? 0) !== limits.memoryBytes) differences.push(`HostConfig.MemorySwap=${String(host.MemorySwap ?? 0)} is not the memory limit ${String(limits.memoryBytes)} bytes`)
+  if (actual.pids !== limits.pids) differences.push(`HostConfig.PidsLimit=${String(actual.pids)} is not ${String(limits.pids)} PIDs`)
+  // A disk size is set only where the engine enforces one; where it is not, the created container has none either.
+  if (host.StorageOpt?.size !== undefined && actual.diskBytes !== limits.diskBytes) differences.push(`HostConfig.StorageOpt.size=${String(actual.diskBytes)} is not ${String(limits.diskBytes)} bytes`)
+  if (actual.tmpBytes !== limits.tmpBytes) differences.push(`HostConfig.Tmpfs["/tmp"] size=${String(actual.tmpBytes)} is not ${String(limits.tmpBytes)} bytes`)
+  return differences
+}
+
 /** The variables a workspace container's tools read for the proxy. */
 export const PROXY_VARIABLES = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'] as const
 
@@ -177,7 +252,9 @@ export function createBody(plan: ContainerPlan): CreateBody {
   return {
     Image: plan.image,
     User: `${String(plan.user.uid)}:${String(plan.user.gid)}`,
-    Labels: plan.labels,
+    // The limits are recorded on the container itself, so a later start compares the machine's fields with what was
+    // asked rather than with what the machine reports, which a `docker update` changes in both places at once.
+    Labels: { ...plan.labels, [LIMITS_LABEL]: JSON.stringify(plan.limits) },
     Env: plan.env,
     ...plan.command === undefined ? {} : { Cmd: plan.command },
     ...plan.workingDir === undefined ? {} : { WorkingDir: plan.workingDir },
@@ -273,6 +350,7 @@ export interface InspectRecord {
     readonly IpcMode?: string
     readonly PidMode?: string
     readonly UsernsMode?: string
+    readonly CgroupnsMode?: string
     readonly Tmpfs?: Readonly<Record<string, string>> | null
   }
   readonly Mounts?: readonly { readonly Type?: string, readonly Source?: string, readonly Destination?: string, readonly ReadOnly?: boolean }[] | null
@@ -312,10 +390,13 @@ export function hardeningDifferences(record: InspectRecord, body: CreateBody): {
   expect('HostConfig.PidMode', (host.PidMode ?? '') === '')
   expect('HostConfig.IpcMode', host.IpcMode === 'private')
   expect('HostConfig.UsernsMode', (host.UsernsMode ?? '') === '')
+  expect('HostConfig.CgroupnsMode', host.CgroupnsMode === body.HostConfig.CgroupnsMode)
   expect('HostConfig.Tmpfs', host.Tmpfs?.['/tmp'] === body.HostConfig.Tmpfs['/tmp'])
   if (body.HostConfig.StorageOpt !== undefined) expect('HostConfig.StorageOpt', host.StorageOpt?.size === body.HostConfig.StorageOpt.size)
   const wanted = body.HostConfig.Mounts.map(mount => `${mount.Source}:${mount.Target}`).sort()
-  const found = (record.Mounts ?? []).filter(mount => mount.Type === 'bind').map(mount => `${mount.Source ?? ''}:${mount.Destination ?? ''}`).sort()
+  // The engine mounts its own files beside the container's: they are the engine's, so they are neither asked for nor
+  // a difference from the resolved paths.
+  const found = (record.Mounts ?? []).filter(mount => mount.Type === 'bind' && !ENGINE_FILE_MOUNTS.includes(mount.Destination ?? '')).map(mount => `${mount.Source ?? ''}:${mount.Destination ?? ''}`).sort()
   const unexpected = (record.Mounts ?? []).filter(mount => mount.Type !== 'bind' && mount.Type !== 'tmpfs').map(mount => `${mount.Type ?? 'unknown'}:${mount.Destination ?? ''}`)
   const mounts = [...found.filter(mount => !wanted.includes(mount)), ...wanted.filter(mount => !found.includes(mount)), ...unexpected]
   return { mounts, settings }

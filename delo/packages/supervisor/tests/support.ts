@@ -201,6 +201,8 @@ export interface FakeEngineState {
   exec?: (container: string, cmd: readonly string[], state: FakeEngineState) => Promise<number | undefined> | number | undefined
   /** The state a start leaves, as an engine that runs a container which exits at once does; `running` when omitted. */
   startState?: InspectRecord['State']
+  /** Refuses one call, as an engine that failed or refused it would; no call is refused when omitted. */
+  refuse?: (method: string, path: string) => Error | undefined
 }
 
 /** A digest the fake engine holds the S2 image at. */
@@ -232,6 +234,8 @@ export function fakeEngine(state: FakeEngineState): Engine {
   return {
     call: (method, path, body) => {
       state.calls.push(`${method} ${path}`)
+      const refused = state.refuse?.(method, path)
+      if (refused !== undefined) return Promise.reject(refused)
       const name = decodeURIComponent(/^\/containers\/([^/?]+)/.exec(path)?.[1] ?? '')
       if (path.startsWith('/images/')) return Promise.resolve({ Id: 'sha256:i', RepoDigests: [`${IMAGES.s2}@${FAKE_DIGEST}`] })
       if (method === 'GET' && path.startsWith('/containers/json')) {

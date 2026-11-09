@@ -32,7 +32,10 @@ import {
   createBody,
   hardeningDifferences,
   labelsOf,
+  limitDifferences,
+  limitsOf,
   networkBody,
+  recordedLimits,
   workspaceBinds,
   workspaceEnv,
   workspaceHash,
@@ -75,7 +78,7 @@ export interface WorkspaceView {
   readonly container: string
   /** The container's engine state, such as `created`, `running`, `exited` or, once the gate retired it, `failed`. */
   readonly state: string
-  /** The limits in effect, from the container's inspect record. */
+  /** The limits in effect: the ones the container records it was created with, or the engine's fields when it records none. */
   readonly limits: ResourceLimits
   /** The egress mode the proxy runs with; `none` when no proxy exists. */
   readonly egress: EgressMode
@@ -134,22 +137,6 @@ export function allowedHosts(egress: EgressMode, additions: readonly string[]): 
 }
 
 /**
- * The limits a container runs with, from its inspect record.
- * @param record - the container's inspect record.
- * @returns the limits.
- */
-function limitsOf(record: InspectRecord): ResourceLimits {
-  const host = record.HostConfig ?? {}
-  return {
-    cpus: (host.NanoCpus ?? 0) / 1e9,
-    memoryBytes: host.Memory ?? 0,
-    diskBytes: Number(host.StorageOpt?.size ?? 0),
-    pids: host.PidsLimit ?? 0,
-    tmpBytes: Number(/size=(\d+)/.exec(host.Tmpfs?.['/tmp'] ?? '')?.[1] ?? 0),
-  }
-}
-
-/**
  * The egress mode and hosts a proxy container runs with, from its environment.
  * @param proxy - the proxy's inspect record.
  * @returns the mode, `none` when the record names neither `allowlist` nor `open`, and the hosts.
@@ -186,12 +173,25 @@ export function engineRefusal(error: unknown): unknown {
   return new SupervisorError(error.status === 0 ? 'DOCKER_UNAVAILABLE' : 'ENGINE_REFUSED', error.message)
 }
 
+/**
+ * The typed refusal a gate that threw records: a supervisor code as it is, an engine failure as the engine's refusal,
+ * and anything else as `ENGINE_REFUSED` naming it, so a probe that could not run can never retire nothing.
+ * @param error - the thrown value.
+ * @returns the refusal to report and retire the workspace with.
+ */
+function gateRefusal(error: unknown): SupervisorError {
+  const refusal = engineRefusal(error)
+  if (refusal instanceof SupervisorError) return refusal
+  return new SupervisorError('ENGINE_REFUSED', `the confinement gate did not finish: ${error instanceof Error ? error.message : String(error)}`)
+}
+
 /** The `workspace.*` operations over one engine. */
 export class Workspaces {
   /**
    * The workspaces the gate retired: a container that failed its health or confinement check is stopped and removed,
-   * and this start reports it as `failed` with the code until the workspace is created again. A retired workspace is
-   * never started, so a container the machine altered cannot come back into use.
+   * and this reports it as `failed` with the code until the workspace is created again. A retired workspace is never
+   * started, even when a removal that failed left its container behind, so a container the machine altered cannot come
+   * back into use.
    */
   private readonly retired = new Map<WorkspaceId, Retired>()
 
@@ -301,8 +301,9 @@ export class Workspaces {
    * @param workspaceId - the workspace.
    * @param view - the workspace as it was just started, which the report keeps.
    * @param limits - the limits it runs with.
-   * @throws {SupervisorError} `ENGINE_REFUSED` for a container that did not stay running, `ROOT_REFUSED` or
-   *   `LIMITS_MISSING` for a failed or unconfirmed check.
+   * @throws {SupervisorError} `ENGINE_REFUSED` for a container that did not stay running or a probe the engine refused,
+   *   `ROOT_REFUSED` or `LIMITS_MISSING` for a failed or unconfirmed check, and the engine's refusal for an engine call
+   *   that failed.
    */
   private async gate(workspaceId: WorkspaceId, view: WorkspaceView, limits: ResourceLimits): Promise<void> {
     const names = workspaceNames(workspaceId)
@@ -310,18 +311,22 @@ export class Workspaces {
     try {
       const record = await this.owned(workspaceId)
       if (record.State?.Running !== true) throw new SupervisorError('ENGINE_REFUSED', `${names.container} did not stay running (state ${record.State?.Status ?? 'unknown'})`)
+      const raised = limitDifferences(record, limits)
+      if (raised.length > 0) throw new SupervisorError('LIMITS_MISSING', `${names.container} no longer runs with the limits it was created with: ${raised.join('; ')}`)
       const root = (record.Mounts ?? []).find(mount => mount.Type === 'bind' && mount.Destination !== HELPER_SOCKET_DIR)?.Source ?? ''
       const expectation = this.expectation(workspaceId, root, limits)
       this.requireIsolated(names.container, record, expectation)
       const body = this.workspaceBody(workspaceId, root, limits, record.HostConfig?.StorageOpt?.size !== undefined, await this.s2Image())
       const read = async (): Promise<InspectRecord> => this.engine.call('GET', `/containers/${encodeURIComponent(names.container)}/json`) as Promise<InspectRecord>
       // The probes run first and the record is read after them, so a container the machine altered while they ran is
-      // reported as it is, and a mount that appeared behind the pre-start check is still found.
+      // reported as it is, a mount that appeared behind the pre-start check is still found, and a container that
+      // stopped while they ran is refused rather than reported as a running workspace.
       requireConfined(await confineContainer({ engine: this.engine, container: names.container, read, body, expectation }))
       return
     } catch (error) {
-      if (!(error instanceof SupervisorError)) throw error
-      refusal = error
+      // Whatever the gate threw is its verdict: a probe the engine refused or did not answer, an engine call that
+      // failed, or a refusal it raised itself. Retiring nothing would hand the container out on the next start.
+      refusal = gateRefusal(error)
     }
     this.retired.set(workspaceId, { code: refusal.code, view: { ...view, state: 'failed', reason: refusal.code } })
     await this.retire(workspaceId)
@@ -330,14 +335,31 @@ export class Workspaces {
 
   /**
    * Stop and remove everything a workspace built, so a container the gate refused can never be started again; the
-   * workspace's own files are untouched.
+   * workspace's own files are untouched. Each removal is best effort: a cleanup that fails cannot replace the verdict,
+   * and the workspace stays retired whether or not anything is left on the engine.
    * @param workspaceId - the workspace.
    */
   private async retire(workspaceId: WorkspaceId): Promise<void> {
     const names = workspaceNames(workspaceId)
-    for (const name of [names.container, names.proxy]) await this.removeIfPresent(`/containers/${encodeURIComponent(name)}?force=true&v=true`)
-    await this.removeObjects([], [names.network, names.outNetwork])
-    await rm(this.helperDirectory(workspaceId), { recursive: true, force: true })
+    for (const path of [
+      `/containers/${encodeURIComponent(names.container)}?force=true&v=true`,
+      `/containers/${encodeURIComponent(names.proxy)}?force=true&v=true`,
+      `/networks/${encodeURIComponent(names.network)}`,
+      `/networks/${encodeURIComponent(names.outNetwork)}`,
+    ]) await this.quietly(async () => { await this.removeIfPresent(path) })
+    await this.quietly(async () => { await rm(this.helperDirectory(workspaceId), { recursive: true, force: true }) })
+  }
+
+  /**
+   * Run one cleanup step, keeping the caller's verdict when it fails.
+   * @param step - the removal to run.
+   */
+  private async quietly(step: () => Promise<void>): Promise<void> {
+    try {
+      await step()
+    } catch {
+      // Nothing to do: the retirement stands, and `workspace.remove` removes whatever a failed cleanup left behind.
+    }
   }
 
   /**
@@ -517,15 +539,35 @@ export class Workspaces {
   }
 
   /**
+   * Refuse a workspace the gate retired before anything is read or started: its container failed a property C9 requires,
+   * so handing it out again would run commands in a container the machine altered.
+   * @param workspaceId - the workspace.
+   * @throws {SupervisorError} with the code the gate retired it with.
+   */
+  private refuseRetired(workspaceId: WorkspaceId): void {
+    const retired = this.retired.get(workspaceId)
+    if (retired === undefined) return
+    throw new SupervisorError(retired.code, `${workspaceNames(workspaceId).container} was retired by the confinement gate and is not used again until workspace.create makes the workspace again`)
+  }
+
+  /**
    * Check a workspace's containers before they start: the owner labels, the root mount's source, which must still
    * resolve to itself and pass every root rule, the mounts and the network C9 allows, the helper directory, and every
-   * setting `workspace.create` asked for.
+   * setting and limit `workspace.create` asked for.
    * @param workspaceId - the workspace.
-   * @throws {SupervisorError} `NOT_FOUND`, `ROOT_REFUSED`, `LIMITS_MISSING` or an image refusal.
+   * @returns the container's record and the limits it records it was created with.
+   * @throws {SupervisorError} the retirement's code, `NOT_FOUND`, `ROOT_REFUSED`, `LIMITS_MISSING` or an image refusal.
    */
-  private async verifyBeforeStart(workspaceId: WorkspaceId): Promise<void> {
+  private async verifyBeforeStart(workspaceId: WorkspaceId): Promise<{ readonly record: InspectRecord, readonly limits: ResourceLimits }> {
+    this.refuseRetired(workspaceId)
     const record = await this.owned(workspaceId)
     const names = workspaceNames(workspaceId)
+    // The container records the limits it was created with; a limit the machine changed afterwards differs from them
+    // and is refused, so a record and its cgroup raised together cannot pass as the limits that were asked for.
+    const limits = recordedLimits(record)
+    if (limits === undefined) throw new SupervisorError('LIMITS_MISSING', `${names.container} carries no record of the limits it was created with`)
+    const raised = limitDifferences(record, limits)
+    if (raised.length > 0) throw new SupervisorError('LIMITS_MISSING', `${names.container} no longer runs with the limits it was created with: ${raised.join('; ')}`)
     const helperDir = this.helperDirectory(workspaceId)
     const binds = (record.Mounts ?? []).filter(mount => mount.Type === 'bind')
     const rootMount = binds.find(mount => mount.Destination !== HELPER_SOCKET_DIR)
@@ -535,21 +577,24 @@ export class Workspaces {
     if (await realpath(helperDir) !== helperDir) throw new SupervisorError('ROOT_REFUSED', `${helperDir} does not resolve to itself`)
     await checkPrivateDirectory(helperDir)
     const image = await this.s2Image()
-    const limits = limitsOf(record)
     const diskQuota = record.HostConfig?.StorageOpt?.size !== undefined
     this.requireIsolated(names.container, record, this.expectation(workspaceId, root, limits))
     requireMatch(names.container, record, this.workspaceBody(workspaceId, root, limits, diskQuota, image))
     const proxy = await this.find(names.proxy, workspaceId)
-    if (proxy === undefined) return
+    if (proxy === undefined) return { record, limits }
     const { egress, allowlist } = egressOfRecord(proxy)
     if (egress === 'none') throw new SupervisorError('LIMITS_MISSING', `${names.proxy} has no egress mode`)
     requireMatch(names.proxy, proxy, this.proxyBody(workspaceId, egress, allowlist, limits, diskQuota, image))
+    return { record, limits }
   }
 
   private async start(workspaceId: WorkspaceId): Promise<WorkspaceView> {
-    await this.verifyBeforeStart(workspaceId)
+    this.refuseRetired(workspaceId)
+    const { record, limits } = await this.verifyBeforeStart(workspaceId)
     const names = workspaceNames(workspaceId)
-    const limits = limitsOf(await this.owned(workspaceId))
+    // Docker answers 304 for a container that already runs, which is not a start; the workspace it names is running
+    // already, and its caller is told so rather than a second gate reading that container as if it had just started.
+    if (record.State?.Running === true) throw new SupervisorError('WORKSPACE_EXISTS', `${names.container} is already running`)
     if (await this.find(names.proxy, workspaceId) !== undefined) await this.engine.call('POST', `/containers/${encodeURIComponent(names.proxy)}/start`)
     await this.engine.call('POST', `/containers/${encodeURIComponent(names.container)}/start`)
     const view = await this.inspect(workspaceId)
@@ -590,19 +635,19 @@ export class Workspaces {
   }
 
   private async inspect(workspaceId: WorkspaceId): Promise<WorkspaceView> {
-    const record = await this.find(workspaceNames(workspaceId).container, workspaceId)
+    // A workspace the gate retired reports failed with its code until it is created again, even when a removal that
+    // failed left its container behind: a workspace whose container the machine altered never reports a usable runtime.
     const retired = this.retired.get(workspaceId)
-    // A container the gate retired is gone from the engine, and the workspace is reported failed until it is created
-    // again: a workspace whose container the machine altered never reports a usable runtime.
-    if (record === undefined) {
-      if (retired !== undefined) return retired.view
-      throw new SupervisorError('NOT_FOUND', `no workspace container for ${workspaceId}`)
-    }
+    if (retired !== undefined) return { ...retired.view, state: 'failed', reason: retired.code }
+    const record = await this.find(workspaceNames(workspaceId).container, workspaceId)
+    if (record === undefined) throw new SupervisorError('NOT_FOUND', `no workspace container for ${workspaceId}`)
     return {
       workspaceId,
       container: workspaceNames(workspaceId).container,
       state: record.State?.Status ?? 'unknown',
-      limits: limitsOf(record),
+      // The limits it records it was created with, which are the ones the gate binds; a record without them reports
+      // what the engine holds, and the next start refuses it.
+      limits: recordedLimits(record) ?? limitsOf(record),
       ...await this.egressOf(workspaceId),
     }
   }
@@ -630,7 +675,7 @@ export class Workspaces {
     if (egress !== 'none') {
       const created: string[] = []
       try {
-        await this.createProxy(workspaceId, egress, additions, limitsOf(record), record.HostConfig?.StorageOpt?.size !== undefined, created, [])
+        await this.createProxy(workspaceId, egress, additions, recordedLimits(record) ?? limitsOf(record), record.HostConfig?.StorageOpt?.size !== undefined, created, [])
         if (record.State?.Running === true) await this.engine.call('POST', `/containers/${encodeURIComponent(names.proxy)}/start`)
       } catch (error) {
         await this.removeObjects(created, [])

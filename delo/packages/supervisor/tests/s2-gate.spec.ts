@@ -14,7 +14,7 @@ import { SUPERVISOR_ROOTS_FILE } from '@delo/contract-home-layout'
 import { PRESETS, type SupervisorRequest, type WorkspaceId } from '@delo/contract-runtime-supervisor'
 import { writeProtectedFile } from '@delo/home'
 import { afterEach, describe, expect, it } from 'vitest'
-import { SupervisorError, workspaceNames, type WorkspaceView } from '../src/index.ts'
+import { SupervisorError, EngineError, LIMITS_LABEL, workspaceNames, type WorkspaceView } from '../src/index.ts'
 import { FAKE_DIGEST, fakeWorkspaces, PROFILE, tempHome, type FakeEngineState, type FakeWorkspaceOptions, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
@@ -103,8 +103,10 @@ describe('a container that fails the gate', () => {
     expect(existsSync(helperDirectory())).toBe(false)
     // The workspace is reported failed with the code, not as a runtime a caller could use.
     expect(await workspaces.handle(inspect())).toMatchObject({ workspace: { state: 'failed', reason: 'LIMITS_MISSING' } })
-    // Removing the container is what makes it unreusable: a second start cannot bring it back.
-    expect((await refusalOf(async () => workspaces.handle(start()))).code).toBe('NOT_FOUND')
+    // A retired workspace is never handed out again, and the code it was retired with is not lost.
+    const again = await refusalOf(async () => workspaces.handle(start()))
+    expect(again.code).toBe('LIMITS_MISSING')
+    expect(again.detail).toContain('retired')
   })
 
   it('is retired when a probe cannot run, because a property no probe confirmed is not one the workspace has', async () => {
@@ -237,5 +239,111 @@ describe('a machine where a limit S2 requires is not enforced', () => {
     expect(containers(state)).toEqual([])
     expect(state.calls.filter(call => call.startsWith('POST '))).toEqual([])
     expect(existsSync(helperDirectory())).toBe(false)
+  })
+})
+
+describe('a limit the machine changed after the container was created', () => {
+  it('is refused with LIMITS_MISSING when the memory limit and its swap were raised together', async () => {
+    const { workspaces, root, state } = await workspace()
+    await workspaces.handle(create(root))
+    // `docker update --memory 32g --memory-swap 32g` raises the record and the cgroup together, so every probe passes
+    // and only the limits the container records it was created with show it is not the container that was asked for.
+    for (const [name, record] of state.containers) state.containers.set(name, { ...record, HostConfig: { ...record.HostConfig, Memory: 32 * 1024 ** 3, MemorySwap: 32 * 1024 ** 3 } })
+    const refusal = await refusalOf(async () => workspaces.handle(start()))
+    expect(refusal.code).toBe('LIMITS_MISSING')
+    expect(refusal.detail).toContain('HostConfig.Memory')
+    // Refused before anything starts in it.
+    expect(state.calls.filter(call => call.endsWith('/start'))).toEqual([])
+  })
+
+  it('is refused with LIMITS_MISSING when the tmpfs /tmp grew with it', async () => {
+    const { workspaces, root, state } = await workspace()
+    await workspaces.handle(create(root))
+    for (const [name, record] of state.containers) state.containers.set(name, { ...record, HostConfig: { ...record.HostConfig, Tmpfs: { '/tmp': `rw,nosuid,nodev,size=${String(2 * 1024 ** 3)}` } } })
+    const refusal = await refusalOf(async () => workspaces.handle(start()))
+    expect(refusal.code).toBe('LIMITS_MISSING')
+    expect(refusal.detail).toContain('HostConfig.Tmpfs')
+  })
+
+  it('records the limits it was created with on the container itself, so they can be compared at every start', async () => {
+    const { workspaces, root, state } = await workspace()
+    await workspaces.handle(create(root))
+    const label = [...state.containers.values()][0]?.Config?.Labels?.[LIMITS_LABEL]
+    expect(label).toBeDefined()
+    expect(JSON.parse(label ?? 'null')).toEqual(PRESETS.small)
+  })
+})
+
+describe('a container whose probes throw', () => {
+  it('is retired with the engine\'s refusal and never handed out again', async () => {
+    const { workspaces, root, state } = await workspace({
+      containers: new Map(),
+      calls: [],
+      // The engine refuses every exec, as it does once the container has died.
+      exec: () => Promise.reject(new EngineError(500, 'cannot exec in a stopped container')),
+    })
+    await workspaces.handle(create(root))
+    const refusal = await refusalOf(async () => workspaces.handle(start()))
+    expect(refusal.code).toBe('ENGINE_REFUSED')
+    expect(refusal.detail).toContain('cannot exec')
+    // A probe that threw retired nothing without the fix: the container, its directory and a running inspect survived.
+    expect(containers(state)).toEqual([])
+    expect(existsSync(helperDirectory())).toBe(false)
+    expect(await workspaces.handle(inspect())).toMatchObject({ workspace: { state: 'failed', reason: 'ENGINE_REFUSED' } })
+    expect((await refusalOf(async () => workspaces.handle(start()))).code).toBe('ENGINE_REFUSED')
+  })
+
+  it('is retired with ENGINE_REFUSED when it stops while its probes run', async () => {
+    const { workspaces, root, state } = await workspace({
+      containers: new Map(),
+      calls: [],
+      // Every probe still answers, and only the record read after them shows the container is gone.
+      exec: (_container, _cmd, current) => {
+        for (const [name, record] of current.containers) current.containers.set(name, { ...record, State: { Status: 'exited', Running: false } })
+        return 0
+      },
+    })
+    await workspaces.handle(create(root))
+    const refusal = await refusalOf(async () => workspaces.handle(start()))
+    expect(refusal.code).toBe('ENGINE_REFUSED')
+    expect(refusal.detail).toContain('not running')
+    expect(containers(state)).toEqual([])
+  })
+
+  it('keeps the gate\'s verdict when its container cannot be removed, and still refuses to hand it out', async () => {
+    const state: FakeEngineState = {
+      containers: new Map(),
+      calls: [],
+      exec: (_container, cmd) => cmd.join(' ').includes('NoNewPrivs') ? 1 : 0,
+      // The engine refuses the removal, as it does when a container is still in use.
+      refuse: (method, path) => method === 'DELETE' && path.startsWith('/containers/') ? new EngineError(500, 'container is in use') : undefined,
+    }
+    const { workspaces, root } = await workspace(state)
+    await workspaces.handle(create(root))
+    const refusal = await refusalOf(async () => workspaces.handle(start()))
+    // The verdict is the probe's, not the failed cleanup's.
+    expect(refusal.code).toBe('LIMITS_MISSING')
+    expect(refusal.detail).toContain('no-new-privileges')
+    // The removal failed, so the container survives; the workspace still reports failed with the verdict...
+    expect(containers(state)).toHaveLength(1)
+    expect(await workspaces.handle(inspect())).toMatchObject({ workspace: { state: 'failed', reason: 'LIMITS_MISSING' } })
+    // ...and its container is never started again.
+    const starts = state.calls.filter(call => call.endsWith('/start')).length
+    expect((await refusalOf(async () => workspaces.handle(start()))).code).toBe('LIMITS_MISSING')
+    expect(state.calls.filter(call => call.endsWith('/start')).length).toBe(starts)
+  })
+})
+
+describe('a start on a container that already runs', () => {
+  it('is refused instead of starting it a second time, which the engine answers with 304', async () => {
+    const { workspaces, root, state } = await workspace()
+    await workspaces.handle(create(root))
+    expect(await workspaces.handle(start())).toMatchObject({ workspace: { state: 'running' } })
+    const starts = state.calls.filter(call => call.endsWith('/start')).length
+    const refusal = await refusalOf(async () => workspaces.handle(start()))
+    expect(refusal.code).toBe('WORKSPACE_EXISTS')
+    expect(refusal.detail).toContain('already running')
+    // Without the check the second start reached the engine again, which answers 304 and starts nothing.
+    expect(state.calls.filter(call => call.endsWith('/start')).length).toBe(starts)
   })
 })

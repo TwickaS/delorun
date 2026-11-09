@@ -274,7 +274,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 | `IMAGE_PULL_FAILED` | 拉取所列摘要失败 |
 | `DOCKER_UNAVAILABLE` | 当前 context 上没有 Docker 引擎应答 |
 | `ENGINE_REFUSED` | Docker 引擎拒绝了一次调用；detail 带有引擎的消息 |
-| `WORKSPACE_EXISTS` | `workspace.create` 指定的工作区的容器已经存在 |
+| `WORKSPACE_EXISTS` | `workspace.create` 指定的工作区的容器已经存在，或 `workspace.start` 指定的工作区的容器已在运行 |
 | `LIMITS_MISSING` | 某形态所需的限制在本机未被强制执行 |
 | `PRESET_OUT_OF_RANGE` | Advanced 的某个值超出其范围，或某预设超过机器 |
 | `ADDITIONAL_ROOTS_UNSUPPORTED` | 为 Docker 工作区指定了附加可写根目录 |

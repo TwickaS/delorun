@@ -5,6 +5,10 @@
  * Each `it` names, in its last line of prose, the check whose removal makes it fail, so the suite is a ledger of the
  * refusals the gate keeps rather than a description of the code beside it.
  */
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { HELPER_SOCKET_DIR, PRESETS } from '@delo/contract-runtime-supervisor'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -14,6 +18,7 @@ import {
   confinementProbes,
   createBody,
   dockerSocketPaths,
+  hardeningDifferences,
   isWithin,
   networkFindings,
   probeFinding,
@@ -63,8 +68,14 @@ function withMount(record: InspectRecord, source: string, destination: string, e
   return { ...record, Mounts: [...record.Mounts ?? [], { Type: extra.Type ?? 'bind', Source: source, Destination: destination, ...extra.ReadOnly === undefined ? {} : { ReadOnly: extra.ReadOnly } }] }
 }
 
+/** A record of the container a start left running, which is the record the gate reads after the probes. */
+function runningRecord(created: CreateBody = body()): InspectRecord {
+  return { ...appliedRecord(created), State: { Status: 'running', Running: true } }
+}
+
 /** A report whose every probe passed, for the refusal specs to spoil. */
 const passing = (): ConfinementReport => ({
+  running: true,
   mounts: [],
   network: [],
   settings: [],
@@ -138,6 +149,19 @@ describe('the mounts C9 allows', () => {
     // A read-only mount of the same path is not a way to write the machine.
     expect(writableBinds(withMount(appliedRecord(body()), '/opt/extra', '/extra', { ReadOnly: true }), expectation())).toEqual([])
   })
+
+  it('allows the engine\'s own files, which every engine mounts at fixed destinations', () => {
+    const engineFiles: readonly (readonly [string, string])[] = [
+      ['/var/lib/docker/containers/1/hosts', '/etc/hosts'],
+      ['/var/lib/docker/containers/1/hostname', '/etc/hostname'],
+      ['/var/lib/docker/containers/1/resolv.conf', '/etc/resolv.conf'],
+    ]
+    const record = engineFiles.reduce((acc, [source, destination]) => withMount(acc, source, destination), appliedRecord(body()))
+    // Refusing the engine's own files would refuse every container a native engine creates.
+    expect(refusedMounts(record, expectation())).toEqual([])
+    expect(writableBinds(record, expectation())).toEqual([])
+    expect(hardeningDifferences(record, body())).toEqual({ mounts: [], settings: [] })
+  })
 })
 
 describe('the network a container joins', () => {
@@ -163,12 +187,15 @@ describe('the probes', () => {
     expect(advanced.memory.at(-1)).toBe(String(6 * 1024 ** 3))
     expect(advanced.pids.at(-1)).toBe('777')
     expect(advanced.cpu.at(-1)).toBe(String(3e9))
-    // The paths a probe reads are the resolved ones: the workspace root, the helper's directory and the homes.
+    // The paths a probe reads are the resolved ones: the workspace root, the helper's mount point and the mounts file.
     expect(probes['workspace-root-writable'].at(-1)).toBe(ROOT)
-    expect(probes['writable-mounts'].slice(-2)).toEqual([ROOT, HELPER])
+    expect(probes['writable-mounts'].slice(-3)).toEqual([ROOT, HELPER_SOCKET_DIR, '/proc/mounts'])
     expect(probes['delo-home-hidden']).toContain(DELO_HOME)
     expect(probes['docker-socket-hidden']).toContain('/var/run/docker.sock')
     expect(probes.user.at(-1)).toBe('1000')
+    // The tmpfs /tmp is checked against the workspace's own size, not a preset's.
+    expect(probes['tmpfs-size'].at(-1)).toBe(String(PRESETS.small.tmpBytes))
+    expect(confinementProbes(expectation({ limits: { ...PRESETS.small, tmpBytes: 512 * 1024 ** 2 } }))['tmpfs-size'].at(-1)).toBe(String(512 * 1024 ** 2))
   })
 
   it('reads an exit code as pass, fail or unconfirmed, never as pass when no code arrived', () => {
@@ -177,6 +204,46 @@ describe('the probes', () => {
     expect(probeFinding(['sh', '-c', 'true'], 127).status).toBe('unconfirmed')
     expect(probeFinding(['sh', '-c', 'true'], undefined).status).toBe('unconfirmed')
     expect(probeFinding(['sh', '-c', 'true'], undefined).evidence).toContain('did not finish')
+  })
+
+  it('reads every writable mount whose destination the workspace was not given, tmpfs or not', () => {
+    const probe = confinementProbes(expectation())['writable-mounts']
+    // The probe reads the mounts file named by its last argument, so a fixture stands in for /proc/mounts here.
+    const status = (mounts: readonly string[]): number => {
+      const dir = mkdtempSync(join(tmpdir(), 'delo-mounts-'))
+      try {
+        const file = join(dir, 'mounts')
+        writeFileSync(file, `${mounts.join('\n')}\n`)
+        const argv = [...probe.slice(0, -1), file]
+        return spawnSync(argv[0] ?? 'sh', argv.slice(1), { encoding: 'utf8' }).status ?? 1
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    }
+    const mount = (source: string, destination: string, fstype: string, options: string): string => `${source} ${destination} ${fstype} ${options} 0 0`
+    // What every engine gives a workspace container: the root, the helper's mount point, /tmp, the engine's own files
+    // and the kernel's writable filesystems, including Docker Desktop's tmpfs masks under /proc.
+    const allowed = [
+      mount('overlay', '/', 'overlay', 'ro,relatime'),
+      mount('proc', '/proc', 'proc', 'rw,nosuid,nodev,noexec,relatime'),
+      mount('tmpfs', '/dev', 'tmpfs', 'rw,nosuid,size=65536k'),
+      mount('devpts', '/dev/pts', 'devpts', 'rw,nosuid,noexec,relatime'),
+      mount('shm', '/dev/shm', 'tmpfs', 'rw,nosuid,nodev,noexec,relatime'),
+      mount('tmpfs', '/proc/interrupts', 'tmpfs', 'rw,nosuid,size=65536k'),
+      mount('/dev/sde', '/etc/hosts', 'ext4', 'rw,relatime'),
+      mount(ROOT, ROOT, 'ext4', 'rw,relatime'),
+      mount(HELPER, HELPER_SOCKET_DIR, 'ext4', 'rw,relatime'),
+      mount('tmpfs', '/tmp', 'tmpfs', 'rw,nosuid,nodev,size=1048576k'),
+    ]
+    expect(status(allowed)).toBe(0)
+    // A tmpfs at any other destination is writable space the workspace was never given; skipping every tmpfs by its
+    // filesystem type would pass it.
+    expect(status([...allowed, mount('tmpfs', '/data', 'tmpfs', 'rw,nosuid,size=65536k')])).toBe(1)
+    // So is a writable mount the record does not show either, even over a destination the engine itself uses.
+    expect(status([...allowed, mount('/opt/extra', '/srv', 'ext4', 'rw,relatime')])).toBe(1)
+    expect(status([...allowed, mount('/', '/dev', 'ext4', 'rw,relatime')])).toBe(1)
+    // Kernel filesystems are the kernel's own wherever they are mounted, so they are not a host path.
+    expect(status([...allowed, mount('proc', '/proc', 'proc', 'rw,nosuid,nodev,noexec,relatime')])).toBe(0)
   })
 })
 
@@ -214,28 +281,38 @@ describe('reading a container', () => {
 
   it('runs one exec per checked property and passes every finding through', async () => {
     const seen: string[] = []
-    const report = await confineContainer({ engine: engine(0, seen), container: 'c', read: () => Promise.resolve(appliedRecord(body())), body: body(), expectation: expectation() })
+    const report = await confineContainer({ engine: engine(0, seen), container: 'c', read: () => Promise.resolve(runningRecord()), body: body(), expectation: expectation() })
     expect(seen).toHaveLength(CONFINEMENT_CHECKS.length)
     expect(Object.values(report.probes).every(finding => finding.status === 'pass')).toBe(true)
-    expect(report).toMatchObject({ mounts: [], network: [], settings: [] })
+    expect(report).toMatchObject({ running: true, mounts: [], network: [], settings: [] })
     // One probed property at a time: a gate that ran fewer would leave a property unproven.
     expect(new Set(seen).size).toBe(CONFINEMENT_CHECKS.length)
   })
 
   it('reports a property the container fails and one the engine could not answer for', async () => {
-    const failed = await confineContainer({ engine: engine(1, []), container: 'c', read: () => Promise.resolve(appliedRecord(body())), body: body(), expectation: expectation() })
+    const failed = await confineContainer({ engine: engine(1, []), container: 'c', read: () => Promise.resolve(runningRecord()), body: body(), expectation: expectation() })
     expect(Object.values(failed.probes).every(finding => finding.status === 'fail')).toBe(true)
-    const unanswered = await confineContainer({ engine: engine(undefined, []), container: 'c', read: () => Promise.resolve(appliedRecord(body())), body: body(), expectation: expectation() })
+    const unanswered = await confineContainer({ engine: engine(undefined, []), container: 'c', read: () => Promise.resolve(runningRecord()), body: body(), expectation: expectation() })
     expect(Object.values(unanswered.probes).every(finding => finding.status === 'unconfirmed')).toBe(true)
   })
 
   it('reads the record too: a mount and a setting the engine added are found without a probe', async () => {
-    const record = withMount(appliedRecord(body()), DELO_HOME, DELO_HOME)
+    const record = withMount(runningRecord(), DELO_HOME, DELO_HOME)
     const report = await confineContainer({ engine: engine(0, []), container: 'c', read: () => Promise.resolve(record), body: body(), expectation: expectation() })
     expect(refusal(() => { requireConfined(report) }).code).toBe('ROOT_REFUSED')
-    const unhardened: InspectRecord = { ...appliedRecord(body()), HostConfig: { ...appliedRecord(body()).HostConfig, CapDrop: [] } }
+    const unhardened: InspectRecord = { ...runningRecord(), HostConfig: { ...runningRecord().HostConfig, CapDrop: [] } }
     const settings = await confineContainer({ engine: engine(0, []), container: 'c', read: () => Promise.resolve(unhardened), body: body(), expectation: expectation() })
     expect(refusal(() => { requireConfined(settings) }).detail).toContain('HostConfig.CapDrop')
+  })
+
+  it('refuses a container that stopped while the probes ran, whose record no longer shows it running', async () => {
+    const exited: InspectRecord = { ...runningRecord(), State: { Status: 'exited', Running: false } }
+    const report = await confineContainer({ engine: engine(0, []), container: 'c', read: () => Promise.resolve(exited), body: body(), expectation: expectation() })
+    // Every property held while the probes ran; only the record read after them shows the container is gone.
+    expect(Object.values(report.probes).every(finding => finding.status === 'pass')).toBe(true)
+    const gone = refusal(() => { requireConfined(report) })
+    expect(gone.code).toBe('ENGINE_REFUSED')
+    expect(gone.detail).toContain('not running')
   })
 })
 

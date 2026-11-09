@@ -212,8 +212,8 @@ export type DockerLimit =
   | 'host-loopback-block'
   | 'egress-allowlist'
 
-/** Limits a shape requires to be offered. */
-export const REQUIRED_LIMITS: readonly DockerLimit[] = ['cap-drop', 'no-new-privileges', 'seccomp', 'network-isolation', 'memory', 'pids']
+/** Limits a shape requires to be offered: the container carries each of them, and one the machine cannot show refuses it. */
+export const REQUIRED_LIMITS: readonly DockerLimit[] = ['cap-drop', 'no-new-privileges', 'seccomp', 'read-only-root', 'network-isolation', 'cpu', 'memory', 'pids']
 
 /** One inspected limit. */
 export interface LimitFinding {

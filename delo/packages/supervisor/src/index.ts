@@ -31,11 +31,16 @@ export {
 } from './confine.ts'
 export {
   createBody,
+  ENGINE_FILE_MOUNTS,
   hardeningDifferences,
   homeIdOf,
   labelsOf,
+  LIMITS_LABEL,
+  limitDifferences,
+  limitsOf,
   networkBody,
   PROXY_VARIABLES,
+  recordedLimits,
   workspaceBinds,
   workspaceEnv,
   workspaceHash,

@@ -4,12 +4,12 @@
  * required, because either alone can be fooled:
  *
  * - the inspect record, read structurally: the bind mounts are the resolved workspace root and the helper's socket
- *   directory and nothing else, no mount source is the OS home, the Delo home or a Docker socket, and the container is
- *   a member of its own internal network alone;
+ *   directory and the engine's own files, nothing else, no mount source is the OS home, the Delo home or a Docker
+ *   socket, and the container is a member of its own internal network alone;
  * - the container's own view, read by fixed probe commands whose exit code alone is read: every capability dropped,
  *   `no-new-privileges`, seccomp, a read-only root, the preset's cgroup limits, the workspace user, the Delo home and
- *   the machine's Docker sockets absent, and no writable host mount besides the workspace root and the helper's socket
- *   directory.
+ *   the machine's Docker sockets absent, `/tmp` a tmpfs of the preset's size, and no writable mount besides the
+ *   workspace root, the helper's socket directory, `/tmp` and the engine's own files and devices.
  *
  * The probes create nothing and read nothing back, so a probe command never carries a secret and its output never
  * leaves the container. A probe that cannot run, or does not finish, is `unconfirmed`: the gate fails closed, because a
@@ -18,7 +18,7 @@
  * @module @delo/supervisor/confine
  */
 import { HELPER_SOCKET_DIR, type ResourceLimits } from '@delo/contract-runtime-supervisor'
-import { hardeningDifferences, type ContainerUser, type CreateBody, type InspectRecord } from './container.ts'
+import { ENGINE_FILE_MOUNTS, hardeningDifferences, type ContainerUser, type CreateBody, type InspectRecord } from './container.ts'
 import type { Engine } from './docker/engine.ts'
 import { SupervisorError } from './errors.ts'
 
@@ -33,6 +33,7 @@ export const CONFINEMENT_CHECKS = [
   'delo-home-hidden',
   'docker-socket-hidden',
   'tmp-is-tmpfs',
+  'tmpfs-size',
   'memory',
   'pids',
   'cpu',
@@ -76,6 +77,8 @@ export interface ConfinementFinding {
 
 /** Everything the gate read: the structural findings and the probes'. */
 export interface ConfinementReport {
+  /** Whether the container still ran when its record was read after the probes. */
+  readonly running: boolean
   /** Mount sources the record must not carry; empty when it carries none. */
   readonly mounts: readonly string[]
   /** Network findings; empty when the container is isolated. */
@@ -119,8 +122,8 @@ export function isWithin(path: string, parent: string): boolean {
 /** System directories no workspace container mounts: a mount of one of these hands the workspace the machine. */
 const SYSTEM_DIRECTORIES: readonly string[] = ['/', '/bin', '/boot', '/dev', '/etc', '/lib', '/lib64', '/opt', '/proc', '/root', '/run', '/sbin', '/srv', '/sys', '/usr', '/var', '/var/run']
 
-/** The container's own engine files, which every engine bind-mounts read-write. */
-const ENGINE_FILES: readonly string[] = ['/etc/hosts', '/etc/hostname', '/etc/resolv.conf']
+/** The destinations a tmpfs may have beyond `/tmp`: the engine's own files and the engine's own devices. */
+const ENGINE_TMPFS_DESTINATIONS: readonly string[] = ['/dev', '/dev/shm', ...ENGINE_FILE_MOUNTS]
 
 /**
  * The mounts C9 allows in an S2 workspace container, by source and destination: the resolved workspace root at its own
@@ -133,8 +136,9 @@ export function allowedMounts(expectation: ConfinementExpectation): ReadonlyMap<
 }
 
 /**
- * The mounts of a container that C9 forbids: any mount that is not one of {@link allowedMounts}, and any that reaches
- * the Delo home, the OS home, a Docker socket or a system directory, which is why each is named separately.
+ * The mounts of a container that C9 forbids: any mount that is not one of {@link allowedMounts} or the engine's own
+ * files and tmpfs mounts, and any that reaches the Delo home, the OS home, a Docker socket or a system directory, which
+ * is why each is named separately.
  * @param record - the container's inspect record.
  * @param expectation - the workspace's resolved paths.
  * @returns one entry per refused mount, naming its type, source and destination.
@@ -147,14 +151,16 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
     const destination = mount.Destination ?? ''
     const named = `${mount.Type ?? 'unknown'} ${source} at ${destination}`
     if (mount.Type === 'tmpfs') {
-      // The engine's own files and the preset's /tmp are the only tmpfs mounts a container has.
-      if (destination !== '/tmp' && !ENGINE_FILES.includes(destination)) refused.push(`${named}: a tmpfs outside /tmp and the engine's files`)
+      // The preset's /tmp and the engine's own tmpfs mounts are the only tmpfs mounts a container has.
+      if (destination !== '/tmp' && !ENGINE_TMPFS_DESTINATIONS.includes(destination)) refused.push(`${named}: a tmpfs outside /tmp and the engine's own mounts`)
       continue
     }
     if (mount.Type !== 'bind') {
       refused.push(`${named}: not a bind mount`)
       continue
     }
+    // The engine mounts its own files at fixed destinations; they are the engine's, not a host path the container chose.
+    if (ENGINE_FILE_MOUNTS.includes(destination)) continue
     if (allowed.get(source) === destination) continue
     if (allowed.has(source)) {
       refused.push(`${named}: ${source} belongs at ${allowed.get(source) ?? ''}`)
@@ -183,8 +189,8 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
 export function writableBinds(record: InspectRecord, expectation: ConfinementExpectation): string[] {
   return (record.Mounts ?? [])
     .filter(mount => mount.Type === 'bind' && mount.ReadOnly !== true)
+    .filter(mount => !ENGINE_FILE_MOUNTS.includes(mount.Destination ?? ''))
     .map(mount => mount.Source ?? '')
-    .filter(source => !ENGINE_FILES.includes(source))
     .filter(source => source !== expectation.root && source !== expectation.helperDir)
 }
 
@@ -221,23 +227,34 @@ export function confinementProbes(expectation: ConfinementExpectation): Record<C
     'seccomp': ['sh', '-c', 'grep -Eq "^Seccomp:[[:space:]]+2$" /proc/self/status'],
     'read-only-root': ['sh', '-c', 'grep -Eq "^[^ ]+ / [^ ]+ ro[, ]" /proc/mounts'],
     'workspace-root-writable': ['sh', '-c', 'test -d "$0" && test -w "$0"', expectation.root],
-    // Every mount that is writable, is not a pseudo filesystem and is not the workspace root, the helper's directory,
-    // /tmp or one of the engine's own files: the workspace may write the host only through its root.
+    // Every writable mount whose destination is not one the container must have: the workspace root, the helper's
+    // mount point, /tmp, the engine's own files, the kernel's own filesystems and the engine's own tmpfs over its
+    // devices and the kernel files it masks. A writable mount anywhere else, tmpfs or not, is writable space the
+    // workspace was not given. The mounts file is the last argument, so a spec can read a fixture.
     'writable-mounts': ['sh', '-c', [
       'awk -v root="$1" -v helper="$2" \'',
       '  $4 ~ /(^|,)rw(,|$)/ {',
-      '    if ($3 ~ /^(proc|sysfs|devpts|devtmpfs|tmpfs|mqueue|cgroup|cgroup2|securityfs|debugfs|overlay|nsfs)$/) next',
-      '    if ($2 == "/tmp" || $2 == root || $2 == helper) next',
-      '    if ($2 == "/etc/hosts" || $2 == "/etc/hostname" || $2 == "/etc/resolv.conf") next',
-      '    print $2',
+      '    dest = $2',
+      '    type = $3',
+      '    if (dest == root || dest == helper || dest == "/tmp") next',
+      '    if (dest == "/etc/hosts" || dest == "/etc/hostname" || dest == "/etc/resolv.conf") next',
+      '    if (type ~ /^(proc|sysfs|devpts|devtmpfs|mqueue|cgroup|cgroup2|securityfs|debugfs|nsfs)$/) next',
+      '    if (type == "tmpfs" || type == "shm") {',
+      '      if (dest == "/dev" || index(dest, "/dev/") == 1) next',
+      '      if (index(dest, "/proc/") == 1 || index(dest, "/sys/") == 1) next',
+      '    }',
+      '    print dest',
       '    found = 1',
       '  }',
       '  END { exit found }',
-      '\' /proc/mounts',
-    ].join('\n'), 'sh', expectation.root, expectation.helperDir],
+      '\' "$3"',
+    ].join('\n'), 'sh', expectation.root, HELPER_SOCKET_DIR, '/proc/mounts'],
     'delo-home-hidden': hidden([expectation.deloHome]),
     'docker-socket-hidden': hidden(expectation.dockerSockets),
     'tmp-is-tmpfs': ['sh', '-c', 'grep -Eq "^[^ ]+ /tmp tmpfs " /proc/mounts'],
+    // The tmpfs /tmp is the preset's size: the kernel reports it rounded down to a page, so anything within one large
+    // page below the limit is that limit.
+    'tmpfs-size': ['sh', '-c', 'v=$(df -B1 --output=size /tmp 2>/dev/null | tail -n 1 | tr -dc 0-9); test -n "$v" && test "$v" -le "$0" && test $(( $0 - v )) -lt 65536', String(expectation.limits.tmpBytes)],
     'memory': ['sh', '-c', 'v=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes); test "$v" = "$0"', String(expectation.limits.memoryBytes)],
     'pids': ['sh', '-c', 'v=$(cat /sys/fs/cgroup/pids.max 2>/dev/null || cat /sys/fs/cgroup/pids/pids.max); test "$v" = "$0"', String(expectation.limits.pids)],
     'cpu': ['sh', '-c', 'if [ -r /sys/fs/cgroup/cpu.max ]; then read q p < /sys/fs/cgroup/cpu.max; else q=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us); p=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us); fi; test "$q" != max && test $((q * 1000000000 / p)) = "$0"', String(Math.round(expectation.limits.cpus * 1e9))],
@@ -294,6 +311,7 @@ export function confinementReport(input: {
   readonly probes: Record<ConfinementCheck, ConfinementFinding>
 }): ConfinementReport {
   return {
+    running: input.record.State?.Running === true,
     mounts: [...refusedMounts(input.record, input.expectation), ...writableBinds(input.record, input.expectation).map(source => `writable ${source}: not the workspace root or the helper's socket directory`)],
     network: networkFindings(input.record, input.body.HostConfig.NetworkMode),
     settings: hardeningDifferences(input.record, input.body).settings,
@@ -319,12 +337,15 @@ export async function confineContainer(input: {
 }
 
 /**
- * Refuse a container whose gate did not pass: the properties it does not show, then the ones no probe could confirm.
+ * Refuse a container whose gate did not pass: a container that stopped while its record was read, then the properties
+ * it does not show, then the ones no probe could confirm.
  * @param report - what {@link confineContainer} read.
- * @throws {SupervisorError} `ROOT_REFUSED` for a refused mount, `LIMITS_MISSING` for a setting, a network finding or
- *   a property that failed or was not confirmed.
+ * @throws {SupervisorError} `ENGINE_REFUSED` for a container that was not running when its record was read after the
+ *   probes, `ROOT_REFUSED` for a refused mount, `LIMITS_MISSING` for a setting, a network finding or a property that
+ *   failed or was not confirmed.
  */
 export function requireConfined(report: ConfinementReport): void {
+  if (!report.running) throw new SupervisorError('ENGINE_REFUSED', 'the container was not running when its confinement was read')
   if (report.mounts.length > 0) throw new SupervisorError('ROOT_REFUSED', `the container mounts what C9 forbids: ${report.mounts.join('; ')}`)
   const failed = CONFINEMENT_CHECKS.filter(check => report.probes[check].status === 'fail')
   const unconfirmed = CONFINEMENT_CHECKS.filter(check => report.probes[check].status === 'unconfirmed')

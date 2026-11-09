@@ -242,7 +242,7 @@ A file operation that a container's read-only root refuses is denied by the envi
 | `IMAGE_PULL_FAILED` | Pulling a listed digest failed |
 | `DOCKER_UNAVAILABLE` | No Docker engine answers at the active context |
 | `ENGINE_REFUSED` | The Docker engine refused a call; the detail carries the engine's message |
-| `WORKSPACE_EXISTS` | `workspace.create` named a workspace whose container already exists |
+| `WORKSPACE_EXISTS` | `workspace.create` named a workspace whose container already exists, or `workspace.start` one whose container already runs |
 | `LIMITS_MISSING` | A limit that a shape requires is not enforced on this machine |
 | `PRESET_OUT_OF_RANGE` | An Advanced value is outside its bound, or a preset exceeds the machine |
 | `ADDITIONAL_ROOTS_UNSUPPORTED` | A Docker workspace was given additional writable roots |

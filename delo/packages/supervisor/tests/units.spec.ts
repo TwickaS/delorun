@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { GIB, IMAGES, PRESETS, type WorkspaceId } from '@delo/contract-runtime-supervisor'
+import { GIB, IMAGES, PRESETS, type DockerLimit, type WorkspaceId } from '@delo/contract-runtime-supervisor'
 import type { OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -14,6 +14,7 @@ import {
   endpointOf,
   EngineError,
   engineRefusal,
+  LIMITS_LABEL,
   loadSeccompProfile,
   ensureListedImage,
   hardeningDifferences,
@@ -182,17 +183,23 @@ describe('the hardened container', () => {
     expect(workspaceNames('ws-1' as WorkspaceId)).toEqual({ container: `delo-ws-${hex}`, network: `delo-ws-${hex}`, outNetwork: `delo-ws-${hex}-out`, proxy: `delo-ws-${hex}-proxy` })
   })
 
+  it('records the limits it was created with on the container itself', () => {
+    const created = body()
+    // The fields a `docker update` can change are not a record of what was asked; the label is.
+    expect(JSON.parse(created.Labels[LIMITS_LABEL] ?? 'null')).toEqual(PRESETS.small)
+  })
+
   it('finds no difference when the engine applied the body, and names each one it did not apply', () => {
     const created = body()
     expect(hardeningDifferences(applied(created), created)).toEqual({ mounts: [], settings: [] })
     const changed = applied(created)
     const record: InspectRecord = {
       ...changed,
-      HostConfig: { ...changed.HostConfig, Memory: 0, PidsLimit: null, SecurityOpt: ['no-new-privileges:true', 'seccomp=unconfined'] },
+      HostConfig: { ...changed.HostConfig, Memory: 0, PidsLimit: null, SecurityOpt: ['no-new-privileges:true', 'seccomp=unconfined'], CgroupnsMode: 'host' },
       Mounts: [{ Type: 'bind', Source: '/', Destination: '/p/w' }, { Type: 'volume', Source: 'v', Destination: '/data' }],
     }
     const differences = hardeningDifferences(record, created)
-    expect(differences.settings).toEqual(expect.arrayContaining(['HostConfig.Memory', 'HostConfig.PidsLimit', 'HostConfig.SecurityOpt']))
+    expect(differences.settings).toEqual(expect.arrayContaining(['HostConfig.Memory', 'HostConfig.PidsLimit', 'HostConfig.SecurityOpt', 'HostConfig.CgroupnsMode']))
     expect(differences.mounts).toEqual(expect.arrayContaining(['/:/p/w', '/p/w:/p/w', 'volume:/data']))
   })
 })
@@ -262,6 +269,19 @@ describe('shapes', () => {
     expect(shapesOf(docker('docker-engine'), undefined, { s3: 'unlisted' }).s3.reason).toBe('image-unverified')
     expect(shapesOf({ ...docker('docker-engine'), endpoint: { kind: 'tcp' } }, undefined, {}).s2.reason).toBe('docker-endpoint-network')
     expect(shapesOf(undefined, 'docker-unavailable', {}).s3.reason).toBe('docker-unavailable')
+  })
+
+  it('does not offer S2 when the CPU or the read-only root its container needs is not enforced', () => {
+    const withLimit = (limit: DockerLimit, status: 'unknown' | 'not-enforced'): ReturnType<typeof docker> => {
+      const base = docker('docker-engine')
+      return { ...base, limits: { ...base.limits, [limit]: { status, evidence: 'fixture' } } }
+    }
+    // A container that cannot be shown to hold either limit is not one C9 allows, so the shape is refused up front
+    // rather than offered and then refused at every start.
+    for (const limit of ['cpu', 'read-only-root'] as const) {
+      expect(shapesOf(withLimit(limit, 'not-enforced'), undefined, {}).s2).toMatchObject({ available: false, reason: 'limits-missing' })
+      expect(shapesOf(withLimit(limit, 'unknown'), undefined, {}).s2.reason).toBe('limits-missing')
+    }
   })
 })
 
