@@ -2,15 +2,20 @@
  * The containers and networks the supervisor creates, as Engine API bodies built only from contract C9 (sections
  * "Containers" and "Networks and egress"): every capability dropped, `no-new-privileges`, the engine's seccomp
  * profile kept, a read-only root with a tmpfs `/tmp`, the preset's limits with swap equal to memory, an init process,
- * no restart policy, no device, none of the host's namespaces, and only the mounts C9 lists. After creation,
+ * no restart policy, no device, none of the host's namespaces, and only the mounts C9 lists, the helper's among them
+ * read-only but for its channel. An internal network is created with the bridge driver's `isolated` gateway mode, so
+ * the container has no address of the machine to reach. After creation,
  * {@link hardeningDifferences} compares the engine's inspect record with what was asked, so a container the engine
  * changed is removed rather than started.
  *
  * @module @delo/supervisor/container
  */
 import { createHash } from 'node:crypto'
+import { join } from 'node:path'
 import {
   EGRESS_PROXY_PORT,
+  HELPER_CHANNEL_DIR,
+  HELPER_CHANNEL_NAME,
   HELPER_SOCKET_DIR,
   LABELS,
   NAME_HASH_HEX_DIGITS,
@@ -197,8 +202,8 @@ export interface ContainerPlan {
   readonly diskQuota: boolean
   /** The networks the container joins; the first is its network mode. */
   readonly networks: readonly string[]
-  /** Bind mounts, each with the same path inside the container unless a target is given. */
-  readonly binds: readonly { readonly source: string, readonly target: string }[]
+  /** Bind mounts, each with the same path inside the container unless a target is given; all but `readOnly` ones are writable. */
+  readonly binds: readonly { readonly source: string, readonly target: string, readonly readOnly?: boolean }[]
   /** The argv, or `undefined` for the image's own entry. */
   readonly command?: readonly string[]
   /** Variables derived from the contract; never a request's value. */
@@ -232,7 +237,7 @@ export interface CreateBody {
     readonly Init: true
     readonly RestartPolicy: { readonly Name: 'no' }
     readonly NetworkMode: string
-    readonly Mounts: readonly { readonly Type: 'bind', readonly Source: string, readonly Target: string, readonly ReadOnly: false }[]
+    readonly Mounts: readonly { readonly Type: 'bind', readonly Source: string, readonly Target: string, readonly ReadOnly: boolean }[]
     readonly Devices: readonly []
     readonly IpcMode: 'private'
     readonly PidMode: ''
@@ -273,7 +278,7 @@ export function createBody(plan: ContainerPlan): CreateBody {
       Init: true,
       RestartPolicy: { Name: 'no' },
       NetworkMode: mode,
-      Mounts: plan.binds.map(bind => ({ Type: 'bind', Source: bind.source, Target: bind.target, ReadOnly: false })),
+      Mounts: plan.binds.map(bind => ({ Type: 'bind', Source: bind.source, Target: bind.target, ReadOnly: bind.readOnly === true })),
       Devices: [],
       IpcMode: 'private',
       PidMode: '',
@@ -292,6 +297,16 @@ export interface NetworkBody {
   readonly Internal: boolean
   readonly Attachable: false
   readonly Labels: Readonly<Record<string, string>>
+  readonly Options: Readonly<Record<string, string>>
+}
+
+/**
+ * The bridge driver's gateway modes of a workspace's own network, which drop the container's traffic to the bridge
+ * gateway: with the gateway mode `isolated`, the engine gives an internal network's bridge no host address, so the
+ * container has no address of the machine to reach and none of the person's services answering on it.
+ */
+export const ISOLATED_GATEWAY_OPTIONS: Readonly<Record<string, string>> = {
+  'com.docker.network.bridge.gateway_mode_ipv4': 'isolated',
 }
 
 /**
@@ -299,10 +314,10 @@ export interface NetworkBody {
  * @param name - the network's name.
  * @param internal - true for the workspace's internal network, false for the proxy's way out.
  * @param labels - the owner's labels.
- * @returns the create body.
+ * @returns the create body; an internal network carries {@link ISOLATED_GATEWAY_OPTIONS} and the way out carries none, because the proxy reaches the internet through that network's own gateway.
  */
 export function networkBody(name: string, internal: boolean, labels: Readonly<Record<string, string>>): NetworkBody {
-  return { Name: name, Driver: 'bridge', Internal: internal, Attachable: false, Labels: labels }
+  return { Name: name, Driver: 'bridge', Internal: internal, Attachable: false, Labels: labels, Options: internal ? ISOLATED_GATEWAY_OPTIONS : {} }
 }
 
 /**
@@ -316,14 +331,29 @@ export function workspaceEnv(proxy: string): string[] {
 }
 
 /**
- * The bind mounts of an S2 workspace container: the resolved workspace root at the same path, and the helper's
- * socket directory at C9's mount point.
+ * The bind mounts of an S2 workspace container: the resolved workspace root at the same path, writable; the helper's
+ * directory at C9's mount point, read-only; and the one subdirectory of it the helper creates its sockets in, mounted
+ * writable at {@link HELPER_CHANNEL_DIR}. A workspace therefore reaches the helper's directory without being able to
+ * add to it, rename anything in it or replace it, and the only host path it may add to is the channel's subdirectory.
  * @param root - the resolved workspace root.
  * @param helperDir - `~/.delo/run/<profile>/s2/<12 hex>/`.
  * @returns the binds.
  */
-export function workspaceBinds(root: string, helperDir: string): { readonly source: string, readonly target: string }[] {
-  return [{ source: root, target: root }, { source: helperDir, target: HELPER_SOCKET_DIR }]
+export function workspaceBinds(root: string, helperDir: string): { readonly source: string, readonly target: string, readonly readOnly: boolean }[] {
+  return [
+    { source: root, target: root, readOnly: false },
+    { source: helperDir, target: HELPER_SOCKET_DIR, readOnly: true },
+    { source: join(helperDir, HELPER_CHANNEL_NAME), target: HELPER_CHANNEL_DIR, readOnly: false },
+  ]
+}
+
+/**
+ * The one writable subdirectory of the helper's directory on the machine: where the helper creates its sockets.
+ * @param helperDir - the helper's directory on the machine.
+ * @returns the path of the channel below it, which is the one part of that directory a workspace may write.
+ */
+export function helperChannelDirectory(helperDir: string): string {
+  return join(helperDir, HELPER_CHANNEL_NAME)
 }
 
 /** The parts of an Engine API inspect record that {@link hardeningDifferences} reads. */
@@ -398,6 +428,12 @@ export function hardeningDifferences(record: InspectRecord, body: CreateBody): {
   // a difference from the resolved paths.
   const found = (record.Mounts ?? []).filter(mount => mount.Type === 'bind' && !ENGINE_FILE_MOUNTS.includes(mount.Destination ?? '')).map(mount => `${mount.Source ?? ''}:${mount.Destination ?? ''}`).sort()
   const unexpected = (record.Mounts ?? []).filter(mount => mount.Type !== 'bind' && mount.Type !== 'tmpfs').map(mount => `${mount.Type ?? 'unknown'}:${mount.Destination ?? ''}`)
-  const mounts = [...found.filter(mount => !wanted.includes(mount)), ...wanted.filter(mount => !found.includes(mount)), ...unexpected]
+  // A mount asked for read-only that the container may write is a second writable path to the machine, so its mode is
+  // compared like every other setting of the body.
+  const writable = body.HostConfig.Mounts
+    .filter(mount => mount.ReadOnly)
+    .filter(mount => (record.Mounts ?? []).some(entry => entry.Type === 'bind' && entry.Source === mount.Source && entry.Destination === mount.Target && entry.ReadOnly !== true))
+    .map(mount => `${mount.Source}:${mount.Target} is writable, not read-only`)
+  const mounts = [...found.filter(mount => !wanted.includes(mount)), ...wanted.filter(mount => !found.includes(mount)), ...unexpected, ...writable]
   return { mounts, settings }
 }

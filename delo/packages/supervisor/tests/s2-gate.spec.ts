@@ -6,12 +6,13 @@
  *
  * Each `it` names the check whose removal makes it fail.
  */
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { StartToken } from '@delo/contract-home-layout'
 import { SUPERVISOR_ROOTS_FILE } from '@delo/contract-home-layout'
-import { PRESETS, type SupervisorRequest, type WorkspaceId } from '@delo/contract-runtime-supervisor'
+import { HELPER_CHANNEL_DIR, HELPER_SOCKET_DIR, PRESETS, type SupervisorRequest, type WorkspaceId } from '@delo/contract-runtime-supervisor'
 import { writeProtectedFile } from '@delo/home'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SupervisorError, EngineError, LIMITS_LABEL, workspaceNames, type WorkspaceView } from '../src/index.ts'
@@ -156,6 +157,18 @@ describe('a container that fails the gate', () => {
     await workspaces.handle(create(root))
     expect((await refusalOf(async () => workspaces.handle(start()))).detail).toContain('not the workspace root')
     expect(containers(state)).toEqual([])
+  })
+
+  it('is retired with LIMITS_MISSING when the container can write the helper\'s directory', async () => {
+    // The helper's directory is mounted read-only, so a write there fails and the container cannot replace what the
+    // harness connects to; a container in which that write succeeds is not one C9 allows.
+    const { workspaces, root, state } = await workspace({ containers: new Map(), calls: [], exec: (_container, cmd) => cmd.join(' ').includes('! -w') ? 1 : 0 })
+    await workspaces.handle(create(root))
+    const refusal = await refusalOf(async () => workspaces.handle(start()))
+    expect(refusal.code).toBe('LIMITS_MISSING')
+    expect(refusal.detail).toContain('helper-read-only')
+    expect(containers(state)).toEqual([])
+    expect(await workspaces.handle(inspect())).toMatchObject({ workspace: { state: 'failed', reason: 'LIMITS_MISSING' } })
   })
 
   it('is retired with ENGINE_REFUSED when it does not stay running', async () => {
@@ -345,5 +358,66 @@ describe('a start on a container that already runs', () => {
     expect(refusal.detail).toContain('already running')
     // Without the check the second start reached the engine again, which answers 304 and starts nothing.
     expect(state.calls.filter(call => call.endsWith('/start')).length).toBe(starts)
+  })
+})
+
+describe('the mounts and the network a workspace container is created with', () => {
+  it('mounts the helper\'s directory read-only with its channel writable, and gives the network no gateway to reach', async () => {
+    const state: FakeEngineState = { containers: new Map(), calls: [], networks: new Map() }
+    const { workspaces, root } = await workspace(state)
+    await workspaces.handle(create(root))
+    const names = workspaceNames(WORKSPACE)
+    // The helper's directory is read-only, so nothing the workspace runs can add to it, rename anything in it or
+    // replace it; the channel below it is the one host path it may write, which is where the helper's sockets go.
+    expect(state.containers.get(names.container)?.Mounts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ Source: helperDirectory(), Destination: HELPER_SOCKET_DIR, ReadOnly: true }),
+      expect.objectContaining({ Source: join(helperDirectory(), 'channel'), Destination: HELPER_CHANNEL_DIR, ReadOnly: false }),
+    ]))
+    // The bridge driver's isolated gateway mode is asked for at creation: an engine that applies it gives the internal
+    // network's bridge no host address, so the container has none of the machine's services to reach.
+    expect(state.networks?.get(names.network)).toMatchObject({ Internal: true, Options: { 'com.docker.network.bridge.gateway_mode_ipv4': 'isolated' } })
+  })
+
+  it('leaves the egress proxy\'s way out without the isolated gateway, so the proxy has a route', async () => {
+    const state: FakeEngineState = { containers: new Map(), calls: [], networks: new Map() }
+    const { workspaces, root } = await workspace(state)
+    await workspaces.handle({ ...create(root), args: { ...create(root).args, egress: 'allowlist' } })
+    const names = workspaceNames(WORKSPACE)
+    expect(state.networks?.get(names.network)).toMatchObject({ Internal: true, Options: { 'com.docker.network.bridge.gateway_mode_ipv4': 'isolated' } })
+    expect(state.networks?.get(names.outNetwork)).toMatchObject({ Internal: false, Options: {} })
+  })
+})
+
+describe('the channel a workspace may write', () => {
+  const channel = (): string => join(helperDirectory(), 'channel')
+
+  it('clears a socket a previous session left, so the next helper starts with an empty channel', async () => {
+    const { workspaces, root } = await workspace()
+    await workspaces.handle(create(root))
+    const stale = createServer()
+    await new Promise<void>((resolve, reject) => {
+      stale.once('error', reject)
+      stale.listen(join(channel(), 'left-behind.sock'), () => { resolve() })
+    })
+    try {
+      expect(existsSync(join(channel(), 'left-behind.sock'))).toBe(true)
+      expect(await workspaces.handle(start())).toMatchObject({ workspace: { state: 'running' } })
+      // A socket no live helper holds is stale: it is removed before the container starts rather than offered to the
+      // harness as if it were the helper's.
+      expect(existsSync(join(channel(), 'left-behind.sock'))).toBe(false)
+    } finally {
+      await new Promise<void>((resolve) => { stale.close(() => { resolve() }) })
+    }
+  })
+
+  it('refuses the start when the channel holds a regular file, and nothing starts in the container', async () => {
+    const { workspaces, root, state } = await workspace()
+    await workspaces.handle(create(root))
+    writeFileSync(join(channel(), 'planted'), 'not the helper\'s\n')
+    const refusal = await refusalOf(async () => workspaces.handle(start()))
+    expect(refusal.code).toBe('ROOT_REFUSED')
+    expect(refusal.detail).toContain('a regular file')
+    // The refusal comes before the container starts, so a channel the workspace could use as storage never runs.
+    expect(state.calls.filter(call => call.endsWith('/start'))).toEqual([])
   })
 })

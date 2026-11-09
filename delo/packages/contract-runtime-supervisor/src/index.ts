@@ -212,8 +212,12 @@ export type DockerLimit =
   | 'host-loopback-block'
   | 'egress-allowlist'
 
-/** Limits a shape requires to be offered: the container carries each of them, and one the machine cannot show refuses it. */
-export const REQUIRED_LIMITS: readonly DockerLimit[] = ['cap-drop', 'no-new-privileges', 'seccomp', 'read-only-root', 'network-isolation', 'cpu', 'memory', 'pids']
+/**
+ * Limits a shape requires to be offered: the container carries each of them, and one the machine cannot show refuses it.
+ * `host-gateway-block` is among them: a network the machine leaves its gateway reachable on gives the workspace the
+ * machine's own services, and no other limit of the container stands in for that.
+ */
+export const REQUIRED_LIMITS: readonly DockerLimit[] = ['cap-drop', 'no-new-privileges', 'seccomp', 'read-only-root', 'network-isolation', 'host-gateway-block', 'cpu', 'memory', 'pids']
 
 /** One inspected limit. */
 export interface LimitFinding {
@@ -422,8 +426,17 @@ export const HELPER_CHALLENGE_LABEL = 'delo-helper-v1'
 /** Time the helper waits for a challenge answer, in milliseconds. */
 export const HELPER_CHALLENGE_TIMEOUT_MS = 5_000
 
-/** Mount point of the S2 helper's socket directory inside the container. */
+/**
+ * Mount point of the S2 helper's directory inside the container. It is mounted read-only, so nothing the workspace runs
+ * can add to it, rename anything in it or replace it.
+ */
 export const HELPER_SOCKET_DIR = '/run/delo-helper'
+
+/** The one writable part of {@link HELPER_SOCKET_DIR}: the subdirectory the helper creates its sockets in. */
+export const HELPER_CHANNEL_DIR = `${HELPER_SOCKET_DIR}/channel`
+
+/** The name of {@link HELPER_CHANNEL_DIR} inside the helper's directory on the machine, which is mounted there. */
+export const HELPER_CHANNEL_NAME = 'channel'
 
 /** Mount point of a forwarded agent's socket inside the container. */
 export const AGENT_SOCKET_PATH = '/run/delo-agent/agent.sock'

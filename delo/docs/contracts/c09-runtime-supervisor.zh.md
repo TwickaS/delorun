@@ -54,8 +54,8 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 - **字段。** `v`（1）、`checkedAt`、`machine`（`os`、`arch`）、`confinement`（[C1](c01-home-layout.zh.md) 对原生工作区的各规则状态）、`docker`（没有引擎应答时缺省）以及 `shapes`（`s2` 与 `s3`，各自带 `available`，不可用时带原因代码）。
 - **Docker 部分。** `engine`（`docker-engine`、`docker-desktop` 或 `other`）、`version`、`rootless`、`context`（当前 context 的名称）、`endpoint`（`unix`、`npipe`、`tcp` 或 `ssh`，带其路径）、`storageDriver` 与 `limits`。
 - **限制项。** `limits` 的每个条目都有 `status`（`enforced`、`not-enforced` 或 `unknown`）和 `evidence` 字符串，后者给出所检查的字段及其值。条目为 `cpu`、`memory`、`pids`、`disk`、`cap-drop`、`no-new-privileges`、`read-only-root`、`seccomp`、`user-namespace`、`network-isolation`、`host-gateway-block`、`host-loopback-block` 与 `egress-allowlist`。
-- **检查。** 监管器以 Small 预设从 S2 工作区镜像创建一个探测容器，读取其 `docker inspect` 记录，并在其中运行探测命令：连接监管器在网络网关地址上打开的监听器，连接主机回环上的监听器，向允许列表之外的主机发出请求，以及向允许列表中的主机发出请求。只有当检查记录显示某项限制，并且对于网络条目，探测中被禁止的连接失败而被允许的连接成功时，该项才是 `enforced`。之后删除探测容器。
-- **提供形态的条件。** 本人选择形态之前，setup（[C11](c11-setup-answers.zh.md)）列出每项限制在本机的状态。只有当 `cap-drop`、`no-new-privileges`、`seccomp`、`network-isolation`、`memory` 与 `pids` 都为 `enforced` 时，才提供 S2 与 S3。其他任何不为 `enforced` 的条目，在 setup 与工作区设置中显示为在本机仅作建议。
+- **检查。** 监管器以 Small 预设从 S2 工作区镜像创建一个探测容器，读取其 `docker inspect` 记录，并在其中运行探测命令：连接监管器在网络网关地址上打开的监听器，连接主机回环上的监听器，向允许列表之外的主机发出请求，以及向允许列表中的主机发出请求。只有当检查记录显示某项限制，并且对于网络条目，探测中被禁止的连接失败而被允许的连接成功时，该项才是 `enforced`。探测网络以桥接驱动的 `isolated` 网关模式创建：应用该模式的引擎完全不给网络分配网关地址，这一缺失即为 `host-gateway-block` 成立的证据；忽略该选项的引擎会保留该地址，由连接结果决定。之后删除探测容器。
+- **提供形态的条件。** 本人选择形态之前，setup（[C11](c11-setup-answers.zh.md)）列出每项限制在本机的状态。只有当 `cap-drop`、`no-new-privileges`、`seccomp`、`network-isolation`、`host-gateway-block`、`memory` 与 `pids` 都为 `enforced` 时，才提供 S2 与 S3。其他任何不为 `enforced` 的条目，在 setup 与工作区设置中显示为在本机仅作建议。
 - **形态原因。** `docker-unavailable`、`docker-endpoint-network`（context 的端点是 TCP 或 SSH）、`s2-transport-unsupported`（macOS 与 Windows 上的 Docker Desktop）、`image-unverified`（镜像摘要与已校验的 manifest 不符）以及 `limits-missing`。
 
 <a id="docker-shapes"></a>
@@ -114,7 +114,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 ## 网络与出站
 
 - **每个工作区一个网络。** 每个 Docker 工作区都有自己的内部网络 `delo-ws-<12 hex>`，其成员只有该工作区的容器及其出站代理。没有哪个网络以两个工作区为成员，因此任何工作区容器都无法访问另一个工作区的容器。代理还加入第二个网络 `delo-ws-<12 hex>-out`，这是它唯一的出口路由。
-- **主机网关与回环。** 内部网络不给工作区容器任何通往机器的路由。代理拒绝位于机器上的目标。从不向容器添加 `host.docker.internal` 与 `host-gateway` 别名。
+- **主机网关与回环。** 内部网络不给工作区容器任何通往机器的路由，并且以桥接驱动的 `isolated` 网关模式创建：其网桥不携带主机地址，容器没有可连接的网关。代理拒绝位于机器上的目标。从不向容器添加 `host.docker.internal` 与 `host-gateway` 别名。
 - **出站代理。** 它从 S2 工作区镜像的摘要运行，使用该工作区的资源限制和入口 `/usr/local/bin/delo-egress-proxy`，该入口由镜像提供。监管器在 `DELO_EGRESS_MODE` 中传入出站模式（`allowlist` 或 `open`），在 `DELO_EGRESS_HOSTS` 中传入以逗号分隔的允许主机。它是端口 3128 上的 HTTP 代理，为端口 443 提供 `CONNECT`，为端口 80 提供普通 HTTP。它自行解析每个主机，并拒绝以下目标地址：回环、链路本地（`169.254.0.0/16`、`fe80::/10`）、私有（`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`fc00::/7`）、共享（`100.64.0.0/10`）、组播或机器自身的地址。容器的环境把 `HTTP_PROXY`、`HTTPS_PROXY`、`http_proxy` 与 `https_proxy` 设为该代理；忽略这些变量的工具没有出口路由。
 - **出站模式。** `allowlist`（默认）允许下列主机及该工作区的追加项。`open` 允许每个公网主机，只能由本人为该工作区选择设置。`none` 不启动代理。
 - **默认允许列表。** profile 中所配置模型提供商的主机；npm：`registry.npmjs.org`；PyPI：`pypi.org`、`files.pythonhosted.org`；crates.io：`crates.io`、`static.crates.io`、`index.crates.io`；Go 模块代理：`proxy.golang.org`、`sum.golang.org`；GitHub：`github.com`、`api.github.com`、`codeload.github.com`、`objects.githubusercontent.com`、`raw.githubusercontent.com`、`release-assets.githubusercontent.com`。
@@ -206,7 +206,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 - **辅助程序。** 辅助程序是安装在 S2 工作区镜像中的上游 `ssh-helper-runtime` 可执行文件，harness 按上游 SSH 连接检查 `helperHash` 的方式检查其摘要。
 - **用户。** 监管器通过 Docker exec 以容器的工作区用户启动辅助程序：在 rootful 引擎上是本人的 uid 与 gid，在 rootless 引擎上是 uid 0，引擎把它映射为机器上本人的 uid。工作区命令以同一用户运行。辅助程序从不以比它启动的命令权限更高的用户运行。
-- **Linux 引擎上的传输。** 辅助程序的流套接字位于容器内的 `/run/delo-helper/`，该目录从机器上的 `~/.delo/run/<profile>/s2/<12 hex>/`（权限 0700）绑定挂载，harness 在那里连接它们。
+- **Linux 引擎上的传输。** 辅助程序的目录（机器上的 `~/.delo/run/<profile>/s2/<12 hex>/`，权限 0700）以只读方式绑定挂载到 `/run/delo-helper`，harness 在该处连接套接字。辅助程序唯一可写的子目录 `channel/` 以可写方式挂载到 `/run/delo-helper/channel`，其中只允许辅助程序的流套接字，因此工作区唯一可写的宿主路径不承载任何自有字节：每次启动时监管器删除上一次会话遗留的套接字，并对任何其他条目拒绝启动。
 - **认证。** 每次辅助程序启动时，监管器生成一个 32 字节的通道密钥，在 exec 时把它写入辅助程序的标准输入，并只在 `helper.start` 响应中返回它。该密钥从不写入文件、命令行或环境变量。每个到辅助程序套接字的连接都以辅助程序发出的 32 字节随机挑战开始，harness 以通道密钥对该挑战与字符串 `delo-helper-v1` 计算 HMAC-SHA-256 作答。回答错误或 5 秒内未到达时，辅助程序关闭该连接。
 - **密钥保护什么。** 它拒绝没有密钥的对端：其他容器中的进程（它们没有该套接字目录），以及机器上抵达该目录但没有密钥的进程。它不保护辅助程序免受其自身容器中命令的影响，这些命令以同一用户运行，由容器限制。
 - **Docker Desktop。** 在 macOS 与 Windows 的 Docker Desktop 上不提供 S2（`s2-transport-unsupported`）。
@@ -348,7 +348,7 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 - **Landlock 与 rootful 引擎。** Landlock 无法拒绝原生命令连接 Docker 套接字，因此在只有 Landlock 且使用 rootful 引擎的系统上，任何受限原生命令都能启动挂载机器文件的容器。Delo 会报告它并提供 rootless 引擎；在那里无法阻止它。
 - **经网络的 Docker。** 端点为 TCP 或 SSH 的 context 可被任何有网络访问的命令访问，而没有方言限制网络；报告将其标为 `docker-endpoint-network`，并且不在其上提供 Docker 形态。
-- **主机网关与回环。** 工作区网络能否访问机器取决于引擎；探测报告它在本机上的发现，rootful 引擎的内部网桥可能让网关地址仍可访问。
+- **主机网关与回环。** 内部网络与机器之间的距离由引擎保证：网络以桥接驱动的 `isolated` 网关模式创建，忽略该选项的引擎只在检查时由探测发现，不会在每次工作区启动时再次确认。仍让网关可达的机器不满足 `host-gateway-block`，因此不在其上提供 S2。
 - **磁盘限制。** 大多数存储驱动、所有 rootless 引擎与 Docker Desktop 都不强制执行容器的磁盘大小；在那里预设的磁盘值仅作建议。
 - **辅助程序密钥。** 它不保护 S2 辅助程序免受其自身容器中命令的影响，这些命令以同一用户运行。
 - **S3。** S3 不隔离各工作区之间。

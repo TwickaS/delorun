@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { GIB, IMAGES, PRESETS, type DockerLimit, type WorkspaceId } from '@delo/contract-runtime-supervisor'
+import { GIB, HELPER_CHANNEL_DIR, HELPER_SOCKET_DIR, IMAGES, PRESETS, type DockerLimit, type WorkspaceId } from '@delo/contract-runtime-supervisor'
 import type { OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -21,10 +21,12 @@ import {
   isAllowlistHost,
   limitFindings,
   listedImage,
+  networkBody,
   presetLimits,
   resolveDockerContext,
   shapesOf,
   SupervisorError,
+  workspaceBinds,
   workspaceNames,
   type CreateBody,
   type Engine,
@@ -178,6 +180,23 @@ describe('the hardened container', () => {
     expect(created.HostConfig.StorageOpt).toBeUndefined()
   })
 
+  it('mounts the helper\'s directory read-only, with its channel writable below it', () => {
+    const helperDir = '/h/run/default/s2/0123456789ab'
+    const created = createBody({
+      name: 'delo-ws-000000000000', image: `${IMAGES.s2}@${ABSENT_DIGEST}`, labels: {}, user: { uid: 1000, gid: 1000 },
+      limits: PRESETS.small, diskQuota: false, networks: ['delo-ws-000000000000'], binds: workspaceBinds('/p/w', helperDir), env: [],
+    })
+    expect(created.HostConfig.Mounts).toEqual([
+      { Type: 'bind', Source: '/p/w', Target: '/p/w', ReadOnly: false },
+      { Type: 'bind', Source: helperDir, Target: HELPER_SOCKET_DIR, ReadOnly: true },
+      { Type: 'bind', Source: `${helperDir}/channel`, Target: HELPER_CHANNEL_DIR, ReadOnly: false },
+    ])
+    // A record whose helper mount the container may write is not the container that was asked for.
+    const record = appliedRecord(created)
+    const loosened: InspectRecord = { ...record, Mounts: (record.Mounts ?? []).map(mount => mount.Destination === HELPER_SOCKET_DIR ? { ...mount, ReadOnly: false } : mount) }
+    expect(hardeningDifferences(loosened, created).mounts).toEqual([expect.stringContaining('is writable, not read-only')])
+  })
+
   it('names a workspace\'s objects after the first 12 hex digits of its id\'s SHA-256 digest', () => {
     const hex = createHash('sha256').update('ws-1').digest('hex').slice(0, 12)
     expect(workspaceNames('ws-1' as WorkspaceId)).toEqual({ container: `delo-ws-${hex}`, network: `delo-ws-${hex}`, outNetwork: `delo-ws-${hex}-out`, proxy: `delo-ws-${hex}-proxy` })
@@ -249,7 +268,16 @@ describe('limit findings', () => {
   it('reports unknown when a probe tool is missing or did not finish', () => {
     expect(limitFindings(evidence({ exits: { ...exits, seccomp: 127 } })).seccomp.status).toBe('unknown')
     expect(limitFindings(evidence({ exits: { ...exits, cpu: undefined } })).cpu.status).toBe('unknown')
-    expect(limitFindings(evidence({ gateway: { skipped: 'no address' } }))['host-gateway-block'].status).toBe('unknown')
+    expect(limitFindings(evidence({ gateway: { skipped: 'the supervisor cannot listen on the gateway address 198.51.100.1 (EADDRNOTAVAIL)' } }))['host-gateway-block'].status).toBe('unknown')
+  })
+
+  it('reports the host gateway blocked when the probe network has no gateway address to reach', () => {
+    // The probe network is created with the bridge driver's isolated gateway mode, and an engine that applies it gives
+    // the network no gateway address: there is nothing on the machine for the container to connect to. An engine that
+    // ignores the option leaves the address in place, and the connect's exit code decides.
+    expect(limitFindings(evidence({ gateway: { isolated: true } }))['host-gateway-block']).toMatchObject({ status: 'enforced', evidence: expect.stringContaining('no gateway address') })
+    expect(limitFindings(evidence({ gateway: { address: '198.51.100.1', exit: 0 } }))['host-gateway-block'].status).toBe('not-enforced')
+    expect(limitFindings(evidence({ gateway: { address: '198.51.100.1', exit: undefined } }))['host-gateway-block'].status).toBe('unknown')
   })
 })
 
@@ -271,17 +299,26 @@ describe('shapes', () => {
     expect(shapesOf(undefined, 'docker-unavailable', {}).s3.reason).toBe('docker-unavailable')
   })
 
-  it('does not offer S2 when the CPU or the read-only root its container needs is not enforced', () => {
+  it('does not offer S2 when a limit its container needs is unknown or not enforced', () => {
     const withLimit = (limit: DockerLimit, status: 'unknown' | 'not-enforced'): ReturnType<typeof docker> => {
       const base = docker('docker-engine')
       return { ...base, limits: { ...base.limits, [limit]: { status, evidence: 'fixture' } } }
     }
-    // A container that cannot be shown to hold either limit is not one C9 allows, so the shape is refused up front
-    // rather than offered and then refused at every start.
-    for (const limit of ['cpu', 'read-only-root'] as const) {
+    // A container that cannot be shown to hold any of these is not one C9 allows, so the shape is refused up front
+    // rather than offered and then refused at every start. `host-gateway-block` is among them: a network whose gateway
+    // the workspace can reach gives it the machine's own services, which no other limit of the container stands in for.
+    for (const limit of ['cpu', 'read-only-root', 'host-gateway-block'] as const) {
       expect(shapesOf(withLimit(limit, 'not-enforced'), undefined, {}).s2).toMatchObject({ available: false, reason: 'limits-missing' })
       expect(shapesOf(withLimit(limit, 'unknown'), undefined, {}).s2.reason).toBe('limits-missing')
     }
+  })
+
+  it('creates an internal network with the bridge driver\'s isolated gateway mode, and the way out without it', () => {
+    const internal = networkBody('delo-ws-0123456789ab', true, {})
+    expect(internal.Options).toEqual({ 'com.docker.network.bridge.gateway_mode_ipv4': 'isolated' })
+    // The proxy reaches the internet through the way out's own gateway, which the isolated mode would remove.
+    expect(networkBody('delo-ws-0123456789ab-out', false, {}).Options).toEqual({})
+    expect(internal).toMatchObject({ Driver: 'bridge', Internal: true, Attachable: false })
   })
 })
 
