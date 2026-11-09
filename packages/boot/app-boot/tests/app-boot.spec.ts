@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -104,10 +104,18 @@ describe('loadLayeredEnv', () => {
     for (const name of NAMES) Reflect.deleteProperty(process.env, name)
   }
 
+  /**
+   * Write the Harness-home `.env` at the owner-only mode it is required to carry; a plain
+   * `writeFileSync` would leave 0644 and be refused for being readable beyond its owner.
+   */
+  function writeHomeEnv(home: string, content: string): void {
+    writeFileSync(join(home, '.env'), content, { mode: 0o600 })
+  }
+
   it('layers user under project under the inherited environment', () => {
     const home = tmp()
     const project = tmp()
-    writeFileSync(join(home, '.env'), [
+    writeHomeEnv(home, [
       `${NAMES[0]}=user`,
       `${NAMES[1]}=user-only`,
       'APP_BOOT_LAYERED_INHERITED=user-loses',
@@ -171,7 +179,7 @@ describe('loadLayeredEnv', () => {
     // spelling gets its own name here: Windows folds `https_proxy` and `HTTPS_PROXY` into one
     // variable, so which spelling a value lands under is the platform's to decide — that the file
     // supplies it, and that the launching shell outranks the file, is not.
-    writeFileSync(join(home, '.env'), 'HTTP_PROXY=http://from-home:8080\nno_proxy=example.com\nHTTPS_PROXY=http://from-home:8443\n')
+    writeHomeEnv(home, 'HTTP_PROXY=http://from-home:8080\nno_proxy=example.com\nHTTPS_PROXY=http://from-home:8443\n')
     clear(); clearProxy()
     vi.stubEnv('DSH_HOME', home)
     vi.stubEnv('HTTPS_PROXY', 'http://exported:8080')
@@ -194,7 +202,7 @@ describe('loadLayeredEnv', () => {
     const project = tmp()
     // A CA path sits in the same network group as the proxy names and changes what is trusted,
     // not where traffic goes; the exemption must not widen to it.
-    writeFileSync(join(home, '.env'), 'SSL_CERT_FILE=/tmp/ca.pem\n')
+    writeHomeEnv(home, 'SSL_CERT_FILE=/tmp/ca.pem\n')
     clear()
     vi.stubEnv('DSH_HOME', home)
     try {
@@ -223,7 +231,7 @@ describe('loadLayeredEnv', () => {
 
   it('treats the invoking directory as the Harness home when they are the same directory', () => {
     const home = tmp()
-    writeFileSync(join(home, '.env'), 'HTTP_PROXY=http://from-home:8080\n')
+    writeHomeEnv(home, 'HTTP_PROXY=http://from-home:8080\n')
     clear(); clearProxy()
     vi.stubEnv('DSH_HOME', home)
     try {
@@ -239,7 +247,7 @@ describe('loadLayeredEnv', () => {
   it('reports each file value with its absolute path', () => {
     const home = tmp()
     const project = tmp()
-    writeFileSync(join(home, '.env'), `${NAMES[1]}=u\n`)
+    writeHomeEnv(home, `${NAMES[1]}=u\n`)
     writeFileSync(join(project, '.env'), `${NAMES[2]}=p\n`)
     clear()
     vi.stubEnv('DSH_HOME', home)
@@ -257,7 +265,7 @@ describe('loadLayeredEnv', () => {
   it('resolves the harness home from the inherited environment, never from a file', () => {
     const home = tmp()
     const project = tmp()
-    writeFileSync(join(home, '.env'), `${NAMES[1]}=real-home\n`)
+    writeHomeEnv(home, `${NAMES[1]}=real-home\n`)
     writeFileSync(join(project, '.env'), `${NAMES[2]}=set-by-project\n`)
     clear()
     vi.stubEnv('DSH_HOME', home)
@@ -346,12 +354,84 @@ describe('loadLayeredEnv', () => {
 
   it('reads a harness home that is also the invocation directory exactly once', () => {
     const both = tmp()
-    writeFileSync(join(both, '.env'), `${NAMES[2]}=one-file\n`)
+    writeHomeEnv(both, `${NAMES[2]}=one-file\n`)
     clear()
     vi.stubEnv('DSH_HOME', both)
     try {
       const snapshot = loadLayeredEnv(NAME, both, vi.fn())
       expect(snapshot.get(NAMES[2])).toEqual({ value: 'one-file', source: 'project-env', path: join(both, '.env') })
+    } finally {
+      clear()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  const POSIX = process.platform !== 'win32'
+
+  it.runIf(POSIX)('refuses a Harness-home .env that other local users can read', () => {
+    const home = tmp()
+    const project = tmp()
+    writeHomeEnv(home, `${NAMES[1]}=from-lax-file\n`)
+    chmodSync(join(home, '.env'), 0o644)
+    clear()
+    vi.stubEnv('DSH_HOME', home)
+    try {
+      expect(() => loadLayeredEnv(NAME, project, vi.fn()))
+        .toThrow(`readable beyond its owner (mode 644); run "chmod 600 ${join(home, '.env')}" before starting again`)
+      // The refused layer contributed nothing to the process environment.
+      expect(process.env[NAMES[1]]).toBeUndefined()
+    } finally {
+      clear()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it.runIf(POSIX)('refuses a Harness-home .env that is a symbolic link', () => {
+    const home = tmp()
+    const project = tmp()
+    const target = join(tmp(), 'elsewhere.env')
+    writeFileSync(target, `${NAMES[1]}=from-a-link\n`, { mode: 0o600 })
+    symlinkSync(target, join(home, '.env'))
+    clear()
+    vi.stubEnv('DSH_HOME', home)
+    try {
+      expect(() => loadLayeredEnv(NAME, project, vi.fn())).toThrow(/is a symbolic link/)
+      expect(process.env[NAMES[1]]).toBeUndefined()
+    } finally {
+      clear()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it.runIf(POSIX)('refuses a Harness-home .env owned by another OS user', () => {
+    const home = tmp()
+    const project = tmp()
+    writeHomeEnv(home, `${NAMES[1]}=owned-elsewhere\n`)
+    const owner = statSync(join(home, '.env')).uid
+    const euid = vi.spyOn(process as { geteuid: () => number }, 'geteuid').mockReturnValue(owner + 1)
+    clear()
+    vi.stubEnv('DSH_HOME', home)
+    try {
+      expect(() => loadLayeredEnv(NAME, project, vi.fn())).toThrow(`owned by another OS user (uid ${String(owner)})`)
+      expect(process.env[NAMES[1]]).toBeUndefined()
+    } finally {
+      euid.mockRestore()
+      clear()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it.runIf(POSIX)('loads a 0600 Harness-home .env', () => {
+    const home = tmp()
+    const project = tmp()
+    writeHomeEnv(home, `${NAMES[1]}=owner-only\n`)
+    expect(statSync(join(home, '.env')).mode & 0o777).toBe(0o600)
+    clear()
+    vi.stubEnv('DSH_HOME', home)
+    try {
+      const snapshot = loadLayeredEnv(NAME, project, vi.fn())
+      expect(snapshot.get(NAMES[1])).toEqual({ value: 'owner-only', source: 'user-env', path: join(home, '.env') })
+      expect(process.env[NAMES[1]]).toBe('owner-only')
     } finally {
       clear()
       vi.unstubAllEnvs()

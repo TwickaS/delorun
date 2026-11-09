@@ -156,7 +156,8 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
   })
 
   it('reads the key from the home .env file, the layer that delorun start reads', async () => {
-    writeFileSync(join(deloHome, '.env'), `DEEPSEEK_API_KEY=${GOOD_KEY}\n`)
+    // Owner-only, as the home `.env` must be: a group- or world-readable one stops the start.
+    writeFileSync(join(deloHome, '.env'), `DEEPSEEK_API_KEY=${GOOD_KEY}\n`, { mode: 0o600 })
     const port = await freePort()
     const result = doctor(['--port', String(port)])
     expect(result.status).toBe(0)

@@ -14,11 +14,12 @@ import { Context } from '@deepseek-ai/cordis'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, normalize } from 'node:path'
+import { basename, dirname, isAbsolute, join, normalize, relative } from 'node:path'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SaveTextSpill } from '@deepseek-ai/dsh-spill'
 import LocalSpillStore, {
+  DEFAULT_ROOT_DIR_NAME,
   DEFAULT_ROOT_PREFIX,
   discoverDefaultRoots,
   encodeSegment,
@@ -129,10 +130,26 @@ describe('saveTextFile', () => {
 })
 
 describe('privateRoot', () => {
-  it('is a stable absolute directory under the temp dir', () => {
-    const first = privateRoot()
+  it('is the home’s own spill directory: absolute, owner-only and stable per home', () => {
+    const home = join(root, 'home')
+    const first = privateRoot(home)
     expect(isAbsolute(first)).toBe(true)
-    expect(privateRoot()).toBe(first)
+    expect(first).toBe(join(home, DEFAULT_ROOT_DIR_NAME))
+    expect(privateRoot(home)).toBe(first)
+    expect(privateRoot(join(root, 'second-home'))).not.toBe(first)
+    if (process.platform !== 'win32') {
+      expect(statSync(first).mode & 0o777).toBe(0o700)
+      expect(statSync(home).mode & 0o777).toBe(0o700)
+    }
+  })
+
+  it('keeps the temp root only for a home that cannot host its spill directory', () => {
+    // A file where the home should be: `<home>/spill` cannot be created under it.
+    const blocked = join(root, 'occupied')
+    writeFileSync(blocked, 'x')
+    const fallback = privateRoot(blocked)
+    expect(dirname(fallback)).toBe(tmpdir())
+    expect(basename(fallback)).toMatch(new RegExp(`^${DEFAULT_ROOT_PREFIX}[A-Za-z0-9]{6}$`))
   })
 })
 
@@ -155,10 +172,46 @@ describe('LocalSpillStore service', () => {
     expect(isAbsolute((ctx.spillStore as LocalSpillStore).root)).toBe(true)
   })
 
-  it('falls back to the private root when none is configured', async () => {
+  it('defaults to the resolved harness home’s own spill directory', async () => {
+    // The default root must sit inside the home: a deployment's protected home is
+    // what keeps a confined command from reading spilled tool output, and the OS
+    // temp dir it used to fall back to is readable by every confined command.
+    const home = join(root, 'harness-home')
+    vi.stubEnv('DSH_HOME', home)
     const ctx = new Context()
-    await ctx.plugin(LocalSpillStore, { cleanupPeriodDays: 0 })
-    expect((ctx.spillStore as LocalSpillStore).root).toBe(privateRoot())
+    try {
+      await ctx.plugin(LocalSpillStore, { cleanupPeriodDays: 0 })
+      const store = ctx.spillStore as LocalSpillStore
+      expect(store.root).toBe(join(home, DEFAULT_ROOT_DIR_NAME))
+      expect(dirname(store.root)).toBe(home)
+      expect(store.root).toBe(privateRoot(home))
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('does not enumerate another home’s spill', async () => {
+    // Two homes on one machine, each spilling through its default root, must stay
+    // invisible to each other: the startup sweep of one may not discover, list or
+    // reach the other's files. The temp dir is the shared base both would scan.
+    const fakeTmp = join(root, 'tmp')
+    mkdirSync(fakeTmp)
+    const previous = process.env.TMPDIR
+    process.env.TMPDIR = fakeTmp
+    try {
+      const homeA = join(root, 'home-a')
+      const homeB = join(root, 'home-b')
+      const savedB = await saveTextFile({ root: privateRoot(homeB), sessionId: 'sess-1', suggestedName: 'b.txt', content: 'home b only' })
+      const roots = await gatherSweepRoots(privateRoot(homeA), () => {}, tmpdir())
+      expect(roots.map(entry => entry.path)).toEqual([privateRoot(homeA)])
+      expect(roots.some((entry) => {
+        const between = relative(entry.path, savedB.path)
+        return between === '' || (!between.startsWith('..') && !isAbsolute(between))
+      })).toBe(false)
+    } finally {
+      if (previous === undefined) delete process.env.TMPDIR
+      else process.env.TMPDIR = previous
+    }
   })
 
   it('rejects when the root is not writable (missing parent, exclusive open)', async () => {

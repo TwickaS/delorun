@@ -7,13 +7,20 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync } from 'node:fs'
 import { mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
-/** Prefix shared by default-root creation and startup discovery. */
+/**
+ * Prefix shared by default-root creation and startup discovery, for the temp
+ * root a home that cannot host its own spill directory falls back to.
+ */
 export const DEFAULT_ROOT_PREFIX = 'dsh-spill-'
+
+/** Name of the default spill root inside the Harness home: `<home>/spill`. */
+export const DEFAULT_ROOT_DIR_NAME = 'spill'
 
 /**
  * Test a caught value for a Node system error code.
@@ -26,16 +33,47 @@ export function isErrno(error: unknown, code: string): boolean {
   return error instanceof Error && (error as NodeJS.ErrnoException).code === code
 }
 
-let defaultRoot: string | undefined
+/** The private root of each home this process has resolved, keyed by that home. */
+const privateRoots = new Map<string, string>()
 
 /**
- * Return the lazily-created private per-process spill root.
+ * Create the private spill root of one home: `<home>/spill` at mode 0700, or —
+ * when the home cannot host it — a private `dsh-spill-*` directory under the OS
+ * temp dir.
  *
- * @returns The private root path.
+ * @param home The Harness home that owns the root.
+ * @returns The absolute root path.
  */
-export function privateRoot(): string {
-  defaultRoot ??= mkdtempSync(join(tmpdir(), DEFAULT_ROOT_PREFIX))
-  return defaultRoot
+function createPrivateRoot(home: string): string {
+  const preferred = join(home, DEFAULT_ROOT_DIR_NAME)
+  try {
+    mkdirSync(preferred, { recursive: true, mode: 0o700 })
+    return preferred
+  } catch {
+    // A read-only home, or a home path a file occupies, cannot hold the spill
+    // directory; the temp root keeps spilling working. It sits outside the home
+    // that `home-read` covers, so a deployment that protects the home must
+    // protect these `dsh-spill-*` roots too.
+    return mkdtempSync(join(tmpdir(), DEFAULT_ROOT_PREFIX))
+  }
+}
+
+/**
+ * Return the lazily-created private per-home spill root: `<home>/spill` at mode
+ * 0700. Keeping the default inside the home is what lets a deployment's
+ * protected home — the set confined commands can neither read nor write — cover
+ * spilled tool output, which the OS temp dir, granted to every confined command,
+ * shared across every home on the machine.
+ *
+ * @param home The Harness home that owns the root; defaults to `$DSH_HOME`.
+ * @returns The private root path, one per home for this process's lifetime.
+ */
+export function privateRoot(home: string = resolveDshHome()): string {
+  const cached = privateRoots.get(home)
+  if (cached !== undefined) return cached
+  const created = createPrivateRoot(home)
+  privateRoots.set(home, created)
+  return created
 }
 
 // Spill keeps its empty-name policy local so storage backends stay decoupled.

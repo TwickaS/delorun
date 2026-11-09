@@ -7,7 +7,8 @@
  */
 
 import { pathToFileURL } from 'node:url'
-import { readFileSync } from 'node:fs'
+import { lstatSync, readFileSync } from 'node:fs'
+import type { Stats } from 'node:fs'
 import { inspect, parseEnv } from 'node:util'
 import { captureStartupComposition, type StartupCompositionDiagnostic } from './startup-diagnostics.ts'
 export type { StartupCompositionDiagnostic, StartupPluginState, StartupServiceState } from './startup-diagnostics.ts'
@@ -181,21 +182,68 @@ function isBootstrapOnly(name: string): boolean {
   return BOOTSTRAP_NAMES.has(upper) || BOOTSTRAP_PREFIXES.some(prefix => upper.startsWith(prefix))
 }
 
+/** Permission bits outside the owner; a Harness-home `.env` must have none of them. */
+const GROUP_OTHER_BITS = 0o077
+
+/**
+ * The refusal for a Harness-home `.env` that is not the user's own owner-only
+ * regular file. Its values become process environment, so a link followed to
+ * another account's file, or a file other local users can read or rewrite,
+ * would let them choose what this process loads — the same rule
+ * `dsh-credentials-local` applies to `.credentials.yaml`. An entry that is not
+ * a regular file at all is left to the read, which already reports it.
+ * @param binName - the diagnostic prefix on the message.
+ * @param path - absolute path of the `.env` file.
+ * @param stats - the `lstat` of that path.
+ * @returns the refusal message, or `undefined` when the file is acceptable.
+ */
+function homeEnvRefusal(binName: string, path: string, stats: Stats): string | undefined {
+  if (stats.isSymbolicLink()) {
+    return `${binName}: ${path} is a symbolic link; a Harness-home .env must be a regular file`
+      + ' (replace it with one, mode 0600) so its values cannot come from another file'
+  }
+  if (!stats.isFile()) return undefined
+  /* v8 ignore next -- POSIX ownership and mode bits have no Windows equivalent; native Windows coverage takes this. */
+  if (process.platform === 'win32' || process.geteuid === undefined) return undefined
+  /* v8 ignore start -- Windows takes the return above; POSIX tests exercise the owner and mode refusals. */
+  if (stats.uid !== process.geteuid()) {
+    return `${binName}: ${path} is owned by another OS user (uid ${String(stats.uid)});`
+      + ' a Harness-home .env must be the user\'s own, owner-only file (mode 0600)'
+  }
+  const offending = stats.mode & GROUP_OTHER_BITS
+  if (offending === 0) return undefined
+  return `${binName}: ${path} is readable beyond its owner (mode ${(stats.mode & 0o777).toString(8)});`
+    + ` run "chmod 600 ${path}" before starting again`
+  /* v8 ignore stop */
+}
+
 /**
  * Parse one directory's `.env` without applying it, rejecting bootstrap-only
  * names before any value is materialized.
  * @param binName - the diagnostic prefix on the thrown error.
  * @param dir - the directory whose `.env` to read.
  * @param warn - sink for the one-line unreadable-file diagnostic.
- * @param home - the resolved Harness home; when `dir` is it, {@link HOME_LAYER_PROXY_NAMES} are accepted.
+ * @param home - the resolved Harness home; when `dir` is it, {@link HOME_LAYER_PROXY_NAMES} are accepted
+ *   and the file itself must be a regular, owner-only file owned by the current user.
  * @returns the parsed entries, or `undefined` when the file is absent or unreadable.
- * @throws when the file declares a name {@link isBootstrapOnly} rejects and this layer may not set.
+ * @throws when the file declares a name {@link isBootstrapOnly} rejects and this layer may not set, or when the
+ *   Harness-home file is a link, is owned by another user, or is readable by group or others.
  */
 function readEnvLayer(
   binName: string, dir: string, warn: (line: string) => void, home: string,
 ): { path: string; values: Record<string, string> } | undefined {
   const path = resolve(dir, '.env')
   const isHome = resolve(dir) === home
+  if (isHome) {
+    let refused: string | undefined
+    try {
+      refused = homeEnvRefusal(binName, path, lstatSync(path))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') throw error
+      // A missing home `.env` grants nothing; the layers below it still apply.
+    }
+    if (refused !== undefined) throw new Error(refused)
+  }
   let content: string
   try {
     content = readFileSync(path, 'utf8')
@@ -234,7 +282,8 @@ function readEnvLayer(
  * @param cwd - the invoking directory whose `.env` is the project layer.
  * @param warn - sink for the one-line misconfiguration diagnostics.
  * @returns this run's frozen environment snapshot.
- * @throws when either file declares a bootstrap-only variable, except {@link HOME_LAYER_PROXY_NAMES} in the Harness-home file.
+ * @throws when either file declares a bootstrap-only variable, except {@link HOME_LAYER_PROXY_NAMES} in the Harness-home file, or when the
+ *   Harness-home file is a link, another user's, or readable by group or others.
  */
 export function loadLayeredEnv(
   binName: string, cwd: string = process.cwd(),

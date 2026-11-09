@@ -732,14 +732,34 @@
       "reason": "Chinese counterpart of the boot README's doctor row."
     },
     {
+      "path": "packages/boot/app-boot/README.i18n.yaml",
+      "class": "security",
+      "reason": "Re-records the `/use-this-package/profiles` section hashes of both README sides after the `.env` refusal bullet changed in each, so the bilingual pairing gate reports the pair consistent."
+    },
+    {
+      "path": "packages/boot/app-boot/README.md",
+      "class": "security",
+      "reason": "Documents the Harness-home `.env` refusal beside the existing layer rules: the file must be the user's own owner-only regular file, and the bullet names the `chmod 600` fix."
+    },
+    {
+      "path": "packages/boot/app-boot/README.zh.md",
+      "class": "security",
+      "reason": "The Chinese counterpart of the Harness-home `.env` refusal bullet."
+    },
+    {
       "path": "packages/boot/app-boot/src/index.ts",
       "class": "delo-feature",
-      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delo axis from `./plugin-compatibility.ts`: `DELO_VERSION_ENV`, `evaluateDeloRequirement`, `getDeloRuntimeVersion` and the `DeloRequirement` type."
+      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delo axis from `./plugin-compatibility.ts`: `DELO_VERSION_ENV`, `evaluateDeloRequirement`, `getDeloRuntimeVersion` and the `DeloRequirement` type. F3: a Harness-home `.env` is read only when it is the user's own owner-only regular file. `readEnvLayer` lstats it first and refuses a symbolic link, a file owned by another OS user, or one carrying any group/other permission bit, with the same refusal and `chmod 600` remedy `dsh-credentials-local` gives `.credentials.yaml`, before a single value reaches `process.env`; POSIX-only, like the mode rule it mirrors."
     },
     {
       "path": "packages/boot/app-boot/src/plugin-compatibility.ts",
       "class": "delo-feature",
       "reason": "Contract C17's second version axis: `evaluateDeloRequirement` checks a plugin's `engines.delo` range against Delo's version, which `getDeloRuntimeVersion` reads from `DELO_VERSION`, the variable Delo's CLI exports (`delo/apps/cli/src/version.ts`) before any module runs. `evaluatePluginCompatibility` reports the Delo result beside the dsh requirements, so the install, the start preflight and the update report refuse or disable a plugin whose range this Delo does not satisfy, or whose declaration is not a string, and the warning names both versions. With `DELO_VERSION` unset, as on stock DSH, the Delo axis is not evaluated and every result is byte-identical to upstream's."
+    },
+    {
+      "path": "packages/boot/app-boot/tests/app-boot.spec.ts",
+      "class": "security",
+      "reason": "Proves the Harness-home `.env` refusals: a 0644 file, a symbolic link and a foreign owner each stop boot, a 0600 file loads, and every existing home-layer fixture writes its file at 0600."
     },
     {
       "path": "packages/boot/config-editor/README.i18n.yaml",
@@ -2252,6 +2272,16 @@
       "reason": "Admission seam (C4): proves that an additional listener's gate runs before every route, upgrade and the fallback, that refusals and `only` dispatch nothing else, that a pass's Peer and pinned headers reach the response, that `streams` listeners end TLS and expose SNI, that close and service disposal end every connection, and that the configured listener stays ungated. It also proves that refused upgrades reset at once raise no uncaught error, that a half-open refused client is destroyed and close settles, and that a concurrent open of one id fails. Covers the nonce on every inline element the index renderer emits. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges."
     },
     {
+      "path": "packages/identity/anonymous-user-id/src/index.ts",
+      "class": "security",
+      "reason": "F13: the anonymous user id is written at 0600 and the harness home this module creates at 0700, so an upstream-only run that never runs Delo's `ensureHomeTree` leaves neither readable by another local user."
+    },
+    {
+      "path": "packages/identity/anonymous-user-id/tests/anonymous-user-id.spec.ts",
+      "class": "security",
+      "reason": "Pins the id file's 0600 mode and the created home's 0700 mode with a 0022 umask."
+    },
+    {
       "path": "packages/interaction/permission-presets/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Per-workspace permission defaults: the consistency record re-recorded after the `unset(session)` sentence was added to README.md and its Chinese counterpart."
@@ -2650,6 +2680,36 @@
       "path": "packages/shell/tool-pwsh/tests/tools.spec.ts",
       "class": "delo-feature",
       "reason": "Container denial marker: covers the output schema declaring `deniedBy` only with the switch on, a foreground environment denial reaching the model through the pwsh tool with its marker and no escalation hint, a policy denial keeping both, and the environment marker on a job read."
+    },
+    {
+      "path": "packages/spill/spill-local/package.json",
+      "class": "security",
+      "reason": "Declares `@deepseek-ai/dsh-home-paths` (`privateRoot` resolves `$DSH_HOME`) and the test-only `@deepseek-ai/dsh-sandbox-local` the confinement spec wraps a command through."
+    },
+    {
+      "path": "packages/spill/spill-local/src/index.ts",
+      "class": "security",
+      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses."
+    },
+    {
+      "path": "packages/spill/spill-local/src/store.ts",
+      "class": "security",
+      "reason": "F2: the default spill root is the home's own `<home>/spill`, created 0700 from `$DSH_HOME`, instead of `mkdtemp` under the OS temp dir. The temp dir is granted to every confined command, so a spill written there was readable from inside any home's sandbox, and `discoverDefaultRoots` listed every home's roots. The temp root stays only for a home that cannot host the spill directory."
+    },
+    {
+      "path": "packages/spill/spill-local/tests/spill-local.spec.ts",
+      "class": "security",
+      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill."
+    },
+    {
+      "path": "packages/spill/spill-local/tests/spill-root-confinement.spec.ts",
+      "class": "security",
+      "reason": "A denial spec against a real runner: under the home-protected profile a confined command reads a workspace control file and cannot read the spilled tool output beside it."
+    },
+    {
+      "path": "packages/spill/spill-local/tsconfig.json",
+      "class": "security",
+      "reason": "The `home-paths` project reference for the new import."
     },
     {
       "path": "packages/test-support/client-runtime/tests/assembly-vitest.client.spec.ts",

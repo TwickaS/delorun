@@ -16,6 +16,9 @@
       "path": "../../../vendor/schemastery"
     },
     {
+      "path": "../../util/home-paths"
+    },
+    {
       "path": "../spill"
     }
   ]

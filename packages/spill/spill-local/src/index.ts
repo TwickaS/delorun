@@ -21,7 +21,7 @@ import { privateRoot, saveTextFile } from './store.ts'
 
 export { discoverDefaultRoots, sweepSpillRoots } from './cleanup.ts'
 export type { SweepOptions, SweepRoot, WarnFn } from './cleanup.ts'
-export { DEFAULT_ROOT_PREFIX, encodeSegment, isErrno, privateRoot, saveTextFile, sessionDir } from './store.ts'
+export { DEFAULT_ROOT_DIR_NAME, DEFAULT_ROOT_PREFIX, encodeSegment, isErrno, privateRoot, saveTextFile, sessionDir } from './store.ts'
 export type { SavedText, SaveTextOptions } from './store.ts'
 
 /** Milliseconds in one day — converts the `cleanupPeriodDays` config to the sweep cutoff. */
@@ -30,9 +30,14 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
 /** Plugin config (all optional — `static Config` supplies the defaults). */
 export interface Config {
   /**
-   * Root directory for spill files. Omitted uses a lazily-created private
-   * (0700) per-process directory under the OS temp dir — the safe default for
-   * a local deployment. Set it to keep spill files under a known location.
+   * Root directory for spill files. Omitted uses the lazily-created private
+   * (0700) `<home>/spill` directory of the resolved Harness home
+   * (`$DSH_HOME`, else `~/.dsh`) — the safe default for a local deployment,
+   * because a deployment's protected home already keeps confined commands from
+   * reading it. A home that cannot host it (a read-only home) falls back to a
+   * private (0700) `dsh-spill-*` directory under the OS temp dir, which is
+   * outside that protected set. Set it to keep spill files under a known
+   * location.
    */
   root?: string
   /**
@@ -136,7 +141,8 @@ export class LocalSpillStore extends SpillStore {
 
   /**
    * The directory scanned for prior default `dsh-spill-*` roots — the OS tmpdir,
-   * where {@link privateRoot} creates them (accumulation only happens there). A
+   * where {@link privateRoot} creates the fallback root of a home that cannot host
+   * `<home>/spill` (accumulation only happens there). A
    * test overrides this to point discovery at an isolated fixture instead of the
    * real tmpdir; it is a test seam, not a deployment knob.
    *

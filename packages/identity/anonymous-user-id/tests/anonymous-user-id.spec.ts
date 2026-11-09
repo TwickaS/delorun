@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -101,5 +101,20 @@ describe('getOrCreateAnonymousUserId', () => {
       if (previous === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = previous
     }
+  })
+
+  it.runIf(process.platform !== 'win32')('writes the id 0600 and creates the home 0700', () => {
+    // A fresh harness home, as an upstream-only run (one that never runs Delo's
+    // `ensureHomeTree`) leaves it: the id belongs to the owner, and the directory this
+    // module had to create must not be readable by another local user either.
+    const home = join(tempHome(), 'dsh-home')
+    const umask = process.umask(0o022)
+    try {
+      expect(getOrCreateAnonymousUserId({ env: { DSH_HOME: home } })).toMatch(UUID)
+    } finally {
+      process.umask(umask)
+    }
+    expect(statSync(home).mode & 0o777).toBe(0o700)
+    expect(statSync(join(home, ANONYMOUS_USER_ID_FILE_NAME)).mode & 0o777).toBe(0o600)
   })
 })

@@ -13,6 +13,10 @@
  * touches the disk once, and a file deleted mid-run keeps the process's id
  * until the next launch.
  *
+ * The file is written at mode 0600 and the harness home at 0700 when this
+ * module is the first writer to create it, so an upstream-only run (which does
+ * not otherwise tighten the home) leaves neither readable by another local user.
+ *
  * @module @deepseek-ai/dsh-anonymous-user-id
  */
 
@@ -27,6 +31,19 @@ export type AnonymousUserId = Branded<'AnonymousUserId'>
 
 /** File inside the harness home storing the id: a bare UUID line, no wrapper format. */
 export const ANONYMOUS_USER_ID_FILE_NAME = '.anonymous-user-id'
+
+/**
+ * Mode of the harness home this module creates when it is the first writer to touch it. The home holds the
+ * credentials document and the session log, so any other local user's access to it is refused by creating it
+ * owner-only rather than at the umask's default.
+ */
+const HOME_MODE = 0o700
+
+/**
+ * Mode of the id file. It is the identity every telemetry and feedback export carries, so it is the owner's
+ * alone even when the umask asks for more, as `.credentials.yaml` is.
+ */
+const ID_FILE_MODE = 0o600
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -75,8 +92,8 @@ export function getOrCreateAnonymousUserId(options: AnonymousUserIdOptions = {})
     const generate = options.randomUUID ?? randomUUID
     const created = generate() as AnonymousUserId
     try {
-      mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(file, `${created}\n`, { encoding: 'utf8', flag: 'wx' })
+      mkdirSync(dirname(file), { recursive: true, mode: HOME_MODE })
+      writeFileSync(file, `${created}\n`, { encoding: 'utf8', flag: 'wx', mode: ID_FILE_MODE })
       id = created
     } catch {
       // A wx refusal (EEXIST) covers both a concurrent winner and a
@@ -86,7 +103,7 @@ export function getOrCreateAnonymousUserId(options: AnonymousUserIdOptions = {})
       id = readPersistedId(file)
       if (id === undefined) {
         try {
-          writeFileSync(file, `${created}\n`, 'utf8')
+          writeFileSync(file, `${created}\n`, { encoding: 'utf8', mode: ID_FILE_MODE })
         } catch {
           // Best-effort persistence: keep the fresh id in memory even when the
           // home is unwritable, so this run still reports a consistent id.
