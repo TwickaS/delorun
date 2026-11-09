@@ -241,6 +241,15 @@ class SocketTunnel implements TunnelSocket {
       this.socket.off('close', listener)
     }
   }
+
+  onPong(listener: () => void): () => void {
+    // The home's answer to the relay's ping is something received: without this listener an idle
+    // but healthy tunnel would close on C6's 45-second silence limit.
+    this.socket.on('pong', listener)
+    return () => {
+      this.socket.off('pong', listener)
+    }
+  }
 }
 
 /** The WebSocket subprotocol the upgrade asked for, when it asked for C6's. */

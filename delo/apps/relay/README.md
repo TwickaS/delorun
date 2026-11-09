@@ -72,7 +72,7 @@ The handshake completes within 10 seconds or the relay closes with 4408.
 
 | Close code | Code | When |
 | --- | --- | --- |
-| 4400 | `PROTOCOL_ERROR` | A malformed or unexpected frame or message, a frame for a stream the tunnel never opened, or 45 seconds without a message. |
+| 4400 | `PROTOCOL_ERROR` | A malformed or unexpected frame or message, a frame for a stream the tunnel never opened, or 45 seconds without receiving anything, a WebSocket pong included. |
 | 4401 | `PROOF_INVALID` | The proof does not verify with the bound key. |
 | 4408 | `HANDSHAKE_TIMEOUT` | The handshake did not complete within 10 seconds. |
 | 4409 | `TUNNEL_ALREADY_LIVE` | A second handshake for a live name. |
@@ -142,10 +142,10 @@ The app also registers a driver for C20's cross-surface denial suite (`delo/pack
 | `token.spec.ts` | The request signature, the clock skew, the binding, the expiry, the restart rule, single use, the canonical claims a token signs. |
 | `frames.spec.ts` | Every round trip, each payload limit, the stream and header rules, and a deterministic corpus of malformed messages that answers refusals only. |
 | `client-hello.spec.ts` | The SNI in one chunk and in pieces, a hello without it, the record and size limits, a split hello, a name that is not a host name. |
-| `handshake.spec.ts` | `ready`, the pre-upgrade refusals, a proof by another key, the 10-second limit, a second valid-key tunnel refused and announced, a token for one name that opens none for another, frames before `ready`. |
+| `handshake.spec.ts` | `ready`, the pre-upgrade refusals including a token whose signature is forged or another token key's, a proof by another key, the 10-second limit, a second valid-key tunnel refused and announced, a token for one name that opens none for another, frames before `ready`. |
 | `routing.spec.ts` | One home per name, no prefix match, a frame resolved in its own home's map, an `OPEN` a home may not send, the peer facts, the 64-stream limit. |
 | `stream.spec.ts` | Opaque bytes in both directions, the DATA limit, the credit rule in both directions, the 1 MiB held-bytes cap, the browser's backpressure. |
-| `teardown.spec.ts` | A home's disconnect ends every browser connection it owns at once, the name accepts the next handshake, another name is untouched, the stall limit, the relay's own shutdown. |
+| `teardown.spec.ts` | A home's disconnect ends every browser connection it owns at once, the name accepts the next handshake, another name is untouched, the stall limit, which a WebSocket pong from the home resets, the relay's own shutdown. |
 | `logging.spec.ts` | C20's fields, the token registered as a secret, a refusal recorded with its code and no token. |
 | `node/end-to-end.spec.ts` | Over loopback: a browser's handshake completes only with the home's certificate, the bytes round-trip, the home receives the browser socket's own address and port, the log holds no plaintext, and the token endpoint answers C6's statuses. |
 

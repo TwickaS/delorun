@@ -3531,7 +3531,7 @@
       "path": "pnpm-lock.yaml",
       "class": "delo-feature",
       "reason": "Lockfile importers for Delo's workspace packages; regenerate with pnpm install on an upstream merge, never hand-merge. Includes `@delo/cli`'s dependency on `@deepseek-ai/dsh-sandbox-local` for setup's dialect report. Includes the tool-fs-search sandbox dependencies.",
-      "sha256": "6c54d82d703c291ccae6d82190aee3d39b9fff336c20e3b55b6cd66ea9369541"
+      "sha256": "eaee19e39e8eb174534a421db4b56515ab52a5d2f66264a86f9a03f95031c036"
     },
     {
       "path": "pnpm-workspace.yaml",

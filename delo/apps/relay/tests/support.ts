@@ -110,6 +110,7 @@ export class FakeTunnelSocket implements TunnelSocket {
   private readonly textListeners = new Set<(text: string) => void>()
   private readonly binaryListeners = new Set<(bytes: Uint8Array) => void>()
   private readonly closeListeners = new Set<() => void>()
+  private readonly pongListeners = new Set<() => void>()
 
   sendText(text: string): void {
     if (!this.closed) this.texts.push(text)
@@ -152,6 +153,13 @@ export class FakeTunnelSocket implements TunnelSocket {
     }
   }
 
+  onPong(listener: () => void): () => void {
+    this.pongListeners.add(listener)
+    return () => {
+      this.pongListeners.delete(listener)
+    }
+  }
+
   /**
    * Deliver a text message from the home.
    * @param text - the message.
@@ -166,6 +174,11 @@ export class FakeTunnelSocket implements TunnelSocket {
    */
   deliverBinary(bytes: Uint8Array): void {
     for (const listener of this.binaryListeners) listener(bytes)
+  }
+
+  /** Deliver a WebSocket pong, as the home's WebSocket answers the relay's ping. */
+  deliverPong(): void {
+    for (const listener of this.pongListeners) listener()
   }
 
   /** Deliver the home's close, as its socket would. */

@@ -121,7 +121,10 @@ export class Tunnel {
     return this.streams.size
   }
 
-  /** Begin the handshake: listen, send the challenge and arm C6's 10-second limit. */
+  /**
+   * Begin the handshake: listen for the home's text, binary and pong messages, send the challenge
+   * and arm C6's 10-second limit.
+   */
   start(): void {
     if (this.phase !== 'challenge') return
     this.stop.push(this.options.socket.onText(text => {
@@ -133,6 +136,10 @@ export class Tunnel {
     this.stop.push(this.options.socket.onClose(() => {
       this.dispose(undefined)
     }))
+    const stopPong = this.options.socket.onPong?.(() => {
+      this.lastReceivedAt = this.options.now()
+    })
+    if (stopPong !== undefined) this.stop.push(stopPong)
     this.nonce = randomBase64Url(RELAY_LIMITS.challengeNonceBytes)
     this.options.socket.sendText(JSON.stringify({ type: 'challenge', relayId: this.options.relayId, nonce: this.nonce }))
     this.handshakeTimer = this.options.timers.after(RELAY_LIMITS.handshakeTimeoutMs, () => {

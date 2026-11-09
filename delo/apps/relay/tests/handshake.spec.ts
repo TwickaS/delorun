@@ -4,12 +4,13 @@
  * gives it, and each is paired with the attempt that succeeds, so removing the check turns its
  * spec red: drop the live check and `a second valid-key tunnel for a live name is refused and
  * announced` opens a second live tunnel; drop the proof comparison and a proof by another key is
- * accepted.
+ * accepted; drop the token's signature check and the token whose signature is all `A`s, or the one
+ * another token key signed, is accepted with 200 instead of refused with 401.
  */
 import { RELAY_LIMITS, TUNNEL_PROOF_LABEL, type RelayId } from '@delo/contract-relay-protocol'
 import type { KeyObject } from 'node:crypto'
 import { afterEach, describe, expect, it } from 'vitest'
-import { concatBytes, generateEd25519, signBytes, toBase64Url, utf8 } from '../src/keys.ts'
+import { concatBytes, fromBase64Url, generateEd25519, signBytes, toBase64Url, utf8 } from '../src/keys.ts'
 import { TunnelTokens } from '../src/token.ts'
 import { connectHome, issueToken, makeRelay, tokenRequestBody, type RelayFixture } from './support.ts'
 
@@ -88,6 +89,35 @@ describe('the upgrade refusal', () => {
     expect(replay.accepted).toBe(false)
     expect(replay.status).toBe(401)
     expect(replay.code).toBe('TUNNEL_TOKEN_REPLAYED')
+  })
+
+  it('refuses a token whose signature is all As with 401 before any upgrade', () => {
+    const fixture = relay()
+    const [claims = ''] = issueToken(fixture, 'studio.example.test').split('.')
+    // 86 base64url characters decode to the 64 bytes a token signature must hold, so this token
+    // reaches the signature check and is refused there rather than by the decoder.
+    const signature = 'A'.repeat(86)
+    expect(fromBase64Url(signature, 64)).toHaveLength(64)
+    const home = connectHome(fixture, { name: 'studio.example.test', token: `${claims}.${signature}` })
+    expect(home.accepted).toBe(false)
+    expect(home.status).toBe(401)
+    expect(home.code).toBe('TUNNEL_TOKEN_INVALID')
+    expect(home.socket.texts).toEqual([])
+    expect(fixture.core.isLive('studio.example.test')).toBe(false)
+  })
+
+  it('refuses a token signed by another token key with 401 before any upgrade', () => {
+    const fixture = relay()
+    const homeKey = fixture.homes.get('studio.example.test')
+    if (homeKey === undefined) throw new Error('the fixture binds no home key')
+    const stranger = new TunnelTokens({ tokenKey: generateEd25519(), relayId: fixture.settings.relayId, bindings: fixture.settings.bindings, now: fixture.now, startedAt: 0 })
+    const foreign = stranger.issue(tokenRequestBody(homeKey, 'studio.example.test', fixture.now())).token
+    const home = connectHome(fixture, { name: 'studio.example.test', token: foreign })
+    expect(home.accepted).toBe(false)
+    expect(home.status).toBe(401)
+    expect(home.code).toBe('TUNNEL_TOKEN_INVALID')
+    expect(home.socket.texts).toEqual([])
+    expect(fixture.core.isLive('studio.example.test')).toBe(false)
   })
 })
 

@@ -87,6 +87,13 @@ export interface TunnelSocket {
   onClose(listener: () => void): () => void
   /** Send a WebSocket ping, when the transport supports one. */
   ping?(): void
+  /**
+   * Register the listener for a WebSocket pong, when the transport reports one. A pong counts as
+   * something received, so a tunnel whose home answers every ping stays out of C6's silence limit.
+   * @param listener - the listener.
+   * @returns the unsubscribe.
+   */
+  onPong?(listener: () => void): () => void
 }
 
 /** The timer seam the handshake limit, the ping interval and the stall limit run on. */

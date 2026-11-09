@@ -2,10 +2,11 @@
  * Teardown: a home that disconnects ends every association it owns at once, the name stays
  * without a tunnel until a new handshake, and the relay's shutdown ends them all. A teardown
  * that only marked the tunnel dead would leave the browsers' connections open, which the first
- * spec asserts against.
+ * spec asserts against. The silence limit counts a WebSocket pong as received, so an idle tunnel
+ * whose home answers every ping stays live while one that receives nothing closes at 45 seconds.
  */
 import { afterEach, describe, expect, it } from 'vitest'
-import { STREAM_CLOSE_REASONS } from '@delo/contract-relay-protocol'
+import { RELAY_LIMITS, STREAM_CLOSE_REASONS } from '@delo/contract-relay-protocol'
 import { encodeClose, encodeControl, encodeData } from '../src/frames.ts'
 import { peerAssertion } from '../src/peer.ts'
 import { clientHello, connectHome, FakeBrowser, makeRelay, type RelayFixture } from './support.ts'
@@ -101,6 +102,21 @@ describe('a home disconnecting', () => {
     }
     expect(fixture.core.isLive(STUDIO)).toBe(true)
     expect(home.socket.pings).toBe(3)
+  })
+
+  it('keeps an idle tunnel live whose home answers every ping with a WebSocket pong', () => {
+    const fixture = relay()
+    const home = connectHome(fixture, { name: STUDIO })
+    // A pong is something received (C6, "Frames and flow control"), so the home's WebSocket
+    // answering every ping keeps an idle but healthy tunnel past C6's 45-second silence limit:
+    // without the pong listener the tunnel closes at 45 seconds, as the spec above asserts.
+    for (let index = 0; index < 4; index += 1) {
+      fixture.timers.advance(RELAY_LIMITS.pingIntervalMs)
+      expect(home.socket.closeCode).toBeUndefined()
+      home.socket.deliverPong()
+    }
+    expect(home.socket.pings).toBe(4)
+    expect(fixture.core.isLive(STUDIO)).toBe(true)
   })
 })
 
