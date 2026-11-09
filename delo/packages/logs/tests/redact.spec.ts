@@ -179,3 +179,63 @@ describe('step 4: errors', () => {
     expect(redactor.error(undefined)).toEqual({ name: 'NonError', message: 'null' })
   })
 })
+
+// A model prints what it prints: one 10 MiB record or a 65 KiB line is a capture, not an attack on the redactor, and
+// every record passes it before it is written. A step-3 pattern whose work grows with the square of the line's length
+// — an unbounded `*` before an alternation over the same characters, or a scan to the end of a run for every position
+// that starts a match — turns such a record into a denial of service: the shapes below took 490 s, 410 s and 13 s.
+// The bounds are generous on purpose, so a loaded host passes and a regression fails.
+describe('performance: step 3 stays linear in the length of the text', { timeout: 60_000 }, () => {
+  /** The elapsed milliseconds of a redaction. */
+  function elapsed(text: string): { readonly elapsed: number; readonly redacted: string } {
+    const started = performance.now()
+    const redacted = new Redactor().text(text)
+    return { elapsed: performance.now() - started, redacted }
+  }
+
+  it('redacts 1 MiB of path-like text in under 250 ms', () => {
+    const text = `${'/a/b/c'.repeat(Math.ceil((1024 * 1024) / 6))} /home/runner/.ssh/id_rsa`
+    const { elapsed: ms, redacted } = elapsed(text)
+    // The text is still redacted, not merely fast: the path at its end is a credential file.
+    expect(redacted.endsWith('[redacted:credential-file-path]')).toBe(true)
+    expect(ms).toBeLessThan(250)
+  })
+
+  it('redacts 10 MiB of /word/word lines in under 2 s', () => {
+    const line = '/word'.repeat(10)
+    const text = Array.from({ length: Math.ceil((10 * 1024 * 1024) / `${line}\n`.length) }, () => `${line}\n`).join('')
+    const { elapsed: ms, redacted } = elapsed(text)
+    // No form is listed in it, so nothing changes but the redactor's own time.
+    expect(redacted.length).toBe(text.length)
+    expect(ms).toBeLessThan(2_000)
+  })
+
+  it('redacts a 65,536-byte single line in under 50 ms', () => {
+    // The writer's longest record and the capture's line limit, in the one-letter run `writer.spec.ts` writes.
+    const text = 'r'.repeat(65_536)
+    const { elapsed: ms, redacted } = elapsed(text)
+    expect(redacted).toBe(text)
+    expect(ms).toBeLessThan(50)
+  })
+
+  it('redacts a 65,536-byte line whose every third position starts a match in under 50 ms', () => {
+    // `ab-` puts a word start every three characters, so the scheme, path and name patterns all start a match over and
+    // over in one line: the shape that made an unbounded `[a-z][a-z0-9+.-]*` before `://` re-read the rest of the line
+    // at each start. It is 65 KiB here and not 10 MiB because the pattern's cost per start is what this guards.
+    const text = 'ab-'.repeat(Math.ceil(65_536 / 3)).slice(0, 65_536)
+    const { elapsed: ms, redacted } = elapsed(text)
+    expect(redacted).toBe(text)
+    expect(ms).toBeLessThan(50)
+  })
+
+  it('redacts a 65,536-byte line of long names in under 50 ms', () => {
+    // A query parameter's name and an environment variable's name are each read around the word that marks them, so a
+    // run that gives the word a match at every position — `?keykeykey…`, `KEYKEYKEY…` — is the shape that made an
+    // unbounded `[^=&;#\s]*` or `[A-Za-z0-9_]*` on each side re-read the rest of the run at every position.
+    const text = `?${'key'.repeat(10_922)}${'KEY'.repeat(10_922)}`
+    const { elapsed: ms, redacted } = elapsed(text)
+    // Neither run is followed by `=`, so neither is a pair a pattern lists.
+    expect(redacted).toBe(text)
+    expect(ms).toBeLessThan(50)
+  })
+})

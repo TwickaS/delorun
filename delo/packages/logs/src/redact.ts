@@ -59,6 +59,26 @@ interface Pattern {
 const NOT_A_MARKER = String.raw`(?!["']?\[redacted)`
 
 /**
+ * How long a run of path characters a pattern reads, and how long a name may be on either side of the word that marks
+ * it. A filesystem path, an environment variable name and a query parameter name are all far shorter than these. Each
+ * bound is what keeps a pattern's work per position of the text fixed: a record holding a megabyte of `/word/word` or
+ * 64 KiB of one letter — a model can print either — costs time linear in its length, not quadratic in it. An unbounded
+ * `*` before an alternation over the same characters backtracks once per character for every position that starts a
+ * match, which is the shape that made a 10 MiB record take minutes.
+ */
+const PATH_MAX_CHARS = 256
+const NAME_MAX_CHARS = 64
+
+/** How long a URL a webhook pattern reads; a real endpoint is shorter, and the bound keeps the scan linear. */
+const URL_MAX_CHARS = 4096
+
+/** A URL scheme as a URL's text begins: a letter, then up to 31 scheme characters, then `://`. */
+const URL_START = String.raw`\b[a-z][a-z0-9+.-]{0,31}:\/\/`
+
+/** What precedes a path in text: the start of the text, or a space, a quote, a backtick, `=` or `(`. */
+const PATH_LEAD = String.raw`(^|[\s"'\u0060=(])`
+
+/**
  * Whether a base32 run is an owner code rather than ordinary prose. The contract's code is 26 base32 characters,
  * which a person may paste in either case and in groups. A run of letters only in lower case is a word — English
  * prose reaches 26 letters without much trouble — whereas a code carries a digit with probability
@@ -77,6 +97,50 @@ function isOwnerCode(match: string): boolean {
     return even && /[2-7]/.test(match)
   }
   return /[2-7]/.test(match) || /[A-Z]/.test(match)
+}
+
+/**
+ * The last segment of a path, which is where a credential file's own name is.
+ * @param path - a path token.
+ * @returns the text after its last separator.
+ */
+function lastSegment(path: string): string {
+  return path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1)
+}
+
+/** A credential file named in one segment, where a login looks for it; a copy or a public half is the same file. */
+const CREDENTIAL_FILE_NAME = /(?:\.netrc|\.npmrc|\.pgpass|\.git-credentials|application_default_credentials\.json|id_(?:rsa|dsa|ecdsa|ed25519))[^/\\]*$/i
+/** The credential files whose name is two segments: `.aws/credentials` and `.docker/config.json`. */
+const CREDENTIAL_FILE_PAIR = /(?:\.aws[/\\]credentials|\.docker[/\\]config\.json)[^/\\]*$/i
+/** A service-account key file: the last segment carries `service[-_]?account` and ends in `.json`. */
+const SERVICE_ACCOUNT_FILE = /service[_-]?account[^/\\]*\.json/i
+
+/**
+ * Whether a bounded path token names a file that holds credentials. The token is decided as a whole rather than by a
+ * pattern that scans back over it: a pattern needs an unbounded `[^/\\\s"']*` before `service` to find the name in its
+ * last segment, and that scan repeats for every position of the token, which is the quadratic shape this file avoids.
+ * A path followed by a sentence's full stop is still a path, so the caller strips the stop before asking.
+ * @param path - a run of path characters.
+ * @returns whether it names a credential file.
+ */
+function isCredentialPath(path: string): boolean {
+  return CREDENTIAL_FILE_PAIR.test(path) || CREDENTIAL_FILE_NAME.test(path) || SERVICE_ACCOUNT_FILE.test(lastSegment(path))
+}
+
+/** A webhook host, as Slack and its kin name one. */
+const WEBHOOK_HOST = new RegExp(String.raw`^${URL_START}hooks\.`, 'i')
+/** A webhook path: `/webhook`, `/webhooks`, `.webhook` or `.webhooks` between separators. */
+const WEBHOOK_PATH = /[/.]webhooks?[/.]/i
+
+/**
+ * Whether a URL carries a secret of its own: a `hooks.` host, or a `/webhook(s)` path that authorises the post.
+ * Deciding this from the whole URL token keeps the scan linear — a pattern with an unanchored `[^\s"'<>]*` before
+ * `[/.]webhooks?[/.]` re-reads the rest of a whitespace-free run for every `://` in it.
+ * @param url - a bounded URL token.
+ * @returns whether it is a webhook endpoint.
+ */
+function isWebhookUrl(url: string): boolean {
+  return WEBHOOK_HOST.test(url) || WEBHOOK_PATH.test(url)
 }
 
 /** The step-3 forms, in the order they apply. Each regex is global, so `String.replace` replaces every match. */
@@ -106,25 +170,36 @@ const PATTERNS: readonly Pattern[] = [
     regex: new RegExp(String.raw`\b(Bearer|bearer|Basic)(\s+)${NOT_A_MARKER}[A-Za-z0-9._~+/-]{8,}=*`, 'g'),
     replace: (_match, scheme = '', space = '') => `${scheme}${space}${redactionMarker(scheme === 'Basic' ? 'basic' : 'bearer')}`,
   },
-  // The user information of a URL.
+  // The user information of a URL. The scheme is bounded, so a line of `a-b-a-b` — every `a` a word start — cannot
+  // make the scan quadratic.
   {
-    regex: /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi,
+    regex: new RegExp(String.raw`(${URL_START})[^\s/?#@]+@`, 'gi'),
     replace: (_match, scheme = '') => `${scheme}${redactionMarker('url-userinfo')}@`,
   },
-  // A URL query parameter whose name contains token, key, secret, password, code or sig.
+  // A URL query parameter whose name contains token, key, secret, password, code or sig. The name is bounded on each
+  // side of the marking word: two unbounded `[^=&;#\s]*` around it re-read the rest of a long name once per position.
   {
-    regex: new RegExp(String.raw`([?&;])([^=&;#\s]*(?:token|key|secret|password|code|sig)[^=&;#\s]*)=${NOT_A_MARKER}[^&;#\s"'<>]+`, 'gi'),
+    regex: new RegExp(String.raw`([?&;])([^=&;#\s]{0,${NAME_MAX_CHARS}}?(?:token|key|secret|password|code|sig)[^=&;#\s]{0,${NAME_MAX_CHARS}})=${NOT_A_MARKER}[^&;#\s"'<>]+`, 'gi'),
     replace: (_match, separator = '', name = '') => `${separator}${name}=${redactionMarker('url-parameter')}`,
   },
   // A webhook endpoint — a `hooks.` host or a `/webhook(s)` path — whose path is the secret that authorises the post.
+  // The URL is read as one bounded token and decided as a whole, which keeps the scan linear: an unanchored
+  // `[^\s"'<>]*` before `[/.]webhooks?[/.]` re-reads the rest of a whitespace-free run for every `://` in it.
   {
-    regex: /\b[a-z][a-z0-9+.-]*:\/\/(?:hooks\.[^\s"'<>]+|[^\s"'<>]*[/.]webhooks?[/.][^\s"'<>]*)/gi,
-    replace: () => redactionMarker('webhook-url'),
+    regex: new RegExp(String.raw`${URL_START}[^\s"'<>]{1,${URL_MAX_CHARS}}`, 'gi'),
+    replace: match => isWebhookUrl(match) ? redactionMarker('webhook-url') : match,
   },
-  // The path of a file that holds credentials, whatever precedes it.
+  // The path of a file that holds credentials, whatever precedes it. The path is read as one bounded token and
+  // decided as a whole, because no literal anchors the last form — `service[-_]?account…json` is a name, not a lead —
+  // and a pattern that reached it with `[^/\\\s"']*service` backtracked once per character for every path start.
   {
-    regex: /(^|[\s"'`=(])[~A-Za-z0-9._/\\-]*(?:\.aws[/\\]credentials|\.netrc|\.npmrc|\.pgpass|\.git-credentials|\.docker[/\\]config\.json|application_default_credentials\.json|id_(?:rsa|dsa|ecdsa|ed25519)|[^/\\\s"']*service[_-]?account[^/\\\s"']*\.json)/gi,
-    replace: (_match, lead = '') => `${lead}${redactionMarker('credential-file-path')}`,
+    regex: new RegExp(String.raw`${PATH_LEAD}([~A-Za-z0-9._/\\-]{1,${PATH_MAX_CHARS}})`, 'gi'),
+    replace: (match, lead = '', path = '') => {
+      // A path a sentence ends after keeps its full stop: the token is greedy, so the stop belongs to the sentence.
+      const stop = /\.+$/.exec(path)?.[0] ?? ''
+      const token = path.slice(0, path.length - stop.length)
+      return isCredentialPath(token) ? `${lead}${redactionMarker('credential-file-path')}${stop}` : match
+    },
   },
   { regex: /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}/g, replace: () => redactionMarker('provider-key') },
   { regex: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g, replace: () => redactionMarker('github-token') },
@@ -137,9 +212,11 @@ const PATTERNS: readonly Pattern[] = [
     regex: /(?<![A-Za-z0-9])[A-Za-z2-7](?:[- ]?[A-Za-z2-7]){25}(?![A-Za-z0-9])/g,
     replace: match => isOwnerCode(match) ? redactionMarker('owner-code') : match,
   },
-  // A NAME=value pair whose name contains KEY, TOKEN, SECRET, PASSWORD or COOKIE.
+  // A NAME=value pair whose name contains KEY, TOKEN, SECRET, PASSWORD or COOKIE. The name is bounded on each side of
+  // the marking word: `[A-Za-z0-9_]*KEY[A-Za-z0-9_]*` re-reads the rest of a long name once per position, so a line of
+  // `KEYKEYKEY…` cost its own length squared.
   {
-    regex: new RegExp(String.raw`\b([A-Za-z_][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Za-z0-9_]*)=${NOT_A_MARKER}("[^"\r\n]*"|'[^'\r\n]*'|[^\s"'&;]+)`, 'gi'),
+    regex: new RegExp(String.raw`\b([A-Za-z_][A-Za-z0-9_]{0,${NAME_MAX_CHARS}}?(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Za-z0-9_]{0,${NAME_MAX_CHARS}})=${NOT_A_MARKER}("[^"\r\n]*"|'[^'\r\n]*'|[^\s"'&;]+)`, 'gi'),
     replace: (_match, name = '') => `${name}=${redactionMarker('env-secret')}`,
   },
 ]
