@@ -187,7 +187,11 @@ export const DOWNLOAD_CONNECT_TIMEOUT_MS = 30_000
 /** Time a download may deliver no byte before it fails, in milliseconds. */
 export const DOWNLOAD_STALL_TIMEOUT_MS = 60_000
 
-/** The only hosts a release-file download may reach, redirects included; the release-log check reaches the hosts C18 names. */
+/**
+ * The only hosts a release-file download may reach, redirects included. This list covers release files and nothing
+ * else: the release-log check of contract C18 reads under a host list of its own, which names the log's origin and the
+ * witness network's distributor, so neither list has to name the other's hosts.
+ */
 export const RELEASE_DOWNLOAD_HOSTS = ['releases.delorun.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'] as const
 
 /** A Delo release version naming one directory of the runtime store. */

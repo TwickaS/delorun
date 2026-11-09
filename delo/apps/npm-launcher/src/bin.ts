@@ -17,7 +17,7 @@ import { parseRuntimeVersion, RuntimeStore, type LaunchCommand } from '@delo/run
 import { runLauncher, launcherProfile, type LauncherOutput } from './launcher.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
 import { readEmbeddedRoots } from './root.ts'
-import { platformOf, RELEASE_LOG_TILES_ORIGIN } from './platform.ts'
+import { platformOf, RELEASE_LOG_HOSTS, RELEASE_LOG_TILES_ORIGIN } from './platform.ts'
 
 /** The launcher's own flag for the CLI profile, which it also passes to the runtime. */
 export const PROFILE_FLAG = '--profile'
@@ -205,7 +205,9 @@ export async function main(argv: readonly string[], context: { readonly env: Nod
         platform,
         roots,
         channel: 'stable',
-        log: createTilesLogService({ origin: RELEASE_LOG_TILES_ORIGIN, downloader }),
+        // The log reads under its own host list, the log's origin and the distributor's: the downloader below keeps
+        // contract C1's release-file rule, and neither list has to name the other's hosts.
+        log: createTilesLogService({ origin: RELEASE_LOG_TILES_ORIGIN, hosts: RELEASE_LOG_HOSTS, downloader }),
         downloader,
       }),
       roots,

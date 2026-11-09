@@ -187,28 +187,49 @@ export function requireVerifiedLog(result: OnlineCheckResult, source: string): v
 
 /** What a tlog-tiles log service needs. */
 export interface TilesLogOptions {
-  /** The log shard's tlog-tiles origin, without a trailing slash. */
+  /** The log shard's tlog-tiles origin, without a trailing slash; its host must be one of {@link TilesLogOptions.hosts}. */
   readonly origin: string
-  /** The downloader, which applies contract C1's host rule to the log's answers too. */
+  /**
+   * The hosts the release-log check reaches: the log's own origin and the witness network's checkpoint distributor.
+   * This list is the log's own; contract C1's release-file hosts are a separate rule and are never widened by it.
+   */
+  readonly hosts: readonly string[]
+  /**
+   * The downloader whose fetch, timings and size limit the log reads through. Its host rule is replaced by
+   * {@link TilesLogOptions.hosts}, so the log's answers never travel under the release-file rule and the release files
+   * never travel under the log's.
+   */
   readonly downloader: Downloader
+  /** Redirects followed before a log answer is refused; {@link LOG_MAX_REDIRECTS} by default. */
+  readonly maxRedirects?: number
 }
+
+/** Redirects a log answer may follow: the log and its distributor answer directly, so a hop is the exception. */
+export const LOG_MAX_REDIRECTS = 2
 
 /**
  * A {@link LogService} over a log shard's C2SP `tlog-tiles` static API: `GET <origin>/checkpoint` for the signed
  * checkpoint and `GET <origin>/proof/consistency?first=<a>&second=<b>` for the proof, whose body is the older size as
- * eight big-endian bytes followed by the hashes, or the hashes alone.
- * @param options - the shard's origin and the downloader.
+ * eight big-endian bytes followed by the hashes, or the hashes alone. The service reads under its own host rule, which
+ * names the log and the distributor, so the release-file rule never has to name another service's host.
+ * @param options - the shard's origin, the hosts the check reaches, and the downloader.
  * @returns the service.
+ * @throws {InstallError} `DOWNLOAD_REFUSED` when the origin is not one of the log's own hosts.
  */
 export function createTilesLogService(options: TilesLogOptions): LogService {
+  const shard = new URL(options.origin)
+  if (!options.hosts.includes(shard.hostname)) {
+    throw new InstallError('DOWNLOAD_REFUSED', options.origin, `the log's origin is not one of the log hosts ${options.hosts.join(', ')}`)
+  }
+  const downloader = options.downloader.withHosts({ scheme: shard.protocol, hosts: options.hosts, maxRedirects: options.maxRedirects ?? LOG_MAX_REDIRECTS })
   const parts = (first: number, second: number): string => `proof/consistency?first=${String(first)}&second=${String(second)}`
   return {
     async checkpoint(): Promise<string> {
-      const { bytes } = await options.downloader.bytes(`${options.origin}/checkpoint`, CHECKPOINT_MAX_BYTES)
+      const { bytes } = await downloader.bytes(`${options.origin}/checkpoint`, CHECKPOINT_MAX_BYTES)
       return bytes.toString('utf8')
     },
     async consistency(first: number, second: number): Promise<readonly Uint8Array[]> {
-      const { bytes } = await options.downloader.bytes(`${options.origin}/${parts(first, second)}`, CHECKPOINT_MAX_BYTES)
+      const { bytes } = await downloader.bytes(`${options.origin}/${parts(first, second)}`, CHECKPOINT_MAX_BYTES)
       const offset = bytes.byteLength % HASH_SIZE === 8 && bytes.readBigUInt64BE(0) === BigInt(first) ? 8 : 0
       if ((bytes.byteLength - offset) % HASH_SIZE !== 0) {
         throw new InstallError('DOWNLOAD_FAILED', options.origin, `the consistency proof has ${String(bytes.byteLength)} bytes, which is not a list of ${String(HASH_SIZE)}-byte hashes`)

@@ -44,7 +44,7 @@ description: "Delo 的安装路径：启动器通过 HTTPS 获取的发布文件
 
 ## 发布日志
 
-`runOnlineCheck` 是约定 C18 针对当前日志的检查。它读取日志的最新检查点，要求有日志自身的签名，以及根所列见证者中达到阈值的联署，且联署时间不超过 24 小时。随后它证明一致性：从已校验 bundle 携带的检查点（或本 home 存储的更新的检查点）到最新检查点，并存储最新检查点。日志不可达会把该发布记为 `unchecked`，可验证的失败记为 `failed`；`requireVerifiedLog` 在这两种状态下都拒绝安装，因此无法对照日志检查的发布永远不会被安装。`createTilesLogService` 通过同一个下载器读取 tlog-tiles 分片，因此主机规则同样约束日志的应答。
+`runOnlineCheck` 是约定 C18 针对当前日志的检查。它读取日志的最新检查点，要求有日志自身的签名，以及根所列见证者中达到阈值的联署，且联署时间不超过 24 小时。随后它证明一致性：从已校验 bundle 携带的检查点（或本 home 存储的更新的检查点）到最新检查点，并存储最新检查点。日志不可达会把该发布记为 `unchecked`，可验证的失败记为 `failed`；`requireVerifiedLog` 在这两种状态下都拒绝安装，因此无法对照日志检查的发布永远不会被安装。`createTilesLogService` 通过下载器读取 tlog-tiles 分片，但使用自己的主机清单：`hosts` 列出日志的 origin 与见证者网络的检查点分发器，发布文件的主机规则仍属于约定 C1，两份清单都不必列出对方的主机。origin 不在自己的主机清单中，或应答重定向到清单之外，都会以 `DOWNLOAD_REFUSED` 拒绝。
 
 <a id="extraction"></a>
 
