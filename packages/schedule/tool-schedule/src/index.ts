@@ -23,7 +23,7 @@ import {
 } from '@deepseek-ai/dsh-schedule'
 import type { SchedulePermissionPresets } from '@deepseek-ai/dsh-schedule'
 import type {
-  InternalScheduleError, ScheduleEditRequest, ScheduleEffect, ScheduleRecord, ScheduleTarget,
+  InternalScheduleError, ScheduleConsentRefusal, ScheduleEditRequest, ScheduleEffect, ScheduleRecord, ScheduleTarget,
   ScheduleTargetRequest, ScheduleToolError,
   ScheduleCatalogEntry, ScheduleDeliveryReceipt, SubagentSessionError,
 } from '@deepseek-ai/dsh-schedule'
@@ -346,46 +346,80 @@ function storedFacts(
   return { targetSessionId: target.sessionId, targetPreset: agent === undefined ? undefined : presets?.current(agent.session) }
 }
 
+/** What one pending management call puts to the composed consent. */
+interface ConsentFacts {
+  /** The effect the consent names: the recurrence the call arms or keeps. */
+  readonly effect: ScheduleEffect | undefined
+  /** The refusal the consent recorded on the edited task, which this edit puts to the person again. */
+  readonly refusal: ScheduleConsentRefusal | undefined
+}
+
 /**
- * Build the effect one Schedule management call creates, for the consent to name. An update that
- * restates no rule names the stored rule, so the approval always carries the recurrence the task
- * keeps; a task that cannot be read leaves the approval unnamed, and a delete creates no effect to
- * name at all.
+ * Read the facts one Schedule management call puts to the consent. An update that restates no rule
+ * names the stored rule, so the approval always carries the recurrence the task keeps; a task that
+ * cannot be read leaves the approval unnamed, and a delete creates no effect to name at all. An
+ * edit of a task the consent refused reports that refusal, so the ask states why the delivery
+ * stopped before the person re-approves it.
  * @param ctx - Scope whose `schedule` service stores the tasks.
  * @param exec - Pending management call with its parsed arguments.
  * @param agent - Calling root Agent.
- * @returns The effect, or undefined when the call names no readable effect.
+ * @returns The effect and the stored refusal; both are undefined when the call names neither.
  */
-async function consentEffect(ctx: Context, exec: ToolExecution, agent: Agent): Promise<ScheduleEffect | undefined> {
+async function consentFacts(ctx: Context, exec: ToolExecution, agent: Agent): Promise<ConsentFacts> {
   const args = exec.arguments as { rrule?: unknown; target?: unknown; id?: unknown; action?: unknown } | undefined
-  if (args === undefined || typeof args !== 'object') return undefined
+  const none: ConsentFacts = { effect: undefined, refusal: undefined }
+  if (args === undefined || typeof args !== 'object') return none
   // A delete only removes the task: nothing starts delivering, so the approval states nothing.
-  if (exec.name === 'schedule_edit' && args.action === 'delete') return undefined
+  if (exec.name === 'schedule_edit' && args.action === 'delete') return none
   const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
   let recurrence: string | undefined
   let facts: TargetFacts
+  let refusal: ScheduleConsentRefusal | undefined
   if (exec.name === 'schedule_create') {
-    if (typeof args.rrule !== 'string') return undefined
+    if (typeof args.rrule !== 'string') return none
     recurrence = args.rrule
     facts = targetFacts(ctx, agent, typeof args.target === 'string'
       ? args.target as typeof TARGET_CHOICES[number]
       : 'new_once')
   } else {
-    if (typeof args.id !== 'string') return undefined
+    if (typeof args.id !== 'string') return none
     const stored = await ctx.schedule.view({ id: ScheduleId(args.id) })
-    if (!('kind' in stored) || stored.kind === undefined) return undefined
+    // A lookup miss names no task, so the approval states neither an effect nor a refusal; every stored task states
+    // its rule, and the refusal a paused one carries, so the person sees why the delivery stopped before they
+    // re-approve it.
+    if ('code' in stored) return none
+    refusal = stored.consentRefusal
     recurrence = typeof args.rrule === 'string' ? args.rrule : recurrenceText(stored)
     facts = typeof args.target === 'string'
       ? targetFacts(ctx, agent, args.target as typeof TARGET_CHOICES[number])
       : storedFacts(ctx, presets, stored.target)
   }
   return {
-    tool: exec.name,
-    recurrence,
-    ...facts.targetSessionId === undefined ? {} : { targetSessionId: facts.targetSessionId },
-    targetPreset: facts.targetPreset,
-  } as ScheduleEffect
+    effect: {
+      tool: exec.name,
+      recurrence,
+      ...facts.targetSessionId === undefined ? {} : { targetSessionId: facts.targetSessionId },
+      targetPreset: facts.targetPreset,
+    } as ScheduleEffect,
+    refusal,
+  }
 }
+
+/** The ask text a mounted consent uses when it names no effect of its own. */
+const UNNAMED_CONSENT_ASK = 'The composed scheduled-task consent reviews this change before its deliveries run.'
+
+/** The ask text that puts a recorded refusal back to the person. */
+function refusalText(refusal: ScheduleConsentRefusal): string {
+  return `The consent refused this task's delivery at ${refusal.refusedAt}: ${refusal.reason}`
+}
+
+/**
+ * The calls this plugin raised a consent ask for. A `tools/pre-execute` `ask` runs the body only
+ * after the approval service answered `allowed-once` and denies every other outcome, so a call that
+ * reaches its body with an entry here was answered by the person for exactly the effect the ask
+ * named.
+ */
+const consentAsks = new WeakSet<ToolExecution>()
 
 /** Stable error for failures not safe to expose. */
 function internalError(): InternalScheduleError {
@@ -473,19 +507,33 @@ function registerScheduleTools(ctx: Context): void {
   })
 
   // The consent seam is resolved per call, so a plugin that mounts or disposes it mid-session
-  // changes only the later approvals. Only an `ask` decision is named: allow and deny stay as
-  // the policy resolved them, and a consent failure fails the call like any pre-execute policy.
+  // changes only the later approvals. A mounted consent IS the gate: an `allow` the policy
+  // resolved becomes the consent's ask, because a mount with no producer of asks would leave
+  // every management call unasked; an ask that already exists gains the consent's naming, so the
+  // person sees the recurrence, the chat and the preset the call would start delivering to. The
+  // record of that ask is what lets the tool tell the service the person approved *this* edit.
   ctx.on('tools/pre-execute', async (exec, next) => {
     const gate = await next()
-    if (gate.kind !== 'ask' || (exec.name !== 'schedule_create' && exec.name !== 'schedule_edit')) return gate
+    if ((gate.kind !== 'allow' && gate.kind !== 'ask')
+      || (exec.name !== 'schedule_create' && exec.name !== 'schedule_edit')) return gate
     const consent = ctx.get('scheduleConsent')
     const agent = exec.agent
     if (consent === undefined || agent === undefined) return gate
-    const effect = await consentEffect(ctx, exec, agent)
-    if (effect === undefined) return gate
-    const named = consent.nameEffect(effect)
-    if (named === undefined || named.length === 0) return gate
-    return { ...gate, reason: gate.reason === undefined ? named : `${gate.reason} ${named}` }
+    const { effect, refusal } = await consentFacts(ctx, exec, agent)
+    if (effect === undefined && refusal === undefined) return gate
+    const named = effect === undefined ? undefined : consent.nameEffect(effect)
+    const stated = [named, refusal === undefined ? undefined : refusalText(refusal)]
+      .filter((part): part is string => part !== undefined && part.length > 0)
+    if (gate.kind === 'ask') {
+      // Another composed policy asked without the consent's text, so the consent took no part in it.
+      if (stated.length === 0) return gate
+      consentAsks.add(exec)
+      return { ...gate, reason: gate.reason === undefined ? stated.join(' ') : `${gate.reason} ${stated.join(' ')}` }
+    }
+    // An edit of a task the consent refused is approved again only by an answer to this ask, so the
+    // service learns about it the same way it learns about every other consent ask.
+    if (effect !== undefined) consentAsks.add(exec)
+    return { kind: 'ask', reason: stated.length === 0 ? UNNAMED_CONSENT_ASK : stated.join(' ') }
   })
 
   // Plugin configuration is fixed for the life of the Host service, so the description is read once.
@@ -597,7 +645,15 @@ function registerScheduleTools(ctx: Context): void {
           if (Object.keys(patch).length === 0) {
             throw new ScheduleInputError('invalid_selector', 'update requires at least one of title, prompt, rrule, target, or active.')
           }
-          request = { id, action: 'update', patch, ...expected }
+          request = {
+            id,
+            action: 'update',
+            patch,
+            ...expected,
+            // The consent ask this call passed names the delivery the edit arms, so the person
+            // answered for that delivery: the edit may re-capture the baseline it was approved under.
+            ...consentAsks.has(exec) ? { consentApproval: 'allowed-once' as const } : {},
+          }
         }
         return ctx.schedule.edit(request, agent.session.id, exec.signal)
           .then(result => 'kind' in result ? modelTask(result) : result)

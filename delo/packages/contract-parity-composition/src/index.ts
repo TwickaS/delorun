@@ -33,6 +33,16 @@ export interface ParitySwitchField {
   readonly key: string
 }
 
+/**
+ * The state of a model-visible switch's switch-on scenario.
+ *
+ * `recorded` means `snapshots/<scenario>` holds the recorded Session and the expectation its replay is diffed against,
+ * so the parity-replay lane proves the switch. `pending recording` means the scenario exists only as staged
+ * configuration under `delo/apps/tools/src/parity/composition/scenarios`: it tells nobody that the switch was ever
+ * observed to change anything, and `parity-switches` reports it as pending instead of counting it as evidence.
+ */
+export type ParityScenarioState = 'recorded' | 'pending recording'
+
 /** Fields every registry entry carries. */
 interface ParitySwitchBase {
   /** Lower snake case, never reused. */
@@ -50,6 +60,12 @@ interface ParitySwitchBase {
   readonly modelVisible: boolean
   /** The switch-on scenario, `<profile>/delo-<id with hyphens>` under `snapshots/`, for a model-visible switch. */
   readonly scenario?: string
+  /**
+   * Whether that scenario is recorded or still waits for its recording. A built, model-visible switch states this,
+   * so a scenario with no recorded expectation cannot be mistaken for a passing one; `parity-switches` holds the
+   * claim against the tree in both directions.
+   */
+  readonly scenarioState?: ParityScenarioState
 }
 
 /** A switch whose Config field exists in the tree. */
@@ -86,6 +102,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'web/delo-studio-additions',
+    scenarioState: 'pending recording',
     field: {
       module: '@delo/plugin-main-chat',
       source: 'delo/packages/plugin-main-chat/src/index.ts',
@@ -106,6 +123,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-permission-defaults',
+    scenarioState: 'pending recording',
     field: {
       module: '@delo/plugin-permission-defaults',
       source: 'delo/packages/plugin-permission-defaults/src/index.ts',
@@ -126,6 +144,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-fetch-guard',
+    scenarioState: 'pending recording',
     field: {
       module: '@delo/plugin-fetch-guard',
       source: 'delo/packages/plugin-fetch-guard/src/index.ts',
@@ -147,6 +166,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'web/delo-preset-inspect',
+    scenarioState: 'recorded',
     field: {
       module: '@deepseek-ai/dsh-agent-preset-registry/tools',
       source: 'packages/preset/agent-preset-registry/src/tools.ts',
@@ -176,6 +196,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-plugin-manager-read-exemption',
+    scenarioState: 'recorded',
     field: {
       module: '@deepseek-ai/dsh-plugin-manager/tools',
       source: 'packages/boot/plugin-manager/src/tools.ts',
@@ -191,6 +212,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-profile-history',
+    scenarioState: 'recorded',
     field: {
       module: '@deepseek-ai/dsh-plugin-manager/tools',
       source: 'packages/boot/plugin-manager/src/tools.ts',
@@ -206,6 +228,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-scheduled-task-consent',
+    scenarioState: 'pending recording',
     field: {
       module: '@delo/plugin-schedule-consent',
       source: 'delo/packages/plugin-schedule-consent/src/index.ts',
@@ -227,6 +250,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-instruction-layer-consent',
+    scenarioState: 'pending recording',
     field: {
       module: '@delo/plugin-instruction-consent',
       source: 'delo/packages/plugin-instruction-consent/src/index.ts',
@@ -251,6 +275,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-mcp-add-consent',
+    scenarioState: 'pending recording',
     field: {
       module: '@delo/plugin-mcp-consent',
       source: 'delo/packages/plugin-mcp-consent/src/index.ts',
@@ -272,6 +297,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-container-denial-marker',
+    scenarioState: 'recorded',
     field: {
       module: '@deepseek-ai/dsh-sandbox-policy',
       source: 'packages/sandbox/sandbox-policy/src/index.ts',
@@ -292,6 +318,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-sandbox-protected-reads',
+    scenarioState: 'pending recording',
     field: {
       module: '@deepseek-ai/dsh-tool-fs-search',
       source: 'packages/fs/tool-fs-search/src/index.ts',

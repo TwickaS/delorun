@@ -559,6 +559,10 @@ export class ScheduleService extends TypertRemoteService {
 
   /**
    * Update or delete one task for a human Remote caller; an invalid patch rejects with `schedule/input-invalid`.
+   *
+   * A Remote edit carries no consent approval, so it changes the task exactly as the caller asked and
+   * leaves the delivery baseline and any recorded refusal alone: re-approving a delivery is the
+   * consent's answer to name, not a side effect of a form submission.
    * @param request - Task identity and one update or delete operation.
    * @param signal - Cancellation checked before the durable write begins, including after FIFO waits.
    * @returns The updated task, the deletion outcome, or a non-mutating miss or conflict.
@@ -613,7 +617,10 @@ export class ScheduleService extends TypertRemoteService {
         await this.validateTarget(effectiveTarget, signal)
         signal?.throwIfAborted()
       }
-      const task = this.reapproved(revisedTask(current, request.patch, target, actorSessionId, Date.now()))
+      const task = this.reapproved(
+        revisedTask(current, request.patch, target, actorSessionId, Date.now()),
+        request.consentApproval === 'allowed-once',
+      )
       await tasks.put(request.id, task)
       this.emitChanged()
       this.runtime?.requestDrive()
@@ -625,15 +632,21 @@ export class ScheduleService extends TypertRemoteService {
   /**
    * Refresh the management baselines of an edited task the way creation captures them.
    *
-   * An edit is a fresh approval of the task, so the preset its deliveries are reviewed against
-   * becomes the one its effective target runs now — the live target Session's preset, or the
-   * deployment default when the target opens a Session at delivery — instead of the preset captured
-   * when the task was created. The same edit settles any refusal the consent recorded, because the
-   * person has re-approved the task.
+   * An edit the person approved through the composed consent's ask is a fresh approval of the
+   * task, so the preset its deliveries are reviewed against becomes the one its effective target
+   * runs now — the live target Session's preset, or the deployment default when the target opens a
+   * Session at delivery — instead of the preset captured when the task was created. The same
+   * approval settles any refusal the consent recorded, because the person has re-approved the task.
+   *
+   * An edit nobody approved keeps both. A refusal is the consent's record of a delivery it stopped;
+   * re-capturing the baseline without an answer would lift that refusal, and drop the preset the
+   * delivery was refused against, on a change the person never saw.
    * @param revised - The updated task before its management baselines are refreshed.
+   * @param approved - Whether this edit carries the consent's `allowed-once` for the delivery it arms.
    * @returns The task to store.
    */
-  private reapproved(revised: ScheduleTask): ScheduleTask {
+  private reapproved(revised: ScheduleTask, approved: boolean): ScheduleTask {
+    if (!approved) return revised
     const { consentRefusal: _settled, ...task } = revised
     const creationPreset = creationPresetOf(
       this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined,

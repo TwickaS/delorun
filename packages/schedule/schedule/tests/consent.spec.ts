@@ -245,7 +245,7 @@ it('captures the deployment default for a Remote-created task, which carries no 
   expect(await test.service.view({ id: created.id })).toMatchObject({ status: 'ended' })
 })
 
-it('re-captures the creation preset from the target chat on an edit, so a later move is refused again', async () => {
+it('re-captures the creation preset from the target chat on an approved edit, so a later move is refused again', async () => {
   const presets = presetBook({ chat: 'wide' })
   const test = await presetHarness(presetConsent, presets)
   const chat = agentFor(test.ctx, 'chat')
@@ -259,7 +259,9 @@ it('re-captures the creation preset from the target chat on an edit, so a later 
 
   // The person narrows the chat and re-approves the task with an edit: that approval names "narrow".
   presets.book.set('chat', 'narrow')
-  await test.service.edit({ id: created.id, action: 'update', patch: { title: 'Queue check renamed' } }, chat.session.id)
+  await test.service.edit({
+    id: created.id, action: 'update', patch: { title: 'Queue check renamed' }, consentApproval: 'allowed-once',
+  }, chat.session.id)
   expect(taskTable(test.ctx).get(created.id)).toMatchObject({ creationPreset: 'narrow' })
 
   // The chat widens again before the occurrence falls due, so no approval covers the delivery.
@@ -270,6 +272,69 @@ it('re-captures the creation preset from the target chat on an edit, so a later 
     status: 'paused', consentRefusal: { reason: REFUSAL },
   })
   expect(chat.followup).not.toHaveBeenCalled()
+})
+
+it('keeps the refused baseline and the recorded refusal on an edit nobody approved', async () => {
+  const presets = presetBook({ chat: 'wide' })
+  const test = await presetHarness(presetConsent, presets)
+  const chat = agentFor(test.ctx, 'chat')
+  await test.ctx.agents.register(chat)
+  test.resolve.mockResolvedValue({ agent: chat })
+  const created = await test.service.create({
+    title: 'Queue check', prompt: 'Check the queue', timing: { kind: 'rrule', rrule: ONCE },
+    target: { kind: 'session', sessionId: chat.session.id },
+  }, chat.session.id)
+  expect(taskTable(test.ctx).get(created.id)).toMatchObject({ creationPreset: 'wide' })
+
+  // The chat moves off the approved preset, so the due delivery is refused and the task pauses.
+  presets.book.set('chat', 'narrow')
+  await vi.advanceTimersByTimeAsync(1000)
+  const refused = { reason: REFUSAL, refusedAt: '2026-09-16T00:00:01.000Z' }
+  expect(taskTable(test.ctx).get(created.id)).toMatchObject({ creationPreset: 'wide', consentRefusal: refused })
+
+  // An edit that carries no approval changes only what it names: it settles no refusal and re-captures no preset,
+  // so the delivery the consent stopped stays stopped and stays measured against the preset it was stopped under.
+  await test.service.edit({ id: created.id, action: 'update', patch: { title: 'Queue check renamed' } }, chat.session.id)
+  expect(taskTable(test.ctx).get(created.id)).toMatchObject({
+    creationPreset: 'wide', consentRefusal: refused, record: { title: 'Queue check renamed' },
+  })
+})
+
+it('settles the refusal only on the edit the person approved, and re-captures that edit\'s preset', async () => {
+  const presets = presetBook({ chat: 'wide' })
+  const test = await presetHarness(presetConsent, presets)
+  const chat = agentFor(test.ctx, 'chat')
+  await test.ctx.agents.register(chat)
+  test.resolve.mockResolvedValue({ agent: chat })
+  const created = await test.service.create({
+    title: 'Queue check', prompt: 'Check the queue', timing: { kind: 'rrule', rrule: ONCE },
+    target: { kind: 'session', sessionId: chat.session.id },
+  }, chat.session.id)
+  presets.book.set('chat', 'narrow')
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(taskTable(test.ctx).get(created.id)).toHaveProperty('consentRefusal')
+
+  await test.service.edit({
+    id: created.id, action: 'update', patch: { title: 'Queue check renamed' }, consentApproval: 'allowed-once',
+  }, chat.session.id)
+  const stored = taskTable(test.ctx).get(created.id)
+  expect(stored).not.toHaveProperty('consentRefusal')
+  expect(stored).toMatchObject({ creationPreset: 'narrow' })
+})
+
+it('leaves a Remote edit\'s baseline alone, because a form submission is no consent answer', async () => {
+  const presets = presetBook({ chat: 'wide' })
+  const test = await presetHarness(presetConsent, presets)
+  const chat = agentFor(test.ctx, 'chat')
+  await test.ctx.agents.register(chat)
+  test.resolve.mockResolvedValue({ agent: chat })
+  const created = await test.service.create({
+    title: 'Queue check', prompt: 'Check the queue', timing: { kind: 'rrule', rrule: ONCE },
+    target: { kind: 'session', sessionId: chat.session.id },
+  }, chat.session.id)
+  presets.book.set('chat', 'narrow')
+  await test.service.remoteEdit({ id: created.id, action: 'update', patch: { title: 'Renamed from the UI' } })
+  expect(taskTable(test.ctx).get(created.id)).toMatchObject({ creationPreset: 'wide' })
 })
 
 it('records the reason of a scheduled refusal on the task and projects it into the catalog entry', async () => {

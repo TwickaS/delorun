@@ -11,8 +11,11 @@
   "include": ["src", "tests"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../../packages/context/agent-instructions" },
     { "path": "../../../packages/fs/tool-fs" },
     { "path": "../../../packages/sandbox/sandbox-policy" },
+    { "path": "../../../packages/skill/skill" },
+    { "path": "../../../packages/skill/skill-filesystem" },
     { "path": "../../../packages/util/home-paths" }
   ]
 }

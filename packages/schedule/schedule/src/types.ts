@@ -558,6 +558,13 @@ export type ScheduleEditRequest =
     readonly patch: SchedulePatch
     /** `updatedAt` value that the editor read; a different stored value returns `schedule_conflict`. */
     readonly expectedUpdatedAt?: string | null
+    /**
+     * The person's `allowed-once` answer to the composed consent's ask for this edit. Only a
+     * present grant re-captures the delivery baseline and settles a refusal the consent recorded;
+     * an edit that asked nothing leaves both as they stand, so it cannot launder a delivery the
+     * consent stopped.
+     */
+    readonly consentApproval?: 'allowed-once'
   }
   | {
     /** Task to remove. */

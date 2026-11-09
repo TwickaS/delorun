@@ -44,6 +44,16 @@ const DEFAULT_WATCH_MAX_PROJECTS = 128
 export const name = 'skill-filesystem'
 export const inject = ['skills']
 
+/**
+ * The project-scope skill directories this provider reads, below a project root. A consumer that must recognize a
+ * skill file without a lookup — a consent over the writes that change one, say — reads this list instead of
+ * restating the directory names.
+ */
+export const PROJECT_SKILL_DIRS = ['.dsh/skills', '.agents/skills'] as const
+
+/** The home-relative directory of each default skill store: the harness home's and the shared agent root's. */
+export const HOME_SKILL_DIR = 'skills'
+
 /** Local filesystem skill provider configuration. */
 export interface Config {
   /** Unique provider name. Defaults to `filesystem`. */
@@ -248,20 +258,35 @@ export class FileSystemSkillProvider implements SkillProvider {
     return this.disposal
   }
 
+  /**
+   * The skill roots this provider's configuration names without a workspace: the custom roots, the two default home
+   * stores and the bundled root. Project roots come from a lookup's cwd, so they are not here; a consumer that must
+   * recognize a skill file without discovering one classifies against these paths plus {@link PROJECT_SKILL_DIRS}.
+   * @returns absolute root paths, in the order discovery reads them.
+   */
+  configuredRoots(): readonly string[] {
+    const roots: string[] = [...this.customSkillDirs]
+    if (this.includeDefaultRoots) {
+      roots.push(join(this.dshHome, HOME_SKILL_DIR), join(this.agentsHome, HOME_SKILL_DIR))
+    }
+    if (this.bundledSkillDir !== undefined) roots.push(this.bundledSkillDir)
+    return roots
+  }
+
   private async roots(cwd: string | undefined): Promise<SkillRoot[]> {
     const roots: SkillRoot[] = []
     if (this.includeDefaultRoots && cwd !== undefined) {
       const projectRoot = await findProjectRoot(resolve(cwd), optionalFileSystem(this.ctx))
       roots.push(
-        { path: join(projectRoot, '.dsh/skills'), source: 'project-dsh', rank: PROJECT_DSH_RANK, projectRoot },
-        { path: join(projectRoot, '.agents/skills'), source: 'project-agents', rank: PROJECT_AGENTS_RANK, projectRoot },
+        { path: join(projectRoot, PROJECT_SKILL_DIRS[0]), source: 'project-dsh', rank: PROJECT_DSH_RANK, projectRoot },
+        { path: join(projectRoot, PROJECT_SKILL_DIRS[1]), source: 'project-agents', rank: PROJECT_AGENTS_RANK, projectRoot },
       )
     }
     roots.push(...this.customSkillDirs.map(path => ({ path, source: 'custom' as const, rank: CUSTOM_RANK })))
     if (this.includeDefaultRoots) {
       roots.push(
-        { path: join(this.dshHome, 'skills'), source: 'user-dsh', rank: USER_DSH_RANK, skipSystem: true },
-        { path: join(this.agentsHome, 'skills'), source: 'user-agents', rank: USER_AGENTS_RANK },
+        { path: join(this.dshHome, HOME_SKILL_DIR), source: 'user-dsh', rank: USER_DSH_RANK, skipSystem: true },
+        { path: join(this.agentsHome, HOME_SKILL_DIR), source: 'user-agents', rank: USER_AGENTS_RANK },
       )
     }
     if (this.bundledSkillDir !== undefined) {

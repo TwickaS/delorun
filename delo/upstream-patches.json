@@ -4049,6 +4049,26 @@
       "path": "packages/web/web-fetch-http/tsconfig.json",
       "class": "security",
       "reason": "web_fetch guard pin (B3): the project reference to `../../util/http-proxy`, whose proxy policy the provider reads before it chooses a dispatcher."
+    },
+    {
+      "path": "packages/context/agent-instructions/src/config.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent: the loader exports its own default instruction file names (`AGENTS.md`, `CLAUDE.md` and their `.local.md` overlays) instead of keeping them module-private, so the consent over instruction writes reads that list rather than restating a name; a default the loader adds is then a name the consent reviews. The loader reads the same constants, so behaviour is unchanged."
+    },
+    {
+      "path": "packages/context/agent-instructions/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent: the package re-exports the default instruction file name lists from `config.ts` so a consumer outside the package can read them. Re-export only; no behaviour changes."
+    },
+    {
+      "path": "packages/skill/skill/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent: `SkillProvider` gains an optional `configuredRoots()`, and `SkillRegistry` implements it over the registered providers, so a consent over skill writes classifies a target against the roots the deployment's providers actually read, a configured custom directory included. A provider that names no roots contributes none."
+    },
+    {
+      "path": "packages/skill/skill-filesystem/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent: the filesystem skill provider names its project skill directories and home store as exported constants and implements `configuredRoots()`, which reports the roots its configuration names without a workspace — the custom directories, the two default home stores and the bundled root. Discovery reads the same constants, so a configured root and a reviewed root cannot drift."
     }
   ],
   "retired": []

@@ -7,7 +7,7 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { classifyTarget, reviewNote } from '../src/classify.ts'
+import { classifyTarget, INSTRUCTION_FILE_NAMES, reviewNote } from '../src/classify.ts'
 import { apply, Config, InstructionConsent } from '../src/index.ts'
 
 /** The environment the classifier's homes resolve from in this suite. */
@@ -28,11 +28,24 @@ describe('the classifier', () => {
     expect(classifyTarget('/work/app/presets/nested/deep.patch.yml', { env: ENV })).toBeUndefined()
   })
 
-  it('classifies a folder AGENTS.md as folder-scoped and a home AGENTS.md as global', () => {
-    expect(classifyTarget('/work/app/AGENTS.md', { env: ENV })).toEqual({ kind: 'instructions', scope: 'folder' })
-    expect(classifyTarget('/work/app/nested/AGENTS.md', { env: ENV })).toEqual({ kind: 'instructions', scope: 'folder' })
-    expect(classifyTarget('/home/person/.delo/AGENTS.md', { env: ENV })).toEqual({ kind: 'instructions', scope: 'global' })
-    expect(classifyTarget('/home/person/.agents/AGENTS.md', { env: ENV })).toEqual({ kind: 'instructions', scope: 'global' })
+  it('classifies every instruction file name the loader reads, as folder-scoped or home-scoped', () => {
+    // The loader's own default list is the source: every name it loads is a name this classifier covers.
+    for (const name of INSTRUCTION_FILE_NAMES) {
+      expect(classifyTarget(`/work/app/${name}`, { env: ENV }), name).toEqual({ kind: 'instructions', scope: 'folder' })
+      expect(classifyTarget(`/work/app/nested/${name}`, { env: ENV }), name).toEqual({ kind: 'instructions', scope: 'folder' })
+      expect(classifyTarget(`/home/person/.delo/${name}`, { env: ENV }), name).toEqual({ kind: 'instructions', scope: 'global' })
+      expect(classifyTarget(`/home/person/.agents/${name}`, { env: ENV }), name).toEqual({ kind: 'instructions', scope: 'global' })
+    }
+    expect([...INSTRUCTION_FILE_NAMES]).toEqual(['AGENTS.md', 'CLAUDE.md', 'AGENTS.local.md', 'CLAUDE.local.md'])
+  })
+
+  it('classifies a file under a skill root the provider configured', () => {
+    // A deployment's own skill directory comes from the mounted provider, not from a literal in this module.
+    expect(classifyTarget('/opt/company/skills/review/SKILL.md', { env: ENV })).toBeUndefined()
+    expect(classifyTarget('/opt/company/skills/review/SKILL.md', { env: ENV, skillRoots: ['/opt/company/skills'] }))
+      .toEqual({ kind: 'skill', root: 'custom' })
+    // The project directories stay lexical, so a nested project skill classifies without a provider lookup.
+    expect(classifyTarget('/work/app/.agents/skills/lint/references/cheap.md', { env: ENV })).toEqual({ kind: 'skill', root: 'project' })
   })
 
   it('classifies no unrelated target', () => {
@@ -117,6 +130,18 @@ describe('the writeConsent review', () => {
     const note = (verdict as { required: true; note: string }).note
     expect(note).toContain('these instructions load in every future chat that works in this folder')
     expect(note).toContain('--- old ---\nold rules\n--- new ---\nnew rules')
+  })
+
+  it('requires consent for a write to a skill under a root the mounted provider configured', () => {
+    let roots: string[] = ['/opt/company/skills']
+    ctx.provide('skills', { configuredRoots: () => roots } as never)
+    const verdict = consent.review({ tool: 'write', path: '/opt/company/skills/review/SKILL.md', diff: { old: null, new: 'body' } })
+    expect(verdict).toMatchObject({ required: true })
+    expect((verdict as { required: true; note: string }).note)
+      .toContain('A model-authored write to a skill: its instructions load in every future chat.')
+    // The provider's roots are read on every review, so a root it stops naming stops being reviewed.
+    roots = []
+    expect(consent.review({ tool: 'write', path: '/opt/company/skills/review/SKILL.md' })).toBeUndefined()
   })
 
   it('needs no consent for an unrelated write', () => {

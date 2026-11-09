@@ -31,6 +31,11 @@ import {
 import { instructionCandidateGroup, instructionScopeKey, scopeForDisplayPath, type AgentInstructionChange } from './render.ts'
 
 export { Config, name }
+export {
+  DEFAULT_INSTRUCTION_FILE_CANDIDATES,
+  DEFAULT_INSTRUCTION_FILE_NAMES,
+  DEFAULT_LOCAL_INSTRUCTION_FILE_CANDIDATES,
+} from './config.ts'
 /** Services required by workspace instruction projection. */
 export const inject = ['agents', 'workingDirectory']
 export {
