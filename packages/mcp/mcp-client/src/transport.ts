@@ -13,12 +13,17 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type { Config } from './index.ts'
 
 /**
- * The subprocess seam's scrubbed parent env (credential-shaped and stale
- * `DSH_*` names dropped), plus the spec's explicit env. The MCP SDK owns the
- * actual spawn, so this transport shares the scrub definition rather than the
- * spawn path.
+ * The environment one stdio MCP server starts from: the subprocess seam's
+ * scrubbed parent env (credential-shaped names, denylisted ambient
+ * authorities, and names whose value has a credential shape dropped) with the
+ * configured `env` merged over it. This merge is the only pass-through: the
+ * SDK owns the actual spawn and pre-merges its own small default name list
+ * (`HOME`, `PATH`, `TERM`, `USER`, …), all of which the scrub already keeps,
+ * so a credential reaches the child only when this config names it.
+ * @param extra - the plugin config's explicit environment entries.
+ * @returns the child process environment.
  */
-function buildChildEnv(extra: Record<string, string>): Record<string, string> {
+export function buildChildEnv(extra: Record<string, string>): Record<string, string> {
   return { ...scrubbedParentEnv(), ...extra }
 }
 

@@ -13,7 +13,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { PostToolDecision } from '@deepseek-ai/dsh-tools'
 import { publicToolName, syncTools, type ToolBridgeOptions } from '@deepseek-ai/dsh-mcp-client/src/tools.ts'
-import { createTransport } from '@deepseek-ai/dsh-mcp-client/src/transport.ts'
+import { buildChildEnv, createTransport } from '@deepseek-ai/dsh-mcp-client/src/transport.ts'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
 
 const testToolSignal = new AbortController().signal
@@ -1181,6 +1181,56 @@ describe('createTransport', () => {
     }
     const transport = createTransport(config)
     expect(transport).toBeDefined()
+  })
+})
+
+describe('buildChildEnv', () => {
+  /**
+   * The child env the transport builds, with the ambient probe entries set for the read and restored afterwards.
+   * @param ambient - the ambient entries to set.
+   * @param extra - the configured explicit entries.
+   * @returns the env handed to the stdio server.
+   */
+  function childEnv(ambient: Record<string, string>, extra: Record<string, string> = {}): Record<string, string> {
+    const saved = new Map(Object.keys(ambient).map(key => [key, process.env[key]]))
+    try {
+      for (const [key, value] of Object.entries(ambient)) process.env[key] = value
+      return buildChildEnv(extra)
+    } finally {
+      for (const [key, value] of saved) {
+        if (value === undefined) Reflect.deleteProperty(process.env, key)
+        else process.env[key] = value
+      }
+    }
+  }
+
+  it('drops an ambient credential-shaped name, a denylisted name and a credential-shaped value', () => {
+    const env = childEnv({
+      MCP_SCRUB_PROBE_TOKEN: 'hidden',
+      SSH_AUTH_SOCK: 'opaque',
+      MCP_SCRUB_PROBE_ENDPOINT: 'https://robot:canary@registry.example.invalid/v1',
+      MCP_SCRUB_PROBE_PLAIN: 'kept',
+    })
+    expect(env.MCP_SCRUB_PROBE_TOKEN).toBeUndefined()
+    expect(env.SSH_AUTH_SOCK).toBeUndefined()
+    expect(env.MCP_SCRUB_PROBE_ENDPOINT).toBeUndefined()
+    expect(env.MCP_SCRUB_PROBE_PLAIN).toBe('kept')
+    expect(env.PATH).toBeDefined()
+  })
+
+  it('is the only pass-through: the configured env reaches the child whatever its name or value shape', () => {
+    const explicit = {
+      SSH_AUTH_SOCK: '/tmp/ssh-canary/agent.4242',
+      DEPLOY_WEBHOOK_URL: 'https://hooks.example.invalid/services/T000/B000/canary',
+      MCP_SCRUB_PROBE_PLAIN: 'configured',
+    }
+    const env = childEnv({ MCP_SCRUB_PROBE_PLAIN: 'ambient' }, explicit)
+    for (const [name, value] of Object.entries(explicit)) expect(env[name], name).toBe(value)
+  })
+
+  it('does not let an ambient entry override a configured one', () => {
+    const env = childEnv({ MCP_SCRUB_PROBE_PLAIN: 'ambient' }, { MCP_SCRUB_PROBE_PLAIN: 'configured' })
+    expect(env.MCP_SCRUB_PROBE_PLAIN).toBe('configured')
   })
 })
 

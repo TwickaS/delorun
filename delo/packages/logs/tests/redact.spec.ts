@@ -92,7 +92,7 @@ describe('step 3: listed forms', () => {
     const canaries = patternCanaries()
     const text = redactor.text(patternLines(canaries).join('\n'))
     for (const secret of patternSecrets(canaries)) expect(text, secret).not.toContain(secret)
-    for (const kind of ['provider-key', 'github-token', 'aws-key-id', 'jwt', 'slack-token', 'owner-code', 'authorization', 'cookie', 'url-userinfo', 'url-parameter', 'env-secret', 'private-key']) {
+    for (const kind of ['provider-key', 'github-token', 'aws-key-id', 'jwt', 'slack-token', 'owner-code', 'authorization', 'cookie', 'url-userinfo', 'url-parameter', 'webhook-url', 'credential-file-path', 'env-secret', 'private-key']) {
       expect(text, kind).toContain(`[redacted:${kind}]`)
     }
     expect(text).toContain('fetch https://[redacted:url-userinfo]@git.example.invalid/repo.git failed')
@@ -110,6 +110,23 @@ describe('step 3: listed forms', () => {
     const redactor = new Redactor()
     const body = patternCanaries().pemBody
     expect(redactor.text(`key: ${pemLine('BEGIN')}\n${body.join('\n')}`)).toBe('key: [redacted:private-key]')
+  })
+
+  it('redacts a webhook URL on a hooks host and on a /webhooks path', () => {
+    const redactor = new Redactor()
+    const path = patternCanaries().webhookPath
+    expect(redactor.text(`posted to https://hooks.example.invalid/services/T000/B000/${path}`)).toBe('posted to [redacted:webhook-url]')
+    expect(redactor.text(`posted to https://chat.example.invalid/api/webhooks/${path}`)).toBe('posted to [redacted:webhook-url]')
+    expect(redactor.text(`posted to https://ci.example.invalid/webhook/${path}?run=7`)).toBe('posted to [redacted:webhook-url]')
+  })
+
+  it('redacts the path of a credentials file in a field, a quoted value and prose', () => {
+    const redactor = new Redactor()
+    const path = patternCanaries().credentialPath
+    expect(redactor.text(`GOOGLE_APPLICATION_CREDENTIALS=${path}`)).toBe('GOOGLE_APPLICATION_CREDENTIALS=[redacted:credential-file-path]')
+    expect(redactor.text('token file "~/.netrc" absent')).toBe('token file "[redacted:credential-file-path]" absent')
+    expect(redactor.text('signing with /home/runner/.ssh/id_rsa.')).toBe('signing with [redacted:credential-file-path].')
+    expect(redactor.text('key at /opt/keys/service-account.json')).toBe('key at [redacted:credential-file-path]')
   })
 
   it('leaves ordinary text alone', () => {
