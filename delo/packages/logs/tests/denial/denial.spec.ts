@@ -158,7 +158,15 @@ describe.each(drivers)('$label', { timeout: IO_TIMEOUT_MS }, ({ driver }) => {
     await surface.print('stdout', [`echo ${residue}\n`])
     writeFileSync(join(home, 'logs', 'startup-2026-11-01T00-00-00.000Z-x.log'), `WARNING\n${residue}\n`, { mode: 0o600 })
     expect(logTexts(home).some(({ text }) => text.includes(residue))).toBe(true)
-    const cleared = surface.location.dir.startsWith(join(home, 'logs')) ? clearLocalLogs(home) : clearSurface(surface.location)
+    const local = surface.location.dir.startsWith(join(home, 'logs')) ? clearLocalLogs(home) : clearSurface(surface.location)
+    // A surface that keeps files of its own, such as the relay's container directory, clears them
+    // in addition to the home's surfaces and startup reports.
+    const own = surface.clear?.()
+    const cleared = {
+      deleted: [...local.deleted, ...own?.deleted ?? []],
+      emptied: [...local.emptied, ...own?.emptied ?? []],
+      failures: [...local.failures, ...own?.failures ?? []],
+    }
     expect(cleared.failures).toEqual([])
     await surface.log('after the clear')
     expect(logTexts(home).some(({ text }) => text.includes(residue))).toBe(false)

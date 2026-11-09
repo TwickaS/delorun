@@ -11,9 +11,10 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { RELAY_DRIVER } from '../../../../apps/relay/tests/log-driver.ts'
 import { HOME_DRIVER } from '../../../home-process/tests/log-driver.ts'
 import { SUPERVISOR_DRIVER } from '../../../supervisor/tests/log-driver.ts'
-import { captureStream, LineCapture, Redactor, resolveSurface, SurfaceLog, type CapturedStream, type DeloLogDetails, type LogsFailure, type SurfaceLocation } from '../../src/index.ts'
+import { captureStream, LineCapture, Redactor, resolveSurface, SurfaceLog, type CapturedStream, type DeloLogDetails, type LogsFailure, type RetentionReport, type SurfaceLocation } from '../../src/index.ts'
 
 /** The repository root. */
 export const REPOSITORY = fileURLToPath(new URL('../../../../../', import.meta.url))
@@ -30,6 +31,12 @@ export interface RunningSurface {
   log(message: string, details?: DeloLogDetails): Promise<void>
   /** Make upstream code the surface runs print to one stream, in exactly these writes. */
   print(stream: CapturedStream, writes: readonly string[]): Promise<void>
+  /**
+   * Clear the surface's files, for a surface whose files are outside the Delo home's `logs/`
+   * directory, which the home's clear does not reach. The relay keeps its own directory, so it
+   * clears itself; a surface without this clears through the home or through `clearSurface`.
+   */
+  clear?(): RetentionReport
   /** Stop the surface. */
   stop(): Promise<void>
 }
@@ -61,7 +68,7 @@ export const SURFACES: readonly SurfaceEntry[] = [
   { name: 'home-<profile>', kind: 'home', owner: 'delo/packages/home-process', workPackage: 'WP3.9', driver: HOME_DRIVER },
   { name: 'supervisor-<profile>', kind: 'supervisor', owner: 'delo/packages/supervisor', workPackage: 'WP4.1', driver: SUPERVISOR_DRIVER },
   { name: 'desktop-host', kind: 'desktop-host', owner: 'apps/desktop', workPackage: 'WP6.1' },
-  { name: 'relay', kind: 'relay', owner: 'delo/apps/relay', workPackage: 'WP5.6' },
+  { name: 'relay', kind: 'relay', owner: 'delo/apps/relay', workPackage: 'WP5.6', driver: RELAY_DRIVER },
 ]
 
 /** Whether a surface's package is in the tree and writes through `@delo/logs`. */

@@ -1365,6 +1365,40 @@ importers:
         specifier: workspace:*
         version: link:../../packages/runtime-store
 
+  delo/apps/relay:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-operational-logs':
+        specifier: workspace:*
+        version: link:../../packages/contract-operational-logs
+      '@delo/contract-relay-protocol':
+        specifier: workspace:*
+        version: link:../../packages/contract-relay-protocol
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../../packages/logs
+      '@delo/release':
+        specifier: workspace:*
+        version: link:../release
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      selfsigned:
+        specifier: ^4.0.1
+        version: 4.0.1
+
   delo/apps/release:
     dependencies:
       '@deepseek-ai/dsh-brand':
