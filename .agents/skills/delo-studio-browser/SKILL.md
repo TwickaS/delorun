@@ -38,7 +38,7 @@ return await page.title()
 node_modules/.bin/tsx delo/apps/tools/src/studio-browser.ts run --url http://127.0.0.1:5173/ --file check-title.js
 ```
 
-Add `--record /tmp/studio/run.webm` to record the run as a WebM at 15 frames per second. Encode it to a GIF with the encoder that [`record-browser-gif`](../record-browser-gif/SKILL.md) describes.
+Add `--record /tmp/studio/run.webm` to record the run as a WebM at 15 frames per second. A recorded run opens the studio origin's root page before the recording starts, because a recording needs an open tab; the script then begins on that page. Encode it to a GIF with the encoder that [`record-browser-gif`](../record-browser-gif/SKILL.md) describes.
 
 ## Add another adapter
 
