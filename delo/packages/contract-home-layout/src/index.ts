@@ -133,6 +133,15 @@ export const TRUST_FILES = {
   checkpoint: 'checkpoint.json',
 } as const
 
+/**
+ * Directory under `trust/` that holds the root chain an install walked, one `<n>.root.json` per version, oldest first
+ * (C2, "Root metadata"): the proof a stored root newer than every root a launcher ships descends from one it ships.
+ */
+export const TRUST_ROOTS_DIRECTORY = 'roots'
+
+/** Source of the regular expression one filed root's name matches: `<n>.root.json`, where `n` is its version. */
+export const ROOT_FILE_NAME_PATTERN = '^([1-9][0-9]*)\\.root\\.json$'
+
 /** Files under `status/`, one per installation (C3). */
 export const STATUS_FILES = {
   /** Written by the CLI home. */

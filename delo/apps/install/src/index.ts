@@ -14,9 +14,11 @@ export { CHECKPOINT_MAX_BYTES, createTilesLogService, requireVerifiedLog, runOnl
 export {
   readStoredCheckpoint,
   readStoredRootBytes,
+  readStoredRootChain,
   readStoredTimestamp,
   trustFile,
   writeStoredCheckpoint,
+  writeStoredRootChain,
   writeStoredTimestamp,
   writeTrustedRoot,
   type StoredCheckpoint,

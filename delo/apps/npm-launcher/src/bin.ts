@@ -29,11 +29,13 @@ export const RELEASE_FLAG = '--release'
 export const TERMINATOR = '--'
 
 /**
- * The variables a launch never inherits: Node's own module hooks and the dynamic loader's, which a process could use
- * to install code into the runtime's Node before it starts. None of them is a launch protocol variable, so the
- * runtime's environment is the inherited one without these.
+ * The variables a launch never inherits: Node's own module hooks, its trust settings and the dynamic loader's, which a
+ * process could use to install code into the runtime's Node before it starts or to stand between it and every HTTPS
+ * connection. `NODE_EXTRA_CA_CERTS` and `NODE_TLS_REJECT_UNAUTHORIZED` decide what the runtime's Node trusts, so an
+ * inherited value would let the parent process read every release check the runtime makes. None of them is a launch
+ * protocol variable, so the runtime's environment is the inherited one without these.
  */
-const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|LD_.*|DYLD_.*)$/u
+const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|LD_.*|DYLD_.*)$/u
 
 /**
  * The environment a runtime starts with: this process's, without the variables that would load code into the

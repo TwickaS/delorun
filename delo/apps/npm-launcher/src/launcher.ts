@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { DELO_HOME_ENTRIES, DELO_PROFILE_ENV, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
-import { messageOf, readStoredRootBytes, trustFile, verifyStoredRoot } from '@delo/install'
+import { messageOf, readStoredRootBytes, readStoredRootChain, trustFile, verifyStoredRoot } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
 import { RuntimeStoreError, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type VerifiedRuntime } from '@delo/runtime-store'
 import { refusalFor, type RemedyContext } from './refusals.ts'
@@ -158,13 +158,15 @@ function installedRefusal(options: LauncherOptions, installed: RuntimeVersion): 
 
 /**
  * Read `trust/root.json`, the root this home last verified, and trust it by the roots the launcher ships: the
- * start check anchors on it, so a root an install did not verify may not reach the store. A home with no stored root
- * is a store without a runtime, because nothing on it was verified yet.
+ * start check anchors on it, so a root an install did not verify may not reach the store. A root newer than every
+ * shipped root is trusted only with the chain the install walked to it, `trust/roots/<n>.root.json`, so a root a
+ * restore or a sync placed under `trust/` is not an anchor. A home with no stored root is a store without a runtime,
+ * because nothing on it was verified yet.
  * @param home - the resolved Delo home.
  * @param shipped - the root files this launcher ships, oldest first.
  * @returns the stored root's metadata.
  * @throws {RuntimeStoreError} `NO_ACTIVE_RUNTIME` when no trusted root is stored or it does not read; `RUNTIME_CHANGED`
- *   when the stored root is not one this launcher trusts.
+ *   when the stored root is not one this launcher trusts, or the chain that should prove it cannot be read.
  */
 async function storedRoot(home: string, shipped: readonly Uint8Array[]): Promise<RootMetadata> {
   const path = trustFile(home, TRUST_FILES.root)
@@ -177,8 +179,14 @@ async function storedRoot(home: string, shipped: readonly Uint8Array[]): Promise
   if (stored === undefined) {
     throw new RuntimeStoreError('NO_ACTIVE_RUNTIME', path, `no trusted release root is stored beside this home (${path} holds none), so no installed runtime can be checked`, ['reinstall'])
   }
+  let walked: readonly Uint8Array[]
   try {
-    return verifyStoredRoot({ stored, shipped, source: path }).metadata
+    walked = await readStoredRootChain(home)
+  } catch (error) {
+    throw new RuntimeStoreError('RUNTIME_CHANGED', path, `the root chain stored beside ${path} cannot be read, so the runtime installed beside it cannot be checked: ${messageOf(error)}`, ['reinstall'], { cause: error })
+  }
+  try {
+    return verifyStoredRoot({ stored, shipped, walked, source: path }).metadata
   } catch (error) {
     throw new RuntimeStoreError('RUNTIME_CHANGED', path, `the root stored at ${path} is not one this launcher trusts, so the runtime installed beside it cannot be checked: ${messageOf(error)}`, ['reinstall'], { cause: error })
   }

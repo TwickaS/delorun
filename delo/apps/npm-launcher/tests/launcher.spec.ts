@@ -29,7 +29,7 @@ import {
 import { launcherProfile, runLauncher, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
 import { installRemedies, LAUNCHER_EXIT, refusalFor } from '../src/refusals.ts'
 import { launchEnvironment, parseCommandLine, spawnRuntime, usage } from '../src/bin.ts'
-import { fixtureRelease, VERSION, type Fixture } from '../../install/tests/support.ts'
+import { fixtureRelease, nextRoot, VERSION, type Fixture } from '../../install/tests/support.ts'
 
 let directories: string[] = []
 
@@ -312,6 +312,63 @@ describe('an install step that refuses', () => {
 })
 
 describe('the root a start trusts', () => {
+  /**
+   * Store a walked root chain under a home, as an install writes it: `trust/roots/<n>.root.json` at mode 0600.
+   * @param home - the Delo home.
+   * @param roots - the chain, oldest first, each with the version its name carries.
+   */
+  async function storeChain(home: string, roots: readonly { readonly version: number, readonly bytes: Uint8Array }[]): Promise<void> {
+    await mkdir(join(home, 'trust', 'roots'), { recursive: true, mode: 0o700 })
+    for (const root of roots) await writeFile(join(home, 'trust', 'roots', `${String(root.version)}.root.json`), root.bytes, { mode: 0o600 })
+  }
+
+  it('refuses a stored root newer than every shipped root when no walked chain proves it descends from one, and starts nothing', async () => {
+    const shipped = await fixtureRelease()
+    const second = nextRoot(shipped.rootMetadata, shipped.keys, [shipped.keys.root])
+    const directory = await home({ root: second })
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    let printed = ''
+    let started = false
+    const status = await runLauncher(launch({
+      home: directory,
+      store: recordingStore(recorded, { installed: true }),
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: shipped.roots,
+      spawn: () => {
+        started = true
+        return Promise.resolve(0)
+      },
+      stderr: (text) => { printed += text },
+    }))
+    expect(status).toBe(LAUNCHER_EXIT.failed)
+    expect(printed).toContain(`the root stored at ${join(directory, 'trust', TRUST_FILES.root)} is not one this launcher trusts`)
+    expect(printed).toContain('holds no root of that version')
+    expect(started).toBe(false)
+    expect(recorded.launches).toHaveLength(0)
+  })
+
+  it('starts the installed runtime with a stored root newer than every shipped root when the walked chain reaches it', async () => {
+    const shipped = await fixtureRelease()
+    const second = nextRoot(shipped.rootMetadata, shipped.keys, [shipped.keys.root])
+    const directory = await home({ root: second })
+    await storeChain(directory, [{ version: 1, bytes: shipped.roots[0]! }, { version: 2, bytes: second }])
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    let started: LaunchCommand | undefined
+    const status = await runLauncher(launch({
+      home: directory,
+      store: recordingStore(recorded, { installed: true }),
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: shipped.roots,
+      spawn: (command) => {
+        started = command
+        return Promise.resolve(5)
+      },
+    }))
+    expect(status).toBe(5)
+    expect(started?.command).toBe('/home/.delo/runtimes/0.1.0/node/bin/node')
+    expect(recorded.launches).toHaveLength(1)
+  })
+
   it('refuses a stored root of a shipped version that this launcher does not ship, and starts nothing', async () => {
     const shipped = await fixtureRelease()
     const unrelated = await fixtureRelease()
@@ -381,12 +438,14 @@ describe('a release named with --release when a runtime is installed', () => {
 })
 
 describe('the environment the runtime starts with', () => {
-  it('drops the variables that load code into the runtime’s Node and its dynamic loader', () => {
+  it('drops the variables that load code into the runtime’s Node and its dynamic loader, and the ones that decide what its HTTPS connections trust', () => {
     const environment = launchEnvironment(
       {
         PATH: '/bin',
         NODE_OPTIONS: '--require /tmp/hook.cjs',
         NODE_PATH: '/tmp/modules',
+        NODE_EXTRA_CA_CERTS: '/tmp/interceptor.pem',
+        NODE_TLS_REJECT_UNAUTHORIZED: '0',
         LD_PRELOAD: '/tmp/hook.so',
         LD_LIBRARY_PATH: '/tmp/lib',
         DYLD_INSERT_LIBRARIES: '/tmp/hook.dylib',
@@ -395,6 +454,14 @@ describe('the environment the runtime starts with', () => {
       { DELO_HOME: '/home', DELO_PROFILE: 'work' },
     )
     expect(environment).toEqual({ PATH: '/bin', DELO_HOME: '/home', DELO_PROFILE: 'work' })
+  })
+
+  it('drops a parent’s extra certificate authority and its TLS check switch, which would intercept every HTTPS connection the runtime makes', () => {
+    const environment = launchEnvironment(
+      { NODE_EXTRA_CA_CERTS: '/tmp/interceptor.pem', NODE_TLS_REJECT_UNAUTHORIZED: '0', HOME: '/home' },
+      {},
+    )
+    expect(environment).toEqual({ HOME: '/home' })
   })
 
   it('starts a child Node that sees none of them, and sees the launch protocol’s own variables', async () => {

@@ -2,11 +2,12 @@
  * The customisation document of contract C8: `customisation.json`. It is a
  * closed schema — a row kind the format does not define is refused, a field a
  * row kind does not define is refused, and a value is data: a string, a number
- * a boolean or null. An archive never causes an evaluation: a `!!js`
- * expression is refused by scanning the document's text before it is parsed,
- * and an `insert` row is refused before any row is applied. A row of a denied
- * kind — a sandbox mode, a credential reference, a reach row, an egress — is
- * refused, so an archive cannot change any of them.
+ * a boolean or null. An archive never causes an evaluation: every decoded
+ * string is refused when its first non-space character is `!` or when it
+ * carries `!!`, the document's text is scanned for `!!js` before it is parsed
+ * as a second layer, and an `insert` row is refused before any row is applied.
+ * A row of a denied kind — a sandbox mode, a credential reference, a reach row,
+ * an egress — is refused, so an archive cannot change any of them.
  *
  * @module @delo/archive/customisation
  */
@@ -24,11 +25,17 @@ import { CUSTOMISATION_PATH } from './manifest.ts'
 /** The fields one customisation row defines and no others. */
 const ROW_FIELDS = ['kind', 'target', 'values'] as const
 
-/** A `!!js` tag, which names an expression to evaluate. */
+/**
+ * A `!!js` tag in the document's text, which names an expression to evaluate. It is the second layer: a tag written
+ * with a JSON escape (`"\u0021\u0021js"`) appears only in the decoded value, which {@link requireNoExpression} checks.
+ */
 const EXPRESSION_TAG = /!!js/u
 
-/** A YAML tag prefix at the start of a value, which is how an expression reaches a document. */
-const TAG_PREFIX = /^!/u
+/** A YAML tag at the start of a decoded string, past any leading space, which is how an expression reaches a document. */
+const DECODED_TAG = /^\s*!/u
+
+/** A `!!` tag anywhere in a decoded string, which is what an expression is written with. */
+const DECODED_TAG_ANYWHERE = '!!'
 
 /** One row of the diff a person sees before the customisation is applied. */
 export interface CustomisationDiffRow {
@@ -55,6 +62,7 @@ export function parseCustomisation(bytes: Uint8Array): ArchiveCustomisation {
   } catch {
     throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${CUSTOMISATION_PATH} is not UTF-8 JSON`)
   }
+  requireNoExpression(document, CUSTOMISATION_PATH)
   const fields = requireObject(document, CUSTOMISATION_PATH)
   const unknown = Object.keys(fields).filter(key => key !== 'schemaVersion' && key !== 'rows')
   if (unknown.length > 0) {
@@ -113,25 +121,45 @@ function parseRow(value: unknown, index: number): ArchiveCustomisationRow {
 }
 
 /**
- * Require a row's values to be data: a string, a number, a boolean or null,
- * with no object, no array and no tagged or expression-bearing string.
+ * Refuse any decoded string an expression could be read from: one whose first non-space character is `!`, which a
+ * YAML reader takes as a tag, or one that carries `!!`. The document's text is scanned before it is parsed as well,
+ * but an escaped tag (`"\u0021\u0021js process.exit(1)"`) reads as `!!js process.exit(1)` only once the value is
+ * decoded, so the decoded values are the check of record and the text scan is the second layer.
+ * @param value - the parsed value.
+ * @param where - the value's name, for the refusal's message.
+ * @throws ArchiveError `ARCHIVE_EXPRESSION_REFUSED` for a string that reads as a tag or an expression.
+ */
+function requireNoExpression(value: unknown, where: string): void {
+  if (typeof value === 'string') {
+    if (DECODED_TAG.test(value) || value.includes(DECODED_TAG_ANYWHERE)) {
+      throw new ArchiveError('ARCHIVE_EXPRESSION_REFUSED', `${where} carries a string that reads as a tag or an expression, and an archive never evaluates one`)
+    }
+    return
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) requireNoExpression(item, where)
+    return
+  }
+  if (typeof value !== 'object' || value === null) return
+  for (const [key, item] of Object.entries(value)) {
+    requireNoExpression(key, where)
+    requireNoExpression(item, where)
+  }
+}
+
+/**
+ * Require a row's values to be data: a string, a number, a boolean or null, with no object, no array and no
+ * expression-bearing string, which {@link requireNoExpression} refuses for the whole document.
  * @param value - the parsed `values` field.
  * @param where - the field's name, for the refusal's message.
  * @returns the values.
- * @throws ArchiveError `ARCHIVE_EXPRESSION_REFUSED` for a tagged string, and `ARCHIVE_SCHEMA_INVALID` for a value that is not data.
+ * @throws ArchiveError `ARCHIVE_SCHEMA_INVALID` for a value that is not data.
  */
 function requireValues(value: unknown, where: string): Record<string, string | number | boolean | null> {
   const fields = requireObject(value, where)
   const values: Record<string, string | number | boolean | null> = {}
   for (const [key, item] of Object.entries(fields)) {
-    if (item === null || typeof item === 'number' || typeof item === 'boolean') {
-      values[key] = item
-      continue
-    }
-    if (typeof item === 'string') {
-      if (TAG_PREFIX.test(item)) {
-        throw new ArchiveError('ARCHIVE_EXPRESSION_REFUSED', `${where} ${JSON.stringify(key)} is a tagged value, which an archive never evaluates`)
-      }
+    if (item === null || typeof item === 'number' || typeof item === 'boolean' || typeof item === 'string') {
       values[key] = item
       continue
     }

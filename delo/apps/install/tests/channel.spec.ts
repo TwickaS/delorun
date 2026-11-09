@@ -4,7 +4,7 @@
  * release log the machine cannot reach, and a release the channel does not offer. Each refuses with its contract C1 or
  * C18 code, and none of them installs anything.
  */
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -111,6 +111,10 @@ describe('a release the channel can verify', () => {
     expect(Buffer.from(files.manifest).equals(Buffer.from(fixture.manifestBytes))).toBe(true)
     expect(await readdir(join(directory, 'node/bin'))).toEqual(['node'])
     expect(await readdir(join(home, 'trust'))).toEqual(expect.arrayContaining(['root.json', 'timestamp.json', 'checkpoint.json']))
+    // The chain the walk covered is kept beside the root it ended at, so a start can prove a root newer than the ones
+    // its launcher ships descends from one of them.
+    expect(await readdir(join(home, 'trust', 'roots'))).toEqual(['1.root.json'])
+    expect(await readFile(join(home, 'trust', 'roots', '1.root.json'))).toEqual(Buffer.from(fixture.roots[0]!))
   })
 })
 

@@ -35,12 +35,12 @@ const DIGEST = createHash('sha256').update(MANIFEST).digest('hex')
 const SHA512 = createHash('sha512').update(MANIFEST).digest('base64')
 
 /** An entry body with the given fields, serialized the way Rekor v2 serializes one. */
-function body(key: KeyObject, fields: { digest?: string, algorithm?: string, signature: Buffer, keyDetails: string }): Buffer {
-  const rawBytes = createPublicKey(key).export({ format: 'der', type: 'spki' }).toString('base64')
+function body(key: KeyObject, fields: { digest?: string, algorithm?: string, signature: Buffer, keyDetails: string, rawBytes?: Buffer }): Buffer {
+  const rawBytes = fields.rawBytes ?? createPublicKey(key).export({ format: 'der', type: 'spki' })
   return Buffer.from(canonicalJson({
     apiVersion: '0.0.2',
     kind: 'hashedrekord',
-    spec: { hashedRekordV002: { data: { algorithm: fields.algorithm ?? 'SHA2_512', digest: fields.digest ?? SHA512 }, signature: { content: fields.signature.toString('base64'), verifier: { publicKey: { rawBytes }, keyDetails: fields.keyDetails } } } },
+    spec: { hashedRekordV002: { data: { algorithm: fields.algorithm ?? 'SHA2_512', digest: fields.digest ?? SHA512 }, signature: { content: fields.signature.toString('base64'), verifier: { publicKey: { rawBytes: rawBytes.toString('base64') }, keyDetails: fields.keyDetails } } } },
   }))
 }
 
@@ -52,6 +52,21 @@ function failure(run: () => unknown): string | undefined {
     throw error
   }
   return undefined
+}
+
+/**
+ * The refusal a bundle verification raises.
+ * @param run - the verification.
+ * @returns the refusal.
+ */
+function refusal(run: () => unknown): LogVerificationError {
+  try {
+    run()
+  } catch (error) {
+    if (error instanceof LogVerificationError) return error
+    throw error
+  }
+  throw new Error('the bundle verified, and the spec expected a refusal')
 }
 
 describe('release-log bundle', () => {
@@ -150,6 +165,15 @@ describe('release-log bundle checks, each on its own', () => {
     const index = log.append(body(keys.targets, { signature: sign(null, MANIFEST, keys.targets), keyDetails: 'PKIX_ED25519_PH' }))
     const bundle = log.bundle(index, { name: 'delorun-0.1.0.manifest.json', sha256: sha256Hex(DIGEST) }, witness.cosign(log.checkpoint(), 1_793_981_700))
     expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', bundle))).toBe('entry-signature-invalid')
+  })
+
+  it('refuses an entry whose verifier key does not parse, and names why it could not be read', () => {
+    const { keys, log, witness, root } = setup()
+    const index = log.append(body(keys.targets, { signature: signEd25519ph(keys.targets, MANIFEST), keyDetails: 'PKIX_ED25519_PH', rawBytes: Buffer.from('not a spki key') }))
+    const bundle = log.bundle(index, { name: 'delorun-0.1.0.manifest.json', sha256: sha256Hex(DIGEST) }, witness.cosign(log.checkpoint(), 1_793_981_700))
+    const error = refusal(() => verifyBundle(root, MANIFEST, '0.1.0', bundle))
+    expect(error.failure).toBe('entry-signature-invalid')
+    expect(error.message).toContain('its verifier key does not parse')
   })
 
   it('refuses an entry body with a field Rekor v2\'s hashedrekord v0.0.2 does not have', () => {

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { VERIFICATION_MODES } from '@delo/contract-verification-checks'
@@ -95,6 +95,22 @@ describe('install', () => {
     await fixture.install(V1)
     const outsider = throwawayKeys().targets
     await refusedInstall(() => releaseFiles(outsider, V2, closureFiles(V2)))
+  })
+
+  it('seals the staged tree before it hashes it, so no writable window sits between the digest and the installed modes', async () => {
+    const files = closureFiles(V1)
+    await fixture.store.install({
+      version: V1,
+      root: fixture.root,
+      fill: async (directory) => {
+        writeClosure(directory, files)
+        // The fill step leaves one file write-only: hashing it before the installed modes are set fails on the read,
+        // so only a seal that runs first reaches the bytes the signed list names.
+        chmodSync(join(directory, 'app/package.json'), 0o200)
+        return Promise.resolve(releaseFiles(fixture.keys.targets, V1, files))
+      },
+    })
+    expect(lstatSync(join(runtimes(), V1, 'app/package.json')).mode & 0o777).toBe(0o444)
   })
 
   it('refuses a staged file whose bytes differ from the file list', async () => {

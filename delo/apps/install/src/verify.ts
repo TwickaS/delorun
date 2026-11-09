@@ -23,7 +23,7 @@ import {
 } from '@delo/contract-release-manifest'
 import { LogVerificationError, readBundle, verifyBundle, type VerifiedBundle } from '@delo/release/log/bundle'
 import { canonicalJson, toJsonValue } from '@delo/release/sign/json'
-import { readRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifyTimestamp, type TrustedRoot } from '@delo/release/sign/verify'
+import { readRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifyTimestamp, walkRootChain, type TrustedRoot } from '@delo/release/sign/verify'
 import { InstallError, messageOf } from './errors.ts'
 import type { StoredTimestamp } from './state.ts'
 
@@ -242,6 +242,8 @@ export interface StoredRootRequest {
   readonly stored: Uint8Array
   /** The root files the launcher ships, oldest first: the only roots it trusts. */
   readonly shipped: readonly Uint8Array[]
+  /** `trust/roots/<n>.root.json`'s bytes, oldest first: the chain an install walked to the stored root. */
+  readonly walked: readonly Uint8Array[]
   /** The stored root's path, which a refusal names. */
   readonly source: string
 }
@@ -250,12 +252,17 @@ export interface StoredRootRequest {
  * Trust the root a home stored for a start, by the roots the launcher ships (contract C1: trust comes only through
  * the launcher's own roots). The stored root must be signed by its own root threshold, and at a version the launcher
  * ships it must be that very root: a root of the same version whose keys or roles differ is an unrelated root that
- * signs unrelated releases, so it is refused rather than handed to the start check. A stored root newer than every
- * shipped root is the newest version a verified rotation walked to, which only an install writes.
- * @param request - the stored root, the shipped roots and the stored root's path.
+ * signs unrelated releases, so it is refused rather than handed to the start check.
+ *
+ * A stored root newer than every shipped root is trusted only with the chain an install walked to it: every version
+ * from the newest shipped root to the stored one, each signed by the root before it and by its own root threshold. A
+ * root a restore or a sync placed under `trust/` descends from no shipped root, so it is refused rather than accepted
+ * as an anchor for whatever runtime sits beside it.
+ * @param request - the stored root, the shipped roots, the walked chain and the stored root's path.
  * @returns the stored root, as trusted.
  * @throws {InstallError} `NO_TRUSTED_ROOT` when the launcher ships no root; `INSTALL_VERIFY_FAILED` when the stored
- *   root does not verify, is older than the oldest shipped root, or differs from the shipped root of its version.
+ *   root does not verify, is older than the oldest shipped root, differs from the shipped root of its version, or is
+ *   newer than every shipped root without a chain that walks from one.
  */
 export function verifyStoredRoot(request: StoredRootRequest): TrustedRoot {
   const shipped = request.shipped.map((bytes) => {
@@ -283,6 +290,30 @@ export function verifyStoredRoot(request: StoredRootRequest): TrustedRoot {
   const oldest = Math.min(...shipped.map(root => root.metadata.version))
   if (version < oldest) {
     throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, older than root ${String(oldest)}, the oldest this launcher ships; a root never moves backwards`)
+  }
+  const newest = Math.max(...shipped.map(root => root.metadata.version))
+  const walked = request.walked.map((bytes) => {
+    try {
+      return { root: readRoot(bytes), bytes }
+    } catch (error) {
+      throw refused(request.source, error)
+    }
+  })
+  // The walk starts at the newest shipped root, so roots the chain holds at or below it are the launcher's own files
+  // and roots past the stored one are a chain written after this root, which says nothing about it.
+  const forward = walked.filter(entry => entry.root.metadata.version > newest && entry.root.metadata.version <= version)
+  if (!forward.some(entry => entry.root.metadata.version === version)) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, newer than root ${String(newest)}, the newest this launcher ships, and the chain an install walked holds no root of that version: nothing proves it descends from the root this launcher ships, so it is not trusted`)
+  }
+  let chain: TrustedRoot[]
+  try {
+    chain = walkRootChain([...request.shipped, ...forward.map(entry => entry.bytes)])
+  } catch (error) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, newer than root ${String(newest)}, the newest this launcher ships, and the chain an install walked does not walk from a shipped root to it: ${messageOf(error)}`, { cause: error })
+  }
+  const last = chain.at(-1)!
+  if (last.metadata.version !== version || last.sha256 !== stored.sha256) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, and the chain an install walked ends at root ${String(last.metadata.version)}; the chain proves a different root, so the stored one is not trusted`)
   }
   return stored
 }
