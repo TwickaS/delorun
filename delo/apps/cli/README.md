@@ -92,7 +92,7 @@ This build has no runtime store yet, so its home process refuses update requests
 - Start at login (`delorun start --at-login`, `delorun stop --at-login`), `delorun status --follow`, the runtime store's updates and the Host's chat gate ([the home process's seams](../../packages/home-process/README.md#seams-for-other-packages)), and the confinement probes of the start sequence.
 - Setup's reach question and the import of a stock DeepSeek Harness home. Setup records reach as off.
 - The Windows DACL check ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory and protected-file checks look only at the file type.
-- `delorun --version`, `verify`, `logs`, `update`, `recover`, `reach`, `devices`, `export`, `import` and `dev`.
+- `delorun verify`, `update`, `reach`, `devices`, `export`, `import` and `dev`.
 
 ## Development
 

@@ -93,7 +93,7 @@ The specs drive the handshake through a fixture store in `tests/support.ts`, whi
 
 - The runtime store, the profile history and the Host's chat gate, as the table above states. Until the chat gate lands, `delorun stop` does not wait for a running chat.
 - Step 8's confinement probes and their results, and `delorun verify`'s report of a dialect that cannot enforce C1's rules. The home process wraps no confined command itself yet; the probes, when they land, retry once a Landlock wrap refused with exit code 125 because an entry on the path to the home changed between the wrap and the launch, before reporting it.
-- Start at login (`--at-login`), `delorun status --follow`, `delorun update` and `delorun recover`.
+- Start at login (`--at-login`), `delorun status --follow` and `delorun update`.
 - The Windows named pipe with C1's DACL: the channel listens only on a Unix socket.
 
 ## Tests
