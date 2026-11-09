@@ -90,25 +90,25 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)，[`@delo/home-
 | `cap-drop`、`no-new-privileges`、`seccomp` | `CapDrop`、`SecurityOpt`，以及引擎的 seccomp 选项 | `/proc/self/status` 中为空的 `CapBnd`、`CapPrm`、`CapEff` 与 `CapAmb`，以及 `NoNewPrivs` 与 `Seccomp` |
 | `read-only-root`、`user-namespace` | `ReadonlyRootfs`，引擎的 `userns` 或 `rootless` 选项 | `/` 以只读方式挂载；`uid_map` 不是恒等映射 |
 | `network-isolation` | 探测网络为内部网络，且是容器唯一的网络 | 除 `lo` 外的接口上没有默认路由 |
-| `host-gateway-block`、`host-loopback-block` | | 连接监管器在网关地址上打开的监听器，以及经由 `host.docker.internal`、`10.0.2.2` 和网关连接回环监听器，均失败 |
+| `host-gateway-block`、`host-loopback-block` | 探测网络的 `Options` 请求桥接驱动的 `isolated` 网关模式，因此它没有网关地址 | 连接监管器在网关地址上打开的监听器，以及经由 `host.docker.internal`、`10.0.2.2` 和网关连接回环监听器，均失败；完全没有网关地址的网络（`isolated` 模式所致）本身就是该阻断 |
 | `egress-allowlist` | | `unknown`：探测需要 S2 镜像的出站代理 |
 
-缺失或未能结束的探测工具会得到 `unknown`；监管器无法在其上监听的网关地址同样得到 `unknown`，引擎运行在虚拟机中时即为此情形。无论发生什么，返回报告之前都会删除探测容器及其网络。只有当 C9 要求的限制均为 `enforced` 且其镜像已列出时，`shapesOf` 才会提供某个形态；在 Docker Desktop 上、任何宿主系统上，都不会提供 S2，因为其辅助程序套接字无法穿过 Desktop 的虚拟机文件共享；文件监视仅在 Linux 引擎上被报告为 `supported`。
+缺失或未能结束的探测工具会得到 `unknown`；监管器无法在其上监听的网关地址同样得到 `unknown`，引擎运行在虚拟机中时即为此情形。无论发生什么，返回报告之前都会删除探测容器及其网络。只有当 C9 要求的限制（其中包括 `host-gateway-block`）均为 `enforced` 且其镜像已列出时，`shapesOf` 才会提供某个形态；在 Docker Desktop 上、任何宿主系统上，都不会提供 S2，因为其辅助程序套接字无法穿过 Desktop 的虚拟机文件共享；文件监视仅在 Linux 引擎上被报告为 `supported`。
 
 <a id="workspace-containers"></a>
 ## 工作区容器
 
 `workspace.create` 要求 S2 已被提供，拒绝凭据转发，解析根目录，依据引擎所在机器检查预设（`PRESET_OUT_OF_RANGE`），确保 S2 镜像存在，并在 home 与 profile 的标签下创建：
 
-- 内部网络 `delo-ws-<12 hex>`；
-- 同名容器，由 `createBody` 构建：丢弃所有能力，设置 `no-new-privileges`，使用所列的 seccomp 配置文件或引擎的默认配置文件，根文件系统只读并带有大小为预设值的 tmpfs `/tmp`，CPU、内存与 PID 限制取自预设，交换空间等于内存，磁盘大小仅在报告确认其已强制执行时设置，使用 init 进程，无重启策略，无设备，不加入宿主的任何命名空间，使用 C9 辅助通道的工作区用户，并且只绑定挂载解析后的根目录（路径相同）以及辅助程序的套接字目录 `run/<profile>/s2/<12 hex>/` 到 `/run/delo-helper`；
+- 内部网络 `delo-ws-<12 hex>`，由 `networkBody` 以桥接驱动的 `isolated` 网关模式创建，因此其网桥不携带主机地址，容器没有机器上的网关可连接；
+- 同名容器，由 `createBody` 构建：丢弃所有能力，设置 `no-new-privileges`，使用所列的 seccomp 配置文件或引擎的默认配置文件，根文件系统只读并带有大小为预设值的 tmpfs `/tmp`，CPU、内存与 PID 限制取自预设，交换空间等于内存，磁盘大小仅在报告确认其已强制执行时设置，使用 init 进程，无重启策略，无设备，不加入宿主的任何命名空间，使用 C9 辅助通道的工作区用户，并且只绑定挂载解析后的根目录（路径相同，可写）以及辅助程序的目录 `run/<profile>/s2/<12 hex>/` 到 `/run/delo-helper`（只读），其 `channel/` 子目录以可写方式挂载到 `/run/delo-helper/channel`；
 - 除非出站为 `none`，否则还会创建出站代理 `delo-ws-<12 hex>-proxy`，它使用同一摘要的镜像，接入 `delo-ws-<12 hex>-out` 与内部网络，以 C9 的入口 `/usr/local/bin/delo-egress-proxy`（`EGRESS_PROXY_ENTRY`）启动，其模式与主机列表分别在 `DELO_EGRESS_MODE` 与 `DELO_EGRESS_HOSTS` 中给出，并使用工作区的资源限制。
 
 每创建一个容器后，监管器都会将其 inspect 记录与其请求体比较（`hardeningDifferences`）：挂载与解析后的路径不一致时，删除本次创建的全部内容，并以 `ROOT_REFUSED` 拒绝；引擎未应用某项设置时，以 `LIMITS_MISSING` 拒绝。工作区容器的代理变量始终指向该代理，因此在 `none` 下，任何名称都无法解析，也没有任何流量能够发出。容器已存在的工作区以 `WORKSPACE_EXISTS` 拒绝，启动一个容器已在运行的工作区也是如此，引擎拒绝的调用以 `ENGINE_REFUSED` 并附引擎的消息拒绝，引擎未应答时以 `DOCKER_UNAVAILABLE` 拒绝。对不带有本 home 与本 profile 标签的容器执行的操作，会以 `NOT_FOUND` 失败。`workspace.remove` 会删除这些容器、两个网络与辅助程序目录，并保持工作区根目录不变。
 
-每次 `workspace.start` 之前，监管器都会再次检查这些容器：所有者标签、经 `recheckMountedRoot` 检查的根目录挂载、辅助程序目录、C9 所允许的挂载与网络，以及每条 inspect 记录与 `workspace.create` 所构建请求体的比较，包括镜像、用户与每项设置，还包括容器在 `delo.limits` 标签中记录的限额，因此创建之后被机器提高的限额会以 `LIMITS_MISSING` 拒绝。未通过检查的容器不会启动。容器中的命令会写入辅助程序目录，因此使用该目录的主机端代码（例如 S2 辅助程序的客户端）绝不能跟随其中的路径。
+每次 `workspace.start` 之前，监管器都会再次检查这些容器：所有者标签、经 `recheckMountedRoot` 检查的根目录挂载、辅助程序目录及其通道目录、C9 所允许的挂载与网络，以及每条 inspect 记录与 `workspace.create` 所构建请求体的比较，包括镜像、用户与每项设置，还包括容器在 `delo.limits` 标签中记录的限额，因此创建之后被机器提高的限额会以 `LIMITS_MISSING` 拒绝。未通过检查的容器不会启动。通道目录是工作区唯一可写的宿主路径，因此每次启动时都会清空上一次会话遗留的辅助程序套接字，并在其中含有任何其他条目时以 `ROOT_REFUSED` 拒绝；容器中的命令会写入该目录，因此使用它的主机端代码（例如 S2 辅助程序的客户端）绝不能跟随其中的路径。
 
-随后，`workspace.start` 会从容器内部对刚刚启动的容器进行闸门检查（[`confine.ts`](src/confine.ts)，C9 的容器、网络与根目录各节），并要求两部分都成立，因为任何一部分单独都可能被蒙骗。在探测运行之后重新读取的 inspect 记录只能带有 C9 允许的绑定挂载——解析后的根目录挂载在其自身路径上、辅助程序的套接字目录，以及引擎自身的 `/etc/hosts`、`/etc/hostname` 与 `/etc/resolv.conf`——其挂载源不得位于 OS home、Delo home 或 Docker 套接字之中，并且容器只能属于它自己的内部网络，不加入宿主的任何命名空间。随后每个属性各有一条固定的探测命令，仅凭退出码读取容器自身的视图：能力集合为空、`no-new-privileges`、seccomp、根文件系统只读、工作区根目录可写，且除根目录、辅助程序目录、`/tmp` 与引擎自身的文件系统及文件之外没有其他可写挂载、Delo home 与本机 Docker 套接字不存在、`/tmp` 为预设大小的 tmpfs、预设的 cgroup 限制、工作区用户，以及除 `lo` 之外没有接口带有默认路由。若某个挂载、某项设置、网络或某条探测不通过，或探测无法运行、无法结束，容器会连同其网络与辅助程序目录一起被停止并删除；挂载问题以 `ROOT_REFUSED` 拒绝，其余以 `LIMITS_MISSING` 拒绝，未保持运行的容器以 `ENGINE_REFUSED` 拒绝，探测或其他引擎调用被引擎拒绝时同样如此。此后该工作区在 `reason` 中报告该代码并处于 `failed` 状态，直到 `workspace.create` 重新创建它；被收回的工作区绝不会被启动：即使清理失败、其容器仍然存在，`workspace.inspect` 也会以该代码报告 `failed`，而下一次启动会以同一代码被拒绝。探测不读取任何输出，因此探测命令从不携带机密，容器所显示的内容也不会离开容器。
+随后，`workspace.start` 会从容器内部对刚刚启动的容器进行闸门检查（[`confine.ts`](src/confine.ts)，C9 的容器、网络与根目录各节），并要求两部分都成立，因为任何一部分单独都可能被蒙骗。在探测运行之后重新读取的 inspect 记录只能带有 C9 允许的绑定挂载——解析后的根目录挂载在其自身路径上、辅助程序目录（只读）及其下方可写的通道目录，以及引擎自身的 `/etc/hosts`、`/etc/hostname` 与 `/etc/resolv.conf`——其挂载源不得位于 OS home、Delo home 或 Docker 套接字之中，并且容器只能属于它自己的内部网络，不加入宿主的任何命名空间。随后每个属性各有一条固定的探测命令，仅凭退出码读取容器自身的视图：能力集合为空、`no-new-privileges`、seccomp、根文件系统只读、工作区根目录可写、辅助程序目录只读而其通道目录可写，且除根目录、通道目录、`/tmp` 与引擎自身的文件系统及文件之外没有其他可写挂载、Delo home 与本机 Docker 套接字不存在、`/tmp` 为预设大小的 tmpfs、预设的 cgroup 限制、工作区用户，以及除 `lo` 之外没有接口带有默认路由。若某个挂载、某项设置、网络或某条探测不通过，或探测无法运行、无法结束，容器会连同其网络与辅助程序目录一起被停止并删除；挂载问题以 `ROOT_REFUSED` 拒绝，其余以 `LIMITS_MISSING` 拒绝，未保持运行的容器以 `ENGINE_REFUSED` 拒绝，探测或其他引擎调用被引擎拒绝时同样如此。此后该工作区在 `reason` 中报告该代码并处于 `failed` 状态，直到 `workspace.create` 重新创建它；被收回的工作区绝不会被启动：即使清理失败、其容器仍然存在，`workspace.inspect` 也会以该代码报告 `failed`，而下一次启动会以同一代码被拒绝。探测不读取任何输出，因此探测命令从不携带机密，容器所显示的内容也不会离开容器。
 
 每次 Engine API 调用都有截止时间 `engineCallMs`，每次拉取都有 `pullMs`；超过截止时间的调用为 `DOCKER_UNAVAILABLE`，拉取为 `IMAGE_PULL_FAILED`。拉取的进度流按行读取，因此其长度不受限制。
 

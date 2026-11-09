@@ -14,7 +14,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SUPERVISOR_ROOTS_FILE } from '@delo/contract-home-layout'
-import { HELPER_SOCKET_DIR, IMAGES, LABELS, PRESETS, type DockerLimit } from '@delo/contract-runtime-supervisor'
+import { HELPER_CHANNEL_DIR, HELPER_SOCKET_DIR, IMAGES, LABELS, PRESETS, type DockerLimit } from '@delo/contract-runtime-supervisor'
 import type { FileRef, OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
 import { writeProtectedFile } from '@delo/home'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -192,7 +192,7 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
     const name = created.ok && typeof created.workspace === 'object' && created.workspace !== null && 'container' in created.workspace ? String(created.workspace.container) : ''
     const record = (JSON.parse(docker('inspect', name)) as { readonly HostConfig: Record<string, unknown>, readonly Mounts: { readonly Type: string, readonly Source: string, readonly Destination: string }[] }[])[0]
     expect(record?.HostConfig).toMatchObject({ CapDrop: ['ALL'], ReadonlyRootfs: true, Privileged: false, Memory: PRESETS.small.memoryBytes, MemorySwap: PRESETS.small.memoryBytes, PidsLimit: PRESETS.small.pids, Init: true })
-    expect(record?.Mounts.filter(mount => mount.Type === 'bind').map(mount => mount.Destination).sort()).toEqual([HELPER_SOCKET_DIR, root].sort())
+    expect(record?.Mounts.filter(mount => mount.Type === 'bind').map(mount => mount.Destination).sort()).toEqual([HELPER_CHANNEL_DIR, HELPER_SOCKET_DIR, root].sort())
     expect(record?.Mounts.find(mount => mount.Destination === root)?.Source).toBe(root)
     expect(await send(socket, { v: 1, token, op: 'workspace.start', args: { workspaceId: 'w' } })).toMatchObject({ ok: true, workspace: { state: 'running' } })
     expect(await send(socket, { v: 1, token, op: 'workspace.stop', args: { workspaceId: 'w', mode: 'kill' } })).toMatchObject({ ok: true })

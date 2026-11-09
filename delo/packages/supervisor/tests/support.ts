@@ -192,6 +192,8 @@ export interface FakeEngineState {
   readonly containers: Map<string, InspectRecord>
   /** Every call, as `METHOD path`. */
   readonly calls: string[]
+  /** The body of each `/networks/create` call, by the network's name, when the spec reads them. */
+  readonly networks?: Map<string, Record<string, unknown>>
   /** Changes a created container's record, as an engine that does not apply a setting would. */
   alter?: (name: string, record: InspectRecord) => InspectRecord
   /**
@@ -219,7 +221,7 @@ export function appliedRecord(body: CreateBody): InspectRecord {
     Config: { Image: body.Image, User: body.User, Labels: body.Labels, Env: body.Env },
     State: { Status: 'created', Running: false },
     HostConfig: { ...body.HostConfig },
-    Mounts: body.HostConfig.Mounts.map(mount => ({ Type: 'bind', Source: mount.Source, Destination: mount.Target })),
+    Mounts: body.HostConfig.Mounts.map(mount => ({ Type: 'bind', Source: mount.Source, Destination: mount.Target, ReadOnly: mount.ReadOnly })),
     NetworkSettings: { Networks: { [body.HostConfig.NetworkMode]: {} } },
   }
 }
@@ -249,6 +251,11 @@ export function fakeEngine(state: FakeEngineState): Engine {
         return Promise.resolve([...state.containers.entries()]
           .filter(([, record]) => matches(record.Config?.Labels ?? {}))
           .map(([key, record]) => ({ Names: [`/${key}`], Labels: record.Config?.Labels ?? {}, Mounts: (record.Mounts ?? []).map(mount => ({ ...mount })) })))
+      }
+      if (method === 'POST' && path === '/networks/create') {
+        const created = body as { readonly Name: string }
+        state.networks?.set(created.Name, body as Record<string, unknown>)
+        return Promise.resolve({ Id: created.Name })
       }
       if (method === 'POST' && path.startsWith('/containers/create')) {
         const created = decodeURIComponent(/name=([^&]+)/.exec(path)?.[1] ?? '')

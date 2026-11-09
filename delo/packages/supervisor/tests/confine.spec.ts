@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { HELPER_SOCKET_DIR, PRESETS } from '@delo/contract-runtime-supervisor'
+import { HELPER_CHANNEL_DIR, HELPER_SOCKET_DIR, PRESETS } from '@delo/contract-runtime-supervisor'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   allowedMounts,
@@ -22,6 +22,7 @@ import {
   isWithin,
   networkFindings,
   probeFinding,
+  readOnlyMounts,
   refusedMounts,
   requireConfined,
   SupervisorError,
@@ -112,11 +113,25 @@ describe('the paths a container may reach', () => {
 })
 
 describe('the mounts C9 allows', () => {
-  it('allows exactly the resolved root at its own path and the helper\'s socket directory', () => {
-    expect([...allowedMounts(expectation())]).toEqual([[ROOT, ROOT], [HELPER, HELPER_SOCKET_DIR]])
+  it('allows exactly the resolved root at its own path and the helper\'s directory with its channel', () => {
+    expect([...allowedMounts(expectation())]).toEqual([[ROOT, ROOT], [HELPER, HELPER_SOCKET_DIR], [`${HELPER}/channel`, HELPER_CHANNEL_DIR]])
+    expect(readOnlyMounts(expectation())).toEqual([HELPER])
     expect(refusedMounts(appliedRecord(body()), expectation())).toEqual([])
-    // Removing the helper's directory from the allowed set makes its recorded mount a refusal.
-    expect(refusedMounts(appliedRecord(body(workspaceBinds(ROOT, '/elsewhere'))), expectation())).toEqual([expect.stringContaining("not the workspace root or the helper's socket directory")])
+    // Removing the helper's directory from the allowed set makes its recorded mounts refusals: the directory, and the
+    // channel it carries below it.
+    const elsewhere = refusedMounts(appliedRecord(body(workspaceBinds(ROOT, '/elsewhere'))), expectation())
+    expect(elsewhere).toHaveLength(2)
+    expect(elsewhere.every(entry => entry.includes("not the workspace root or the helper's socket directory"))).toBe(true)
+  })
+
+  it('refuses a helper mount the container may write, which is the mount a workspace could add to', () => {
+    const record = appliedRecord(body())
+    const writable = { ...record, Mounts: (record.Mounts ?? []).map(mount => mount.Source === HELPER ? { ...mount, ReadOnly: false } : mount) }
+    expect(refusedMounts(writable, expectation())).toEqual([expect.stringContaining("writable, and the helper's directory is read-only")])
+    // The channel below it stays writable: it is where the helper creates its sockets.
+    const channel = { ...record, Mounts: (record.Mounts ?? []).map(mount => mount.Source === `${HELPER}/channel` ? { ...mount, ReadOnly: true } : mount) }
+    expect(refusedMounts(channel, expectation())).toEqual([])
+    expect(writableBinds(channel, expectation())).toEqual([])
   })
 
   it('refuses a mount of the Delo home, a path inside it, the OS home, a Docker socket and a system directory', () => {
@@ -187,9 +202,10 @@ describe('the probes', () => {
     expect(advanced.memory.at(-1)).toBe(String(6 * 1024 ** 3))
     expect(advanced.pids.at(-1)).toBe('777')
     expect(advanced.cpu.at(-1)).toBe(String(3e9))
-    // The paths a probe reads are the resolved ones: the workspace root, the helper's mount point and the mounts file.
+    // The paths a probe reads are the resolved ones: the workspace root, the helper's channel and the mounts file.
     expect(probes['workspace-root-writable'].at(-1)).toBe(ROOT)
-    expect(probes['writable-mounts'].slice(-3)).toEqual([ROOT, HELPER_SOCKET_DIR, '/proc/mounts'])
+    expect(probes['helper-read-only'].slice(-2)).toEqual([HELPER_SOCKET_DIR, HELPER_CHANNEL_DIR])
+    expect(probes['writable-mounts'].slice(-3)).toEqual([ROOT, HELPER_CHANNEL_DIR, '/proc/mounts'])
     expect(probes['delo-home-hidden']).toContain(DELO_HOME)
     expect(probes['docker-socket-hidden']).toContain('/var/run/docker.sock')
     expect(probes.user.at(-1)).toBe('1000')
@@ -221,8 +237,9 @@ describe('the probes', () => {
       }
     }
     const mount = (source: string, destination: string, fstype: string, options: string): string => `${source} ${destination} ${fstype} ${options} 0 0`
-    // What every engine gives a workspace container: the root, the helper's mount point, /tmp, the engine's own files
-    // and the kernel's writable filesystems, including Docker Desktop's tmpfs masks under /proc.
+    // What every engine gives a workspace container: the root, the helper's directory read-only with its channel
+    // below it writable, /tmp, the engine's own files and the kernel's writable filesystems, including Docker Desktop's
+    // tmpfs masks under /proc.
     const allowed = [
       mount('overlay', '/', 'overlay', 'ro,relatime'),
       mount('proc', '/proc', 'proc', 'rw,nosuid,nodev,noexec,relatime'),
@@ -232,10 +249,14 @@ describe('the probes', () => {
       mount('tmpfs', '/proc/interrupts', 'tmpfs', 'rw,nosuid,size=65536k'),
       mount('/dev/sde', '/etc/hosts', 'ext4', 'rw,relatime'),
       mount(ROOT, ROOT, 'ext4', 'rw,relatime'),
-      mount(HELPER, HELPER_SOCKET_DIR, 'ext4', 'rw,relatime'),
+      mount(HELPER, HELPER_SOCKET_DIR, 'ext4', 'ro,relatime'),
+      mount(`${HELPER}/channel`, HELPER_CHANNEL_DIR, 'ext4', 'rw,relatime'),
       mount('tmpfs', '/tmp', 'tmpfs', 'rw,nosuid,nodev,size=1048576k'),
     ]
     expect(status(allowed)).toBe(0)
+    // A writable helper's directory is a writable mount the workspace was not given: skipping it by its destination
+    // would pass a container that can replace what the harness connects to.
+    expect(status(allowed.map(entry => entry.replace(`${HELPER} ${HELPER_SOCKET_DIR} ext4 ro,`, `${HELPER} ${HELPER_SOCKET_DIR} ext4 rw,`)))).toBe(1)
     // A tmpfs at any other destination is writable space the workspace was never given; skipping every tmpfs by its
     // filesystem type would pass it.
     expect(status([...allowed, mount('tmpfs', '/data', 'tmpfs', 'rw,nosuid,size=65536k')])).toBe(1)

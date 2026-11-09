@@ -123,8 +123,11 @@ export interface ProbeEvidence {
   readonly exits: Readonly<Record<keyof typeof PROBE_COMMANDS, number | undefined>>
   /** Why the container was created without a disk size, when it was. */
   readonly diskRefused?: string
-  /** The host-gateway probe: the connect's exit code, or why it did not run. */
-  readonly gateway: { readonly exit: number | undefined, readonly address: string } | { readonly skipped: string }
+  /**
+   * The host-gateway probe: the connect's exit code against the gateway address, the isolation the probe network reports
+   * in place of a gateway address, or why the probe did not run.
+   */
+  readonly gateway: { readonly exit: number | undefined, readonly address: string } | { readonly isolated: true } | { readonly skipped: string }
   /** The host-loopback probe: each target's connect exit code. */
   readonly loopback: readonly { readonly target: string, readonly exit: number | undefined }[]
 }
@@ -167,9 +170,14 @@ export function limitFindings(evidence: ProbeEvidence): Record<DockerLimit, Limi
   const { exits } = evidence
   const engineUserNamespace = security.some(option => option.includes('name=userns') || option.includes('name=rootless'))
   const isolated = evidence.network.Internal === true && Object.keys(evidence.inspect.NetworkSettings?.Networks ?? {}).length === 1
+  // The probe network is created with the bridge driver's isolated gateway mode, so an engine that applies it gives the
+  // network no gateway address at all: with none, the container has no address of the machine to connect to, which is
+  // what the limit asks for. An engine that ignores the option leaves the gateway in place, and the connect decides.
   const gateway: LimitFinding = 'skipped' in evidence.gateway
     ? { status: 'unknown', evidence: evidence.gateway.skipped }
-    : { status: blocked([evidence.gateway.exit]), evidence: `connect to a listener on ${evidence.gateway.address} exit ${String(evidence.gateway.exit ?? 'none (timed out)')}` }
+    : 'isolated' in evidence.gateway
+      ? { status: 'enforced', evidence: 'Network.IPAM.Config carries no gateway address: the container has no address of the machine to reach' }
+      : { status: blocked([evidence.gateway.exit]), evidence: `connect to a listener on ${evidence.gateway.address} exit ${String(evidence.gateway.exit ?? 'none (timed out)')}` }
   return {
     'cpu': finding('HostConfig.NanoCpus', host.NanoCpus, !differences.has('HostConfig.NanoCpus'), exits.cpu, 'cgroup cpu quota'),
     'memory': finding('HostConfig.Memory', host.Memory, !differences.has('HostConfig.Memory') && !differences.has('HostConfig.MemorySwap'), exits.memory, 'cgroup memory limit'),
@@ -325,7 +333,9 @@ async function probe(options: InspectOptions, info: EngineInfo, image: string, s
     const address = network.IPAM?.Config?.[0]?.Gateway
     let gateway: ProbeEvidence['gateway']
     if (address === undefined || address === '') {
-      gateway = { skipped: 'the probe network has no gateway address' }
+      // The network was created with the bridge driver's isolated gateway mode, so the engine gave its bridge no host
+      // address: there is no gateway for the container to reach and none for the supervisor to listen on.
+      gateway = { isolated: true }
     } else {
       try {
         gatewayServer = await listen(address)

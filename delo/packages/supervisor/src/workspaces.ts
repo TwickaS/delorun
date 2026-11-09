@@ -7,13 +7,12 @@
  *
  * @module @delo/supervisor/workspaces
  */
-import { mkdir, realpath, rm } from 'node:fs/promises'
+import { mkdir, readdir, realpath, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   ADVANCED_BOUNDS,
   DEFAULT_EGRESS_HOSTS,
   EGRESS_PROXY_ENTRY,
-  HELPER_SOCKET_DIR,
   LABELS,
   PRESETS,
   type CredentialOption,
@@ -31,6 +30,7 @@ import { confineContainer, dockerSocketPaths, networkFindings, refusedMounts, re
 import {
   createBody,
   hardeningDifferences,
+  helperChannelDirectory,
   labelsOf,
   limitDifferences,
   limitsOf,
@@ -258,6 +258,43 @@ export class Workspaces {
   }
 
   /**
+   * The one writable subdirectory of a workspace's helper directory: where the helper creates its sockets, and the only
+   * host path the workspace's container may add to.
+   * @param workspaceId - the workspace.
+   * @returns its path on the machine, `run/<profile>/s2/<12 hex>/channel/`.
+   */
+  private channelDirectory(workspaceId: WorkspaceId): string {
+    return helperChannelDirectory(this.helperDirectory(workspaceId))
+  }
+
+  /**
+   * Empty a workspace's channel of what a previous session left, and refuse the directory when it holds anything the
+   * helper would not have made there. The channel is the one host path a workspace may add to, so it may hold the
+   * helper's stream sockets and nothing else: a socket is cleared before the next container starts, because a socket no
+   * live helper holds is stale and nothing else could have put it there, while a regular file, a link, a directory or a
+   * device is either storage the workspace was never given or something the harness could be made to follow.
+   * @param workspaceId - the workspace.
+   * @throws {SupervisorError} `ROOT_REFUSED` for an entry that is not a socket, and the filesystem's refusal for a
+   *   channel that cannot be read.
+   */
+  private async requireHelperChannel(workspaceId: WorkspaceId): Promise<void> {
+    const dir = this.channelDirectory(workspaceId)
+    await mkdir(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
+    if (await realpath(dir) !== dir) throw new SupervisorError('ROOT_REFUSED', `${dir} does not resolve to itself`)
+    await checkPrivateDirectory(dir)
+    const refused: string[] = []
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      if (entry.isSocket()) {
+        await rm(path, { force: true })
+        continue
+      }
+      refused.push(`${entry.name} is ${entry.isDirectory() ? 'a directory' : entry.isSymbolicLink() ? 'a symbolic link' : entry.isFile() ? 'a regular file' : 'not a socket'}`)
+    }
+    if (refused.length > 0) throw new SupervisorError('ROOT_REFUSED', `${dir} holds what the helper's channel may not: ${refused.join('; ')}`)
+  }
+
+  /**
    * What a workspace's container must show the confinement gate: its resolved paths, the machine's homes and Docker
    * sockets, and the limits and user it runs with.
    * @param workspaceId - the workspace.
@@ -313,7 +350,7 @@ export class Workspaces {
       if (record.State?.Running !== true) throw new SupervisorError('ENGINE_REFUSED', `${names.container} did not stay running (state ${record.State?.Status ?? 'unknown'})`)
       const raised = limitDifferences(record, limits)
       if (raised.length > 0) throw new SupervisorError('LIMITS_MISSING', `${names.container} no longer runs with the limits it was created with: ${raised.join('; ')}`)
-      const root = (record.Mounts ?? []).find(mount => mount.Type === 'bind' && mount.Destination !== HELPER_SOCKET_DIR)?.Source ?? ''
+      const root = (record.Mounts ?? []).find(mount => mount.Type === 'bind' && mount.Destination === mount.Source)?.Source ?? ''
       const expectation = this.expectation(workspaceId, root, limits)
       this.requireIsolated(names.container, record, expectation)
       const body = this.workspaceBody(workspaceId, root, limits, record.HostConfig?.StorageOpt?.size !== undefined, await this.s2Image())
@@ -446,6 +483,7 @@ export class Workspaces {
     const helperDir = this.helperDirectory(args.workspaceId)
     await mkdir(helperDir, { recursive: true, mode: PRIVATE_DIR_MODE })
     await checkPrivateDirectory(helperDir)
+    await this.requireHelperChannel(args.workspaceId)
     const created: string[] = []
     const networks: string[] = []
     try {
@@ -570,12 +608,15 @@ export class Workspaces {
     if (raised.length > 0) throw new SupervisorError('LIMITS_MISSING', `${names.container} no longer runs with the limits it was created with: ${raised.join('; ')}`)
     const helperDir = this.helperDirectory(workspaceId)
     const binds = (record.Mounts ?? []).filter(mount => mount.Type === 'bind')
-    const rootMount = binds.find(mount => mount.Destination !== HELPER_SOCKET_DIR)
+    const rootMount = binds.find(mount => mount.Source === mount.Destination)
     const root = rootMount?.Source
     if (root === undefined || rootMount?.Destination !== root) throw new SupervisorError('ROOT_REFUSED', `${names.container} has no root mount at its own path`)
     await recheckMountedRoot(root, this.context.rules, await this.otherRoots(workspaceId))
     if (await realpath(helperDir) !== helperDir) throw new SupervisorError('ROOT_REFUSED', `${helperDir} does not resolve to itself`)
     await checkPrivateDirectory(helperDir)
+    // The container's one writable host path is checked before it starts: nothing a previous session or the workspace
+    // left there but the helper's own sockets reaches the next one.
+    await this.requireHelperChannel(workspaceId)
     const image = await this.s2Image()
     const diskQuota = record.HostConfig?.StorageOpt?.size !== undefined
     this.requireIsolated(names.container, record, this.expectation(workspaceId, root, limits))

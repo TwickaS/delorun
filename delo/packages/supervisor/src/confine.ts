@@ -3,13 +3,14 @@
  * roots"): what a container the supervisor created must still show before its workspace may use it. Two halves, both
  * required, because either alone can be fooled:
  *
- * - the inspect record, read structurally: the bind mounts are the resolved workspace root and the helper's socket
- *   directory and the engine's own files, nothing else, no mount source is the OS home, the Delo home or a Docker
- *   socket, and the container is a member of its own internal network alone;
+ * - the inspect record, read structurally: the bind mounts are the resolved workspace root, the helper's directory
+ *   read-only with its channel writable below it, and the engine's own files, nothing else, no mount source is the OS
+ *   home, the Delo home or a Docker socket, and the container is a member of its own internal network alone;
  * - the container's own view, read by fixed probe commands whose exit code alone is read: every capability dropped,
  *   `no-new-privileges`, seccomp, a read-only root, the preset's cgroup limits, the workspace user, the Delo home and
- *   the machine's Docker sockets absent, `/tmp` a tmpfs of the preset's size, and no writable mount besides the
- *   workspace root, the helper's socket directory, `/tmp` and the engine's own files and devices.
+ *   the machine's Docker sockets absent, `/tmp` a tmpfs of the preset's size, the helper's directory read-only and its
+ *   channel writable, and no writable mount besides the workspace root, the helper's channel, `/tmp` and the engine's
+ *   own files and devices.
  *
  * The probes create nothing and read nothing back, so a probe command never carries a secret and its output never
  * leaves the container. A probe that cannot run, or does not finish, is `unconfirmed`: the gate fails closed, because a
@@ -17,8 +18,8 @@
  *
  * @module @delo/supervisor/confine
  */
-import { HELPER_SOCKET_DIR, type ResourceLimits } from '@delo/contract-runtime-supervisor'
-import { ENGINE_FILE_MOUNTS, hardeningDifferences, type ContainerUser, type CreateBody, type InspectRecord } from './container.ts'
+import { HELPER_CHANNEL_DIR, HELPER_SOCKET_DIR, type ResourceLimits } from '@delo/contract-runtime-supervisor'
+import { ENGINE_FILE_MOUNTS, hardeningDifferences, helperChannelDirectory, type ContainerUser, type CreateBody, type InspectRecord } from './container.ts'
 import type { Engine } from './docker/engine.ts'
 import { SupervisorError } from './errors.ts'
 
@@ -29,6 +30,7 @@ export const CONFINEMENT_CHECKS = [
   'seccomp',
   'read-only-root',
   'workspace-root-writable',
+  'helper-read-only',
   'writable-mounts',
   'delo-home-hidden',
   'docker-socket-hidden',
@@ -127,12 +129,27 @@ const ENGINE_TMPFS_DESTINATIONS: readonly string[] = ['/dev', '/dev/shm', ...ENG
 
 /**
  * The mounts C9 allows in an S2 workspace container, by source and destination: the resolved workspace root at its own
- * path, and the helper's socket directory at {@link HELPER_SOCKET_DIR}. No other host path is mounted.
+ * path, and the helper's directory at {@link HELPER_SOCKET_DIR} with its channel below it. No other host path is
+ * mounted.
  * @param expectation - the workspace's resolved paths.
  * @returns each allowed source with the destination it must have.
  */
 export function allowedMounts(expectation: ConfinementExpectation): ReadonlyMap<string, string> {
-  return new Map([[expectation.root, expectation.root], [expectation.helperDir, HELPER_SOCKET_DIR]])
+  return new Map([
+    [expectation.root, expectation.root],
+    [expectation.helperDir, HELPER_SOCKET_DIR],
+    [helperChannelDirectory(expectation.helperDir), HELPER_CHANNEL_DIR],
+  ])
+}
+
+/**
+ * The allowed mounts a container must not write: the helper's directory, so nothing the workspace runs can add to it,
+ * rename anything in it or replace it. The channel below it and the workspace root stay writable.
+ * @param expectation - the workspace's resolved paths.
+ * @returns the allowed sources that must be mounted read-only.
+ */
+export function readOnlyMounts(expectation: ConfinementExpectation): readonly string[] {
+  return [expectation.helperDir]
 }
 
 /**
@@ -146,6 +163,7 @@ export function allowedMounts(expectation: ConfinementExpectation): ReadonlyMap<
 export function refusedMounts(record: InspectRecord, expectation: ConfinementExpectation): string[] {
   const refused: string[] = []
   const allowed = allowedMounts(expectation)
+  const readOnly = readOnlyMounts(expectation)
   for (const mount of record.Mounts ?? []) {
     const source = mount.Source ?? ''
     const destination = mount.Destination ?? ''
@@ -161,7 +179,12 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
     }
     // The engine mounts its own files at fixed destinations; they are the engine's, not a host path the container chose.
     if (ENGINE_FILE_MOUNTS.includes(destination)) continue
-    if (allowed.get(source) === destination) continue
+    if (allowed.get(source) === destination) {
+      // The helper's directory is the one allowed mount the container must only read: a writable one there is the
+      // workspace's second way into the machine, beside the channel it was given.
+      if (readOnly.includes(source) && mount.ReadOnly !== true) refused.push(`${named}: writable, and the helper's directory is read-only`)
+      continue
+    }
     if (allowed.has(source)) {
       refused.push(`${named}: ${source} belongs at ${allowed.get(source) ?? ''}`)
     } else if (isWithin(source, expectation.deloHome)) {
@@ -180,18 +203,19 @@ export function refusedMounts(record: InspectRecord, expectation: ConfinementExp
 }
 
 /**
- * The bind mounts a container writes on the host: the workspace root, and the helper's socket directory, which holds the
- * helper's sockets alone. A mount of anything else that is writable is a second way into the machine.
+ * The bind mounts a container writes on the host: the workspace root, the helper's channel below its directory, which
+ * holds the helper's sockets alone. A mount of anything else that is writable is a second way into the machine.
  * @param record - the container's inspect record.
  * @param expectation - the workspace's resolved paths.
- * @returns the writable bind sources other than those two.
+ * @returns the writable bind sources other than those.
  */
 export function writableBinds(record: InspectRecord, expectation: ConfinementExpectation): string[] {
+  const written = [expectation.root, helperChannelDirectory(expectation.helperDir)]
   return (record.Mounts ?? [])
     .filter(mount => mount.Type === 'bind' && mount.ReadOnly !== true)
     .filter(mount => !ENGINE_FILE_MOUNTS.includes(mount.Destination ?? ''))
     .map(mount => mount.Source ?? '')
-    .filter(source => source !== expectation.root && source !== expectation.helperDir)
+    .filter(source => !written.includes(source))
 }
 
 /**
@@ -227,16 +251,20 @@ export function confinementProbes(expectation: ConfinementExpectation): Record<C
     'seccomp': ['sh', '-c', 'grep -Eq "^Seccomp:[[:space:]]+2$" /proc/self/status'],
     'read-only-root': ['sh', '-c', 'grep -Eq "^[^ ]+ / [^ ]+ ro[, ]" /proc/mounts'],
     'workspace-root-writable': ['sh', '-c', 'test -d "$0" && test -w "$0"', expectation.root],
+    // The helper's directory is mounted read-only and its channel is not: a write there fails, and the sockets the
+    // helper starts have somewhere to go. A workspace that can write the directory itself can replace what the harness
+    // connects to, which is what this shows it cannot do.
+    'helper-read-only': ['sh', '-c', 'test -d "$0" && test -d "$1" && [ ! -w "$0" ] && test -w "$1"', HELPER_SOCKET_DIR, HELPER_CHANNEL_DIR],
     // Every writable mount whose destination is not one the container must have: the workspace root, the helper's
-    // mount point, /tmp, the engine's own files, the kernel's own filesystems and the engine's own tmpfs over its
-    // devices and the kernel files it masks. A writable mount anywhere else, tmpfs or not, is writable space the
-    // workspace was not given. The mounts file is the last argument, so a spec can read a fixture.
+    // channel, /tmp, the engine's own files, the kernel's own filesystems and the engine's own tmpfs over its devices
+    // and the kernel files it masks. A writable mount anywhere else, tmpfs or not, is writable space the workspace was
+    // not given. The mounts file is the last argument, so a spec can read a fixture.
     'writable-mounts': ['sh', '-c', [
-      'awk -v root="$1" -v helper="$2" \'',
+      'awk -v root="$1" -v channel="$2" \'',
       '  $4 ~ /(^|,)rw(,|$)/ {',
       '    dest = $2',
       '    type = $3',
-      '    if (dest == root || dest == helper || dest == "/tmp") next',
+      '    if (dest == root || dest == channel || dest == "/tmp") next',
       '    if (dest == "/etc/hosts" || dest == "/etc/hostname" || dest == "/etc/resolv.conf") next',
       '    if (type ~ /^(proc|sysfs|devpts|devtmpfs|mqueue|cgroup|cgroup2|securityfs|debugfs|nsfs)$/) next',
       '    if (type == "tmpfs" || type == "shm") {',
@@ -248,7 +276,7 @@ export function confinementProbes(expectation: ConfinementExpectation): Record<C
       '  }',
       '  END { exit found }',
       '\' "$3"',
-    ].join('\n'), 'sh', expectation.root, HELPER_SOCKET_DIR, '/proc/mounts'],
+    ].join('\n'), 'sh', expectation.root, HELPER_CHANNEL_DIR, '/proc/mounts'],
     'delo-home-hidden': hidden([expectation.deloHome]),
     'docker-socket-hidden': hidden(expectation.dockerSockets),
     'tmp-is-tmpfs': ['sh', '-c', 'grep -Eq "^[^ ]+ /tmp tmpfs " /proc/mounts'],
