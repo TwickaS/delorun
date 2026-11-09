@@ -2017,6 +2017,16 @@
       "reason": "Reach listener Content Security Policy (C4): builds the `page-policy` entry. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end."
     },
     {
+      "path": "packages/context/agent-instructions/src/config.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent: the loader exports its own default instruction file names (`AGENTS.md`, `CLAUDE.md` and their `.local.md` overlays) instead of keeping them module-private, so the consent over instruction writes reads that list rather than restating a name; a default the loader adds is then a name the consent reviews. The loader reads the same constants, so behaviour is unchanged."
+    },
+    {
+      "path": "packages/context/agent-instructions/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent: the package re-exports the default instruction file name lists from `config.ts` so a consumer outside the package can read them. Re-export only; no behaviour changes."
+    },
+    {
       "path": "packages/core/tool-executor-ptc/README.i18n.yaml",
       "class": "delo-feature",
       "reason": "Container denial marker: the consistency record re-recorded after the environment-marker sentence was added to README.md and its Chinese counterpart."
@@ -2650,6 +2660,16 @@
       "path": "packages/shell/tool-pwsh/tests/tools.spec.ts",
       "class": "delo-feature",
       "reason": "Container denial marker: covers the output schema declaring `deniedBy` only with the switch on, a foreground environment denial reaching the model through the pwsh tool with its marker and no escalation hint, a policy denial keeping both, and the environment marker on a job read."
+    },
+    {
+      "path": "packages/skill/skill/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent: `SkillProvider` gains an optional `configuredRoots()`, and `SkillRegistry` implements it over the registered providers, so a consent over skill writes classifies a target against the roots the deployment's providers actually read, a configured custom directory included. A provider that names no roots contributes none."
+    },
+    {
+      "path": "packages/skill/skill-filesystem/src/index.ts",
+      "class": "delo-feature",
+      "reason": "Instruction-layer consent: the filesystem skill provider names its project skill directories and home store as exported constants and implements `configuredRoots()`, which reports the roots its configuration names without a workspace — the custom directories, the two default home stores and the bundled root. Discovery reads the same constants, so a configured root and a reviewed root cannot drift."
     },
     {
       "path": "packages/test-support/client-runtime/tests/assembly-vitest.client.spec.ts",

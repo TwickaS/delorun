@@ -83,7 +83,8 @@ type Setup = Awaited<ReturnType<typeof setup>>
 
 /** Approve every ask and record the request the pipeline audited. */
 function approving(test: Setup) {
-  const request = vi.fn(async (_ask: { readonly toolName: string; readonly reason: string }) => 'allowed-once' as const)
+  // The answer type is the union a case may later rewrite with `mockImplementation`, so a rejection is type-safe.
+  const request = vi.fn(async (_ask: { readonly toolName: string; readonly reason: string }): Promise<'allowed-once' | 'rejected'> => 'allowed-once')
   test.ctx.provide('approval', { request } as unknown as ApprovalService)
   return request
 }
@@ -170,6 +171,7 @@ describe('Schedule consent approval naming', () => {
     const test = await setup({ consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) } })
     approving(test)
     await call(test, 'schedule_create', TASK)
+    nameEffect.mockClear()
     await call(test, 'schedule_list', {})
     expect(nameEffect).not.toHaveBeenCalled()
   })
@@ -221,7 +223,7 @@ describe('Schedule consent approval naming', () => {
     await call(test, 'schedule_edit', { id: created.id, action: 'delete' })
     // A delete arms nothing, so nothing is named and the ask keeps the policy's own reason.
     expect(nameEffect).not.toHaveBeenCalled()
-    expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(ASK_REASON)
+    expect(request.mock.calls.at(-1)?.at(0)?.reason).toBe(ASK_REASON)
   })
 
   it('names the real effect sentence at the tool call site', async () => {
@@ -286,6 +288,88 @@ describe('Schedule consent creation baseline', () => {
   })
 })
 
+describe('Schedule consent as the gate', () => {
+  it('asks before creating a task once a consent service is mounted, without any policy ask', async () => {
+    // The consent alone makes the call ask: a composition that mounts it has no other producer of asks.
+    const test = await setup({ consent: { nameEffect: () => NAMED, reviewDelivery: () => ({ kind: 'allow' }) } })
+    const request = approving(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+
+    expect(created.id).toBeTruthy()
+    expect(request).toHaveBeenCalledOnce()
+    expect(request.mock.calls.at(0)?.at(0)).toMatchObject({ toolName: 'schedule_create', reason: NAMED })
+    expect(await call(test, 'schedule_view', { id: created.id })).toMatchObject({ id: created.id, title: TASK.title })
+  })
+
+  it('asks with its own sentence while the consent names no effect, and still creates the task', async () => {
+    const test = await setup({ consent: { nameEffect: () => undefined, reviewDelivery: () => ({ kind: 'allow' }) } })
+    const request = approving(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    expect(request.mock.calls.at(0)?.at(0)).toMatchObject({ toolName: 'schedule_create' })
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toBeTruthy()
+    expect(await call(test, 'schedule_view', { id: created.id })).toMatchObject({ id: created.id })
+  })
+
+  it('leaves schedule_create unasked without a consent service, as upstream runs it', async () => {
+    const test = await setup()
+    const request = approving(test)
+    await call(test, 'schedule_create', TASK)
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('asks again on an edit of a task the consent refused, and states the refusal it would settle', async () => {
+    const test = await setup({ consent: { nameEffect: () => NAMED, reviewDelivery: () => ({ kind: 'refuse', reason: REFUSAL }) } })
+    const request = approving(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    test.resolve.mockResolvedValue({ agent: test.agent })
+    await expect(test.service.run({ id: ScheduleId(created.id) })).rejects.toThrow(REFUSAL)
+    request.mockClear()
+
+    await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
+    expect(request).toHaveBeenCalledOnce()
+    expect(request.mock.calls.at(0)?.at(0)).toMatchObject({ toolName: 'schedule_edit' })
+    // The person sees why the delivery stopped before they approve the task again.
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toContain(REFUSAL)
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toContain(NAMED)
+  })
+
+  it('keeps a refused task refused when the person does not approve its edit, and re-captures nothing', async () => {
+    const reviews: ScheduleDeliveryReview[] = []
+    let preset = CALLER_PRESET
+    const test = await setup({
+      consent: {
+        nameEffect: () => undefined,
+        reviewDelivery: (review) => {
+          reviews.push(review)
+          return presetReview(review)
+        },
+      },
+      presets: { defaultPreset: DEPLOYMENT_DEFAULT, current: () => preset },
+    })
+    const request = approving(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    test.resolve.mockResolvedValue({ agent: test.agent })
+    // The chat moves off the approved preset, so the consent refuses the due delivery and pauses the task.
+    preset = 'danger-full-access'
+    await expect(test.service.run({ id: ScheduleId(created.id) })).rejects.toThrow(REFUSAL)
+    const refusedAt = taskTable(test.ctx).get(ScheduleId(created.id))?.consentRefusal?.refusedAt
+    expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({
+      consentRefusal: { reason: REFUSAL }, creationPreset: CALLER_PRESET,
+    })
+
+    // The edit asks, and the person rejects it: the task keeps the refusal and the baseline it was refused on.
+    request.mockImplementation(async () => 'rejected' as const)
+    const denied = await executeToolFixture(test.ctx, {
+      callId: ToolCallId('consent-denied'), signal: new AbortController().signal,
+      name: 'schedule_edit', arguments: { id: created.id, action: 'update', title: 'Renamed' }, agent: test.agent,
+    })
+    expect(denied.isError).toBe(true)
+    expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({
+      consentRefusal: { reason: REFUSAL, refusedAt }, creationPreset: CALLER_PRESET, record: { title: TASK.title },
+    })
+  })
+})
+
 describe('Schedule consent manual run', () => {
   it('refuses a manual run through the consent with the typed schedule/consent-refused error', async () => {
     const reviews: ScheduleDeliveryReview[] = []
@@ -296,6 +380,7 @@ describe('Schedule consent manual run', () => {
         return { kind: 'refuse', reason: REFUSAL }
       },
     } })
+    approving(test)
     const created = await call(test, 'schedule_create', TASK) as { id: string }
     test.resolve.mockResolvedValue({ agent: test.agent })
 
@@ -316,6 +401,7 @@ describe('Schedule consent manual run', () => {
       nameEffect: () => undefined,
       reviewDelivery: () => ({ kind: 'refuse', reason: REFUSAL }),
     } })
+    approving(test)
     const created = await call(test, 'schedule_create', TASK) as { id: string }
     test.resolve.mockResolvedValue({ agent: test.agent })
     // A refused run records why the task paused on the Host task; the model-facing task carries no such field,

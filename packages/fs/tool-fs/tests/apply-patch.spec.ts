@@ -227,3 +227,44 @@ it('refuses a patch whose target lies under the sandbox provider\'s protected ho
   expect(readText).not.toHaveBeenCalled()
   expect(await t.bytes('home/key')).toBe('old\n')
 })
+
+it('reviews every target of a patch at its own intent, so the second file asks too', async () => {
+  const t = await setup()
+  const reviewed: string[] = []
+  t.ctx.provide('writeConsent', {
+    review: (request) => {
+      reviewed.push(request.path)
+      return { required: true, note: `consent for ${request.path}` }
+    },
+  })
+  const asked: string[] = []
+  t.ctx.provide('approval', {
+    request: (request: { readonly reason?: string }) => {
+      asked.push(request.reason ?? '')
+      return Promise.resolve('allowed-once' as const)
+    },
+  })
+  const result = await call(t, patch(add('first'), add('second')))
+  expect(result.isError, JSON.stringify(result.content)).toBe(false)
+  const first = resolve(t.workspace, 'first')
+  const second = resolve(t.workspace, 'second')
+  // One review and one ask per target, in patch order, each at the intent of its own write.
+  expect(reviewed).toEqual([first, second])
+  expect(asked).toEqual([`consent for ${first}`, `consent for ${second}`])
+  expect(await t.bytes('first')).toBe('new\n')
+  expect(await t.bytes('second')).toBe('new\n')
+})
+
+it('refuses the patch at the first target the person does not approve, and names that target', async () => {
+  const t = await setup()
+  t.ctx.provide('writeConsent', { review: () => ({ required: true, note: 'reviewed' }) })
+  // The preflight asks about every target before anything is written, so a refusal of the second one rejects the
+  // whole patch with that target's name and leaves every file alone.
+  t.ctx.provide('approval', { request: () => Promise.resolve('rejected' as const) })
+  const result = await call(t, patch(add('first'), add('second')))
+  expect(result.isError).toBe(true)
+  const first = resolve(t.workspace, 'first')
+  expect(result.content.map(block => block.type === 'text' ? block.text : '').join('')).toContain(`the user refused the apply_patch to "${first}"`)
+  await expect(t.bytes('first')).rejects.toMatchObject({ code: 'ENOENT' })
+  await expect(t.bytes('second')).rejects.toMatchObject({ code: 'ENOENT' })
+})

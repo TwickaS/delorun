@@ -27,7 +27,7 @@ import type { WriteConsentRequest, WriteConsentReview, WriteConsentService } fro
 import z from '@deepseek-ai/schemastery'
 import { classifyTarget, reviewNote } from './classify.ts'
 
-export { classifyTarget, INSTRUCTIONS_FILE, PRESETS_DIR, PROJECT_SKILLS_DIRS, reviewNote } from './classify.ts'
+export { classifyTarget, INSTRUCTION_FILE_NAMES, PRESETS_DIR, PROJECT_SKILLS_DIRS, reviewNote } from './classify.ts'
 export type { ClassifyOptions, InstructionLayerTarget } from './classify.ts'
 
 /** The plugin's name in the loader's diagnostics. */
@@ -56,9 +56,14 @@ export const Config: z<Config> = z.object({
  * target's path and never touches the filesystem, so it answers at once; a
  * target that is no instruction-layer file needs no consent, and the tools run
  * it exactly as upstream runs it.
+ *
+ * The skill roots come from the mounted skill providers
+ * (`ctx.skills.configuredRoots()`), so a directory a deployment configured for
+ * its skills — a `customSkillDirs` entry, say — is a directory this review
+ * asks about.
  */
 export class InstructionConsent extends Service implements WriteConsentService {
-  /** No services: the review classifies the target path only. */
+  /** No services: the review reads the skill registry opportunistically and classifies paths only. */
   static inject = []
 
   /**
@@ -76,7 +81,8 @@ export class InstructionConsent extends Service implements WriteConsentService {
    *   verbatim — or undefined when the write proceeds without asking.
    */
   review(request: WriteConsentRequest): WriteConsentReview | undefined {
-    const target = classifyTarget(request.path)
+    const roots = this.ctx.get('skills')?.configuredRoots() ?? []
+    const target = classifyTarget(request.path, roots.length === 0 ? {} : { skillRoots: roots })
     if (target === undefined) return undefined
     return { required: true, note: reviewNote(target, request.diff) }
   }

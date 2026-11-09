@@ -20,7 +20,8 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ToolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
-import { unsupportedModel, unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
+import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
+import { provideWorkingDirectoryFixture, unsupportedModel, unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
 
 const contexts: Context[] = []
 const roots: string[] = []
@@ -742,5 +743,56 @@ describe('the sandbox provider\'s protected home', () => {
     const plain = await setup({}, { sandboxMode: 'workspace-write' })
     await protectedHomeFixture(plain.root)
     expect(text(await call(plain.ctx, plain.owner, { command: 'view', path: join(plain.root, '.delo', 'secrets', 'key') }))).toContain('secret-key')
+  })
+})
+
+describe('the write consent seam', () => {
+  /**
+   * Mount the fs tool layer's consent seam beside this tool, with none of its own tools registered: the seam lives
+   * with the fs tools, and every writer of the tree emits the intent it gates.
+   */
+  async function seamSetup() {
+    const fixture = await setup()
+    provideWorkingDirectoryFixture(fixture.ctx, fixture.root)
+    await fixture.ctx.plugin(ToolFs, { read: false, readImage: false, write: false, edit: false })
+    return fixture
+  }
+
+  it('asks before a create under a skill root, and writes nothing when the person declines', async () => {
+    const { ctx, root, owner } = await seamSetup()
+    const skill = join(root, '.dsh', 'skills', 'review', 'SKILL.md')
+    const reviewed: string[] = []
+    ctx.provide('writeConsent', {
+      review: (request) => {
+        reviewed.push(request.path)
+        return request.path === skill ? { required: true, note: 'a skill file loads as instructions' } : undefined
+      },
+    })
+    const asked: string[] = []
+    ctx.provide('approval', {
+      request: (request: { readonly reason?: string }) => {
+        asked.push(request.reason ?? '')
+        return Promise.resolve('rejected' as const)
+      },
+    })
+
+    const result = await call(ctx, owner, { command: 'create', path: skill, file_text: 'body\n' })
+    expect(result.isError).toBe(true)
+    // The tool itself calls no consent code: the intent it emits is what asked, with this tool's diff.
+    expect(reviewed).toEqual([skill])
+    expect(asked).toEqual(['a skill file loads as instructions'])
+    expect(text(result)).toContain('the user refused the str_replace_editor to')
+    await expect(readFile(skill, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('writes the file once the person allows the ask', async () => {
+    const { ctx, root, owner } = await seamSetup()
+    const skill = join(root, 'AGENTS.md')
+    ctx.provide('writeConsent', { review: () => ({ required: true, note: 'an instruction file' }) })
+    ctx.provide('approval', { request: () => Promise.resolve('allowed-once' as const) })
+
+    const result = await call(ctx, owner, { command: 'create', path: skill, file_text: 'rules\n' })
+    expect(result.isError, text(result)).toBe(false)
+    expect(await readFile(skill, 'utf8')).toBe('rules\n')
   })
 })

@@ -1174,7 +1174,7 @@ describe('write consent seam (write/edit/apply_patch)', () => {
       expect(result.isError, text(result)).toBe(false)
       expect(fs.files.get('key:a.txt')).toBe('x')
       expect(review).toHaveBeenCalledTimes(1)
-      expect(review).toHaveBeenCalledWith({ tool: 'write', path: '/session-project/a.txt', diff: { old: null, new: 'x' } })
+      expect(review).toHaveBeenCalledWith({ tool: 'write', path: '/abs/a.txt', diff: { old: null, new: 'x' } })
       expect(approval).toHaveBeenCalledTimes(1)
       expect(approval.mock.calls.at(0)?.at(0)).toMatchObject({ toolName: 'write', reason: note })
       // The ask is audited on the session log as the asked/decided pair.
@@ -1209,7 +1209,7 @@ describe('write consent seam (write/edit/apply_patch)', () => {
       ctx.on('approval/request', () => Promise.resolve('rejected' as const))
       const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, escalationAgent())
       expect(result.isError).toBe(true)
-      expect(text(result)).toContain('the user refused the write to "/session-project/a.txt"')
+      expect(text(result)).toContain('the user refused the write to "/abs/a.txt"')
       expect(result.error?.info).toEqual({ name: 'WriteConsentRefusedError', code: 'FS_CONSENT_DENIED' })
       expect(fs.files.size).toBe(0)
     } finally {

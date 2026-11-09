@@ -264,6 +264,14 @@ export interface SkillProvider {
    * @returns the full skill body, or `undefined` if it is no longer loadable.
    */
   readonly get: (candidate: SkillCandidate, options: SkillLookupOptions) => Promise<SkillDefinition | undefined>
+  /**
+   * The skill directories this provider reads without a workspace, when its configuration names them: a consent over
+   * the writes that change a skill classifies a target against these paths instead of restating them, so a root the
+   * deployment configures is a root the consent reviews. A provider whose roots depend on a lookup cwd — or on an
+   * answer only the filesystem gives — omits it.
+   * @returns absolute root paths, in the order this provider reads them.
+   */
+  readonly configuredRoots?: () => readonly string[]
 }
 
 /** Registration-scoped lifecycle and invalidation capability borrowed by one provider. */
@@ -486,6 +494,20 @@ export class SkillRegistry extends Service {
         .sort(compareSkillSummary),
       complete: collected.cacheable,
     }
+  }
+
+  /**
+   * The skill directories the registered providers read without a workspace. A consent over the writes that change a
+   * skill classifies a target against them, so the roots a deployment configures for its providers are the roots the
+   * consent reviews; a provider that names no roots contributes none.
+   * @returns the configured root paths of every provider that names them, deduplicated, in registration order.
+   */
+  configuredRoots(): string[] {
+    const roots = new Set<string>()
+    for (const { provider } of this.layers.global.providers.values()) {
+      for (const root of provider.configuredRoots?.() ?? []) roots.add(root)
+    }
+    return [...roots]
   }
 
   /**

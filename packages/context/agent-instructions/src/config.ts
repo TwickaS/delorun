@@ -9,8 +9,19 @@ import z from '@deepseek-ai/schemastery'
 import { resolveAgentsHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
 const DEFAULT_PROJECT_ROOT_MARKERS = ['.git'] as const
-const DEFAULT_INSTRUCTION_FILE_CANDIDATES = ['AGENTS.md', 'CLAUDE.md'] as const
-const DEFAULT_LOCAL_INSTRUCTION_FILE_CANDIDATES = ['AGENTS.local.md', 'CLAUDE.local.md'] as const
+/** The instruction files a folder loads by default, in precedence order. */
+export const DEFAULT_INSTRUCTION_FILE_CANDIDATES = ['AGENTS.md', 'CLAUDE.md'] as const
+/** The local overlay instruction files a folder loads by default, after the candidates. */
+export const DEFAULT_LOCAL_INSTRUCTION_FILE_CANDIDATES = ['AGENTS.local.md', 'CLAUDE.local.md'] as const
+/**
+ * Every file name this loader reads as instructions by default: the same-directory candidates and the local
+ * overlays. A consumer that must recognize an instruction file — a consent over the writes that change one, say —
+ * reads this list instead of restating a name, so a loader default it does not cover is a failing spec.
+ */
+export const DEFAULT_INSTRUCTION_FILE_NAMES: readonly string[] = [
+  ...DEFAULT_INSTRUCTION_FILE_CANDIDATES,
+  ...DEFAULT_LOCAL_INSTRUCTION_FILE_CANDIDATES,
+]
 const DEFAULT_MAX_SOURCE_BYTES = 1_048_576
 const RESERVED_PATH_SEGMENTS = new Set(['', '.', '..'])
 

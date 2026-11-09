@@ -15,9 +15,10 @@ import { applyApplyPatchTool } from './apply-patch.ts'
 import { applyEditTool } from './edit.ts'
 import { applyReadImageTool } from './read-image.ts'
 import { READ_MAX_BYTES, READ_MAX_LINE_LENGTH } from './read-render.ts'
+import { applyWriteConsent } from './consent.ts'
 import { FsSandboxController } from './sandbox.ts'
 
-export { FS_CONSENT_DENIED, WriteConsentRefusedError, reviewWriteConsent } from './consent.ts'
+export { FS_CONSENT_DENIED, WriteConsentRefusedError, applyWriteConsent, reviewWriteConsent } from './consent.ts'
 export type { WriteConsentDiff, WriteConsentRequest, WriteConsentReview, WriteConsentService, WriteConsentTool } from './consent.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -94,6 +95,9 @@ export function apply(ctx: Context, config: Config): void {
       applyReadImageTool(imageCtx)
     })
   }
+  // The instruction-layer consent seam gates every filesystem intent, so it covers each writer of the tree — this
+  // package's tools and `str_replace_editor` alike — and every target of a multi-file patch, not one tool's path.
+  applyWriteConsent(ctx)
   // One escalation API shared by the mutating tools: advertisement gating,
   // per-call policy resolution, and denial-marker mapping, all keyed off whether
   // the mounted ctx.fs confines (ctx.fs.sandboxMode).
