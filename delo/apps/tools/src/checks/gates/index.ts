@@ -82,6 +82,12 @@ export const GATES: readonly GateCheck[] = [
     inputs: ['delo/**/package.json', 'LICENSE'],
   },
   {
+    id: 'gates:erasable-syntax',
+    title: 'Every Delo source uses only syntax that Node\'s type stripping removes',
+    command: [TSX, `${GATE_DIR}/erasable-syntax.ts`],
+    inputs: ['delo/**/*.ts', 'delo/**/*.tsx', 'delo/**/*.mts', 'delo/**/*.cts', `${GATE_DIR}/erasable-syntax.ts`],
+  },
+  {
     id: 'gates:package-states',
     title: 'Every Delo package records a state that agrees with what the shipped roots reach',
     command: [TSX, `${GATE_DIR}/package-states.ts`],

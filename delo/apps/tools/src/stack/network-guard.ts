@@ -54,8 +54,11 @@ export interface NetworkGuard {
 export class NetworkGuardRefusal extends Error {
   /** {@link NETWORK_GUARD_CODE}, where Node's own socket errors carry theirs. */
   readonly code = NETWORK_GUARD_CODE
-  constructor(readonly refusal: GuardRefusal) {
+  readonly refusal: GuardRefusal
+
+  constructor(refusal: GuardRefusal) {
     super(`network guard: ${refusal.operation} to ${refusal.target}${refusal.port === undefined ? '' : `:${String(refusal.port)}`} leaves loopback`)
+    this.refusal = refusal
   }
 }
 

@@ -145,12 +145,15 @@ export interface UpdateOutcome {
 
 /** A failure that stops the run before it can check anything: a bad input, or git failing under the path. */
 export class UpstreamUpdateError extends Error {
+  readonly code: string
+
   /**
    * @param code - the failure's code, such as `target-tag-missing`.
    * @param message - what failed and what would make it pass.
    */
-  constructor(readonly code: string, message: string) {
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
     this.name = 'UpstreamUpdateError'
   }
 }

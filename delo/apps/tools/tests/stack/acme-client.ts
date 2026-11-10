@@ -26,7 +26,13 @@ export class TestAcmeClient {
   private nonce: string | undefined
   private keys: { readonly privateKey: CryptoKey, readonly jwk: JWK } | undefined
 
-  constructor(readonly directoryUrl: string, readonly ca: string) {}
+  readonly directoryUrl: string
+  readonly ca: string
+
+  constructor(directoryUrl: string, ca: string) {
+    this.directoryUrl = directoryUrl
+    this.ca = ca
+  }
 
   /**
    * Fetch the directory and make the account key.

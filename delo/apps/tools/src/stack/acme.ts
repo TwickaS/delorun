@@ -166,8 +166,11 @@ interface Order {
 }
 
 class ProblemError extends Error {
-  constructor(readonly problem: AcmeProblem) {
+  readonly problem: AcmeProblem
+
+  constructor(problem: AcmeProblem) {
     super(problem.detail)
+    this.problem = problem
   }
 }
 
