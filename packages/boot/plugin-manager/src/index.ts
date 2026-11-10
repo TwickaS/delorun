@@ -520,6 +520,8 @@ export class PluginManager extends TypertRemoteService {
   @Remote
   setVersionExemption(packageVersion: string, runtimeVersion: string, enabled: boolean, acceptRisk?: boolean): Promise<ChangeResult> {
     return this.change(result => this.configure(async () => {
+      // A revoked exemption of a protected package stops it at the reevaluation below, as disabling it would.
+      if (!enabled) this.assertProtectedExemptionsKept({ [packageVersion]: [runtimeVersion] }, {})
       await setProfileVersionExemption(this.profile.dir, packageVersion, runtimeVersion, enabled, acceptRisk === true)
       Object.assign(result, await this.reload())
     }), { stage: 'enable', target: packageVersion, enabled }, 'bundle',
@@ -691,12 +693,14 @@ export class PluginManager extends TypertRemoteService {
     const provided = changes.plugins.flatMap(plugin => this.providedProtected(plugin.name))
     if (provided.length > 0) throw this.protectionFailure(provided)
     const rows = this.currentRows()
+    const exemptions = readProfileVersionExemptions(this.profile.dir)
     const audited = broughtBack(changes)
     if (files.get(LOCKFILE) === current.get(LOCKFILE)) {
       await this.auditRestored(audited)
       await writeProfileVersion(this.profile.dir, files)
       try {
         this.assertProtectedRowsKept(rows, this.composedRows())
+        this.assertProtectedExemptionsKept(exemptions, readProfileVersionExemptions(this.profile.dir))
       } catch (error) {
         // The version's files go back as they were; its dependency set is the current one, so nothing is reinstalled.
         await writeProfileVersion(this.profile.dir, current)
@@ -720,6 +724,7 @@ export class PluginManager extends TypertRemoteService {
     try {
       await this.auditRestored(audited)
       this.assertProtectedRowsKept(rows, this.composedRows())
+      this.assertProtectedExemptionsKept(exemptions, readProfileVersionExemptions(this.profile.dir))
     } catch (error) {
       // No package the audit refused stays: the files go back as they were, and their installed set with them.
       await writeProfileVersion(this.profile.dir, current)
@@ -1582,6 +1587,25 @@ export class PluginManager extends TypertRemoteService {
       return isDeepStrictEqual(was, now) ? [] : [...was, ...now].map(row => row.name)
     })
     if (changed.length > 0) throw this.protectionFailure(changed)
+  }
+
+  /**
+   * Refuse a change that takes away a version exemption of a package that provides a protected module or is a
+   * management bundle: without it, the package's version check stops the guard at the next reevaluation, as disabling
+   * its row would.
+   * @param before - the exemptions before the change, by `name@version`.
+   * @param after - the exemptions the change would leave.
+   * @throws ManagementFailure `management-required` naming the protected modules the package provides.
+   */
+  private assertProtectedExemptionsKept(
+    before: Readonly<Record<string, readonly string[]>>, after: Readonly<Record<string, readonly string[]>>,
+  ): void {
+    const lost = Object.entries(before).flatMap(([key, runtimes]) => {
+      const name = key.slice(0, key.lastIndexOf('@'))
+      const kept = after[key] ?? []
+      return runtimes.some(runtime => !kept.includes(runtime)) && this.protectsManager(name) ? [name] : []
+    })
+    if (lost.length > 0) throw this.protectionFailure(lost.flatMap(name => this.providedProtected(name)))
   }
 
   /**

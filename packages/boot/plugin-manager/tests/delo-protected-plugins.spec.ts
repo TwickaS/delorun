@@ -391,6 +391,33 @@ describe('plugin_manager undo and restore in danger-full-access with @delo/bundl
     expect(files()).toEqual(before)
   })
 
+  /** A version exemption of the guard's package for a fixture runtime. */
+  const EXEMPTION = { [`${GUARD}@1.0.0`]: ['0.0.1'] }
+
+  it('refuses to revoke a version exemption of a package that provides a protected module, and keeps the exemption', async () => {
+    const { dir, call } = await fixture({ reload: 'startup' })
+    writeFileSync(join(dir, 'compatibility.json'), JSON.stringify(EXEMPTION))
+    expect(changeResult(await call({ action: 'set_version_exemption', target: `${GUARD}@1.0.0`, runtimeVersion: '0.0.1', enabled: false })))
+      .toMatchObject(GUARD_REFUSAL)
+    expect(JSON.parse(readFileSync(join(dir, 'compatibility.json'), 'utf8'))).toEqual(EXEMPTION)
+  })
+
+  it('refuses to restore a version without the guard\'s exemption, and keeps it', async () => {
+    const { ctx, dir, call } = await fixture({ reload: 'startup' })
+    const version = await outsideVersion(ctx, dir, (dir) => { rmSync(join(dir, 'compatibility.json'), { force: true }) })
+    writeFileSync(join(dir, 'compatibility.json'), JSON.stringify(EXEMPTION))
+    await ctx.pluginManager.history(1)
+    expect(changeResult(await call({ action: 'restore', target: version }))).toMatchObject(GUARD_REFUSAL)
+    expect(JSON.parse(readFileSync(join(dir, 'compatibility.json'), 'utf8'))).toEqual(EXEMPTION)
+  })
+
+  it('revokes a version exemption of an unprotected package', async () => {
+    const { dir, call } = await fixture({ reload: 'startup' })
+    writeFileSync(join(dir, 'compatibility.json'), JSON.stringify({ 'unrelated-plugin@1.0.0': ['0.0.1'] }))
+    expect(changeResult(await call({ action: 'set_version_exemption', target: 'unrelated-plugin@1.0.0', runtimeVersion: '0.0.1', enabled: false })))
+      .toMatchObject({ changed: true })
+  })
+
   it('restores a version that leaves the protected rows as they are', async () => {
     const { ctx, dir, call } = await fixture({ reload: 'startup' })
     const version = await outsideVersion(ctx, dir, (dir) => { writeFileSync(join(dir, 'cordis.patch.yml'), '[]\n') })
