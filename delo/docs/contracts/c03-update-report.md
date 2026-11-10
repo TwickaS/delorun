@@ -18,9 +18,11 @@ Before an update applies, Delo shows what the target release would change or bre
 - [Items](#items)
 - [Reasons](#reasons)
 - [Verified and unverified](#verified-and-unverified)
+- [Data formats](#data-formats)
 - [Applying an update](#applying-an-update)
 - [Health check](#health-check)
 - [Rollback triggers](#rollback-triggers)
+- [Rollback](#rollback)
 - [Undo and restore](#undo-and-restore)
 - [Values and limits](#values-and-limits)
 - [Consumers](#consumers)
@@ -62,14 +64,14 @@ A report is built for one installation and one target release, after the target'
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schema` | `delo.update-report/1` | The report format. |
+| `schema` | `delo.update-report/2` | The report format. |
 | `installation` | `cli-home` or `desktop-host` | The installation being updated. |
 | `from`, `to` | `{ "delo", "dsh", "channel" }` | The running and target versions ([C17](c17-plugin-versions.md#the-two-versions)). |
 | `release` | `{ "manifest": sha256, "signature", "freshness", "log" }` | The target's manifest digest and each check's result; all three are `passed` for any report shown. |
 | `generated` | timestamp | When the report was built. |
 | `installations` | list of `{ "id", "delo", "dsh", "state", "target"? }` | Both installations' versions and update states. |
 | `items` | list of item | Everything that changes, sorted by kind, then subject. |
-| `counts` | `{ "disabled", "removed", "changed", "unverified" }` | The number of items with each effect, and of unverified items. |
+| `counts` | `{ "disabled", "removed", "changed", "unverified", "data" }` | The number of items with each effect, of unverified items and of `data` items. |
 
 The report is stored in the snapshot's history version, so the history shows what the update was predicted to change.
 
@@ -77,13 +79,13 @@ The report is stored in the snapshot's history version, so the history shows wha
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `kind` | `plugin`, `bundle` or `row` | What the item is about. |
-| `subject` | object | For `plugin`: `{ "name", "version" }`; for `bundle`: `{ "package" }`; for `row`: `{ "id"?, "name", "layer" }`, where `layer` names the bundle, profile patch, home patch or overlay that holds the row. |
+| `kind` | `plugin`, `bundle`, `row` or `data` | What the item is about. |
+| `subject` | object | For `plugin`: `{ "name", "version" }`; for `bundle`: `{ "package" }`; for `row`: `{ "id"?, "name", "layer" }`, where `layer` names the bundle, profile patch, home patch or overlay that holds the row; for `data`: `{ "directories": ["sessions", "storages"] }`. |
 | `reason` | reason code | Why it changes ([reasons](#reasons)). |
 | `effect` | `disabled`, `removed`, `changed` or `kept` | What happens to it on the target; `kept` appears only for an exempted or unverified subject the person should see. |
 | `verification` | `verified` or `unverified` | Whether the prediction rests on metadata Delo read ([verified and unverified](#verified-and-unverified)). |
 | `detail` | object | The reason's facts, such as the requirement range, the axis, the revocation message or the replacement bundle. |
-| `actions` | list | Offered choices: `update-plugin`, `keep-disabled`, `allow-version`, `skip-update`. |
+| `actions` | list | Offered choices: `update-plugin`, `keep-disabled`, `allow-version`, `skip-update`, `copy-session-data`, `continue-without-copy`. |
 
 ## Reasons
 
@@ -102,6 +104,8 @@ The report is stored in the snapshot's history version, so the history shows wha
 | `bundle-skipped` | bundle | disabled | `<bundle> cannot load on the target: <reason>.` (upstream's `skippedBundles`) |
 | `row-disabled` | row | disabled | `Row <id or name> in <layer> loads <plugin>, which the update disables.` |
 | `row-include-blocked` | row | disabled | `Include <file> reaches <plugin>, which the update disables, so the whole Include is disabled.` |
+| `data-format-changed` | data | changed | `Delo <to.delo> keeps chat data in a format Delo <from.delo> may not read.` |
+| `data-format-unknown` | data | changed | `Delo cannot tell whether Delo <from.delo> reads the chat data Delo <to.delo> writes.` |
 
 For a mismatch on either version axis the report names both target versions, and its `actions` offer updating the plugin to a version that meets the target and, for the axis that is unmet, an exact-version exemption on the target version ([C17](c17-plugin-versions.md#exemptions)).
 
@@ -109,12 +113,22 @@ For a mismatch on either version axis the report names both target versions, and
 
 An item is `verified` when every fact it states was read from a source Delo checked: the installed plugin's `package.json`, the staged target's packages and the verified manifest. It is `unverified` when a fact is missing or could not be read, such as a manifest that does not parse, a row whose module cannot be resolved, or a plugin that declares no requirement. Unverified items are never counted as safe: the report shows "Delo cannot predict this item" beside each, and the summary counts them. The health check treats them like named items.
 
+## Data formats
+
+Every runtime closure carries `data-formats.json` at its root, listed in its signed file list ([C2](c02-release-manifest.md)): `{ "schema": "delo.data-formats/1", "persistence": <SHA-256 of upstream's docs/persistence-schema.json at the built commit>, "deloRecords": { <record name>: <version> } }`. `deloRecords` names each versioned record Delo's own packages keep under the home.
+
+The report compares the running and the target release. The chat data differs when the manifests' `dsh` versions differ, the `persistence` digests differ, or the `deloRecords` differ; upstream's schema inventory covers the Session header, envelope and events but no storage unit under `storages/`, so a different `dsh` version counts as a difference on its own. Any difference is one `data` item with reason `data-format-changed`, `verified`, and Delo treats every difference as one-way. A `data-formats.json` that is missing or unreadable on either side is `data-format-unknown`, `unverified`, and is treated the same way. There is no downgrade refusal: the comparison never blocks a rollback.
+
+A `data` item offers `copy-session-data`, the default, and `continue-without-copy`. Its detail holds the copy's file count and size and the free space on the home's filesystem, and the report states beside it: `Without the copy, Delo cannot go back to <from.delo> after <to.delo> first starts.` When nothing differs no copy is offered, and `delorun update --data-copy` takes one anyway.
+
+A session-data copy holds the home's `sessions/` and `storages/` as real copies (`COPYFILE_FICLONE`, falling back to a full copy), never hard links. `attachments/` stays in place because nothing deletes from it, `cache/` is left out and rebuilds, and Delo's records under `secrets/` are never copied or restored: the previous release reads every record the current one writes. The copy is written to `data-copies/<to.delo>/` beside `copy.json` (both releases' `data-formats.json`, the file count and the byte total) after running chats have ended and the Host has stopped, while the home lock is held, under a temporary name that is renamed and synced before the runtime switches. A copy that does not fit refuses the update with `DATA_COPY_NO_SPACE`, unless the person chose to continue without it. One copy is kept: a later update's copy removes the older one.
+
 ## Applying an update
 
-1. The person confirms the report; `delorun update` prints it and asks, and `delorun update --yes` confirms a report that has no `disabled` or `removed` item and no unverified item.
-2. A snapshot is written: a profile history version named "Before update to Delo <to.delo>", holding the profile patch, the home patch, the bundle list, both exemption files, the profile's `pnpm-workspace.yaml` and the report.
-3. Running chats finish, or the person stops them; the CLI switch goes through the home process's update handshake, which never switches under a running chat ([C19](c19-home-process.md)), and the desktop app does this in its pre-restart step.
-4. The target starts and the health check runs.
+1. The person confirms the report; `delorun update` prints it and asks, and `delorun update --yes` confirms a report that has no `disabled` or `removed` item and no unverified item. With a `data` item the person also chooses about the copy: `--yes` takes it, and declining needs `--no-data-copy` or the prompt's second choice.
+2. A snapshot is written: a profile history version named "Before update to Delo <to.delo>", holding the profile patch, the home patch, the bundle list, both exemption files, the profile's `pnpm-workspace.yaml` and the report. The update record `run/<profile>/update.json` ([C1](c01-home-layout.md)) names the two versions, whether the data differs, whether a copy is taken and the snapshot.
+3. Running chats finish, or the person stops them; the CLI switch goes through the home process's update handshake, which never switches under a running chat ([C19](c19-home-process.md)), and the desktop app does this in its pre-restart step. With the Host stopped and the home lock held, the session-data copy is written when the person chose it.
+4. The update record's `targetStarted` is written and synced, then the target starts and the health check runs.
 
 ## Health check
 
@@ -136,7 +150,22 @@ Automatic rollback runs when:
 
 On request, the person rolls back at any later time from the studio's update screen, `delorun recover` or the desktop app's rollback.
 
-A rollback restores the snapshot's files and switches the installation back to the release it replaced: for `cli-home`, the runtime the store keeps ([C1](c01-home-layout.md)); for `desktop-host`, the cached previous release ([C2](c02-release-manifest.md#desktop-updates-and-rollback)). It changes no chat, workspace or file outside the profile and the runtime store. After an automatic rollback the studio names the criterion that failed, and the failed release is offered again only with that failure shown. A rollback that fails leaves the state `failed` and offers safe mode and `delorun recover`.
+A rollback restores the snapshot's files and switches the installation back to the release it replaced: for `cli-home`, the runtime the store keeps ([C1](c01-home-layout.md)); for `desktop-host`, the cached previous release ([C2](c02-release-manifest.md#desktop-updates-and-rollback)). After an automatic rollback the studio names the criterion that failed, and the failed release is offered again only with that failure shown. A rollback that fails leaves the state `failed` and offers safe mode and `delorun recover`.
+
+## Rollback
+
+Every way back for `cli-home` reads the update record and applies one table: the handshake's `rollback`, the automatic rollback, the restart after an interrupted update and `delorun recover rollback` with no home process running. None swaps the runtime pointers on its own.
+
+| Data differs | Target started | Copy | Rollback does |
+| --- | --- | --- | --- |
+| no | either | — | Restores the profile snapshot and switches to the previous runtime. Chats written since stay. |
+| yes | no | either | The same; the target never opened the data. |
+| yes | yes | present | States how many chats were created or changed since the update and that they are set aside, not deleted. Moves the live `sessions/` and `storages/` to `data-set-aside/<to.delo>-<time>/`, moves the copy into place, restores the snapshot and switches the runtime. |
+| yes | yes | absent | Refuses with `ROLLBACK_NEEDS_DATA_COPY` and the reason, and offers `delorun recover rollback --profile-only`, which restores the snapshot and keeps the target runtime. |
+
+Nothing is deleted by a rollback: set-aside data stays until the person removes it, and `delorun recover status` lists it with its size. The restore writes the journal `data-copies/restore.json` before its first rename, and each step is one directory rename; `delorun start` and `delorun recover` complete a restore in progress before any Host starts.
+
+This procedure holds for `cli-home`, the only installation that applies it. The desktop Host shares `sessions/` and takes no home lock, so it is not shipped until a lock covers both installations and its updater uses this procedure.
 
 ## Undo and restore
 
@@ -154,6 +183,7 @@ A plugin version the current revocation list revokes is restored disabled with i
 | --- | --- |
 | Health-check limit | 120 seconds after the target starts |
 | Status records read per report | 2, one per installation |
+| Session-data copies kept | 1 |
 
 ## Consumers
 
@@ -173,9 +203,11 @@ The report's `schema` names its major version; reason codes form a closed list i
 - R1. No update disables, removes or changes a plugin, bundle or row the report did not name; the health check enforces it and rolls back otherwise.
 - R2. Nothing applies before the person confirms the report, and a report exists only for a target that passed signature, freshness and log checks.
 - R3. Unverified items are shown as such and never counted as safe.
-- R4. A failed health check rolls back automatically; the person can roll back at any later time; a rollback changes nothing outside the profile and the runtime store.
+- R4. A failed health check rolls back automatically; the person can roll back at any later time; a rollback changes the profile and the runtime store, and chat data only by restoring a copy the person took, with the newer data set aside.
 - R5. Undo and restore run the install-time plugin checks over what they bring back and list the plugins, builds and exemptions that change before applying.
 - R6. Both installations' versions and update states are shown, and updating one never switches the other.
+- R7. No update whose data differs applies before the person has seen the `data` item and chosen about the copy.
+- R8. No rollback deletes chat data.
 
 ### Denial tests
 
@@ -192,3 +224,14 @@ The report's `schema` names its major version; reason codes form a closed list i
 | `c03-restore-revoked-stays-disabled` | WP3.6 | Restoring a version that holds a revoked plugin version brings it back disabled with its reason. |
 | `c03-failed-restore-reverts` | WP3.5 | A restore whose install step fails leaves every profile file as it was. |
 | `c03-desktop-update-leaves-cli` | WP3.4, WP6.3 | Updating the desktop Host leaves the CLI home's version and state unchanged, and both appear in the report. |
+| `c03-data-change-named` | update | Two releases whose data facts differ produce one `data-format-changed` item with the copy's size and the free space. |
+| `c03-unknown-data-format-is-unverified` | update | A release without `data-formats.json` produces `data-format-unknown`, `unverified`, and `--yes` does not confirm the report. |
+| `c03-yes-takes-the-copy` | update | `delorun update --yes` on a report with a `data` item takes the session-data copy. |
+| `c03-copy-without-space-refuses` | update | A copy larger than the free space refuses the update with `DATA_COPY_NO_SPACE`, and the runtime stays. |
+| `c03-rollback-restores-copy-and-sets-aside` | update | A rollback after the target started restores the copy and moves the newer data to `data-set-aside/`. |
+| `c03-rollback-without-copy-refuses` | update | A rollback after the target started with changed data and no copy refuses with `ROLLBACK_NEEDS_DATA_COPY`, and `--profile-only` restores the snapshot and keeps the target. |
+| `c03-rollback-before-first-start-needs-no-copy` | update | A rollback before the target started restores the snapshot and the runtime without a copy and leaves the data. |
+| `c03-pointer-swap-applies-the-table` | update | `delorun recover rollback` with no home process running applies the table; it never swaps the pointers alone. |
+| `c03-second-rollback-keeps-both-set-asides` | update | Two update-and-rollback rounds leave two set-aside directories. |
+| `c03-interrupted-restore-completes-before-a-host-starts` | update | A restore killed between its renames is completed at the next start before the Host boots. |
+| `c03-previous-release-reads-delorun-records` | update | Every record `deloRecords` names is written at the version listed, and the update record a release writes is read back by the same reader. |

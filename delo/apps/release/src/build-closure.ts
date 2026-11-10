@@ -12,7 +12,8 @@
  * `-ffile-prefix-map=<build root>=.`; and for each platform deploys the closure's root package with production
  * dependencies for that platform, transpiles Delo's packages to JavaScript, stamps the release version into the
  * `delorun` package, has the install anchor declare Delo's bundles, substitutes the pinned prebuilt
- * native packages, adds the pinned Node and pnpm, checks every native file against `prebuilt-pins.json`, and writes
+ * native packages, adds the pinned Node and pnpm, writes `data-formats.json` (contract C3) at the closure's root,
+ * checks every native file against `prebuilt-pins.json`, and writes
  * the deterministic archive and its unsigned runtime file list to `--out`; when it built every platform, it also
  * writes the release's SPDX SBOM derived from the archives. It refuses to run under a Node or pnpm
  * other than `toolchain.json` pins. `--artifacts existing` skips the artifact build and copies the worktree's built
@@ -40,6 +41,7 @@ import { verifyStagedDependencies } from '../../../../scripts/executable-packagi
 import { semanticVersion } from './brands.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { artifactDirectories, artifactProblems, isArtifactSource, type ArtifactSource } from './closure/artifacts.ts'
+import { writeDataFormats } from './closure/data-formats.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { declareAnchorBundles, stampDeloVersion, transpileDeloPackages } from './closure/delo.ts'
 import { stageNode, stagePnpm, substitutePrebuilt } from './closure/sources.ts'
@@ -202,6 +204,7 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
     if (!existing) await substitutePrebuilt(recipe.pins.substitutes[platform], join(app, 'node_modules'), request.cache)
     await stageNode(recipe.toolchain, platform, stage, request.cache)
     await stagePnpm(recipe.toolchain, stage, request.cache)
+    await writeDataFormats(stage, source)
     const files = await archiveClosure({ stage, outDir: request.out, version: request.version, platform, epoch, pins: request.writePins || existing ? undefined : recipe.pins.files[platform], requireLaunchFiles: true })
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)

@@ -9,11 +9,34 @@
  * @module @delo/update
  */
 export { confirmsWithoutAsking } from './confirm.ts'
-export { UpdateReportError, type UpdateReportErrorCode } from './errors.ts'
+export { compareDataFacts, dataFormatsOf, dataFormatsText, dataItems, DELO_RECORDS, parseDataFormats, readDataFormats, type DataComparison, type DataFacts, type ReleaseDataFacts } from './data-formats.ts'
+export { DataSafetyError, isDataSafetyError, UpdateReportError, type DataSafetyErrorCode, type UpdateReportErrorCode } from './errors.ts'
+export {
+  assertCopyFits,
+  changedChats,
+  COPY_RECORD_FILE,
+  COPY_RECORD_SCHEMA,
+  DATA_COPIES_DIRECTORY,
+  DATA_SET_ASIDE_DIRECTORY,
+  discardKeptData,
+  listKeptData,
+  planDataCopy,
+  readCopyRecord,
+  recoverDataCopies,
+  RESTORE_JOURNAL_FILE,
+  RESTORE_JOURNAL_SCHEMA,
+  restoreDataCopy,
+  saveDataCopy,
+  type CopyRecord,
+  type KeptData,
+  type RestoreResult,
+  type SaveRequest,
+} from './data-copy.ts'
+export { decideRollback, rollbackUpdate, type RollbackDecision, type RollbackRequest, type RollbackResult, type UpdateRecordFacts } from './rollback.ts'
 export { type BundleFacts, type IncludeFact, type InstallationStatusFacts, type LayerFact, type ProfileFacts, type ReleaseChecks, type ReportInput, type RevokedPluginVersion, type RowFact, type SkippedBundleFact, type TargetFacts } from './facts.ts'
 export { bundleItems, pluginItems, predictBundleList, rowItems, versionOf, type DisabledPlugin, type PluginItems } from './items.ts'
 export { readInstalledPlugin, type DeclaredRequirement, type InstalledPluginFact, type PluginRequirements } from './manifest.ts'
-export { reasonMessage, UNVERIFIED_NOTE, type MessageVersions } from './messages.ts'
+export { dataCopyNote, reasonMessage, UNVERIFIED_NOTE, type MessageVersions } from './messages.ts'
 export { buildUpdateReport, countItems, disabledPluginNames, sortItems } from './report.ts'
-export { UpdateReportService, type BuiltUpdateReport, type ReportSources, type UpdateReportOptions } from './service.ts'
+export { buildFromSources, builtReport, readReportInput, UpdateReportService, type BuiltUpdateReport, type ReportHealth, type ReportSources, type UpdateReportOptions } from './service.ts'
 export { evaluateRequirement, exempted, exemptionKey, satisfiesRange, type AxisDecision, type AxisVersions } from './versions.ts'

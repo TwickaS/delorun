@@ -11,7 +11,7 @@ import type { ReleaseChannel, SemanticVersion, Sha256Hex, UtcTimestamp } from '@
 import type { VersionAxis } from '@delo/contract-plugin-versions'
 
 /** The `schema` value of an update report. */
-export const UPDATE_REPORT_SCHEMA = 'delo.update-report/1'
+export const UPDATE_REPORT_SCHEMA = 'delo.update-report/2'
 
 /** The two installations that update independently: the CLI home and the desktop app with its Host. */
 export type Installation = 'cli-home' | 'desktop-host'
@@ -78,7 +78,7 @@ export interface InstallationStatus {
 export type ReleaseCheckResult = 'passed' | 'failed'
 
 /** What an item is about. */
-export type ItemKind = 'plugin' | 'bundle' | 'row'
+export type ItemKind = 'plugin' | 'bundle' | 'row' | 'data'
 
 /** A plugin subject. */
 export interface PluginSubject {
@@ -104,7 +104,48 @@ export interface RowSubject {
   readonly layer: string
 }
 
-/** Every reason code of report format 1; the list is closed for that format. */
+/** The home directories whose chat data a `data` item is about. */
+export type SessionDataDirectory = 'sessions' | 'storages'
+
+/** The directories a session-data copy holds, in copy order. */
+export const SESSION_DATA_DIRECTORIES: readonly SessionDataDirectory[] = ['sessions', 'storages']
+
+/** A `data` subject: the chat data of the home, which both releases read. */
+export interface DataSubject {
+  /** The home directories the item is about: always {@link SESSION_DATA_DIRECTORIES}. */
+  readonly directories: readonly SessionDataDirectory[]
+}
+
+/** The `schema` value of a release's `data-formats.json`. */
+export const DATA_FORMATS_SCHEMA = 'delo.data-formats/1'
+
+/** The file a runtime closure carries at its root, listed in the signed file list. */
+export const DATA_FORMATS_FILE = 'data-formats.json'
+
+/** A release's `data-formats.json`: what its persisted data looks like, as digests and record versions. */
+export interface DataFormats {
+  /** Always {@link DATA_FORMATS_SCHEMA}. */
+  readonly schema: typeof DATA_FORMATS_SCHEMA
+  /** SHA-256 of upstream's `docs/persistence-schema.json` at the built commit. */
+  readonly persistence: Sha256Hex
+  /** The versioned records Delo's own packages keep under the home, by record name. */
+  readonly deloRecords: Readonly<Record<string, number>>
+}
+
+/** Which part of the two releases' data facts differs. */
+export type DataFormatDifference = 'dsh' | 'persistence' | 'delo-records'
+
+/** The size of a session-data copy and the room for it. */
+export interface DataCopySize {
+  /** Regular files the copy would hold. */
+  readonly files: number
+  /** Bytes the copy would hold. */
+  readonly bytes: number
+  /** Bytes free on the home's filesystem. */
+  readonly free: number
+}
+
+/** Every reason code of report format 2; the list is closed for that format. */
 export type ReportReason =
   | 'dsh-requirement-unmet'
   | 'delo-requirement-unmet'
@@ -119,6 +160,8 @@ export type ReportReason =
   | 'bundle-skipped'
   | 'row-disabled'
   | 'row-include-blocked'
+  | 'data-format-changed'
+  | 'data-format-unknown'
 
 /** What happens to an item's subject on the target. */
 export type ItemEffect = 'disabled' | 'removed' | 'changed' | 'kept'
@@ -127,7 +170,7 @@ export type ItemEffect = 'disabled' | 'removed' | 'changed' | 'kept'
 export type ItemVerification = 'verified' | 'unverified'
 
 /** A choice the report offers for an item. */
-export type ItemAction = 'update-plugin' | 'keep-disabled' | 'allow-version' | 'skip-update'
+export type ItemAction = 'update-plugin' | 'keep-disabled' | 'allow-version' | 'skip-update' | 'copy-session-data' | 'continue-without-copy'
 
 /** The facts behind an item's reason. */
 export interface ItemDetail {
@@ -141,6 +184,12 @@ export interface ItemDetail {
   readonly failure?: string
   /** The plugin a row or Include reaches, for row reasons. */
   readonly plugin?: PluginSubject
+  /** What differs between the two releases' data facts, for `data-format-changed`. */
+  readonly differs?: readonly DataFormatDifference[]
+  /** Which release's `data-formats.json` is missing or unreadable, for `data-format-unknown`. */
+  readonly unreadable?: readonly ('from' | 'to')[]
+  /** The size of the session-data copy and the free space, for `data` reasons. */
+  readonly copy?: DataCopySize
 }
 
 /** Fields every item has. */
@@ -166,6 +215,7 @@ export type ReportItem =
   | ItemFields<'plugin', PluginSubject>
   | ItemFields<'bundle', BundleSubject>
   | ItemFields<'row', RowSubject>
+  | ItemFields<'data', DataSubject>
 
 /** An update report, stored in the snapshot's history version. */
 export interface UpdateReport {
@@ -190,12 +240,13 @@ export interface UpdateReport {
   readonly installations: readonly InstallationStatus[]
   /** Every change, sorted by kind, then subject. */
   readonly items: readonly ReportItem[]
-  /** Items per effect, and unverified items. */
+  /** Items per effect, unverified items and `data` items. */
   readonly counts: {
     readonly disabled: number
     readonly removed: number
     readonly changed: number
     readonly unverified: number
+    readonly data: number
   }
 }
 

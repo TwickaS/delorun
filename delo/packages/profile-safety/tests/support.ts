@@ -115,7 +115,7 @@ export function version(text: string): SemanticVersion {
  */
 export function report(items: readonly ReportItem[]): UpdateReport {
   return {
-    schema: 'delo.update-report/1',
+    schema: 'delo.update-report/2',
     installation: 'cli-home',
     from: { delo: version('1.0.0'), dsh: version('0.2.2'), channel: 'stable' },
     to: { delo: version('1.0.1'), dsh: version('0.2.2'), channel: 'stable' },
@@ -123,7 +123,7 @@ export function report(items: readonly ReportItem[]): UpdateReport {
     generated: brandString<UtcTimestamp>('2026-01-01T00:00:00.000Z'),
     installations: [{ id: 'cli-home', delo: version('1.0.0'), dsh: version('0.2.2'), state: 'current' }],
     items: [...items],
-    counts: { disabled: 0, removed: 0, changed: 0, unverified: 0 },
+    counts: { disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0 },
   }
 }
 

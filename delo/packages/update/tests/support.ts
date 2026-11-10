@@ -5,8 +5,8 @@
  */
 import type { ExemptionRecord } from '@delo/contract-plugin-versions'
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
-import type { Installation, InstallationStatus, ReportReason, ReportVersions, UpdateReport, UpdateState } from '@delo/contract-update-report'
-import { readInstalledPlugin, type BundleFacts, type InstalledPluginFact, type ProfileFacts, type ReportInput, type ReportSources, type RevokedPluginVersion, type TargetFacts } from '../src/index.ts'
+import { DATA_FORMATS_SCHEMA, type DataCopySize, type DataFormats, type Installation, type InstallationStatus, type ReportReason, type ReportVersions, type UpdateReport, type UpdateState } from '@delo/contract-update-report'
+import { readInstalledPlugin, type BundleFacts, type DataFacts, type InstalledPluginFact, type ProfileFacts, type ReportInput, type ReportSources, type RevokedPluginVersion, type TargetFacts } from '../src/index.ts'
 
 /**
  * A plain string as the brand a fixture needs; the brands are compile-time only.
@@ -167,6 +167,15 @@ export const STATUSES = {
   'desktop-host': status('desktop-host', '0.9.0', '0.2.2', 'available', '1.0.0'),
 }
 
+/** A `data-formats.json` record for a fixture release. */
+export const FORMATS: DataFormats = { schema: DATA_FORMATS_SCHEMA, persistence: brand<Sha256Hex>('c'.repeat(64)), deloRecords: { 'update-record': 1 } }
+
+/** A copy of three files and 300 bytes on a filesystem with 10,000 bytes free. */
+export const COPY: DataCopySize = { files: 3, bytes: 300, free: 10_000 }
+
+/** Two releases that read each other's data. */
+export const DATA: DataFacts = { from: { dsh: version('0.2.2'), formats: FORMATS }, to: { dsh: version('0.2.2'), formats: FORMATS }, copy: COPY }
+
 /**
  * A report input over the default fixture.
  * @param overrides - the fields to replace.
@@ -179,6 +188,7 @@ export function input(overrides: Partial<ReportInput> = {}): ReportInput {
     target: target({ bundles: BUNDLE_FACTS, revocations: revocations() }),
     profile: PROFILE,
     statuses: STATUSES,
+    data: DATA,
     generated: GENERATED,
     ...overrides,
   }
@@ -195,6 +205,7 @@ export function sources(overrides: Partial<ReportSources> = {}): ReportSources {
     statuses: async () => STATUSES,
     profile: async () => PROFILE,
     target: async () => target({ bundles: BUNDLE_FACTS, revocations: revocations() }),
+    data: async () => DATA,
     now: () => GENERATED,
     ...overrides,
   }

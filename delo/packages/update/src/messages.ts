@@ -115,6 +115,27 @@ function rowSentence(item: ReportItem & { readonly kind: 'row' }): string {
 }
 
 /**
+ * The sentence of a data item.
+ * @param item - the item, whose subject is the home's chat data.
+ * @param versions - the running and target releases.
+ * @returns the sentence.
+ */
+function dataMessage(item: ReportItem & { readonly kind: 'data' }, versions: MessageVersions): string {
+  return item.reason === 'data-format-unknown'
+    ? `Delo cannot tell whether Delo ${versions.from.delo} reads the chat data Delo ${versions.to.delo} writes.`
+    : `Delo ${versions.to.delo} keeps chat data in a format Delo ${versions.from.delo} may not read.`
+}
+
+/**
+ * The sentence a report shows beside a `data` item, in C3's words: what declining the copy costs.
+ * @param versions - the running and target releases.
+ * @returns the sentence.
+ */
+export function dataCopyNote(versions: MessageVersions): string {
+  return `Without the copy, Delo cannot go back to ${versions.from.delo} after ${versions.to.delo} first starts.`
+}
+
+/**
  * The sentence a report shows beside an unverified item, in C3's words: "Delo cannot predict this item".
  */
 export const UNVERIFIED_NOTE = 'Delo cannot predict this item.'
@@ -133,5 +154,7 @@ export function reasonMessage(item: ReportItem, versions: MessageVersions): stri
       return bundleMessage(item, versions)
     case 'row':
       return rowSentence(item)
+    case 'data':
+      return dataMessage(item, versions)
   }
 }

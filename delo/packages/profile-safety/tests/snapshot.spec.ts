@@ -49,7 +49,7 @@ describe.skipIf(!hasGit)('recordSnapshot', () => {
       expect(files.get(PROFILE_MANIFEST_FILENAME)).toContain('@delo/bundle-local')
       expect(files.get(PROFILE_PATCH_FILENAME)).toContain('@me/tools-plugin')
       expect(files.get(HOME_PATCH_COPY_FILENAME)).toContain('"theme":"dark"')
-      expect(files.get(UPDATE_REPORT_FILENAME)).toContain('delo.update-report/1')
+      expect(files.get(UPDATE_REPORT_FILENAME)).toContain('delo.update-report/2')
       expect(files.get(HOME_PATCH_COPY_FILENAME)).toBe(text(join(profile.homeDir, 'cordis.patch.yml')))
       const [latest] = await history.list(1)
       expect(latest?.summary).toBe('Before update to Delo 1.0.1')

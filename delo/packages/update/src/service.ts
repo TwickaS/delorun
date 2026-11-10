@@ -2,7 +2,7 @@
  * The report as a service of a Delo process: `ctx.updateReport` reads the profile, the staged target and both
  * installations' status records from {@link ReportSources} and returns C3's report with the plugin ids the health check
  * holds the target to. It is the `UpdateReporter` the runtime store's `prepare` and `reportRollback` call
- * (`delo/packages/runtime-store/src/seam.ts`), whose seam passes a version and receives `{ report, disabledPlugins }`.
+ * (`delo/packages/runtime-store/src/seam.ts`), whose seam passes a version and receives `{ report, health, dataDiffers }`.
  *
  * The service owns no reader and no clock: the caller passes the sources, so a spec answers from fixtures and the
  * launcher's real reads stay behind their owner. One report is built at a time, and a second request for the version
@@ -17,7 +17,9 @@ import semver from 'semver'
 import type { UtcTimestamp } from '@delo/contract-release-manifest'
 import type { Installation, ReportVersions, UpdateReport } from '@delo/contract-update-report'
 import { UpdateReportError } from './errors.ts'
-import type { InstallationStatusFacts, ProfileFacts, TargetFacts } from './facts.ts'
+import type { DataFacts } from './data-formats.ts'
+import type { InstallationStatusFacts, ProfileFacts, ReportInput, TargetFacts } from './facts.ts'
+import { predictBundleList } from './items.ts'
 import { buildUpdateReport, disabledPluginNames } from './report.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -51,18 +53,80 @@ export interface ReportSources {
    */
   target(version: string): Promise<TargetFacts>
   /**
+   * Both releases' data facts and the size of the session-data copy (C3, "Data formats").
+   * @param version - the installed target's version.
+   * @returns the facts.
+   */
+  data(version: string): Promise<DataFacts>
+  /**
    * The current time.
    * @returns the time the report is stamped with.
    */
   now(): UtcTimestamp
 }
 
-/** A built report, with the plugin ids the health check holds the target to. */
+/** What C3's health check holds a target to, as one report predicts it. */
+export interface ReportHealth {
+  /** H3: the plugins the report names as disabled at boot. */
+  readonly disabledPlugins: readonly string[]
+  /** H3, H4: the rows the report names, by id or name. */
+  readonly namedRows: readonly string[]
+  /** H5: the bundle list the report predicts. */
+  readonly bundles: readonly string[]
+}
+
+/** A built report, with what the health check holds the target to and whether the data differs. */
 export interface BuiltUpdateReport {
   /** C3's report, returned to the caller as it is. */
   readonly report: UpdateReport
-  /** The plugin ids the report names as disabled at boot; the health check refuses any other. */
-  readonly disabledPlugins: readonly string[]
+  /** What the health check holds the target to. */
+  readonly health: ReportHealth
+  /** Whether the report holds a `data` item. */
+  readonly dataDiffers: boolean
+}
+
+/**
+ * Build one report from its sources: the reads run together, and the report is built from what they return.
+ * @param installation - the installation being updated.
+ * @param sources - where the facts come from.
+ * @param version - the installed target's version.
+ * @returns the report, what the health check holds the target to, and whether the data differs.
+ * @throws {UpdateReportError} `REPORT_TARGET_UNVERIFIED` when the target did not pass every check.
+ */
+export async function buildFromSources(installation: Installation, sources: ReportSources, version: string): Promise<BuiltUpdateReport> {
+  return builtReport(await readReportInput(installation, sources, version))
+}
+
+/**
+ * Read every fact one report is built from; the reads run together.
+ * @param installation - the installation being updated.
+ * @param sources - where the facts come from.
+ * @param version - the installed target's version.
+ * @returns the report's input.
+ */
+export async function readReportInput(installation: Installation, sources: ReportSources, version: string): Promise<ReportInput> {
+  const [from, statuses, profile, target, data] = await Promise.all([sources.running(), sources.statuses(), sources.profile(), sources.target(version), sources.data(version)])
+  return { installation, from, profile, target, statuses, data, generated: sources.now() }
+}
+
+/**
+ * Build one report from its input, with what the health check holds the target to.
+ * @param input - the report's input.
+ * @returns the report, what the health check holds the target to, and whether the data differs.
+ * @throws {UpdateReportError} `REPORT_TARGET_UNVERIFIED` when the target did not pass every check.
+ */
+export function builtReport(input: ReportInput): BuiltUpdateReport {
+  const report = buildUpdateReport(input)
+  const { profile, target } = input
+  return {
+    report,
+    health: {
+      disabledPlugins: disabledPluginNames(report),
+      namedRows: report.items.flatMap(item => item.kind === 'row' ? [item.subject.id ?? item.subject.name] : []),
+      bundles: predictBundleList(profile.bundles, target.bundles),
+    },
+    dataDiffers: report.items.some(item => item.kind === 'data'),
+  }
 }
 
 /** What the service needs. */
@@ -136,12 +200,10 @@ export class UpdateReportService extends Service {
    * @throws {UpdateReportError} `REPORT_DISPOSED` when the context was disposed while a fact was read.
    */
   private async compute(version: string): Promise<BuiltUpdateReport> {
-    const [from, statuses, profile, target] = await Promise.all([this.options.sources.running(), this.options.sources.statuses(), this.options.sources.profile(), this.options.sources.target(version)])
+    const input = await readReportInput(this.options.installation, this.options.sources, version)
     // The reads may have outlived the context that asked for them, and a report from it is not this context's answer.
     this.assertLive()
-    const report = buildUpdateReport({ installation: this.options.installation, from, profile, target, statuses, generated: this.options.sources.now() })
-    this.assertLive()
-    return { report, disabledPlugins: disabledPluginNames(report) }
+    return builtReport(input)
   }
 
   /**

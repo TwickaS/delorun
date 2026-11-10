@@ -10,6 +10,7 @@
 import type { ExemptionRecord, VersionAxis } from '@delo/contract-plugin-versions'
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
 import type { Installation, InstallationStatus, ReleaseCheckResult, ReportVersions } from '@delo/contract-update-report'
+import type { DataFacts } from './data-formats.ts'
 import type { InstalledPluginFact } from './manifest.ts'
 
 /** The target release's manifest digest and the result of each check C2 and C18 give it. */
@@ -127,6 +128,8 @@ export interface ReportInput {
   readonly profile: ProfileFacts
   /** Both installations' status records, as each writes them. */
   readonly statuses: InstallationStatusFacts
+  /** Both releases' data facts and the size of the session-data copy (C3, "Data formats"). */
+  readonly data: DataFacts
   /** When the report was built. */
   readonly generated: UtcTimestamp
 }

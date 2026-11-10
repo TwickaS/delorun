@@ -32,7 +32,7 @@ describe('UpdateReportService', () => {
     const built = await service.build('1.0.0')
     expect(built.report.installation).toBe('cli-home')
     expect(built.report.generated).toBe(GENERATED)
-    expect(built.disabledPlugins).toEqual(['bridge', 'calendar', 'legacy-x', 'old-exempt', 'revoked-plugin', 'weird'])
+    expect(built.health.disabledPlugins).toEqual(['bridge', 'calendar', 'legacy-x', 'old-exempt', 'revoked-plugin', 'weird'])
   })
 
   it('refuses a version that is not a semantic version before it reads anything', async () => {

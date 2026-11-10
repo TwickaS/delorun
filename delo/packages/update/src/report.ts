@@ -14,11 +14,12 @@ import { INSTALLATIONS, UPDATE_REPORT_SCHEMA, type Installation, type Installati
 import type { VersionAxis } from '@delo/contract-plugin-versions'
 import { UpdateReportError } from './errors.ts'
 import type { ReportInput, TargetFacts } from './facts.ts'
+import { dataItems } from './data-formats.ts'
 import { bundleItems, pluginItems, rowItems } from './items.ts'
 import type { AxisVersions } from './versions.ts'
 
 /** The order C3's item table lists the kinds in, which the report sorts by first. */
-const KIND_ORDER: Readonly<Record<ReportItem['kind'], number>> = { plugin: 0, bundle: 1, row: 2 }
+const KIND_ORDER: Readonly<Record<ReportItem['kind'], number>> = { plugin: 0, bundle: 1, row: 2, data: 3 }
 
 /** The three checks C3 requires to have passed before any report is shown. */
 const RELEASE_CHECKS = ['signature', 'freshness', 'log'] as const
@@ -26,7 +27,7 @@ const RELEASE_CHECKS = ['signature', 'freshness', 'log'] as const
 /**
  * The subject text an item is sorted by within its kind.
  * @param item - the item.
- * @returns the plugin name, the bundle package, or the row's id or name.
+ * @returns the plugin name, the bundle package, the row's id or name, or the data item's directories.
  */
 function subjectText(item: ReportItem): string {
   switch (item.kind) {
@@ -36,6 +37,8 @@ function subjectText(item: ReportItem): string {
       return item.subject.package
     case 'row':
       return item.subject.id ?? item.subject.name
+    case 'data':
+      return item.subject.directories.join(',')
   }
 }
 
@@ -54,7 +57,7 @@ export function sortItems(items: readonly ReportItem[]): readonly ReportItem[] {
 }
 
 /**
- * The counts C3's `counts` field holds: the items per effect, and the unverified items beside them.
+ * The counts C3's `counts` field holds: the items per effect, and the unverified and `data` items beside them.
  * @param items - every item.
  * @returns the counts.
  */
@@ -64,6 +67,7 @@ export function countItems(items: readonly ReportItem[]): UpdateReport['counts']
     removed: items.filter(item => item.effect === 'removed').length,
     changed: items.filter(item => item.effect === 'changed').length,
     unverified: items.filter(item => item.verification === 'unverified').length,
+    data: items.filter(item => item.kind === 'data').length,
   }
 }
 
@@ -120,6 +124,7 @@ export function buildUpdateReport(input: ReportInput): UpdateReport {
     ...plugins.items,
     ...bundleItems(profile.bundles, target.bundles),
     ...rowItems(profile.layers, plugins.disabled),
+    ...dataItems(input.data),
   ])
   return {
     schema: UPDATE_REPORT_SCHEMA,

@@ -11,8 +11,10 @@
   "dependencies": {
     "@clack/prompts": "^1.8.1",
     "@deepseek-ai/dsh": "workspace:*",
+    "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
     "@deepseek-ai/dsh-llm-deepseek": "workspace:*",
     "@deepseek-ai/dsh-native-command": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
@@ -27,6 +29,7 @@
     "@delo/contract-plugin-versions": "workspace:*",
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/contract-setup-answers": "workspace:*",
+    "@delo/contract-update-report": "workspace:*",
     "@delo/contract-verification-checks": "workspace:*",
     "@delo/home": "workspace:*",
     "@delo/home-process": "workspace:*",
@@ -38,6 +41,7 @@
     "@delo/runtime-store": "workspace:*",
     "@delo/supervisor": "workspace:*",
     "@delo/trash": "workspace:*",
+    "@delo/update": "workspace:*",
     "semver": "^7.8.5",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
@@ -45,6 +49,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-launch-environment": "workspace:*",
+    "@delo/release": "workspace:*",
     "@types/semver": "^7.8.0"
   },
   "peerDependencies": {
