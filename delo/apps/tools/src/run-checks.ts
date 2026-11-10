@@ -12,6 +12,9 @@
  * reach the trunk. `--tier agent|merge` chooses it. A push takes the merge tier when a pushed ref is `refs/heads/v5` or
  * `DELO_TIER=merge` is set.
  *
+ * Heavy runs wait in a first-come queue under the system's temporary directory (`checks/run-queue.ts`); a push to the trunk or
+ * `DELO_GATE_PRIORITY=trunk` goes ahead of waiting runs, and a plan of unexclusive, unmerged checks within 2 GiB takes no turn.
+ *
  * The invocations, which `lefthook.yml` and `pnpm check` use:
  *
  * - `--pre-commit` runs the repository gates marked `staged` over the staged
@@ -51,6 +54,7 @@ import { contentId, createPassCache, passCacheEnabled, type PassCache } from './
 import { GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type GateTier, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
+import { isLightPlan, gatePriority, processGuard, takeTurn } from './checks/run-queue.ts'
 import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { readWebSpecs } from './checks/web.ts'
@@ -243,9 +247,16 @@ export function prePushBase(root: string, input: string, base: string, fullGate:
  * @returns the tier.
  */
 export function pushTier(input: string, env: NodeJS.ProcessEnv): GateTier {
-  if (env['DELO_TIER'] === 'merge') return 'merge'
-  const trunk = lines(input).some(line => line.split(' ')[2] === TRUNK_REF && !ZERO.test(line.split(' ')[1] ?? ''))
-  return trunk ? 'merge' : 'agent'
+  return env['DELO_TIER'] === 'merge' || pushesTrunk(input) ? 'merge' : 'agent'
+}
+
+/**
+ * Whether a push updates the trunk.
+ * @param input - the lines git's pre-push hook reads.
+ * @returns true when a pushed ref is the trunk and is not being deleted.
+ */
+export function pushesTrunk(input: string): boolean {
+  return lines(input).some(line => line.split(' ')[2] === TRUNK_REF && !ZERO.test(line.split(' ')[1] ?? ''))
 }
 
 /**
@@ -416,26 +427,28 @@ function summarize(results: readonly Result[], milliseconds: number, root: strin
 }
 
 /**
- * The machine-wide run lock: a file naming the holder's pid, taken over when that process is gone.
- * @returns when the lock is held by this process.
+ * Wait in the machine-wide queue for this run's turn (`checks/run-queue.ts`).
+ * @param priority - 0 for a push to the trunk, otherwise 1.
+ * @returns when this process holds the machine.
  */
-async function holdRunLock(): Promise<void> {
-  const path = join(tmpdir(), 'delo-run-checks.lock')
-  for (let announced = false; ; announced = true) {
-    try {
-      writeFileSync(path, String(process.pid), { flag: 'wx' })
-      process.once('exit', () => { try { rmSync(path, { force: true }) } catch (error) { void error } })
-      return
-    } catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
-      const holder = Number(readFileSync(path, 'utf8'))
-      let alive = false
-      try { process.kill(holder, 0); alive = holder !== process.pid } catch (gone) { void gone }
-      if (!alive) { rmSync(path, { force: true }); continue }
-      if (!announced) process.stderr.write(`run-checks: waiting for the run in process ${String(holder)} to finish\n`)
-      await new Promise(resolve => setTimeout(resolve, 5000))
-    }
-  }
+async function holdRunLock(priority: 0 | 1): Promise<void> {
+  const base = tmpdir()
+  await takeTurn({
+    fs: {
+      ensureDir: path => { mkdirSync(path, { recursive: true }) },
+      list: path => existsSync(path) ? readdirSync(path) : [],
+      create: (path, text) => { writeFileSync(path, text, { flag: 'wx' }) },
+      rename: renameSync,
+      remove: path => { rmSync(path, { force: true }) },
+      read: path => existsSync(path) ? readFileSync(path, 'utf8') : undefined,
+    },
+    now: () => Date.now(),
+    pid: process.pid,
+    alive: pid => { try { process.kill(pid, 0); return true } catch (gone) { return gone instanceof Error && 'code' in gone && gone.code === 'EPERM' } },
+    sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+    say: line => process.stderr.write(line),
+    guard: processGuard(process),
+  }, { dir: join(base, 'delo-run-checks.queue'), oldLock: join(base, 'delo-run-checks.lock') }, priority)
 }
 
 /**
@@ -589,8 +602,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   // Answered before the lock: a covered tree starts nothing, so it does not wait for a gate running on this machine.
   if (covered(treeRecordsOn ? treeState(root) : undefined, false)) return 0
 
-  // One gate at a time on this machine; a second run waits for the first.
-  if (!light && env[IN_SCOPE] === undefined) await holdRunLock()
+  // One heavy run at a time on this machine, in arrival order; a light plan takes no ticket.
+  if (!light && env[IN_SCOPE] === undefined && !isLightPlan(plan)) await holdRunLock(gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)))
   if (!light && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
     const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)
     const child = spawnSync(command, args, { stdio: [pushInput === undefined ? 'inherit' : 'pipe', 'inherit', 'inherit'], env: { ...env, [IN_SCOPE]: '1' }, ...pushInput === undefined ? {} : { input: pushInput } })

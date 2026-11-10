@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createPassCache, passCacheEnabled, type PassCache } from '../src/checks/cache.ts'
 import type { Planned } from '../src/checks/plan.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
-import { main, prePushBase, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
+import { main, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
 
 const ZERO = '0'.repeat(40)
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -274,6 +274,12 @@ describe('the gate tier of a run', () => {
     expect(pushTier(push(TRUNK_REF), {})).toBe('merge')
     expect(pushTier(push('refs/heads/lane') + push(TRUNK_REF), {})).toBe('merge')
     expect(pushTier('', {})).toBe('agent')
+  })
+
+  it('names a push of the trunk for the queue priority, but not DELO_TIER=merge or a deletion', () => {
+    expect(pushesTrunk(push(TRUNK_REF))).toBe(true)
+    expect(pushesTrunk(push('refs/heads/lane'))).toBe(false)
+    expect(pushesTrunk(push(TRUNK_REF, zero))).toBe(false)
   })
 
   it('does not count the deletion of the trunk, and takes the merge tier from DELO_TIER=merge', () => {

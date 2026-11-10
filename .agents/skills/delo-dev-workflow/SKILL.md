@@ -59,4 +59,5 @@ A new spec goes in its package's `tests/` directory, which `tests:fork` runs.
 
 - `gh` defaults to the upstream remote in this repository: pass `--repo` with the Delo repository on every call.
 - Upstream's plugin-manager specs run through `pnpm exec vitest`; a bare `vitest` finds a global pnpm and fails the spec that needs the workspace's pnpm.
+- Heavy runs of `run-checks.ts` wait their turn in a first-come queue (a second run prints the holder's pid and its position); a run of a few small checks, such as `--only gates:docs`, takes no turn, and the lead's trunk push sets `DELO_GATE_PRIORITY=trunk` to go ahead of waiting runs.
 - To wait on a long command in the background, wait on its process id (`while kill -0 <pid>; do sleep 5; done`). A `pgrep -f '<pattern>'` loop matches its own command line, which contains the pattern, and never ends.
