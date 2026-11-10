@@ -4,20 +4,15 @@
  * the launcher installed its runtime. The launcher checked that chain against the roots it ships before it started
  * this runtime, so the runtime trusts no root the launcher did not.
  *
- * The log's origins below repeat the launcher's (`delo/apps/npm-launcher/src/platform.ts`) until `@delo/install`
- * exports them.
+ * The release log is the one the trusted root names, read through `@delo/release-verify`'s transport, as the
+ * launcher reads it.
  *
  * @module @delo/cli/update/channel
  */
 import { RUNTIME_PLATFORMS, type ReleaseChannel, type RuntimePlatform } from '@delo/contract-release-manifest'
-import { createTilesLogService, Downloader, LauncherChannel, progressLines, readStoredRootBytes, readStoredRootChain, type InstallProgress } from '@delo/install'
+import { Downloader, LauncherChannel, progressLines, readStoredRootBytes, readStoredRootChain, type InstallProgress } from '@delo/install'
+import { logEndpoints, tilesTransport } from '@delo/release-verify'
 import type { UpdateReleaseChannel } from '@delo/runtime-store'
-
-/** The release log's tiles origin, as the launcher reads it. */
-const RELEASE_LOG_TILES_ORIGIN = 'https://rekor.sigstore.dev'
-
-/** The witness network's checkpoint distributor, as the launcher reads it. */
-const RELEASE_LOG_DISTRIBUTOR_ORIGIN = 'https://witness.sigstore.dev'
 
 /**
  * The runtime platform of this machine, as contract C2 names it.
@@ -58,10 +53,9 @@ export async function homeReleaseChannel(home: string, platform: RuntimePlatform
   const root = await readStoredRootBytes(home)
   const roots = chain.length > 0 ? chain : root === undefined ? [] : [root]
   if (roots.length === 0) throw new Error('this home stores no verified release root, so no update can be verified; reinstall Delo with its launcher')
-  const downloader = new Downloader()
-  const hosts = [new URL(RELEASE_LOG_TILES_ORIGIN).host, new URL(RELEASE_LOG_DISTRIBUTOR_ORIGIN).host]
+  const fetch = globalThis.fetch.bind(globalThis)
   return new LauncherChannel({
-    home, platform, roots, channel, log: createTilesLogService({ origin: RELEASE_LOG_TILES_ORIGIN, hosts, downloader }), downloader,
+    home, platform, roots, channel, log: trusted => tilesTransport({ fetch, ...logEndpoints(trusted) }), downloader: new Downloader(),
     progress: installLines(line),
   })
 }
