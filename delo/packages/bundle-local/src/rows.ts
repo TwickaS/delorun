@@ -97,16 +97,16 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     },
   },
   {
-    id: 'connection',
-    kind: 'changed',
-    reason: 'The C16 switch `one_time_launch_tokens` on: a studio sign-in link works once, within 60 seconds, and a refused request tells the person to run `delorun open`; upstream keeps one reusable launch token for the life of the Host.',
-    parity: { kind: 'upstream', reason: 'The switch\'s parity value is off: the overlay leaves the row to upstream\'s web bundle, so the recorded web scenarios sign in with the reusable process token, as they were recorded.' },
-  },
-  {
     id: 'workspace-controller',
     kind: 'changed',
     reason: 'The studio\'s first-use workspace folder is the one `delorun start` resolves, `<documents>/Delo/default-workspace` or `<home>/Delo/default-workspace` where the platform reports no documents folder, so the studio has a default workspace on every platform; upstream\'s row sets none, and its own lookup gives up where the platform reports no documents folder.',
     parity: { kind: 'upstream', reason: 'The C16 switch `default_workspace_directory` is a presence switch whose parity value is off: the overlay leaves the row out, so the replay places the first-use workspace by upstream\'s own lookup.' },
+  },
+  {
+    id: 'connection',
+    kind: 'changed',
+    reason: 'The C16 switch `one_time_launch_tokens` on: a studio sign-in link works once, within 60 seconds, and a refused request tells the person to run `delorun open`; upstream keeps one reusable launch token for the life of the Host.',
+    parity: { kind: 'upstream', reason: 'The switch\'s parity value is off: the overlay leaves the row to upstream\'s web bundle, so the recorded web scenarios sign in with the reusable process token, as they were recorded.' },
   },
   {
     id: 'ui-settings-models',

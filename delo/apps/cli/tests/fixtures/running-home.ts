@@ -35,6 +35,7 @@ export async function startRunningHome(home: string, profile: string, studio: st
   const host: RunningHost = {
     chats: new CountingChatGate(),
     studio: () => studio,
+    studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
     failedRows: () => [],
     rows: () => [],
     check: () => Promise.resolve({ passed: true }),

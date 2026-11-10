@@ -104,7 +104,7 @@ describe('delorun status', { timeout: 30_000 }, () => {
   it('reports no home process, with and without --json, and a lock its exited holder left', async () => {
     expect(await status()).toMatchObject({ code: EXIT.notRunning, stdout: expect.stringContaining('state: not running\n') as string })
     expect(await status(['--json'])).toMatchObject({ code: EXIT.notRunning, stdout: '{"ok":false,"state":"not-running"}\n' })
-    const exited = spawnSync(process.execPath, ['-e', ''])
+    const exited = spawnSync(process.execPath, ['-e', ''], { timeout: 30_000 })
     writeLock(exited.pid as number)
     expect((await status()).stdout).toContain(`a lock left by process ${String(exited.pid)}, which has exited`)
   })

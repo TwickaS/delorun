@@ -58,7 +58,7 @@ afterEach(async () => {
 async function setStudioPort(port: number): Promise<void> {
   const directory = profileDirectory(home, PROFILE)
   mkdirSync(directory, { recursive: true })
-  await profileSection.apply({ home, directory, secret: undefined }, { ...SETUP_DEFAULTS, profile: { name: null, port } })
+  await profileSection.apply({ home, env: {}, directory, secret: undefined }, { ...SETUP_DEFAULTS, profile: { name: null, port } })
 }
 
 /**
@@ -168,7 +168,7 @@ describe('the port of this home\'s own studio', { timeout: 30_000 }, () => {
 
   it('is none while no home process runs, its lock\'s holder has exited, or the Host serves no studio', async () => {
     expect(await homeStudioPort(home, PROFILE)).toBeUndefined()
-    writeLock(spawnSync(process.execPath, ['-e', '']).pid as number)
+    writeLock(spawnSync(process.execPath, ['-e', ''], { timeout: 30_000 }).pid as number)
     expect(await homeStudioPort(home, PROFILE)).toBeUndefined()
     rmSync(join(runDirectory(home, PROFILE), 'home.lock'))
     running = await startRunningHome(home, PROFILE, undefined)

@@ -732,6 +732,12 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
     const answers = { ...(await import('@delo/contract-setup-answers')).SETUP_DEFAULTS }
     expect(() => keySection.apply({ home, env: {}, directory: home, secret: undefined }, answers)).toThrow('the model key was not entered')
   })
+
+  it('reviews the key line without a draft as a key nothing is known to have failed to check', async () => {
+    const { keySection } = await import('../../src/setup/sections.ts')
+    const answers = { ...(await import('@delo/contract-setup-answers')).SETUP_DEFAULTS }
+    expect(keySection.review?.(answers)).toBe('DeepSeek API key: key entered now')
+  })
 })
 
 describe('the way back inside the full sections', { timeout: TIMEOUT_MS }, () => {

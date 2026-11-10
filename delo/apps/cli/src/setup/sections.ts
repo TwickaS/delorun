@@ -38,7 +38,7 @@ export interface Draft {
   /** The typed key, kept in memory until the key section's write; never in the answers. */
   readonly secret: string | undefined
   /** Why the live check of the key failed when the person continued without a successful check; never the key. */
-  readonly keyCheckFailure: string | undefined
+  readonly keyCheckFailure?: string | undefined
 }
 
 /** What a section's question returns. */
@@ -113,7 +113,7 @@ export interface SetupSection {
    * @param draft - the run's answers so far, with what the questions found, such as a failed key check.
    * @returns the section's line of the review screen. A section without one omits the method.
    */
-  review?(answers: SetupAnswers, draft: Draft): string
+  review?(answers: SetupAnswers, draft?: Draft): string
   /**
    * Make the section's writes. A run that repeats a write leaves the same values.
    * @param context - the home, profile directory and typed key.
@@ -270,7 +270,7 @@ export const keySection: SetupSection = {
   },
   review(answers, draft) {
     const source = answers.modelProvider.credential.source === 'prompt' ? 'key entered now' : `read from ${answers.modelProvider.credential.name} at each start`
-    return `DeepSeek API key: ${source}${draft.keyCheckFailure === undefined ? '' : `, not verified: ${draft.keyCheckFailure}`}`
+    return `DeepSeek API key: ${source}${draft?.keyCheckFailure === undefined ? '' : `, not verified: ${draft.keyCheckFailure}`}`
   },
   apply(context, answers) {
     if (answers.modelProvider.credential.source === 'prompt') {
