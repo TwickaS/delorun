@@ -28,7 +28,7 @@ This app is the `delorun` command. Before any upstream code runs, it resolves an
 | --- | --- |
 | `delorun [--profile <name>]` | Runs setup on a home without the CLI profile; otherwise starts the home process in this terminal and opens the studio |
 | `delorun setup [<section>] [--profile <name>] [--yes \| --config <file>] [--check-key] [--list]` | Setup: Quick or Full in a terminal, or every default with `--yes`, or an answers document with `--config`; a finished setup is left unchanged. `<section>` runs one section again and `--list` lists them |
-| `delorun start [--foreground] [--profile <name>]` | Starts the home process detached from the terminal and waits at most 120 seconds for it to report `running`; `--foreground` runs it in this terminal. Neither opens the studio |
+| `delorun start [--foreground] [--profile <name>]` | Starts the home process detached from the terminal and waits at most 120 seconds for it to report `running`; `--foreground` runs it in this terminal, and so does a start whose setup answers chose against the background. Neither opens the studio |
 | `delorun stop [--now] [--profile <name>]` | Stops the home process once running chats end, waiting at most 1,800 seconds; `--now` cancels them first |
 | `delorun status [--profile <name>] [--json]` | Prints the home, the profile, an inherited `DSH_HOME` that `delorun` ignored, and the home process's state, process id, start id, runtime versions, running chats and update in progress; `--json` prints its `status` answer alone |
 | `delorun doctor [--port <n>]` | Checks the home, the Docker engine, the DeepSeek API key's format and the studio's port, one line per check; it contacts no model, starts no container and runs no command except the read-only `docker version` probe |

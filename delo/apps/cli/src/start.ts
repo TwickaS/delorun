@@ -31,7 +31,8 @@ import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, refuseSkippedDeloBundles, type BootedRow, type RowState } from './delo-bundles.ts'
-import { hasCliProfile } from './profile.ts'
+import { hasCliProfile, profileDirectory } from './profile.ts'
+import { readBackgroundAnswer } from './setup/background.ts'
 import { safeModeNotice, safeModeStart } from './safe-mode.ts'
 import { removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, writeSandboxOverlay } from './sandbox-protection.ts'
 
@@ -318,6 +319,17 @@ async function answeringStatus(home: string, profile: string): Promise<{ readonl
   }
 }
 
+/**
+ * Whether `delorun start` detaches from the terminal: not when `--foreground` was given, and not when the profile's
+ * setup answers say the person chose against running in the background. A missing answers record keeps the default.
+ * @param foreground - whether `--foreground` was given.
+ * @param profileDirectory - the CLI profile's directory.
+ * @returns true when the home process starts detached.
+ */
+export function startsDetached(foreground: boolean, profileDirectory: string): boolean {
+  return !foreground && readBackgroundAnswer(profileDirectory)
+}
+
 /** `delorun start [--foreground] [--profile <name>]`. */
 export const startCommand: CliCommand = {
   name: 'start',
@@ -325,7 +337,7 @@ export const startCommand: CliCommand = {
   async run(args, context) {
     const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, profile: { type: 'string' } })
     const { home, profile } = await prepareHome(context, values.profile)
-    if (values.foreground !== true) return startDetached(home.path, profile, context)
+    if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) return startDetached(home.path, profile, context)
     return startForeground({ home: home.path, profile, open: false, output: context })
   },
 }
