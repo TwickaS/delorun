@@ -39,19 +39,34 @@ const INTEGRATION_HOOK_TIMEOUT_MS = 120_000
 
 const SPEC_DIRS = ['apps/*/tests/**', 'packages/*/tests/**']
 
+/** The unit project: `*.spec.ts` specs that start no process. */
+export const forkUnitProject = {
+  test: {
+    name: 'fork',
+    include: SPEC_DIRS.map(dir => `${dir}/*.spec.ts`),
+    exclude: ['**/node_modules/**', '**/*.docker.spec.ts', '**/*.integration.spec.ts'],
+    testTimeout: UNIT_TIMEOUT_MS,
+    hookTimeout: UNIT_HOOK_TIMEOUT_MS,
+  },
+}
+
+/** The client component project: `*.spec.tsx` specs in jsdom, upstream packages resolved to their sources. */
+export const forkClientProject = {
+  plugins: [tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
+  test: {
+    name: 'fork-client',
+    include: SPEC_DIRS.map(dir => `${dir}/*.spec.tsx`),
+    setupFiles: [fileURLToPath(new URL('../scripts/test-dom-environment.ts', import.meta.url)), fileURLToPath(new URL('./vitest.dom-setup.ts', import.meta.url))],
+    testTimeout: UNIT_TIMEOUT_MS,
+    hookTimeout: UNIT_HOOK_TIMEOUT_MS,
+  },
+}
+
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   test: {
     projects: [
-      {
-        test: {
-          name: 'fork',
-          include: SPEC_DIRS.map(dir => `${dir}/*.spec.ts`),
-          exclude: ['**/node_modules/**', '**/*.docker.spec.ts', '**/*.integration.spec.ts'],
-          testTimeout: UNIT_TIMEOUT_MS,
-          hookTimeout: UNIT_HOOK_TIMEOUT_MS,
-        },
-      },
+      forkUnitProject,
       {
         test: {
           name: 'fork-integration',
@@ -61,16 +76,7 @@ export default defineConfig({
           hookTimeout: INTEGRATION_HOOK_TIMEOUT_MS,
         },
       },
-      {
-        plugins: [tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
-        test: {
-          name: 'fork-client',
-          include: SPEC_DIRS.map(dir => `${dir}/*.spec.tsx`),
-          setupFiles: [fileURLToPath(new URL('../scripts/test-dom-environment.ts', import.meta.url)), fileURLToPath(new URL('./vitest.dom-setup.ts', import.meta.url))],
-          testTimeout: UNIT_TIMEOUT_MS,
-          hookTimeout: UNIT_HOOK_TIMEOUT_MS,
-        },
-      },
+      forkClientProject,
     ],
   },
 })

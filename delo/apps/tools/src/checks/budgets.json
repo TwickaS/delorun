@@ -12,6 +12,7 @@
     "typecheck": { "memoryGiB": 1 },
     "tests:fork": { "memoryGiB": 0.5, "perWorker": true },
     "tests:fork:integration": { "memoryGiB": 1, "perWorker": true },
+    "tests:moved-clock": { "memoryGiB": 0.5, "perWorker": true },
     "tests:docker": { "memoryGiB": 1 },
     "tests:upstream-changed": { "memoryGiB": 0.6, "perWorker": true },
     "tests:snapshots": { "memoryGiB": 0.6, "perWorker": true, "exclusive": true },

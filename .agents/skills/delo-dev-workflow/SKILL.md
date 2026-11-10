@@ -39,6 +39,8 @@ The test lanes, by what they need:
 
 A new spec goes in its package's `tests/` directory. Name it `*.integration.spec.ts` when it runs git, Node or `tsx` children, a real profile, a release build or many durable writes to a real file tree; `gates:spec-lanes` refuses a unit spec that starts a process, and every `spawnSync` or `execFileSync` in a spec needs a `timeout`. `--only tests:fork` runs both phases.
 
+A spec that fixes "now" fixes every time it compares against, file modification times included (`utimesSync`), or injects the clock into the code under test; a fixed date beside a time the clock or the file system supplies starts failing on the day the real clock passes it. `--only tests:moved-clock` runs the unit specs with the clock moved forward and names such a test; run it after adding dated fixtures.
+
 ## Read a failure
 
 - `node_modules/.cache/delo-checks/report.json` holds each check's status, whether a cached pass served it, duration and peak memory; `node_modules/.cache/delo-checks/logs/<check>.log` holds its full output.

@@ -211,6 +211,15 @@ describe('selection', () => {
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['tests:fork:integration'] }))).toEqual(['generate:native', 'tests:fork', 'tests:fork:integration'])
   })
 
+  it('runs the moved-clock check only when --only names it, after the builds, on at most 8 workers', () => {
+    const check = CHECKS.find(candidate => candidate.id === 'tests:moved-clock')
+    expect(check).toMatchObject({ group: 'tests', tiers: [], needs: ['generate:native'], cpus: 8, command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/checks/moved-clock.ts', '--workers=8'], budget: { memoryGiB: 0.5, perWorker: true } })
+    expect(catalog(TREE, { ...HOST, workers: { ...HOST.workers, fork: 3 } }).find(candidate => candidate.id === 'tests:moved-clock')?.command.at(-1)).toBe('--workers=3')
+    expect(ids(select(CHECKS, TREE, NONE))).not.toContain('tests:moved-clock')
+    expect(ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delo/packages/update/tests/rollback.spec.ts'] } }))).not.toContain('tests:moved-clock')
+    expect(ids(select(CHECKS, TREE, { ...NONE, only: ['tests:moved-clock'] }))).toEqual(['generate:native', 'tests:moved-clock'])
+  })
+
   it('names the --only and --skip selectors that match no check, so a typo cannot select nothing and pass', () => {
     expect(unknownSelectors(CHECKS, ['tests:fork', 'tests', 'typecheck:delo', 'tests:forkk', 'nope'])).toEqual(['tests:forkk', 'nope'])
   })

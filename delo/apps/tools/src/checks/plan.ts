@@ -252,6 +252,11 @@ export const NOTICES_ID = 'generated:notices'
 /** The check that builds the Delo packages whose output is missing or older than their sources. */
 export const DELO_BUILD_ID = 'build:delo'
 
+/** The check that runs the unit specs with the clock moved forward. */
+export const MOVED_CLOCK_ID = 'tests:moved-clock'
+// The moved-clock check's workers: it runs the unit specs three times in a row, so a modest pool keeps it beside other work.
+const MOVED_CLOCK_WORKERS = 8
+
 /** The parity replay's negative control: a replay with a planted switch left on must fail. */
 export const PARITY_CONTROL_ID = 'parity-replay:control'
 
@@ -497,6 +502,17 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       env: TEST_ENV,
       tiers: ['changed', 'full'],
       cpus: Math.min(workers.fork, FORK_INTEGRATION_WORKERS),
+    },
+    // No tier selects it: run it with `--only tests:moved-clock` before a release and after a change that adds dated fixtures.
+    {
+      id: MOVED_CLOCK_ID,
+      group: 'tests',
+      title: 'The unit and client component specs with `Date` moved forward 2 and 400 days: a test that passes today and fails then compares a fixed date with the clock (`delo/vitest.moved-clock.config.ts`)',
+      cwd: '',
+      command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/checks/moved-clock.ts', `--workers=${String(Math.min(workers.fork, MOVED_CLOCK_WORKERS))}`],
+      needs: upstreamSuiteNeeds,
+      tiers: [],
+      cpus: Math.min(workers.fork, MOVED_CLOCK_WORKERS),
     },
     // Present only in a tree with Docker specs. The specs share the host's one engine, so they run one file at a time.
     ...tree.packages.some(pkg => pkg.dockerSpecs === true)
