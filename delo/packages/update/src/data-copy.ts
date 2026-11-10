@@ -1,22 +1,24 @@
 /**
  * The session-data copy of contract C3 ("Data formats", "Rollback"): a real copy of the home's `sessions/` and
  * `storages/` taken before a runtime switch whose data differs, and the restore that puts it back and sets the newer
- * data aside. Nothing here deletes chat data: a restore moves the live directories to `data-set-aside/`, and only a
- * later copy replaces an older copy.
+ * data aside. Nothing here deletes chat data: a restore moves the live directories to `data-set-aside/`, and copies
+ * are removed only by {@link keepOnlyCopy} when an update commits, {@link discardCopy} when an update ends before its
+ * switch, and the person's {@link discardKeptData}.
  *
  * - The copy is written under `data-copies/.tmp-<16 hex>/`, its files and `copy.json` synced, then renamed to
- *   `data-copies/<to>/` and the directory synced. Every other copy is removed after the rename: one copy is kept.
+ *   `data-copies/<to>/` and the directory synced. Other copies stay until the update commits.
  * - The restore writes the journal `data-copies/restore.json` before its first rename; each step is one directory
- *   rename, so {@link recoverDataCopies} completes a killed restore from the journal before any Host starts.
- * - Files are copied with `COPYFILE_FICLONE`, which falls back to a full copy, never a hard link. Symbolic links are
- *   copied as links.
+ *   rename, after which the journal's `done` count is rewritten durably, so {@link recoverDataCopies} completes a
+ *   killed restore from the journal before any Host starts, whichever step the kill interrupted.
+ * - `sessions/` and `storages/` must be real directories. Files are copied with `COPYFILE_FICLONE`, which falls back
+ *   to a full copy, never a hard link. Symbolic links inside them are copied as links and never followed.
  *
  * @module @delo/update/data-copy
  */
 import { randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
 import { cp, lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, statfs, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { SESSION_DATA_DIRECTORIES, type DataCopySize, type DataFormats, type SessionDataDirectory } from '@delo/contract-update-report'
 import { z } from 'zod'
 import { parseDataFormats } from './data-formats.ts'
@@ -106,7 +108,9 @@ const journalSchema = z.strictObject({
     z.strictObject({ kind: z.literal('restore'), directory: directorySchema }),
     z.strictObject({ kind: z.literal('record') }),
   ])),
-})
+  /** The steps finished and synced, from the first; the step at this index may have renamed without being counted. */
+  done: z.number().int().nonnegative(),
+}).refine(journal => journal.done <= journal.steps.length, { message: 'done counts more steps than the journal holds' })
 
 /** A restore in progress, as its journal records it. */
 type RestoreJournal = z.output<typeof journalSchema>
@@ -206,14 +210,58 @@ export interface SaveRequest {
 }
 
 /**
- * Take the session-data copy for an update: copy `sessions/` and `storages/` under a temporary name, sync it, rename
- * it to `data-copies/<to>/`, and remove every other copy.
+ * Refuse a name that cannot name a copy, so no path built from it leaves `data-copies/`.
+ * @param to - the version that names the copy.
+ * @throws {Error} when it is not a version.
+ */
+function assertVersionName(to: string): void {
+  if (!VERSION_NAME.test(to)) throw new Error(`${JSON.stringify(to)} is not a version a copy can be named by`)
+}
+
+/**
+ * Refuse a home whose `sessions/` or `storages/` is a symbolic link or anything but a directory; an absent one is
+ * accepted.
+ * @param home - the resolved Delo home.
+ * @throws {DataSafetyError} `DATA_NOT_A_DIRECTORY` naming the first such entry.
+ */
+async function assertDataDirectories(home: string): Promise<void> {
+  for (const directory of SESSION_DATA_DIRECTORIES) {
+    const path = join(home, directory)
+    let entry
+    try {
+      entry = await lstat(path)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      throw error
+    }
+    if (!entry.isDirectory()) {
+      throw new DataSafetyError('DATA_NOT_A_DIRECTORY', `${path} is ${entry.isSymbolicLink() ? 'a symbolic link' : 'not a directory'}; Delo copies only a real directory there, so move the data into ${path} itself`)
+    }
+  }
+}
+
+/**
+ * Refuse while a restore's journal exists: the restore still needs the copy it names.
+ * @param home - the resolved Delo home.
+ * @throws {DataSafetyError} `DATA_IN_USE` when `data-copies/restore.json` exists.
+ */
+async function assertNoRestore(home: string): Promise<void> {
+  const journal = join(home, DATA_COPIES_DIRECTORY, RESTORE_JOURNAL_FILE)
+  if (await exists(journal)) throw new DataSafetyError('DATA_IN_USE', `a restore of the chat data is in progress (${journal}); run delorun recover to complete it first`)
+}
+
+/**
+ * Take the session-data copy for an update: copy `sessions/` and `storages/` under a temporary name, sync it and
+ * rename it to `data-copies/<to>/`, replacing an earlier copy for the same version. Copies for other versions stay.
  * @param request - the home, both versions, both releases' formats and the time.
  * @returns the copy's record.
- * @throws {DataSafetyError} `DATA_COPY_NO_SPACE` when the copy would not fit, before anything is written.
+ * @throws {Error} when `to` is not a version.
+ * @throws {DataSafetyError} `DATA_NOT_A_DIRECTORY` when `sessions/` or `storages/` is a symbolic link or not a
+ *   directory, and `DATA_COPY_NO_SPACE` when the copy would not fit; both before anything is written.
  */
 export async function saveDataCopy(request: SaveRequest): Promise<CopyRecord> {
-  if (!VERSION_NAME.test(request.to)) throw new Error(`${JSON.stringify(request.to)} is not a version a copy can be named by`)
+  assertVersionName(request.to)
+  await assertDataDirectories(request.home)
   assertCopyFits(await planDataCopy(request.home))
   const copies = join(request.home, DATA_COPIES_DIRECTORY)
   await mkdir(copies, { recursive: true, mode: 0o700 })
@@ -240,14 +288,43 @@ export async function saveDataCopy(request: SaveRequest): Promise<CopyRecord> {
     await rm(named, { recursive: true, force: true })
     await rename(temporary, named)
     await sync(copies)
-    for (const entry of await readdir(copies)) {
-      if (entry !== request.to && entry !== RESTORE_JOURNAL_FILE) await rm(join(copies, entry), { recursive: true, force: true })
-    }
     return record
   } catch (error) {
     await rm(temporary, { recursive: true, force: true })
     throw error
   }
+}
+
+/**
+ * When an update commits: remove every entry under `data-copies/` except the committed update's copy, so one copy is
+ * kept. It refuses while a restore's journal exists, so the journal and the copy it names stay.
+ * @param home - the resolved Delo home, whose lock the caller holds.
+ * @param to - the committed update's target version, which names the copy kept.
+ * @throws {Error} when `to` is not a version.
+ * @throws {DataSafetyError} `DATA_IN_USE` when a restore's journal exists; nothing is removed then.
+ */
+export async function keepOnlyCopy(home: string, to: string): Promise<void> {
+  assertVersionName(to)
+  await assertNoRestore(home)
+  const copies = join(home, DATA_COPIES_DIRECTORY)
+  if (!await exists(copies)) return
+  for (const entry of await readdir(copies)) {
+    if (entry !== to) await rm(join(copies, entry), { recursive: true, force: true })
+  }
+  await sync(copies)
+}
+
+/**
+ * When an update ends before its runtime switch: remove the copy it took, `data-copies/<to>/`, and nothing else.
+ * @param home - the resolved Delo home, whose lock the caller holds.
+ * @param to - the ended update's target version, which names the copy.
+ * @throws {Error} when `to` is not a version.
+ * @throws {DataSafetyError} `DATA_IN_USE` when a restore's journal exists; nothing is removed then.
+ */
+export async function discardCopy(home: string, to: string): Promise<void> {
+  assertVersionName(to)
+  await assertNoRestore(home)
+  await rm(join(home, DATA_COPIES_DIRECTORY, to), { recursive: true, force: true })
 }
 
 /**
@@ -320,22 +397,42 @@ function stepPaths(home: string, journal: RestoreJournal, step: RestoreStep): { 
 }
 
 /**
- * Run a restore's steps from its journal: each rename runs when its source exists and its destination does not, and
- * is skipped when it already ran. The journal goes last.
+ * Write a restore's journal durably.
+ * @param home - the resolved Delo home.
+ * @param journal - the journal.
+ */
+async function writeJournal(home: string, journal: RestoreJournal): Promise<void> {
+  await writeDurable(join(home, DATA_COPIES_DIRECTORY), RESTORE_JOURNAL_FILE, `${JSON.stringify(journal)}\n`)
+}
+
+/**
+ * Run a restore's steps from its journal, starting at its `done` count. A step whose source exists and whose
+ * destination does not is renamed; a step whose source is gone and whose destination exists renamed before a kill
+ * and is counted. Each step's two directories are synced and the journal's `done` count rewritten durably before the
+ * next step. The emptied copy directory and the journal go last.
  * @param home - the resolved Delo home.
  * @param journal - the restore's journal.
- * @throws {DataSafetyError} `DATA_RESTORE_INCONSISTENT` when a step's source and destination both exist.
+ * @throws {DataSafetyError} `DATA_RESTORE_INCONSISTENT` when the next step's source and destination both exist, or
+ *   neither does.
  */
 async function runRestore(home: string, journal: RestoreJournal): Promise<void> {
   await mkdir(join(home, DATA_SET_ASIDE_DIRECTORY, journal.setAside), { recursive: true, mode: 0o700 })
-  for (const step of journal.steps) {
+  await sync(join(home, DATA_SET_ASIDE_DIRECTORY))
+  let { done } = journal
+  for (const step of journal.steps.slice(done)) {
     const { source, destination } = stepPaths(home, journal, step)
     const [from, to] = [await exists(source), await exists(destination)]
-    if (from && to) throw new DataSafetyError('DATA_RESTORE_INCONSISTENT', `both ${source} and ${destination} exist; move one away by hand, then run delorun recover`)
+    if (from === to) {
+      throw new DataSafetyError('DATA_RESTORE_INCONSISTENT', from
+        ? `both ${source} and ${destination} exist; move one away by hand, then run delorun recover`
+        : `neither ${source} nor ${destination} exists, so the restore cannot continue; the journal is ${join(home, DATA_COPIES_DIRECTORY, RESTORE_JOURNAL_FILE)}`)
+    }
     if (from) await rename(source, destination)
+    await sync(dirname(source))
+    await sync(dirname(destination))
+    done += 1
+    await writeJournal(home, { ...journal, done })
   }
-  await sync(home)
-  await sync(join(home, DATA_SET_ASIDE_DIRECTORY, journal.setAside))
   await rmdir(join(home, DATA_COPIES_DIRECTORY, journal.to)).catch((error: unknown) => {
     // ENOENT: an earlier run of the same journal removed it.
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
@@ -385,20 +482,27 @@ export async function changedChats(home: string, record: CopyRecord): Promise<nu
 /**
  * Put the copy an update took back in place: the live `sessions/` and `storages/` move to
  * `data-set-aside/<to>-<time>/`, the copy's move into the home, and the copy's record goes beside the set-aside data.
- * The journal is written before the first rename.
+ * The journal is written before the first rename and counts each finished rename.
  * @param home - the resolved Delo home, whose lock the caller holds with no Host running.
  * @param record - the copy's record.
  * @param now - the time, which names the set-aside directory.
  * @returns the set-aside directory and the number of chats it holds that the copy did not.
+ * @throws {DataSafetyError} `DATA_IN_USE` when another restore's journal exists, before anything changes;
+ *   `DATA_RESTORE_INCONSISTENT` when a step finds its directories in a state no restore leaves.
  */
 export async function restoreDataCopy(home: string, record: CopyRecord, now: Date): Promise<RestoreResult> {
+  await assertNoRestore(home)
   const changed = await changedChats(home, record)
   const steps: RestoreStep[] = []
-  for (const directory of SESSION_DATA_DIRECTORIES) if (await exists(join(home, directory))) steps.push({ kind: 'set-aside', directory })
-  for (const directory of SESSION_DATA_DIRECTORIES) if (await exists(join(home, DATA_COPIES_DIRECTORY, record.to, directory))) steps.push({ kind: 'restore', directory })
+  for (const directory of SESSION_DATA_DIRECTORIES) {
+    if (await exists(join(home, directory))) steps.push({ kind: 'set-aside', directory })
+  }
+  for (const directory of SESSION_DATA_DIRECTORIES) {
+    if (await exists(join(home, DATA_COPIES_DIRECTORY, record.to, directory))) steps.push({ kind: 'restore', directory })
+  }
   steps.push({ kind: 'record' })
-  const journal: RestoreJournal = { schema: RESTORE_JOURNAL_SCHEMA, to: record.to, setAside: await setAsideName(home, record.to, now), steps }
-  await writeDurable(join(home, DATA_COPIES_DIRECTORY), RESTORE_JOURNAL_FILE, `${JSON.stringify(journal)}\n`)
+  const journal: RestoreJournal = { schema: RESTORE_JOURNAL_SCHEMA, to: record.to, setAside: await setAsideName(home, record.to, now), steps, done: 0 }
+  await writeJournal(home, journal)
   await runRestore(home, journal)
   return { setAside: join(DATA_SET_ASIDE_DIRECTORY, journal.setAside), changedChats: changed }
 }
@@ -462,14 +566,29 @@ export async function listKeptData(home: string): Promise<readonly KeptData[]> {
   return kept
 }
 
+/** What the caller knows about the copies an update or a rollback still needs, for {@link discardKeptData}. */
+export interface DiscardGuard {
+  /** The versions whose copies an update record still refers to. */
+  readonly referenced: readonly string[]
+  /** Whether a rollback has begun and not finished. */
+  readonly rollingBack: boolean
+}
+
 /**
  * Remove one copy or set-aside directory the person named.
- * @param home - the resolved Delo home.
+ * @param home - the resolved Delo home, whose lock the caller holds.
  * @param path - the entry's path relative to the home, as {@link listKeptData} gives it.
- * @throws {DataSafetyError} `NOT_KEPT_DATA` when the path is not a kept copy or set-aside directory.
+ * @param guard - the copies an update record refers to and whether a rollback is in progress.
+ * @throws {DataSafetyError} `DATA_IN_USE` when a restore's journal exists, a rollback is in progress, or the path is a
+ *   copy named in `guard.referenced`; `NOT_KEPT_DATA` when the path is not a kept copy or set-aside directory.
  */
-export async function discardKeptData(home: string, path: string): Promise<void> {
-  const kept = await listKeptData(home)
-  if (!kept.some(entry => entry.path === path)) throw new DataSafetyError('NOT_KEPT_DATA', `${path} is not a copy or set-aside directory of this home; delorun recover status lists them`)
+export async function discardKeptData(home: string, path: string, guard: DiscardGuard): Promise<void> {
+  await assertNoRestore(home)
+  if (guard.rollingBack) throw new DataSafetyError('DATA_IN_USE', `a rollback is in progress and may still need ${path}; run delorun recover to finish it first`)
+  const entry = (await listKeptData(home)).find(kept => kept.path === path)
+  if (entry === undefined) throw new DataSafetyError('NOT_KEPT_DATA', `${path} is not a copy or set-aside directory of this home; delorun recover status lists them`)
+  if (entry.kind === 'copy' && guard.referenced.includes(basename(entry.path))) {
+    throw new DataSafetyError('DATA_IN_USE', `${path} is the copy an update record refers to; a rollback of that update needs it`)
+  }
   await rm(join(home, path), { recursive: true, force: true })
 }

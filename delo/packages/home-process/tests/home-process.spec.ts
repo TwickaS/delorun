@@ -14,7 +14,7 @@ import { REQUEST_MAX_BYTES, type HomeStatus } from '@delo/contract-home-process'
 import { newStartId, processExists, readHomeLock, readStartTokenFile, runDirectory, startTokenFile, writeProtectedFile } from '@delo/home'
 import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it } from 'vitest'
-import { exchangeLines, journalPath, openHomeLog, queryHomeStatus, sendHomeRequest, updateSocketPath, writeJournal, type ResponseLine } from '../src/index.ts'
+import { exchangeLines, journalPath, openHomeLog, queryHomeStatus, readJournal, sendHomeRequest, stashPath, updateSocketPath, writeJournal, type JournalledUpdate, type ResponseLine } from '../src/index.ts'
 import { FixtureStore, installFixture, killLockHolder, PROFILE, readPointer, startHome, tempHome, text, until, V0, V1, V2, type InProcessHome, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
@@ -352,11 +352,38 @@ describe('rollback', TIMEOUT, () => {
     expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ from: V1, to: V2, phase: 'committed', targetStarted: true })
     expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toEqual({ ok: true, outcome: 'rolled-back' })
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the rolled-back successor')
-    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+    // The record goes once the version rolled back to has passed its health check.
+    await until(() => !existsSync(journalPath(home, PROFILE)), 30_000, 'the record to go')
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V2)
   })
+
+  it('when the version rolled back to fails its health check, the predecessor stops and the record stays until a start on that version passes', async () => {
+    const home = await setUp()
+    await FixtureStore.seed(home, V2, V1)
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: true }, 'committed')
+    const running = await start(home, { running: V2 })
+    installFixture(home, V1, { healthy: false })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toEqual({ ok: true, outcome: 'failed', reason: 'HEALTH_CHECK_FAILED' })
+    await until(() => running.exits.length > 0, 10_000, 'the predecessor to stop')
+    expect(running.exits).toEqual([1])
+    expect(running.hosts.booted).toHaveLength(1)
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'rolling-back', from: V1, to: V2 })
+    running.exit()
+    await expect(startHome(home, { running: V1 })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'rolling-back' })
+    installFixture(home, V1)
+    await start(home, { running: V1 })
+    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+    expect(readPointer(home, 'current')).toBe(V1)
+  })
 })
+
+/** The record of an update from V1 to V2 whose target started and whose data differs, with no copy. */
+function interrupted(): JournalledUpdate {
+  return { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: true, copy: false, targetStarted: true }
+}
 
 describe('home-killed-mid-switch', TIMEOUT, () => {
   it('a start after a home process killed in health-check with a failing new version restores both pointers from the journal', async () => {
@@ -371,8 +398,10 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     await expect(startHome(home, { running: V2 })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V0)
-    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+    // The record stays rolling-back until the restart on the previous version has passed its check.
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'rolling-back' })
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
+    await until(() => !existsSync(journalPath(home, PROFILE)), 30_000, 'the record to go')
   })
 
   it('without a previous runtime before the update, the recovery removes previous', async () => {
@@ -466,7 +495,37 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: true, copy: false, targetStarted: true }, 'health-check')
     await expect(startHome(home, { running: V2 })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V2)
-    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ phase: 'health-check', targetStarted: true })
+    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ phase: 'health-check', targetStarted: true, refused: true })
+  })
+
+  it('a start refuses a record whose automatic rollback C3\'s table refused, naming the ways out, and boots no Host', async () => {
+    const home = await setUp()
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeJournal(journalPath(home, PROFILE), { ...interrupted(), refused: true }, 'health-check')
+    let hosts: { readonly booted: readonly unknown[] } | undefined
+    const failure = await startHome(home, { running: V2, configure: (parts) => { hosts = parts.hosts } }).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ code: 'ROLLBACK_NEEDS_DATA_COPY' })
+    expect(String((failure as { readonly detail?: unknown }).detail)).toMatch(/delorun recover rollback --profile-only.*delorun recover safe-mode/)
+    expect(hosts?.booted).toEqual([])
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'health-check', refused: true })
+    expect(readPointer(home, 'current')).toBe(V2)
+  })
+
+  it('a start rolls an interrupted update back while it still holds the home lock', async () => {
+    const home = await setUp({ healthy: false })
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeJournal(journalPath(home, PROFILE), { ...interrupted(), dataDiffers: false }, 'health-check')
+    let holder: string | undefined = 'not called'
+    let startId: string | undefined
+    await expect(startHome(home, {
+      running: V2,
+      configure: (parts) => {
+        startId = parts.startId
+        parts.copies.beforeRollback = () => { holder = readHomeLock(runDirectory(home, PROFILE))?.startId }
+      },
+    })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    expect(holder).toBe(startId)
+    await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
   })
 
   it('a start after a home process killed in switching before current was written runs the previous version and removes the journal', async () => {
@@ -475,6 +534,109 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     await start(home)
     expect(existsSync(journalPath(home, PROFILE))).toBe(false)
     expect(await status(home)).toMatchObject({ state: 'running', runtime: { current: V1, running: V1 } })
+  })
+})
+
+/** The committed record of an update from V0 to V1, which a process on V1 keeps for a later rollback. */
+const EARLIER: JournalledUpdate = { from: V0, to: V1, previous: undefined, startedAt: '2026-11-01T00:00:00.000Z', dataDiffers: false, copy: false, targetStarted: true }
+
+/** Leave the earlier update's committed record in the stash, as an update in progress does. */
+async function stashEarlier(home: string): Promise<void> {
+  await writeJournal(stashPath(journalPath(home, PROFILE)), EARLIER, 'committed')
+}
+
+describe('a kill at each step of an update or rollback', TIMEOUT, () => {
+  it('after the copy is written and before the switch: the next start discards the copy, and the previous update\'s record returns', async () => {
+    const home = await setUp()
+    await stashEarlier(home)
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: true, copy: true, targetStarted: false }, 'switching')
+    const running = await start(home)
+    expect(running.copies.calls).toEqual(['recover', `discard:${V2}`])
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ from: V0, to: V1, phase: 'committed' })
+    expect(existsSync(stashPath(journalPath(home, PROFILE)))).toBe(false)
+    expect(readPointer(home, 'current')).toBe(V1)
+  })
+
+  it('after the stash and before the update\'s own record: the next start puts the previous update\'s record back', async () => {
+    const home = await setUp()
+    await stashEarlier(home)
+    await start(home)
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ from: V0, to: V1, phase: 'committed' })
+    expect(existsSync(stashPath(journalPath(home, PROFILE)))).toBe(false)
+  })
+
+  it('after the successor committed and before the stash went: the next start keeps only the committed update\'s record and copy', async () => {
+    const home = await setUp()
+    await FixtureStore.seed(home, V2, V1)
+    await stashEarlier(home)
+    await writeJournal(journalPath(home, PROFILE), interrupted(), 'committed')
+    const running = await start(home, { running: V2 })
+    expect(running.copies.calls).toEqual(['recover', `commit:${V2}`])
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ from: V1, to: V2, phase: 'committed' })
+    expect(existsSync(stashPath(journalPath(home, PROFILE)))).toBe(false)
+  })
+
+  it('after targetStarted and before the successor answered: the next start holds the target to the record\'s expectations and commits', async () => {
+    const home = await setUp({ disabled: ['@scope/plugin'] })
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await stashEarlier(home)
+    await writeJournal(journalPath(home, PROFILE), { ...interrupted(), health: { disabledPlugins: ['@scope/plugin'], namedRows: [] } }, 'health-check')
+    const running = await start(home, { running: V2 })
+    expect(running.copies.calls).toEqual(['recover', `commit:${V2}`])
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ from: V1, to: V2, phase: 'committed' })
+    expect(existsSync(stashPath(journalPath(home, PROFILE)))).toBe(false)
+  })
+
+  it('after targetStarted and before the successor answered: the next start runs H1 to H5 and rolls back through the table when H3 fails', async () => {
+    const home = await setUp({ disabled: ['@scope/plugin'] })
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await stashEarlier(home)
+    await writeJournal(journalPath(home, PROFILE), { ...interrupted(), dataDiffers: false, health: { disabledPlugins: [], namedRows: [] } }, 'health-check')
+    let calls: readonly string[] = []
+    await expect(startHome(home, { running: V2, configure: (parts) => { calls = parts.copies.calls } })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    expect(calls).toEqual(['recover', `rollback:${V1}>${V2}`])
+    expect(readPointer(home, 'current')).toBe(V1)
+    await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
+    // Once the previous version passed its check, the rollback's record goes and the earlier update's returns.
+    await until(async () => (await readJournal(journalPath(home, PROFILE)))?.to === V1, 30_000, 'the earlier record to return')
+    expect(existsSync(stashPath(journalPath(home, PROFILE)))).toBe(false)
+  })
+
+  it('between the data restore and the switch: the next start completes the switch before any Host boots and starts again on the previous version', async () => {
+    const home = await setUp()
+    await FixtureStore.seed(home, V2, V1)
+    await writeJournal(journalPath(home, PROFILE), { ...interrupted(), dataDiffers: false }, 'rolling-back')
+    let booted = -1
+    await expect(startHome(home, {
+      running: V2,
+      configure: (parts) => { parts.copies.beforeRollback = () => { booted = parts.hosts.booted.length } },
+    })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    expect(booted).toBe(0)
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(readPointer(home, 'previous')).toBe(V2)
+    await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
+    await until(() => !existsSync(journalPath(home, PROFILE)), 30_000, 'the record to go')
+  })
+
+  it('after the switch of a rollback and before its check: the next start on the previous version checks it and removes the record', async () => {
+    const home = await setUp()
+    await writeJournal(journalPath(home, PROFILE), { ...interrupted(), dataDiffers: false }, 'rolling-back')
+    const running = await start(home)
+    expect(running.copies.calls).toEqual(['recover'])
+    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+  })
+})
+
+describe('the previous update\'s committed record across an update', TIMEOUT, () => {
+  it('waits in the stash while the update runs and goes once the successor has committed', async () => {
+    const home = await setUp()
+    await writeJournal(journalPath(home, PROFILE), EARLIER, 'committed')
+    await start(home)
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'committed' })
+    // The successor rewrites the record while this polls; a read that meets the rename is retried.
+    await until(async () => (await readJournal(journalPath(home, PROFILE)).catch(() => undefined))?.phase === 'committed', 30_000, 'the committed record')
+    await until(() => !existsSync(stashPath(journalPath(home, PROFILE))), 30_000, 'the stash to go')
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ from: V1, to: V2, phase: 'committed' })
   })
 })
 

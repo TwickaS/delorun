@@ -68,6 +68,8 @@ export interface FixtureBehaviour {
   readonly bootMs: number
   /** Whether the update report to this version names a data change. */
   readonly dataDiffers?: boolean
+  /** The rows its Host has at boot. */
+  readonly rows?: readonly string[]
 }
 
 /** A temporary Delo home with C1's tree. */
@@ -215,23 +217,33 @@ export class FixtureSnapshots implements ProfileSnapshots {
   /** Every call, as `save:<from>>to` or `restore:<from>>to`. */
   readonly calls: string[] = []
 
-  async save(from: RuntimeVersion, to: RuntimeVersion): Promise<void> {
+  async save(from: RuntimeVersion, to: RuntimeVersion): Promise<string> {
     this.calls.push(`save:${from}>${to}`)
-    return Promise.resolve()
+    return Promise.resolve(`snapshot-${from}-${to}`)
   }
 }
 
+/** A rollback step a spec makes fail. */
+export type RollbackStep = 'data' | 'profile' | 'switch'
+
 /**
  * Session-data copies that record their calls and apply C3's rollback table to the copies they took: a copy exists
- * for a target once {@link FixtureCopies.save} ran for it.
+ * for a target once {@link FixtureCopies.save} ran for it. A rollback runs the preflight, the caller's mark, the
+ * data, the profile and the switch in that order, and the spec can make a step fail.
  */
 export class FixtureCopies implements SessionDataCopies {
-  /** Every call, as `recover`, `plan`, `save:<from>>to` or `rollback:<from>>to`. */
+  /** Every call, as `recover`, `plan`, `save:<from>>to`, `discard:<to>`, `commit:<to>` or `rollback:<from>>to`. */
   readonly calls: string[] = []
   /** The targets a copy was taken for. */
   readonly copies = new Set<string>()
   /** Whether {@link FixtureCopies.plan} refuses for want of space. */
   noSpace = false
+  /** Whether the preflight finds the version rolled back to unusable. */
+  unusable = false
+  /** The step that fails, after the steps before it ran. */
+  failAt: RollbackStep | undefined
+  /** Runs at the start of each rollback, before the preflight. */
+  beforeRollback: ((record: UpdateJournal) => void) | undefined
 
   /** @param snapshots - the profile history the rollback restores through. */
   constructor(private readonly snapshots: FixtureSnapshots) {}
@@ -253,11 +265,32 @@ export class FixtureCopies implements SessionDataCopies {
     return Promise.resolve()
   }
 
+  async discard(to: RuntimeVersion): Promise<void> {
+    this.calls.push(`discard:${to}`)
+    this.copies.delete(to)
+    return Promise.resolve()
+  }
+
+  async commit(to: RuntimeVersion): Promise<void> {
+    this.calls.push(`commit:${to}`)
+    for (const target of this.copies) if (target !== to) this.copies.delete(target)
+    return Promise.resolve()
+  }
+
   async rollback(record: UpdateJournal, steps: RollbackSteps): Promise<void> {
     this.calls.push(`rollback:${record.from}>${record.to}${steps.profileOnly ? ':profile-only' : ''}`)
-    if (!steps.profileOnly && record.dataDiffers && record.targetStarted && !this.copies.has(record.to)) throw new HomeProcessError('ROLLBACK_NEEDS_DATA_COPY', 'no copy')
+    this.beforeRollback?.(record)
+    const restoresCopy = !steps.profileOnly && record.dataDiffers && record.targetStarted
+    if (!steps.profileOnly && this.unusable) throw new HomeProcessError('ROLLBACK_TARGET_UNUSABLE', `${record.from} does not start`)
+    if (restoresCopy && !this.copies.has(record.to)) throw new HomeProcessError('ROLLBACK_NEEDS_DATA_COPY', 'no copy')
+    await steps.markRollingBack()
+    if (this.failAt === 'data') throw new Error('the data step failed')
+    if (restoresCopy) this.copies.delete(record.to)
     this.snapshots.calls.push(`restore:${record.from}>${record.to}`)
-    if (!steps.profileOnly) await steps.switchRuntime()
+    if (this.failAt === 'profile') throw new Error('the profile step failed')
+    if (steps.profileOnly) return
+    if (this.failAt === 'switch') throw new Error('the switch step failed')
+    await steps.switchRuntime()
   }
 }
 
@@ -276,11 +309,18 @@ export class FixtureHost implements RunningHost {
     return this.behaviour.disabled
   }
 
+  rows(): readonly string[] {
+    return this.behaviour.rows ?? []
+  }
+
   async check(expect: HealthExpectations | undefined): Promise<HealthVerdict> {
     if (!this.behaviour.healthy) return Promise.resolve({ passed: false, criterion: 'H2-host-ready', detail: 'the fixture is unhealthy' })
-    const allowed = new Set([...expect?.disabledPlugins ?? [], ...expect?.previousFailures ?? []])
-    const unexpected = expect === undefined ? [] : this.behaviour.disabled.filter(plugin => !allowed.has(plugin))
-    return Promise.resolve(unexpected.length === 0 ? { passed: true } : { passed: false, criterion: 'H3-only-named-disabled', detail: unexpected.join(',') })
+    if (expect === undefined) return Promise.resolve({ passed: true })
+    const allowed = new Set([...expect.disabledPlugins, ...expect.previousFailures])
+    const unexpected = this.behaviour.disabled.filter(plugin => !allowed.has(plugin))
+    if (unexpected.length > 0) return Promise.resolve({ passed: false, criterion: 'H3-only-named-disabled', detail: unexpected.join(',') })
+    const gone = expect.previousRows.filter(row => !this.rows().includes(row) && !expect.namedRows.includes(row))
+    return Promise.resolve(gone.length === 0 ? { passed: true } : { passed: false, criterion: 'H3-rows-kept', detail: gone.join(',') })
   }
 
   async close(): Promise<void> {
@@ -348,6 +388,8 @@ export interface StartHomeOptions {
   readonly supervisor?: SupervisorSetup
   /** Its log's redactor and start id, when it logs to a real surface. */
   readonly log?: { readonly redactor: Redactor, readonly startId: StartId }
+  /** Runs before the start with the fixture parts and the start id, so a spec can watch a start that fails. */
+  readonly configure?: (parts: { readonly copies: FixtureCopies, readonly hosts: FixtureHostRunner, readonly store: FixtureStore | undefined, readonly startId: StartId }) => void
 }
 
 /**
@@ -366,8 +408,10 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
   const logger = new MemoryLogger()
   const exits: number[] = []
   const listeners: (() => void)[] = []
+  const startId = options.log?.startId ?? newStartId()
+  options.configure?.({ copies, hosts, store, startId })
   const homeOptions: HomeProcessOptions = {
-    home, profile: PROFILE, running, startId: options.log?.startId ?? newStartId(), host: hosts, probe: updateChannelProbe(home, PROFILE), logger: options.logger ?? logger, redactor: options.log?.redactor ?? new Redactor(),
+    home, profile: PROFILE, running, startId, host: hosts, probe: updateChannelProbe(home, PROFILE), logger: options.logger ?? logger, redactor: options.log?.redactor ?? new Redactor(),
     updates: store === undefined ? undefined : { store, snapshots, copies }, supervisor: options.supervisor,
     onExit: (listener) => { listeners.push(listener) },
     exit: (code) => { exits.push(code) },

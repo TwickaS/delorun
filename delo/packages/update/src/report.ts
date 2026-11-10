@@ -140,6 +140,7 @@ export function buildUpdateReport(input: ReportInput): UpdateReport {
     generated,
     installations: installationStatuses(input.statuses),
     items,
+    notChecked: target.notChecked,
     counts: countItems(items),
   }
 }

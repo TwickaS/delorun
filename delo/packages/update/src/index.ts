@@ -18,7 +18,9 @@ export {
   COPY_RECORD_SCHEMA,
   DATA_COPIES_DIRECTORY,
   DATA_SET_ASIDE_DIRECTORY,
+  discardCopy,
   discardKeptData,
+  keepOnlyCopy,
   listKeptData,
   planDataCopy,
   readCopyRecord,
@@ -28,11 +30,12 @@ export {
   restoreDataCopy,
   saveDataCopy,
   type CopyRecord,
+  type DiscardGuard,
   type KeptData,
   type RestoreResult,
   type SaveRequest,
 } from './data-copy.ts'
-export { decideRollback, rollbackUpdate, type RollbackDecision, type RollbackRequest, type RollbackResult, type UpdateRecordFacts } from './rollback.ts'
+export { decideRollback, ROLLING_BACK_PHASE, rollbackUpdate, type RollbackDecision, type RollbackRequest, type RollbackResult, type UpdateRecordFacts } from './rollback.ts'
 export { type BundleFacts, type IncludeFact, type InstallationStatusFacts, type LayerFact, type ProfileFacts, type ReleaseChecks, type ReportInput, type RevokedPluginVersion, type RowFact, type SkippedBundleFact, type TargetFacts } from './facts.ts'
 export { bundleItems, pluginItems, predictBundleList, rowItems, versionOf, type DisabledPlugin, type PluginItems } from './items.ts'
 export { readInstalledPlugin, type DeclaredRequirement, type InstalledPluginFact, type PluginRequirements } from './manifest.ts'

@@ -44,8 +44,8 @@ import { exchangeLines } from './client.ts'
 import { HomeProcessError } from './errors.ts'
 import { startSuccessor, type HandoverPipe, type Successor } from './handover.ts'
 import { UpdateHandshake, type HandshakeSubject, type UpdateSupport } from './handshake.ts'
-import { journalPath, markCommitted, readJournal, removeJournal, writeJournal } from './journal.ts'
-import type { ChatGate, HostRunner, RunningHost, UpdateChannelAccess } from './seams.ts'
+import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted, readJournal, removeJournal, removeStash, writeJournal } from './journal.ts'
+import type { ChatGate, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
 
 /** What a home process runs with; `delorun` supplies every value. */
@@ -85,6 +85,15 @@ export interface HomeProcessOptions {
 /** The update's journal states that a start after a killed home process finishes. */
 const SWITCH_PHASES: ReadonlySet<UpdateJournal['phase']> = new Set(['switching', 'health-check'])
 
+/**
+ * Whether an error is C3's table refusing a rollback before any step.
+ * @param error - the error.
+ * @returns true for `ROLLBACK_NEEDS_DATA_COPY` and `ROLLBACK_TARGET_UNUSABLE`.
+ */
+function isRollbackRefusal(error: unknown): boolean {
+  return error instanceof HomeProcessError && (error.code === 'ROLLBACK_NEEDS_DATA_COPY' || error.code === 'ROLLBACK_TARGET_UNUSABLE')
+}
+
 /** A running home process. */
 export class HomeProcess implements HandshakeSubject {
   private state: HomeProcessState = 'starting'
@@ -94,7 +103,12 @@ export class HomeProcess implements HandshakeSubject {
   private host: RunningHost | undefined
   private launched: LaunchedSupervisor | undefined
   private readonly handshake: UpdateHandshake | undefined
+  /** An interrupted update whose target this start's Host checks. */
   private recovering: UpdateJournal | undefined
+  /** An interrupted rollback whose runtime rolled back to this start's Host checks. */
+  private verifyingRollback: UpdateJournal | undefined
+  /** The version a failed start starts again on, once it has released the lock. */
+  private restartOn: RuntimeVersion | undefined
   private stopRequested = false
   private ended = false
   private readonly access: UpdateChannelAccess = {
@@ -144,7 +158,10 @@ export class HomeProcess implements HandshakeSubject {
    * @returns the process, in `running`.
    * @throws {HomeLayoutError} `HOME_MODE` for a laxer directory, `HOME_RUNNING` or `HOME_UNRESPONSIVE` when another
    *   home process holds the lock, `SOCKET_PATH_TOO_LONG` for a long socket path.
-   * @throws {HomeProcessError} `HEALTH_CHECK_FAILED` when a start that finished an interrupted update rolled it back.
+   * @throws {HomeProcessError} `HEALTH_CHECK_FAILED` when a start that finished an interrupted update or rollback
+   *   rolled back or completed a rollback and starts again on the version rolled back to, or when the runtime of an
+   *   interrupted rollback fails its check; `ROLLBACK_NEEDS_DATA_COPY` when the record says C3's table refused the
+   *   automatic rollback.
    * @throws the Host's boot failure.
    */
   static async start(options: HomeProcessOptions): Promise<HomeProcess> {
@@ -163,8 +180,11 @@ export class HomeProcess implements HandshakeSubject {
       return home
     } catch (error) {
       options.logger.error('the home process could not start', { err: error })
-      await home.abandon()
-      await home.restartFromInterruptedUpdate()
+      await home.closeStarted()
+      // The rollback runs while the lock is held, so no other start runs a Host on the data while it changes.
+      await home.rollBackInterruptedUpdate()
+      home.lock?.release()
+      home.startAgain()
       throw error
     }
   }
@@ -206,8 +226,7 @@ export class HomeProcess implements HandshakeSubject {
       await home.listen()
       home.startSupervisor()
       home.enterRunning()
-      // The update record stays, marked committed, so a later rollback reads it (C3, "Rollback").
-      await markCommitted(home.journal)
+      await home.settleRecord(handover.to)
       options.logger.info('took over from the previous runtime', { data: { from: handover.from, to: handover.to } })
       return home
     } catch (error) {
@@ -299,6 +318,11 @@ export class HomeProcess implements HandshakeSubject {
   /** @inheritdoc */
   failedRows(): readonly string[] {
     return this.host?.failedRows() ?? []
+  }
+
+  /** @inheritdoc */
+  rows(): readonly string[] {
+    return this.host?.rows() ?? []
   }
 
   /** @inheritdoc */
@@ -396,8 +420,9 @@ export class HomeProcess implements HandshakeSubject {
       void this.shutdown(0)
       return
     }
-    if (request.op === 'update.apply' && this.handshake?.failed === true) {
-      // C3's table refused the automatic rollback: neither runtime may run on this data until the person chooses.
+    if ((request.op === 'update.apply' || request.op === 'rollback') && this.handshake?.failed === true) {
+      // A rollback was refused after the switch or stopped after a step may have run: this Host may not run on the
+      // data again. The record stays, so the next start refuses with ROLLBACK_NEEDS_DATA_COPY or completes the rollback.
       void this.shutdown(1)
       return
     }
@@ -425,64 +450,158 @@ export class HomeProcess implements HandshakeSubject {
   }
 
   /**
-   * Step 3: read the update record a killed home process left. A committed record stays while `current` names its
-   * target and is removed once `current` names its source, because a rollback completed; a record before
-   * `switching` is removed; one in `switching` or `health-check` with `current` naming `from` is removed; one with
-   * `current` naming `to` makes this start's Host boot the health check of `to`, and records `targetStarted` first.
+   * Step 3: settle the update record a killed home process left, and the stash beside it.
+   *
+   * - No record and a stash: the update was killed before it wrote its own record; the stashed record returns.
+   * - `refused`: C3's table refused the automatic rollback; the start fails with `ROLLBACK_NEEDS_DATA_COPY`.
+   * - `committed`: the record stays while `current` names `to`, and a stash left by a kill after the commit goes;
+   *   the record goes once `current` names `from`.
+   * - A phase before `switching`, or `switching` or `health-check` with `current` naming `from`: nothing switched.
+   *   `previous` is restored from the record, the update's copy is discarded, and the record goes with the stashed
+   *   record returning.
+   * - `switching` or `health-check` with `current` naming `to`: `targetStarted` is recorded and this start's Host
+   *   boots as the health check of `to`, held to the record's expectations.
+   * - `rolling-back` with `current` naming `to`: the rollback is completed before any Host boots, and the start fails
+   *   and starts again on `from`. With `current` naming `from`: this start's Host boots as its health check.
    */
   private async finishInterruptedUpdate(): Promise<void> {
-    const journal = await readJournal(this.journal)
-    if (journal === undefined) return
-    if (this.options.updates === undefined) {
-      this.logger.warn('an update journal exists, and this build has no runtime store to finish it with; it is left in place', { data: { from: journal.from, to: journal.to, phase: journal.phase } })
+    const journal = this.journal
+    let record = await readJournal(journal)
+    if (record === undefined && !await hasStash(journal)) return
+    const updates = this.options.updates
+    if (updates === undefined) {
+      this.logger.warn('an update record exists, and this build has no runtime store to finish it with; it is left in place', { data: { from: record?.from ?? '', to: record?.to ?? '', phase: record?.phase ?? 'stash' } })
       return
     }
-    const { current } = await this.options.updates.store.pointers()
-    if (journal.phase === 'committed') {
-      if (current === journal.from) {
-        this.logger.info('a rollback of the recorded update completed; its record goes', { data: { from: journal.from, to: journal.to } })
-        await removeJournal(this.journal)
+    if (record === undefined) {
+      this.logger.info('an update stopped before it wrote its record; the previous update\'s record returns')
+      await endUpdateRecord(journal)
+      record = await readJournal(journal)
+      if (record === undefined) return
+    }
+    const data = { from: record.from, to: record.to, phase: record.phase }
+    if (record.refused === true) {
+      throw new HomeProcessError('ROLLBACK_NEEDS_DATA_COPY', `Delo ${record.to} failed its health check after the update from ${record.from}, and going back needs a session-data copy that was not taken, so neither version starts on this data. Run delorun recover rollback --profile-only to restore the profile and keep Delo ${record.to}, or delorun recover safe-mode.`)
+    }
+    const { current } = await updates.store.pointers()
+    if (record.phase === 'committed') {
+      if (current === record.to) {
+        if (await hasStash(journal)) {
+          this.logger.info('an update committed before its stashed record went; it goes now', { data })
+          await updates.copies.commit(record.to)
+          await removeStash(journal)
+        }
+        return
+      }
+      if (current === record.from) {
+        this.logger.info('a rollback of the recorded update completed; its record goes', { data })
+        await removeJournal(journal)
       }
       return
     }
-    if (!SWITCH_PHASES.has(journal.phase) || current === journal.from) {
-      this.logger.info('an interrupted update had not switched the runtime; nothing changed', { data: { from: journal.from, to: journal.to, phase: journal.phase } })
-      // A kill between the store's two pointer writes leaves `previous` holding `from` on disk while the journal
-      // still records the true rollback target; restore the journal's `previous` (or its absence) before the
-      // journal goes, or the person's rollback target is lost.
-      await this.options.updates.store.restore(journal.previous === undefined ? { current } : { current, previous: journal.previous })
-      await removeJournal(this.journal)
+    if (record.phase === 'rolling-back') {
+      await this.finishInterruptedRollback(record, current)
       return
     }
-    if (current !== journal.to || this.running !== journal.to) throw new Error(`the update journal names ${journal.from} to ${journal.to}, current names ${current} and this process runs ${this.running}; start Delo through its launcher`)
-    this.logger.info('finishing an interrupted update: checking the health of the new runtime', { data: { from: journal.from, to: journal.to } })
+    if (!SWITCH_PHASES.has(record.phase) || current === record.from) {
+      this.logger.info('an interrupted update had not switched the runtime; nothing changed', { data })
+      // A kill between the store's two pointer writes leaves `previous` holding `from` while the record keeps the
+      // true rollback target; it is restored, or removed when the record has none, before the record goes.
+      await updates.store.restore(record.previous === undefined ? { current } : { current, previous: record.previous })
+      if (record.copy) await updates.copies.discard(record.to)
+      await endUpdateRecord(journal)
+      return
+    }
+    if (current !== record.to || this.running !== record.to) throw new Error(`the update journal names ${record.from} to ${record.to}, current names ${current} and this process runs ${this.running}; start Delo through its launcher`)
+    this.logger.info('finishing an interrupted update: checking the health of the new runtime', { data })
     // This start's Host opens the data as `to`: a rollback from here on treats the target as started.
-    const started = { ...journal, previous: journal.previous, targetStarted: true }
-    await writeJournal(this.journal, started, journal.phase)
-    this.recovering = { ...journal, targetStarted: true }
+    const started: UpdateJournal = { ...record, targetStarted: true }
+    await writeJournal(journal, journalledUpdate(started), record.phase)
+    this.recovering = started
   }
 
   /**
-   * After a failed start that was finishing an interrupted update: apply C3's rollback table with both pointers
-   * restored to their values before the update from the record, and start a home process on `from`. When the table
-   * refuses, nothing is restored and the record stays for `delorun recover`.
+   * A record in `rolling-back`: with `current` naming `to`, complete the rollback through C3's table while the lock is
+   * held and before any Host boots, then fail this start so it starts again on `from`; with `current` naming `from`,
+   * this start's Host boots as the health check of `from`.
+   * @throws {HomeProcessError} `HEALTH_CHECK_FAILED` once the rollback completed; the table's refusal or a step's
+   *   failure, with the record left in place.
    */
-  private async restartFromInterruptedUpdate(): Promise<void> {
-    const journal = this.recovering
+  private async finishInterruptedRollback(record: UpdateJournal, current: RuntimeVersion): Promise<void> {
     const updates = this.options.updates
-    if (journal === undefined || updates === undefined) return
+    if (updates === undefined) return
+    const data = { from: record.from, to: record.to }
+    if (current === record.to) {
+      this.logger.warn('completing an interrupted rollback before any Host starts', { data })
+      // `current` names `to`, and the store reads only an installed version as `current`, so `previous` may name it.
+      const after: RuntimePointers = { current: record.from, previous: record.to }
+      await updates.copies.rollback(record, { profileOnly: false, switchRuntime: () => updates.store.restore(after), markRollingBack: async () => {} })
+      this.restartOn = record.from
+      throw new HomeProcessError('HEALTH_CHECK_FAILED', `an interrupted rollback from ${record.to} to ${record.from} completed; Delo starts again on ${record.from}`)
+    }
+    if (current !== record.from || this.running !== record.from) throw new Error(`the update record rolls ${record.to} back to ${record.from}, current names ${current} and this process runs ${this.running}; start Delo through its launcher`)
+    this.logger.info('finishing an interrupted rollback: checking the health of the runtime rolled back to', { data })
+    this.verifyingRollback = record
+  }
+
+  /**
+   * After a failed start that was finishing an interrupted update, with the lock still held and no Host running:
+   * apply C3's rollback table with both pointers restored to their values before the update from the record, and
+   * start again on `from` once the lock is released. The record stays `rolling-back` until that start's Host passes
+   * its check. When the table refuses, nothing is restored and the record gains `refused`; when a step fails, the
+   * record stays `rolling-back` for the next start. Failures are logged, never thrown.
+   */
+  private async rollBackInterruptedUpdate(): Promise<void> {
+    const record = this.recovering
+    const updates = this.options.updates
+    if (record === undefined || updates === undefined) return
     this.recovering = undefined
-    const before = journal.previous === undefined ? { current: journal.from } : { current: journal.from, previous: journal.previous }
+    const journal = this.journal
+    const update = journalledUpdate(record)
+    const data = { from: record.from, to: record.to }
+    const before: RuntimePointers = record.previous === undefined ? { current: record.from } : { current: record.from, previous: record.previous }
     try {
-      await updates.copies.rollback(journal, { profileOnly: false, switchRuntime: () => updates.store.restore(before) })
+      await updates.copies.rollback(record, { profileOnly: false, switchRuntime: () => updates.store.restore(before), markRollingBack: () => writeJournal(journal, update, 'rolling-back') })
     } catch (error) {
-      this.logger.error('the interrupted update failed its health check and could not be rolled back; run delorun recover', { err: error, data: { from: journal.from, to: journal.to } })
+      if (isRollbackRefusal(error)) {
+        this.logger.error('the interrupted update failed its health check and C3\'s table refuses the rollback; run delorun recover rollback --profile-only or delorun recover safe-mode', { err: error, data })
+        if (error instanceof HomeProcessError && error.code === 'ROLLBACK_NEEDS_DATA_COPY') await writeJournal(journal, { ...update, refused: true }, record.phase).catch((writeError: unknown) => { this.logger.error('the refusal could not be recorded', { err: writeError, data }) })
+        return
+      }
+      this.logger.error('the rollback of an interrupted update stopped after a step may have run; the next start completes it', { err: error, data })
       return
     }
-    await removeJournal(this.journal)
-    const command = updates.store.homeCommand(journal.from, 'start')
+    this.restartOn = record.from
+    this.logger.warn('the interrupted update failed its health check; rolled back and starting on the previous runtime', { data })
+  }
+
+  /** Start a home process on the version {@link restartOn} names, once this start has released the lock. */
+  private startAgain(): void {
+    const version = this.restartOn
+    const updates = this.options.updates
+    if (version === undefined || updates === undefined) return
+    this.restartOn = undefined
+    const command = updates.store.homeCommand(version, 'start')
     spawn(command.command, [...command.args], { cwd: command.cwd, stdio: 'ignore', detached: true }).unref()
-    this.logger.warn('the interrupted update failed its health check; rolled back and starting on the previous runtime', { data: { from: journal.from, to: journal.to } })
+  }
+
+  /**
+   * A successor that took over settles the record: a rollback's record goes, because the runtime rolled back to has
+   * passed its health check, and the stashed record returns when one exists; an update's record is marked
+   * `committed` so a later rollback reads it, only its copy is kept, and the stash goes.
+   * @param to - the version this successor runs.
+   */
+  private async settleRecord(to: RuntimeVersion): Promise<void> {
+    const record = await readJournal(this.journal)
+    if (record === undefined) return
+    if (record.phase === 'rolling-back') {
+      await endUpdateRecord(this.journal)
+      this.logger.info('the rollback completed; its record goes', { data: { from: record.from, to: record.to } })
+      return
+    }
+    await markCommitted(this.journal)
+    await this.options.updates?.copies.commit(to)
+    await removeStash(this.journal)
   }
 
   private startSupervisor(): void {
@@ -495,12 +614,25 @@ export class HomeProcess implements HandshakeSubject {
 
   private async bootHost(): Promise<void> {
     this.host = await this.options.host.boot(this.access)
-    if (this.recovering !== undefined) {
-      const verdict = await this.host.check(undefined)
-      if (!verdict.passed) throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${this.recovering.to} failed ${verdict.criterion} after an interrupted update: ${verdict.detail}`)
+    const recovering = this.recovering
+    if (recovering !== undefined) {
+      const expect = recovering.health === undefined ? undefined : { ...recovering.health, previousFailures: [], previousRows: [] }
+      const verdict = await this.host.check(expect)
+      if (!verdict.passed) throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${recovering.to} failed ${verdict.criterion} after an interrupted update: ${verdict.detail}`)
       await markCommitted(this.journal)
-      this.logger.info('finished an interrupted update', { data: { from: this.recovering.from, to: this.recovering.to } })
+      // Committed: a failure from here on is no reason to roll the update back.
       this.recovering = undefined
+      await this.options.updates?.copies.commit(recovering.to)
+      await removeStash(this.journal)
+      this.logger.info('finished an interrupted update', { data: { from: recovering.from, to: recovering.to } })
+    }
+    const verifying = this.verifyingRollback
+    if (verifying !== undefined) {
+      const verdict = await this.host.check(undefined)
+      if (!verdict.passed) throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${verifying.from} failed ${verdict.criterion} after a rollback from ${verifying.to}: ${verdict.detail}; the record stays for the next start`)
+      this.verifyingRollback = undefined
+      await endUpdateRecord(this.journal)
+      this.logger.info('finished an interrupted rollback', { data: { from: verifying.from, to: verifying.to } })
     }
   }
 
@@ -521,8 +653,8 @@ export class HomeProcess implements HandshakeSubject {
     if (this.token !== undefined) removeStartTokenFile(startTokenFile(this.options.home, this.options.profile), this.token)
   }
 
-  /** Undo a start that failed: each part this start created goes, in the clean stop's order. */
-  private async abandon(): Promise<void> {
+  /** Undo a start that failed, keeping the lock: each part this start created goes, in the clean stop's order. */
+  private async closeStarted(): Promise<void> {
     this.ended = true
     await this.closeHost().catch((error: unknown) => { this.logger.error('the Host did not close', { err: error }) })
     this.removeToken()
@@ -530,6 +662,11 @@ export class HomeProcess implements HandshakeSubject {
     this.channel = undefined
     await this.launched?.stop()
     this.launched = undefined
+  }
+
+  /** Undo a start that failed: each part this start created goes, then the lock. */
+  private async abandon(): Promise<void> {
+    await this.closeStarted()
     this.lock?.release()
   }
 

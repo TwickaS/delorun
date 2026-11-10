@@ -9,7 +9,7 @@
  */
 import type { ExemptionRecord, VersionAxis } from '@delo/contract-plugin-versions'
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
-import type { Installation, InstallationStatus, ReleaseCheckResult, ReportVersions } from '@delo/contract-update-report'
+import type { Installation, InstallationStatus, ReleaseCheckResult, ReportVersions, UncheckedSource } from '@delo/contract-update-report'
 import type { DataFacts } from './data-formats.ts'
 import type { InstalledPluginFact } from './manifest.ts'
 
@@ -71,6 +71,8 @@ export interface TargetFacts {
   readonly bundles: BundleFacts
   /** The target's revocation list, as the fresh list Delo verified before the update. */
   readonly revocations: readonly RevokedPluginVersion[]
+  /** The sources the reader did not read; the report names them instead of counting them as checked. */
+  readonly notChecked: readonly UncheckedSource[]
 }
 
 /** An Include a row pulls in, with the rows it brings. */

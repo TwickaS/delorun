@@ -61,6 +61,10 @@ describe('c03-no-report-for-unverified-target', () => {
     }
   })
 
+  it('names a refusal by its code alone when it carries no detail', () => {
+    expect(new UpdateReportError('REPORT_DISPOSED').message).toBe('REPORT_DISPOSED')
+  })
+
   it('produces no report for a stale timestamp or a failed log check either', () => {
     for (const check of ['freshness', 'log'] as const) {
       const failed = target({ release: { ...target().release, [check]: 'failed' } })

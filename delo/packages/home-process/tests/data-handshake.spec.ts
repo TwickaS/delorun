@@ -1,23 +1,34 @@
 /**
  * The handshake's session-data copy and its way back (contract C3, "Data formats" and "Rollback"): the copy is taken
  * after the Host stopped and before the switch; `targetStarted` is recorded before the successor starts; an
- * automatic rollback goes through the one rollback function, which may refuse; and the person's `rollback` reads the
- * update record.
+ * automatic rollback goes through the one rollback function, which may refuse; the person's `rollback` reads the
+ * update record; a rollback marks the record `rolling-back` before its first step and never runs the Host it left
+ * once a step may have run; and the previous update's committed record survives an update that does not commit.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { HandoverMessage } from '@delo/contract-home-process'
-import { CountingChatGate, journalPath, readJournal, UpdateHandshake, writeJournal, type HandoverLine, type HandshakeSubject, type Successor } from '../src/index.ts'
-import { FixtureCopies, FixtureSnapshots, FixtureStore, installFixture, MemoryLogger, PROFILE, readPointer, tempHome, V0, V1, V2, type TempHome } from './support.ts'
+import type { HandoverMessage, UpdateJournal } from '@delo/contract-home-process'
+import { CountingChatGate, journalPath, readJournal, stashPath, startSuccessor, UpdateHandshake, writeJournal, type HandoverLine, type HandshakeSubject, type Successor } from '../src/index.ts'
+import { FixtureCopies, FixtureSnapshots, FixtureStore, installFixture, MemoryLogger, PROFILE, readPointer, REPOSITORY, tempHome, V0, V1, V2, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
-afterEach(() => {
+const successors: Successor[] = []
+afterEach(async () => {
+  for (const successor of successors.splice(0)) await successor.stop()
   temp?.remove()
   temp = undefined
 })
 
+/** How the fake successor behaves: it answers as told, or the spec starts a real process. */
+interface SetUpOptions {
+  readonly running?: typeof V1
+  readonly answer?: HandoverMessage['type']
+  readonly dataDiffers?: boolean
+  readonly successor?: (handover: HandoverLine) => Successor
+}
+
 /** A handshake over a fixture store and copies, with a successor that answers as told. */
-async function setUp(options: { readonly running?: typeof V1, readonly answer?: HandoverMessage['type'], readonly dataDiffers?: boolean } = {}) {
+async function setUp(options: SetUpOptions = {}) {
   temp = await tempHome()
   const home = temp.home
   const running = options.running ?? V1
@@ -32,40 +43,68 @@ async function setUp(options: { readonly running?: typeof V1, readonly answer?: 
   const snapshots = new FixtureSnapshots()
   const copies = new FixtureCopies(snapshots)
   const journal = journalPath(home, PROFILE)
+  // As in the home process, the Host's rows are known only while it runs.
+  let hostRuns = true
   const subject: HandshakeSubject = {
     running, home, profile: PROFILE, journal, logger: new MemoryLogger(),
     chats: () => gate,
     setState: (state) => { events.push(`state:${state}`) },
-    suspend: async () => { events.push(`suspend copies=${copies.calls.join(',')}`) },
-    resume: async () => { events.push('resume') },
+    suspend: async () => {
+      hostRuns = false
+      events.push(`suspend copies=${copies.calls.join(',')}`)
+    },
+    resume: async () => {
+      hostRuns = true
+      events.push('resume')
+    },
     startSuccessor: (handover): Successor => {
       handovers.push(handover)
       const record = (existsSync(journal) ? JSON.parse(readFileSync(journal, 'utf8')) : {}) as { readonly targetStarted?: boolean }
       events.push(`start ${handover.to} targetStarted=${String(record.targetStarted)} switches=${store.switches.join(',')} copies=${copies.calls.join(',')}`)
+      if (options.successor !== undefined) return options.successor(handover)
       const answer: HandoverMessage = (options.answer ?? 'ready') === 'ready' ? { type: 'ready' } : { type: 'failed', reason: 'HEALTH_CHECK_FAILED' }
       return { pid: 4242, result: Promise.resolve(answer), commit: async () => {}, stop: async () => { events.push('stop successor') } }
     },
     handOver: () => { events.push('handOver') },
-    failedRows: () => ['row-that-failed-before'],
+    failedRows: () => (hostRuns ? ['row-that-failed-before'] : []),
+    rows: () => (hostRuns ? ['row-a', 'row-b'] : []),
   }
   const handshake = new UpdateHandshake(subject, { store, snapshots, copies })
   return { home, events, handovers, store, snapshots, copies, handshake, journal, gate }
 }
 
 /** Prepare and apply an update to V2. */
-async function update(handshake: UpdateHandshake, dataCopy: boolean) {
+async function update(handshake: UpdateHandshake, dataCopy: boolean, wait: 'drain' | 'abort-if-busy' = 'drain') {
   const { reportId } = await handshake.prepare(V2, () => {}) as { readonly reportId: string }
-  return handshake.apply(reportId, 'drain', undefined, dataCopy, () => {})
+  return handshake.apply(reportId, wait, undefined, dataCopy, () => {})
+}
+
+/** The committed record of an update from V0 to V1, which a process on V1 keeps for a later rollback. */
+const EARLIER: UpdateJournal = { v: 1, from: V0, to: V1, phase: 'committed', startedAt: '2026-11-01T00:00:00.000Z', dataDiffers: false, copy: false, targetStarted: true }
+
+async function recordEarlierUpdate(journal: string): Promise<void> {
+  await writeJournal(journal, { ...EARLIER, previous: undefined }, 'committed')
 }
 
 describe('an update with a session-data copy', () => {
   it('takes the copy after the Host stopped and before the switch, and records targetStarted before the successor starts', async () => {
-    const { handshake, events, handovers, journal } = await setUp()
+    const { handshake, events, journal } = await setUp()
     expect(await update(handshake, true)).toEqual({ outcome: 'committed' })
     expect(events).toContain('suspend copies=plan')
     expect(events).toContain(`start ${V2} targetStarted=true switches=${V1}>${V2} copies=plan,save:${V1}>${V2}`)
-    expect(handovers[0]?.health).toEqual({ disabledPlugins: [], namedRows: [], previousFailures: ['row-that-failed-before'] })
     expect(await readJournal(journal)).toMatchObject({ dataDiffers: true, copy: true, targetStarted: true })
+  })
+
+  it('holds the successor to what the running Host had at boot, read before that Host stopped', async () => {
+    const { handshake, handovers } = await setUp()
+    await update(handshake, true)
+    expect(handovers[0]?.health).toEqual({ disabledPlugins: [], namedRows: [], previousFailures: ['row-that-failed-before'], previousRows: ['row-a', 'row-b'] })
+  })
+
+  it('records the profile history version and the health expectations, so a start that finishes it runs H1 to H5', async () => {
+    const { handshake, journal } = await setUp()
+    await update(handshake, true)
+    expect(await readJournal(journal)).toMatchObject({ snapshot: `snapshot-${V1}-${V2}`, health: { disabledPlugins: [], namedRows: [] } })
   })
 
   it('refuses before anything changes when the copy does not fit', async () => {
@@ -79,12 +118,41 @@ describe('an update with a session-data copy', () => {
     expect(handshake.running()).toBe(false)
   })
 
-  it('runs the Host again and ends aborted when the copy cannot be written', async () => {
+  it('runs the Host again, discards the unfinished copy and ends aborted when the copy cannot be written', async () => {
     const { handshake, copies, events, store } = await setUp()
     copies.save = async () => { throw new Error('disk gone') }
     await expect(update(handshake, true)).rejects.toThrow('disk gone')
     expect(events).toContain('resume')
+    expect(copies.calls).toContain(`discard:${V2}`)
     expect(store.switches).toEqual([])
+  })
+})
+
+describe('the previous update\'s committed record', () => {
+  it('returns when an update ends before the switch', async () => {
+    const { handshake, journal, gate } = await setUp()
+    await recordEarlierUpdate(journal)
+    const end = gate.begin(() => {})
+    expect(await update(handshake, false, 'abort-if-busy')).toEqual({ outcome: 'aborted', reason: 'CHATS_RUNNING' })
+    end()
+    expect(await readJournal(journal)).toEqual(EARLIER)
+    expect(existsSync(stashPath(journal))).toBe(false)
+  })
+
+  it('returns when an update is rolled back automatically', async () => {
+    const { handshake, journal } = await setUp({ answer: 'failed' })
+    await recordEarlierUpdate(journal)
+    expect(await update(handshake, true)).toEqual({ outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    expect(await readJournal(journal)).toEqual(EARLIER)
+    expect(existsSync(stashPath(journal))).toBe(false)
+  })
+
+  it('waits in the stash while the successor takes over', async () => {
+    const { handshake, journal } = await setUp()
+    await recordEarlierUpdate(journal)
+    expect(await update(handshake, false)).toEqual({ outcome: 'committed' })
+    expect(await readJournal(journal)).toMatchObject({ from: V1, to: V2, phase: 'health-check' })
+    expect(await readJournal(stashPath(journal))).toEqual(EARLIER)
   })
 })
 
@@ -107,20 +175,61 @@ describe('the automatic rollback', () => {
     expect(await readJournal(journal)).toBeUndefined()
   })
 
-  it('is refused by the table when the data differs and no copy was taken: the target stays and the process stops serving', async () => {
+  it('is refused by the table when the data differs and no copy was taken: the record says so, the target stays and the process stops serving', async () => {
     const { handshake, events, home, journal } = await setUp({ answer: 'failed' })
     expect(await update(handshake, false)).toEqual({ outcome: 'failed', reason: 'ROLLBACK_NEEDS_DATA_COPY' })
     expect(handshake.failed).toBe(true)
     expect(events).not.toContain('resume')
     expect(events).toContain('state:stopping')
     expect(readPointer(home, 'current')).toBe(V2)
-    expect(await readJournal(journal)).toMatchObject({ phase: 'health-check', targetStarted: true, copy: false })
+    expect(await readJournal(journal)).toMatchObject({ phase: 'health-check', targetStarted: true, copy: false, refused: true })
+  })
+
+  it('marks the record rolling-back before its first step, and stops serving without running the Host when a step fails', async () => {
+    const { handshake, copies, events, home, journal } = await setUp({ answer: 'failed' })
+    copies.failAt = 'data'
+    expect(await update(handshake, true)).toEqual({ outcome: 'failed' })
+    expect(handshake.failed).toBe(true)
+    expect(events).not.toContain('resume')
+    expect(readPointer(home, 'current')).toBe(V2)
+    expect(await readJournal(journal)).toMatchObject({ phase: 'rolling-back', from: V1, to: V2 })
   })
 
   it('needs no copy when the data does not differ', async () => {
     const { handshake, home } = await setUp({ answer: 'failed', dataDiffers: false })
     expect(await update(handshake, false)).toEqual({ outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V1)
+  })
+})
+
+describe('C3\'s rollback triggers T2 and T3', () => {
+  /**
+   * A real successor process from a script, given a short time to answer.
+   * @param script - what the process runs.
+   * @param timeoutMs - the time it has to answer.
+   */
+  function realSuccessor(script: string, timeoutMs: number): (handover: HandoverLine) => Successor {
+    return (handover) => {
+      const successor = startSuccessor({ command: process.execPath, args: ['-e', script], cwd: REPOSITORY }, handover, timeoutMs)
+      successors.push(successor)
+      return successor
+    }
+  }
+
+  it('T2: a successor silent past the limit is stopped and rolled back through the rollback function', async () => {
+    const { handshake, copies, home, events } = await setUp({ successor: realSuccessor('setInterval(() => {}, 1000)', 500) })
+    expect(await update(handshake, true)).toEqual({ outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    expect(copies.calls.at(-1)).toBe(`rollback:${V1}>${V2}`)
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(events.at(-2)).toBe('resume')
+  })
+
+  it('T3: a successor whose process exits during the health check is rolled back through the rollback function', async () => {
+    const { handshake, copies, home, events } = await setUp({ successor: realSuccessor('setTimeout(() => process.exit(3), 100)', 60_000) })
+    expect(await update(handshake, true)).toEqual({ outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    expect(copies.calls.at(-1)).toBe(`rollback:${V1}>${V2}`)
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(events.at(-2)).toBe('resume')
   })
 })
 
@@ -136,7 +245,7 @@ describe('the person\'s rollback', () => {
     expect(handshake.running()).toBe(false)
   })
 
-  it('applies the table, removes the record and starts the version rolled back to', async () => {
+  it('applies the table and starts the version rolled back to, leaving the record rolling-back for that version to remove', async () => {
     const { handshake, copies, events, home, journal } = await setUp({ running: V2 })
     copies.copies.add(V2)
     await committed(journal, true)
@@ -145,7 +254,7 @@ describe('the person\'s rollback', () => {
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V2)
     expect(events).toContain('handOver')
-    expect(await readJournal(journal)).toBeUndefined()
+    expect(await readJournal(journal)).toMatchObject({ from: V1, to: V2, phase: 'rolling-back' })
     expect(handshake.committed?.pid).toBe(4242)
   })
 
@@ -158,6 +267,30 @@ describe('the person\'s rollback', () => {
     expect(await readJournal(journal)).toMatchObject({ phase: 'committed' })
   })
 
+  it('is refused when the version rolled back to is unusable, and the Host runs again with nothing changed', async () => {
+    const { handshake, copies, events, home, journal } = await setUp({ running: V2 })
+    copies.copies.add(V2)
+    copies.unusable = true
+    await committed(journal, true)
+    await expect(handshake.rollback('drain', undefined, false, () => {})).rejects.toMatchObject({ code: 'ROLLBACK_TARGET_UNUSABLE' })
+    expect(events.at(-2)).toBe('resume')
+    expect(readPointer(home, 'current')).toBe(V2)
+    expect(await readJournal(journal)).toMatchObject({ phase: 'committed' })
+  })
+
+  it('stops this process without running its Host again when a step fails after the rollback began', async () => {
+    const { handshake, copies, events, home, journal } = await setUp({ running: V2 })
+    copies.copies.add(V2)
+    copies.failAt = 'data'
+    await committed(journal, true)
+    expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'failed' })
+    expect(handshake.failed).toBe(true)
+    expect(events).not.toContain('resume')
+    expect(events).toContain('state:stopping')
+    expect(readPointer(home, 'current')).toBe(V2)
+    expect(await readJournal(journal)).toMatchObject({ phase: 'rolling-back' })
+  })
+
   it('with profileOnly restores the profile, keeps the runtime and runs the Host again', async () => {
     const { handshake, copies, events, home, journal } = await setUp({ running: V2 })
     await committed(journal, false)
@@ -168,13 +301,16 @@ describe('the person\'s rollback', () => {
     expect(await readJournal(journal)).toBeUndefined()
   })
 
-  it('runs this runtime again when the version rolled back to fails its health check', async () => {
+  it('stops with the pointers on the version rolled back to when that version fails its health check', async () => {
     const { handshake, copies, events, home, journal } = await setUp({ running: V2, answer: 'failed' })
     copies.copies.add(V2)
     await committed(journal, true)
-    expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'aborted', reason: 'HEALTH_CHECK_FAILED' })
+    expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'failed', reason: 'HEALTH_CHECK_FAILED' })
     expect(events).toContain('stop successor')
-    expect(readPointer(home, 'current')).toBe(V2)
+    expect(events).not.toContain('resume')
+    expect(handshake.failed).toBe(true)
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(await readJournal(journal)).toMatchObject({ phase: 'rolling-back' })
   })
 
   it('with abort-if-busy ends aborted while a chat runs, changing nothing', async () => {

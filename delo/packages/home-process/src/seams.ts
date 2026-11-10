@@ -34,6 +34,8 @@ export interface HealthExpectations {
   readonly bundles?: readonly string[]
   /** H4: the rows that did not load on the previous release, by id or name. */
   readonly previousFailures: readonly string[]
+  /** H3: the id of every row the previous release's Host had at boot, so a row the report did not name that is gone fails. */
+  readonly previousRows: readonly string[]
 }
 
 /** The health check's answer: passed, or the first criterion that failed. */
@@ -47,8 +49,8 @@ export interface PreparedRuntime {
   readonly version: RuntimeVersion
   /** C3's update report, returned to the caller as it is. */
   readonly report: unknown
-  /** What the health check holds the target to, apart from the previous release's failures. */
-  readonly health: Omit<HealthExpectations, 'previousFailures'>
+  /** What the health check holds the target to, apart from what the previous release's Host had at boot. */
+  readonly health: Omit<HealthExpectations, 'previousFailures' | 'previousRows'>
   /** Whether the report names a data change (C3, "Data formats"). */
   readonly dataDiffers: boolean
 }
@@ -124,8 +126,9 @@ export interface ProfileSnapshots {
    * @param from - the running version.
    * @param to - the target version.
    * @param report - C3's report the person confirmed.
+   * @returns the id of the profile history version, which the update record keeps as `snapshot`.
    */
-  save(from: RuntimeVersion, to: RuntimeVersion, report: unknown): Promise<void>
+  save(from: RuntimeVersion, to: RuntimeVersion, report: unknown): Promise<string>
 }
 
 /** The steps of a rollback its caller owns. */
@@ -137,6 +140,12 @@ export interface RollbackSteps {
    * @returns when the pointers name the version rolled back to.
    */
   readonly switchRuntime: () => Promise<void>
+  /**
+   * Record durably that the rollback has begun, before its first step: the caller rewrites the update record with
+   * phase `rolling-back`, or does nothing where an interruption leaves nothing to complete.
+   * @returns when the record is synced.
+   */
+  readonly markRollingBack: () => Promise<void>
 }
 
 /**
@@ -161,12 +170,25 @@ export interface SessionDataCopies {
    */
   save(from: RuntimeVersion, to: RuntimeVersion): Promise<void>
   /**
-   * Apply C3's rollback table for the update a record names: the data, the profile snapshot and, through the caller's
+   * Remove the copy of an update that ended before the switch, whole or unfinished; does nothing when none exists.
+   * @param to - the update's target version.
+   */
+  discard(to: RuntimeVersion): Promise<void>
+  /**
+   * An update committed: keep only its copy, when it has one, and remove every other. Running it again does nothing
+   * more.
+   * @param to - the committed update's target version.
+   */
+  commit(to: RuntimeVersion): Promise<void>
+  /**
+   * Apply C3's rollback table for the update a record names, in this order: the preflight, which refuses or goes on;
+   * the caller's {@link RollbackSteps.markRollingBack}; the data; the profile snapshot; and, through the caller's
    * step, the runtime.
    * @param record - the update record.
-   * @param steps - whether only the profile goes back, and the caller's runtime switch.
+   * @param steps - whether only the profile goes back, the caller's record mark and its runtime switch.
    * @throws {HomeProcessError} `ROLLBACK_NEEDS_DATA_COPY` when the data differs, the target started and no copy
-   *   exists; nothing has changed then.
+   *   exists, or `ROLLBACK_TARGET_UNUSABLE` when the version rolled back to is not installed or fails its start
+   *   check; either is thrown before any step, with nothing changed. Any other error means a step may have run.
    */
   rollback(record: UpdateJournal, steps: RollbackSteps): Promise<void>
 }
@@ -233,8 +255,14 @@ export interface RunningHost {
    */
   failedRows(): readonly string[]
   /**
+   * Every row the Host had at boot, which a successor's H3 compares with its own.
+   * @returns their ids.
+   */
+  rows(): readonly string[]
+  /**
    * Contract C3's health check: H1 to H5 against the report's expectations, or H1 and H2 alone without them.
-   * @param expect - what the report predicted, or `undefined` for a start that finishes an interrupted update.
+   * @param expect - what the report predicted, or `undefined` for a start whose record keeps no expectations, such
+   *   as the check of a runtime rolled back to.
    * @returns the verdict.
    */
   check(expect: HealthExpectations | undefined): Promise<HealthVerdict>

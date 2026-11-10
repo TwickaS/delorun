@@ -25,6 +25,7 @@ function subject(home: string, gate: CountingChatGate, events: string[]): Handsh
     startSuccessor: (): Successor => { throw new Error('the switch ran') },
     handOver: () => { events.push('handOver') },
     failedRows: () => [],
+    rows: () => [],
   }
 }
 

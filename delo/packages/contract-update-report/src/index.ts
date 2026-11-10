@@ -217,6 +217,9 @@ export type ReportItem =
   | ItemFields<'row', RowSubject>
   | ItemFields<'data', DataSubject>
 
+/** A source the report did not read, so its items cannot rest on it: the revocation list, the bundles' own layers, or the bundles the target would skip. */
+export type UncheckedSource = 'revocations' | 'bundle-layers' | 'skipped-bundles'
+
 /** An update report, stored in the snapshot's history version. */
 export interface UpdateReport {
   /** Always {@link UPDATE_REPORT_SCHEMA}. */
@@ -240,6 +243,8 @@ export interface UpdateReport {
   readonly installations: readonly InstallationStatus[]
   /** Every change, sorted by kind, then subject. */
   readonly items: readonly ReportItem[]
+  /** The sources the report did not read; the person is told, and the health check is what holds them. */
+  readonly notChecked: readonly UncheckedSource[]
   /** Items per effect, unverified items and `data` items. */
   readonly counts: {
     readonly disabled: number

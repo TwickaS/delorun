@@ -38,6 +38,10 @@ export type DataSafetyErrorCode =
   | 'DATA_RESTORE_INCONSISTENT'
   /** A path named for removal is not a copy or set-aside directory of the home. */
   | 'NOT_KEPT_DATA'
+  /** The home's `sessions/` or `storages/` is a symbolic link or not a directory, so no copy is taken of it. */
+  | 'DATA_NOT_A_DIRECTORY'
+  /** A restore or a rollback is in progress, or an update record refers to the copy, so it is not removed or replaced. */
+  | 'DATA_IN_USE'
 
 /** A refused session-data copy, restore or rollback; nothing has changed when it is thrown before a step ran. */
 export class DataSafetyError extends Error {

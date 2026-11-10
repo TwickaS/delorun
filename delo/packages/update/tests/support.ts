@@ -82,6 +82,7 @@ export function target(overrides: Partial<TargetFacts> = {}): TargetFacts {
     release: { manifest: MANIFEST, signature: 'passed', freshness: 'passed', log: 'passed' },
     bundles: { retired: [], skipped: [] },
     revocations: [],
+    notChecked: [],
     ...overrides,
   }
 }

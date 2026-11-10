@@ -61,8 +61,11 @@ export const STATUS_EXIT_NOT_RUNNING = 3
 /** A state of the home process. */
 export type HomeProcessState = 'starting' | 'running' | 'waiting' | 'switching' | 'stopping' | 'standby'
 
-/** A phase of the update handshake, in order. */
-export type UpdatePhase = 'checking' | 'installing' | 'reporting' | 'snapshot' | 'waiting' | 'switching' | 'health-check' | 'committed'
+/**
+ * A phase of the update handshake, in order, then `rolling-back`: the update record's phase once a rollback has
+ * begun its first step, kept until the runtime rolled back to has passed its health check.
+ */
+export type UpdatePhase = 'checking' | 'installing' | 'reporting' | 'snapshot' | 'waiting' | 'switching' | 'health-check' | 'committed' | 'rolling-back'
 
 /** The final outcome of an update or rollback. */
 export type UpdateOutcome = 'committed' | 'rolled-back' | 'aborted' | 'failed'
@@ -174,6 +177,7 @@ export type HomeProcessErrorCode =
   | 'NO_UPDATE_RECORD'
   | 'DATA_COPY_NO_SPACE'
   | 'ROLLBACK_NEEDS_DATA_COPY'
+  | 'ROLLBACK_TARGET_UNUSABLE'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {
@@ -211,10 +215,22 @@ export type UpdateChannelResponse =
   | { readonly ok: true, readonly outcome: UpdateOutcome, readonly reason?: HomeProcessErrorCode }
   | { readonly ok: false, readonly error: HomeProcessErrorCode }
 
+/** What C3's health check holds an update's target to, from the update report, as the update record keeps it. */
+export interface UpdateHealth {
+  /** H3: the plugins the report names as disabled at boot. */
+  readonly disabledPlugins: readonly string[]
+  /** H3, H4: the rows the report names, by id or name. */
+  readonly namedRows: readonly string[]
+  /** H5: the bundle list the report predicts; absent when the report predicts none. */
+  readonly bundles?: readonly string[]
+}
+
 /**
- * Contents of `run/<profile>/update.json`, the update record: written at each phase from `snapshot` on, kept with
- * phase `committed` after the update commits so a later rollback reads it, and removed when a rollback completes or
- * an update ends before switching.
+ * Contents of `run/<profile>/update.json`, the update record: written at each phase from `snapshot` on and marked
+ * `committed` by the successor once it runs, so a later rollback reads it. A rollback rewrites it with phase
+ * `rolling-back` before its first step, and the record goes only once the runtime rolled back to has passed its
+ * health check. An update that ends before switching removes it. While an update runs, the previous update's
+ * committed record waits in `run/<profile>/update.previous.json` and returns when the update ends without committing.
  */
 export interface UpdateJournal {
   /** Record version. */
@@ -235,6 +251,15 @@ export interface UpdateJournal {
   readonly copy: boolean
   /** Whether the target's process was spawned; written and synced before the spawn. */
   readonly targetStarted: boolean
+  /** The id of the profile history version the `snapshot` phase saved; absent until it is saved. */
+  readonly snapshot?: string
+  /**
+   * Present when C3's table refused the automatic rollback: the pointers name `to`, and a start refuses to run until
+   * the person rolls back the profile alone or starts in safe mode.
+   */
+  readonly refused?: true
+  /** What the health check holds `to` to, so a start that finishes an interrupted update runs H1 to H5. */
+  readonly health?: UpdateHealth
 }
 
 /** A message on the handover pipe from successor to predecessor. */

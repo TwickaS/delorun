@@ -44,6 +44,10 @@ export const DELO_RECORDS: Readonly<Record<string, number>> = Object.freeze({
   'session-data-copy': 1,
   /** `data-copies/restore.json` (C3). */
   'data-restore-journal': 1,
+  /** The `delo_workspaces` storage domain under `storages/`, its `defineDomain` version (`@delo/plugin-workspaces`). */
+  'storage:delo_workspaces': 1,
+  /** `trash/items/<id>/item.json`, a trash item's record, at `TRASH_ITEM_SCHEMA_VERSION` (`@delo/trash`). */
+  'trash-item': 1,
 })
 
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u)

@@ -56,6 +56,7 @@ const handoverSchema = z.strictObject({
     namedRows: z.array(z.string()),
     bundles: z.array(z.string()).optional(),
     previousFailures: z.array(z.string()),
+    previousRows: z.array(z.string()),
   }),
   startedAt: z.string().datetime(),
 })

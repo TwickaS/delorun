@@ -123,6 +123,7 @@ export function report(items: readonly ReportItem[]): UpdateReport {
     generated: brandString<UtcTimestamp>('2026-01-01T00:00:00.000Z'),
     installations: [{ id: 'cli-home', delo: version('1.0.0'), dsh: version('0.2.2'), state: 'current' }],
     items: [...items],
+    notChecked: [],
     counts: { disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0 },
   }
 }
