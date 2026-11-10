@@ -73,6 +73,7 @@ export interface SetupAnswers {
   readonly background: boolean
   readonly profile: ProfileAnswer
   readonly reach: ReachAnswer
+  /** Whether setup imports the stock DeepSeek Harness home after showing its preview; never true in a `--config` document. */
   readonly importStockHome: boolean
   /** The sections this run showed, in order; the studio's onboarding leaves out what the terminal covered. */
   readonly sections: readonly SectionRecord[]

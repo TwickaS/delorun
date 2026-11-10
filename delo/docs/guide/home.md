@@ -32,7 +32,7 @@ The command line uses the profile `default`. Set `DELO_PROFILE`, or pass `--prof
 
 ## Your DeepSeek Harness home
 
-Delo never reads, changes or moves `~/.dsh`. If you set `DSH_HOME` for DeepSeek Harness, `delorun` ignores it and uses your Delo home, and `delorun status` tells you so. `delorun plugin` and `delorun headless` work as `dsh plugin` and `dsh headless` do, inside your Delo home.
+Delo never changes or moves `~/.dsh`, and reads it only when you import it ([Switching from DeepSeek Harness](switching.md)). If you set `DSH_HOME` for DeepSeek Harness, `delorun` ignores it and uses your Delo home, and `delorun status` tells you so. `delorun plugin` and `delorun headless` work as `dsh plugin` and `dsh headless` do, inside your Delo home.
 
 ## Fixing permissions
 

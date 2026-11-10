@@ -148,6 +148,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
     ])
     expect(recordOf().sections).toEqual([
       { id: 'privacy', status: 'seen' },
+      { id: 'import', status: 'skipped' },
       { id: 'key', status: 'answered' },
       { id: 'prompts', status: 'answered' },
       { id: 'background', status: 'skipped' },
@@ -337,7 +338,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     expect(hasCliProfile(home, 'work')).toBe(true)
     expect(hasCliProfile(home, PROFILE)).toBe(false)
     expect(patchOf('work')).toContainEqual({ id: 'webserver', config: { host: '127.0.0.1', port: 4100, compression: 'gzip', compressionLevel: 1, compressionThresholdBytes: 1024 } })
-    expect(recordOf('work').sections.map(record => record.status)).toEqual(['seen', 'answered', 'answered', 'answered', 'answered'])
+    expect(recordOf('work').sections.map(record => record.status)).toEqual(['seen', 'skipped', 'answered', 'answered', 'answered', 'answered'])
     expect(readBackgroundAnswer(profileDirectory(home, 'work'))).toBe(false)
     expect(ending.started).toEqual(['foreground'])
     expect(ending.opened).toBe(1)
@@ -428,6 +429,7 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
     expect(sectionList(defaultRegistry())).toBe([
       'Sections (delorun setup <section> runs one again):',
       '  privacy     Privacy (Quick and Full)',
+      '  import      Import a DeepSeek Harness home (Quick and Full)',
       '  key         Model key (Quick and Full)',
       '  prompts     Prompts (Quick and Full)',
       '  background  Background (Full)',
@@ -524,15 +526,15 @@ describe('the section registry', () => {
   it('puts a section registered between two existing ones into the flow where its order says', async () => {
     const registry = defaultRegistry()
     registry.register({
-      ...stub('import'),
+      ...stub('example'),
       asks: true,
-      ask: (io) => io.confirm('Import your DeepSeek Harness home?', false).then(answer => typeof answer === 'boolean' ? { answers: { importStockHome: answer }, status: 'answered' as const } : answer),
-      review: answers => `Import: ${answers.importStockHome ? 'yes' : 'no'}`,
-    }, { order: 15 })
+      ask: (io) => io.confirm('Example question?', false).then(answer => typeof answer === 'boolean' ? { answers: { background: answer }, status: 'answered' as const } : answer),
+      review: answers => `Example: ${answers.background ? 'yes' : 'no'}`,
+    }, { order: 16 })
     expect(await interactive(['quick', 'yes', 'environment', 'safer', 'save', false], { registry })).toBe(EXIT.ok)
-    expect(recording.asked.slice(0, 3)).toEqual(['select: How do you want to set up Delorun?', 'select: Import your DeepSeek Harness home?', 'select: Where does the DeepSeek API key come from?'])
-    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'import', 'key', 'prompts', 'background', 'profile'])
-    expect(screen()).toContain('  Import: yes')
+    expect(recording.asked.slice(0, 3)).toEqual(['select: How do you want to set up Delorun?', 'select: Example question?', 'select: Where does the DeepSeek API key come from?'])
+    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'import', 'example', 'key', 'prompts', 'background', 'profile'])
+    expect(screen()).toContain('  Example: yes')
   })
 })
 
@@ -553,6 +555,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
     expect(await unattended({})).toBe(EXIT.ok)
     expect(recordOf().sections).toEqual([
       { id: 'privacy', status: 'seen' },
+      { id: 'import', status: 'skipped' },
       { id: 'key', status: 'skipped' },
       { id: 'prompts', status: 'skipped' },
       { id: 'background', status: 'skipped' },
@@ -670,7 +673,7 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
   it('stops a key write that has no typed key to store', async () => {
     const { keySection } = await import('../../src/setup/sections.ts')
     const answers = { ...(await import('@delo/contract-setup-answers')).SETUP_DEFAULTS }
-    expect(() => keySection.apply({ home, directory: home, secret: undefined }, answers)).toThrow('the model key was not entered')
+    expect(() => keySection.apply({ home, env: {}, directory: home, secret: undefined }, answers)).toThrow('the model key was not entered')
   })
 })
 

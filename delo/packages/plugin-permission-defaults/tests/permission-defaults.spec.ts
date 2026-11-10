@@ -13,6 +13,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness, type AgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import PermissionPresetService from '@deepseek-ai/dsh-permission-presets'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
@@ -279,5 +280,153 @@ describe('the store the plugin reads', () => {
     expect(defaults.granted(workspace)).toBe(true)
     await defaults.select(agent, FULL_ACCESS_PRESET)
     expect(asks).toHaveLength(0)
+  })
+})
+
+/**
+ * Make every chat created after this call open with a log that already runs it with the given mode, as a chat copied
+ * from another home does: the listener runs before the plugin's, and appends the mode without any guard.
+ * @param ctx - the composition.
+ * @param mode - the mode the log holds.
+ */
+function restoreWith(ctx: Context, mode: SandboxMode): void {
+  ctx.on('agent/created', ({ agent }) => {
+    agent.session.append('sandbox/mode', { mode })
+    agent.session.append('permission/preset', { preset: mode })
+  }, { prepend: true })
+}
+
+describe('a restored chat whose log runs it with full access', () => {
+  it('opens on the safer preset when this home holds no grant for its workspace, and asks nothing', async () => {
+    const { ctx, harness, asks, workspace } = await mounted()
+    restoreWith(ctx, FULL_ACCESS_PRESET)
+    const agent = await harness.create(SessionId('chat-copied'), {}, { cwd: workspace })
+    expect(knobs(ctx, agent.session)).toMatchObject({ preset: SAFER_PRESET, sandbox: SAFER_PRESET })
+    expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(SAFER_PRESET)
+    expect(asks).toHaveLength(0)
+  })
+
+  it('keeps full access in a workspace this home granted it for', async () => {
+    const { ctx, harness, workspace } = await mounted({
+      store: paths => serializePermissionStore(new Map([[workspaceKey(paths.workspace), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1_700_000_000_000 }]])),
+    })
+    restoreWith(ctx, FULL_ACCESS_PRESET)
+    const agent = await harness.create(SessionId('chat-granted'), {}, { cwd: workspace })
+    expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(FULL_ACCESS_PRESET)
+  })
+
+  it('opens on the safer preset when the workspace\'s record names full access without a grant', async () => {
+    const { ctx, harness, workspace } = await mounted({
+      store: paths => serializePermissionStore(new Map([[workspaceKey(paths.workspace), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: null }]])),
+    })
+    restoreWith(ctx, FULL_ACCESS_PRESET)
+    const agent = await harness.create(SessionId('chat-ungranted'), {}, { cwd: workspace })
+    expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(SAFER_PRESET)
+  })
+
+  it('leaves a restored chat that runs in the sandbox as it is', async () => {
+    const { ctx, harness, workspace } = await mounted()
+    restoreWith(ctx, 'read-only')
+    const agent = await harness.create(SessionId('chat-read-only-log'), {}, { cwd: workspace })
+    expect(knobs(ctx, agent.session)).toMatchObject({ preset: 'read-only', sandbox: 'read-only' })
+  })
+
+  it('lowers a chat that runs with full access in a subdirectory of a granted workspace, because a grant covers its folder exactly', async () => {
+    const { ctx, harness, workspace } = await mounted({
+      store: paths => serializePermissionStore(new Map([[workspaceKey(paths.workspace), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1_700_000_000_000 }]])),
+    })
+    const subdirectory = join(workspace, 'sub')
+    mkdirSync(subdirectory)
+    restoreWith(ctx, FULL_ACCESS_PRESET)
+    const agent = await harness.create(SessionId('chat-subdirectory'), {}, { cwd: subdirectory })
+    expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(SAFER_PRESET)
+  })
+
+  it('does not open the chat when it cannot be set to the safer preset', async () => {
+    const { ctx, harness, workspace } = await mounted()
+    restoreWith(ctx, FULL_ACCESS_PRESET)
+    ctx.permissionPresets.set = () => { throw new Error('the preset table is not ready') }
+    await expect(harness.create(SessionId('chat-stuck'), {}, { cwd: workspace })).rejects.toThrow(/could not be set to the safer preset \(the preset table is not ready\), so it does not open/u)
+  })
+})
+
+/**
+ * One composition over a real chat store on disk: the jsonl persistence over `sessionsRoot`, the agent loop, the
+ * sandbox policy, the permission presets and this plugin, with a Delo home whose permission store grants full access
+ * for `workspace` or holds nothing.
+ * @param paths - the chat store, the Delo home and the workspace folder.
+ * @param grant - whether the home's store grants full access for the workspace.
+ * @returns the composition and the asks its approval answerer saw.
+ */
+async function persistedComposition(paths: { sessionsRoot: string, home: string, workspace: string }, grant: boolean): Promise<{ ctx: Context, asks: ApprovalRequest[], harness: AgentLoopTestHarness }> {
+  const store = permissionStorePath(paths.home)
+  rmSync(store, { force: true })
+  if (grant) {
+    mkdirSync(join(store, '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(store, serializePermissionStore(new Map([[workspaceKey(paths.workspace), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1_700_000_000_000 }]])), { mode: 0o600 })
+  }
+  process.env['DELO_HOME'] = paths.home
+  const ctx = new Context()
+  const asks: ApprovalRequest[] = []
+  await mountAgentLoopTestDependencies(ctx)
+  // The store mounts before the loop, so the loop's teardown drains its writers into still-open handles.
+  await ctx.plugin(JsonlSessionPersistence, { root: paths.sessionsRoot })
+  const harness = await mountAgentLoopTestHarness(ctx)
+  await ctx.plugin(SandboxPolicyService, { mode: SAFER_PRESET, workspaceRoot: paths.workspace })
+  ctx.provide('shell', {
+    sandboxMode: 'workspace-write' as SandboxMode,
+    resolve() { throw new Error('permission-defaults specs do not execute bash') },
+    run() { throw new Error('permission-defaults specs do not execute bash') },
+    start() { throw new Error('permission-defaults specs do not execute bash') },
+  } as never)
+  ctx.provide('approval', {
+    config: { policy: 'ask' },
+    request: async (request: ApprovalRequest) => {
+      asks.push(request)
+      return 'allowed-once'
+    },
+    setPolicy() {},
+  } as never)
+  await ctx.plugin(PermissionPresetService, { defaultPreset: SAFER_PRESET })
+  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { enabled: true }) })
+  return { ctx, asks, harness }
+}
+
+/**
+ * Save one chat that runs with full access to a real chat store: a home that grants full access seeds it, and the
+ * composition is disposed, so the log on disk is the only trace of it.
+ * @returns the chat store, the Delo home, the workspace folder and the chat's id.
+ */
+async function savedFullAccessChat(): Promise<{ sessionsRoot: string, home: string, workspace: string, id: SessionId }> {
+  const root = mkdtempSync(join(tmpdir(), 'delo-permission-defaults-saved-'))
+  roots.push(root)
+  const paths = { sessionsRoot: join(root, 'sessions'), home: join(root, 'home'), workspace: join(root, 'work') }
+  for (const directory of [paths.sessionsRoot, paths.home, paths.workspace]) mkdirSync(directory, { recursive: true })
+  const id = SessionId('chat-saved')
+  const { ctx, harness } = await persistedComposition(paths, true)
+  const agent = await harness.create(id, {}, { cwd: paths.workspace })
+  expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(FULL_ACCESS_PRESET)
+  await ctx.fiber.dispose()
+  return { ...paths, id }
+}
+
+describe('a chat reopened from its saved log', () => {
+  it('opens on the safer preset when its saved log runs it with full access and this home holds no grant, and asks nothing', async () => {
+    const saved = await savedFullAccessChat()
+    const { ctx, asks } = await persistedComposition(saved, false)
+    const handle = await ctx.agents.resume({ resumeSessionId: saved.id })
+    expect(ctx.sandboxPolicy.resolve({ session: handle.agent.session }).mode).toBe(SAFER_PRESET)
+    expect(knobs(ctx, handle.agent.session)).toMatchObject({ preset: SAFER_PRESET, sandbox: SAFER_PRESET })
+    expect(asks).toHaveLength(0)
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps full access when this home holds a grant for its workspace', async () => {
+    const saved = await savedFullAccessChat()
+    const { ctx, asks } = await persistedComposition(saved, true)
+    const handle = await ctx.agents.resume({ resumeSessionId: saved.id })
+    expect(ctx.sandboxPolicy.resolve({ session: handle.agent.session }).mode).toBe(FULL_ACCESS_PRESET)
+    expect(asks).toHaveLength(0)
+    await ctx.fiber.dispose()
   })
 })

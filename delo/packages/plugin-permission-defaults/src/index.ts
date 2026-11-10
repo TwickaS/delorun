@@ -17,7 +17,9 @@
  *   same synchronous step runs inside the sandbox
  *   ({@link PermissionDefaults.review} is that verdict);
  * - it seeds each new chat of a workspace with that workspace's preset before
- *   upstream pins the deployment default;
+ *   upstream pins the deployment default, and sets a restored chat whose log
+ *   runs it with full access in a workspace without a grant in this home, such
+ *   as a chat copied from a stock DeepSeek Harness home, to the safer preset;
  * - it asks the person once per workspace for full access
  *   ({@link PermissionDefaults.select}), and records the consent in the home's
  *   protected state ([`./store.ts`](./store.ts)).
@@ -34,6 +36,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxModeGuard } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import { resolveDeloHome } from '@delo/home'
@@ -144,8 +147,8 @@ export function fullAccessRefusal(workspace: string, problem?: string): string {
  * a granted consent is written through the store before it is remembered.
  */
 export class PermissionDefaults extends Service {
-  /** The permission-preset owner upstream's composition mounts, which seeds and applies presets. */
-  static inject = ['permissionPresets']
+  /** The permission-preset owner upstream's composition mounts, which seeds and applies presets, and the sandbox policy, which reads a chat's logged mode. */
+  static inject = ['permissionPresets', 'sandboxPolicy']
 
   /** The store's entries; empty while nothing is recorded or the store was refused. */
   private entries: ReadonlyMap<string, WorkspacePermission> = new Map()
@@ -305,12 +308,19 @@ export class PermissionDefaults extends Service {
   /**
    * Seed one new chat with its workspace's preset, before upstream's pin fills
    * the knob defaults. A chat that already holds a choice, or that was seeded
-   * by its constructor, is never touched: a restored or forked chat keeps the
-   * permission it has.
+   * by its constructor, keeps the permission it has, with one exception: a
+   * chat whose log runs it with full access in a workspace this home holds no
+   * grant for, such as a chat copied from a stock DeepSeek Harness home or one
+   * whose grant the person withdrew, is set to the safer preset before it runs
+   * anything ({@link withdrawUngranted}).
    * @param session - the chat being created.
+   * @throws Error when such a chat cannot be set to the safer preset, so the chat does not open with full access.
    */
   private seed(session: Session): void {
-    if (!this.ctx.permissionPresets.unset(session)) return
+    if (!this.ctx.permissionPresets.unset(session)) {
+      this.withdrawUngranted(session)
+      return
+    }
     const workspace = workspaceKey(session.header.cwd ?? '')
     const preset = defaultPresetOf(this.entries, workspace)
     try {
@@ -328,6 +338,25 @@ export class PermissionDefaults extends Service {
       // creation: upstream's pin then seeds the deployment default, exactly as
       // it does without this plugin.
       this.ctx.logger.warn(`permission-defaults: seeding the preset of ${String(session.id)} failed: ${reasonOf(error)}`)
+    }
+  }
+
+  /**
+   * Set a restored chat that runs with full access, in a workspace this home
+   * holds no grant for, to the safer preset. The full-access
+   * consent covers a workspace in this home, and a log written elsewhere or
+   * before a withdrawal carries none.
+   * @param session - the restored chat.
+   * @throws Error when the preset cannot be set; the caller's chat creation fails rather than open with full access.
+   */
+  private withdrawUngranted(session: Session): void {
+    if (this.ctx.sandboxPolicy.overrideOf(session) !== FULL_ACCESS_PRESET) return
+    const workspace = workspaceKey(session.header.cwd ?? '')
+    if (fullAccessGranted(this.entries, workspace)) return
+    try {
+      this.ctx.permissionPresets.set(session, SAFER_PRESET)
+    } catch (error) {
+      throw new Error(`permission-defaults: the chat ${String(session.id)} runs with full access in a workspace with no full-access consent, and it could not be set to the safer preset (${reasonOf(error)}), so it does not open`, { cause: error })
     }
   }
 

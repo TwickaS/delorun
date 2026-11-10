@@ -93,6 +93,10 @@ describe('the answers document', () => {
     expect(refusal(write('prompts.json', { ...BASE, prompts: 'lax' }))).toContain('prompts is not a value')
   })
 
+  it('refuses a document that asks for the stock-home import, which shows its preview in a terminal first', () => {
+    expect(refusal(write('import.json', { ...BASE, importStockHome: true }))).toContain('importStockHome must be false in --config')
+  })
+
   it('refuses a credential value given as a name, a file that is not JSON and a file that is missing', () => {
     const secret = 'sk-SECRET-VALUE-79'
     const named = refusal(write('named.json', { ...BASE, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: secret } } }))

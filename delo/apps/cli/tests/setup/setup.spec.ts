@@ -158,7 +158,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
     }
     const typed: readonly Answer[] = ['quick', 'prompt', 'typed-key-value', 'safer', 'save', false]
     await expect(setup(asked(typed), {}, interrupt)).rejects.toThrow('interrupted')
-    expect(steps).toEqual([PROFILE_STEP, sectionStep('privacy'), sectionStep('key')])
+    expect(steps).toEqual([PROFILE_STEP, sectionStep('privacy'), sectionStep('import'), sectionStep('key')])
     expect(readProgress(runDirectory(home, PROFILE))?.completed).toEqual(steps)
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: 'typed-key-value' } })
 
@@ -189,7 +189,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('records every step in order when nothing interrupts', async () => {
     const steps: SetupStep[] = []
     expect(await setup({ kind: 'yes' }, undefined, { afterStep: step => void steps.push(step) })).toBe(EXIT.ok)
-    expect(steps).toEqual([PROFILE_STEP, ...['privacy', 'key', 'prompts', 'background', 'profile'].map(sectionStep)])
+    expect(steps).toEqual([PROFILE_STEP, ...['privacy', 'import', 'key', 'prompts', 'background', 'profile'].map(sectionStep)])
     expect(existsSync(join(runDirectory(home, PROFILE), 'setup-progress.json'))).toBe(false)
     expect(statSync(join(profileDirectory(home, PROFILE), 'setup-answers.json')).mode & 0o777).toBe(0o600)
   })

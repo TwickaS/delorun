@@ -1,5 +1,5 @@
 ---
-description: "Delo's archive format v1 (C8): the ZIP reader and writer, the path, link, size and ratio refusals, the closed customisation schema, the signature and the signer a person accepts, the staging and atomic publication of an import, the export with its secrets warning, and the home key that signs."
+description: "Delo's archive format v1 (C8): the ZIP reader and writer, the path, link, size and ratio refusals, the closed customisation schema, the signature and the signer a person accepts, the staging and atomic publication of an import, the export with its secrets warning, the home key that signs, and the import of a stock DeepSeek Harness home."
 ---
 
 # @delo/archive
@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-This package implements the archive half of [contract C8](../../docs/contracts/c08-archive-and-trash.md): an export writes one or more workspaces with their chats and attachments as a ZIP file with a manifest, a customisation document and an Ed25519 signature, and an import checks every byte of such a file before it writes anything. An archive is hostile input until it has passed every check. `delorun export` and `delorun import` ([`@delo/cli`](../../apps/cli/README.md)) are the commands that reach it.
+This package implements the archive half of [contract C8](../../docs/contracts/c08-archive-and-trash.md): an export writes one or more workspaces with their chats and attachments as a ZIP file with a manifest, a customisation document and an Ed25519 signature, and an import checks every byte of such a file before it writes anything. An archive is hostile input until it has passed every check. `delorun export` and `delorun import` ([`@delo/cli`](../../apps/cli/README.md)) are the commands that reach it. The `./dsh-import` export carries out [the stock-home import](../../docs/contracts/c08-archive-and-trash.md#the-stock-home-import), which `delorun import-home` and setup reach.
 
 ## Contents
 
@@ -16,6 +16,7 @@ This package implements the archive half of [contract C8](../../docs/contracts/c
 - [The signer](#the-signer)
 - [Export](#export)
 - [The home key](#the-home-key)
+- [The stock-home import](#the-stock-home-import)
 - [Tests](#tests)
 
 ## Import
@@ -34,6 +35,18 @@ This package implements the archive half of [contract C8](../../docs/contracts/c
 
 `loadHomeKey` ([`home-key.ts`](src/home-key.ts)) reads the home key of [contract C5](../../docs/contracts/c05-device-approval.md), `secrets/home-auth/home-key.pem`, PKCS #8 at mode 0600, through C1's protected-file rules, and creates it on request when the home has none. A new key is written whole to a temporary file and linked into place, so two first uses at once keep one key.
 
+## The stock-home import
+
+`@delo/archive/dsh-import` copies a stock DeepSeek Harness home into a Delo home, and only ever reads the stock home, which it treats as hostile input.
+
+- `planDshHomeImport` ([`plan.ts`](src/dsh-import/plan.ts)) reads both homes and writes nothing. It walks the stock home by `lstat` through the entries the layout table ([`layout.ts`](src/dsh-import/layout.ts)) names, and returns the data it carries (chats, attachments whose bytes have the digest their path names, the workspace list), each category a person says yes to separately (profiles, settings layers, instructions, skills, the DeepSeek key) with the exact text that lands, every entry it leaves behind with a reason, at most 100 listed per reason and all counted, and the blockers that keep it from going on: a Delo home with chats without `merge`, and each collision. A directory without a chat, a profile manifest or a workspace list is refused, and a size limit past its bound throws. A link, a pipe, socket or device, an entry on another device and a name upstream does not write are left behind; a chat goes whole or not at all.
+- `SourceReader` ([`source.ts`](src/dsh-import/source.ts)) opens each stock directory with `O_NOFOLLOW` and `O_DIRECTORY` and lists it from the descriptor, and each stock file with `O_NOFOLLOW` and `O_NONBLOCK`; it checks every open descriptor against the identity and path the walk recorded, reads no more than the recorded size, and counts every listed name against the entry limit. It counts the hard links it meets, so a file with a link from outside the stock home is never copied.
+- `splitPatchLayer` and `splitSettingsLayer` ([`layers.ts`](src/dsh-import/layers.ts)) parse a patch layer or the earlier settings without evaluating them, carry only the row and setting pairs on the `CARRIED_SETTINGS` allow list with plain values, and hold back every other row with a reason, as an inert file.
+- `ChatLogScan` ([`chats.ts`](src/dsh-import/chats.ts)) reads a chat's newest generation as a bounded stream while it is hashed: the header's Session and working folder, and whether the log ends inside a turn. `sensitiveFolder`, `restrictRegistry` and `serializeRegistry` ([`workspaces.ts`](src/dsh-import/workspaces.ts)) hold back a workspace in a sensitive folder and write the list from its parsed value with only what is carried.
+- `landManifest` and `carryNotes` ([`profiles.ts`](src/dsh-import/profiles.ts)) write a profile manifest again with a name, `private`, its registry dependencies and its bundle list, list each bundle and plugin as carried, to install, added or not carried, and run [`@delo/profile-safety`](../profile-safety/README.md)'s carry check on texts read once.
+- `parseRegistry` and `mergeRegistries` ([`workspaces.ts`](src/dsh-import/workspaces.ts)) read upstream's workspace unit with its own record schemas and join two lists without overwriting a record. The credentials are read with upstream's parser ([`credentials.ts`](src/dsh-import/credentials.ts)), which offers only the DeepSeek key; a value is never returned or printed.
+- `applyDshHomeImport` ([`apply.ts`](src/dsh-import/apply.ts)) carries out a plan with the categories the person took: it stages and syncs every file under `archive/stock-import/staging-<id>/`, checks each document's digest again, writes and syncs a journal that names every directory and file it will place, places each new file by one hard link that fails on an existing path, replaces a document it adds to by one rename after linking the original aside, and removes the journal to complete. A failure withdraws what it placed and puts back what it replaced, leaving a file whose bytes changed since it was placed; `recoverDshImport` does the same for a crashed import, refuses a journal whose staging directory is gone, and removes every staging root, and `recoverStockImport` is the form the start path is to call before a profile starts. `readDshImportRecord` returns what completed imports carried.
+
 ## Tests
 
-From the repository root, `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/archive` runs the specs: the extraction refusals, the size bounds, the staging directory, the signer consent, the preview, the partway failure, the customisation schema, the export round trip, the home key, and C8's denial tests for control characters, lazy reading, lower limits, recovery and linked directories.
+From the repository root, `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/archive` runs the specs: the extraction refusals, the size bounds, the staging directory, the signer consent, the preview, the partway failure, the customisation schema, the export round trip, the home key, and C8's denial tests for control characters, lazy reading, lower limits, recovery and linked directories. The `dsh-import` specs cover the stock-home import: what it carries and leaves behind, the link, pipe, mount, swapped-directory, hard-link, name, size and collision refusals, each class of held-back row, the profile as data, and the journal's withdrawal after a failure or a crash at any placement.

@@ -88,7 +88,7 @@ The first release changes a few of DSH's defaults on purpose, and the [parity ch
 
 ## Moving between DSH and Delo
 
-- **From DSH:** Delo's contract requires setup to offer to import a copy of your plugins, settings and chats from `~/.dsh`, which it never changes.
+- **From DSH:** setup offers to copy your chats and workspaces from `~/.dsh`, and `delorun import-home` does it any time and asks about your profiles, settings, instructions, skills and key one by one; `~/.dsh` is never changed ([Switching from DeepSeek Harness](switching.md)).
 - **Back to DSH:** Delo's contract requires that your DSH home stay untouched, so stock DSH keeps working beside Delo. Delo's export files carry workspaces and chats between homes.
 - **Delo's look without leaving Delo:** turn off Delo's studio additions for the stock look, or turn off any one of them.
 

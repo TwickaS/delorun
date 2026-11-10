@@ -8,5 +8,17 @@
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/loader" },
+    { "path": "../../../packages/boot/app-boot" },
+    { "path": "../../../packages/boot/plugin-manager" },
+    { "path": "../../../packages/core/session" },
+    { "path": "../../../packages/credentials/credentials-local" },
+    { "path": "../../../packages/session/session-format" },
+    { "path": "../../../packages/session/session-persistence-jsonl" },
+    { "path": "../../../packages/util/official-bundles" },
+    { "path": "../../../packages/workspace/workspace" }
+  ]
 }

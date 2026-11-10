@@ -2,7 +2,8 @@
  * The answers `delorun setup` applies (contract C11, "Answer schema" and
  * "The --yes and --config forms"): the `--config` document, the `--yes`
  * defaults, and the refusals that keep reach and credential forwarding off in
- * the unattended forms, and a document that carries a question setup no longer asks. A refusal names the field and never echoes a value.
+ * the unattended forms, the refusal of a document that asks for the stock-home import, which shows a preview first, and
+ * a document that carries a question setup no longer asks. A refusal names the field and never echoes a value.
  *
  * @module @delo/cli/setup/answers
  */
@@ -100,6 +101,8 @@ export function readAnswersDocument(path: string): SetupAnswers {
   if (answers.modelProvider.credential.source === 'prompt') throw refusal('modelProvider.credential.source', 'must be "environment" in --config: a document cannot take the key at a prompt')
   if (answers.reach.identityFactor !== null) throw refusal('reach.identityFactor', 'must be null: reach is not set up by a document')
   if (answers.sections.length > 0) throw refusal('sections', 'is written by setup; remove it from the document')
+  // The stock-home import shows its preview before anything changes, which no document can stand in for.
+  if (answers.importStockHome) throw refusal('importStockHome', 'must be false in --config: the import shows what it copies before it asks, so run delorun import-home in a terminal')
   if (answers.profile.name !== null) {
     try {
       selectProfile(answers.profile.name, {})

@@ -164,7 +164,7 @@ function readLayer(path: string, layer: PatchLayer, rows: PersonRow[], configura
   }
   let parsed: unknown
   try {
-    parsed = parse(text)
+    parsed = parse(text, { logLevel: 'error' })
   } catch (error) {
     throw new ProfileSafetyError('PROFILE_UNREADABLE', path, `${path} is not YAML: ${String(error)}`, ['repair-profile'], [{ kind: 'configuration', name: path, layer }], { cause: error })
   }

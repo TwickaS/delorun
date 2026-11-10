@@ -202,7 +202,7 @@ async function runStep(step: SetupStep, request: SetupRequest, registry: Section
     return undefined
   }
   const section = registry.all().find(candidate => sectionStep(candidate.id) === step) as SetupSection
-  return section.apply({ home: request.home, directory, secret }, progress.answers)
+  return section.apply({ home: request.home, env: request.env, directory, secret }, progress.answers)
 }
 
 /**
@@ -306,7 +306,7 @@ export async function runSection(request: SetupRequest, id: string): Promise<Exi
   const draft: Draft = { mode: 'full', answers: recordedAnswers(directory), secret: undefined }
   const given = await section.ask(stepIO(prompter, false), draft, environment) as Exclude<Awaited<ReturnType<SetupSection['ask']>>, typeof BACK>
   const answers: SetupAnswers = { ...draft.answers, ...given.answers, sections: withRecord(draft.answers.sections, section.id, given.status) }
-  const note = await section.apply({ home: request.home, directory, secret: given.secret }, answers)
+  const note = await section.apply({ home: request.home, env: request.env, directory, secret: given.secret }, answers)
   if (note !== undefined) request.output.stdout(`${note}\n`)
   writeAnswersRecord(directory, answers)
   request.output.stdout(`Updated the ${id} section of the profile ${request.profile}. If Delorun is running, restart it for the change to take effect: delorun stop, then delorun start.\n`)

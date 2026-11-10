@@ -2,7 +2,8 @@
  * The sections of `delorun setup`. A section is one topic of the terminal flow with its question, its review line
  * and the writes it produces, and the registry lists them in order. Quick runs the sections marked `quick`; Full runs
  * every section. Each section is also `delorun setup <id>`. Later packages add their sections through
- * {@link SectionRegistry.register}; this module registers privacy, key, prompts, background and profile.
+ * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, key, prompts, background
+ * and profile.
  *
  * @module @delo/cli/setup/sections
  */
@@ -15,7 +16,9 @@ import {
   type SectionStatus,
   type SetupAnswers,
 } from '@delo/contract-setup-answers'
+import { LOCAL_BUNDLE } from '@delo/bundle-local/profile'
 import { en } from '@delo/bundle-local/statements'
+import { importSection } from '../import-home/section.ts'
 import { selectProfile } from '../profile.ts'
 import { CliError, EXIT } from '../exit.ts'
 import type { KeyCheck } from './key-check.ts'
@@ -68,6 +71,8 @@ export interface SectionEnvironment {
 export interface ApplyContext {
   /** The Delo home. */
   readonly home: string
+  /** The environment `delorun` inherited. */
+  readonly env: Readonly<Record<string, string | undefined>>
   /** The profile directory the writes go to. */
   readonly directory: string
   /** The typed key, when the run has one. */
@@ -356,11 +361,12 @@ export const profileSection: SetupSection = {
 
 /**
  * The registry of the sections this build ships. Later packages register theirs into it.
- * @returns a registry holding privacy, key, prompts, background and profile.
+ * @returns a registry holding privacy, the stock-home import, key, prompts, background and profile.
  */
 export function defaultRegistry(): SectionRegistry {
   const registry = new SectionRegistry()
   registry.register(privacySection, { order: 10 })
+  registry.register(importSection({ deloBundles: [LOCAL_BUNDLE] }), { order: 15 })
   registry.register(keySection, { order: 20 })
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })

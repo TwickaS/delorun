@@ -1254,6 +1254,9 @@ importers:
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../../packages/host/webserver
@@ -1363,6 +1366,15 @@ importers:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../../packages/util/launch-environment
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-persistence':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-persistence
+      '@deepseek-ai/dsh-session-persistence-jsonl':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-persistence-jsonl
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
@@ -1591,6 +1603,24 @@ importers:
 
   delo/packages/archive:
     dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-credentials-local':
+        specifier: workspace:*
+        version: link:../../../packages/credentials/credentials-local
+      '@deepseek-ai/dsh-official-bundles':
+        specifier: workspace:*
+        version: link:../../../packages/util/official-bundles
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-format':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-format
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
       '@delo/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
@@ -1603,6 +1633,25 @@ importers:
       '@delo/home':
         specifier: workspace:*
         version: link:../home
+      '@delo/profile-safety':
+        specifier: workspace:*
+        version: link:../profile-safety
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-session-persistence-jsonl':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-persistence-jsonl
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
   delo/packages/bundle-local:
     dependencies:
@@ -2394,6 +2443,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-persistence-jsonl':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-persistence-jsonl
       '@deepseek-ai/dsh-session-projection':
         specifier: workspace:*
         version: link:../../../packages/session/session-projection
