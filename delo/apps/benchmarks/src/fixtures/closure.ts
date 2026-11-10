@@ -82,6 +82,7 @@ export async function buildBase(repository: string, cache: string, commit: strin
   const building = `${target}.building`
   removeTree(building)
   mkdirSync(building, { recursive: true })
+  await waitForOtherClosureBuilds(log)
   log(`building the base closure of ${commit.slice(0, 12)} with the release recipe; this takes minutes`)
   const shims = cycleTolerantPnpm(join(cache, 'build-shims'))
   const finished = await run({
@@ -96,6 +97,33 @@ export async function buildBase(repository: string, cache: string, commit: strin
   removeTree(target)
   renameSync(building, target)
   return { directory: target, version: BASE_VERSION }
+}
+
+/**
+ * Wait while another `build-closure.ts` runs on this machine: the recipe's build root is one fixed directory, and two
+ * builds at once remove each other's.
+ * @param log - receives progress text.
+ * @param running - lists the other builds' process ids; `pgrep` by default.
+ * @param pause - waits between checks.
+ */
+export async function waitForOtherClosureBuilds(log: (text: string) => void, running: () => readonly number[] = otherClosureBuilds, pause: () => Promise<void> = () => new Promise(resolve => setTimeout(resolve, 10_000))): Promise<void> {
+  for (let others = running(); others.length > 0; others = running()) {
+    log(`waiting for the closure build in process ${others.join(', ')}, which uses the same build root`)
+    await pause()
+  }
+}
+
+/**
+ * The process ids of `build-closure.ts` runs on this machine.
+ * @returns the ids.
+ */
+function otherClosureBuilds(): readonly number[] {
+  try {
+    return execFileSync('pgrep', ['-f', 'release/src/build-closure\\.ts'], { encoding: 'utf8' }).split('\n').map(Number).filter(pid => pid > 0 && pid !== process.pid)
+  } catch (_none) {
+    // pgrep exits 1 when nothing matches.
+    return []
+  }
 }
 
 /**
