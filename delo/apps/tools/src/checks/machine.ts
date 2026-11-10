@@ -14,7 +14,7 @@
  * @module @delo/tools/checks/machine
  */
 import { execFileSync } from 'node:child_process'
-import { chmodSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, statfsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -140,12 +140,87 @@ export function memoryReport(): MemoryReport | undefined {
   }
 }
 
+/** The variable that chooses where a run's temporary files go: `disk` (the default) or `memory`. */
+export const SCRATCH_ENV = 'DELO_CHECKS_SCRATCH'
+/** The variable that sets the memory a run's temporary files may take on a memory file system, in GiB. */
+export const SCRATCH_CAP_ENV = 'DELO_CHECKS_SCRATCH_GIB'
+/** The memory a run's temporary files may take on a memory file system when the environment names no other figure. */
+const DEFAULT_SCRATCH_GIB = 4
+/** `statfs`'s type of a tmpfs. */
+const TMPFS_MAGIC = 0x01021994
+
+/** Where a run's temporary files go. */
+export interface ScratchPlace {
+  /** The directory the run's scratch directory is made in. */
+  readonly base: string
+  /** Whether it is a memory file system. */
+  readonly memory: boolean
+  /** The memory set aside for the files on a memory file system, which the run's budget gives up; 0 on disk. */
+  readonly capBytes: number
+  /** Why a run that asked for memory got the disk. */
+  readonly fallback?: string
+}
+
+/** What {@link scratchPlace} reads from the machine. */
+export interface ScratchProbe {
+  /** The system's temporary directory. */
+  readonly tmpdir: string
+  /**
+   * A directory's file system: its `statfs` type and the bytes free to this user, or undefined when it does not exist.
+   * @param dir - the directory.
+   * @returns the facts.
+   */
+  readonly statfs: (dir: string) => { readonly type: number, readonly freeBytes: number } | undefined
+}
+
 /**
- * A scratch directory for the run's temporary files, under the system's temporary directory.
+ * Where a run's temporary files go: the system's temporary directory, or with `DELO_CHECKS_SCRATCH=memory` a memory file
+ * system (`/dev/shm`, else `$XDG_RUNTIME_DIR`) that has `DELO_CHECKS_SCRATCH_GIB` (default 4) free, which the run's memory
+ * budget then gives up. A request for memory that no memory file system can meet falls back to the disk and says why.
+ * @param env - the environment.
+ * @param probe - the machine.
+ * @returns the place.
+ * @throws Error when the variable names neither `disk` nor `memory`, or the figure is not a positive number.
+ */
+export function scratchPlace(env: NodeJS.ProcessEnv, probe: ScratchProbe): ScratchPlace {
+  const choice = env[SCRATCH_ENV] ?? 'disk'
+  if (choice !== 'disk' && choice !== 'memory') throw new Error(`${SCRATCH_ENV} takes disk or memory, got ${choice}`)
+  const disk = { base: probe.tmpdir, memory: false, capBytes: 0 }
+  if (choice === 'disk') return disk
+  const gib = env[SCRATCH_CAP_ENV] === undefined ? DEFAULT_SCRATCH_GIB : Number(env[SCRATCH_CAP_ENV])
+  if (!(gib > 0)) throw new Error(`${SCRATCH_CAP_ENV} takes a positive number of GiB, got ${String(env[SCRATCH_CAP_ENV])}`)
+  const capBytes = Math.round(gib * GIB)
+  const candidates = ['/dev/shm', env['XDG_RUNTIME_DIR']].filter((dir): dir is string => dir !== undefined && dir !== '')
+  for (const dir of candidates) {
+    const facts = probe.statfs(dir)
+    if (facts?.type === TMPFS_MAGIC && facts.freeBytes >= capBytes) return { base: dir, memory: true, capBytes }
+  }
+  return { ...disk, fallback: `no memory file system (${candidates.join(', ')}) has ${String(gib)} GiB free` }
+}
+
+/**
+ * The file system facts {@link scratchPlace} reads, from `statfs`.
+ * @param dir - the directory.
+ * @returns its type and free bytes, or undefined when it does not exist.
+ */
+export function statfsOf(dir: string): { readonly type: number, readonly freeBytes: number } | undefined {
+  try {
+    const stats = statfsSync(dir)
+    return { type: stats.type, freeBytes: stats.bavail * stats.bsize }
+  } catch (error) {
+    // ENOENT: no such directory on this machine.
+    void error
+    return undefined
+  }
+}
+
+/**
+ * A scratch directory for the run's temporary files.
+ * @param base - the directory to make it in, from {@link scratchPlace}; the system's temporary directory by default.
  * @returns the new directory.
  */
-export function scratchDir(): string {
-  return mkdtempSync(join(tmpdir(), 'delo-checks-'))
+export function scratchDir(base: string = tmpdir()): string {
+  return mkdtempSync(join(base, 'delo-checks-'))
 }
 
 /**

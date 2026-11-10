@@ -50,14 +50,14 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { availableParallelism, totalmem } from 'node:os'
+import { availableParallelism, tmpdir, totalmem } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { z } from 'zod'
 import { cacheUse, contentId, createPassCache, type PassCache, type SharedUse } from './checks/cache.ts'
 import { FUNDAMENTALS_INPUTS, GATES } from './checks/gates/index.ts'
-import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, removeScratch, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
+import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, removeScratch, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, scratchPlace, statfsOf, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { checksToRun, fitToGrant, runDemand, withoutIdleNeeds } from './checks/demand.ts'
 import { isLightPlan, gatePriority } from './checks/run-queue.ts'
@@ -653,7 +653,9 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   // A granted run fits its test runners to its slots and schedules its checks inside its share of the memory.
   if (grant !== undefined) plan = fitToGrant(plan, grant.slots)
   const runCpus = grant?.slots ?? cpus
-  const runMemory = grant === undefined ? memory : Math.min(memory, grant.memoryBytes)
+  // Temporary files on a memory file system take memory from the run's budget.
+  const place = scratchPlace(env, { tmpdir: tmpdir(), statfs: statfsOf })
+  const runMemory = Math.max(GIB, (grant === undefined ? memory : Math.min(memory, grant.memoryBytes)) - place.capBytes)
   const ioAtStart = ioPressure(name => readFileSync(name, 'utf8'))
   // A gate that ran while this run waited for the lock may have recorded the tree, so the record is read again here.
   const startState = treeRecordsOn ? treeState(root) : undefined
@@ -661,7 +663,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   // Only a pre-push run records its pass, and only from a clean tree.
   const before = values['pre-push'] && startState?.clean === true ? startState : undefined
 
-  const scratch = scratchDir()
+  if (place.fallback !== undefined) console.log(`delo checks: temporary files go to the disk: ${place.fallback}`)
+  const scratch = scratchDir(place.base)
   const childEnv = checkEnvironment(env, scratch)
   // The environment `pnpm run` gives a script is read from pnpm only when a planned check needs it.
   if (plan.some(readsPnpmScriptEnvironment)) Object.assign(childEnv, pnpmScriptEnvironment(root, childEnv['PATH'] ?? ''))

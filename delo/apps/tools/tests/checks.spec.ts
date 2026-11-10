@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
-import { checkEnvironment, cgroupBudget, removeScratch, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
+import { checkEnvironment, cgroupBudget, removeScratch, scratchDir, scratchPlace, statfsOf, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
 import { affectsParity, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
 import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
@@ -657,6 +657,23 @@ describe('the machine budget', () => {
   it('hands checks no ambient NODE_ENV, so the invoking shell\'s value cannot pick React\'s production build in the client lane', () => {
     const env = checkEnvironment({ PATH: '/usr/bin', NODE_ENV: 'production', HOME: '/home/me' }, '/dev/shm/run')
     expect(env).not.toHaveProperty('NODE_ENV')
+  })
+
+  it('puts temporary files on the disk unless memory is asked for and a memory file system has the room, which the budget gives up', () => {
+    const TMPFS = 0x01021994
+    const probe = (facts: Record<string, { type: number, freeBytes: number }>) => ({ tmpdir: '/tmp', statfs: (dir: string) => facts[dir] })
+    expect(scratchPlace({}, probe({ '/dev/shm': { type: TMPFS, freeBytes: 10 * GIB } }))).toEqual({ base: '/tmp', memory: false, capBytes: 0 })
+    expect(scratchPlace({ DELO_CHECKS_SCRATCH: 'disk' }, probe({}))).toEqual({ base: '/tmp', memory: false, capBytes: 0 })
+    expect(scratchPlace({ DELO_CHECKS_SCRATCH: 'memory' }, probe({ '/dev/shm': { type: TMPFS, freeBytes: 10 * GIB } }))).toEqual({ base: '/dev/shm', memory: true, capBytes: 4 * GIB })
+    expect(scratchPlace({ DELO_CHECKS_SCRATCH: 'memory', DELO_CHECKS_SCRATCH_GIB: '1', XDG_RUNTIME_DIR: '/run/user/1' }, probe({ '/dev/shm': { type: 1, freeBytes: 10 * GIB }, '/run/user/1': { type: TMPFS, freeBytes: 2 * GIB } }))).toEqual({ base: '/run/user/1', memory: true, capBytes: GIB })
+    expect(scratchPlace({ DELO_CHECKS_SCRATCH: 'memory', XDG_RUNTIME_DIR: '' }, probe({ '/dev/shm': { type: TMPFS, freeBytes: GIB } }))).toEqual({ base: '/tmp', memory: false, capBytes: 0, fallback: 'no memory file system (/dev/shm) has 4 GiB free' })
+    expect(() => scratchPlace({ DELO_CHECKS_SCRATCH: 'ram' }, probe({}))).toThrow('DELO_CHECKS_SCRATCH takes disk or memory, got ram')
+    expect(() => scratchPlace({ DELO_CHECKS_SCRATCH: 'memory', DELO_CHECKS_SCRATCH_GIB: '0' }, probe({}))).toThrow('DELO_CHECKS_SCRATCH_GIB takes a positive number of GiB, got 0')
+    expect(statfsOf(tmpdir())?.freeBytes).toBeGreaterThan(0)
+    expect(statfsOf('/no/such/directory')).toBeUndefined()
+    const made = scratchDir(tmpdir())
+    expect(made).toContain('delo-checks-')
+    rmSync(made, { recursive: true, force: true })
   })
 
   it('removes a scratch directory that a check left unreadable, and reports one it cannot remove', () => {
