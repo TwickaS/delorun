@@ -366,12 +366,12 @@ describe('storeReportSources', () => {
       })
 
       expect((await sources().profile()).plugins).toEqual([
-        { name: 'plugin-ok', version: '1.4.2', requirements: { dsh: { kind: 'range', range: '^0.2.0' }, delo: { kind: 'range', range: '>=1' } } },
-        { name: '@scope/plugin', version: '2.0.1', requirements: { dsh: { kind: 'none' }, delo: { kind: 'none' } } },
+        { name: 'plugin-ok', version: '1.4.2', manifest: { name: 'plugin-ok', version: '1.4.2', engines: { dsh: '^0.2.0', delo: '>=1' } } },
+        { name: '@scope/plugin', version: '2.0.1', manifest: { name: '@scope/plugin', version: '2.0.1' } },
       ])
     })
 
-    it('falls back to the dependency spec for the version, and states no requirements, when the plugin\'s package.json is missing', async () => {
+    it('falls back to the dependency spec for the version, and states no manifest, when the plugin\'s package.json is missing', async () => {
       writeFiles(profileDir, { 'package.json': manifest({ dependencies: { 'exact-spec': '2.3.4', 'ranged-spec': '^3.0.0' } }) })
 
       expect((await sources().profile()).plugins).toEqual([
@@ -380,7 +380,7 @@ describe('storeReportSources', () => {
       ])
     })
 
-    it('states no requirements when the plugin\'s package.json is not JSON, and takes the version from the spec', async () => {
+    it('states no manifest when the plugin\'s package.json is not JSON, and takes the version from the spec', async () => {
       writeFiles(profileDir, {
         'package.json': manifest({ dependencies: { broken: '1.2.3' } }),
         ...plugin('broken', '{"name": '),

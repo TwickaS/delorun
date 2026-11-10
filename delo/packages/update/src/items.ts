@@ -17,7 +17,7 @@ import type { SemanticVersion } from '@delo/contract-release-manifest'
 import type { ItemAction, ItemDetail, ItemEffect, ItemVerification, PluginSubject, ReportItem, ReportReason, RowSubject } from '@delo/contract-update-report'
 import type { BundleFacts, LayerFact, RevokedPluginVersion, RowFact, SkippedBundleFact } from './facts.ts'
 import type { InstalledPluginFact } from './manifest.ts'
-import { evaluateRequirement, exemptionKey, type AxisDecision, type AxisVersions } from './versions.ts'
+import { evaluatePluginAxes, exemptionKey, type AxisDecision, type AxisVersions } from './versions.ts'
 
 /** What one disabled plugin contributes to the report, for the rows and Includes that load it. */
 export interface DisabledPlugin {
@@ -113,14 +113,14 @@ export function pluginItems(plugins: readonly InstalledPluginFact[], versions: R
       disabled.set(plugin.name, { subject, verification: 'verified' })
       continue
     }
-    if (plugin.requirements === undefined) {
+    if (plugin.manifest === undefined) {
       // An unreadable manifest is kept — nothing says the update breaks it — and it is never counted as safe.
       items.push(pluginItem(subject, 'manifest-unreadable', 'kept', 'unverified', {}, ['keep-disabled', 'skip-update']))
       continue
     }
-    const key = exemptionKey(plugin.name, plugin.version)
+    const decisions = evaluatePluginAxes(plugin.manifest, versions, exemptions, exemptionKey(plugin.name, plugin.version))
     for (const axis of VERSION_AXES) {
-      const item = axisItem(plugin, axis, evaluateRequirement(axis, plugin.requirements[axis], versions[axis], exemptions[axis], key))
+      const item = axisItem(plugin, axis, decisions[axis])
       if (item === undefined) continue
       items.push(item)
       if (item.effect === 'disabled') disabled.set(plugin.name, { subject, verification: item.verification })
