@@ -60,12 +60,18 @@ export async function writeStaging(root: string, entries: readonly StagedEntry[]
 }
 
 /**
- * Remove one staging root with everything in it. A failure is ignored: the
- * staging root holds no content the import still needs.
+ * Remove one staging root with everything in it. A root that does not exist,
+ * because a file stands where its parent would be, has nothing to remove; any
+ * other failure propagates, because the root may still hold chat content.
  * @param root - the absolute path of the staging root.
  */
 export async function removeStaging(root: string): Promise<void> {
-  await rm(root, { recursive: true, force: true })
+  try {
+    await rm(root, { recursive: true, force: true })
+  } catch (error: unknown) {
+    // ENOTDIR: a file stands where the root's parent would be, so the root was never created.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOTDIR') throw error
+  }
 }
 
 /**

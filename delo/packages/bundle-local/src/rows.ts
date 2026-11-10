@@ -129,6 +129,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     reason: 'The C16 switch `fetch_guard` on: `web_fetch` refuses loopback, link-local, private-network and unique-local destinations with a typed reason; the plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the fetchGuard service is absent, so the recorded fetch scenarios call their loopback fixtures as they did.' },
   },
+  {
+    id: 'delo-trash',
+    kind: 'added',
+    reason: 'Contract C8\'s trash: deleting a chat or a workspace in the studio moves it to the trash, the Trash section in Settings restores it or deletes it forever, and each start deletes what is older than 30 days; upstream has no chat delete and its workspace Delete keeps every chat.',
+    parity: { kind: 'disabled', reason: 'Recorded scenarios compare upstream\'s interface output, which has no trash action and no Trash section, and a disabled row mounts nothing.' },
+  },
 ]
 
 /** One patch of a Cordis patch file, as parsed. */

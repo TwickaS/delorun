@@ -325,7 +325,8 @@ function inflate(record: ZipCentralRecord, stored: Uint8Array): Uint8Array {
   try {
     return new Uint8Array(inflateRawSync(stored, { maxOutputLength: Math.max(record.uncompressedSize, 1) }))
   } catch (error: unknown) {
-    if (error instanceof ArchiveError) throw error
+    // Every inflate failure, a stream past its declared size included, is the same refusal; the cause is not shown to the person.
+    void error
     throw new ArchiveError(
       'ARCHIVE_TRUNCATED',
       `the entry ${JSON.stringify(record.name)} expands past the ${String(record.uncompressedSize)} bytes it declares, or is not a deflate stream`,

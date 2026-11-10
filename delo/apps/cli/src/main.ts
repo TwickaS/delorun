@@ -11,6 +11,9 @@
  * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
  * | `delorun recover [--rollback \| --restore <version> \| --safe-mode \| --exit-safe-mode]` | where the profile stands after an update, and the way back (contract C3; [recover](./recover.ts)) |
+ * | `delorun trash list \| restore <id> \| purge <id> \| empty` | the trash: what was deleted, restoring an item and deleting one or all forever (contract C8; [trash](./trash/command.ts)) |
+ * | `delorun export <chat-or-workspace> --out <file>` | a chat, or a workspace with its chats, as an archive signed by this home (contract C8; [export](./export/command.ts)) |
+ * | `delorun import <file>` | an archive checked, shown and imported after the person confirms (contract C8; [import](./import/command.ts)) |
  * | `delorun --version [--json]` | Delo's version and the DSH version it runs on (contract C17; [version](./version.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |
  *
@@ -34,12 +37,15 @@ import { stopCommand } from './stop.ts'
 import { doctorCommand } from './doctor/index.ts'
 import { logsCommand } from './logs/command.ts'
 import { recoverCommand } from './recover.ts'
+import { trashCommand } from './trash/command.ts'
+import { exportCommand } from './export/command.ts'
+import { importCommand } from './import/command.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
 import { applyDeloVersionEnvironment, DeloVersionError, versionCommand } from './version.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, doctorCommand, logsCommand, recoverCommand, pluginCommand, headlessCommand]
+export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, doctorCommand, logsCommand, recoverCommand, trashCommand, exportCommand, importCommand, pluginCommand, headlessCommand]
 
 /**
  * The help text.

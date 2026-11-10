@@ -33,6 +33,20 @@ export interface TrashedChat {
   readonly origin?: string
   /** Name of the directory the moved session content sits under, when moved. */
   readonly movedAs?: string
+  /**
+   * Set while a live writer held the chat's session lock at the delete: the
+   * content stays at its origin until a later start moves it in
+   * (`TrashService.settle`), and a purge removes it there.
+   */
+  readonly pending?: true
+}
+
+/** The workspace registration a workspace delete removed, which a restore registers again. */
+export interface TrashedRegistration {
+  /** The workspace's title. */
+  readonly title: string
+  /** The workspace's directory. */
+  readonly path: string
 }
 
 /** One trashed item's record, `items/<id>/item.json`. */
@@ -56,6 +70,10 @@ export interface TrashItem {
   readonly expiresAt: number
   /** The absolute sessions root the origins are relative to. */
   readonly sessionsRoot?: string
+  /** Session ids the deleting home archived for the delete, which a restore unarchives. */
+  readonly archived?: readonly string[]
+  /** The workspace registration a workspace delete removed, which a restore registers again. */
+  readonly registration?: TrashedRegistration
 }
 
 /** Input of a chat delete. */
@@ -67,6 +85,8 @@ export interface DeleteChatInput {
   readonly label?: string
   /** Digests of the chat's attachment objects, which stay until the purge. */
   readonly attachments?: readonly string[]
+  /** Session ids the deleting home archived for the delete, which a restore unarchives. */
+  readonly archived?: readonly string[]
 }
 
 /** Input of a workspace delete. */
@@ -76,6 +96,10 @@ export interface DeleteWorkspaceInput {
   readonly chats: readonly DeleteChatInput[]
   readonly label?: string
   readonly attachments?: readonly string[]
+  /** Session ids the deleting home archived for the delete, which a restore unarchives. */
+  readonly archived?: readonly string[]
+  /** The workspace registration the delete removes, which a restore registers again. */
+  readonly registration?: TrashedRegistration
 }
 
 /** Error of the trash store and service. */
@@ -145,6 +169,8 @@ export class TrashStore {
       workspaceIds?: readonly string[]
       attachments?: readonly string[]
       sessionsRoot?: string
+      archived?: readonly string[]
+      registration?: TrashedRegistration
     },
     now: number,
   ): Promise<TrashItem> {
@@ -160,6 +186,8 @@ export class TrashStore {
       deletedAt: now,
       expiresAt: now + TRASH_RETENTION_DAYS * DAY_MS,
       ...(input.sessionsRoot === undefined ? {} : { sessionsRoot: input.sessionsRoot }),
+      ...(input.archived === undefined || input.archived.length === 0 ? {} : { archived: input.archived }),
+      ...(input.registration === undefined ? {} : { registration: input.registration }),
     }
     await mkdir(this.itemPath(item.id), { recursive: true, mode: 0o700 })
     await this.writeItem(item)
@@ -301,7 +329,8 @@ export async function moveDirectory(from: string, to: string): Promise<void> {
     await rename(from, to)
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException | null)?.code !== 'EXDEV') throw error
-    await cp(from, to, { recursive: true, mode: 0o700 })
+    // The copy keeps each file's mode, and refuses a target that appeared meanwhile rather than merge into it.
+    await cp(from, to, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true })
     await rm(from, { recursive: true, force: true })
   }
 }

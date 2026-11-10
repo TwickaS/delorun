@@ -51,6 +51,7 @@ export {
   archiveOrigin,
   checkArchiveSignature,
   encodePublicKey,
+  keyFingerprint,
   parseSignature,
   signManifest,
   verifyArchiveSignature,
@@ -68,7 +69,10 @@ export {
   signatureLabel,
   type ArchiveImportReport,
   type ArchiveImporterConfig,
+  type ArchivePreview,
+  type ArchiveSigner,
   type ArchiveWorkspaceStore,
+  type PreviewWorkspace,
   type ImportedWorkspace,
   type StagedWorkspaceDocument,
 } from './importer.ts'
@@ -82,4 +86,4 @@ export {
   type SecretFinding,
   type SecretKind,
 } from './exporter.ts'
-export { ArchiveService, registerArchive, type ArchiveContext, type ArchiveHandle } from './service.ts'
+export { HOME_AUTH_DIRECTORY, homeKeyPath, loadHomeKey, type HomeKey } from './home-key.ts'

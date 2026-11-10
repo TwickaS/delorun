@@ -6,15 +6,22 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./drafts": "./src/drafts.ts"
   },
   "dependencies": {
+    "@deepseek-ai/node-addon-system": "workspace:~",
     "@delo/contract-archive-and-trash": "workspace:*",
     "@delo/contract-host-qualified-keys": "workspace:*",
     "@delo/logs": "workspace:*"
   },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-session-persistence": "workspace:*",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:*"
+  },
   "delo": {
-    "state": "shipped",
-    "unreached": "data-safety"
+    "state": "shipped"
   }
 }

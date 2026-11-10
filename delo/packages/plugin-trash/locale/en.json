@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Trash",
+    "description": "Deleting a chat or a workspace moves it to the trash for 30 days; the Trash section in Settings restores it or deletes it forever"
+  }
+}

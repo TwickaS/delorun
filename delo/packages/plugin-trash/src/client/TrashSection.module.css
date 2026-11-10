@@ -1,0 +1,175 @@
+/* Trash section: a header with Empty trash, then one card per item, laid out like the Plugins page's cards. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: var(--dsh-settings-section-max-width, 760px);
+  color: var(--dsw-alias-label-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--dsh-settings-section-title-size, 18px);
+  font-weight: var(--dsh-settings-section-title-weight, 500);
+  line-height: var(--dsh-settings-section-title-line-height, normal);
+  display: var(--dsh-settings-section-title-display, block);
+}
+
+.emptyAll {
+  flex: none;
+  margin-left: auto;
+}
+
+.status {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  padding: 12px 14px;
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.meta > span + span::before {
+  margin: 0 6px;
+  content: '\00b7';
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.danger {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.failure {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.failureText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.confirmText {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* Loading rows are sized like a card with a name and one meta line. */
+.skeletonRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  padding: 15px 14px;
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+.skeletonBar {
+  width: 40%;
+  height: 14px;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-bg-skeleton);
+}
+
+.skeletonBar + .skeletonBar {
+  width: 70%;
+  height: 12px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeletonBar {
+    animation: delo-trash-skeleton 2s cubic-bezier(0.36, 0, 0.64, 1) infinite;
+  }
+}
+
+@keyframes delo-trash-skeleton {
+  0% { opacity: 1; }
+  40% { opacity: 0.6; }
+  80%, 100% { opacity: 1; }
+}
+
+/* The row's actions drop under the text on a narrow page. */
+@media (max-width: 520px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
+    justify-content: flex-end;
+  }
+}

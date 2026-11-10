@@ -18,6 +18,7 @@ This package implements the trash half of [contract C8](../../docs/contracts/c08
 - [Purging](#purging)
 - [The clear-logs offer](#the-clear-logs-offer)
 - [Retention](#retention)
+- [Live chats](#live-chats)
 - [Wiring](#wiring)
 - [Tests](#tests)
 
@@ -27,7 +28,7 @@ One directory per item under the trash root, `<home>/trash`: the item's record `
 
 ## Deleting
 
-`TrashService.deleteChat` locates the chat's session directory under the session-persistence root — first through the project directory the chat's cwd derives, then across every project directory, because a session id is unique across the root — and moves it into the item, with every generation in it. `deleteWorkspace` moves every chat of a workspace into one item and records the workspace id that the workspace's browser entries name. A chat with nothing materialized still lands in the trash as a record without content, so its purge still reaches every store that names it.
+`TrashService.deleteChat` locates the chat's session directory under the session-persistence root — first through the project directory the chat's cwd derives, then across every project directory, because a session id is unique across the root — and moves it into the item, with every generation in it. `deleteWorkspace` moves every chat of a workspace into one item and records the workspace id that the workspace's browser entries name. A delete also records the chats the deleting home archived for it and, for a workspace, the registration it removed, so a restore can unarchive them and register the workspace again. A chat with nothing materialized still lands in the trash as a record without content, so its purge still reaches every store that names it.
 
 ## Restoring
 
@@ -54,10 +55,14 @@ A purge states that fragments of the purged content may remain in the operationa
 
 An item's `expiresAt` is its `deletedAt` plus 30 days. `enforceRetention` purges every item whose retention has ended, and `list` marks each item expired or not, so a screen can show what the trash keeps.
 
+## Live chats
+
+The JSONL session backend holds a kernel lock on `session.lock` inside a chat's session directory while a write handle is open, which is the whole time a home process keeps the chat live. A delete takes the same lock before it moves the directory and releases it afterwards ([`lease.ts`](src/lease.ts)). When another holder keeps the lock, the chat is recorded as `pending` and stays at its origin; `settle` moves every pending chat in once its lock is free, and a home runs it at start. A purge removes a pending chat where it is, and a restore leaves it there. Windows holds that lock as a named semaphore, so there a chat with a session directory always counts as held.
+
 ## Wiring
 
-The stores are the service's constructor config: `sessionsRoot`, `spillRoots`, `attachmentsRoot` and `logsHome`, plus two seams — `sessionIndex`, wired to session-query-sqlite's engine `forgetSessions`, and `draftStorage`, the studio connection's browser storage. A deployment that runs none of them passes no binding, and the report states only what the purge reached.
+The stores are the service's constructor config: `sessionsRoot`, `storagesRoot`, `spillRoots`, `attachmentsRoot` and `logsHome`, plus three seams: `sessionIndex`, the full-text index engine's `forgetSessions`; `projectionCache`, the live projection cache's `forget`, so a pending write-behind flush cannot write a purged chat's values back; and `draftStorage`, the browser storage of the connection performing the purge. A deployment that runs none of them passes no binding, and the report states only what the purge reached. [`@delo/plugin-trash`](../plugin-trash/README.md) wires the harness's services and `delorun trash` the home's files. The browser half is the separate module `@delo/trash/drafts`, which imports nothing that needs Node, so the studio clears a purged item's drafts from its own `localStorage`, under the host-qualified keys and under the unqualified key a page without a host id writes.
 
 ## Tests
 
-From the repository root, `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/trash` runs the specs: delete, restore, purge with its canary matrix, and the retention expiry.
+From the repository root, `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/trash` runs the specs: delete, restore, purge with its canary matrix, the retention expiry, the seams, and the delete, restore and settle of a chat against upstream's own JSONL session backend, live writer included.

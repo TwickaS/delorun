@@ -10,18 +10,27 @@
  * staging directory by one rename that never replaces an existing workspace.
  * An identifier that already exists is given a new one.
  *
+ * An import publishes only an archive whose signer the person has accepted: a
+ * signature that does not verify is refused, a key the home does not vouch for
+ * is refused until the person confirms it, and an unsigned archive is refused
+ * until the person accepts it unverified. {@link ArchiveImporter.inspect} runs
+ * every validation step and writes nothing, so a caller can show who signed an
+ * archive and what it holds before it asks. A publication that fails partway
+ * withdraws every workspace the import already published, so a failed import
+ * leaves no partial workspace or chat.
+ *
  * @module @delo/archive/importer
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, mkdir, rename } from 'node:fs/promises'
+import { lstat, mkdir, rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ArchiveManifest } from '@delo/contract-archive-and-trash'
+import type { ArchiveCustomisation, ArchiveManifest } from '@delo/contract-archive-and-trash'
 import { ArchiveError } from './errors.ts'
 import { customisationDiff, parseCustomisation, type CustomisationDiffRow } from './customisation.ts'
 import { checkContainerDeclarations, checkManifestDeclarations } from './limits.ts'
 import { CUSTOMISATION_PATH, MANIFEST_PATH, OBJECTS_DIRECTORY, parseManifest, SIGNATURE_PATH } from './manifest.ts'
 import { checkPathCollisions } from './paths.ts'
-import { checkArchiveSignature, parseSignature, type SignatureReason, type SignatureState } from './signature.ts'
+import { checkArchiveSignature, keyFingerprint, parseSignature, type SignatureCheck, type SignatureReason, type SignatureState } from './signature.ts'
 import { removeStaging, writeStaging, type StagedEntry } from './staging.ts'
 import { ZipArchive } from './zip-read.ts'
 
@@ -59,6 +68,13 @@ export interface ArchiveWorkspaceStore {
    * @param stagedDirectory - the absolute path of the staged directory, which the store's file system holds.
    */
   publish(id: string, stagedDirectory: string): Promise<void>
+
+  /**
+   * Remove one workspace this import published, when a later publication of
+   * the same import fails, so a failed import leaves no partial workspace.
+   * @param id - the identifier the import published the workspace under.
+   */
+  withdraw(id: string): Promise<void>
 }
 
 /** The workspace store of a home that keeps one directory per workspace under a root. */
@@ -94,8 +110,16 @@ export class DirectoryWorkspaceStore implements ArchiveWorkspaceStore {
    * @param stagedDirectory - the absolute path of the staged directory.
    */
   async publish(id: string, stagedDirectory: string): Promise<void> {
-    await mkdir(this.root, { recursive: true })
+    await mkdir(this.root, { recursive: true, mode: 0o700 })
     await rename(stagedDirectory, join(this.root, id))
+  }
+
+  /**
+   * Remove one workspace directory the same import published.
+   * @param id - the identifier the workspace was published under.
+   */
+  async withdraw(id: string): Promise<void> {
+    await rm(join(this.root, id), { recursive: true, force: true })
   }
 }
 
@@ -107,6 +131,54 @@ export interface ImportedWorkspace {
   readonly id: string
   /** The workspace's name. */
   readonly name: string
+}
+
+/** One workspace an archive holds, as a person sees it before the import. */
+export interface PreviewWorkspace {
+  /** The identifier the archive gives the workspace. */
+  readonly id: string
+  /** The workspace's name. */
+  readonly name: string
+  /** How many chats the workspace holds. */
+  readonly chats: number
+  /** How many attachments the workspace holds. */
+  readonly attachments: number
+}
+
+/** The key an archive names as its signer, as a person confirms it. */
+export interface ArchiveSigner {
+  /** The key identifier the manifest declares, which the archive itself asserts. */
+  readonly declaredKeyId: string
+  /** The base64url public key the manifest declares. */
+  readonly publicKey: string
+  /** The SHA-256 of the raw public key, base64url: what a person compares and confirms, because the archive cannot choose it. */
+  readonly fingerprint: string
+}
+
+/** What a validated archive holds and who signed it, which an import shows before it asks. */
+export interface ArchivePreview {
+  /** Whether the archive was signed by a key this home vouches for. */
+  readonly state: SignatureState
+  /** Why the archive is unverified; absent when it is verified. */
+  readonly reason?: SignatureReason | undefined
+  /** One sentence naming the source and the state. */
+  readonly label: string
+  /** The archive's source: its file name, or the origin's key identifier. */
+  readonly source: string
+  /** Whether the archive carries a signature. */
+  readonly signed: boolean
+  /** The key the archive names as its signer. */
+  readonly signer: ArchiveSigner
+  /** The Delo version that wrote the archive, as the archive states it. */
+  readonly createdBy: string
+  /** The time the export finished, as the archive states it. */
+  readonly exportedAt: string
+  /** The workspaces the archive holds, in its order. */
+  readonly workspaces: readonly PreviewWorkspace[]
+  /** The customisation diff: each row's kind and target. */
+  readonly customisation: readonly CustomisationDiffRow[]
+  /** The uncompressed bytes the manifest's entries add up to. */
+  readonly totalBytes: number
 }
 
 /** What an import did. */
@@ -137,8 +209,19 @@ export interface ArchiveImporterConfig {
   readonly confirmedHomeKeyId?: string | undefined
   /** The base64url key the person confirmed by its fingerprint at import: the confirmation binds this key, and the identifier alone vouches for nothing. */
   readonly confirmedPublicKey?: string | undefined
+  /** Set once the person has seen that the archive carries no signature and chosen to import it unverified. */
+  readonly acceptUnsigned?: boolean | undefined
   /** The identifier generator for a workspace whose archive identifier is taken; a UUID by default. */
   readonly newId?: (() => string) | undefined
+}
+
+/** One archive that passed every validation step, held in memory. */
+interface ValidatedArchive {
+  readonly manifest: ArchiveManifest
+  readonly contents: ReadonlyMap<string, Uint8Array>
+  readonly customisation: ArchiveCustomisation
+  readonly signed: boolean
+  readonly check: SignatureCheck
 }
 
 /**
@@ -171,13 +254,72 @@ export class ArchiveImporter {
   }
 
   /**
+   * Validate one archive and describe it, writing nothing: the signer, the
+   * signature state, the workspaces and the customisation a person sees before
+   * an import asks.
+   * @param bytes - the whole archive.
+   * @param options - `source` names the archive by its file name; the origin's key identifier is used when it is absent.
+   * @returns the preview.
+   * @throws ArchiveError with the code of the first refusal the archive earns, `ARCHIVE_SIGNATURE_INVALID` included.
+   */
+  async inspect(bytes: Uint8Array, options: { readonly source?: string } = {}): Promise<ArchivePreview> {
+    const validated = this.validate(bytes)
+    const { manifest, check } = validated
+    const source = options.source ?? manifest.origin.homeKeyId
+    return {
+      state: check.state,
+      reason: check.reason,
+      label: signatureLabel(check.state, check.reason, source),
+      source,
+      signed: validated.signed,
+      signer: {
+        declaredKeyId: manifest.origin.homeKeyId,
+        publicKey: manifest.origin.publicKey,
+        fingerprint: keyFingerprint(manifest.origin.publicKey),
+      },
+      createdBy: manifest.createdBy,
+      exportedAt: manifest.exportedAt,
+      workspaces: manifest.workspaces.map(workspace => ({
+        id: workspace.id,
+        name: workspace.name,
+        chats: workspace.chats.length,
+        attachments: workspace.attachments.length,
+      })),
+      customisation: customisationDiff(validated.customisation),
+      totalBytes: manifest.entries.reduce((total, entry) => total + entry.size, 0),
+    }
+  }
+
+  /**
    * Validate one archive and publish its workspaces.
    * @param bytes - the whole archive.
    * @param options - `source` names the archive in the report, by its file name; the origin's key identifier is used when it is absent.
    * @returns the import report.
-   * @throws ArchiveError with the code of the first refusal the archive earns, after which nothing is written.
+   * @throws ArchiveError with the code of the first refusal the archive earns, after which nothing is written; `ARCHIVE_SIGNER_UNTRUSTED` when the signing key is neither vouched for nor confirmed, or the archive is unsigned and the person did not accept it unverified.
    */
   async import(bytes: Uint8Array, options: { readonly source?: string } = {}): Promise<ArchiveImportReport> {
+    const validated = this.validate(bytes)
+    const { manifest, check } = validated
+    this.requireAcceptedSigner(check)
+    const source = options.source ?? manifest.origin.homeKeyId
+    const workspaces = await this.publish(manifest, validated.contents)
+    return {
+      state: check.state,
+      reason: check.reason,
+      label: signatureLabel(check.state, check.reason, source),
+      source,
+      workspaces,
+      customisation: customisationDiff(validated.customisation),
+    }
+  }
+
+  /**
+   * Every validation step, in the contract's order, with nothing written.
+   * @param bytes - the whole archive.
+   * @returns the validated archive.
+   * @throws ArchiveError with the code of the first refusal, and `ARCHIVE_SIGNATURE_INVALID` when a signature is present and does not verify.
+   */
+  private validate(bytes: Uint8Array): ValidatedArchive {
     const archive = ZipArchive.open(bytes)
     // The declarations come before the first read: every read allocates what its central-directory record declares, so a bomb is refused on its sizes rather than inflated into memory and refused afterwards.
     checkContainerDeclarations(archive)
@@ -198,15 +340,23 @@ export class ArchiveImporter {
       confirmedHomeKeyId: this.config.confirmedHomeKeyId,
       confirmedPublicKey: this.config.confirmedPublicKey,
     })
-    const source = options.source ?? manifest.origin.homeKeyId
-    const workspaces = await this.publish(manifest, contents)
-    return {
-      state: check.state,
-      reason: check.reason,
-      label: signatureLabel(check.state, check.reason, source),
-      source,
-      workspaces,
-      customisation: customisationDiff(customisation),
+    if (check.reason === 'signature-invalid') {
+      throw new ArchiveError('ARCHIVE_SIGNATURE_INVALID', 'the archive carries a signature that does not verify over its manifest')
+    }
+    return { manifest, contents, customisation, signed: signature !== undefined, check }
+  }
+
+  /**
+   * Refuse an archive whose signer the person has not accepted.
+   * @param check - the signature check of the validated archive.
+   * @throws ArchiveError `ARCHIVE_SIGNER_UNTRUSTED` for a key neither vouched for nor confirmed, and for an unsigned archive not accepted unverified.
+   */
+  private requireAcceptedSigner(check: SignatureCheck): void {
+    if (check.reason === 'key-not-trusted') {
+      throw new ArchiveError('ARCHIVE_SIGNER_UNTRUSTED', 'the archive is signed by a key this home does not trust, and the person has not confirmed it')
+    }
+    if (check.reason === 'absent' && this.config.acceptUnsigned !== true) {
+      throw new ArchiveError('ARCHIVE_SIGNER_UNTRUSTED', 'the archive carries no signature, and the person has not accepted it unverified')
     }
   }
 
@@ -266,6 +416,8 @@ export class ArchiveImporter {
     if (!listed.has(CUSTOMISATION_PATH)) {
       throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the manifest lists no ${CUSTOMISATION_PATH} entry, and every archive carries one`)
     }
+    // Defence in depth: parseManifest already admits only these paths, so with every entry listed this never fires.
+    /* v8 ignore next 5 -- unreachable while parseManifest restricts listed paths; kept so a looser manifest reader cannot admit a root entry */
     for (const name of archive.names()) {
       if (name !== MANIFEST_PATH && name !== SIGNATURE_PATH && name !== CUSTOMISATION_PATH && !name.startsWith(`${OBJECTS_DIRECTORY}/`)) {
         throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the archive holds ${JSON.stringify(name)} at its root, and the format allows no other entry there`)
@@ -277,7 +429,8 @@ export class ArchiveImporter {
    * Stage every workspace and publish each one with one rename. The staging
    * root is filled and published inside one try, and it is removed whatever
    * the staging write or a publication did, so a refusal that lands after the
-   * first staged file leaves no chat content on disk.
+   * first staged file leaves no chat content on disk. A publication that fails
+   * withdraws every workspace this import already published.
    * @param manifest - the validated manifest.
    * @param contents - every validated document and object, by path.
    * @returns the published workspaces, in the archive's order.
@@ -324,6 +477,9 @@ export class ArchiveImporter {
         }
         published.push({ archiveId: workspace.id, id, name: workspace.name })
       }
+    } catch (error: unknown) {
+      for (const workspace of published.reverse()) await this.config.store.withdraw(workspace.id)
+      throw error
     } finally {
       await removeStaging(root)
     }

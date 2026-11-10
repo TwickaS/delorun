@@ -354,6 +354,20 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
     ],
   }
+  /** The trash row in the parity form the overlay's fourth patch restates it, with the home paths kept as expressions. */
+  const TRASH_INSERT = {
+    insert: [{
+      id: 'delo-trash',
+      name: '@delo/plugin-trash',
+      config: {
+        trashRoot: { __jsExpr: 'dshHomePath(\'trash\')' },
+        sessionsRoot: { __jsExpr: 'dshHomePath(\'sessions\')' },
+        storagesRoot: { __jsExpr: 'dshHomePath(\'storages\')' },
+        logsHome: { __jsExpr: 'dshHomePath()' },
+      },
+      disabled: true,
+    }],
+  }
 
   it('restates the bundle\'s patch in its parity form', () => {
     const { localBundle } = readOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
@@ -370,6 +384,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
           { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
         ],
       },
+      TRASH_INSERT,
     ])
   })
 
@@ -378,13 +393,15 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
     expect(localBundleErrors(localBundle.slice(0, 1), bundle)).toEqual([
       'parity overlay: @delo/bundle-local patch 1 is nothing, not its parity form {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}',
       `parity overlay: @delo/bundle-local patch 2 is nothing, not its parity form ${JSON.stringify(CONSENT_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 3 is nothing, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
     ])
     // The session-log row's parity form is upstream's composition, so restating it overrides the replay's root configuration.
     expect(localBundleErrors([{ id: 'session-log-deepseek', config: { enabled: false } }, ...localBundle], bundle)).toEqual([
       'parity overlay: @delo/bundle-local patch 0 is {"id":"session-log-deepseek","config":{"enabled":false}}, not its parity form {"id":"product-analytics","config":{"enabled":false,"appVersion":{"__jsExpr":"process.env.DSH_CLIENT_VERSION"}}}',
       'parity overlay: @delo/bundle-local patch 1 is {"id":"product-analytics","config":{"enabled":false,"appVersion":{"__jsExpr":"process.env.DSH_CLIENT_VERSION"}}}, not its parity form {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}',
       'parity overlay: @delo/bundle-local patch 2 is {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}, not its parity form ' + JSON.stringify(CONSENT_INSERT),
-      `parity overlay: @delo/bundle-local patch 3 is ${JSON.stringify(CONSENT_INSERT)}, not its parity form nothing`,
+      `parity overlay: @delo/bundle-local patch 3 is ${JSON.stringify(CONSENT_INSERT)}, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 4 is ${JSON.stringify(TRASH_INSERT)}, not its parity form nothing`,
     ])
     expect(localBundleErrors(localBundle, `${bundle}\n- id: web-search-deepseek\n  config: {}\n`)).toEqual([
       `${LOCAL_BUNDLE_PATCH_PATH}: @delo/bundle-local writes row "web-search-deepseek", which LOCAL_ROWS does not list`,

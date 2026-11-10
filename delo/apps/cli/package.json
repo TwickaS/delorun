@@ -17,7 +17,9 @@
     "@deepseek-ai/dsh-native-command": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "@deepseek-ai/dsh-sandbox-local": "workspace:*",
+    "@delo/archive": "workspace:*",
     "@delo/bundle-local": "workspace:*",
+    "@delo/contract-archive-and-trash": "workspace:*",
     "@delo/contract-home-layout": "workspace:*",
     "@delo/contract-home-process": "workspace:*",
     "@delo/contract-operational-logs": "workspace:*",
@@ -30,6 +32,7 @@
     "@delo/logs": "workspace:*",
     "@delo/profile-safety": "workspace:*",
     "@delo/supervisor": "workspace:*",
+    "@delo/trash": "workspace:*",
     "semver": "^7.8.5",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"

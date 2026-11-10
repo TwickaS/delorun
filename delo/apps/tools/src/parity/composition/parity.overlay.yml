@@ -90,3 +90,13 @@
       config:
         enabled: true
       disabled: true
+
+- insert:
+    - id: delo-trash
+      name: '@delo/plugin-trash'
+      config:
+        trashRoot: !!js dshHomePath('trash')
+        sessionsRoot: !!js dshHomePath('sessions')
+        storagesRoot: !!js dshHomePath('storages')
+        logsHome: !!js dshHomePath()
+      disabled: true

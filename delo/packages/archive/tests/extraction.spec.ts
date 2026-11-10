@@ -72,7 +72,7 @@ async function importRefusal(bytes: Uint8Array): Promise<{ readonly refusal: Arc
   forgetScratch()
   const tree = makeScratch()
   scratch = tree
-  const importer = new ArchiveImporter({ stagingParent: tree.stagingParent, store: new RecordingStore() })
+  const importer = new ArchiveImporter({ stagingParent: tree.stagingParent, store: new RecordingStore(), acceptUnsigned: true })
   const refusal = await refusalOf(() => importer.import(bytes))
   return { refusal, staged: readdirSync(tree.stagingParent) }
 }
@@ -370,7 +370,7 @@ describe('the staging directory of an extraction', () => {
       }],
     })
 
-    const report = await new ArchiveImporter({ stagingParent: tree.stagingParent, store }).import(bytes, { source: 'archive.zip' })
+    const report = await new ArchiveImporter({ stagingParent: tree.stagingParent, store, acceptUnsigned: true }).import(bytes, { source: 'archive.zip' })
 
     expect(report.workspaces).toEqual([{ archiveId: 'ws-fixture', id: 'ws-fixture', name: 'Project' }])
     expect(report.source).toBe('archive.zip')
@@ -390,7 +390,7 @@ describe('the staging directory of an extraction', () => {
     const bytes = buildArchive({ workspaces: [{ id: 'ws-taken', name: 'Project', chats: [], attachments: [], objects: [] }] })
     const store = new RecordingStore(['ws-taken'])
 
-    const report = await new ArchiveImporter({ stagingParent: tree.stagingParent, store, newId: () => 'ws-fresh' }).import(bytes)
+    const report = await new ArchiveImporter({ stagingParent: tree.stagingParent, store, newId: () => 'ws-fresh', acceptUnsigned: true }).import(bytes)
 
     expect(report.workspaces).toEqual([{ archiveId: 'ws-taken', id: 'ws-fresh', name: 'Project' }])
     expect(store.published.map(workspace => workspace.id)).toEqual(['ws-fresh'])
@@ -401,7 +401,7 @@ describe('the staging directory of an extraction', () => {
     const bytes = buildArchive({ workspaces: [{ id: 'ws-taken', name: 'Project', chats: [], attachments: [], objects: [] }] })
     const store = new RecordingStore(['ws-taken', 'ws-fresh'])
 
-    const refusal = await refusalOf(() => new ArchiveImporter({ stagingParent: tree.stagingParent, store, newId: () => 'ws-fresh' }).import(bytes))
+    const refusal = await refusalOf(() => new ArchiveImporter({ stagingParent: tree.stagingParent, store, newId: () => 'ws-fresh', acceptUnsigned: true }).import(bytes))
 
     expect(refusal.code).toBe('ARCHIVE_STAGING_FAILED')
     expect(store.published).toEqual([])

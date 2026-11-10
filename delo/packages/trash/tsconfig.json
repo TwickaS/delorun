@@ -8,5 +8,22 @@
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["src", "tests"]
+  "include": [
+    "src",
+    "tests"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/session/session-persistence"
+    },
+    {
+      "path": "../../../packages/session/session-persistence-jsonl"
+    }
+  ]
 }

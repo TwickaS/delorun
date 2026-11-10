@@ -113,3 +113,16 @@
       name: '@delo/plugin-fetch-guard'
       config:
         enabled: true
+
+# Contract C8's trash: deleting a chat or a workspace in the studio moves it to
+# the trash under the home, the Trash section in Settings restores it or
+# deletes it forever, and each start deletes what is older than 30 days. The
+# paths are the home's own stores, which the purge reaches.
+- insert:
+    - id: delo-trash
+      name: '@delo/plugin-trash'
+      config:
+        trashRoot: !!js dshHomePath('trash')
+        sessionsRoot: !!js dshHomePath('sessions')
+        storagesRoot: !!js dshHomePath('storages')
+        logsHome: !!js dshHomePath()

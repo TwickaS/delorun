@@ -12,7 +12,6 @@
 import { lstat, readdir, rm, stat } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { PERSISTED_KEYS } from '@delo/contract-host-qualified-keys'
 import { attachmentObjectPath, encodeSegment, isSessionGenerationFilename, spillSessionDirectoryPath } from './paths.ts'
 import { TrashError } from './store.ts'
 
@@ -61,17 +60,6 @@ export interface SessionIndexPurge {
    * @param ids - the sessions whose rows the purge removes.
    */
   forgetSessions(ids: readonly string[]): Promise<void>
-}
-
-/** The browser draft storage of the studio connection performing the purge. */
-export interface DraftStorage {
-  /** Every stored key. */
-  keys(): readonly string[]
-  /**
-   * Remove one stored key.
-   * @param key - the key to remove.
-   */
-  remove(key: string): void
 }
 
 /**
@@ -197,43 +185,4 @@ export async function removeSpill(spillRoots: readonly string[], sessionIds: rea
       await rm(spillSessionDirectoryPath(root, sessionId), { recursive: true, force: true })
     }
   }
-}
-
-/**
- * Remove the item's draft entries from the browser's storage, under every host
- * scope: a host-qualified key of a persisted entry joins the persist name, the
- * 36-character host id, and — for a session- or store-scoped entry — the
- * upstream id exactly as the home issued it. Every key that names one of the
- * item's ids after its host id goes, whichever connection wrote it.
- * @param storage - the browser draft storage.
- * @param sessionIds - the item's chat session ids.
- * @param workspaceIds - the item's workspace ids.
- * @returns the keys removed.
- */
-export function removeDraftEntries(
-  storage: DraftStorage,
-  sessionIds: readonly string[],
-  workspaceIds: readonly string[] = [],
-): string[] {
-  const sessions = new Set(sessionIds)
-  const workspaces = new Set(workspaceIds)
-  const removed: string[] = []
-  for (const entry of PERSISTED_KEYS) {
-    if (entry.scope !== 'host-and-session' && entry.scope !== 'host-and-store-scope') continue
-    const targets = entry.scope === 'host-and-session' ? sessions : workspaces
-    if (targets.size === 0) continue
-    const prefix = `${entry.name}.`
-    for (const key of storage.keys()) {
-      if (!key.startsWith(prefix)) continue
-      const scope = key.slice(prefix.length)
-      // The host id has a fixed length, so the reader splits after it and the
-      // upstream id that follows is never parsed.
-      if (scope.length <= 36 + 1 || scope[36] !== '.') continue
-      const upstreamId = scope.slice(36 + 1)
-      if (!targets.has(upstreamId)) continue
-      storage.remove(key)
-      removed.push(key)
-    }
-  }
-  return removed
 }

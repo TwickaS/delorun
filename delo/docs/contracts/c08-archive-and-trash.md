@@ -82,9 +82,16 @@ The customisation applies only after the person has seen its diff. The diff scre
 <a id="signature"></a>
 ### Signature
 
-`signature.json` is a JSON object with `algorithm` `ed25519`, the `homeKeyId` of the signing key, and the `signature` in base64url. The signature covers the exact bytes of `manifest.json`. The signing key is the exporting home's key. An archive without `signature.json`, whose signature fails, or whose key the importing home does not vouch for is imported in the unverified state. The importing home vouches for a key that it already holds as a trusted home key, or that the person confirms by its fingerprint at import.
+`signature.json` is a JSON object with `algorithm` `ed25519`, the `homeKeyId` of the signing key, and the `signature` in base64url. The signature covers the exact bytes of `manifest.json`. The signing key is the exporting home's key, the home key of [C5](c05-device-approval.md) at `secrets/home-auth/home-key.pem`, which the home's first export creates when no earlier component has. A key's fingerprint is the SHA-256 of its raw 32-byte public key in base64url, the home key id of C5; a person compares and confirms the fingerprint, because the archive chooses its declared `homeKeyId` itself.
 
-Verification happens before anything is written. The unverified state is shown on the diff screen and in the report that `delorun import` prints.
+An import goes on only with a signer the person has accepted:
+
+- A signature that does not verify, or that names another key than the manifest's origin, is refused with `ARCHIVE_SIGNATURE_INVALID`.
+- A signature by a key the importing home vouches for is the verified state. The home vouches for its own home key, and for a key the person confirms at import by typing its fingerprint.
+- A signature by any other key is refused with `ARCHIVE_SIGNER_UNTRUSTED` until the person confirms the key.
+- An archive without `signature.json` is refused with `ARCHIVE_SIGNER_UNTRUSTED` until the person accepts it in the unverified state.
+
+Verification happens before anything is written. `delorun import` prints the signer's fingerprint, whether the home trusts it, and what the archive holds before it asks, and its report states the verified or unverified state.
 
 <a id="limits"></a>
 ### Limits
@@ -103,9 +110,9 @@ The check is made on the sizes that the central directory and the entry headers 
 <a id="import-and-export"></a>
 ### Import and export
 
-Export streams each object into the archive and records its SHA-256 and size in the manifest. The export warns the person about secrets that it finds in chat history, and the person decides whether to continue.
+`delorun export <chat-or-workspace> --out <file>` writes one chat, or one workspace with its chats, from the home's stores: each chat's newest session generation, and the attachments a chat names by its content digest that the home's attachment store holds. Export writes each object into the archive and records its SHA-256 and size in the manifest. The export warns the person about secrets that it finds in chat history, naming each finding by its kind and chat and never by its value, and writes nothing until the person decides to continue. The archive file is created new at mode 0600 and never replaces an existing file.
 
-Import reads the archive into a staging directory under the home directory, on the same file system as the workspace store. It validates the manifest, the checksums, the paths, the entries, the limits, the customisation and the signature, in that order. Only a fully validated archive is published. Each new workspace is published by one atomic rename from the staging directory into the workspace store. An import never overwrites an existing workspace or chat. When an identifier already exists, the import assigns a new one.
+`delorun import <file>` refuses a file larger than the total limit before it reads it. Import then checks the sizes the central directory declares before it reads any entry, and validates the manifest, the checksums, the paths, the entries, the limits, the customisation and the signature, in that order. Only a fully validated archive, whose signer the person accepted, is written: it is staged under `archive/staging/` in the home, and each new workspace is published by one atomic rename into `archive/imported/`, on the same file system. A publication that fails partway removes every workspace the same import already published, so a failed import leaves no partial workspace or chat. An import never overwrites an existing workspace or chat. When an identifier already exists, the import assigns a new one. Imported chats stay in `archive/imported/`, out of every model request; the customisation rows are listed and not applied.
 
 The import of a stock DeepSeek Harness home copies its plugins, settings and sessions into a new Delo home, and it never modifies the stock home.
 
@@ -130,9 +137,10 @@ Each refusal carries one code from this table. A refusal writes nothing.
 | `ARCHIVE_EXPRESSION_REFUSED` | A row contains a `!!js` expression or an `insert` row. |
 | `ARCHIVE_DENIED_ROW` | A row is of a denied kind. |
 | `ARCHIVE_SIGNATURE_INVALID` | `signature.json` is present and its signature does not verify. |
+| `ARCHIVE_SIGNER_UNTRUSTED` | The signing key is one the importing home does not vouch for and the person did not confirm, or the archive is unsigned and the person did not accept it unverified. |
 | `ARCHIVE_STAGING_FAILED` | The staging directory cannot be written, or the atomic rename fails. |
 
-An absent signature is not an error. It is the unverified state.
+An absent signature that the person accepted is not an error. It is the unverified state.
 
 <a id="untrusted-imported-chats"></a>
 ### Untrusted imported chats
@@ -142,7 +150,7 @@ Every imported chat is untrusted until the person marks it trusted. An untrusted
 <a id="trash-and-purge"></a>
 ### Trash and purge
 
-Deleting a chat or a workspace moves it to trash. Trash keeps each item for 30 days. The person can restore an item from trash before its retention ends. At the end of its retention, the item is purged. Trash keeps the secrets in the item until it is purged.
+Deleting a chat or a workspace moves it to trash. In the studio, the "Move to trash" action of a chat's or a workspace's menu archives its chats with their running work stopped, moves each chat's session directory into `trash/` under the home, and, for a workspace, records and removes its registration. A chat whose session lock a live writer holds stays at its origin, archived and hidden, until the next start moves it in. The Trash section in Settings lists every item with the days it has left; `delorun trash list` prints the same. Trash keeps each item for 30 days. The person can restore an item from trash before its retention ends: its chats return to their origin, a workspace is registered again with its chats, and every chat the delete archived is unarchived. Each start of the home process purges every item whose retention has ended. Trash keeps the secrets in the item until it is purged.
 
 A purge removes the item from each store that holds its content.
 
@@ -151,17 +159,17 @@ A purge removes the item from each store that holds its content.
 - The projection cache's stored document for each chat in the item, which holds the cached title, first message, plan, goal and todos of that chat, and the copy the cache moved aside when it discarded an invalid record.
 - The attachments of the item.
 - The spill files of the item in the `spill` storage.
-- The draft entries of the item in the browser that performs the purge, under every host scope, as the host-qualified keys contract sets.
+- The draft entries of the item in the browser that performs the purge, under every host scope, as the host-qualified keys contract sets, and under the unqualified key a page without a host id writes. A purge from `delorun trash` or at the end of the retention is performed by no browser, so it reaches no draft.
 
 Fragments of purged content may remain in the operational logs until those logs are removed. Under the operational-log contract, each operational-log record is kept for at most 14 days. A purge states this residue. It offers to clear the affected log files, current and rotated, at once. When the person accepts, the purge deletes them.
 
 <a id="consumers"></a>
 ## Consumers
 
-- `delo/packages/archive/`: the export, the import and the validation, with the stock-home import under `src/dsh-import/`.
+- `delo/packages/archive/`: the export, the import, the validation and the home key's loading.
 - `delo/packages/trash/`: trash, restore and purge, and the trash retention.
-- The studio's trash screen and its draft entries under the host-qualified keys contract.
-- `delorun import`, which prints the verification report.
+- `delo/packages/plugin-trash/`: the studio's "Move to trash" actions, the Trash section and its draft entries under the host-qualified keys contract, and the purge at start; `@delo/bundle-local` mounts it in every CLI profile.
+- `delorun trash`, `delorun export` and `delorun import` (`delo/apps/cli/`), which print the listing, write the signed archive and print the verification report.
 - `delo/packages/contract-archive-and-trash/`: the manifest, row kinds, error codes, limits and retention constants.
 
 <a id="compatibility"></a>
@@ -183,13 +191,14 @@ Requirements:
 - Nothing is written until the whole archive validates in staging.
 - An archive never evaluates a `!!js` expression, and it never writes a row that contains one.
 - A row of a denied kind is refused, so an archive cannot change a sandbox mode, a credential reference, a reach option or an egress limit.
-- An archive whose signature does not verify, or that carries none, imports only in the unverified state, and the diff screen and the report both show that state.
+- An archive whose signature does not verify is refused. An archive signed by a key the home does not trust is refused until the person confirms the key's fingerprint, and one that carries no signature until the person accepts it in the unverified state, which the report shows.
 - Imported plugin declarations are listed and never installed automatically.
 - Imported presets cannot raise a permission above the person's own presets.
 - Imported skills start disabled, and imported chats start untrusted.
 - An import never overwrites a workspace or chat.
 - Trash keeps secrets until purged, and a purge removes the content from every store listed in this contract. A symbolic link planted at a store's root, or at the directory that holds a versioned root, is refused rather than followed, so a purge deletes nothing outside the store it names.
-- Export warns about secrets in chat history before it writes the archive.
+- Export warns about secrets in chat history before it writes the archive, and writes nothing until the person confirms.
+- A delete never moves a chat's session directory while a live writer holds its session lock.
 
 Denial tests:
 
@@ -199,7 +208,12 @@ Denial tests:
 | `archive with an insert row is refused` | A customisation row of the `insert` form is refused with `ARCHIVE_EXPRESSION_REFUSED`. |
 | `archive that sets a sandbox mode, credential reference, reach row or egress is refused` | Each such row is refused with `ARCHIVE_DENIED_ROW`, and no row is applied. |
 | `traversal, link, size, ratio, case, truncation, version and canary fixtures cause no write` | Each fixture is refused with its error code, and the workspace store is unchanged. |
-| `unverified archive imports only with the unverified label` | An archive with no signature, or with a failing signature, shows the unverified label on the diff screen and in the report. |
+| `unverified archive imports only with the unverified label` | An archive with no signature imports only after the person accepts it, and shows the unverified label in the report. |
+| `a signature that does not verify is refused` | An archive whose manifest changed after signing, or whose signature is another key's, is refused with `ARCHIVE_SIGNATURE_INVALID`, and nothing is written. |
+| `an unknown signer is refused until its fingerprint is typed` | An archive signed by a key the home does not trust is refused with `ARCHIVE_SIGNER_UNTRUSTED` until the person types the key's fingerprint, and nothing is written. |
+| `an import that fails partway leaves no workspace` | A publication that fails after an earlier workspace of the same import was published removes that workspace. |
+| `a deleted chat leaves the session list until it is restored` | A chat in trash is absent from upstream's session list and cannot be opened; a restore returns every event. |
+| `a chat a live writer holds stays pending` | A chat whose session lock is held stays at its origin until the lock is released and a start moves it into trash. |
 | `imported plugin declarations are listed and never installed` | After import, no plugin declared by the archive is installed. |
 | `imported presets do not raise permissions` | An imported preset cannot grant a permission above the person's own presets. |
 | `imported skills start disabled` | Each imported skill is disabled after import. |

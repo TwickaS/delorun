@@ -179,6 +179,8 @@ export interface PublishedWorkspace {
 export class RecordingStore implements ArchiveWorkspaceStore {
   /** Every workspace the imports published, in order. */
   readonly published: PublishedWorkspace[] = []
+  /** Every workspace a failed import withdrew, in order. */
+  readonly withdrawn: string[] = []
   private readonly taken: Set<string>
 
   /**
@@ -209,6 +211,15 @@ export class RecordingStore implements ArchiveWorkspaceStore {
       files: walk(stagedDirectory),
     })
     this.taken.add(id)
+  }
+
+  /**
+   * Forget one workspace the store recorded as published.
+   * @param id - the identifier it was published under.
+   */
+  async withdraw(id: string): Promise<void> {
+    this.withdrawn.push(id)
+    this.taken.delete(id)
   }
 }
 

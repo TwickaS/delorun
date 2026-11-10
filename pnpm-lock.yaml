@@ -1260,9 +1260,15 @@ importers:
       '@deepseek-ai/dsh-sandbox-local':
         specifier: workspace:*
         version: link:../../../packages/sandbox/sandbox-local
+      '@delo/archive':
+        specifier: workspace:*
+        version: link:../../packages/archive
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local
+      '@delo/contract-archive-and-trash':
+        specifier: workspace:*
+        version: link:../../packages/contract-archive-and-trash
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout
@@ -1299,6 +1305,9 @@ importers:
       '@delo/supervisor':
         specifier: workspace:*
         version: link:../../packages/supervisor
+      '@delo/trash':
+        specifier: workspace:*
+        version: link:../../packages/trash
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -1517,6 +1526,15 @@ importers:
       '@delo/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
+      '@delo/contract-device-approval':
+        specifier: workspace:*
+        version: link:../contract-device-approval
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
 
   delo/packages/bundle-local:
     dependencies:
@@ -1541,6 +1559,9 @@ importers:
       '@delo/plugin-schedule-consent':
         specifier: workspace:*
         version: link:../plugin-schedule-consent
+      '@delo/plugin-trash':
+        specifier: workspace:*
+        version: link:../plugin-trash
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -2118,6 +2139,82 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/core/session
 
+  delo/packages/plugin-trash:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-archive-and-trash':
+        specifier: workspace:*
+        version: link:../contract-archive-and-trash
+      '@delo/trash':
+        specifier: workspace:*
+        version: link:../trash
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-store':
+        specifier: workspace:*
+        version: link:../../../packages/client/store
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-context-menu':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-context-menu
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-layout
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-slots
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-workspace
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-persistence-jsonl':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-persistence-jsonl
+      '@deepseek-ai/dsh-session-projection-cache':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-projection-cache
+      '@deepseek-ai/dsh-session-query':
+        specifier: workspace:*
+        version: link:../../../packages/session-query/session-query
+      '@deepseek-ai/dsh-spill':
+        specifier: workspace:*
+        version: link:../../../packages/spill/spill
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
   delo/packages/plugin-workspaces:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -2279,6 +2376,9 @@ importers:
 
   delo/packages/trash:
     dependencies:
+      '@deepseek-ai/node-addon-system':
+        specifier: workspace:~
+        version: link:../../../native/system/packages/entry
       '@delo/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
@@ -2288,6 +2388,19 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../logs
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-persistence':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-persistence
+      '@deepseek-ai/dsh-session-persistence-jsonl':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-persistence-jsonl
 
   delo/packages/update:
     dependencies:

@@ -9,10 +9,12 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@delo/contract-archive-and-trash": "workspace:*"
+    "@delo/contract-archive-and-trash": "workspace:*",
+    "@delo/contract-device-approval": "workspace:*",
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/home": "workspace:*"
   },
   "delo": {
-    "state": "shipped",
-    "unreached": "data-safety"
+    "state": "shipped"
   }
 }

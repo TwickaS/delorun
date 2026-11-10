@@ -70,7 +70,7 @@ async function refusalOf(run: () => Promise<unknown>): Promise<ArchiveError> {
  */
 async function importRefusal(
   bytes: Uint8Array,
-  config: Omit<ArchiveImporterConfig, 'stagingParent'> = { store: new RecordingStore() },
+  config: Omit<ArchiveImporterConfig, 'stagingParent'> = { store: new RecordingStore(), acceptUnsigned: true },
 ): Promise<{ readonly refusal: ArchiveError, readonly staged: readonly string[] }> {
   forgetScratch()
   const tree = makeScratch()
@@ -142,15 +142,16 @@ describe('the signature state of an import', () => {
       sign: { homeKeyId: HOME_KEY_ID, privateKey: impostor.privateKey },
     })
 
-    const report = await importInto(bytes, { store: new RecordingStore(), confirmedHomeKeyId: HOME_KEY_ID })
+    const store = new RecordingStore()
+    const { refusal, staged } = await importRefusal(bytes, { store, confirmedHomeKeyId: HOME_KEY_ID })
 
-    expect(report.state).toBe('unverified')
-    expect(report.reason).toBe('key-not-trusted')
-    expect(report.label).toContain('not one this home trusts')
+    expect(refusal.code).toBe('ARCHIVE_SIGNER_UNTRUSTED')
+    expect(staged).toEqual([])
+    expect(store.published).toEqual([])
   })
 
-  it('shows an unsigned archive as unverified with the reason the report names', async () => {
-    const report = await importInto(buildArchive(), { store: new RecordingStore() })
+  it('shows an unsigned archive the person accepted as unverified with the reason the report names', async () => {
+    const report = await importInto(buildArchive(), { store: new RecordingStore(), acceptUnsigned: true })
 
     expect(report.state).toBe('unverified')
     expect(report.reason).toBe('absent')
@@ -240,7 +241,12 @@ describe('the staging root of a refusal', () => {
     })
 
     const { refusal, staged } = await importRefusal(bytes, {
-      store: { exists: async () => false, publish: async () => { throw Object.assign(new Error('the store refused'), { code: 'EACCES' }) } },
+      store: {
+        exists: async () => false,
+        publish: async () => { throw Object.assign(new Error('the store refused'), { code: 'EACCES' }) },
+        withdraw: async () => { throw new Error('nothing was published, so nothing is withdrawn') },
+      },
+      acceptUnsigned: true,
     })
 
     expect(refusal.code).toBe('ARCHIVE_STAGING_FAILED')

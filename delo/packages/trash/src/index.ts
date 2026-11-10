@@ -22,24 +22,26 @@ export {
   type DeleteChatInput,
   type DeleteWorkspaceInput,
   type TrashedChat,
+  type TrashedRegistration,
   type TrashItem,
   type TrashItemKind,
 } from './store.ts'
 export {
   PROJECTION_CACHE_UNIT,
   removeAttachments,
-  removeDraftEntries,
   removeProjectionCache,
   removeSessionDirectory,
   removeSpill,
   removeStrayGenerations,
-  type DraftStorage,
   type SessionIndexPurge,
 } from './effects.ts'
+export { removeDraftEntries, type DraftStorage } from './drafts.ts'
+export { SESSION_LOCK_FILENAME, takeSessionLock, type HeldSessionLock } from './lease.ts'
 export {
   PURGE_RESIDUE_NOTICE,
   TrashService,
   type PurgeReport,
+  type ProjectionCachePurge,
   type PurgeStore,
   type TrashServiceConfig,
   type TrashStores,

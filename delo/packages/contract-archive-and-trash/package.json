@@ -9,7 +9,6 @@
     ".": "./src/index.ts"
   },
   "delo": {
-    "state": "shipped",
-    "unreached": "data-safety"
+    "state": "shipped"
   }
 }

@@ -1,0 +1,39 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
+  },
+  "files": [
+    "src/index.ts",
+    "src/operations.ts",
+    "src/wire.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/session/session-projection-cache"
+    },
+    {
+      "path": "../../../packages/session-query/session-query"
+    },
+    {
+      "path": "../../../packages/spill/spill"
+    },
+    {
+      "path": "../../../packages/workspace/workspace"
+    }
+  ]
+}
