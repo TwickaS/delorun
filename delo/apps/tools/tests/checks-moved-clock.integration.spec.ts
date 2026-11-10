@@ -27,10 +27,11 @@ function plantedRun(days: number): { status: number | null, output: string } {
   const directory = mkdtempSync(join(tmpdir(), 'delo-moved-clock-spec-'))
   directories.push(directory)
   writeFileSync(join(directory, 'vitest.config.mjs'), `export default { test: { include: ['bomb.spec.mjs'], setupFiles: [${JSON.stringify(SETUP)}] } }\n`)
-  // Fixes a date one day ahead of the real time at load, and compares the clock with it in the test.
+  // Fixes a literal date one day ahead of the real time, and compares the clock with it in the test.
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString()
   writeFileSync(join(directory, 'bomb.spec.mjs'), [
     "import { expect, it } from 'vitest'",
-    'const FIXED = new Date(Date.now() + 86_400_000)',
+    `const FIXED = new Date('${tomorrow}')`,
     "it('the clock is before the fixed date', () => {",
     '  expect(Date.now()).toBeLessThan(FIXED.getTime())',
     '})',

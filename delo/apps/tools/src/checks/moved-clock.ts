@@ -6,7 +6,7 @@
  * real clock passes the fixed date. The check does not move the times the file system records, so a fixed date
  * compared with a file's modification time is not caught; the rule in the contributor workflow covers that case. The
  * integration project is left out: its git, Node and `tsx` children read the system clock, which an in-process fake
- * does not move. Before its verdict it prints, as warnings, the specs {@link fixedDateWarnings} names. Run from the
+ * does not move; so are the specs {@link MOVED_CLOCK_EXCLUDED} lists, each with its reason. Before its verdict it prints, as warnings, the specs {@link fixedDateWarnings} names. Run from the
  * repository root:
  * `node_modules/.bin/tsx delo/apps/tools/src/checks/moved-clock.ts [--workers <n>]`. It prints one line per such test
  * and exits 1.
@@ -30,6 +30,25 @@ export const MOVED_CLOCK_ENV = 'DELO_MOVED_CLOCK_DAYS'
 
 /** The Vitest configuration of the check. */
 export const MOVED_CLOCK_CONFIG = 'delo/vitest.moved-clock.config.ts'
+
+/** A spec the check leaves out, relative to `delo/`, and why a moved `Date` cannot judge it. */
+export interface ExcludedSpec {
+  readonly spec: string
+  readonly reason: string
+}
+
+const TLS = 'it serves and verifies TLS certificates it makes with `Date`; OpenSSL checks their validity against the system clock, so a moved `Date` makes them not yet valid'
+
+/** The specs the check leaves out, each with its reason; `delo/vitest.moved-clock.config.ts` excludes them. */
+export const MOVED_CLOCK_EXCLUDED: readonly ExcludedSpec[] = [
+  { spec: 'apps/relay/tests/node/end-to-end.spec.ts', reason: TLS },
+  { spec: 'apps/tools/tests/stack/acme.spec.ts', reason: TLS },
+  { spec: 'apps/tools/tests/stack/certificate-transparency.spec.ts', reason: TLS },
+  { spec: 'apps/tools/tests/stack/oidc-provider.spec.ts', reason: TLS },
+  { spec: 'apps/tools/tests/stack/stack.spec.ts', reason: TLS },
+  { spec: 'packages/home-auth/tests/denial/admission/listeners.spec.ts', reason: TLS },
+  { spec: 'packages/logs/tests/retention.spec.ts', reason: 'it compares `Date.now()` with the modification times of files it writes, which agree in a real run; the check moves `Date` and not the file times, so past the retention window every new file reads as expired' },
+]
 
 /** One run of the specs: the command and the variables it sets. */
 export interface ClockRun {

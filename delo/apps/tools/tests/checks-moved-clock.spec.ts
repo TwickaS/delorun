@@ -1,11 +1,12 @@
 /**
  * The moved-clock check's runs, the statuses it reads from Vitest's JSON report, the tests it reports, and its lines.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { clockRegressions, clockRun, fixedDateWarnings, MOVED_CLOCK_CONFIG, MOVED_CLOCK_DAYS, MOVED_CLOCK_ENV, outcomes, report, specTexts } from '../src/checks/moved-clock.ts'
+import { clockRegressions, clockRun, fixedDateWarnings, MOVED_CLOCK_CONFIG, MOVED_CLOCK_DAYS, MOVED_CLOCK_ENV, MOVED_CLOCK_EXCLUDED, outcomes, report, specTexts } from '../src/checks/moved-clock.ts'
 
 const roots: string[] = []
 
@@ -22,6 +23,15 @@ describe('the moved-clock check', () => {
       args: ['run', '--config', MOVED_CLOCK_CONFIG, '--maxWorkers=6', '--reporter=json', '--outputFile=/r/report.json'],
       env: { [MOVED_CLOCK_ENV]: '400' },
     })
+  })
+
+  it('leaves out only specs that exist in the unit projects, each with a reason', () => {
+    const delo = fileURLToPath(new URL('../../../', import.meta.url))
+    for (const { spec, reason } of MOVED_CLOCK_EXCLUDED) {
+      expect(existsSync(join(delo, spec)), spec).toBe(true)
+      expect(spec).toMatch(/(?<!\.integration)\.spec\.tsx?$/)
+      expect(reason.length, spec).toBeGreaterThan(40)
+    }
   })
 
   it('reads each test by its file and full name, and a file that failed before its tests by the file', () => {
