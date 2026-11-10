@@ -50,7 +50,7 @@ English | [中文](README.zh.md)
 
 ## Extraction
 
-`extractArchive` accepts exactly the files the signed list names, at the list's length, SHA-256 and mode. An entry type the archive format forbids, a path the list does not name, a path that would land outside the staging directory, a repeated path and a length or digest the list contradicts each stop the extraction, and a listed file the archive lacks stops it too. The staging directory is left for the caller to remove, and nothing is written outside it.
+`extractArchive` accepts exactly the files the signed list names, at the list's length, SHA-256 and mode. Each file is hashed once, from the bytes it is written from, created exclusively at its installed mode (0444, or 0555 for an executable) and reported with its identity right after the write, so the runtime store confirms the identity instead of reading the file again. An entry type the archive format forbids, a path the list does not name, a path that would land outside the staging directory, a repeated path and a length or digest the list contradicts each stop the extraction, and a listed file the archive lacks stops it too. The staging directory is left for the caller to remove, and nothing is written outside it.
 
 <a id="what-a-home-remembers"></a>
 

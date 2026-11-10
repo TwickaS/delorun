@@ -73,7 +73,7 @@ The registry contains these checks.
 | `data-sharing` | `none` | The two upstream opt-ins, which are on or off as the person set them. |
 | `home-modes` | `none` | The mode of `~/.delo` and of its secret files. A mode with group or other bits is a `fail`, and the detail names the `chmod` command that fixes it. |
 
-The launcher's runtime hash check is outside the registry: the npm launcher calls `@delo/runtime-store` at every start, and a changed, missing or extra runtime file stops the start in every mode, so a change to the registry or to `delorun verify` does not disable it.
+The launcher's runtime start check is outside the registry: the npm launcher calls `@delo/runtime-store` at every start, and a changed, missing or extra runtime file stops the start in every mode, so a change to the registry or to `delorun verify` does not disable it. A start hashes the files its identity record cannot vouch for ([C2](c02-release-manifest.md#client-verification)); `runtime-files` under `delorun verify` always hashes every file.
 
 Each confinement rule state maps to a verification check result: `enforced` is `pass`, `not-enforced` is `not-enforced`, `unconfined` is `fail` and `unknown` is `unknown`. The `confinement-rule` check applies that mapping to each rule of [C1](c01-home-layout.md#confinement-rules).
 

@@ -1,27 +1,55 @@
 /**
  * Contract C1's runtime store under `~/.delo/runtimes/`: reading `current` and `previous`, switching and restoring
  * them by atomic rename under `store.lock`, installing a verified closure from a
- * staging directory, retention, and the start check of contract C2 that every launch of the CLI runtime runs.
+ * staging directory, retention, and the start check of contract C2 that every launch of the CLI runtime runs: the
+ * comparison of each file's identity with the installation's identity record where change times are trusted, and the
+ * hash of every file at install, on request, when due and wherever the record cannot vouch ([identity](./identity.ts)).
  *
  * @module @delo/runtime-store/store
  */
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { lstatSync } from 'node:fs'
 import { mkdir, readdir, rename } from 'node:fs/promises'
 import { join } from 'node:path'
-import { PRIVATE_DIR_MODE, STORE_ENTRIES, STORE_LAYOUT, STORE_LOCK_WAIT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { PRIVATE_DIR_MODE, PROTECTED_FILE_MODE, STORE_ENTRIES, STORE_LAYOUT, STORE_LOCK_WAIT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import type { DeloLogger } from '@delo/logs'
 import { isStoreError, RuntimeStoreError, type RuntimeRemedy } from './errors.ts'
-import { createStagingDirectory, moveOutAndRemove, removeTree, sealInstallation, setInstalledModes, writeStoreFile } from './files.ts'
+import { createStagingDirectory, moveOutAndRemove, removeTree, sealInstallation, setInstalledModes, STORE_FILE_MODE, writeStoreFile } from './files.ts'
+import { changeTimeOf, fullCheckDue, nowNs, RACY_WINDOW_NS, readIdentityRecord, recordBound, recordText, trustedFileSystem, type RecordBinding } from './identity.ts'
 import { launchCommand, readStoreLayout, requireLayout, requireProtocol, SUPPORTED, type LauncherSupport, type LaunchCommand } from './launch.ts'
 import { withStoreLock } from './lock.ts'
-import { parseRuntimeVersion, releaseFileVersion, StorePaths } from './paths.ts'
+import { identityRecordVersion, parseRuntimeVersion, releaseFileVersion, StorePaths } from './paths.ts'
 import { isInstalled, readPointerFile, readPointers, syncDirectory, writePointers, type RuntimePointers } from './pointer.ts'
 import { readStoredRelease, verifyRelease, type ReleaseFileBytes, type VerifiedRelease } from './release.ts'
-import { checkTree, describeProblems } from './tree.ts'
+import { describeProblems, examineTree, type RecordedIdentities, type TreeExamination } from './tree.ts'
 
 /** A temporary file the store writes before a rename: `<name>.tmp-<16 hex>`. */
 const TEMPORARY = /\.tmp-[0-9a-f]{16}$/u
+
+const NS_PER_MS = 1_000_000n
+
+/** The interval of the start's full hash when the person sets none, in days. */
+const FULL_CHECK_DAYS = 7
+
+/** The longest interval of the start's full hash a person may set, in days. */
+const FULL_CHECK_DAYS_MAX = 30
+
+/**
+ * Resolve the interval of the start's full hash from the person's setting: whole days from 0 to 30, where 0 hashes
+ * every file at every start, and 7 when nothing is set.
+ * @param text - the setting's text, or `undefined` when it is not set.
+ * @returns the interval in days.
+ * @throws {Error} when the text is not a whole number of days from 0 to 30.
+ */
+export function resolveFullCheckDays(text: string | undefined): number {
+  if (text === undefined || text.trim() === '') return FULL_CHECK_DAYS
+  const days = /^[0-9]{1,2}$/u.test(text.trim()) ? Number(text.trim()) : Number.NaN
+  if (!(days <= FULL_CHECK_DAYS_MAX)) throw new Error(`the interval of the runtime's full check is ${JSON.stringify(text)}, and it must be a whole number of days from 0 to ${String(FULL_CHECK_DAYS_MAX)}`)
+  return days
+}
 
 /** What a {@link RuntimeStore} needs. */
 export interface RuntimeStoreOptions {
@@ -31,6 +59,23 @@ export interface RuntimeStoreOptions {
   readonly platform: RuntimePlatform
   /** Where retention reports removals it could not finish. */
   readonly logger: DeloLogger
+}
+
+/** The files a fill step wrote, each hashed from the bytes it wrote, so the store need not read them again. */
+export interface StagedFiles {
+  /** The SHA-256 of the signed file list whose lengths and digests every written file matched. */
+  readonly fileList: string
+  /**
+   * Each written file's identity by its list path, from `fstat` after its last write, as `identityOf` gives it. The
+   * file was created at its installed mode, so sealing the tree leaves the identity unchanged.
+   */
+  readonly identities: ReadonlyMap<string, string>
+}
+
+/** What a fill step returns: the release files to keep, and the identities of the files it wrote when it reports them. */
+export interface FilledRelease extends ReleaseFileBytes {
+  /** The staged files' identities; without them the store hashes every staged file. */
+  readonly staged?: StagedFiles
 }
 
 /** What {@link RuntimeStore.install} needs. */
@@ -44,9 +89,9 @@ export interface InstallRequest {
    * timestamp walk, the manifest's signature and freshness, the release-log bundle and online check, the archive's
    * and file list's digests), and extract the archive into `directory` with C1's path checks.
    * @param directory - a new, empty `staging/<16 hex>/` directory at mode 0700.
-   * @returns the release files to keep beside the installation.
+   * @returns the release files to keep beside the installation, and the identities of the files written.
    */
-  readonly fill: (directory: string) => Promise<ReleaseFileBytes>
+  readonly fill: (directory: string) => Promise<FilledRelease>
 }
 
 /** A runtime that passed the start check. */
@@ -63,6 +108,8 @@ export interface LaunchRequest {
   readonly root: RootMetadata
   /** The person's verification mode, which a refusal names; the start check runs in every mode. */
   readonly mode: VerificationMode
+  /** The interval of the start check's full hash in days, as {@link resolveFullCheckDays} resolves it. */
+  readonly fullCheckDays: number
   /** The CLI profile. */
   readonly profile: string
   /** The arguments for `delorun`. */
@@ -83,6 +130,18 @@ export interface RetentionResult {
   readonly failed: readonly string[]
 }
 
+/**
+ * Wait until every staged identity is settled: until the clock is {@link RACY_WINDOW_NS} past the newest change time,
+ * at most that long, so a capture taken next vouches for every file the fill wrote.
+ * @param staged - the identities a fill reported, or `null` where it reported none.
+ */
+async function settle(staged: readonly (string | null)[]): Promise<void> {
+  let newest = 0n
+  for (const identity of staged) if (identity !== null && changeTimeOf(identity) > newest) newest = changeTimeOf(identity)
+  const wait = newest + RACY_WINDOW_NS - nowNs()
+  if (wait > 0n) await sleep(Number((wait < RACY_WINDOW_NS ? wait : RACY_WINDOW_NS) / NS_PER_MS) + 1)
+}
+
 /** C1's runtime store of one home. */
 export class RuntimeStore {
   /** The store's paths. */
@@ -90,6 +149,8 @@ export class RuntimeStore {
 
   /** The home, the platform and the logger. */
   private readonly options: RuntimeStoreOptions
+  /** The file checks of the current {@link shareChecks} scope, by version and file list digest. */
+  private readonly shared = new AsyncLocalStorage<Map<string, Promise<void>>>()
 
   /**
    * @param options - the home, the platform and the logger.
@@ -142,8 +203,11 @@ export class RuntimeStore {
   }
 
   /**
-   * Run the start check on an installed version: verify its stored manifest and file list with the root, then check
-   * every regular file under its directory against the list. A missing, changed or extra file fails it.
+   * Run the full check on an installed version: verify its stored manifest and file list with the root, then hash
+   * every regular file under its directory against the list, whatever the identity record says. A missing, changed or
+   * extra file fails it. A pass rewrites the record, where change times are trusted, only when no usable record exists
+   * or an identity differs from it, so a check of an intact runtime writes nothing. Inside a {@link shareChecks} scope,
+   * the file check of a version runs once and every later call shares its result.
    * @param version - the installed version.
    * @param root - the trusted root.
    * @returns the verified runtime.
@@ -151,13 +215,40 @@ export class RuntimeStore {
    *   another installed version is kept as `previous`, rollback.
    */
   async checkRuntime(version: RuntimeVersion, root: RootMetadata): Promise<VerifiedRuntime> {
-    return this.checkFiles(version, await this.storedRelease(version, root))
+    const release = await this.storedRelease(version, root)
+    const scope = this.shared.getStore()
+    if (scope === undefined) {
+      await this.fullCheck(version, release, 'changed')
+    } else {
+      const key = `${version}\n${this.listDigest(release)}`
+      let check = scope.get(key)
+      if (check === undefined) {
+        check = this.fullCheck(version, release, 'changed')
+        scope.set(key, check)
+      }
+      await check
+    }
+    return { version, ...release }
   }
 
   /**
-   * Prepare the launch of `current`, writing nothing: check the store's layout, read `current`, verify its manifest
-   * and launch protocol, run the start check, and build launch protocol 1's command. The check runs in every
-   * verification mode, and a launcher never switches `current`, whether it is newer or older than the active runtime.
+   * Run work in which every {@link checkRuntime} of a version, and an install's verification of it, share one file
+   * check: an update's prepare, whose channel opener, install and report readers each check the runtimes they read.
+   * The result is shared only within the work's own calls; a later scope checks again.
+   * @param work - the work.
+   * @returns its result.
+   */
+  async shareChecks<T>(work: () => Promise<T>): Promise<T> {
+    return this.shared.run(new Map(), work)
+  }
+
+  /**
+   * Prepare the launch of `current`: check the store's layout, read `current`, verify its manifest and launch protocol,
+   * run the start check, and build launch protocol 1's command. The start check lists the installation and compares
+   * each file's identity with the installation's record, hashing every file the record cannot vouch for; it hashes
+   * every file when the record is missing or unbound, the full hash is due, or change times are not trusted here. It
+   * writes nothing but that record, after a passing hash. It runs in every verification mode, and a launcher never
+   * switches `current`, whether it is newer or older than the active runtime.
    * @param request - the launcher's support, the root, the mode, the profile and the arguments.
    * @returns the command that starts `current`.
    * @throws {RuntimeStoreError} `RUNTIME_INCOMPATIBLE`, `NO_ACTIVE_RUNTIME` or `RUNTIME_CHANGED`, each naming the
@@ -169,7 +260,7 @@ export class RuntimeStore {
       const { current } = await readPointers(this.paths)
       const release = await this.storedRelease(current, request.root)
       requireProtocol(this.paths, current, release.manifest, release.files, request.launcher)
-      await this.checkFiles(current, release)
+      await this.startCheck(current, release, request.fullCheckDays)
       return { version: current, ...launchCommand(this.paths, current, request.profile, request.args) }
     } catch (error) {
       if (!isStoreError(error)) throw error
@@ -194,7 +285,9 @@ export class RuntimeStore {
    * Install a verified runtime closure under `store.lock`. The caller fills a new staging directory after C2's client
    * verification steps 1 to 5; the store then verifies the release files' signatures with the root and every staged
    * file against the file list, writes the release files beside the installation, and renames the staging directory
-   * to `runtimes/<version>/` last, so no version reads as installed before every check passes. An installed copy of
+   * to `runtimes/<version>/` last, so no version reads as installed before every check passes. A staged file the fill
+   * reports with an identity its `lstat` still shows, against the same file list, is not read again, where change
+   * times are trusted; every other file is hashed. The identity record is then written under the lock. An installed copy of
    * the same version is moved out just before. A failed install removes its staging directory and leaves every
    * pointer and installation as it was. When `store.json` is absent or unreadable it is written, and when `current`
    * is absent or malformed it is set to the installed version: C1's first install.
@@ -214,28 +307,36 @@ export class RuntimeStore {
       try {
         const bytes = await request.fill(staging)
         let release: VerifiedRelease
-        let problems
+        let examined: TreeExamination
+        let fileSystem: number | undefined
+        let capturedAt: bigint
         try {
           release = verifyRelease(this.paths, request.root, request.version, bytes)
-          // Seal the staged tree before it is hashed: the digest a person's machine installs must be the digest of
-          // bytes nobody could change, so no writable window may sit between the hash and the mode that closes it.
+          fileSystem = await trustedFileSystem(staging)
+          // Seal the staged tree before it is checked: the digest a person's machine installs must be the digest of
+          // bytes nobody could change, so no writable window may sit between the check and the mode that closes it.
           await setInstalledModes(staging, release.files)
-          problems = await checkTree(staging, release.files)
+          const staged = fileSystem === undefined ? undefined : this.stagedIdentities(release, bytes.staged)
+          if (staged !== undefined) await settle(staged)
+          capturedAt = nowNs()
+          examined = await examineTree(staging, release.files, staged === undefined ? undefined : { identities: staged, capturedAt })
         } catch (error) {
           throw new RuntimeStoreError('INSTALL_VERIFY_FAILED', staging, `release ${request.version} does not verify: ${(error as Error).message}`, [], { cause: error })
         }
-        if (problems.length > 0) throw new RuntimeStoreError('INSTALL_VERIFY_FAILED', staging, `the staged runtime ${request.version} differs from its signed file list: ${describeProblems(problems)}`)
+        if (examined.problems.length > 0) throw new RuntimeStoreError('INSTALL_VERIFY_FAILED', staging, `the staged runtime ${request.version} differs from its signed file list: ${describeProblems(examined.problems)}`)
         const files = this.paths.releaseFiles(request.version)
-        await writeStoreFile(files.manifest, bytes.manifest)
-        await writeStoreFile(files.files, bytes.files)
-        await writeStoreFile(files.bundle, bytes.bundle)
-        if (layout === undefined) await writeStoreFile(this.paths.layout, Buffer.from(`${JSON.stringify({ layout: STORE_LAYOUT })}\n`))
+        await writeStoreFile(files.manifest, bytes.manifest, STORE_FILE_MODE)
+        await writeStoreFile(files.files, bytes.files, STORE_FILE_MODE)
+        await writeStoreFile(files.bundle, bytes.bundle, STORE_FILE_MODE)
+        if (layout === undefined) await writeStoreFile(this.paths.layout, Buffer.from(`${JSON.stringify({ layout: STORE_LAYOUT })}\n`), STORE_FILE_MODE)
         await syncDirectory(this.paths.root)
         const installation = this.paths.version(request.version)
         if (await isInstalled(this.paths, request.version)) await moveOutAndRemove(installation, this.paths.staging)
         await rename(staging, installation)
         await sealInstallation(installation)
         await syncDirectory(this.paths.root)
+        if (fileSystem !== undefined) await this.writeRecord(request.version, release, { identities: examined.identities, capturedAt }, Number(capturedAt / NS_PER_MS), fileSystem)
+        this.shared.getStore()?.set(`${request.version}\n${this.listDigest(release)}`, Promise.resolve())
         const current = await readPointerFile(this.paths.pointer(STORE_ENTRIES.current))
         if (current === undefined || current === 'malformed') await writePointers(this.paths, { current: request.version })
         return { version: request.version, ...release }
@@ -248,8 +349,8 @@ export class RuntimeStore {
 
   /**
    * C1's retention, run after a switch commits and at each start: under `store.lock`, keep the versions `current`
-   * and `previous` name with their release files, and remove every other installation with its release files, every
-   * directory under `staging/`, and the temporary files of interrupted writes. Other entries are left alone. A
+   * and `previous` name with their release files and identity records, and remove every other installation with its
+   * release files and identity record, every directory under `staging/`, and the temporary files of interrupted writes. Other entries are left alone. A
    * removal that fails is logged and left for the next run.
    * @returns what was removed and what failed.
    * @throws {RuntimeStoreError} `NO_ACTIVE_RUNTIME` when `current` cannot be read, before anything is removed;
@@ -286,6 +387,14 @@ export class RuntimeStore {
         throw error
       })
       for (const name of staged) await attempt(join(this.paths.staging, name), () => removeTree(join(this.paths.staging, name)))
+      const records = await readdir(this.paths.identityRecords).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+        throw error
+      })
+      for (const name of records) {
+        const owner = identityRecordVersion(name)
+        if (owner !== undefined && (!kept.has(owner) || TEMPORARY.test(name))) await attempt(join(this.paths.identityRecords, name), () => removeTree(join(this.paths.identityRecords, name)))
+      }
       return { removed, failed }
     })
   }
@@ -306,22 +415,150 @@ export class RuntimeStore {
   }
 
   /**
-   * Check an installation's files against its verified file list.
+   * Hash every file of an installation against its verified file list, and rewrite its identity record from the
+   * identities the pass read under, where change times are trusted: always, for the start's scheduled pass, whose time
+   * the record must move; or only when the record is missing, unbound or names another identity, for a check on
+   * request.
    * @param version - the installed version.
    * @param release - its verified release files.
-   * @returns the verified runtime.
+   * @param write - `always`, or `changed` to leave a record that already holds every identity the pass read.
    * @throws {RuntimeStoreError} `RUNTIME_CHANGED` naming the files that differ.
    */
-  private async checkFiles(version: RuntimeVersion, release: VerifiedRelease): Promise<VerifiedRuntime> {
+  private async fullCheck(version: RuntimeVersion, release: VerifiedRelease, write: 'always' | 'changed'): Promise<void> {
     const directory = this.paths.version(version)
-    let problems
+    const fileSystem = await trustedFileSystem(directory)
+    const capturedAt = nowNs()
+    const examined = await this.examine(version, release)
+    if (fileSystem === undefined) return
+    if (write === 'changed') {
+      const record = await readIdentityRecord(this.paths.identityRecord(version))
+      const unchanged = record !== undefined && recordBound(record, this.binding(version, release, fileSystem)) && record.files.every((identity, index) => identity === examined.identities[index])
+      if (unchanged) return
+    }
+    await this.refreshRecord(version, release, { identities: examined.identities, capturedAt }, Number(capturedAt / NS_PER_MS), fileSystem)
+  }
+
+  /**
+   * What an installation's record must be bound to.
+   * @param version - the installed version.
+   * @param release - its verified release files.
+   * @param fileSystem - the installation's trusted file system.
+   * @returns the binding.
+   */
+  private binding(version: RuntimeVersion, release: VerifiedRelease, fileSystem: number): RecordBinding {
+    return { version, platform: this.paths.platform, fileList: this.listDigest(release), manifest: release.manifestSha256, rootInode: String(lstatSync(this.paths.version(version), { bigint: true }).ino), fileSystem, length: release.files.files.length }
+  }
+
+  /**
+   * The start check of an installation. Where change times are trusted and the installation's record is bound to this
+   * release, installation and file system, and its full hash is not due, compare each file's identity with the record
+   * and hash the files it cannot vouch for, rewriting the record when any was hashed and all match; otherwise
+   * {@link fullCheck}.
+   * @param version - the installed version.
+   * @param release - its verified release files.
+   * @param fullCheckDays - the interval of the full hash in days.
+   * @throws {RuntimeStoreError} `RUNTIME_CHANGED` naming the files that differ.
+   */
+  private async startCheck(version: RuntimeVersion, release: VerifiedRelease, fullCheckDays: number): Promise<void> {
+    const directory = this.paths.version(version)
+    const fileSystem = await trustedFileSystem(directory)
+    if (fileSystem === undefined) return this.fullCheck(version, release, 'always')
+    const record = await readIdentityRecord(this.paths.identityRecord(version))
+    if (record === undefined || !recordBound(record, this.binding(version, release, fileSystem)) || fullCheckDue(record, Date.now(), fullCheckDays)) return this.fullCheck(version, release, 'always')
+    const capturedAt = nowNs()
+    const examined = await this.examine(version, release, { identities: record.files, capturedAt: BigInt(record.capturedAt) * NS_PER_MS })
+    if (examined.hashed > 0) await this.refreshRecord(version, release, { identities: examined.identities, capturedAt }, record.fullCheckAt, fileSystem)
+  }
+
+  /**
+   * Compare an installation with its verified file list.
+   * @param version - the installed version.
+   * @param release - its verified release files.
+   * @param recorded - the record's identities, when the start check may skip files they vouch for.
+   * @returns what the comparison found.
+   * @throws {RuntimeStoreError} `RUNTIME_CHANGED` naming the files that differ, or when the installation cannot be read.
+   */
+  private async examine(version: RuntimeVersion, release: VerifiedRelease, recorded?: RecordedIdentities): Promise<TreeExamination> {
+    const directory = this.paths.version(version)
+    let examined
     try {
-      problems = await checkTree(directory, release.files)
+      examined = await examineTree(directory, release.files, recorded)
     } catch (error) {
       throw new RuntimeStoreError('RUNTIME_CHANGED', directory, `runtime ${version} cannot be checked: ${(error as Error).message}`, await this.remediesFor(version), { cause: error })
     }
-    if (problems.length > 0) throw new RuntimeStoreError('RUNTIME_CHANGED', directory, `runtime ${version} differs from its signed file list: ${describeProblems(problems)}`, await this.remediesFor(version))
-    return { version, ...release }
+    if (examined.problems.length > 0) throw new RuntimeStoreError('RUNTIME_CHANGED', directory, `runtime ${version} differs from its signed file list: ${describeProblems(examined.problems)}`, await this.remediesFor(version))
+    return examined
+  }
+
+  /**
+   * Rewrite an installation's identity record under `store.lock` without waiting for it: while an install, a switch or
+   * a removal holds the lock, the record stays as it is and the next start hashes again what this pass hashed.
+   * @param version - the installed version.
+   * @param release - its verified release files.
+   * @param recorded - the identities a passing check read the files under, and their capture time.
+   * @param fullCheckAt - when the last pass that hashed every file started, in milliseconds since the epoch.
+   * @param fileSystem - the installation's trusted file system.
+   */
+  private async refreshRecord(version: RuntimeVersion, release: VerifiedRelease, recorded: RecordedIdentities, fullCheckAt: number, fileSystem: number): Promise<void> {
+    try {
+      await withStoreLock(this.paths.lock, 0, () => this.writeRecord(version, release, recorded, fullCheckAt, fileSystem))
+    } catch (error) {
+      // STORE_BUSY: another store operation holds the lock, which a start does not wait for.
+      this.options.logger.info('the runtime store left its runtime check unrecorded while another operation held store.lock', { err: error })
+    }
+  }
+
+  /**
+   * Write an installation's identity record, under `store.lock`, which the caller holds. A record that cannot be
+   * written is logged and left; the next start then hashes every file.
+   * @param version - the installed version.
+   * @param release - its verified release files.
+   * @param recorded - the identities a passing check read the files under, and their capture time.
+   * @param fullCheckAt - when the last pass that hashed every file started, in milliseconds since the epoch.
+   * @param fileSystem - the installation's trusted file system.
+   */
+  private async writeRecord(version: RuntimeVersion, release: VerifiedRelease, recorded: RecordedIdentities, fullCheckAt: number, fileSystem: number): Promise<void> {
+    const path = this.paths.identityRecord(version)
+    try {
+      await mkdir(this.paths.identityRecords, { mode: PRIVATE_DIR_MODE }).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      })
+      const record = {
+        version: String(version),
+        platform: this.paths.platform,
+        fileList: this.listDigest(release),
+        manifest: release.manifestSha256,
+        rootInode: String(lstatSync(this.paths.version(version), { bigint: true }).ino),
+        fileSystem,
+        capturedAt: Number(recorded.capturedAt / NS_PER_MS),
+        fullCheckAt,
+        files: recorded.identities,
+      }
+      await writeStoreFile(path, Buffer.from(recordText(record)), PROTECTED_FILE_MODE)
+    } catch (error) {
+      this.options.logger.warn('the runtime store could not record its runtime check; the next start checks every file again', { err: error, data: { path } })
+    }
+  }
+
+  /**
+   * The identities a fill reported, in the order of the verified file list, when it checked the files against that
+   * list.
+   * @param release - the verified release files.
+   * @param staged - what the fill reported.
+   * @returns one identity or `null` per list entry, or `undefined` when the fill reported none for this list.
+   */
+  private stagedIdentities(release: VerifiedRelease, staged: StagedFiles | undefined): (string | null)[] | undefined {
+    if (staged === undefined || staged.fileList !== this.listDigest(release)) return undefined
+    return release.files.files.map(file => staged.identities.get(file.path) ?? null)
+  }
+
+  /**
+   * The SHA-256 of a verified file list, as its verified manifest gives it.
+   * @param release - the verified release files.
+   * @returns the digest.
+   */
+  private listDigest(release: VerifiedRelease): string {
+    return release.manifest.runtime[this.paths.platform].files.sha256
   }
 
   /**

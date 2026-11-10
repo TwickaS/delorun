@@ -195,6 +195,7 @@ describe('the launcher\'s rollback after the current runtime failed its start ch
       args: [],
       passedThrough: [],
       mode: 'enforce',
+      fullCheckDays: 7,
       roots: fixture.roots,
       logger: { error: () => undefined, warn: () => undefined, info: () => undefined, debug: () => undefined },
       channel: { resolve: () => Promise.reject(new Error('no install')), fill: () => Promise.reject(new Error('no install')) },
@@ -203,7 +204,7 @@ describe('the launcher\'s rollback after the current runtime failed its start ch
         install: () => Promise.reject(new Error('no install')),
         retain: () => Promise.reject(new Error('no retention')),
         pointers: () => Promise.resolve({ current: release('0.2.0'), previous: release('0.1.0') }),
-        checkRuntime: (version) => Promise.resolve({ version, manifest: fixture.manifest, files: fixture.files }),
+        checkRuntime: (version) => Promise.resolve({ version, manifest: fixture.manifest, files: fixture.files, manifestSha256: '0'.repeat(64) }),
         launchCommand: (_version, profile, args): LaunchCommand => ({ command: process.execPath, args: ['entry.js', ...args], env: { DELO_HOME: deloHome, DELO_PROFILE: profile } }),
       },
       // The previous runtime's own `delorun`, run in this process with the environment launch protocol 1 sets.

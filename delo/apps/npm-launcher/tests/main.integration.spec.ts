@@ -158,6 +158,10 @@ describe('the launcher’s main function', () => {
     expect(await main(['--release', 'not-a-version'], world.context())).toBe(2)
     expect(world.stderr.join('')).toContain('--release names not-a-version, which is not a Delo release version')
     expect(world.stderr.join('')).toContain('Usage: delorun')
+    for (const days of ['31', '-1', '1.5', 'weekly']) {
+      expect(await main(['status'], world.context({ env: { DELO_HOME: world.home, DELO_RUNTIME_FULL_CHECK_DAYS: days } }))).toBe(2)
+      expect(world.stderr.join('')).toContain(`the interval of the runtime's full check is ${JSON.stringify(days)}`)
+    }
     expect(await readdir(join(world.home, '..')).then(names => names.includes('home'))).toBe(false)
   })
 

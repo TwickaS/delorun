@@ -64,7 +64,7 @@ describe('probe: concurrency', () => {
     await held()
     const started = Date.now()
     // current is still whole, so the lock-free launch check succeeds even though a writer holds the lock
-    await expect(fixture.store.prepareLaunch({ launcher: SUPPORTED, root: fixture.root, mode: 'warn', profile: 'default', args: [] })).resolves.toMatchObject({ version: V1 })
+    await expect(fixture.store.prepareLaunch({ launcher: SUPPORTED, root: fixture.root, mode: 'warn', fullCheckDays: 7, profile: 'default', args: [] })).resolves.toMatchObject({ version: V1 })
     expect(Date.now() - started).toBeLessThan(2_000)
     holder.kill('SIGKILL')
   })

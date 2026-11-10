@@ -110,7 +110,12 @@ export function closureFiles(marker: string): Record<string, FixtureFile> {
   }
 }
 
-function sha256(bytes: Uint8Array): Sha256Hex {
+/**
+ * The lowercase hex SHA-256 of bytes.
+ * @param bytes - the bytes.
+ * @returns the digest.
+ */
+export function sha256(bytes: Uint8Array): Sha256Hex {
   return brandString<Sha256Hex>(createHash('sha256').update(bytes).digest('hex'))
 }
 
@@ -130,16 +135,22 @@ function sign<T extends object>(signed: T, key: KeyObject): Buffer {
  * @returns the manifest, file list and a placeholder log bundle.
  */
 export function releaseFiles(key: KeyObject, release: string, files: Record<string, FixtureFile>): ReleaseFileBytes {
+  return signedRelease(key, release, Object.entries(files).sort(([left], [right]) => (left < right ? -1 : 1)).map(([path, file]) => {
+    const bytes = Buffer.from(file.content)
+    return { path, length: bytes.byteLength, sha256: sha256(bytes), mode: file.executable === true ? '0755' : '0644' }
+  }))
+}
+
+/**
+ * Signed release files for a closure whose file list entries are already computed.
+ * @param key - the targets key that signs both.
+ * @param release - the version.
+ * @param entries - the file list's entries, in their order.
+ * @returns the manifest, file list and a placeholder log bundle.
+ */
+export function signedRelease(key: KeyObject, release: string, entries: RuntimeFileList['files']): ReleaseFileBytes {
   const semantic = brandString<SemanticVersion>(release)
-  const list: RuntimeFileList = {
-    schema: RELEASE_SCHEMAS.files,
-    version: semantic,
-    platform: PLATFORM,
-    files: Object.entries(files).sort(([left], [right]) => (left < right ? -1 : 1)).map(([path, file]) => {
-      const bytes = Buffer.from(file.content)
-      return { path, length: bytes.byteLength, sha256: sha256(bytes), mode: file.executable === true ? '0755' : '0644' }
-    }),
-  }
+  const list: RuntimeFileList = { schema: RELEASE_SCHEMAS.files, version: semantic, platform: PLATFORM, files: entries }
   const listBytes = sign(list, key)
   const placeholder = ref('placeholder', Buffer.from('placeholder'))
   const desktopRef = { ...placeholder, sha512: brandString<ReleaseManifest['desktop']['mac-arm64']['installer']['sha512']>(`${'A'.repeat(86)}==`) }

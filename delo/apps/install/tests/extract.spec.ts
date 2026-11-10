@@ -5,6 +5,7 @@
  * written outside the staging directory. The hostile archives are written by hand, because the release tooling refuses
  * to produce one.
  */
+import { lstatSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,6 +14,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { RELEASE_SCHEMAS, type RuntimeFileList, type Sha256Hex, type SemanticVersion } from '@delo/contract-release-manifest'
 import { gzip } from '@delo/release-formats/archive/bytes'
 import type { ArchiveEntry } from '@delo/release-formats/archive/entry'
+import { identityOf } from '@delo/runtime-store'
 import { extractArchive, extractionPath } from '../src/extract.ts'
 import { isInstallError, type InstallError } from '../src/errors.ts'
 import { sha256, tarGz, VERSION } from './support.ts'
@@ -132,12 +134,17 @@ const ENTRIES: readonly ArchiveEntry[] = [
 ]
 
 describe('a verified archive', () => {
-  it('writes exactly the files its signed list names, at the listed mode', async () => {
+  it('writes exactly the files its signed list names, at their installed modes, and reports each identity', async () => {
     const directory = await scratch()
-    const extracted = await extractArchive({ archive: await archiveOf(ENTRIES), format: 'tar.gz', files: fileList(ENTRIES), directory })
-    expect(extracted.written).toBe(ENTRIES.length)
+    const entries = [...ENTRIES, { path: 'node/bin/npm', mode: '0755' as const, data: Buffer.from('#!/bin/sh\nexit 1\n') }]
+    const extracted = await extractArchive({ archive: await archiveOf(entries), format: 'tar.gz', files: fileList(entries), directory })
+    expect(extracted.written).toBe(entries.length)
     expect(await readFile(join(directory, 'node/bin/node'), 'utf8')).toBe('#!/bin/sh\nexit 0\n')
     expect(await readFile(join(directory, 'app/node_modules/@delo/cli/src/bin.js'), 'utf8')).toBe('// the runtime entry\n')
+    expect(lstatSync(join(directory, 'node/bin/node')).mode & 0o777).toBe(0o555)
+    expect(lstatSync(join(directory, 'app/node_modules/@delo/cli/src/bin.js')).mode & 0o777).toBe(0o444)
+    expect([...extracted.identities.keys()].sort()).toEqual(entries.map(entry => entry.path).sort())
+    for (const entry of entries) expect(extracted.identities.get(entry.path)).toBe(identityOf(lstatSync(join(directory, ...entry.path.split('/')), { bigint: true })))
   })
 })
 

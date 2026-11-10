@@ -32,6 +32,22 @@ export type PointerName = typeof STORE_ENTRIES.current | typeof STORE_ENTRIES.pr
 /** A pointer's temporary sibling: `<pointer>.tmp-<16 hex>`. */
 export const POINTER_TEMP = /^(current|previous)\.tmp-[0-9a-f]{16}$/u
 
+/** The directory of the installations' identity records, under the home's `trust/`. */
+const IDENTITY_RECORDS = 'runtime-files'
+
+/** An identity record's name, with the version it names: `delorun-<version>-<platform>.json` or its temporary sibling. */
+const IDENTITY_RECORD = /^delorun-(.+?)-(?:linux-x64|linux-arm64|darwin-x64|darwin-arm64|win32-x64)\.json(?:\.tmp-[0-9a-f]{16})?$/u
+
+/**
+ * The version an identity record, or its temporary sibling, belongs to.
+ * @param name - an entry name under `trust/runtime-files/`.
+ * @returns the version, or `undefined` when the name is not a record's.
+ */
+export function identityRecordVersion(name: string): RuntimeVersion | undefined {
+  const match = IDENTITY_RECORD.exec(name)
+  return match === null ? undefined : parseRuntimeVersion(match[1]!)
+}
+
 /** The release files kept beside an installation, with the version each names. */
 const RELEASE_FILE = /^delorun-(.+?)(?:\.manifest\.json|\.manifest\.log\.json|-(?:linux-x64|linux-arm64|darwin-x64|darwin-arm64|win32-x64)\.files\.json)$/u
 
@@ -55,6 +71,8 @@ export class StorePaths {
   readonly layout: string
   /** `runtimes/store.lock`. */
   readonly lock: string
+  /** `trust/runtime-files`, the installations' identity records, outside every read exemption of confined commands. */
+  readonly identityRecords: string
 
   /** The resolved Delo home. */
   readonly home: string
@@ -72,6 +90,7 @@ export class StorePaths {
     this.staging = join(home, DELO_HOME_ENTRIES.staging)
     this.layout = join(this.root, STORE_ENTRIES.layout)
     this.lock = join(this.root, STORE_ENTRIES.lock)
+    this.identityRecords = join(home, DELO_HOME_ENTRIES.trust, IDENTITY_RECORDS)
   }
 
   /**
@@ -103,5 +122,14 @@ export class StorePaths {
       files: join(this.root, `delorun-${version}-${this.platform}.files.json`),
       bundle: join(this.root, `delorun-${version}.manifest.log.json`),
     }
+  }
+
+  /**
+   * An installation's identity record.
+   * @param version - the version.
+   * @returns `trust/runtime-files/delorun-<version>-<platform>.json`.
+   */
+  identityRecord(version: RuntimeVersion): string {
+    return join(this.identityRecords, `delorun-${version}-${this.platform}.json`)
   }
 }

@@ -3,16 +3,19 @@
  * only regular files, and the extraction accepts exactly the files the signed list names, each with the list's length
  * and SHA-256, at the list's mode. An entry the archive format forbids, a path the list does not name, a repeated
  * path, and a length or digest the list contradicts all stop the extraction with the staging directory left for the
- * caller to remove; nothing is written outside the staging directory.
+ * caller to remove; nothing is written outside the staging directory. Each file is hashed once, from the bytes it is
+ * written from, created at its installed mode, and reported with its identity after the last write, so the runtime
+ * store confirms the identity instead of reading the file again.
  *
  * @module @delo/install/extract
  */
 import { createHash } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, open } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
-import { entryPathError, modeBits, type ArchiveFormat } from '@delo/release-formats/archive/entry'
+import { entryPathError, type ArchiveFormat } from '@delo/release-formats/archive/entry'
 import { archiveEntries } from '@delo/release-formats/archive/inspect'
 import type { RuntimeFileList } from '@delo/contract-release-manifest'
+import { identityOf, installedFileMode } from '@delo/runtime-store'
 import { InstallError, messageOf } from './errors.ts'
 
 /** What one extraction is given. */
@@ -47,18 +50,27 @@ export function extractionPath(directory: string, path: string): string {
   return target
 }
 
+/** What an extraction wrote. */
+export interface Extracted {
+  /** How many files were written. */
+  readonly written: number
+  /** Each written file's identity by its list path, from `fstat` after its last write. */
+  readonly identities: ReadonlyMap<string, string>
+}
+
 /**
  * Extract a verified archive into the staging directory, checking every entry against the signed file list as it
  * arrives.
  * @param request - the archive, its format, the verified list and the staging directory.
- * @returns how many files were written.
+ * @returns how many files were written, and each one's identity.
  * @throws {InstallError} `ARCHIVE_REFUSED` for an entry type, path or name the archive may not hold, or one the list
  *   does not name; `INSTALL_VERIFY_FAILED` for a length or digest the list contradicts, or a listed file the archive
  *   does not hold.
  */
-export async function extractArchive(request: ExtractRequest): Promise<{ readonly written: number }> {
+export async function extractArchive(request: ExtractRequest): Promise<Extracted> {
   const listed = new Map(request.files.files.map(file => [file.path, file]))
-  const written = new Set<string>()
+  const written = new Map<string, string>()
+  const directories = new Set<string>()
   try {
     for await (const entry of archiveEntries(request.archive, request.format)) {
       const expected = listed.get(entry.path)
@@ -73,9 +85,19 @@ export async function extractArchive(request: ExtractRequest): Promise<{ readonl
       if (entry.data.byteLength !== expected.length || sha256 !== expected.sha256) {
         throw new InstallError('INSTALL_VERIFY_FAILED', entry.path, `${entry.path} in ${request.archive} has ${String(entry.data.byteLength)} bytes and SHA-256 ${sha256}; its signed file list lists ${String(expected.length)} bytes and ${expected.sha256}`)
       }
-      await mkdir(dirname(target), { recursive: true, mode: 0o755 })
-      await writeFile(target, entry.data, { mode: modeBits(expected.mode), flag: 'wx' })
-      written.add(entry.path)
+      const parent = dirname(target)
+      if (!directories.has(parent)) {
+        await mkdir(parent, { recursive: true, mode: 0o755 })
+        directories.add(parent)
+      }
+      // `wx` creates the file exclusively, so an existing entry, a symbolic link included, refuses the write.
+      const handle = await open(target, 'wx', installedFileMode(expected.mode))
+      try {
+        await handle.writeFile(entry.data)
+        written.set(entry.path, identityOf(await handle.stat({ bigint: true })))
+      } finally {
+        await handle.close()
+      }
     }
   } catch (error) {
     if (error instanceof InstallError) throw error
@@ -85,5 +107,5 @@ export async function extractArchive(request: ExtractRequest): Promise<{ readonl
     const missing = request.files.files.map(file => file.path).filter(path => !written.has(path))
     throw new InstallError('INSTALL_VERIFY_FAILED', request.archive, `${request.archive} holds ${String(written.size)} of the ${String(request.files.files.length)} files its signed list names; it lacks ${missing.slice(0, 10).join(', ')}`)
   }
-  return { written: written.size }
+  return { written: written.size, identities: written }
 }

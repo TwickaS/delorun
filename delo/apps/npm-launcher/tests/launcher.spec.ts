@@ -107,7 +107,7 @@ function recordingStore(recorded: Recorded, options: { readonly installed?: bool
       recorded.installs.push(request)
       await request.fill('/home/.delo/staging/0123456789abcdef')
       installed = true
-      return { manifest: {} as VerifiedRuntime['manifest'], files: {} as VerifiedRuntime['files'], version: request.version }
+      return { manifest: {} as VerifiedRuntime['manifest'], files: {} as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64), version: request.version }
     },
     retain: (): Promise<RetentionResult> => {
       recorded.retentions++
@@ -230,6 +230,7 @@ function launch(options: {
     args: options.args ?? [],
     passedThrough: options.passedThrough ?? [],
     mode: 'enforce',
+    fullCheckDays: 7,
     store: options.store,
     channel: options.channel,
     roots: options.roots,
@@ -264,6 +265,7 @@ describe('a run with a runtime installed', () => {
     expect(status).toBe(7)
     expect(started?.command).toBe('/home/.delo/runtimes/0.1.0/node/bin/node')
     expect(recorded.launches).toHaveLength(1)
+    expect(recorded.launches[0]?.fullCheckDays).toBe(7)
     expect(recorded.installs).toHaveLength(0)
     expect(asked).toBe(0)
   })
@@ -899,7 +901,7 @@ describe('a current runtime that fails its start check', () => {
       checkRuntime: (checked, root) => {
         asked.checked.push(`${checked}@${String(root.version)}`)
         if (previous === 'fails') return Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', `/home/.delo/runtimes/${checked}`, 'differs'))
-        return Promise.resolve({ version: checked, manifest: {} as VerifiedRuntime['manifest'], files: {} as VerifiedRuntime['files'] })
+        return Promise.resolve({ version: checked, manifest: {} as VerifiedRuntime['manifest'], files: {} as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) })
       },
       launchCommand: (launched, profile, args) => {
         asked.commands.push(`${launched} ${args.join(' ')}`)

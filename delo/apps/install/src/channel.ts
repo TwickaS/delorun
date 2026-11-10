@@ -23,7 +23,7 @@ import {
   type RuntimePlatform,
   type SemanticVersion,
 } from '@delo/contract-release-manifest'
-import type { ReleaseFileBytes } from '@delo/runtime-store'
+import type { FilledRelease } from '@delo/runtime-store'
 import type { RuntimeChannel, ChannelRelease } from '@delo/runtime-store'
 import { parseRuntimeVersion } from '@delo/runtime-store'
 import { archiveFormat } from '@delo/release-formats/archive/entry'
@@ -184,12 +184,13 @@ export class LauncherChannel implements RuntimeChannel {
    * and extract the archive into the staging directory with contract C1's path checks.
    * @param release - the release {@link LauncherChannel.resolve} returned.
    * @param directory - a new, empty `staging/<16 hex>/` directory.
-   * @returns the manifest, the file list and the release-log bundle, to keep beside the installation. Each download
-   *   is held to the length the signed manifest gives it.
+   * @returns the manifest, the file list and the release-log bundle, to keep beside the installation, and each
+   *   extracted file's identity against the verified file list. Each download is held to the length the signed
+   *   manifest gives it.
    * @throws {InstallError} `INSTALL_VERIFY_FAILED` when a file is not the manifest's or the archive is not the list's;
    *   `ARCHIVE_REFUSED` when the archive holds an entry it may not; `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED`.
    */
-  async fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes> {
+  async fill(release: ChannelRelease, directory: string): Promise<FilledRelease> {
     const resolved = this.resolved.get(release.version)
     if (resolved === undefined) throw new InstallError('INSTALL_VERIFY_FAILED', String(release.version), `${NO_RELEASE}: ${release.version} was not resolved before it was installed`)
     const { manifest } = resolved.verified
@@ -205,8 +206,8 @@ export class LauncherChannel implements RuntimeChannel {
       await verifyDownloadedFile(artifacts.archive, archivePath)
       const list = await this.downloader.bytes(this.source.files(manifest.version, artifacts.files.name), Math.min(artifacts.files.length, RELEASE_FILE_SIZE_LIMITS.files))
       const files = verifyPlatformFiles({ root: release.root, manifest, platform: this.options.platform, bytes: list.bytes })
-      await extractArchive({ archive: archivePath, format, files, directory })
-      return { manifest: resolved.manifestBytes, files: list.bytes, bundle: resolved.bundleBytes }
+      const extracted = await extractArchive({ archive: archivePath, format, files, directory })
+      return { manifest: resolved.manifestBytes, files: list.bytes, bundle: resolved.bundleBytes, staged: { fileList: artifacts.files.sha256, identities: extracted.identities } }
     } finally {
       await rm(scratch, { recursive: true, force: true })
     }

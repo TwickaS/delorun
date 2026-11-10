@@ -1,8 +1,9 @@
 /**
  * Review probes (not part of the package): what a switch, a rollback, a restore and a retention change outside
- * `runtimes/`, the pointer files' modes, and the shape of a `previous` that is malformed or dangling.
+ * `runtimes/` and the installations' identity records under `trust/runtime-files/`, the pointer files' modes, and the
+ * shape of a `previous` that is malformed or dangling.
  */
-import { lstatSync, mkdirSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { fixtureHome, snapshotTree, version, type FixtureHome } from './support.ts'
@@ -20,8 +21,11 @@ afterEach(() => {
   fixture.remove()
 })
 
+/** The store's own entries: `runtimes/` and the identity records. */
+const STORE_OWNED = ['runtimes', 'trust/runtime-files']
+
 function outsideRuntimes(): Record<string, string> {
-  return Object.fromEntries(Object.entries(snapshotTree(fixture.home)).filter(([path]) => path !== 'runtimes' && !path.startsWith('runtimes/')))
+  return Object.fromEntries(Object.entries(snapshotTree(fixture.home)).filter(([path]) => !STORE_OWNED.some(owned => path === owned || path.startsWith(`${owned}/`))))
 }
 
 function runtimes(): string {
@@ -29,7 +33,7 @@ function runtimes(): string {
 }
 
 describe('probe: store containment', () => {
-  it('install, switch, rollback, restore and retention change nothing outside runtimes/', async () => {
+  it('install, switch, rollback, restore and retention change nothing outside runtimes/ and the identity records', async () => {
     await fixture.install(V1)
     // canaries beside the store, including files the store never owns
     mkdirSync(join(fixture.home, 'profiles/default'), { recursive: true })
@@ -49,6 +53,7 @@ describe('probe: store containment', () => {
     expect(outsideRuntimes()).toEqual(before)
     await fixture.store.retain()
     expect(outsideRuntimes()).toEqual(before)
+    expect(readdirSync(join(fixture.home, 'trust/runtime-files')).sort()).toEqual(['delorun-0.1.0-linux-x64.json', 'delorun-0.2.0-linux-x64.json'])
     // pointer and lock modes are the contract's 0600, and no pointer is a symbolic link
     expect(lstatSync(join(runtimes(), 'current')).mode & 0o777).toBe(0o600)
     expect(lstatSync(join(runtimes(), 'previous')).mode & 0o777).toBe(0o600)

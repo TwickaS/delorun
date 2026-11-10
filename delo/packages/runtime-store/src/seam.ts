@@ -14,8 +14,8 @@ import type { RootMetadata } from '@delo/contract-release-manifest'
 import { isStoreError, RuntimeStoreError } from './errors.ts'
 import { launchFiles } from './launch.ts'
 import { isInstalled, type RuntimePointers } from './pointer.ts'
-import type { ReleaseFileBytes, TrustedRootSource } from './release.ts'
-import type { RetentionResult, RuntimeStore } from './store.ts'
+import type { TrustedRootSource } from './release.ts'
+import type { FilledRelease, RetentionResult, RuntimeStore } from './store.ts'
 
 /** The phases of an update's prepare, as the home process reports them. */
 export type PreparePhase = 'checking' | 'installing' | 'reporting'
@@ -52,10 +52,10 @@ export interface RuntimeChannel {
    * C1's path checks. Runs under `store.lock`, because the store calls it from its install.
    * @param release - the release {@link RuntimeChannel.resolve} returned.
    * @param directory - a new, empty `staging/<16 hex>/` directory at mode 0700.
-   * @returns the release files to keep beside the installation.
+   * @returns the release files to keep beside the installation, and the identities of the files written.
    * @throws when the download or a check fails.
    */
-  fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes>
+  fill(release: ChannelRelease, directory: string): Promise<FilledRelease>
 }
 
 /**
@@ -247,7 +247,9 @@ export class HomeRuntimeStore {
   /**
    * The update's `checking`, `installing` and `reporting` phases: resolve `target`, or the newest release on the
    * person's channel, and install it unless it is installed and its files match its manifest. An installed copy
-   * that fails the start check is installed again, and an install never switches `current`.
+   * that fails the start check is installed again, and an install never switches `current`. The phases share one
+   * file check per runtime ({@link RuntimeStore.shareChecks}): the channel opener's check of the running runtime, the
+   * install's or the intact check's of the target, and the report readers' checks of both.
    * @param target - the version, or `undefined` for the newest release.
    * @param phase - called as each phase starts; `installing` is skipped when nothing installs.
    * @param line - writes each line of the release's install progress, as the launcher prints it; nothing is written
@@ -257,6 +259,17 @@ export class HomeRuntimeStore {
    *   when the store has no usable runtime; `STORE_BUSY` while another install, switch or removal holds the lock.
    */
   async prepare(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, line: (text: string) => void): Promise<PreparedRuntime> {
+    return this.options.store.shareChecks(() => this.prepareShared(target, phase, line))
+  }
+
+  /**
+   * {@link prepare}'s phases, inside its shared checks.
+   * @param target - the version, or `undefined` for the newest release.
+   * @param phase - called as each phase starts.
+   * @param line - writes each line of the release's install progress.
+   * @returns the prepared version.
+   */
+  private async prepareShared(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, line: (text: string) => void): Promise<PreparedRuntime> {
     phase('checking')
     let version: RuntimeVersion
     if (target !== undefined && await this.intact(target)) {
@@ -282,7 +295,8 @@ export class HomeRuntimeStore {
 
   /**
    * The `reporting` phase of a rollback: the report against an installed version, installing nothing. The version
-   * must pass the start check, because the report describes the runtime the rollback would start.
+   * must pass the full check, because the report describes the runtime the rollback would start; the report's readers
+   * share that check ({@link RuntimeStore.shareChecks}).
    * @param target - the version `previous` names.
    * @returns the prepared version.
    * @throws {RuntimeStoreError} `NOT_INSTALLED` when the version is not installed; `RUNTIME_CHANGED` when its files
@@ -292,9 +306,11 @@ export class HomeRuntimeStore {
     if (!await isInstalled(this.options.store.paths, target)) {
       throw new RuntimeStoreError('NOT_INSTALLED', this.options.store.paths.version(target), `runtime ${target} is not installed in ${this.options.store.paths.root}`)
     }
-    await this.options.store.checkRuntime(target, await this.options.root())
-    const report = await this.options.report.build(target)
-    return { version: target, report: report.report, health: report.health, dataDiffers: report.dataDiffers }
+    return this.options.store.shareChecks(async () => {
+      await this.options.store.checkRuntime(target, await this.options.root())
+      const report = await this.options.report.build(target)
+      return { version: target, report: report.report, health: report.health, dataDiffers: report.dataDiffers }
+    })
   }
 
   /**

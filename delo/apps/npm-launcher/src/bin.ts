@@ -20,7 +20,7 @@ import { checkAndRecord } from '@delo/release-verify/record'
 import type { StartCheckResult } from '@delo/release-verify/start'
 import { tilesTransport } from '@delo/release-verify/transport'
 import type { DeloLogger } from '@delo/logs'
-import { parseRuntimeVersion, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
+import { parseRuntimeVersion, resolveFullCheckDays, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
 import { runLauncher, launcherProfile, type LauncherOutput, type SpawnRuntime } from './launcher.ts'
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
@@ -29,6 +29,12 @@ import { BUILD_CONSTANTS, channelPlan, logPlan, platformOf, type BuildConstants 
 
 /** The launcher's own flag for the CLI profile, which it also passes to the runtime. */
 export const PROFILE_FLAG = '--profile'
+
+/**
+ * The variable that sets the interval of the start check's full hash, in whole days from 0 to 30; 7 when unset. The
+ * launcher reads no settings file, so this is where a person sets it.
+ */
+export const FULL_CHECK_DAYS_ENV = 'DELO_RUNTIME_FULL_CHECK_DAYS'
 
 /** The launcher's own flag for the release to install, which it keeps. */
 export const RELEASE_FLAG = '--release'
@@ -145,6 +151,9 @@ export function usage(): string {
     '',
     'Every other argument is passed to delorun unchanged.',
     '',
+    'Every start checks the installed runtime against its signed file list, and hashes every file at least',
+    `every 7 days; ${FULL_CHECK_DAYS_ENV} sets that interval from 0 (every start) to 30 days.`,
+    '',
   ].join('\n')
 }
 
@@ -260,6 +269,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
   let profile: string
   let platform: ReturnType<typeof platformOf>
   let target: RuntimeVersion | undefined
+  let fullCheckDays: number
   try {
     line = parseCommandLine(argv)
     if (line.help) {
@@ -270,6 +280,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     platform = platformOf(process.platform, process.arch)
     target = line.release === undefined ? undefined : parseRuntimeVersion(line.release)
     if (line.release !== undefined && target === undefined) throw new Error(`--release names ${line.release}, which is not a Delo release version`)
+    fullCheckDays = resolveFullCheckDays(context.env[FULL_CHECK_DAYS_ENV])
   } catch (error) {
     const refusal = refusalFor(error, { home: '~/.delo', profile: CLI_PROFILE })
     context.output.stderr(`${refusal.text}\n${usage()}`)
@@ -303,6 +314,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       args: line.runtimeArgs,
       passedThrough: line.passedThrough,
       mode: LAUNCHER_MODE,
+      fullCheckDays,
       store: new RuntimeStore({ home: home.path, platform, logger }),
       channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, {
         home: home.path,

@@ -108,6 +108,8 @@ export interface LauncherOptions {
   readonly passedThrough: readonly string[]
   /** The person's verification mode, which a refusal names; the start check runs in every mode. */
   readonly mode: VerificationMode
+  /** The interval of the start check's full hash in days, as `resolveFullCheckDays` resolves it. */
+  readonly fullCheckDays: number
   /** The store, this home's `RuntimeStore` in a real run. */
   readonly store: LauncherStore
   /**
@@ -331,7 +333,7 @@ export function runtimeCommand(args: readonly string[]): string | undefined {
  */
 async function prepare(options: LauncherOptions): Promise<CheckedPlan> {
   const root = await storedRoot(options.home, options.roots)
-  return { ...await options.store.prepareLaunch({ launcher: SUPPORTED, root, mode: options.mode, profile: options.profile, args: options.args }), root }
+  return { ...await options.store.prepareLaunch({ launcher: SUPPORTED, root, mode: options.mode, fullCheckDays: options.fullCheckDays, profile: options.profile, args: options.args }), root }
 }
 
 /**

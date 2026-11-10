@@ -89,6 +89,8 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   // Verification state under trust/, replaced by every install and never part of a session-data copy.
   'delo.release-log-checkpoint': null,
   'delo.release-log-state': null,
+  // A cache of the start check under trust/: a release that cannot read it, or reads another schema, hashes every file.
+  'delo.runtime-identity': null,
 }
 
 describe('c03-previous-release-reads-delorun-records', () => {

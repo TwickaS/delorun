@@ -6,6 +6,7 @@
  *
  * @module @delo/runtime-store/release
  */
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { RELEASE_FILE_SIZE_LIMITS, type ReleaseManifest, type RootMetadata, type RuntimeFileList } from '@delo/contract-release-manifest'
@@ -18,6 +19,8 @@ export interface VerifiedRelease {
   readonly manifest: ReleaseManifest
   /** This platform's runtime file list. */
   readonly files: RuntimeFileList
+  /** The SHA-256 of the manifest's bytes, which binds an installation's identity record. */
+  readonly manifestSha256: string
 }
 
 /** The bytes of a version's release files. */
@@ -42,7 +45,7 @@ export interface ReleaseFileBytes {
 export function verifyRelease(paths: StorePaths, root: RootMetadata, version: RuntimeVersion, bytes: Pick<ReleaseFileBytes, 'manifest' | 'files'>): VerifiedRelease {
   const manifest = verifySignedManifest(root, bytes.manifest)
   if (manifest.version !== String(version)) throw new Error(`the manifest is release ${manifest.version}, not ${version}`)
-  return { manifest, files: verifyFileList(root, manifest, paths.platform, bytes.files) }
+  return { manifest, files: verifyFileList(root, manifest, paths.platform, bytes.files), manifestSha256: createHash('sha256').update(bytes.manifest).digest('hex') }
 }
 
 /**

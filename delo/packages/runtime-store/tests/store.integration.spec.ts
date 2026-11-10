@@ -59,7 +59,7 @@ function fakeTimersWithPromises(): () => void {
 }
 
 function launch(launcher: LauncherSupport = SUPPORTED, mode: (typeof VERIFICATION_MODES)[number] = 'warn') {
-  return fixture.store.prepareLaunch({ launcher, root: fixture.root, mode, profile: 'default', args: ['status'] })
+  return fixture.store.prepareLaunch({ launcher, root: fixture.root, mode, fullCheckDays: 7, profile: 'default', args: ['status'] })
 }
 
 /** A home with 0.1.0 installed as `previous` and 0.2.0 as `current`. */
@@ -313,7 +313,7 @@ describe('the start check', () => {
   it('stops the launch when the root revokes the key that signed the runtime', async () => {
     await twoVersions()
     const { metadata: revoking } = rootFile(fixture.keys, 'revoked', throwawayKeys().targets)
-    await refusal(fixture.store.prepareLaunch({ launcher: SUPPORTED, root: revoking, mode: 'warn', profile: 'default', args: [] }), 'RUNTIME_CHANGED')
+    await refusal(fixture.store.prepareLaunch({ launcher: SUPPORTED, root: revoking, mode: 'warn', fullCheckDays: 7, profile: 'default', args: [] }), 'RUNTIME_CHANGED')
     await refusal(fixture.store.checkRuntime(V2, revoking), 'RUNTIME_CHANGED')
   })
 

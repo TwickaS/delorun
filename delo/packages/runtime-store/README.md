@@ -50,29 +50,34 @@ The store has no rollback of its own: every way back reads the update record and
 
 ## Installing
 
-`install({ version, root, fill })` takes `store.lock` for the whole install and creates `staging/<16 hex>/` at mode 0700. `fill` downloads the release, runs C2's client verification steps 1 to 5 and extracts the archive into that directory, then returns the manifest, file list and release-log bundle. The store then:
+`install({ version, root, fill })` takes `store.lock` for the whole install and creates `staging/<16 hex>/` at mode 0700. `fill` downloads the release, runs C2's client verification steps 1 to 5 and extracts the archive into that directory, then returns the manifest, file list and release-log bundle, and may report each file's identity after it wrote the file from bytes that matched the list (`staged`). The store then:
 
 1. verifies the manifest's and file list's targets signatures with `root`, and that they describe `version` and this platform;
-2. checks every staged entry against the file list: the regular files are exactly the listed ones with their lengths and SHA-256, and no other kind of entry exists;
-3. sets the installed modes (files 0444, or 0555 for executables, directories 0555), writes the three release files beside the installation and, on a first install, `store.json`;
-4. moves an installed copy of the same version out, renames the staging directory to `runtimes/<version>/` and sets it to 0555;
-5. on a first install, when `current` is absent or malformed, writes `current`.
+2. sets the installed modes (files 0444, or 0555 for executables, directories 0555), leaving a file that already has its mode untouched;
+3. checks every staged entry against the file list: the regular files are exactly the listed ones with their lengths and SHA-256, and no other kind of entry exists. Where change times are trusted, a file the fill reported against the same file list, whose identity `lstat` still shows, is not read again; the store first waits until the newest reported change time is 2 s old, so the record it writes vouches for every file;
+4. writes the three release files beside the installation and, on a first install, `store.json`;
+5. moves an installed copy of the same version out, renames the staging directory to `runtimes/<version>/`, sets it to 0555 and, where change times are trusted, writes its identity record;
+6. on a first install, when `current` is absent or malformed, writes `current`.
 
 Any failure fails with `INSTALL_VERIFY_FAILED` or the underlying error, removes the staging directory and leaves every pointer and installation as it was. A store whose `store.json` names a layout other than 1 is refused with `RUNTIME_INCOMPATIBLE`.
 
 ## Retention
 
-`retain()` runs after a switch commits and at each start. Under `store.lock` it keeps the versions `current` and `previous` name with their release files, and removes every other installation (moved out of `runtimes/` first, so it stops reading as installed at once) with its release files, every directory under `staging/` and the temporary files of interrupted writes. Other entries are left alone. A removal that fails is logged at `warn` and retried by the next run. When `current` cannot be read, nothing is removed.
+`retain()` runs after a switch commits and at each start. Under `store.lock` it keeps the versions `current` and `previous` name with their release files and identity records, and removes every other installation (moved out of `runtimes/` first, so it stops reading as installed at once) with its release files and identity record, every directory under `staging/` and the temporary files of interrupted writes. Other entries are left alone. A removal that fails is logged at `warn` and retried by the next run. When `current` cannot be read, nothing is removed.
 
 ## The start check
 
-`checkRuntime(version, root)` verifies the stored manifest and file list with the root, then compares the installation with the list: a missing, changed, extra or non-regular entry fails it with `RUNTIME_CHANGED`, naming up to ten entries with their kind. The remedies are `reinstall`, and `rollback` when `previous` names another installed version. A root that revokes the targets key the runtime was signed with fails it as a bad signature does.
+`checkRuntime(version, root)` is the full check: it verifies the stored manifest and file list with the root, then hashes every file of the installation against the list, whatever the identity record says: a missing, changed, extra or non-regular entry fails it with `RUNTIME_CHANGED`, naming up to ten entries with their kind. The remedies are `reinstall`, and `rollback` when `previous` names another installed version. A root that revokes the targets key the runtime was signed with fails it as a bad signature does. A pass rewrites the identity record under `store.lock`, without waiting for it, only when the record is missing, unbound or names another identity, so a check of an intact runtime writes nothing. `delorun verify`, an update and the update's health check use it; `shareChecks(work)` runs work in which every `checkRuntime` of a version, and an install of it, share one file check, which `HomeRuntimeStore` uses for an update's prepare and a rollback's report.
+
+The start check that `prepareLaunch` runs reads the installation's identity record, `trust/runtime-files/delorun-<version>-<platform>.json` at mode 0600 (`identity.ts`). Where the installation lies on a file system whose change times only the local kernel sets (Linux on ext2 to ext4, XFS, Btrfs, F2FS, tmpfs or overlayfs), the record is bound to this version, platform, file list, manifest, installation directory and file system, and its last full pass is newer than `fullCheckDays` days, the start lists the installation and hashes only the files whose identity differs from the record, whose device is not the installation's, or whose change time is within 2 s of the record's capture time. Otherwise it runs the full check. A start that hashed a file and passed rewrites the record under `store.lock` without waiting; one that failed leaves it. The [start check design](../../docs/design/start-check.md) states what the identity comparison does and does not detect.
+
+`resolveFullCheckDays(text)` resolves the interval from the launcher's `DELO_RUNTIME_FULL_CHECK_DAYS`: whole days from 0 to 30, 7 when unset, and an error for anything else.
 
 The store never reads `trust/root.json` itself: every root it verifies with is its caller's, anchored on the release roots the launcher ships. The launcher anchors the root for its start; the home process's `HomeRuntimeStore` takes a `TrustedRootSource` (`root` in its options) that the CLI anchors on the roots the launcher names in `DELO_LAUNCHER_ROOTS`, and that refuses with `ROOT_NOT_ANCHORED` when the process was not started by the launcher, so no update installs and no rollback starts under a root a same-user process could have replaced. The clock is not read: an expired root does not stop a start.
 
 ## Launching
 
-`prepareLaunch({ launcher, root, mode, profile, args })` writes nothing. It reads `store.json`'s layout number, `current`, its verified manifest's launch protocol number and the start check, and returns launch protocol 1's command:
+`prepareLaunch({ launcher, root, mode, fullCheckDays, profile, args })` writes nothing but the identity record. It reads `store.json`'s layout number, `current`, its verified manifest's launch protocol number and the start check, and returns launch protocol 1's command:
 
 - the runtime's Node executable, `node/bin/node`, or `node/node.exe` on Windows;
 - the arguments `app/node_modules/@delo/cli/src/bin.js` followed by `args`;

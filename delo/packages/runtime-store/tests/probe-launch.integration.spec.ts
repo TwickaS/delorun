@@ -29,7 +29,7 @@ function runtimes(): string {
 }
 
 function launch() {
-  return fixture.store.prepareLaunch({ launcher: SUPPORTED, root: fixture.root, mode: 'warn', profile: 'default', args: ['status'] })
+  return fixture.store.prepareLaunch({ launcher: SUPPORTED, root: fixture.root, mode: 'warn', fullCheckDays: 7, profile: 'default', args: ['status'] })
 }
 
 /** Flip one byte of a file, as a tamper with the person's own access would. */

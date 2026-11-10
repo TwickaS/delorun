@@ -77,7 +77,7 @@ Plugins are code the person installs, trusted to the extent of their install. A 
 
 ### Other local processes under the same user
 
-A process of the person's user that runs outside the sandbox can read and change everything under the home, read the start token, and run `delorun` and `docker` whenever the person can. Delo claims no protection against such a process. The home's modes protect against other users, not against it, and no root-owned helper exists. The launcher's start check detects a changed runtime file only when the tampering does not also alter the launcher or the stored root.
+A process of the person's user that runs outside the sandbox can read and change everything under the home, read the start token, and run `delorun` and `docker` whenever the person can. Delo claims no protection against such a process. The home's modes protect against other users, not against it, and no root-owned helper exists. The launcher's start check detects a changed runtime file only when the tampering does not also alter the launcher, the stored root or the runtime's identity record under `trust/runtime-files/`.
 
 ### Other users on the machine
 
@@ -173,7 +173,7 @@ No sign-in beyond a launch token from `delorun open` exists. [C14](../contracts/
 - Installing or updating needs a verified inclusion proof in the release log, cosigned by a witness the root lists. At each start, a verified release-log failure stops the start; an offline or unknown result never blocks one.
 - The targets-key holder signs only after rebuilding the release from the tagged source with the published recipe on a machine they control, outside CI, and the signing command refuses without a matching rebuild record.
 - The signing command checks the lockfile against the GitHub Advisory Database and refuses on an advisory without a valid acceptance.
-- Nothing lands under `~/.delo/runtimes/` before the signature, digest and log checks pass. At every start the npm launcher checks every installed runtime file against the signed file list.
+- Nothing lands under `~/.delo/runtimes/` before the signature, digest and log checks pass. At every start the npm launcher checks every installed runtime file against the signed file list: it hashes each file, or compares the file's identity with the one recorded after its last hash, and hashes every file at least every 7 days by default. Storage corruption that leaves a file's change time alone is found by that full pass or `delorun verify`, not by the next start.
 - The npm launcher is the pre-install trust anchor: `npx delorun` runs the launcher npm serves before any Delo check.
 
 No release workflow exists: re-signing the timestamp every 24 hours, publishing to npm with a build attestation and without a token, and the install scripts are in the [release workflow design](../design/release-workflow.md). The desktop app's updater is upstream's and checks no Delo signature or log entry ([update and rollback design](../design/update-and-rollback.md#the-desktop-app)).
@@ -196,7 +196,7 @@ The catalogue and the revocation list are not built ([C13](../contracts/c13-cata
 
 ### Verification
 
-[C15](../contracts/c15-verification-checks.md) defines `delorun verify`. It runs two checks: `release-signature`, which anchors the stored root on the roots the launcher ships and checks the manifest's signature, the timestamp's freshness and the release-log bundle, with the online log check unless `--offline`; and `runtime-files`, which checks every installed file against the signed file list. Every other check of C15's list is reported as not run. The checks run with the person's access, and every report states that a program running with that access can change them. A result is `pass`, `fail`, `not-enforced` or `unknown`; `not-enforced` and `unknown` never count as a pass. Nothing reads a verification mode: `delorun verify` reports in `warn` and blocks nothing, and the launcher always stops on a verified signature, file or release-log failure. No detail holds a secret, a token, a cookie, a key or file content.
+[C15](../contracts/c15-verification-checks.md) defines `delorun verify`. It runs two checks: `release-signature`, which anchors the stored root on the roots the launcher ships and checks the manifest's signature, the timestamp's freshness and the release-log bundle, with the online log check unless `--offline`; and `runtime-files`, which hashes every installed file against the signed file list. Every other check of C15's list is reported as not run. The checks run with the person's access, and every report states that a program running with that access can change them. A result is `pass`, `fail`, `not-enforced` or `unknown`; `not-enforced` and `unknown` never count as a pass. Nothing reads a verification mode: `delorun verify` reports in `warn` and blocks nothing, and the launcher always stops on a verified signature, file or release-log failure. No detail holds a secret, a token, a cookie, a key or file content.
 
 ### Parity
 

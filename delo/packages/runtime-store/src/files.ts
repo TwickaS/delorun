@@ -18,7 +18,7 @@ const READ_EXECUTE = 0o555
 const READ_ONLY = 0o444
 
 /** Mode of the release files beside an installation and of `store.json`. */
-const STORE_FILE_MODE = 0o444
+export const STORE_FILE_MODE = 0o444
 
 /**
  * Create a new staging directory `staging/<16 hex>` at mode 0700.
@@ -33,13 +33,34 @@ export async function createStagingDirectory(staging: string): Promise<string> {
 }
 
 /**
+ * C1's installed mode of a listed file: 0555 for a file the list marks `0755`, otherwise 0444. An extraction may
+ * create each file at this mode, so sealing the tree leaves the file's change time, and the identity it reported, as
+ * they were.
+ * @param mode - the list's mode.
+ * @returns the installed mode.
+ */
+export function installedFileMode(mode: RuntimeFileList['files'][number]['mode']): number {
+  return mode === '0755' ? READ_EXECUTE : READ_ONLY
+}
+
+/**
  * Give a verified tree C1's installed modes: files 0444, or 0555 when the list marks them `0755`, and every
- * directory below the root 0555. The root keeps its mode, so the tree can still be renamed; the caller sets it after.
+ * directory below the root 0555. A file that already has its mode is left alone, so its change time stays; an entry
+ * that is not a regular file is left for the file check to refuse. The root keeps its mode, so the tree can still be
+ * renamed; the caller sets it after.
  * @param root - the tree.
  * @param list - its file list.
  */
 export async function setInstalledModes(root: string, list: RuntimeFileList): Promise<void> {
-  for (const file of list.files) await chmod(join(root, ...file.path.split('/')), file.mode === '0755' ? READ_EXECUTE : READ_ONLY)
+  for (const file of list.files) {
+    const path = join(root, ...file.path.split('/'))
+    const stats = await lstat(path).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw error
+    })
+    const mode = installedFileMode(file.mode)
+    if (stats?.isFile() === true && (stats.mode & 0o7777) !== mode) await chmod(path, mode)
+  }
   const directories: string[] = []
   const walk = async (directory: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -62,15 +83,16 @@ export async function sealInstallation(root: string): Promise<void> {
 }
 
 /**
- * Write a file of the store other than a pointer (a release file beside an installation, or `store.json`): a
- * temporary sibling `<name>.tmp-<16 hex>` created exclusively, flushed and renamed over the path, read-only. The
- * caller flushes the directory.
+ * Write a file of the store other than a pointer (a release file beside an installation, `store.json` or an
+ * installation's identity record): a temporary sibling `<name>.tmp-<16 hex>` created exclusively at its mode, flushed
+ * and renamed over the path. The caller flushes the directory.
  * @param path - the file.
  * @param bytes - its contents.
+ * @param mode - its mode: {@link STORE_FILE_MODE} for a release file or `store.json`, 0600 for an identity record.
  */
-export async function writeStoreFile(path: string, bytes: Uint8Array): Promise<void> {
+export async function writeStoreFile(path: string, bytes: Uint8Array, mode: number): Promise<void> {
   const temporary = `${path}.tmp-${randomBytes(8).toString('hex')}`
-  const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW), STORE_FILE_MODE)
+  const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW), mode)
   try {
     try {
       await handle.writeFile(bytes)
