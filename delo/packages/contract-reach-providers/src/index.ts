@@ -46,6 +46,13 @@ export interface ReachConfigRows {
     readonly address: StudioAddress
     /** Default 443. */
     readonly servePort: number
+    /**
+     * The fixed port on `127.0.0.1` that the serve target names; `0`, the default, until `delorun reach on tailscale`
+     * chooses one from {@link LISTENER_PORT_RANGE} and records it.
+     */
+    readonly listenerPort: number
+    /** How often a ready option rereads `tailscale serve status --json` for Funnel; default {@link DEFAULT_SERVE_CHECK_INTERVAL_MS}. */
+    readonly serveCheckIntervalMs: number
   }
   readonly tailscaleFunnel?: {
     readonly enabled: boolean
@@ -67,6 +74,18 @@ export interface ReachConfigRows {
 
 /** Default Tailscale serve port. */
 export const DEFAULT_SERVE_PORT = 443 as const
+
+/**
+ * The range `delorun reach on tailscale` chooses `tailscalePrivate.listenerPort` from: below the ephemeral ranges of
+ * Linux (from 32768), macOS and Windows (from 49152), so an outgoing connection never holds it.
+ */
+export const LISTENER_PORT_RANGE = { min: 20_000, max: 32_767 } as const
+
+/** Default interval between rereads of `tailscale serve status --json` while Tailscale private is ready: one minute. */
+export const DEFAULT_SERVE_CHECK_INTERVAL_MS = 60_000 as const
+
+/** Shortest accepted `tailscalePrivate.serveCheckIntervalMs`: one second. */
+export const MIN_SERVE_CHECK_INTERVAL_MS = 1_000 as const
 
 /** Ports Tailscale Funnel accepts. */
 export const FUNNEL_PORTS = [443, 8443, 10_000] as const
@@ -145,6 +164,8 @@ export const REACH_ERROR_CODES = [
   'TAILSCALE_ADDRESS_MISMATCH',
   'TAILSCALE_HTTPS_DISABLED',
   'TAILSCALE_SERVE_NOT_PERMITTED',
+  'TAILSCALE_SERVE_CONFLICT',
+  'TAILSCALE_FUNNEL_ON',
   'FUNNEL_NOT_PERMITTED',
   'PORT_CONFLICT',
   'NO_OWNER',

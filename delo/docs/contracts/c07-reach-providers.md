@@ -66,8 +66,9 @@ The capability seam has three roles. The Service Definition is the Cordis servic
 - **`reach.register(provider)`** registers a provider for one option id and returns the disposer. A second provider for the same id fails at load.
 - **`provider.factor`** declares the identity factor a session created through the option records. `@delo/home-auth` reads it from this declaration and refuses `tailnet-membership` for any option other than `tailscale-private`.
 - **`provider.resolve(rows)`** turns the option's configuration rows into a `ReachSpec`: the address, the listener, the ports and every value the provider would otherwise default. It runs at load, so a missing or invalid row fails there with its error code.
-- **`provider.start(spec, listener)`** connects the started reach listener to the outside and resolves when the provider reaches `ready` or a refusal state.
-- **`provider.stop()`** disconnects and resolves when the provider reaches `off`.
+- **`provider.start(spec)`** connects the option's fixed listener port, which the service binds before it calls `start` and relays to the started reach listener, to the outside, and resolves when the provider reaches `ready` or a refusal state.
+- **`provider.stop(spec)`** disconnects, confirms that the outside no longer reaches the fixed listener port, and fails with its error code when it cannot. The service stops the provider before it releases the port, adds a failure to the sentence of a start that did not reach `ready`, and logs one at disposal.
+- **`provider.check(spec)`** rechecks a ready option every `checkIntervalMs`: `ok`; `unknown`, which makes the option `degraded` until a later check answers; or `blocked`, which stops the option as a failed start does and leaves it `blocked` with the check's code.
 - **`provider.visibility(spec)`** returns the option's [visibility note](#visibility-notes) for that spec.
 - **`reach/state`** is the event each state change emits, with the option id, the state and its cause.
 - **`GET /delo/reach/status`** answers `{ "available": true, "options": [{ "option", "state", "address"?, "cause"?, "detail"? }] }` to the studio on the loopback listener and to an admitted reach session, and `421 HOST_MISMATCH` to any other arrival. The studio's settings and onboarding read it; a profile without the reach service answers `404`, which a reader takes as no remote access in this profile.
@@ -117,6 +118,8 @@ The rows are fields of the `@delo/reach` plugin's `Config` in the home's profile
 | `tailscalePrivate.enabled` | boolean | `false` | — |
 | `tailscalePrivate.address` | studio address | none | Must equal `https://` and this machine's `ts.net` name as `tailscale status --json` reports it, with the port when it is not 443. |
 | `tailscalePrivate.servePort` | integer | `443` | 1 to 65535. |
+| `tailscalePrivate.listenerPort` | integer | `0`, none chosen | 1 to 65535 when the option is on; `delorun reach on tailscale` and setup choose it once, at random from 20000 to 32767, and keep it unless another program holds it while Delo is stopped. An enabled row with `0` fails at load with `PORT_CONFLICT`. |
+| `tailscalePrivate.serveCheckIntervalMs` | integer | `60000` | At least `1000`. |
 | `tailscaleFunnel.enabled` | boolean | `false` | — |
 | `tailscaleFunnel.address` | studio address | none | As `tailscalePrivate.address`, with the Funnel port. |
 | `tailscaleFunnel.funnelPort` | integer | `8443` | `443`, `8443` or `10000`, the ports Funnel accepts, and different from `servePort` when both options are on. |
@@ -130,14 +133,14 @@ No row sets a listener's address ([C4](c04-admission.md#listeners)). Secrets of 
 <a id="tailscale-serve-target"></a>
 ### Tailscale serve target
 
-**Current contract: the fallback.** The Tailscale private target is a TCP port on `127.0.0.1` that the operating system assigns to `reach-tailscale-private`. The provider configures it with `tailscale serve --bg --https=<servePort> http://127.0.0.1:<bound port>` and removes it with `tailscale serve --https=<servePort> off`. Under the fallback:
+**Current contract: the fallback.** The Tailscale private target is the fixed TCP port `tailscalePrivate.listenerPort` on `127.0.0.1`. The service binds it before the provider writes the serve rule and relays each connection on it to `reach-tailscale-private`, whose port the operating system assigns; a port that does not bind leaves the option `blocked` with `PORT_CONFLICT`, after the service removes any rule on the serve port, and no rule is written. The provider configures the target with `tailscale serve --bg --https=<servePort> http://127.0.0.1:<listenerPort>`, which `tailscaled` keeps until it is removed, and removes it with `tailscale serve --https=<servePort> off`. Under the fallback:
 
 - identity headers are trusted on no listener, including this one;
 - tailnet-private reach signs a device in with `tailnet-membership` ([C14](c14-oidc-passkeys.md#tailnet-membership)): an approved device's key alone, after an approval at the home's own computer ([C5](c05-device-approval.md#local-approval)); the header-based `tailnet` identity factor is refused with `TAILNET_IDENTITY_UNAVAILABLE`;
 - owner claim is accepted only on the loopback listener ([C5](c05-device-approval.md#owner-claim));
 - a local process that connects to the target port is admitted only as any remote device would be.
 
-Before `start` configures the target, the provider checks that `tailscale` is installed (`TAILSCALE_NOT_INSTALLED`), runs and is signed in (`TAILSCALE_NOT_LOGGED_IN`), that the tailnet has HTTPS certificates on for this machine (`TAILSCALE_HTTPS_DISABLED`) and that the configured address is this machine's `ts.net` name (`TAILSCALE_ADDRESS_MISMATCH`). It runs every `tailscale` command itself, with an argument list and never through `sudo`; when the person's user may not configure `tailscale serve`, it refuses with `TAILSCALE_SERVE_NOT_PERMITTED` and prints the one command the person runs themselves, `sudo tailscale set --operator=$USER`.
+Before `start` configures the target, the provider checks that `tailscale` is installed (`TAILSCALE_NOT_INSTALLED`), runs and is signed in (`TAILSCALE_NOT_LOGGED_IN`), that the tailnet has HTTPS certificates on for this machine (`TAILSCALE_HTTPS_DISABLED`) and that the configured address is this machine's `ts.net` name (`TAILSCALE_ADDRESS_MISMATCH`). It runs every `tailscale` command itself, with an argument list and never through `sudo`; when the person's user may not configure `tailscale serve`, it refuses with `TAILSCALE_SERVE_NOT_PERMITTED` and prints the one command the person runs themselves, `sudo tailscale set --operator=$USER`. It then reads `tailscale serve status --json`, the JSON of Tailscale's `ipn.ServeConfig` (`TCP` by port, `Web` and `AllowFunnel` by `<ts.net name>:<port>`, and the same fields for each foreground session under `Foreground`), for the serve address `<ts.net name>:<servePort>`. While `AllowFunnel` allows that address in any configuration, the option does not start and is `blocked` with `TAILSCALE_FUNNEL_ON`, naming `tailscale funnel --https=<servePort> off`; `delorun reach on tailscale` and setup refuse the same way. Any other rule on the serve port that is not this home's own, HTTPS in the background configuration with the one mount point `/` proxying to `http://127.0.0.1:<listenerPort>`, is removed with the `off` command of its kind (`--https`, `--http` or `--tcp`), and the status is read again; a removal that fails or leaves the port served is `TAILSCALE_SERVE_CONFLICT`, and no rule is written. `delorun reach on tailscale` removes such rules too, and the home's own rule as well while Delo is stopped, since no program of the home then holds its port. The provider's stop and `delorun reach off` remove whatever is served on the serve port and read the status again to confirm it is gone; `delorun reach off` exits non-zero with the reason when it is not. While the option is ready the service rereads the status every `serveCheckIntervalMs`: Funnel found on the serve address removes the rule, closes the listeners and leaves the option `blocked` with `TAILSCALE_FUNNEL_ON`, and a status it cannot read makes the option `degraded` until a later read answers.
 
 **Socket variant, adopted only by a passing spike.** Where the spike result recorded under [compatibility](#compatibility) passes for a platform, the target on that platform is the Unix socket `~/.delo/run/<profile>/serve.sock` ([C1](c01-home-layout.md)), created by the home process and set to mode 0600 after it binds. The provider configures it with the command the spike recorded. On each accepted connection the home reads the peer's credentials (`SO_PEERCRED` on Linux, `getpeereid` on macOS) and closes the connection unless the peer's user is the user `tailscaled` runs as and that user is not the person's user. Under the variant, identity headers are trusted on this socket only, a claim on it may set the tailnet login allowlist, and the `tailnet` identity factor is available for `tailscale-private`. When the peer-credential condition does not hold at start, for example because `tailscaled` runs as the person's user, the provider uses the fallback on that home and says so in its state.
 
@@ -184,8 +187,10 @@ Own-domain reach is the self-hosted relay option. The certificate authority this
 | `TAILSCALE_ADDRESS_MISMATCH` | The configured address differs from the name Tailscale reports. |
 | `TAILSCALE_HTTPS_DISABLED` | The tailnet does not have HTTPS certificates on for this machine. |
 | `TAILSCALE_SERVE_NOT_PERMITTED` | The person's user may not configure `tailscale serve`. |
+| `TAILSCALE_SERVE_CONFLICT` | A serve rule on the serve port could not be removed, or the port is still served after the removal. |
+| `TAILSCALE_FUNNEL_ON` | Tailscale Funnel is allowed for the Tailscale private address. |
 | `FUNNEL_NOT_PERMITTED` | The tailnet policy does not grant the `funnel` attribute. |
-| `PORT_CONFLICT` | `funnelPort` equals an enabled `servePort`. |
+| `PORT_CONFLICT` | `funnelPort` equals an enabled `servePort`, a port row is out of range or unchosen, or another program holds `tailscalePrivate.listenerPort`. |
 | `NO_OWNER` | The home has no owner. |
 | `NO_IDENTITY_FACTOR` | No identity factor that C14 allows for the address is enrolled. |
 | `TAILNET_IDENTITY_UNAVAILABLE` | The `tailnet` identity factor under the fallback. |
@@ -229,6 +234,7 @@ Requirements:
 - Under the fallback, which is the current contract, identity headers are trusted on no listener and tailnet-private reach signs in with `tailnet-membership`, so a device is approved only at the home's own computer and its session is refused every action C14 reserves for that computer; the fallback also applies whenever a local process other than `tailscaled` can reach the serve target.
 - Under the socket variant, identity headers are trusted only on the mode-0600 serve socket from a peer whose user is `tailscaled`'s, and dropped everywhere else; the tailnet login allowlist is set at owner claim.
 - Funnel targets its own listener, which trusts no identity header.
+- While the home runs, the Tailscale private serve rule names a port the home holds: the fixed listener port binds before the rule is written, a rule on the serve port that is not the home's own is removed and confirmed gone first, and the stop removes the rule and confirms it before the port is released. Tailscale private never serves while Funnel is allowed for its address.
 - Own-domain reach requires the CAA record whose `accounturi` names the home's Let's Encrypt account, and `delorun verify` asserts only the parameters Let's Encrypt documents.
 - While a relay is in the path, the home starts no challenge that a party other than the home answers, and no challenge is delegated to Delo.
 - A reach option turns on only interactively, after its visibility note, with an owner and an allowed identity factor.
@@ -245,6 +251,10 @@ Denial tests:
 | `with a relay in the path the home starts no off-home challenge` | Against the ACME stand-in, every challenge the home starts while the relay is in the path is TLS-ALPN-01 answered by the home's reach listener, and it starts no HTTP-01 or DNS-01 challenge. |
 | `a challenge delegated to Delo blocks the provider` | A `_acme-challenge` CNAME into `delo.run` puts the provider in `blocked` with `CHALLENGE_DELEGATED`. |
 | `Funnel and serve cannot share a port` | Enabling both options with the same port fails with `PORT_CONFLICT`. |
+| `refuses a fixed port another program holds, removing the rule an earlier run left there` | With `listenerPort` held by another program, the option is `blocked` with `PORT_CONFLICT`, no rule is written and a rule left on the serve port is removed. |
+| `removes a rule this home does not own and confirms it is gone before writing its own` | A rule on the serve port to another target is removed and the status read again before the home's rule is written; a removal that fails leaves the option `blocked` with `TAILSCALE_SERVE_CONFLICT` and writes nothing. |
+| `refuses to start while Funnel is on for the address, and removes the rule` | With Funnel allowed for the address, the option is `blocked` with `TAILSCALE_FUNNEL_ON` and no rule is written. |
+| `stops serving when Funnel is turned on while ready, and marks an unreadable status degraded` | Funnel allowed after start is found at the next check, which removes the rule, closes the listeners and leaves the option `blocked` with `TAILSCALE_FUNNEL_ON`. |
 
 <a id="what-this-does-not-prove"></a>
 ### What this does not prove
@@ -253,6 +263,8 @@ Denial tests:
 - **Windows.** Windows has no peer-credential check for a Unix socket, so it has no socket variant: the fallback is the contract there whatever a spike records on other platforms.
 - **Tailscale.** Tailscale's coordination service can add a device to the tailnet unless Tailnet Lock is on, and Tailscale obtains the `ts.net` certificate; no Delo check detects either.
 - **A local process under the fallback.** Under the fallback any local process can connect to the Tailscale private target; it is then admitted only as a remote device would be, so this contract does not keep it from trying to sign in.
+- **A home process that dies without stopping.** `tailscaled` keeps the rule, which then names a fixed listener port no program of the home holds until the next start, `delorun reach on tailscale` or `delorun reach off`. A program of another local user that binds the port in that time is served on the phone's `ts.net` origin. The next start finds the port held, removes the rule and stays `blocked`, but nothing removes the rule earlier.
+- **Tailscale's serve status.** The specs read `tailscale serve status --json` as Tailscale's `ipn.ServeConfig` source defines it; no real tailnet has exercised the reading, the removal commands or Funnel detection.
 
 <a id="decided-values"></a>
 ## Decided values
@@ -261,3 +273,4 @@ Denial tests:
 - The CAA record is checked before start, before each ACME order and every 24 hours; certificates renew 30 days before expiry.
 - The Tailscale private target: a TCP port on `127.0.0.1` (the fallback) on every platform, until a spike result adopts the socket variant for a platform.
 - The default ports: 443 for Tailscale private and 8443 for Funnel.
+- The fixed listener port is chosen from 20000 to 32767, below the ephemeral port ranges of Linux, macOS and Windows; the serve status is reread every 60 seconds by default, and an interval below one second is refused.

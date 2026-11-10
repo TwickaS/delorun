@@ -6,9 +6,12 @@
  * identity factor a session created through it records; `@delo/home-auth` reads the factor from that declaration.
  *
  * The Tailscale private provider declares `tailnet-membership`. Its `start` checks that Tailscale is installed, runs,
- * is signed in and has HTTPS certificates on, that the configured address is this machine's `ts.net` name, and then
- * configures `tailscale serve` to the listener's bound port; `stop` removes the serve target. Every `tailscale` call goes
- * through the injected runner, and none runs through `sudo`.
+ * is signed in and has HTTPS certificates on, and that the configured address is this machine's `ts.net` name; reads
+ * `tailscale serve status --json` and refuses while Funnel is allowed for the address; removes any rule on the serve
+ * port that is not this home's own and confirms it is gone; and then configures `tailscale serve` to the fixed
+ * listener port, which the service holds by then. `stop` removes whatever is served on the serve port and confirms it
+ * is gone; `check` rereads the serve status for Funnel while the option is ready. Every `tailscale` call goes through
+ * the injected runner, and none runs through `sudo`.
  *
  * @module @delo/reach/provider
  */
@@ -16,7 +19,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ReachListenerId, StudioAddress } from '@delo/contract-admission'
 import type { IdentityFactor } from '@delo/contract-oidc-passkeys'
 import { REACH_OPTION_LISTENERS, type ReachConfigRows, type ReachOptionId } from '@delo/contract-reach-providers'
-import { ReachError, readTailscale, serve, unserve, type TailscaleRunner } from './tailscale.ts'
+import { ReachError, readServeRules, readTailscale, removeServe, serve, serveTarget, type TailscaleRunner } from './tailscale.ts'
 
 /** What a provider resolved from its rows: every value it would otherwise default. */
 export interface ReachSpec {
@@ -24,7 +27,22 @@ export interface ReachSpec {
   readonly listener: ReachListenerId
   readonly address: StudioAddress
   readonly servePort: number
+  /** The fixed port on `127.0.0.1` the service holds and the outside is connected to. */
+  readonly listenerPort: number
+  /** How often the service runs {@link ReachProvider.check} while the option is ready. */
+  readonly checkIntervalMs: number
 }
+
+/**
+ * What {@link ReachProvider.check} found.
+ * - `ok`: the option may stay ready.
+ * - `unknown`: the provider could not tell; the option is `degraded` until a later check answers.
+ * - `blocked`: the option must stop serving at once.
+ */
+export type ReachCheck =
+  | { readonly kind: 'ok' }
+  | { readonly kind: 'unknown'; readonly error: ReachError }
+  | { readonly kind: 'blocked'; readonly error: ReachError }
 
 /** C7's Provider. */
 export interface ReachProvider {
@@ -40,17 +58,23 @@ export interface ReachProvider {
    */
   resolve(rows: ReachConfigRows): ReachSpec | undefined
   /**
-   * Connect a started listener to the outside.
+   * Connect the fixed listener port, which the service holds when it calls this, to the outside.
    * @param spec - the resolved spec.
-   * @param port - the listener's bound port on `127.0.0.1`.
    * @throws {ReachError} for a check that fails.
    */
-  start(spec: ReachSpec, port: number): Promise<void>
+  start(spec: ReachSpec): Promise<void>
   /**
-   * Disconnect.
+   * Disconnect, and confirm the outside no longer reaches the fixed listener port.
    * @param spec - the spec it started with.
+   * @throws {ReachError} when the disconnection fails or cannot be confirmed.
    */
   stop(spec: ReachSpec): Promise<void>
+  /**
+   * Recheck a ready option.
+   * @param spec - the spec it started with.
+   * @returns what the check found.
+   */
+  check(spec: ReachSpec): Promise<ReachCheck>
   /**
    * The option's visibility note.
    * @returns the text the studio and setup show.
@@ -89,30 +113,73 @@ export class TailscalePrivateProvider implements ReachProvider {
     if (!Number.isInteger(servePort) || servePort < 1 || servePort > 65_535) {
       throw new ReachError('PORT_CONFLICT', `tailscalePrivate.servePort must be a port from 1 to 65535, got ${String(servePort)}`)
     }
+    const listenerPort = row.listenerPort
+    if (!Number.isInteger(listenerPort) || listenerPort < 1 || listenerPort > 65_535) {
+      throw new ReachError('PORT_CONFLICT', `tailscalePrivate.listenerPort must be a port from 1 to 65535, got ${String(listenerPort)}. Run delorun reach on tailscale again to choose one`)
+    }
     const address = URL.parse(row.address)
     if (address?.protocol !== 'https:' || !address.hostname.endsWith('.ts.net') || address.origin !== row.address) {
       throw new ReachError('TAILSCALE_ADDRESS_MISMATCH', `tailscalePrivate.address must be this machine's https ts.net address, got ${JSON.stringify(row.address)}`)
     }
-    return { option: this.option, listener: REACH_OPTION_LISTENERS[this.option], address: row.address, servePort }
+    return { option: this.option, listener: REACH_OPTION_LISTENERS[this.option], address: row.address, servePort, listenerPort, checkIntervalMs: row.serveCheckIntervalMs }
   }
 
   /** @inheritdoc */
-  async start(spec: ReachSpec, port: number): Promise<void> {
+  async start(spec: ReachSpec): Promise<void> {
     const facts = await readTailscale(this.run)
     const expected = tailscaleAddress(facts.dnsName, spec.servePort)
     if (expected !== spec.address) {
       throw new ReachError('TAILSCALE_ADDRESS_MISMATCH', `The configured address ${spec.address} is not this machine's Tailscale address ${expected}. Run delorun reach on tailscale again`)
     }
-    await serve(this.run, spec.servePort, port)
+    const target = serveTarget(spec.listenerPort)
+    const rules = await readServeRules(this.run, facts.dnsName, spec.servePort, target)
+    if (rules.funnel) throw funnelOn(facts.dnsName, spec.servePort, RESTART)
+    if (rules.present && !rules.own) await removeServe(this.run, facts.dnsName, spec.servePort, target)
+    await serve(this.run, spec.servePort, spec.listenerPort)
   }
 
   /** @inheritdoc */
   async stop(spec: ReachSpec): Promise<void> {
-    await unserve(this.run, spec.servePort)
+    await removeServe(this.run, hostOf(spec), spec.servePort, serveTarget(spec.listenerPort))
+  }
+
+  /** @inheritdoc */
+  async check(spec: ReachSpec): Promise<ReachCheck> {
+    try {
+      const rules = await readServeRules(this.run, hostOf(spec), spec.servePort, serveTarget(spec.listenerPort))
+      return rules.funnel ? { kind: 'blocked', error: funnelOn(hostOf(spec), spec.servePort, RESTART) } : { kind: 'ok' }
+    } catch (error) {
+      // A runner that rejects leaves the answer unknown, as a Tailscale that cannot answer does.
+      return { kind: 'unknown', error: error instanceof ReachError ? error : new ReachError('TAILSCALE_NOT_LOGGED_IN', `tailscale serve status failed: ${error instanceof Error ? error.message : String(error)}`) }
+    }
   }
 
   /** @inheritdoc */
   visibility(): string {
     return TAILSCALE_PRIVATE_VISIBILITY
   }
+}
+
+/**
+ * The refusal while Funnel is allowed for the serve address, which would publish the studio's sign-in page to the
+ * internet under the phone's origin.
+ * @param host - this machine's `ts.net` name.
+ * @param servePort - the serve port.
+ * @param next - what the person does once Funnel is off, as a clause beginning with `then`.
+ * @returns the refusal, naming the command that turns Funnel off.
+ */
+export function funnelOn(host: string, servePort: number, next: string): ReachError {
+  return new ReachError('TAILSCALE_FUNNEL_ON', `Tailscale Funnel is on for ${host}:${String(servePort)}, which would put this studio on the public internet, so remote access stays off. Turn Funnel off with tailscale funnel --https=${String(servePort)} off, ${next}`)
+}
+
+/** What the running home's refusal asks the person to do once Funnel is off. */
+const RESTART = 'then restart Delo'
+
+/**
+ * The `ts.net` name of a resolved spec's address.
+ * @param spec - the spec, whose address `resolve` checked.
+ * @returns the host name in lower case.
+ */
+function hostOf(spec: ReachSpec): string {
+  return new URL(spec.address).hostname
 }

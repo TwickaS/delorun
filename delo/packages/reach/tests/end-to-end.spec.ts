@@ -1,12 +1,13 @@
 /**
  * Reach end to end over loopback, with `tailscale` faked: Delo's shipped web composition boots in this process,
  * `@delo/home-auth` and `@delo/reach` load with the Tailscale private option on, and a client plays the phone on the
- * reach listener's port, sending the `Host` that `tailscaled` forwards. The person at the home's computer is the
- * loopback listener.
+ * fixed listener port the serve target names, which relays to the reach listener, sending the `Host` that `tailscaled`
+ * forwards. The person at the home's computer is the loopback listener.
  *
  * The phone asks for approval outside a window and is refused unread; the person opens a window; the phone's request
  * shows a match code that the browser module computes and the person types; the phone signs a challenge and receives a
- * `tailnet-membership` session; that session is refused every action of the home's own computer; removal ends it.
+ * `tailnet-membership` session; that session is refused every action of the home's own computer, changing reach
+ * included; removal ends it.
  */
 import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -17,24 +18,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { RemoteError, type PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { HomeAuthService } from '@delo/home-auth'
 import { bootStudio, type Studio } from '../../home-auth/tests/denial/admission/studio.ts'
-import { ReachService, type Config } from '../src/service.ts'
-import type { TailscaleResult, TailscaleRunner } from '../src/tailscale.ts'
+import { LISTENER_PORT_RANGE } from '@delo/contract-reach-providers'
+import { REACH_STATUS_PATH, ReachService, type Config } from '../src/service.ts'
+import { chooseListenerPort } from '../src/front.ts'
+import type { TailscaleRunner } from '../src/tailscale.ts'
+import { fakeTailscale } from './fake-tailscale.ts'
 // @ts-expect-error -- the sign-in page's browser module is JavaScript without declarations.
 import { deviceIdOf, matchCodeOf, signInMessage } from '../../home-auth/assets/sign-in.js'
 
 const ADDRESS = 'https://home.example.ts.net'
 const HOST = 'home.example.ts.net'
-
-/** A fake `tailscale` that records each invocation and answers as a signed-in machine with HTTPS on. */
-function fakeTailscale(calls: string[][]): TailscaleRunner {
-  return async (args): Promise<TailscaleResult> => {
-    calls.push([...args])
-    if (args[0] === 'status') {
-      return { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: `${HOST}.` }, CertDomains: [HOST] }), stderr: '' }
-    }
-    return Promise.resolve({ code: 0, stdout: '', stderr: '' })
-  }
-}
 
 /** One reply. */
 interface Reply {
@@ -104,13 +97,15 @@ class Phone {
 
 let studio: Studio
 let secrets: string
-const calls: string[][] = []
+/** A signed-in machine with HTTPS on, which records each invocation. */
+const tailscale = fakeTailscale(HOST)
+const calls = tailscale.calls
 let reachPort = 0
 
 /** The reach service with the faked `tailscale`. */
 class FakeReach extends ReachService {
   protected override tailscale(): TailscaleRunner {
-    return fakeTailscale(calls)
+    return tailscale.run
   }
 }
 
@@ -140,10 +135,11 @@ beforeAll(async () => {
   studio = await bootStudio()
   secrets = await mkdtemp(join(tmpdir(), 'delo-reach-e2e-'))
   await studio.ctx.plugin(HomeAuthService, { secretsDirectory: join(secrets, 'home-auth') })
-  const config: Config = { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443 } }
+  const listenerPort = await chooseListenerPort(LISTENER_PORT_RANGE)
+  const config: Config = { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort, serveCheckIntervalMs: 60_000 } }
   await studio.ctx.plugin(FakeReach, config)
   await new Promise<void>((resolve) => { studio.ctx.inject(['reach'], () => { resolve() }) })
-  const served = calls.find(call => call[0] === 'serve')?.at(-1) ?? ''
+  const served = calls.find(call => call[1] === '--bg')?.at(-1) ?? ''
   reachPort = Number(new URL(served).port)
   studioCookie = await signInStudio()
 }, 120_000)
@@ -154,9 +150,9 @@ afterAll(async () => {
 })
 
 describe('reach on the Tailscale private address', () => {
-  it('configures tailscale serve to the reach listener, never through sudo', () => {
-    expect(calls.map(call => call[0])).toEqual(['version', 'status', 'serve'])
-    expect(calls.find(call => call[0] === 'serve')).toEqual(['serve', '--bg', '--https=443', `http://127.0.0.1:${String(reachPort)}`])
+  it('configures tailscale serve to the fixed listener port, never through sudo', () => {
+    expect(calls.map(call => call.slice(0, 2).join(' '))).toEqual(['version', 'status --json', 'serve status', 'serve --bg'])
+    expect(calls.find(call => call[1] === '--bg')).toEqual(['serve', '--bg', '--https=443', `http://127.0.0.1:${String(reachPort)}`])
     expect(calls.flat()).not.toContain('sudo')
     expect(studio.ctx.reach.status()).toEqual([{ option: 'tailscale-private', state: 'ready', address: ADDRESS }])
   })
@@ -255,12 +251,26 @@ describe('reach on the Tailscale private address', () => {
       const removal = await phone.send('POST', '/auth/devices/remove', { v: 1, deviceId })
       expect(json(removal).error).toBe('LOOPBACK_REQUIRED')
       expect((json(await loopback('GET', '/auth/devices')) as { devices: unknown[] }).devices).toHaveLength(1)
-      // No route of this home resets, enrols a factor or changes reach from a session; each path answers as unregistered.
-      for (const path of ['/auth/devices/reset', '/auth/passkey/register', '/auth/oidc/start', '/auth/recovery', '/delo/reach/settings']) {
+      // No route of this home resets or enrols a factor from a session; each path answers as unregistered.
+      for (const path of ['/auth/devices/reset', '/auth/passkey/register', '/auth/oidc/start', '/auth/recovery']) {
         const reply = await phone.send('POST', path, {})
         expect({ path, ok: reply.status < 300 }).toEqual({ path, ok: false })
       }
+      // Reach changes through the `delo-reach` row, which `delorun reach` writes on the home's computer and the plugin
+      // manager could switch; over HTTP the reach status route is the one reach route, and it only reads.
+      // Pins the status route's method check: a write method on it is refused and changes nothing.
+      for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+        const reply = await phone.send(method, REACH_STATUS_PATH, { enabled: false }, method === 'POST' ? {} : { origin: ADDRESS })
+        expect({ method, status: reply.status, error: json(reply).error }).toEqual({ method, status: 405, error: 'METHOD_NOT_ALLOWED' })
+      }
+      // Pins the reach access policy's plugin-management refusal: the phone cannot switch the reach row off or on.
+      const switched = await phone.send('POST', '/api/pluginManager/setPluginEnabled', {
+        type: 'client-request', rpcId: 'reach-row', method: 'pluginManager/setPluginEnabled', payload: { args: { id: 'delo-reach', enabled: false } },
+      })
+      expect(switched.status).toBe(200)
+      expect(json(switched).result).toMatchObject({ ok: false, error: { code: 'remote-access/denied', details: { action: 'pluginManager/setPluginEnabled' } } })
       expect(studio.ctx.reach.status()[0]?.state).toBe('ready')
+      expect(calls.filter(call => call.at(-1) === 'off')).toEqual([])
     })
 
     it('a tailnet-route session cannot grant full access by the escalation prompt or the workspace consent', () => {

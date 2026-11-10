@@ -1,33 +1,62 @@
 /**
- * The `reach` service over a bare Cordis context with a recording `homeAuth` and `connection`: an option starts only
- * when its row is on, a failed check leaves it `blocked` with the listener closed and nothing served, any other failure
- * leaves it `failed`, and disposal stops the provider, closes the listener and stops serving, in that order.
+ * The `reach` service over a bare Cordis context with a recording `homeAuth` and `connection` and a fake `tailscale`
+ * that keeps a serve configuration: an option starts only when its row is on, after binding its fixed listener port; a
+ * failed check leaves it `blocked` with the rule removed, the listeners closed and nothing served; any other failure
+ * leaves it `failed`; Funnel found while ready stops it; and disposal stops the provider, closes the listeners and stops
+ * serving, in that order, logging a removal that failed.
+ *
+ * Each test's comment names the check whose removal makes that test fail.
  */
-import { describe, expect, it } from 'vitest'
+import { createServer, type Server } from 'node:net'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { ReachListener } from '@deepseek-ai/dsh-client-connection'
-import type { ReachStateChange } from '@delo/contract-reach-providers'
+import { LISTENER_PORT_RANGE, type ReachStateChange } from '@delo/contract-reach-providers'
 import { ReachService, type Config } from '../src/service.ts'
 import { TailscalePrivateProvider } from '../src/provider.ts'
-import type { TailscaleResult, TailscaleRunner } from '../src/tailscale.ts'
+import { chooseListenerPort, isPortFree } from '../src/front.ts'
+import type { TailscaleRunner } from '../src/tailscale.ts'
+import { fakeTailscale, ownRule, type FakeTailscale } from './fake-tailscale.ts'
 
-const ADDRESS = 'https://home.example.ts.net'
-const ON: Config = { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443 } }
+const HOST = 'home.example.ts.net'
+const ADDRESS = `https://${HOST}`
+
+/**
+ * The configuration with Tailscale private on.
+ * @param listenerPort - the fixed listener port.
+ * @param serveCheckIntervalMs - the check interval.
+ * @returns the configuration.
+ */
+function on(listenerPort: number, serveCheckIntervalMs = 60_000): Config {
+  return { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort, serveCheckIntervalMs } }
+}
 
 /** A world of fakes and what they recorded, in order. */
 interface World {
   readonly ctx: Context
   readonly events: string[]
   readonly states: ReachStateChange[]
+  readonly tailscale: FakeTailscale
+  readonly run: TailscaleRunner
+  readonly logs: string[]
 }
 
 /** The routes the fake web server holds. */
 const routes = new Map<string, (request: object, response: object) => void>()
 
-function world(options: { readonly open?: () => Promise<Partial<ReachListener>>; readonly serve?: TailscaleResult; readonly off?: TailscaleResult } = {}): World & { readonly run: TailscaleRunner } {
+/** Servers a test holds a port with. */
+const held: Server[] = []
+
+afterEach(async () => {
+  vi.useRealTimers()
+  await Promise.all(held.splice(0).map(server => new Promise<void>((resolve) => { server.close(() => { resolve() }) })))
+})
+
+function world(options: { readonly open?: () => Promise<Partial<ReachListener>>; readonly answers?: FakeTailscale['answers'] } = {}): World {
   const ctx = new Context()
   const events: string[] = []
   const states: ReachStateChange[] = []
+  const logs: string[] = []
   ctx.on('reach/state', (change) => { states.push(change) })
   ctx.provide('webServer', {
     register: (route: { readonly path: string; readonly handler: (request: object, response: object) => void }) => {
@@ -37,7 +66,7 @@ function world(options: { readonly open?: () => Promise<Partial<ReachListener>>;
   } as never)
   ctx.provide('homeAuth', {
     arrivalOf: (request: { readonly headers: { readonly host?: string } }) => ({
-      listener: request.headers.host === 'home.example.ts.net' ? 'reach-tailscale-private' : request.headers.host === 'rebind.example' ? undefined : 'loopback',
+      listener: request.headers.host === HOST ? 'reach-tailscale-private' : request.headers.host === 'rebind.example' ? undefined : 'loopback',
       host: request.headers.host,
       source: '127.0.0.1',
     }),
@@ -55,19 +84,17 @@ function world(options: { readonly open?: () => Promise<Partial<ReachListener>>;
       return { ...listener, close: async () => { events.push('close') } }
     },
   } as never)
-  const status = { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: 'home.example.ts.net.' }, CertDomains: ['home.example.ts.net'] }), stderr: '' }
+  for (const level of ['warn', 'error'] as const) vi.spyOn(ctx.logger, level).mockImplementation((message: unknown) => { logs.push(`${level} ${String(message)}`) })
+  const tailscale = fakeTailscale(HOST, options.answers)
   const run: TailscaleRunner = async (args) => {
     events.push(`tailscale ${args.join(' ')}`)
-    if (args[0] === 'status') return status
-    if (args[0] === 'serve' && args.at(-1) === 'off') return options.off ?? { code: 0, stdout: '', stderr: '' }
-    if (args[0] === 'serve') return options.serve ?? { code: 0, stdout: '', stderr: '' }
-    return Promise.resolve({ code: 0, stdout: '', stderr: '' })
+    return tailscale.run(args)
   }
-  return { ctx, events, states, run }
+  return { ctx, events, states, tailscale, run, logs }
 }
 
 /** Mount the service with the world's `tailscale`. */
-async function mount(w: ReturnType<typeof world>, config: Config): Promise<{ dispose(): Promise<unknown> }> {
+async function mount(w: World, config: Config): Promise<{ dispose(): Promise<unknown> }> {
   class Reach extends ReachService {
     protected override tailscale(): TailscaleRunner {
       return w.run
@@ -77,26 +104,48 @@ async function mount(w: ReturnType<typeof world>, config: Config): Promise<{ dis
   return fiber
 }
 
+/**
+ * Hold a port as another program would.
+ * @returns the port.
+ */
+async function hold(): Promise<number> {
+  const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+  const server = createServer()
+  held.push(server)
+  await new Promise<void>((resolve) => { server.listen(port, '127.0.0.1', () => { resolve() }) })
+  return port
+}
+
+/** The calls that write or remove a serve rule. */
+const writes = (w: World): string[] => w.events.filter(event => event.startsWith('tailscale serve --'))
+
 describe('the reach service', () => {
-  it('starts an option whose row is on, and stops it in order', async () => {
+  it('starts an option whose row is on after binding its fixed port, and stops it in order, confirming the removal', async () => {
     const w = world()
-    const fiber = await mount(w, ON)
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    const fiber = await mount(w, on(port))
     expect(w.ctx.reach.status()).toEqual([{ option: 'tailscale-private', state: 'ready', address: ADDRESS }])
+    // Pins the bind before the rule: while the rule exists, this home holds its target port.
+    await expect(isPortFree(port)).resolves.toBe(false)
     await fiber.dispose()
     expect(w.events).toEqual([
-      'serve reach-tailscale-private tailnet-membership', 'open', 'tailscale version', 'tailscale status --json',
-      'tailscale serve --bg --https=443 http://127.0.0.1:4321', 'tailscale serve --https=443 off', 'close', 'unserve',
+      'serve reach-tailscale-private tailnet-membership', 'open', 'tailscale version', 'tailscale status --json', 'tailscale serve status --json',
+      `tailscale serve --bg --https=443 http://127.0.0.1:${String(port)}`,
+      'tailscale serve status --json', 'tailscale serve --https=443 off', 'tailscale serve status --json', 'close', 'unserve',
     ])
+    expect(w.tailscale.config).toEqual({ TCP: {}, Web: {} })
+    await expect(isPortFree(port)).resolves.toBe(true)
     expect(w.states.map(change => change.state)).toEqual(['starting', 'ready', 'stopping', 'off'])
+    expect(w.logs).toEqual([])
   })
 
   it('starts nothing while the row is off, which is the default', async () => {
     const w = world()
-    const fiber = await mount(w, { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443 } })
+    const fiber = await mount(w, { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443, listenerPort: 0, serveCheckIntervalMs: 60_000 } })
     expect(w.events).toEqual([])
     expect(w.ctx.reach.status()).toEqual([{ option: 'tailscale-private', state: 'off' }])
     expect(() => w.ctx.reach.register(new TailscalePrivateProvider(w.run))).toThrow(/has a provider already/)
-    const funnel = { ...new TailscalePrivateProvider(w.run), option: 'tailscale-funnel' as const, resolve: () => undefined, start: () => Promise.resolve(), stop: () => Promise.resolve(), visibility: () => '' }
+    const funnel = { ...new TailscalePrivateProvider(w.run), option: 'tailscale-funnel' as const, resolve: () => undefined, start: () => Promise.resolve(), stop: () => Promise.resolve(), check: () => Promise.resolve({ kind: 'ok' as const }), visibility: () => '' }
     const off = w.ctx.reach.register(funnel)
     expect(w.ctx.reach.status().map(status => status.option)).toEqual(['tailscale-private', 'tailscale-funnel'])
     off()
@@ -105,41 +154,179 @@ describe('the reach service', () => {
     await fiber.dispose()
   })
 
-  it('leaves a failed check blocked, with the listener closed and nothing served', async () => {
-    const w = world({ serve: { code: 1, stdout: '', stderr: 'Access denied' } })
-    const fiber = await mount(w, ON)
-    expect(w.ctx.reach.status()).toEqual([expect.objectContaining({ state: 'blocked', cause: 'TAILSCALE_SERVE_NOT_PERMITTED' })])
-    expect(w.events.slice(-2)).toEqual(['close', 'unserve'])
-    expect(w.states.at(-1)).toEqual({ option: 'tailscale-private', state: 'blocked', cause: 'TAILSCALE_SERVE_NOT_PERMITTED' })
+  it('refuses a fixed port another program holds, removing the rule an earlier run left there', async () => {
+    const w = world()
+    const port = await hold()
+    w.tailscale.config = ownRule(HOST, 443, port)
+    const fiber = await mount(w, on(port))
+    expect(w.ctx.reach.status()).toEqual([expect.objectContaining({ state: 'blocked', cause: 'PORT_CONFLICT', detail: expect.stringContaining(`127.0.0.1:${String(port)}`) })])
+    // Pins the refusal and the removal: no rule is written, and the stale rule that now forwards to the other program is gone.
+    expect(writes(w)).toEqual(['tailscale serve --https=443 off'])
+    expect(w.tailscale.config).toEqual({ TCP: {}, Web: {} })
+    expect(w.events).not.toContain('open')
+    expect(w.events.at(-1)).toBe('unserve')
     await fiber.dispose()
   })
 
-  it('leaves any other failure failed', async () => {
-    const opened = world({ open: () => Promise.reject(new Error('no provider')) })
-    await (await mount(opened, ON)).dispose()
-    expect(opened.ctx.get('reach')).toBeUndefined()
-    expect(opened.states.at(-1)).toMatchObject({ state: 'failed' })
-    expect(opened.events).toEqual(['serve reach-tailscale-private tailnet-membership', 'open', 'unserve'])
-    const unbound = world({ open: async () => Promise.resolve({ address: undefined }) })
-    await (await mount(unbound, ON)).dispose()
-    expect(unbound.states.at(-1)).toMatchObject({ state: 'failed' })
-    const thrown = world({ open: () => Promise.reject('a string') })
-    await (await mount(thrown, ON)).dispose()
-    expect(thrown.states.at(-1)).toMatchObject({ state: 'failed' })
+  it('says so when the rule on a port another program holds cannot be removed', async () => {
+    const w = world({ answers: { 'serve off': { code: 1, stdout: '', stderr: 'denied' } } })
+    const port = await hold()
+    w.tailscale.config = ownRule(HOST, 443, port)
+    const fiber = await mount(w, on(port))
+    expect(w.ctx.reach.status()[0]).toMatchObject({ state: 'blocked', cause: 'PORT_CONFLICT', detail: expect.stringMatching(/holds 127\.0\.0\.1:\d+.*tailscale serve --https=443 off failed \(denied\)/) })
+    await fiber.dispose()
   })
 
-  it('closes the listener and stops serving even when the provider fails to stop', async () => {
-    const w = world({ off: { code: 1, stdout: '', stderr: '' } })
-    const fiber = await mount(w, ON)
+  it('leaves a failed check blocked, with the rule removed before the listeners close, and nothing served', async () => {
+    const w = world({ answers: { 'serve set': { code: 1, stdout: '', stderr: 'Access denied' } } })
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    const fiber = await mount(w, on(port))
+    expect(w.ctx.reach.status()).toEqual([expect.objectContaining({ state: 'blocked', cause: 'TAILSCALE_SERVE_NOT_PERMITTED' })])
+    expect(w.events.slice(-3)).toEqual(['tailscale serve status --json', 'close', 'unserve'])
+    expect(w.states.at(-1)).toEqual({ option: 'tailscale-private', state: 'blocked', cause: 'TAILSCALE_SERVE_NOT_PERMITTED' })
+    await expect(isPortFree(port)).resolves.toBe(true)
+    await fiber.dispose()
+  })
+
+  it('refuses to start while Funnel is on for the address, and removes the rule', async () => {
+    const w = world()
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    w.tailscale.config = { ...ownRule(HOST, 443, port), AllowFunnel: { [`${HOST}:443`]: true } }
+    const fiber = await mount(w, on(port))
+    // Pins the Funnel refusal at start: the studio is never put on the public internet.
+    expect(w.ctx.reach.status()[0]).toMatchObject({ state: 'blocked', cause: 'TAILSCALE_FUNNEL_ON', detail: expect.stringContaining('tailscale funnel --https=443 off') })
+    expect(writes(w)).toEqual(['tailscale serve --https=443 off'])
+    expect(w.events.slice(-2)).toEqual(['close', 'unserve'])
+    await fiber.dispose()
+  })
+
+  it('removes a rule this home does not own and confirms it is gone before writing its own', async () => {
+    const w = world()
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    w.tailscale.config = ownRule(HOST, 443, 1234)
+    const fiber = await mount(w, on(port))
+    expect(writes(w)).toEqual(['tailscale serve --https=443 off', `tailscale serve --bg --https=443 http://127.0.0.1:${String(port)}`])
+    expect(w.tailscale.config).toEqual(ownRule(HOST, 443, port))
+    await fiber.dispose()
+    const stuck = world({ answers: { 'serve off': { code: 1, stdout: '', stderr: 'denied' } } })
+    stuck.tailscale.config = ownRule(HOST, 443, 1234)
+    await (await mount(stuck, on(port))).dispose()
+    // Pins the removal's result check: a foreign rule that stays blocks the start, and the state says why once.
+    expect(stuck.states.find(change => change.state === 'blocked')).toEqual({ option: 'tailscale-private', state: 'blocked', cause: 'TAILSCALE_SERVE_CONFLICT' })
+    expect(writes(stuck).filter(event => event.includes('--bg'))).toEqual([])
+  })
+
+  it('leaves any other failure failed, trying the removal anyway', async () => {
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    const opened = world({ open: () => Promise.reject(new Error('no provider')) })
+    await (await mount(opened, on(port))).dispose()
+    expect(opened.ctx.get('reach')).toBeUndefined()
+    expect(opened.states.at(-1)).toMatchObject({ state: 'failed' })
+    expect(opened.events).toEqual(['serve reach-tailscale-private tailnet-membership', 'open', 'tailscale serve status --json', 'unserve'])
+    const unbound = world({ open: async () => Promise.resolve({ address: undefined }) })
+    await (await mount(unbound, on(port))).dispose()
+    expect(unbound.states.at(-1)).toMatchObject({ state: 'failed' })
+    const thrown = world({ open: () => Promise.reject('a string') })
+    await (await mount(thrown, on(port))).dispose()
+    expect(thrown.states.at(-1)).toMatchObject({ state: 'failed' })
+    // A missing tailscale serves nothing, so its failed removal adds nothing to the sentence.
+    const missing = world({ answers: { version: { code: null, stdout: '', stderr: '' }, 'serve status': { code: null, stdout: '', stderr: '' } } })
+    await (await mount(missing, on(port))).dispose()
+    expect(missing.states.find(change => change.state === 'blocked')).toMatchObject({ cause: 'TAILSCALE_NOT_INSTALLED' })
+  })
+
+  it('reports a removal that fails while stopping, after closing the listeners and stopping serving', async () => {
+    const w = world({ answers: { 'serve off': { code: 1, stdout: '', stderr: 'denied' } } })
+    const fiber = await mount(w, on(await chooseListenerPort(LISTENER_PORT_RANGE)))
     await fiber.dispose()
     expect(w.events.slice(-2)).toEqual(['close', 'unserve'])
     expect(w.states.at(-1)?.state).toBe('off')
+    // Pins the stop's report: a rule left behind is logged with the command that failed.
+    expect(w.logs).toEqual([expect.stringMatching(/^error reach: tailscale-private stopped, but tailscale serve --https=443 off failed \(denied\).*\(TAILSCALE_SERVE_CONFLICT\)$/)])
+    const broken = world()
+    const brokenFiber = await mount(broken, on(await chooseListenerPort(LISTENER_PORT_RANGE)))
+    broken.tailscale.answers['serve status'] = () => { throw new Error('runner broke') }
+    await brokenFiber.dispose()
+    expect(broken.logs).toEqual(['error reach: tailscale-private stopped, but the serve rule could not be removed: runner broke (TAILSCALE_SERVE_CONFLICT)'])
+    const thrown = world()
+    const thrownFiber = await mount(thrown, on(await chooseListenerPort(LISTENER_PORT_RANGE)))
+    thrown.tailscale.answers['serve status'] = () => { throw 'gone' }
+    await thrownFiber.dispose()
+    expect(thrown.logs).toEqual(['error reach: tailscale-private stopped, but the serve rule could not be removed: gone (TAILSCALE_SERVE_CONFLICT)'])
+  })
+
+  it('stops serving when Funnel is turned on while ready, and marks an unreadable status degraded', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const w = world()
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    const fiber = await mount(w, on(port, 1_000))
+    const reads = (): number => w.events.filter(event => event === 'tailscale serve status --json').length
+    const tick = async (): Promise<void> => {
+      const before = reads()
+      await vi.advanceTimersByTimeAsync(1_000)
+      await vi.waitFor(() => { expect(reads()).toBe(before + 1) })
+    }
+    await tick()
+    expect(w.ctx.reach.status()[0]?.state).toBe('ready')
+    w.tailscale.answers['serve status'] = { code: 1, stdout: '', stderr: 'tailscaled stopped' }
+    await tick()
+    await vi.waitFor(() => { expect(w.ctx.reach.status()[0]?.state).toBe('degraded') })
+    await tick()
+    expect(w.ctx.reach.status()[0]).toMatchObject({ state: 'degraded', cause: 'TAILSCALE_NOT_LOGGED_IN', detail: 'tailscale serve status failed: tailscaled stopped' })
+    delete w.tailscale.answers['serve status']
+    await vi.advanceTimersByTimeAsync(1_000)
+    await vi.waitFor(() => { expect(w.ctx.reach.status()[0]?.state).toBe('ready') })
+    // Pins the periodic Funnel check: Funnel turned on after start stops serving at the next check.
+    w.tailscale.config = { ...w.tailscale.config, AllowFunnel: { [`${HOST}:443`]: true } }
+    await vi.advanceTimersByTimeAsync(1_000)
+    await vi.waitFor(() => { expect(w.ctx.reach.status()[0]?.state).toBe('blocked') })
+    expect(w.ctx.reach.status()[0]).toMatchObject({ cause: 'TAILSCALE_FUNNEL_ON', detail: expect.stringContaining('then restart Delo') })
+    expect(w.tailscale.config.TCP).toEqual({})
+    expect(w.events.slice(-2)).toEqual(['close', 'unserve'])
+    await expect(isPortFree(port)).resolves.toBe(true)
+    const after = w.events.length
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(w.events).toHaveLength(after)
+    await fiber.dispose()
+    expect(w.states.map(change => change.state)).toEqual(['starting', 'ready', 'degraded', 'ready', 'blocked', 'stopping', 'off'])
+    expect(w.events).toHaveLength(after)
+  })
+
+  it('runs one check at a time, logs a check that throws, and stops checking when disposed', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const w = world()
+    const fiber = await mount(w, on(await chooseListenerPort(LISTENER_PORT_RANGE), 1_000))
+    const pending = Promise.withResolvers<undefined>()
+    const check = vi.spyOn(TailscalePrivateProvider.prototype, 'check').mockImplementation(async () => {
+      await pending.promise
+      throw new Error('check broke')
+    })
+    try {
+      await vi.advanceTimersByTimeAsync(3_000)
+      expect(check).toHaveBeenCalledTimes(1)
+      pending.resolve(undefined)
+      await vi.waitFor(() => { expect(w.logs).toEqual(['warn reach: the tailscale-private check failed: check broke']) })
+      check.mockRejectedValueOnce('text')
+      await vi.advanceTimersByTimeAsync(1_000)
+      await vi.waitFor(() => { expect(w.logs).toHaveLength(2) })
+      expect(w.logs[1]).toBe('warn reach: the tailscale-private check failed: text')
+      // A check that answers after disposal began changes nothing.
+      const late = Promise.withResolvers<{ kind: 'blocked'; error: never }>()
+      check.mockImplementationOnce(() => late.promise)
+      await vi.advanceTimersByTimeAsync(1_000)
+      const disposed = fiber.dispose()
+      late.resolve({ kind: 'blocked', error: undefined as never })
+      await disposed
+      expect(w.states.map(change => change.state)).toEqual(['starting', 'ready', 'stopping', 'off'])
+    } finally {
+      check.mockRestore()
+    }
   })
 
   it('mounts nothing while the C16 switch is off', async () => {
     const w = world()
     routes.clear()
-    const fiber = await mount(w, { ...ON, enabled: false })
+    const fiber = await mount(w, { ...on(1), enabled: false })
     expect(w.ctx.reach.status()).toEqual([])
     expect(routes.size).toBe(0)
     expect(w.events).toEqual([])
@@ -148,7 +335,7 @@ describe('the reach service', () => {
 
   it('answers the reach status to the studio on loopback and on the reach address, and to nothing else', async () => {
     const w = world()
-    const fiber = await mount(w, ON)
+    const fiber = await mount(w, on(await chooseListenerPort(LISTENER_PORT_RANGE)))
     const answer = (host: string, method = 'GET', cookie: string | null = 'studio'): { status: number; body: unknown } => {
       const handler = routes.get('/delo/reach/status')
       if (handler === undefined) throw new Error('no status route')
@@ -161,7 +348,7 @@ describe('the reach service', () => {
       return { status: reply.status, body: reply.body }
     }
     expect(answer('127.0.0.1:3080')).toEqual({ status: 200, body: { available: true, options: [{ option: 'tailscale-private', state: 'ready', address: ADDRESS }] } })
-    expect(answer('home.example.ts.net').status).toBe(200)
+    expect(answer(HOST).status).toBe(200)
     // Pins the arrival check: a rebinding name reaches the loopback port and reads nothing.
     expect(answer('rebind.example')).toMatchObject({ status: 421, body: { error: 'HOST_MISMATCH' } })
     expect(answer('127.0.0.1:3080', 'POST').status).toBe(405)
@@ -181,6 +368,6 @@ describe('the reach service', () => {
         return this.tailscale()
       }
     }
-    expect(new Exposed(new Context(), ON).runner()).toBeTypeOf('function')
+    expect(new Exposed(new Context(), on(1)).runner()).toBeTypeOf('function')
   })
 })

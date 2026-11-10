@@ -14,7 +14,7 @@ This types-only package exports the definitions of reach providers: the reach op
 
 - `REACH_OPTION_IDS`, `ReachOptionId` and `REACH_OPTION_LISTENERS`: the options and their listeners.
 - `REACH_STATES`, `ReachState`, `REACH_STATE_TRANSITIONS` and `ReachStateChange`: the states and the `reach/state` event.
-- `ReachConfigRows`, `DEFAULT_SERVE_PORT`, `FUNNEL_PORTS` and `DEFAULT_FUNNEL_PORT`: the configuration rows.
+- `ReachConfigRows`, `DEFAULT_SERVE_PORT`, `LISTENER_PORT_RANGE`, `DEFAULT_SERVE_CHECK_INTERVAL_MS`, `MIN_SERVE_CHECK_INTERVAL_MS`, `FUNNEL_PORTS` and `DEFAULT_FUNNEL_PORT`: the configuration rows.
 - `TailscaleServeTarget`, `SERVE_SOCKET_PATH`, `SERVE_SOCKET_MODE` and `ServeSocketSpikeEvidence`: the serve target variants and the spike evidence.
 - `TAILSCALE_HEADER_PREFIX` and `TAILSCALE_LOGIN_HEADER`: identity headers.
 - `NAMED_CA`, `CAA_ENFORCED_PARAMETERS`, `RELAY_PATH_VALIDATION_METHOD`, `DELO_CONTROLLED_ZONES`, `CAA_CHECK_INTERVAL_MS` and `CERTIFICATE_RENEW_BEFORE_DAYS`: own-domain reach.

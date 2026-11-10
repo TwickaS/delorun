@@ -3,10 +3,15 @@
  * `@delo/reach` configuration rows.
  *
  * Mounting it registers the Tailscale private provider. For each option whose row is enabled it asks `homeAuth` to
- * serve the option's listener with the factor the provider declares, opens the reach listener through
- * `ctx.connection.openReachListener` on a port the operating system assigns, and starts the provider on that port. A
- * provider that fails a check leaves the option `blocked` with C7's code, and the listener closed. Disposing the plugin
- * stops each provider, closes its listener and stops serving it, in that order. Every option is off by default.
+ * serve the option's listener with the factor the provider declares, binds the option's fixed listener port on
+ * `127.0.0.1` ({@link openFront}), opens the reach listener through `ctx.connection.openReachListener` on a port the
+ * operating system assigns, relays the fixed port to it, and starts the provider, which connects the fixed port to the
+ * outside. A fixed port that does not bind, or a provider that fails a check, leaves the option `blocked` with C7's
+ * code; the provider's stop runs first, so the outside reaches no port this home released, and its failure is added to
+ * the state's sentence. While the option is ready the service runs the provider's check every `checkIntervalMs` on an
+ * unreferenced timer: an unknown answer makes it `degraded`, and a blocking one stops it as a failed start does.
+ * Disposing the plugin stops each provider, closes its listeners and stops serving it, in that order, and logs a stop
+ * that failed. Every option is off by default.
  *
  * @module @delo/reach/service
  */
@@ -16,7 +21,10 @@ import { isLoopbackHost } from '@delo/home-auth'
 import schema from '@deepseek-ai/schemastery'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
-import { DEFAULT_SERVE_PORT, type ReachConfigRows, type ReachErrorCode, type ReachOptionId, type ReachState, type ReachStateChange } from '@delo/contract-reach-providers'
+import {
+  DEFAULT_SERVE_CHECK_INTERVAL_MS, DEFAULT_SERVE_PORT, MIN_SERVE_CHECK_INTERVAL_MS, type ReachConfigRows, type ReachErrorCode, type ReachOptionId, type ReachState, type ReachStateChange,
+} from '@delo/contract-reach-providers'
+import { openFront, type LoopbackFront } from './front.ts'
 import { TailscalePrivateProvider, type ReachProvider, type ReachSpec } from './provider.ts'
 import { ReachError, systemTailscale, type TailscaleRunner } from './tailscale.ts'
 
@@ -47,6 +55,10 @@ export interface Config {
     readonly enabled: boolean
     readonly address: string
     readonly servePort: number
+    /** The fixed port on `127.0.0.1` the serve target names; `0` until `delorun reach on tailscale` chooses one. */
+    readonly listenerPort: number
+    /** How often a ready option rereads the serve status for Funnel, in milliseconds. */
+    readonly serveCheckIntervalMs: number
   }
 }
 
@@ -56,8 +68,12 @@ export const Config: schema<Config> = schema.object({
   tailscalePrivate: schema.object({
     enabled: schema.boolean().description('Whether this home is reachable on its Tailscale private address.').default(false),
     address: schema.string().default('').description('This machine\'s https ts.net address, as delorun reach on tailscale writes it.'),
-    servePort: schema.natural().default(DEFAULT_SERVE_PORT).description('The port Tailscale serves HTTPS on.'),
-  }).default({ enabled: false, address: '', servePort: DEFAULT_SERVE_PORT }),
+    servePort: schema.natural().max(65_535).default(DEFAULT_SERVE_PORT).description('The port Tailscale serves HTTPS on.'),
+    listenerPort: schema.natural().max(65_535).default(0)
+      .description('The fixed port on 127.0.0.1 that tailscale serve forwards to, which delorun reach on tailscale chooses once and writes here. 0 means none is chosen, and an enabled option then fails at load.'),
+    serveCheckIntervalMs: schema.natural().min(MIN_SERVE_CHECK_INTERVAL_MS).default(DEFAULT_SERVE_CHECK_INTERVAL_MS)
+      .description('How often, in milliseconds, a ready option rereads tailscale serve status for Funnel.'),
+  }).default({ enabled: false, address: '', servePort: DEFAULT_SERVE_PORT, listenerPort: 0, serveCheckIntervalMs: DEFAULT_SERVE_CHECK_INTERVAL_MS }),
 })
 
 /**
@@ -185,44 +201,114 @@ export class ReachService extends Service {
   }
 
   /**
-   * Start one option: serve its listener, open it and connect it; stop it when the plugin is disposed.
+   * Start one option: serve its listener, hold its fixed port, open the reach listener, relay the fixed port to it and
+   * connect the provider; watch it while ready, and stop it when the plugin is disposed.
    * @param provider - the option's provider.
    * @param spec - the resolved spec.
    */
   private async startOption(provider: ReachProvider, spec: ReachSpec): Promise<void> {
     this.change({ option: spec.option, state: 'starting', address: spec.address })
     const unserve = this.ctx.homeAuth.serve({ listener: spec.listener, address: spec.address, factor: provider.factor })
+    let front: LoopbackFront
+    try {
+      front = await openFront(spec.listenerPort)
+    } catch (error) {
+      // A rule left by an earlier run would point at a port another program holds.
+      const removal = await stopProvider(provider, spec)
+      unserve()
+      this.refuse(spec, error, removal)
+      return
+    }
     let listener: Awaited<ReturnType<typeof this.ctx.connection.openReachListener>> | undefined
     try {
       listener = await this.ctx.connection.openReachListener({ listener: spec.listener, bind: { kind: 'loopback' } })
       const port = listener.address?.port
       if (port === undefined) throw new Error(`reach: the ${spec.listener} listener opened without a port`)
-      await provider.start(spec, port)
+      front.connect(port)
+      await provider.start(spec)
     } catch (error) {
+      const removal = await stopProvider(provider, spec)
       await listener?.close()
+      await front.close()
       unserve()
-      const cause = error instanceof ReachError ? error : undefined
-      this.change({
-        option: spec.option,
-        state: cause === undefined ? 'failed' : 'blocked',
-        address: spec.address,
-        cause: cause?.code ?? 'TAILSCALE_NOT_LOGGED_IN',
-        detail: error instanceof Error ? (cause?.detail ?? error.message) : String(error),
-      })
+      this.refuse(spec, error, removal)
       return
     }
     const open = listener
     this.change({ option: spec.option, state: 'ready', address: spec.address })
-    this.ctx.effect(() => async () => {
-      this.change({ option: spec.option, state: 'stopping', address: spec.address })
-      try {
-        await provider.stop(spec)
-      } finally {
-        await open.close()
-        unserve()
-        this.change({ option: spec.option, state: 'off' })
+    // `disposing` makes a check that answers after disposal began change nothing; `released` records that the option
+    // stopped serving, by a blocking check or by disposal.
+    const watch: { disposing: boolean; released: boolean; checking: Promise<void> | undefined } = { disposing: false, released: false, checking: undefined }
+    const release = async (): Promise<ReachError | undefined> => {
+      watch.released = true
+      clearInterval(timer)
+      const removal = await stopProvider(provider, spec)
+      await open.close()
+      await front.close()
+      unserve()
+      return removal
+    }
+    const check = async (): Promise<void> => {
+      const result = await provider.check(spec)
+      if (watch.disposing) return
+      const current = this.states.get(spec.option)
+      switch (result.kind) {
+        case 'ok':
+          if (current?.state === 'degraded') this.change({ option: spec.option, state: 'ready', address: spec.address })
+          return
+        case 'unknown':
+          if (current?.state !== 'degraded') {
+            this.change({ option: spec.option, state: 'degraded', address: spec.address, cause: result.error.code, detail: result.error.detail })
+          }
+          return
+        case 'blocked': {
+          const removal = await release()
+          this.change({ option: spec.option, state: 'blocked', address: spec.address, cause: result.error.code, detail: withRemoval(result.error.detail, removal) })
+          return
+        }
+        /* v8 ignore next 4 -- ReachCheck is a closed union, so the default holds no reachable statement. */
+        default: {
+          const unexpected: never = result
+          throw new Error(`reach: unknown check result ${JSON.stringify(unexpected)}`)
+        }
       }
+    }
+    const timer = setInterval(() => {
+      if (watch.checking !== undefined) return
+      watch.checking = check()
+        .catch((error: unknown) => { this.ctx.logger.warn(`reach: the ${spec.option} check failed: ${error instanceof Error ? error.message : String(error)}`) })
+        .finally(() => { watch.checking = undefined })
+    }, spec.checkIntervalMs)
+    timer.unref()
+    this.ctx.effect(() => async () => {
+      watch.disposing = true
+      clearInterval(timer)
+      await watch.checking
+      this.change({ option: spec.option, state: 'stopping', address: spec.address })
+      if (!watch.released) {
+        const removal = await release()
+        if (removal !== undefined) this.ctx.logger.error(`reach: ${spec.option} stopped, but ${removal.detail} (${removal.code})`)
+      }
+      this.change({ option: spec.option, state: 'off' })
     }, `reach ${spec.option}`)
+  }
+
+  /**
+   * Record a start that did not reach `ready`: `blocked` for a provider refusal, `failed` for any other error.
+   * @param spec - the spec.
+   * @param error - what stopped it.
+   * @param removal - the provider stop's failure, if it failed.
+   */
+  private refuse(spec: ReachSpec, error: unknown, removal: ReachError | undefined): void {
+    const cause = error instanceof ReachError ? error : undefined
+    const detail = cause?.detail ?? (error instanceof Error ? error.message : String(error))
+    this.change({
+      option: spec.option,
+      state: cause === undefined ? 'failed' : 'blocked',
+      address: spec.address,
+      cause: cause?.code ?? 'TAILSCALE_NOT_LOGGED_IN',
+      detail: withRemoval(detail, removal),
+    })
   }
 
   /**
@@ -233,6 +319,34 @@ export class ReachService extends Service {
     this.states.set(status.option, status)
     this.ctx.emit('reach/state', { option: status.option, state: status.state, ...(status.cause === undefined ? {} : { cause: status.cause }) })
   }
+}
+
+
+/**
+ * Stop a provider, keeping its failure as a value.
+ * @param provider - the provider.
+ * @param spec - the spec it started with, or tried to.
+ * @returns the failure, or undefined when the stop was confirmed; a missing `tailscale` counts as confirmed, because
+ *   nothing serves without it.
+ */
+async function stopProvider(provider: ReachProvider, spec: ReachSpec): Promise<ReachError | undefined> {
+  try {
+    await provider.stop(spec)
+    return undefined
+  } catch (error) {
+    if (error instanceof ReachError) return error.code === 'TAILSCALE_NOT_INSTALLED' ? undefined : error
+    return new ReachError('TAILSCALE_SERVE_CONFLICT', `the serve rule could not be removed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+/**
+ * A state's sentence with the provider stop's failure after it.
+ * @param detail - the sentence.
+ * @param removal - the stop's failure, if any.
+ * @returns the sentence, followed by the failure's unless it says the same.
+ */
+function withRemoval(detail: string, removal: ReachError | undefined): string {
+  return removal === undefined || removal.detail === detail ? detail : `${detail}. ${removal.detail}`
 }
 
 export default ReachService

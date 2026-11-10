@@ -7,8 +7,10 @@
  * @module @delo/reach
  */
 export { REACH_STATUS_PATH, ReachService, Config as ReachConfig, type Config, type ReachStatus, type ReachSummary } from './service.ts'
-export { TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachProvider, type ReachSpec } from './provider.ts'
+export { funnelOn, TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachCheck, type ReachProvider, type ReachSpec } from './provider.ts'
+export { chooseListenerPort, isPortFree, openFront, type LoopbackFront } from './front.ts'
 export {
-  isPermissionRefusal, ReachError, readTailscale, serve, systemTailscale, unserve, type TailscaleFacts, type TailscaleResult, type TailscaleRunner,
+  isPermissionRefusal, parseServeRules, ReachError, readServeRules, readTailscale, removeServe, serve, serveTarget, systemTailscale,
+  type ServeRules, type TailscaleFacts, type TailscaleResult, type TailscaleRunner,
 } from './tailscale.ts'
 export { ReachService as default } from './service.ts'

@@ -1,6 +1,8 @@
 /**
  * The Tailscale private provider's checks and commands, over a fake `tailscale`: it is never run through `sudo`, each
- * failed check names C7's code and what the person does, and the serve target is the reach listener's bound port.
+ * failed check names C7's code and what the person does, the serve target is the fixed listener port, a rule on the
+ * serve port that is not this home's own is removed and confirmed gone before the provider writes its own, Funnel on
+ * the serve address refuses, and `serve status --json` is read as Tailscale's `ipn.ServeConfig` JSON.
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
@@ -11,8 +13,11 @@ import { describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delo/contract-reach-providers'
-import { TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress } from '../src/provider.ts'
-import { isPermissionRefusal, readTailscale, systemTailscale, unserve, type TailscaleResult, type TailscaleRunner } from '../src/tailscale.ts'
+import { TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachSpec } from '../src/provider.ts'
+import {
+  isPermissionRefusal, parseServeRules, readServeRules, readTailscale, removeServe, systemTailscale, type TailscaleResult, type TailscaleRunner,
+} from '../src/tailscale.ts'
+import { fakeTailscale, ownRule } from './fake-tailscale.ts'
 
 const HOST = 'home.example.ts.net'
 const ADDRESS = brandString<StudioAddress>(`https://${HOST}`)
@@ -31,7 +36,10 @@ function fake(answers: Partial<Record<string, TailscaleResult>> = {}): { readonl
   }
 }
 
-const rows = (row: object): Parameters<TailscalePrivateProvider['resolve']>[0] => ({ tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, ...row } })
+const LISTENER_PORT = 24_680
+const TARGET = `http://127.0.0.1:${String(LISTENER_PORT)}`
+const rows = (row: object): Parameters<TailscalePrivateProvider['resolve']>[0] => ({ tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, serveCheckIntervalMs: 60_000, ...row } })
+const SPEC: ReachSpec = { option: 'tailscale-private', listener: 'reach-tailscale-private', address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, checkIntervalMs: 60_000 }
 
 describe('the Tailscale private provider', () => {
   it('declares tailnet-membership and resolves only an https ts.net address', () => {
@@ -40,46 +48,148 @@ describe('the Tailscale private provider', () => {
     expect(provider.visibility()).toBe(TAILSCALE_PRIVATE_VISIBILITY)
     expect(provider.resolve({})).toBeUndefined()
     expect(provider.resolve(rows({ enabled: false }))).toBeUndefined()
-    expect(provider.resolve(rows({}))).toEqual({ option: 'tailscale-private', listener: 'reach-tailscale-private', address: ADDRESS, servePort: 443 })
+    expect(provider.resolve(rows({}))).toEqual(SPEC)
+    // Pins the listener port check: an unchosen port would write a rule to a port no program holds.
+    for (const listenerPort of [0, 65_536, 1.5]) expect(() => provider.resolve(rows({ listenerPort }))).toThrow(expect.objectContaining({ code: 'PORT_CONFLICT' }))
     expect(() => provider.resolve(rows({ address: 'https://studio.example.org' }))).toThrow(expect.objectContaining({ code: 'TAILSCALE_ADDRESS_MISMATCH' }))
     expect(() => provider.resolve(rows({ address: `http://${HOST}` }))).toThrow(expect.objectContaining({ code: 'TAILSCALE_ADDRESS_MISMATCH' }))
     expect(() => provider.resolve(rows({ servePort: 0 }))).toThrow(expect.objectContaining({ code: 'PORT_CONFLICT' }))
     expect(tailscaleAddress(HOST, 8443)).toBe(`https://${HOST}:8443`)
   })
 
-  it('configures the serve target to the listener\'s port and removes it, never through sudo', async () => {
-    const tailscale = fake()
+  it('configures the serve target to the fixed listener port and removes it, confirming the removal, never through sudo', async () => {
+    const tailscale = fakeTailscale(HOST)
     const provider = new TailscalePrivateProvider(tailscale.run)
-    const spec = provider.resolve(rows({}))
-    if (spec === undefined) throw new Error('no spec')
-    await provider.start(spec, 41234)
-    await provider.stop(spec)
+    await provider.start(SPEC)
+    expect(tailscale.config).toEqual(ownRule(HOST, 443, LISTENER_PORT))
+    await provider.stop(SPEC)
     expect(tailscale.calls).toEqual([
-      ['version'], ['status', '--json'], ['serve', '--bg', '--https=443', 'http://127.0.0.1:41234'], ['serve', '--https=443', 'off'],
+      ['version'], ['status', '--json'], ['serve', 'status', '--json'], ['serve', '--bg', '--https=443', TARGET],
+      ['serve', 'status', '--json'], ['serve', '--https=443', 'off'], ['serve', 'status', '--json'],
     ])
     expect(tailscale.calls.flat()).not.toContain('sudo')
+    // Stopping with nothing served runs no removal.
+    tailscale.calls.length = 0
+    await provider.stop(SPEC)
+    expect(tailscale.calls).toEqual([['serve', 'status', '--json']])
+  })
+
+  it('keeps its own rule left by an earlier run, and removes any other rule on the serve port before writing its own', async () => {
+    const own = fakeTailscale(HOST)
+    own.config = ownRule(HOST, 443, LISTENER_PORT)
+    await new TailscalePrivateProvider(own.run).start(SPEC)
+    expect(own.calls.filter(call => call.at(-1) === 'off')).toEqual([])
+    // Pins the removal of a foreign rule: a rule to another port would serve whatever program binds it on the phone's origin.
+    const foreign = fakeTailscale(HOST)
+    foreign.config = ownRule(HOST, 443, 1234)
+    await new TailscalePrivateProvider(foreign.run).start(SPEC)
+    expect(foreign.calls.slice(2)).toEqual([
+      ['serve', 'status', '--json'], ['serve', 'status', '--json'], ['serve', '--https=443', 'off'], ['serve', 'status', '--json'], ['serve', '--bg', '--https=443', TARGET],
+    ])
+    expect(foreign.config).toEqual(ownRule(HOST, 443, LISTENER_PORT))
+  })
+
+  it('refuses while Funnel is on for the address, and when a foreign rule cannot be removed, writing nothing', async () => {
+    // Pins the Funnel refusal: the studio would be on the public internet under the phone's origin.
+    const funnel = fakeTailscale(HOST)
+    funnel.config = { AllowFunnel: { [`${HOST}:443`]: true } }
+    await expect(new TailscalePrivateProvider(funnel.run).start(SPEC)).rejects.toMatchObject({ code: 'TAILSCALE_FUNNEL_ON', detail: expect.stringContaining('tailscale funnel --https=443 off, then restart Delo') })
+    expect(funnel.calls.some(call => call[1] === '--bg')).toBe(false)
+    // Pins the removal's result check: a failed `off` is reported, and the provider writes no rule over it.
+    const stuck = fakeTailscale(HOST, { 'serve off': { code: 1, stdout: '', stderr: 'denied\n' } })
+    stuck.config = ownRule(HOST, 443, 1234)
+    await expect(new TailscalePrivateProvider(stuck.run).start(SPEC)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_CONFLICT', detail: expect.stringContaining('tailscale serve --https=443 off failed (denied)') })
+    expect(stuck.calls.some(call => call[1] === '--bg')).toBe(false)
+    // Pins the confirmation: a foreground session that keeps the port after the removal is reported.
+    const foreground = fakeTailscale(HOST, { 'serve off': { code: 0, stdout: '', stderr: '' } })
+    foreground.config = { Foreground: { session: ownRule(HOST, 443, 1234) } }
+    await expect(new TailscalePrivateProvider(foreground.run).start(SPEC)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_CONFLICT', detail: expect.stringContaining('still serves') })
+    await expect(new TailscalePrivateProvider(foreground.run).stop(SPEC)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_CONFLICT' })
+  })
+
+  it('rechecks a ready option: Funnel blocks, an unreadable status is unknown', async () => {
+    const tailscale = fakeTailscale(HOST)
+    const provider = new TailscalePrivateProvider(tailscale.run)
+    await expect(provider.check(SPEC)).resolves.toEqual({ kind: 'ok' })
+    // Pins the periodic Funnel check: Funnel turned on after start is found.
+    tailscale.config = { ...ownRule(HOST, 443, LISTENER_PORT), AllowFunnel: { [`${HOST}:443`]: true } }
+    await expect(provider.check(SPEC)).resolves.toMatchObject({ kind: 'blocked', error: { code: 'TAILSCALE_FUNNEL_ON' } })
+    tailscale.answers['serve status'] = { code: 1, stdout: '', stderr: 'tailscaled not running' }
+    await expect(provider.check(SPEC)).resolves.toMatchObject({ kind: 'unknown', error: { code: 'TAILSCALE_NOT_LOGGED_IN', detail: 'tailscale serve status failed: tailscaled not running' } })
+    await expect(new TailscalePrivateProvider(() => Promise.reject(new Error('runner broke'))).check(SPEC)).resolves.toMatchObject({ kind: 'unknown', error: { detail: 'tailscale serve status failed: runner broke' } })
+    await expect(new TailscalePrivateProvider(() => Promise.reject('gone')).check(SPEC)).resolves.toMatchObject({ kind: 'unknown', error: { detail: 'tailscale serve status failed: gone' } })
   })
 
   it('names each failed check with C7\'s code', async () => {
     const provider = (answers: Parameters<typeof fake>[0]): TailscalePrivateProvider => new TailscalePrivateProvider(fake(answers).run)
-    const spec = new TailscalePrivateProvider(fake().run).resolve(rows({}))
-    if (spec === undefined) throw new Error('no spec')
-    await expect(provider({ version: { code: null, stdout: '', stderr: '' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_INSTALLED' })
-    await expect(provider({ status: { code: 1, stdout: '', stderr: 'stopped' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
-    await expect(provider({ status: { code: 0, stdout: 'not json', stderr: '' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
-    await expect(provider({ status: { code: 0, stdout: 'null', stderr: '' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
-    await expect(provider({ status: { code: 0, stdout: '{}', stderr: '' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
-    await expect(provider({ status: { code: 0, stdout: JSON.stringify({ BackendState: 'NeedsLogin' }), stderr: '' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
+    const spec = SPEC
+    await expect(provider({ version: { code: null, stdout: '', stderr: '' } }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_INSTALLED' })
+    await expect(provider({ status: { code: 1, stdout: '', stderr: 'stopped' } }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
+    await expect(provider({ status: { code: 0, stdout: 'not json', stderr: '' } }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
+    await expect(provider({ status: { code: 0, stdout: 'null', stderr: '' } }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
+    await expect(provider({ status: { code: 0, stdout: '{}', stderr: '' } }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
+    await expect(provider({ status: { code: 0, stdout: JSON.stringify({ BackendState: 'NeedsLogin' }), stderr: '' } }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
     // Pins the HTTPS check: without certificates, tailscale serve answers nothing a browser accepts.
-    await expect(provider({ status: { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: `${HOST}.` }, CertDomains: [] }), stderr: '' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_HTTPS_DISABLED' })
-    await expect(provider({ status: { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: 'other.example.ts.net.' }, CertDomains: ['other.example.ts.net'] }), stderr: '' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_ADDRESS_MISMATCH' })
+    await expect(provider({ status: { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: `${HOST}.` }, CertDomains: [] }), stderr: '' } }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_HTTPS_DISABLED' })
+    await expect(provider({ status: { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: 'other.example.ts.net.' }, CertDomains: ['other.example.ts.net'] }), stderr: '' } }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_ADDRESS_MISMATCH' })
     // Pins "prints the one command and never runs sudo".
-    await expect(provider({ serve: { code: 1, stdout: '', stderr: 'Access denied: serve config denied' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_NOT_PERMITTED', detail: expect.stringContaining(TAILSCALE_OPERATOR_COMMAND) })
-    await expect(provider({ serve: { code: 1, stdout: '', stderr: '\nsomething else broke\n' } }).start(spec, 1)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN', detail: 'tailscale serve failed: something else broke' })
-    await expect(provider({ serve: { code: 1, stdout: '', stderr: '' } }).start(spec, 1)).rejects.toMatchObject({ detail: 'tailscale serve failed: no reason given' })
-    await expect(unserve(fake({ serve: { code: 1, stdout: '', stderr: '' } }).run, 443)).resolves.toBe(false)
+    const setting = (answer: TailscaleResult): TailscalePrivateProvider => new TailscalePrivateProvider(fakeTailscale(HOST, { 'serve set': answer }).run)
+    await expect(setting({ code: 1, stdout: '', stderr: 'Access denied: serve config denied' }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_NOT_PERMITTED', detail: expect.stringContaining(TAILSCALE_OPERATOR_COMMAND) })
+    await expect(setting({ code: 1, stdout: '', stderr: '\nsomething else broke\n' }).start(spec)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN', detail: 'tailscale serve failed: something else broke' })
+    await expect(setting({ code: 1, stdout: '', stderr: '' }).start(spec)).rejects.toMatchObject({ detail: 'tailscale serve failed: no reason given' })
     expect([isPermissionRefusal('permission denied'), isPermissionRefusal('use --operator'), isPermissionRefusal('timeout')]).toEqual([true, true, false])
     await expect(readTailscale(fake({ status: { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: 'x', CertDomains: 'x' }), stderr: '' } }).run)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
+  })
+
+  it('reads one host and port of tailscale serve status --json', () => {
+    const read = (config: unknown): ReturnType<typeof parseServeRules> => parseServeRules(JSON.stringify(config), HOST, 443, TARGET)
+    const nothing = { present: false, own: false, funnel: false, removal: '--https=443' }
+    expect(read(null)).toEqual(nothing)
+    expect(read({})).toEqual(nothing)
+    expect(read(ownRule(HOST, 443, LISTENER_PORT))).toEqual({ present: true, own: true, funnel: false, removal: '--https=443' })
+    // Keys compare in any case, and a proxy target may end in a slash.
+    expect(read({ TCP: { 443: { HTTPS: true } }, Web: { 'HOME.example.ts.net:443': { Handlers: { '/': { Proxy: `${TARGET}/` } } } } })).toMatchObject({ own: true })
+    // Rules on another port or for another name of this machine are not this port's.
+    expect(read(ownRule(HOST, 8443, 1))).toEqual(nothing)
+    expect(read({ Web: { 'other.example.ts.net:443': { Handlers: { '/': { Proxy: 'http://127.0.0.1:1' } } } } })).toEqual(nothing)
+    // Each foreign form is present and not this home's own, and names the flag that removes it.
+    expect(read(ownRule(HOST, 443, 1234))).toEqual({ present: true, own: false, funnel: false, removal: '--https=443' })
+    expect(read({ ...ownRule(HOST, 443, LISTENER_PORT), Web: { [`${HOST}:443`]: { Handlers: { '/': { Proxy: TARGET }, '/x': { Text: 'hi' } } } } })).toMatchObject({ present: true, own: false })
+    expect(read({ TCP: { 443: { HTTPS: true } }, Web: { [`${HOST}:443`]: { Handlers: { '/app': { Proxy: TARGET } } } } })).toMatchObject({ own: false })
+    expect(read({ TCP: { 443: { HTTPS: true } }, Web: { [`${HOST}:443`]: { Handlers: { '/': { Text: 'hi' } } } } })).toMatchObject({ own: false })
+    expect(read({ TCP: { 443: { TCPForward: '127.0.0.1:22' } } })).toEqual({ present: true, own: false, funnel: false, removal: '--tcp=443' })
+    expect(read({ TCP: { 443: { HTTPS: true, TCPForward: '127.0.0.1:22' } }, Web: ownRule(HOST, 443, LISTENER_PORT).Web })).toMatchObject({ own: false, removal: '--tcp=443' })
+    expect(read({ TCP: { 443: { HTTP: true } }, Web: ownRule(HOST, 443, LISTENER_PORT).Web })).toEqual({ present: true, own: false, funnel: false, removal: '--http=443' })
+    expect(read({ TCP: { 443: {} } })).toEqual({ present: true, own: false, funnel: false, removal: '--https=443' })
+    expect(read({ ...ownRule(HOST, 443, LISTENER_PORT), Foreground: { session: ownRule(HOST, 443, LISTENER_PORT) } })).toMatchObject({ present: true, own: false })
+    expect(read({ Foreground: { session: ownRule(HOST, 443, 1), other: 'x' } })).toEqual({ present: true, own: false, funnel: false, removal: '--https=443' })
+    // Funnel for this host and port, in the background or a foreground session; Funnel elsewhere is not this port's.
+    expect(read({ AllowFunnel: { [`${HOST}:443`]: true } })).toEqual({ ...nothing, funnel: true })
+    expect(read({ Foreground: { session: { AllowFunnel: { [`${HOST}:443`]: true } } } })).toEqual({ ...nothing, funnel: true })
+    expect(read({ AllowFunnel: { [`${HOST}:8443`]: true, [`${HOST}:443`]: false } })).toEqual(nothing)
+    // Fields of another type read as absent.
+    expect(read({ TCP: [], Web: { [`${HOST}:443`]: 'x' }, AllowFunnel: 'x', Foreground: [] })).toEqual(nothing)
+    expect(read({ TCP: { 443: 'x' }, Web: { [`${HOST}:443`]: { Handlers: [] } } })).toEqual(nothing)
+    expect(read({ TCP: { 443: { HTTPS: true } }, Web: { [`${HOST}:443`]: { Handlers: { '/': 'x' } } } })).toMatchObject({ own: false })
+    for (const text of ['not json', '[]', '"text"', '3']) expect(parseServeRules(text, HOST, 443, TARGET)).toBeUndefined()
+  })
+
+  it('names each serve status and removal failure with C7\'s code', async () => {
+    await expect(readServeRules(fake({ serve: { code: null, stdout: '', stderr: '' } }).run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_INSTALLED' })
+    await expect(readServeRules(fake({ serve: { code: 1, stdout: '', stderr: 'Access denied: serve config denied' } }).run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_NOT_PERMITTED', detail: expect.stringContaining(TAILSCALE_OPERATOR_COMMAND) })
+    await expect(readServeRules(fake({ serve: { code: 1, stdout: '', stderr: 'no tailscaled\n' } }).run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN', detail: 'tailscale serve status failed: no tailscaled' })
+    // Pins the JSON check: output that is not the configuration is never read as an empty one.
+    await expect(readServeRules(fake({ serve: { code: 0, stdout: '', stderr: '' } }).run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN', detail: 'tailscale serve status failed: its output is not the serve configuration' })
+    const tailscale = fakeTailscale(HOST)
+    await removeServe(tailscale.run, HOST, 443, TARGET)
+    expect(tailscale.calls).toEqual([['serve', 'status', '--json']])
+    tailscale.config = { TCP: { 443: { TCPForward: '127.0.0.1:22' } } }
+    await removeServe(tailscale.run, HOST, 443, TARGET)
+    expect(tailscale.calls.at(-2)).toEqual(['serve', '--tcp=443', 'off'])
+    expect(tailscale.config).toEqual({ TCP: {}, Web: {} })
+    const silent = fakeTailscale(HOST, { 'serve off': { code: 1, stdout: '', stderr: '' } })
+    silent.config = ownRule(HOST, 443, 1)
+    await expect(removeServe(silent.run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_CONFLICT', detail: expect.stringContaining('failed (no reason given)') })
   })
 
   it('runs the system tailscale without a shell', async () => {
