@@ -166,7 +166,7 @@ afterEach(async () => {
 })
 
 afterAll(() => {
-  execFileSync('chmod', ['-R', 'u+rwX', base])
+  execFileSync('chmod', ['-R', 'u+rwX', base], { timeout: 30_000 })
   rmSync(base, { recursive: true, force: true })
 })
 

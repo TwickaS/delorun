@@ -46,7 +46,7 @@ const list = JSON.parse(readFileSync(join(ROOT, LIST), 'utf8')) as NetworkReques
  * @returns their repository paths.
  */
 function networkFiles(): string[] {
-  const files = execFileSync('git', ['ls-files', '--', ...SCOPES], { cwd: ROOT, encoding: 'utf8' }).split('\n')
+  const files = execFileSync('git', ['ls-files', '--', ...SCOPES], { cwd: ROOT, encoding: 'utf8', timeout: 30_000 }).split('\n')
     .filter(path => /\.tsx?$/u.test(path) && !path.includes('/client/') && !path.includes('/tests/'))
   return files.filter(path => NETWORK_PRIMITIVE.test(readFileSync(join(ROOT, path), 'utf8')))
 }
