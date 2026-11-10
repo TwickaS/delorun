@@ -12,16 +12,16 @@ export class HomeLayoutError extends Error {
   /**
    * @param code - C1's error code.
    * @param path - the absolute path the failure concerns.
-   * @param message - what is wrong with the path, without the fix.
+   * @param detail - what is wrong with the path, without the fix; the message is the code, this and the fix.
    * @param fix - the shell command that fixes it, such as `chmod 600 <path>`, when one exists.
    */
   constructor(
     readonly code: HomeLayoutErrorCode,
     readonly path: string,
-    message: string,
+    readonly detail: string,
     readonly fix?: string,
   ) {
-    super(`${code}: ${message}${fix === undefined ? '' : `; fix it with: ${fix}`}`)
+    super(`${code}: ${detail}${fix === undefined ? '' : `; fix it with: ${fix}`}`)
     this.name = 'HomeLayoutError'
   }
 }

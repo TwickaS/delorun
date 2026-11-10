@@ -45,11 +45,12 @@ describe('the computer', () => {
 
   it('starts through the existing start entries without opening the studio there', async () => {
     const opener = recordingOpener(true)
-    const ending = computerEnding(directory, 'work', output, {}, undefined, opener)
+    const launched = { DELO_FIXTURE: 'launch' }
+    const ending = computerEnding(directory, 'work', output, launched, undefined, opener)
     expect(await ending.start('background')).toBe(EXIT.ok)
     expect(startDetached).toHaveBeenCalledWith(directory, 'work', output, false, opener)
     expect(await ending.start('foreground')).toBeUndefined()
-    expect(startForeground).toHaveBeenCalledWith({ home: directory, profile: 'work', open: false, output })
+    expect(startForeground).toHaveBeenCalledWith({ home: directory, profile: 'work', open: false, output, env: launched })
   })
 
   it('opens a fresh link from the home process through the opener, and reports when no browser took it', async () => {

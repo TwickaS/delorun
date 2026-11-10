@@ -5,7 +5,7 @@
  *
  * @module @delo/npm-launcher
  */
-export { LAUNCHER_EXIT, installRemedies, refusalFor, storeRemedies, type LauncherExit, type Refusal, type RemedyContext } from './refusals.ts'
+export { LAUNCHER_DESCRIBERS, LAUNCHER_EXIT, refusalFor, type LauncherExit, type LauncherRefusal, type RemedyContext } from './refusals.ts'
 export { launcherProfile, runLauncher, PROFILE_NAME, type LauncherOptions, type LauncherOutput, type LauncherStore, type SpawnRuntime } from './launcher.ts'
 export { BUILD_CONSTANTS, buildOrigin, channelPlan, logPlan, platformOf, RELEASE_LOG_API_PREFIX, type BuildConstants, type ChannelPlan, type LogPlan } from './platform.ts'
 export { formatSize, progressLines, type LauncherProgress } from './progress.ts'

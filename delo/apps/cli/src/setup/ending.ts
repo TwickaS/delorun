@@ -89,7 +89,7 @@ export function computerEnding(
 ): Ending {
   return {
     spawn: (command, args) => run(command, args),
-    start: mode => mode === 'background' ? startDetached(home, profile, output, false, opener) : startForeground({ home, profile, open: false, output }),
+    start: mode => mode === 'background' ? startDetached(home, profile, output, false, opener) : startForeground({ home, profile, open: false, output, env }),
     address: () => studioAddress(home, profile),
     open: async () => (await openStudio(home, profile, opener)).kind === 'opened',
     canOpen: () => opener.canOpen(),

@@ -32,6 +32,7 @@ export {
   type ReleaseLogRefusal,
 } from './errors.ts'
 export { parseStrictJson, type JsonValue } from './json.ts'
+export { logContradictionDescriber, logUnreachableDescriber, RELEASE_VERIFY_DESCRIBERS, releaseLogInternalDescriber, releaseLogRefusalDescriber } from './refusal.ts'
 export { isPowerOfTwo, leafHash, nodeHash, rootFromInclusionProof, verifyConsistencyProof } from './merkle.ts'
 export {
   checkpointBody,

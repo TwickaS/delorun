@@ -85,10 +85,11 @@ async function runHome(ctx: Context | undefined): Promise<void> {
       chats: new CountingChatGate(), failedRows: () => [], rows: () => [],
       studio: () => ctx === undefined ? undefined : `http://127.0.0.1:${String(ctx.webServer.port)}/`,
       studioLink: port => ctx === undefined ? { kind: 'unavailable', reason: 'the Host serves no studio' } : hostStudioLink(ctx, port),
-      check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve(),
+      check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve(), suspend: async () => Promise.resolve(),
     }) },
+    preStart: () => Promise.resolve(),
     probe: updateChannelProbe(home, PROFILE), logger: SILENT, redactor: new Redactor(), updates: undefined, supervisor: undefined,
-    onExit: (listener) => { listeners.push(listener) }, exit: () => {},
+    onExit: (listener) => { listeners.push(listener) }, onSignal: () => () => undefined, exit: () => {},
   })
   cleanups.push(async () => {
     await running.shutdown(0)

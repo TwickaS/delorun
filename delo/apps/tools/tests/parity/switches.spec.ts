@@ -503,7 +503,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
     ],
   }
   /** The update gate row in the parity form the overlay's fourth patch restates it. */
-  const GATE_INSERT = { insert: [{ id: 'delo-update-gate', name: '@delo/bundle-local/update-gate', config: { enabled: true }, disabled: true }] }
+  const GATE_INSERT = { insert: [{ id: 'delo-update-gate', name: '@delo/bundle-local/update-gate', config: { enabled: true, holdUntilChecked: true }, disabled: true }] }
   /** The trash row in the parity form the overlay's fifth patch restates it, with the home paths kept as expressions. */
   const TRASH_INSERT = {
     insert: [{

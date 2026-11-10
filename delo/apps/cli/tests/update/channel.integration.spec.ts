@@ -1,17 +1,15 @@
 /**
- * The release channel of a Delo home (`delo/apps/cli/src/update/channel.ts`): which runtime platforms Delo names, and
- * that a channel exists only when the home stores a verified release root, either as a walked chain under
- * `trust/roots/` or as `trust/root.json`, and the launcher's lines it writes for each install step. Nothing here reaches
- * the network; the channel is only constructed.
+ * The release channel of a Delo home (`delo/apps/cli/src/update/channel.ts`): which runtime platforms Delo names, the
+ * channel over the roots the launcher ships, and the launcher's lines it writes for each install step. Nothing here
+ * reaches the network; the channel is only constructed.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { DELO_HOME_ENTRIES, TRUST_ROOTS_DIRECTORY } from '@delo/contract-home-layout'
-import { ensureHomeTree, writeProtectedFile } from '@delo/home'
-import { LauncherChannel, writeTrustedRoot } from '@delo/install'
+import { ensureHomeTree } from '@delo/home'
+import { LauncherChannel } from '@delo/install'
 import type { SemanticVersion } from '@delo/contract-release-manifest'
 import { homeReleaseChannel, installLines, runtimePlatformOf } from '../../src/update/channel.ts'
 
@@ -46,27 +44,10 @@ describe('runtimePlatformOf', () => {
 })
 
 describe('homeReleaseChannel', () => {
-  it('refuses a home that stores no verified release root, telling the person to reinstall', async () => {
+  it('returns the launcher\'s channel, walking from the roots the launcher ships', async () => {
     const home = await emptyHome()
 
-    await expect(homeReleaseChannel(home, 'linux-x64', 'stable', () => {})).rejects.toThrow('this home stores no verified release root, so no update can be verified; reinstall Delo with its launcher')
-  })
-
-  it('returns the launcher\'s channel anchored on the root the home stores', async () => {
-    const home = await emptyHome()
-    await writeTrustedRoot(home, Buffer.from('{"root":"stored"}\n'))
-
-    expect(await homeReleaseChannel(home, 'linux-x64', 'stable', () => {})).toBeInstanceOf(LauncherChannel)
-  })
-
-  it('returns the launcher\'s channel for a home that stores a walked root chain and no single root', async () => {
-    const home = await emptyHome()
-    const roots = join(home, DELO_HOME_ENTRIES.trust, TRUST_ROOTS_DIRECTORY)
-    mkdirSync(roots, { mode: 0o700 })
-    await writeProtectedFile(join(roots, '1.root.json'), Buffer.from('{"root":1}\n'))
-    await writeProtectedFile(join(roots, '2.root.json'), Buffer.from('{"root":2}\n'))
-
-    expect(await homeReleaseChannel(home, 'darwin-arm64', 'stable', () => {})).toBeInstanceOf(LauncherChannel)
+    expect(homeReleaseChannel(home, 'darwin-arm64', 'stable', [Buffer.from('{"root":1}\n')], () => {})).toBeInstanceOf(LauncherChannel)
   })
 })
 

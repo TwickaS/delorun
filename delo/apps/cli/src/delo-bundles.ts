@@ -32,7 +32,7 @@ const PLUGIN_OPERATION_OUTPUT_BYTES = 16_384
  * @param packageName - the package name.
  * @returns true for `@delo/…`.
  */
-function isDelo(packageName: string): boolean {
+export function isDeloPackage(packageName: string): boolean {
   return packageName.startsWith(DELO_BUNDLE_SCOPE)
 }
 
@@ -95,7 +95,7 @@ export async function linkDeloBundles(
 ): Promise<void> {
   const { profile: loaded, resolution } = await linking.resolve()
   const importable = new Set([...resolution.entries.map(entry => entry.name), ...resolution.localPackageNames])
-  for (const bundle of bundles.filter(isDelo)) {
+  for (const bundle of bundles.filter(isDeloPackage)) {
     const layered = loaded.layers.some(layer => layer.packageName === bundle)
     if (layered && importable.has(bundle)) continue
     const directory = carriedPackageDirectory(bundle)
@@ -119,7 +119,7 @@ export async function linkDeloBundles(
  * @throws {CliError} with the failure code, naming each skipped Delo bundle, its reason and the command that fixes it.
  */
 export function refuseSkippedDeloBundles(profile: Pick<Profile, 'name' | 'skippedBundles'>): void {
-  const skipped = profile.skippedBundles.filter(bundle => isDelo(bundle.packageName))
+  const skipped = profile.skippedBundles.filter(bundle => isDeloPackage(bundle.packageName))
   if (skipped.length === 0) return
   throw new CliError(EXIT.failed, [
     `delorun: the CLI profile ${profile.name} could not load Delo's ${skipped.length === 1 ? 'bundle' : 'bundles'}, so Delo did not start:`,
@@ -141,6 +141,8 @@ export interface BootedRow {
   readonly disabled: boolean
   /** How its startup ended. */
   readonly state: RowState
+  /** The config the Loader mounted the row with, after every patch layer; absent when the row has none. */
+  readonly config?: unknown
 }
 
 /**
@@ -161,7 +163,7 @@ export function deloRowIds(profile: Pick<Profile, 'layers'>): Set<string> {
     for (const child of Object.values(record)) if (typeof child === 'object') visit(child)
   }
   for (const layer of profile.layers) {
-    if (!isDelo(layer.packageName)) continue
+    if (!isDeloPackage(layer.packageName)) continue
     for (const patch of layer.patches) visit((patch as { insert?: unknown }).insert)
   }
   return ids
@@ -175,7 +177,7 @@ export function deloRowIds(profile: Pick<Profile, 'layers'>): Set<string> {
  * @returns the inactive Delo rows.
  */
 export function inactiveDeloRows(rows: readonly BootedRow[], deloIds: ReadonlySet<string>): BootedRow[] {
-  return rows.filter(row => (deloIds.has(row.id) || isDelo(row.name)) && !row.disabled && row.state !== 'active')
+  return rows.filter(row => (deloIds.has(row.id) || isDeloPackage(row.name)) && !row.disabled && row.state !== 'active')
 }
 
 /**

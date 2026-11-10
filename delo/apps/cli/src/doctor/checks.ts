@@ -15,8 +15,8 @@ import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delo/contract-setup-answers'
 import { checkPrivateDirectory, HomeLayoutError, resolveDeloHome, runDirectory, type DeloHome } from '@delo/home'
 
-/** A check's name, as `delorun doctor` prints it. */
-export type CheckName = 'home' | 'docker' | 'key' | 'port'
+/** A check's name, as `delorun doctor` prints it; `release-log` and `import` are the record lines of [records](./records.ts). */
+export type CheckName = 'home' | 'docker' | 'key' | 'port' | 'release-log' | 'import'
 
 /**
  * A check's verdict. `pass` needs nothing. `warn` names something optional or

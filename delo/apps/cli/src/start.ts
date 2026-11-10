@@ -21,22 +21,22 @@
  */
 import { spawn } from 'node:child_process'
 import { rmSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
+import { assertDeloInvariants, composeDeloProfile, NO_APPROVED_CONTENT, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
 import { HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import { START_WAIT_MS } from '@delo/contract-home-process'
-import { CountingChatGate, HomeProcess, openHomeLog, captureHomeOutput, queryHomeStatus, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
+import { CountingChatGate, HomeProcess, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
-import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, refuseSkippedDeloBundles, type BootedRow, type RowState } from './delo-bundles.ts'
+import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, type BootedRow, type RowState } from './delo-bundles.ts'
+import { registerHomeProcess } from './home-exclusion.ts'
 import { announceStudio } from './open/announce.ts'
 import { hostStudioLink } from './open/host-link.ts'
 import { computerOpener, type StudioOpener } from './open/studio.ts'
@@ -44,27 +44,36 @@ import { hasCliProfile, profileDirectory } from './profile.ts'
 import { readBackgroundAnswer } from './setup/background.ts'
 import { upstreamLinking } from './setup/index.ts'
 import { addStudioBundle } from './studio-bundle.ts'
-import { safeModeNotice, safeModeStart } from './safe-mode.ts'
-import { removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, writeSandboxOverlay } from './sandbox-protection.ts'
+import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
+import { studioBundleMigration } from './profile-migrations.ts'
+import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.ts'
 import { checkHealth, inactiveRows, watchChats } from './update/host.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
 import { checkStoredRuntime, storeUpdateSupport } from './update/store-support.ts'
+import { launcherAnchor } from './update/trusted-root.ts'
+import { loadDeloEnvironment } from './launch-environment.ts'
+
+/**
+ * Adds `@delo/bundle-studio` to a profile setup created before it existed ({@link addStudioBundle}).
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @param output - where pnpm's output goes.
+ * @returns whether the bundle was added.
+ */
+export type AddStudioBundle = (home: string, profile: string, output: CommandOutput) => Promise<boolean>
 
 /** What the foreground start calls outside this module; specs replace them. */
 export interface StartDependencies {
-  /**
-   * Adds `@delo/bundle-studio` to a profile setup created before it existed ({@link addStudioBundle}); upstream's
-   * resolution and `dsh plugin add` by default.
-   */
-  readonly addStudioBundle: (home: string, profile: string, output: CommandOutput) => Promise<boolean>
   /** Loads the profile and reports its skipped bundles as upstream's boot does; upstream's `prepareProfile` by default. */
   readonly prepareProfile: (profile: string) => Promise<ResolvedProfileRuntime>
   /** Boots the profile; upstream's `runProfile` by default, with its rows and its shutdown. */
   readonly runProfile: (options: RunProfileOptions) => Promise<BootedProfile>
-  /** Loads the launch environment with upstream's `.env` layers; upstream's `loadLayeredEnv` by default. */
+  /** Loads the launch environment with upstream's `.env` layers, refusing a `DELO_` name in one ({@link loadDeloEnvironment}). */
   readonly loadEnvironment: () => RunProfileOptions['environment']
   /** Asks a live lock holder for its status; the update channel's `status` request by default. */
   readonly probe: (home: string, profile: string) => HolderProbe
+  /** Routes this process's termination signals to the home process, which owns the one handler. */
+  readonly onSignal: HomeProcessOptions['onSignal']
   /** Registers a listener for this process's exit. */
   readonly onExit: (listener: () => void) => void
   /** Ends the process after a stop or a handover. */
@@ -87,9 +96,10 @@ export interface StartDependencies {
    * @param profile - the CLI profile.
    * @param running - the version this process runs.
    * @param logger - the home process's logger.
+   * @param env - the environment `delorun` was started with, read for the launcher's release roots.
    * @returns the support.
    */
-  readonly updates: (home: string, profile: string, running: RuntimeVersion, logger: DeloLogger) => UpdateSupport
+  readonly updates: (home: string, profile: string, running: RuntimeVersion, logger: DeloLogger, env: Readonly<Record<string, string | undefined>>) => UpdateSupport
   /**
    * The handover pipe when this process was started as an update's successor, which inherits it as file descriptor 3.
    * @returns the pipe, or `undefined` for a fresh start.
@@ -97,19 +107,51 @@ export interface StartDependencies {
   readonly handover: () => Promise<HandoverPipe | undefined>
   /** How a start that opens the studio asks the home process for a link and opens it ({@link computerOpener}). */
   readonly opener: StudioOpener
+  /** The composition's approved plugin content step ([compose](./compose.ts)); {@link NO_APPROVED_CONTENT} in a real start. */
+  readonly approvedPluginContent: ApprovedPluginContent
+  /** The ordered steps before any Host boots ([pre-start](./pre-start.ts)); {@link realPreStartSteps} in a real start. */
+  readonly preStartSteps: readonly PreStartStep[]
+}
+
+/**
+ * The real start's pre-start steps, whose migration adds Delo's studio bundle to a profile set up before it shipped.
+ * @param add - links the studio bundle into a profile; upstream's resolution and `dsh plugin add` in a real start.
+ * @returns the steps.
+ */
+export function realPreStartSteps(add: AddStudioBundle): readonly PreStartStep[] {
+  return preStartSteps({ migrations: context => [studioBundleMigration(() => add(context.home, context.profile, context.output), context.output, context.profile)] })
 }
 
 
 /** A booted profile, as the start's audit of Delo's rows reads it. */
 export interface BootedProfile {
-  /** The Loader's rows after startup settled; empty when the tree was already disposed. */
+  /** The Loader's rows after startup settled, with their configs; empty when the tree was already disposed. */
   readonly rows: () => readonly BootedRow[]
   /**
-   * Dispose the application and let the process end with this code.
+   * Who provides a service in the booted root context.
+   * @param name - the service's name.
+   * @returns the provider ({@link serviceProvider}), or `undefined` when no active fiber provides it.
+   */
+  readonly providerOf: (name: string) => ServiceProvider | undefined
+  /**
+   * Release the turn gate's start hold, so turns that wait for the start's check go on: called once the booted Host
+   * passed it. A Host without the `deloTurnGate` service holds no turn, and this does nothing.
+   */
+  readonly releaseTurns: () => void
+  /**
+   * Dispose the application and let the process end with this code, through upstream's bounded shutdown: it ends the
+   * process at once when the teardown fails or overruns its 5 seconds.
    * @param code - the exit code.
    * @returns when disposal finished.
    */
   readonly shutdown: (code: number) => Promise<void>
+  /**
+   * Dispose the application's root context and keep the process: the teardown an update's switch runs, which arms no
+   * process exit. Upstream's process-wide proxy dispatcher stays installed, and the next boot in this process
+   * installs its own over it.
+   * @returns when disposal finished.
+   */
+  readonly dispose: () => Promise<void>
   /**
    * Count the Host's running chats into the home process's gate ([host](./update/host.ts)).
    * @param gate - the gate.
@@ -128,10 +170,11 @@ export interface BootedProfile {
   readonly studioLink: (port: number | undefined) => StudioLinkResult
 }
 
-/** Loader fiber states, mirrored as upstream's startup audit mirrors them because Cordis's enum is `const`. */
-const FIBER_PENDING = 0
-const FIBER_ACTIVE = 2
-const FIBER_DISPOSED = 4
+/**
+ * The Loader fiber states the audit reads, by name: Cordis's `FiberState` is a `const enum`, which a module run from
+ * its emitted JavaScript cannot import, so its numbers are mirrored here, and a spec compares them with Cordis's source.
+ */
+export const FIBER_STATES = { PENDING: 0, ACTIVE: 2, DISPOSED: 4 } as const
 
 /**
  * Read the Loader's rows from a booted root context, as upstream's startup audit reads them.
@@ -145,16 +188,52 @@ export function bootedRows(ctx: Context): BootedRow[] {
     let disabled: boolean
     try {
       disabled = Boolean(entry.disabled)
-    } catch {
+    } catch (_disabledThrew) {
       // A `disabled` expression that throws leaves the row unmounted; upstream's audit reports it as failed.
-      return { id: entry.options.id, name: entry.options.name, disabled: false, state: 'failed' }
+      return { id: entry.options.id, name: entry.options.name, disabled: false, state: 'failed', ...configOf(entry.options.config) }
     }
     const fiber = entry.fiber
-    const state: RowState = fiber === undefined || fiber.state === FIBER_DISPOSED
+    const state: RowState = fiber === undefined || fiber.state === FIBER_STATES.DISPOSED
       ? 'not-imported'
-      : fiber.state === FIBER_ACTIVE ? 'active' : fiber.state === FIBER_PENDING ? 'pending' : 'failed'
-    return { id: entry.options.id, name: entry.options.name, disabled, state }
+      : fiber.state === FIBER_STATES.ACTIVE ? 'active' : fiber.state === FIBER_STATES.PENDING ? 'pending' : 'failed'
+    return { id: entry.options.id, name: entry.options.name, disabled, state, ...configOf(entry.options.config) }
   })
+}
+
+/**
+ * A row's config field, present only when the row has a config.
+ * @param config - the Loader entry's config.
+ * @returns the field to spread into the row.
+ */
+function configOf(config: unknown): { readonly config?: unknown } {
+  return config === undefined ? {} : { config }
+}
+
+/**
+ * Who provides a service in a booted root context: the Loader row whose fiber registered it, or whose fiber is an
+ * ancestor of the fiber that did, so a plugin that provides through a child plugin still counts as its row.
+ * @param ctx - the root context.
+ * @param name - the service's name.
+ * @returns `undefined` when no active fiber provides the service; otherwise the provider, whose `row` is `undefined`
+ *   when no Loader row's fiber is the registering fiber or one of its ancestors.
+ */
+export function serviceProvider(ctx: Context, name: string): ServiceProvider | undefined {
+  const provision = ctx.reflect._getImpl(name)
+  if (provision === undefined) return undefined
+  // By uid: the Loader's entries are read through a context proxy, so their fibers are not the provision's objects. A
+  // disposed fiber has no uid and provides nothing.
+  const rowOf = new Map<number, string>()
+  for (const entry of ctx.get('loader')?.entries() ?? []) {
+    const uid = entry.fiber?.uid
+    if (uid !== undefined && uid !== null) rowOf.set(uid, entry.options.id)
+  }
+  const seen = new Set<number>()
+  for (let fiber: Fiber = provision.ctx.fiber; fiber.uid !== null && !seen.has(fiber.uid); fiber = fiber.parent.fiber) {
+    seen.add(fiber.uid)
+    const row = rowOf.get(fiber.uid)
+    if (row !== undefined) return { row }
+  }
+  return { row: undefined }
 }
 
 /** What a foreground start runs. */
@@ -167,41 +246,73 @@ export interface StartRequest {
   readonly open: boolean
   /** Where the start writes. */
   readonly output: CommandOutput
+  /**
+   * The environment `delorun` was started with, captured once in `main` before any `.env` layer applies: the launcher's
+   * release roots and the Docker context are read from it, never from this process's environment.
+   */
+  readonly env: Readonly<Record<string, string | undefined>>
 }
 
 /** The level of the home process's log. */
 const HOME_LOG_LEVEL = 'info'
 
 /**
+ * Boot a profile with upstream's profile runner and read it as the start reads a booted profile.
+ * @param options - the runner's options.
+ * @param signals - whether upstream's runner installs its own termination-signal handlers: false under a home process,
+ *   which owns them, and true for a one-shot run such as `delorun headless`.
+ * @returns the booted profile.
+ */
+export async function runUpstreamProfile(options: RunProfileOptions, signals: boolean): Promise<BootedProfile> {
+  // Loaded after the launch variables are set, so upstream resolves the Delo home.
+  const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
+  const { ctx, shutdown } = await runProfile({ ...options, signals })
+  return {
+    rows: () => bootedRows(ctx),
+    providerOf: name => serviceProvider(ctx, name),
+    shutdown: code => shutdown.shutdown(code),
+    dispose: async () => { await ctx.fiber.dispose() },
+    watchChats: (gate) => { watchChats(ctx, gate) },
+    // The CLI profile's invariants require the service, so it is absent only in a profile that holds no turn.
+    releaseTurns: () => { ctx.get('deloTurnGate')?.release() },
+    studio: () => {
+      const server = ctx.get('webServer')
+      return server?.port === undefined ? undefined : { host: server.host, port: server.port }
+    },
+    studioLink: port => hostStudioLink(ctx, port),
+  }
+}
+
+/**
+ * Add the studio bundle through upstream's resolution and `dsh plugin add`.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @param output - where pnpm's output goes, on stderr.
+ * @returns whether the bundle was added.
+ */
+export function upstreamAddStudioBundle(home: string, profile: string, output: CommandOutput): Promise<boolean> {
+  return addStudioBundle(home, profile, () => upstreamLinking(home, profile), (text) => { output.stderr(text) })
+}
+
+/**
  * The dependencies of a real start.
- * @returns upstream's profile preparation, profile runner and `.env` loader, the update channel's probe, the process's
- *   exit event and exit, and the output capture.
+ * @returns no approved plugin content, the real pre-start steps, upstream's profile preparation, profile runner and
+ *   `.env` loader, the update channel's probe, the process's exit event and exit, and the output capture.
  */
 export function upstreamDependencies(): StartDependencies {
   return {
-    addStudioBundle: (home, profile, output) => addStudioBundle(home, profile, () => upstreamLinking(home, profile), (text) => { output.stderr(text) }),
+    approvedPluginContent: NO_APPROVED_CONTENT,
+    preStartSteps: realPreStartSteps(upstreamAddStudioBundle),
     async prepareProfile(profile) {
       // Loaded after the launch variables are set, so upstream resolves the Delo home.
       const { INSTALL_ANCHOR, prepareProfile } = await import('@deepseek-ai/dsh/profile-boot')
       return { profile: prepareProfile(profile), installAnchor: INSTALL_ANCHOR }
     },
-    async runProfile(options) {
-      // Loaded after the launch variables are set, so upstream resolves the Delo home.
-      const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
-      const { ctx, shutdown } = await runProfile(options)
-      return {
-        rows: () => bootedRows(ctx),
-        shutdown: code => shutdown.shutdown(code),
-        watchChats: (gate) => { watchChats(ctx, gate) },
-        studio: () => {
-          const server = ctx.get('webServer')
-          return server?.port === undefined ? undefined : { host: server.host, port: server.port }
-        },
-        studioLink: port => hostStudioLink(ctx, port),
-      }
-    },
-    loadEnvironment: () => loadLayeredEnv('delorun'),
+    // The home process owns this process's signals across Host boots, so upstream's runner installs none.
+    runProfile: options => runUpstreamProfile(options, false),
+    loadEnvironment: () => loadDeloEnvironment(),
     probe: updateChannelProbe,
+    onSignal: listenProcessSignals,
     onExit(listener) {
       process.on('exit', listener)
     },
@@ -234,6 +345,9 @@ export async function startForeground(request: StartRequest, dependencies: Start
   if (!hasCliProfile(request.home, request.profile)) {
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} is not set up in ${request.home}; run: delorun setup`)
   }
+  // The chat data and the runtime pointers are the whole home's: this process is a user of them for its whole life, so
+  // another profile's update, copy, restore or rollback refuses while it runs ([home exclusion](./home-exclusion.ts)).
+  dependencies.onExit(await registerHomeProcess(request.home, request.profile))
   // A successor reads its handover first: the start id it logs and locks under is the one the predecessor chose.
   const handover = await dependencies.handover()
   const startId = handover?.handover.startId ?? newStartId()
@@ -251,12 +365,16 @@ export async function startForeground(request: StartRequest, dependencies: Start
       profile: request.profile,
       running,
       startId,
-      host: { boot: async () => bootProfile(handover === undefined ? request : { ...request, open: false }, dependencies, runtime.store ? running : undefined, homeLog.logger) },
+      host: {
+        boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, dependencies, runtime.store ? running : undefined, homeLog.logger),
+      },
+      preStart: () => runPreStartSteps(dependencies.preStartSteps, { home: request.home, profile: request.profile, kind: 'cli', successor: handover !== undefined, output: request.output }),
       probe: dependencies.probe(request.home, request.profile),
       logger: homeLog.logger,
       redactor: homeLog.redactor,
-      updates: runtime.store ? dependencies.updates(request.home, request.profile, running, homeLog.logger) : undefined,
+      updates: runtime.store ? dependencies.updates(request.home, request.profile, running, homeLog.logger, request.env) : undefined,
       supervisor: undefined,
+      onSignal: dependencies.onSignal,
       onExit: dependencies.onExit,
       exit: dependencies.exit,
     }
@@ -279,48 +397,32 @@ export async function startForeground(request: StartRequest, dependencies: Start
 }
 
 /**
- * Load the CLI profile and boot it: the home process's Host.
+ * Compose the CLI profile and boot it: the home process's Host. The composition is the one every Host over a Delo home
+ * goes through ([compose](./compose.ts)), with C1's confinement on its sandbox row, whose overlay exists while the Host
+ * runs; the booted Host is held to the composition's invariants before it serves.
  * @param request - the home, profile, studio choice and output.
  * @param dependencies - the profile preparation, runner and environment loader.
  * @param stored - the version this process runs from the store, whose files H1 checks; `undefined` outside the store.
- * The profile boots with C1's confinement on its sandbox row ([sandbox protection](./sandbox-protection.ts)), whose
- * overlay exists while the Host runs.
+ * @param logger - the home process's logger.
  * @returns the running Host, whose running chats feed the home process's gate and whose health check is C3's.
- * @throws {CliError} when the profile skipped a Delo bundle, fails to boot, or a row of a Delo bundle did not activate.
+ * @throws {CliError} when the profile skipped a Delo bundle, fails to boot, a row of a Delo bundle did not activate, or
+ *   the composed or booted profile breaks an invariant.
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
-  // A profile that cannot take the studio bundle still starts, in the stock look; its data is unchanged either way.
-  try {
-    if (await dependencies.addStudioBundle(request.home, request.profile, request.output)) {
-      request.output.stderr(`delorun: added Delo's studio look to the profile ${request.profile}; Settings → Appearance switches back to the stock look.\n`)
-    }
-  } catch (error) {
-    if (!(error instanceof CliError)) throw error
-    request.output.stderr(`delorun: the profile ${request.profile} starts in the stock look, because Delo's studio look could not be added: ${error.message}\n`)
-  }
-  let resolvedProfile: ResolvedProfileRuntime
-  try {
-    resolvedProfile = await dependencies.prepareProfile(request.profile)
-    refuseSkippedDeloBundles(resolvedProfile.profile)
-  } catch (error) {
-    if (error instanceof CliError) throw error
-    throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
-  }
-  const environment = dependencies.loadEnvironment()
-  const overlay = await writeSandboxOverlay(request.home, request.profile, resolvedProfile.profile.patchPath, await sandboxProtection(request.home, request.profile, process.env, homedir()))
-  // Safe mode boots the same profile with its third-party layers and rows left out, and edits none of its files.
-  const safe = safeModeStart({ home: request.home, profile: request.profile, resolvedProfile })
-  if (safe !== undefined) {
-    request.output.stdout(safeModeNotice(safe))
-    resolvedProfile = safe.resolvedProfile
-  }
+  const composed = await composeDeloProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env }, {
+    prepareProfile: dependencies.prepareProfile,
+    approvedPluginContent: dependencies.approvedPluginContent,
+  }).catch(async (error: unknown) => {
+    await removeSandboxOverlay(request.home, request.profile)
+    throw error
+  })
   let booted: BootedProfile
   try {
     booted = await dependencies.runProfile({
-      environment,
+      environment: dependencies.loadEnvironment(),
       profile: request.profile,
-      resolvedProfile,
-      patchFiles: [overlay, ...safe === undefined ? [] : safe.patchFiles],
+      resolvedProfile: composed.resolvedProfile,
+      patchFiles: composed.patchFiles,
       // The studio opens through the home process's `studio.open-token`, never through upstream's browser handoff.
       args: ['--no-open'],
     })
@@ -328,12 +430,33 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     await removeSandboxOverlay(request.home, request.profile)
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} failed to start: ${error instanceof Error ? error.message : String(error)}`)
   }
-  const inactive = inactiveDeloRows(booted.rows(), deloRowIds(resolvedProfile.profile))
-  if (inactive.length > 0) {
+  try {
+    const inactive = inactiveDeloRows(booted.rows(), deloRowIds(composed.resolvedProfile.profile))
+    if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)
+    assertDeloInvariants(composed, booted)
+  } catch (error) {
     await booted.shutdown(EXIT.failed)
     await removeSandboxOverlay(request.home, request.profile)
-    throw inactiveRowsRefusal(request.profile, inactive)
+    throw error
   }
+  booted.releaseTurns()
+  return runningHost(booted, request, async () => {
+    if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root)
+  })
+}
+
+/**
+ * The home process's Host over a booted profile: its chats counted into the home process's gate, its studio address,
+ * the rows it had at boot, C3's health check, and its two ways to stop. `close` stops it as the process stops, through
+ * upstream's bounded shutdown, which may end the process when the teardown overruns its 5 seconds. `suspend` stops it
+ * for an update's or a rollback's switch through the profile's own teardown, which ends no process; the home process
+ * bounds that wait itself, so a slow teardown never ends the process in the middle of a switch.
+ * @param booted - the booted profile.
+ * @param request - the home and profile.
+ * @param verifyRuntime - C3's H1, the start check of the running version from the store.
+ * @returns the Host.
+ */
+export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, verifyRuntime: () => Promise<void>): RunningHost {
   const chats = new CountingChatGate()
   booted.watchChats(chats)
   const atBoot = booted.rows()
@@ -348,16 +471,13 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     studioLink: booted.studioLink,
     failedRows: () => failed,
     rows: () => ids,
-    check: expect => checkHealth({
-      rows: booted.rows,
-      studio: booted.studio,
-      profileDir: join(request.home, 'profiles', request.profile),
-      verifyRuntime: async () => {
-        if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger)
-      },
-    }, expect),
+    check: expect => checkHealth({ rows: booted.rows, studio: booted.studio, profileDir: join(request.home, 'profiles', request.profile), verifyRuntime }, expect),
     close: async () => {
       await booted.shutdown(EXIT.ok)
+      await removeSandboxOverlay(request.home, request.profile)
+    },
+    suspend: async () => {
+      await booted.dispose()
       await removeSandboxOverlay(request.home, request.profile)
     },
   }
@@ -448,6 +568,6 @@ export const startCommand: CliCommand = {
     const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' } })
     const { home, profile } = await prepareHome(context, values.profile)
     if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) return startDetached(home.path, profile, context, values.open === true)
-    return startForeground({ home: home.path, profile, open: values.open === true, output: context })
+    return startForeground({ home: home.path, profile, open: values.open === true, output: context, env: context.env })
   },
 }

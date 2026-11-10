@@ -1,8 +1,8 @@
 /**
  * The release channel `delorun update` fetches through: `@delo/install`'s `LauncherChannel`, the one implementation
- * of contract C2's client verification and contract C18's log check, anchored on the root chain this home stored when
- * the launcher installed its runtime. The launcher checked that chain against the roots it ships before it started
- * this runtime, so the runtime trusts no root the launcher did not.
+ * of contract C2's client verification and contract C18's log check, walking from the release roots the launcher that
+ * started this runtime ships ([trusted root](./trusted-root.ts)). The channel trusts the root this home stored only
+ * when those roots lead to it, so the runtime trusts no root the launcher does not.
  *
  * The release log is the one the trusted root names, read through `@delo/release-verify`'s transport, as the
  * launcher reads it.
@@ -10,7 +10,7 @@
  * @module @delo/cli/update/channel
  */
 import { RUNTIME_PLATFORMS, type ReleaseChannel, type RuntimePlatform } from '@delo/contract-release-manifest'
-import { Downloader, LauncherChannel, progressLines, readStoredRootBytes, readStoredRootChain, type InstallProgress } from '@delo/install'
+import { Downloader, LauncherChannel, progressLines, type InstallProgress } from '@delo/install'
 import { logEndpoints, tilesTransport } from '@delo/release-verify'
 import type { UpdateReleaseChannel } from '@delo/runtime-store'
 
@@ -41,21 +41,17 @@ export function installLines(line: (text: string) => void): (event: InstallProgr
 
 /**
  * The release channel of this home.
- * @param home - the resolved Delo home, whose `trust/` holds the root chain an install verified.
+ * @param home - the resolved Delo home, whose `trust/` holds the root and the chain an install verified.
  * @param platform - the runtime platform.
  * @param channel - the person's release channel.
+ * @param shipped - the release roots the launcher that started this runtime ships, oldest first.
  * @param line - writes each line of the install's progress, the lines the launcher prints while it installs.
  * @returns the channel.
- * @throws {Error} when the home stores no verified root, so nothing anchors an update.
  */
-export async function homeReleaseChannel(home: string, platform: RuntimePlatform, channel: ReleaseChannel, line: (text: string) => void): Promise<UpdateReleaseChannel> {
-  const chain = await readStoredRootChain(home)
-  const root = await readStoredRootBytes(home)
-  const roots = chain.length > 0 ? chain : root === undefined ? [] : [root]
-  if (roots.length === 0) throw new Error('this home stores no verified release root, so no update can be verified; reinstall Delo with its launcher')
+export function homeReleaseChannel(home: string, platform: RuntimePlatform, channel: ReleaseChannel, shipped: readonly Uint8Array[], line: (text: string) => void): UpdateReleaseChannel {
   const fetch = globalThis.fetch.bind(globalThis)
   return new LauncherChannel({
-    home, platform, roots, channel, log: trusted => tilesTransport({ fetch, ...logEndpoints(trusted) }), downloader: new Downloader(),
+    home, platform, roots: shipped, channel, log: trusted => tilesTransport({ fetch, ...logEndpoints(trusted) }), downloader: new Downloader(),
     progress: installLines(line),
   })
 }

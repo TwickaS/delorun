@@ -118,6 +118,18 @@ export interface RuntimeStore {
    * @returns the command.
    */
   homeCommand(version: RuntimeVersion, mode: HomeCommandMode): HomeCommand
+  /**
+   * The check before a home process starts from an installed version, as the launcher checks a version before it
+   * starts it: C2's start check of every file and C18's release-log start check.
+   * @param version - the installed version.
+   * @throws when the version may not start; nothing of it has run then.
+   */
+  checkLaunch(version: RuntimeVersion): Promise<void>
+  /**
+   * Keep the versions the pointers name and remove the other installed runtimes, once an update committed.
+   * @returns what was removed and what the next run retries.
+   */
+  retain(): Promise<unknown>
 }
 
 /** The profile history versions an update saves and restores (contract C3). */
@@ -155,15 +167,21 @@ export interface RollbackSteps {
  */
 export interface SessionDataCopies {
   /**
-   * Complete an interrupted restore and remove an unfinished copy; runs before any Host starts, with the home lock
-   * held.
+   * Check, before an update writes anything, that no other process uses the home's chat data, and that a copy of it
+   * fits now when the person chose one.
+   * @param copy - whether the update takes a session-data copy.
+   * @throws {HomeProcessError} `CHATS_RUNNING` while another process, another profile's home process included, uses the
+   *   chat data; `DATA_COPY_NO_SPACE` when the chosen copy does not fit.
    */
-  recover(): Promise<void>
+  plan(copy: boolean): Promise<void>
   /**
-   * Check that a copy of the home's chat data fits now.
-   * @throws {HomeProcessError} `DATA_COPY_NO_SPACE` when it does not.
+   * Check again that no other process uses the home's chat data, after the update record exists and right before the
+   * Host stops for the switch: a process that registered before the record was written is seen here, and one that
+   * registers later sees the record and refuses to start.
+   * @throws {HomeProcessError} `CHATS_RUNNING` while another process, another profile's home process included, uses the
+   *   chat data.
    */
-  plan(): Promise<void>
+  confirmSoleUser(): Promise<void>
   /**
    * Write the session-data copy for an update, after the Host has stopped and before the switch.
    * @param from - the running version.
@@ -285,8 +303,16 @@ export interface RunningHost {
    */
   check(expect: HealthExpectations | undefined): Promise<HealthVerdict>
   /**
-   * Stop the Host.
+   * Stop the Host as this process stops. Its teardown may end the process when it overruns the Host's own bound.
    * @returns when it has stopped.
    */
   close(): Promise<void>
+  /**
+   * Stop the Host and keep this process, for an update's or a rollback's switch: afterwards this process boots another
+   * Host or hands over to a successor. It never ends the process, however long the teardown takes; the home process
+   * bounds the wait.
+   * @returns when it has stopped.
+   * @throws when the teardown fails.
+   */
+  suspend(): Promise<void>
 }

@@ -108,7 +108,7 @@ describe('the built launcher', LIMIT, () => {
     await expect(buildLauncher({ roots: [secondPath, thirdPath], out: join(work, 'chain') })).resolves.toMatchObject({ tarball: expect.stringContaining('delorun-') as string })
     const firstPath = join(work, 'first.json')
     await writeFile(firstPath, fixture.roots[0]!)
-    await expect(buildLauncher({ roots: [firstPath, thirdPath], out: join(work, 'skip') })).rejects.toThrow('ships root 3 without root 2')
+    await expect(buildLauncher({ roots: [firstPath, thirdPath], out: join(work, 'skip') })).rejects.toThrow('holds root 3 without root 2')
   })
 })
 

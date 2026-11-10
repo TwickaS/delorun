@@ -7,7 +7,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { join } from 'node:path'
 import { REQUEST_MAX_BYTES, type HomeStatus } from '@delo/contract-home-process'
@@ -15,7 +15,7 @@ import { newStartId, processExists, readHomeLock, readStartTokenFile, runDirecto
 import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { exchangeLines, journalPath, openHomeLog, queryHomeStatus, readJournal, sendHomeRequest, stashPath, updateSocketPath, writeJournal, type JournalledUpdate, type ResponseLine } from '../src/index.ts'
-import { FixtureStore, installFixture, killLockHolder, PROFILE, readPointer, startHome, tempHome, text, until, V0, V1, V2, type InProcessHome, type TempHome } from './support.ts'
+import { FixtureStore, installFixture, killLockHolder, MemoryLogger, PROFILE, readPointer, startHome, tempHome, text, until, V0, V1, V2, type InProcessHome, type StartParts, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
 const homes: InProcessHome[] = []
@@ -538,6 +538,19 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
   })
 
+  it('a start that rolled an interrupted update back starts no home process on a version that fails its check before a start', async () => {
+    const home = await setUp({ healthy: false })
+    installFixture(home, V1, { launchRefused: true })
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeJournal(journalPath(home, PROFILE), { ...interrupted(), dataDiffers: false }, 'health-check')
+    const logger = new MemoryLogger()
+    await expect(startHome(home, { running: V2, logger })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    expect(readPointer(home, 'current')).toBe(V1)
+    await until(() => logger.records.some(record => record.includes('failed its check before a start')), 5_000, 'the refusal in the log')
+    await new Promise(resolve => setTimeout(resolve, 1_000))
+    await expect(status(home)).rejects.toThrow()
+  })
+
   it('a start after a home process killed in switching before current was written runs the previous version and removes the journal', async () => {
     const home = await setUp()
     await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: false }, 'switching')
@@ -706,5 +719,159 @@ describe('a build without the runtime store', TIMEOUT, () => {
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'update.prepare', args: {} }))).toMatchObject({ ok: false, error: 'VERIFY_FAILED' })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toMatchObject({ ok: false, error: 'NO_UPDATE_RECORD' })
     expect(await status(temp.home)).toMatchObject({ state: 'running', runtime: { current: V1, running: V1 } })
+  })
+})
+
+describe('host-teardown-bounded', TIMEOUT, () => {
+  it('an update whose Host takes 8 seconds to stop waits for it, keeps this process and commits', async () => {
+    const home = await setUp()
+    let stopping: number | undefined
+    let stopped: number | undefined
+    const running = await start(home, {
+      hostSuspend: async () => {
+        stopping = Date.now()
+        await new Promise(resolve => setTimeout(resolve, 8_000))
+        stopped = Date.now()
+      },
+    })
+    const reportId = await prepare(home)
+    const lines = await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId, wait: 'drain', dataCopy: false } })
+    expect(final(lines)).toEqual({ ok: true, outcome: 'committed' })
+    expect(stopped! - stopping!).toBeGreaterThanOrEqual(7_900)
+    expect(running.store?.switches).toEqual([`${V1}>${V2}`])
+    await until(() => running.exits.length > 0, 5_000, 'the predecessor to end')
+    // The process ends once, after the handover, never in the middle of the switch.
+    expect(running.exits).toEqual([0])
+    // The committed successor keeps the runtimes the pointers name and removes the rest.
+    await until(() => existsSync(join(home, 'runtimes', 'retained.log')), 30_000, 'the retention at commit')
+  })
+
+  it('a Host that does not stop within the bound, or whose teardown fails, is refused with HOST_STOP_FAILED and the process keeps running', async () => {
+    const home = await setUp()
+    let fail = false
+    const running = await start(home, { hostSuspend: () => (fail ? Promise.reject(new Error('a row did not dispose')) : new Promise<void>(() => {})) })
+    const began = Date.now()
+    await expect(running.process.suspend(1)).rejects.toMatchObject({ code: 'HOST_STOP_FAILED', detail: 'the Host did not stop within 1 seconds; nothing was switched' })
+    expect(Date.now() - began).toBeLessThan(5_000)
+    await running.process.resume()
+    fail = true
+    await expect(running.process.suspend(60)).rejects.toMatchObject({ code: 'HOST_STOP_FAILED', detail: 'the Host\'s teardown failed (a row did not dispose); nothing was switched' })
+    await running.process.resume()
+    expect(running.exits).toEqual([])
+    expect((await status(home)).state).toBe('running')
+  })
+})
+
+describe('signals and stop', TIMEOUT, () => {
+  /** The paths a stop removes. */
+  function stopRemoved(home: string): string[] {
+    return [startTokenFile(home, PROFILE), updateSocketPath(home, PROFILE), join(runDirectory(home, PROFILE), 'home.lock')]
+  }
+
+  it('a signal before the Host booted stops the process and removes the token, the socket and the lock', async () => {
+    temp = await tempHome()
+    const home = temp.home
+    const bootGate = join(home, 'boot.release')
+    installFixture(home, V1, { bootGate })
+    await FixtureStore.seed(home, V1)
+    let parts: StartParts | undefined
+    const starting = startHome(home, { configure: (configured) => { parts = configured } }).catch((error: unknown) => error)
+    await until(async () => (await status(home).catch(() => undefined))?.state === 'starting', 5_000, 'the channel')
+    expect(parts?.hosts.booted).toEqual([])
+    parts?.signals.send('SIGTERM')
+    await until(() => (parts?.exits.length ?? 0) > 0, 5_000, 'the stop')
+    expect(parts?.exits).toEqual([0])
+    for (const path of stopRemoved(home)) expect(existsSync(path), path).toBe(false)
+    expect(parts?.signals.count).toBe(0)
+    // The Host's boot finishes only now, after the stop: the start ends without serving it.
+    writeFileSync(bootGate, '')
+    expect(await starting).toMatchObject({ message: 'the home process stopped while its Host booted' })
+    expect(parts?.hosts.booted[0]?.closed).toBe(true)
+  })
+
+  it('after a failed switch and the Host\'s boot again, one SIGTERM stops the process once through its own stop', async () => {
+    const home = await setUp({ disabled: ['@scope/plugin'] })
+    const running = await start(home)
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    expect(running.hosts.booted).toHaveLength(2)
+    expect(running.signals.count).toBe(1)
+    running.signals.send('SIGTERM')
+    await until(() => running.exits.length > 0, 5_000, 'the stop')
+    expect(running.exits).toEqual([0])
+    expect(running.hosts.latest.closed).toBe(true)
+    for (const path of stopRemoved(home)) expect(existsSync(path), path).toBe(false)
+    expect(running.logger.records).toContain('info stopped {"code":0}')
+  })
+
+  it('SIGINT stops with code 130, and a second signal while that stop runs ends the process at once', async () => {
+    const home = await setUp()
+    const running = await start(home)
+    running.signals.send('SIGINT')
+    running.signals.send('SIGTERM')
+    expect(running.exits[0]).toBe(0)
+    await until(() => running.exits.length > 1, 5_000, 'the stop')
+    expect(running.exits).toEqual([0, 130])
+  })
+
+  it('stop --now during a draining stop cancels the running chat, and both requests end with the process', async () => {
+    const home = await setUp()
+    const running = await start(home)
+    let cancelled = 0
+    let end: (() => void) | undefined
+    end = running.hosts.latest.chats.begin(() => {
+      cancelled += 1
+      end?.()
+    })
+    const draining = sendHomeRequest(home, PROFILE, { op: 'stop', args: { mode: 'drain' } })
+    await until(async () => (await status(home)).state === 'stopping', 5_000, 'stopping')
+    const now = sendHomeRequest(home, PROFILE, { op: 'stop', args: { mode: 'cancel' } })
+    expect(final(await now)).toMatchObject({ ok: true, status: { state: 'stopping', chats: 0 } })
+    expect(final(await draining)).toMatchObject({ ok: true, status: { state: 'stopping', chats: 0 } })
+    expect(cancelled).toBe(1)
+    await until(() => running.exits.length > 0, 5_000, 'the stop')
+    expect(running.exits).toEqual([0])
+  })
+
+  it('a stop whose cancellation fails, or whose status cannot be read, still answers and ends the process', async () => {
+    const home = await setUp()
+    const running = await start(home)
+    let end: (() => void) | undefined
+    end = running.hosts.latest.chats.track(() => {
+      end?.()
+      throw new Error('the cancellation failed after the turn ended')
+    })
+    // The status reads `current`, which is gone.
+    rmSync(join(home, 'runtimes', 'current'))
+    const lines = await sendHomeRequest(home, PROFILE, { op: 'stop', args: { mode: 'cancel' } })
+    expect(final(lines)).toEqual({ ok: true })
+    await until(() => running.exits.length > 0, 5_000, 'the stop')
+    expect(running.exits).toEqual([0])
+    expect(running.logger.records.some(record => record.startsWith('error the stop could not cancel the running chats'))).toBe(true)
+  })
+})
+
+describe('an update record without the runtime store', TIMEOUT, () => {
+  it('refuses to start with NO_RUNTIME_STORE, naming delorun recover, boots no Host and leaves the record', async () => {
+    temp = await tempHome()
+    const home = temp.home
+    installFixture(home, V1)
+    await writeJournal(journalPath(home, PROFILE), interrupted(), 'switching')
+    let hosts: { readonly booted: readonly unknown[] } | undefined
+    const failure = await startHome(home, { updates: false, configure: (parts) => { hosts = parts.hosts } }).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ code: 'NO_RUNTIME_STORE' })
+    expect(String((failure as { readonly detail?: unknown }).detail)).toMatch(/delorun recover/)
+    expect(hosts?.booted).toEqual([])
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'switching', from: V1, to: V2 })
+    expect(readHomeLock(runDirectory(home, PROFILE))).toBeUndefined()
+  })
+
+  it('starts with a committed record, which it leaves for a later rollback', async () => {
+    temp = await tempHome()
+    const home = temp.home
+    installFixture(home, V1)
+    await writeJournal(journalPath(home, PROFILE), interrupted(), 'committed')
+    const running = await start(home, { updates: false })
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'committed' })
+    expect(running.logger.records.some(record => record.startsWith('warn an update record exists'))).toBe(true)
   })
 })

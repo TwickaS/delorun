@@ -1,0 +1,83 @@
+/**
+ * The one ordered list of steps before a Host boots (`delo/apps/cli/src/pre-start.ts`): its order, which start runs
+ * which step, a successor that makes no one-time change, and a refusing step that stops the rest.
+ */
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { preStartSteps, recoverStockImportStep, runPreStartSteps, updateNoticeStep, type PreStartContext, type PreStartStep } from '../src/pre-start.ts'
+
+let home: string
+
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), 'delorun-pre-start-'))
+})
+
+afterEach(() => {
+  rmSync(home, { recursive: true, force: true })
+})
+
+/**
+ * A start's context.
+ * @param kind - the start.
+ * @param successor - whether it is an update's successor.
+ * @returns the context.
+ */
+function context(kind: PreStartContext['kind'], successor = false): PreStartContext {
+  return { home, profile: kind === 'cli' ? 'default' : 'headless', kind, successor, output: { stdout: () => undefined, stderr: () => undefined } }
+}
+
+/**
+ * The real list with each step replaced by one that records its name, keeping its kinds.
+ * @param ran - collects the names.
+ * @param migrated - collects the starts whose migrations were asked for.
+ * @returns the steps.
+ */
+function recorded(ran: string[], migrated: PreStartContext[]): PreStartStep[] {
+  return preStartSteps({ migrations: (start) => { migrated.push(start); return [] } }).map(step => ({
+    ...step,
+    run: async (start: PreStartContext) => {
+      ran.push(step.name)
+      if (step.name === 'profile-migrations') await step.run(start)
+    },
+  }))
+}
+
+describe('the pre-start steps', () => {
+  it('run in one order: the import recovery, the restore recovery, the migrations, then the update notice', () => {
+    expect(preStartSteps({ migrations: () => [] }).map(step => step.name)).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'update-notice'])
+  })
+
+  it('run every step for the CLI profile, and only the import recovery and the update notice for delorun headless', async () => {
+    const cli: string[] = []
+    await runPreStartSteps(recorded(cli, []), context('cli'))
+    expect(cli).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'update-notice'])
+    const headless: string[] = []
+    await runPreStartSteps(recorded(headless, []), context('headless'))
+    expect(headless).toEqual(['stock-import-recovery', 'update-notice'])
+  })
+
+  it('make the profile\'s one-time changes on a fresh start and none for an update\'s successor', async () => {
+    const migrated: PreStartContext[] = []
+    await runPreStartSteps(recorded([], migrated), context('cli', true))
+    expect(migrated).toEqual([])
+    await runPreStartSteps(recorded([], migrated), context('cli'))
+    expect(migrated.map(start => start.profile)).toEqual(['default'])
+  })
+
+  it('stop at the first step that refuses, and run none after it', async () => {
+    const ran: string[] = []
+    const refusal = new Error('the import journal cannot be trusted')
+    const steps: PreStartStep[] = recorded(ran, []).map(step => step.name === 'stock-import-recovery' ? { ...step, run: () => Promise.reject(refusal) } : step)
+    await expect(runPreStartSteps(steps, context('cli'))).rejects.toBe(refusal)
+    expect(ran).toEqual([])
+  })
+
+  it('finish no restore on a home without one, and leave the slots doing nothing until their features fill them', async () => {
+    const real = preStartSteps({ migrations: () => [] })
+    await expect(real.find(step => step.name === 'data-copy-recovery')!.run(context('cli'))).resolves.toBeUndefined()
+    await expect(recoverStockImportStep(context('cli'))).resolves.toBeUndefined()
+    await expect(updateNoticeStep(context('headless'))).resolves.toBeUndefined()
+  })
+})

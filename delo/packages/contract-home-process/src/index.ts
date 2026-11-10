@@ -197,6 +197,8 @@ export type HomeProcessErrorCode =
   | 'ROLLBACK_NEEDS_DATA_COPY'
   | 'ROLLBACK_TARGET_UNUSABLE'
   | 'STUDIO_UNAVAILABLE'
+  | 'HOST_STOP_FAILED'
+  | 'NO_RUNTIME_STORE'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {

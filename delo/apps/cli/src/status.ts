@@ -9,7 +9,7 @@
  */
 import { DSH_HOME_ENV, HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { HomeStatus } from '@delo/contract-home-process'
-import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
+import { holderAlive, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
 import { queryHomeStatus } from '@delo/home-process'
 import { EXIT } from './exit.ts'
 import { parseOptions, type CliCommand } from './command.ts'
@@ -48,7 +48,7 @@ export const statusCommand: CliCommand = {
       }
     }
     const record = readHomeLock(runDirectory(home.path, profile))
-    if (record === undefined || !processExists(record.pid)) {
+    if (record === undefined || !holderAlive(record)) {
       if (json) context.stdout(`${JSON.stringify({ ok: false, state: 'not-running' })}\n`)
       else context.stdout(record === undefined ? 'state: not running\n' : `state: not running (a lock left by process ${String(record.pid)}, which has exited, is replaced at the next start)\n`)
       return EXIT.notRunning

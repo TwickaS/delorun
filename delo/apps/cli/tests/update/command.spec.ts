@@ -393,10 +393,15 @@ describe('runUpdate', () => {
     await expect(update(['--check'])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: SCHEMA_VIOLATION' })
   })
 
-  it('reports an answer with no lines as no answer', async () => {
+  it('reports a home process that ended before its final line, and says what to do', async () => {
+    const ended = 'delorun update: the home process ended before it answered to prepare the update, so Delo may have stopped; run delorun status, start Delo again with delorun start if it is not running, and see delorun logs for the reason'
     await homeAnswering({ prepare: [] })
+    await expect(update(['--check'])).rejects.toMatchObject({ message: ended })
+  })
 
-    await expect(update(['--check'])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: no answer' })
+  it('reports a home process whose last line is progress as one that ended before it answered', async () => {
+    await homeAnswering({ prepare: [{ ok: true, phase: 'checking' }] })
+    await expect(update(['--check'])).rejects.toMatchObject({ message: expect.stringContaining('the home process ended before it answered to prepare the update') })
   })
 
   it('reports the home process\'s refusal to apply', async () => {

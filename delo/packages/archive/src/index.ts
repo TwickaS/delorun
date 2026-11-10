@@ -7,6 +7,7 @@
  * @module @delo/archive
  */
 export { ArchiveError, isArchiveError } from './errors.ts'
+export { archiveDescriber, dshImportDescriber } from './refusal.ts'
 export { keyFingerprint } from './fingerprint.ts'
 export { hasControlCharacter } from './text.ts'
 export { RESERVED_DEVICE_NAMES, checkArchivePath, checkPathCollisions, resolveInside } from './paths.ts'

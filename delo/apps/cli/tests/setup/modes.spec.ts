@@ -354,13 +354,15 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     expect(ending.started).toEqual(['background'])
   })
 
-  it('asks again for a port that is in use, a port outside the range, a name that is taken and a name that is refused', async () => {
+  it('asks again for a port that is in use, a port outside the range, a name that is taken, a reserved name and a name that is refused', async () => {
     mkdirSync(profileDirectory(home, 'taken'), { recursive: true })
     writeFileSync(join(profileDirectory(home, 'taken'), 'package.json'), '{}\n')
     const portIsFree = (port: number): Promise<boolean> => Promise.resolve(port !== 4100)
-    expect(await interactive(['full', 'environment', 'safer', 'yes', 'taken', 'desktop', 'a/b', 'work', '80', '4100', '4101', 'save', false], { portIsFree })).toBe(EXIT.ok)
+    expect(await interactive(['full', 'environment', 'safer', 'yes', 'taken', 'desktop', 'headless', 'a/b', 'work', '80', '4100', '4101', 'save', false], { portIsFree })).toBe(EXIT.ok)
     expect(screen()).toContain('! A profile named taken already exists.')
-    expect(screen()).toContain('! Use a name without slashes or dots-only names; "desktop" belongs to the desktop app.')
+    expect(screen()).toContain('! Choose another name: "desktop" is reserved: it is the desktop app\'s own profile, which only the desktop app runs or changes.')
+    expect(screen()).toContain('! Choose another name: "headless" is reserved: it is the profile `delorun headless` boots')
+    expect(screen()).toContain('! Choose another name: "a/b" is not a profile name: a profile is 1 to 32 lowercase letters')
     expect(screen()).toContain('! Enter a port from 1024 to 65535.')
     expect(screen()).toContain('Port 4100 is in use on this computer. Choose another.')
     expect(recordOf('work').profile).toEqual({ name: 'work', port: 4101 })

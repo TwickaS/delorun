@@ -6,8 +6,11 @@
  *
  * @module @delo/cli/setup/prompt-switches
  */
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { PARITY_SWITCHES, type ParitySwitchEntry } from '@delo/contract-parity-composition'
-import type { PromptsAnswer } from '@delo/contract-setup-answers'
+import { PROMPTS_OPTIONS, SETUP_DEFAULTS, type PromptsAnswer } from '@delo/contract-setup-answers'
+import { ANSWERS_FILENAME } from './progress.ts'
 import { setPatchRow } from './writes.ts'
 
 /**
@@ -43,4 +46,24 @@ export function promptRows(answer: PromptsAnswer, registry: readonly ParitySwitc
  */
 export function writePromptRows(patchPath: string, answer: PromptsAnswer): void {
   for (const row of promptRows(answer)) setPatchRow(patchPath, row)
+}
+
+/**
+ * The prompts answer setup recorded for a profile, which the start holds the prompt rows to. A profile without an
+ * answers record, or with one that does not name a known answer, has setup's default, "Safer prompts"; `delorun
+ * setup prompts` records the answer again.
+ * @param profileDirectory - the CLI profile's directory.
+ * @returns the answer.
+ */
+export function readPromptsAnswer(profileDirectory: string): PromptsAnswer {
+  const path = join(profileDirectory, ANSWERS_FILENAME)
+  if (!existsSync(path)) return SETUP_DEFAULTS.prompts
+  let record: { prompts?: unknown }
+  try {
+    record = JSON.parse(readFileSync(path, 'utf8')) as { prompts?: unknown }
+  } catch (_unreadable) {
+    // An unreadable record is not setup's answer; the default applies and `delorun setup prompts` rewrites it.
+    return SETUP_DEFAULTS.prompts
+  }
+  return PROMPTS_OPTIONS.find(option => option === record.prompts) ?? SETUP_DEFAULTS.prompts
 }

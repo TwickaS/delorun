@@ -1,7 +1,13 @@
 /**
- * `delorun doctor [--port <n>]`: runs four checks in order and prints one line
- * per check. `pass` lines go to standard output; `warn` and `fail` lines go to
- * standard error. The checks are described in [checks](./checks.ts).
+ * `delorun doctor [--port <n>]`: runs four checks in order, then reads the
+ * running release's release-log check state, and prints one line per check.
+ * `pass` lines go to standard output; `warn` and `fail` lines go to standard
+ * error. The checks are described in [checks](./checks.ts) and the record
+ * lines in [records](./records.ts). The stock-home import line is printed only
+ * when the command is built with a reader of the import record. The shipped
+ * command is built without one: this build has no stock-home import, so
+ * nothing writes the record, and a line about it would report a check that
+ * reads nothing.
  *
  * The command contacts no model, starts no container and runs no command
  * except the read-only `docker version` probe, and it creates no file. It reads
@@ -15,23 +21,25 @@
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delo/contract-setup-answers'
 import { readProtectedFile, resolveDeloHome } from '@delo/home'
 import { parseDocument } from 'yaml'
 import { parseOptions, type CliCommand, type CommandContext } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
-import { applyLaunchEnvironment } from '../launch-environment.ts'
+import { applyLaunchEnvironment, loadDeloEnvironment } from '../launch-environment.ts'
 import { selectProfile } from '../profile.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
+import { deloVersion } from '../version.ts'
 import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
+import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 
 /** The `delorun doctor --help` text. */
 const DOCTOR_USAGE = [
   'Usage: delorun doctor [--port <n>]',
   '',
   'Checks the Delo home (home), the Docker engine (docker), the DeepSeek API key\'s format (key) and the studio\'s port (port),',
-  'and prints one line per check: pass on standard output, warn or fail on standard error.',
+  'then reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused.',
+  'Prints one line per check: pass on standard output, warn or fail on standard error.',
   'Exit codes: 0 when no check fails, 1 when one fails, 2 for a wrong command line. Warnings do not change the exit code.',
   '',
   'No model is contacted and no command runs, except the read-only probe `docker version` of the Docker engine; no container starts.',
@@ -82,12 +90,13 @@ async function storedKey(home: string): Promise<string | undefined> {
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile, for the launch variables.
  * @returns the key, or `undefined` when no source sets it.
- * @throws {Error} with the loader's message when a `.env` file sets a name only the launching environment may set.
+ * @throws {Error} with the loader's message when a `.env` file sets a name only the launching environment may set, a
+ *   `DELO_` name among them.
  * @throws {HomeLayoutError} `SECRET_FILE_MODE` when the credentials document is laxer than 0600.
  */
 async function resolveKey(context: CommandContext, home: string, profile: string): Promise<string | undefined> {
   applyLaunchEnvironment(home, profile)
-  const layered = loadLayeredEnv('delorun', process.cwd(), line => { context.stderr(line) })
+  const layered = loadDeloEnvironment(process.cwd(), line => { context.stderr(line) })
   const stored = await storedKey(home)
   if (stored !== undefined) return stored
   for (const source of ENVIRONMENT_LAYERS) {
@@ -139,29 +148,57 @@ export function parsePort(text: string | undefined): number {
   return port
 }
 
-/** `delorun doctor [--port <n>]`. */
-export const doctorCommand: CliCommand = {
-  name: 'doctor',
-  summary: 'Check Docker, the DeepSeek API key format, the home and the studio port',
-  async run(args, context) {
-    if (args.includes('--help') || args.includes('-h')) {
-      context.stdout(DOCTOR_USAGE)
-      return EXIT.ok
-    }
-    const values = parseOptions('doctor', args, { port: { type: 'string' } })
-    const port = parsePort(values.port)
-    const profile = selectProfile(undefined, context.env)
-    const results = [
-      await guarded('home', () => checkHome(context.env, profile)),
-      await guarded('docker', () => checkDocker(() => runDockerVersion(dockerProbeEnvironment(context.env)))),
-      await guarded('key', () => keyCheck(context, profile)),
-      await guarded('port', () => checkPort(port)),
-    ]
-    for (const result of results) {
-      const line = `${result.status} ${result.name}: ${result.message}\n`
-      if (result.status === 'pass') context.stdout(line)
-      else context.stderr(line)
-    }
-    return results.some(result => result.status === 'fail') ? EXIT.failed : EXIT.ok
-  },
+/** What the command reads besides the home and the environment. */
+export interface DoctorEnvironment {
+  /**
+   * The clock.
+   * @returns Unix seconds.
+   */
+  readonly now: () => number
+  /**
+   * The running release's version.
+   * @returns the version.
+   */
+  readonly running: () => string
+  /** Reads the stock-home import record; without it the command prints no `import` line. */
+  readonly importRecord?: DshImportRecordReader
 }
+
+/**
+ * `delorun doctor` over an environment.
+ * @param environment - the clock, the running version and the optional import-record reader.
+ * @returns the command.
+ */
+export function createDoctorCommand(environment: DoctorEnvironment): CliCommand {
+  return {
+    name: 'doctor',
+    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port and the release-log check',
+    async run(args, context) {
+      if (args.includes('--help') || args.includes('-h')) {
+        context.stdout(DOCTOR_USAGE)
+        return EXIT.ok
+      }
+      const values = parseOptions('doctor', args, { port: { type: 'string' } })
+      const port = parsePort(values.port)
+      const profile = selectProfile(undefined, context.env)
+      const results = [
+        await guarded('home', () => checkHome(context.env, profile)),
+        await guarded('docker', () => checkDocker(() => runDockerVersion(dockerProbeEnvironment(context.env)))),
+        await guarded('key', () => keyCheck(context, profile)),
+        await guarded('port', () => checkPort(port)),
+        await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
+      ]
+      const { importRecord } = environment
+      if (importRecord !== undefined) results.push(await guarded('import', async () => checkImportRecord((await resolveDeloHome(context.env)).path, importRecord)))
+      for (const result of results) {
+        const line = `${result.status} ${result.name}: ${result.message}\n`
+        if (result.status === 'pass') context.stdout(line)
+        else context.stderr(line)
+      }
+      return results.some(result => result.status === 'fail') ? EXIT.failed : EXIT.ok
+    },
+  }
+}
+
+/** `delorun doctor [--port <n>]`, over this process's clock and version, with no import-record reader. */
+export const doctorCommand: CliCommand = createDoctorCommand({ now: () => Math.floor(Date.now() / 1000), running: deloVersion })

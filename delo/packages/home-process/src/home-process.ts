@@ -9,6 +9,10 @@
  * token and the channel only once the predecessor has handed the lock over. Whatever way the process ends, a `exit`
  * listener removes this start's token file and socket and releases the lock while each is still this start's.
  *
+ * From the moment a fresh start holds the lock, or a successor starts booting its Host, the process holds the one
+ * listener for `SIGTERM` and `SIGINT` (`options.onSignal`): the first signal runs {@link HomeProcess.shutdown} with
+ * the signal's exit code, and a second one while that stop runs ends the process at once.
+ *
  * @module @delo/home-process/home-process
  */
 import { spawn } from 'node:child_process'
@@ -46,6 +50,7 @@ import { startSuccessor, type HandoverPipe, type Successor } from './handover.ts
 import { UpdateHandshake, type HandshakeSubject, type UpdateSupport } from './handshake.ts'
 import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted, readJournal, removeJournal, removeStash, writeJournal } from './journal.ts'
 import type { ChatGate, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
+import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
 
@@ -61,6 +66,13 @@ export interface HomeProcessOptions {
   readonly startId: StartId
   /** Boots the profile's Host. */
   readonly host: HostRunner
+  /**
+   * The start's steps before any Host boots, run by a fresh start once it holds the home lock and before it finishes an
+   * interrupted update: the CLI's ordered pre-start list, which finishes an interrupted restore of a session-data copy
+   * (contract C3, "Rollback"). A successor does not run them. A throw refuses the start.
+   * @returns when the steps are done.
+   */
+  readonly preStart: () => Promise<void>
   /** Asks a live lock holder for its status: `updateChannelProbe` of this home and profile. */
   readonly probe: HolderProbe
   /** The home process's logger, on C20's `home-<profile>` surface. */
@@ -77,6 +89,13 @@ export interface HomeProcessOptions {
    */
   readonly onExit: (listener: () => void) => void
   /**
+   * Registers the process's one listener for `SIGTERM` and `SIGINT`; `listenProcessSignals` in a real home
+   * process, whose Host's profile runner then installs no signal handler of its own.
+   * @param listener - runs with the signal's name each time one arrives.
+   * @returns the disposer that removes the listener.
+   */
+  readonly onSignal: (listener: (signal: HomeSignal) => void) => () => void
+  /**
    * Ends the process after a stop or a committed handover.
    * @param code - the exit code.
    */
@@ -92,7 +111,32 @@ const SWITCH_PHASES: ReadonlySet<UpdateJournal['phase']> = new Set(['switching',
  * @returns true for `ROLLBACK_NEEDS_DATA_COPY` and `ROLLBACK_TARGET_UNUSABLE`.
  */
 function isRollbackRefusal(error: unknown): boolean {
-  return error instanceof HomeProcessError && (error.code === 'ROLLBACK_NEEDS_DATA_COPY' || error.code === 'ROLLBACK_TARGET_UNUSABLE')
+  return error instanceof HomeProcessError && (error.code === 'ROLLBACK_NEEDS_DATA_COPY' || error.code === 'ROLLBACK_TARGET_UNUSABLE' || error.code === 'CHATS_RUNNING')
+}
+
+/**
+ * Stop a Host for a switch within a bound, keeping this process.
+ * @param host - the running Host.
+ * @param limitS - the longest wait, in seconds.
+ * @returns when the Host has stopped.
+ * @throws {HomeProcessError} `HOST_STOP_FAILED` when its teardown fails or has not finished after `limitS`; a teardown
+ *   still running then goes on, and no Host is in use.
+ */
+async function suspendWithin(host: RunningHost, limitS: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const overrun = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => { reject(new HomeProcessError('HOST_STOP_FAILED', `the Host did not stop within ${String(limitS)} seconds; nothing was switched`)) }, limitS * 1000)
+  })
+  try {
+    await Promise.race([
+      host.suspend().catch((error: unknown) => {
+        throw new HomeProcessError('HOST_STOP_FAILED', `the Host's teardown failed (${error instanceof Error ? error.message : String(error)}); nothing was switched`)
+      }),
+      overrun,
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** A running home process. */
@@ -113,7 +157,15 @@ export class HomeProcess implements HandshakeSubject {
   /** The version a failed start starts again on, once it has released the lock. */
   private restartOn: RuntimeVersion | undefined
   private stopRequested = false
+  /** The final line of the stop that waits for running chats, which a later stop request joins. */
+  private stopping: Promise<Readonly<Record<string, unknown>>> | undefined
   private ended = false
+  /** Whether {@link shutdown} has run: this start's parts are released and the process is told to exit. */
+  private stopped = false
+  /** Whether a termination signal has arrived; a further one ends the process at once. */
+  private signalled = false
+  /** Removes the signal listener. */
+  private stopSignals: (() => void) | undefined
   private readonly access: UpdateChannelAccess = {
     send: async (request, options) => {
       if (this.hostToken === undefined || this.channel === undefined) throw new Error('the update channel is not open')
@@ -164,8 +216,9 @@ export class HomeProcess implements HandshakeSubject {
    * @throws {HomeProcessError} `HEALTH_CHECK_FAILED` when a start that finished an interrupted update or rollback
    *   rolled back or completed a rollback and starts again on the version rolled back to, or when the runtime of an
    *   interrupted rollback fails its check; `ROLLBACK_NEEDS_DATA_COPY` when the record says C3's table refused the
-   *   automatic rollback.
-   * @throws the Host's boot failure.
+   *   automatic rollback; `NO_RUNTIME_STORE` when an unfinished update record exists and `options.updates` is
+   *   `undefined`, leaving the record in place.
+   * @throws the Host's boot failure, or an `Error` when a termination signal stopped the process while its Host booted.
    */
   static async start(options: HomeProcessOptions): Promise<HomeProcess> {
     const home = new HomeProcess(options)
@@ -173,8 +226,8 @@ export class HomeProcess implements HandshakeSubject {
       await home.checkDirectories()
       home.lock = await acquireHomeLock({ runDirectory: runDirectory(options.home, options.profile), runtime: options.running, probe: options.probe, startId: options.startId })
       options.onExit(() => { home.cleanUpSync() })
-      // An interrupted restore of a session-data copy finishes before any Host starts (C3, "Rollback").
-      await options.updates?.copies.recover()
+      home.listenSignals()
+      await options.preStart()
       await home.finishInterruptedUpdate()
       await home.listen()
       home.startSupervisor()
@@ -182,12 +235,15 @@ export class HomeProcess implements HandshakeSubject {
       home.enterRunning()
       return home
     } catch (error) {
+      // A signal's shutdown has released this start's parts, the lock among them, so nothing may roll back here.
+      if (home.stopped) throw error
       options.logger.error('the home process could not start', { err: error })
       await home.closeStarted()
       // The rollback runs while the lock is held, so no other start runs a Host on the data while it changes.
       await home.rollBackInterruptedUpdate()
       home.lock?.release()
-      home.startAgain()
+      home.stopSignals?.()
+      await home.startAgain()
       throw error
     }
   }
@@ -207,9 +263,10 @@ export class HomeProcess implements HandshakeSubject {
     const { handover } = pipe
     try {
       await home.checkDirectories()
+      home.listenSignals()
       let healthy = false
       try {
-        home.host = await options.host.boot(home.access)
+        home.host = await home.bootedHost()
         const verdict = await home.host.check(handover.health)
         if (!verdict.passed) options.logger.warn('the Host failed its health check on the new runtime', { data: { criterion: verdict.criterion, detail: verdict.detail } })
         healthy = verdict.passed
@@ -233,8 +290,10 @@ export class HomeProcess implements HandshakeSubject {
       options.logger.info('took over from the previous runtime', { data: { from: handover.from, to: handover.to } })
       return home
     } catch (error) {
+      if (home.stopped) throw error
       options.logger.error('the successor could not take over', { err: error })
       await home.abandon()
+      home.stopSignals?.()
       throw error
     } finally {
       pipe.close()
@@ -263,53 +322,51 @@ export class HomeProcess implements HandshakeSubject {
   /**
    * Stop this home process: new turns are refused, running chats are waited for at most 1,800 seconds (`drain`) or
    * cancelled (`cancel`), and then the Host, the token, the channel, the supervisor and the lock go in that order.
+   * A stop requested while another waits joins it and returns the same final line; a joining `cancel` first cancels
+   * the running chats, so `delorun stop --now` ends a draining stop's wait. Once accepted, a stop always returns its
+   * final line and the process ends after sending it: a failed cancellation is logged and the stop goes on, and a
+   * status that cannot be read is left out of the line.
    * @param mode - how running chats are treated.
    * @param progress - writes progress lines.
-   * @returns the final line's fields; the process ends once the line is sent.
+   * @returns the final line's fields, with `status` when it could be read; the process ends once the line is sent.
    * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while an update or rollback runs.
    */
   async requestStop(mode: StopMode, progress: (fields: Readonly<Record<string, unknown>>) => void): Promise<Readonly<Record<string, unknown>>> {
     if (this.handshake?.running() === true) throw new HomeProcessError('UPDATE_IN_PROGRESS', 'an update or rollback is running; cancel it or wait for it to end')
-    if (this.state === 'stopping') return { status: await this.status() }
-    this.state = 'stopping'
-    const gate = this.host?.chats
-    if (gate !== undefined) {
-      gate.hold()
-      if (mode === 'cancel') await gate.cancelAll()
-      progress({ state: 'stopping', chats: gate.running() })
-      const controller = new AbortController()
-      const timer = setTimeout(() => { controller.abort(new Error('drain timeout')) }, DRAIN_TIMEOUT_DEFAULT_S * 1000)
-      try {
-        while (gate.running() > 0) await gate.idle(controller.signal)
-      } catch (_timeout) {
-        // The drain's 1,800 seconds passed; C19's stop goes on with the chats that still run.
-        this.logger.warn('stopping with chats still running after the drain limit', { data: { chats: gate.running() } })
-      } finally {
-        clearTimeout(timer)
-      }
+    if (this.stopped) return this.stopLine()
+    if (this.stopping !== undefined) {
+      if (mode === 'cancel') await this.cancelChats()
+      return this.stopping
     }
-    this.stopRequested = true
-    return { status: await this.status() }
+    this.state = 'stopping'
+    this.stopping = this.stopAfterChats(mode, progress)
+    return this.stopping
   }
 
   /**
-   * Stop at once, as a termination signal does: the same order as {@link requestStop} without waiting for chats.
+   * Stop at once, as a termination signal does: the same order as {@link requestStop} without waiting for chats. A
+   * Host that fails to close is logged and the remaining parts still go; the process is told to exit in any case.
    * @param code - the exit code.
    * @returns when the process has been told to exit.
    */
   async shutdown(code: number): Promise<void> {
     if (this.ended) return
     this.ended = true
+    this.stopped = true
     this.state = 'stopping'
-    await this.closeHost()
-    this.removeToken()
-    await this.channel?.close()
-    this.channel = undefined
-    await this.launched?.stop()
-    this.launched = undefined
-    this.lock?.release()
-    this.logger.info('stopped', { data: { code } })
-    this.options.exit(code)
+    try {
+      await this.closeHost()
+      this.removeToken()
+      await this.channel?.close()
+      this.channel = undefined
+      await this.launched?.stop()
+      this.launched = undefined
+      this.lock?.release()
+      this.logger.info('stopped', { data: { code } })
+    } finally {
+      this.stopSignals?.()
+      this.options.exit(code)
+    }
   }
 
   // HandshakeSubject
@@ -336,10 +393,15 @@ export class HomeProcess implements HandshakeSubject {
   }
 
   /** @inheritdoc */
-  async suspend(): Promise<void> {
-    await this.closeHost()
-    await this.launched?.stop()
-    this.launched = undefined
+  async suspend(limitS: number): Promise<void> {
+    const host = this.host
+    this.host = undefined
+    try {
+      if (host !== undefined) await suspendWithin(host, limitS)
+    } finally {
+      await this.launched?.stop()
+      this.launched = undefined
+    }
   }
 
   /** @inheritdoc */
@@ -365,6 +427,87 @@ export class HomeProcess implements HandshakeSubject {
   handOver(successor: Successor, startId: StartId, to: RuntimeVersion): void {
     if (this.lock === undefined) throw new Error('the home lock is not held')
     this.lock.handOver({ pid: successor.pid, startId, runtime: to })
+  }
+
+  // Stopping
+
+  /**
+   * A stop's wait and its final line, the request marked as a stop to end the process once the line is sent.
+   * @param mode - how running chats are treated.
+   * @param progress - writes the progress line with the running chats.
+   * @returns the final line's fields; never rejects.
+   */
+  private async stopAfterChats(mode: StopMode, progress: (fields: Readonly<Record<string, unknown>>) => void): Promise<Readonly<Record<string, unknown>>> {
+    await this.waitForChats(mode, progress)
+    const line = await this.stopLine()
+    this.stopRequested = true
+    return line
+  }
+
+  /**
+   * A stop's wait: hold the gate, cancel the running chats for `cancel`, and wait at most 1,800 seconds for none to run.
+   * @param mode - how running chats are treated.
+   * @param progress - writes the progress line with the running chats.
+   * @returns once no chat runs or the limit passed.
+   */
+  private async waitForChats(mode: StopMode, progress: (fields: Readonly<Record<string, unknown>>) => void): Promise<void> {
+    const gate = this.host?.chats
+    if (gate === undefined) return
+    gate.hold()
+    if (mode === 'cancel') await this.cancelChats()
+    progress({ state: 'stopping', chats: gate.running() })
+    const controller = new AbortController()
+    const timer = setTimeout(() => { controller.abort(new Error('drain timeout')) }, DRAIN_TIMEOUT_DEFAULT_S * 1000)
+    try {
+      while (gate.running() > 0) await gate.idle(controller.signal)
+    } catch (_timeout) {
+      // The drain's 1,800 seconds passed; C19's stop goes on with the chats that still run.
+      this.logger.warn('stopping with chats still running after the drain limit', { data: { chats: gate.running() } })
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /** Cancel the Host's running chats for a stop; a failure is logged, and the stop goes on with the chats that still run. */
+  private async cancelChats(): Promise<void> {
+    try {
+      await this.host?.chats.cancelAll()
+    } catch (error) {
+      this.logger.error('the stop could not cancel the running chats; it goes on with them', { err: error })
+    }
+  }
+
+  /**
+   * A stop's final line, which never fails, so an accepted stop is always answered and ends the process.
+   * @returns the status, or no field when it cannot be read.
+   */
+  private async stopLine(): Promise<Readonly<Record<string, unknown>>> {
+    try {
+      return { status: await this.status() }
+    } catch (error) {
+      this.logger.warn('the stop\'s final line carries no status, which could not be read', { err: error })
+      return {}
+    }
+  }
+
+  private listenSignals(): void {
+    this.stopSignals = this.options.onSignal((signal) => { this.onSignal(signal) })
+  }
+
+  /**
+   * The first termination signal stops the process in C19's order; a further one, while that stop runs, ends the
+   * process at once with the signal's code.
+   * @param signal - the signal.
+   */
+  private onSignal(signal: HomeSignal): void {
+    const code = SIGNAL_EXIT_CODES[signal]
+    this.logger.info('received a termination signal', { data: { signal } })
+    if (this.signalled) {
+      this.options.exit(code)
+      return
+    }
+    this.signalled = true
+    void this.shutdown(code)
   }
 
   // The update channel
@@ -462,6 +605,8 @@ export class HomeProcess implements HandshakeSubject {
   /**
    * Step 3: settle the update record a killed home process left, and the stash beside it.
    *
+   * - Without the runtime store: a stash and a `committed` record stay as they are; any other record fails the start
+   *   with `NO_RUNTIME_STORE` and stays.
    * - No record and a stash: the update was killed before it wrote its own record; the stashed record returns.
    * - `refused`: C3's table refused the automatic rollback; the start fails with `ROLLBACK_NEEDS_DATA_COPY`.
    * - `committed`: the record stays while `current` names `to`, and a stash left by a kill after the commit goes;
@@ -480,8 +625,13 @@ export class HomeProcess implements HandshakeSubject {
     if (record === undefined && !await hasStash(journal)) return
     const updates = this.options.updates
     if (updates === undefined) {
-      this.logger.warn('an update record exists, and this build has no runtime store to finish it with; it is left in place', { data: { from: record?.from ?? '', to: record?.to ?? '', phase: record?.phase ?? 'stash' } })
-      return
+      // A committed record and a stash only keep a later rollback's way back; any other record is an update that has
+      // not finished, which no Host may run under.
+      if (record === undefined || record.phase === 'committed') {
+        this.logger.warn('an update record exists, and this build has no runtime store to settle it with; it is left in place', { data: { from: record?.from ?? '', to: record?.to ?? '', phase: record?.phase ?? 'stash' } })
+        return
+      }
+      throw new HomeProcessError('NO_RUNTIME_STORE', `an update from Delo ${record.from} to ${record.to} stopped in ${record.refused === true ? 'a refused rollback' : `its ${record.phase} phase`}, and this delorun runs outside the Delo home's runtime store, so it cannot finish or roll the update back and starts no Host. Start Delo through the launcher the Delo home installs, or run delorun recover status, then delorun recover rollback.`)
     }
     if (record === undefined) {
       this.logger.info('an update stopped before it wrote its record; the previous update\'s record returns')
@@ -586,13 +736,26 @@ export class HomeProcess implements HandshakeSubject {
   }
 
   /** Start a home process on the version {@link restartOn} names, once this start has released the lock. */
-  private startAgain(): void {
+  /**
+   * After an interrupted update was rolled back while this start held the lock, start a home process again on the
+   * version rolled back to, detached: once that version passes the check the launcher runs before a start. A version
+   * that fails it, or a spawn that fails, is logged and nothing starts; the next `delorun start` reports it.
+   */
+  private async startAgain(): Promise<void> {
     const version = this.restartOn
     const updates = this.options.updates
     if (version === undefined || updates === undefined) return
     this.restartOn = undefined
+    try {
+      await updates.store.checkLaunch(version)
+    } catch (error) {
+      this.logger.error('the version rolled back to failed its check before a start, so no home process starts on it', { err: error, data: { version } })
+      return
+    }
     const command = updates.store.homeCommand(version, 'start')
-    spawn(command.command, [...command.args], { cwd: command.cwd, stdio: 'ignore', detached: true }).unref()
+    const child = spawn(command.command, [...command.args], { cwd: command.cwd, stdio: 'ignore', detached: true })
+    child.once('error', (error) => { this.logger.error('the home process could not be started again', { err: error, data: { version } }) })
+    child.unref()
   }
 
   /**
@@ -612,6 +775,11 @@ export class HomeProcess implements HandshakeSubject {
     await markCommitted(this.journal)
     await this.options.updates?.copies.commit(to)
     await removeStash(this.journal)
+    // The committed update leaves `current` and `previous`, which the record names; every other runtime goes.
+    const retained = await this.options.updates?.store.retain().catch((error: unknown) => {
+      this.logger.warn('the runtime store could not remove the runtimes the update left; the next update retries it', { err: error })
+    })
+    if (retained !== undefined) this.logger.info('retained the runtimes the pointers name', { data: { retention: retained } })
   }
 
   private startSupervisor(): void {
@@ -622,8 +790,20 @@ export class HomeProcess implements HandshakeSubject {
     logger.info('launched the supervisor', { data: { pid: this.launched.pid } })
   }
 
+  /**
+   * Boot a Host through `options.host`.
+   * @returns the Host.
+   * @throws {Error} when the process stopped while the Host booted; that Host is closed first.
+   */
+  private async bootedHost(): Promise<RunningHost> {
+    const host = await this.options.host.boot(this.access)
+    if (!this.stopped) return host
+    await host.close()
+    throw new Error('the home process stopped while its Host booted')
+  }
+
   private async bootHost(): Promise<void> {
-    this.host = await this.options.host.boot(this.access)
+    this.host = await this.bootedHost()
     const recovering = this.recovering
     if (recovering !== undefined) {
       const expect = recovering.health === undefined ? undefined : { ...recovering.health, previousFailures: [], previousRows: [] }
@@ -653,10 +833,15 @@ export class HomeProcess implements HandshakeSubject {
 
   // Teardown
 
+  /** Close the Host; a failure is logged, and the parts a stop releases after it still go. */
   private async closeHost(): Promise<void> {
     const host = this.host
     this.host = undefined
-    await host?.close()
+    try {
+      await host?.close()
+    } catch (error) {
+      this.logger.error('the Host did not close', { err: error })
+    }
   }
 
   private removeToken(): void {
@@ -666,7 +851,7 @@ export class HomeProcess implements HandshakeSubject {
   /** Undo a start that failed, keeping the lock: each part this start created goes, in the clean stop's order. */
   private async closeStarted(): Promise<void> {
     this.ended = true
-    await this.closeHost().catch((error: unknown) => { this.logger.error('the Host did not close', { err: error }) })
+    await this.closeHost()
     this.removeToken()
     await this.channel?.close()
     this.channel = undefined

@@ -32,6 +32,7 @@ import { mkdir, open } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { ARCHIVE_LIMITS } from '@delo/contract-archive-and-trash'
+import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, loadHomeKey, type ArchiveImporterConfig, type ArchivePreview, type ArchiveSizeLimits } from '@delo/archive'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { printable, quoted } from '../terminal-text.ts'
@@ -62,7 +63,7 @@ export interface ImportIo {
 }
 
 /** The directory under the home that holds the import's staging root and the imported workspaces. */
-export const ARCHIVE_HOME_DIRECTORY = 'archive'
+export const ARCHIVE_HOME_DIRECTORY = DELO_HOME_ENTRIES.archive
 
 /**
  * A count with its noun.

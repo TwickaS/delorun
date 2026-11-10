@@ -62,6 +62,7 @@ export {
 export { endpointOf, resolveDockerContext, type DockerContext } from './docker/endpoint.ts'
 export { engineAt, EngineError, isNotFound, type Engine, type EngineTimeouts } from './docker/engine.ts'
 export { SupervisorError } from './errors.ts'
+export { engineDescriber, supervisorDescriber } from './refusal.ts'
 export { ensureListedImage, type ImagePull } from './images.ts'
 export { encodeLaunch, LAUNCH_FD, LAUNCH_MAX_BYTES, parseLaunch, runSupervisorProcess, type SupervisorLaunch } from './launch.ts'
 export { captureSupervisorOutput, openSupervisorLog, SUPERVISOR_LOGGER, type SupervisorLog, type SupervisorLogOptions } from './log.ts'

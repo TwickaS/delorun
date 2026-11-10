@@ -21,7 +21,7 @@ import { EXEMPTION_FILES, type ExemptionRecord, type VersionAxis } from '@delo/c
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
 import type { InstallationStatus, ReportVersions } from '@delo/contract-update-report'
 import { bundleListOf, dependenciesOf, readInventory } from '@delo/profile-safety'
-import { readStoredRoot, type RuntimeStore, type VerifiedRuntime } from '@delo/runtime-store'
+import type { RuntimeStore, TrustedRootSource, VerifiedRuntime } from '@delo/runtime-store'
 import { planDataCopy, predictBundleList, readDataFormats, readInstalledPlugin, type BundleFacts, type DataFacts, type InstallationStatusFacts, type InstalledPluginFact, type LayerFact, type ProfileFacts, type ReportSources, type TargetFacts } from '@delo/update'
 import semver from 'semver'
 import { z } from 'zod'
@@ -42,6 +42,8 @@ export interface StoreSourcesOptions {
   readonly store: RuntimeStore
   /** The version this process runs. */
   readonly running: RuntimeVersion
+  /** The stored root, anchored on the launcher's roots, which every start check of the report verifies with. */
+  readonly root: TrustedRootSource
   /**
    * Read the target runtime's bundle tables; {@link readBundleTables} by default.
    * @param runtime - the installed runtime's directory.
@@ -211,7 +213,7 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
   const profileDir = join(home, 'profiles', profile)
   const tables = options.bundleTables ?? readBundleTables
   const bundleLayers = options.bundleLayers ?? readBundleLayers
-  const verified = async (version: string): Promise<VerifiedRuntime> => store.checkRuntime(brandString<RuntimeVersion>(version), await readStoredRoot(home))
+  const verified = async (version: string): Promise<VerifiedRuntime> => store.checkRuntime(brandString<RuntimeVersion>(version), await options.root())
   const profileFacts = async (): Promise<ProfileFacts> => {
     const manifest = await readJson(join(profileDir, 'package.json'))
     const inventory = readInventory({ profileDir, homeDir: home })

@@ -58,10 +58,13 @@ export interface HandshakeSubject {
    */
   setState(state: HomeProcessState): void
   /**
-   * Stop the Host and the supervisor this process started, for the switch.
+   * Stop the Host and the supervisor this process started, for the switch, keeping this process.
+   * @param limitS - the longest wait for the Host's teardown, the update's `drainTimeoutS`.
    * @returns when both have stopped.
+   * @throws {HomeProcessError} `HOST_STOP_FAILED` when the Host's teardown fails or does not finish within `limitS`;
+   *   the supervisor is stopped either way, and no Host runs.
    */
-  suspend(): Promise<void>
+  suspend(limitS: number): Promise<void>
   /**
    * Boot the Host and start the supervisor again on this process's runtime, after a failed switch.
    * @returns when the Host runs.
@@ -405,8 +408,8 @@ export class UpdateHandshake {
       let update: JournalledUpdate = {
         from, to, previous: before.previous, startedAt: new Date().toISOString(), dataDiffers: prepared.dataDiffers, copy: dataCopy, targetStarted: false, health: prepared.health,
       }
-      // A copy that cannot fit refuses the update before anything is written.
-      if (dataCopy) await copies.plan()
+      // Another process on the chat data, or a chosen copy that cannot fit, refuses the update before anything is written.
+      await copies.plan(dataCopy)
       await stashCommitted(journal)
       recorded = true
       await this.phase(update, 'snapshot', progress)
@@ -421,7 +424,30 @@ export class UpdateHandshake {
       this.subject.setState('switching')
       await this.phase(update, 'switching', progress)
       const health = this.expectations(prepared.health)
-      await this.subject.suspend()
+      // The target is checked as the launcher checks a version before it starts it, while nothing has changed yet.
+      try {
+        await store.checkLaunch(to)
+      } catch (error) {
+        this.subject.logger.error('the target failed its check before a start; the update stops with nothing changed', { err: error, data: { from, to } })
+        return await end({ outcome: 'aborted', reason: 'VERIFY_FAILED' })
+      }
+      // A process that registered on the chat data after the plan check and before the record was written refuses the
+      // update here, with nothing changed; the record goes with it.
+      try {
+        await copies.confirmSoleUser()
+      } catch (error) {
+        this.subject.logger.error('another process uses the chat data; the update stops with nothing changed', { err: error, data: { from, to } })
+        await end({ outcome: 'aborted' })
+        throw error
+      }
+      try {
+        await this.subject.suspend(drainTimeoutS)
+      } catch (error) {
+        // Nothing switched and no copy was written: the record goes, as for an update that ended before switching.
+        const result = await end({ outcome: 'aborted', reason: 'HOST_STOP_FAILED' })
+        await this.resumeAfterStopFailed(error, { from, to })
+        return result
+      }
       if (dataCopy) {
         copyAttempted = true
         try {
@@ -478,6 +504,22 @@ export class UpdateHandshake {
   }
 
   /**
+   * After the Host did not stop for a switch, with nothing switched: boot this process's Host again. A teardown that
+   * is still running may keep the new Host from booting; then {@link HandshakeSubject.resume} stops this process, and
+   * the next start runs the version `current` names, which the update or rollback did not change.
+   * @param error - why the Host did not stop.
+   * @param data - the update's versions, for the log.
+   */
+  private async resumeAfterStopFailed(error: unknown, data: Readonly<Record<string, unknown>>): Promise<void> {
+    this.subject.logger.error('the Host did not stop for the switch; nothing was switched and the Host runs again', { err: error, data })
+    try {
+      await this.subject.resume()
+    } catch (_bootFailed) {
+      // `resume` logged the boot failure and stopped this process; the update has already ended with nothing switched.
+    }
+  }
+
+  /**
    * C3's automatic rollback after a failed switch or health check: stop the successor and apply the rollback table
    * with the pointers restored to their values before the update; on success this process's Host runs again, the
    * record goes and the stashed record returns. When the table refuses, nothing is restored: the record stays with
@@ -502,6 +544,9 @@ export class UpdateHandshake {
       }
       if (isRefusal(error, 'ROLLBACK_TARGET_UNUSABLE')) {
         return this.stopServing({ outcome: 'failed', reason: 'ROLLBACK_TARGET_UNUSABLE' }, 'the target failed its health check and the version to roll back to cannot run; run delorun recover', error, data)
+      }
+      if (isRefusal(error, 'CHATS_RUNNING')) {
+        return this.stopServing({ outcome: 'failed', reason: 'CHATS_RUNNING' }, 'the target failed its health check and another process uses the chat data, so the rollback did not start; stop it, and the next start completes the rollback', error, data)
       }
       return this.stopServing({ outcome: 'failed' }, 'the rollback stopped after a step may have run; the next start completes it', error, data)
     }
@@ -538,7 +583,22 @@ export class UpdateHandshake {
       this.subject.setState('switching')
       this.announce('switching', record.from, progress)
       const health = prepared === undefined ? undefined : this.expectations(prepared.health)
-      await this.subject.suspend()
+      if (health !== undefined) {
+        try {
+          await store.checkLaunch(record.from)
+        } catch (error) {
+          this.subject.logger.error('the version to roll back to failed its check before a start; the rollback stops with nothing changed', { err: error, data })
+          return end({ outcome: 'aborted', reason: 'VERIFY_FAILED' })
+        }
+      }
+      try {
+        await this.subject.suspend(drainTimeoutS)
+      } catch (error) {
+        // No step of the rollback ran: the record stays as it was.
+        const result = end({ outcome: 'aborted', reason: 'HOST_STOP_FAILED' })
+        await this.resumeAfterStopFailed(error, data)
+        return result
+      }
       try {
         await copies.rollback(record, {
           profileOnly: health === undefined,
@@ -547,7 +607,7 @@ export class UpdateHandshake {
           markRollingBack: health === undefined ? async () => {} : () => writeJournal(journal, journalledUpdate(record), 'rolling-back'),
         })
       } catch (error) {
-        if (isRefusal(error, 'ROLLBACK_NEEDS_DATA_COPY') || isRefusal(error, 'ROLLBACK_TARGET_UNUSABLE')) {
+        if (isRefusal(error, 'ROLLBACK_NEEDS_DATA_COPY') || isRefusal(error, 'ROLLBACK_TARGET_UNUSABLE') || isRefusal(error, 'CHATS_RUNNING')) {
           // Refused before any step: this Host runs again with nothing changed.
           await this.subject.resume()
           end({ outcome: 'aborted' })

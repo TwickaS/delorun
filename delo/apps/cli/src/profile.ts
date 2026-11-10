@@ -1,15 +1,16 @@
 /**
  * The CLI profile `delorun` runs (contract C1, "Profiles"): `default`, or the
- * name `--profile` or `DELO_PROFILE` selects under upstream's profile-name
- * rules. The desktop app's `desktop` profile is refused, so `delorun` never
- * runs, initialises or changes it.
+ * name `--profile` or `DELO_PROFILE` selects under C1's profile-name rule,
+ * which the launcher applies too. The rule refuses C1's reserved names, the
+ * desktop app's `desktop` profile among them, so `delorun` never runs,
+ * initialises or changes one as a CLI profile.
  *
  * @module @delo/cli/profile
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
-import { CLI_PROFILE, DELO_PROFILE_ENV, DESKTOP_PROFILE } from '@delo/contract-home-layout'
+import { CLI_PROFILE, DELO_PROFILE_ENV, profileNameProblem } from '@delo/contract-home-layout'
 import { CliError, EXIT } from './exit.ts'
 
 /**
@@ -17,22 +18,50 @@ import { CliError, EXIT } from './exit.ts'
  * @param flag - the `--profile` value, which wins over the environment.
  * @param env - the environment, read for `DELO_PROFILE`; blank counts as unset.
  * @returns the profile name.
- * @throws {CliError} with the usage code for the desktop app's profile or a name upstream's rules refuse.
+ * @throws {CliError} with the usage code for a name C1's profile-name rule refuses, naming the name and why.
  */
 export function selectProfile(flag: string | undefined, env: Readonly<Record<string, string | undefined>>): string {
   const fromEnv = env[DELO_PROFILE_ENV]
   const name = flag ?? (fromEnv !== undefined && fromEnv.trim().length > 0 ? fromEnv : CLI_PROFILE)
   const source = flag === undefined ? DELO_PROFILE_ENV : '--profile'
-  if (name.toLowerCase() === DESKTOP_PROFILE) {
-    throw new CliError(EXIT.usage, `delorun: ${source} names "${name}", the desktop app's own profile, which only the desktop app runs or changes; choose another profile name`)
-  }
-  try {
-    // Upstream's rules: not empty, no path separator, not `.`, `..` or `node_modules`.
-    resolveProfileDir(name, '/')
-  } catch {
-    throw new CliError(EXIT.usage, `delorun: ${source} names ${JSON.stringify(name)}, which is not a valid profile name`)
-  }
+  // C1's rule, which the launcher applies too; it is narrower than upstream's, so upstream accepts every such name.
+  const problem = profileNameProblem(name)
+  if (problem !== undefined) throw new CliError(EXIT.usage, `delorun: ${source} is refused: ${problem}; choose another profile name`)
   return name
+}
+
+/**
+ * Every `--profile` value a command line carries, as `--profile <name>` or `--profile=<name>`, in order; the arguments
+ * after `--` are not read.
+ * @param args - the command's arguments.
+ * @returns the values; a `--profile` with no value after it counts as an empty value.
+ */
+export function profileOptionValues(args: readonly string[]): string[] {
+  const values: string[] = []
+  for (let at = 0; at < args.length; at++) {
+    const argument = args[at]!
+    if (argument === '--') break
+    if (argument === '--profile') values.push(args[++at] ?? '')
+    else if (argument.startsWith('--profile=')) values.push(argument.slice('--profile='.length))
+  }
+  return values
+}
+
+/**
+ * Select the CLI profile of a command that hands its arguments to a parser of its own, such as upstream's `dsh plugin`
+ * or `delorun logs`: every `--profile` value the arguments carry goes through C1's profile-name rule, and values that
+ * differ are refused, so the profile checked is the profile the parser uses, whichever occurrence it reads.
+ * @param command - the command's name, for the refusal.
+ * @param args - the command's arguments.
+ * @param env - the environment, read for `DELO_PROFILE` when no `--profile` is given.
+ * @returns the profile name.
+ * @throws {CliError} with the usage code for a refused name, or for `--profile` values that differ.
+ */
+export function selectCommandProfile(command: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>): string {
+  const values = profileOptionValues(args)
+  const distinct = [...new Set(values)]
+  if (distinct.length > 1) throw new CliError(EXIT.usage, `delorun ${command}: --profile is given more than once with different names (${distinct.map(value => JSON.stringify(value)).join(', ')}); give one profile`)
+  return selectProfile(distinct[0], env)
 }
 
 /**

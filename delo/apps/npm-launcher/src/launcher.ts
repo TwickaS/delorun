@@ -4,17 +4,21 @@
  * signed file list does not start. An install runs contract C1's download rule, contract C2's client verification and
  * contract C18's online check through `@delo/install`, and leaves nothing under `~/.delo/runtimes/` when any of them
  * refuses. A launcher never switches `current`: the store's install sets it only when the store has no runtime at all.
+ * When `current` fails its start check and `previous` passes it, a run that starts Delo (see {@link mayStartPrevious})
+ * starts `previous` with `delorun recover rollback`, the one way back contract C3 defines, which switches the pointers
+ * only through its rollback table; every other command is refused with that command as its remedy, and runs nothing.
  *
  * @module @delo/npm-launcher/launcher
  */
 import { join } from 'node:path'
-import { DELO_HOME_ENTRIES, DELO_PROFILE_ENV, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { DELO_HOME_ENTRIES, DELO_PROFILE_ENV, PROFILE_NAME_PATTERN, profileNameProblem, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
+import { codedReason, profileOption, renderRefusal } from '@delo/home'
 import { messageOf, readStoredRootBytes, readStoredRootChain, trustFile, verifyStoredRoot } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
 import type { StartCheckResult } from '@delo/release-verify/start'
-import { RuntimeStoreError, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type VerifiedRuntime } from '@delo/runtime-store'
+import { RuntimeStoreError, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type RuntimePointers, type VerifiedRuntime } from '@delo/runtime-store'
 import type { LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor, type RemedyContext } from './refusals.ts'
 
@@ -42,6 +46,31 @@ export interface LauncherStore {
    * @returns what was removed and what the next run retries.
    */
   retain(): Promise<RetentionResult>
+
+  /**
+   * Read `current` and `previous`.
+   * @returns the pointers; `previous` is absent unless it names an installed version.
+   * @throws {RuntimeStoreError} `NO_ACTIVE_RUNTIME` when `current` is missing, malformed or names no installed version.
+   */
+  pointers(): Promise<RuntimePointers>
+
+  /**
+   * Run contract C2's start check on an installed version.
+   * @param version - the installed version.
+   * @param root - the trusted root.
+   * @returns the verified runtime.
+   * @throws {RuntimeStoreError} `RUNTIME_CHANGED` when a file, the manifest or the file list does not verify.
+   */
+  checkRuntime(version: RuntimeVersion, root: RootMetadata): Promise<VerifiedRuntime>
+
+  /**
+   * The command that starts an installed version by launch protocol 1, without checking it.
+   * @param version - the installed version.
+   * @param profile - the CLI profile, which the command passes in `DELO_PROFILE`.
+   * @param args - the arguments for `delorun`.
+   * @returns the command.
+   */
+  launchCommand(version: RuntimeVersion, profile: string, args: readonly string[]): LaunchCommand
 }
 
 /** Runs an installed runtime and resolves with its exit status. */
@@ -72,6 +101,11 @@ export interface LauncherOptions {
   readonly platform: RuntimePlatform
   /** The arguments for the runtime, which the launcher does not interpret. */
   readonly args: readonly string[]
+  /**
+   * The arguments the person passed after `--`, which the launcher read no option from: they are at the end of
+   * {@link LauncherOptions.args}, and a run that has any is never a start {@link mayStartPrevious} accepts.
+   */
+  readonly passedThrough: readonly string[]
   /** The person's verification mode, which a refusal names; the start check runs in every mode. */
   readonly mode: VerificationMode
   /** The store, this home's `RuntimeStore` in a real run. */
@@ -117,17 +151,72 @@ export async function runLauncher(options: LauncherOptions): Promise<number> {
   }
 }
 
+/** The arguments the launcher starts `previous` with when `current` fails its start check. */
+export const ROLLBACK_ARGS = ['recover', 'rollback'] as const
+
 /**
- * Start the installed runtime, and install the channel's release first when the store holds none.
+ * The commands, once every `--profile` option is removed, whose run starts `previous` with {@link ROLLBACK_ARGS} when
+ * `current` fails its start check: a bare `delorun`, `delorun start`, and `delorun recover rollback`, the command the
+ * refusal of every other command names.
+ */
+const FALLBACK_COMMANDS: readonly (readonly string[])[] = [[], ['start'], ROLLBACK_ARGS]
+
+/**
+ * Whether a run whose `current` fails its start check may start `previous` with {@link ROLLBACK_ARGS} in place of its
+ * arguments. The fallback drops every argument but the profile, which the launch command passes in `DELO_PROFILE`, so it
+ * is taken only when the arguments are `--profile <name>` or `--profile=<name>` options, anywhere and any number of
+ * times, around exactly one of {@link FALLBACK_COMMANDS}. Any other argument, `--foreground`, `--open` and `--help`
+ * included, and a `--profile` with no value make the run a different command, which the launcher refuses. So does any
+ * argument after `--`: the launcher read no `--profile` there, so the profile it would roll back could differ from the
+ * one those arguments name.
+ * @param args - the runtime's arguments.
+ * @param passedThrough - the arguments after `--`.
+ * @returns `true` for `delorun`, `delorun start` and `delorun recover rollback` with only profile options and nothing
+ *   after `--`.
+ */
+export function mayStartPrevious(args: readonly string[], passedThrough: readonly string[]): boolean {
+  if (passedThrough.length > 0) return false
+  const words: string[] = []
+  for (let at = 0; at < args.length; at++) {
+    const argument = args[at]!
+    if (argument === '--profile') {
+      if (at + 1 === args.length) return false
+      at++
+    } else if (!argument.startsWith('--profile=')) {
+      words.push(argument)
+    }
+  }
+  return FALLBACK_COMMANDS.some(command => command.length === words.length && command.every((word, at) => words[at] === word))
+}
+
+/** A command to start, with the release and the root its start check verified it under. */
+type CheckedPlan = LaunchPlan & { readonly root: RootMetadata }
+
+/**
+ * Start the installed runtime, and install the channel's release first when the store holds none. When `current`
+ * fails its start check and `previous` passes its own (see {@link previousRollback}), a run {@link mayStartPrevious}
+ * accepts starts `previous` with {@link ROLLBACK_ARGS}; any other run prints {@link rollbackRefusalText} and starts
+ * nothing.
  * @param options - the launch's inputs.
- * @returns the runtime's exit status.
+ * @returns the runtime's exit status, or {@link LAUNCHER_EXIT.failed} when the run is refused.
  * @throws when a start, install or a named release refuses, for {@link runLauncher} to print.
  */
 async function startOrInstall(options: LauncherOptions): Promise<number> {
-  let plan: (LaunchPlan & { readonly root: RootMetadata }) | undefined
+  let plan: CheckedPlan | undefined
   try {
     plan = await prepare(options)
   } catch (error) {
+    if (error instanceof RuntimeStoreError && error.code === 'RUNTIME_CHANGED') {
+      const rollback = await previousRollback(options)
+      if (rollback === undefined) throw error
+      // Any other command would run on `previous` as a rollback the person did not ask for, so it runs nothing.
+      if (!mayStartPrevious(options.args, options.passedThrough)) {
+        options.output.stderr(rollbackRefusalText(options, error, rollback.current, rollback.previous))
+        return LAUNCHER_EXIT.failed
+      }
+      options.output.stderr(`Delo did not start release ${String(rollback.current)}: it failed its start check. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
+      return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root }, ROLLBACK_ARGS)
+    }
     if (!(error instanceof RuntimeStoreError && error.code === 'NO_ACTIVE_RUNTIME')) throw error
   }
   if (plan === undefined) {
@@ -138,6 +227,17 @@ async function startOrInstall(options: LauncherOptions): Promise<number> {
   // runtime: it never replaces the runtime a person already has. Starting the installed runtime instead would
   // silently drop what was asked for, so the run stops and names both versions.
   if (options.target !== undefined) throw installedRefusal(options, plan.version)
+  return start(options, plan, options.args)
+}
+
+/**
+ * Run contract C18's start check of a checked release, then start it.
+ * @param options - the launch's inputs.
+ * @param plan - the command, with the release and the root its start check verified it under.
+ * @param args - the arguments the runtime is started with, which name its command.
+ * @returns the runtime's exit status, or {@link LAUNCHER_EXIT.failed} when the release-log check stops the start.
+ */
+async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly string[]): Promise<number> {
   if (options.startCheck !== undefined) {
     const check = await options.startCheck(plan.version, plan.root)
     for (const notice of check.notices ?? []) options.output.stderr(`Release log: ${notice}\n`)
@@ -146,10 +246,52 @@ async function startOrInstall(options: LauncherOptions): Promise<number> {
     // never does. `delorun verify` itself still runs, so the person can see every check.
     if (check.stop) {
       options.output.stderr(failedStartText(plan.version, check))
-      if (runtimeCommand(options.args) !== 'verify') return LAUNCHER_EXIT.failed
+      if (runtimeCommand(args) !== 'verify') return LAUNCHER_EXIT.failed
     }
   }
   return options.spawn(plan)
+}
+
+/**
+ * The `previous` to start with {@link ROLLBACK_ARGS} after `current` failed its start check: contract C3's one
+ * rollback, which reads the update record, applies the rollback table and switches the pointers, and which refuses
+ * with `NO_UPDATE_RECORD` when no update to `current` is recorded. It exists only when no release was named, the stored
+ * root is anchored on the roots this launcher ships, the store names a `previous`, and `previous` passes contract C2's
+ * start check under that root. Finding it reads the home and writes nothing; the launcher switches no pointer itself.
+ * @param options - the launch's inputs.
+ * @returns the version `previous` names, the root it passed its start check under and the version `current` names, or
+ *   `undefined` when there is no usable `previous`, so the start's own refusal stands.
+ */
+async function previousRollback(options: LauncherOptions): Promise<{ readonly previous: RuntimeVersion, readonly root: RootMetadata, readonly current: RuntimeVersion } | undefined> {
+  if (options.target !== undefined) return undefined
+  // A refusal at any step leaves no version to start the rollback from, and the refusal of `current` is what the
+  // person sees: a root this launcher does not anchor, pointers that do not read, or a `previous` that fails its own
+  // start check.
+  const root = await storedRoot(options.home, options.roots).catch(() => undefined)
+  if (root === undefined) return undefined
+  const pointers = await options.store.pointers().catch(() => undefined)
+  if (pointers?.previous === undefined) return undefined
+  const previous = pointers.previous
+  if (!await options.store.checkRuntime(previous, root).then(() => true, () => false)) return undefined
+  return { previous, root, current: pointers.current }
+}
+
+/**
+ * What a run that is not a start prints when `current` failed its start check and `previous` passed its own: the
+ * release that failed and the check's reason, and `delorun recover rollback`, which starts `previous` to roll back to it.
+ * @param options - the launch's inputs, whose arguments name the command that was refused.
+ * @param error - the start check's refusal of `current`.
+ * @param current - the version `current` names.
+ * @param previous - the version `previous` names.
+ * @returns the refusal in `@delo/home`'s format, every line ending with a newline.
+ */
+function rollbackRefusalText(options: Pick<LauncherOptions, 'args' | 'profile'>, error: RuntimeStoreError, current: RuntimeVersion, previous: RuntimeVersion): string {
+  const command = ['delorun', ...options.args].join(' ')
+  return renderRefusal({
+    lead: `Delo did not run ${command}: release ${String(current)} failed its start check, so Delo ran no release.`,
+    reason: codedReason(error.code, error.detail),
+    remedies: [`Start release ${String(previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}${profileOption({ profile: options.profile })}`],
+  })
 }
 
 /**
@@ -187,7 +329,7 @@ export function runtimeCommand(args: readonly string[]): string | undefined {
  * @returns the command that starts `current`, with the root it was checked under.
  * @throws {RuntimeStoreError} `NO_ACTIVE_RUNTIME`, `RUNTIME_CHANGED`, `RUNTIME_INCOMPATIBLE`, `STORE_BUSY`.
  */
-async function prepare(options: LauncherOptions): Promise<LaunchPlan & { readonly root: RootMetadata }> {
+async function prepare(options: LauncherOptions): Promise<CheckedPlan> {
   const root = await storedRoot(options.home, options.roots)
   return { ...await options.store.prepareLaunch({ launcher: SUPPORTED, root, mode: options.mode, profile: options.profile, args: options.args }), root }
 }
@@ -267,8 +409,8 @@ async function install(options: LauncherOptions): Promise<void> {
   })
 }
 
-/** A profile name: what the launcher resolves to one directory under the home's profiles, and what a shell passes safely. */
-export const PROFILE_NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/u
+/** A profile name: contract C1's rule, which `delorun` applies too. */
+export const PROFILE_NAME = PROFILE_NAME_PATTERN
 
 /**
  * The profile a launch runs, from the option or `DELO_PROFILE`, refusing the desktop app's own profile and any name
@@ -281,9 +423,7 @@ export const PROFILE_NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/u
  */
 export function launcherProfile(named: string | undefined, env: NodeJS.ProcessEnv): string {
   const profile = named ?? (env[DELO_PROFILE_ENV] === undefined || env[DELO_PROFILE_ENV].trim() === '' ? 'default' : env[DELO_PROFILE_ENV].trim())
-  if (profile === 'desktop') throw new Error('the profile desktop belongs to the Delo desktop app, which builds it itself')
-  if (!PROFILE_NAME.test(profile)) {
-    throw new Error(`the profile ${JSON.stringify(profile)} is not a profile name: a profile is 1 to 32 lowercase letters, digits, hyphens or underscores, starting with a letter or digit`)
-  }
+  const problem = profileNameProblem(profile)
+  if (problem !== undefined) throw new Error(`the profile ${problem}`)
   return profile
 }

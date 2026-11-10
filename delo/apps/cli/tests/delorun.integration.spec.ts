@@ -7,15 +7,17 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
-import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
+import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES } from '@delo/contract-home-layout'
 import { parse } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
+import { NO_APPROVED_CONTENT } from '../src/compose.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
 import { requestStudioLink } from '../src/open/studio.ts'
-import { startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
+import { realPreStartSteps, startForeground, upstreamAddStudioBundle, upstreamDependencies, type StartDependencies } from '../src/start.ts'
 import { runtimeOfFile } from '../src/update/runtime.ts'
+import { composedBootRows, composedProviders } from './fixtures/composed-rows.ts'
 
 const BIN = join(import.meta.dirname, '../src/bin.ts')
 const BUNDLE_LOCAL_DIR = new URL('.', import.meta.resolve('@delo/bundle-local/package.json')).pathname
@@ -66,6 +68,16 @@ function delorun(args: readonly string[], env: Record<string, string> = {}): { s
   // A child ended by its timeout or a signal reports that, with its output, instead of a status mismatch.
   if (result.error !== undefined || result.signal !== null) throw new Error(`delorun ${args.join(' ')} did not exit (${result.error?.message ?? String(result.signal)}):\n${result.stderr}`)
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+}
+
+/**
+ * The entries a start leaves in a profile's run directory, without the record of its one-time profile changes, which
+ * stays by design.
+ * @param directory - the run directory.
+ * @returns the entries.
+ */
+function startArtifacts(directory: string): string[] {
+  return readdirSync(directory).filter(name => name !== 'migrations.json')
 }
 
 beforeEach(() => {
@@ -132,11 +144,33 @@ describe('delorun', { timeout: 60_000 }, () => {
       expect(refused.status).toBe(EXIT.usage)
       expect(refused.stderr).toContain('the desktop app\'s own profile')
     }
+    // Delo's own profile-name rule refuses the name before upstream's plugin manager, which refuses it too, runs.
     const plugin = delorun(['plugin', '--profile', 'desktop', 'add', 'some-plugin'])
-    expect(plugin.status).toBe(1)
-    expect(plugin.stderr).toContain('profile "desktop" is managed exclusively by the Electron application')
+    expect(plugin.status).toBe(EXIT.usage)
+    expect(plugin.stderr).toContain('the desktop app\'s own profile')
     expect(delorun(['status']).status).toBe(EXIT.notRunning)
     expect(snapshot(desktopProfile)).toEqual(before)
+    expect(readdirSync(join(deloHome, 'run'))).toEqual(['default'])
+  })
+
+  it('reserved-profile-refused: refuses a CLI profile under a reserved name at start, and changes nothing', () => {
+    expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
+    // A CLI profile under a name the rule reserves, as an earlier release accepted it.
+    const reserved = join(deloHome, 'profiles', 'data-users')
+    mkdirSync(reserved, { recursive: true })
+    writeFileSync(join(reserved, 'package.json'), '{"name":"dsh-profile-data-users"}\n')
+    const before = snapshot(reserved)
+    const runs: ReadonlyArray<readonly [readonly string[], Record<string, string>, string]> = [
+      [['start', '--foreground', '--profile', 'data-users'], {}, 'data-users'],
+      [['start', '--foreground'], { DELO_PROFILE: 'headless' }, 'headless'],
+      [['--profile', 'node_modules'], {}, 'node_modules'],
+    ]
+    for (const [args, env, name] of runs) {
+      const refused = delorun(args, env)
+      expect(refused.status).toBe(EXIT.usage)
+      expect(refused.stderr).toContain(`"${name}" is reserved: ${RESERVED_PROFILE_NAMES.get(name)!}; choose another profile name`)
+    }
+    expect(snapshot(reserved)).toEqual(before)
     expect(readdirSync(join(deloHome, 'run'))).toEqual(['default'])
   })
 
@@ -151,7 +185,7 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(refused.stderr).toContain(`  To fix it, run: delorun plugin --profile default add link:${BUNDLE_LOCAL_DIR}`)
     expect(refused.stderr).toContain('upload session logs to DeepSeek')
     expect(refused.stdout).not.toContain('http://')
-    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
+    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual([])
   })
 
   it('refuses a home inside ~/.dsh before creating anything', () => {
@@ -210,16 +244,19 @@ describe('starting the home process', { timeout: 60_000 }, () => {
    * @param seen - collects each run's options and DSH_HOME.
    * @returns the dependencies.
    */
-  function recording(seen: { options: RunProfileOptions, dshHome: string | undefined }[], rows: readonly BootedRow[] = [], shutdowns: number[] = []): StartDependencies {
+  function recording(seen: { options: RunProfileOptions, dshHome: string | undefined }[], rows: readonly BootedRow[] = [], shutdowns: number[] = [], events: string[] = []): StartDependencies {
     return {
-      addStudioBundle: () => Promise.resolve(false),
+      approvedPluginContent: NO_APPROVED_CONTENT,
+      preStartSteps: realPreStartSteps(() => Promise.resolve(false)),
       prepareProfile: upstreamDependencies().prepareProfile,
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
-        return Promise.resolve({ rows: () => rows, shutdown: (code) => { shutdowns.push(code); return Promise.resolve() }, watchChats: () => {}, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
+        const booted = (): BootedRow[] => composedBootRows(deloHome, options, rows)
+        return Promise.resolve({ rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => Promise.resolve(), watchChats: () => {}, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
       probe: () => () => Promise.resolve('answered'),
+      onSignal: () => () => undefined,
       onExit: () => undefined,
       exit: () => undefined,
       captureOutput: () => () => undefined,
@@ -260,28 +297,33 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     delete manifest.dependencies?.[STUDIO_BUNDLE]
     writeFileSync(path, JSON.stringify(manifest))
     const output = { ...context, stderr: () => undefined }
-    expect(await upstreamDependencies().addStudioBundle(deloHome, 'default', output)).toBe(true)
+    expect(await upstreamAddStudioBundle(deloHome, 'default', output)).toBe(true)
     expect((JSON.parse(readFileSync(path, 'utf8')) as { dsh: { profile: { bundles: string[] } } }).dsh.profile.bundles).toContain(STUDIO_BUNDLE)
-    expect(await upstreamDependencies().addStudioBundle(deloHome, 'default', output)).toBe(false)
+    expect(await upstreamAddStudioBundle(deloHome, 'default', output)).toBe(false)
   })
 
-  it('adds the studio look to a profile set up before it existed, and starts in the stock look when that fails', async () => {
+  it('adds the studio look once, at a fresh start, starts in the stock look while that fails, and never tries again once it is done', async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const printed: string[] = []
     const output = { ...context, stderr: (text: string) => void printed.push(text) }
+    const lock = join(deloHome, 'run', 'default', 'home.lock')
+    const refusing: StartDependencies = { ...recording([]), preStartSteps: realPreStartSteps(() => Promise.reject(new CliError(EXIT.failed, 'pnpm exited 1'))) }
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, refusing)).toBeUndefined()
+    expect(printed.join('')).toContain('delorun: the profile default starts in the stock look, because Delo\'s studio look could not be added: pnpm exited 1')
+    rmSync(lock, { force: true })
+    printed.length = 0
     const added: string[] = []
-    const upgrading: StartDependencies = { ...recording([]), addStudioBundle: (_home, profile) => { added.push(profile); return Promise.resolve(true) } }
-    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output }, upgrading)).toBeUndefined()
+    const upgrading: StartDependencies = { ...recording([]), preStartSteps: realPreStartSteps((_home, profile) => { added.push(profile); return Promise.resolve(true) }) }
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, upgrading)).toBeUndefined()
     expect(added).toEqual(['default'])
     expect(printed.join('')).toContain('delorun: added Delo\'s studio look to the profile default')
-    rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
-    printed.length = 0
-    const refusing: StartDependencies = { ...recording([]), addStudioBundle: () => Promise.reject(new CliError(EXIT.failed, 'pnpm exited 1')) }
-    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output }, refusing)).toBeUndefined()
-    expect(printed.join('')).toContain('delorun: the profile default starts in the stock look, because Delo\'s studio look could not be added: pnpm exited 1')
-    rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
-    const failing: StartDependencies = { ...recording([]), addStudioBundle: () => Promise.reject(new Error('disk gone')) }
-    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output }, failing)).rejects.toThrow('disk gone')
+    rmSync(lock, { force: true })
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, upgrading)).toBeUndefined()
+    expect(added).toEqual(['default'])
+    rmSync(lock, { force: true })
+    rmSync(join(deloHome, 'run', 'default', 'migrations.json'))
+    const failing: StartDependencies = { ...recording([]), preStartSteps: realPreStartSteps(() => Promise.reject(new Error('disk gone'))) }
+    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, failing)).rejects.toThrow('disk gone')
   })
 
   it('boots the CLI profile with DSH_HOME set to the Delo home, and a second start leaves one holder', async () => {
@@ -289,7 +331,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     const prepared = await prepareHome(context, undefined)
     expect(prepared.home).toEqual({ path: deloHome, ignoredDshHome: dshHome })
     const seen: { options: RunProfileOptions, dshHome: string | undefined }[] = []
-    expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: context }, recording(seen))).toBeUndefined()
+    expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: context, env: context.env }, recording(seen))).toBeUndefined()
     expect(seen).toHaveLength(1)
     const overlay = join(deloHome, 'run', 'default', 'sandbox.patch.yml')
     expect(seen[0]).toMatchObject({ dshHome: deloHome, options: { profile: 'default', patchFiles: [overlay], args: ['--no-open'] } })
@@ -306,26 +348,26 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     const lock = JSON.parse(readFileSync(join(deloHome, 'run', 'default', 'home.lock'), 'utf8')) as { pid: number }
     expect(lock.pid).toBe(process.pid)
     const printed: string[] = []
-    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: { ...context, stdout: text => void printed.push(text) } }, recording(seen))).toBe(EXIT.ok)
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: { ...context, stdout: text => void printed.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)
     expect(printed.join('')).toContain(`Delo is already running for the profile default (process ${String(process.pid)}`)
     expect(printed.join('')).toContain('Run delorun open to open the studio in your browser.\n')
     const opening: string[] = []
-    expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: { stdout: () => {}, stderr: text => void opening.push(text) } }, recording(seen))).toBe(EXIT.ok)
+    expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: { stdout: () => {}, stderr: text => void opening.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)
     expect(opening.join('')).toBe('The home process for the profile default did not give a studio link (STUDIO_UNAVAILABLE: the Host serves no studio); see delorun status.\n')
     expect(seen).toHaveLength(1)
     const silent: StartDependencies = { ...recording(seen), probe: () => () => Promise.resolve('silent') }
-    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, silent)).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
+    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, silent)).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
     expect(seen).toHaveLength(1)
     expect(JSON.parse(readFileSync(join(deloHome, 'run', 'default', 'home.lock'), 'utf8'))).toEqual(lock)
   })
 
   it('releases the lock when the profile fails to boot, and refuses a home without the CLI profile', async () => {
     await prepareHome(context, undefined)
-    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording([]))).rejects.toThrow('run: delorun setup')
+    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([]))).rejects.toThrow('run: delorun setup')
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const failing: StartDependencies = { ...recording([]), runProfile: () => Promise.reject(new Error('boot failed')) }
-    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, failing)).rejects.toThrow('failed to start: boot failed')
-    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
+    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, failing)).rejects.toThrow('failed to start: boot failed')
+    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual([])
   })
 
   it('refuses a Delo bundle that resolves but fails to load, and still starts over a skipped upstream bundle', async () => {
@@ -336,13 +378,13 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     linkIntoProfile('@delo/bundle-broken', broken)
     appendBundles('@delo/bundle-broken')
     const seen: { options: RunProfileOptions, dshHome: string | undefined }[] = []
-    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording(seen)))
+    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording(seen)))
       .rejects.toThrow(/@delo\/bundle-broken: Error: dsh: profile bundle "@delo\/bundle-broken" declares no dsh.bundle[^\n]*\n {2}To fix it, reinstall Delo, or run: delorun plugin --profile default install/)
     expect(seen).toHaveLength(0)
     const manifest = JSON.parse(readFileSync(join(deloHome, 'profiles', 'default', 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
     manifest.dsh.profile.bundles = [...DELO_PROFILE_BUNDLES, '@deepseek-ai/dsh-not-installed']
     writeFileSync(join(deloHome, 'profiles', 'default', 'package.json'), JSON.stringify(manifest))
-    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording(seen))).toBeUndefined()
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording(seen))).toBeUndefined()
     expect(seen[0]!.options.resolvedProfile?.profile.skippedBundles.map(bundle => bundle.packageName)).toEqual(['@deepseek-ai/dsh-not-installed'])
   })
 
@@ -353,13 +395,27 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       { id: 'agent-loop', name: '@deepseek-ai/dsh-agent-loop', disabled: false, state: 'active' },
       { id: 'delo-privacy', name: LOCAL_BUNDLE, disabled: false, state: 'not-imported' },
     ]
-    const refusal = startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording([], rows, shutdowns))
+    const refusal = startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([], rows, shutdowns))
     await expect(refusal).rejects.toThrow(/delo-privacy \(@delo\/bundle-local\) failed to import\n {2}To fix it, build it in this source checkout with: pnpm --filter @delo\/bundle-local run build/)
     expect(shutdowns).toEqual([EXIT.failed])
-    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
-    const upstreamOnly: BootedRow[] = [{ id: 'mcp', name: '@deepseek-ai/dsh-mcp-client', disabled: false, state: 'failed' }, { ...rows[1]!, disabled: true }]
-    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, recording([], upstreamOnly, shutdowns))).toBeUndefined()
+    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual([])
+    const upstreamOnly: BootedRow[] = [{ id: 'mcp', name: '@deepseek-ai/dsh-mcp-client', disabled: false, state: 'failed' }]
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([], upstreamOnly, shutdowns))).toBeUndefined()
     expect(shutdowns).toEqual([EXIT.failed])
+  })
+
+  it('releases the turn gate\'s start hold only after the booted Host passed its check, and never for a Host it refuses', async () => {
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    const refusedEvents: string[] = []
+    const disabled: BootedRow[] = [{ id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', disabled: true, state: 'active', config: { enabled: true } }]
+    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([], disabled, [], refusedEvents))).rejects.toThrow('delo-fetch-guard is disabled')
+    expect(refusedEvents).not.toContain('release')
+    expect(refusedEvents.at(-1)).toBe('shutdown')
+    const events: string[] = []
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([], [], [], events))).toBeUndefined()
+    expect(events.filter(event => event === 'release')).toEqual(['release'])
+    expect(events.indexOf('release')).toBeGreaterThan(events.lastIndexOf('rows', events.indexOf('release')))
+    expect(events).not.toContain('shutdown')
   })
 })
 
@@ -421,7 +477,7 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     const manifest = JSON.parse(readFileSync(join(deloHome, 'profiles', 'default', 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
     expect(manifest.dependencies[LOCAL_BUNDLE]).toBe(`link:${BUNDLE_LOCAL_DIR}`)
     const started = startDriver()
-    expect(started.report.outcome, started.stderr).toBe('started')
+    expect(started.report.outcome, String((started.report as { message?: unknown }).message)).toBe('started')
     expect(started.status).toBe(0)
     // A row that requires a service no enabled row provides stays pending, and the Host starts with a did-not-activate warning.
     expect(started.report.rows.filter(row => !row.disabled && row.state !== 'active')).toEqual([])
@@ -473,6 +529,6 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     expect(refused.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ state: 'not-imported', disabled: false })
     expect(refused.stderr).toContain('forced import failure')
     expect(refused.report.sessionLogEnabled).toBe(false)
-    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
+    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual([])
   })
 })

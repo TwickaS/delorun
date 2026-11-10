@@ -25,16 +25,17 @@
  * [startup pruning](./logs/startup.ts)), and every one exports Delo's version as `DELO_VERSION` before any
  * upstream module runs (contract C17; [version](./version.ts)). Every command resolves the Delo home, `DELO_HOME` or `~/.delo`, and every
  * command but `status` creates its tree at mode 0700 and refuses a laxer one
- * before upstream code runs. Exit codes are {@link EXIT}'s.
+ * before upstream code runs. A failed command prints what Delo did, why and what the person can do, in the refusal
+ * format `delorun` shares with its npm launcher ([refusals](./refusals.ts)), and never a stack. Exit codes are
+ * {@link EXIT}'s.
  *
  * @module @delo/cli
  */
-import { CliError, EXIT, type ExitCode } from './exit.ts'
+import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
-import { HomeLayoutError } from '@delo/home'
 import { hasCliProfile, profileDirectory } from './profile.ts'
+import { cliRefusal } from './refusals.ts'
 import { runSetup, setupCommand } from './setup/index.ts'
-import { SetupCancelled } from './setup/prompts.ts'
 import { startCommand, startDetached, startForeground, startsDetached } from './start.ts'
 import { statusCommand } from './status.ts'
 import { stopCommand } from './stop.ts'
@@ -49,7 +50,7 @@ import { updateCommand } from './update/command.ts'
 import { importHomeCommand } from './import-home/command.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
-import { applyDeloVersionEnvironment, DeloVersionError, versionCommand } from './version.ts'
+import { applyDeloVersionEnvironment, versionCommand } from './version.ts'
 import { verifyCommand } from './verify/index.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
@@ -89,11 +90,11 @@ async function bare(args: readonly string[], context: CommandContext): Promise<C
   if (!hasCliProfile(home.path, profile)) return runSetup({ home: home.path, profile, output: context, env: context.env, form: { kind: 'interactive' } })
   // The setup answer decides as it does for `delorun start`; either way the studio opens once Delo runs.
   if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) return startDetached(home.path, profile, context, true)
-  return startForeground({ home: home.path, profile, open: true, output: context })
+  return startForeground({ home: home.path, profile, open: true, output: context, env: context.env })
 }
 
 /**
- * Run one `delorun` invocation and report its failure.
+ * Run one `delorun` invocation and report its failure, whatever was thrown, as a refusal on standard error.
  * @param argv - the arguments after the script.
  * @param context - the environment and output; this process's by default.
  * @returns the exit code, or `undefined` when upstream's profile runner owns it.
@@ -117,33 +118,10 @@ export async function main(argv: readonly string[], context: CommandContext = {
     if (command === undefined) throw new CliError(EXIT.usage, `delorun: unknown command ${JSON.stringify(first)}\n\n${usage()}`)
     return await command.run(rest, context)
   } catch (error) {
-    return report(error, context)
+    // Every failure reaches the person in the refusal format, without a stack: `delorun` keeps no log of its own
+    // failures, so the message is all a person has.
+    const refusal = cliRefusal(error, argv)
+    context.stderr(refusal.text)
+    return refusal.exit
   }
-}
-
-/**
- * Report a failure on standard error.
- * @param error - the failure.
- * @param context - the output.
- * @returns its exit code.
- * @throws the error itself when it is neither a {@link CliError}, a {@link SetupCancelled}, a {@link DeloVersionError} nor a {@link HomeLayoutError}.
- */
-function report(error: unknown, context: CommandContext): ExitCode {
-  if (error instanceof CliError) {
-    context.stderr(`${error.message}\n`)
-    return error.exit
-  }
-  if (error instanceof SetupCancelled) {
-    context.stderr(`${error.message}\n`)
-    return EXIT.failed
-  }
-  if (error instanceof DeloVersionError) {
-    context.stderr(`${error.message}\n`)
-    return EXIT.failed
-  }
-  if (error instanceof HomeLayoutError) {
-    context.stderr(`delorun: ${error.message}\n`)
-    return EXIT.failed
-  }
-  throw error
 }

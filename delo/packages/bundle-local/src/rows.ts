@@ -153,7 +153,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'delo-update-gate',
     kind: 'added',
-    reason: 'The C16 switch `update_turn_refusal` on: while `delorun update` or a stop waits for running chats, the first step of every new turn is refused with `UPDATE_PENDING`, so the wait ends once the running turns end; the plugin\'s own default, off, is the parity value.',
+    reason: 'The C16 switch `update_turn_refusal` on: while `delorun update` or a stop waits for running chats, the first step of every new turn is refused with `UPDATE_PENDING`, so the wait ends once the running turns end; and the first step of every turn waits until `delorun` has checked the booted Host\'s rows and services (`holdUntilChecked`). The plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the deloTurnGate service is absent, so every turn starts as upstream starts it.' },
   },
   {

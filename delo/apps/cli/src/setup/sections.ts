@@ -18,8 +18,8 @@ import {
 } from '@delo/contract-setup-answers'
 import { LOCAL_BUNDLE } from '@delo/bundle-local/profile'
 import { en } from '@delo/bundle-local/statements'
+import { profileNameProblem } from '@delo/contract-home-layout'
 import { importSection } from '../import-home/section.ts'
-import { selectProfile } from '../profile.ts'
 import { CliError, EXIT } from '../exit.ts'
 import type { KeyCheck } from './key-check.ts'
 import { writePromptRows } from './prompt-switches.ts'
@@ -308,12 +308,9 @@ export const backgroundSection: SetupSection = {
  * @returns the message to show, or `undefined` for a usable name.
  */
 function nameProblem(value: string, environment: SectionEnvironment): string | undefined {
-  try {
-    selectProfile(value, {})
-  } catch {
-    // selectProfile refuses the desktop app's profile and names upstream's rules refuse; the message here is for the prompt.
-    return 'Use a name without slashes or dots-only names; "desktop" belongs to the desktop app.'
-  }
+  // C1's rule, which `selectProfile` applies to `--profile` and `DELO_PROFILE`.
+  const problem = profileNameProblem(value)
+  if (problem !== undefined) return `Choose another name: ${problem}.`
   return value !== environment.profile && environment.profileNameTaken(value) ? `A profile named ${value} already exists.` : undefined
 }
 

@@ -7,3 +7,4 @@ section: Added
 - `delorun stop` stops Delo once running chats end, or at once with `--now`.
 - `delorun status` shows the home and profile in use, whether Delo is running, its process, runtime version and running chats, or prints them as JSON with `--json`.
 - `delorun plugin` and `delorun headless` work as their `dsh` counterparts do, inside your Delo home.
+- When a `delorun` command or the launcher stops on a failure, it says what Delo did, why, with the error's code and the file or detail concerned, and what you can do next, naming your `--profile`; it never prints a stack trace.

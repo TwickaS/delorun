@@ -1,16 +1,15 @@
 /**
  * The signed release files an installation keeps beside it (contract C1), verified with `@delo/release`'s C2
  * verifier: the manifest's targets signature, and the platform's file list against the manifest's digest and its own
- * targets signature. The trusted root comes from `trust/root.json` under C1's refusal rule.
+ * targets signature. The trusted root is the caller's: the launcher, and every update and rollback through a
+ * {@link TrustedRootSource}, anchor `trust/root.json` on the roots the launcher ships before it reaches the store.
  *
  * @module @delo/runtime-store/release
  */
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { DELO_HOME_ENTRIES, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
+import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { RELEASE_FILE_SIZE_LIMITS, type ReleaseManifest, type RootMetadata, type RuntimeFileList } from '@delo/contract-release-manifest'
-import { readProtectedFile } from '@delo/home'
-import { readRoot, verifyFileList, verifySignedManifest } from '@delo/release/sign/verify'
+import { verifyFileList, verifySignedManifest } from '@delo/release/sign/verify'
 import type { StorePaths } from './paths.ts'
 
 /** A version's manifest and file list, each verified with the trusted root. */
@@ -74,14 +73,11 @@ export async function readStoredRelease(paths: StorePaths, root: RootMetadata, v
 }
 
 /**
- * Read the stored root `trust/root.json` under C1's refusal rule and check that its own root threshold signs it. The
- * clock is not read: an expired root does not stop a start (C2). Whether the stored root descends from the root the
- * launcher embeds is the launcher's check.
- * @param home - the resolved Delo home.
- * @returns the root metadata.
- * @throws {HomeLayoutError} `SECRET_FILE_MODE` for a laxer, linked or foreign file.
- * @throws {Error} when the file is missing or does not verify.
+ * Reads the root a start check, an install or a rollback verifies with: `trust/root.json`, read under C1's refusal
+ * rule and trusted only through the release roots the launcher that started this process ships, by the chain an
+ * install walked to it. The store never reads `trust/root.json` itself, because a root checked against its own
+ * signatures only is one any process running as the person could have written.
+ * @returns the anchored root.
+ * @throws {RuntimeStoreError} `ROOT_NOT_ANCHORED` when the root cannot be anchored; the error names the remedy.
  */
-export async function readStoredRoot(home: string): Promise<RootMetadata> {
-  return readRoot(await readProtectedFile(join(home, DELO_HOME_ENTRIES.trust, TRUST_FILES.root))).metadata
-}
+export type TrustedRootSource = () => Promise<RootMetadata>

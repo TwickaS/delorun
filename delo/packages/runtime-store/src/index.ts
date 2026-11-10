@@ -7,10 +7,11 @@
  * @module @delo/runtime-store
  */
 export { isStoreError, RuntimeStoreError, type RuntimeRemedy, type RuntimeStoreErrorCode, type StoreLayoutCode } from './errors.ts'
+export { runtimeStoreDescriber, storeRemedies } from './refusal.ts'
 export { launchFiles, launchProtocolOf, SUPPORTED, type LaunchCommand, type LauncherSupport } from './launch.ts'
 export { parseRuntimeVersion, StorePaths } from './paths.ts'
 export type { RuntimePointers } from './pointer.ts'
-export { readStoredRoot, type ReleaseFileBytes, type VerifiedRelease } from './release.ts'
+export type { ReleaseFileBytes, TrustedRootSource, VerifiedRelease } from './release.ts'
 export {
   HomeRuntimeStore,
   type ChannelRelease,

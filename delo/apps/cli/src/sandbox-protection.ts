@@ -7,23 +7,29 @@
  * `escapeSocketDirectories` WSL's interop directory `/run/WSL`, whose sockets let a command start Windows programs
  * outside every Linux namespace: the provider hides it under bwrap and refuses confined commands on a runner that
  * cannot, whenever it exists at a wrap. The settings travel as an overlay patch the start writes to `run/<profile>/sandbox.patch.yml` and hands to upstream's
- * profile runner; the provider's other settings in the profile's own patch are kept, its own denied sockets included.
- * A patch that sets the runner itself (`runnerCommand`, `runnerFailureSignatures`) is refused: a non-empty runner
- * command asserts full enforcement and skips the built-in selection, which would boot the row unconfined while the
- * provider reports full.
+ * profile runner as its last `--patch` overlay, so the overlay applies over every layer that composes the row, in
+ * upstream's order (`readProfilePatches` in `@deepseek-ai/dsh-app-boot`): the bundle layers, the profile's own
+ * `cordis.patch.yml`, the home's `cordis.patch.yml`, which upstream applies over every profile, and the start's other
+ * overlays. A patch's `config` replaces the row's whole config (`applyPatches` in `@deepseek-ai/cordis-plugin-include`),
+ * so the overlay carries over the composed config, which the last layer that sets one gives, with Delo's three keys
+ * replaced; its `deniedSockets` and `escapeSocketDirectories` keep the entries every layer lists. A layer that sets the runner itself
+ * (`runnerCommand`, `runnerFailureSignatures`) on the row is refused, even when a later layer replaces it: a non-empty
+ * runner command asserts full enforcement and skips the built-in selection, which would boot the row unconfined while
+ * the provider reports full.
  *
  * @module @delo/cli/sandbox-protection
  */
 import { realpathSync } from 'node:fs'
 import { realpath, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
-import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
+import { composeEntries, type Profile } from '@deepseek-ai/dsh-app-boot'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { runDirectory, writeProtectedFile } from '@delo/home'
 import { updateSocketPath } from '@delo/home-process'
 import { resolveDockerContext, supervisorSocketPath } from '@delo/supervisor'
 import { stringify } from 'yaml'
 import { CliError, EXIT } from './exit.ts'
+import { isRecord, patchLayers, rowPatches, type PatchLayer } from './patch-layers.ts'
 
 /** The id of upstream's local sandbox provider row in the CLI profile's composition. */
 export const SANDBOX_ROW = 'sandbox'
@@ -133,49 +139,93 @@ function isPlain(value: unknown): boolean {
   return Object.values(value).every(isPlain)
 }
 
+/** The provider settings that set the runner itself, which no layer of the row may set. */
+const RUNNER_KEYS = ['runnerCommand', 'runnerFailureSignatures'] as const
+
+/** The keys whose values the overlay replaces outright, so a layer's value for them, expressions included, is dropped. */
+const REPLACED_KEYS: readonly string[] = ['protectedHome', 'protectedHomeReadable']
+
 /**
- * The provider's settings in the profile's own patch, which the overlay keeps: the last `sandbox` entry's `config`.
- * @param patchPath - the profile's `cordis.patch.yml`.
- * @returns the settings, or an empty object.
- * @throws {CliError} when the entry's settings are not plain values, which the overlay cannot carry over.
+ * The configs that patches or composed entries give the `sandbox` row, in order.
+ * @param entries - the patches or entries.
+ * @returns the configs, which a later one replaces whole.
  */
-function personSettings(patchPath: string): Record<string, unknown> {
-  const entries = loadOverlayPatches('delorun', patchPath).filter(entry => entry.id === SANDBOX_ROW && entry.config !== undefined)
-  const config: unknown = entries.at(-1)?.config
-  if (config === undefined) return {}
-  if (typeof config !== 'object' || config === null || Array.isArray(config) || !isPlain(config)) throw new CliError(EXIT.failed, `delorun: ${patchPath} configures the ${SANDBOX_ROW} row with expressions; Delo adds its home protection to that row at start and can carry over plain values only, so write its settings as plain YAML values`)
-  return config as Record<string, unknown>
+function rowConfigs(entries: readonly unknown[]): unknown[] {
+  return rowPatches(entries, SANDBOX_ROW).flatMap(entry => entry.config === undefined ? [] : [entry.config])
 }
 
 /**
- * Write the overlay that sets the protection on the profile's sandbox row.
- * @param home - the resolved Delo home.
- * @param profile - the CLI profile.
- * @param patchPath - the profile's `cordis.patch.yml`.
- * @param protection - the settings.
- * @returns the overlay's path, to pass to upstream's profile runner.
- * @throws {CliError} when the profile's own settings for the row cannot be carried over, or when the row sets the
- *   runner itself, which would replace the confinement Delo's home protection needs.
+ * The sources of the layers that give the row a config passing a test.
+ * @param layers - the layers.
+ * @param test - the test.
+ * @returns the sources, comma-separated.
  */
-export async function writeSandboxOverlay(home: string, profile: string, patchPath: string, protection: SandboxProtection): Promise<string> {
-  const own = personSettings(patchPath)
-  // The provider treats a non-empty `runnerCommand` as an assertion of full enforcement and skips its built-in
-  // selection, so a person-controlled row could boot unconfined while the provider reports full. Refuse it here,
-  // as the expressions above are refused: the row cannot carry over.
-  const runnerKeys = ['runnerCommand', 'runnerFailureSignatures'].filter(key => own[key] !== undefined)
-  if (runnerKeys.length > 0) {
-    throw new CliError(EXIT.failed, `delorun: ${patchPath} configures the ${SANDBOX_ROW} row with ${runnerKeys.join(' and ')}; Delo's home protection requires the provider's built-in runner selection, so remove ${runnerKeys.join(' and ')} from that row`)
+function sourcesOf(layers: readonly PatchLayer[], test: (config: unknown) => boolean): string {
+  return layers.filter(layer => rowConfigs(layer.patches).some(test)).map(layer => layer.source).join(', ')
+}
+
+/**
+ * The settings of a row config the overlay carries over: the config without the keys it replaces.
+ * @param config - the row config.
+ * @returns the settings, or `undefined` when the config is not an object or holds an expression in a carried key.
+ */
+function carriedSettings(config: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(config)) return undefined
+  const kept = Object.fromEntries(Object.entries(config).filter(([key]) => !REPLACED_KEYS.includes(key)))
+  return isPlain(kept) ? kept : undefined
+}
+
+/**
+ * The string entries of a list in a row config.
+ * @param config - the row config.
+ * @param key - the list's key, `deniedSockets` or `escapeSocketDirectories`.
+ * @returns the entries, or none when the config lists none as plain strings.
+ */
+function listedEntries(config: unknown, key: 'deniedSockets' | 'escapeSocketDirectories'): string[] {
+  const value = isRecord(config) ? config[key] : undefined
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
+/**
+ * Write the overlay that sets the protection on the profile's sandbox row. The overlay must be the last `--patch`
+ * overlay the start passes, after `patchFiles`: its config replaces the row's composed config whole.
+ * @param home - the resolved Delo home, whose `cordis.patch.yml` applies over every profile.
+ * @param name - the CLI profile's name.
+ * @param profile - the profile as it boots: its bundle layers and its own patch.
+ * @param patchFiles - the start's other `--patch` overlays, which apply before this one.
+ * @param protection - the settings.
+ * @returns the overlay's path, to pass to upstream's profile runner after `patchFiles`.
+ * @throws {CliError} when any layer sets the runner itself on the row, which would replace the confinement Delo's
+ *   home protection needs, naming each file and key; or when the composed settings hold expressions the overlay
+ *   cannot carry over.
+ * @throws {Error} upstream's loader error when the home patch or an overlay cannot be read or parsed.
+ */
+export async function writeSandboxOverlay(home: string, name: string, profile: Profile, patchFiles: readonly string[], protection: SandboxProtection): Promise<string> {
+  const layers = patchLayers(home, profile, patchFiles)
+  const runner = RUNNER_KEYS.flatMap(key => {
+    const sources = sourcesOf(layers, config => isRecord(config) && config[key] !== undefined)
+    return sources === '' ? [] : [{ key, sources }]
+  })
+  if (runner.length > 0) {
+    const keys = runner.map(entry => entry.key).join(' and ')
+    throw new CliError(EXIT.failed, `delorun: the ${SANDBOX_ROW} row sets the runner itself (${runner.map(entry => `${entry.key} in ${entry.sources}`).join('; ')}); Delo's home protection requires the provider's built-in runner selection, so remove ${keys} from that row in each file named`)
   }
-  const listed = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [])
-  // The person's own denied sockets and escape directories stay denied; the home is Delo's.
+  const composed = rowConfigs(composeEntries(layers.map(layer => layer.patches))).at(-1) ?? {}
+  const carried = carriedSettings(composed)
+  if (carried === undefined) {
+    const sources = sourcesOf(layers, config => carriedSettings(config) === undefined)
+    throw new CliError(EXIT.failed, `delorun: the ${SANDBOX_ROW} row is configured with expressions (in ${sources}); Delo adds its home protection to that row at start and can carry over plain values only, so write its settings as plain YAML values`)
+  }
+  // A denied socket or escape directory only narrows what a confined command reaches, so every layer's entries stay.
+  const listed = (key: 'deniedSockets' | 'escapeSocketDirectories'): string[] => layers.flatMap(layer => rowConfigs(layer.patches).flatMap(config => listedEntries(config, key)))
   const config = {
-    ...own,
+    ...carried,
     protectedHome: protection.protectedHome,
     protectedHomeReadable: [...protection.protectedHomeReadable],
-    deniedSockets: [...new Set([...listed(own.deniedSockets), ...protection.deniedSockets])],
-    escapeSocketDirectories: [...new Set([...listed(own.escapeSocketDirectories), ...protection.escapeSocketDirectories])],
+    deniedSockets: [...new Set([...listed('deniedSockets'), ...protection.deniedSockets])],
+    escapeSocketDirectories: [...new Set([...listed('escapeSocketDirectories'), ...protection.escapeSocketDirectories])],
   }
-  const path = sandboxOverlayPath(home, profile)
+  const path = sandboxOverlayPath(home, name)
   await writeProtectedFile(path, stringify([{ id: SANDBOX_ROW, config }]))
   return path
 }

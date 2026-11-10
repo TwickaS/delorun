@@ -3,8 +3,8 @@
  * (`delo/docs/contracts/c01-home-layout.md`): the Delo home tree, the modes of
  * its directories and protected files, the per-start token, the home lock, the
  * runtime store's pointer files, the launcher's download limits and the
- * confinement rules `delorun verify` reports. The package holds no runtime
- * behaviour; the contract page is the authority for every value here.
+ * confinement rules `delorun verify` reports. Its one function is the pure
+ * profile-name check; the contract page is the authority for every value here.
  *
  * @module @delo/contract-home-layout
  */
@@ -39,7 +39,70 @@ export const CLI_PROFILE = 'default'
 /** The desktop app's upstream profile, which `delorun` refuses to run or manage. */
 export const DESKTOP_PROFILE = 'desktop'
 
-/** Top-level entries Delo adds to the home; every other entry is upstream's. */
+/**
+ * Upstream's `headless` profile, which `delorun headless` boots through Delo's composition with only its sandbox
+ * protection checked, and whose run directory is `run/headless/`.
+ */
+export const HEADLESS_PROFILE = 'headless'
+
+/**
+ * Directory under `run/` that holds one record per process using the home's shared stores (C1,
+ * "`run/data-users/<pid>`"); it is never a profile's run directory.
+ */
+export const DATA_USERS_DIRECTORY = 'data-users'
+
+/** Upstream's package layer for every profile, `profiles/node_modules/`, a name upstream refuses as a profile. */
+const UPSTREAM_PROFILES_PACKAGES = 'node_modules'
+
+/** The device names Windows reserves in every folder, which no file or folder may take: `con`, `prn`, `aux`, `nul`, `com1` to `com9` and `lpt1` to `lpt9`. */
+export const WINDOWS_DEVICE_NAMES: readonly string[] = ['con', 'prn', 'aux', 'nul', ...Array.from({ length: 9 }, (_, at) => `com${String(at + 1)}`), ...Array.from({ length: 9 }, (_, at) => `lpt${String(at + 1)}`)]
+
+/**
+ * Names no CLI profile may take (C1, "Profiles"), each mapped to the reason its refusal gives: a CLI profile of the
+ * name would share a directory under `profiles/` or `run/` with something else in the same home, or be booted by a
+ * command other than the CLI profile's start, or be a Windows device name ({@link WINDOWS_DEVICE_NAMES}). Upstream's
+ * template names that nothing boots in a Delo home, such as `web` and `tui`, stay usable.
+ */
+export const RESERVED_PROFILE_NAMES: ReadonlyMap<string, string> = new Map([
+  [DESKTOP_PROFILE, 'it is the desktop app\'s own profile, which only the desktop app runs or changes'],
+  [HEADLESS_PROFILE, 'it is the profile `delorun headless` boots, which Delo checks for its sandbox protection only, not for every protection a CLI profile\'s start requires'],
+  [DATA_USERS_DIRECTORY, 'run/data-users/ holds the records of every process that uses the home\'s shared stores, so a profile\'s run directory there would escape the home-wide exclusion'],
+  [UPSTREAM_PROFILES_PACKAGES, 'profiles/node_modules/ is upstream\'s package layer for every profile, which upstream refuses as a profile'],
+  ...WINDOWS_DEVICE_NAMES.map(name => [name, 'it is a Windows device name, which Windows does not let a folder take, so the profile\'s folders could not exist there'] as const),
+])
+
+// The reserved names hold only letters, digits, hyphens and underscores, which are literal in a pattern outside a
+// character class.
+const RESERVED_ALTERNATIVES = [...RESERVED_PROFILE_NAMES.keys()].join('|')
+
+/**
+ * A CLI profile's name (C1, "Profiles"): 1 to 32 lowercase letters, digits, hyphens or underscores, starting with a
+ * letter or a digit, and none of {@link RESERVED_PROFILE_NAMES}. A name that matches never leaves `profiles/` and a
+ * shell passes it unquoted. Callers check a name with {@link profileNameProblem}, whose refusal says why.
+ */
+export const PROFILE_NAME_PATTERN = new RegExp(`^(?!(?:${RESERVED_ALTERNATIVES})$)[a-z0-9][a-z0-9_-]{0,31}$`, 'u')
+
+/**
+ * Why a name cannot be a CLI profile (C1, "Profiles"). The launcher and `delorun` refuse every name this check
+ * refuses, before the name becomes a path. A reserved name is recognised in any letter case, since the home may lie on
+ * a case-insensitive filesystem.
+ * @param name - the candidate profile name.
+ * @returns a sentence that quotes the name and says why it is refused, or `undefined` for a usable name.
+ */
+export function profileNameProblem(name: string): string | undefined {
+  const reserved = RESERVED_PROFILE_NAMES.get(name.toLowerCase())
+  if (reserved !== undefined) return `${JSON.stringify(name)} is reserved: ${reserved}`
+  if (!PROFILE_NAME_PATTERN.test(name)) {
+    return `${JSON.stringify(name)} is not a profile name: a profile is 1 to 32 lowercase letters, digits, hyphens or underscores, starting with a letter or digit`
+  }
+  return undefined
+}
+
+/**
+ * Top-level entries Delo adds to the home; every other entry is upstream's. Each is a directory that the home tree's
+ * creation makes at {@link PRIVATE_DIR_MODE}; `home-entries.spec.ts` fails on Delo code that builds a top-level path
+ * this list does not name.
+ */
 export const DELO_HOME_ENTRIES = {
   /** The runtime store. */
   runtimes: 'runtimes',
@@ -61,6 +124,14 @@ export const DELO_HOME_ENTRIES = {
   bin: 'bin',
   /** Signed certificate-alert files (C5). */
   alerts: 'alerts',
+  /** The session-data copy an update took and a restore's journal (C3). */
+  dataCopies: 'data-copies',
+  /** Chat data a rollback set aside (C3). */
+  dataSetAside: 'data-set-aside',
+  /** Trashed chats and workspaces until their retention ends or the person restores them (C8). */
+  trash: 'trash',
+  /** Workspace archive imports: their staging root and the imported workspaces (C8). */
+  archive: 'archive',
 } as const
 
 /**
@@ -138,6 +209,8 @@ export const TRUST_FILES = {
   timestamp: 'timestamp.json',
   /** The latest log checkpoint that verified (C18). */
   checkpoint: 'checkpoint.json',
+  /** The release-log check state of each installed release (C18, "Check states"). */
+  releaseLog: 'release-log.json',
 } as const
 
 /**
@@ -237,6 +310,16 @@ export interface HomeLockRecord {
   readonly runtime: RuntimeVersion
   /** RFC 3339 UTC time the holder took the lock. */
   readonly startedAt: string
+  /**
+   * The holder process's start identity (C1, "The home lock"); absent where the platform has none and in records
+   * written before it existed, which are judged by `pid` alone.
+   */
+  readonly processStart?: string
+  /**
+   * The pid namespace `pid` is numbered in, `pid:[<inode>]` (C1, "The home lock"); Linux only. A holder whose
+   * namespace differs from the reader's is never judged dead.
+   */
+  readonly pidNamespace?: string
 }
 
 /** A confinement rule that Delo's sandbox profiles add to upstream's dialects. */

@@ -6,8 +6,24 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { RuntimeVersion } from '@delo/contract-home-layout'
+import { journalPath, writeJournal } from '@delo/home-process'
+import { parseRuntimeVersion, RuntimeStoreError, type LaunchCommand } from '@delo/runtime-store'
 import { EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
+import { runLauncher } from '../../npm-launcher/src/launcher.ts'
+import { fixtureRelease } from '../../install/tests/support.ts'
+
+/**
+ * A release version.
+ * @param text - its text.
+ * @returns the version.
+ */
+function release(text: string): RuntimeVersion {
+  const parsed = parseRuntimeVersion(text)
+  if (parsed === undefined) throw new Error(`${text} is not a release version`)
+  return parsed
+}
 
 let osHome: string
 let deloHome: string
@@ -99,5 +115,62 @@ describe('delorun recover', () => {
     const removed = await delorun(['recover', 'discard', 'data-set-aside/1.1.0-20261110T130000Z'])
     expect(removed.code).toBe(EXIT.ok)
     expect(existsSync(join(deloHome, 'data-set-aside', '1.1.0-20261110T130000Z'))).toBe(false)
+  })
+})
+
+describe('a rollback that reaches a root', () => {
+  it('refuses with ROOT_NOT_ANCHORED, changing nothing, when no launcher named its release roots', async () => {
+    const path = journalPath(deloHome, 'default')
+    mkdirSync(join(deloHome, 'run', 'default'), { recursive: true, mode: 0o700 })
+    await writeJournal(path, { from: release('0.1.0'), to: release('0.2.0'), previous: undefined, startedAt: '2026-11-01T00:00:00.000Z', dataDiffers: false, copy: false, targetStarted: true }, 'committed')
+    const before = readFileSync(path, 'utf8')
+    let stderr = ''
+    const environment: Record<string, string | undefined> = { ...process.env, HOME: osHome, USERPROFILE: osHome, DELO_HOME: deloHome }
+    delete environment.DELO_LAUNCHER_ROOTS
+    const code = await main(['recover', 'rollback'], { env: environment, stdout: () => undefined, stderr: (text) => { stderr += text } })
+    expect(code).toBe(EXIT.failed)
+    expect(stderr).toContain('ROOT_NOT_ANCHORED')
+    expect(stderr).toContain('start Delo with its launcher')
+    expect(readFileSync(path, 'utf8')).toBe(before)
+  })
+})
+
+describe('the launcher\'s rollback after the current runtime failed its start check', () => {
+  it('starts the previous runtime with recover rollback, which refuses with NO_UPDATE_RECORD when no update is recorded, and the launcher exits with its status', async () => {
+    const fixture = await fixtureRelease()
+    mkdirSync(join(deloHome, 'trust'), { recursive: true, mode: 0o700 })
+    writeFileSync(join(deloHome, 'trust', 'root.json'), fixture.roots[0]!, { mode: 0o600 })
+    let stderr = ''
+    let stdout = ''
+    const status = await runLauncher({
+      home: deloHome,
+      profile: 'default',
+      platform: 'linux-x64',
+      args: [],
+      passedThrough: [],
+      mode: 'enforce',
+      roots: fixture.roots,
+      logger: { error: () => undefined, warn: () => undefined, info: () => undefined, debug: () => undefined },
+      channel: { resolve: () => Promise.reject(new Error('no install')), fill: () => Promise.reject(new Error('no install')) },
+      store: {
+        prepareLaunch: () => Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', join(deloHome, 'runtimes', '0.2.0'), 'runtime 0.2.0 differs from its signed file list')),
+        install: () => Promise.reject(new Error('no install')),
+        retain: () => Promise.reject(new Error('no retention')),
+        pointers: () => Promise.resolve({ current: release('0.2.0'), previous: release('0.1.0') }),
+        checkRuntime: (version) => Promise.resolve({ version, manifest: fixture.manifest, files: fixture.files }),
+        launchCommand: (_version, profile, args): LaunchCommand => ({ command: process.execPath, args: ['entry.js', ...args], env: { DELO_HOME: deloHome, DELO_PROFILE: profile } }),
+      },
+      // The previous runtime's own `delorun`, run in this process with the environment launch protocol 1 sets.
+      spawn: async command => (await main(command.args.slice(1), {
+        env: { ...process.env, HOME: osHome, USERPROFILE: osHome, ...command.env },
+        stdout: (text) => { stdout += text },
+        stderr: (text) => { stderr += text },
+      })) ?? EXIT.ok,
+      output: { stdout: (text) => { stdout += text }, stderr: (text) => { stderr += text } },
+    })
+    expect(status).toBe(EXIT.failed)
+    expect(stderr).toContain('Delo did not start release 0.2.0: it failed its start check. Starting release 0.1.0')
+    expect(stderr).toContain('NO_UPDATE_RECORD')
+    expect(stdout).toBe('')
   })
 })

@@ -259,6 +259,11 @@ export interface RunProfileOptions {
   args: readonly string[]
   /** Application-owned package runtime, scoped to plugin package operations. */
   packageManager?: ProfileContext['packageManager']
+  /**
+   * Whether this run installs `SIGTERM` and `SIGINT` handlers that interrupt the returned shutdown; true by default.
+   * A caller that owns the process's signals passes false and stops the run through the returned shutdown itself.
+   */
+  signals?: boolean | undefined
 }
 
 /**
@@ -304,8 +309,10 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
     // SIGTERM is a supervisor's ordinary stop request and exits 0 on every
     // surface — the launcher does not know whether the app considered its work
     // complete; SIGINT is a user interrupt and reports 130.
-    process.on('SIGTERM', () => { interrupt(0) })
-    process.on('SIGINT', () => { interrupt(130) })
+    if (options.signals !== false) {
+      process.on('SIGTERM', () => { interrupt(0) })
+      process.on('SIGINT', () => { interrupt(130) })
+    }
     installFailLoud(NAME, process, async () => {
       await app.current?.fiber.dispose()
     })

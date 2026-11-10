@@ -7,7 +7,7 @@
 import { createInterface } from 'node:readline/promises'
 import type { CliCommand } from '../command.ts'
 import { resolveDeloHome } from '@delo/home'
-import { selectProfile } from '../profile.ts'
+import { selectCommandProfile } from '../profile.ts'
 import { runLogs } from './index.ts'
 
 /**
@@ -35,10 +35,8 @@ export const logsCommand: CliCommand = {
   name: 'logs',
   summary: 'Show where each operational log is and its recent records; follow, clear or prune them',
   async run(args, context) {
-    // `runLogs` parses `--profile` itself; this reads it only to apply the command's profile rules first.
-    const profileAt = args.indexOf('--profile')
-    const flag = profileAt === -1 ? args.find(arg => arg.startsWith('--profile='))?.slice('--profile='.length) : args[profileAt + 1]
-    const profile = selectProfile(flag, context.env)
+    // `runLogs` parses `--profile` itself; every value it could read is held to C1's rule first.
+    const profile = selectCommandProfile('logs', args, context.env)
     const home = await resolveDeloHome(context.env)
     const interrupt = new AbortController()
     const stop = (): void => { interrupt.abort() }

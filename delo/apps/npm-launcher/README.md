@@ -28,7 +28,7 @@ This app is what `npx delorun` runs. It starts the runtime this computer has ins
 | Command line | What it does |
 | --- | --- |
 | `delorun [--profile <name>]` | Starts the installed runtime with the arguments it was given; installs the channel's release first when the store holds no runtime |
-| `--profile <name>` | The CLI profile, also passed to the runtime; the default is `default`, and `DELO_PROFILE` supplies it when the flag is absent. A profile name is 1 to 32 lowercase letters, digits, `-` or `_`, starting with a letter or a digit; anything else, `desktop` included, is refused before the home is read |
+| `--profile <name>` | The CLI profile, also passed to the runtime; the default is `default`, and `DELO_PROFILE` supplies it when the flag is absent. A profile name is 1 to 32 lowercase letters, digits, `-` or `_`, starting with a letter or a digit; anything else, and each name [contract C1](../../docs/contracts/c01-home-layout.md#profiles) reserves (`desktop`, `headless`, `data-users` and `node_modules`), is refused before the home is read |
 | `--release <version>` | Installs this release instead of the channel's current one, when the store holds no runtime; a release the fresh timestamp does not name is refused, and with a runtime installed the launcher stops and names both versions rather than ignoring it |
 | `--help`, `-h` | Prints the usage text |
 | `--` | Ends the launcher's own options: every argument after it is passed to the runtime unchanged, so the runtime keeps its own `--release` and `--profile` |
@@ -39,6 +39,23 @@ This app is what `npx delorun` runs. It starts the runtime this computer has ins
 ## The launch flow
 
 `runLauncher` starts, and installs only when the store answers `NO_ACTIVE_RUNTIME`. A start reads `trust/root.json`, the root this home last verified, and hands it to the store, which runs contract C2's start check over `current` and builds contract C1's launch protocol 1 command. The root is trusted only through the roots the launcher ships (see [The roots it ships](#the-roots-it-ships)); a start with no stored root is treated as a store without a runtime, because nothing on this home was verified yet. Before the runtime starts, the launcher runs contract C18's start check through `@delo/release-verify`: the stored release-log bundle offline, then the online check against the log the root names, recording the state and the verified checkpoint under `trust/`. A check that could not complete prints the warning and starts; a verifiable failure prints the refusal, names `delorun verify` and a reinstall, and exits 1 without starting, except for `delorun verify` itself, which starts so the person can see every check. The runtime is started with `DELO_LAUNCHER_ROOTS` set to the launcher's `roots/` directory.
+
+When `current` fails its start check, the launcher looks for the version the last update replaced, reading the home and writing nothing: the stored root must be anchored on the shipped roots, the store must name a `previous`, and `previous` must pass the same start check. With such a `previous`, what happens depends on the command. A bare `delorun`, `delorun start` and `delorun recover rollback`, each with only `--profile <name>` or `--profile=<name>` options around it and nothing after `--`, print one line, run the release-log start check for `previous`, and start it with `delorun recover rollback` instead of the person's arguments, the profile passed in `DELO_PROFILE` as launch protocol 1 passes it:
+
+```text
+Delo did not start release 0.2.0: it failed its start check. Starting release 0.1.0, the version before the last update, to roll back to it: delorun recover rollback
+```
+
+That command applies contract C3's rollback table, so the pointers change only through it, and it refuses with `NO_UPDATE_RECORD` when no update to `current` is recorded; the launcher exits with its status. Every other command, `delorun verify`, `delorun stop`, `delorun status`, `delorun update`, `delorun recover status`, an unknown command, a start with any other option such as `--foreground`, and any command line with arguments after `--`, whose `--profile` the launcher does not read, included, is refused: the launcher starts no release, changes nothing in the home, prints which release failed its start check and why, names `delorun recover rollback` as the way to start `previous` and roll back to it, and exits 1, because running the rollback in its place would roll back the runtime and the chat data on a command that asked for neither:
+
+```text
+Delo did not run delorun verify: release 0.2.0 failed its start check, so Delo ran no release.
+Why: RUNTIME_CHANGED: runtime 0.2.0 differs from its signed file list: app/entry.js (sha256)
+What you can do:
+  Start release 0.1.0, the version before the last update, to roll back to it: delorun recover rollback --profile default
+```
+
+Without a usable `previous`, and whenever a release was named with `--release`, the start's own refusal stands for every command.
 
 A release named with `--release` is installed, and this launcher installs one only when the store holds no runtime: it never replaces the runtime a person already has and never switches `current`. A store that holds a runtime therefore refuses the named release, naming the version installed and offering the runtime's own update, rather than starting the installed runtime and dropping what was asked for.
 
@@ -67,7 +84,7 @@ Checking the release log: not checked (the release log did not answer: …).
 Warning: Release 0.1.0 has not been checked against the release log; Delo checks it at the next connection.
 ```
 
-The install then goes on with the release's signature, and the home records the release as `unchecked` in `trust/release-log.json` (see [`@delo/install`](../install/README.md#the-release-log)). A log that answers and contradicts the release refuses instead, as [Refusals](#refusals) describes. A start prints none of these lines.
+The install then goes on with the release's signature, and the home records the release as `unchecked` in `trust/release-log.json` (see [`@delo/install`](../install/README.md#the-release-log)). A log that answers and contradicts the release refuses instead, as [Refusals](#refusals) describes. A start prints none of these lines. The lines are `@delo/install`'s `progressLines`, which `src/progress.ts` re-exports, so `delorun update` prints the same words.
 
 A Node older than the package's `engines` range (`>=24.9.0`) gets one line, with the version it found and where to get a newer one, and exit status 1, before anything else runs: the published `bin` (`src/entry.ts`) loads the launcher's main module only after the version check passes, so a Node that cannot read the main module's syntax still reads the refusal.
 
@@ -75,15 +92,15 @@ A Node older than the package's `engines` range (`>=24.9.0`) gets one line, with
 
 ## The roots it ships
 
-The launcher trusts a release only through the root files in its own package's `roots/` directory, `1.root.json`, `2.root.json` and on. The shipped roots must form a chain: each is signed by the root before it as well as by its own keys, which the launcher checks when it reads them and the build checks when it packs them. A newer root is reached by walking from the newest root the package ships, so a package whose roots skip a version refuses every install rather than trusting what the network offers. A package with no root at all refuses every install with `NO_TRUSTED_ROOT` and tells the person to use the install script on the release page instead.
+The launcher trusts a release only through the root files in its own package's `roots/` directory, `1.root.json`, `2.root.json` and on. The shipped roots must form a chain: each is signed by the root before it as well as by its own keys, which the launcher checks when it reads them and the build checks when it packs them. A newer root is reached by walking from the newest root the package ships, so a package whose roots skip a version refuses every install rather than trusting what the network offers. A package with no root at all refuses every install with `NO_TRUSTED_ROOT` and tells the person to use the install script on the release page instead. The rule is `@delo/install`'s `readShippedRoots`, which the runtime this launcher starts applies to the same directory through `DELO_LAUNCHER_ROOTS`.
 
-The same roots anchor a start. The root a home stored is read back and checked against them before the store runs its start check: at a version the launcher ships, the stored root must be that very root, keys and roles included, and a stored root older than the oldest shipped one is refused, so a root an install did not verify cannot make an unrelated runtime look signed. A stored root newer than every shipped root is trusted only with the chain an install walked to it under `trust/roots/`: every version from a shipped root to the stored one, each signed by the previous root's keys and by its own. A stored root that no shipped root leads to is refused, which is `RUNTIME_CHANGED`, so a root a restore or a sync placed under `trust/` anchors nothing. A launcher whose package later carries the newer root checks it exactly.
+The same roots anchor a start. The root a home stored is read back and checked against them before the store runs its start check: at a version the launcher ships, the stored root must be that very root, keys and roles included, and a stored root older than the oldest shipped one is refused, so a root an install did not verify cannot make an unrelated runtime look signed. A stored root newer than every shipped root is trusted only with the chain an install walked to it under `trust/roots/`: every version from a shipped root to the stored one, each signed by the previous root's keys and by its own. A stored root that no shipped root leads to is refused, which is `RUNTIME_CHANGED`, so a root a restore or a sync placed under `trust/` anchors nothing. A launcher whose package later carries the newer root checks it exactly. The runtime anchors every update, rollback and health check on the same roots, through `DELO_LAUNCHER_ROOTS`, so a root a same-user process wrote over `trust/root.json` is refused there too.
 
 <a id="refusals"></a>
 
 ## Refusals
 
-`refusalFor` turns any failure into one sentence on standard error: what Delo did, why, and what the person can do about it. An install refusal names the release, host or file it concerned and offers the remedies its code carries:
+`refusalFor` prints any failure on standard error in the refusal format `delorun` shares (`@delo/home`'s `renderRefusal`): a line saying what Delo did, a `Why:` line with the error's code and the release, host, file or detail it concerns, and the remedies under `What you can do:`. Each package describes its own errors (`@delo/home`'s refused home, `@delo/install`'s install failures, `@delo/runtime-store`'s store refusals and `@delo/release-verify`'s release-log failures); `LAUNCHER_DESCRIBERS` lists the ones the launcher composes. Any other failure prints `Delo stopped: <message>`, with no stack and no remedy. An install refusal offers the remedies its code carries:
 
 - An unreachable release host asks the person to check the connection and run the same command again. An unreachable log is not a refusal: the install warns and goes on.
 - A launcher with no trusted root points at the install script on the release page.

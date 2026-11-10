@@ -1,12 +1,15 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { recorded, serializeCheckState } from '@delo/release-verify'
 import { closeServer, GOOD_KEY, leaksPartOf, listenOnEphemeralPort, POSIX, ANSWERING_DOCKER, FAILING_DOCKER } from './fixtures.ts'
 
 const BIN = join(import.meta.dirname, '../../src/bin.ts')
 const TSX_LOADER = import.meta.resolve('tsx/esm')
+/** The release the source command runs as: the CLI package's version. */
+const RUNNING = (JSON.parse(readFileSync(join(import.meta.dirname, '../../package.json'), 'utf8')) as { version: string }).version
 
 let osHome: string
 let deloHome: string
@@ -77,14 +80,28 @@ async function freePort(): Promise<number> {
 }
 
 describe('delorun doctor', { timeout: 60_000 }, () => {
-  it('warns that Docker is missing, passes the other checks, and exits 0', async () => {
+  it('warns that Docker is missing and that no release-log check is recorded, passes the other checks, and exits 0', async () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.status).toBe(0)
-    expect(result.stderr).toBe('warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.\n')
+    expect(result.stderr).toBe([
+      'warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.',
+      `warn release-log: no release-log check of release ${RUNNING} is recorded in ${join(deloHome, 'trust', 'release-log.json')}; run delorun verify to check it against the release log.`,
+      '',
+    ].join('\n'))
     expect(result.stdout).toContain('pass home: ')
     expect(result.stdout).toContain('pass key: the DeepSeek API key is set and has the expected format (format only; the key was not sent to DeepSeek).\n')
     expect(result.stdout).toContain(`pass port: port ${String(port)} on 127.0.0.1 is free.\n`)
+  })
+
+  it('warns for a running release that has stayed unchecked, with the time since and the recorded reason', async () => {
+    const now = Math.floor(Date.now() / 1000)
+    mkdirSync(join(deloHome, 'trust'), { mode: 0o700 })
+    writeFileSync(join(deloHome, 'trust', 'release-log.json'), serializeCheckState(new Map([[RUNNING, recorded(RUNNING, 'unchecked', now - 2 * 86_400, { detail: 'no network' })]])), { mode: 0o600 })
+    const port = await freePort()
+    const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY })
+    expect(result.status).toBe(0)
+    expect(result.stderr).toMatch(new RegExp(`^warn release-log: Release ${RUNNING.replaceAll('.', '\\.')} has not been checked against the release log; Delo checks it at the next connection\\. It has stayed unchecked since \\S+Z \\(2 days\\); the last attempt, at \\S+Z, recorded: no network\\.$`, 'm'))
   })
 
   it.runIf(POSIX)('passes an answering Docker engine and prints its version', async () => {
@@ -93,7 +110,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY, PATH: fakeBin })
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('pass docker: the Docker engine answers; its server version is 27.3.1.\n')
-    expect(result.stderr).toBe('')
+    expect(result.stderr).not.toContain(' docker: ')
   })
 
   it.runIf(POSIX)('warns when Docker is installed but its engine does not answer, and exits 0', async () => {
@@ -158,9 +175,9 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     // Without HOME the home resolves from the account database, so the verdicts of the home and key checks depend on the machine.
     const result = doctorWithEnvironment(['--port', '1'], {})
     const lines = (result.stdout + result.stderr).split('\n').filter(line => line !== '')
-    expect(lines.map(line => /^(?:pass|warn|fail) (home|docker|key|port): /.exec(line)?.[1])).toEqual(['home', 'docker', 'key', 'port'])
-    expect(lines[1]).toMatch(/^(?:pass|warn) docker: /)
-    expect(lines[3]).toMatch(/^(?:pass|fail) port: /)
+    expect(lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log'])
+    expect(lines.find(line => line.includes(' docker: '))).toMatch(/^(?:pass|warn) docker: /)
+    expect(lines.find(line => line.includes(' port: '))).toMatch(/^(?:pass|fail) port: /)
     expect(result.status).toBe(lines.some(line => line.startsWith('fail ')) ? 1 : 0)
     expect(result.stderr).not.toMatch(/\n\s+at /)
     expect(result.stdout + result.stderr).not.toContain('sk-')

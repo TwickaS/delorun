@@ -68,6 +68,19 @@ describe('resolveDeloHome', () => {
     expect((await refusal(resolveDeloHome({ DELO_HOME: join(osHome, 'link') }))).code).toBe('HOME_IS_DSH_HOME')
     expect((await resolveDeloHome({ DELO_HOME: join(osHome, '.dsh-other') })).path).toBe(join(osHome, '.dsh-other'))
   })
+
+  it('resolves a home under a symbolically linked directory to its real path, keeping a part that does not exist yet', async () => {
+    mkdirSync(join(osHome, 'real', 'delo'), { recursive: true })
+    symlinkSync(join(osHome, 'real'), join(osHome, 'link'))
+    expect(await resolveDeloHome({ DELO_HOME: join(osHome, 'link', 'delo'), DSH_HOME: join(osHome, 'link', 'delo') })).toEqual({ path: join(osHome, 'real', 'delo') })
+    expect((await resolveDeloHome({ DELO_HOME: '~/link/new/delo' })).path).toBe(join(osHome, 'real', 'new', 'delo'))
+  })
+
+  it('keeps a home that is itself a symbolic link as the link, which the mode checks refuse', async () => {
+    mkdirSync(join(osHome, 'real'))
+    symlinkSync(join(osHome, 'real'), join(osHome, 'link'))
+    expect((await resolveDeloHome({ DELO_HOME: join(osHome, 'link') })).path).toBe(join(osHome, 'link'))
+  })
 })
 
 describe.runIf(POSIX)('ensureHomeTree', () => {

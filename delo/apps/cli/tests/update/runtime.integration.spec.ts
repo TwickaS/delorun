@@ -4,9 +4,10 @@
  * read only from a socket or a pipe on its descriptor.
  */
 import { execFileSync } from 'node:child_process'
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs'
+import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resolveDeloHome } from '@delo/home'
 import { afterEach, describe, expect, it } from 'vitest'
 import { inheritedHandover, runningVersion, runtimeOfFile } from '../../src/update/runtime.ts'
 
@@ -29,6 +30,18 @@ describe('runtimeOfFile', () => {
     expect(runtimeOfFile('/home/x/.delo', '/src/delo/apps/cli/src/start.ts')).toEqual({ version: MANIFEST_VERSION, store: false })
     expect(runtimeOfFile('/home/x/.delo', '/home/x/.delo/runtimes/current')).toEqual({ version: MANIFEST_VERSION, store: false })
     expect(runningVersion()).toBe(MANIFEST_VERSION)
+  })
+
+  it('names the stored version of a file under a home whose parent is reached through a symbolic link, as the resolved home names it', async () => {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), 'dcr-')))
+    directories.push(directory)
+    const real = join(directory, 'real', 'home')
+    mkdirSync(join(real, 'runtimes', '1.2.3', 'lib'), { recursive: true })
+    symlinkSync(join(directory, 'real'), join(directory, 'link'))
+    const home = await resolveDeloHome({ DELO_HOME: join(directory, 'link', 'home') })
+    expect(home.path).toBe(real)
+    // A module's own path, from `import.meta.url`, has its links resolved.
+    expect(runtimeOfFile(home.path, join(real, 'runtimes', '1.2.3', 'lib', 'start.js'))).toEqual({ version: '1.2.3', store: true })
   })
 })
 

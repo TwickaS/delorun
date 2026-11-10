@@ -7,6 +7,7 @@
  */
 export { LineCapture, captureStream, interceptStdio, type CapturedStream, type InterceptOptions } from './capture.ts'
 export { isLogsFailure, LogsError, type LogsErrorCode, type LogsFailure } from './errors.ts'
+export { logsDescriber } from './refusal.ts'
 export { checkProfile, resolveSurface, rotatedFile, surfaceOfDirectory, type SurfaceLocation, type SurfaceRequest } from './files.ts'
 export { followLines, parseRecord, readLines, type FollowOptions, type StoredLine } from './reader.ts'
 export { serializeRecord, type LogKeys } from './record.ts'

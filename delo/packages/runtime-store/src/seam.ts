@@ -14,8 +14,8 @@ import type { RootMetadata } from '@delo/contract-release-manifest'
 import { isStoreError, RuntimeStoreError } from './errors.ts'
 import { launchFiles } from './launch.ts'
 import { isInstalled, type RuntimePointers } from './pointer.ts'
-import { readStoredRoot, type ReleaseFileBytes } from './release.ts'
-import type { RuntimeStore } from './store.ts'
+import type { ReleaseFileBytes, TrustedRootSource } from './release.ts'
+import type { RetentionResult, RuntimeStore } from './store.ts'
 
 /** The phases of an update's prepare, as the home process reports them. */
 export type PreparePhase = 'checking' | 'installing' | 'reporting'
@@ -125,6 +125,19 @@ export interface HomeRuntimeStoreOptions {
   readonly openChannel: OpenUpdateChannel
   /** The report builder, which `delo/packages/update` provides. */
   readonly report: UpdateReporter
+  /**
+   * The anchored root every start check of this store's prepare and rollback report verifies with. A release the
+   * channel resolves and the store installs is verified with the root the channel walked to, which the opener anchors.
+   */
+  readonly root: TrustedRootSource
+  /**
+   * Contract C18's release-log start check of a version before a home process starts from it, as the launcher runs it
+   * before a start; none by default.
+   * @param version - the installed version.
+   * @param root - the anchored root its start check verified it under.
+   * @throws when the check stops the start.
+   */
+  readonly preLaunch?: (version: RuntimeVersion, root: RootMetadata) => Promise<void>
 }
 
 /** A version ready to switch to: the installed, verified target with its update report. */
@@ -204,6 +217,29 @@ export class HomeRuntimeStore {
   }
 
   /**
+   * The check before a home process is started from an installed version, an update's or a rollback's successor or the
+   * start after an interrupted update, as the launcher checks a version before it starts it: contract C2's start check
+   * of every file under the anchored root, then the options' `preLaunch`, contract C18's release-log start check.
+   * @param version - the installed version.
+   * @throws {RuntimeStoreError} `RUNTIME_CHANGED` when a file or the stored release files do not verify;
+   *   `ROOT_NOT_ANCHORED` when the root cannot be anchored; whatever `preLaunch` throws when the release-log check
+   *   stops the start.
+   */
+  async checkLaunch(version: RuntimeVersion): Promise<void> {
+    const root = await this.options.root()
+    await this.options.store.checkRuntime(version, root)
+    await this.options.preLaunch?.(version, root)
+  }
+
+  /**
+   * Keep the versions the pointers name and remove every other installation, as a committed update leaves the store.
+   * @returns what was removed, and what could not be and is retried by the next run.
+   */
+  async retain(): Promise<RetentionResult> {
+    return this.options.store.retain()
+  }
+
+  /**
    * The update's `checking`, `installing` and `reporting` phases: resolve `target`, or the newest release on the
    * person's channel, and install it unless it is installed and its files match its manifest. An installed copy
    * that fails the start check is installed again, and an install never switches `current`.
@@ -251,7 +287,7 @@ export class HomeRuntimeStore {
     if (!await isInstalled(this.options.store.paths, target)) {
       throw new RuntimeStoreError('NOT_INSTALLED', this.options.store.paths.version(target), `runtime ${target} is not installed in ${this.options.store.paths.root}`)
     }
-    await this.options.store.checkRuntime(target, await readStoredRoot(this.options.store.paths.home))
+    await this.options.store.checkRuntime(target, await this.options.root())
     const report = await this.options.report.build(target)
     return { version: target, report: report.report, health: report.health, dataDiffers: report.dataDiffers }
   }
@@ -288,7 +324,7 @@ export class HomeRuntimeStore {
     const paths = this.options.store.paths
     if (!await isInstalled(paths, version)) return false
     try {
-      await this.options.store.checkRuntime(version, await readStoredRoot(paths.home))
+      await this.options.store.checkRuntime(version, await this.options.root())
       return true
     } catch (error) {
       if (isStoreError(error, 'RUNTIME_CHANGED')) return false

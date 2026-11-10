@@ -9,6 +9,11 @@
  * running is let through. Nothing in this package holds the gate: the CLI attaches its chat gate's held state with
  * {@link UpdateTurnGate.attach}.
  *
+ * With {@link Config.holdUntilChecked} on, step 1 of every turn also waits until the CLI calls
+ * {@link UpdateTurnGate.release}, which it does once its check of the booted Host's rows and services passes (contract
+ * C19, "Host invariants"), so no turn starts before that check. A turn still waiting when the Host stops is refused with
+ * {@link UpdatePendingError}.
+ *
  * Every registration sits behind the C16 switch `update_turn_refusal` ({@link Config.enabled}), off by default: off,
  * the plugin provides no service and registers no listener, which is the parity value.
  *
@@ -36,11 +41,17 @@ export interface Config {
    * as upstream starts it. Delo's composition turns it on.
    */
   readonly enabled: boolean
+  /**
+   * Whether step 1 of every turn waits for {@link UpdateTurnGate.release} before it runs. Off by default, the parity
+   * value; Delo's composition turns it on, and `delorun` releases the gate once the booted Host passes its check.
+   */
+  readonly holdUntilChecked: boolean
 }
 
 /** Validated configuration. The default is the parity value. */
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(false),
+  holdUntilChecked: z.boolean().default(false),
 })
 
 /** The code of the refusal, contract C19's `UPDATE_PENDING`. */
@@ -70,23 +81,61 @@ export interface UpdateTurnGate {
   attach(isHeld: () => boolean): () => void
   /** Whether an attached source answers true now. */
   readonly held: boolean
+  /**
+   * Let the turns that wait for the start's check go on, and every later turn start without waiting; a second call does
+   * nothing. Without {@link Config.holdUntilChecked} no turn waits, and this does nothing.
+   */
+  release(): void
 }
 
 /** The `deloTurnGate` service. */
 export class UpdateTurnGateService extends Service implements UpdateTurnGate {
   private readonly sources = new Set<() => boolean>()
+  /** Settles `true` on {@link release} and `false` when the plugin stops first. */
+  private readonly checked = Promise.withResolvers<boolean>()
+  private open: boolean
 
   /**
-   * Provide the service and refuse step 1 of every turn while it is held. The listener runs before every other
-   * `agent/pre-step` listener, so a refused turn spends no later listener's work.
+   * Provide the service and refuse step 1 of every turn while it is held; with the start hold on, step 1 first waits
+   * for {@link release}. The listener runs before every other `agent/pre-step` listener, so a refused turn spends no
+   * later listener's work.
    * @param ctx - the plugin context.
+   * @param config - the switches.
    */
-  constructor(ctx: Context) {
+  constructor(ctx: Context, config: Config) {
     super(ctx, 'deloTurnGate')
-    ctx.on('agent/pre-step', ({ step }, next) => {
+    this.open = !config.holdUntilChecked
+    ctx.on('agent/pre-step', async ({ step, signal }, next) => {
+      if (step === 1 && !this.open) await this.waitForCheck(signal)
       if (step === 1 && this.held) throw new UpdatePendingError()
       return next()
     }, { prepend: true })
+    ctx.effect(() => () => { this.checked.resolve(false) })
+  }
+
+  /** @inheritdoc */
+  release(): void {
+    this.open = true
+    this.checked.resolve(true)
+  }
+
+  /**
+   * Wait until the start's check passes.
+   * @param signal - the turn's abort signal.
+   * @throws {UpdatePendingError} when the plugin stops before the check passes; the signal's reason when the turn is
+   *   aborted while it waits.
+   */
+  private async waitForCheck(signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted()
+    const waiting = Promise.withResolvers<boolean>()
+    const onAbort = (): void => { waiting.reject(signal.reason) }
+    signal.addEventListener('abort', onAbort, { once: true })
+    void this.checked.promise.then(waiting.resolve)
+    try {
+      if (!await waiting.promise) throw new UpdatePendingError()
+    } finally {
+      signal.removeEventListener('abort', onAbort)
+    }
   }
 
   /** @inheritdoc */
@@ -111,5 +160,5 @@ export class UpdateTurnGateService extends Service implements UpdateTurnGate {
  */
 export function apply(ctx: Context, config: Config): void {
   if (!config.enabled) return
-  new UpdateTurnGateService(ctx)
+  new UpdateTurnGateService(ctx, config)
 }

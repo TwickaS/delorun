@@ -7,7 +7,7 @@
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { newStartId } from '@delo/home'
-import { HomeProcess, openHandoverPipe, openHomeLog, updateChannelProbe, type HomeProcessOptions } from '../../src/index.ts'
+import { HomeProcess, listenProcessSignals, openHandoverPipe, openHomeLog, updateChannelProbe, type HomeProcessOptions } from '../../src/index.ts'
 import { behaviourOf, FixtureCopies, FixtureHostRunner, FixtureSnapshots, FixtureStore } from '../support.ts'
 
 const [mode, home = '', profile = '', versionText = ''] = process.argv.slice(2)
@@ -24,21 +24,20 @@ function optionsOf(startId: HomeProcessOptions['startId'], running: RuntimeVersi
   const snapshots = new FixtureSnapshots()
   process.on('exit', () => { log.close() })
   return {
-    home, profile, running, startId, host: new FixtureHostRunner(() => behaviourOf(home, running)), probe: updateChannelProbe(home, profile), logger, redactor,
+    home, profile, running, startId, host: new FixtureHostRunner(() => behaviourOf(home, running)), preStart: () => Promise.resolve(), probe: updateChannelProbe(home, profile), logger, redactor,
     updates: { store: new FixtureStore(home, profile), snapshots, copies: new FixtureCopies(snapshots) }, supervisor: undefined,
     onExit: (listener) => { process.on('exit', listener) },
+    onSignal: listenProcessSignals,
     exit: (code) => { process.exit(code) },
   }
 }
 
-let running: HomeProcess | undefined
-process.on('SIGTERM', () => { void (running?.shutdown(0) ?? Promise.resolve(process.exit(0))) })
 try {
   if (mode === 'successor') {
     const pipe = await openHandoverPipe()
-    running = await HomeProcess.takeOver(optionsOf(pipe.handover.startId, pipe.handover.to), pipe)
+    await HomeProcess.takeOver(optionsOf(pipe.handover.startId, pipe.handover.to), pipe)
   } else {
-    running = await HomeProcess.start(optionsOf(newStartId(), version))
+    await HomeProcess.start(optionsOf(newStartId(), version))
   }
 } catch (_failed) {
   // The home process logged the failure to its own log.

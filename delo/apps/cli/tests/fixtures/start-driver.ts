@@ -22,7 +22,8 @@ import { startTokenFile } from '@delo/home'
 import { updateSocketPath } from '@delo/home-process'
 import { prepareHome } from '../../src/command.ts'
 import { CliError } from '../../src/exit.ts'
-import { bootedRows, startForeground, upstreamDependencies, type BootedProfile } from '../../src/start.ts'
+import type {} from '@delo/bundle-local/update-gate'
+import { bootedRows, serviceProvider, startForeground, upstreamDependencies, type BootedProfile } from '../../src/start.ts'
 
 const context = {
   env: { ...process.env },
@@ -78,7 +79,7 @@ async function probeConfinement(ctx: Context): Promise<Record<string, unknown>> 
 }
 
 try {
-  await startForeground({ home: home.path, profile, open: false, output: context }, {
+  await startForeground({ home: home.path, profile, open: false, output: context, env: context.env }, {
     ...upstream,
     async runProfile(options) {
       const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
@@ -86,7 +87,7 @@ try {
       root = ctx
       const row = [...ctx.get('loader')?.entries() ?? []].find(entry => entry.options.id === 'session-log-deepseek')
       sessionLogEnabled = (row?.options.config as { enabled?: unknown } | undefined)?.enabled
-      const profile: BootedProfile = { rows: () => (rowsAtBoot = bootedRows(ctx)), shutdown: code => shutdown.shutdown(code), watchChats: () => {}, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) }
+      const profile: BootedProfile = { rows: () => (rowsAtBoot = bootedRows(ctx)), providerOf: name => serviceProvider(ctx, name), releaseTurns: () => { ctx.get('deloTurnGate')?.release() }, shutdown: code => shutdown.shutdown(code), dispose: async () => { await ctx.fiber.dispose() }, watchChats: () => {}, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) }
       booted = profile
       return profile
     },

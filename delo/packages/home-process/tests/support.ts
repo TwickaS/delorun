@@ -8,7 +8,7 @@
  * `fixture.json` says.
  */
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,6 +27,7 @@ import {
   type HomeCommand,
   type HomeCommandMode,
   type HomeProcessOptions,
+  type HomeSignal,
   type HostRunner,
   type PreparedRuntime,
   type ProfileSnapshots,
@@ -71,6 +72,13 @@ export interface FixtureBehaviour {
   readonly dataDiffers?: boolean
   /** The rows its Host has at boot. */
   readonly rows?: readonly string[]
+  /** Whether the store's check before a start refuses this version. */
+  readonly launchRefused?: boolean
+  /**
+   * Its teardown for a switch, which resolves at once by default.
+   * @returns when the teardown has finished.
+   */
+  readonly suspend?: () => Promise<void>
 }
 
 /** A temporary Delo home with C1's tree. */
@@ -201,6 +209,20 @@ export class FixtureStore implements RuntimeStore {
   homeCommand(version: RuntimeVersion, mode: HomeCommandMode): HomeCommand {
     return { command: process.execPath, args: ['--import', 'tsx/esm', ENTRY, mode, this.home, this.profile, version], cwd: REPOSITORY }
   }
+
+  /** A version whose check before a start refuses, besides one whose fixture says so. */
+  launchRefused: RuntimeVersion | undefined
+
+  async checkLaunch(version: RuntimeVersion): Promise<void> {
+    if (version === this.launchRefused || behaviourOf(this.home, version).launchRefused === true) throw new HomeProcessError('VERIFY_FAILED', `release ${version} failed its check before a start`)
+    return Promise.resolve()
+  }
+
+  /** Records each retention in `runtimes/retained.log`, which a successor in another process writes too. */
+  async retain(): Promise<unknown> {
+    appendFileSync(join(this.home, 'runtimes', 'retained.log'), `${readPointer(this.home, 'current') ?? ''}\n`)
+    return Promise.resolve({ removed: [], failed: [] })
+  }
 }
 
 /**
@@ -250,15 +272,32 @@ export class FixtureCopies implements SessionDataCopies {
   /** @param snapshots - the profile history the rollback restores through. */
   constructor(private readonly snapshots: FixtureSnapshots) {}
 
+  /**
+   * Record the home process's pre-start steps, which finish an interrupted restore before any Host starts.
+   * @returns at once.
+   */
   async recover(): Promise<void> {
     this.calls.push('recover')
     return Promise.resolve()
   }
 
-  async plan(): Promise<void> {
+  /** Whether another process uses the chat data, which refuses an update and a rollback. */
+  othersRunning = false
+
+  async plan(copy: boolean): Promise<void> {
+    if (this.othersRunning) throw new HomeProcessError('CHATS_RUNNING', 'the home process of the profile other (process 1) uses the chat data')
+    if (!copy) return Promise.resolve()
     this.calls.push('plan')
     if (this.noSpace) throw new HomeProcessError('DATA_COPY_NO_SPACE', 'the fixture has no room')
     return Promise.resolve()
+  }
+
+  /** Runs when the handshake checks again, before {@link FixtureCopies.othersRunning} is read. */
+  beforeConfirm: (() => Promise<void>) | undefined
+
+  async confirmSoleUser(): Promise<void> {
+    await this.beforeConfirm?.()
+    if (this.othersRunning) throw new HomeProcessError('CHATS_RUNNING', 'the home process of the profile other (process 1) uses the chat data')
   }
 
   async save(from: RuntimeVersion, to: RuntimeVersion): Promise<void> {
@@ -284,6 +323,7 @@ export class FixtureCopies implements SessionDataCopies {
     this.beforeRollback?.(record)
     const restoresCopy = !steps.profileOnly && record.dataDiffers && record.targetStarted
     if (!steps.profileOnly && this.unusable) throw new HomeProcessError('ROLLBACK_TARGET_UNUSABLE', `${record.from} does not start`)
+    if (!steps.profileOnly && this.othersRunning) throw new HomeProcessError('CHATS_RUNNING', 'the home process of the profile other (process 1) uses the chat data')
     if (restoresCopy && !this.copies.has(record.to)) throw new HomeProcessError('ROLLBACK_NEEDS_DATA_COPY', 'no copy')
     await steps.markRollingBack()
     if (this.failAt === 'data') throw new Error('the data step failed')
@@ -345,6 +385,11 @@ export class FixtureHost implements RunningHost {
     this.closed = true
     return Promise.resolve()
   }
+
+  async suspend(): Promise<void> {
+    await this.behaviour.suspend?.()
+    this.closed = true
+  }
 }
 
 /** Boots fixture Hosts and keeps the latest. */
@@ -381,6 +426,34 @@ export class MemoryLogger implements DeloLogger {
   debug(msg: string, details?: { readonly data?: Readonly<Record<string, unknown>> }): void { this.records.push(`debug ${msg} ${JSON.stringify(details?.data ?? {})}`) }
 }
 
+/** The signal listeners a fixture home process registered through `onSignal`, to which a spec sends signals. */
+export class FixtureSignals {
+  private readonly listeners = new Set<(signal: HomeSignal) => void>()
+
+  /** The number of listeners registered now. */
+  get count(): number {
+    return this.listeners.size
+  }
+
+  /**
+   * The `onSignal` option.
+   * @param listener - the home process's listener.
+   * @returns the disposer.
+   */
+  readonly listen = (listener: (signal: HomeSignal) => void): (() => void) => {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+
+  /**
+   * Deliver a signal to every registered listener, as the operating system delivers it.
+   * @param signal - the signal.
+   */
+  send(signal: HomeSignal): void {
+    for (const listener of [...this.listeners]) listener(signal)
+  }
+}
+
 /** An in-process home process and what the spec observes of it. */
 export interface InProcessHome {
   readonly process: HomeProcess
@@ -389,6 +462,8 @@ export interface InProcessHome {
   readonly snapshots: FixtureSnapshots
   readonly copies: FixtureCopies
   readonly logger: MemoryLogger
+  /** The signals the process listens for. */
+  readonly signals: FixtureSignals
   /** The exit codes the process asked for. */
   readonly exits: number[]
   /** Run the exit listeners, as the process's exit would. */
@@ -407,8 +482,25 @@ export interface StartHomeOptions {
   readonly supervisor?: SupervisorSetup
   /** Its log's redactor and start id, when it logs to a real surface. */
   readonly log?: { readonly redactor: Redactor, readonly startId: StartId }
+  /**
+   * The teardown of each Host this process boots, for a switch; it resolves at once by default.
+   * @returns when the teardown has finished.
+   */
+  readonly hostSuspend?: () => Promise<void>
   /** Runs before the start with the fixture parts and the start id, so a spec can watch a start that fails. */
-  readonly configure?: (parts: { readonly copies: FixtureCopies, readonly hosts: FixtureHostRunner, readonly store: FixtureStore | undefined, readonly startId: StartId }) => void
+  readonly configure?: (parts: StartParts) => void
+}
+
+/** The fixture parts of a start, which {@link StartHomeOptions.configure} receives before the start runs. */
+export interface StartParts {
+  readonly copies: FixtureCopies
+  readonly hosts: FixtureHostRunner
+  readonly store: FixtureStore | undefined
+  readonly startId: StartId
+  /** The signals the process listens for. */
+  readonly signals: FixtureSignals
+  /** The exit codes the process asked for. */
+  readonly exits: readonly number[]
 }
 
 /**
@@ -423,20 +515,23 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
   const store = updates ? new FixtureStore(home, PROFILE) : undefined
   const snapshots = new FixtureSnapshots()
   const copies = new FixtureCopies(snapshots)
-  const hosts = new FixtureHostRunner(() => behaviourOf(home, running))
+  const hostSuspend = options.hostSuspend
+  const hosts = new FixtureHostRunner(() => ({ ...behaviourOf(home, running), ...hostSuspend === undefined ? {} : { suspend: hostSuspend } }))
   const logger = new MemoryLogger()
   const exits: number[] = []
   const listeners: (() => void)[] = []
   const startId = options.log?.startId ?? newStartId()
-  options.configure?.({ copies, hosts, store, startId })
+  const signals = new FixtureSignals()
+  options.configure?.({ copies, hosts, store, startId, signals, exits })
   const homeOptions: HomeProcessOptions = {
-    home, profile: PROFILE, running, startId, host: hosts, probe: updateChannelProbe(home, PROFILE), logger: options.logger ?? logger, redactor: options.log?.redactor ?? new Redactor(),
+    home, profile: PROFILE, running, startId, host: hosts, preStart: () => copies.recover(), probe: updateChannelProbe(home, PROFILE), logger: options.logger ?? logger, redactor: options.log?.redactor ?? new Redactor(),
     updates: store === undefined ? undefined : { store, snapshots, copies }, supervisor: options.supervisor,
     onExit: (listener) => { listeners.push(listener) },
+    onSignal: signals.listen,
     exit: (code) => { exits.push(code) },
   }
   const started = await HomeProcess.start(homeOptions)
-  return { process: started, hosts, store, snapshots, copies, logger, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
+  return { process: started, hosts, store, snapshots, copies, logger, signals, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
 }
 
 /**

@@ -1,7 +1,8 @@
 /**
  * The `delo-update-gate` row's plugin on the production agent loop: while an attached source is held, a new turn is
  * refused with `UPDATE_PENDING` before any model request, a turn that was already running goes on to its next step,
- * and with the switch off the plugin provides no service.
+ * with the start hold on no turn reaches the model before the CLI releases the gate, and with the switch off the plugin
+ * provides no service.
  */
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -60,9 +61,10 @@ afterEach(async () => {
 /**
  * A loop with the plugin mounted, a scripted model and a `hold` tool that holds the gate.
  * @param enabled - the C16 switch.
+ * @param holdUntilChecked - the start hold.
  * @returns the context, the agent, the adapter, a run helper and the held flag.
  */
-async function setup(enabled: boolean) {
+async function setup(enabled: boolean, holdUntilChecked = false) {
   const ctx = context = new Context()
   await mountAgentLoopTestDependencies(ctx)
   // A pre-step listener mounted before the gate: a refused turn must not reach it.
@@ -71,7 +73,8 @@ async function setup(enabled: boolean) {
     reached.push(step)
     return next()
   })
-  await ctx.plugin(UpdateGate, { enabled })
+  const gate = ctx.plugin(UpdateGate, { enabled, holdUntilChecked })
+  await gate
   const state = { held: false }
   ctx.tools.register(defineTool({
     name: 'hold',
@@ -92,7 +95,7 @@ async function setup(enabled: boolean) {
     await target.whenIdle()
   }
   const endings = (): unknown[] => agent.session.ownEvents().flatMap(event => (event.type === 'turn/end' ? [event.data.reason] : []))
-  return { ctx, agent, adapter, run, state, reached, endings }
+  return { ctx, gate, agent, adapter, run, state, reached, endings }
 }
 
 describe('the update gate with its switch on', () => {
@@ -131,7 +134,7 @@ describe('the update gate with its switch on', () => {
   })
 
   it('is held while any attached source is held, and a detached source no longer counts', () => {
-    const service = new UpdateGate.UpdateTurnGateService(new Context())
+    const service = new UpdateGate.UpdateTurnGateService(new Context(), { enabled: true, holdUntilChecked: false })
     expect(service.held).toBe(false)
     const quiet = service.attach(() => false)
     const busy = service.attach(() => true)
@@ -151,6 +154,44 @@ describe('the update gate with its switch on', () => {
   })
 })
 
+describe('the update gate\'s start hold', () => {
+  it('keeps a turn from reaching the model until the gate is released, then lets it run', async () => {
+    const { ctx, agent, adapter, reached, endings } = await setup(true, true)
+    adapter.script.push(answer)
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Hello.' }], source: { kind: 'user' } }))
+    await new Promise(resolve => setImmediate(resolve))
+    await new Promise(resolve => setImmediate(resolve))
+    expect(adapter.requests).toBe(0)
+    expect(reached).toEqual([])
+
+    ctx.deloTurnGate.release()
+    await agent.whenIdle()
+    expect(adapter.requests).toBe(1)
+    expect(reached).toEqual([1])
+    expect(endings()).toEqual([{ kind: 'completed' }])
+    ctx.deloTurnGate.release()
+  })
+
+  it('refuses a turn still waiting when the plugin stops, and never asks the model', async () => {
+    const { gate, agent, adapter, reached } = await setup(true, true)
+    adapter.script.push(answer)
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Hello.' }], source: { kind: 'user' } }))
+    await new Promise(resolve => setImmediate(resolve))
+    await gate.dispose()
+    await agent.whenIdle()
+    expect(adapter.requests).toBe(0)
+    expect(reached).toEqual([])
+  })
+
+  it('lets turns run at once when the hold is off, the plugin\'s default', async () => {
+    const { agent, adapter, run, endings } = await setup(true, false)
+    adapter.script.push(answer)
+    await run(agent, 'Hello.')
+    expect(adapter.requests).toBe(1)
+    expect(endings()).toEqual([{ kind: 'completed' }])
+  })
+})
+
 describe('the update gate with its switch off, the parity value', () => {
   it('provides no service, so no turn is refused', async () => {
     const { ctx, agent, adapter, run, endings } = await setup(false)
@@ -164,6 +205,6 @@ describe('the update gate with its switch off, the parity value', () => {
   })
 
   it('defaults the switch to off', () => {
-    expect(UpdateGate.Config()).toEqual({ enabled: false })
+    expect(UpdateGate.Config()).toEqual({ enabled: false, holdUntilChecked: false })
   })
 })

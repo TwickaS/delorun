@@ -8,7 +8,7 @@
  */
 import { setTimeout as sleep } from 'node:timers/promises'
 import { START_WAIT_MS } from '@delo/contract-home-process'
-import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
+import { holderAlive, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
 import { sendHomeRequest } from '@delo/home-process'
 import { EXIT } from './exit.ts'
 import { parseOptions, type CliCommand } from './command.ts'
@@ -24,7 +24,7 @@ export const stopCommand: CliCommand = {
     const home = await resolveDeloHome(context.env)
     const directory = runDirectory(home.path, profile)
     const record = readHomeLock(directory)
-    if (record === undefined || !processExists(record.pid)) {
+    if (record === undefined || !holderAlive(record)) {
       context.stdout(`Delo is not running for the profile ${profile}.\n`)
       return EXIT.ok
     }
@@ -45,7 +45,7 @@ export const stopCommand: CliCommand = {
       return EXIT.failed
     }
     const deadline = Date.now() + START_WAIT_MS
-    while (processExists(record.pid) && readHomeLock(directory)?.startId === record.startId) {
+    while (holderAlive(record) && readHomeLock(directory)?.startId === record.startId) {
       if (Date.now() > deadline) {
         context.stderr(`delorun stop: process ${String(record.pid)} accepted the stop but has not exited\n`)
         return EXIT.failed

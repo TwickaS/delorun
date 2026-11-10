@@ -2,7 +2,7 @@
  * Review probes (not part of the package): the seam over the store — homeCommand's argv and cwd, error shapes that
  * cross the seam, and what prepare does with a channel offering a version lower than the installed one.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { HomeRuntimeStore, RuntimeStoreError, type ChannelRelease, type ReleaseFileBytes } from '../src/index.ts'
@@ -41,7 +41,7 @@ function channelOf(offers: Array<{ readonly release: string, readonly files?: Re
 const reporter = { build: async (version: unknown) => ({ report: { for: version }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false }) }
 
 function seam(channel: ReturnType<typeof channelOf>): HomeRuntimeStore {
-  return new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: async () => channel, report: reporter })
+  return new HomeRuntimeStore({ store: fixture.store, profile: 'default', root: async () => fixture.root, openChannel: async () => channel, report: reporter })
 }
 
 describe('probe: homeCommand', () => {
@@ -63,23 +63,20 @@ describe('probe: homeCommand', () => {
 })
 
 describe('probe: errors across the seam', () => {
-  it('a lax trust root surfaces as HomeLayoutError, not RuntimeStoreError, from reportRollback and prepare', async () => {
+  it('a root source that cannot anchor the root refuses reportRollback, and a prepare of an installed target, before the channel is asked', async () => {
     await fixture.install(V1)
     await fixture.install(V2)
     await fixture.store.switchTo(V1, V2)
-    const rootPath = join(fixture.home, 'trust/root.json')
-    const bytes = readFileSync(rootPath)
-    const { rmSync, chmodSync } = await import('node:fs')
-    rmSync(rootPath)
-    writeFileSync(rootPath, bytes, { mode: 0o644 })
-    expect((await import('node:fs')).statSync(rootPath).mode & 0o777).toBe(0o644)
-    const store = seam(channelOf([]))
-    let caught: unknown
-    await store.reportRollback(V1).catch((error: unknown) => { caught = error })
-    expect((caught as { name?: string }).name).toBe('HomeLayoutError')
-    expect((caught as { code?: string }).code).toBe('SECRET_FILE_MODE')
-    // restore the mode so teardown can remove the fixture home
-    chmodSync(rootPath, 0o600)
+    const refusal = new RuntimeStoreError('ROOT_NOT_ANCHORED', join(fixture.home, 'trust/root.json'), 'no launcher roots')
+    let opened = 0
+    const store = new HomeRuntimeStore({
+      store: fixture.store, profile: 'default', root: () => Promise.reject(refusal), report: reporter,
+      openChannel: async () => { opened += 1; return channelOf([]) },
+    })
+    await expect(store.reportRollback(V1)).rejects.toBe(refusal)
+    await expect(store.prepare(V1, () => {}, () => {})).rejects.toBe(refusal)
+    expect(opened).toBe(0)
+    expect(await fixture.store.pointers()).toEqual({ current: V2, previous: V1 })
   })
 
   it('prepare reports an intact installed target without contacting the channel', async () => {

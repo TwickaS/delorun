@@ -17,7 +17,7 @@ import { DELO_HOME_ENTRIES, TRUST_FILES, type RuntimeVersion } from '@delo/contr
 import { ensureHomeTree, newStartId, processExists, readHomeLock, runDirectory } from '@delo/home'
 import { CountingChatGate, HomeProcess, journalPath, readJournal, updateChannelProbe, type RunningHost } from '@delo/home-process'
 import { Redactor, type DeloLogger } from '@delo/logs'
-import { RuntimeStore } from '@delo/runtime-store'
+import { RuntimeStore, type TrustedRootSource } from '@delo/runtime-store'
 import { EXIT } from '../../src/exit.ts'
 import { main } from '../../src/main.ts'
 import { runtimePlatformOf } from '../../src/update/channel.ts'
@@ -25,6 +25,7 @@ import { runUpdate, type UpdatePrompts } from '../../src/update/command.ts'
 import { storeReportSources } from '../../src/update/sources.ts'
 import { homeUpdateSupport } from '../../src/update/support.ts'
 import { FakeChannel, fakeClosure, signedRelease, throwawayRoot, writeClosure, type FakeBehaviour } from './support.ts'
+import { preStartSteps, runPreStartSteps } from '../../src/pre-start.ts'
 
 const PROFILE = 'default'
 const TIMEOUT = { timeout: 120_000 }
@@ -49,6 +50,8 @@ let home: string
 let osHome: string
 let channel: FakeChannel
 let store: RuntimeStore
+/** The stored root, anchored as the launcher's roots would anchor it: the throwaway root the home stores. */
+let anchored: TrustedRootSource
 
 beforeAll(async () => {
   base = realpathSync(mkdtempSync(join(tmpdir(), 'dup-')))
@@ -57,7 +60,11 @@ beforeAll(async () => {
   mkdirSync(osHome, { mode: 0o700 })
   await ensureHomeTree(home, PROFILE)
   const root = throwawayRoot()
+  anchored = async () => Promise.resolve(root.metadata)
   writeFileSync(join(home, DELO_HOME_ENTRIES.trust, TRUST_FILES.root), root.bytes, { mode: 0o600 })
+  // The roots of the launcher that started this Delo, which `delorun recover rollback` anchors the stored root on.
+  mkdirSync(join(base, 'launcher-roots'), { mode: 0o700 })
+  writeFileSync(join(base, 'launcher-roots', '1.root.json'), root.bytes)
   const profileDir = join(home, 'profiles', PROFILE)
   mkdirSync(profileDir, { recursive: true, mode: 0o700 })
   writeFileSync(join(profileDir, 'package.json'), `${JSON.stringify({ name: 'dsh-profile-default', private: true, dependencies: {}, dsh: { profile: { bundles: [] } } }, undefined, 2)}\n`)
@@ -87,7 +94,7 @@ interface Running {
 
 /** A Host that boots at once, counts no chats and passes the health check. */
 function host(): RunningHost {
-  return { chats: new CountingChatGate(), failedRows: () => [], rows: () => [], studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve() }
+  return { chats: new CountingChatGate(), failedRows: () => [], rows: () => [], studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve(), suspend: async () => Promise.resolve() }
 }
 
 /**
@@ -106,10 +113,12 @@ async function startHome(): Promise<Running> {
   const listeners: (() => void)[] = []
   const process_ = await HomeProcess.start({
     home, profile: PROFILE, running: current, startId: newStartId(), host: { boot: async () => Promise.resolve(host()) },
+    preStart: () => runPreStartSteps(preStartSteps({ migrations: () => [] }), { home, profile: PROFILE, kind: 'cli', successor: false, output: { stdout: () => undefined, stderr: () => undefined } }),
     probe: updateChannelProbe(home, PROFILE), logger: SILENT, redactor: new Redactor(),
-    updates: homeUpdateSupport({ home, profile: PROFILE, store, openChannel: channel.open, sources: storeReportSources({ home, profile: PROFILE, store, running: current }), now: () => new Date() }),
+    updates: homeUpdateSupport({ home, profile: PROFILE, store, root: anchored, openChannel: channel.open, sources: storeReportSources({ home, profile: PROFILE, store, running: current, root: anchored }), now: () => new Date() }),
     supervisor: undefined,
     onExit: (listener) => { listeners.push(listener) },
+    onSignal: () => () => {},
     exit: (code) => { exits.push(code) },
   })
   return {
@@ -129,7 +138,7 @@ async function startHome(): Promise<Running> {
 async function delorun(args: readonly string[]): Promise<{ readonly code: number | undefined, readonly stdout: string, readonly stderr: string }> {
   let stdout = ''
   let stderr = ''
-  const context = { env: { ...process.env, HOME: osHome, USERPROFILE: osHome, DELO_HOME: home }, stdout: (text: string) => { stdout += text }, stderr: (text: string) => { stderr += text } }
+  const context = { env: { ...process.env, HOME: osHome, USERPROFILE: osHome, DELO_HOME: home, DELO_LAUNCHER_ROOTS: join(base, 'launcher-roots') }, stdout: (text: string) => { stdout += text }, stderr: (text: string) => { stderr += text } }
   const code = args[0] === 'update' ? await runUpdate(args.slice(1), context, NO_TERMINAL) : await main(args, context)
   return { code, stdout, stderr }
 }
@@ -164,7 +173,7 @@ describe('delorun update end to end', TIMEOUT, () => {
       expect(result.stdout).toContain('Delo 1.1.0 runs now.')
       expect((await store.pointers()).current).toBe('1.1.0')
       await until(async () => (await readJournal(journalPath(home, PROFILE)).catch(() => undefined))?.phase === 'committed', 'the successor\'s commit')
-      expect(existsSync(join(home, 'data-copies'))).toBe(false)
+      expect(readdirSync(join(home, 'data-copies'))).toEqual([])
     } finally {
       await running.end()
     }

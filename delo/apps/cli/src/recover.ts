@@ -23,9 +23,9 @@ import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import { acquireHomeLock, newStartId, runDirectory } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
 import { journalPath, queryHomeStatus, readJournal, removeJournal, removeStash, sendHomeRequest, stashPath, updateChannelProbe, writeJournal } from '@delo/home-process'
-import { isProfileSafetyError, recover, type RecoverAction } from '@delo/profile-safety'
+import { recover, type RecoverAction } from '@delo/profile-safety'
 import { isStoreError, RuntimeStore } from '@delo/runtime-store'
-import { discardKeptData, isDataSafetyError, listKeptData, recoverDataCopies } from '@delo/update'
+import { discardKeptData, listKeptData, recoverDataCopies } from '@delo/update'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { CliError, EXIT } from './exit.ts'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
@@ -33,6 +33,7 @@ import { removeSafeModeOverlay } from './safe-mode.ts'
 import { runtimeOfFile } from './update/runtime.ts'
 import { runtimePlatformOf } from './update/channel.ts'
 import { rollbackRecordedUpdate } from './update/support.ts'
+import { launcherAnchor } from './update/trusted-root.ts'
 
 /** The options `delorun recover` takes. */
 const RECOVER_OPTIONS = {
@@ -157,7 +158,7 @@ async function rollbackOffline(home: string, profile: string, profileOnly: boole
       else await store.switchTo(record.to, record.from)
     }
     const markRollingBack = (): Promise<void> => writeJournal(path, { ...record, previous: record.previous }, 'rolling-back')
-    const result = await rollbackRecordedUpdate({ home, profile, store, now: () => new Date() }, record, { profileOnly, switchRuntime, markRollingBack })
+    const result = await rollbackRecordedUpdate({ home, profile, store, root: launcherAnchor(home, context.env).root, now: () => new Date() }, record, { profileOnly, switchRuntime, markRollingBack })
     // A profile-only rollback keeps the running release, which ends the update and the previous update's way back;
     // a runtime rollback's record goes once the version rolled back to starts healthy.
     if (profileOnly) {
@@ -224,40 +225,35 @@ export const recoverCommand: CliCommand = {
    * Run `delorun recover`.
    * @param args - the arguments after `recover`.
    * @param context - the environment and output.
-   * @returns the exit code: 0 when the action ran, 1 when it was refused.
+   * @returns the action's exit code: 0 when it ran.
+   * @throws {ProfileSafetyError}, {DataSafetyError} or {RuntimeStoreError} when the action is refused; `delorun`'s
+   *   entry point reports it with its remedies.
    */
   async run(args: readonly string[], context: CommandContext): Promise<CommandResult> {
     const { action, profile: profileFlag, json } = requested(args)
     const { home, profile } = await prepareHome(context, profileFlag)
-    try {
-      switch (action.kind) {
-        case 'rollback':
-          return await (await homeRunning(home.path, profile) ? rollbackLive : rollbackOffline)(home.path, profile, action.profileOnly, context)
-        case 'discard':
-          return await discard(home.path, profile, action.path, context)
-        default:
-          break
-      }
-      const recoverAction: RecoverAction = action.kind === 'restore' ? { kind: 'restore', version: action.version as ProfileVersionId } : action
-      const report = await recover({
-        profileDir: join(home.path, 'profiles', profile),
-        homeDir: home.path,
-        profile,
-        action: recoverAction,
-        installationBundles: DELO_PROFILE_BUNDLES,
-        changedBy: { kind: 'person' },
-      })
-      // Ending safe mode takes the overlay a safe-mode start wrote with it.
-      if (action.kind === 'exit-safe-mode') removeSafeModeOverlay(home.path, profile)
-      const lines = action.kind === 'status' ? [...report.lines, ...await updateLines(home.path, profile)] : report.lines
-      if (json) context.stdout(JSON.stringify({ ...report, lines }, undefined, 2) + '\n')
-      else for (const line of lines) context.stdout(`${line}\n`)
-      return EXIT.ok
-    } catch (error) {
-      if (!isProfileSafetyError(error) && !isDataSafetyError(error)) throw error
-      context.stderr(`delorun recover: ${error.message}\n`)
-      if (isProfileSafetyError(error) && error.remedies.length > 0) context.stderr(`What you can do: ${error.remedies.join(', ')}.\n`)
-      return EXIT.failed
+    switch (action.kind) {
+      case 'rollback':
+        return await (await homeRunning(home.path, profile) ? rollbackLive : rollbackOffline)(home.path, profile, action.profileOnly, context)
+      case 'discard':
+        return await discard(home.path, profile, action.path, context)
+      default:
+        break
     }
+    const recoverAction: RecoverAction = action.kind === 'restore' ? { kind: 'restore', version: action.version as ProfileVersionId } : action
+    const report = await recover({
+      profileDir: join(home.path, 'profiles', profile),
+      homeDir: home.path,
+      profile,
+      action: recoverAction,
+      installationBundles: DELO_PROFILE_BUNDLES,
+      changedBy: { kind: 'person' },
+    })
+    // Ending safe mode takes the overlay a safe-mode start wrote with it.
+    if (action.kind === 'exit-safe-mode') removeSafeModeOverlay(home.path, profile)
+    const lines = action.kind === 'status' ? [...report.lines, ...await updateLines(home.path, profile)] : report.lines
+    if (json) context.stdout(JSON.stringify({ ...report, lines }, undefined, 2) + '\n')
+    else for (const line of lines) context.stdout(`${line}\n`)
+    return EXIT.ok
   },
 }

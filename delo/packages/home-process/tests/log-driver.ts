@@ -22,9 +22,10 @@ export const HOME_DRIVER: SurfaceDriver = {
     const exits: (() => void)[] = []
     const snapshots = new FixtureSnapshots()
     const running = await HomeProcess.start({
-      home, profile: PROFILE, running: V1, startId, host: new FixtureHostRunner(() => behaviourOf(home, V1)), probe: updateChannelProbe(home, PROFILE), logger: opened.logger, redactor: opened.redactor,
+      home, profile: PROFILE, running: V1, startId, host: new FixtureHostRunner(() => behaviourOf(home, V1)), preStart: () => Promise.resolve(), probe: updateChannelProbe(home, PROFILE), logger: opened.logger, redactor: opened.redactor,
       updates: { store: new FixtureStore(home, PROFILE), snapshots, copies: new FixtureCopies(snapshots) }, supervisor: undefined,
       onExit: (listener) => { exits.push(listener) },
+      onSignal: () => () => {},
       exit: () => {},
     })
     return {

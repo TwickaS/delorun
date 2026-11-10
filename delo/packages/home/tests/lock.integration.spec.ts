@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion, StartId } from '@delo/contract-home-layout'
-import { acquireHomeLock, newStartId, HomeLayoutError, readHomeLock, removeStaleLock, type HolderProbe } from '../src/index.ts'
+import { acquireHomeLock, adoptHomeLock, newStartId, HomeLayoutError, readHomeLock, readPidNamespace, readProcessStart, removeStaleLock, type HolderProbe } from '../src/index.ts'
 
 const REPOSITORY = join(import.meta.dirname, '../../../..')
 const CONTENDER = join(import.meta.dirname, 'fixtures/lock-contender.ts')
@@ -58,9 +58,20 @@ function fakeTimersWithPromises(): () => void {
  * Write a lock record as another holder would.
  * @param pid - the holder's process id.
  * @param startId - its start id.
+ * @param processStart - its start identity, omitted when undefined.
+ * @param pidNamespace - its pid namespace, omitted when undefined.
  */
-function plantLock(pid: number, startId = 'a'.repeat(32)): void {
-  writeFileSync(join(runDirectory, 'home.lock'), JSON.stringify({ v: 1, pid, startId, runtime: '1.0.0', startedAt: '2026-01-01T00:00:00.000Z' }), { mode: 0o600 })
+function plantLock(pid: number, startId = 'a'.repeat(32), processStart?: string, pidNamespace?: string): void {
+  writeFileSync(join(runDirectory, 'home.lock'), JSON.stringify({ v: 1, pid, startId, runtime: '1.0.0', startedAt: '2026-01-01T00:00:00.000Z', processStart, pidNamespace }), { mode: 0o600 })
+}
+
+/**
+ * A start identity of this platform's form that no live process has: this process's, with its time changed.
+ * @returns the identity, or `undefined` where the platform has no reader.
+ */
+function otherStart(): string | undefined {
+  const own = readProcessStart(process.pid)
+  return own?.replace(/\d+$/u, digits => String(Number(digits) + 1))
 }
 
 /** One contender's report. */
@@ -124,8 +135,10 @@ describe('the home lock', () => {
     const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
     const path = join(runDirectory, 'home.lock')
     const record = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
-    expect(Object.keys(record)).toEqual(['v', 'pid', 'startId', 'runtime', 'startedAt'])
-    expect(record).toMatchObject({ v: 1, pid: process.pid, runtime: '1.2.3' })
+    const processStart = readProcessStart(process.pid)
+    const pidNamespace = readPidNamespace()
+    expect(Object.keys(record)).toEqual(['v', 'pid', 'startId', 'runtime', 'startedAt', ...processStart === undefined ? [] : ['processStart'], ...pidNamespace === undefined ? [] : ['pidNamespace']])
+    expect(record).toMatchObject({ v: 1, pid: process.pid, runtime: '1.2.3', processStart, pidNamespace })
     expect(record.startId).toMatch(/^[0-9a-f]{32}$/)
     expect(new Date(record.startedAt as string).toISOString()).toBe(record.startedAt)
     if (process.platform !== 'win32') expect(statSync(path).mode & 0o777).toBe(0o600)
@@ -156,10 +169,73 @@ describe('the home lock', () => {
     expect(readdirSync(runDirectory)).toEqual([])
   })
 
-  it('does not take over a live holder of another start and does not remove its lock on release', async () => {
+  it('never takes over or removes a holder recorded in another pid namespace, though its process id is dead in this one', async () => {
+    const pid = deadPid()
+    plantLock(pid, 'b'.repeat(32), otherStart(), 'pid:[1]')
+    const before = readFileSync(join(runDirectory, 'home.lock'), 'utf8')
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: () => Promise.resolve('silent') })).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE', message: expect.stringContaining(`process ${String(pid)}`) as string })
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toMatchObject({ code: 'HOME_RUNNING' })
+    expect(await removeStaleLock(runDirectory, brandString<StartId>('b'.repeat(32)))).toBe('done')
+    expect(readFileSync(join(runDirectory, 'home.lock'), 'utf8')).toBe(before)
+    expect(readdirSync(runDirectory)).toEqual(['home.lock'])
+  })
+
+  it.skipIf(readPidNamespace() === undefined)('replaces a dead holder\'s lock recorded in this process\'s pid namespace', async () => {
+    plantLock(deadPid(), 'b'.repeat(32), undefined, readPidNamespace())
+    const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
+    expect(readHomeLock(runDirectory)).toEqual(lock.record)
+    lock.release()
+    expect(readdirSync(runDirectory)).toEqual([])
+  })
+
+  it('refuses a record whose pid namespace is malformed and leaves it, though its process id is dead', async () => {
+    plantLock(deadPid(), 'b'.repeat(32), undefined, 'pid:[not-an-inode]')
+    const before = readFileSync(join(runDirectory, 'home.lock'), 'utf8')
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toThrow('is not a home lock record')
+    await expect(removeStaleLock(runDirectory, brandString<StartId>('b'.repeat(32)))).rejects.toThrow('is not a home lock record')
+    expect(readFileSync(join(runDirectory, 'home.lock'), 'utf8')).toBe(before)
+  })
+
+  it('judges a record without a start identity, as older Delo wrote, by its process id: a live one is never taken over', async () => {
     plantLock(process.pid, 'b'.repeat(32))
     await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toMatchObject({ code: 'HOME_RUNNING' })
     expect(readHomeLock(runDirectory)?.startId).toBe('b'.repeat(32))
+  })
+
+  it.skipIf(otherStart() === undefined)('replaces a lock whose process id now names another process, as after a reboot', async () => {
+    plantLock(process.pid, 'b'.repeat(32), otherStart())
+    const lock = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
+    expect(readHomeLock(runDirectory)).toEqual(lock.record)
+    lock.release()
+    expect(readdirSync(runDirectory)).toEqual([])
+  })
+
+  it('does not take over a holder whose recorded start identity is the live process\'s', async () => {
+    plantLock(process.pid, 'b'.repeat(32), readProcessStart(process.pid))
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toMatchObject({ code: 'HOME_RUNNING' })
+    expect(readHomeLock(runDirectory)).toMatchObject({ startId: 'b'.repeat(32), processStart: readProcessStart(process.pid) })
+  })
+
+  it('refuses a record whose start identity or runtime is malformed', async () => {
+    plantLock(process.pid, 'b'.repeat(32), 'linux:not-a-boot-id:1')
+    await expect(acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })).rejects.toThrow('is not a home lock record')
+    writeFileSync(join(runDirectory, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: 'b'.repeat(32), runtime: 1, startedAt: '2026-01-01T00:00:00.000Z' }))
+    expect(() => readHomeLock(runDirectory)).toThrow('is not a home lock record')
+  })
+
+  it('hands the lock over with the successor\'s start identity, once', async () => {
+    const held = await acquireHomeLock({ startId: newStartId(), runDirectory, runtime: RUNTIME, probe: answered })
+    const startId = newStartId()
+    const next = held.handOver({ pid: process.pid, startId, runtime: brandString<RuntimeVersion>('1.2.4') })
+    expect(next).toMatchObject({ pid: process.pid, startId, runtime: '1.2.4', processStart: readProcessStart(process.pid), pidNamespace: readPidNamespace() })
+    expect(readHomeLock(runDirectory)).toEqual(next)
+    expect(() => held.handOver({ pid: process.pid, startId: newStartId(), runtime: RUNTIME })).toThrow('was not handed over')
+    held.release()
+    const adopted = adoptHomeLock(runDirectory, startId)
+    expect(adopted.record).toEqual(next)
+    expect(() => adoptHomeLock(runDirectory, newStartId())).toThrow('was not handed to this process')
+    adopted.release()
+    expect(readdirSync(runDirectory)).toEqual([])
   })
 
   it('refuses a file that is not a lock record and leaves it', async () => {

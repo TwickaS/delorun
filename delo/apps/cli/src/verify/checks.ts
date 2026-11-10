@@ -146,6 +146,18 @@ export function durationText(seconds: number): string {
 }
 
 /**
+ * The warning for a release that has stayed `unchecked`, as `delorun verify` and `delorun doctor` print it.
+ * @param release - the release's version.
+ * @param since - Unix seconds since which it has stayed `unchecked`.
+ * @param now - the clock, in Unix seconds.
+ * @param why - why the online check did not complete, as a clause without a final full stop.
+ * @returns the warning text.
+ */
+export function uncheckedSinceWarning(release: string, since: number, now: number, why: string): string {
+  return `${uncheckedWarning(release)} It has stayed unchecked since ${utcText(since)} (${durationText(now - since)}); ${why}.`
+}
+
+/**
  * The root files the launcher ships, from its `roots/` directory, in no order: the anchoring reads each by its version.
  * @param directory - the directory the launcher named.
  * @returns the files.
@@ -310,8 +322,7 @@ async function releaseLogPart(options: ReleaseCheckOptions, root: TrustedRoot, p
       // Contract C18: `delorun verify` fails on a missing bundle, which a start only warns about.
       if (bundle === undefined) return { result: 'fail', detail: `no release-log bundle is stored for release ${options.release} at ${path}`, recorded: record, notices }
       const why = options.fetch === undefined ? 'the online check was not run (--offline)' : `the online check could not complete: ${String(record.detail)}`
-      const since = record.uncheckedSince!
-      const warning = `${uncheckedWarning(options.release)} It has stayed unchecked since ${utcText(since)} (${durationText(options.now - since)}); ${why}.`
+      const warning = uncheckedSinceWarning(options.release, record.uncheckedSince!, options.now, why)
       return { result: 'unknown', detail: `the release-log bundle verifies offline; ${why}`, recorded: record, warning, notices }
     }
   }

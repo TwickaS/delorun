@@ -1,8 +1,7 @@
 /**
- * Where contract C18's two records live under a Delo home (contract C1): the verified checkpoint at C1's
- * `trust/checkpoint.json`, which the contract names, and the check state of each installed release beside it. C1 lists
- * the checkpoint file and no per-release state file, so this package names the second one — `trust/release-log.json` —
- * until C1 lists one, and the README states that.
+ * Where contract C18's two records live under a Delo home (contract C1): the verified checkpoint at
+ * `trust/checkpoint.json` and the check state of each installed release at `trust/release-log.json`, both named by C1's
+ * `TRUST_FILES`.
  *
  * @module @delo/release-verify/paths
  */
@@ -10,7 +9,7 @@ import { DELO_HOME_ENTRIES, TRUST_FILES } from '@delo/contract-home-layout'
 import { join } from 'node:path'
 
 /** The check state of every installed release, relative to the home. */
-export const RELEASE_LOG_STATE_FILE = `${DELO_HOME_ENTRIES.trust}/release-log.json`
+export const RELEASE_LOG_STATE_FILE = `${DELO_HOME_ENTRIES.trust}/${TRUST_FILES.releaseLog}`
 
 /**
  * The path of the verified checkpoint record.

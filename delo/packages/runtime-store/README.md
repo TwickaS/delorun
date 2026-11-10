@@ -27,13 +27,13 @@ This package is the one implementation of [contract C1](../../docs/contracts/c01
 ## Use this package
 
 ```text
-import { readStoredRoot, RuntimeStore, SUPPORTED } from '@delo/runtime-store'
+import { RuntimeStore, SUPPORTED } from '@delo/runtime-store'
 
 const store = new RuntimeStore({ home, platform: 'linux-x64', logger })
-const plan = await store.prepareLaunch({ launcher: SUPPORTED, root: await readStoredRoot(home), mode: 'warn', profile: 'default', args })
+const plan = await store.prepareLaunch({ launcher: SUPPORTED, root: anchoredRoot, mode: 'warn', profile: 'default', args })
 ```
 
-`home` is the resolved Delo home from [`@delo/home`](../home/README.md), `platform` the runtime platform of this machine (C2's `process.platform` and `process.arch` joined by a hyphen) and `logger` a [`@delo/logs`](../logs/README.md) logger for retention's failures. Every failure is a `RuntimeStoreError` with a `code`, the `path` it concerns, the `detail` and the `remedies` the launcher offers.
+`home` is the resolved Delo home from [`@delo/home`](../home/README.md), `anchoredRoot` the root `trust/root.json` holds once it is anchored on the launcher's shipped roots ([the start check](#the-start-check)), `platform` the runtime platform of this machine (C2's `process.platform` and `process.arch` joined by a hyphen) and `logger` a [`@delo/logs`](../logs/README.md) logger for retention's failures. Every failure is a `RuntimeStoreError` with a `code`, the `path` it concerns, the `detail` and the `remedies` the launcher offers.
 
 ## Pointers and switching
 
@@ -42,7 +42,7 @@ const plan = await store.prepareLaunch({ launcher: SUPPORTED, root: await readSt
 - **Writing a pointer.** The new value goes to `<pointer>.tmp-<16 hex>`, created exclusively at mode 0600 and flushed, which is renamed over the pointer; on Linux and macOS `runtimes/` is then flushed. On Windows a rename that reports `EPERM`, `EBUSY` or `EACCES` is retried for at most 2,000 ms, and then fails with `POINTER_REPLACE_FAILED`, leaving the old pointer.
 - **`switchTo(from, to)`** takes `store.lock`, requires `current` to name `from` (`POINTER_CHANGED` otherwise) and `to` to be installed (`NOT_INSTALLED`), then writes `previous` with `from` and `current` with `to`. It removes nothing.
 - **`restore(before)`** writes both pointers back to the values read before an update, `previous` first and removed when it was absent.
-- **`store.lock`** holds `{"v":1,"pid":…,"id":…}` at mode 0600, created whole by a hard link. A live holder is waited for 30 seconds before `STORE_BUSY`; a lock whose process no longer exists is removed under a takeover guard named after its random id, the algorithm of `@delo/home`'s home lock.
+- **`store.lock`** holds `{"v":1,"pid":…,"id":…}` at mode 0600, with the holder's `processStart` and `pidNamespace` where the platform reports them, and is `@delo/home`'s `LockFile`: created whole by a hard link, a record without them read too. A live holder is waited for 30 seconds before `STORE_BUSY`; a lock whose holder is not alive by `@delo/home`'s `holderAlive` (its process has exited, or another process now has its process id; a holder in another pid namespace is alive) is removed under a takeover guard named after its random id.
 
 ## Rollback
 
@@ -68,7 +68,7 @@ Any failure fails with `INSTALL_VERIFY_FAILED` or the underlying error, removes 
 
 `checkRuntime(version, root)` verifies the stored manifest and file list with the root, then compares the installation with the list: a missing, changed, extra or non-regular entry fails it with `RUNTIME_CHANGED`, naming up to ten entries with their kind. The remedies are `reinstall`, and `rollback` when `previous` names another installed version. A root that revokes the targets key the runtime was signed with fails it as a bad signature does.
 
-`readStoredRoot(home)` reads `trust/root.json` under C1's refusal rule and checks its own root signature, without the clock, because an expired root does not stop a start. Whether that root descends from the root the launcher embeds is the launcher's check.
+The store never reads `trust/root.json` itself: every root it verifies with is its caller's, anchored on the release roots the launcher ships. The launcher anchors the root for its start; the home process's `HomeRuntimeStore` takes a `TrustedRootSource` (`root` in its options) that the CLI anchors on the roots the launcher names in `DELO_LAUNCHER_ROOTS`, and that refuses with `ROOT_NOT_ANCHORED` when the process was not started by the launcher, so no update installs and no rollback starts under a root a same-user process could have replaced. The clock is not read: an expired root does not stop a start.
 
 ## Launching
 
@@ -93,6 +93,7 @@ A layout or protocol the launcher does not support fails with `RUNTIME_INCOMPATI
 | `RUNTIME_CHANGED` | The start check failed; C2 requires the stop and names no code |
 | `POINTER_CHANGED` | A switch's `from` is not the version `current` names |
 | `NOT_INSTALLED` | A pointer write names a version that is not installed |
+| `ROOT_NOT_ANCHORED` | A `TrustedRootSource` could not anchor `trust/root.json` on the launcher's shipped roots: the process was not started by the launcher, its roots do not read, or none leads to the stored root |
 
 ## Crash safety
 

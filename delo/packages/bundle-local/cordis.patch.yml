@@ -137,12 +137,15 @@
 # every new turn is refused with UPDATE_PENDING, so the wait ends once the
 # running turns end. `delorun` attaches its chat gate to the deloTurnGate
 # service this row provides; without the row, a turn that starts during the
-# wait is counted and the wait lasts until it ends.
+# wait is counted and the wait lasts until it ends. `holdUntilChecked` makes
+# the first step of every turn wait until `delorun` has checked the booted
+# Host's rows and services (C19), so no turn starts before that check.
 - insert:
     - id: delo-update-gate
       name: '@delo/bundle-local/update-gate'
       config:
         enabled: true
+        holdUntilChecked: true
 
 # Plugin management protects the guard rows above and the sandbox rows as it
 # protects its own components: the `plugin_manager` tool, which runs without a

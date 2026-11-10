@@ -21,6 +21,7 @@
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { PURGE_RESIDUE_MAX_DAYS, TRASH_RETENTION_DAYS } from '@delo/contract-archive-and-trash'
+import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import { DAY_MS, TrashError, TrashService, type DamagedItem, type PurgeReport, type TrashItem } from '@delo/trash'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { quoted } from '../terminal-text.ts'
@@ -54,7 +55,7 @@ export interface TrashIo {
  */
 export function homeTrash(home: string): TrashService {
   return new TrashService({
-    root: join(home, 'trash'),
+    root: join(home, DELO_HOME_ENTRIES.trash),
     stores: {
       sessionsRoot: join(home, 'sessions'),
       storagesRoot: join(home, 'storages'),

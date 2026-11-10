@@ -7,24 +7,24 @@
  * run beside a live home process, a live user of the stores, or an update mid-copy.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { RuntimeVersion } from '@delo/contract-home-layout'
-import { acquireHomeLock, ensureHomeTree, newStartId, readHomeLock, runDirectory, type HolderAnswer } from '@delo/home'
+import { DATA_USERS_DIRECTORY, type RuntimeVersion } from '@delo/contract-home-layout'
+import { acquireHomeLock, ensureHomeTree, newStartId, readHomeLock, readPidNamespace, readProcessStart, runDirectory, type HolderAnswer } from '@delo/home'
 import { journalPath, updateChannelProbe, writeJournal } from '@delo/home-process'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import {
   assertNoUpdateInProgress,
   assertSoleDataUser,
-  DATA_USERS_DIRECTORY,
   DataInUseError,
   homeExclusion,
   otherDataUsers,
   registerDataUser,
+  registerHomeProcess,
   useHomeShared,
   withHomeExclusive,
   type HomeExclusion,
@@ -243,6 +243,83 @@ describe('useHomeShared', () => {
     expect(code).toBe(EXIT.failed)
     expect(stderr).toContain('delorun headless: an update of the profile default from Delo 1.0.0 to Delo 1.1.0 is snapshot')
     expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
+  })
+})
+
+describe('registerHomeProcess', () => {
+  it('registers this process as the profile\'s home process with its start identity, named as such to others', async () => {
+    const root = newHome()
+    const release = await registerHomeProcess(root, 'work')
+    const path = join(root, 'run', DATA_USERS_DIRECTORY, String(process.pid))
+    const processStart = readProcessStart(process.pid)
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ mode: 'shared', command: 'start', profile: 'work', ...processStart === undefined ? {} : { processStart }, pidNamespace: readPidNamespace() })
+    expect(otherDataUsers(root, 0)).toEqual([{ pid: process.pid, mode: 'shared', command: 'start', profile: 'work' }])
+    expect(() => { assertSoleDataUser(root) }).not.toThrow()
+    release()
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
+  })
+
+  it('refuses while an exclusive user runs, and leaves no registration behind', async () => {
+    const root = newHome()
+    const pid = liveProcess()
+    registerDataUser(root, 'exclusive', 'trash', pid)
+    await expect(registerHomeProcess(root, 'default')).rejects.toThrow(new CliError(EXIT.failed, `delorun start: process ${String(pid)} (delorun trash) is changing the stores this command uses; wait for it to finish, and try again`))
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([String(pid)])
+  })
+
+  it('refuses while another profile\'s update is in progress, and not for its own profile\'s update or an unfinished restore its start completes', async () => {
+    const root = newHome()
+    await updateRecord(root, 'snapshot')
+    mkdirSync(join(root, 'data-copies'), { recursive: true })
+    writeFileSync(join(root, 'data-copies', 'restore.json'), '{}')
+    ;(await registerHomeProcess(root, 'default'))()
+    await expect(registerHomeProcess(root, 'work')).rejects.toThrow(new CliError(EXIT.failed, 'delorun start: an update of the profile default from Delo 1.0.0 to Delo 1.1.0 is snapshot; wait for it to end, or run delorun recover status'))
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
+  })
+
+  it.skipIf(readProcessStart(process.pid) === undefined)('does not count a registration whose process id another process now has, and removes it', () => {
+    const root = newHome()
+    const pid = liveProcess()
+    const stale = (readProcessStart(pid) ?? readProcessStart(process.pid)!).replace(/\d+$/u, digits => String(Number(digits) + 1))
+    mkdirSync(join(root, 'run', DATA_USERS_DIRECTORY), { recursive: true })
+    writeFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(pid)), JSON.stringify({ mode: 'exclusive', command: 'trash', processStart: stale }))
+    expect(otherDataUsers(root)).toEqual([])
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
+  })
+
+  it('counts a registration recorded in another pid namespace, though its process id is dead in this one, and keeps it', async () => {
+    const root = newHome()
+    const exited = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' })
+    await new Promise(resolve => exited.once('exit', resolve))
+    const pid = exited.pid!
+    mkdirSync(join(root, 'run', DATA_USERS_DIRECTORY), { recursive: true })
+    writeFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(pid)), JSON.stringify({ mode: 'exclusive', command: 'trash', pidNamespace: 'pid:[1]' }))
+    expect(otherDataUsers(root)).toEqual([{ pid, mode: 'exclusive', command: 'trash' }])
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([String(pid)])
+  })
+
+  it('reads a registration whose start identity is malformed as an exclusive use judged by its process id', () => {
+    const root = newHome()
+    const pid = liveProcess()
+    mkdirSync(join(root, 'run', DATA_USERS_DIRECTORY), { recursive: true })
+    writeFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(pid)), JSON.stringify({ mode: 'shared', command: 'headless', processStart: 'windows:1' }))
+    expect(otherDataUsers(root)).toEqual([{ pid, mode: 'exclusive', command: 'unknown' }])
+  })
+
+  it('reads a registration whose pid namespace is malformed as an exclusive use judged by its process id', () => {
+    const root = newHome()
+    const pid = liveProcess()
+    mkdirSync(join(root, 'run', DATA_USERS_DIRECTORY), { recursive: true })
+    writeFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(pid)), JSON.stringify({ mode: 'shared', command: 'headless', pidNamespace: 'pid:[x]' }))
+    expect(otherDataUsers(root)).toEqual([{ pid, mode: 'exclusive', command: 'unknown' }])
+  })
+
+  it('records another process\'s start identity when it registers that process', () => {
+    const root = newHome()
+    const pid = liveProcess()
+    registerDataUser(root, 'shared', 'headless', pid)
+    const processStart = readProcessStart(pid)
+    expect(JSON.parse(readFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(pid)), 'utf8'))).toEqual({ mode: 'shared', command: 'headless', ...processStart === undefined ? {} : { processStart }, pidNamespace: readPidNamespace() })
   })
 })
 

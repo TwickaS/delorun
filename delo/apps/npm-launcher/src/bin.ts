@@ -74,6 +74,8 @@ export interface LauncherCommandLine {
   readonly release?: string
   /** Everything the runtime receives, `--profile` included. */
   readonly runtimeArgs: readonly string[]
+  /** The arguments after the first `--`, which the launcher did not read; also at the end of {@link runtimeArgs}. */
+  readonly passedThrough: readonly string[]
   /** Whether `--help` was asked for. */
   readonly help: boolean
 }
@@ -91,10 +93,12 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
   let release: string | undefined
   let help = false
   const runtimeArgs: string[] = []
+  let passedThrough: string[] = []
   for (let at = 0; at < argv.length; at++) {
     const argument = argv[at]!
     if (argument === TERMINATOR) {
-      runtimeArgs.push(...argv.slice(at + 1))
+      passedThrough = argv.slice(at + 1)
+      runtimeArgs.push(...passedThrough)
       break
     }
     if (argument === '--help' || argument === '-h') {
@@ -119,7 +123,7 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
       runtimeArgs.push(argument, ...argument === PROFILE_FLAG ? [profile!] : [])
     }
   }
-  return { runtimeArgs, help, ...profile === undefined ? {} : { profile }, ...release === undefined ? {} : { release } }
+  return { runtimeArgs, passedThrough, help, ...profile === undefined ? {} : { profile }, ...release === undefined ? {} : { release } }
 }
 
 /**
@@ -276,6 +280,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       profile,
       platform,
       args: line.runtimeArgs,
+      passedThrough: line.passedThrough,
       mode: LAUNCHER_MODE,
       store: new RuntimeStore({ home: home.path, platform, logger }),
       channel: new LauncherChannel({

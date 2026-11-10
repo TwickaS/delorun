@@ -13,8 +13,8 @@ import { HomeProcessError, type ProfileSnapshots, type RollbackSteps, type Sessi
 import { readSafetyRecord, recordSnapshot, rollbackToSnapshot, withUpdate, writeSafetyRecord } from '@delo/profile-safety'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { assertSoleDataUser, DataInUseError } from '../home-exclusion.ts'
-import { HomeRuntimeStore, isStoreError, readStoredRoot, type OpenUpdateChannel, type RuntimeStore } from '@delo/runtime-store'
-import { assertCopyFits, buildFromSources, discardCopy, keepOnlyCopy, isDataSafetyError, planDataCopy, readDataFormats, recoverDataCopies, rollbackUpdate, saveDataCopy, type ReportSources, type RollbackResult } from '@delo/update'
+import { HomeRuntimeStore, isStoreError, type HomeRuntimeStoreOptions, type OpenUpdateChannel, type RuntimeStore, type TrustedRootSource } from '@delo/runtime-store'
+import { assertCopyFits, buildFromSources, discardCopy, keepOnlyCopy, isDataSafetyError, planDataCopy, readDataFormats, rollbackUpdate, saveDataCopy, type ReportSources, type RollbackResult } from '@delo/update'
 
 /** What {@link homeUpdateSupport} needs. */
 export interface UpdateSupportOptions {
@@ -24,6 +24,13 @@ export interface UpdateSupportOptions {
   readonly profile: string
   /** C1's runtime store. */
   readonly store: RuntimeStore
+  /** The stored root, anchored on the launcher's roots ([trusted root](./trusted-root.ts)). */
+  readonly root: TrustedRootSource
+  /**
+   * Contract C18's release-log start check before a home process starts from an installed version
+   * ([release check](./release-check.ts)); none when absent.
+   */
+  readonly preLaunch?: HomeRuntimeStoreOptions['preLaunch']
   /** Opens the release channel of one prepare. */
   readonly openChannel: OpenUpdateChannel
   /** The report's sources. */
@@ -68,12 +75,12 @@ export function profileSnapshots(home: string, profile: string, now: () => Date)
  * @throws {DataSafetyError} `ROLLBACK_NEEDS_DATA_COPY` when the table refuses; {@link DataInUseError} while another
  *   process uses the chat data; the store's error when the version rolled back to is unusable; nothing has changed then.
  */
-export async function rollbackRecordedUpdate(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'now'>, record: UpdateJournal, steps: RollbackSteps): Promise<RollbackResult> {
+export async function rollbackRecordedUpdate(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'root' | 'now'>, record: UpdateJournal, steps: RollbackSteps): Promise<RollbackResult> {
   const snapshots = profileSnapshots(options.home, options.profile, options.now)
   if (!steps.profileOnly) assertSoleDataUser(options.home)
   return rollbackUpdate({
     home: options.home, record, profileOnly: steps.profileOnly, now: options.now(),
-    preflight: async () => { await options.store.checkRuntime(record.from, await readStoredRoot(options.home)) },
+    preflight: async () => { await options.store.checkRuntime(record.from, await options.root()) },
     markRollingBack: steps.markRollingBack,
     restoreProfile: () => snapshots.restore(record),
     switchRuntime: steps.switchRuntime,
@@ -85,7 +92,7 @@ export async function rollbackRecordedUpdate(options: Pick<UpdateSupportOptions,
  * @param options - the home, the profile, the store and the clock.
  * @returns the copies.
  */
-export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'now'>): SessionDataCopies {
+export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'root' | 'now'>): SessionDataCopies {
   const { home, store } = options
   const refusal = (error: unknown): unknown => {
     if (isDataSafetyError(error, 'DATA_COPY_NO_SPACE')) return new HomeProcessError('DATA_COPY_NO_SPACE', error.detail)
@@ -95,16 +102,17 @@ export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | '
     return error
   }
   return {
-    async recover() {
-      await recoverDataCopies(home)
-    },
-    async plan() {
+    async plan(copy: boolean) {
       try {
         assertSoleDataUser(home)
-        assertCopyFits(await planDataCopy(home))
+        if (copy) assertCopyFits(await planDataCopy(home))
       } catch (error) {
         throw refusal(error)
       }
+    },
+    async confirmSoleUser() {
+      soleDataUser(home)
+      return Promise.resolve()
     },
     async save(from: RuntimeVersion, to: RuntimeVersion) {
       const formats = { from: await readDataFormats(store.paths.version(from)), to: await readDataFormats(store.paths.version(to)) }
@@ -132,16 +140,71 @@ export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | '
 }
 
 /**
+ * Refuse with C19's `CHATS_RUNNING` while another process uses the chat data.
+ * @param home - the resolved Delo home.
+ * @throws {HomeProcessError} `CHATS_RUNNING` naming the processes.
+ */
+function soleDataUser(home: string): void {
+  try {
+    assertSoleDataUser(home)
+  } catch (error) {
+    throw error instanceof DataInUseError ? new HomeProcessError('CHATS_RUNNING', error.detail) : error
+  }
+}
+
+/**
+ * C1's store as the home process drives it, with C19's codes for the store refusals the handshake answers with a line
+ * a person reads: a prepare whose release, installed runtime or stored root fails its check is `VERIFY_FAILED`, and a
+ * version to roll back to that is not installed, fails its start check or cannot be checked is
+ * `ROLLBACK_TARGET_UNUSABLE`. Any other failure reaches the handshake unchanged. A prepare, and the report of a rollback
+ * that switches the runtime, refuse with `CHATS_RUNNING` while another process uses the chat data, another profile's
+ * home process included, before anything is downloaded or changed: `current` and the chat data are the whole home's.
+ */
+class CliHomeRuntimeStore extends HomeRuntimeStore {
+  /**
+   * @param options - the store's options.
+   * @param dataHome - the resolved Delo home whose data users are checked.
+   */
+  constructor(options: ConstructorParameters<typeof HomeRuntimeStore>[0], private readonly dataHome: string) {
+    super(options)
+  }
+
+  /** @inheritdoc */
+  override async prepare(...args: Parameters<HomeRuntimeStore['prepare']>): ReturnType<HomeRuntimeStore['prepare']> {
+    soleDataUser(this.dataHome)
+    try {
+      return await super.prepare(...args)
+    } catch (error) {
+      if (isStoreError(error, 'ROOT_NOT_ANCHORED', 'INSTALL_VERIFY_FAILED', 'RUNTIME_CHANGED')) throw new HomeProcessError('VERIFY_FAILED', error.message)
+      throw error
+    }
+  }
+
+  /** @inheritdoc */
+  override async reportRollback(...args: Parameters<HomeRuntimeStore['reportRollback']>): ReturnType<HomeRuntimeStore['reportRollback']> {
+    soleDataUser(this.dataHome)
+    try {
+      return await super.reportRollback(...args)
+    } catch (error) {
+      if (isStoreError(error)) throw new HomeProcessError('ROLLBACK_TARGET_UNUSABLE', error.message)
+      throw error
+    }
+  }
+}
+
+/**
  * The home process's update support over the store, the channel and the report's sources.
- * @param options - the home, the profile, the store, the channel's opener, the sources and the clock.
+ * @param options - the home, the profile, the store, the anchored root, the channel's opener, the sources and the clock.
  * @returns the support.
  */
 export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport {
-  const store = new HomeRuntimeStore({
+  const store = new CliHomeRuntimeStore({
     store: options.store,
     profile: options.profile,
     openChannel: options.openChannel,
+    root: options.root,
+    ...options.preLaunch === undefined ? {} : { preLaunch: options.preLaunch },
     report: { build: version => buildFromSources('cli-home', options.sources, version) },
-  })
+  }, options.home)
   return { store, snapshots: profileSnapshots(options.home, options.profile, options.now), copies: sessionDataCopies(options) }
 }

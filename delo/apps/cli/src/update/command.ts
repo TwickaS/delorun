@@ -100,11 +100,15 @@ export function reportLines(report: UpdateReport): readonly string[] {
  * @param lines - every response line.
  * @param what - the request, for the refusal.
  * @returns the final line, whose `ok` is true.
- * @throws {CliError} when the home process refused.
+ * @throws {CliError} when the home process refused, or ended before its final line.
  */
 function finalLine(lines: readonly ResponseLine[], what: string): ResponseLine {
   const final = lines.at(-1)
-  if (final?.ok !== true) throw new CliError(EXIT.failed, `delorun update: the home process refused ${what}: ${String(final?.error ?? 'no answer')}${typeof final?.detail === 'string' ? ` (${final.detail})` : ''}`)
+  // A connection that ends without a final line means the home process ended while it worked on the request.
+  if (final === undefined || (final.ok === true && ('phase' in final || 'line' in final))) {
+    throw new CliError(EXIT.failed, `delorun update: the home process ended before it answered ${what}, so Delo may have stopped; run delorun status, start Delo again with delorun start if it is not running, and see delorun logs for the reason`)
+  }
+  if (final.ok !== true) throw new CliError(EXIT.failed, `delorun update: the home process refused ${what}: ${String(final.error)}${typeof final.detail === 'string' ? ` (${final.detail})` : ''}`)
   return final
 }
 

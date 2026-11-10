@@ -1,8 +1,10 @@
 /**
- * The users of a Delo home's shared stores beside its home processes. Every profile of a home shares `sessions/`,
- * `attachments/`, `storages/`, `trash/` and `archive/`; this module is the one place that decides who may use them at
- * once.
+ * The users of a Delo home's shared stores. Every profile of a home shares `sessions/`, `attachments/`, `storages/`,
+ * `trash/`, `archive/` and the runtime store's `current`; this module is the one place that decides who may use them at
+ * once. Home processes of several CLI profiles may run at once (contract C19, "The home process").
  *
+ * - **Home processes.** Each home process registers under `run/data-users/<pid>` as a shared user with its profile,
+ *   from before it takes its profile's home lock until it exits.
  * - **Exclusive use.** `delorun trash`, `delorun export` and `delorun import` take the home lock of every profile under
  *   `run/` for their whole operation, as a home process does, so no home process can start while they run and a
  *   profile whose home process runs refuses them. They also register under `run/data-users/<pid>` as exclusive users.
@@ -10,23 +12,25 @@
  *   `run/data-users/<pid>` as a shared user.
  * - **Refusals.** An exclusive user refuses while any other live process is registered; a shared user refuses while
  *   an exclusive user is registered; both refuse while an update or a rollback of any profile is between its snapshot
- *   and its end, or a restore of a session-data copy is unfinished. An update's session-data copy, restore and
- *   rollback refuse while any other live process is registered (contract C3, "Data formats"). Each user registers
- *   before it checks, so of two users that start together at least one refuses.
+ *   and its end, or a restore of a session-data copy is unfinished. A home process refuses to start while an exclusive
+ *   user is registered or an update or a rollback of another profile is between its snapshot and its end. An update's
+ *   prepare, session-data copy, restore and rollback refuse while any other live process is registered, another
+ *   profile's home process included (contract C3, "Data formats"). Each user registers before it checks, so of two
+ *   users that start together at least one refuses.
+ * - **Liveness.** A registration is live while its holder is ([holder](../../../packages/home/src/holder.ts)): its
+ *   process exists and, where the registration records the process's start identity, is still that process. A
+ *   registration that records another pid namespace than the reader's counts as live.
  *
  * @module @delo/cli/home-exclusion
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
-import { acquireHomeLock, ensureHomeTree, HomeLayoutError, newStartId, processExists, readHomeLock, runDirectory, type HolderProbe, type HomeLock } from '@delo/home'
+import { DATA_USERS_DIRECTORY, DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { acquireHomeLock, currentHolder, ensureHomeTree, HomeLayoutError, holderAlive, holderIdentity, holderOf, newStartId, parseHolder, readHomeLock, runDirectory, type HolderProbe, type HomeLock, type ProcessHolder } from '@delo/home'
 import { journalPath, readJournal, updateChannelProbe } from '@delo/home-process'
 import { DATA_COPIES_DIRECTORY, RESTORE_JOURNAL_FILE } from '@delo/update'
 import { CliError, EXIT } from './exit.ts'
 import { runningVersion } from './update/runtime.ts'
-
-/** The directory of registered data users, under the home's `run/`; never a profile's run directory. */
-export const DATA_USERS_DIRECTORY = 'data-users'
 
 /** How a registered process uses the shared stores. */
 export type DataUseMode = 'shared' | 'exclusive'
@@ -39,7 +43,12 @@ export interface DataUser {
   readonly mode: DataUseMode
   /** The `delorun` command it runs, or `unknown`. */
   readonly command: string
+  /** The CLI profile of a home process; absent for every other user. */
+  readonly profile?: string
 }
+
+/** The `command` a home process registers with. */
+const HOME_PROCESS_COMMAND = 'start'
 
 /** A refusal that names what holds the data. */
 export class DataInUseError extends Error {
@@ -62,18 +71,22 @@ function usersDirectory(home: string): string {
 }
 
 /**
- * Register this process as a user of the shared stores.
+ * Register a process as a user of the shared stores. The registration records the process's start identity and pid
+ * namespace where the platform reports them, so it stops counting once that process exits even when its process id is
+ * reused, and a reader in another pid namespace never counts it as exited.
  * @param home - the resolved Delo home.
  * @param mode - how it uses them.
  * @param command - the `delorun` command it runs, named in other users' refusals.
  * @param pid - the process id; this process's by default.
+ * @param profile - the CLI profile of a home process; omitted for every other user.
  * @returns the release, which removes the registration; a second call does nothing.
  */
-export function registerDataUser(home: string, mode: DataUseMode, command: string, pid: number = process.pid): () => void {
+export function registerDataUser(home: string, mode: DataUseMode, command: string, pid: number = process.pid, profile?: string): () => void {
   const directory = usersDirectory(home)
   mkdirSync(directory, { recursive: true, mode: 0o700 })
   const path = join(directory, String(pid))
-  writeFileSync(path, `${JSON.stringify({ mode, command })}\n`, { mode: 0o600 })
+  const identity = holderIdentity(pid === process.pid ? currentHolder() : holderOf(pid))
+  writeFileSync(path, `${JSON.stringify({ mode, command, ...profile === undefined ? {} : { profile }, ...identity })}\n`, { mode: 0o600 })
   let released = false
   return () => {
     if (released) return
@@ -83,24 +96,31 @@ export function registerDataUser(home: string, mode: DataUseMode, command: strin
 }
 
 /**
- * Read one registration; a registration that cannot be read counts as an exclusive use by an unknown command.
+ * Read one registration; a registration that cannot be read counts as an exclusive use by an unknown command, judged
+ * by its process id alone.
  * @param path - the registration file.
  * @param pid - its process id.
- * @returns the user.
+ * @returns the user, and its holder with the start identity and pid namespace its registration records.
  */
-function readUser(path: string, pid: number): DataUser {
-  let parsed: { mode?: unknown, command?: unknown } | null = null
+function readUser(path: string, pid: number): { readonly user: DataUser, readonly holder: ProcessHolder } {
+  let parsed: Readonly<Record<string, unknown>> | null = null
   try {
-    parsed = JSON.parse(readFileSync(path, 'utf8'))
+    parsed = JSON.parse(readFileSync(path, 'utf8')) as Readonly<Record<string, unknown>> | null
   } catch (_unreadable) {
     // A registration removed while it was read, or not JSON, is read as an exclusive use below.
   }
-  if ((parsed?.mode === 'shared' || parsed?.mode === 'exclusive') && typeof parsed.command === 'string') return { pid, mode: parsed.mode, command: parsed.command }
-  return { pid, mode: 'exclusive', command: 'unknown' }
+  const holder = typeof parsed === 'object' && parsed !== null ? parseHolder({ pid, processStart: parsed.processStart, pidNamespace: parsed.pidNamespace }) : undefined
+  if (holder === undefined || parsed === null || (parsed.mode !== 'shared' && parsed.mode !== 'exclusive') || typeof parsed.command !== 'string') return { user: { pid, mode: 'exclusive', command: 'unknown' }, holder: { pid } }
+  return {
+    user: { pid, mode: parsed.mode, command: parsed.command, ...typeof parsed.profile === 'string' ? { profile: parsed.profile } : {} },
+    holder,
+  }
 }
 
 /**
- * The live registered users other than one process.
+ * The live registered users other than one process. A registration is live while its holder is alive by
+ * `holderAlive`: its process exists and, where it records a start identity, is still the process that registered, or
+ * it records another pid namespace than this process's.
  * @param home - the resolved Delo home.
  * @param except - the process id to leave out; this process's by default.
  * @returns the users, in directory order; registrations of dead processes are removed.
@@ -112,7 +132,8 @@ export function otherDataUsers(home: string, except: number = process.pid): read
   for (const name of readdirSync(directory)) {
     const pid = Number(name)
     if (!Number.isInteger(pid) || pid <= 0 || pid === except) continue
-    if (processExists(pid)) live.push(readUser(join(directory, name), pid))
+    const { user, holder } = readUser(join(directory, name), pid)
+    if (holderAlive(holder)) live.push(user)
     else rmSync(join(directory, name), { force: true })
   }
   return live
@@ -121,32 +142,39 @@ export function otherDataUsers(home: string, except: number = process.pid): read
 /**
  * The users for a refusal.
  * @param users - the users.
- * @returns each as `process <pid> (delorun <command>)`, joined.
+ * @returns each as `the home process of the profile <profile> (process <pid>)` or `process <pid> (delorun <command>)`, joined.
  */
 function named(users: readonly DataUser[]): string {
-  return users.map(user => `process ${String(user.pid)} (delorun ${user.command})`).join(', ')
+  return users.map(user => user.profile === undefined
+    ? `process ${String(user.pid)} (delorun ${user.command})`
+    : `the home process of the profile ${user.profile} (process ${String(user.pid)})`).join(', ')
 }
 
 /**
- * Refuse while another process uses the shared stores: an update's copy, restore and rollback call this with the home
- * lock held.
+ * Refuse while another process uses the shared stores, another profile's home process included: an update's prepare,
+ * copy, restore and rollback call this with the home lock held.
  * @param home - the resolved Delo home.
- * @throws {DataInUseError} naming the processes.
+ * @throws {DataInUseError} naming the processes, and the `delorun stop` of each home process among them.
  */
 export function assertSoleDataUser(home: string): void {
   const others = otherDataUsers(home)
-  if (others.length > 0) throw new DataInUseError(`${named(others)} uses the chat data; wait for it to end, then try again`)
+  if (others.length === 0) return
+  const stops = others.flatMap(user => user.profile === undefined ? [] : [`delorun stop --profile ${user.profile}`])
+  throw new DataInUseError(`${named(others)} uses the chat data; wait for it to end${stops.length === 0 ? '' : `, or stop it with ${stops.join(' and ')}`}, then try again`)
 }
 
 /**
- * Refuse while an update or a rollback of any CLI profile is between its snapshot and its end, or a restore of a
- * copy is unfinished: the chat data may be mid-copy or mid-restore.
+ * Refuse while an update or a rollback of a CLI profile is between its snapshot and its end, or a restore of a copy
+ * is unfinished: the chat data may be mid-copy or mid-restore.
  * @param home - the resolved Delo home.
+ * @param homeProcess - the profile of a home process that is starting: its own update record is left out, and so is an
+ *   unfinished restore, both of which its start completes under its lock.
  * @throws {DataInUseError} naming what is in progress.
  */
-export async function assertNoUpdateInProgress(home: string): Promise<void> {
-  if (existsSync(join(home, DATA_COPIES_DIRECTORY, RESTORE_JOURNAL_FILE))) throw new DataInUseError('a restore of the chat data is unfinished; run delorun start or delorun recover status first')
+export async function assertNoUpdateInProgress(home: string, homeProcess?: string): Promise<void> {
+  if (homeProcess === undefined && existsSync(join(home, DATA_COPIES_DIRECTORY, RESTORE_JOURNAL_FILE))) throw new DataInUseError('a restore of the chat data is unfinished; run delorun start or delorun recover status first')
   for (const profile of profilesOf(home)) {
+    if (profile === homeProcess) continue
     const record = await readJournal(journalPath(home, profile))
     if (record !== undefined && record.phase !== 'committed') throw new DataInUseError(`an update of the profile ${profile} from Delo ${record.from} to Delo ${record.to} is ${record.phase}; wait for it to end, or run delorun recover status`)
   }
@@ -172,11 +200,36 @@ function profilesOf(home: string): readonly string[] {
  * @throws {CliError} naming what holds the stores; nothing stays registered then.
  */
 export async function useHomeShared(home: string, command: string): Promise<() => void> {
-  const release = registerDataUser(home, 'shared', command)
+  return registerShared(home, command, undefined)
+}
+
+/**
+ * Register this process as a profile's home process, a shared user of the stores for its whole life, before it takes
+ * the profile's home lock; refuse while an exclusive user runs or an update or a rollback of another profile is between
+ * its snapshot and its end. Its own registration never refuses its own update, copy, restore or rollback.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile.
+ * @returns the release, which removes the registration; the caller runs it when the process exits.
+ * @throws {CliError} naming what holds the stores; nothing stays registered then.
+ */
+export async function registerHomeProcess(home: string, profile: string): Promise<() => void> {
+  return registerShared(home, HOME_PROCESS_COMMAND, profile)
+}
+
+/**
+ * Register this process as a shared user and check that it may use the stores.
+ * @param home - the resolved Delo home.
+ * @param command - the command's name.
+ * @param homeProcess - the profile of a home process; `undefined` for any other command.
+ * @returns the release, which removes the registration.
+ * @throws {CliError} naming what holds the stores; nothing stays registered then.
+ */
+async function registerShared(home: string, command: string, homeProcess: string | undefined): Promise<() => void> {
+  const release = registerDataUser(home, 'shared', command, process.pid, homeProcess)
   try {
     const exclusive = otherDataUsers(home).filter(user => user.mode === 'exclusive')
     if (exclusive.length > 0) throw new DataInUseError(`${named(exclusive)} is changing the stores this command uses; wait for it to finish, and try again`)
-    await assertNoUpdateInProgress(home)
+    await assertNoUpdateInProgress(home, homeProcess)
     return release
   } catch (error) {
     release()

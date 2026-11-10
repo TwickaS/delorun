@@ -1,32 +1,37 @@
 /**
- * The sentence the launcher prints for each refusal, in the order of what Delo did, why and what the person can do: one
- * sentence for every install failure and every runtime-store failure, with the store's own remedies as commands.
+ * What the launcher prints for each refusal, in `@delo/home`'s refusal format: what Delo did, why with the code, and
+ * what the person can do, for every install failure, every runtime-store failure, a refused home and a refused
+ * release-log check, with the store's remedies as commands for the profile.
  */
 import { describe, expect, it } from 'vitest'
-import { InstallError, type InstallErrorCode } from '@delo/install'
-import { RuntimeStoreError, type RuntimeRemedy } from '@delo/runtime-store'
-import { installRemedies, LAUNCHER_EXIT, refusalFor, storeRemedies } from '../src/refusals.ts'
+import { HomeLayoutError, homeLayoutDescriber } from '@delo/home'
+import { InstallError, installDescriber, installRemedies, type InstallErrorCode } from '@delo/install'
+import { ReleaseLogRefusalError } from '@delo/release-verify/errors'
+import { LogUnreachableError } from '@delo/release-verify/online'
+import { RELEASE_VERIFY_DESCRIBERS } from '@delo/release-verify/refusal'
+import { RuntimeStoreError, runtimeStoreDescriber, type RuntimeRemedy } from '@delo/runtime-store'
+import { LAUNCHER_DESCRIBERS, LAUNCHER_EXIT, refusalFor } from '../src/refusals.ts'
 
 const CONTEXT = { home: '/home/.delo', profile: 'work' }
 
 describe('an install refusal', () => {
   const leads: ReadonlyArray<readonly [InstallErrorCode, string]> = [
-    ['DOWNLOAD_REFUSED', 'Delo refused to download the source: what is wrong'],
-    ['DOWNLOAD_FAILED', 'The download of the source did not finish: what is wrong'],
-    ['INSTALL_VERIFY_FAILED', 'Delo refused release the source, which did not verify: what is wrong. Nothing was installed.'],
-    ['ARCHIVE_REFUSED', 'Delo refused the runtime archive the source: what is wrong. Nothing was installed.'],
-    ['RELEASE_LOG_FAILED', 'Delo refused the source because its release-log check failed: what is wrong'],
-    ['RELEASE_NOT_OFFERED', 'Delo did not install that release: what is wrong'],
-    ['RELEASE_METADATA_INVALID', 'Delo could not read the release metadata at the source: what is wrong. Nothing was installed.'],
-    ['TRUST_STATE_INVALID', 'Delo could not read what it stored about verified releases: what is wrong Nothing was installed.'],
-    ['NO_TRUSTED_ROOT', 'This launcher cannot verify any release: what is wrong'],
+    ['DOWNLOAD_REFUSED', 'Delo refused to download the source.'],
+    ['DOWNLOAD_FAILED', 'The download of the source did not finish.'],
+    ['INSTALL_VERIFY_FAILED', 'Delo refused release the source, which did not verify. Nothing was installed.'],
+    ['ARCHIVE_REFUSED', 'Delo refused the runtime archive the source. Nothing was installed.'],
+    ['RELEASE_LOG_FAILED', 'Delo refused the source because its release-log check failed.'],
+    ['RELEASE_NOT_OFFERED', 'Delo did not install that release.'],
+    ['RELEASE_METADATA_INVALID', 'Delo could not read the release metadata at the source. Nothing was installed.'],
+    ['TRUST_STATE_INVALID', 'Delo could not read what it stored about verified releases. Nothing was installed.'],
+    ['NO_TRUSTED_ROOT', 'This launcher cannot verify any release.'],
   ]
 
   for (const [code, lead] of leads) {
-    it(`leads with what Delo did for ${code}, then the remedies`, () => {
+    it(`leads with what Delo did for ${code}, then why, then the remedies`, () => {
       const refusal = refusalFor(new InstallError(code, 'the source', 'what is wrong'), CONTEXT)
-      expect(refusal.text.split('\n')[0]).toBe(lead)
-      expect(refusal.text.split('\n').slice(1, -1)).toEqual(installRemedies(code).map(remedy => `  ${remedy}`))
+      expect(refusal.text).toBe(`${lead}\nWhy: ${code}: what is wrong\nWhat you can do:\n${installRemedies(code).map(remedy => `  ${remedy}\n`).join('')}`)
+      expect(refusal.remedies).toEqual(installRemedies(code))
       expect(refusal.exit).toBe(LAUNCHER_EXIT.failed)
     })
   }
@@ -39,40 +44,59 @@ describe('an install refusal', () => {
 
 describe('a runtime store refusal', () => {
   const leads: ReadonlyArray<readonly [RuntimeStoreError['code'], string]> = [
-    ['RUNTIME_CHANGED', 'Delo did not start the installed runtime: what is wrong'],
-    ['RUNTIME_INCOMPATIBLE', 'Delo did not start the installed runtime: what is wrong'],
-    ['NO_ACTIVE_RUNTIME', 'Delo found no installed runtime to start: what is wrong'],
-    ['STORE_BUSY', 'Another Delo command is changing the installed runtimes: what is wrong'],
-    ['POINTER_REPLACE_FAILED', 'Delo did not change which runtime is active: what is wrong'],
-    ['POINTER_CHANGED', 'Delo did not change which runtime is active: what is wrong'],
-    ['NOT_INSTALLED', 'Delo did not change which runtime is active: what is wrong'],
-    ['NO_PREVIOUS', 'Delo did not change which runtime is active: what is wrong'],
-    ['INSTALL_VERIFY_FAILED', 'Delo refused the release it downloaded: what is wrong'],
+    ['RUNTIME_CHANGED', 'Delo did not start the installed runtime.'],
+    ['RUNTIME_INCOMPATIBLE', 'Delo did not start the installed runtime.'],
+    ['ROOT_NOT_ANCHORED', 'Delo did not start the installed runtime.'],
+    ['NO_ACTIVE_RUNTIME', 'Delo found no installed runtime to start.'],
+    ['STORE_BUSY', 'Another Delo command is changing the installed runtimes.'],
+    ['POINTER_REPLACE_FAILED', 'Delo did not change which runtime is active.'],
+    ['POINTER_CHANGED', 'Delo did not change which runtime is active.'],
+    ['NOT_INSTALLED', 'Delo did not change which runtime is active.'],
+    ['NO_PREVIOUS', 'Delo did not change which runtime is active.'],
+    ['INSTALL_VERIFY_FAILED', 'Delo refused the release it downloaded.'],
   ]
 
   for (const [code, lead] of leads) {
-    it(`leads with what Delo did for ${code}`, () => {
+    it(`leads with what Delo did for ${code}, then why`, () => {
       const refusal = refusalFor(new RuntimeStoreError(code, '/home/.delo/runtimes', 'what is wrong'), CONTEXT)
-      expect(refusal.text).toBe(`${lead}\n`)
+      expect(refusal.text).toBe(`${lead}\nWhy: ${code}: what is wrong\n`)
       expect(refusal.remedies).toEqual([])
     })
   }
 
   it('offers each remedy the store names as a command for the profile', () => {
     const remedies: readonly RuntimeRemedy[] = ['reinstall', 'rollback', 'update', 'launcher-update']
-    const error = new RuntimeStoreError('RUNTIME_CHANGED', '/home/.delo/runtimes', 'what is wrong', remedies)
-    expect(storeRemedies(error, CONTEXT)).toEqual([
-      'Install the release again: delorun update --profile work',
-      'Go back to the version before the last update: delorun recover rollback --profile work',
-      'Update the runtime: delorun update --profile work',
-      'Update the launcher to a version that reads this runtime.',
+    const refusal = refusalFor(new RuntimeStoreError('RUNTIME_CHANGED', '/home/.delo/runtimes', 'what is wrong', remedies), CONTEXT)
+    expect(refusal.text.split('\n').slice(2, -1)).toEqual([
+      'What you can do:',
+      '  Install the release again: delorun update --profile work',
+      '  Go back to the version before the last update: delorun recover rollback --profile work',
+      '  Update the runtime: delorun update --profile work',
+      '  Update the launcher to a version that reads this runtime.',
     ])
-    expect(refusalFor(error, CONTEXT).text.split('\n').slice(1, -1)).toEqual(storeRemedies(error, CONTEXT).map(remedy => `  ${remedy}`))
+  })
+})
+
+describe('a refused home or release-log check', () => {
+  it('names the path, the code and the fix of a refused home', () => {
+    const refusal = refusalFor(new HomeLayoutError('HOME_MODE', '/home/.delo', '/home/.delo has mode 0755', 'chmod 700 /home/.delo'), CONTEXT)
+    expect(refusal.text).toBe('Delo stopped before using /home/.delo.\nWhy: HOME_MODE: /home/.delo has mode 0755\nWhat you can do:\n  Fix it with: chmod 700 /home/.delo\n')
+  })
+
+  it('names the check that refused and what the log did', () => {
+    expect(refusalFor(new ReleaseLogRefusalError('consistency-proof-invalid', 'the log forked'), CONTEXT).text).toContain('Why: consistency-proof-invalid: the log forked\n')
+    expect(refusalFor(new LogUnreachableError('the connection was reset'), CONTEXT).text).toBe('Delo could not reach the release log.\nWhy: the connection was reset\nWhat you can do:\n  Check this computer\'s connection, then run the same command again.\n')
+  })
+})
+
+describe('the launcher\'s describers', () => {
+  it('are the packages\' own, the ones delorun composes too', () => {
+    expect(LAUNCHER_DESCRIBERS).toEqual([homeLayoutDescriber, installDescriber, runtimeStoreDescriber, ...RELEASE_VERIFY_DESCRIBERS])
   })
 })
 
 describe('any other failure', () => {
-  it('is reported with its own message and no remedy', () => {
+  it('is reported with its own message, no stack and no remedy', () => {
     expect(refusalFor(new Error('the disk is full'), CONTEXT)).toEqual({ text: 'Delo stopped: the disk is full\n', exit: LAUNCHER_EXIT.failed, remedies: [] })
     expect(refusalFor('plain text', CONTEXT).text).toBe('Delo stopped: plain text\n')
   })

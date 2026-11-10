@@ -27,25 +27,40 @@ afterEach(() => { rmSync(home, { recursive: true, force: true }) })
  */
 function copies(at: string): ReturnType<typeof sessionDataCopies> {
   const logger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
-  return sessionDataCopies({ home: at, profile: 'default', store: new RuntimeStore({ home: at, platform: runtimePlatformOf(process.platform, process.arch), logger }), now: () => new Date('2026-11-10T12:00:00.000Z') })
+  return sessionDataCopies({ home: at, profile: 'default', store: new RuntimeStore({ home: at, platform: runtimePlatformOf(process.platform, process.arch), logger }), root: () => Promise.reject(new Error('no root is read for a copy')), now: () => new Date('2026-11-10T12:00:00.000Z') })
 }
 
 describe('sessionDataCopies', () => {
   it('plans a copy that fits, and passes a failure that is not a refusal through', async () => {
-    await expect(copies(home).plan()).resolves.toBeUndefined()
-    await expect(copies(join(home, 'missing')).plan()).rejects.toThrow(/ENOENT/u)
+    await expect(copies(home).plan(true)).resolves.toBeUndefined()
+    await expect(copies(join(home, 'missing')).plan(true)).rejects.toThrow(/ENOENT/u)
   })
 
   it('refuses a copy and a rollback while delorun headless uses the chat data', async () => {
     const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' })
     const release = registerDataUser(home, 'shared', 'headless', child.pid)
     try {
-      await expect(copies(home).plan()).rejects.toMatchObject({ code: 'CHATS_RUNNING' })
+      await expect(copies(home).plan(true)).rejects.toMatchObject({ code: 'CHATS_RUNNING' })
       await expect(copies(home).save(v('1.0.0'), v('1.1.0'))).rejects.toMatchObject({ code: 'CHATS_RUNNING' })
       const record = { v: 1 as const, from: v('1.0.0'), to: v('1.1.0'), phase: 'committed' as const, startedAt: '2026-11-10T12:00:00.000Z', dataDiffers: false, copy: false, targetStarted: true }
       await expect(copies(home).rollback(record, { profileOnly: false, switchRuntime: async () => {}, markRollingBack: async () => {} })).rejects.toMatchObject({ code: 'CHATS_RUNNING' })
     } finally {
       release()
+      child.kill('SIGKILL')
+    }
+  })
+
+  it('confirms the sole user while only this process is registered, and refuses with CHATS_RUNNING once another live process registers', async () => {
+    const own = registerDataUser(home, 'shared', 'start', process.pid, 'default')
+    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' })
+    try {
+      await expect(copies(home).confirmSoleUser()).resolves.toBeUndefined()
+      const other = registerDataUser(home, 'shared', 'start', child.pid, 'work')
+      await expect(copies(home).confirmSoleUser()).rejects.toMatchObject({ code: 'CHATS_RUNNING', message: expect.stringContaining(`the home process of the profile work (process ${String(child.pid)}) uses the chat data`) as string })
+      other()
+      await expect(copies(home).confirmSoleUser()).resolves.toBeUndefined()
+    } finally {
+      own()
       child.kill('SIGKILL')
     }
   })
@@ -62,6 +77,5 @@ describe('sessionDataCopies', () => {
     expect(refused).toBeInstanceOf(HomeProcessError)
     expect(refused).toMatchObject({ code: 'ROLLBACK_NEEDS_DATA_COPY' })
     expect(switched).toBe(false)
-    await expect(copies(home).recover()).resolves.toBeUndefined()
   })
 })

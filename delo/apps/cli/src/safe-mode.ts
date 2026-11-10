@@ -25,6 +25,8 @@ export interface SafeModeStart {
   readonly patchFiles: readonly string[]
   /** The bundles left out. */
   readonly skipped: readonly string[]
+  /** The rows the overlay disables: the person's rows for the plugins of the bundles left out. */
+  readonly skippedRows: readonly string[]
 }
 
 /**
@@ -51,6 +53,7 @@ export function safeModeStart(options: {
     resolvedProfile: { ...options.resolvedProfile, profile: { ...options.resolvedProfile.profile, layers } },
     patchFiles,
     skipped: plan.skipped,
+    skippedRows: plan.skippedRows,
   }
 }
 

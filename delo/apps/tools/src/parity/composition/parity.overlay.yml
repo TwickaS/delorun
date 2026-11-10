@@ -102,6 +102,7 @@
       name: '@delo/bundle-local/update-gate'
       config:
         enabled: true
+        holdUntilChecked: true
       disabled: true
 
 - insert:

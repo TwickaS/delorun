@@ -86,6 +86,41 @@ describe('runProfile with an application-owned profile', () => {
     }
   })
 
+  it.each([
+    [undefined, ['SIGTERM', 'SIGINT']],
+    [false, []],
+  ] as const)('with signals %s installs the signal handlers %j', async (signals, installed) => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-profile-signals-'))
+    homes.push(home)
+    mkdirSync(join(home, 'runtime'))
+    writeFileSync(join(home, 'runtime/package.json'), '{"name":"test-runtime","version":"1.0.0"}')
+    writeFileSync(join(home, 'package.json'), '{"name":"test-bundle","version":"1.0.0"}')
+    vi.stubEnv('DSH_HOME', home)
+    const on = vi.spyOn(process, 'on').mockReturnValue(process)
+    const ctx = new Context()
+    ctx.provide('loader', { create: vi.fn() })
+    ctx.provide('hmr', {})
+    vi.mocked(installProxyFromEnvironment).mockResolvedValue(vi.fn().mockResolvedValue(undefined))
+    vi.mocked(boot).mockImplementation(async (_name, _root, _patches, setup) => {
+      await setup?.(ctx)
+      return ctx
+    })
+    const profile: Profile = { skippedBundles: [],
+      name: 'desktop', dir: home, patchPath: join(home, 'cordis.patch.yml'),
+      patches: [], layers: [],
+    }
+    try {
+      await runProfile({
+        environment: createLaunchEnvironmentSnapshot([]), profile: 'desktop', patchFiles: [], args: ['--no-open'],
+        resolvedProfile: { profile, installAnchor: join(home, 'runtime/package.json') },
+        ...(signals === undefined ? {} : { signals }),
+      })
+      expect(on.mock.calls.map(([event]) => event).filter(event => event === 'SIGTERM' || event === 'SIGINT')).toEqual(installed)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('uses shared layers, runtime resolution, and shutdown', async () => {
     const home = mkdtempSync(join(tmpdir(), 'dsh-resolved-profile-'))
     homes.push(home)

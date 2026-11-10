@@ -3,12 +3,13 @@
  * after the Host stopped and before the switch; `targetStarted` is recorded before the successor starts; an
  * automatic rollback goes through the one rollback function, which may refuse; the person's `rollback` reads the
  * update record; a rollback marks the record `rolling-back` before its first step and never runs the Host it left
- * once a step may have run; and the previous update's committed record survives an update that does not commit.
+ * once a step may have run; the previous update's committed record survives an update that does not commit; and
+ * another process on the chat data refuses an update both before its record is written and right before the Host stops.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { HandoverMessage, UpdateJournal } from '@delo/contract-home-process'
-import { CountingChatGate, journalPath, readJournal, stashPath, startSuccessor, UpdateHandshake, writeJournal, type HandoverLine, type HandshakeSubject, type Successor } from '../src/index.ts'
+import { CountingChatGate, HomeProcessError, journalPath, readJournal, stashPath, startSuccessor, UpdateHandshake, writeJournal, type HandoverLine, type HandshakeSubject, type Successor } from '../src/index.ts'
 import { FixtureCopies, FixtureSnapshots, FixtureStore, installFixture, MemoryLogger, PROFILE, readPointer, REPOSITORY, tempHome, V0, V1, V2, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
@@ -25,6 +26,10 @@ interface SetUpOptions {
   readonly answer?: HandoverMessage['type']
   readonly dataDiffers?: boolean
   readonly successor?: (handover: HandoverLine) => Successor
+  /** The Host's teardown for the switch, which the subject's `suspend` runs after it records the call. */
+  readonly hostStop?: () => Promise<void>
+  /** The Host's boot after a failed switch, which the subject's `resume` runs after it records the call. */
+  readonly hostBoot?: () => Promise<void>
 }
 
 /** A handshake over a fixture store and copies, with a successor that answers as told. */
@@ -49,13 +54,15 @@ async function setUp(options: SetUpOptions = {}) {
     running, home, profile: PROFILE, journal, logger: new MemoryLogger(),
     chats: () => gate,
     setState: (state) => { events.push(`state:${state}`) },
-    suspend: async () => {
+    suspend: async (limitS) => {
       hostRuns = false
-      events.push(`suspend copies=${copies.calls.join(',')}`)
+      events.push(`suspend copies=${copies.calls.join(',')} limit=${String(limitS)}`)
+      await options.hostStop?.()
     },
     resume: async () => {
       hostRuns = true
       events.push('resume')
+      await options.hostBoot?.()
     },
     startSuccessor: (handover): Successor => {
       handovers.push(handover)
@@ -90,7 +97,7 @@ describe('an update with a session-data copy', () => {
   it('takes the copy after the Host stopped and before the switch, and records targetStarted before the successor starts', async () => {
     const { handshake, events, journal } = await setUp()
     expect(await update(handshake, true)).toEqual({ outcome: 'committed' })
-    expect(events).toContain('suspend copies=plan')
+    expect(events).toContain('suspend copies=plan limit=1800')
     expect(events).toContain(`start ${V2} targetStarted=true switches=${V1}>${V2} copies=plan,save:${V1}>${V2}`)
     expect(await readJournal(journal)).toMatchObject({ dataDiffers: true, copy: true, targetStarted: true })
   })
@@ -320,5 +327,115 @@ describe('the person\'s rollback', () => {
     expect(await handshake.rollback('abort-if-busy', undefined, false, () => {})).toEqual({ outcome: 'aborted', reason: 'CHATS_RUNNING' })
     expect(copies.calls).toEqual([])
     end()
+  })
+})
+
+describe('a Host that does not stop for the switch', () => {
+  const notStopped = (): Promise<void> => Promise.reject(new HomeProcessError('HOST_STOP_FAILED', 'the Host did not stop within 1800 seconds; nothing was switched'))
+
+  it('ends the update aborted with HOST_STOP_FAILED before any copy or switch, removes its record and runs the Host again', async () => {
+    const { handshake, copies, events, store, home, journal } = await setUp({ hostStop: notStopped })
+    await recordEarlierUpdate(journal)
+    expect(await update(handshake, true)).toEqual({ outcome: 'aborted', reason: 'HOST_STOP_FAILED' })
+    expect(copies.calls).toEqual(['plan'])
+    expect(store.switches).toEqual([])
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(events.at(-1)).toBe('resume')
+    // The previous update's committed record returns, as for an update that ended before the switch.
+    expect(await readJournal(journal)).toEqual(EARLIER)
+    expect(existsSync(stashPath(journal))).toBe(false)
+    expect(handshake.running()).toBe(false)
+  })
+
+  it('still ends the update with nothing switched when the Host does not boot again either', async () => {
+    const { handshake, store, journal } = await setUp({ hostStop: notStopped, hostBoot: () => Promise.reject(new Error('the port is still held')) })
+    expect(await update(handshake, false)).toEqual({ outcome: 'aborted', reason: 'HOST_STOP_FAILED' })
+    expect(store.switches).toEqual([])
+    expect(await readJournal(journal)).toBeUndefined()
+  })
+
+  it('ends the person\'s rollback aborted with HOST_STOP_FAILED before any step, keeping the committed record', async () => {
+    const { handshake, copies, events, home, journal } = await setUp({ running: V2, hostStop: notStopped })
+    await writeJournal(journal, { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString(), dataDiffers: true, copy: true, targetStarted: true }, 'committed')
+    expect(await handshake.rollback('drain', 600, false, () => {})).toEqual({ outcome: 'aborted', reason: 'HOST_STOP_FAILED' })
+    expect(events).toContain(`suspend copies= limit=600`)
+    expect(copies.calls).toEqual([])
+    expect(readPointer(home, 'current')).toBe(V2)
+    expect(events.at(-1)).toBe('resume')
+    expect(await readJournal(journal)).toMatchObject({ from: V1, to: V2, phase: 'committed' })
+    expect(handshake.running()).toBe(false)
+  })
+})
+
+describe('a version that fails its check before a start', () => {
+  it('ends an update aborted with VERIFY_FAILED before the Host stops, with nothing switched', async () => {
+    const { handshake, events, home, store, journal } = await setUp()
+    store.launchRefused = V2
+    await recordEarlierUpdate(journal)
+    expect(await update(handshake, true)).toEqual({ outcome: 'aborted', reason: 'VERIFY_FAILED' })
+    expect(store.switches).toEqual([])
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(events.some(event => event.startsWith('suspend'))).toBe(false)
+    expect(await readJournal(journal)).toEqual(EARLIER)
+  })
+
+  it('ends the person\'s rollback aborted with VERIFY_FAILED before any step, keeping the committed record', async () => {
+    const { handshake, journal, store, events } = await setUp({ running: V2 })
+    store.launchRefused = V1
+    await writeJournal(journal, { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: true }, 'committed')
+    expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'aborted', reason: 'VERIFY_FAILED' })
+    expect(events.some(event => event.startsWith('suspend'))).toBe(false)
+    expect(await readJournal(journal)).toMatchObject({ phase: 'committed' })
+  })
+})
+
+describe('another process on the chat data', () => {
+  it('refuses an update without a copy before anything is written', async () => {
+    const { handshake, copies, store, journal } = await setUp()
+    copies.othersRunning = true
+    await expect(update(handshake, false)).rejects.toMatchObject({ code: 'CHATS_RUNNING' })
+    expect(store.switches).toEqual([])
+    expect(await readJournal(journal)).toBeUndefined()
+  })
+
+  it.each([true, false])('refuses an update with dataCopy %s when a process registered after the plan check, before the Host stops, and unwinds the record', async (dataCopy) => {
+    const { handshake, copies, events, store, snapshots, home, journal } = await setUp()
+    await recordEarlierUpdate(journal)
+    const plan = copies.plan.bind(copies)
+    copies.plan = async (copy) => {
+      await plan(copy)
+      copies.othersRunning = true
+    }
+    let recordAtCheck: UpdateJournal | undefined
+    copies.beforeConfirm = async () => { recordAtCheck = await readJournal(journal) }
+
+    await expect(update(handshake, dataCopy)).rejects.toMatchObject({ code: 'CHATS_RUNNING' })
+    expect(recordAtCheck).toMatchObject({ from: V1, to: V2, phase: 'switching', copy: dataCopy })
+    expect(snapshots.calls).toEqual([`save:${V1}>${V2}`])
+    expect(events.some(event => event.startsWith('suspend'))).toBe(false)
+    expect(events.at(-1)).toBe('state:running')
+    expect(store.switches).toEqual([])
+    expect(readPointer(home, 'current')).toBe(V1)
+    expect(copies.calls).toEqual(dataCopy ? ['plan'] : [])
+    expect(await readJournal(journal)).toEqual(EARLIER)
+    expect(existsSync(stashPath(journal))).toBe(false)
+    expect(handshake.running()).toBe(false)
+  })
+
+  it('refuses the person\'s rollback before any step, and the Host runs again', async () => {
+    const { handshake, copies, events, journal } = await setUp({ running: V2 })
+    await writeJournal(journal, { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: true }, 'committed')
+    copies.othersRunning = true
+    await expect(handshake.rollback('drain', undefined, false, () => {})).rejects.toMatchObject({ code: 'CHATS_RUNNING' })
+    expect(events.at(-2)).toBe('resume')
+    expect(await readJournal(journal)).toMatchObject({ phase: 'committed' })
+  })
+
+  it('stops an automatic rollback before any step, leaving the record for the next start', async () => {
+    const { handshake, copies, journal } = await setUp({ answer: 'failed', dataDiffers: false })
+    const { reportId } = await handshake.prepare(V2, () => {}) as { readonly reportId: string }
+    copies.save = async () => { copies.othersRunning = true }
+    expect(await handshake.apply(reportId, 'drain', undefined, true, () => {})).toEqual({ outcome: 'failed', reason: 'CHATS_RUNNING' })
+    expect(await readJournal(journal)).toMatchObject({ phase: 'health-check' })
   })
 })

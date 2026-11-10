@@ -19,8 +19,12 @@ export type StoreLayoutCode = Extract<HomeLayoutErrorCode, 'STORE_BUSY' | 'NO_AC
  *   does not verify. C2 requires the stop and names no code for it.
  * - `POINTER_CHANGED`: a switch's `from` is not the version `current` names, so the caller acted on a stale read.
  * - `NOT_INSTALLED`: a pointer write names a version with no installed directory.
+ * - `ROOT_NOT_ANCHORED`: the trusted root `trust/root.json` could not be anchored on the release roots the launcher
+ *   ships, because the process was not started by the launcher (which names its roots in `DELO_LAUNCHER_ROOTS`), the
+ *   shipped roots do not read, or no shipped root leads to the stored one. Nothing is installed, switched to or rolled
+ *   back to under such a root.
  */
-export type RuntimeStoreErrorCode = StoreLayoutCode | 'NO_PREVIOUS' | 'RUNTIME_CHANGED' | 'POINTER_CHANGED' | 'NOT_INSTALLED'
+export type RuntimeStoreErrorCode = StoreLayoutCode | 'NO_PREVIOUS' | 'RUNTIME_CHANGED' | 'POINTER_CHANGED' | 'NOT_INSTALLED' | 'ROOT_NOT_ANCHORED'
 
 /** What the launcher offers after a refused start. */
 export type RuntimeRemedy = 'reinstall' | 'rollback' | 'update' | 'launcher-update'

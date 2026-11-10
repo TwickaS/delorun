@@ -6,12 +6,12 @@
  * The release fixture is the install path's own (`../../install/tests/support.ts`), because a launcher's flow is the
  * install path plus the store, and a release is what both are about.
  */
-import { chmod, mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
-import { InstallError, type InstallErrorCode } from '@delo/install'
+import { InstallError, installRemedies, type InstallErrorCode } from '@delo/install'
 import {
   parseRuntimeVersion,
   RuntimeStore,
@@ -26,9 +26,9 @@ import {
   type RuntimeChannel,
   type VerifiedRuntime,
 } from '@delo/runtime-store'
-import { failedStartText, launcherProfile, runLauncher, runtimeCommand, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
+import { failedStartText, launcherProfile, ROLLBACK_ARGS, runLauncher, runtimeCommand, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
 import type { StartCheckResult } from '@delo/release-verify/start'
-import { installRemedies, LAUNCHER_EXIT, refusalFor } from '../src/refusals.ts'
+import { LAUNCHER_EXIT, refusalFor } from '../src/refusals.ts'
 import { launchEnvironment, parseCommandLine, spawnRuntime, usage } from '../src/bin.ts'
 import { fixtureRelease, nextRoot, VERSION, type Fixture } from '../../install/tests/support.ts'
 
@@ -63,6 +63,13 @@ async function home(options: { readonly root?: Uint8Array } = {}): Promise<strin
     await writeFile(join(directory, 'trust', TRUST_FILES.root), options.root, { mode: 0o600 })
   }
   return directory
+}
+
+/** The store operations a launch that starts or installs `current` never reaches. */
+const NO_ROLLBACK: Pick<LauncherStore, 'pointers' | 'checkRuntime' | 'launchCommand'> = {
+  pointers: () => Promise.reject(new Error('the launcher reads no pointers when current starts')),
+  checkRuntime: () => Promise.reject(new Error('the launcher checks no other version when current starts')),
+  launchCommand: () => { throw new Error('the launcher builds no other command when current starts') },
 }
 
 /** What a spec's store was asked, so a spec can assert what ran. */
@@ -106,6 +113,7 @@ function recordingStore(recorded: Recorded, options: { readonly installed?: bool
       recorded.retentions++
       return Promise.resolve({ removed: [], failed: [] })
     },
+    ...NO_ROLLBACK,
   }
 }
 
@@ -171,6 +179,33 @@ async function unlock(directory: string): Promise<void> {
   }
 }
 
+/** Every entry under a home, by its path relative to the home: its type, mode, inode, size, modification time and, for a file, its bytes. */
+type HomeTree = Record<string, string>
+
+/**
+ * Read every entry under a directory, so a spec can show a run changed nothing: a rewritten or renamed file changes its
+ * inode or modification time even when its bytes are the same.
+ * @param directory - the directory.
+ * @param prefix - the relative path of `directory`, empty at the top.
+ * @returns the entries.
+ */
+async function homeTree(directory: string, prefix = ''): Promise<HomeTree> {
+  const tree: HomeTree = {}
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+    const info = await lstat(path)
+    const header = `${entry.isDirectory() ? 'dir' : entry.isFile() ? 'file' : 'other'} ${info.mode.toString(8)} ${info.ino} ${info.size} ${info.mtimeMs}`
+    if (entry.isDirectory()) {
+      tree[relative] = header
+      Object.assign(tree, await homeTree(path, relative))
+    } else {
+      tree[relative] = entry.isFile() ? `${header} ${(await readFile(path)).toString('base64')}` : header
+    }
+  }
+  return tree
+}
+
 /**
  * The launcher's inputs for a spec, with the parts it does not exercise defaulted.
  * @param options - the home, the store, the channel, the roots the launcher ships, and what the spec observes.
@@ -185,6 +220,7 @@ function launch(options: {
   readonly spawn?: (command: LaunchCommand) => Promise<number>
   readonly stderr?: (text: string) => void
   readonly args?: readonly string[]
+  readonly passedThrough?: readonly string[]
   readonly startCheck?: LauncherOptions['startCheck']
 }): LauncherOptions {
   return {
@@ -192,6 +228,7 @@ function launch(options: {
     profile: 'default',
     platform: 'linux-x64',
     args: options.args ?? [],
+    passedThrough: options.passedThrough ?? [],
     mode: 'enforce',
     store: options.store,
     channel: options.channel,
@@ -306,6 +343,7 @@ describe('the record of a release’s log check', () => {
       prepareLaunch: () => Promise.reject(new RuntimeStoreError('NO_ACTIVE_RUNTIME', '/home/.delo/runtimes', 'no runtime is installed')),
       install: () => Promise.reject(new RuntimeStoreError('INSTALL_VERIFY_FAILED', '/home/.delo/staging', 'the archive is not the manifest’s', ['reinstall'])),
       retain: () => Promise.resolve({ removed: [], failed: [] }),
+      ...NO_ROLLBACK,
     }
     const status = await runLauncher(launch({
       home: directory,
@@ -382,6 +420,7 @@ describe('an install step that refuses', () => {
       prepareLaunch: () => Promise.reject(new RuntimeStoreError('NO_ACTIVE_RUNTIME', '/home/.delo/runtimes', 'no runtime is installed')),
       install: () => Promise.reject(new RuntimeStoreError('INSTALL_VERIFY_FAILED', '/home/.delo/staging', 'the archive is not the manifest’s', ['reinstall'])),
       retain: () => Promise.resolve({ removed: [], failed: [] }),
+      ...NO_ROLLBACK,
     }
     const status = await runLauncher(launch({
       home: await home(),
@@ -395,7 +434,7 @@ describe('an install step that refuses', () => {
     expect(printed).toContain('delorun update --profile default')
   })
 
-  it('prints one sentence and a remedy for every install refusal the path can raise', () => {
+  it('prints what Delo did, why and a remedy for every install refusal the path can raise', () => {
     const codes: readonly InstallErrorCode[] = [
       'DOWNLOAD_REFUSED',
       'DOWNLOAD_FAILED',
@@ -414,7 +453,7 @@ describe('an install step that refuses', () => {
       expect(refusal.exit, code).toBe(LAUNCHER_EXIT.failed)
       expect(refusal.remedies, code).toEqual(remedies)
       expect(refusal.text.endsWith('\n'), code).toBe(true)
-      expect(refusal.text, code).not.toContain(code)
+      expect(refusal.text, code).toContain(`Why: ${code}: what is wrong\n`)
     }
   })
 })
@@ -679,6 +718,46 @@ describe('a runtime a real runtime store installed', () => {
   })
 })
 
+describe('a real runtime store whose current fails its start check after an update', () => {
+  it('refuses delorun verify without running either release, leaving both pointers and every file as they were, and starts previous with delorun recover rollback for delorun start', async () => {
+    const fixture = await fixtureRelease()
+    // A release signed by keys this home's root does not list: installed as `current`, it fails the start check.
+    const unsigned = await fixtureRelease({ version: '0.2.0' })
+    const directory = await home({ root: fixture.roots[0]! })
+    try {
+      const store = new RuntimeStore({ home: directory, platform: fixture.platform, logger: { error: () => undefined, warn: () => undefined, info: () => undefined, debug: () => undefined } })
+      await store.install({ version: version(VERSION), root: fixture.rootMetadata, fill: staging => fillFromFixture(fixture, staging) })
+      await store.install({ version: version('0.2.0'), root: unsigned.rootMetadata, fill: staging => fillFromFixture(unsigned, staging) })
+      await store.switchTo(version(VERSION), version('0.2.0'))
+      const channel = refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked'))
+      const started: LaunchCommand[] = []
+      let printed = ''
+      const options = {
+        home: directory,
+        store,
+        channel,
+        roots: fixture.roots,
+        spawn: (command: LaunchCommand) => { started.push(command); return Promise.resolve(0) },
+        stderr: (text: string) => { printed += text },
+      }
+      const before = await homeTree(directory)
+      const refused = await runLauncher(launch({ ...options, args: ['verify'] }))
+      expect(refused).toBe(LAUNCHER_EXIT.failed)
+      expect(started).toEqual([])
+      expect(printed).toContain('Delo did not run delorun verify: release 0.2.0 failed its start check, so Delo ran no release.\nWhy: RUNTIME_CHANGED: ')
+      expect(printed).toContain(`Start release ${VERSION}, the version before the last update, to roll back to it: delorun recover rollback --profile default`)
+      expect(await homeTree(directory)).toEqual(before)
+      expect(await store.pointers()).toEqual({ current: version('0.2.0'), previous: version(VERSION) })
+      const status = await runLauncher(launch({ ...options, args: ['start'] }))
+      expect(status).toBe(0)
+      expect(started.map(command => [command.command, ...command.args.slice(-2)])).toEqual([[join(directory, 'runtimes', VERSION, 'node', 'bin', 'node'), ...ROLLBACK_ARGS]])
+    } finally {
+      // An installation is read-only; the spec's cleanup must be able to remove it.
+      await unlock(directory)
+    }
+  })
+})
+
 describe('the command line', () => {
   it('keeps --release and --profile for itself and passes everything else to the runtime', () => {
     const line = parseCommandLine(['--release', '0.1.0', '--profile=work', 'doctor', '--json'])
@@ -697,6 +776,7 @@ describe('the command line', () => {
     expect(line.profile).toBe('work')
     expect(line.release).toBeUndefined()
     expect(line.runtimeArgs).toEqual(['--profile', 'work', '--release', '0.2.0', '--profile', 'desktop'])
+    expect(line.passedThrough).toEqual(['--release', '0.2.0', '--profile', 'desktop'])
   })
 
   it('refuses a profile name that would leave the home', () => {
@@ -711,6 +791,14 @@ describe('the command line', () => {
     expect(() => launcherProfile('desktop', {})).toThrow(/desktop/u)
     expect(launcherProfile(undefined, { DELO_PROFILE: 'work' })).toBe('work')
     expect(launcherProfile(undefined, {})).toBe('default')
+  })
+
+  it('reserved-profile-refused: refuses every name contract C1 reserves, from the option and DELO_PROFILE', () => {
+    for (const name of ['desktop', 'headless', 'data-users', 'node_modules']) {
+      expect(() => launcherProfile(name, {})).toThrow(name)
+      expect(() => launcherProfile(undefined, { DELO_PROFILE: name })).toThrow(name)
+    }
+    for (const name of ['work', 'web', 'tui', 'my-headless', 'data-users2']) expect(launcherProfile(name, {})).toBe(name)
   })
 
   it('documents the launcher’s own options and passes the rest through', () => {
@@ -781,5 +869,183 @@ describe('the release-log check at a start', () => {
     expect(runtimeCommand([])).toBeUndefined()
     expect(runtimeCommand(['--profile', 'work', 'verify', '--json'])).toBe('verify')
     expect(runtimeCommand(['--json', 'status'])).toBe('status')
+  })
+})
+
+describe('a current runtime that fails its start check', () => {
+  const CURRENT = version('0.2.0')
+  const PREVIOUS = version('0.1.0')
+
+  /** What a spec's broken store was asked. */
+  interface Asked {
+    /** The versions whose start check ran, with the root version each was given. */
+    checked: string[]
+    /** The commands built. */
+    commands: string[]
+  }
+
+  /**
+   * A store whose `current` fails its start check, with a `previous` that passes or fails its own.
+   * @param asked - the record to add to.
+   * @param previous - whether `previous` is installed, and whether it passes its start check.
+   * @returns the store.
+   */
+  function brokenStore(asked: Asked, previous: 'none' | 'passes' | 'fails'): LauncherStore {
+    return {
+      prepareLaunch: () => Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', `/home/.delo/runtimes/${CURRENT}`, `runtime ${CURRENT} differs from its signed file list: app/entry.js (sha256)`, ['reinstall', 'rollback'])),
+      install: () => Promise.reject(new Error('the launcher must not install')),
+      retain: () => Promise.reject(new Error('the launcher must not retain')),
+      pointers: () => Promise.resolve(previous === 'none' ? { current: CURRENT } : { current: CURRENT, previous: PREVIOUS }),
+      checkRuntime: (checked, root) => {
+        asked.checked.push(`${checked}@${String(root.version)}`)
+        if (previous === 'fails') return Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', `/home/.delo/runtimes/${checked}`, 'differs'))
+        return Promise.resolve({ version: checked, manifest: {} as VerifiedRuntime['manifest'], files: {} as VerifiedRuntime['files'] })
+      },
+      launchCommand: (launched, profile, args) => {
+        asked.commands.push(`${launched} ${args.join(' ')}`)
+        return { command: `/home/.delo/runtimes/${launched}/node/bin/node`, args: ['entry.js', ...args], env: { DELO_PROFILE: profile } }
+      },
+    }
+  }
+
+  /**
+   * Run the launcher over a broken store.
+   * @param previous - the store's `previous`.
+   * @param options - the stored root, when it is not the shipped one; a named release; the start check; the arguments,
+   *   `start` by default.
+   * @returns the status, what was printed, the commands started, what the store was asked, and the home's tree before
+   *   and after the run.
+   */
+  async function run(previous: 'none' | 'passes' | 'fails', options: { readonly stored?: Uint8Array, readonly target?: RuntimeVersion, readonly startCheck?: LauncherOptions['startCheck'], readonly args?: readonly string[], readonly argv?: readonly string[] } = {}): Promise<{ readonly status: number, readonly printed: string, readonly started: LaunchCommand[], readonly asked: Asked, readonly before: HomeTree, readonly after: HomeTree }> {
+    const fixture = await fixtureRelease()
+    const asked: Asked = { checked: [], commands: [] }
+    const started: LaunchCommand[] = []
+    let printed = ''
+    const directory = await home({ root: options.stored ?? fixture.roots[0]! })
+    const before = await homeTree(directory)
+    const status = await runLauncher(launch({
+      home: directory,
+      store: brokenStore(asked, previous),
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: fixture.roots,
+      ...options.argv === undefined
+        ? { args: options.args ?? ['start'] }
+        : { args: parseCommandLine(options.argv).runtimeArgs, passedThrough: parseCommandLine(options.argv).passedThrough },
+      spawn: (command) => { started.push(command); return Promise.resolve(7) },
+      stderr: (text) => { printed += text },
+      ...options.target === undefined ? {} : { target: options.target },
+      ...options.startCheck === undefined ? {} : { startCheck: options.startCheck },
+    }))
+    return { status, printed, started, asked, before, after: await homeTree(directory) }
+  }
+
+  /** The notice a run that starts `previous` prints. */
+  const NOTICE = `Delo did not start release ${CURRENT}: it failed its start check. Starting release ${PREVIOUS}, the version before the last update, to roll back to it: delorun recover rollback\n`
+
+  it.each([
+    [[]],
+    [['start']],
+    [['--profile', 'default']],
+    [['--profile=default']],
+    [['--profile', 'default', 'start']],
+    [['start', '--profile', 'default']],
+    [['recover', 'rollback']],
+    [['--profile', 'default', 'recover', 'rollback']],
+  ])('starts previous with delorun recover rollback for the start or rollback command %j', async (args) => {
+    const result = await run('passes', { args })
+    expect(result.status).toBe(7)
+    expect(result.started.map(command => command.args)).toEqual([['entry.js', ...ROLLBACK_ARGS]])
+    expect(result.printed).toBe(NOTICE)
+  })
+
+  it.each([
+    [['verify']],
+    [['stop']],
+    [['status']],
+    [['update']],
+    [['logs']],
+    [['recover', 'status']],
+    [['frobnicate']],
+    [['--profile', 'default', 'verify']],
+    [['--profile=default', 'stop']],
+    [['--foreground']],
+    [['start', '--foreground']],
+    [['start', 'start']],
+    [['recover', 'rollback', '--profile-only']],
+    [['--profile']],
+  ])('refuses %j, which is not a start, naming delorun recover rollback, and launches nothing and changes nothing in the home', async (args) => {
+    const released: RuntimeVersion[] = []
+    const result = await run('passes', { args, startCheck: (release) => { released.push(release); return Promise.resolve({ state: 'verified', stop: false }) } })
+    expect(result.status).toBe(LAUNCHER_EXIT.failed)
+    expect(result.started).toEqual([])
+    expect(result.asked.commands).toEqual([])
+    expect(released).toEqual([])
+    expect(result.printed).toBe([
+      `Delo did not run ${['delorun', ...args].join(' ')}: release ${CURRENT} failed its start check, so Delo ran no release.`,
+      `Why: RUNTIME_CHANGED: runtime ${CURRENT} differs from its signed file list: app/entry.js (sha256)`,
+      'What you can do:',
+      `  Start release ${PREVIOUS}, the version before the last update, to roll back to it: delorun recover rollback --profile default`,
+      '',
+    ].join('\n'))
+    expect(result.after).toEqual(result.before)
+  })
+
+  it.each([
+    [['--', '--profile', 'work']],
+    [['--', 'start']],
+  ])('refuses the command line %j, whose arguments after -- the launcher did not read, and starts no release', async (argv) => {
+    const result = await run('passes', { argv })
+    expect(result.status).toBe(LAUNCHER_EXIT.failed)
+    expect(result.started).toEqual([])
+    expect(result.printed).toContain('delorun recover rollback --profile default')
+    expect(result.after).toEqual(result.before)
+  })
+
+  it('starts previous with delorun recover rollback after checking it under the anchored root, printing one line', async () => {
+    const result = await run('passes')
+    expect(result.status).toBe(7)
+    expect(result.asked).toEqual({ checked: [`${PREVIOUS}@1`], commands: [`${PREVIOUS} recover rollback`] })
+    expect(result.started).toEqual([{ command: `/home/.delo/runtimes/${PREVIOUS}/node/bin/node`, args: ['entry.js', ...ROLLBACK_ARGS], env: { DELO_PROFILE: 'default' }, version: PREVIOUS, root: expect.objectContaining({ version: 1 }) }])
+    expect(result.printed).toBe(`Delo did not start release ${CURRENT}: it failed its start check. Starting release ${PREVIOUS}, the version before the last update, to roll back to it: delorun recover rollback\n`)
+  })
+
+  it('refuses as before, starting nothing, when no previous is installed', async () => {
+    const result = await run('none')
+    expect(result.status).toBe(LAUNCHER_EXIT.failed)
+    expect(result.started).toEqual([])
+    expect(result.asked.checked).toEqual([])
+    expect(result.printed).toContain(`Delo did not start the installed runtime.\nWhy: RUNTIME_CHANGED: runtime ${CURRENT} differs from its signed file list`)
+  })
+
+  it('refuses as before, starting nothing, when previous fails its own start check', async () => {
+    const result = await run('fails')
+    expect(result.status).toBe(LAUNCHER_EXIT.failed)
+    expect(result.started).toEqual([])
+    expect(result.asked).toEqual({ checked: [`${PREVIOUS}@1`], commands: [] })
+    expect(result.printed).toContain('Delo did not start the installed runtime')
+  })
+
+  it('checks and starts nothing when the stored root is not one the launcher trusts', async () => {
+    const stranger = await fixtureRelease()
+    const result = await run('passes', { stored: stranger.roots[0]! })
+    expect(result.status).toBe(LAUNCHER_EXIT.failed)
+    expect(result.started).toEqual([])
+    expect(result.asked).toEqual({ checked: [], commands: [] })
+  })
+
+  it('starts no rollback for a named release, which refuses as the store does', async () => {
+    const result = await run('passes', { target: version('0.3.0') })
+    expect(result.status).toBe(LAUNCHER_EXIT.failed)
+    expect(result.started).toEqual([])
+    expect(result.asked.checked).toEqual([])
+  })
+
+  it('runs the release-log check of previous, and starts no rollback when it fails', async () => {
+    const checked: RuntimeVersion[] = []
+    const result = await run('passes', { startCheck: (release) => { checked.push(release); return Promise.resolve({ state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'the log forked' }) } })
+    expect(checked).toEqual([PREVIOUS])
+    expect(result.status).toBe(LAUNCHER_EXIT.failed)
+    expect(result.started).toEqual([])
+    expect(result.printed).toContain(`Delo did not start release ${PREVIOUS}: its release-log check failed`)
   })
 })
