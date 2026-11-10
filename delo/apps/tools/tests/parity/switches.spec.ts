@@ -9,15 +9,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PARITY_OVERLAY_PATH, PARITY_SWITCHES, type BuiltParitySwitch, type ParitySwitchEntry } from '@delo/contract-parity-composition'
-import { report, scanParity } from '../../src/parity/composition/check-parity-switches.ts'
+import { BASE_PATCH_PATH, compositionSettings, report, scanParity } from '../../src/parity/composition/check-parity-switches.ts'
 import { changedLines, contributionErrors, findContributions } from '../../src/parity/composition/contributions.ts'
-import { DEFAULT_PARITY, LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parseOverlay, parsePatchFile, readOverlay } from '../../src/parity/composition/overlay.ts'
-import { presenceErrors, registryErrors, scenarioName, switchMarkers, type RowSetting } from '../../src/parity/composition/switches.ts'
+import { DEFAULT_PARITY, LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parseOverlay, readOverlay } from '../../src/parity/composition/overlay.ts'
+import { presenceErrors, registryErrors, scenarioName, switchMarkers } from '../../src/parity/composition/switches.ts'
 import { STAGED_ROOT, sweep, sweepLine } from '../../src/parity/composition/sweep.ts'
 
 const ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
-/** The bundle whose rows name the module of every upstream entry the compositions share. */
-const BASE_PATCH_PATH = 'packages/bundle/base/cordis.patch.yml'
 const roots: string[] = []
 
 afterEach(() => {
@@ -25,7 +23,7 @@ afterEach(() => {
 })
 
 /**
- * A fixture repository with an empty ledger, the real overlay, the local bundle's patch and the given files.
+ * A fixture repository with an empty ledger, the real overlay, the local bundle's and the base bundle's patches and the given files.
  * @param files - repository paths and their contents.
  * @returns the fixture's root.
  */
@@ -36,6 +34,7 @@ function fixtureTree(files: Record<string, string>): string {
     'delo/upstream-patches.json': JSON.stringify({ upstream: { repository: 'r', ref: 't', commit: '0'.repeat(40) }, forkOwned: ['delo/'], patches: [], retired: [] }),
     [PARITY_OVERLAY_PATH]: readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'),
     [LOCAL_BUNDLE_PATCH_PATH]: readFileSync(join(ROOT, LOCAL_BUNDLE_PATCH_PATH), 'utf8'),
+    [BASE_PATCH_PATH]: readFileSync(join(ROOT, BASE_PATCH_PATH), 'utf8'),
     ...files,
   }
   for (const [path, text] of Object.entries(all)) {
@@ -108,28 +107,15 @@ describe('the real tree', () => {
   it('declares the value the shipped composition gives every switch its rows set', () => {
     // `defaultValue` is what Delo's default composition does, and the Config default is the parity value. Nothing held
     // the two together: this switch's entry claimed the change was on while no shipped row set it, so the search tools
-    // kept their stock behaviour in the composition Delo ships. The shipped rows are where the claim is made, and the
-    // base bundle is where a row id's module is written.
-    const rowsOf = (patches: readonly Record<string, unknown>[]): Record<string, unknown>[] => patches
-      .flatMap(row => Array.isArray(row['insert']) ? row['insert'].filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null) : [row])
-    const fileRows = (path: string): Record<string, unknown>[] => rowsOf(parsePatchFile(readFileSync(join(ROOT, path), 'utf8'), path))
-    const moduleOf = new Map([...fileRows(BASE_PATCH_PATH), ...fileRows(LOCAL_BUNDLE_PATCH_PATH)]
-      .flatMap(row => typeof row['id'] === 'string' && typeof row['name'] === 'string' ? [[row['id'], row['name']] as const] : []))
-    const settings = (rows: readonly Record<string, unknown>[]): RowSetting[] => rows.flatMap((row) => {
-      const module = typeof row['name'] === 'string' ? row['name'] : typeof row['id'] === 'string' ? moduleOf.get(row['id']) : undefined
-      if (module === undefined) return []
-      return Object.entries((row['config'] ?? {}) as Record<string, unknown>).map(([key, value]) => ({ module, key, value }))
-    })
-    const shipped = settings(fileRows(LOCAL_BUNDLE_PATCH_PATH))
-    // The parity composition's Delo rows: the bundle in the parity form the overlay restates, and the overlay's own rows.
-    const overlay = readOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
-    const parity = settings([...rowsOf(overlay.localBundle), ...overlay.switches.map(row => ({ ...row }))])
+    // kept their stock behaviour in the composition Delo ships. The shipped rows are where the claim is made.
+    const read = (path: string): string => readFileSync(join(ROOT, path), 'utf8')
+    const { shipped, parity } = compositionSettings(read, readOverlay(read(PARITY_OVERLAY_PATH)))
     const registry = PARITY_SWITCHES as readonly ParitySwitchEntry[]
     const covered = registry.filter((entry): entry is BuiltParitySwitch => entry.state === 'built' && entry.field.kind !== 'presence').flatMap(entry => shipped
       .filter(row => row.module === entry.field.module && row.key === entry.field.key)
       .map(row => ({ id: entry.id, value: row.value, declared: entry.defaultValue })))
-    // A row may be restated per profile; one switch is still one claim. The consent plugins are inserted rows, so the
-    // map above reads their id and name from the local patch too.
+    // A row may be restated per profile; one switch is still one claim. The consent plugins are inserted rows, which
+    // carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
       'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'scheduled_task_consent',
     ])
@@ -246,6 +232,43 @@ describe('a presence switch', () => {
     expect(presenceErrors(registryOver([]), [], [])).toEqual([])
     const planned: ParitySwitchEntry = { id: 'fixture_context', state: 'planned', plannedBy: 'WP0', registeredBy: 'fixture', defaultValue: true, parityValue: false, modelVisible: true, scenario: 'session/delo-fixture-context' }
     expect(presenceErrors([planned], [], [])).toEqual([])
+  })
+})
+
+describe('parity-switches on a presence switch', () => {
+  /** A presence switch on the sandbox row's given key, with the fixture provider Config as its field's source. */
+  const sandboxRegistry = (key: string): ParitySwitchEntry[] => [{
+    id: 'fixture_home', state: 'built', registeredBy: 'fixture', defaultValue: true, parityValue: false, modelVisible: true,
+    scenario: 'session/delo-fixture-home', field: { kind: 'presence', module: '@deepseek-ai/dsh-sandbox-local', source: PRESENCE_SOURCE, key }, sources: [PRESENCE_SOURCE],
+  }]
+  const config = (key: string): string => PRESENCE_CONFIG.replace('  home?: string', `  ${key}?: string`).replace('  home: z.string()', `  ${key}: z.string()`)
+
+  it('holds the key against the rows @delo/bundle-local and the parity overlay set', () => {
+    const root = fixtureTree({ [PRESENCE_SOURCE]: config('protectedHome') })
+    const options = { registry: sandboxRegistry('protectedHome'), upstreamChanges: () => 'all' as const }
+    // The fixture switch has no overlay reason and no scenario, which other checks report; the presence rule is silent.
+    expect(scanParity(root, options).errors.filter(error => error.includes('composition sets'))).toEqual([])
+  })
+
+  it('refuses a key Delo\'s default composition does not set', () => {
+    const root = fixtureTree({ [PRESENCE_SOURCE]: config('unsetKey') })
+    expect(scanParity(root, { registry: sandboxRegistry('unsetKey'), upstreamChanges: () => 'all' }).errors).toContain(
+      'fixture_home: Delo\'s default composition sets no unsetKey on a @deepseek-ai/dsh-sandbox-local row, so the switch is off where it is declared on',
+    )
+  })
+
+  it('reports a composition it cannot read', () => {
+    const root = fixtureTree({ [PRESENCE_SOURCE]: config('protectedHome') })
+    rmSync(join(root, BASE_PATCH_PATH))
+    const errors = scanParity(root, { registry: sandboxRegistry('protectedHome'), upstreamChanges: () => 'all' }).errors
+    expect(errors.filter(error => error.startsWith('parity compositions: '))).toHaveLength(1)
+  })
+
+  it('leaves the presence rule out when the overlay cannot be read', () => {
+    const root = fixtureTree({ [PRESENCE_SOURCE]: config('unsetKey'), [PARITY_OVERLAY_PATH]: 'not: a list\n' })
+    const errors = scanParity(root, { registry: sandboxRegistry('unsetKey'), upstreamChanges: () => 'all' }).errors
+    expect(errors.some(error => error.startsWith(`${PARITY_OVERLAY_PATH}: `))).toBe(true)
+    expect(errors.filter(error => error.includes('composition sets') || error.startsWith('parity compositions: '))).toEqual([])
   })
 })
 

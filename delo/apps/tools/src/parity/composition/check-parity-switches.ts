@@ -15,8 +15,8 @@ import { PARITY_OVERLAY_PATH, PARITY_REGISTRY_VERSION, PARITY_SWITCHES, type Par
 import { readManifest } from '../../check-fork-boundary.ts'
 import { repositoryRoot, runGit } from '../../git.ts'
 import { changedLines, contributionErrors, findContributions, type Contribution } from './contributions.ts'
-import { LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, readOverlay } from './overlay.ts'
-import { registryErrors, switchMarkers, type SwitchMarker } from './switches.ts'
+import { LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parsePatchFile, readOverlay, type ParsedOverlay } from './overlay.ts'
+import { presenceErrors, registryErrors, switchMarkers, type RowSetting, type SwitchMarker } from './switches.ts'
 import { sweep, sweepLine, type SweepRow } from './sweep.ts'
 
 /** What one scan found. */
@@ -81,6 +81,42 @@ function listDir(root: string): (dir: string) => readonly string[] | undefined {
   }
 }
 
+/** The bundle whose rows name the module of every upstream entry the compositions share. */
+export const BASE_PATCH_PATH = 'packages/bundle/base/cordis.patch.yml'
+
+/** The keys the Delo rows of each composition set. */
+export interface CompositionSettings {
+  /** Delo's default composition: the rows of `@delo/bundle-local`'s patch. */
+  readonly shipped: readonly RowSetting[]
+  /** The parity composition: the overlay's restatement of that bundle in its parity form, and the overlay's own rows. */
+  readonly parity: readonly RowSetting[]
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * The keys the Delo rows of Delo's default composition and of the parity composition set. A row's module is the
+ * `name` it carries, otherwise the module the base bundle or `@delo/bundle-local` mounts under its id.
+ * @param read - reads a repository path.
+ * @param overlay - the parsed parity overlay.
+ * @returns the settings of each composition.
+ * @throws Error when the base bundle's or the local bundle's patch cannot be read or parsed.
+ */
+export function compositionSettings(read: (path: string) => string, overlay: ParsedOverlay): CompositionSettings {
+  const rowsOf = (patches: readonly Record<string, unknown>[]): Record<string, unknown>[] =>
+    patches.flatMap(row => Array.isArray(row['insert']) ? row['insert'].filter(isRecord) : [row])
+  const local = rowsOf(parsePatchFile(read(LOCAL_BUNDLE_PATCH_PATH), LOCAL_BUNDLE_PATCH_PATH))
+  const moduleOf = new Map([...rowsOf(parsePatchFile(read(BASE_PATCH_PATH), BASE_PATCH_PATH)), ...local]
+    .flatMap(row => typeof row['id'] === 'string' && typeof row['name'] === 'string' ? [[row['id'], row['name']] as const] : []))
+  const settings = (rows: readonly Record<string, unknown>[]): RowSetting[] => rows.flatMap((row) => {
+    const module = typeof row['name'] === 'string' ? row['name'] : moduleOf.get(String(row['id']))
+    const config = row['config']
+    if (module === undefined || !isRecord(config)) return []
+    return Object.entries(config).map(([key, value]) => ({ module, key, value }))
+  })
+  return { shipped: settings(local), parity: settings([...rowsOf(overlay.localBundle), ...overlay.switches.map(row => ({ ...row }))]) }
+}
+
 /**
  * Scan a repository.
  * @param root - the repository root; it holds `delo/upstream-patches.json` and the parity overlay.
@@ -106,11 +142,20 @@ export function scanParity(root: string, options: ScanOptions = {}): ParityScan 
     ...registryErrors(registry, markers, path => existsSync(join(root, path))),
     ...contributionErrors(contributions, registry),
   ]
+  let overlay: ParsedOverlay | undefined
   try {
-    const overlay = readOverlay(read(PARITY_OVERLAY_PATH))
+    overlay = readOverlay(read(PARITY_OVERLAY_PATH))
     errors.push(...overlayErrors(overlay.switches, registry), ...localBundleErrors(overlay.localBundle, read(LOCAL_BUNDLE_PATCH_PATH)))
   } catch (error) {
     errors.push(`${PARITY_OVERLAY_PATH}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (overlay !== undefined) {
+    try {
+      const { shipped, parity } = compositionSettings(read, overlay)
+      errors.push(...presenceErrors(registry, shipped, parity))
+    } catch (error) {
+      errors.push(`parity compositions: ${String(error)}`)
+    }
   }
   const swept = sweep(registry, { list: listDir(root) })
   errors.push(...swept.errors)

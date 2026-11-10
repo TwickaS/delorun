@@ -23,7 +23,7 @@ import type { BuiltParitySwitch, ParitySwitchEntry, ParitySwitchId } from '@delo
 export const DEFAULT_PARITY: Readonly<Partial<Record<ParitySwitchId, string>>> = {
   preset_inspect: 'its row sits in each Web preset\'s plugin list, which a patch reaches only by replacing the whole preset row',
   container_denial_marker: 'the bundles and the root configurations set sandbox-policy\'s mode and workspace root, which a row would erase',
-  sandbox_protected_reads: 'the bundles set the search tools\' over-cap sampling choice, which a row would erase',
+  sandbox_protected_reads: 'a presence switch: the overlay leaves the sandbox row to upstream, which sets no protectedHome, so no row can set it to its parity value',
   fetch_guard: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the fetchGuard service unmounted, and the provider reads its absence per hop and runs unguarded',
   doctor: 'only the doctor profile mounts the app, and the replay starts no doctor process',
   studio_additions: 'no shipped profile or bundle mounts the main chat, whose row the studio bundle adds with the switch on',

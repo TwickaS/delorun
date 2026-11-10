@@ -95,14 +95,18 @@ function declaredRow(id: string): Record<string, unknown> | undefined {
 type BuiltSwitch = Extract<(typeof PARITY_SWITCHES)[number], { state: 'built' }>
 
 /**
- * The value an enabled top-level row of the default composition gives a switch's Config key. The plugin's schema
- * default is not read: that needs the plugin loaded, which a composition read without a Host does not do.
+ * The value an enabled top-level row of the default composition gives a switch. A boolean switch is its Config key's
+ * value; a presence switch is whether the row sets its key. The plugin's schema default is not read: that needs the
+ * plugin loaded, which a composition read without a Host does not do.
  * @param rows - the composed rows of the default profile.
  * @param entry - a built registry entry.
- * @returns the configured value, or `undefined` when no enabled top-level row mounts the module with that key set.
+ * @returns the configured value, or `undefined` when no enabled top-level row mounts the module with a boolean
+ *   switch's key set.
  */
 function configuredValue(rows: readonly Row[], entry: BuiltSwitch): unknown {
-  return rows.find(candidate => candidate.name === entry.field.module && candidate.disabled !== true)?.config?.[entry.field.key]
+  const value: unknown = rows.find(candidate => candidate.name === entry.field.module && candidate.disabled !== true)?.config?.[entry.field.key]
+  if ('kind' in entry.field && entry.field.kind === 'presence') return value !== undefined && value !== null
+  return value
 }
 
 /**
@@ -116,7 +120,6 @@ const UNREACHED_DEFAULTS: Readonly<Record<string, string>> = {
   plugin_manager_read_exemption: 'the top-level tool-plugin-manager row is disabled and sets no key',
   profile_history: 'the top-level tool-plugin-manager row is disabled and sets no key',
   container_denial_marker: 'the sandbox-policy row sets no containerDenialMarker, and the plugin default is false',
-  sandbox_protected_reads: 'the patched top-level tool-fs-search row is disabled; the presets carry their own tool-fs-search rows without protectedReads',
 }
 
 beforeAll(() => { home = createTestHome() })
