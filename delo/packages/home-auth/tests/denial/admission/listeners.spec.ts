@@ -12,7 +12,7 @@ import {
   ADDRESSES, REACH_LISTENERS, SESSION_COOKIE, StandInHomeAuth, mountFixturePlugin, relayEndpoint, relayTls, tcpEndpoint,
   type Endpoint, type FixturePlugin, type RelayEndpoint, type Reply,
 } from './fixtures.ts'
-import { bootStudio, type Registration, type Studio } from './studio.ts'
+import { bootStudio, targetOf, type Registration, type Studio } from './studio.ts'
 
 /** Compile-time: Delo's contract types are values of the upstream seam's types. */
 type Assignable<T extends U, U> = T
@@ -82,20 +82,6 @@ afterEach(() => {
 function expectRefused(reply: Reply, code: keyof typeof REACH_REFUSAL_STATUS): void {
   expect({ status: reply.status, body: reply.body }).toEqual({ status: REACH_REFUSAL_STATUS[code], body: JSON.stringify({ error: code }) })
   expect(reply.headers['set-cookie']).toBeUndefined()
-}
-
-/** A request target that reaches one registration, and whether it is an upgrade. */
-function targetOf(registration: Registration): { readonly path: string; readonly upgrade: boolean } {
-  switch (registration.kind) {
-    case 'exact': return { path: registration.path, upgrade: false }
-    case 'prefix': return { path: `${registration.path}/admission-probe`, upgrade: false }
-    case 'upgrade': return { path: registration.path, upgrade: true }
-    case 'fallback': return { path: '/admission-probe-fallback', upgrade: false }
-    default: {
-      const unknown: never = registration
-      throw new Error(`unknown registration ${JSON.stringify(unknown)}`)
-    }
-  }
 }
 
 describe('C4 listener and dispatch denials', () => {

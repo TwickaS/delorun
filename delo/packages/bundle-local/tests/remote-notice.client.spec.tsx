@@ -63,6 +63,8 @@ describe('the refused-answer notice', () => {
     expect(t('remote.refused', { action: refusedActionText(t, 'full-access-escalation') }))
       .toBe('这需要你在电脑前操作：授予完全访问权限。请在主机所在电脑上的 studio 中回答这个提示')
     expect(refusedActionText(t, 'device-remove')).toBe('操作“device-remove”')
+    expect(refusedActionText(t, 'workspace-management')).toBe('管理工作区及其指令')
+    expect(refusedActionText(makeTranslate(en), 'workspace-management')).toBe('managing workspaces and their instructions')
     expect(refusedActionText(t, undefined)).toBe('回答这个提示')
   })
 

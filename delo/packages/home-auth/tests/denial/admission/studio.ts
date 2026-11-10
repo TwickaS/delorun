@@ -1,24 +1,27 @@
 /**
  * Boot the web routes of Delo's shipped CLI composition in this process: upstream's web template, which Delo's CLI
- * profiles extend, under a temporary Harness home, with the web server on a port the operating system assigns. Delo's
- * `@delo/bundle-local` layer is left out because its host half registers no route and its browser bundle is built
- * outside upstream's `build:artifacts`. The booted web server's route tables list each shipped route, upgrade route and
- * the fallback for a spec to reach.
+ * profiles extend, under a temporary Harness home, with the web server on a port the operating system assigns. By default
+ * Delo's `@delo/bundle-local` layer is left out, so a spec mounts its own authenticator provider. With `local` the
+ * composition is the whole CLI profile, `@delo/home-auth`, `@delo/reach` and the trash included: the profile links the
+ * bundle as `delorun setup` does for a source checkout, and the loader imports Delo's TypeScript sources through tsx's
+ * ESM hook, as the `delorun` source launch does, registered until the studio closes. The booted web server's route
+ * tables list each shipped route, upgrade route and the fallback for a spec to reach.
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import { boot, createRuntimeResolution, initProfile, loadProfileDirectory, PluginPackages, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type { WebServer, WebRouteKind } from '@deepseek-ai/dsh-host-webserver'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE } from '@delo/bundle-local/profile'
 
-/** The bundles of Delo's CLI profiles without `@delo/bundle-local`: upstream's web template. */
+/** The bundles of Delo's CLI profiles without `@delo/bundle-local`: upstream's web template and the studio bundle. */
 const ROUTE_BUNDLES = DELO_PROFILE_BUNDLES.filter(bundle => bundle !== LOCAL_BUNDLE)
 
 const REPO = fileURLToPath(new URL('../../../../../../', import.meta.url))
 const INSTALL_ANCHOR = join(REPO, 'apps/cli/package.json')
+const LOCAL_PACKAGE_DIR = join(REPO, 'delo/packages/bundle-local')
 
 /** One registration with the web server. */
 export type Registration =
@@ -47,26 +50,62 @@ function registrationsOf(server: WebServer): Registration[] {
   ]
 }
 
+/**
+ * A request target that reaches one registration: an exact or upgrade route's own path, a path under a prefix, and for
+ * the fallback a path no route claims.
+ * @param registration - the registration.
+ * @returns the target, and whether it is an upgrade.
+ */
+export function targetOf(registration: Registration): { readonly path: string; readonly upgrade: boolean } {
+  switch (registration.kind) {
+    case 'exact': return { path: registration.path, upgrade: false }
+    case 'prefix': return { path: `${registration.path}/admission-probe`, upgrade: false }
+    case 'upgrade': return { path: registration.path, upgrade: true }
+    case 'fallback': return { path: '/admission-probe-fallback', upgrade: false }
+    default: {
+      const unknown: never = registration
+      throw new Error(`unknown registration ${JSON.stringify(unknown)}`)
+    }
+  }
+}
+
 /** A booted studio. */
 export interface Studio {
   readonly ctx: Context
+  /** The temporary Harness home the studio runs in. */
+  readonly home: string
   /** Every registration the web server holds once boot has settled. */
   readonly registrations: readonly Registration[]
   /** Dispose the composition and remove the home. */
   readonly close: () => Promise<void>
 }
 
+/** Options of {@link bootStudio}. */
+export interface StudioOptions {
+  /** Boot every bundle of Delo's CLI profiles, `@delo/bundle-local` included. */
+  readonly local?: boolean
+}
+
 /**
  * Boot the studio's web composition.
  * @param trustedHosts - `--trusted-host` values for the loopback listener.
+ * @param options - which bundles the composition holds.
  * @returns the booted studio.
  */
-export async function bootStudio(trustedHosts: readonly string[] = []): Promise<Studio> {
+export async function bootStudio(trustedHosts: readonly string[] = [], options: StudioOptions = {}): Promise<Studio> {
   const home = mkdtempSync(join(tmpdir(), 'delo-admission-'))
   const previousHome = process.env.DSH_HOME
   process.env.DSH_HOME = home
   const profileDir = join(home, 'profiles', 'default')
-  initProfile(profileDir, ROUTE_BUNDLES)
+  initProfile(profileDir, options.local === true ? DELO_PROFILE_BUNDLES : ROUTE_BUNDLES)
+  let unregister = async (): Promise<void> => {}
+  if (options.local === true) {
+    const link = join(profileDir, 'node_modules', LOCAL_BUNDLE)
+    mkdirSync(dirname(link), { recursive: true })
+    symlinkSync(LOCAL_PACKAGE_DIR, link, 'junction')
+    const { register } = await import('tsx/esm/api')
+    unregister = register()
+  }
   const restore = (): void => {
     if (previousHome === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previousHome
@@ -90,18 +129,21 @@ export async function bootStudio(trustedHosts: readonly string[] = []): Promise<
     })
     return {
       ctx,
+      home,
       registrations: registrationsOf(ctx.webServer),
       close: async () => {
         try {
           await ctx.fiber.dispose()
         } finally {
           restore()
+          await unregister()
           rmSync(home, { recursive: true, force: true })
         }
       },
     }
   } catch (error) {
     restore()
+    await unregister()
     rmSync(home, { recursive: true, force: true })
     throw error
   }

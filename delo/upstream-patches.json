@@ -1127,8 +1127,8 @@
     {
       "path": "packages/fs/tool-fs/src/consent.ts",
       "class": "security",
-      "reason": "Instruction-layer consent seam (WP2.15, A101): the write-commit consent lets a plugin require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream.",
-      "sha256": "914f8c7405a5039c70ec42cd97238e5689075393d6413d62d3753c18dabf0995"
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the write-commit consent lets a plugin require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream. A consent verdict may also carry an approval `grants` marker, which goes onto the approval request, so the instruction-layer consent marks its prompt as one only the home's own computer may grant.",
+      "sha256": "ef56bd231a6c48e8c955645f737f1f29cbd8cd5dbdac84f8c022be610681f4da"
     },
     {
       "path": "packages/fs/tool-fs/src/index.ts",
@@ -1931,8 +1931,8 @@
     {
       "path": "packages/interaction/user-approval/src/types.ts",
       "class": "security",
-      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's.",
-      "sha256": "f3623d79dcffe879835bf5765240c8c43f32f29526706c8626d85c0f2f73214b"
+      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's. The marker is the `ApprovalGrant` union, `'full-access'` or `'workspace-management'`; the remote answer guard refuses either when a remote device grants it.",
+      "sha256": "30a91c4260f0a9106c2cd39863bd9a89b333fd6470f32360019f4dbb74d110f3"
     },
     {
       "path": "packages/api/gateway/src/client/index.ts",
@@ -1957,6 +1957,24 @@
       "class": "security",
       "reason": "The snapshot's grants group a policy's bindings by resource once, in first-binding order, instead of comparing every binding with every other, so a snapshot is linear in the bindings; the grants are the same, which a spec checks against the earlier computation on generated policies.",
       "sha256": "7adf0db37907a2834d62345d4bbe9216c0b872176fbaa09961f49825836ad56c"
+    },
+    {
+      "path": "packages/core/tools/src/contracts.ts",
+      "class": "security",
+      "reason": "A tool's `ask` decision may carry an approval `grants` marker, which the pipeline puts on the approval request, so a Delo guard can mark a prompt that only the home's own computer may grant; without a marker, behaviour is upstream's.",
+      "sha256": "990c6ef6dbcce2e142c3ac466f482ef51ab7aa41b1ebb89e861703a1edf514fb"
+    },
+    {
+      "path": "packages/core/tools/src/pipeline.ts",
+      "class": "security",
+      "reason": "Passes an `ask` decision's `grants` marker onto the approval request it raises; without a marker, behaviour is upstream's.",
+      "sha256": "2cef487bb80be456f4eb8b493ca8cad8176b4c603a94d5659902395801ad8782"
+    },
+    {
+      "path": "packages/interaction/user-approval/src/index.ts",
+      "class": "security",
+      "reason": "Exports the `ApprovalGrant` marker type, so Delo plugins can mark prompts that only the home's own computer may grant.",
+      "sha256": "6665282b9987bd80b84ecc92e929d32db98394ced3798e29feb764f56c2eb74d"
     }
   ],
   "retired": []

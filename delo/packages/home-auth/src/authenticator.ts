@@ -7,7 +7,9 @@
  *   factor the provider declares. Its policy is the address's `Host` rule, the `https` scheme, no launch token and the
  *   pre-login routes this package answers. Every request `admit` sees is stamped with the listener before any route
  *   runs, so the routes decide its arrival from the stamp. A request on a pre-login route is `pre-login`; any other
- *   request is admitted only with a live session cookie of that listener, and is refused with C4's code otherwise.
+ *   request is admitted only with a live session cookie of that listener, and is refused with C4's code otherwise. A
+ *   request with a live session whose target is not on `REACH_DEVICE_PATHS` (`./reach-paths.ts`) is refused with
+ *   `403 LOOPBACK_REQUIRED` before any route, upgrade handler or the fallback runs.
  * - **Peers.** Each device is one Peer per listener, created on its first admitted request and disposed when the device
  *   is removed or the provider stops. Its principal is the device's `reach-device` principal, never the owner, so
  *   upstream's Gateway decides each of its calls and forwarded events from the `reach-device` policy this provider
@@ -32,6 +34,8 @@ import { stampListener } from './arrival.ts'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie } from './reach-routes.ts'
 import { createReachAccessPolicy, REACH_DEVICE, reachDevicePrincipal } from './reach-access.ts'
+import { reachesDevicePath } from './reach-paths.ts'
+import { HOME_AUTH_HTTP_STATUS } from './errors.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -42,6 +46,21 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 
 /** The sentence the remote studio shows for a refused full-access grant. */
 export const FULL_ACCESS_REFUSAL = 'This needs you at your computer: granting full access. Answer this prompt in the studio on the home\'s own computer'
+
+/** The sentence the remote studio shows for a refused workspace-management grant. */
+export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs you at your computer: managing workspaces and their instructions. Answer this prompt in the studio on the home\'s own computer'
+
+/**
+ * The `LOOPBACK_REQUIRED` refusal of each grant a reach Peer may not give, by the approval request's `grants` marker
+ * (`ApprovalGrant` of `@deepseek-ai/dsh-user-approval`).
+ */
+const REFUSED_GRANTS: ReadonlyMap<unknown, { readonly action: LoopbackRequiredAction; readonly message: string }> = new Map([
+  ['full-access', { action: 'full-access-escalation', message: FULL_ACCESS_REFUSAL }],
+  ['workspace-management', { action: 'workspace-management', message: WORKSPACE_MANAGEMENT_REFUSAL }],
+])
+
+/** The approval outcomes that grant nothing, which a reach Peer may answer to any prompt. */
+const NON_GRANTING_OUTCOMES: ReadonlySet<unknown> = new Set(['rejected', 'cancelled', 'unavailable'])
 
 /** What the home knows about one Peer a reach listener admitted. */
 export interface ReachPeer {
@@ -120,7 +139,7 @@ export class HomeAuthAuthenticator extends Authenticator {
       this.reachPeers.clear()
     }, 'home-auth reach peers')
     ctx.effect(() => ctx.homeAuth.onDeviceRemoved((deviceId) => { this.disposeDevice(deviceId) }), 'home-auth peer removal')
-    ctx.effect(() => ctx.provide('remoteAnswerGuard', { check: (answer: RemoteEventAnswer) => { this.checkAnswer(answer) } }), 'home-auth full-access grant guard')
+    ctx.effect(() => ctx.provide('remoteAnswerGuard', { check: (answer: RemoteEventAnswer) => { this.checkAnswer(answer) } }), 'home-auth reserved grant guard')
     // Without remote access no Gateway is mounted, so no reach Peer's call is dispatched at all.
     ctx.inject(['remoteAccess'], (access) => {
       access.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({
@@ -141,19 +160,23 @@ export class HomeAuthAuthenticator extends Authenticator {
   }
 
   /**
-   * Refuse a full-access grant answered by a reach Peer, whose session's factor is `tailnet-membership` (C14,
-   * `LOOPBACK_REQUIRED`): an escalation to `danger-full-access`, `plugin_manager`'s included, and a workspace's
-   * full-access consent. Every other answer, a refusal of the same prompt included, applies.
+   * Refuse a granting answer from a reach Peer, whose session's factor is `tailnet-membership` (C14,
+   * `LOOPBACK_REQUIRED`), to an approval prompt whose `grants` marker names a grant the home's own computer keeps:
+   * `full-access` (an escalation to `danger-full-access`, `plugin_manager`'s included, and a workspace's full-access
+   * consent) and `workspace-management` (creating, cloning, trashing or restoring a workspace, changing an
+   * instruction-layer file, and the main chat's commands and writes). Any answer but `rejected`, `cancelled` and
+   * `unavailable` counts as granting. Every other answer, a refusal of the same prompt included, applies.
    * @param answer - the answer and the Peer that gave it.
-   * @throws {RemoteError} `LOOPBACK_REQUIRED` for a refused grant.
+   * @throws {RemoteError} `LOOPBACK_REQUIRED` naming the action for a refused grant.
    */
   checkAnswer(answer: RemoteEventAnswer): void {
-    if (answer.event !== 'approval/request' || answer.value !== 'allowed-once') return
-    if (Reflect.get(answer.request, 'grants') !== 'full-access') return
+    if (answer.event !== 'approval/request' || NON_GRANTING_OUTCOMES.has(answer.value)) return
+    const refusal = REFUSED_GRANTS.get(Reflect.get(answer.request, 'grants'))
+    if (refusal === undefined) return
     // This provider creates every reach Peer, and every reach session this home builds has the factor
     // `tailnet-membership`.
     if (!this.reachPeers.has(answer.peer.id)) return
-    throw new RemoteError('LOOPBACK_REQUIRED', FULL_ACCESS_REFUSAL, { action: 'full-access-escalation' })
+    throw new RemoteError('LOOPBACK_REQUIRED', refusal.message, { action: refusal.action })
   }
 
   /** @inheritdoc */
@@ -180,9 +203,14 @@ export class HomeAuthAuthenticator extends Authenticator {
     if (route !== undefined) return { kind: 'pre-login', route }
     const token = sessionTokenOf(cookieOf(request))
     if (token === undefined) return refused('NOT_SIGNED_IN')
-    // A 101 response is written by the upgrade handler, so a session rolls only on a request without `Upgrade`.
-    const admission = this.ctx.homeAuth.admitToken(token, served.listener, { roll: headerOf(request, 'upgrade') === '' })
+    // A signed-in device reaches only the listed paths (`./reach-paths.ts`); any other target, or none, is refused
+    // after the session is checked, so an expired or rotated session still answers with its own code.
+    const reachable = reachesDevicePath(request.url ?? '')
+    // A 101 response is written by the upgrade handler, so a session rolls only on a request without `Upgrade`, and
+    // never on a refused one, whose response would carry no cookie.
+    const admission = this.ctx.homeAuth.admitToken(token, served.listener, { roll: reachable && headerOf(request, 'upgrade') === '' })
     if (admission.kind === 'refused') return refused(admission.code)
+    if (!reachable) return { kind: 'refused', status: HOME_AUTH_HTTP_STATUS.LOOPBACK_REQUIRED, code: 'LOOPBACK_REQUIRED' }
     const { session, sessionId } = admission
     const key = `${served.listener}\u0000${session.deviceId}`
     let peer = this.peers.get(key)

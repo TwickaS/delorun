@@ -17,7 +17,7 @@ import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/type
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
-import { HomeAuthAuthenticator, matchesPreLogin } from '../src/authenticator.ts'
+import { FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
 import { reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
 import { DeviceStore } from '../src/devices.ts'
@@ -154,7 +154,7 @@ describe('the authenticator provider', () => {
     expect(created.map(peer => peer.disposal.disposed)).toEqual([true, true])
   })
 
-  it('refuses a full-access grant answered from a reach Peer, and nothing else', async () => {
+  it('refuses a full-access or workspace-management grant answered from a reach Peer, and nothing else', async () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
     const admitted = provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
     if (admitted.kind !== 'admitted') throw new Error('not admitted')
@@ -162,11 +162,21 @@ describe('the authenticator provider', () => {
     const check = (peer: PeerScope, fields: { event?: string; request?: object; value?: unknown } = {}): void => {
       provider().checkAnswer({ peer, event: fields.event ?? 'approval/request', request: fields.request ?? { grants: 'full-access' }, value: fields.value ?? 'allowed-once' })
     }
+    const workspace = { grants: 'workspace-management' }
     // Pins the refusal for a Peer a reach listener admitted.
-    expect(() => { check(admitted.peer) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', details: { action: 'full-access-escalation' } }))
+    expect(() => { check(admitted.peer) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: FULL_ACCESS_REFUSAL, details: { action: 'full-access-escalation' } }))
+    // Pins the workspace-management refusal, which names its own action.
+    expect(() => { check(admitted.peer, { request: workspace }) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: WORKSPACE_MANAGEMENT_REFUSAL, details: { action: 'workspace-management' } }))
+    // Pins the granting test: an answer outside the closed outcomes counts as granting.
+    expect(() => { check(admitted.peer, { request: workspace, value: 'allowed' }) }).toThrow(expect.objectContaining({ details: { action: 'workspace-management' } }))
     expect(() => { check(local) }).not.toThrow()
-    expect(() => { check(admitted.peer, { value: 'rejected' }) }).not.toThrow()
+    expect(() => { check(local, { request: workspace }) }).not.toThrow()
+    for (const value of ['rejected', 'cancelled', 'unavailable']) {
+      expect(() => { check(admitted.peer, { value }) }).not.toThrow()
+      expect(() => { check(admitted.peer, { request: workspace, value }) }).not.toThrow()
+    }
     expect(() => { check(admitted.peer, { request: {} }) }).not.toThrow()
+    expect(() => { check(admitted.peer, { request: { grants: 'other' } }) }).not.toThrow()
     expect(() => { check(admitted.peer, { event: 'question/ask' }) }).not.toThrow()
     expect(ctx.get('remoteAnswerGuard')).toBeDefined()
   })
@@ -196,6 +206,39 @@ describe('the authenticator provider', () => {
       expect(next).not.toBe(token)
       const after = provider().admit(request({ headers: { cookie: `__Host-delo-session=${next ?? ''}` } }), 'reach-tailscale-private')
       expect(after.kind === 'admitted' ? after.peer : undefined).toBe(rolled.peer)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('refuses a signed-in device every target off its paths, after the session\'s own refusals and without a roll', async () => {
+    await fiber.dispose()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+      await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      const cookie = { cookie: `__Host-delo-session=${await session(2, SESSION_LIMITS.reach.absoluteMs)}` }
+      const loopbackRequired = { kind: 'refused', status: 403, code: 'LOOPBACK_REQUIRED' }
+      // Pins the path check: without it a live session admits every target, a route that only checks admission included.
+      for (const url of ['/open-in-app/apps', '/assets/../open-in-app/apps', '/apix', undefined]) {
+        expect(provider().admit(request({ url, headers: cookie }), 'reach-tailscale-private')).toEqual(loopbackRequired)
+      }
+      expect(provider().admit(request({ url: '/open-in-app/socket', headers: { ...cookie, upgrade: 'websocket' } }), 'reach-tailscale-private')).toEqual(loopbackRequired)
+      expect(created).toEqual([])
+      // Pins the roll's condition: a refused response carries no cookie, so the session rolls on the next reachable request.
+      const step = 11 * HOUR
+      for (const advance of [step, step, SESSION_LIMITS.reach.rollAfterMs - 2 * step]) {
+        vi.setSystemTime(Date.now() + advance)
+        expect(provider().admit(request({ url: '/open-in-app/apps', headers: cookie }), 'reach-tailscale-private')).toEqual(loopbackRequired)
+      }
+      expect(provider().admit(request({ url: '/api/session.list', headers: cookie }), 'reach-tailscale-private')).toMatchObject({ kind: 'admitted', setCookie: expect.stringMatching(/^__Host-delo-session=/) })
+      // Pins the order: an expired session answers its own code on any target.
+      vi.setSystemTime(Date.now() + SESSION_LIMITS.reach.absoluteMs)
+      expect(provider().admit(request({ url: '/open-in-app/apps', headers: cookie }), 'reach-tailscale-private')).toMatchObject({ kind: 'refused', code: 'SESSION_EXPIRED' })
+      // The loopback listener keeps upstream's admission on every target.
+      provider().admit(request({ url: '/open-in-app/apps' }), 'loopback')
+      expect(builtin.at(-1)?.url).toBe('/open-in-app/apps')
     } finally {
       vi.useRealTimers()
     }
