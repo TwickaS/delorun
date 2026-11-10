@@ -29,5 +29,8 @@
   "devDependencies": {
     "@delo/contract-parity-composition": "workspace:*",
     "js-yaml": "^4.3.2"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

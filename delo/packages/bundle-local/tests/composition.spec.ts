@@ -152,7 +152,7 @@ function configuredValue(rows: readonly Row[], entry: BuiltSwitch): unknown {
  * its cause is fixed, so a fix turns `it.fails` red and this entry is removed.
  */
 const UNREACHED_DEFAULTS: Readonly<Record<string, string>> = {
-  studio_additions: '@delo/plugin-main-chat\'s Config default is false, no row mounts it, and its registrant @delo/bundle-studio does not exist',
+  main_chat: 'the main chat is an experimental plugin that no row of the default composition mounts, and the plugin default is false',
   preset_inspect: 'the module is mounted only inside the agent presets\' plugin lists, which no patch reaches, and the plugin default is false',
   doctor: 'no row of the default composition mounts the module, and the plugin default is false',
   plugin_manager_read_exemption: 'the top-level tool-plugin-manager row is disabled and sets no key',
