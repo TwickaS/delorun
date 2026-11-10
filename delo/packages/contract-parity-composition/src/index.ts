@@ -324,9 +324,13 @@ export const PARITY_SWITCHES = [
       source: 'packages/fs/tool-fs-search/src/index.ts',
       key: 'protectedReads',
     },
+    // The refusal reaches the model through each tool's typed error and filtered result, decided by the sandbox
+    // provider's protected home; these are the files whose behaviour that home changes.
     sources: [
+      'packages/deliverables/tool-present/src/index.ts',
       'packages/fs/tool-fs-search/src/glob.ts',
       'packages/fs/tool-fs-search/src/grep.ts',
+      'packages/fs/tool-fs-search/src/search-core.ts',
     ],
   },
 ] as const satisfies readonly ParitySwitchEntry[]
