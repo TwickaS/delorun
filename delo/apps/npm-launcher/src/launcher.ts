@@ -297,18 +297,21 @@ function rollbackRefusalText(options: Pick<LauncherOptions, 'args' | 'profile'>,
 }
 
 /**
- * What a start stopped by a release-log failure prints: the refusal and how to proceed.
+ * What a start stopped by a release-log failure prints: the refusal and how to proceed, in the launcher's refusal format
+ * and through its redactor, since the check's detail can quote what a server or a file held.
  * @param version - the release.
  * @param check - the failed check.
- * @returns the text, ending with a newline.
+ * @returns the redacted text, every line ending with a newline.
  */
 export function failedStartText(version: RuntimeVersion, check: StartCheckResult): string {
-  return [
-    `Delo did not start release ${String(version)}: its release-log check failed (${String(check.refusal)}): ${String(check.detail)}`,
-    '  Run delorun verify to see every check of this release, and reinstall Delo from its release page if the failure stays.',
-    '  Deleting files under the home\'s trust/ directory does not repair this: the next check finds the same failure, or starts without the record that caught it.',
-    '',
-  ].join('\n')
+  return renderLauncherRefusal({
+    lead: `Delo did not start release ${String(version)}: its release-log check failed.`,
+    reason: codedReason(String(check.refusal), check.detail),
+    remedies: [
+      'Run delorun verify to see every check of this release, and reinstall Delo from its release page if the failure stays.',
+      'Deleting files under the home\'s trust/ directory does not repair this: the next check finds the same failure, or starts without the record that caught it.',
+    ],
+  })
 }
 
 /**

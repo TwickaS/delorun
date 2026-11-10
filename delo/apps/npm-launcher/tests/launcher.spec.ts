@@ -861,6 +861,13 @@ describe('the release-log check at a start', () => {
     expect(run.printed).toContain('Deleting files under the home\'s trust/ directory does not repair this')
   })
 
+  it('redacts a secret the failed check\'s detail quotes before it prints it', async () => {
+    const key = ['sk', '0123456789abcdef0123456789abcdef'].join('-')
+    const run = await startWith({ state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: `the log server answered ${key}` })
+    expect(run.printed).toContain('Why: consistency-proof-invalid: the log server answered [redacted:provider-key]\n')
+    expect(run.printed).not.toContain(key)
+  })
+
   it('still runs delorun verify for a failed release, so the person can see every check', async () => {
     const run = await startWith({ state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'x' }, ['--profile', 'default', 'verify'])
     expect(run.started).toBe(true)
