@@ -1,5 +1,5 @@
 /**
- * The start half of safe mode: when `delorun recover --safe-mode` left its marker under the home's run directory, the
+ * The start half of safe mode: when `delorun recover safe-mode` left its marker under the home's run directory, the
  * home process boots the profile without its third-party bundles and without the person's rows for them. The profile's
  * files are not read differently and not written at all — the filtered layers and one overlay patch are values this
  * start passes to upstream's profile runner — so the next ordinary start loads the whole profile again.
@@ -95,5 +95,5 @@ function writeOverlay(home: string, profile: string, skippedRows: readonly strin
  */
 export function safeModeNotice(start: SafeModeStart): string {
   const left = start.skipped.length === 0 ? 'no third-party bundle' : start.skipped.join(', ')
-  return `Delo starts in safe mode: it leaves out ${left}. Your rows and settings are still in the profile; run \`delorun recover --exit-safe-mode\` to load everything again.\n`
+  return `Delo starts in safe mode: it leaves out ${left}. Your rows and settings are still in the profile; run \`delorun recover exit-safe-mode\` to load everything again.\n`
 }

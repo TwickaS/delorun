@@ -13,7 +13,7 @@ import { prepareHome, type CommandContext } from '../src/command.ts'
 import { EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
-import { startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
+import { runtimeOfFile, startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
 
 const BIN = join(import.meta.dirname, '../src/bin.ts')
 const BUNDLE_LOCAL_DIR = new URL('.', import.meta.resolve('@delo/bundle-local/package.json')).pathname
@@ -211,13 +211,16 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       prepareProfile: upstreamDependencies().prepareProfile,
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
-        return Promise.resolve({ rows: () => rows, shutdown: (code) => { shutdowns.push(code); return Promise.resolve() } })
+        return Promise.resolve({ rows: () => rows, shutdown: (code) => { shutdowns.push(code); return Promise.resolve() }, watchChats: () => {}, studio: () => undefined })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
       probe: () => () => Promise.resolve('answered'),
       onExit: () => undefined,
       exit: () => undefined,
       captureOutput: () => () => undefined,
+      runtime: home => runtimeOfFile(home, join(home, 'not-a-runtime')),
+      updates: () => { throw new Error('a start outside the store has no update support') },
+      handover: async () => Promise.resolve(undefined),
     }
   }
 

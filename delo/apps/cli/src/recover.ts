@@ -1,84 +1,226 @@
 /**
- * `delorun recover` (contract C3): the command a person runs when an update failed or a plugin broke the start. It
- * reads the profile's record and history through [`@delo/profile-safety`](../../../packages/profile-safety/README.md) and
- * carries out one action: report where the profile stands (the default), roll back to the snapshot an update took,
- * restore a named history version, start in safe mode, or end safe mode. Only a rollback or a restore writes profile
- * files, and both write only the files the plan listed.
+ * `delorun recover` (contract C3): the command a person runs when an update failed or a plugin broke the start. One
+ * action per run:
  *
- * The runtime switch is not this command's: switching `current` back is the runtime store's rollback, which
- * `delorun recover` runs in the update work package that owns the store.
+ * | Action | What it does |
+ * | --- | --- |
+ * | `status` (the default) | the profile's last update, its snapshot and history, safe mode, the update record, and every session-data copy and set-aside directory with its size |
+ * | `rollback [--profile-only]` | goes back from the recorded update through C3's one rollback function and its table: through the home process when one runs, otherwise under the home lock here; `--profile-only` restores the profile snapshot and keeps the runtime |
+ * | `restore <version>` | brings back a named profile history version |
+ * | `safe-mode [--reason <text>]`, `exit-safe-mode` | starts without third-party plugins, and ends it |
+ * | `discard <path>` | removes one copy or set-aside directory `status` lists |
+ *
+ * A rollback with no home process running first completes an interrupted restore of a session-data copy, then reads
+ * the update record and applies the table; it never swaps the runtime pointers on its own.
  *
  * @module @delo/cli/recover
  */
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { parseArgs } from 'node:util'
 import { DELO_PROFILE_BUNDLES } from '@delo/bundle-local/profile'
+import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
+import { acquireHomeLock, newStartId, runDirectory } from '@delo/home'
+import type { DeloLogger } from '@delo/logs'
+import { journalPath, queryHomeStatus, readJournal, removeJournal, sendHomeRequest, updateChannelProbe } from '@delo/home-process'
 import { isProfileSafetyError, recover, type RecoverAction } from '@delo/profile-safety'
+import { isStoreError, RuntimeStore } from '@delo/runtime-store'
+import { discardKeptData, isDataSafetyError, listKeptData, recoverDataCopies } from '@delo/update'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { CliError, EXIT } from './exit.ts'
-import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
+import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { removeSafeModeOverlay } from './safe-mode.ts'
+import { runtimeOfFile } from './start.ts'
+import { runtimePlatformOf } from './update/channel.ts'
+import { rollbackRecordedUpdate } from './update/support.ts'
 
 /** The options `delorun recover` takes. */
 const RECOVER_OPTIONS = {
   profile: { type: 'string' },
-  rollback: { type: 'boolean' },
-  restore: { type: 'string' },
-  'safe-mode': { type: 'boolean' },
-  'exit-safe-mode': { type: 'boolean' },
+  'profile-only': { type: 'boolean' },
   reason: { type: 'string' },
   json: { type: 'boolean' },
 } as const
 
+/** The store's retention reports nothing here: a rollback removes no installation. */
+const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
+
+/** The actions, in usage order. */
+const ACTIONS = ['status', 'rollback', 'restore', 'safe-mode', 'exit-safe-mode', 'discard'] as const
+
+/** One action and its argument. */
+type Requested =
+  | { readonly kind: 'status' }
+  | { readonly kind: 'rollback', readonly profileOnly: boolean }
+  | { readonly kind: 'restore', readonly version: string }
+  | { readonly kind: 'safe-mode', readonly reason: string }
+  | { readonly kind: 'exit-safe-mode' }
+  | { readonly kind: 'discard', readonly path: string }
+
+/** The usage line. */
+const USAGE = 'usage: delorun recover [status | rollback [--profile-only] | restore <version> | safe-mode [--reason <text>] | exit-safe-mode | discard <path>] [--profile <name>] [--json]'
+
 /**
- * Read the action from the parsed options.
- * @param values - the parsed options.
- * @returns the action to run; `status` when none is named.
- * @throws {CliError} with the usage code when more than one action is named.
+ * Read the action from the command line.
+ * @param args - the arguments after `recover`.
+ * @returns the action and the options.
+ * @throws {CliError} with the usage code for an unknown action, a missing argument or an option another action owns.
  */
-function actionOf(values: ReturnType<typeof parseOptions<typeof RECOVER_OPTIONS>>): RecoverAction {
-  const named = [values.rollback === true, values.restore !== undefined, values['safe-mode'] === true, values['exit-safe-mode'] === true]
-  if (named.filter(Boolean).length > 1) {
-    throw new CliError(EXIT.usage, 'delorun recover: choose one of --rollback, --restore <version>, --safe-mode or --exit-safe-mode')
+function requested(args: readonly string[]): { readonly action: Requested, readonly profile: string | undefined, readonly json: boolean } {
+  let parsed
+  try {
+    parsed = parseArgs({ args: [...args], options: RECOVER_OPTIONS, strict: true, allowPositionals: true })
+  } catch (error) {
+    throw new CliError(EXIT.usage, `delorun recover: ${error instanceof Error ? error.message : String(error)}\n${USAGE}`)
   }
-  if (values.restore !== undefined) return { kind: 'restore', version: values.restore as ProfileVersionId }
-  if (values.rollback === true) return { kind: 'rollback' }
-  if (values['safe-mode'] === true) return { kind: 'safe-mode', reason: values.reason ?? 'the person asked for safe mode' }
-  if (values['exit-safe-mode'] === true) return { kind: 'exit-safe-mode' }
-  return { kind: 'status' }
+  const [name = 'status', argument, ...extra] = parsed.positionals
+  const known = ACTIONS.find(action => action === name)
+  const needsArgument = known === 'restore' || known === 'discard'
+  if (known === undefined || extra.length > 0 || needsArgument !== (argument !== undefined)) throw new CliError(EXIT.usage, `delorun recover: ${JSON.stringify(parsed.positionals.join(' '))} is not an action\n${USAGE}`)
+  if (parsed.values['profile-only'] === true && known !== 'rollback') throw new CliError(EXIT.usage, `delorun recover: --profile-only belongs to rollback\n${USAGE}`)
+  if (parsed.values.reason !== undefined && known !== 'safe-mode') throw new CliError(EXIT.usage, `delorun recover: --reason belongs to safe-mode\n${USAGE}`)
+  const action: Requested = known === 'rollback' ? { kind: 'rollback', profileOnly: parsed.values['profile-only'] === true }
+    : known === 'restore' ? { kind: 'restore', version: argument! }
+      : known === 'safe-mode' ? { kind: 'safe-mode', reason: parsed.values.reason ?? 'the person asked for safe mode' }
+        : known === 'discard' ? { kind: 'discard', path: argument! }
+          : { kind: known }
+  return { action, profile: parsed.values.profile, json: parsed.values.json === true }
 }
 
-/** `delorun recover`: where the profile stands, and the three ways back contract C3 offers. */
+/**
+ * Whether the profile's home process answers.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @returns true when it answers `status`.
+ */
+async function homeRunning(home: string, profile: string): Promise<boolean> {
+  try {
+    await queryHomeStatus(home, profile, HOME_STATUS_TIMEOUT_MS)
+    return true
+  } catch (_notRunning) {
+    // No token, socket or answer: no home process runs for the profile.
+    return false
+  }
+}
+
+/**
+ * The lines `status` adds about the update record and the kept chat data.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @returns the lines.
+ */
+async function updateLines(home: string, profile: string): Promise<string[]> {
+  const record = await readJournal(journalPath(home, profile))
+  const lines = record === undefined
+    ? ['No update is recorded for a rollback.']
+    : [`The recorded update from Delo ${record.from} to Delo ${record.to} is ${record.phase}; the chat data ${record.dataDiffers ? 'changes format' : 'keeps its format'}${record.dataDiffers ? `, and ${record.copy ? 'a copy was taken' : 'no copy was taken'}` : ''}.`]
+  for (const kept of await listKeptData(home)) lines.push(`${kept.kind === 'copy' ? 'Chat-data copy' : 'Set-aside chat data'}: ${kept.path} (${String(kept.bytes)} bytes); remove it with delorun recover discard ${kept.path}.`)
+  return lines
+}
+
+/**
+ * `rollback` with no home process: under the home lock, complete an interrupted restore, read the update record and
+ * apply C3's table, switching the pointers from the record's target to its source.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @param profileOnly - restore only the profile snapshot.
+ * @param context - the output.
+ * @returns the exit code.
+ */
+async function rollbackOffline(home: string, profile: string, profileOnly: boolean, context: CommandContext): Promise<CommandResult> {
+  const store = new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger: SILENT })
+  const current = await store.pointers().then(pointers => pointers.current, (error: unknown) => {
+    // A home without an installed runtime, as a source checkout runs: no update can be recorded against it.
+    if (isStoreError(error, 'NO_ACTIVE_RUNTIME')) return undefined
+    throw error
+  })
+  const lock = await acquireHomeLock({ runDirectory: runDirectory(home, profile), runtime: current ?? runtimeOfFile(home, fileURLToPath(import.meta.url)).version, probe: updateChannelProbe(home, profile), startId: newStartId() })
+  try {
+    await recoverDataCopies(home)
+    const path = journalPath(home, profile)
+    const record = await readJournal(path)
+    if (record === undefined || current === undefined || current !== record.to) {
+      if (!profileOnly) {
+        context.stderr('delorun recover: NO_UPDATE_RECORD: no update to the running release is recorded, so there is nothing to roll back; delorun recover rollback --profile-only restores the latest profile snapshot.\n')
+        return EXIT.failed
+      }
+      const report = await recover({ profileDir: join(home, 'profiles', profile), homeDir: home, profile, action: { kind: 'rollback' }, changedBy: { kind: 'person' } })
+      for (const line of report.lines) context.stdout(`${line}\n`)
+      return EXIT.ok
+    }
+    const result = await rollbackRecordedUpdate({ home, profile, now: () => new Date() }, record, { profileOnly, switchRuntime: () => store.switchTo(record.to, record.from) })
+    await removeJournal(path)
+    for (const line of result.lines) context.stdout(`${line}\n`)
+    return EXIT.ok
+  } finally {
+    lock.release()
+  }
+}
+
+/**
+ * `rollback` through the running home process.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @param profileOnly - restore only the profile snapshot.
+ * @param context - the output.
+ * @returns the exit code.
+ */
+async function rollbackLive(home: string, profile: string, profileOnly: boolean, context: CommandContext): Promise<CommandResult> {
+  const lines = await sendHomeRequest(home, profile, { op: 'rollback', args: { wait: 'drain', profileOnly } }, {
+    onLine: (line) => { if (line.ok && typeof line.phase === 'string') context.stdout(`… ${line.phase}\n`) },
+  })
+  const final = lines.at(-1)
+  if (final?.ok !== true) {
+    context.stderr(`delorun recover: ${String(final?.error ?? 'no answer')}${typeof final?.detail === 'string' ? `: ${final.detail}` : ''}\n`)
+    return EXIT.failed
+  }
+  context.stdout(final.outcome === 'rolled-back' ? 'Rolled back.\n' : `The rollback ended ${String(final.outcome)}${typeof final.reason === 'string' ? ` (${final.reason})` : ''}.\n`)
+  return final.outcome === 'rolled-back' ? EXIT.ok : EXIT.failed
+}
+
+/** `delorun recover`: where the profile stands, and the ways back contract C3 offers. */
 export const recoverCommand: CliCommand = {
   name: 'recover',
-  summary: 'Where the profile stands after an update, and the way back: --rollback, --restore <version>, --safe-mode, --exit-safe-mode',
+  summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>',
   /**
    * Run `delorun recover`.
    * @param args - the arguments after `recover`.
    * @param context - the environment and output.
-   * @returns the exit code: 0 when the action ran, 1 when profile safety refused it.
+   * @returns the exit code: 0 when the action ran, 1 when it was refused.
    */
   async run(args: readonly string[], context: CommandContext): Promise<CommandResult> {
-    const values = parseOptions('recover', args, RECOVER_OPTIONS)
-    const action = actionOf(values)
-    const { home, profile } = await prepareHome(context, values.profile)
+    const { action, profile: profileFlag, json } = requested(args)
+    const { home, profile } = await prepareHome(context, profileFlag)
     try {
+      switch (action.kind) {
+        case 'rollback':
+          return await (await homeRunning(home.path, profile) ? rollbackLive : rollbackOffline)(home.path, profile, action.profileOnly, context)
+        case 'discard':
+          await discardKeptData(home.path, action.path)
+          context.stdout(`Removed ${action.path}.\n`)
+          return EXIT.ok
+        default:
+          break
+      }
+      const recoverAction: RecoverAction = action.kind === 'restore' ? { kind: 'restore', version: action.version as ProfileVersionId } : action
       const report = await recover({
         profileDir: join(home.path, 'profiles', profile),
         homeDir: home.path,
         profile,
-        action,
+        action: recoverAction,
         installationBundles: DELO_PROFILE_BUNDLES,
         changedBy: { kind: 'person' },
       })
       // Ending safe mode takes the overlay a safe-mode start wrote with it.
       if (action.kind === 'exit-safe-mode') removeSafeModeOverlay(home.path, profile)
-      if (values.json === true) context.stdout(JSON.stringify(report, undefined, 2) + '\n')
-      else for (const line of report.lines) context.stdout(`${line}\n`)
+      const lines = action.kind === 'status' ? [...report.lines, ...await updateLines(home.path, profile)] : report.lines
+      if (json) context.stdout(JSON.stringify({ ...report, lines }, undefined, 2) + '\n')
+      else for (const line of lines) context.stdout(`${line}\n`)
       return EXIT.ok
     } catch (error) {
-      if (!isProfileSafetyError(error)) throw error
+      if (!isProfileSafetyError(error) && !isDataSafetyError(error)) throw error
       context.stderr(`delorun recover: ${error.message}\n`)
-      if (error.remedies.length > 0) context.stderr(`What you can do: ${error.remedies.join(', ')}.\n`)
+      if (isProfileSafetyError(error) && error.remedies.length > 0) context.stderr(`What you can do: ${error.remedies.join(', ')}.\n`)
       return EXIT.failed
     }
   },

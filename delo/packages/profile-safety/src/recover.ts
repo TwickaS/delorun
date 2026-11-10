@@ -143,7 +143,7 @@ export async function recover(request: RecoverRequest): Promise<RecoverReport> {
           ...plan.skipped.length === 0
             ? ['This profile selects no third-party bundles, so the next start loads all of it.']
             : [`The next start leaves out ${plan.skipped.join(', ')}; their rows and your settings stay in the profile.`],
-          'Start Delo again, then run `delorun recover --exit-safe-mode` when it works.',
+          'Start Delo again, then run `delorun recover exit-safe-mode` when it works.',
         ],
       }
     }
@@ -171,7 +171,7 @@ function statusLines(
     versionLine(versions),
     ...ejected.length === 0 ? [] : [`Ejected from this profile: ${ejected.join(', ')}.`],
     ...disabled.length === 0 ? [] : [`Kept disabled by a restore: ${disabled.map(entry => `${entry.name} (${entry.message})`).join(', ')}.`],
-    'Run `delorun recover --rollback` to go back, `--restore <version>` for another version, or `--safe-mode` to start without third-party plugins.',
+    'Run `delorun recover rollback` to go back, `delorun recover restore <version>` for another version, or `delorun recover safe-mode` to start without third-party plugins.',
   ]
 }
 
@@ -207,7 +207,7 @@ function decision(value: boolean | 'pending' | undefined): string {
 }
 
 /**
- * The version `delorun recover --rollback` would go back to.
+ * The version `delorun recover rollback --profile-only` would go back to without an update record.
  * @param profileDir - the profile directory.
  * @returns the latest version's id, or undefined before the first version.
  */

@@ -86,8 +86,9 @@ try {
       root = ctx
       const row = [...ctx.get('loader')?.entries() ?? []].find(entry => entry.options.id === 'session-log-deepseek')
       sessionLogEnabled = (row?.options.config as { enabled?: unknown } | undefined)?.enabled
-      booted = { rows: () => (rowsAtBoot = bootedRows(ctx)), shutdown: code => shutdown.shutdown(code) }
-      return booted
+      const profile: BootedProfile = { rows: () => (rowsAtBoot = bootedRows(ctx)), shutdown: code => shutdown.shutdown(code), watchChats: () => {}, studio: () => undefined }
+      booted = profile
+      return profile
     },
   })
   const confinement = process.argv.includes('--probe-confinement') && root !== undefined ? await probeConfinement(root) : {}

@@ -83,7 +83,7 @@ Safe mode starts the home without third-party bundles and without the person's r
 
 ## delorun recover
 
-`delo/apps/cli/src/recover.ts` runs `recover` for `delorun recover`. With no action it reports the profile's last update, its snapshot, its recent versions, its ejections, the plugins a restore kept disabled and whether safe mode is on. `--rollback` goes back to the snapshot an update took, `--restore <version>` brings back a named version, `--safe-mode` starts without third-party plugins, and `--exit-safe-mode` ends it. `--json` prints the same report as one JSON value.
+`delo/apps/cli/src/recover.ts` runs `recover` for `delorun recover`. With no action, or `status`, it reports the profile's last update, its snapshot, its recent versions, its ejections, the plugins a restore kept disabled and whether safe mode is on. `rollback` goes back from a recorded update through `@delo/update`'s rollback function, which restores the snapshot an update took through `rollbackToSnapshot`; `rollback --profile-only` with no recorded update restores the latest version. `restore <version>` brings back a named version, `safe-mode` starts without third-party plugins, and `exit-safe-mode` ends it. `--json` prints the same report as one JSON value.
 
 ## Errors
 

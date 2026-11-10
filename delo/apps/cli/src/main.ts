@@ -10,7 +10,8 @@
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
  * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
- * | `delorun recover [--rollback \| --restore <version> \| --safe-mode \| --exit-safe-mode]` | where the profile stands after an update, and the way back (contract C3; [recover](./recover.ts)) |
+ * | `delorun update [--check \| --yes] [--data-copy \| --no-data-copy]` | the newest release's report, and the update through the home process (contracts C3, C19; [update](./update/command.ts)) |
+ * | `delorun recover [status \| rollback [--profile-only] \| restore <version> \| safe-mode \| exit-safe-mode \| discard <path>]` | where the profile stands after an update, and the way back (contract C3; [recover](./recover.ts)) |
  * | `delorun trash list \| restore <id> \| purge <id> \| empty` | the trash: what was deleted, restoring an item and deleting one or all forever (contract C8; [trash](./trash/command.ts)) |
  * | `delorun export <chat-or-workspace> --out <file>` | a chat, or a workspace with its chats, as an archive signed by this home (contract C8; [export](./export/command.ts)) |
  * | `delorun import <file>` | an archive checked, shown and imported after the person confirms (contract C8; [import](./import/command.ts)) |
@@ -41,13 +42,14 @@ import { recoverCommand } from './recover.ts'
 import { trashCommand } from './trash/command.ts'
 import { exportCommand } from './export/command.ts'
 import { importCommand } from './import/command.ts'
+import { updateCommand } from './update/command.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
 import { applyDeloVersionEnvironment, DeloVersionError, versionCommand } from './version.ts'
 import { verifyCommand } from './verify/index.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, doctorCommand, logsCommand, recoverCommand, trashCommand, exportCommand, importCommand, verifyCommand, pluginCommand, headlessCommand]
+export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, doctorCommand, logsCommand, updateCommand, recoverCommand, trashCommand, exportCommand, importCommand, verifyCommand, pluginCommand, headlessCommand]
 
 /**
  * The help text.

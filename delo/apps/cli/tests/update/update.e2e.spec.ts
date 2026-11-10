@@ -1,0 +1,233 @@
+/**
+ * `delorun update` and `delorun recover rollback` end to end over a temporary home: fake releases signed with keys
+ * generated here are installed into C1's store, a home process runs in this process with the CLI's real update
+ * support (the store, the report's readers, the profile history, the session-data copies and the one rollback
+ * function), each successor is a fake runtime's own process answering the handover, and the commands run as a person
+ * runs them. The four rounds: an update that passes its health check; one that fails it and rolls back on its own;
+ * one whose data changes, taken with a copy, then rolled back, which restores the copy and sets the newer chat aside;
+ * and the same without a copy, whose rollback refuses until `--profile-only`.
+ */
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import { DELO_HOME_ENTRIES, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { ensureHomeTree, newStartId } from '@delo/home'
+import { CountingChatGate, HomeProcess, journalPath, readJournal, updateChannelProbe, type RunningHost } from '@delo/home-process'
+import { Redactor, type DeloLogger } from '@delo/logs'
+import { RuntimeStore } from '@delo/runtime-store'
+import { EXIT } from '../../src/exit.ts'
+import { main } from '../../src/main.ts'
+import { runtimePlatformOf } from '../../src/update/channel.ts'
+import { runUpdate, type UpdatePrompts } from '../../src/update/command.ts'
+import { storeReportSources } from '../../src/update/sources.ts'
+import { homeUpdateSupport } from '../../src/update/support.ts'
+import { FakeChannel, fakeClosure, signedRelease, throwawayRoot, writeClosure, type FakeBehaviour } from './support.ts'
+
+const PROFILE = 'default'
+const TIMEOUT = { timeout: 120_000 }
+const platform = runtimePlatformOf(process.platform, process.arch)
+const v = (text: string): RuntimeVersion => brandString<RuntimeVersion>(text)
+const SAME = 'a'.repeat(64)
+const NEWER = 'b'.repeat(64)
+
+/** The fake releases: 1.1.0 reads 1.0.0's data; 1.2.0 fails its health check; 1.2.0 and 1.3.0 change the data. */
+const RELEASES = new Map<string, FakeBehaviour>([
+  ['1.0.0', { healthy: true, persistence: SAME }],
+  ['1.1.0', { healthy: true, persistence: SAME }],
+  ['1.2.0', { healthy: false, persistence: NEWER }],
+  ['1.3.0', { healthy: true, persistence: NEWER }],
+])
+
+const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
+const NO_TERMINAL: UpdatePrompts = { confirm: async () => Promise.resolve(false), copy: async () => Promise.resolve(true) }
+
+let base: string
+let home: string
+let osHome: string
+let channel: FakeChannel
+let store: RuntimeStore
+
+beforeAll(async () => {
+  base = realpathSync(mkdtempSync(join(tmpdir(), 'dup-')))
+  osHome = join(base, 'o')
+  home = join(base, 'h')
+  mkdirSync(osHome, { mode: 0o700 })
+  await ensureHomeTree(home, PROFILE)
+  const root = throwawayRoot()
+  writeFileSync(join(home, DELO_HOME_ENTRIES.trust, TRUST_FILES.root), root.bytes, { mode: 0o600 })
+  const profileDir = join(home, 'profiles', PROFILE)
+  mkdirSync(profileDir, { recursive: true, mode: 0o700 })
+  writeFileSync(join(profileDir, 'package.json'), `${JSON.stringify({ name: 'dsh-profile-default', private: true, dependencies: {}, dsh: { profile: { bundles: [] } } }, undefined, 2)}\n`)
+  writeFileSync(join(profileDir, 'cordis.patch.yml'), '')
+  mkdirSync(join(home, 'sessions', 'from-before'), { recursive: true })
+  writeFileSync(join(home, 'sessions', 'from-before', 'log.jsonl'), 'before\n')
+  store = new RuntimeStore({ home, platform, logger: SILENT })
+  channel = new FakeChannel(root.metadata, root.keys.targets, platform, RELEASES, v('1.1.0'))
+  const first = fakeClosure('1.0.0', RELEASES.get('1.0.0')!)
+  await store.install({ version: v('1.0.0'), root: root.metadata, fill: async (directory) => {
+    writeClosure(directory, first)
+    return Promise.resolve(signedRelease(root.keys.targets, platform, '1.0.0', first))
+  } })
+})
+
+afterAll(() => {
+  // Installed runtimes are read-only, as C1 installs them; the owner's write permission comes back before removal.
+  execFileSync('chmod', ['-R', 'u+rwX', base])
+  rmSync(base, { recursive: true, force: true })
+})
+
+/** A started in-process home process on the version `current` names, and how to end it. */
+interface Running {
+  readonly exits: number[]
+  readonly end: () => Promise<void>
+}
+
+/** A Host that boots at once, counts no chats and passes the health check. */
+function host(): RunningHost {
+  return { chats: new CountingChatGate(), failedRows: () => [], check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve() }
+}
+
+/**
+ * Start the home process on the version `current` names, with the CLI's update support.
+ * @returns the process's exit codes and its stop.
+ */
+async function startHome(): Promise<Running> {
+  const { current } = await store.pointers()
+  const exits: number[] = []
+  const listeners: (() => void)[] = []
+  const process_ = await HomeProcess.start({
+    home, profile: PROFILE, running: current, startId: newStartId(), host: { boot: async () => Promise.resolve(host()) },
+    probe: updateChannelProbe(home, PROFILE), logger: SILENT, redactor: new Redactor(),
+    updates: homeUpdateSupport({ home, profile: PROFILE, store, channel, sources: storeReportSources({ home, profile: PROFILE, store, running: current }), now: () => new Date() }),
+    supervisor: undefined,
+    onExit: (listener) => { listeners.push(listener) },
+    exit: (code) => { exits.push(code) },
+  })
+  return {
+    exits,
+    end: async () => {
+      if (exits.length === 0) await process_.shutdown(0)
+      for (const listener of listeners.splice(0)) listener()
+    },
+  }
+}
+
+/**
+ * Run `delorun` in this process against the temporary home.
+ * @param args - the arguments.
+ * @returns the exit code and both outputs.
+ */
+async function delorun(args: readonly string[]): Promise<{ readonly code: number | undefined, readonly stdout: string, readonly stderr: string }> {
+  let stdout = ''
+  let stderr = ''
+  const context = { env: { ...process.env, HOME: osHome, USERPROFILE: osHome, DELO_HOME: home }, stdout: (text: string) => { stdout += text }, stderr: (text: string) => { stderr += text } }
+  const code = args[0] === 'update' ? await runUpdate(args.slice(1), context, NO_TERMINAL) : await main(args, context)
+  return { code, stdout, stderr }
+}
+
+/**
+ * Wait until a condition holds.
+ * @param condition - the condition.
+ * @param what - what is awaited, for the failure.
+ */
+async function until(condition: () => boolean | Promise<boolean>, what: string): Promise<void> {
+  const deadline = Date.now() + 60_000
+  while (!await condition()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`)
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+}
+
+/** Whether a chat directory exists under `sessions/`. */
+const chat = (name: string): boolean => existsSync(join(home, 'sessions', name))
+
+describe('delorun update end to end', TIMEOUT, () => {
+  it('commits an update that passes its health check, without a copy when the data does not change', async () => {
+    const running = await startHome()
+    try {
+      const result = await delorun(['update', '--yes'])
+      expect(result.stderr).toBe('')
+      expect(result.code).toBe(EXIT.ok)
+      expect(result.stdout).toContain('Update from Delo 1.0.0 (DSH 0.2.2) to Delo 1.1.0')
+      expect(result.stdout).not.toContain('Chat data:')
+      expect(result.stdout).toContain('Delo 1.1.0 runs now.')
+      expect((await store.pointers()).current).toBe('1.1.0')
+      await until(async () => (await readJournal(journalPath(home, PROFILE)))?.phase === 'committed', 'the successor\'s commit')
+      expect(existsSync(join(home, 'data-copies'))).toBe(false)
+    } finally {
+      await running.end()
+    }
+  })
+
+  it('rolls an update that fails its health check back on its own, restoring the copy it took', async () => {
+    channel.next = v('1.2.0')
+    const running = await startHome()
+    try {
+      const result = await delorun(['update', '--yes'])
+      expect(result.stdout).toContain('Chat data: Delo 1.2.0 keeps chat data in a format Delo 1.1.0 may not read.')
+      expect(result.code).toBe(EXIT.failed)
+      expect(result.stderr).toContain('Delo 1.2.0 failed its health check (HEALTH_CHECK_FAILED); Delo 1.1.0 runs again')
+      expect((await store.pointers()).current).toBe('1.1.0')
+      expect(chat('opened-by-1.2.0')).toBe(false)
+      expect(chat('from-before')).toBe(true)
+      expect(readdirSync(join(home, 'data-set-aside'))).toHaveLength(1)
+    } finally {
+      await running.end()
+    }
+  })
+
+  it('c03-yes-takes-the-copy, then c03-pointer-swap-applies-the-table: the rollback restores the copy and sets the newer chat aside', async () => {
+    channel.next = v('1.3.0')
+    const running = await startHome()
+    try {
+      const result = await delorun(['update', '--yes'])
+      expect(result.code).toBe(EXIT.ok)
+      expect(result.stdout).toContain('Without the copy, Delo cannot go back to 1.1.0 after 1.3.0 first starts.')
+      expect(result.stdout).toContain('The chat data from before is copied in data-copies/1.3.0.')
+      await until(async () => (await readJournal(journalPath(home, PROFILE)))?.phase === 'committed', 'the successor\'s commit')
+    } finally {
+      await running.end()
+    }
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ from: '1.1.0', to: '1.3.0', dataDiffers: true, copy: true, targetStarted: true })
+    expect(chat('opened-by-1.3.0')).toBe(true)
+    const status = await delorun(['recover', 'status'])
+    expect(status.stdout).toContain('Chat-data copy: data-copies/1.3.0')
+    const rolled = await delorun(['recover', 'rollback'])
+    expect(rolled.stderr).toBe('')
+    expect(rolled.code).toBe(EXIT.ok)
+    expect(rolled.stdout).toContain('Went back from Delo 1.3.0 to Delo 1.1.0')
+    expect(rolled.stdout).toMatch(/1 chat\(s\) created or changed since the update are set aside in data-set-aside\/1\.3\.0-/u)
+    expect(await store.pointers()).toEqual({ current: '1.1.0', previous: '1.3.0' })
+    expect(chat('opened-by-1.3.0')).toBe(false)
+    expect(chat('from-before')).toBe(true)
+    expect(readdirSync(join(home, 'data-set-aside')).some(name => name.startsWith('1.3.0-'))).toBe(true)
+    expect(await readJournal(journalPath(home, PROFILE))).toBeUndefined()
+  })
+
+  it('without a copy, the rollback refuses with ROLLBACK_NEEDS_DATA_COPY and --profile-only keeps the target', async () => {
+    const running = await startHome()
+    try {
+      const result = await delorun(['update', '--yes', '--no-data-copy'])
+      expect(result.code).toBe(EXIT.ok)
+      expect(result.stdout).toContain('Continuing without the copy.')
+      await until(async () => (await readJournal(journalPath(home, PROFILE)))?.phase === 'committed', 'the successor\'s commit')
+    } finally {
+      await running.end()
+    }
+    const refused = await delorun(['recover', 'rollback'])
+    expect(refused.code).toBe(EXIT.failed)
+    expect(refused.stderr).toContain('ROLLBACK_NEEDS_DATA_COPY')
+    expect(refused.stderr).toContain('--profile-only')
+    expect((await store.pointers()).current).toBe('1.3.0')
+    expect(chat('opened-by-1.3.0')).toBe(true)
+    const profileOnly = await delorun(['recover', 'rollback', '--profile-only'])
+    expect(profileOnly.code).toBe(EXIT.ok)
+    expect(profileOnly.stdout).toContain('Delo 1.3.0 keeps running.')
+    expect((await store.pointers()).current).toBe('1.3.0')
+    expect(chat('opened-by-1.3.0')).toBe(true)
+    expect(JSON.parse(readFileSync(join(home, 'profiles', PROFILE, 'delo-safety.json'), 'utf8'))).toMatchObject({ update: { from: '1.1.0', to: '1.3.0', state: 'rolled-back' } })
+  })
+})
