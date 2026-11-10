@@ -479,6 +479,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
     requires: ['ctx.tools', 'ctx.schedule', 'ctx.systemPrompt'],
     writes: ['tool/call', 'Schedule storage domain create, update, or delete', 'tool/result'],
     async mount(ctx) {
+      await ctx.plugin(AgentRegistry)
       // Schema harvest never executes a tool, so the Host service is a stub that answers only the read of the
       // default delivery limits, which the target description names when above the minimum.
       ctx.provide('schedule', {
