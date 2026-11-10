@@ -272,10 +272,10 @@ describe('the gate tiers', () => {
     const checks = catalog(dockerTree, { ...HOST, gates: [gate('gates:commits', { history: true }), gate('gates:docs')] })
     const changed = { base: 'v5', paths: ['delo/packages/providers/src/index.ts', 'packages/core/session/src/index.ts'] }
     const lane = select(checks, dockerTree, { ...NONE, changed, tier: 'lane' })
-    expect(ids(lane)).toEqual(['boundary', 'gates:commits', 'typecheck:upstream', 'typecheck:delo:providers', 'generate:native', 'tests:fork'])
+    expect(ids(lane)).toEqual(['boundary', 'gates:commits', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:providers', 'generate:native', 'tests:fork'])
     expect(lane.find(check => check.id === 'tests:fork')?.scope).toEqual(['delo/packages/providers/'])
     expect(lane.find(check => check.id === 'typecheck:upstream')?.reason).toBe('needed by typecheck:delo:providers')
-    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'lane' })).toEqual(['gates:docs', 'jsdoc', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'tests:docker', 'tests:upstream-changed', 'tests:snapshots', 'parity-switches', 'parity-replay'])
+    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'lane' })).toEqual(['gates:docs', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'tests:docker', 'tests:upstream-changed', 'tests:snapshots', 'parity-switches', 'parity-replay'])
     // Without a changed package the lane tier runs no typecheck of Delo's programs and no specs.
     expect(ids(select(checks, dockerTree, { ...NONE, changed: { base: 'v5', paths: ['README.md'] }, tier: 'lane' }))).toEqual(['boundary', 'gates:commits'])
     const program = CHECKS.find(check => check.id === 'typecheck:delo:control')

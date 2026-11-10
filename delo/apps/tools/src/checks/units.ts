@@ -42,7 +42,11 @@ export interface UnitRule {
   readonly reads: string
 }
 
-/** The suite ids that are unitised: the fork suite and its phases. */
+/**
+ * Whether a check is the fork suite or one of its phases, which are unitised.
+ * @param id - the check's id.
+ * @returns true for `tests:fork` and `tests:fork:<phase>`.
+ */
 export function isForkSuite(id: string): boolean {
   return id === 'tests:fork' || id.startsWith('tests:fork:')
 }

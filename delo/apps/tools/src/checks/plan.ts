@@ -28,7 +28,7 @@ export type GateTier = 'lane' | 'agent' | 'merge'
 export const LANE_LEFT_OUT: readonly string[] = ['gates:docs']
 
 /**
- * Whether the lane tier keeps a check: the boundary check, every repository gate but {@link LANE_LEFT_OUT}, the typecheck of
+ * Whether the lane tier keeps a check: the boundary check, the JSDoc rules, every repository gate but {@link LANE_LEFT_OUT}, the typecheck of
  * a Delo program in a changed package, and the fork suite when a package changed. Every other check is left to the agent
  * and merge tiers; a kept check's needs are still planned.
  * @param check - the check.
@@ -36,7 +36,7 @@ export const LANE_LEFT_OUT: readonly string[] = ['gates:docs']
  * @returns true when the lane tier runs it.
  */
 export function laneKeeps(check: Check, touchedDirs: ReadonlySet<string>): boolean {
-  if (check.id === 'boundary') return true
+  if (check.id === 'boundary' || check.id === 'jsdoc') return true
   if (check.group === 'gates') return !LANE_LEFT_OUT.includes(check.id)
   if (check.group === 'typecheck') {
     const dir = packageDirOf(String(check.command[check.command.indexOf('-p') + 1]))
