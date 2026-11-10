@@ -1544,6 +1544,9 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@deepseek-ai/dsh-llm-mock-server':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/llm-mock-server
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local

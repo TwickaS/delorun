@@ -166,6 +166,8 @@ export interface ForkTree {
   readonly upstream: readonly UpstreamPackage[]
   /** The web browser lane's inventory, from `checks/web.ts`; absent in a tree without one, so the lane is never reached. */
   readonly webSpecs?: readonly WebSpec[] | undefined
+  /** Whether the tree holds the journey spec, {@link JOURNEY_SPEC}; absent counts as not, and the check is not offered. */
+  readonly journey?: boolean | undefined
 }
 
 /** The test runners' worker counts. */
@@ -226,6 +228,12 @@ const FORK_CONFIG = 'delo/vitest.config.ts'
 const DOCKER_CONFIG = 'delo/vitest.docker.config.ts'
 /** The Docker lane's id. */
 export const DOCKER_CHECK_ID = 'tests:docker'
+/** The journey check's id. */
+export const JOURNEY_CHECK_ID = 'journey'
+/** The journey's one spec, which `delo/vitest.docker.config.ts` runs alone under `DELO_JOURNEY=1` and leaves out of the Docker lane. */
+export const JOURNEY_SPEC = 'delo/apps/release/tests/journey/journey.docker.spec.ts'
+/** The checks that need the Docker engine of the active context, which the runner declines while none answers. */
+const ENGINE_CHECKS: readonly string[] = [DOCKER_CHECK_ID, JOURNEY_CHECK_ID]
 // Upstream's own unit configuration, unchanged: the fork's WSL wrapper for it is not part of this tree.
 const UPSTREAM_CONFIG = 'vitest.config.ts'
 // Upstream's own default for the replay's scenarios at once. Ten at once measured 92 s against 110 s for five, bound by the largest scenario file, for 3.7 GB more memory.
@@ -562,6 +570,25 @@ function draft(tree: ForkTree, host: Host): Draft[] {
           cpus: 2,
         } satisfies Draft]
       : [],
+    // Present only in a tree with the journey spec. It builds a release from the tree's artifacts and runs it in containers,
+    // so it waits for every build a stale tree needs and runs alone.
+    ...tree.journey === true
+      ? [{
+          id: JOURNEY_CHECK_ID,
+          mergeOnly: true,
+          group: JOURNEY_CHECK_ID,
+          title: 'The journey: a release built from the tree\'s artifacts, installed through the packed launcher in a clean container that reaches only the spec\'s servers, and walked from setup and a chat through customisation, updates, rollbacks, verify, the trash, export and import (`delo/apps/release/tests/journey`); declined while no engine answers',
+          cwd: '',
+          // The verbose reporter names each step's outcome, `it.fails` steps included, in the check's log.
+          command: [VITEST, 'run', '--config', DOCKER_CONFIG, '--reporter=verbose'],
+          environment: { DELO_JOURNEY: '1' },
+          needs: [...built, ...deloBuilt],
+          inputs: ['delo/**', ...UPSTREAM_CODE],
+          env: TEST_ENV,
+          tiers: ['changed', 'full'],
+          cpus: 4,
+        } satisfies Draft]
+      : [],
     {
       id: 'tests:upstream-changed',
       group: 'tests',
@@ -868,6 +895,10 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     } else if (check.id === DOCKER_CHECK_ID) {
       const docker = tree.packages.find(pkg => pkg.dockerSpecs === true && (forkWide.length > 0 || reachedDirs.has(pkg.dir)))
       if (docker !== undefined) pick(check, `Docker specs of a package a change reaches (${docker.dir})`)
+    } else if (check.id === JOURNEY_CHECK_ID) {
+      // What the installed release runs: Delo code and configuration, and upstream code that reaches the runtime.
+      const release = paths.find(affectsParity)
+      if (release !== undefined) pick(check, `${release.startsWith('delo/') ? 'Delo code' : 'upstream-owned code'} the installed release runs changed (${release})`)
     } else if (check.id === 'tests:snapshots') {
       const upstream = paths.find(path => !path.startsWith('delo/') && affectsUpstreamRuntime(path))
       if (upstream !== undefined) pick(check, `upstream-owned code changed (${upstream})`)
@@ -941,16 +972,16 @@ export function declineClosureOffHost(plan: readonly Planned[], problem: string 
 }
 
 /**
- * Decline the Docker lane while no engine answers, so a merge-tier run fails instead of passing on specs that skip.
- * Probes only when the plan holds the lane.
+ * Decline the Docker lane and the journey while no engine answers, so a merge-tier run fails instead of passing on
+ * specs that skip. Probes once, and only when the plan holds either.
  * @param plan - the plan.
  * @param probe - asks the engine; returns why none answers, or undefined when one does.
- * @returns the plan, with the lane declined for a host limit when the probe names a reason.
+ * @returns the plan, with each check that needs the engine declined for a host limit when the probe names a reason.
  */
 export function declineUnansweredDocker(plan: readonly Planned[], probe: () => string | undefined): Planned[] {
-  if (!plan.some(check => check.id === DOCKER_CHECK_ID)) return [...plan]
+  if (!plan.some(check => ENGINE_CHECKS.includes(check.id))) return [...plan]
   const reason = probe()
-  return plan.map(check => check.id === DOCKER_CHECK_ID && reason !== undefined ? { ...check, declined: reason, declinedByHost: true } : check)
+  return plan.map(check => ENGINE_CHECKS.includes(check.id) && reason !== undefined ? { ...check, declined: reason, declinedByHost: true } : check)
 }
 
 /**

@@ -29,6 +29,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-llm-mock-server": "workspace:*",
     "@delo/bundle-local": "workspace:*",
     "@types/semver": "^7.8.0"
   },

@@ -68,7 +68,7 @@ describe('readTree', () => {
 
   it('reads a tree without a ledger or package directories', () => {
     expect(readTree(makeTree(false)).upstream.some(pkg => pkg.security === true)).toBe(false)
-    expect(readTree(tempDir('delo-batch-empty-'))).toEqual({ packages: [], programs: [], upstream: [], webSpecs: [] })
+    expect(readTree(tempDir('delo-batch-empty-'))).toEqual({ packages: [], programs: [], upstream: [], webSpecs: [], journey: false })
   })
 })
 

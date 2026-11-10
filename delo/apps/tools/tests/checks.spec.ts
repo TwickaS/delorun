@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, removeScratch, scratchDir, scratchPlace, statfsOf, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
-import { affectsParity, declaredBuildOutputs, declineClosureOffHost, declineUnansweredDocker, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
+import { affectsParity, declaredBuildOutputs, declineClosureOffHost, declineUnansweredDocker, JOURNEY_SPEC, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
 import { closureHostProblem } from '../src/checks/closure.ts'
 import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
@@ -499,6 +499,52 @@ async function runDeclined(plan: Planned[]): Promise<{ results: Result[] }> {
     rmSync(logDir, { recursive: true, force: true })
   }
 }
+
+describe('the journey', () => {
+  const journeyTree: ForkTree = { ...TREE, journey: true }
+  const checks = catalog(journeyTree, HOST)
+  const merge = (paths: readonly string[]): Planned[] => select(checks, journeyTree, { ...NONE, changed: { base: 'v5', paths }, tier: 'merge' })
+
+  it('is offered only in a tree that holds its spec, as a merge-only check that runs the spec alone under the Docker configuration', () => {
+    expect(CHECKS.some(check => check.id === 'journey')).toBe(false)
+    expect(JOURNEY_SPEC).toBe('delo/apps/release/tests/journey/journey.docker.spec.ts')
+    const journey = checks.find(check => check.id === 'journey')
+    expect(journey).toMatchObject({ group: 'journey', mergeOnly: true, exclusive: true, environment: { DELO_JOURNEY: '1' }, tiers: ['changed', 'full'], needs: [] })
+    expect(journey?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delo/vitest.docker.config.ts', '--reporter=verbose'])
+    expect(journey?.inputs).toEqual(expect.arrayContaining(['delo/**', 'packages/**']))
+    expect(journey?.memoryBytes).toBe(Math.round(BUDGETS.checks['journey']!.memoryGiB * GIB))
+  })
+
+  it('waits for the builds a stale tree needs, since it releases the tree\'s built artifacts', () => {
+    const stale = catalog(journeyTree, { ...HOST, staleRuntime: ['apps/cli'], staleDeloBuilds: [{ name: '@delo/plugin-trash', reason: 'older' }] })
+    expect(stale.find(check => check.id === 'journey')?.needs).toEqual(['build:artifacts', 'build:delo'])
+  })
+
+  it('runs in the merge tier for a change to what the installed release runs, and not for documentation alone', () => {
+    expect(merge(['delo/packages/providers/src/index.ts']).find(check => check.id === 'journey')?.reason).toBe('Delo code the installed release runs changed (delo/packages/providers/src/index.ts)')
+    expect(merge(['packages/core/session/src/index.ts']).find(check => check.id === 'journey')?.reason).toBe('upstream-owned code the installed release runs changed (packages/core/session/src/index.ts)')
+    expect(ids(merge(['delo/docs/contracts/c03-update-report.md', 'docs/architecture.md']))).not.toContain('journey')
+    const changed = { base: 'v5', paths: ['delo/packages/providers/src/index.ts'] }
+    expect(ids(select(checks, journeyTree, { ...NONE, changed, tier: 'agent' }))).not.toContain('journey')
+    expect(leftForMerge(checks, journeyTree, { ...NONE, changed, tier: 'agent' })).toContain('journey')
+    expect(ids(select(checks, journeyTree, { ...NONE, only: ['journey'], tier: 'agent' }))).toEqual(['journey'])
+  })
+
+  it('is declined for a limit of this host while no engine answers, with the Docker lane on one probe', async () => {
+    const tree: ForkTree = { ...journeyTree, packages: journeyTree.packages.map(pkg => pkg.name === '@delo/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
+    const plan = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'v5', paths: ['delo/packages/providers/src/index.ts'] }, tier: 'merge' })
+    let asked = 0
+    const declined = declineUnansweredDocker(plan, () => { asked += 1; return 'no engine' })
+    expect(asked).toBe(1)
+    expect(declined.filter(check => check.declinedByHost === true).map(check => check.id)).toEqual(['tests:docker', 'journey'])
+    const alone = declineUnansweredDocker(merge(['delo/packages/providers/src/index.ts']), () => 'no engine').find(check => check.id === 'journey')
+    expect(alone).toMatchObject({ declined: 'no engine', declinedByHost: true })
+    const { results } = await runDeclined([alone!])
+    expect(results).toEqual([expect.objectContaining({ id: 'journey', outcome: 'declined', unrun: true })])
+    expect(gateFailure(results[0]!, 'merge')).toBe(true)
+    expect(declineUnansweredDocker(merge(['delo/packages/providers/src/index.ts']), () => undefined).find(check => check.id === 'journey')?.declined).toBeUndefined()
+  })
+})
 
 describe('the build of Delo\'s packages', () => {
   const MANIFEST = {

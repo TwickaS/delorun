@@ -9,7 +9,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { MANIFEST_PATH, parseManifest } from '../fork-boundary.ts'
-import { declaredBuildOutputs, withSecurityPackages, type ForkPackage, type ForkTree, type Program, type UpstreamPackage } from './plan.ts'
+import { declaredBuildOutputs, JOURNEY_SPEC, withSecurityPackages, type ForkPackage, type ForkTree, type Program, type UpstreamPackage } from './plan.ts'
 import { readWebSpecs } from './web.ts'
 
 /** The `package.json` fields the tree reading uses. */
@@ -97,5 +97,5 @@ export function readTree(root: string): ForkTree {
   }
   const patches = existsSync(join(root, MANIFEST_PATH)) ? parseManifest(readFileSync(join(root, MANIFEST_PATH), 'utf8')).patches : []
   const marked = withSecurityPackages(upstream, patches)
-  return { packages, programs, upstream: marked, webSpecs: readWebSpecs(root, marked) }
+  return { packages, programs, upstream: marked, webSpecs: readWebSpecs(root, marked), journey: existsSync(join(root, JOURNEY_SPEC)) }
 }
