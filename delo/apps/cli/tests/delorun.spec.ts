@@ -368,6 +368,8 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     const started = startDriver()
     expect(started.report.outcome, started.stderr).toBe('started')
     expect(started.status).toBe(0)
+    // A row that requires a service no enabled row provides stays pending, and the Host starts with a did-not-activate warning.
+    expect(started.report.rows.filter(row => !row.disabled && row.state !== 'active')).toEqual([])
     expect(started.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ name: LOCAL_BUNDLE, state: 'active', disabled: false })
     expect(started.report.sessionLogEnabled).toBe(false)
   })
