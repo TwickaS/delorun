@@ -8,9 +8,14 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { ReleaseLogCheck } from '@delo/contract-release-log'
+import { leafHash, treeRoot } from '@delo/release/log/merkle'
+import { checkpointBody, signatureLine } from '@delo/release/log/note'
+import { generateKeyPairSync } from 'node:crypto'
 import { Downloader, RELEASE_HOSTS } from '../src/download.ts'
-import { isInstallError, type InstallError } from '../src/errors.ts'
-import { CHECKPOINT_MAX_BYTES, createTilesLogService } from '../src/log.ts'
+import { InstallError as InstallFailure, isInstallError, messageOf, type InstallError } from '../src/errors.ts'
+import { CHECKPOINT_MAX_BYTES, createTilesLogService, refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckRequest } from '../src/log.ts'
+import { fixtureRelease, LOG_ORIGIN, NOW, WITNESS_NAME, logService, type Fixture } from './support.ts'
 
 /** The short timeouts these specs use, so a refusal is reported in milliseconds rather than in contract C1's minute. */
 const TIMINGS = { connectMs: 2_000, stallMs: 500 }
@@ -104,5 +109,107 @@ describe('the release files’ host rule', () => {
     const error = await refusal(new Downloader({ timings: TIMINGS }).bytes('https://rekor.sigstore.dev/checkpoint', CHECKPOINT_MAX_BYTES), 'DOWNLOAD_REFUSED')
     expect(error.source).toBe('https://rekor.sigstore.dev/checkpoint')
     expect(error.detail).toContain('rekor.sigstore.dev is not an allowed host')
+  })
+})
+
+describe('the online check', () => {
+  /**
+   * The check's request for a fixture release, with the log answering what a spec chooses.
+   * @param fixture - the release.
+   * @param service - the log.
+   * @param change - fields to replace.
+   * @returns the request.
+   */
+  function request(fixture: Fixture, service: LogService, change: Partial<OnlineCheckRequest> = {}): OnlineCheckRequest {
+    return { root: fixture.rootMetadata, release: '0.1.0' as OnlineCheckRequest['release'], log: { treeSize: 1, rootHash: treeRoot(fixture.leaves) }, service, now: NOW, ...change }
+  }
+
+  /**
+   * A checkpoint of a tree, signed and cosigned as the fixture's log and witness do.
+   * @param fixture - the release whose keys sign.
+   * @param leaves - the tree's leaves.
+   * @param change - what to leave out or change.
+   * @returns the note.
+   */
+  function note(fixture: Fixture, leaves: readonly Buffer[], change: { readonly origin?: string, readonly logSignature?: boolean, readonly cosign?: boolean, readonly cosignedAt?: number } = {}): string {
+    const origin = change.origin ?? LOG_ORIGIN
+    const body = checkpointBody(origin, leaves.length, treeRoot([...leaves]))
+    const log = change.logSignature === false ? '' : signatureLine(origin, fixture.keys.log, body)
+    const witness = change.cosign === false ? '' : signatureLine(WITNESS_NAME, fixture.keys.witness, body, change.cosignedAt ?? NOW - 60)
+    return `${body}\n${log}${witness}`
+  }
+
+  it('verifies a log whose latest checkpoint is the bundle’s own, and gives the checkpoint to store', async () => {
+    const fixture = await fixtureRelease()
+    const result = await runOnlineCheck(request(fixture, logService(fixture.checkpoint)))
+    expect(result.check).toEqual({ release: '0.1.0', state: 'verified', lastAttempt: NOW })
+    expect(result.checkpoint).toEqual({ treeSize: 1, rootHash: treeRoot(fixture.leaves).toString('hex') })
+  })
+
+  it('proves consistency from the stored checkpoint when it is at least as large as the bundle’s', async () => {
+    const fixture = await fixtureRelease()
+    const stored = { treeSize: 1, rootHash: treeRoot(fixture.leaves).toString('hex') }
+    expect((await runOnlineCheck(request(fixture, logService(fixture.checkpoint), { stored }))).check.state).toBe('verified')
+  })
+
+  it('finds the release unchecked, with the reason, when the log does not answer, the proof is not served or the checkpoint is stale', async () => {
+    const fixture = await fixtureRelease()
+    const silent = await runOnlineCheck(request(fixture, { checkpoint: () => Promise.reject('connection refused'), consistency: () => Promise.reject(new Error('unused')) }))
+    expect(silent).toMatchObject({ check: { state: 'unchecked' }, detail: 'the release log did not answer: connection refused' })
+    const two = [...fixture.leaves, leafHash(Buffer.from('second'))]
+    const growing = await runOnlineCheck(request(fixture, { checkpoint: () => Promise.resolve(note(fixture, two)), consistency: () => Promise.reject(new Error('503')) }))
+    expect(growing).toMatchObject({ check: { state: 'unchecked' }, detail: 'the release log gave no consistency proof: 503' })
+    const stale = await runOnlineCheck(request(fixture, logService(note(fixture, fixture.leaves, { cosignedAt: NOW - 90_000 }))))
+    expect(stale).toMatchObject({ check: { state: 'unchecked' }, detail: expect.stringContaining('25 hours old') as string })
+  })
+
+  it('fails a checkpoint that is not the log’s: too large, unreadable, another origin, unsigned by the log or not cosigned by a listed witness', async () => {
+    const fixture = await fixtureRelease()
+    const failure = async (checkpoint: string): Promise<ReleaseLogCheck['failure']> => (await runOnlineCheck(request(fixture, logService(checkpoint)))).check.failure
+    expect(await failure('x'.repeat(CHECKPOINT_MAX_BYTES + 1))).toBe('log-signature-invalid')
+    expect(await failure('not a checkpoint')).toBe('log-signature-invalid')
+    expect(await failure(note(fixture, fixture.leaves, { origin: 'other.example/log' }))).toBe('log-signature-invalid')
+    expect(await failure(note(fixture, fixture.leaves, { logSignature: false }))).toBe('log-signature-invalid')
+    expect(await failure(note(fixture, fixture.leaves, { cosign: false }))).toBe('witness-cosignature-missing')
+    const stranger = generateKeyPairSync('ed25519').privateKey
+    const body = checkpointBody(LOG_ORIGIN, 1, treeRoot([...fixture.leaves]))
+    expect(await failure(`${body}\n${signatureLine(LOG_ORIGIN, fixture.keys.log, body)}${signatureLine('stranger.example', stranger, body, NOW - 60)}`)).toBe('witness-cosignature-missing')
+  })
+
+  it('fails a log that has gone backwards from the stored checkpoint, or whose proof does not verify', async () => {
+    const fixture = await fixtureRelease()
+    const stored = { treeSize: 5, rootHash: 'cd'.repeat(32) }
+    expect((await runOnlineCheck(request(fixture, logService(fixture.checkpoint), { stored }))).check.failure).toBe('checkpoint-rolled-back')
+    const two = [...fixture.leaves, leafHash(Buffer.from('second'))]
+    expect((await runOnlineCheck(request(fixture, logService(note(fixture, two))))).check.failure).toBe('consistency-proof-invalid')
+  })
+
+  it('refuses an install only for a failed check, naming the reason, and lets a verified or unchecked one go on', () => {
+    const verified: ReleaseLogCheck = { release: '0.1.0' as ReleaseLogCheck['release'], state: 'verified', lastAttempt: 1 }
+    expect(() => refuseFailedLog({ check: verified }, 'release 0.1.0')).not.toThrow()
+    expect(() => refuseFailedLog({ check: { ...verified, state: 'unchecked' }, detail: 'down' }, 'release 0.1.0')).not.toThrow()
+    expect(() => refuseFailedLog({ check: { ...verified, state: 'failed', failure: 'checkpoint-rolled-back' } }, 'release 0.1.0')).toThrow('(checkpoint-rolled-back); nothing was installed')
+    expect(() => refuseFailedLog({ check: { ...verified, state: 'failed' } }, 'release 0.1.0')).toThrow('(unknown)')
+  })
+})
+
+describe('the consistency proof a tiles log serves', () => {
+  it('reads hashes with or without the older size in front, and refuses a body that is not a list of hashes', async () => {
+    const withoutSize = Buffer.alloc(64, 7)
+    const origin = await standIn((request, response) => {
+      if (request.url?.includes('first=2')) response.writeHead(200).end(withoutSize)
+      else response.writeHead(200).end(Buffer.alloc(33))
+    })
+    const service = createTilesLogService({ origin, hosts: ['127.0.0.1'], downloader: new Downloader({ timings: TIMINGS }) })
+    expect(await service.consistency(2, 4)).toHaveLength(2)
+    const error = await refusal(service.consistency(3, 4), 'DOWNLOAD_FAILED')
+    expect(error.detail).toContain('33 bytes, which is not a list of 32-byte hashes')
+  })
+})
+
+describe('an install failure’s message', () => {
+  it('is the error’s own message, or the text of whatever else was thrown', () => {
+    expect(messageOf(new InstallFailure('DOWNLOAD_FAILED', 'x', 'detail'))).toBe('DOWNLOAD_FAILED: detail')
+    expect(messageOf('plain text')).toBe('plain text')
   })
 })

@@ -48,7 +48,6 @@ export interface RemedyContext {
 export function installRemedies(code: InstallErrorCode): readonly string[] {
   switch (code) {
     case 'DOWNLOAD_FAILED':
-    case 'RELEASE_LOG_UNCHECKED':
       return ['Check this computer\'s connection, then run the same command again.']
     case 'NO_TRUSTED_ROOT':
       return ['Install Delo from the install script on its release page.']
@@ -106,8 +105,6 @@ function installRefusal(error: InstallError): Refusal {
         return `Delo refused the runtime archive ${error.source}: ${error.detail}. Nothing was installed.`
       case 'RELEASE_LOG_FAILED':
         return `Delo refused ${error.source} because its release-log check failed: ${error.detail}`
-      case 'RELEASE_LOG_UNCHECKED':
-        return `Delo could not check ${error.source} against the release log, so it installed nothing: ${error.detail}`
       case 'RELEASE_NOT_OFFERED':
         return `Delo did not install that release: ${error.detail}`
       case 'RELEASE_METADATA_INVALID':
@@ -118,7 +115,7 @@ function installRefusal(error: InstallError): Refusal {
         return `This launcher cannot verify any release: ${error.detail}`
     }
   })()
-  return { text: `${lead}\n${remedies.map(remedy => `  ${remedy}`).join('\n')}${remedies.length === 0 ? '' : '\n'}`, exit: LAUNCHER_EXIT.failed, remedies }
+  return { text: `${lead}\n${remedies.map(remedy => `  ${remedy}\n`).join('')}`, exit: LAUNCHER_EXIT.failed, remedies }
 }
 
 /**

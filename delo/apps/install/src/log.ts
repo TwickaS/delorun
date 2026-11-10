@@ -2,10 +2,11 @@
  * Contract C18's online check, "Consistency with the current log": the launcher fetches the log's latest checkpoint
  * with its witness cosignatures, requires a valid log signature and at least the root's witness threshold of listed
  * cosignatures no older than 24 hours, verifies an RFC 6962 consistency proof from the checkpoint it verified before
- * (the bundle's, or the stored one) to the latest, and stores the latest. An unreachable log or distributor leaves
- * the release `unchecked`, which is not a failure; a bad signature, a missing cosignature, a proof that does not
- * verify or a checkpoint smaller than the stored one is `failed`. An install needs `verified`, so both other states
- * refuse it and the running version stays.
+ * (the bundle's, or the stored one) to the latest, and stores the latest. An unreachable log or distributor, or a
+ * latest witnessed checkpoint older than 24 hours, leaves the release `unchecked`, which is not a failure; a bad
+ * signature, a missing cosignature, a proof that does not verify or a checkpoint smaller than the stored one is
+ * `failed`. An install goes on from `unchecked` with a warning and a record that the check did not run, and refuses
+ * a `failed` check (contract C18, "Behaviour per client").
  *
  * @module @delo/install/log
  */
@@ -14,7 +15,7 @@ import type { RootMetadata, SemanticVersion } from '@delo/contract-release-manif
 import { verifyConsistency } from '@delo/release/log/merkle'
 import { parseCheckpoint, parseVerifier, splitNote, verifySignature, type Checkpoint, type NoteSignature } from '@delo/release/log/note'
 import type { Downloader } from './download.ts'
-import { InstallError } from './errors.ts'
+import { InstallError, messageOf } from './errors.ts'
 import type { StoredCheckpoint } from './state.ts'
 
 /** The largest checkpoint note read: a body and one signature line per witness. */
@@ -51,16 +52,19 @@ export interface OnlineCheckResult {
   readonly check: ReleaseLogCheck
   /** The latest checkpoint, to store, when the check verified. */
   readonly checkpoint?: StoredCheckpoint
+  /** Why the check did not run, when the state is `unchecked`. */
+  readonly detail?: string
 }
 
 /**
- * The record of a check that did not run, which is not a failure.
+ * The result of a check that did not run, which is not a failure.
  * @param release - the release.
  * @param now - the client's clock in Unix seconds.
- * @returns the record, in the `unchecked` state.
+ * @param detail - why the check could not run.
+ * @returns the record, in the `unchecked` state, with the reason.
  */
-function unchecked(release: SemanticVersion, now: number): ReleaseLogCheck {
-  return { release, state: 'unchecked', lastAttempt: now }
+function unchecked(release: SemanticVersion, now: number, detail: string): OnlineCheckResult {
+  return { check: { release, state: 'unchecked', lastAttempt: now }, detail }
 }
 
 /**
@@ -122,15 +126,15 @@ export interface OnlineCheckRequest {
  * Run contract C18's online check.
  * @param request - the root, the release, the bundle's checkpoint, the stored one, the service and the clock.
  * @returns the record, and the checkpoint to store when the check verified; an unreachable log gives `unchecked` and a
- *   verifiable failure gives `failed`, so the caller applies {@link requireVerifiedLog} to refuse an install.
+ *   verifiable failure gives `failed`, so the caller applies {@link refuseFailedLog} to refuse an install.
  */
 export async function runOnlineCheck(request: OnlineCheckRequest): Promise<OnlineCheckResult> {
   const { root, release, now } = request
   let note: string
   try {
     note = await request.service.checkpoint()
-  } catch {
-    return { check: unchecked(release, now) }
+  } catch (error) {
+    return unchecked(release, now, `the release log did not answer: ${messageOf(error)}`)
   }
   if (Buffer.byteLength(note) > CHECKPOINT_MAX_BYTES) return { check: failed(release, 'log-signature-invalid', now) }
   let body: string
@@ -149,7 +153,9 @@ export async function runOnlineCheck(request: OnlineCheckRequest): Promise<Onlin
   if (!signatures.some(line => verifySignature(log, body, line) === true)) return { check: failed(release, 'log-signature-invalid', now) }
   const cosigned = cosignatures(root, body, signatures)
   if (cosigned.count < root.witnesses.threshold) return { check: failed(release, 'witness-cosignature-missing', now) }
-  if (cosigned.time !== undefined && now - cosigned.time > MAX_WITNESSED_CHECKPOINT_AGE_SECONDS) return { check: unchecked(release, now) }
+  if (cosigned.time !== undefined && now - cosigned.time > MAX_WITNESSED_CHECKPOINT_AGE_SECONDS) {
+    return unchecked(release, now, `the log's newest witnessed checkpoint is ${String(Math.floor((now - cosigned.time) / 3600))} hours old, and a check needs one from the last ${String(MAX_WITNESSED_CHECKPOINT_AGE_SECONDS / 3600)} hours`)
+  }
   const stored = request.stored
   const from = Math.max(request.log.treeSize, stored?.treeSize ?? 0)
   const fromRoot = stored !== undefined && stored.treeSize >= request.log.treeSize ? Buffer.from(stored.rootHash, 'hex') : Buffer.from(request.log.rootHash)
@@ -157,8 +163,8 @@ export async function runOnlineCheck(request: OnlineCheckRequest): Promise<Onlin
   let proof: readonly Uint8Array[]
   try {
     proof = await request.service.consistency(from, latest.size)
-  } catch {
-    return { check: unchecked(release, now) }
+  } catch (error) {
+    return unchecked(release, now, `the release log gave no consistency proof: ${messageOf(error)}`)
   }
   if (!verifyConsistency(from, latest.size, fromRoot, latest.rootHash, proof)) {
     return { check: failed(release, 'consistency-proof-invalid', now) }
@@ -170,19 +176,17 @@ export async function runOnlineCheck(request: OnlineCheckRequest): Promise<Onlin
 }
 
 /**
- * Refuse an install whose online check did not verify (contract C18, R3).
+ * Refuse an install whose online check failed verifiably (contract C18, R3). A check that did not run is not refused
+ * here: the install continues on the release's signature, and the caller warns and records the outcome.
  * @param result - what {@link runOnlineCheck} found.
  * @param source - the release the refusal names.
- * @throws {InstallError} `RELEASE_LOG_FAILED` for a verifiable failure, naming C18's reason code; `RELEASE_LOG_UNCHECKED`
- *   when the check could not run.
+ * @throws {InstallError} `RELEASE_LOG_FAILED`, naming C18's reason code, when the log answered and contradicts the
+ *   release.
  */
-export function requireVerifiedLog(result: OnlineCheckResult, source: string): void {
+export function refuseFailedLog(result: OnlineCheckResult, source: string): void {
   const { check } = result
-  if (check.state === 'verified') return
-  if (check.state === 'failed') {
-    throw new InstallError('RELEASE_LOG_FAILED', source, `the release log failed its check (${check.failure ?? 'unknown'}); nothing was installed`)
-  }
-  throw new InstallError('RELEASE_LOG_UNCHECKED', source, 'the release log could not be checked, and an install needs a passing online check; nothing was installed')
+  if (check.state !== 'failed') return
+  throw new InstallError('RELEASE_LOG_FAILED', source, `the release log failed its check (${check.failure ?? 'unknown'}); nothing was installed`)
 }
 
 /** What a tlog-tiles log service needs. */

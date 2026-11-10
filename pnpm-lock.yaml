@@ -1348,6 +1348,9 @@ importers:
       '@delo/release':
         specifier: workspace:*
         version: link:../release
+      '@delo/release-verify':
+        specifier: workspace:*
+        version: link:../../packages/release-verify
       '@delo/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
@@ -1379,9 +1382,19 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../../packages/logs
+      '@delo/release':
+        specifier: workspace:*
+        version: link:../release
+      '@delo/release-verify':
+        specifier: workspace:*
+        version: link:../../packages/release-verify
       '@delo/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
+    devDependencies:
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
   delo/apps/relay:
     dependencies:
@@ -1471,6 +1484,13 @@ importers:
       dsh-python-runtime-closure:
         specifier: workspace:*
         version: link:../../../python/sdk-runtime
+    devDependencies:
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../../packages/contract-release-manifest
+      '@delo/runtime-store':
+        specifier: workspace:*
+        version: link:../../packages/runtime-store
 
   delo/apps/tools:
     dependencies:

@@ -1,0 +1,198 @@
+/**
+ * The installable path end to end, on throwaway keys and local servers only: `local-release.ts` signs a release into a
+ * channel directory, a server in the spec serves it, the launcher is built with the spec's root and that server as its
+ * channel origin and packed, and `npm exec` runs the tarball the way `npx` does. The launcher's log origin is a closed
+ * port, so the install continues on the signature, prints the warning and records that the log check did not run.
+ *
+ * The runtime in the release is a fixture: its Node is a script that hands over to the Node running the spec, and its
+ * `delorun` entry file prints the version its package carries. The spec shows that the launcher installs, verifies and
+ * starts the runtime that launch protocol 1 names and that the version stamped by the release build reaches it; it does
+ * not start the Host, which `tests/closure/boot.closure.spec.ts` does for a closure built from the real tree.
+ */
+import { execFile, execFileSync } from 'node:child_process'
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { join } from 'node:path'
+import { describe, expect, it, type TestContext } from 'vitest'
+import { buildLauncher } from '../../../npm-launcher/src/build.ts'
+import { scratch } from '../support.ts'
+import { closedPort, fixtureClosure, keyFile, runEntryAsync, serveChannel, serveLog, trust, type Trust } from './support.ts'
+
+/** The progress lines for an install that could not reach the log. */
+const VERSION = '0.1.0'
+
+/** What a release served from a channel directory needs. */
+interface Served {
+  readonly directory: string
+  readonly channel: string
+  readonly origin: string
+  readonly rootPath: string
+  readonly trusted: Trust
+}
+
+/**
+ * Build version 0.1.0 with `local-release.ts` into a channel directory and serve it.
+ * @param test - the running test.
+ * @returns the served channel.
+ */
+async function servedRelease(test: TestContext): Promise<Served> {
+  const directory = scratch(test)
+  // An installed runtime is read-only (contract C1), so the home is made writable again before the directory is removed.
+  test.onTestFinished(() => { execFileSync('chmod', ['-R', 'u+rwX', directory]) })
+  const trusted = trust()
+  const log = await serveLog(test, trusted)
+  const closures = join(directory, 'closures')
+  mkdirSync(closures)
+  await fixtureClosure(test, VERSION)(closures)
+  const rootPath = join(directory, 'root.json')
+  writeFileSync(rootPath, trusted.root)
+  const channel = join(directory, 'channel')
+  const built = await runEntryAsync('local-release.ts', [
+    '--version', VERSION, '--out', channel, '--root', rootPath,
+    '--targets-key', keyFile(directory, 'targets.pem', trusted.keys.targets),
+    '--timestamp-key', keyFile(directory, 'timestamp.pem', trusted.keys.timestamp),
+    '--state', join(directory, 'state.json'),
+    '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles,
+    '--closures-from', closures,
+  ])
+  expect(built.stderr).toBe('')
+  expect(built.status).toBe(0)
+  return { directory, channel, origin: await serveChannel(test, channel), rootPath, trusted }
+}
+
+/** A finished child process. */
+interface Finished {
+  readonly status: number | null
+  readonly stdout: string
+  readonly stderr: string
+}
+
+/**
+ * Run a command without blocking this process, because the servers the command talks to run in it.
+ * @param command - the executable.
+ * @param args - its arguments.
+ * @param env - its whole environment.
+ * @returns its exit status and output.
+ */
+function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv): Promise<Finished> {
+  return new Promise((resolve) => {
+    execFile(command, [...args], { encoding: 'utf8', timeout: 120_000, env }, (error, stdout, stderr) => {
+      resolve({ status: error === null ? 0 : typeof error.code === 'number' ? error.code : null, stdout, stderr })
+    })
+  })
+}
+
+/**
+ * Run the packed launcher as `npx` does, in an environment that holds only a path, a home for npm and the Delo home.
+ * @param tarball - the packed launcher.
+ * @param home - the Delo home the run installs into.
+ * @param args - the arguments after the command name.
+ * @param scratchDirectory - a directory for npm's cache and home.
+ * @returns the run's status and output.
+ */
+function npx(tarball: string, home: string, args: readonly string[], scratchDirectory: string): Promise<Finished> {
+  return run('npm', ['exec', '--yes', `--package=${tarball}`, '--', 'delorun', ...args], {
+    PATH: process.env.PATH ?? '',
+    HOME: scratchDirectory,
+    DELO_HOME: home,
+    npm_config_cache: join(scratchDirectory, 'npm-cache'),
+    npm_config_offline: 'true',
+    npm_config_update_notifier: 'false',
+    npm_config_audit: 'false',
+    npm_config_fund: 'false',
+  })
+}
+
+/** The build, the pack and `npm exec` take seconds each, so the specs of this file get a longer limit. */
+const LIMIT = { timeout: 180_000 }
+
+/**
+ * Run the packed launcher's `bin` with Node directly, from the tarball's unpacked content.
+ * @param tarball - the packed launcher.
+ * @param home - the Delo home the run installs into.
+ * @param args - the arguments after the command name.
+ * @param scratchDirectory - a directory to unpack into.
+ * @returns the run's status and output.
+ */
+function node(tarball: string, home: string, args: readonly string[], scratchDirectory: string): Promise<Finished> {
+  const unpacked = join(scratchDirectory, 'unpacked')
+  if (!existsSync(unpacked)) {
+    mkdirSync(unpacked)
+    execFileSync('tar', ['-xzf', tarball, '-C', unpacked])
+  }
+  return run(process.execPath, [join(unpacked, 'package', 'dist', 'bin.js'), ...args], { PATH: process.env.PATH ?? '', DELO_HOME: home })
+}
+
+describe('the built launcher against a local release', LIMIT, () => {
+  it('installs it with the log unreachable: prints each step and the warning, records the check, and starts the runtime', async (test) => {
+    const served = await servedRelease(test)
+    const port = await closedPort()
+    const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: `http://127.0.0.1:${String(port)}` }, version: '0.0.1-e2e' })
+    const home = join(served.directory, 'home')
+    const first = await npx(built.tarball, home, ['--version'], served.directory)
+    expect(first.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))).toEqual([
+      'Resolving the release: the stable channel names 0.1.0.',
+      'Checking the signature: 0.1.0 is signed under release root 1.',
+      expect.stringMatching(/^Checking the release log: not checked \(the release log did not answer: .+\)\.$/u),
+      'Warning: Release 0.1.0 has not been checked against the release log; Delo checks it at the next connection.',
+      expect.stringMatching(/^Downloading delorun-0\.1\.0-linux-x64\.tar\.gz \(\d+(\.\d)? (kB|MB)\)\.$/u),
+      'Installing release 0.1.0.',
+    ])
+    expect(first.stdout).toBe('Delo 0.1.0\n')
+    expect(first.status).toBe(0)
+    expect(readdirSync(join(home, 'runtimes'))).toEqual(expect.arrayContaining([VERSION, 'current', 'store.json', `delorun-${VERSION}.manifest.json`, `delorun-${VERSION}.manifest.log.json`]))
+    const state = JSON.parse(readFileSync(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string, detail?: string }> }
+    expect(state.releases[VERSION]?.state).toBe('unchecked')
+    expect(state.releases[VERSION]?.detail).toContain('the release log did not answer')
+    // A start needs no network and prints none of the install lines.
+    const second = await node(built.tarball, home, ['--version'], served.directory)
+    expect(second.stdout).toBe('Delo 0.1.0\n')
+    expect(second.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))).toEqual([])
+    expect(second.status).toBe(0)
+  })
+
+  it('refuses an archive with one changed byte before anything is written to the store', async (test) => {
+    const served = await servedRelease(test)
+    const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: `http://127.0.0.1:${String(await closedPort())}` }, version: '0.0.1-e2e' })
+    const archive = join(served.channel, 'releases', 'download', `v${VERSION}`, `delorun-${VERSION}-linux-x64.tar.gz`)
+    const bytes = readFileSync(archive)
+    bytes[bytes.byteLength - 1] = bytes[bytes.byteLength - 1]! ^ 0xff
+    chmodSync(archive, 0o644)
+    writeFileSync(archive, bytes)
+    const home = join(served.directory, 'home')
+    const finished = await node(built.tarball, home, ['--version'], served.directory)
+    expect(finished.status).toBe(1)
+    expect(finished.stderr).toContain('Delo refused release delorun-0.1.0-linux-x64.tar.gz, which did not verify')
+    expect(finished.stdout).toBe('')
+    expect(readdirSync(join(home, 'runtimes'))).toEqual([])
+    expect(readdirSync(join(home, 'staging'))).toEqual([])
+  })
+
+  it('refuses when the log answers and contradicts the release, and records nothing', async (test) => {
+    const served = await servedRelease(test)
+    const contradicting = createServer((_, response) => response.writeHead(200).end('not a signed checkpoint\n'))
+    await new Promise<void>(resolve => contradicting.listen(0, '127.0.0.1', resolve))
+    test.onTestFinished(() => new Promise<void>(resolve => contradicting.close(() => resolve())))
+    const logOrigin = `http://127.0.0.1:${String((contradicting.address() as AddressInfo).port)}`
+    const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin }, version: '0.0.1-e2e' })
+    const home = join(served.directory, 'home')
+    const finished = await node(built.tarball, home, ['--version'], served.directory)
+    expect(finished.status).toBe(1)
+    expect(finished.stderr).toContain('because its release-log check failed')
+    expect(finished.stderr).not.toContain('Warning:')
+    expect(readdirSync(join(home, 'runtimes'))).toEqual([])
+    expect(() => readFileSync(join(home, 'trust', 'release-log.json'))).toThrow('ENOENT')
+  })
+
+  it('refuses every install when the package ships no root', async (test) => {
+    const served = await servedRelease(test)
+    const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: `http://127.0.0.1:${String(await closedPort())}` }, version: '0.0.1-e2e' })
+    rmSync(join(built.directory, 'roots'), { recursive: true })
+    const finished = await run(process.execPath, [join(built.directory, 'dist', 'bin.js'), '--version'], { PATH: process.env.PATH ?? '', DELO_HOME: join(served.directory, 'home') })
+    expect(finished.status).toBe(1)
+    expect(finished.stderr).toContain('This launcher cannot verify any release')
+    expect(finished.stderr).toContain('install Delo from its release page instead')
+    expect(readdirSync(join(served.directory, 'home', 'runtimes'))).toEqual([])
+  })
+})

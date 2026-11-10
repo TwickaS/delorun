@@ -14,6 +14,7 @@ import type { VerificationMode } from '@delo/contract-verification-checks'
 import { messageOf, readStoredRootBytes, readStoredRootChain, trustFile, verifyStoredRoot } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
 import { RuntimeStoreError, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type VerifiedRuntime } from '@delo/runtime-store'
+import type { LauncherProgress } from './progress.ts'
 import { refusalFor, type RemedyContext } from './refusals.ts'
 
 /** The runtime-store operations the launcher drives; `RuntimeStore` satisfies it. */
@@ -86,6 +87,8 @@ export interface LauncherOptions {
   readonly output: LauncherOutput
   /** The release a person named, when one was named. */
   readonly target?: RuntimeVersion
+  /** Told of the step the launcher itself reports, `installing`; the channel reports the others. Nothing by default. */
+  readonly report?: (event: LauncherProgress) => void
 }
 
 /**
@@ -199,7 +202,15 @@ async function storedRoot(home: string, shipped: readonly Uint8Array[]): Promise
  */
 async function install(options: LauncherOptions): Promise<void> {
   const release: ChannelRelease = await options.channel.resolve(options.target)
-  await options.store.install({ version: release.version, root: release.root, fill: directory => options.channel.fill(release, directory) })
+  await options.store.install({
+    version: release.version,
+    root: release.root,
+    fill: async (directory) => {
+      const files = await options.channel.fill(release, directory)
+      options.report?.({ step: 'installing', version: release.version })
+      return files
+    },
+  })
   await options.store.retain().catch((error: unknown) => {
     options.logger.warn('the runtime store could not finish its retention after an install; the next run retries it', { err: error })
   })

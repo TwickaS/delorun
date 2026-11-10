@@ -9,8 +9,8 @@
  * are the same on every builder; installs the locked dependencies and builds the artifacts, with the client title
  * `closure.json` names, and Delo's packages there under `SOURCE_DATE_EPOCH` (the commit's committer time) and
  * `-ffile-prefix-map=<build root>=.`; and for each platform deploys the closure's root package with production
- * dependencies for that platform, transpiles Delo's packages to JavaScript, has the install anchor declare Delo's
- * bundles, substitutes the pinned prebuilt
+ * dependencies for that platform, transpiles Delo's packages to JavaScript, stamps the release version into the
+ * `delorun` package, has the install anchor declare Delo's bundles, substitutes the pinned prebuilt
  * native packages, adds the pinned Node and pnpm, checks every native file against `prebuilt-pins.json`, and writes
  * the deterministic archive and its unsigned runtime file list to `--out`; when it built every platform, it also
  * writes the release's SPDX SBOM derived from the archives. It refuses to run under a Node or pnpm
@@ -35,7 +35,7 @@ import { verifyStagedDependencies } from '../../../../scripts/executable-packagi
 import { semanticVersion } from './brands.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
-import { declareAnchorBundles, transpileDeloPackages } from './closure/delo.ts'
+import { declareAnchorBundles, stampDeloVersion, transpileDeloPackages } from './closure/delo.ts'
 import { stageNode, stagePnpm, substitutePrebuilt } from './closure/sources.ts'
 import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
@@ -179,16 +179,31 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
       if (!ROOT_PACKAGE_KEPT.includes(name)) await rm(join(app, name), { recursive: true, force: true })
     }
     await transpileDeloPackages(join(app, 'node_modules'))
+    await stampDeloVersion(join(app, 'node_modules'), request.version)
     await declareAnchorBundles(join(app, 'node_modules'), recipe.closure.anchor.package, recipe.closure.anchor.bundles)
     await substitutePrebuilt(recipe.pins.substitutes[platform], join(app, 'node_modules'), request.cache)
     await stageNode(recipe.toolchain, platform, stage, request.cache)
     await stagePnpm(recipe.toolchain, stage, request.cache)
-    const files = await archiveClosure({ stage, outDir: request.out, version: request.version, platform, epoch, pins: request.writePins ? undefined : recipe.pins.files[platform] })
+    const files = await archiveClosure({ stage, outDir: request.out, version: request.version, platform, epoch, pins: request.writePins ? undefined : recipe.pins.files[platform], requireLaunchFiles: true })
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)
   }
   if (RUNTIME_PLATFORMS.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.toolchain, readImagesRecipe().base)}`)
   return results
+}
+
+/**
+ * Run the recipe after the toolchain check the command line makes, for a caller that is not the command line.
+ * @param repository - the repository whose commit is built.
+ * @param request - the release, commit, output and platforms.
+ * @returns each platform's release files.
+ * @throws Error when the running Node or pnpm is not the toolchain `toolchain.json` pins, or the build fails.
+ */
+export async function buildClosuresChecked(repository: string, request: BuildRequest): Promise<Map<RuntimePlatform, ClosureFiles>> {
+  const recipe = readRecipe()
+  const problems = toolchainProblems(recipe, process.version, execFileSync('pnpm', ['--version'], { encoding: 'utf8' }).trim())
+  if (problems.length > 0) throw new Error(problems.join('\n'))
+  return buildClosures(repository, recipe, request)
 }
 
 async function writePins(results: ReadonlyMap<RuntimePlatform, ClosureFiles>): Promise<void> {

@@ -1,6 +1,7 @@
 /**
- * `delorun` as npm serves it: the launcher's entry point, its argument line and the composition of the store, the
- * release channel and the process it starts. The launcher's own options are `--profile`, `--release` and `--help`;
+ * `delorun` as npm serves it: the launcher's main function, its argument line and the composition of the store, the
+ * release channel and the process it starts. `entry.ts` is the published `bin`, which checks the Node version and then
+ * calls {@link main}. The launcher's own options are `--profile`, `--release` and `--help`;
  * every other argument is passed to the runtime unchanged, because the runtime owns `delorun`'s commands.
  *
  * @module @delo/npm-launcher/bin
@@ -14,10 +15,11 @@ import { ensureHomeTree, resolveDeloHome } from '@delo/home'
 import { Downloader, createTilesLogService, LauncherChannel } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
 import { parseRuntimeVersion, RuntimeStore, type LaunchCommand } from '@delo/runtime-store'
-import { runLauncher, launcherProfile, type LauncherOutput } from './launcher.ts'
+import { runLauncher, launcherProfile, type LauncherOutput, type SpawnRuntime } from './launcher.ts'
+import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
 import { readEmbeddedRoots } from './root.ts'
-import { platformOf, RELEASE_LOG_HOSTS, RELEASE_LOG_TILES_ORIGIN } from './platform.ts'
+import { channelPlan, logPlan, platformOf, type BuildConstants } from './platform.ts'
 
 /** The launcher's own flag for the CLI profile, which it also passes to the runtime. */
 export const PROFILE_FLAG = '--profile'
@@ -149,7 +151,7 @@ export function spawnRuntime(command: LaunchCommand): Promise<number> {
  * @param output - where the launcher writes.
  * @returns the logger.
  */
-function stderrLogger(output: LauncherOutput): DeloLogger {
+export function stderrLogger(output: LauncherOutput): DeloLogger {
   return {
     error: message => output.stderr(`${message}\n`),
     warn: message => output.stderr(`${message}\n`),
@@ -158,13 +160,28 @@ function stderrLogger(output: LauncherOutput): DeloLogger {
   }
 }
 
+/** What one launcher invocation runs in. */
+export interface LauncherContext {
+  /** The environment: `DELO_HOME` and `DELO_PROFILE` are read from it. */
+  readonly env: NodeJS.ProcessEnv
+  /** Where the launcher writes. */
+  readonly output: LauncherOutput
+  /** The package directory whose `roots/` the launcher trusts; this package's own by default. */
+  readonly packageDirectory?: string | undefined
+  /** The origins to read the channel and the log from; this build's by default. */
+  readonly constants?: BuildConstants | undefined
+  /** Starts the installed runtime; {@link spawnRuntime} by default. */
+  readonly spawn?: SpawnRuntime | undefined
+}
+
 /**
  * Run one launcher invocation.
  * @param argv - the arguments after the script.
- * @param context - the environment and output; this process's by default.
+ * @param context - the environment and output; this process's by default. The other fields exist for specs: a run
+ *   from the published package leaves them out, so the roots are the package's own and the origins are the build's.
  * @returns the exit code: the runtime's own status, `1` for a refusal the launcher printed, `2` for a wrong command line.
  */
-export async function main(argv: readonly string[], context: { readonly env: NodeJS.ProcessEnv, readonly output: LauncherOutput } = {
+export async function main(argv: readonly string[], context: LauncherContext = {
   env: { ...process.env },
   output: { stdout: text => void process.stdout.write(text), stderr: text => void process.stderr.write(text) },
 }): Promise<number> {
@@ -188,13 +205,18 @@ export async function main(argv: readonly string[], context: { readonly env: Nod
     return LAUNCHER_EXIT.usage
   }
   const logger = stderrLogger(context.output)
+  const report = (event: LauncherProgress): void => {
+    for (const line of progressLines(event)) context.output.stderr(line)
+  }
   try {
     const home = await resolveDeloHome(context.env)
     await ensureHomeTree(home.path, profile)
-    const downloader = new Downloader()
+    const channel = channelPlan(context.constants)
+    const log = logPlan(context.constants)
+    const downloader = new Downloader({ hosts: channel.rule })
     // The roots this launcher ships anchor both halves of a run: an install walks from them, and a start trusts the
     // root this home stored only when it is one of them.
-    const roots = await readEmbeddedRoots(dirname(dirname(fileURLToPath(import.meta.url))))
+    const roots = await readEmbeddedRoots(context.packageDirectory ?? dirname(dirname(fileURLToPath(import.meta.url))))
     return await runLauncher({
       home: home.path,
       profile,
@@ -207,15 +229,18 @@ export async function main(argv: readonly string[], context: { readonly env: Nod
         platform,
         roots,
         channel: 'stable',
-        // The log reads under its own host list, the log's origin and the distributor's: the downloader below keeps
+        // The log reads under its own host list, the log's origin and the distributor's: the downloader keeps
         // contract C1's release-file rule, and neither list has to name the other's hosts.
-        log: createTilesLogService({ origin: RELEASE_LOG_TILES_ORIGIN, hosts: RELEASE_LOG_HOSTS, downloader }),
+        log: createTilesLogService({ origin: log.origin, hosts: log.hosts, downloader }),
+        source: channel.source,
         downloader,
+        progress: report,
       }),
       roots,
       logger,
-      spawn: spawnRuntime,
+      spawn: context.spawn ?? spawnRuntime,
       output: context.output,
+      report,
       ...target === undefined ? {} : { target },
     })
   } catch (error) {
@@ -223,9 +248,4 @@ export async function main(argv: readonly string[], context: { readonly env: Nod
     context.output.stderr(refusal.text)
     return refusal.exit
   }
-}
-
-// The npm package's bin runs this file; importing the module from a spec runs nothing.
-if (import.meta.main) {
-  process.exitCode = await main(process.argv.slice(2))
 }

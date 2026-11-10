@@ -18,8 +18,8 @@ export type InstallLayoutCode = Extract<HomeLayoutErrorCode, 'DOWNLOAD_REFUSED' 
  * - `DOWNLOAD_FAILED`: a connection that did not open or stalled, a response other than 200, a file above its limit,
  *   or a file that cannot be created, written to completion or closed.
  * - `ARCHIVE_REFUSED`: the archive holds an entry its format forbids or its signed file list does not name.
- * - `RELEASE_LOG_FAILED`: contract C18's bundle or online check failed verifiably.
- * - `RELEASE_LOG_UNCHECKED`: the online check could not run, such as when the log is unreachable; an install needs it.
+ * - `RELEASE_LOG_FAILED`: contract C18's bundle or online check failed verifiably. An online check that could not run
+ *   is not an error: the install warns and records it.
  * - `RELEASE_NOT_OFFERED`: the requested version is not the release the fresh timestamp names for the channel.
  * - `RELEASE_METADATA_INVALID`: a release file does not read at all, such as a timestamp that is not JSON.
  * - `TRUST_STATE_INVALID`: a stored root, timestamp or log checkpoint under `trust/` does not read.
@@ -30,7 +30,6 @@ export type InstallErrorCode =
   | 'DOWNLOAD_FAILED'
   | 'ARCHIVE_REFUSED'
   | 'RELEASE_LOG_FAILED'
-  | 'RELEASE_LOG_UNCHECKED'
   | 'RELEASE_NOT_OFFERED'
   | 'RELEASE_METADATA_INVALID'
   | 'TRUST_STATE_INVALID'

@@ -14,7 +14,9 @@ This app is what `npx delorun` runs. It starts the runtime this computer has ins
 
 - [Commands](#commands)
 - [The launch flow](#the-launch-flow)
+- [What it prints](#what-it-prints)
 - [The roots it ships](#the-roots-it-ships)
+- [Building the package](#building-the-package)
 - [Refusals](#refusals)
 - [Exit codes](#exit-codes)
 - [Development](#development)
@@ -44,6 +46,31 @@ An install resolves the release, asks the store to install it with the channel's
 
 The runtime runs in this process's stead: the launcher spawns it with the environment the store built over this process's own — minus `NODE_OPTIONS`, `NODE_PATH`, `NODE_EXTRA_CA_CERTS`, `NODE_TLS_REJECT_UNAUTHORIZED`, `LD_*` and `DYLD_*`, so the shell that ran `npx delorun` cannot load code into the runtime's Node or its dynamic loader, and cannot decide what its HTTPS connections trust — shares its standard streams, and exits with the runtime's own status.
 
+<a id="what-it-prints"></a>
+
+## What it prints
+
+An install prints one line per step to standard error, so the output of the command that runs next stays on standard output unmixed. Each line says what finished:
+
+```text
+Resolving the release: the stable channel names 0.1.0.
+Checking the signature: 0.1.0 is signed under release root 1.
+Checking the release log: verified.
+Downloading delorun-0.1.0-linux-x64.tar.gz (61.5 MB).
+Installing release 0.1.0.
+```
+
+Lines appear in the order the checks run: the signature is checked before the archive is downloaded, because the signed manifest is what names the archive and its size. When the release log or its witness cannot be reached, or its newest witnessed checkpoint is older than 24 hours, the log line says so with the reason, and one warning follows in the words of contract C18:
+
+```text
+Checking the release log: not checked (the release log did not answer: …).
+Warning: Release 0.1.0 has not been checked against the release log; Delo checks it at the next connection.
+```
+
+The install then goes on with the release's signature, and the home records the release as `unchecked` in `trust/release-log.json` (see [`@delo/install`](../install/README.md#the-release-log)). A log that answers and contradicts the release refuses instead, as [Refusals](#refusals) describes. A start prints none of these lines.
+
+A Node older than the package's `engines` range (`>=24.9.0`) gets one line, with the version it found and where to get a newer one, and exit status 1, before anything else runs: the published `bin` (`src/entry.ts`) loads the launcher's main module only after the version check passes, so a Node that cannot read the main module's syntax still reads the refusal.
+
 <a id="the-roots-it-ships"></a>
 
 ## The roots it ships
@@ -58,7 +85,7 @@ The same roots anchor a start. The root a home stored is read back and checked a
 
 `refusalFor` turns any failure into one sentence on standard error: what Delo did, why, and what the person can do about it. An install refusal names the release, host or file it concerned and offers the remedies its code carries:
 
-- An unreachable host or an unchecked log asks the person to check the connection and run the same command again.
+- An unreachable release host asks the person to check the connection and run the same command again. An unreachable log is not a refusal: the install warns and goes on.
 - A launcher with no trusted root points at the install script on the release page.
 - A trust file that does not read asks the person to move it aside; the launcher stores it again from the release it verifies.
 - A stored root that is not one the launcher ships, or that no shipped root leads to, asks the person to install the release again, which re-verifies the root chain from the shipped roots and stores what it proves.
@@ -67,6 +94,21 @@ The same roots anchor a start. The root a home stored is read back and checked a
 - A profile name that is not one, or a `--release` that is not a version, is a wrong command line: the launcher prints the usage text and exits 2, before reading or writing the home.
 
 A store refusal offers the store's own remedies as commands the person can run, such as installing the release again or switching back to the version kept for rollback.
+
+<a id="building-the-package"></a>
+
+## Building the package
+
+`src/build.ts` builds the package npm serves as `delorun` and packs it. The package holds the launcher bundled into plain JavaScript with its dependencies inlined (`dist/bin.js` and one chunk), the root files in `roots/`, `LICENSE` and a short `README.md`, with `bin` pointing at `dist/bin.js` and `engines.node` set to `>=24.9.0`; `npx` runs it on Node alone.
+
+```sh
+node_modules/.bin/tsx delo/apps/npm-launcher/src/build.ts --root <root.json>... --out <dir> \
+  [--channel-origin <origin>] [--log-origin <origin>] [--package-version <version>]
+```
+
+- Each `--root` is copied to `roots/<n>.root.json`, named by the root's own version, after it verifies with its own root signatures. The roots together must be consecutive versions; a build with no `--root` is refused, because the launcher it made would refuse every install with `NO_TRUSTED_ROOT`.
+- `--channel-origin` and `--log-origin` become build constants that the bundler writes into the code; no setting, argument or environment variable moves them afterwards. Without them the build is the production launcher: the channel is `releases.delorun.com` and GitHub Releases under contract C1's host list, and the log is the public Rekor shard and its witness distributor. An origin is `https:` with no path, or `http:` on this machine's loopback address, so a local channel and log can serve a build. A channel origin serves `timestamp.json`, `root/<n>.root.json` and `releases/download/v<version>/<file>`, the layout `apps/release/src/local-release.ts` writes; the downloader then allows that origin's host and no other.
+- The package is staged at `<out>/package` and packed to `<out>/delorun-<version>.tgz` by `npm pack`. `--package-version` sets the version, and this package's own is the default.
 
 <a id="exit-codes"></a>
 
@@ -82,4 +124,4 @@ A store refusal offers the store's own remedies as commands the person can run, 
 
 ## Development
 
-The tests in `tests/` drive `runLauncher` with a stand-in store, channel and spawn, so no network is contacted and nothing is installed on the machine running them. Run them with the repository's Vitest configuration: `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/npm-launcher`.
+The tests in `tests/` drive `runLauncher` with a stand-in store, channel and spawn, so no network is contacted and nothing is installed on the machine running them; `tests/build.spec.ts` builds and packs the launcher with a throwaway root. The end-to-end spec in [`@delo/release`](../release/README.md#local-release) installs a local release through a packed launcher. Run them with the repository's Vitest configuration: `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/npm-launcher`.

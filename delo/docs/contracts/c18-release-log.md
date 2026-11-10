@@ -8,7 +8,7 @@ English | [中文](c18-release-log.zh.md)
 
 ## Summary
 
-Every signed release manifest of [C2](c02-release-manifest.md) has an entry in Sigstore's public Rekor log, an append-only transparency log that Delo does not operate. Rekor signs checkpoints of its tree, and an independent witness from the public witness network cosigns them, so a log that showed one client a different history from another would be caught by the witness. Each release publishes a bundle with the entry, its inclusion proof and a witnessed checkpoint. Clients refuse an entry without a valid witness cosignature. Installing a release always requires a verified inclusion proof; a start without network starts with a warning naming the unchecked release and checks at the next connection. The types live in [`@delo/contract-release-log`](../../packages/contract-release-log/README.md).
+Every signed release manifest of [C2](c02-release-manifest.md) has an entry in Sigstore's public Rekor log, an append-only transparency log that Delo does not operate. Rekor signs checkpoints of its tree, and an independent witness from the public witness network cosigns them, so a log that showed one client a different history from another would be caught by the witness. Each release publishes a bundle with the entry, its inclusion proof and a witnessed checkpoint. Clients refuse an entry without a valid witness cosignature. Installing a release always requires a verified inclusion proof. When the log or its witness cannot be reached, or its newest witnessed checkpoint is stale, an install or update warns, continues on the release's signature and records that the online check did not run; a log that answers and contradicts the release refuses. A start without network starts with a warning naming the unchecked release and checks at the next connection. The types live in [`@delo/contract-release-log`](../../packages/contract-release-log/README.md).
 
 ## Contents
 
@@ -83,6 +83,8 @@ A verified bundle shows the entry was in the log at the checkpoint it carries. T
 
 When the client cannot reach the distributor or the log, or the latest witnessed checkpoint is older than 24 hours, the online check is not done and the release stays `unchecked`; that is not a failure. A verifiable failure (a bad signature, a missing witness cosignature, a consistency proof that does not verify, a checkpoint smaller than the stored one) is `failed`.
 
+An install or update that finds `unchecked` goes on with the release's signature alone and tells the person so. The launcher prints the step "Checking the release log: not checked" with the reason, then the warning "Release <version> has not been checked against the release log; Delo checks it at the next connection." It records the release as `unchecked`, with the reason as `detail`, in the check state file once the archive has verified. Whoever can block a person's connection to the log and its witness leaves that person with the signature alone; the inclusion proof in the release's own bundle is still verified, offline, before anything installs. An install or update that finds `failed` installs nothing and records nothing.
+
 ## Check states
 
 | State | Meaning |
@@ -91,7 +93,7 @@ When the client cannot reach the distributor or the log, or the latest witnessed
 | `unchecked` | The online check has not passed yet because the log or distributor was not reachable; the bundle, if present, verifies. |
 | `failed` | The bundle or the online check failed verifiably. |
 
-The state is stored per installed release at the path [C1](c01-home-layout.md) names, and `delorun verify`, `delorun status` and the studio's Verification panel show it with the release's version ([C15](c15-verification-checks.md)).
+The state is stored per installed release in `trust/release-log.json` (schema `delo.release-log-state/1`, one entry per release with its `state`, `lastAttempt` and, for `unchecked`, the reason as `detail`), beside the checkpoint [C1](c01-home-layout.md) names. An install records `verified` or `unchecked` for the release it installs, and the start check updates the same entry. `delorun verify`, `delorun status` and the studio's Verification panel show it with the release's version ([C15](c15-verification-checks.md)).
 
 Under `integrity.mode: off` ([C15](c15-verification-checks.md#modes)), the online check does not run. A release whose bundle verifies offline then stays `unchecked`, and the start warning and retries do not apply. The offline verification still runs at each start, and a verified failure of it stops the start in every mode, as R5 requires.
 
@@ -99,12 +101,12 @@ Under `integrity.mode: off` ([C15](c15-verification-checks.md#modes)), the onlin
 
 | Client | Install or update | Start |
 | --- | --- | --- |
-| npm launcher and install script | Require a verified bundle and a passing online check; otherwise nothing installs. | — |
-| `delorun update` and the studio's "Update now" | Require a verified bundle and a passing online check for the target; otherwise the update is refused with the reason. | — |
+| npm launcher and install script | Require a verified bundle. With the online check passed, install and record `verified`. With it `unchecked`, print the reason and the warning, install, and record `unchecked`. With it `failed`, install nothing. | — |
+| `delorun update` and the studio's "Update now" | Require a verified bundle for the target, and treat the online check as the launcher does: `unchecked` warns, continues and records, `failed` refuses the update with the reason. | — |
 | CLI launcher, at every start | — | Verifies the stored bundle offline. With network, runs the online check. Without network, starts with the warning "Release <version> has not been checked against the release log; Delo checks it at the next connection." and records `unchecked`. On `failed`, stops in every verification mode and offers rollback. |
 | Headless home | — | As the CLI launcher; the warning goes to the terminal, the operational log ([C20](c20-operational-logs.md)) and `delorun status`. |
 | Home process while running | — | While the state is `unchecked`, retries the online check every 15 minutes and at every start until it passes or fails. |
-| Desktop updater | Requires a verified bundle and a passing online check before `quitAndInstall`, and for a requested rollback target. | At start, verifies its release's bundle when stored and runs the online check; without network, shows the same warning in the app and retries every 15 minutes. |
+| Desktop updater | Requires a verified bundle before `quitAndInstall`, and for a requested rollback target; an online check that is `unchecked` warns and records, and one that is `failed` refuses. | At start, verifies its release's bundle when stored and runs the online check; without network, shows the same warning in the app and retries every 15 minutes. |
 | `delorun verify` | — | Reports `verified`, `unchecked` or `failed` for the active release, and fails on `failed` or on a missing bundle. |
 
 The first start of a desktop app installed from a downloaded installer has no stored bundle; it fetches the bundle from GitHub Releases, and without network it starts `unchecked` with the warning.
@@ -138,7 +140,7 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 
 - R1. Every manifest file, re-signed ones included, has a log entry before its release is published.
 - R2. A client refuses an entry whose checkpoint lacks a valid cosignature from a listed witness.
-- R3. Installing or updating, and a requested desktop rollback, require a verified bundle and a passing online check.
+- R3. Installing or updating, and a requested desktop rollback, require a verified bundle. An online check that could not run (`unchecked`) does not stop them: they warn, continue on the signature and record that the check did not run. An online check that failed verifiably stops them.
 - R4. A start without network starts with a warning that names the unchecked release, records `unchecked`, and checks at the next connection.
 - R5. A verifiable log failure stops the CLI start in every verification mode and fails `delorun verify`.
 - R6. The log key and the witness keys are trusted only from the root metadata.
@@ -155,7 +157,8 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 | `c18-pure-ed25519-entry-refused` | WP3.1, WP3.2 | An entry with a pure Ed25519 signature or `PKIX_ED25519` key details is refused; the same manifest's Ed25519ph entry verifies. |
 | `c18-offline-start-warns` | WP2.11, WP3.9 | A start with the log and distributor stand-ins unreachable starts, prints the warning with the release's version and records `unchecked`. |
 | `c18-offline-recheck-on-connect` | WP3.9 | After the stand-ins become reachable, the home process's next retry records `verified`. |
-| `c18-offline-update-refused` | WP3.2, WP3.9, WP6.3 | An update attempted while the log is unreachable is refused, and the running version stays. |
+| `c18-offline-install-continues` | WP3.2, WP3.9, WP6.3 | An install or update attempted while the log is unreachable or its newest witnessed checkpoint is stale prints the reason and the warning, installs, and records `unchecked` with the reason. |
+| `c18-contradicting-log-refuses-install` | WP3.2, WP3.9, WP6.3 | An install or update attempted while the log answers with a checkpoint that does not verify, lacks the witness cosignature, is smaller than the stored one or is inconsistent with the bundle's installs nothing, records nothing, and the running version stays. |
 | `c18-inconsistent-log-fails-start` | WP2.11 | A latest checkpoint whose consistency proof from the stored checkpoint does not verify records `failed` and stops the start in every verification mode. |
 | `c18-checkpoint-rollback-refused` | WP2.11 | A witnessed checkpoint with a smaller tree size than the stored one records `failed`. |
 | `c18-desktop-refuses-unlogged-update` | WP6.3 | A desktop update whose bundle fails is refused before `quitAndInstall`. |
@@ -163,6 +166,6 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 ### What this does not prove
 
 - **Witness independence.** A client verifies that a witness key listed in the root metadata cosigned the checkpoint. It cannot verify that the witness is operated independently of the log or of Delo; that rests on which witnesses the root metadata lists.
-- **An offline home.** A home that never reaches the log and the distributor stays `unchecked` and keeps starting with the warning. It never completes the consistency check, so a different view of the log shown to it is not detected until it connects; installing or updating still requires the check.
+- **An offline home.** A home that never reaches the log and the distributor stays `unchecked` and keeps starting with the warning. It never completes the consistency check, so a different view of the log shown to it is not detected until it connects. An install or update that cannot reach the log goes on the same way, so whoever can block a person's connection to the log and its witness leaves that person with the release's signature and the offline inclusion proof alone.
 - **Clock dependence.** The 24-hour limit on the latest witnessed checkpoint's age uses the client's clock; a wrong clock can accept an older checkpoint or record `unchecked` for a current one.
 - **What a log entry means.** A verified entry shows that the manifest was published in a log every client can check; it does not show that the release is free of defects or vulnerabilities.

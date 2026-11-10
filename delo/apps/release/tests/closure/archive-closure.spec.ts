@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { inspectArchive } from '../../src/archive/inspect.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
+import { launchProtocolFiles, missingLaunchFiles } from '../../src/closure/launch.ts'
 import { listStagedTree } from '../../src/closure/tree.ts'
 import { peImage, scratch, writeTree, type StagedContent } from '../support.ts'
 
@@ -108,5 +109,33 @@ describe('listStagedTree', () => {
     const directory = scratch(test)
     writeTree(directory, { 'b.js': '', 'B.js': '', 'a/z.js': '', 'a-b.js': '' })
     expect((await listStagedTree(directory, 'linux-x64')).map(file => file.path)).toEqual(['B.js', 'a-b.js', 'a/z.js', 'b.js'])
+  })
+
+  it('refuses a closure the launcher cannot start, naming the missing file, when launch files are required', async (test) => {
+    const directory = scratch(test)
+    writeTree(join(directory, 'stage'), TREE)
+    await expect(archiveClosure({ stage: join(directory, 'stage'), outDir: directory, version: '0.1.0', platform: 'linux-x64', epoch: EPOCH, pins: undefined, requireLaunchFiles: true }))
+      .rejects.toThrow('the linux-x64 closure lacks app/node_modules/@delo/cli/src/bin.js, which the launcher starts the runtime with')
+    expect(readdirSync(directory)).toEqual(['stage'])
+  })
+
+  it('archives a closure that holds both launch files when they are required', async (test) => {
+    const directory = scratch(test)
+    writeTree(join(directory, 'stage'), { ...TREE, 'app/node_modules/@delo/cli/src/bin.js': 'console.log("delorun")\n' })
+    const result = await archiveClosure({ stage: join(directory, 'stage'), outDir: directory, version: '0.1.0', platform: 'linux-x64', epoch: EPOCH, pins: undefined, requireLaunchFiles: true })
+    expect(result.entries).toBe(Object.keys(TREE).length + 1)
+  })
+})
+
+describe('launch protocol 1\'s files', () => {
+  it('are the runtime\'s own Node and the delorun entry file, with the Windows executable named for its platform', () => {
+    expect(launchProtocolFiles('linux-x64')).toEqual(['node/bin/node', 'app/node_modules/@delo/cli/src/bin.js'])
+    expect(launchProtocolFiles('win32-x64')).toEqual(['node/node.exe', 'app/node_modules/@delo/cli/src/bin.js'])
+  })
+
+  it('are reported missing one by one', () => {
+    expect(missingLaunchFiles(['node/bin/node'], 'linux-x64')).toEqual(['app/node_modules/@delo/cli/src/bin.js'])
+    expect(missingLaunchFiles(['node/bin/node', 'app/node_modules/@delo/cli/src/bin.js'], 'linux-x64')).toEqual([])
+    expect(missingLaunchFiles([], 'darwin-arm64')).toEqual(launchProtocolFiles('darwin-arm64'))
   })
 })

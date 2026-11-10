@@ -1,0 +1,190 @@
+/**
+ * Builds the launcher into the package npm publishes as `delorun`, and packs it:
+ *
+ * `node_modules/.bin/tsx delo/apps/npm-launcher/src/build.ts --root <root.json>... --out <dir> [--channel-origin <origin>]
+ * [--log-origin <origin>] [--package-version <version>]`
+ *
+ * The build bundles the launcher and the workspace packages it uses into plain JavaScript with no dependencies, so
+ * `npx` runs it on Node alone. Each `--root` is copied into the package's `roots/` directory under the name its own
+ * version gives, after it verifies with its own root signatures, and the roots together must start at any version and
+ * rise by one; a build with no root is refused, because the launcher it made would refuse every install. The channel
+ * and log origins become build constants the bundler writes into the code (see `platform.ts`); without them the build
+ * is the production launcher. The package is staged at `<out>/package` and packed to `<out>/delorun-<version>.tgz`.
+ *
+ * @module @delo/npm-launcher/build
+ */
+import { execFile } from 'node:child_process'
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { parseArgs, promisify } from 'node:util'
+import { build } from 'tsdown'
+import { RELEASE_REPOSITORY_URL } from '@delo/contract-release-manifest'
+import { messageOf } from '@delo/install'
+import { readRoot } from '@delo/release/sign/verify'
+import { MINIMUM_NODE, NODE_ENGINES_RANGE } from './node-version.ts'
+import { channelPlan, logPlan, type BuildConstants } from './platform.ts'
+import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
+
+const run = promisify(execFile)
+
+/** This package's directory. */
+const PACKAGE_DIRECTORY = dirname(dirname(fileURLToPath(import.meta.url)))
+
+/** The repository root, whose `tsconfig.base.json` maps workspace packages to their sources for the bundler. */
+const REPOSITORY_ROOT = resolve(PACKAGE_DIRECTORY, '..', '..', '..')
+
+/** What a build is given. */
+export interface BuildOptions {
+  /** The root files the launcher ships, as paths; at least one. */
+  readonly roots: readonly string[]
+  /** An empty or absent directory the package and the tarball are written to. */
+  readonly out: string
+  /** The channel and log origins to build in; the production ones by default. */
+  readonly constants?: BuildConstants
+  /** The npm package version; this package's own by default. */
+  readonly version?: string
+}
+
+/** What a build made. */
+export interface BuiltLauncher {
+  /** The staged package, whose `bin`, `dist/` and `roots/` are what the tarball holds. */
+  readonly directory: string
+  /** The tarball `npm pack` wrote. */
+  readonly tarball: string
+}
+
+/** The README npm shows for the published package. */
+const PUBLISHED_README = `# delorun
+
+\`npx delorun\` installs and starts Delo. It checks the release it installs against its signed manifest and the release log, and installs nothing when either check refuses.
+
+This package holds only the launcher. The program it installs comes from the release channel and is checked before it runs. The launcher needs Node ${MINIMUM_NODE[0]}.${MINIMUM_NODE[1]} or newer.
+`
+
+/**
+ * The manifest of the published package.
+ * @param version - the package version.
+ * @param constants - the build's origins, so the description says which channel the build serves.
+ * @returns the `package.json` text.
+ */
+function publishedManifest(version: string, constants: BuildConstants): string {
+  const custom = constants.channelOrigin !== undefined || constants.logOrigin !== undefined
+  return `${JSON.stringify({
+    name: 'delorun',
+    version,
+    description: custom ? 'Delo launcher built for a local release channel' : 'Install and run Delo',
+    license: 'MIT',
+    type: 'module',
+    bin: { delorun: 'dist/bin.js' },
+    files: ['dist', ROOTS_DIRECTORY, 'LICENSE', 'README.md'],
+    engines: { node: NODE_ENGINES_RANGE },
+    repository: { type: 'git', url: `git+${RELEASE_REPOSITORY_URL}.git` },
+  }, undefined, 2)}\n`
+}
+
+/**
+ * Copy the root files into a package's `roots/` directory, named by each root's own version.
+ * @param paths - the root files.
+ * @param stage - the staged package.
+ * @throws {Error} when no root is given, a root does not verify, or two roots share a version.
+ */
+async function stageRoots(paths: readonly string[], stage: string): Promise<void> {
+  if (paths.length === 0) throw new Error('pass at least one --root <root file>: a launcher without a root refuses every install')
+  const directory = join(stage, ROOTS_DIRECTORY)
+  await mkdir(directory, { recursive: true })
+  const seen = new Set<number>()
+  for (const path of paths) {
+    const bytes = await readFile(path)
+    const version = readRoot(bytes).metadata.version
+    if (seen.has(version)) throw new Error(`two --root files are root version ${String(version)}`)
+    seen.add(version)
+    await writeFile(join(directory, `${String(version)}.root.json`), bytes)
+  }
+  await readEmbeddedRoots(stage)
+}
+
+/**
+ * Build and pack the launcher.
+ * @param options - the roots, the output directory, the origins and the version.
+ * @returns the staged package and its tarball.
+ * @throws {Error} when an origin or a root is refused, the output directory already holds a package, or the bundler
+ *   or `npm pack` fails; an `InstallError` when the roots do not form a chain.
+ */
+export async function buildLauncher(options: BuildOptions): Promise<BuiltLauncher> {
+  const constants = options.constants ?? {}
+  // The same functions the launcher runs at start refuse a bad origin here, before anything is written.
+  channelPlan(constants)
+  logPlan(constants)
+  const version = options.version ?? (JSON.parse(await readFile(join(PACKAGE_DIRECTORY, 'package.json'), 'utf8')) as { version: string }).version
+  const out = resolve(options.out)
+  const stage = join(out, 'package')
+  await mkdir(out, { recursive: true })
+  try {
+    await mkdir(stage)
+  } catch (error) {
+    throw new Error(`${stage} exists; build into a new directory`, { cause: error })
+  }
+  await stageRoots(options.roots.map(path => resolve(path)), stage)
+  await build({
+    config: false,
+    cwd: REPOSITORY_ROOT,
+    entry: { bin: join(PACKAGE_DIRECTORY, 'src', 'entry.ts') },
+    outDir: join(stage, 'dist'),
+    format: ['esm'],
+    platform: 'node',
+    target: 'es2022',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+    tsconfig: join(REPOSITORY_ROOT, 'tsconfig.base.json'),
+    deps: { alwaysBundle: [/^(?!node:)/u] },
+    define: { __DELO_LAUNCHER_BUILD__: JSON.stringify(constants) },
+    logLevel: 'warn',
+  })
+  await writeFile(join(stage, 'package.json'), publishedManifest(version, constants))
+  await copyFile(join(PACKAGE_DIRECTORY, 'LICENSE'), join(stage, 'LICENSE'))
+  await writeFile(join(stage, 'README.md'), PUBLISHED_README)
+  await run('npm', ['pack', '--pack-destination', out, '--silent'], { cwd: stage })
+  return { directory: stage, tarball: join(out, `delorun-${version}.tgz`) }
+}
+
+/**
+ * The command line.
+ * @param argv - the arguments after the script.
+ * @returns the exit code: 0 when the tarball was written, 1 when the build refused or failed.
+ */
+export async function main(argv: readonly string[]): Promise<number> {
+  const { values } = parseArgs({
+    args: [...argv],
+    strict: true,
+    options: {
+      'root': { type: 'string', multiple: true },
+      'out': { type: 'string' },
+      'channel-origin': { type: 'string' },
+      'log-origin': { type: 'string' },
+      'package-version': { type: 'string' },
+    },
+  })
+  try {
+    if (values.out === undefined) throw new Error('pass --out <dir> and at least one --root <root file>')
+    const built = await buildLauncher({
+      roots: values.root ?? [],
+      out: values.out,
+      constants: {
+        ...values['channel-origin'] === undefined ? {} : { channelOrigin: values['channel-origin'] },
+        ...values['log-origin'] === undefined ? {} : { logOrigin: values['log-origin'] },
+      },
+      ...values['package-version'] === undefined ? {} : { version: values['package-version'] },
+    })
+    console.log(`build: wrote ${built.tarball}`)
+    return 0
+  } catch (error) {
+    console.error(`build: ${messageOf(error)}`)
+    return 1
+  }
+}
+
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = await main(process.argv.slice(2))
+}

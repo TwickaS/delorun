@@ -15,6 +15,7 @@ import { FileSink, fileDigest } from '../archive/sink.ts'
 import { tarStream } from '../archive/tar.ts'
 import { zipStream } from '../archive/zip.ts'
 import { sha256Hex } from '../brands.ts'
+import { missingLaunchFiles } from './launch.ts'
 import { isNativeCode, nativePinProblems, NODE_DIRECTORY } from './native.ts'
 import { closureFileNames, listStagedTree, runtimeFileList, unsignedEnvelopeText, type ListedEntry } from './tree.ts'
 
@@ -32,6 +33,8 @@ export interface ClosureArchiveRequest {
   readonly epoch: number
   /** The platform's native-file pins; `undefined` records the native files without checking them. */
   readonly pins: Readonly<Record<string, string>> | undefined
+  /** Whether to refuse a tree without launch protocol 1's files; a release build sets it. */
+  readonly requireLaunchFiles?: boolean
 }
 
 /** The release files of one closure. */
@@ -54,12 +57,16 @@ function digest(data: Buffer | string): string {
  * Archive a staged closure and write its file list.
  * @param request - the tree, the destination and the release facts.
  * @returns the two release files and the native files found.
- * @throws Error when the tree holds anything an archive cannot, the native files disagree with the pins, the
- * archive exceeds 1 GiB, or a release file already exists.
+ * @throws Error when the tree holds anything an archive cannot, lacks launch protocol 1's files when they are required,
+ * the native files disagree with the pins, the archive exceeds 1 GiB, or a release file already exists.
  */
 export async function archiveClosure(request: ClosureArchiveRequest): Promise<ClosureFiles> {
   const names = closureFileNames(request.version, request.platform)
   const staged = await listStagedTree(request.stage, request.platform)
+  if (request.requireLaunchFiles === true) {
+    const missing = missingLaunchFiles(staged.map(file => file.path), request.platform)
+    if (missing.length > 0) throw new Error(`the ${request.platform} closure lacks ${missing.join(' and ')}, which the launcher starts the runtime with (contract C1, launch protocol 1)`)
+  }
   const listed: ListedEntry[] = []
   const native = new Map<string, string>()
   async function* entries(): AsyncGenerator<ArchiveEntry> {

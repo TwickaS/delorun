@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { declareAnchorBundles, transpileDeloPackages } from '../../src/closure/delo.ts'
+import { declareAnchorBundles, stampDeloVersion, transpileDeloPackages } from '../../src/closure/delo.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { scratch, writeTree } from '../support.ts'
 
@@ -42,6 +42,18 @@ describe('Delo packages in a closure', () => {
     expect(run.stdout).toBe('size 42\n')
   })
 
+  it('rewrites entry points in arrays, and leaves other values in an entry field as they are', async (test) => {
+    const root = scratch(test)
+    writeTree(root, {
+      'node_modules/@delo/mixed/package.json': JSON.stringify({ name: '@delo/mixed', version: '0.0.0', exports: ['./src/index.ts', './src/other.js'], imports: { '#plain': null, '#flag': true } }),
+      'node_modules/@delo/mixed/src/index.ts': 'export const one: number = 1\n',
+    })
+    await transpileDeloPackages(join(root, 'node_modules'))
+    const manifest = JSON.parse(readFileSync(join(root, 'node_modules/@delo/mixed/package.json'), 'utf8'))
+    expect(manifest.exports).toEqual(['./src/index.js', './src/other.js'])
+    expect(manifest.imports).toEqual({ '#plain': null, '#flag': true })
+  })
+
   it('refuses a source that does not transpile, naming it', async (test) => {
     const root = scratch(test)
     writeTree(root, {
@@ -58,6 +70,27 @@ describe('Delo packages in a closure', () => {
     await declareAnchorBundles(nodeModules, '@deepseek-ai/dsh', ['@delo/bundle-local'])
     expect(JSON.parse(readFileSync(join(nodeModules, '@deepseek-ai/dsh/package.json'), 'utf8')).dependencies).toEqual({ '@deepseek-ai/dsh-brand': '0.2.2', '@delo/bundle-local': '1.2.3', 'zod': '4.4.3' })
     await expect(declareAnchorBundles(nodeModules, '@deepseek-ai/dsh', ['@delo/missing'])).rejects.toThrow('the closure does not carry @delo/missing, which closure.json\'s anchor names')
+    writeTree(root, { 'node_modules/@delo/unversioned/package.json': '{"name":"@delo/unversioned"}\n' })
+    await expect(declareAnchorBundles(nodeModules, '@deepseek-ai/dsh', ['@delo/unversioned'])).rejects.toThrow('@delo/unversioned\'s package.json names no version')
+  })
+
+  it('stamps the release version into the delorun package, where delorun --version reads it, and into no other package', async (test) => {
+    const root = scratch(test)
+    stagedTree(root)
+    const nodeModules = join(root, 'node_modules')
+    await stampDeloVersion(nodeModules, '0.2.0')
+    const manifest = JSON.parse(readFileSync(join(nodeModules, '@delo/cli/package.json'), 'utf8')) as { version: string, bin: unknown }
+    expect(manifest.version).toBe('0.2.0')
+    expect(manifest.bin).toEqual({ delorun: './src/bin.ts' })
+    expect(JSON.parse(readFileSync(join(nodeModules, '@delo/lib/package.json'), 'utf8')).version).toBe('0.0.0')
+    await stampDeloVersion(nodeModules, '0.3.0-rc.1')
+    expect(JSON.parse(readFileSync(join(nodeModules, '@delo/cli/package.json'), 'utf8')).version).toBe('0.3.0-rc.1')
+  })
+
+  it('refuses to stamp a closure that carries no delorun package', async (test) => {
+    const root = scratch(test)
+    writeTree(root, { 'node_modules/@delo/lib/package.json': '{"name":"@delo/lib"}\n' })
+    await expect(stampDeloVersion(join(root, 'node_modules'), '0.2.0')).rejects.toThrow('the closure does not carry @delo/cli')
   })
 
   it('names, in closure.json, the client title and every Delo bundle of a new CLI profile for the anchor', async () => {

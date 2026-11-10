@@ -28,8 +28,9 @@ import { archiveFormat } from '@delo/release/archive/entry'
 import { Downloader } from './download.ts'
 import { InstallError } from './errors.ts'
 import { extractArchive } from './extract.ts'
-import { requireVerifiedLog, runOnlineCheck, type LogService } from './log.ts'
-import { readStoredCheckpoint, readStoredTimestamp, writeStoredCheckpoint, writeStoredRootChain, writeStoredTimestamp, writeTrustedRoot, type StoredCheckpoint } from './state.ts'
+import { refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckResult } from './log.ts'
+import type { InstallProgress } from './progress.ts'
+import { readStoredCheckpoint, readStoredTimestamp, writeReleaseLogCheck, writeStoredCheckpoint, writeStoredRootChain, writeStoredTimestamp, writeTrustedRoot, type StoredCheckpoint } from './state.ts'
 import { newestRootVersion, rootVersionOf, verifyChannelRelease, verifyDownloadedFile, verifyPlatformFiles, verifyTimestampUnderRoots, type VerifiedChannelRelease } from './verify.ts'
 
 /**
@@ -72,6 +73,8 @@ export interface LauncherChannelOptions {
   readonly downloader?: Downloader
   /** The clock, in milliseconds; `Date.now` by default. */
   readonly now?: () => number
+  /** Told of each step that finishes; nothing by default. */
+  readonly progress?: (event: InstallProgress) => void
 }
 
 /** A release this channel resolved, kept for its install. */
@@ -80,6 +83,8 @@ interface Resolved {
   readonly verified: VerifiedChannelRelease
   readonly manifestBytes: Buffer
   readonly bundleBytes: Buffer
+  /** What the online log check found, for the record the install keeps once the archive verified. */
+  readonly online: OnlineCheckResult
 }
 
 /** A release the channel resolved but has not filled, for its own error messages. */
@@ -108,11 +113,14 @@ export class LauncherChannel implements RuntimeChannel {
    * Name, verify and log-check a release: walk the root chain from the embedded root to the one the timestamp names,
    * verify the timestamp's signature, lifetime, expiry and version, verify the channel's manifest and contract C18's
    * bundle, run the online log check, and record what verified under `trust/`. Nothing downloads a runtime until all
-   * of it passes.
+   * of it passes. A log check that could not run (the log or its witness is unreachable, or its newest witnessed
+   * checkpoint is stale) does not stop the install: it continues on the release's signature, and the home records
+   * that the check did not run (contract C18, "Behaviour per client"). A log that answers and contradicts the
+   * release refuses.
    * @param target - the version a person asked for, or `undefined` for the channel's current release.
    * @returns the release's version and the root it verified with.
    * @throws {InstallError} `DOWNLOAD_REFUSED`, `DOWNLOAD_FAILED`, `INSTALL_VERIFY_FAILED`, `RELEASE_NOT_OFFERED`,
-   *   `RELEASE_LOG_FAILED` or `RELEASE_LOG_UNCHECKED`; no file appears under `runtimes/` on any of them.
+   *   `RELEASE_LOG_FAILED` or `TRUST_STATE_INVALID`; no file appears under `runtimes/` on any of them.
    */
   async resolve(target?: RuntimeVersion): Promise<ChannelRelease> {
     const now = Math.floor(this.now() / 1000)
@@ -125,6 +133,7 @@ export class LauncherChannel implements RuntimeChannel {
     await writeStoredTimestamp(this.options.home, stamp.bytes)
     const pointer = timestamp.channels[this.options.channel]
     const version = asVersion(pointer.release)
+    this.options.progress?.({ step: 'resolved', channel: this.options.channel, version: pointer.release })
     const manifest = await this.downloader.bytes(this.source.files(pointer.release, pointer.manifest.name), RELEASE_FILE_SIZE_LIMITS.manifest)
     const bundleName = bundleFileName(pointer.release)
     const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleName), RELEASE_FILE_SIZE_LIMITS.manifest)
@@ -136,11 +145,13 @@ export class LauncherChannel implements RuntimeChannel {
       bundle: bundle.bytes,
       ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
     })
+    this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
     const online = await runOnlineCheck({ root: root.metadata, release: pointer.release, log: verified.log, service: this.options.log, now, ...await this.storedCheckpoint() })
-    requireVerifiedLog(online, `release ${pointer.release}`)
+    refuseFailedLog(online, `release ${pointer.release}`)
     if (online.checkpoint !== undefined) await writeStoredCheckpoint(this.options.home, online.checkpoint)
+    this.options.progress?.({ step: 'log-checked', version: pointer.release, state: online.check.state === 'verified' ? 'verified' : 'unchecked', ...online.detail === undefined ? {} : { detail: online.detail } })
     const release: ChannelRelease = { version, root: root.metadata }
-    this.resolved.set(version, { release, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes })
+    this.resolved.set(version, { release, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes, online })
     return release
   }
 
@@ -149,9 +160,11 @@ export class LauncherChannel implements RuntimeChannel {
    * and extract the archive into the staging directory with contract C1's path checks.
    * @param release - the release {@link LauncherChannel.resolve} returned.
    * @param directory - a new, empty `staging/<16 hex>/` directory.
-   * @returns the manifest, the file list and the release-log bundle, to keep beside the installation.
+   * @returns the manifest, the file list and the release-log bundle, to keep beside the installation. The release's
+   *   log check state, `verified` or `unchecked` with the reason, is recorded in the home once the archive verified.
    * @throws {InstallError} `INSTALL_VERIFY_FAILED` when a file is not the manifest's or the archive is not the list's;
-   *   `ARCHIVE_REFUSED` when the archive holds an entry it may not; `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED`.
+   *   `ARCHIVE_REFUSED` when the archive holds an entry it may not; `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED`;
+   *   `TRUST_STATE_INVALID` when the check state cannot be recorded.
    */
   async fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes> {
     const resolved = this.resolved.get(release.version)
@@ -162,11 +175,13 @@ export class LauncherChannel implements RuntimeChannel {
     const scratch = await mkdtemp(join(dirname(directory), '.download-'))
     try {
       const archivePath = join(scratch, artifacts.archive.name)
+      this.options.progress?.({ step: 'downloading', name: artifacts.archive.name, bytes: artifacts.archive.length })
       await this.downloader.file(this.source.files(manifest.version, artifacts.archive.name), ARCHIVE_MAX_BYTES, archivePath)
       await verifyDownloadedFile(artifacts.archive, archivePath)
       const list = await this.downloader.bytes(this.source.files(manifest.version, artifacts.files.name), RELEASE_FILE_SIZE_LIMITS.files)
       const files = verifyPlatformFiles({ root: release.root, manifest, platform: this.options.platform, bytes: list.bytes })
       await extractArchive({ archive: archivePath, format, files, directory })
+      await writeReleaseLogCheck(this.options.home, resolved.online.check, resolved.online.detail)
       return { manifest: resolved.manifestBytes, files: list.bytes, bundle: resolved.bundleBytes }
     } finally {
       await rm(scratch, { recursive: true, force: true })

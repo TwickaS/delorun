@@ -15,6 +15,7 @@
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/home": "workspace:*",
     "@delo/release": "workspace:*",
+    "@delo/release-verify": "workspace:*",
     "@delo/runtime-store": "workspace:*",
     "semver": "^7.8.5"
   },

@@ -5,7 +5,7 @@
  * `package.json` entry point that named a removed file names the JavaScript file instead; a package's `tests`
  * directory is removed. The install anchor, the package whose `package.json` upstream's runtime resolution reads to
  * decide what a profile's plugin rows can import, then declares each Delo bundle the recipe names as a dependency at
- * its staged version.
+ * its staged version. The `delorun` command package carries the release's version, which `delorun --version` reports.
  *
  * @module @delo/release/closure/delo
  */
@@ -69,7 +69,7 @@ export async function transpileDeloPackage(directory: string): Promise<string[]>
     const local = relative(directory, path).split(sep).join('/')
     if (!local.startsWith('src/') || !isTranspiled(path)) continue
     const output = ts.transpileModule(await readFile(path, 'utf8'), { compilerOptions: TRANSPILE_OPTIONS, fileName: local, reportDiagnostics: true })
-    const problems = (output.diagnostics ?? []).filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
+    const problems = output.diagnostics!.filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
     if (problems.length > 0) throw new Error(`${join(directory, local)} does not transpile: ${problems.map(problem => ts.flattenDiagnosticMessageText(problem.messageText, ' ')).join('; ')}`)
     await writeFile(`${path.slice(0, -'.ts'.length)}.js`, output.outputText)
     await rm(path)
@@ -116,6 +116,26 @@ export async function declareAnchorBundles(nodeModules: string, anchor: string, 
     if (typeof version !== 'string') throw new Error(`${bundle}'s package.json names no version`)
     dependencies[bundle] = version
   }
-  manifest.dependencies = Object.fromEntries(Object.entries(dependencies).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+  manifest.dependencies = Object.fromEntries(Object.entries(dependencies).sort(([a], [b]) => (a < b ? -1 : 1)))
   await writeFile(join(nodeModules, anchor, 'package.json'), `${JSON.stringify(manifest, undefined, 2)}\n`)
+}
+
+/**
+ * Stamp the release's version into the `delorun` command package, whose `package.json` `version` is the version
+ * `delorun --version` reports and the plugin version checks compare against (contract C17). The workspace holds
+ * `0.0.0` there, so a closure built without this step would report `0.0.0` under every release.
+ * @param nodeModules - the staged closure's `app/node_modules`.
+ * @param version - the release version.
+ * @throws Error when the closure does not carry `@delo/cli`.
+ */
+export async function stampDeloVersion(nodeModules: string, version: string): Promise<void> {
+  const path = join(nodeModules, DELO_SCOPE, 'cli', 'package.json')
+  let manifest: Record<string, unknown>
+  try {
+    manifest = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+  } catch (error) {
+    throw new Error(`the closure does not carry @delo/cli, which reports the release's version`, { cause: error })
+  }
+  manifest.version = version
+  await writeFile(path, `${JSON.stringify(manifest, undefined, 2)}\n`)
 }

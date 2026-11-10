@@ -12,5 +12,9 @@
   "delo": {
     "state": "shipped",
     "unreached": "release"
+  },
+  "devDependencies": {
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/runtime-store": "workspace:*"
   }
 }

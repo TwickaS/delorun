@@ -9,7 +9,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "delorun": "tsx src/bin.ts"
+    "delorun": "tsx src/entry.ts",
+    "pack:launcher": "tsx src/build.ts"
   },
   "dependencies": {
     "@delo/contract-home-layout": "workspace:*",
@@ -18,9 +19,14 @@
     "@delo/home": "workspace:*",
     "@delo/install": "workspace:*",
     "@delo/logs": "workspace:*",
+    "@delo/release": "workspace:*",
+    "@delo/release-verify": "workspace:*",
     "@delo/runtime-store": "workspace:*"
   },
   "delo": {
     "state": "shipped"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.2"
   }
 }

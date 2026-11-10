@@ -243,6 +243,73 @@ describe('a run with no runtime installed', () => {
   })
 })
 
+describe('a home whose stored trust cannot be read', () => {
+  it('treats a stored root that does not read as a home with no runtime, and installs', async () => {
+    const fixture = await fixtureRelease()
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    const directory = await home({ root: fixture.roots[0]! })
+    await chmod(join(directory, 'trust', TRUST_FILES.root), 0o644)
+    // The file stays laxer than 0600 after the install, so the launch that follows the install reads no root either.
+    await runLauncher(launch({ home: directory, store: recordingStore(recorded), channel: fixtureChannel(directory, fixture), roots: fixture.roots }))
+    expect(recorded.installs).toHaveLength(1)
+  })
+
+  it('refuses a walked root chain that does not read, and starts nothing', async () => {
+    const fixture = await fixtureRelease()
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    const directory = await home({ root: fixture.roots[0]! })
+    await writeFile(join(directory, 'trust', 'roots'), 'in the way')
+    let printed = ''
+    let started = false
+    const status = await runLauncher(launch({
+      home: directory,
+      store: recordingStore(recorded, { installed: true }),
+      channel: fixtureChannel(directory, fixture),
+      roots: fixture.roots,
+      spawn: () => { started = true; return Promise.resolve(0) },
+      stderr: (text) => { printed += text },
+    }))
+    expect(status).toBe(LAUNCHER_EXIT.failed)
+    expect(printed).toContain('the root chain stored beside')
+    expect(printed).toContain('cannot be checked')
+    expect(started).toBe(false)
+  })
+})
+
+describe('an install whose retention cannot finish', () => {
+  it('warns that the next run retries it, and still starts the runtime', async () => {
+    const fixture = await fixtureRelease()
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    const directory = await home()
+    const warnings: string[] = []
+    const store: LauncherStore = { ...recordingStore(recorded), retain: () => Promise.reject(new Error('the disk is busy')) }
+    let started = false
+    const options = launch({ home: directory, store, channel: fixtureChannel(directory, fixture), roots: fixture.roots, spawn: () => { started = true; return Promise.resolve(0) } })
+    const status = await runLauncher({ ...options, logger: { ...options.logger, warn: message => void warnings.push(message) } })
+    expect(status).toBe(0)
+    expect(started).toBe(true)
+    expect(warnings).toEqual(['the runtime store could not finish its retention after an install; the next run retries it'])
+  })
+})
+
+describe('the line the launcher itself reports', () => {
+  it('reports installing once the release’s files are in the staging directory, and not before', async () => {
+    const fixture = await fixtureRelease()
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    const directory = await home()
+    const events: string[] = []
+    const channel = fixtureChannel(directory, fixture)
+    const options = launch({
+      home: directory,
+      store: recordingStore(recorded),
+      channel: { resolve: channel.resolve.bind(channel), fill: (...args) => { events.push('filled'); return channel.fill(...args) } },
+      roots: fixture.roots,
+    })
+    await runLauncher({ ...options, report: event => events.push(event.step) })
+    expect(events).toEqual(['filled', 'installing'])
+  })
+})
+
 describe('an install step that refuses', () => {
   it('prints the sentence and a remedy, exits 1, and starts nothing', async () => {
     const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
@@ -293,7 +360,6 @@ describe('an install step that refuses', () => {
       'INSTALL_VERIFY_FAILED',
       'ARCHIVE_REFUSED',
       'RELEASE_LOG_FAILED',
-      'RELEASE_LOG_UNCHECKED',
       'RELEASE_NOT_OFFERED',
       'RELEASE_METADATA_INVALID',
       'TRUST_STATE_INVALID',
@@ -481,6 +547,13 @@ describe('the environment the runtime starts with', () => {
         else process.env[name] = value
       }
     }
+  })
+})
+
+describe('a runtime that ends without a status', () => {
+  it('counts as a failure, with the launcher’s own failure status', async () => {
+    const status = await spawnRuntime({ command: process.execPath, args: ['-e', 'process.kill(process.pid, "SIGKILL")'], env: {} })
+    expect(status).toBe(LAUNCHER_EXIT.failed)
   })
 })
 

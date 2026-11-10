@@ -9,8 +9,8 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { create as createTar } from 'tar'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { buildEnvironment, toolchainProblems } from '../../src/build-closure.ts'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { buildClosuresChecked, buildEnvironment, toolchainProblems } from '../../src/build-closure.ts'
 import { readRecipe, readRecipeFile, RebuildExceptions, RECIPE_DIR } from '../../src/closure/config.ts'
 import { fetchPinned, stageNpmPackage, substitutePrebuilt } from '../../src/closure/sources.ts'
 import { scratch } from '../support.ts'
@@ -129,5 +129,15 @@ describe('pinned downloads', () => {
     const substitute = { name: '@deepseek-ai/node-addon-system-linux-x64', version: '0.1.2', integrity: `sha512-${'A'.repeat(86)}==` }
     await expect(substitutePrebuilt([substitute], modules, join(directory, 'cache'))).rejects.toThrow(/does not match the deployed source version 0\.2\.0/u)
     await expect(substitutePrebuilt([{ ...substitute, name: '@deepseek-ai/absent' }], modules, join(directory, 'cache'))).rejects.toThrow(/none is deployed/u)
+  })
+})
+
+describe('the checked build', () => {
+  it('refuses a Node other than the pinned one before it exports the tree or builds anything', async (test) => {
+    const root = scratch(test)
+    vi.spyOn(process, 'version', 'get').mockReturnValue('v1.0.0')
+    test.onTestFinished(() => { vi.restoreAllMocks() })
+    await expect(buildClosuresChecked(root, { version: '0.1.0', commit: 'HEAD', out: join(root, 'out'), platforms: ['linux-x64'], cache: join(root, 'cache'), writePins: false }))
+      .rejects.toThrow('Node v1.0.0 runs the build, but toolchain.json pins v24.22.0')
   })
 })

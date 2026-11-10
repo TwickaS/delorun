@@ -38,13 +38,13 @@ English | [中文](README.zh.md)
 4. The platform's file list, held to the manifest's length and SHA-256 and to its own signature.
 5. The archive itself, held to the manifest's length and SHA-256 as it is read from disk.
 
-`LauncherChannel` is the composition the launcher drives: `resolve` names and verifies a release and records what it proved under `trust/`, and `fill` downloads that release's archive and file list, checks both against the manifest, and extracts into the staging directory the store made.
+`LauncherChannel` is the composition the launcher drives: `resolve` names and verifies a release and records what it proved under `trust/`, and `fill` downloads that release's archive and file list, checks both against the manifest, and extracts into the staging directory the store made. The channel reports each step that finishes as an `InstallProgress` event (`resolved`, `signature-checked`, `log-checked`, `downloading` with the archive's signed size) through its `progress` option and formats nothing: the launcher turns the events into the lines a person reads.
 
 <a id="the-release-log"></a>
 
 ## The release log
 
-`runOnlineCheck` is contract C18's check against the current log. It reads the log's latest checkpoint and requires the log's own signature plus the root's witness threshold of cosignatures no older than 24 hours. It then proves consistency from the checkpoint the verified bundle carries, or the newer one this home stored, to the latest, and stores the latest. An unreachable log leaves the release `unchecked` and a verifiable failure leaves it `failed`; `requireVerifiedLog` refuses an install in both states, so a release that cannot be checked against the log never installs. `createTilesLogService` reads a tlog-tiles shard through the downloader, under a host list of its own: `hosts` names the log's origin and the witness network's checkpoint distributor, and the release-file rule stays contract C1's, so neither list has to name the other's hosts. A log whose origin is not one of its own hosts, or an answer that redirects out of them, is refused with `DOWNLOAD_REFUSED`.
+`runOnlineCheck` is contract C18's check against the current log. It reads the log's latest checkpoint and requires the log's own signature plus the root's witness threshold of cosignatures no older than 24 hours. It then proves consistency from the checkpoint the verified bundle carries, or the newer one this home stored, to the latest, and stores the latest. An unreachable log, a log that gives no consistency proof, or a newest witnessed checkpoint older than 24 hours leaves the release `unchecked`, with the reason in the result's `detail`; a verifiable failure leaves it `failed`. `refuseFailedLog` refuses an install only in the `failed` state: an `unchecked` release installs on its signature, and the channel reports `log-checked` with the reason so the launcher can warn (contract C18, "Behaviour per client"). Once the archive verified, `fill` records the outcome, `verified` or `unchecked` with its reason, in `trust/release-log.json`, the check state file of `@delo/release-verify`, keeping the entries of other releases; a file there that does not read refuses the install with `TRUST_STATE_INVALID`, and a `failed` check records nothing. `createTilesLogService` reads a tlog-tiles shard through the downloader, under a host list of its own: `hosts` names the log's origin and the witness network's checkpoint distributor, and the release-file rule stays contract C1's, so neither list has to name the other's hosts. A log whose origin is not one of its own hosts, or an answer that redirects out of them, is refused with `DOWNLOAD_REFUSED`.
 
 <a id="extraction"></a>
 
@@ -72,11 +72,10 @@ Every refusal is an `InstallError`, which `isInstallError` tests for:
 | `DOWNLOAD_FAILED` | The connection did not open or stalled, the answer was not 200, the file passed its limit, or the file cannot be created, written to completion or closed |
 | `INSTALL_VERIFY_FAILED` | A signature, digest, length or version check failed |
 | `ARCHIVE_REFUSED` | The archive holds an entry its format forbids or its signed list does not name |
-| `RELEASE_LOG_FAILED` | Contract C18's bundle or online check failed verifiably |
-| `RELEASE_LOG_UNCHECKED` | The online check could not run, and an install needs it |
+| `RELEASE_LOG_FAILED` | Contract C18's bundle or online check failed verifiably; an online check that could not run is not a failure |
 | `RELEASE_NOT_OFFERED` | The version a person named is not the release the fresh timestamp names |
 | `RELEASE_METADATA_INVALID` | A release file does not read at all |
-| `TRUST_STATE_INVALID` | A file under `trust/` does not read |
+| `TRUST_STATE_INVALID` | A file under `trust/` does not read or cannot be written |
 | `NO_TRUSTED_ROOT` | The launcher supplied no root, so nothing can be verified |
 
 <a id="development"></a>
