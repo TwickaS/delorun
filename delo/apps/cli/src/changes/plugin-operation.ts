@@ -22,6 +22,8 @@ export interface UpstreamOperation {
 }
 
 /**
+ * Load upstream's pnpm operation and installation anchor, imported after the launch variables are set so upstream
+ * resolves the Delo home.
  * @returns upstream's operation and installation anchor.
  */
 export async function loadUpstream(): Promise<UpstreamOperation> {
