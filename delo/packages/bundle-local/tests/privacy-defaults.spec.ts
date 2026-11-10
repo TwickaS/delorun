@@ -120,7 +120,7 @@ describe('a Delo CLI profile', () => {
   it('lists the two upstream opt-in rows it turns off, and the rows it removes or overrides', () => {
     expect(LOCAL_ROWS.filter(row => row.kind === 'changed').map(row => row.id).sort())
       .toEqual([
-        SETUP_OPT_IN_ROWS.desktopAnalytics, 'command-feedback', 'deepseek-account', 'sandbox', 'session-telemetry-otel',
+        SETUP_OPT_IN_ROWS.desktopAnalytics, 'account-controller', 'command-feedback', 'deepseek-account', 'sandbox', 'session-telemetry-otel',
         SETUP_OPT_IN_ROWS.sessionLogUpload, 'ui-message-feedback', 'ui-settings-account', 'ui-settings-models',
       ].sort())
   })

@@ -21,6 +21,11 @@
 - id: deepseek-account
   disabled: true
 
+# The API controller over that account service: it requires `deepseekAccount`, which no enabled row provides once the row
+# above is disabled, so left mounted it waits for the service for good and the Host starts with a did-not-activate warning.
+- id: account-controller
+  disabled: true
+
 # Feedback goes nowhere outside the machine. Upstream's feedback telemetry exporter sends a session-log prefix to
 # DeepSeek's collector when the person sends feedback, and Delo has no DeepSeek feedback service, so the row is disabled.
 - id: session-telemetry-otel

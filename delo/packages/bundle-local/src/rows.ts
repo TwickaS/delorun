@@ -82,6 +82,15 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value; the overlay does not restate the row.' },
   },
   {
+    id: 'account-controller',
+    kind: 'changed',
+    reason: 'The API controller over the DeepSeek account service is removed with it: the controller requires `deepseekAccount`, which no enabled row provides, so mounted it would never activate; upstream mounts it.',
+    parity: {
+      kind: 'upstream',
+      reason: 'C16\'s changed default takes upstream\'s value: the replay signs no account in, and the overlay does not restate the row.',
+    },
+  },
+  {
     id: 'ui-settings-models',
     kind: 'changed',
     reason: 'Upstream\'s preview notice is replaced by Delo\'s own notice (welcomeNotice off), and the other onboarding settings keep upstream\'s values.',

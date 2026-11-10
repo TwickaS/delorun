@@ -3,7 +3,7 @@
  * names the bundle that wrote it, and the composition differs from upstream's web profile only in {@link LOCAL_ROWS}.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import yaml from 'js-yaml'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -14,6 +14,9 @@ import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, LOCAL_ROWS, UPSTREAM_TEMPLATE } fro
 // Relative: this package does not depend on the registry, and a test must not add a dependency.
 import { PARITY_SWITCHES } from '../../contract-parity-composition/src/index.ts'
 import { createTestHome, DELO_PROFILE, INSTALL_ANCHOR, PACKAGE_DIR, REPO, type TestHome } from './profiles.ts'
+
+/** The service the disabled `deepseek-account` row provided; no enabled row of a Delo CLI profile may require it. */
+const REMOVED_ACCOUNT_SERVICE = 'deepseekAccount'
 
 /** The consent and guard rows this bundle mounts, with the row id each entry carries. */
 const MOUNTED_PLUGINS = [
@@ -67,6 +70,32 @@ function dumpConfig(profile: string): Dump {
 function writers(label: string): string[] {
   const [origin = '', patched] = label.split(', patched by ')
   return [origin, ...patched === undefined ? [] : patched.split(', ')]
+}
+
+/** The source directory of every workspace package, by package name, under the upstream and fork package trees. */
+function workspaceDirs(): ReadonlyMap<string, string> {
+  const dirs = new Map<string, string>()
+  const visit = (dir: string, depth: number): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === 'node_modules' || entry.name === 'lib') continue
+      const child = join(dir, entry.name)
+      if (existsSync(join(child, 'package.json'))) dirs.set((JSON.parse(readFileSync(join(child, 'package.json'), 'utf8')) as { name: string }).name, child)
+      else if (depth < 2) visit(child, depth + 1)
+    }
+  }
+  for (const tree of ['packages', 'delo/packages', 'apps']) visit(join(REPO, tree), 0)
+  return dirs
+}
+
+/**
+ * The services a package's host entry requires: the names in a `static inject` or exported `inject` array, or the
+ * `required` list of an object form. An `optional` list, and a plugin that reads a service with `ctx.get`, name none.
+ * @param source - the package's TypeScript source text.
+ * @returns the required service names.
+ */
+function requiredInjects(source: string): string[] {
+  const lists = [...source.matchAll(/(?:static\s+inject|export\s+const\s+inject)\s*=\s*(?:\[([^\]]*)\]|\{[^}]*?required\s*:\s*\[([^\]]*)\])/g)]
+  return lists.flatMap(match => [...(match[1] ?? match[2] ?? '').matchAll(/'([^']+)'/g)].map(name => name[1] ?? ''))
 }
 
 const text = (row: object): string => yaml.dump(row, { schema: entryListSchema, noRefs: true })
@@ -161,9 +190,27 @@ describe('a Delo CLI profile', () => {
     expect([...hosts].filter(entry => !entry.endsWith(' api.deepseek.com'))).toEqual([])
   })
 
+  it('mounts no enabled row that requires the account service the disabled account row no longer provides', () => {
+    const rows = home.rows(DELO_PROFILE)
+    // The disabled row is the only provider of the service in the composition.
+    expect(rows.filter(row => row.id === 'deepseek-account').map(row => row.disabled)).toEqual([true])
+    const dirs = workspaceDirs()
+    // A `disabled` condition is evaluated by the Host at load, so only a row with none can be known to mount; the condition
+    // the web template puts on `product-analytics` holds outside the desktop profile.
+    const mounted = rows.filter(row => row.disabled === undefined || row.disabled === false)
+    const consumers = mounted.flatMap((row) => {
+      const dir = dirs.get(String(row.name).replace(/^(@[^/]+\/[^/]+)\/.*$/, '$1'))
+      if (dir === undefined) return []
+      const sources = readdirSync(join(dir, 'src'), { recursive: true, encoding: 'utf8' }).filter(file => file.endsWith('.ts') && !file.endsWith('.d.ts') && !file.startsWith('client'))
+      return sources.some(file => requiredInjects(readFileSync(join(dir, 'src', file), 'utf8')).includes(REMOVED_ACCOUNT_SERVICE)) ? [`${String(row.id)} (${String(row.name)})`] : []
+    })
+    expect(consumers).toEqual([])
+    expect(requiredInjects("static inject = ['a', 'b']\nexport const inject = { optional: ['c'], required: ['d'] }\nexport const inject = { optional: ['e'] }")).toEqual(['a', 'b', 'd'])
+  })
+
   it('composes no enabled feedback exporter, feedback surface or account surface', () => {
     const rows = home.rows(DELO_PROFILE)
-    for (const id of ['session-telemetry-otel', 'command-feedback', 'ui-message-feedback', 'ui-settings-account']) {
+    for (const id of ['session-telemetry-otel', 'command-feedback', 'ui-message-feedback', 'ui-settings-account', 'account-controller']) {
       expect(rows.filter(row => row.id === id && row.disabled !== true), id).toEqual([])
     }
   })
