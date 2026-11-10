@@ -3,7 +3,7 @@
  * sandbox Delo's start configures cannot start a Windows program by any way interop is reached, and a workspace on a
  * Windows drive stays readable and writable. The ways: the program by its `/mnt/c` path, by bare name through `PATH`,
  * as a copy in the workspace, through `/init` called directly, with `WSL_INTEROP` naming each interop socket, a direct
- * connect to each socket, and the kernel's `WSLInterop` binfmt registration read, changed or mounted again. Under
+ * connect to each socket, and the kernel's `WSLInterop` binfmt registration, which no writable `binfmt_misc` mount exposes. Under
  * Landlock, which cannot hide the sockets, the provider refuses the wrap. The harmless program is `whoami.exe`, which
  * prints the Windows account and exits. Each case skips by name with its reason on a machine without WSL interop or
  * without bwrap.
@@ -149,15 +149,17 @@ describe('wsl-interop-denied: a command the bwrap sandbox confines under WSL', {
     }
   })
 
-  it('cannot read, change or mount again the kernel\'s WSLInterop registration', async (test) => {
+  it('sees no writable binfmt_misc mount and no registration in it, so WSLInterop cannot be read or changed', async (test) => {
     requireWsl(test, true)
     const sandbox = await provider()
     const workspace = directory(tmpdir(), 'dsh-interop-workspace-')
+    // Only reads and existence checks: nothing here writes a registration, whatever user runs the test.
     for (const command of [
+      // Any binfmt_misc mount the command sees is read-only.
+      'grep binfmt_misc /proc/self/mounts | grep -q -v " ro,"',
+      'test -e /proc/sys/fs/binfmt_misc/register',
+      'test -e /proc/sys/fs/binfmt_misc/WSLInterop',
       'cat /proc/sys/fs/binfmt_misc/WSLInterop',
-      'echo 0 > /proc/sys/fs/binfmt_misc/WSLInterop',
-      'echo :planted:M::MZ::/bin/true: > /proc/sys/fs/binfmt_misc/register',
-      `mount -t binfmt_misc none ${workspace}`,
     ]) {
       refused(await confined(sandbox, command, workspace), command)
     }

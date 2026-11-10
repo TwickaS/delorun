@@ -500,7 +500,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     if (this.escapeSocketDirectories.length > 0 && !RUNNER_PROTECTION[selected.runner].socketConnect) {
       const escape = this.escapeSocketDirectories.find(directory => existsSync(directory))
       if (escape !== undefined) {
-        throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them, or run the command with full access`)
+        throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them`)
       }
     }
     const runnerArgv = this.runnerArgv(selected.runner, policy, protection)

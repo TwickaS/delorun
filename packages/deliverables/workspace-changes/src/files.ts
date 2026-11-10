@@ -141,8 +141,8 @@ interface Identity {
  * the Host touches anything inside: each must still be a directory, not a link, with the same device and inode, so a
  * directory or one of its parents that was renamed away or replaced by a link, here or above the scratch root, is
  * refused instead of followed. The check and the operation after it are separate calls, so a swap inside that window
- * is not seen; the directory lies outside every root a live Session's confined commands can write, which is what
- * keeps such a swap out of their reach.
+ * is not seen; the recorder's check of the directory against every live Session's writable roots before each use is
+ * what keeps such a swap out of confined commands' reach.
  */
 export class PrivateTree {
   private readonly identities = new Map<string, Identity>()
