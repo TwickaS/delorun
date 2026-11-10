@@ -9,6 +9,7 @@
 import { constants } from 'node:fs'
 import { lstat, mkdir, mkdtemp, open, readdir, realpath, rm, chmod, type FileHandle } from 'node:fs/promises'
 import { isAbsolute, join, sep } from 'node:path'
+import { pathWithin } from '@deepseek-ai/dsh-sandbox'
 
 /** Read without following a final link and without waiting for a writer on a named pipe. */
 const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
@@ -228,6 +229,19 @@ export class PrivateTree {
 }
 
 /**
+ * Require the scratch root's `lstat` to name a directory, not a link, owned by the current user where the platform
+ * reports user ids.
+ * @param root - absolute scratch root.
+ * @param stats - the root's `lstat`.
+ * @throws when the root is a link, not a directory, or owned by another user.
+ */
+function assertOwnedDirectory(root: string, stats: { isDirectory(): boolean; uid: number }): void {
+  if (!stats.isDirectory()) throw new Error(`scratch root ${root} is not a directory`)
+  const uid = process.getuid?.()
+  if (uid !== undefined && stats.uid !== uid) throw new Error(`scratch root ${root} belongs to another user`)
+}
+
+/**
  * Create one Session's private directory under the scratch root. The root and its missing ancestors are created
  * first; the root must then be a directory, not a link, owned by the current user, and is narrowed to mode 0700.
  * @param root - absolute scratch root.
@@ -237,9 +251,7 @@ export class PrivateTree {
 export async function createPrivateDirectory(root: string): Promise<string> {
   await mkdir(root, { recursive: true, mode: 0o700 })
   const stats = await lstat(root)
-  if (!stats.isDirectory()) throw new Error(`scratch root ${root} is not a directory`)
-  const uid = process.getuid?.()
-  if (uid !== undefined && stats.uid !== uid) throw new Error(`scratch root ${root} belongs to another user`)
+  assertOwnedDirectory(root, stats)
   if ((stats.mode & 0o077) !== 0) await chmod(root, 0o700)
   return realpath(await mkdtemp(join(root, `${SESSION_DIRECTORY_PREFIX}${process.pid}-`)))
 }
@@ -261,27 +273,40 @@ export function processAlive(pid: number): boolean {
 
 /**
  * Remove the private directories that Host processes no longer running left under the scratch root: each
- * `session-<pid>-*` directory, not a link, whose process is gone. A directory of this process or of a running one,
- * a link, and any other entry are left alone; a missing root removes nothing.
+ * `session-<pid>-*` directory, not a link, whose process is gone. Before listing, the root must be a directory, not a
+ * link, owned by the current user, and its canonical path must overlap no root a live Session's confined commands can
+ * write; otherwise nothing is removed. A directory of this process or of a running one, a link, and any other entry
+ * are left alone; a missing root removes nothing.
  * @param root - absolute scratch root.
+ * @param writableRoots - the canonical roots any live Session's confined commands can write at this moment.
  * @param alive - whether a process id is running.
  * @returns the directories removed.
+ * @throws when the root is a link, not a directory, owned by another user, or overlaps a writable root, in which case
+ * nothing is removed.
  */
-export async function removeStaleDirectories(root: string, alive: (pid: number) => boolean = processAlive): Promise<string[]> {
-  let entries: string[]
+export async function removeStaleDirectories(
+  root: string, writableRoots: () => readonly string[], alive: (pid: number) => boolean = processAlive,
+): Promise<string[]> {
+  let stats: Awaited<ReturnType<typeof lstat>>
   try {
-    entries = await readdir(root)
+    stats = await lstat(root)
   } catch (error: unknown) {
     if (isMissing(error)) return []
     throw error
   }
+  assertOwnedDirectory(root, stats)
+  const canonical = await realpath(root)
+  const exposed = writableRoots().find(writable => pathWithin(canonical, writable) || pathWithin(writable, canonical))
+  if (exposed !== undefined) {
+    throw new Error(`scratch root ${canonical} overlaps ${exposed}, which a live Session's confined commands can write; stale private directories are left in place`)
+  }
   const removed: string[] = []
-  for (const entry of entries) {
+  for (const entry of await readdir(canonical)) {
     const match = new RegExp(`^${SESSION_DIRECTORY_PREFIX}(\\d+)-`).exec(entry)
     if (match === null) continue
     const pid = Number(match[1])
     if (pid === process.pid || alive(pid)) continue
-    const path = join(root, entry)
+    const path = join(canonical, entry)
     if (!(await lstat(path)).isDirectory()) continue
     await rm(path, { recursive: true, force: true })
     removed.push(path)

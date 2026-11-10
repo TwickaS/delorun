@@ -146,8 +146,11 @@ export function apply(ctx: Context, config: Config): void {
     if (!Number.isSafeInteger(value) || value < 1) throw new Error(`workspace-changes requires a positive integer ${field}`)
   }
   const scratchRoot = resolveScratchRoot(config)
-  // Private directories that a Host process no longer running left behind hold copies of workspace files.
-  void removeStaleDirectories(scratchRoot).catch((error: unknown) => { ctx.logger.warn(`workspace-changes: ${String(error)}`) })
+  // Private directories that a Host process no longer running left behind hold copies of workspace files. No recorder
+  // exists yet, so the store's Sessions are every live one.
+  void removeStaleDirectories(scratchRoot, () => everyConfinedWritableRoot(ctx, [])).catch((error: unknown) => {
+    ctx.logger.warn(`workspace-changes: ${String(error)}`)
+  })
   const lifetime = new AbortController()
   const recorders = new Map<Session, TurnRecorder>()
   const mutations = new WeakMap<object, TurnRecorder>()
