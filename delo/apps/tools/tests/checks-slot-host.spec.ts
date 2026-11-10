@@ -150,10 +150,10 @@ describe('the wrapper for ad-hoc commands', () => {
 
   it('takes the slots, runs the command with the grant in DELO_SLOTS and returns its status', async () => {
     const { host, ran, said } = wrapper()
-    expect(await withSlots(['--slots', '2', '--disk', '--memory-gib', '1', '--', 'tsc', '-p', 'x'], host)).toBe(3)
-    expect(ran).toEqual([{ argv: ['tsc', '-p', 'x'], slots: '2' }])
+    expect(await withSlots(['--slots', '2', '--disk', '--memory-gib', '1', '--', 'tsc', '-p', 'x\n'], host)).toBe(3)
+    expect(ran).toEqual([{ argv: ['tsc', '-p', 'x\n'], slots: '2' }])
     expect(said).toEqual(['with-slots: waited 3 s for 2 slots\n'])
-    expect(readFileSync(join(host.paths.dir, `held-${String(process.pid)}.json`), 'utf8')).toContain('"label":"with-slots: tsc -p x"')
+    expect(readFileSync(join(host.paths.dir, `held-${String(process.pid)}.json`), 'utf8')).toContain('"label":"with-slots: tsc -p x "')
   })
 
   it('takes four slots by default', async () => {

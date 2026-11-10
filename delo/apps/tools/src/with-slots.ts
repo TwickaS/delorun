@@ -56,7 +56,7 @@ export async function withSlots(argv: readonly string[], host: WrapperHost): Pro
   const memoryGiB = values['memory-gib'] === undefined ? 0 : Number(values['memory-gib'])
   if (!(memoryGiB >= 0)) throw new Error(`--memory-gib takes a number of GiB, got ${String(values['memory-gib'])}`)
   if (positionals.length === 0) throw new Error('give the command after --, such as `-- node_modules/.bin/tsc -p delo/apps/tools/tsconfig.json --noEmit`')
-  const grant = await takeSlots(host.slots, host.paths, host.budget, { want: slots, min: slots, memoryBytes: memoryGiB * GIB, disk: values.disk, priority: gatePriority(host.env, false), label: `with-slots: ${positionals.join(' ').slice(0, 160)}` })
+  const grant = await takeSlots(host.slots, host.paths, host.budget, { want: slots, min: slots, memoryBytes: memoryGiB * GIB, disk: values.disk, priority: gatePriority(host.env, false), label: `with-slots: ${positionals.join(' ').replace(/\s+/g, ' ').slice(0, 160)}` })
   if (grant.waitedMs >= 1000) host.slots.say(`with-slots: waited ${String(Math.round(grant.waitedMs / 1000))} s for ${String(grant.slots)} slots\n`)
   return host.run(positionals, { ...host.env, DELO_SLOTS: String(grant.slots) })
 }
