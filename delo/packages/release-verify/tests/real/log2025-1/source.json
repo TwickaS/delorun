@@ -1,0 +1,22 @@
+{
+  "log": "https://log2025-1.rekor.sigstore.dev/api/v2",
+  "fetchedAt": "2026-11-10T07:10:59.827Z",
+  "firstSize": 192074427,
+  "secondSize": 192074472,
+  "tiles": [
+    "https://log2025-1.rekor.sigstore.dev/api/v2/tile/0/x750/290.p/232",
+    "https://log2025-1.rekor.sigstore.dev/api/v2/tile/1/x002/930.p/210",
+    "https://log2025-1.rekor.sigstore.dev/api/v2/tile/2/011.p/114",
+    "https://log2025-1.rekor.sigstore.dev/api/v2/tile/3/000.p/11"
+  ],
+  "keys": {
+    "log": {
+      "vkey": "log2025-1.rekor.sigstore.dev+cf119915+AbfK5adZJxsI323FwGD2AJJ9F4i89cfDuLdGJBIYntuO",
+      "source": "Sigstore's trusted root, https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json, tlog https://log2025-1.rekor.sigstore.dev (PKIX_ED25519 public key, checkpoint key id zxGZFQ==)"
+    },
+    "witness": {
+      "vkey": "witness.stagemole.eu+67f7aea0+BEqSG3yu9YrmcM3BHvQYTxwFj3uSWakQepafafpUqklv",
+      "source": "the witness operator's page, https://witness.stagemole.eu/about"
+    }
+  }
+}
