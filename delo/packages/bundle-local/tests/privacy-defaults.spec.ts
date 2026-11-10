@@ -156,7 +156,8 @@ describe('a Delo CLI profile', () => {
     expect(destinations.filter(host => host?.includes('delo') === true)).toEqual([])
     const deloRows = rows.filter(row => strings([row.name]).some(name => name.startsWith('@delo/')))
     expect(deloRows.map(row => row.id)).toEqual(LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id))
-    // The bundle's own browser half, each consent and guard plugin it mounts, and the trash, which keeps everything local.
+    // The bundle's own browser half, each consent and guard plugin it mounts, its update gate, and the trash, which
+    // keeps everything local.
     expect(deloRows.map(row => row.name)).toEqual([
       LOCAL_BUNDLE,
       '@delo/plugin-instruction-consent',
@@ -164,6 +165,7 @@ describe('a Delo CLI profile', () => {
       '@delo/plugin-permission-defaults',
       '@delo/plugin-schedule-consent',
       '@delo/plugin-fetch-guard',
+      `${LOCAL_BUNDLE}/update-gate`,
       '@delo/plugin-trash',
     ])
   })

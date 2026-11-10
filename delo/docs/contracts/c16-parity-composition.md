@@ -79,6 +79,7 @@ The registry has these entries.
 | `instruction_layer_consent` | Delo's approval for instruction-layer files | On | Off | The approval for a model-authored write to a skill, a preset or an `AGENTS.md`, which names the effect and shows the diff. |
 | `mcp_add_consent` | Delo's MCP server add flow | On | Off | The consent that names the command an added MCP server will run. |
 | `container_denial_marker` | Delo's edit of upstream's container denial reporting | On | Off | The environment denial marker on denials inside a container. |
+| `update_turn_refusal` | `@delo/bundle-local`, its `delo-update-gate` row | On | Off | The refusal of the first step of every new turn with `UPDATE_PENDING` while `delorun`'s chat gate is held ([C19](c19-home-process.md)), so the turn ends with that message and no model request. |
 | `sandbox_protected_reads` | Delo's edit of upstream's `glob`, `grep` and `present` tools | On: `@delo/bundle-local`'s `sandbox` row sets `protectedHome` | Off: the parity overlay leaves the `sandbox` row to upstream, which sets no `protectedHome` | Whether the search tools and `present` refuse the sandbox provider's protected reads: a search rooted under the Delo home is refused and its paths are left out of a wider search, and a file under the home is not presented, as `read` and `read_image` already refuse them. |
 
 A registry entry's `defaultValue` applies in Delo's default composition, and its `parityValue` applies in the parity composition. A built switch's field is either a boolean Config field, whose schema default is the parity value, or a presence field: a Config key whose JSDoc names the switch and which Delo's default composition sets on the module's row and the parity composition does not. A presence switch is on by default and off at parity, and `parity-switches` with its specs checks both compositions' rows. Configuration sets each switch value. A switch registered by an upstream edit is a hook or configuration field added upstream, and the behaviour it controls lives under `delo/`.
@@ -106,7 +107,7 @@ A parity run passes when `pnpm run test:snapshot` with the overlay exits 0 for e
 - `delo/apps/tools/src/parity/composition/`: the parity overlay, the replay lane, the static scan and the switch sweep.
 - `delo/apps/tools/src/run-checks.ts`: the `parity-replay` and `parity-switches` checks.
 - `delo/apps/tools/src/parity/release/`: the release tooling delivers the parity run on built release artifacts.
-- `@delo/bundle-studio`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`: the packages that register switches, which the studio packages deliver.
+- `@delo/bundle-studio`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`, which the studio packages deliver, and `@delo/bundle-local`, which Delo's CLI profiles add: the packages that register switches.
 - `packages/boot/doctor`, launched by `apps/cli`: the doctor's registration.
 - Upstream's `vitest.snapshot.config.ts`, the snapshot adapters listed in `snapshotAdapters`, and the `snapshot.yml` and replay layer files of each scenario, which the lane reads without changing them.
 
@@ -125,8 +126,8 @@ The parity composition is a test composition. Shipped profiles do not select it,
 Requirements:
 
 - The parity overlay loads only when the replay lane sets `DSH_SNAPSHOT_PATCH`. No shipped profile, no person's configuration and no command-line option selects it.
-- In the parity composition, `permission_defaults`, `fetch_guard`, `scheduled_task_consent`, `instruction_layer_consent`, `mcp_add_consent` and `container_denial_marker` are off, and their protections are absent there.
-- The composition a person runs mounts the consent plugins on: `@delo/bundle-local`, the one Delo layer a CLI profile adds, inserts the rows `delo-instruction-consent`, `delo-mcp-consent`, `delo-permission-defaults`, `delo-schedule-consent` and `delo-fetch-guard` with their switch on, and the parity overlay restates those same five rows disabled, so the parity composition mounts none of them. `container_denial_marker` is a field of upstream's `sandbox-policy` row, which no shipped layer sets, so each composition runs its Config default, off.
+- In the parity composition, `permission_defaults`, `fetch_guard`, `scheduled_task_consent`, `instruction_layer_consent`, `mcp_add_consent`, `update_turn_refusal` and `container_denial_marker` are off, and their protections are absent there.
+- The composition a person runs mounts the consent plugins on: `@delo/bundle-local`, the one Delo layer a CLI profile adds, inserts the rows `delo-instruction-consent`, `delo-mcp-consent`, `delo-permission-defaults`, `delo-schedule-consent`, `delo-fetch-guard` and `delo-update-gate` with their switch on, and the parity overlay restates those same six rows disabled, so the parity composition mounts none of them. `container_denial_marker` is a field of upstream's `sandbox-policy` row, which no shipped layer sets, so each composition runs its Config default, off.
 - The shipped sandbox row protects the Delo home: `@delo/bundle-local` sets its `protectedHome` to the harness home, which is the Delo home for every runtime process, with C1's read exemptions, so a confined command cannot read the consent stores under `<home>/secrets`; `delorun start` adds that profile's channel sockets as `deniedSockets`. The parity overlay leaves the row to upstream's composition, so the replay runs upstream's confinement.
 - `plugin_manager_read_exemption` exempts only the five read actions. Every write action still requires the `danger-full-access` escalation.
 - A container denial is never answered with escalation guidance, and a policy denial from `bwrap` is never labelled `environment`.
@@ -149,6 +150,7 @@ Denial tests:
 | `container denial carries no escalation guidance` | A denial inside a container returns the environment marker and no escalation guidance in every permission mode of the default composition. |
 | `bwrap policy denial is never labelled environment` | A `Read-only file system` denial from `bwrap` is not labelled `environment`. |
 | `parity overlay is not selected by a person's configuration` | A shipped profile started with the overlay file present and without `DSH_SNAPSHOT_PATCH` does not load the overlay. |
+| `update gate refuses a new turn while held` | With a source attached to the `deloTurnGate` service held, a new turn in the default composition ends with `UPDATE_PENDING` before any model request, and a turn that was already running takes its next step. |
 | `confined command cannot read the home's secrets` | Under the sandbox row the default composition ships, a workspace command cannot read a canary under `<home>/secrets`, while the same command unconfined reads it and a file under a read exemption stays readable. |
 
 Replay proofs, which show that a switch off restores upstream's output and are not denial tests:

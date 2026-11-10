@@ -119,6 +119,18 @@
       config:
         enabled: true
 
+# The update gate (C16 switch `update_turn_refusal`): while `delorun update` or
+# a stop waits for running chats (C19's `waiting` phase), the first step of
+# every new turn is refused with UPDATE_PENDING, so the wait ends once the
+# running turns end. `delorun` attaches its chat gate to the deloTurnGate
+# service this row provides; without the row, a turn that starts during the
+# wait is counted and the wait lasts until it ends.
+- insert:
+    - id: delo-update-gate
+      name: '@delo/bundle-local/update-gate'
+      config:
+        enabled: true
+
 # Contract C8's trash: deleting a chat or a workspace in the studio moves it to
 # the trash under the home, the Trash section in Settings restores it or
 # deletes it forever, and each start deletes what is older than 30 days. The

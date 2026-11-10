@@ -357,6 +357,24 @@ export const PARITY_SWITCHES = [
       'packages/fs/tool-fs-search/src/search-core.ts',
     ],
   },
+  {
+    id: 'update_turn_refusal',
+    state: 'built',
+    registeredBy: '@delo/bundle-local, its delo-update-gate row',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delo-update-turn-refusal',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delo/bundle-local/update-gate',
+      source: 'delo/packages/bundle-local/src/update-gate.ts',
+      key: 'enabled',
+    },
+    // The plugin registers its `agent/pre-step` listener behind the switch: off,
+    // it mounts no service and no listener, so every turn starts as upstream's.
+    sources: ['delo/packages/bundle-local/src/update-gate.ts'],
+  },
 ] as const satisfies readonly ParitySwitchEntry[]
 
 /** One registry entry, as declared. */

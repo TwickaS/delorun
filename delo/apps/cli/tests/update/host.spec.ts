@@ -12,9 +12,11 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { JobEvent, JobEventListener, JobView } from '@deepseek-ai/dsh-jobs'
+import * as UpdateGate from '@delo/bundle-local/update-gate'
 import { CountingChatGate } from '@delo/home-process'
 import type { BootedRow } from '../../src/delo-bundles.ts'
-import { checkHealth, inactiveRows, watchChats, type HostHealthFacts } from '../../src/update/host.ts'
+import { checkHealth, inactiveRows, STOP_REASON, watchChats, type HostHealthFacts } from '../../src/update/host.ts'
 
 /** An agent that records the cancellations it is asked for. */
 interface FakeAgent {
@@ -69,6 +71,159 @@ describe('watchChats', () => {
 
     expect(first.cancellations).toEqual([{ kind: 'hook', reason: 'Delo is stopping or updating' }])
     expect(second.cancellations).toEqual([{ kind: 'hook', reason: 'Delo is stopping or updating' }])
+  })
+})
+
+/** Lets the context's pending plugin fibers start. */
+const settle = (): Promise<void> => new Promise((resolve) => { setImmediate(resolve) })
+
+/** A job registry that hands its listener to the spec and records the kills it is asked for. */
+interface FakeJobs {
+  readonly filters: unknown[]
+  readonly kills: unknown[][]
+  emit: (event: JobEvent) => void
+  failKill: boolean
+}
+
+/** @returns a fake job registry, with its emitter. */
+function fakeJobs(): FakeJobs & { readonly service: object } {
+  const listeners: JobEventListener[] = []
+  const state: FakeJobs = {
+    filters: [],
+    kills: [],
+    emit: (event) => { for (const listener of listeners) listener(event) },
+    failKill: false,
+  }
+  const service = {
+    events: {
+      subscribe: (filter: unknown, listener: JobEventListener) => {
+        state.filters.push(filter)
+        listeners.push(listener)
+        return () => {}
+      },
+    },
+    kill: (...args: unknown[]) => {
+      if (state.failKill) throw new Error('the producer refused the cancellation')
+      state.kills.push(args)
+      return 'requested'
+    },
+  }
+  return Object.assign(state, { service })
+}
+
+/**
+ * @param id - the job's id.
+ * @param owner - its owning session, or `undefined` for an unowned job.
+ * @returns a running job's projection.
+ */
+function job(id: string, owner?: string): JobView {
+  return {
+    id: id as JobView['id'],
+    kind: 'bash',
+    label: id,
+    ...owner === undefined ? {} : { owner: owner as NonNullable<JobView['owner']> },
+    status: 'running',
+    startedAt: 0,
+    output: { total: 0, earliest: 0 },
+  }
+}
+
+describe('watchChats over the job registry', () => {
+  it('counts every owner\'s job from its registration until it settles, and ignores its other events', async () => {
+    const ctx = new Context()
+    const gate = new CountingChatGate()
+    const jobs = fakeJobs()
+    ctx.provide('jobs', jobs.service)
+    watchChats(ctx, gate)
+    await settle()
+
+    expect(jobs.filters).toEqual([{ owners: 'all' }])
+    jobs.emit({ type: 'registered', job: job('bash-1', 'chat-1') })
+    jobs.emit({ type: 'registered', job: job('bash-2') })
+    jobs.emit({ type: 'progress', job: job('bash-1', 'chat-1') })
+    jobs.emit({ type: 'output', id: 'bash-1' as JobView['id'], total: 4 })
+    expect(gate.running()).toBe(2)
+
+    jobs.emit({ type: 'settled', job: job('bash-1', 'chat-1'), cause: 'producer', awaited: false })
+    jobs.emit({ type: 'removed', job: job('bash-1', 'chat-1') })
+    expect(gate.running()).toBe(1)
+    await ctx.fiber.dispose()
+  })
+
+  it('kills each running job as its owner with the stop reason when the gate cancels all chats, and a kill that throws stops no other', async () => {
+    const ctx = new Context()
+    const gate = new CountingChatGate()
+    const jobs = fakeJobs()
+    const agent = fakeAgent()
+    ctx.provide('jobs', jobs.service)
+    watchChats(ctx, gate)
+    await settle()
+    jobs.emit({ type: 'registered', job: job('bash-1', 'chat-1') })
+    jobs.emit({ type: 'registered', job: job('bash-2') })
+    await ctx.parallel('agent/status', { agent, status: 'running' })
+
+    await gate.cancelAll()
+    expect(jobs.kills).toEqual([['bash-1', 'chat-1', STOP_REASON], ['bash-2', undefined, STOP_REASON]])
+
+    jobs.failKill = true
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    await gate.cancelAll()
+    expect(warn).toHaveBeenCalledTimes(2)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('the producer refused the cancellation')
+    expect(agent.cancellations).toHaveLength(2)
+    warn.mockRestore()
+    await ctx.fiber.dispose()
+  })
+
+  it('stops counting the jobs it still tracks when the registry goes', async () => {
+    const ctx = new Context()
+    const gate = new CountingChatGate()
+    const jobs = fakeJobs()
+    const unprovide = ctx.provide('jobs', jobs.service)
+    watchChats(ctx, gate)
+    await settle()
+    jobs.emit({ type: 'registered', job: job('bash-1', 'chat-1') })
+    expect(gate.running()).toBe(1)
+
+    unprovide()
+    await settle()
+
+    expect(gate.running()).toBe(0)
+    await ctx.fiber.dispose()
+  })
+})
+
+describe('watchChats and the update gate of @delo/bundle-local', () => {
+  it('holds new turns back exactly while the chat gate is held, once the row\'s service is mounted', async () => {
+    const ctx = new Context()
+    const gate = new CountingChatGate()
+    watchChats(ctx, gate)
+    await ctx.plugin(UpdateGate, { enabled: true })
+    await settle()
+
+    expect(ctx.deloTurnGate.held).toBe(false)
+    const release = gate.hold()
+    expect(ctx.deloTurnGate.held).toBe(true)
+    release()
+    expect(ctx.deloTurnGate.held).toBe(false)
+    await ctx.fiber.dispose()
+  })
+
+  it('detaches from the service when the watch goes, so a held gate no longer refuses turns', async () => {
+    const ctx = new Context()
+    const gate = new CountingChatGate()
+    const service = new UpdateGate.UpdateTurnGateService(new Context())
+    const unprovide = ctx.provide('deloTurnGate', service)
+    watchChats(ctx, gate)
+    await settle()
+    gate.hold()
+    expect(service.held).toBe(true)
+
+    unprovide()
+    await settle()
+
+    expect(service.held).toBe(false)
+    await ctx.fiber.dispose()
   })
 })
 
@@ -193,6 +348,15 @@ describe('checkHealth', () => {
     const verdict = await checkHealth(facts(1), undefined)
 
     expect(verdict).toEqual({ passed: false, criterion: 'H2-host-ready', detail: 'the studio\'s index did not answer: socket hung up' })
+  })
+
+  it('asks an IPv6 studio listener at its bracketed address', async () => {
+    const fetched = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+
+    const verdict = await checkHealth(facts(0, { studio: () => ({ host: '::1', port: 4000 }) }), undefined)
+
+    expect(verdict).toEqual({ passed: true })
+    expect(String(fetched.mock.calls[0]?.[0])).toBe('http://[::1]:4000/')
   })
 
   it('passes H1 and H2 alone when the report predicted nothing', async () => {

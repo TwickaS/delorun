@@ -36,9 +36,10 @@
 # `false`. The Privacy section and the Delo sidebar brand are present and
 # disabled, because recorded web scenarios compare upstream's interface output
 # and brand. The sandbox row is left out, so the replay runs upstream's
-# confinement with no protected home. The five consent and guard rows are
-# present and disabled: the shipped composition mounts each with its switch on,
-# and a disabled row mounts nothing, which is each switch's parity value. The
+# confinement with no protected home. The five consent and guard rows and the
+# update gate row are present and disabled: the shipped composition mounts each
+# with its switch on, and a disabled row mounts nothing, which is each switch's
+# parity value. The
 # studio bundle and the permission
 # defaults are planned, and the preset default keeps
 # upstream's value (`standard`).
@@ -87,6 +88,13 @@
 
     - id: delo-fetch-guard
       name: '@delo/plugin-fetch-guard'
+      config:
+        enabled: true
+      disabled: true
+
+- insert:
+    - id: delo-update-gate
+      name: '@delo/bundle-local/update-gate'
       config:
         enabled: true
       disabled: true

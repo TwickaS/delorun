@@ -86,13 +86,13 @@ When the machine is set up for Docker, `launchSupervisor` spawns `@delo/supervis
 | `ProfileSnapshots`: `save` in `snapshot`, with the report, returning the history version id the record keeps | C3's profile history, `delo/apps/cli/src/update/support.ts` over `@delo/profile-safety` | as above |
 | `SessionDataCopies`: `recover` before step 3, `plan` and `save` for the copy, `discard` for an update that ended before the switch, `commit` once an update committed, `rollback` for every way back | `delo/apps/cli/src/update/support.ts` over `@delo/update`'s copy and its one rollback function | as above |
 | `HostRunner` and `RunningHost`: boot, every row at boot and the rows that did not load, C3's health check, close | `delorun start` with upstream's profile runner | — |
-| `ChatGate`: running chats, `hold` (refuse new turns and hold scheduled deliveries), `idle`, `cancelAll`; `CountingChatGate` is an implementation the Host feeds with `track` | `delorun start`, from upstream's `agent/status` and `agent/pre-step` (`delo/apps/cli/src/update/host.ts`) | — |
+| `ChatGate`: running chats, `hold` (refuse new turns and hold scheduled deliveries), `idle`, `cancelAll`; `CountingChatGate` is an implementation the Host feeds with `track` | `delorun start`, from upstream's `agent/status` and the job registry's events; `@delo/bundle-local`'s `deloTurnGate` service reads `held` to refuse new turns (`delo/apps/cli/src/update/host.ts`) | — |
 
 The specs drive the handshake through a fixture store in `tests/support.ts`, which keeps C1's pointer files and starts successors from `tests/fixtures/home-entry.ts`.
 
 ## Not yet implemented
 
-- The CLI's Host counts running chats but does not refuse a new turn while the gate is held, because a hook on the model request path needs a registered parity switch (contract C16); it counts no background job and holds no scheduled delivery.
+- The CLI's Host holds no scheduled delivery: a delivery that falls due while the gate is held is recorded as delivered and its turn is refused with `UPDATE_PENDING`. Work that began before the Host reported it is not counted.
 - Step 8's confinement probes and their results, and `delorun verify`'s report of a dialect that cannot enforce C1's rules. The home process wraps no confined command itself yet; the probes, when they land, retry once a Landlock wrap refused with exit code 125 because an entry on the path to the home changed between the wrap and the launch, before reporting it.
 - Start at login (`--at-login`) and `delorun status --follow`.
 - The Windows named pipe with C1's DACL: the channel listens only on a Unix socket.

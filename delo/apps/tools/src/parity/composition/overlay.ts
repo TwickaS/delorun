@@ -31,6 +31,7 @@ export const DEFAULT_PARITY: Readonly<Partial<Record<ParitySwitchId, string>>> =
   permission_defaults: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the permissionDefaults service and its sandbox-mode guard unmounted, so the deployment default reaches every new chat and every mode switch is recorded, as upstream records it',
   instruction_layer_consent: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the writeConsent service unmounted, and the mutating tools run unasked, as upstream runs them',
   scheduled_task_consent: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the consent plugin; the parity composition leaves the scheduleConsent service unmounted, and approvals and deliveries keep upstream\'s text and behaviour',
+  update_turn_refusal: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the deloTurnGate service unmounted, and every turn starts as upstream starts it',
 }
 
 /** One overlay row, as parsed. */

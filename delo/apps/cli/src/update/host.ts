@@ -1,11 +1,8 @@
 /**
  * What the CLI's Host reports to the home process (contracts C19 and C3): its running chats, counted from upstream's
- * `agent/status` event with each agent's own cancellation, and C3's health check H1 to H5 over the booted rows, the
- * studio's listener, the runtime's files and the profile's bundle list.
- *
- * A turn that begins while the gate is held is counted, and the drain waits for it; refusing it needs a hook on the
- * model request path, which contract C16 requires to sit behind a registered parity switch. Background jobs and held
- * scheduled deliveries are not counted yet.
+ * `agent/status` event with each agent's own cancellation and from the job registry's events with each job's kill, the
+ * held state of the gate, which `@delo/bundle-local`'s `deloTurnGate` service reads to refuse new turns, and C3's
+ * health check H1 to H5 over the booted rows, the studio's listener, the runtime's files and the profile's bundle list.
  *
  * @module @delo/cli/update/host
  */
@@ -13,6 +10,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { JobId } from '@deepseek-ai/dsh-jobs'
+import type {} from '@delo/bundle-local/update-gate'
 import type { CountingChatGate, HealthExpectations, HealthVerdict } from '@delo/home-process'
 import { bundleListOf } from '@delo/profile-safety'
 import type { BootedRow } from '../delo-bundles.ts'
@@ -20,21 +19,56 @@ import type { BootedRow } from '../delo-bundles.ts'
 /** How long the studio's index has to answer H2's request. */
 export const STUDIO_HEALTH_TIMEOUT_MS = 10_000
 
+/** The reason a turn or a job cancelled by the gate carries. */
+export const STOP_REASON = 'Delo is stopping or updating'
+
 /**
- * Count the Host's running chats into the gate.
+ * Count the Host's running chats into the gate, and refuse new turns while it is held. A running chat is an agent
+ * between its `running` and `idle` statuses, or a job of the job registry between its `registered` and `settled`
+ * events; either is counted from the event that reports it, so work that began before this call is not. While the
+ * `deloTurnGate` service is present, its held state is the gate's, so the first step of a new turn is refused with
+ * `UPDATE_PENDING`; without the service a turn that starts while the gate is held is counted and the wait lasts until
+ * it ends.
  * @param ctx - the booted profile's root context.
  * @param gate - the home process's gate.
- * @returns nothing; the listener is an effect of `ctx` and goes with it.
+ * @returns nothing; the listeners and the attachment are effects of `ctx` and go with it.
  */
 export function watchChats(ctx: Context, gate: CountingChatGate): void {
   const ends = new Map<Agent, () => void>()
   ctx.on('agent/status', ({ agent, status }) => {
     if (status === 'running') {
-      if (!ends.has(agent)) ends.set(agent, gate.track(() => { agent.cancel({ kind: 'hook', reason: 'Delo is stopping or updating' }) }))
+      if (!ends.has(agent)) ends.set(agent, gate.track(() => { agent.cancel({ kind: 'hook', reason: STOP_REASON }) }))
       return
     }
     ends.get(agent)?.()
     ends.delete(agent)
+  })
+  ctx.inject(['jobs'], (scope) => {
+    const jobs = new Map<JobId, () => void>()
+    scope.effect(() => scope.jobs.events.subscribe({ owners: 'all' }, (event) => {
+      if (event.type === 'registered') {
+        const { id, owner } = event.job
+        jobs.set(id, gate.track(() => {
+          try {
+            scope.jobs.kill(id, owner, STOP_REASON)
+          } catch (error) {
+            scope.logger.warn(`the job ${id} could not be cancelled for the update or stop: ${String(error)}`)
+          }
+        }))
+        return
+      }
+      if (event.type !== 'settled' && event.type !== 'removed') return
+      jobs.get(event.job.id)?.()
+      jobs.delete(event.job.id)
+    }))
+    // The registry settles its jobs when it goes; a job it never reported settled is not running either.
+    scope.effect(() => () => {
+      for (const end of jobs.values()) end()
+      jobs.clear()
+    })
+  })
+  ctx.inject(['deloTurnGate'], (scope) => {
+    scope.effect(() => scope.deloTurnGate.attach(() => gate.held))
   })
 }
 

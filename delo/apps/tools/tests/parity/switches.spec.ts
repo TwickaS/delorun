@@ -114,10 +114,10 @@ describe('the real tree', () => {
     const covered = registry.filter((entry): entry is BuiltParitySwitch => entry.state === 'built' && entry.field.kind !== 'presence').flatMap(entry => shipped
       .filter(row => row.module === entry.field.module && row.key === entry.field.key)
       .map(row => ({ id: entry.id, value: row.value, declared: entry.defaultValue })))
-    // A row may be restated per profile; one switch is still one claim. The consent plugins are inserted rows, which
-    // carry their module as `name`.
+    // A row may be restated per profile; one switch is still one claim. The consent plugins and the update gate are
+    // inserted rows, which carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
-      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'scheduled_task_consent',
+      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'scheduled_task_consent', 'update_turn_refusal',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
     expect(presenceErrors(registry, shipped, parity)).toEqual([])
@@ -323,7 +323,7 @@ describe('the parity overlay', () => {
     const rows = parseOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
-    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'preset_inspect', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions'])
+    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'preset_inspect', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions', 'update_turn_refusal'])
   })
 
   it('fails a switch left on, a key that is no switch, and a row that sets more than config', () => {
@@ -354,7 +354,9 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
     ],
   }
-  /** The trash row in the parity form the overlay's fourth patch restates it, with the home paths kept as expressions. */
+  /** The update gate row in the parity form the overlay's fourth patch restates it. */
+  const GATE_INSERT = { insert: [{ id: 'delo-update-gate', name: '@delo/bundle-local/update-gate', config: { enabled: true }, disabled: true }] }
+  /** The trash row in the parity form the overlay's fifth patch restates it, with the home paths kept as expressions. */
   const TRASH_INSERT = {
     insert: [{
       id: 'delo-trash',
@@ -385,6 +387,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
           { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
         ],
       },
+      GATE_INSERT,
       TRASH_INSERT,
     ])
   })
@@ -394,15 +397,17 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
     expect(localBundleErrors(localBundle.slice(0, 1), bundle)).toEqual([
       'parity overlay: @delo/bundle-local patch 1 is nothing, not its parity form {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}',
       `parity overlay: @delo/bundle-local patch 2 is nothing, not its parity form ${JSON.stringify(CONSENT_INSERT)}`,
-      `parity overlay: @delo/bundle-local patch 3 is nothing, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 3 is nothing, not its parity form ${JSON.stringify(GATE_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 4 is nothing, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
     ])
     // The session-log row's parity form is upstream's composition, so restating it overrides the replay's root configuration.
     expect(localBundleErrors([{ id: 'session-log-deepseek', config: { enabled: false } }, ...localBundle], bundle)).toEqual([
       'parity overlay: @delo/bundle-local patch 0 is {"id":"session-log-deepseek","config":{"enabled":false}}, not its parity form {"id":"product-analytics","config":{"enabled":false,"appVersion":{"__jsExpr":"process.env.DSH_CLIENT_VERSION"}}}',
       'parity overlay: @delo/bundle-local patch 1 is {"id":"product-analytics","config":{"enabled":false,"appVersion":{"__jsExpr":"process.env.DSH_CLIENT_VERSION"}}}, not its parity form {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}',
       'parity overlay: @delo/bundle-local patch 2 is {"insert":[{"id":"delo-privacy","name":"@delo/bundle-local","disabled":true}]}, not its parity form ' + JSON.stringify(CONSENT_INSERT),
-      `parity overlay: @delo/bundle-local patch 3 is ${JSON.stringify(CONSENT_INSERT)}, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
-      `parity overlay: @delo/bundle-local patch 4 is ${JSON.stringify(TRASH_INSERT)}, not its parity form nothing`,
+      `parity overlay: @delo/bundle-local patch 3 is ${JSON.stringify(CONSENT_INSERT)}, not its parity form ${JSON.stringify(GATE_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 4 is ${JSON.stringify(GATE_INSERT)}, not its parity form ${JSON.stringify(TRASH_INSERT)}`,
+      `parity overlay: @delo/bundle-local patch 5 is ${JSON.stringify(TRASH_INSERT)}, not its parity form nothing`,
     ])
     expect(localBundleErrors(localBundle, `${bundle}\n- id: web-search-deepseek\n  config: {}\n`)).toEqual([
       `${LOCAL_BUNDLE_PATCH_PATH}: @delo/bundle-local writes row "web-search-deepseek", which LOCAL_ROWS does not list`,

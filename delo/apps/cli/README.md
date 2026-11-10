@@ -98,7 +98,7 @@ When the command runs from `runtimes/<version>/` of C1's store, the home process
 ## Not yet implemented
 
 - Start at login (`delorun start --at-login`, `delorun stop --at-login`), `delorun status --follow`, and the confinement probes of the start sequence.
-- The chat gate counts no background job and holds no scheduled delivery; the report reads no bundle's own layer, no bundle the target would skip and no revocation list ([`@delo/update`](../../packages/update/README.md#not-yet-implemented)).
+- The chat gate holds no scheduled delivery: a delivery that falls due during an update's wait has its turn refused with `UPDATE_PENDING`. The report reads no revocation list, because no release publishes one ([`@delo/update`](../../packages/update/README.md#not-yet-implemented)).
 - Setup's reach question and the import of a stock DeepSeek Harness home. Setup records reach as off.
 - The Windows DACL check ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory and protected-file checks look only at the file type.
 - `reach`, `devices` and `dev`.

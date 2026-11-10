@@ -139,6 +139,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the fetchGuard service is absent, so the recorded fetch scenarios call their loopback fixtures as they did.' },
   },
   {
+    id: 'delo-update-gate',
+    kind: 'added',
+    reason: 'The C16 switch `update_turn_refusal` on: while `delorun update` or a stop waits for running chats, the first step of every new turn is refused with `UPDATE_PENDING`, so the wait ends once the running turns end; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the deloTurnGate service is absent, so every turn starts as upstream starts it.' },
+  },
+  {
     id: 'delo-trash',
     kind: 'added',
     reason: 'Contract C8\'s trash: deleting a chat or a workspace in the studio moves it to the trash, the Trash section in Settings restores it or deletes it forever, and each start deletes what is older than 30 days; upstream has no chat delete and its workspace Delete keeps every chat.',
