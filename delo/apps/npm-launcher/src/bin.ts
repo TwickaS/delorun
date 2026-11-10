@@ -240,12 +240,19 @@ export async function startCheck(request: StartCheckRequest): Promise<StartCheck
  * reads it and never writes it.
  */
 class RecordingChannel extends LauncherChannel {
+  /** This launcher's build origins, which the channel record names. */
+  private readonly origins: ChannelOrigins
+  /** The channel's options, whose home receives the record. */
+  private readonly channelOptions: LauncherChannelOptions
+
   /**
    * @param origins - this launcher's build origins.
-   * @param options - the channel's options.
+   * @param channelOptions - the channel's options.
    */
-  constructor(private readonly origins: ChannelOrigins, private readonly channelOptions: LauncherChannelOptions) {
+  constructor(origins: ChannelOrigins, channelOptions: LauncherChannelOptions) {
     super(channelOptions)
+    this.origins = origins
+    this.channelOptions = channelOptions
   }
 
   override async recordInstalled(release: ChannelRelease): Promise<void> {

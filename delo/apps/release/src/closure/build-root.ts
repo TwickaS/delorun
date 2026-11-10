@@ -30,16 +30,26 @@ export interface ClaimedBuildRoot {
 
 /** The fixed root is held by another build, or by a build that ended without giving it up. */
 export class BuildRootBusyError extends Error {
+  /** The lock file. */
+  readonly lock: string
+  /** The process id the lock records, or `undefined` when the file names none. */
+  readonly holder: number | undefined
+  /** Whether that process still runs. */
+  readonly running: boolean
+
   /**
    * @param lock - the lock file.
    * @param holder - the process id the lock records, or `undefined` when the file names none.
    * @param running - whether that process still runs.
    */
-  constructor(readonly lock: string, readonly holder: number | undefined, readonly running: boolean) {
+  constructor(lock: string, holder: number | undefined, running: boolean) {
     super(running
       ? `the build root is in use by build-closure process ${String(holder)} (${lock}); wait for it to finish`
       : `${lock} names ${holder === undefined ? 'no process' : `process ${String(holder)}, which has ended`}; if no build-closure runs on this computer, remove the lock and run again`)
     this.name = 'BuildRootBusyError'
+    this.lock = lock
+    this.holder = holder
+    this.running = running
   }
 }
 
