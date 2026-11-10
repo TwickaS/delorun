@@ -49,6 +49,7 @@ Load the sandbox service and mount the provider; the defaults below are the sele
 | `protectedHomeReadable` | `[]` | Paths under `protectedHome`, relative to it, that confined commands may still read and execute; requires `protectedHome` |
 | `deniedSockets` | `[]` | Absolute Unix socket paths that confined commands cannot connect to, on runners that express the rule |
 | `deniedSocketDirectories` | `[]` | Absolute directories that hold only sockets confined commands cannot connect to, such as Docker Desktop's control sockets; bwrap hides each directory, Seatbelt denies each socket present at the wrap |
+| `escapeSocketDirectories` | `[]` | Absolute directories whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. Each is denied like a `deniedSocketDirectories` entry, and while one exists a wrap on a runner that cannot deny socket connects (Landlock, windows-acl) refuses with `SANDBOX_UNSUPPORTED_POLICY` instead of running the command. An entry that does not exist at a wrap denies and refuses nothing. |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-sandbox-local) is the exhaustive source for every accepted field and its JSDoc.
 

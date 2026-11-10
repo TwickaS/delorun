@@ -49,7 +49,7 @@ import { AclWriteGrant, assertTempRootOutsideWorkspace, registerAclDiagnosisSkil
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { aliasCoverage, readMountTable } from './mounts.ts'
 import type { AliasCoverage } from './mounts.ts'
-import { bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from './profiles.ts'
+import { RUNNER_PROTECTION, bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from './profiles.ts'
 import type { LocalSandboxRunner, Protection, ProtectionSettings } from './profiles.ts'
 
 export { RUNNER_PROTECTION } from './profiles.ts'
@@ -116,6 +116,14 @@ export interface Config {
    * Never name a directory that also holds sockets commands need, such as `$XDG_RUNTIME_DIR`.
    */
   deniedSocketDirectories?: string[]
+  /**
+   * Absolute paths of directories whose sockets start programs outside every confinement, such as WSL's interop
+   * directory `/run/WSL`, whose sockets start Windows programs. Each is denied like a {@link deniedSocketDirectories}
+   * entry, and a wrap on a runner that cannot deny socket connects ({@link RUNNER_PROTECTION}), such as Landlock,
+   * refuses with `SANDBOX_UNSUPPORTED_POLICY` while one of them exists, instead of running a command that could leave
+   * the sandbox through it. An entry that does not exist at a wrap denies and refuses nothing.
+   */
+  escapeSocketDirectories?: string[]
 }
 
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
@@ -262,7 +270,8 @@ function assertPositiveFinite(name: string, value: number): void {
 function protectionSettings(config: Config): ProtectionSettings {
   const readable = config.protectedHomeReadable as string[]
   const deniedSockets = config.deniedSockets as string[]
-  const deniedSocketDirectories = config.deniedSocketDirectories as string[]
+  const escapeSocketDirectories = config.escapeSocketDirectories as string[]
+  const deniedSocketDirectories = [...new Set([...config.deniedSocketDirectories as string[], ...escapeSocketDirectories])]
   const configuredHome = config.protectedHome
   if (configuredHome === undefined && readable.length > 0) {
     throw new Error('sandbox-local: protectedHomeReadable requires protectedHome')
@@ -270,9 +279,11 @@ function protectionSettings(config: Config): ProtectionSettings {
   for (const socket of deniedSockets) {
     if (!isAbsolute(socket)) throw new Error(`sandbox-local: deniedSockets entries must be absolute paths: ${JSON.stringify(socket)}`)
   }
-  for (const directory of deniedSocketDirectories) {
-    if (!isAbsolute(directory) || normalize(join(directory, '..')) === normalize(directory)) {
-      throw new Error(`sandbox-local: deniedSocketDirectories entries must be absolute paths other than the filesystem root: ${JSON.stringify(directory)}`)
+  for (const [field, directories] of [['deniedSocketDirectories', config.deniedSocketDirectories as string[]], ['escapeSocketDirectories', escapeSocketDirectories]] as const) {
+    for (const directory of directories) {
+      if (!isAbsolute(directory) || normalize(join(directory, '..')) === normalize(directory)) {
+        throw new Error(`sandbox-local: ${field} entries must be absolute paths other than the filesystem root: ${JSON.stringify(directory)}`)
+      }
     }
   }
   if (configuredHome === undefined) return { home: undefined, readable: [], deniedSockets, deniedSocketDirectories }
@@ -362,6 +373,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     protectedHomeReadable: z.array(z.string()).default([]),
     deniedSockets: z.array(z.string()).default([]),
     deniedSocketDirectories: z.array(z.string()).default([]),
+    escapeSocketDirectories: z.array(z.string()).default([]),
   })
 
   /** Test hook (mirrors the bash executors' `internals`). */
@@ -371,6 +383,8 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly configuredRunnerFailureSignatures: string[]
   private readonly probeTimeoutMs: number
   private readonly protection: ProtectionSettings
+  /** The configured {@link Config.escapeSocketDirectories}, checked for existence at every wrap. */
+  private readonly escapeSocketDirectories: readonly string[]
   /** Cached chain verdict; undefined until the first confined wrap needs it. */
   private selectedRunner: SelectedRunner | 'unavailable' | undefined
   /**
@@ -404,6 +418,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     this.probeTimeoutMs = config.probeTimeoutMs as number
     assertPositiveFinite('probeTimeoutMs', this.probeTimeoutMs)
     this.protection = protectionSettings(config)
+    this.escapeSocketDirectories = config.escapeSocketDirectories as string[]
     // An operator-supplied runner does not use the ACL backend. The registry
     // remains optional and may be mounted after this provider.
     /* v8 ignore next 3 -- Windows-only registration; the Linux coverage lane cannot take this branch */
@@ -482,6 +497,12 @@ export class LocalSandboxProvider extends SandboxProvider {
       })
     }
     const selected = this.selectRunner(policy.mode)
+    if (this.escapeSocketDirectories.length > 0 && !RUNNER_PROTECTION[selected.runner].socketConnect) {
+      const escape = this.escapeSocketDirectories.find(directory => existsSync(directory))
+      if (escape !== undefined) {
+        throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them, or run the command with full access`)
+      }
+    }
     const runnerArgv = this.runnerArgv(selected.runner, policy, protection)
     return Promise.resolve<ConfinedArgv>({
       argv: [...runnerArgv, '--', ...argv],

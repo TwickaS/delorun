@@ -554,3 +554,41 @@ describe('the windows-acl probe (runner invocation contract)', () => {
     expect(confined.argv.slice(0, 2)).toEqual([process.execPath, builtEntry])
   })
 })
+
+describe('escape socket directories', () => {
+  /** A directory standing for WSL's interop directory, with one socket-named entry. */
+  function escapeDirectory(): string {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-escape-sockets-')))
+    tempDirs.push(dir)
+    writeFileSync(join(dir, '1_interop'), '')
+    return dir
+  }
+
+  it('hides each existing one under bwrap like a denied socket directory', async () => {
+    const dir = escapeDirectory()
+    const { sandbox } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'linux', probeBwrap: () => true })
+    const { argv } = await sandbox.confine(['true'], WW)
+    expect(argv.join(' ')).toContain(`--tmpfs ${dir} --remount-ro ${dir}`)
+  })
+
+  it('refuses a wrap on a runner that cannot deny socket connects while one exists, and wraps once it is gone', async () => {
+    const dir = escapeDirectory()
+    const launcher = fakeLauncher()
+    const { sandbox } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'full', landlockLauncher: launcher })
+    await expect(sandbox.confine(['true'], WW)).rejects.toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY', message: expect.stringContaining(JSON.stringify(dir)) })
+    rmSync(dir, { recursive: true, force: true })
+    expect((await sandbox.confine(['true'], WW)).argv[0]).toBe(launcher)
+  })
+
+  it('leaves a denied socket directory to the runner without refusing, as before', async () => {
+    const dir = escapeDirectory()
+    const launcher = fakeLauncher()
+    const { sandbox } = await setup({ deniedSocketDirectories: [dir] }, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'full', landlockLauncher: launcher })
+    expect((await sandbox.confine(['true'], WW)).argv[0]).toBe(launcher)
+  })
+
+  it('rejects an entry that is relative or the filesystem root at load', async () => {
+    await expect(setup({ escapeSocketDirectories: ['run/WSL'] })).rejects.toThrow('escapeSocketDirectories entries must be absolute paths other than the filesystem root')
+    await expect(setup({ escapeSocketDirectories: ['/'] })).rejects.toThrow('escapeSocketDirectories entries')
+  })
+})
