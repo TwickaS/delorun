@@ -4,21 +4,19 @@
  * person runs, each through the launcher:
  *
  * - `delorun start` the first time (cold) and again (warm), each to the command's exit, which `delorun start` reaches
- *   when the home process reports `running`, and to the studio's first page: its index answering with 200 to a
- *   browser holding the start link's cookie;
+ *   when the home process reports `running`, and to the studio's web server answering its index;
  * - `delorun stop` and `delorun stop --now`;
- * - a restart: `delorun stop` then `delorun start`;
- * - a bare `delorun`, which starts Delo and opens the studio; the browser it opens is a stand-in that records the
- *   address and exits, because no browser runs in the isolated network.
+ * - a restart: `delorun stop` then `delorun start`.
+ *
+ * A bare `delorun` is not measured: it opens the default browser, which on WSL is the person's own Windows browser.
+ * The studio suite measures the page in a headless browser.
  *
  * @module @delo/benchmarks/suites/start
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { readLines, resolveSurface } from '@delo/logs'
 import { copyHome, delorun, deloRequest, PROFILE, stopHome, type InstalledHome } from '../../fixtures/home.ts'
 import { installedChannel, templateHome } from '../../fixtures/releases.ts'
-import { expectSuccess, run, type Finished } from '../../harness/processes.ts'
+import { expectSuccess, run, start, type Finished, type Running } from '../../harness/processes.ts'
 import { Samples, type ScenarioResult, type SuiteResult } from '../../harness/result.ts'
 import type { Suite, SuiteContext } from '../../harness/suite.ts'
 
@@ -28,34 +26,32 @@ const STUDIO_TIMEOUT_MS = 120_000
 /** The suite's items. */
 export const START_ITEMS: Readonly<Record<string, string>> = {
   'start-cold': 'The first `delorun start` of a home, from start to the command reporting Delo running',
-  'start-cold:studio': 'The first `delorun start`, from start to the studio\'s index answering a browser that holds the start link',
+  'start-cold:studio': 'The first `delorun start`, from start to the studio\'s web server answering its index',
   'stop': '`delorun stop`, from start to exit',
   'start-warm': 'A later `delorun start`, from start to the command reporting Delo running',
-  'start-warm:studio': 'A later `delorun start`, from start to the studio\'s index answering',
+  'start-warm:studio': 'A later `delorun start`, from start to the studio\'s web server answering its index',
   'stop-now': '`delorun stop --now`, from start to exit',
-  'bare': 'A bare `delorun`, which starts Delo and opens the studio, from start to exit',
-  'bare:browser': 'A bare `delorun`, from start to the browser being asked to open the studio',
-  'bare:studio': 'A bare `delorun`, from start to the studio\'s index answering',
   'restart': '`delorun stop` and then `delorun start`, from the stop starting to the start reporting Delo running',
 }
 
 /**
- * The studio's start link: the address with its one-time token that the Host printed, read from the home log.
+ * The studio's origin, read from the line the Host printed into the home log, whose start token the log redacts.
  * @param deloHome - the Delo home.
  * @param since - records before this time belong to an earlier start.
- * @returns the link, or `undefined` while the Host has not printed it.
+ * @returns the origin, or `undefined` while the Host has not printed it.
  */
-export function studioLink(deloHome: string, since: number): string | undefined {
+export function studioOrigin(deloHome: string, since: number): string | undefined {
   const lines = readLines(resolveSurface({ kind: 'home', home: deloHome, profile: PROFILE }), 10_000, line => line.record !== undefined && Date.parse(line.record.ts) >= since)
   for (const { record } of lines) {
-    const match = /(http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+)/u.exec(record!.msg)
+    const match = /dsh web: (http:\/\/127\.0\.0\.1:\d+)\//u.exec(record!.msg)
     if (match !== null) return match[1]
   }
   return undefined
 }
 
 /**
- * Wait until the studio's index answers 200 to a browser that opened the start link.
+ * Wait until the studio's web server answers its index: 200 with a session, or 401 to a browser without one, which a
+ * started Host answers only once every row has settled.
  * @param deloHome - the Delo home.
  * @param since - the start command's start.
  * @returns when it answered, in epoch milliseconds.
@@ -63,16 +59,14 @@ export function studioLink(deloHome: string, since: number): string | undefined 
  */
 export async function studioAnswered(deloHome: string, since: number): Promise<number> {
   const deadline = Date.now() + STUDIO_TIMEOUT_MS
-  let last = 'no start link in the home log'
+  let last = 'no studio address in the home log'
   while (Date.now() < deadline) {
-    const link = studioLink(deloHome, since)
-    if (link !== undefined) {
+    const origin = studioOrigin(deloHome, since)
+    if (origin !== undefined) {
       try {
-        const opened = await fetch(link, { redirect: 'manual' })
-        const cookie = (opened.headers.get('set-cookie') ?? '').split(';')[0]!
-        const index = await fetch(new URL('/', link), { headers: { cookie } })
+        const index = await fetch(`${origin}/`)
         await index.body?.cancel()
-        if (index.status === 200) return Date.now()
+        if (index.status === 200 || index.status === 401) return Date.now()
         last = `the index answered ${String(index.status)}`
       } catch (error) {
         last = error instanceof Error ? error.message : String(error)
@@ -83,32 +77,65 @@ export async function studioAnswered(deloHome: string, since: number): Promise<n
   throw new Error(`the studio did not answer within ${String(STUDIO_TIMEOUT_MS / 1000)} seconds: ${last}`)
 }
 
+/** A home process started in the foreground, which prints the studio's start link with its token. */
+export interface ForegroundStart {
+  /** The process; `delorun stop` ends it. */
+  readonly running: Running
+  /** The start link the Host printed. */
+  readonly link: string
+  /** When the command started. */
+  readonly startedAt: number
+}
+
 /**
- * A stand-in browser: a `xdg-open` on the root's `PATH` that records when it was asked and exits.
- * @param directory - where to write it.
- * @returns the directory to put first on `PATH`, and the file it records into.
+ * The start link in a line the Host printed.
+ * @param text - the line.
+ * @returns the link, or `undefined`.
  */
-export function standInBrowser(directory: string): { readonly bin: string, readonly record: string } {
-  const bin = join(directory, 'bin')
-  const record = join(directory, 'browser-opened')
-  mkdirSync(bin, { recursive: true })
-  for (const name of ['xdg-open', 'open', 'sensible-browser', 'x-www-browser']) {
-    writeFileSync(join(bin, name), `#!/bin/sh\ndate +%s%3N >> '${record}'\n`)
-    chmodSync(join(bin, name), 0o755)
+export function startLinkIn(text: string): string | undefined {
+  return /dsh web: (http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+)/u.exec(text)?.[1]
+}
+
+/**
+ * Start Delo with `delorun start --foreground`, which prints the studio's start link on its own output (the home log
+ * keeps it redacted), and wait for the link. No browser opens.
+ * @param home - the home.
+ * @param env - variables added to the command's environment.
+ * @returns the process and the link.
+ * @throws {Error} when the process exits or the deadline passes before the link appears.
+ */
+export async function startForLink(home: InstalledHome, env: NodeJS.ProcessEnv = {}): Promise<ForegroundStart> {
+  const request = deloRequest(home, ['start', '--foreground'], 3_600_000)
+  let found: ((link: string) => void) | undefined
+  const linked = new Promise<string>((resolve) => { found = resolve })
+  const running = start({ ...request, env: { ...request.env, ...env }, onLine: (line) => {
+    const link = startLinkIn(line.text)
+    if (link !== undefined) found?.(link)
+  } })
+  let settled = false
+  const ended = running.finished.then((finished) => {
+    if (settled) return ''
+    throw new Error(`\`delorun start --foreground\` ended before the studio printed its link:\n${finished.lines.slice(-20).map(line => line.text).join('\n')}`)
+  })
+  const timeout = new Promise<never>((_, reject) => { setTimeout(() => { reject(new Error('the studio printed no link in time')) }, STUDIO_TIMEOUT_MS).unref() })
+  try {
+    const link = await Promise.race([linked, ended, timeout])
+    settled = true
+    return { running, link, startedAt: Date.now() }
+  } catch (error) {
+    running.kill()
+    throw error
   }
-  return { bin, record }
 }
 
 /**
  * Run a start command and require it to report Delo running.
  * @param home - the home.
  * @param args - the arguments.
- * @param env - extra environment.
  * @returns how it finished.
  */
-async function started(home: InstalledHome, args: readonly string[], env: NodeJS.ProcessEnv = {}): Promise<Finished> {
-  const request = deloRequest(home, args, 300_000)
-  return expectSuccess(await run({ ...request, env: { ...request.env, ...env } }), `\`delorun ${args.join(' ')}\``)
+async function started(home: InstalledHome, args: readonly string[]): Promise<Finished> {
+  return expectSuccess(await run(deloRequest(home, args, 300_000)), `\`delorun ${args.join(' ')}\``)
 }
 
 /**
@@ -129,12 +156,6 @@ async function repetition(home: InstalledHome): Promise<Record<string, number>> 
   items['start-warm:studio'] = await studioAnswered(deloHome, warm.startedAt) - warm.startedAt
   const now = expectSuccess(await delorun(home, ['stop', '--now'], 300_000), '`delorun stop --now`')
   items['stop-now'] = now.endedAt - now.startedAt
-  const browser = standInBrowser(home.root.path)
-  const request = deloRequest(home, [], 300_000)
-  const bare = await started(home, [], { PATH: `${browser.bin}:${String(request.env.PATH)}`, BROWSER: join(browser.bin, 'xdg-open') })
-  items.bare = bare.endedAt - bare.startedAt
-  items['bare:studio'] = await studioAnswered(deloHome, bare.startedAt) - bare.startedAt
-  if (existsSync(browser.record)) items['bare:browser'] = Number(readFileSync(browser.record, 'utf8').split('\n')[0]) - bare.startedAt
   const restartStop = expectSuccess(await delorun(home, ['stop'], 300_000), '`delorun stop`')
   const restartStart = await started(home, ['start'])
   items.restart = restartStart.endedAt - restartStop.startedAt
@@ -170,6 +191,6 @@ export const startSuite: Suite = {
       }
     }
     const result: ScenarioResult = { scenario: 'installed', description: startSuite.scenarios[0]!.description, parameters: { chats: context.options.chatsSmall }, completed, phases: samples.results(Object.keys(START_ITEMS)), failures }
-    return { suite: 'start', scenarios: [result], skipped: [{ item: 'a cold operating-system file cache', reason: 'dropping the page cache needs root; "cold" is the first start of a freshly copied home, whose files the copy has just read' }] }
+    return { suite: 'start', scenarios: [result], skipped: [{ item: 'a bare `delorun`', reason: 'it opens the default browser, which on WSL is the person\'s own Windows browser; the studio suite measures the page in a headless browser' }, { item: 'a cold operating-system file cache', reason: 'dropping the page cache needs root; "cold" is the first start of a freshly copied home, whose files the copy has just read' }] }
   },
 }

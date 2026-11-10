@@ -41,7 +41,6 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { id: 'plugin-list', args: ['plugin', '--profile', 'default', 'list'], running: false, pnpm: true },
   { id: 'logs', args: ['logs'], running: false },
   { id: 'status-running', args: ['status'], running: true },
-  { id: 'update-check-current', args: ['update', '--check'], running: true },
   { id: 'trash-list-running', args: ['trash', 'list'], running: true },
 ]
 
@@ -130,6 +129,6 @@ export const cliSuite: Suite = {
       root.dispose()
     }
     const result: ScenarioResult = { scenario: 'installed', description: cliSuite.scenarios[0]!.description, parameters: { chats: context.options.chatsSmall }, completed, phases: samples.results(Object.keys(CLI_ITEMS)), failures }
-    return { suite: 'cli', scenarios: [result], skipped: [{ item: '`delorun verify` online', reason: 'it asks the release log the trusted root names, which the isolated network cannot reach; `verify --offline` is measured instead' }] }
+    return { suite: 'cli', scenarios: [result], skipped: [{ item: '`delorun update --check` with Delo started by `delorun start`', reason: 'that home process reads the published release hosts, which the isolated network cannot reach; the update suite measures `--check` against the local channel' }, { item: '`delorun verify` online', reason: 'it asks the release log the trusted root names, which the isolated network cannot reach; `verify --offline` is measured instead' }] }
   },
 }

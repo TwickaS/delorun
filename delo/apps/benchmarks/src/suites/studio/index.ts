@@ -21,13 +21,12 @@ import { appendFileSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { chromium, type Browser, type Page } from 'playwright'
 import { corpusModules, type CorpusModules } from '../../fixtures/data.ts'
-import { copyHome, deloRequest, PROFILE, stopHome, type InstalledHome } from '../../fixtures/home.ts'
+import { copyHome, PROFILE, stopHome, type InstalledHome } from '../../fixtures/home.ts'
 import { installedChannel, templateHome } from '../../fixtures/releases.ts'
-import { expectSuccess, run } from '../../harness/processes.ts'
 import { Samples, type ScenarioResult, type Skipped, type SuiteResult } from '../../harness/result.ts'
 import { childEnvironment, type BenchRoot } from '../../harness/roots.ts'
 import type { SharedFixtures, Suite, SuiteContext } from '../../harness/suite.ts'
-import { studioAnswered, studioLink } from '../start/index.ts'
+import { startForLink } from '../start/index.ts'
 
 /** How long one item may take before the repetition fails. */
 const ITEM_TIMEOUT_MS = 60_000
@@ -537,9 +536,7 @@ async function withStudio(
     copyHome(template, root)
     writeWorkspaces(root, plan)
     appendProfileRows(root.deloHome, `${look.profileRows}${onboardingDone ? ONBOARDING_DONE_ROW : ''}`)
-    const started = expectSuccess(await run(deloRequest(home, ['start'], 300_000)), '`delorun start`')
-    await studioAnswered(root.deloHome, started.startedAt)
-    const link = studioLink(root.deloHome, started.startedAt)!
+    const { link } = await startForLink(home)
     browser = await chromium.launch({ headless: true, env: childEnvironment(root, []) })
     await work({ browser, link, look, plan })
   } finally {

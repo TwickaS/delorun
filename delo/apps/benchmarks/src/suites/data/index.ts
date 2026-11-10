@@ -17,7 +17,7 @@ import { expectSuccess, run, type Finished } from '../../harness/processes.ts'
 import { Samples, type ScenarioResult, type Skipped, type SuiteResult } from '../../harness/result.ts'
 import type { BenchRoot } from '../../harness/roots.ts'
 import type { Suite, SuiteContext } from '../../harness/suite.ts'
-import { studioLink } from '../start/index.ts'
+import { startForLink } from '../start/index.ts'
 
 /** The suite's items. */
 export const DATA_ITEMS: Readonly<Record<string, string>> = {
@@ -85,23 +85,15 @@ interface Studio {
 
 /**
  * Open the studio as its owner through the start link.
- * @param deloHome - the Delo home.
- * @param since - the start's time.
+ * @param link - the start link.
  * @returns the origin and the cookie.
- * @throws {Error} when the link is missing or refused.
+ * @throws {Error} when the link gives no cookie.
  */
-async function openStudio(deloHome: string, since: number): Promise<Studio> {
-  const deadline = Date.now() + 120_000
-  while (Date.now() < deadline) {
-    const link = studioLink(deloHome, since)
-    if (link !== undefined) {
-      const opened = await fetch(link, { redirect: 'manual' })
-      const cookie = (opened.headers.get('set-cookie') ?? '').split(';')[0]!
-      if (cookie !== '') return { origin: new URL(link).origin, cookie }
-    }
-    await new Promise(resolve => setTimeout(resolve, 100))
-  }
-  throw new Error('the studio printed no start link that gave a cookie')
+async function openStudio(link: string): Promise<Studio> {
+  const opened = await fetch(link, { redirect: 'manual' })
+  const cookie = (opened.headers.get('set-cookie') ?? '').split(';')[0]!
+  if (cookie === '') throw new Error(`the start link answered ${String(opened.status)} without a cookie`)
+  return { origin: new URL(link).origin, cookie }
 }
 
 /**
@@ -138,8 +130,7 @@ async function repetition(home: InstalledHome, chats: readonly string[], workspa
     const imported = expectSuccess(await onTerminal(home, ['import', out('workspace.delo')], 'y\n'), '`delorun import`')
     items['import-workspace'] = imported.endedAt - imported.startedAt
   }
-  const start = expectSuccess(await delorun(home, ['start'], 300_000), '`delorun start`')
-  const studio = await openStudio(home.root.deloHome, start.startedAt)
+  const studio = await openStudio((await startForLink(home)).link)
   const deleted = await trashRoute(studio, '/api/deloTrash.deleteChat', { sessionId: chats[0] })
   items['trash-delete-chat'] = deleted.ms
   const restored = await trashRoute(studio, '/api/deloTrash.restore', { itemId: (deleted.answer as { readonly id: string }).id })

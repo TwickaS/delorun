@@ -25,13 +25,12 @@
  */
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { copyHome, deloRequest, killLeftovers, PROFILE, runtimeDirectory, stopHome, type InstalledHome } from '../../fixtures/home.ts'
+import { copyHome, killLeftovers, PROFILE, runtimeDirectory, stopHome, type InstalledHome } from '../../fixtures/home.ts'
 import { INSTALLED_VERSION, installedChannel, templateHome } from '../../fixtures/releases.ts'
-import { expectSuccess, run } from '../../harness/processes.ts'
 import { Samples, type ScenarioResult, type SuiteResult } from '../../harness/result.ts'
 import type { BenchRoot } from '../../harness/roots.ts'
 import type { Suite, SuiteContext } from '../../harness/suite.ts'
-import { studioAnswered, studioLink } from '../start/index.ts'
+import { startForLink } from '../start/index.ts'
 import { startModelStub, turnScript, type ModelStub, type ScriptedTool, type StubExchange } from './model-stub.ts'
 import { openStudio, sessionIdOf, type TurnTimes } from './studio-client.ts'
 
@@ -206,28 +205,14 @@ function scenarioTemplate(context: SuiteContext, scenario: 'delorun' | 'stock'):
 }
 
 /**
- * The start link the Host printed, once the studio answers.
- * @param deloHome - the Delo home.
- * @param since - the start command's start.
- * @returns the link.
- */
-async function startLink(deloHome: string, since: number): Promise<string> {
-  await studioAnswered(deloHome, since)
-  const link = studioLink(deloHome, since)
-  if (link === undefined) throw new Error('the studio answered but the home log holds no start link')
-  return link
-}
-
-/**
  * One repetition: start the home against the stub, then the chat's four turns.
  * @param home - the home copied from the template.
  * @param stub - the model stub.
  * @returns each item's samples.
  */
 async function repetition(home: InstalledHome, stub: ModelStub): Promise<Record<string, number[]>> {
-  const request = deloRequest(home, ['start'], 300_000)
-  const started = expectSuccess(await run({ ...request, env: { ...request.env, DEEPSEEK_BASE_URL: stub.baseURL } }), '`delorun start`')
-  const client = await openStudio(await startLink(home.root.deloHome, started.startedAt))
+  const { link } = await startForLink(home, { DEEPSEEK_BASE_URL: stub.baseURL })
+  const client = await openStudio(link)
   try {
     const sessionId = sessionIdOf(await client.call('session/create', { cwd: join(home.root.home, PROJECT_DIRECTORY) }))
     await client.follow(sessionId)

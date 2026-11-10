@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { resolveSurface } from '@delo/logs'
@@ -10,7 +10,7 @@ import { chatIds, corpusModules } from '../src/fixtures/data.ts'
 import { DATA_ITEMS, gatherIntoWorkspace, shellWord } from '../src/suites/data/index.ts'
 import { INSTALL_ITEMS, installItems } from '../src/suites/install/index.ts'
 import { oldestVersion } from '../src/suites/recovery/index.ts'
-import { standInBrowser, studioLink } from '../src/suites/start/index.ts'
+import { startLinkIn, studioOrigin } from '../src/suites/start/index.ts'
 import { SUITES } from '../src/suites/index.ts'
 
 const made: string[] = []
@@ -98,26 +98,23 @@ describe('the data suite', () => {
 })
 
 describe('the start suite', () => {
-  it('reads the studio\'s start link from the home log, ignoring records from before the start', () => {
+  it('reads the studio\'s address from the home log, ignoring records from before the start', () => {
     const home = scratch()
     const file = resolveSurface({ kind: 'home', home, profile: 'default' }).file
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
     const record = (ts: string, msg: string): string => JSON.stringify({ ts, level: 'info', surface: 'home-default', pid: 1, logger: 'stdout', source: 'captured', msg })
     writeFileSync(file, [
-      record('2026-11-10T00:00:00.000Z', 'dsh web: http://127.0.0.1:1111/?token=old'),
+      record('2026-11-10T00:00:00.000Z', 'dsh web: http://127.0.0.1:1111/?token=[redacted:url-parameter]'),
       record('2026-11-10T00:00:02.000Z', 'booting'),
-      record('2026-11-10T00:00:03.000Z', 'dsh web: http://127.0.0.1:2222/?token=a-b_c'),
+      record('2026-11-10T00:00:03.000Z', 'dsh web: http://127.0.0.1:2222/?token=[redacted:url-parameter]'),
       '',
     ].join('\n'), { mode: 0o600 })
-    expect(studioLink(home, Date.parse('2026-11-10T00:00:01.000Z'))).toBe('http://127.0.0.1:2222/?token=a-b_c')
-    expect(studioLink(home, Date.parse('2026-11-10T00:00:04.000Z'))).toBeUndefined()
+    expect(studioOrigin(home, Date.parse('2026-11-10T00:00:01.000Z'))).toBe('http://127.0.0.1:2222')
+    expect(studioOrigin(home, Date.parse('2026-11-10T00:00:04.000Z'))).toBeUndefined()
   })
 
-  it('stands in for the browser with commands that record when they were asked', () => {
-    const directory = scratch()
-    const browser = standInBrowser(directory)
-    execFileSync(join(browser.bin, 'xdg-open'), ['http://127.0.0.1:1/'])
-    expect(existsSync(browser.record)).toBe(true)
-    expect(Number(readFileSync(browser.record, 'utf8').trim())).toBeGreaterThan(1_700_000_000_000)
+  it('reads the start link with its token from the line the Host printed', () => {
+    expect(startLinkIn('dsh web: http://127.0.0.1:2222/?token=a-b_c')).toBe('http://127.0.0.1:2222/?token=a-b_c')
+    expect(startLinkIn('dsh web: http://127.0.0.1:2222/?token=[redacted:url-parameter]')).toBeUndefined()
   })
 })
