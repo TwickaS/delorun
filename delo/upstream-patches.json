@@ -1823,26 +1823,44 @@
     {
       "path": "packages/deliverables/workspace-changes/src/git.ts",
       "class": "security",
-      "reason": "Every Host git command over a Session's repository runs with the hardened environment of hardening.ts, the snapshot's add and write-tree with every filter and diff driver switched off, and, when the runner carries a Session confinement, inside that Session's sandbox with a runner failure reported as an unavailable sandbox, so repository state a confined command writes (.git/config, .gitattributes, hooks, a gitfile) starts no program with the Host's authority; output is unchanged.",
-      "sha256": "49be095997adbb8010c9ae6fb1d9b4236430f172ac2fffe5950f6e1d363779fc"
+      "reason": "Every Host git command over a Session's repository runs with the hardened environment of hardening.ts, the snapshot's add and write-tree with every filter and diff driver switched off, and, when the runner carries a Session confinement, inside that Session's sandbox with a runner failure reported as an unavailable sandbox, so repository state a confined command writes (.git/config, .gitattributes, hooks, a gitfile) starts no program with the Host's authority; output is unchanged. The scratch index is seeded from the repository's index only when it is a regular file opened with O_NOFOLLOW, into a file created exclusively.",
+      "sha256": "79ce46a200502779595f1ab647b3bc71c82bb16f0c775b300f7962d3264d8a87"
     },
     {
       "path": "packages/deliverables/workspace-changes/src/index.ts",
       "class": "security",
-      "reason": "Binds each Session's git runner to that Session's sandbox through confinement.ts and treats a git older than 2.31, which ignores the command-scope overrides, as absent, so the change summary never runs repository-named programs unconfined where the Session's own commands are confined.",
-      "sha256": "17c0d3f85571ee0fd83cbfcb1b67cfcd7a01b7de784fe7a234fe224c86364044"
+      "reason": "Binds each Session's git runner to that Session's sandbox through confinement.ts and treats a git older than 2.31, which ignores the command-scope overrides, as absent, so the change summary never runs repository-named programs unconfined where the Session's own commands are confined. Adds the validated `scratchRoot` Config field, defaulting at load to a package directory in the per-user cache directory, outside every root a confined command can write.",
+      "sha256": "65141c915c3e06ec797749f50366a7efa54edd552b91e15109b1ef06a4791828"
     },
     {
       "path": "packages/deliverables/workspace-changes/src/confinement.ts",
       "class": "security",
       "reason": "New: wraps each repository git command through ctx.sandbox under the Session's resolved ctx.sandboxPolicy plus the private snapshot directory (only that directory writable for a read-only Session), unconfined only under danger-full-access or without a mounted sandbox, and rejects rather than running unconfined when the sandbox cannot confine.",
-      "sha256": "897c5cc0bba97481a55c5f57fd2b0fce7014af724fcd31b8c2c6586a0893c9ab"
+      "sha256": "fd704e7449240836f614b0697c162261fa9e6ea4536f1361ffb558af895b3a0f"
     },
     {
       "path": "packages/deliverables/workspace-changes/src/hardening.ts",
       "class": "security",
       "reason": "New: the one environment builder every Host git command of the package uses: inherited GIT_* names removed, command-scope configuration that switches off the file-system monitor, hooks, pager, editors, external diff, credential helpers, askpass, SSH and proxy commands, alternate-refs and pack-objects hooks and transports, every listed filter and diff driver switched off, and a git version gate at 2.31.",
       "sha256": "6cfe9e174cca63818ca3192dda62010df80d302dba20a1b7813bf082a97c9d9f"
+    },
+    {
+      "path": "packages/deliverables/workspace-changes/src/capture.ts",
+      "class": "security",
+      "reason": "Whole-file captures are taken without following links or blocking on a named pipe (lstat, then O_NOFOLLOW|O_NONBLOCK and a second fstat), written exclusively under the plugin's private directory, and read back only as regular files whose bytes still hash to their name, so a planted link, FIFO or capture cannot redirect the unconfined Host's reads or writes.",
+      "sha256": "ac174b33cffda09da81fddfaf55284ff34249637b4fe137daf0e7ac3a902888a"
+    },
+    {
+      "path": "packages/deliverables/workspace-changes/src/files.ts",
+      "class": "security",
+      "reason": "New: the exclusive, link-refusing file operations the unconfined Host uses in the private directory: exclusive mkdir, O_EXCL|O_NOFOLLOW creation, O_NOFOLLOW|O_NONBLOCK reads with a regular-file fstat check, and the copy of the repository's index under those rules.",
+      "sha256": "3325fb6b56133d281cf1777590f3eef749609b6dd5b8a776fa4ec22ce408c7e0"
+    },
+    {
+      "path": "packages/deliverables/workspace-changes/src/recorder.ts",
+      "class": "security",
+      "reason": "Keeps each Session's snapshot store in a per-Session directory under the configured scratch root outside every writable root of the Session's confined commands, checks that against the Session policy's writableRoots before each snapshot and copy (recording nothing on an overlap), and refuses entries in it that the recorder did not create.",
+      "sha256": "7e8dca14a62a98eecb2160c63f307ea2afc609741d9bd38b01d23e6a1b378ea7"
     }
   ],
   "retired": []

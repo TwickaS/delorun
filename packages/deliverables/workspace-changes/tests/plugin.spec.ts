@@ -21,12 +21,13 @@ afterEach(async () => {
 const signal = new AbortController().signal
 
 async function boot(config: Partial<WorkspaceChanges.Config> = {}) {
+  const scratchRoot = config.scratchRoot ?? await scratchDir('dsh-workspace-changes-scratch-', cleanups)
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
   await ctx.plugin(SessionStore)
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalFileSystem)
-  const fiber = await ctx.plugin(WorkspaceChanges, config as WorkspaceChanges.Config)
+  const fiber = await ctx.plugin(WorkspaceChanges, { ...config, scratchRoot } as WorkspaceChanges.Config)
   return { ctx, fiber }
 }
 
@@ -327,7 +328,7 @@ describe('workspace-changes in a repository', () => {
     expect(changes(ctx, session).map(summary => summary.files.map(file => file.display))).toEqual([['top.txt']])
   })
 
-  it('rejects non-positive bounds at load', async () => {
+  it('rejects non-positive bounds and a relative scratch root at load', async () => {
     const ctx = new Context()
     cleanups.push(() => ctx.fiber.dispose())
     await ctx.plugin(SessionStore)
@@ -335,6 +336,7 @@ describe('workspace-changes in a repository', () => {
     await ctx.plugin(LocalFileSystem)
     await expect(ctx.plugin(WorkspaceChanges, { maxFiles: 0 } as WorkspaceChanges.Config)).rejects.toThrow('positive integer maxFiles')
     await expect(ctx.plugin(WorkspaceChanges, { diffTimeoutMs: 1.5 } as WorkspaceChanges.Config)).rejects.toThrow('positive integer diffTimeoutMs')
+    await expect(ctx.plugin(WorkspaceChanges, { scratchRoot: 'relative/dir' } as WorkspaceChanges.Config)).rejects.toThrow('absolute scratchRoot')
   })
 })
 
@@ -383,23 +385,13 @@ describe('workspace-changes without a repository', () => {
 
   it('lists oversized and binary captured files without counts and serves no lines for them', async () => {
     const cwd = await scratchDir('dsh-workspace-changes-bounds-', cleanups)
-    // The recorder places its temporary directory under the platform temp root; point that root at a scratch directory.
-    const tempRoot = await scratchDir('dsh-workspace-changes-temp-', cleanups)
-    // POSIX reads TMPDIR, Windows reads TMP then TEMP.
-    const previous = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP }
-    for (const name of ['TMPDIR', 'TMP', 'TEMP'] as const) process.env[name] = tempRoot
-    cleanups.push(async () => {
-      for (const name of ['TMPDIR', 'TMP', 'TEMP'] as const) {
-        if (previous[name] === undefined) Reflect.deleteProperty(process.env, name); else process.env[name] = previous[name]
-      }
-    })
-    // Other tooling may create its own directories under the redirected temp root; only the recorder's count.
-    const recorderDirs = async (): Promise<string[]> => (await readdir(tempRoot)).filter(name => name.startsWith('dsh-workspace-changes-'))
+    const scratchRoot = await scratchDir('dsh-workspace-changes-scratch-', cleanups)
+    const recorderDirs = (): Promise<string[]> => readdir(scratchRoot)
     await writeFile(join(cwd, 'grows.txt'), 'small\n')
     await writeFile(join(cwd, 'huge.txt'), 'a'.repeat(20))
     await writeFile(join(cwd, 'mixed.dat'), Uint8Array.of(65, 0, 66))
     await mkdir(join(cwd, 'already-dir'))
-    const { ctx } = await boot({ maxFileBytes: 16 })
+    const { ctx } = await boot({ maxFileBytes: 16, scratchRoot })
     const session = ctx.sessions.create(SessionId('bounds'), { meta: { cwd } })
     startTurn(session, 1)
     await settle(ctx, session)
@@ -429,11 +421,11 @@ describe('workspace-changes without a repository', () => {
       expect(await ctx.workspaceChanges.diff(session.id, seq, index, signal)).toMatchObject({ kind: 'oversized', path: recorded!.files[index]!.path })
     }
     expect(await ctx.workspaceChanges.diff(session.id, seq, 4, signal)).toMatchObject({ kind: 'text', before: false, after: true, hunks: [{ lines: ['+x'] }] })
-    // Every copy lives under the Session's temporary directory and goes with it.
+    // Every copy lives under the Session's private directory and goes with it.
     const [scratch, ...others] = await recorderDirs()
     expect(others).toEqual([])
-    expect(scratch).toBeDefined()
-    expect((await readdir(join(tempRoot, scratch as string, 'captures'))).length).toBeGreaterThan(0)
+    expect(scratch).toMatch(/^session-/)
+    expect((await readdir(join(scratchRoot, scratch as string, 'captures'))).length).toBeGreaterThan(0)
     ctx.emit('session/disposed', session)
     await vi.waitFor(async () => { expect(await recorderDirs()).toEqual([]) })
   })

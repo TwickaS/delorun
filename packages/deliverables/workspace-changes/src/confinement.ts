@@ -4,7 +4,7 @@
  * @module @deepseek-ai/dsh-workspace-changes/confinement
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { SandboxUnavailableError, type ConfinedSandboxMode, type SandboxExecutionPolicy, type SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import { SandboxUnavailableError, writableRoots, type ConfinedSandboxMode, type SandboxExecutionPolicy, type SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { GitConfinement } from './git.ts'
@@ -54,4 +54,20 @@ export function sessionConfinement(ctx: Context, session: Session): GitConfineme
     const wrapped = await sandbox.confine(argv, confined, signal)
     return { argv: wrapped.argv, mode: confined.mode, runnerFailureRules: wrapped.runnerFailureRules }
   }
+}
+
+/**
+ * The canonical roots one Session's confined commands can write at this moment, resolved through
+ * `ctx.sandboxPolicy` as {@link sessionConfinement} resolves them: the `workspace-write` allow-list of
+ * `writableRoots`, which covers every dialect's grants, or none under `read-only`. Under `danger-full-access`, or in a
+ * composition that mounts no sandbox policy, the Session's commands run with the Host's authority and no root is
+ * reported, because no directory is out of their reach.
+ * @param ctx - context whose `sandboxPolicy` service is read on each call.
+ * @param session - the Session whose policy applies.
+ * @returns canonical directory paths.
+ * @throws `SandboxInvalidRootError` when the policy names an extra writable directory that cannot be granted.
+ */
+export function confinedWritableRoots(ctx: Context, session: Session): readonly string[] {
+  const policy = ctx.get('sandboxPolicy')?.resolve({ session })
+  return policy === undefined ? [] : writableRoots(policy)
 }

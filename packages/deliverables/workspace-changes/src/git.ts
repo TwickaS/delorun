@@ -1,8 +1,9 @@
 /** Git working-tree snapshots, tree diffs, and ignore checks through the subprocess capability. */
-import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { SandboxUnavailableError, classifyRunnerFailure, type ConfinedSandboxMode, type RunnerFailureRule } from '@deepseek-ai/dsh-sandbox'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
+import { copyRegularFile, makeDirectory } from './files.ts'
 import { DRIVER_LISTING_ARGS, FIXED_GIT_OVERRIDES, driverOverrides, hardenedGitEnvironment } from './hardening.ts'
 import { parseNumstat, type NumstatEntry } from './numstat.ts'
 import { canonicalPath, isInside, toPosix } from './paths.ts'
@@ -144,13 +145,8 @@ export interface GitWorkspace {
   env: Readonly<Record<string, string>>
   /** Directories every command on this repository writes or reads beside it: the private directory. */
   writes: readonly string[]
-  /** Work-tree paths a snapshot must skip: the private directory when a temporary root lies inside the work tree. */
+  /** Work-tree paths a snapshot must skip: the private directory when the scratch root lies inside the work tree. */
   excludes: readonly string[]
-}
-
-/** Whether a filesystem error names a missing path. */
-function isMissing(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT'
 }
 
 /**
@@ -158,12 +154,13 @@ function isMissing(error: unknown): boolean {
  * directory its snapshots write to. The repository's own object store is
  * attached read-only as an alternate, so snapshots read committed content from
  * it and write nothing into it. A private directory that lies inside the work
- * tree, as a temporary root under the workspace does, is excluded from every
+ * tree, as a scratch root under the workspace does, is excluded from every
  * snapshot. A directory outside any repository yields null; any other git
  * failure throws.
  * @param git - command runner.
  * @param cwd - absolute Session working directory.
- * @param scratch - yields the private directory for snapshot objects and scratch indexes; called only for a located repository.
+ * @param scratch - yields the existing private directory for snapshot objects and scratch indexes; called only for a
+ *   located repository, which gets an `objects` directory created inside it exclusively.
  * @param signal - cancellation.
  * @returns the repository, or null when the directory is not inside one.
  */
@@ -176,8 +173,7 @@ export async function locateGitWorkspace(
   const [root, gitDir, repositoryObjects] = lines as [string, string, string]
   // git reports the canonical root; compare the private directory in the same spelling.
   const directory = await canonicalPath(await scratch())
-  const objects = join(directory, 'objects')
-  await mkdir(objects, { recursive: true })
+  const objects = await makeDirectory(join(directory, 'objects'))
   const excludes = isInside(root, directory) ? [toPosix(relative(root, directory))] : []
   const env = { GIT_OBJECT_DIRECTORY: objects, GIT_ALTERNATE_OBJECT_DIRECTORIES: repositoryObjects }
   return { root, gitDir, scratch: directory, env, writes: [directory], excludes }
@@ -206,20 +202,21 @@ export async function repositoryDrivers(git: GitRunner, workspace: GitWorkspace,
  * not ignored ones, as a tree object through a private index seeded from the
  * repository's index. New blobs and the tree land in the private object store;
  * the repository's index, object store, work tree, and refs stay unchanged,
- * and an in-progress merge keeps its unmerged entries.
+ * and an in-progress merge keeps its unmerged entries. The repository's index
+ * is copied only as a regular file and never through a link, since confined
+ * commands can replace it.
  * @param git - command runner.
  * @param workspace - addressed repository.
  * @param signal - cancellation.
  * @returns the tree object id.
+ * @throws when the repository's index is a link or not a regular file, or a git command fails.
  */
 export async function snapshotTree(git: GitRunner, workspace: GitWorkspace, signal: AbortSignal): Promise<string> {
   const scratch = await mkdtemp(join(workspace.scratch, 'index-'))
   try {
     const index = join(scratch, 'index')
     // A repository without an index yet (fresh `git init`) starts from scratch.
-    await copyFile(join(workspace.gitDir, 'index'), index).catch((error: unknown) => {
-      if (!isMissing(error)) throw error
-    })
+    await copyRegularFile(join(workspace.gitDir, 'index'), index)
     const drivers = await repositoryDrivers(git, workspace, signal)
     const options = { cwd: workspace.root, env: { ...workspace.env, GIT_INDEX_FILE: index }, writes: workspace.writes, drivers, signal }
     // `--ignore-errors` skips unreadable files and reports them through exit code 1; the index is still complete.

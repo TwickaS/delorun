@@ -1,6 +1,7 @@
 /** A Session's repository git commands run in the sandbox the Session's own commands run in. */
 import { spawnSync } from 'node:child_process'
-import { realpath, writeFile } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -139,7 +140,10 @@ async function boot(extra: (ctx: Context) => Promise<void>) {
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalFileSystem)
   await extra(ctx)
-  await ctx.plugin(WorkspaceChanges, {} as WorkspaceChanges.Config)
+  // Outside the temporary roots a workspace-write Session's commands can write.
+  const scratchRoot = await realpath(await mkdtemp(join(homedir(), '.dsh-workspace-changes-scratch-')))
+  cleanups.push(() => rm(scratchRoot, { recursive: true, force: true }))
+  await ctx.plugin(WorkspaceChanges, { scratchRoot } as WorkspaceChanges.Config)
   return ctx
 }
 
@@ -175,7 +179,7 @@ describe('workspace-changes under a Session\'s sandbox', { timeout: 60_000 }, ()
     expect(locate).toEqual({ mode: 'workspace-write', workspaceRoot: cwd })
     expect(rest.length).toBeGreaterThan(4)
     for (const policy of rest) {
-      expect(policy).toMatchObject({ mode: 'workspace-write', workspaceRoot: cwd, additionalWritableRoots: [expect.stringContaining('dsh-workspace-changes-')] })
+      expect(policy).toMatchObject({ mode: 'workspace-write', workspaceRoot: cwd, additionalWritableRoots: [expect.stringMatching(/dsh-workspace-changes-scratch-.*session-/)] })
     }
     policies.length = 0
     mode = 'danger-full-access'

@@ -1,22 +1,29 @@
 /** Per-Session turn recorder: snapshots, captures around file-tool edits, the turn-end diff, and the records kept until disposal. */
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
+import { realpath, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, relative, resolve } from 'node:path'
+import { relative, resolve } from 'node:path'
+import { pathWithin } from '@deepseek-ai/dsh-sandbox'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import { captureFile, sameCapture, type Capture } from './capture.ts'
+import { CaptureStore, sameCapture, type Capture } from './capture.ts'
 import { compareText } from './compare.ts'
+import { createPrivateDirectory } from './files.ts'
 import {
   blobText, diffTrees, gitlinkPaths, ignoredPaths, locateGitWorkspace, snapshotTree, treeBlob, type GitRunner, type GitWorkspace,
 } from './git.ts'
 import { canonicalPath, compareDisplay, displayPathOf, durablePathOf, isInside, isTemporaryPath, temporaryRoots, toPosix } from './paths.ts'
 import type { WorkspaceChangedFile, WorkspaceChangesSummary, WorkspaceFileDiff } from './types.ts'
 
-/** Facts shared by every recorder of one plugin instance. */
+/** Facts one Session's recorder works with. */
 export interface RecorderEnvironment {
   /** Resolves to the runner, or null when git is unavailable and no snapshot is taken. */
   git: Promise<GitRunner | null>
-  /** Directory that receives each Session's temporary directory. */
-  tempRoot: string
+  /** Absolute directory that receives each Session's private directory. */
+  scratchRoot: string
+  /**
+   * The canonical roots the Session's confined commands can write at this moment. The private directory must overlap
+   * none of them; read before each snapshot and each captured copy.
+   */
+  writableRoots: () => readonly string[]
   /** Maximum files carried by one summary. */
   maxFiles: number
   /** Inclusive byte cap on a captured copy and on a snapshot blob read for a comparison. */
@@ -98,9 +105,11 @@ const OVERSIZED = Symbol('oversized')
  * whole-file capture before each file-tool mutation, the turn-end snapshot
  * with its diff, and the appended `workspace/changes` event whose summary and
  * comparisons this recorder keeps. Snapshot objects and captured copies live in
- * a temporary directory owned by the recorder; disposal removes it together
- * with the summaries. Tool execution waits for pending work so a snapshot or
- * capture never races a mutation. A working directory outside any repository,
+ * a private directory owned by the recorder; disposal removes it together
+ * with the summaries. Each snapshot and each stored copy first checks that the
+ * private directory overlaps no root the Session's confined commands can
+ * write; a turn that finds an overlap records nothing. Tool execution waits for
+ * pending work so a snapshot or capture never races a mutation. A working directory outside any repository,
  * or a Host without git, gets no snapshot; its summary lists the files the file
  * tools changed.
  */
@@ -112,8 +121,9 @@ export class TurnRecorder {
   private paths: Paths | undefined
   /** The located repository, reused across turns once found; null keeps retrying each turn. */
   private repository: Repository | null = null
-  /** Temporary directory holding this Session's snapshot objects, scratch indexes, and captured copies. */
+  /** Private directory holding this Session's snapshot objects, scratch indexes, and captured copies. */
   private scratch: Promise<string> | undefined
+  private readonly store = new CaptureStore(() => this.privateDirectory())
   /** Records by the sequence of the event that announced them. */
   private readonly records = new Map<number, TurnRecord>()
   private readonly lifetime = new AbortController()
@@ -136,6 +146,7 @@ export class TurnRecorder {
         this.paths ??= { cwd: await realpath(this.cwd), home: await canonicalPath(homedir()), temporaryRoots: await temporaryRoots() }
         const repository = await this.locate(this.paths.cwd, signal)
         if (repository === null) return
+        await this.privateDirectory()
         const tree = await snapshotTree(repository.git, repository.workspace, signal)
         state.baseline = { ...repository, tree }
       } catch (error: unknown) {
@@ -159,7 +170,7 @@ export class TurnRecorder {
       if (paths === undefined) return
       const absolute = await canonicalPath(path)
       if (state.captures.has(absolute)) return
-      const capture = await captureFile(absolute, join(await this.scratchDir(), 'captures'), this.env.maxFileBytes)
+      const capture = await this.store.capture(absolute, this.env.maxFileBytes)
       if (capture !== undefined) state.captures.set(absolute, capture)
     })
   }
@@ -230,15 +241,15 @@ export class TurnRecorder {
       const { hunks, coarse } = compareText(before, after, this.env.diffTimeoutMs)
       return { kind: 'text', path, display, before: before !== null, after: after !== null, hunks, coarse }
     } catch (error: unknown) {
-      // Disposal removes the temporary directory under a running read; the Session is gone either way.
+      // Disposal removes the private directory under a running read; the Session is gone either way.
       if (this.lifetime.signal.aborted) return undefined
       throw error
     }
   }
 
   /**
-   * Abort queued work, forget every record, and remove the temporary directory.
-   * @returns once the temporary directory is gone.
+   * Abort queued work, forget every record, and remove the private directory.
+   * @returns once the private directory is gone.
    */
   async dispose(): Promise<void> {
     this.lifetime.abort()
@@ -265,10 +276,19 @@ export class TurnRecorder {
     if (!this.lifetime.signal.aborted) this.env.warn(`workspace-changes: ${String(error)}`)
   }
 
-  /** This Session's temporary directory, created on first use. */
-  private scratchDir(): Promise<string> {
-    this.scratch ??= mkdtemp(join(this.env.tempRoot, 'dsh-workspace-changes-'))
-    return this.scratch
+  /**
+   * This Session's private directory, created on first use.
+   * @throws when the directory overlaps a root the Session's confined commands can write, so nothing is stored in or
+   *   read from it while they could change it.
+   */
+  private async privateDirectory(): Promise<string> {
+    this.scratch ??= createPrivateDirectory(this.env.scratchRoot)
+    const directory = await this.scratch
+    const exposed = this.env.writableRoots().find(root => pathWithin(directory, root) || pathWithin(root, directory))
+    if (exposed !== undefined) {
+      throw new Error(`private directory ${directory} overlaps ${exposed}, which this Session's confined commands can write; this turn records nothing`)
+    }
+    return directory
   }
 
   /** The repository enclosing the working directory, located once; null keeps retrying each turn. */
@@ -276,7 +296,7 @@ export class TurnRecorder {
     if (this.repository !== null) return this.repository
     const git = await this.env.git
     if (git === null) return null
-    const workspace = await locateGitWorkspace(git, cwd, () => this.scratchDir(), signal)
+    const workspace = await locateGitWorkspace(git, cwd, () => this.privateDirectory(), signal)
     if (workspace === null) return null
     this.repository = { git, workspace }
     return this.repository
@@ -286,7 +306,7 @@ export class TurnRecorder {
   private async readSide(source: ContentSource, signal: AbortSignal): Promise<string | null | typeof OVERSIZED> {
     switch (source.kind) {
       case 'absent': return null
-      case 'file': return readFile(source.file, { encoding: 'utf8', signal })
+      case 'file': return this.store.read(source, signal)
       case 'snapshot': {
         const { git, workspace } = source.repository
         const blob = await treeBlob(git, workspace, source.tree, source.path, signal)
@@ -307,6 +327,7 @@ export class TurnRecorder {
     const listed = new Map<string, Listed>()
     let snapshot: WorkspaceChangesSummary['snapshot']
     if (baseline !== null) {
+      await this.privateDirectory()
       const after = await snapshotTree(baseline.git, baseline.workspace, signal)
       snapshot = { before: baseline.tree, after }
       const repository: Repository = { git: baseline.git, workspace: baseline.workspace }
@@ -341,9 +362,9 @@ export class TurnRecorder {
         : !isTemporaryPath(absolute, paths.temporaryRoots)
       if (!uncovered) continue
       const before = state.captures.get(absolute) as Capture
-      const after = await captureFile(absolute, join(await this.scratchDir(), 'captures'), this.env.maxFileBytes)
+      const after = await this.store.capture(absolute, this.env.maxFileBytes)
       if (after === undefined || sameCapture(before, after)) continue
-      listed.set(absolute, await this.compared(paths, root, absolute, before, after))
+      listed.set(absolute, await this.compared(paths, root, absolute, before, after, signal))
     }
     const sorted = [...listed.values()].sort((a, b) => compareDisplay(a.file, b.file))
     // An empty list after an earlier in-turn record supersedes that record.
@@ -370,13 +391,15 @@ export class TurnRecorder {
    * counts and refuses its comparison, a binary side likewise, and two text
    * sides carry the counts of their line comparison.
    */
-  private async compared(paths: Paths, root: string, absolute: string, before: Capture, after: Capture): Promise<Listed> {
+  private async compared(
+    paths: Paths, root: string, absolute: string, before: Capture, after: Capture, signal: AbortSignal,
+  ): Promise<Listed> {
     const list = (counts: Counts, sources: FileSources): Listed => ({ file: changedFile(paths, root, absolute, counts), sources })
     if (before.kind === 'oversized' || after.kind === 'oversized') {
       return list({ added: 0, deleted: 0, binary: false, oversized: true }, { refusal: 'oversized' })
     }
     if (isBinary(before) || isBinary(after)) return list({ added: 0, deleted: 0, binary: true }, { refusal: 'binary' })
-    const text = async (side: typeof before): Promise<string | null> => side.kind === 'file' ? readFile(side.file, 'utf8') : null
+    const text = async (side: typeof before): Promise<string | null> => side.kind === 'file' ? this.store.read(side, signal) : null
     const { added, deleted } = compareText(await text(before), await text(after), this.env.diffTimeoutMs)
     return list({ added, deleted, binary: false }, { before, after })
   }

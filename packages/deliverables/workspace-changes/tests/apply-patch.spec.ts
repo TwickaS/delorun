@@ -147,7 +147,7 @@ describe.each(['non-git', 'git-unavailable'])('apply_patch Review in %s', (envir
   it('rejects an unread file without capture, observation, or a Review row', async () => {
     const t = await boot(environment)
     await t.seed('a')
-    const capture = vi.spyOn(captures, 'captureFile')
+    const capture = vi.spyOn(captures.CaptureStore.prototype, 'capture')
     startTurn(t.session, 1)
     const result = await t.apply(patch(update('a')))
     expect(result).toMatchObject({ isError: true, error: { info: { code: 'FS_NOT_OBSERVED' } } })
@@ -197,9 +197,9 @@ describe.each(['non-git', 'git-unavailable'])('apply_patch Review in %s', (envir
     await t.read('source')
     const observed = t.observations()
     const completed: Array<{ path: string; capture: captures.Capture | undefined }> = []
-    const capture = captures.captureFile
-    vi.spyOn(captures, 'captureFile').mockImplementation(async (...args) => {
-      const value = await capture(...args)
+    const capture = captures.CaptureStore.prototype.capture
+    vi.spyOn(captures.CaptureStore.prototype, 'capture').mockImplementation(async function (this: captures.CaptureStore, ...args) {
+      const value = await capture.apply(this, args)
       completed.push({ path: args[0], capture: value })
       return value
     })
@@ -222,7 +222,7 @@ describe.each(['non-git', 'git-unavailable'])('apply_patch Review in %s', (envir
 
   it('rejects invalid syntax without capturing or recording paths', async () => {
     const t = await boot(environment)
-    const capture = vi.spyOn(captures, 'captureFile')
+    const capture = vi.spyOn(captures.CaptureStore.prototype, 'capture')
     startTurn(t.session, 1)
     expect(await t.apply('invalid')).toMatchObject({ isError: true, error: { info: { code: 'PATCH_SYNTAX' } } })
     expect(await t.finish()).toEqual([])

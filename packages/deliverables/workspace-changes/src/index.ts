@@ -10,7 +10,8 @@
  * hardened environment of `hardening.ts` and, where the composition mounts a
  * sandbox, inside the calling Session's sandbox (`confinement.ts`).
  */
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
+import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
@@ -18,7 +19,8 @@ import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
-import { sessionConfinement } from './confinement.ts'
+import { confinedWritableRoots, sessionConfinement } from './confinement.ts'
+import { defaultScratchRoot } from './files.ts'
 import { GitRunner } from './git.ts'
 import { gitVersionProblem } from './hardening.ts'
 import { TurnRecorder } from './recorder.ts'
@@ -52,6 +54,12 @@ export interface Config {
   maxFileBytes: number
   /** Milliseconds a line comparison may run before it degrades to whole-file replacement. */
   diffTimeoutMs: number
+  /**
+   * Absolute directory that holds each Session's private directory of snapshot objects, scratch indexes, and captured
+   * copies. It must lie outside every directory the Sessions' confined commands can write and outside the sandbox's
+   * protected home. Absent: this package's directory in the per-user cache directory ({@link defaultScratchRoot}).
+   */
+  scratchRoot?: string
 }
 
 /** Schemastery validation for {@link Config}. */
@@ -61,7 +69,20 @@ export const Config: z<Config> = z.object({
   maxFiles: z.number().default(500),
   maxFileBytes: z.number().default(2 * 1024 * 1024),
   diffTimeoutMs: z.number().default(100),
+  scratchRoot: z.string(),
 })
+
+/**
+ * The scratch root a configuration selects: the configured absolute directory, or the default for this Host.
+ * @param config - validated configuration.
+ * @returns an absolute directory path.
+ * @throws when `scratchRoot` is configured but not absolute.
+ */
+function resolveScratchRoot(config: Pick<Config, 'scratchRoot'>): string {
+  if (config.scratchRoot === undefined) return defaultScratchRoot(process.platform, process.env, homedir())
+  if (!isAbsolute(config.scratchRoot)) throw new Error(`workspace-changes requires an absolute scratchRoot: ${JSON.stringify(config.scratchRoot)}`)
+  return config.scratchRoot
+}
 
 function eligible(session: Session): string | undefined {
   const { cwd, origin, delegationDepth } = session.header
@@ -124,6 +145,7 @@ export function apply(ctx: Context, config: Config): void {
   ] as const) {
     if (!Number.isSafeInteger(value) || value < 1) throw new Error(`workspace-changes requires a positive integer ${field}`)
   }
+  const scratchRoot = resolveScratchRoot(config)
   const lifetime = new AbortController()
   const recorders = new Map<Session, TurnRecorder>()
   const mutations = new WeakMap<object, TurnRecorder>()
@@ -159,7 +181,8 @@ export function apply(ctx: Context, config: Config): void {
     if (recorder === undefined) {
       recorder = new TurnRecorder(session, cwd, {
         git: gitRunner().then(git => git?.confinedBy(sessionConfinement(ctx, session)) ?? null),
-        tempRoot: tmpdir(), maxFiles: config.maxFiles, maxFileBytes: config.maxFileBytes, diffTimeoutMs: config.diffTimeoutMs,
+        scratchRoot, writableRoots: () => confinedWritableRoots(ctx, session),
+        maxFiles: config.maxFiles, maxFileBytes: config.maxFileBytes, diffTimeoutMs: config.diffTimeoutMs,
         warn: (message) => { ctx.logger.warn(message) },
       })
       recorders.set(session, recorder)

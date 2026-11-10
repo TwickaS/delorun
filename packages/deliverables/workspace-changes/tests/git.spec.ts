@@ -9,8 +9,8 @@ import { TurnRecorder } from '../src/recorder.ts'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { git, scratchDir, startTurn, toolCall } from './support.ts'
 
-/** An object directory factory under a scratch root. */
-const objectsIn = (root: string) => () => Promise.resolve(join(root, 'objects'))
+/** A private directory factory yielding an existing directory. */
+const objectsIn = (root: string) => () => Promise.resolve(root)
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => {
@@ -174,8 +174,11 @@ describe('TurnRecorder', () => {
     const warnings: string[] = []
     let release!: (runner: GitRunner | null) => void
     const gate = new Promise<GitRunner | null>((resolve) => { release = resolve })
-    const tempRoot = await scratchDir('dsh-git-store-', cleanups)
-    const env = { git: gate, tempRoot, maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100, warn: (m: string) => { warnings.push(m) } }
+    const scratchRoot = await scratchDir('dsh-git-store-', cleanups)
+    const env = {
+      git: gate, scratchRoot, writableRoots: () => [], maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
+      warn: (m: string) => { warnings.push(m) },
+    }
     const disposed = new TurnRecorder(session, cwd, env)
     disposed.start(1)
     await new Promise(resolve => setTimeout(resolve, 5))
@@ -196,13 +199,13 @@ describe('TurnRecorder', () => {
   })
 
   it('removes its snapshot objects on disposal and never creates them outside a repository', async () => {
-    const tempRoot = await scratchDir('dsh-git-store-', cleanups)
+    const scratchRoot = await scratchDir('dsh-git-store-', cleanups)
     const { ctx, git: runnerGit } = await runner()
     const env = {
-      git: Promise.resolve(runnerGit), tempRoot, maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
+      git: Promise.resolve(runnerGit), scratchRoot, writableRoots: () => [], maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
       warn: (m: string) => { throw new Error(m) },
     }
-    const plain = new TurnRecorder(ctx.sessions.create(SessionId('plain'), { meta: { cwd: tempRoot } }), tempRoot, env)
+    const plain = new TurnRecorder(ctx.sessions.create(SessionId('plain'), { meta: { cwd: scratchRoot } }), scratchRoot, env)
     plain.start(1)
     await plain.settled()
     await plain.dispose()
@@ -211,24 +214,25 @@ describe('TurnRecorder', () => {
     const repo = new TurnRecorder(ctx.sessions.create(SessionId('repo'), { meta: { cwd } }), cwd, env)
     repo.start(1)
     await repo.settled()
-    const [objects, ...others] = (await readdir(tempRoot)).filter(entry => entry.startsWith('dsh-workspace-changes-'))
+    const [objects, ...others] = await readdir(scratchRoot)
     expect(others).toEqual([])
-    expect(objects).toBeDefined()
+    expect(objects).toMatch(/^session-/)
+    expect(await readdir(join(scratchRoot, objects!))).toEqual(['objects'])
     await repo.dispose()
-    expect(await readdir(tempRoot)).toEqual([])
+    expect(await readdir(scratchRoot)).toEqual([])
   })
 
-  it('keeps its own directory out of the snapshots when the temporary root lies inside the work tree', async () => {
+  it('keeps its own directory out of the snapshots when the scratch root lies inside the work tree', async () => {
     const cwd = await scratchDir('dsh-recorder-tmp-in-tree-', cleanups)
     git(cwd, 'init', '-q', '-b', 'main')
     await writeFile(join(cwd, 'tracked.txt'), 'one\n')
     git(cwd, 'add', '-A'); git(cwd, 'commit', '-q', '-m', 'init')
-    const tempRoot = join(cwd, 'tmp')
-    await mkdir(tempRoot)
+    const scratchRoot = join(cwd, 'tmp')
+    await mkdir(scratchRoot)
     const { ctx, git: runnerGit } = await runner()
     const session = ctx.sessions.create(SessionId('tmp-in-tree'), { meta: { cwd } })
     const env = {
-      git: Promise.resolve(runnerGit), tempRoot, maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
+      git: Promise.resolve(runnerGit), scratchRoot, writableRoots: () => [], maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
       warn: (m: string) => { throw new Error(m) },
     }
     const recorder = new TurnRecorder(session, cwd, env)

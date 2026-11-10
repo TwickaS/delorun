@@ -175,6 +175,15 @@ describe.skipIf(process.platform === 'win32')('the driver listing', () => {
     await writeFile(join(cwd, '.git', 'config'), '[broken\n')
     await expect(snapshotTree(await runner(), workspace, signal)).rejects.toThrow('git config failed')
   })
+
+  it('switches nothing off when the listing matches no key', async () => {
+    const { cwd } = await fixture()
+    const store = await scratchDir('dsh-git-store-', cleanups)
+    const workspace = (await locateGitWorkspace(await runner(), cwd, () => Promise.resolve(store), signal))!
+    // The command-scope overrides always match the listing, so only a listing git reports as empty takes this path.
+    const empty = (await runner()).confinedBy(() => Promise.resolve({ argv: ['/bin/sh', '-c', 'exit 1'], mode: 'read-only', runnerFailureRules: [] }))
+    expect(await repositoryDrivers(empty, workspace, signal)).toEqual([])
+  })
 })
 
 describe('hardened git environment', () => {
