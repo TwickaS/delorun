@@ -1584,7 +1584,7 @@
       "path": "scripts/gen-tool-catalog.ts",
       "class": "delo-feature",
       "feature": "preset-inspect",
-      "reason": "Delo's preset_inspect catalogue entry: the harvest mounts the tool with its switch on, so the catalogue documents its schema."
+      "reason": "Delo's preset_inspect catalogue entry: the harvest mounts the tool with its switch on, so the catalogue documents its schema. The schedule tools' entry mounts the agent registry, which Delo's schedule consent seam makes the tools wait for."
     },
     {
       "path": "scripts/rescope-vendor.ts",
