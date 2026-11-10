@@ -219,7 +219,7 @@ Each check has a budget, its resident memory at the peak and its CPUs, which the
 
 | Check | What it proves | Budget | Tier |
 | --- | --- | --- | --- |
-| `boundary` | Every difference from upstream is fork-owned or a listed patch ([`check-fork-boundary.ts`](src/check-fork-boundary.ts)) | 0.3 GiB, 1 CPU | `changed`, `full` |
+| `boundary` | Every difference from upstream is fork-owned, a ledger entry or a path rule ([`check-fork-boundary.ts`](src/check-fork-boundary.ts)) | 0.3 GiB, 1 CPU | `changed`, `full` |
 | `gates:*` | Each of the eight repository gates in [`checks/gates/index.ts`](src/checks/gates/index.ts); a gate marked `staged` also runs in `pre-commit` | 0.5 GiB, 1 CPU each | `changed`, `full`; a staged gate also `pre-commit` |
 | `whitespace:staged` | No whitespace error in the staged changes (`git diff --cached --check`) | 0.1 GiB, 1 CPU | `pre-commit` |
 | `jsdoc` | Upstream's JSDoc rules over every export of the fork's `src` trees ([`check-jsdoc.ts`](src/check-jsdoc.ts)) | 1.5 GiB, 1 CPU | `changed`, `full` |

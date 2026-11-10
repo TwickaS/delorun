@@ -303,7 +303,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
   // lane's need pulls it into the plan whatever the tier selects, and rebuilds it on any later run whose tree lost it.
   const upstreamSuiteNeeds = [NATIVE_CHECK_ID, ...built]
   const checks: Draft[] = [
-    { id: 'boundary', group: 'boundary', title: 'Every difference from upstream is fork-owned or a listed patch', cwd: '', command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-fork-boundary.ts'], needs: [], inputs: ['**'], history: true, tiers: ['changed', 'full'], cpus: 1 },
+    { id: 'boundary', group: 'boundary', title: 'Every difference from upstream is fork-owned, a ledger entry or a path rule', cwd: '', command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-fork-boundary.ts'], needs: [], inputs: ['**'], history: true, tiers: ['changed', 'full'], cpus: 1 },
   ]
   for (const gate of host.gates) {
     checks.push({
