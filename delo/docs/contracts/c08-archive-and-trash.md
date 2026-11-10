@@ -1,5 +1,5 @@
 ---
-description: "Contract C8: the archive format v1 and its manifest, the closed customisation schema and its denied rows, signature verification, limits, staging and publication, the error taxonomy, untrusted imported chats, and trash with its purge."
+description: "Contract C8: the archive format v1 and its manifest, the closed customisation schema and its denied rows, signature verification, limits, staging and publication, the error taxonomy, where imported chats are kept, and trash with its purge."
 ---
 
 # Contract C8: archive format v1 and trash
@@ -9,12 +9,23 @@ English | [中文](c08-archive-and-trash.zh.md)
 <a id="summary"></a>
 ## Summary
 
-An archive is the export file of one or more workspaces with their chats, attachments and customisation. Its format is versioned. An import validates the whole archive in a staging directory before it writes anything, and it publishes each new workspace atomically without overwriting an existing one. Customisation is data under a closed schema. It cannot contain code, and it cannot set a sandbox mode, a credential reference, a reach option or egress. Trash keeps a deleted chat or workspace for 30 days, and a purge removes its content from every store that holds it.
+An archive is the export file of one or more workspaces with their chats, attachments and customisation. Its format is versioned. An import validates the whole archive in a staging directory before it writes anything, and it publishes each new workspace atomically without overwriting an existing one. Customisation is data under a closed schema. It cannot contain code, and it cannot set a sandbox mode, a credential reference, a reach option or egress. Trash keeps a deleted chat or workspace for 30 days, and a purge removes its content from every store this page lists.
+
+<a id="status"></a>
+## Status
+
+Export, import, trash and purge are built; using what an import stores is not.
+
+- **Built and reached:** `delorun export`, `delorun import`, `delorun trash`, and the studio's trash and purge through `@delo/plugin-trash` in the CLI profile.
+- **Not built:** opening imported chats, which no row of the CLI profile reads; their untrusted state, banner and the action that marks one trusted; applying customisation rows, which an import lists and never writes, with the diff screen and the rules for imported skills, presets and plugin declarations; and the import of a stock DeepSeek Harness home. These rules are in the [imported chats design](../design/imported-chats.md).
+
+The requirements and denial tests below that this list names as not built protect no one until a change builds them.
 
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Archive file](#archive-file)
   - [Manifest](#manifest)
@@ -23,7 +34,7 @@ An archive is the export file of one or more workspaces with their chats, attach
   - [Limits](#limits)
   - [Import and export](#import-and-export)
   - [Errors](#errors)
-  - [Untrusted imported chats](#untrusted-imported-chats)
+  - [Imported chats](#untrusted-imported-chats)
   - [Trash and purge](#trash-and-purge)
 - [Consumers](#consumers)
 - [Compatibility](#compatibility)
@@ -68,16 +79,16 @@ Every `path` is normalised, relative and free of `..` segments, and it refers to
 
 | Row kind | Holds | Rule |
 | --- | --- | --- |
-| `bundle` | A bundle package name. | Listed on the diff screen. Setup does not install it. |
+| `bundle` | A bundle package name. | Listed by the import. Never installed. |
 | `profile-row` | A row id and plain config values for that row. | Values are data. Expressions and `insert` rows are refused. |
-| `preset` | A preset definition. | Cannot raise a permission above the person's own presets. |
-| `skill` | A skill's files. | Imported disabled. |
+| `preset` | A preset definition. | Listed by the import. |
+| `skill` | A skill's files. | Listed by the import. |
 | `theme` | Theme values. | Data only. |
-| `plugin-declaration` | A plugin name and its pinned version. | Listed on the diff screen. Never installed automatically. |
+| `plugin-declaration` | A plugin name and its pinned version. | Listed by the import. Never installed. |
 
 The denied row kinds are `sandbox-mode`, `credential-reference`, `reach-row` and `egress`. A row that sets a sandbox mode, a credential reference, a reach option or an egress limit is refused. Any `!!js` expression and any `insert` row is refused before evaluation, so an archive causes no evaluation.
 
-The customisation applies only after the person has seen its diff. The diff screen shows each row, its kind and its target before the change is written.
+An import lists each row's kind and target and applies no row: no bundle or plugin is installed and no preset, skill, theme or profile row is written. `delorun export` writes no rows. Applying rows after a diff screen, with imported skills starting disabled and imported presets unable to raise a permission, is in the [imported chats design](../design/imported-chats.md) and is not built.
 
 <a id="signature"></a>
 ### Signature
@@ -118,7 +129,7 @@ An import keeps a journal beside its staging root that names each workspace befo
 
 `delorun trash` restore and purge, `delorun export` and `delorun import` run while the command holds the home lock of every profile of the home, because every profile shares the stores they read and change. A profile whose home process runs refuses the command, and no home process starts while the command holds the locks. The command also registers as the exclusive user of the stores under `run/data-users/` ([C1](c01-home-layout.md)): it refuses while `delorun headless` or another user is registered, or an update, a rollback or a restore of a session-data copy is in progress, and `delorun headless` refuses while it runs.
 
-The import of a stock DeepSeek Harness home copies its plugins, settings and sessions into a new Delo home, and it never modifies the stock home.
+No command imports a stock DeepSeek Harness home; that import is in the [imported chats design](../design/imported-chats.md).
 
 <a id="errors"></a>
 ### Errors
@@ -147,11 +158,9 @@ Each refusal carries one code from this table. A refusal writes nothing.
 An absent signature that the person accepted is not an error. It is the unverified state.
 
 <a id="untrusted-imported-chats"></a>
-### Untrusted imported chats
+### Imported chats
 
-Every imported chat is untrusted until the person marks it trusted. An untrusted chat shows a banner that names its source, meaning the archive's origin or file name. Its history stays out of model context until the person marks it trusted. Deleting an untrusted chat moves it to trash, and purging it removes it at once.
-
-The studio does not open imported chats yet. `delorun import` publishes them to `archive/imported/`, which no row of the shipped composition reads, and says so in its report.
+`delorun import` publishes imported workspaces, with their chats, to `archive/imported/`, creates no session, and says in its report that imported chats stay out of every model request and cannot be opened in the studio. No row of the CLI profile reads `archive/imported/`, so an imported chat reaches no Host plugin and no model request. An imported chat has no trust state, banner or trust action, and the trash and purge do not reach it. Opening imported chats as untrusted chats, with their history kept out of model context until the person marks them trusted, is in the [imported chats design](../design/imported-chats.md) and is not built.
 
 <a id="trash-and-purge"></a>
 ### Trash and purge
@@ -201,10 +210,9 @@ Requirements:
 - Nothing is written until the whole archive validates in staging.
 - An archive never evaluates a `!!js` expression, and it never writes a row that contains one.
 - A row of a denied kind is refused, so an archive cannot change a sandbox mode, a credential reference, a reach option or an egress limit.
-- An archive whose signature does not verify is refused. An archive signed by a key the home does not trust is refused until the person confirms the key's fingerprint, and one that carries no signature until the person accepts it in the unverified state, which the report shows.
-- Imported plugin declarations are listed and never installed automatically.
-- Imported presets cannot raise a permission above the person's own presets.
-- Imported skills start disabled, and imported chats start untrusted.
+- An archive whose signature does not verify is refused. An archive signed by a key the home does not trust is refused until the person confirms the key's fingerprint, and one that carries no signature until the person accepts it in the unverified state, which the import states before it asks.
+- No customisation row is applied: no plugin declaration or bundle is installed, and no preset, skill, theme or profile row is written.
+- Imported chats are kept where no row of the CLI profile reads them. Imported skills starting disabled, imported presets unable to raise a permission and imported chats starting untrusted are requirements of the [imported chats design](../design/imported-chats.md), which is not built.
 - An import never overwrites a workspace or chat.
 - Trash keeps secrets until purged, and a purge removes the content from every store listed in this contract. A tampered trash record cannot move or read a directory outside the sessions root or another item's content. A symbolic link planted at a store's root, or at the directory that holds a versioned root, is refused rather than followed, so a purge deletes nothing outside the store it names.
 - Export warns about secrets in chat history before it writes the archive, and writes nothing until the person confirms.
@@ -222,16 +230,12 @@ Denial tests:
 | `archive with an insert row is refused` | A customisation row of the `insert` form is refused with `ARCHIVE_EXPRESSION_REFUSED`. |
 | `archive that sets a sandbox mode, credential reference, reach row or egress is refused` | Each such row is refused with `ARCHIVE_DENIED_ROW`, and no row is applied. |
 | `traversal, link, size, ratio, case, truncation, version and canary fixtures cause no write` | Each fixture is refused with its error code, and the workspace store is unchanged. |
-| `unverified archive imports only with the unverified label` | An archive with no signature imports only after the person accepts it, and shows the unverified label in the report. |
+| `unverified archive imports only with the unverified label` | An archive with no signature imports only after the person accepts it, and the import states that it is not signed before it asks. |
 | `a signature that does not verify is refused` | An archive whose manifest changed after signing, or whose signature is another key's, is refused with `ARCHIVE_SIGNATURE_INVALID`, and nothing is written. |
 | `an unknown signer is refused until its fingerprint is typed` | An archive signed by a key the home does not trust is refused with `ARCHIVE_SIGNER_UNTRUSTED` until the person types the key's fingerprint, and nothing is written. |
 | `an import that fails partway leaves no workspace` | A publication that fails after an earlier workspace of the same import was published removes that workspace. |
 | `a deleted chat leaves the session list until it is restored` | A chat in trash is absent from upstream's session list and cannot be opened; a restore returns every event. |
 | `a chat a live writer holds stays pending` | A chat whose session lock is held stays at its origin until the lock is released and a start moves it into trash. |
-| `imported plugin declarations are listed and never installed` | After import, no plugin declared by the archive is installed. |
-| `imported presets do not raise permissions` | An imported preset cannot grant a permission above the person's own presets. |
-| `imported skills start disabled` | Each imported skill is disabled after import. |
-| `imported chat stays out of model context until trusted` | An untrusted chat shows its banner, and its history is absent from every model request until the person marks it trusted. |
 | `import into an existing identifier never overwrites` | An import whose identifier exists writes a new workspace and leaves the existing one unchanged. |
 | `canary is absent from the index and every generation after purge` | After purge, the canary text is absent from the full-text index and from every session generation of the chat. |
 | `purge refuses a symbolic link at a store` | A link planted at the attachment store is refused with `TRASH_STORE_REFUSED`, and the file it points to is unchanged. |
@@ -271,5 +275,5 @@ Denial tests:
 - The archive limits are 100,000 entries, 4 GiB uncompressed in total, 1 GiB per entry, and a 100:1 compression ratio per entry.
 - Trash keeps each item for 30 days.
 - Purged content stays in process logs for at most 14 days, the retention of the operational-log contract.
-- An imported chat is untrusted until the person marks it trusted. Its banner names its source. Deleting it moves it to trash, and purging it removes it at once.
+- Imported chats stay in `archive/imported/`, which no row of the CLI profile reads.
 - The archive signature algorithm is Ed25519, and its key is the exporting home's key.

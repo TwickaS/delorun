@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This types-only package exports the wire definitions of the relay protocol: the self-hosted relay's configuration and bindings, the tunnel token request and claims, the handshake messages, the frame types and their payloads, the stream close reasons, the announcements, the rebind statement, the close and error codes, the limits and the certificate monitoring source. The relay in `delo/apps/relay/`, the relay client in `@delo/reach` and the fuzz corpus import these definitions, so each frame and limit has one definition. The specification is [contract C6](../../docs/contracts/c06-relay-protocol.md).
+This types-only package exports the wire definitions of the relay protocol: the self-hosted relay's configuration and bindings, the tunnel token request and claims, the handshake messages, the frame types and their payloads, the stream close reasons, the announcements, the rebind statement, the close and error codes, the limits and the certificate monitoring source. The relay in `delo/apps/relay/` and the stand-ins in `delo/apps/tools` import these definitions, so each frame and limit has one definition; the home's relay client and the fuzz corpus that C6 names are not built. The specification is [contract C6](../../docs/contracts/c06-relay-protocol.md).
 
 ## Exports
 

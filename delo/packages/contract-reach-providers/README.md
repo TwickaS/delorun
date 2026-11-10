@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This types-only package exports the definitions of reach providers: the reach option ids and the listener each one connects, the provider states and their transitions, the configuration rows, the two Tailscale serve target variants with the evidence a spike report records, the identity header rules, the certificate authority that own-domain reach names with the CAA parameters checked, and the error codes. `@delo/reach`, `@delo/certificates`, the reach screens and the verification checks import these definitions, so each option, state and code has one definition. The specification is [contract C7](../../docs/contracts/c07-reach-providers.md).
+This types-only package exports the definitions of reach providers: the reach option ids and the listener each one connects, the provider states and their transitions, the configuration rows, the two Tailscale serve target variants with the evidence a spike report records, the identity header rules, the certificate authority that own-domain reach names with the CAA parameters checked, and the error codes. The stand-ins in `delo/apps/tools` and `@delo/contract-oidc-passkeys` import these definitions, so each option, state and code has one definition; the reach provider, the certificate monitoring, the reach screens and the verification checks that C7 names are not built. The specification is [contract C7](../../docs/contracts/c07-reach-providers.md).
 
 ## Exports
 

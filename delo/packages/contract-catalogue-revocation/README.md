@@ -18,7 +18,7 @@ English | [中文](README.zh.md)
 
 ## Use this package
 
-The catalogue repository's schema check and publish job, the load-time revocation check in `delo/packages/catalogue/` and the Discover integration consume it. Import the types with `import type` and the constants with a value import from `@delo/contract-catalogue-revocation`; a package that reads or writes the files this contract defines still validates them at its parser, because these types describe valid files and do not check them.
+No package in this repository consumes it: the catalogue client, the load-time revocation check and the Discover integration that C13 names are not built. Import the types with `import type` and the constants with a value import from `@delo/contract-catalogue-revocation`; a package that reads or writes the files this contract defines still validates them at its parser, because these types describe valid files and do not check them.
 
 ## Known Limitations and Deferred Work
 

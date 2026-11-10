@@ -20,9 +20,12 @@ A design changes through a pull request like any other document. A change to a d
 
 ## The designs
 
-- [Update and rollback](update-and-rollback.md): the update report's data item, the copy of chat data taken by default, the one rollback table, and why a rollback deletes nothing.
-- [Reach on your own tailnet](reach.md): opening the studio from your own devices, device approval only at the home's computer, and what a remote session may and may not do.
+- [Update and rollback](update-and-rollback.md): the update report's data item, the copy of chat data taken by default, the one rollback table, why a rollback deletes nothing, the refusal of a lower version, and verified updates for the desktop app.
+- [Reach on your own tailnet](reach.md): opening the studio from your own devices, device approval only at the home's computer, what a remote session may and may not do, and records and limits for loopback credentials.
 - [The first run](first-run.md): one command from install to a first chat, the launcher's progress, Quick and Full setup, the background start and onboarding in the studio.
 - [Changes to your harness](changes.md): your harness is the signed release plus the changes you approved; reviewing, applying and undoing a change, work sessions, the protection setting, and recovery when a change breaks something.
 - [Security extension points](security-extension-points.md): how a plugin can add a check, a warning, a confirmation or a refusal, and why it can never remove or override a built-in check.
 - [The journey check](journey-check.md): one end-to-end check in a clean container, from install through update and rollback, and what it does not prove.
+- [Native confinement on every command and platform](native-confinement.md): Delo's protections under every command that boots a Host, the checks that report each confinement rule, the full-access prompt, Docker Desktop's control sockets, Windows, and the instruction consent for writes that commands make.
+- [Imported chats and customisation](imported-chats.md): opening imported chats as untrusted until the person trusts them, applying an archive's customisation after a diff, and importing a stock DeepSeek Harness home.
+- [The release workflow](release-workflow.md): the CI workflow that publishes a signed, logged release, timestamp re-signing, npm publication without a token, two of N rebuilds, Authenticode and the install scripts.

@@ -1,5 +1,5 @@
 ---
-description: "Design of Delo's update and rollback: the update report's data item, the copy of chat data taken by default, the one rollback table, interrupted restores, and the rule that a rollback deletes nothing."
+description: "Design of Delo's update and rollback: the update report's data item, the copy of chat data taken by default, the one rollback table, interrupted restores, the rule that a rollback deletes nothing, the refusal of a lower version, and verified updates and rollback for the desktop app."
 ---
 
 # Update and rollback
@@ -20,11 +20,11 @@ Before an update changes anything, Delo shows a report of what the new release w
 
 ## What exists today
 
-- `@delo/update` builds an update report in format `delo.update-report/1`. Its items are plugins, bundles and profile rows that the target release would disable, remove or change, each with a reason from a closed list. No command produces a report: `delorun` has no `update` command.
-- The home process answers the handshake operations `update.prepare`, `update.apply`, `rollback` and `update.cancel`, and no command calls them. The chat gate that `delorun start` gives the home process counts no chats, and its health check always reports healthy.
-- `delorun recover` reports where the profile stands, rolls the profile back to the snapshot an update took (`--rollback`), restores a named profile history version (`--restore <version>`), and enters or leaves safe mode. It writes profile files only, never chat data and never the runtime store.
-- Upstream's readers refuse data newer than they know: a chat log in a newer session format is refused, a whole-unit storage file of a newer version is refused, and a per-record storage file of an unknown version reads as absent. A runtime that goes back to an older release can therefore lose access to chats the newer release wrote or migrated.
-- Upstream's attachment store only adds files, and the full-text index of the shipped profile is held in memory.
+- `delorun update` updates the CLI home through its home process. The home process fetches and verifies the channel's release, installs it into the runtime store and builds an update report in format `delo.update-report/2`, whose items include the `data` item of rules 1 to 3; the command prints the report, asks, and applies it with the person's choice about the session-data copy.
+- The session-data copy, the update record `run/<profile>/update.json` with `targetStarted`, the one rollback table, the set-aside directories, the restore journal, the chat gate that counts running chats and refuses new turns while an update waits, and the health checks with the automatic rollback are built for the CLI home. [C3](../contracts/c03-update-report.md), [C19](../contracts/c19-home-process.md) and [C1](../contracts/c01-home-layout.md) describe them.
+- `delorun recover` reports where the profile stands and runs one action per call: `rollback` through the one rollback table, `rollback --profile-only`, `restore <version>`, `safe-mode` and `exit-safe-mode`, and `discard <path>` for a copy or set-aside directory.
+- No client compares versions before an update: `delorun update` offers the channel's release whenever it differs from the running one.
+- The desktop app is upstream's, unchanged: its updater downloads and installs on the person's click and refuses a downgrade, checks no Delo manifest or log entry, keeps no previous release and offers no rollback.
 
 ## The rules
 
@@ -63,6 +63,17 @@ Before an update changes anything, Delo shows a report of what the new release w
 14. The chat gate counts running chats, and the health check evaluates [C3's health-check criteria](../contracts/c03-update-report.md#health-check), before `delorun update` reaches the handshake.
 15. The design holds for the CLI home only. The desktop app shares `sessions/` and takes no home lock, so it does not update through this procedure until one lock covers both installations and its updater follows the same table.
 
+### No version goes down on its own
+
+16. `delorun update` and the update channel refuse a target lower than the running version unless the person asks for a rollback, which reaches only a signed, logged release through the rollback table.
+
+### The desktop app
+
+17. Before the desktop app hands a download to electron-updater's `quitAndInstall`, it verifies a fresh timestamp, the manifest's signature, the downloaded file's SHA-512 and SHA-256 against the manifest's `desktop` entry and the manifest's log entry ([C2](../contracts/c02-release-manifest.md), [C18](../contracts/c18-release-log.md)). Any failure refuses the install and leaves the running version unchanged.
+18. After an update applies, the app keeps the installer or update archive of the release it replaced in its update cache directory, verified against that release's manifest. The cache keeps exactly one previous release.
+19. The feed refuses an automatic downgrade: a feed that names a version lower than or equal to the running one offers nothing.
+20. A rollback the person requests installs the cached previous release, or an earlier release the person names, downloaded from GitHub Releases. The target must verify as signed (manifest and file digests) and logged (inclusion proof); an unsigned, unlogged or mismatching target is refused. After the install, the profile is restored from history.
+
 ## What this does not protect against
 
 - Chats written after an update that the person then rolls back with a copy are set aside, not merged into the restored data. The person brings them back by import.
@@ -86,7 +97,12 @@ Before an update changes anything, Delo shows a report of what the new release w
 | `c03-second-rollback-keeps-both-set-asides` | A second rollback keeps the first set-aside directory. |
 | `c03-interrupted-restore-completes-before-a-host-starts` | A restore killed between renames is completed by the next `delorun start` before a Host starts. |
 | `c03-previous-release-reads-delo-records` | The previous release reads every record under the home that the current release writes. |
+| `an update to a lower version is refused` | `delorun update` against a channel that names a release lower than the running one offers nothing, and an update-channel request naming a lower installed version is refused. |
+| `c02-desktop-refuses-bad-manifest` | A desktop update whose manifest signature fails, or whose downloaded file's SHA-512 differs from the manifest, is refused before `quitAndInstall`. |
+| `c02-desktop-refuses-unrequested-downgrade` | A feed naming a lower version offers no update. |
+| `c02-desktop-rollback-signed-logged` | A requested rollback to a signed, logged earlier release applies and restores the profile from history. |
+| `c02-desktop-rollback-refuses-unsigned-or-unlogged` | A requested rollback to a release without a verifying manifest, or without a verified log entry, is refused. |
 
 ## What is built so far
 
-The report format `delo.update-report/1` with plugin, bundle and row items, the handshake operations, and the profile snapshot rollback of `delorun recover --rollback` are built. The data item, the copy, the update record, the rollback table, the set-aside directories, the restore journal and the `delorun update` command are not built.
+Rules 1 to 14 are built for the CLI home, and C3, C19 and C1 describe them. Rule 15's single lock for the CLI home and the desktop app, the refusal of a lower version in rule 16, and the desktop app's rules 17, 18 and 20 are not built. Rule 19 holds through upstream's updater, which refuses a downgrade (`allowDowngrade` false).

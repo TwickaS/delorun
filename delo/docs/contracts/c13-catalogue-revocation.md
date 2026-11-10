@@ -10,8 +10,18 @@ English | [中文](c13-catalogue-revocation.zh.md)
 
 The catalogue is a public index of plugins in a `Delo-Run` repository, `Delo-Run/delo-plugins`, where adding a plugin is a pull request. Its publish job signs two files with the catalogue key of [C2](c02-release-manifest.md#key-roles), the index and the revocation list, and GitHub Pages serves them at `catalogue.delorun.com`; the host is not trusted, because a client refuses a file whose signature does not verify. An index entry pins exact plugin versions with their integrity hashes, carries "tested with Delo X" badges from the compatibility corpus, and may list findings, which the studio shows as the claims of the plugin's author or a named reviewer: Delo runs no plugin audit and does not verify them. The revocation list names plugin versions Delo disables at their next load, with sequence numbers against replay, an expiry and a maximum cache age of 24 hours; past that age the studio enters a stale state. The types live in [`@delo/contract-catalogue-revocation`](../../packages/contract-catalogue-revocation/README.md).
 
+## Status
+
+Nothing on this page is built: no code fetches, verifies or caches a catalogue index or a revocation list.
+
+- **Built and reached:** the `catalogue` key role in the root metadata schema of [C2](c02-release-manifest.md#key-roles), and the file name `catalogue/revocations.json` in the home layout of [C1](c01-home-layout.md). Plugins install through upstream's plugin manager, which records each package's integrity hash in the profile's `pnpm-lock.yaml`; Delo adds no pin of its own.
+- **Not built:** the `@delo/catalogue` package; the signed index and revocation list and their publish job; installing from the catalogue with exact versions and integrity pins; the sequence, expiry and 24-hour cache-age checks; the stale state; disabling a revoked plugin version at its next load; badges and listed findings in the studio; the `plugin-pins` check, which `delorun verify` reports as not run. `delorun update`'s report lists `revocations` as not checked.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them. A plugin installed today stays enabled whatever is later known about it, until the person removes it.
+
 ## Contents
 
+- [Status](#status)
 - [Where the files are served](#where-the-files-are-served)
 - [Catalogue index](#catalogue-index)
 - [Badge record](#badge-record)

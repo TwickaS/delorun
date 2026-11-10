@@ -10,8 +10,18 @@ English | [中文](c17-plugin-versions.zh.md)
 
 Delo has its own semantic version and builds on one upstream DSH version, so a plugin is checked on two axes. The upstream axis is unchanged: `engines.dsh` (or, without it, the plugin's `@deepseek-ai/dsh*` peer dependencies) is checked against the version of `@deepseek-ai/dsh-app-boot` by upstream's `evaluatePluginCompatibility`. The Delo axis is `engines.delo`, checked against Delo's version with the same rules. A plugin written for stock DSH declares no `engines.delo` and is compatible on the Delo axis. Each axis has its own exact-version exemption, which the person grants after a risk warning. Every refusal and every update-report line names both versions. The types live in [`@delo/contract-plugin-versions`](../../packages/contract-plugin-versions/README.md).
 
+## Status
+
+Both axes are checked at install, at every start of a profile `delorun` runs, and in the update report; the Delo-axis exemption, the studio's report and the messages as listed here are not built.
+
+- **Built and reached:** `evaluatePluginCompatibility` in upstream's app-boot checks `engines.delo` against the Delo version `delorun` exports; the plugin manager refuses an install on either axis, upstream's profile preflight disables an unmet row before the Loader imports it, `delorun update`'s report names both axes, and `delorun --version` prints both versions. The upstream-axis exemption works through `delorun plugin allow-version ... --dsh-version`, which passes through to upstream.
+- **Not built:** the Delo-axis exemption: no code writes `delo-compatibility.json`, a Delo mismatch is never exempted, and `delorun plugin allow-version ... --delo-version` is refused by upstream's argument parser although the printed remedy names it; the studio's report with Update, Keep disabled and Roll back, since a row disabled at start is reported by one line on standard error; the message table below, since the built text is upstream's sentence followed by Delo's sentence; the catalogue corpus and its badges; the Verification panel and `delorun status` showing the versions.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 ## Contents
 
+- [Status](#status)
 - [The two versions](#the-two-versions)
 - [Declaring requirements](#declaring-requirements)
 - [Evaluation](#evaluation)
@@ -68,7 +78,7 @@ An unreadable declaration is treated as unmet: upstream refuses requirement meta
 Where the axes are checked:
 
 - at install, by the plugin manager, before the package is added;
-- at every start, by upstream's profile preflight (`prepareProfileEntries` in [`compatibility-preflight.ts`](../../../packages/boot/app-boot/src/compatibility-preflight.ts)), which disables an unmet row before the Loader imports it and reports it in the studio with Update, Keep disabled and Roll back;
+- at every start, by upstream's profile preflight (`prepareProfileEntries` in [`compatibility-preflight.ts`](../../../packages/boot/app-boot/src/compatibility-preflight.ts)), which disables an unmet row before the Loader imports it and prints one line to standard error naming the row and the reason; the studio shows no report;
 - before an update, against the target release's two versions, for the update report ([C3](c03-update-report.md));
 - in the catalogue corpus, which records the versions a badge ran ([C13](c13-catalogue-revocation.md#badge-record)).
 
@@ -79,7 +89,7 @@ The person can accept an unmet requirement for one exact plugin version on one e
 | Axis | File in the profile directory | Command |
 | --- | --- | --- |
 | Upstream | `compatibility.json`, upstream's file, unchanged | `delorun plugin allow-version <package>@<version> --dsh-version <dsh> --accept-risk` |
-| Delo | `delo-compatibility.json`, the same record format: exact `package@version` keys mapped to lists of exact Delo versions | `delorun plugin allow-version <package>@<version> --delo-version <delo> --accept-risk` |
+| Delo | `delo-compatibility.json`, the same record format: exact `package@version` keys mapped to lists of exact Delo versions; not built: nothing writes it, and the start check reads no Delo exemption | `delorun plugin allow-version <package>@<version> --delo-version <delo> --accept-risk`; not built: upstream's parser refuses `--delo-version` |
 
 - Both files are written atomically with mode 0600 under the file's lock, as upstream's `setProfileVersionExemption` writes `compatibility.json`.
 - A grant must name the running version of its axis; a revocation may name an earlier one.
@@ -98,7 +108,7 @@ The result of evaluating one plugin against one pair of versions:
 | `delo` | The Delo version checked. |
 | `axes.dsh`, `axes.delo` | Each `{ "status", "requirement"?, "exempted" }`; `status` is `met`, `unmet`, `unreadable` or `none`. |
 
-Messages, in English in logs and stderr and localised in the studio:
+Messages, in English in logs and stderr and localised in the studio. The built text differs: a refusal and a start-time line carry upstream's sentence for the upstream axis followed by Delo's sentence for the Delo axis, both naming the Delo and the DSH version, and the studio shows none of them.
 
 | Case | Message |
 | --- | --- |
@@ -119,7 +129,7 @@ Delo 1.0.0
 DSH 0.2.2
 ```
 
-`delorun --version --json` prints one line, `{"delo":"1.0.0","dsh":"0.2.2"}`. The Verification panel and `delorun status` show the same two versions.
+`delorun --version --json` prints one line, `{"delo":"1.0.0","dsh":"0.2.2"}`. The Verification panel does not exist, and `delorun status` does not show the versions.
 
 ## Consumers
 

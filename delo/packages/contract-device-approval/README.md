@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This types-only package exports the messages and limits of device approval: the key algorithms and the files that hold them, the owner claim, the approval request and its answer, the approval with its WebAuthn or re-authentication proof, the session request, the recovery kit prefix, the desktop app's TLS key statement, the alert file and its kinds, the error codes and every limit as a named constant. `@delo/home-auth`, `@delo/certificates`, the reach screens and the desktop app import these definitions, so each message field and limit has one definition. The specification is [contract C5](../../docs/contracts/c05-device-approval.md).
+This types-only package exports the messages and limits of device approval: the key algorithms and the files that hold them, the owner claim, the approval request and its answer, the approval with its WebAuthn or re-authentication proof, the session request, the recovery kit prefix, the desktop app's TLS key statement, the alert file and its kinds, the error codes and every limit as a named constant. `@delo/home-auth` and `@delo/archive` import these definitions, so each message field and limit has one definition; the certificate monitoring, the reach screens and the desktop app's side that C5 names are not built. The specification is [contract C5](../../docs/contracts/c05-device-approval.md).
 
 ## Exports
 

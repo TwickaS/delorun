@@ -11,10 +11,22 @@ English | [中文](c06-relay-protocol.zh.md)
 
 A relay lets a browser reach a home that accepts no inbound connection. The home opens an outbound WebSocket to the relay and proves its home key; the relay reads only the SNI of each browser connection on port 443 and passes that connection's encrypted bytes over the WebSocket to the home, where TLS ends with the home's own certificate. The relay holds no key of the studio and cannot read its traffic. At Delo 1.0 the relay is the self-hosted relay, run by the person on their own server and domain from the image in `delo/apps/relay/`. This page defines its configuration, the tunnel token, the handshake, the frames, SNI routing, the limits, rebinding, announcements and certificate monitoring, and states which rules bind the Delo relay, a fast-follow. The types package [`@delo/contract-relay-protocol`](../../packages/contract-relay-protocol/README.md) carries the frame types, codes and limits.
 
+<a id="status"></a>
+## Status
+
+The relay's server side is built and parked; no home can use it.
+
+- **Built, reached by nothing:** `delo/apps/relay`, marked parked, with its configuration checks, the single-use 60-second tunnel token, the home-key challenge, one live tunnel per name with the refusal of a second, framing, flow control and limits, SNI routing and its container image. No home-side relay client exists, so no home opens a tunnel.
+- **Does not hold in the relay:** a rebind. The relay checks only that a rebind statement names the binding's name and new key; it does not verify the old key's signature, applies no 60-second delay and announces nothing, and its configuration is read once at start, so an operator who edits the file and restarts rebinds a name silently. The fuzz corpus the Security section names does not exist.
+- **Not built:** the home-side relay client, the alerts that announcements raise, certificate monitoring and the refusal to open a tunnel while a certificate is unexplained, and `delorun reach rebind-statement`.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Parties](#parties)
   - [Relay configuration](#relay-configuration)

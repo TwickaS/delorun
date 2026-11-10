@@ -11,10 +11,21 @@ English | [中文](c05-device-approval.zh.md)
 
 A home admits a browser or desktop app only as a trusted device: a device whose key the home has approved for one studio address. The first device claims the home with the owner code on the home's own computer. Every later device is approved from a trusted device in a live session, by typing the code the new device shows. This page defines the keys and where they are stored, the binding of device keys to their origin and of passkeys to their relying-party ID, owner claim and reset, the approval request and the approval with their match code, signatures, expiry and rate limits, sign-in, revocation, the recovery kit, the desktop app's TLS pin on another home, and how alerts reach a person whose home has no screen. The types package [`@delo/contract-device-approval`](../../packages/contract-device-approval/README.md) carries the message types, codes and limits.
 
+<a id="status"></a>
+## Status
+
+Device approval is not built, and the part of it that exists is reached by nothing.
+
+- **Built, reached by nothing:** `@delo/home-auth` holds the single-use owner code, the owner claim answered only on the loopback listener, the device list and device removal; no shipped profile mounts the package and no `delorun` command calls it, so a home has no owner and no device records. The home key that `delorun export` creates at `secrets/home-auth/home-key.pem` signs archives only ([C8](c08-archive-and-trash.md)).
+- **Not built:** device keys, approval requests and the match code, sign-in with a device key, the approval prompt, removal from another device, `delorun devices` in every form, reset, the recovery kit, the desktop app's connection to another home and its TLS pin, and alerts. The rules for the private tailnet route are in the [reach design](../design/reach.md).
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Keys and storage](#keys-and-storage)
   - [Binding to an address](#binding-to-an-address)

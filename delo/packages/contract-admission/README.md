@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This types-only package exports the identifiers and limits of a home's admission: the listener ids and their policies, the result of the Authenticator's `admit`, the pre-login routes of a reach listener, the refusal codes with their HTTP statuses, the reach session cookie and the session lifetimes. Upstream's connection and web server edits, `@delo/home-auth` and `@delo/reach` import these definitions, so each code and limit has one definition. The specification is [contract C4](../../docs/contracts/c04-admission.md).
+This types-only package exports the identifiers and limits of a home's admission: the listener ids and their policies, the result of the Authenticator's `admit`, the pre-login routes of a reach listener, the refusal codes with their HTTP statuses, the reach session cookie and the session lifetimes. `@delo/home-auth` and the other contract packages import these definitions, so each code and limit has one definition; no shipped profile mounts `@delo/home-auth`, and the reach provider that C4 names is not built. The specification is [contract C4](../../docs/contracts/c04-admission.md).
 
 ## Exports
 

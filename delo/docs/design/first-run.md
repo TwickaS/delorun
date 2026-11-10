@@ -21,12 +21,12 @@ One command, `npx delorun`, takes a person from nothing to a first chat. The lau
 ## What exists today
 
 - **The launcher.** The npm launcher refuses a Node older than 24.9 with the version it needs before it does anything else. While it installs, it prints one line for each step: the release the channel names, the signature check with the release root, the release-log check with its outcome, the download with its size, and the install. When the release-log check did not run, it prints the reason and one warning that names the release.
-- **The bare command.** `delorun` with no command runs setup when the home has no CLI profile. With a profile, it starts Delo in the terminal and opens the studio.
+- **The bare command.** `delorun` with no command runs setup when the home has no CLI profile. With a profile, it starts Delo in the background when setup's `background` answer says so, and otherwise in the terminal, and opens the studio either way; `--foreground` keeps a start in the terminal.
 - **Quick and Full setup.** Setup opens with Quick, preselected, or Full. Quick runs the sections `privacy` (a note that asks nothing), `key` and `prompts`; Full adds `background` and `profile`. Every question after the first offers a way back, and a review screen lists the answers before anything is written. `delorun setup <section>` runs one section again on a profile that is set up, and `delorun setup --list` lists the sections. `--yes` and `--config` give the answers without a terminal.
 - **The key.** A key typed at the prompt is checked with one live request to the provider before it is stored; a failed check lets the person enter it again or continue.
 - **The ending.** A terminal run offers to install the `delorun` command with `npm install -g delorun`, yes preselected, and prints that line when the person declines or the install fails. It then starts Delo in the background or in the terminal, as the `background` answer says, and opens the studio for a background start. It prints whether Delo keeps running after the terminal closes, the studio's address, and `delorun status`, `delorun logs --follow` and `delorun stop`. With no browser to open, it prints the address and the SSH port-forward line. `--yes` and `--config` start nothing and print the command to run.
 - **The record.** Setup writes which sections the person saw, answered or skipped into `setup-answers.json` in the profile.
-- **The studio.** Delo's profile replaces upstream's preview notice with Delo's own notice. There is no onboarding in the studio.
+- **The studio.** Delo's profile replaces upstream's preview notice with Delo's own notice. `@delo/bundle-studio` mounts `@delo/plugin-onboarding`, whose dialog opens on the preview notice, asks for the language and look, offers the Claude Code and Codex delegation bundles and the recommended plugins, and ends by opening a chat in the default workspace with starter prompts. Its reach step never shows, because no reach exists.
 
 ## The rules
 
@@ -55,4 +55,4 @@ The rules above change what is asked and when; the protections they rely on keep
 
 ## What is built so far
 
-The launcher's progress and its Node check, Quick and Full setup with its five sections, the way back, the review screen, the install offer, setup's ending and its record of sections are built. The bare command starts in the terminal, not in the background, and only setup's ending prints the message of rule 3. The stock-home import, the reach and Docker sections, onboarding in the studio and the starter prompts are not built.
+The launcher's progress and its Node check, Quick and Full setup with its five sections, the way back, the review screen, the install offer, setup's ending and its record of sections are built. Onboarding in the studio, with its starter prompts and the reopening from Settings, is built. The bare command starts in the background only when setup's answer says so, and only setup's ending prints the message of rule 3. The stock-home import, the reach and Docker sections, and onboarding's reach step are not built.

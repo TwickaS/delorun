@@ -11,10 +11,21 @@ English | [中文](c07-reach-providers.zh.md)
 
 A reach provider turns one reach option on or off: it connects a reach listener of [C4](c04-admission.md#listeners) to the outside and publishes what the provider of that option can see and do. Delo 1.0 has three reach options: Tailscale private, Tailscale Funnel and the self-hosted relay on the person's own domain. None uses Delo infrastructure. This page defines the provider Service Definition and its states, the visibility notes, the configuration rows, the Tailscale serve target with its fallback, which is the current contract, and the socket variant that a passing spike adopts, the handling of Tailscale identity headers, Funnel's separate listener, and own-domain reach with its CAA record and challenge rule. The types package [`@delo/contract-reach-providers`](../../packages/contract-reach-providers/README.md) carries the option ids, states, rows, codes and the named certificate authority.
 
+<a id="status"></a>
+## Status
+
+No reach provider is built.
+
+- **Built and reached:** setup records reach as off: `--yes` leaves it off, and a `--config` document that names a reach option other than `none` is refused.
+- **Not built:** the provider Service Definition and every provider, the visibility notes, the Tailscale serve and Funnel targets, the own-domain checks of the CAA record and the ACME challenge rule, and the `reach-binding` and `own-domain-caa` checks, which `delorun verify` reports as not run. The rules for reach on the person's own tailnet are in the [reach design](../design/reach.md).
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Reach options](#reach-options)
   - [Provider Service Definition](#provider-service-definition)

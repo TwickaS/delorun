@@ -23,7 +23,7 @@ Import the schemas, presets and limits instead of restating them:
 import { PRESETS, type SupervisorRequest } from '@delo/contract-runtime-supervisor'
 ```
 
-The package is a dependency of `delo/packages/supervisor`, `delo/packages/runtime-docker`, the studio's workspace plugin and `delo/packages/integrity`. It uses the token and confinement types of [`@delo/contract-home-layout`](../contract-home-layout/README.md).
+The package is a dependency of `delo/packages/supervisor`; the Docker runtime provider, the studio's workspace side and the verification checks that C9 names are not built. It uses the token and confinement types of [`@delo/contract-home-layout`](../contract-home-layout/README.md).
 
 ## Exports
 

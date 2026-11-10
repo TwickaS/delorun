@@ -328,30 +328,32 @@ A patch row replaces its entry's whole `config` and reaches only entries of the 
 | `container_denial_marker` | Config default `false`. The bundles and the root configurations set `sandbox-policy`'s mode and workspace root, which an overlay row would erase. |
 | `sandbox_protected_reads` | Config default `false`. The bundles set the search tools' over-cap sampling choice, which an overlay row would erase. |
 | `doctor` | Config default `false`. Only the `doctor` profile mounts the app, and the replay starts no doctor process. |
-| `studio_additions` | Config default `false` of `@delo/plugin-main-chat`'s `studioAdditions`. No shipped profile or bundle mounts the main chat yet. |
+| `studio_additions`, `main_chat` | Config defaults `false` of `@delo/plugin-theme`'s `studioAdditions` and `@delo/plugin-main-chat`'s `enabled`. The replay composes upstream's bundles, which mount neither `@delo/bundle-studio` nor the main chat. |
 
-The overlay also mounts [`@delo/bundle-local`](../../packages/bundle-local/README.md): after the switch rows it restates that bundle's `cordis.patch.yml` in the parity form each `LOCAL_ROWS` entry gives, and `parity-switches` fails when the restatement differs from `parityPatches` of the bundle's file (`localBundleErrors` in [`overlay.ts`](src/parity/composition/overlay.ts)). The session-log upload row, C16's changed default, is left out, so it keeps upstream's value: the overlay follows each replay's root configuration, which turns upload off for the headless and ACP corpora and leaves it on elsewhere. Desktop analytics keeps Delo's `false`, and the Privacy section row is present and disabled. The studio bundle, the permission defaults and the fetch guard are planned; of the studio additions only the main chat is in the tree, off by its own default, and the preset default keeps upstream's value (`standard`).
+The overlay also mounts [`@delo/bundle-local`](../../packages/bundle-local/README.md): after the switch rows it restates that bundle's `cordis.patch.yml` in the parity form each `LOCAL_ROWS` entry gives, and `parity-switches` fails when the restatement differs from `parityPatches` of the bundle's file (`localBundleErrors` in [`overlay.ts`](src/parity/composition/overlay.ts)). The session-log upload row, C16's changed default, is left out, so it keeps upstream's value: the overlay follows each replay's root configuration, which turns upload off for the headless and ACP corpora and leaves it on elsewhere. Desktop analytics keeps Delo's `false`, and the Privacy section row is present and disabled. The studio bundle is not part of the replay's composition, and the main chat is mounted by no profile; the preset default keeps upstream's value (`standard`).
 
 ### The registry
 
 `PARITY_SWITCHES` in [`@delo/contract-parity-composition`](../../packages/contract-parity-composition/README.md) is the one list of switches. A built entry names its Config field (the module a `cordis.yml` row mounts, the module's source file and the key) and the source files whose model-visible contributions it turns off. A planned entry is a switch C16 lists whose change is not in the tree yet; it names the work package that builds it and has no field. `doctor` is a feature switch: it is not model-visible and has no switch-on scenario.
 
-| Switch | State | Field | Default | Parity | Model-visible |
-| --- | --- | --- | --- | --- | --- |
-| `studio_additions` | built | `@delo/plugin-main-chat` `studioAdditions` | on | off | yes |
-| `permission_defaults` | planned | none | on | off | yes |
-| `fetch_guard` | planned | none | on | off | yes |
-| `preset_inspect` | built | `@deepseek-ai/dsh-agent-preset-registry/tools` `presetInspect` | on | off | yes |
-| `doctor` | built | `@deepseek-ai/dsh-doctor/app` `doctor` | on | off | no |
-| `plugin_manager_read_exemption` | built | `@deepseek-ai/dsh-plugin-manager/tools` `readActionsExempt` | on | off | yes |
-| `profile_history` | built | `@deepseek-ai/dsh-plugin-manager/tools` `profileHistory` | on | off | yes |
-| `scheduled_task_consent` | planned | none | on | off | yes |
-| `instruction_layer_consent` | planned | none | on | off | yes |
-| `mcp_add_consent` | planned | none | on | off | yes |
-| `container_denial_marker` | built | `@deepseek-ai/dsh-sandbox-policy` `containerDenialMarker` | on | off | yes |
-| `sandbox_protected_reads` | built | `@deepseek-ai/dsh-tool-fs-search` `protectedReads` | on | off | yes |
+| Switch | State | Field | Registry default | In the CLI profile | Parity | Model-visible |
+| --- | --- | --- | --- | --- | --- | --- |
+| `studio_additions` | built | `@delo/plugin-theme` `studioAdditions` | on | on, through `@delo/bundle-studio` | off | no |
+| `main_chat` | built | `@delo/plugin-main-chat` `enabled` | on | off: no Delo profile mounts the main chat | off | yes |
+| `permission_defaults` | built | `@delo/plugin-permission-defaults` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
+| `fetch_guard` | built | `@delo/plugin-fetch-guard` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
+| `preset_inspect` | built | `@deepseek-ai/dsh-agent-preset-registry/tools` `presetInspect` | on | off: no shipped row sets it, so the Config default stands | off | yes |
+| `doctor` | built | `@deepseek-ai/dsh-doctor/app` `doctor` | on | not mounted: only upstream's `doctor` profile mounts the app | off | no |
+| `plugin_manager_read_exemption` | built | `@deepseek-ai/dsh-plugin-manager/tools` `readActionsExempt` | on | off: no shipped row sets it, so every action escalates as in stock | off | yes |
+| `profile_history` | built | `@deepseek-ai/dsh-plugin-manager/tools` `profileHistory` | on | off: no shipped row sets it | off | yes |
+| `scheduled_task_consent` | built | `@delo/plugin-schedule-consent` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
+| `instruction_layer_consent` | built | `@delo/plugin-instruction-consent` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
+| `mcp_add_consent` | built | `@delo/plugin-mcp-consent` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
+| `container_denial_marker` | built | `@deepseek-ai/dsh-sandbox-policy` `containerDenialMarker` | on | off: no shipped row sets it | off | yes |
+| `sandbox_protected_reads` | built | `@deepseek-ai/dsh-sandbox-local` `protectedHome` | on | on, through `@delo/bundle-local`'s `sandbox` row | off | yes |
+| `update_turn_refusal` | built | `@delo/bundle-local/update-gate` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
 
-The default column is the value in Delo's default composition; each built field's schema default is the parity value.
+The registry default is the value the registry states for Delo's default composition; the CLI profile column is what the profile that `delorun` starts composes today, which differs from it for `main_chat`, `preset_inspect`, `plugin_manager_read_exemption`, `profile_history` and `container_denial_marker`. `delorun headless` runs upstream's `headless` template, in which every switch is at its parity value. Each built field's schema default is the parity value.
 
 ### What `parity-switches` detects
 

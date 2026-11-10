@@ -11,10 +11,22 @@ English | [中文](c04-admission.zh.md)
 
 Admission decides, for every HTTP request and every upgrade that reaches a home's Host, whether it may proceed and which Peer it speaks for. Upstream's connection admits every authenticated browser as one shared owner Peer and leaves each route to authenticate itself. Delo adds an Authenticator Service Definition to upstream's connection, a second kind of listener for reach, and authentication in the reach listener's dispatcher before any route, upgrade or fallback. This page defines the Authenticator, the listeners with their declared scheme and `Host` rule, the dispatch order, the pre-login allowlist, the session store with its cookie, lifetimes and rotation, and the response headers of a reach listener. The types package [`@delo/contract-admission`](../../packages/contract-admission/README.md) carries the identifiers, codes and limits.
 
+<a id="status"></a>
+## Status
+
+Only the loopback listener runs, with upstream's admission; the reach listener is built and opened by nothing, and Delo's provider is not built.
+
+- **Built and reached:** the loopback listener at `127.0.0.1:3080` in the CLI profile, which admits upstream's launch token, `/connect` and upstream's stateless `dsh-auth-*` cookies, as [sessions](#sessions) states, with upstream's `Host` and `Origin` checks on `/api` and `/connect`. Upstream's connection announces each loopback mint with `authenticator/minted`, and nothing listens to it.
+- **Built, reached by nothing:** the `authenticator` Service Definition, which no package provides, so upstream's connection admits with its own launch-token and cookie admission; the reach listener with the dispatch order, the refusal of upstream credentials, the response headers, the Content Security Policy, the Trusted Types header and the remote-image placeholder, which only tests open; and `@delo/home-auth`, which no shipped profile mounts and which does not provide `authenticator`.
+- **Not built:** an `authenticator` provider; the sign-in, device-challenge, passkey, OpenID Connect and recovery routes of the pre-login allowlist; reach session creation, rolling and rotation; the loopback credential records, the 7-day idle limit and the rotation of loopback credentials, and `delorun devices reset`, which are in the [reach design](../design/reach.md#loopback-credentials); and a Content Security Policy on the loopback studio.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Authenticator](#authenticator)
   - [Listeners](#listeners)
@@ -37,7 +49,7 @@ Admission decides, for every HTTP request and every upgrade that reaches a home'
 <a id="authenticator"></a>
 ### Authenticator
 
-The admission seam has three roles. The Service Definition is the Cordis service `authenticator`, an abstract class `Authenticator` that upstream's `@deepseek-ai/dsh-client-connection` declares. Its Service Providers are upstream's default provider, which reproduces upstream's launch-token and `dsh-auth-*` cookie admission unchanged, and Delo's `@delo/home-auth`, which replaces it in Delo's profiles. Its consumers are upstream's `HostConnectionService` and the reach listeners' dispatcher in the same package.
+The admission seam has three roles. The Service Definition is the Cordis service `authenticator`, an abstract class `Authenticator` that upstream's `@deepseek-ai/dsh-client-connection` declares. No package provides it: while no provider is registered, upstream's connection admits with its own launch-token and `dsh-auth-*` cookie admission, unchanged. Delo's provider is specified below and is not built; `@delo/home-auth` does not provide `authenticator`. Its consumers are upstream's `HostConnectionService` and the reach listeners' dispatcher in the same package.
 
 - **`admit(request, listener)`** returns an `Admission` for one request on one listener. It is synchronous: it reads only the provider's in-memory state and never awaits, performs I/O or calls another service that does. Upstream's `admit()` and `admitConnection()` call it before they return.
 - **`policy(listener)`** returns the `ListenerPolicy` of one listener: its declared scheme, its `Host` rule, its pre-login allowlist and whether launch tokens are accepted. The dispatcher reads the policy once when the listener starts and again when the provider announces a change.
@@ -115,11 +127,11 @@ A plugin route joins a reach listener's pre-login allowlist only when the profil
 - **Creation.** `POST /auth/session` creates a session only from a fresh device-key signature of a trusted device approved for this listener's address and an identity-factor proof for that address ([C5](c05-device-approval.md#sign-in), [C14](c14-oidc-passkeys.md)).
 - **Enrolment sessions.** On an address with no enrolled identity factor, the same signature without a proof creates an enrolment session: a reach session with a 10-minute absolute limit, admitted only to the enrolment routes of [C14](c14-oidc-passkeys.md#enrolment) and refused elsewhere with `401 NOT_SIGNED_IN`.
 
-**Loopback sessions** keep upstream's credentials: the launch-token exchange, `/connect` and the stateless HMAC cookies `dsh-auth-<hash>` signed with the browser session secret in upstream's `.credentials.yaml`. `@delo/home-auth` records every loopback credential when it is minted, keyed by the SHA-256 hash of the credential value, and refuses a loopback credential that verifies but has no record with `401 SESSION_EXPIRED`. Upstream's connection announces each mint with the event `authenticator/minted`, synchronously and before it writes the response that carries the credential, with the credential's kind (`browser` from the launch-token exchange, `api` from `/connect`), the SHA-256 hash of its value as base64url without padding, its audience, its issue and expiry times and, for `api`, the id of the Peer it admits; the event never carries the credential's value. Delo's profiles set upstream's `cookieMaxAgeDays` to 30.
+**Loopback sessions** keep upstream's credentials: the launch-token exchange, `/connect` and the stateless HMAC cookies `dsh-auth-<hash>` signed with the browser session secret in upstream's `.credentials.yaml`. The launch token is 32 random bytes made once per Host process and accepted for that process's whole life. A cookie is checked by its signature and expiry only: no server-side record exists, nothing revokes one, and every cookie admits as the one owner Peer. It expires `cookieMaxAgeDays` after it was minted, upstream's default of 30, which Delo's profiles do not change. The browser session secret is never replaced, so a cookie stays valid across restarts until it expires. Upstream's connection announces each mint with the event `authenticator/minted`, synchronously and before it writes the response that carries the credential, with the credential's kind (`browser` from the launch-token exchange, `api` from `/connect`), the SHA-256 hash of its value as base64url without padding, its audience, its issue and expiry times and, for `api`, the id of the Peer it admits; the event never carries the credential's value. No listener of the event exists; recording each loopback credential and refusing one without a record is in the [reach design](../design/reach.md#loopback-credentials).
 
 | Listener | Idle limit | Absolute limit | Rolling |
 | --- | --- | --- | --- |
-| `loopback` | 7 days since last use | 30 days since minting | None: a loopback credential keeps its value until it expires or rotates. |
+| `loopback` | None | 30 days since minting | None: a loopback credential keeps its value until it expires. |
 | Every reach listener | 12 hours since last use | 14 days since creation | Every 24 hours of use, the next admitted request receives a new token in `setCookie`. The old token stays valid for 30 seconds for requests already in flight, then its record is deleted. |
 
 A session past its idle or absolute limit is refused with `401 SESSION_EXPIRED` and its record is deleted. Rolling never extends the absolute limit.
@@ -134,9 +146,9 @@ These events rotate every session of the home, on every listener:
 - a sign-in factor change: enrolling, replacing or removing a passkey, changing the OpenID Connect provider or client, and the completion of a recovery-kit restore;
 - a reach-provider change: turning a reach option on or off, or adding, removing or changing a studio address.
 
-A rotated reach session's next request is refused with `401 ROTATION_REQUIRED`. The studio then signs a fresh device-key challenge and calls `POST /auth/session` with the old token, which returns a new token with the same absolute expiry and deletes the old record; the identity factor is not asked again. A rotated loopback credential's next request receives a newly minted credential with the same absolute expiry, and the old record is deleted.
+A rotated reach session's next request is refused with `401 ROTATION_REQUIRED`. The studio then signs a fresh device-key challenge and calls `POST /auth/session` with the old token, which returns a new token with the same absolute expiry and deletes the old record; the identity factor is not asked again. Rotation does not reach loopback credentials, which have no record.
 
-Revocation ends a session at once. Removing a device deletes its sessions and records and disposes its Peers before the removal returns. `delorun devices reset` ([C5](c05-device-approval.md#reset)) deletes every session record and replaces the browser session secret in upstream's `.credentials.yaml`, so every loopback cookie minted before it fails verification.
+Revocation ends a session at once. Removing a device deletes its sessions and records and disposes its Peers before the removal returns. `delorun devices reset` ([C5](c05-device-approval.md#reset)), which is not built, deletes every session record and replaces the browser session secret ([reach design](../design/reach.md#loopback-credentials)).
 
 <a id="response-headers"></a>
 ### Response headers
@@ -190,15 +202,15 @@ Trusted Types are enforced on reach listeners by the `require-trusted-types-for 
 - Upstream's `packages/client/connection`: the `Authenticator` Service Definition, its default provider, the per-listener `admit` calls, and each reach listener's dispatcher, which applies the dispatch order.
 - Upstream's `packages/host/webserver`: the reach listeners' sockets and streams, the gate that calls the dispatcher before any route, upgrade handler or the fallback, the response headers and the nonce on inline elements.
 - Upstream's `packages/client/modules/src/client/system.ts` and the upstream components that assign `innerHTML`: the Trusted Types policies.
-- `delo/packages/home-auth/`: the Delo provider, the session store, the pre-login routes and rotation.
-- `delo/packages/reach/`: the reach listeners' targets and the relay client's handoff to `reach-self-hosted-relay`.
+- `delo/packages/home-auth/`: the loopback-only owner claim, device list and removal, and a session store; no shipped profile mounts it, and it does not provide `authenticator`, the pre-login routes or rotation.
+- The reach providers of [C7](c07-reach-providers.md), which are not built: the reach listeners' targets and the relay client's handoff to `reach-self-hosted-relay`.
 - `delo/packages/contract-admission/`: listener ids, refusal codes, the cookie name and the limits.
 - [C10](c10-host-qualified-keys.md): the cookie names it leaves outside its inventory. [C15](c15-verification-checks.md): the `reach-binding` check reads the listener table.
 
 <a id="compatibility"></a>
 ## Compatibility
 
-The Authenticator's default provider keeps upstream's admission unchanged, so a profile without `@delo/home-auth` admits requests as stock DSH does. Reach is off in the parity composition ([C16](c16-parity-composition.md)), so no reach listener runs there. Admission adds no model-visible input and no session event.
+Without an `authenticator` provider upstream's admission runs unchanged, so the CLI profile admits loopback requests as stock DSH does. Reach is off in the parity composition ([C16](c16-parity-composition.md)), so no reach listener runs there. Admission adds no model-visible input and no session event.
 
 The cookie name `__Host-delo-session`, the listener ids, the refusal codes and the session store's format, version 1, are fixed. Changing a lifetime, a header value or the pre-login allowlist is a change to this contract. A newer session store format is a new file with a new version; a provider that reads a store of an unknown version starts with no reach sessions and keeps the file.
 
@@ -213,7 +225,7 @@ Requirements:
 - On each listener, a `Host` that the listener's rule does not allow is refused; on the relay listener, `Host` also equals SNI.
 - Reach sessions are stored hashed, server-side and revocable, in `__Host-` cookies with the declared scheme's `Secure` attribute.
 - Sessions follow the lifetimes and rotate on the events above; a removed device's sessions end before the removal returns.
-- `delorun devices reset` replaces the loopback browser session secret, so loopback cookies minted before it stop working.
+- `delorun devices reset` replaces the loopback browser session secret, so loopback cookies minted before it stop working. Not built ([reach design](../design/reach.md#loopback-credentials)).
 - The reach listener's Content Security Policy limits `connect-src`, `img-src` and `media-src` to `'self'`, with `data:` for images and media and `blob:` for images, never allows `'unsafe-eval'`, and chat-rendered remote images are placeholders that are never fetched.
 - Trusted Types are enforced with the two policies above.
 - Removing or replacing `@delo/home-auth` stops every reach listener, and reach never falls back to upstream's cookies.
@@ -233,11 +245,10 @@ Denial tests:
 | `no reach listener runs without home-auth` | With `@delo/home-auth` removed, or replaced by another provider, no reach listener accepts a connection, and open reach connections close. |
 | `a reach listener refuses a host override` | A profile that sets `host` for a reach listener fails at load with `REACH_LISTENER_HOST_OVERRIDE`. |
 | `the session store holds no token` | After sessions are created, `sessions.json` contains none of their tokens, and a token planted as a record key does not admit. |
-| `idle and absolute limits refuse a session` | A reach session unused for 12 hours, a reach session 14 days old, a loopback credential unused for 7 days and one 30 days old are each refused with `SESSION_EXPIRED`. |
+| `idle and absolute limits refuse a session` | A reach session unused for 12 hours and a reach session 14 days old are each refused with `SESSION_EXPIRED`. |
 | `a rolled token stops after its grace` | After a roll, the old token admits for 30 seconds and is refused after them. |
 | `a removed device's sessions end before the removal returns` | After removal returns, the device's next request is refused and its open stream has ended. |
 | `a rotation needs a fresh device-key proof` | After a device approval, an old reach session is refused with `ROTATION_REQUIRED` until a new device-key signature rotates it, and a replayed signature does not. |
-| `a loopback cookie minted before devices reset is refused after it` | A loopback cookie that admitted before `delorun devices reset` is refused after it. |
 | `a script URL outside the allowlist does not load` | A script element whose `src` is a same-origin path not in the boot manifest, or another origin, is refused by the policy and never requested. |
 | `a community plugin's HTML loses its scripts` | A fixture client plugin that assigns HTML containing `<script>` and an `onerror` attribute renders the rest of the HTML with neither. |
 | `the studio boots and styles a terminal with no policy violation` | On a reach listener, the studio boots, connects a workspace and renders a sidebar terminal whose `<style>` elements all apply, and the page reports no Content Security Policy violation, including none for string evaluation. |
@@ -249,12 +260,13 @@ Denial tests:
 - **Code on a trusted origin.** Admission decides who reaches the Host, not what admitted code does. A community client plugin, or script that defeats the sanitiser, runs on the studio's origin with the session's full authority; the Content Security Policy and Trusted Types limit how script and requests get in, not code the person installed.
 - **Every device is the owner.** Each trusted device's Peer acts as upstream's `owner` principal, so this contract gives no device less authority than another.
 - **The person's own processes.** A process of the person's user outside the sandbox can read the home's secrets, including the browser session secret, and can mint loopback credentials and edit the session store; the session limits protect against other parties, not against it ([C1](c01-home-layout.md#security)).
+- **A copied loopback cookie.** A loopback cookie admits for 30 days from minting, survives restarts, and has no record that could revoke it; the loopback studio sends no Content Security Policy, so the Trusted Types policies the studio creates are not enforced there.
 - **Remote content outside chat rendering.** The placeholder rule covers images and media that the studio renders in chat content; other requests a client plugin makes are refused only by the Content Security Policy.
 
 <a id="decided-values"></a>
 ## Decided values
 
-- Loopback sessions: idle 7 days, absolute 30 days.
+- Loopback credentials: absolute 30 days from minting, upstream's default; the 7-day idle limit is in the [reach design](../design/reach.md#loopback-credentials) and is not built.
 - Reach sessions: idle 12 hours, absolute 14 days, rolled every 24 hours of use with a 30-second grace for the old token.
 - Rotation triggers: a device approval or removal, a sign-in factor change and a reach-provider change.
 - Session tokens and the session store: 32 random bytes per token, records keyed by SHA-256, persisted within 5 seconds and before a revocation returns.

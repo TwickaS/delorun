@@ -8,10 +8,21 @@ English | [中文](c02-release-manifest.zh.md)
 
 ## Summary
 
-Every Delo release is a set of files on GitHub Releases described by one release manifest, which the offline targets key signs. The manifest lists every per-platform runtime archive, the desktop installers, the S2 and S3 image digests, the SPDX SBOM, the npm packages and the install scripts, each with its length and SHA-256 digest. An online timestamp key re-signs a small timestamp file daily that names each channel's current manifest and expires after 3 days, so a host that withholds a release is noticed. The root key, also offline, signs the list of keys for every role and each rotation of it. The targets-key holder signs only after rebuilding the release from the tagged source on a machine they control, outside CI, and after the release's lockfile passes the dependency advisory check. Clients (the npm launcher, the install script, the CLI launcher at every start, `delorun verify` and the desktop updater) verify these files as this page states, and also require the release's log entry that [C18](c18-release-log.md) defines. The types live in [`@delo/contract-release-manifest`](../../packages/contract-release-manifest/README.md).
+Every Delo release is a set of files on GitHub Releases described by one release manifest, which the offline targets key signs. The manifest lists every per-platform runtime archive, the desktop installers, the S2 and S3 image digests, the SPDX SBOM, the npm packages and the install scripts, each with its length and SHA-256 digest. An online timestamp key signs a small timestamp file that names each channel's current manifest and expires after 3 days, so a host that withholds a release is noticed. The root key, also offline, signs the list of keys for every role and each rotation of it. The targets-key holder signs only after rebuilding the release from the tagged source on a machine they control, outside CI, and after the release's lockfile passes the dependency advisory check. The npm launcher, `delorun update`, the launcher at every start and `delorun verify` verify these files as this page states, and also require the release's log entry that [C18](c18-release-log.md) defines. The types live in [`@delo/contract-release-manifest`](../../packages/contract-release-manifest/README.md).
+
+## Status
+
+The client verification, the start check and the signing, timestamp and advisory commands are built; the release workflow, the desktop updater's checks and the install scripts are not.
+
+- **Built and reached:** the install verification of the npm launcher and `delorun update` (`delo/apps/install`), the launcher's check of every installed file at each start (`delo/packages/runtime-store`), the two release checks of `delorun verify`, and the commands under `delo/apps/release/src/` that sign a release after a matching rebuild, sign a timestamp without lowering a channel, and check advisories.
+- **Not built:** a release workflow, so no scheduled job re-signs the timestamp every 24 hours and no workflow step runs the advisory check or publishes to npm; npm trusted publishing; two of N rebuilds; Authenticode signatures; the install scripts; and every check of the desktop app, which is upstream's unchanged. These rules are in the [release workflow design](../design/release-workflow.md) and the [update and rollback design](../design/update-and-rollback.md#the-desktop-app).
+- **Partly built:** no client compares versions before an update, so the rule that no client moves to a lower version on its own rests on the person's confirmation and on the timestamp's refusal to lower a channel, as [freshness and rollback protection](#freshness-and-rollback-protection) states. An advisory acceptance counts only an owner named by login in `.github/CODEOWNERS`, which names only a team, so no acceptance is valid and every advisory fails the check.
+
+The requirements and denial tests below that this list names as not built protect no one until a change builds them.
 
 ## Contents
 
+- [Status](#status)
 - [Release files](#release-files)
 - [Signature envelope](#signature-envelope)
 - [Key roles](#key-roles)
@@ -79,7 +90,7 @@ Every signed file (root, timestamp, manifest, runtime file list, the catalogue f
 | --- | --- | --- | --- |
 | `root` | Offline, by the owner | Root metadata: every role's keys and thresholds, the witness keys of [C18](c18-release-log.md), and each rotation | 1; 2 of N once maintainers hold root keys |
 | `targets` | Offline, by the targets-key holder | Each release manifest and its runtime file lists | 1 |
-| `timestamp` | Online, in the release workflow's protected environment | Timestamp metadata only; it attests freshness and names manifests by digest, and cannot change what a manifest lists | 1 |
+| `timestamp` | Online, by whoever runs the timestamp command; the [release workflow design](../design/release-workflow.md) keeps it in a workflow's protected environment | Timestamp metadata only; it attests freshness and names manifests by digest, and cannot change what a manifest lists | 1 |
 | `catalogue` | Online, in the catalogue repository's publish environment | The catalogue index and revocation list of [C13](c13-catalogue-revocation.md) | 1 |
 
 The root and targets private keys never enter CI, a cloud service or a machine the release workflow can reach. Windows Authenticode, macOS Developer ID and notarisation are platform signatures on the files themselves; the manifest records the digests of the signed files, and the platform signing route is outside this contract.
@@ -98,7 +109,7 @@ The root and targets private keys never enter CI, a cloud service or a machine t
 | `log` | `{ "origin", "vkey" }` | The release log's checkpoint origin line and verifier key ([C18](c18-release-log.md)). |
 | `witnesses` | `{ "keys": [{ "name", "vkey" }], "threshold": n }` | The witness verifier keys and how many must cosign ([C18](c18-release-log.md)). |
 
-The npm launcher, the install script and the desktop app each embed the newest root version at their build. A client trusts a newer root only by walking `n + 1, n + 2, …` from the newest it trusts, where each new version verifies with the threshold of the previous version's root keys and with the threshold of its own root keys. A root the client trusts that has expired blocks every install and update until a newer root verifies; it does not stop a start. The root key holder signs the next version at least 30 days before the current one expires.
+The npm launcher embeds the root versions it is packed with, and refuses every install when it embeds none. A client trusts a newer root only by walking `n + 1, n + 2, …` from the newest it trusts, where each new version verifies with the threshold of the previous version's root keys and with the threshold of its own root keys. A root the client trusts that has expired blocks every install and update until a newer root verifies; it does not stop a start. The root key holder signs the next version at least 30 days before the current one expires.
 
 ## Timestamp metadata
 
@@ -111,7 +122,7 @@ The npm launcher, the install script and the desktop app each embed the newest r
 | `root` | `{ "version", "sha256" }` | The newest root version and its file digest. |
 | `channels.stable`, `channels.beta` | `{ "release": <version>, "manifest": FileRef }` | Each channel's current release and its manifest file. |
 
-A scheduled job of the release workflow re-signs it every 24 hours, and the release workflow signs it again when it publishes a release. `channels.stable` names a stable release; `channels.beta` names a beta release or a stable release. No signing moves a channel to a lower version than the previous timestamp names for it. A `FileRef` is `{ "name", "length", "sha256" }`: the file name, one path segment matching `^[A-Za-z0-9._+-]+$` other than `.` and `..`; its length in bytes; and the lowercase hex SHA-256 of its bytes.
+The timestamp command, `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts`, signs it; the scheduled re-signing every 24 hours is in the [release workflow design](../design/release-workflow.md) and is not built. `channels.stable` names a stable release; `channels.beta` names a beta release or a stable release. The timestamp command refuses to move a channel to a lower version than the previous timestamp names for it. A `FileRef` is `{ "name", "length", "sha256" }`: the file name, one path segment matching `^[A-Za-z0-9._+-]+$` other than `.` and `..`; its length in bytes; and the lowercase hex SHA-256 of its bytes.
 
 ## Release manifest
 
@@ -148,7 +159,7 @@ The archive holds no symbolic link, hard link, device or path outside its root, 
 
 ## Client verification
 
-Installing or updating a runtime (npm launcher, install script, `delorun update`):
+Installing or updating a runtime (the npm launcher, `delorun update`):
 
 1. Read the trusted root and walk to the root the timestamp names.
 2. Fetch `timestamp.json`; verify its signature with the timestamp role, its expiry and its `version` against the stored one.
@@ -157,16 +168,17 @@ Installing or updating a runtime (npm launcher, install script, `delorun update`
 5. Fetch the platform's archive and file list; check each length and SHA-256 against the manifest before extracting; verify the file list's targets signature.
 6. Extract into a staging directory outside `~/.delo/runtimes/`, check every entry against the file list, then publish the installation as [C1](c01-home-layout.md) states. No file lands under `~/.delo/runtimes/` before steps 1 to 5 pass.
 
-Every start of the CLI runtime, in every verification mode (`warn`, `enforce`, `off`), the launcher verifies the stored manifest's and file list's signatures with the stored root, then every installed file's length and SHA-256 against the list. A missing, changed or extra regular file stops the start and offers reinstall or rollback. This check needs no network and lives outside `@delo/integrity`.
+At every start of the CLI runtime the npm launcher verifies the stored manifest's and file list's signatures with the stored root, then every installed file's length and SHA-256 against the list. A missing, changed or extra regular file stops the start and offers reinstall or rollback. The check needs no network, lives in the launcher and the runtime store, and runs whatever verification mode is set, because the launcher reads no mode. A release that `delorun update` starts gets the same file check as the first health check of [C19](c19-home-process.md).
 
-`delorun verify` runs the same checks and reports each result ([C15](c15-verification-checks.md)). The S2 and S3 images run only by a digest in the verified manifest ([C9](c09-runtime-supervisor.md)).
+`delorun verify` runs the same checks and reports each result ([C15](c15-verification-checks.md)). The Docker supervisor of [C9](c09-runtime-supervisor.md), which no shipped command launches, runs only an S2 or S3 image digest the verified manifest lists.
 
 ## Freshness and rollback protection
 
 - A client stores the highest timestamp `version` it verified and refuses a lower one; an equal `version` must have identical bytes.
 - A timestamp past `expires` is refused. No clock tolerance applies; the refusal message names the expiry and the local time, so a wrong clock can be seen.
-- Update offers come only from a fresh timestamp: a manifest whose digest differs from the timestamp's channel entry is not offered as the channel's release.
-- No client moves to a lower Delo version on its own. A rollback the person requests may install an earlier release whose manifest verifies with a targets key valid for that release and whose log entry verifies ([C18](c18-release-log.md)); the CLI rollback switches to the runtime the store keeps ([C1](c01-home-layout.md), [C19](c19-home-process.md)), and the desktop rollback follows [desktop updates and rollback](#desktop-updates-and-rollback).
+- `delorun update` offers only the release a fresh timestamp names for the channel: a manifest whose digest differs from the timestamp's channel entry is not offered. The update channel's `update.prepare` also accepts a version already installed in the runtime store as its target, without a timestamp; only a caller holding the start token can send it, and `delorun update` never names a target.
+- Nothing installs or switches a runtime without the person: the npm launcher installs only into an empty runtime store, and `delorun update` applies only after the person confirms. No client compares versions, so `delorun update` offers the channel's release whenever it differs from the running one, lower or higher; a channel names a lower release only if a timestamp signer moves it there, which the timestamp command refuses, and a client refuses a timestamp older than the one it stored. Refusing a lower version outright is in the [update and rollback design](../design/update-and-rollback.md#the-rules) and is not built.
+- The CLI rollback switches to the runtime the store keeps ([C1](c01-home-layout.md), [C19](c19-home-process.md)).
 - A stale or missing timestamp never stops a start; it blocks installs and updates, and `delorun verify` reports it.
 
 ## Key rotation
@@ -196,11 +208,11 @@ The signing command, `node_modules/.bin/tsx delo/apps/release/src/sign-release.t
 - the rebuild's output directory is not on the signing machine, or the digests it recomputes from that directory differ from the record's;
 - the record's commit differs from the tag's.
 
-When maintainers hold keys, signing requires matching rebuild records from two of the N listed builders, at least one with `ci: false`.
+The signing command accepts one rebuild record; two of N builders once maintainers hold keys is in the [release workflow design](../design/release-workflow.md) and is not built.
 
 ## Dependency advisory check
 
-Signatures and the rebuild show integrity, not that the locked dependencies are free of known vulnerabilities. Before signing, the release workflow checks every package name and version in the runtime closure's lockfile, every installed package version its SBOM lists and the pinned pnpm against the GitHub Advisory Database through npm's bulk advisory API (`POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`), and the signing command re-runs the check.
+Signatures and the rebuild show integrity, not that the locked dependencies are free of known vulnerabilities. Before it signs, the signing command checks every package name and version in the runtime closure's lockfile, every installed package version its SBOM lists and the pinned pnpm against the GitHub Advisory Database through npm's bulk advisory API (`POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk`); `check-advisories.ts` runs the same check on its own. No release workflow runs it.
 
 The check fails, and the release stops, when an advisory of any severity affects a locked version and no valid acceptance covers it, when an acceptance has lapsed, or when the feed cannot be reached or returns a malformed response.
 
@@ -227,79 +239,67 @@ acceptances:
 | `lapsesAfter` | The last Delo version the acceptance covers; a later release fails the check until the entry is renewed or removed. |
 | `added` | The date the entry was added, `YYYY-MM-DD`. |
 
-An acceptance covers an advisory when the id and package match, the locked version satisfies `range`, the release's version is at most `lapsesAfter`, and `approver` is an owner of the file in `.github/CODEOWNERS` at the release's commit. Unknown and missing fields fail the check. The release notes list every accepted advisory with its package, range, reason, approver, lapse release and the date the entry records; the manifest's `advisories.accepted` lists their ids.
+An acceptance covers an advisory when the id and package match, the locked version satisfies `range`, the release's version is at most `lapsesAfter`, and `approver` is an owner of the file in `.github/CODEOWNERS` at the release's commit, named there by login; a team owner does not count. Unknown and missing fields fail the check. The manifest's `advisories.accepted` lists the accepted ids.
 
 ## npm publication
 
-`delorun` and `create-delorun` publish through npm trusted publishing from the release workflow of `https://github.com/Delo-Run/delo`: the publish job requests an OIDC token (`permissions: id-token: write`), holds no npm token, and npm attaches a Sigstore-signed SLSA build attestation naming the repository, the workflow file and the commit. The manifest records each tarball's integrity. The launcher has no runtime dependencies; `npx` runs the launcher npm serves before any Delo check runs, so the npm launcher is the pre-install trust anchor, and the Trust page says so.
+`delo/apps/npm-launcher/src/build.ts` packs the `delorun` package with the release roots it is given and refuses a build with none. The manifest records each tarball's integrity. The launcher has no runtime dependencies; `npx` runs the launcher npm serves before any Delo check runs, so the npm launcher is the pre-install trust anchor. No workflow publishes it; publication through npm trusted publishing without an npm token is in the [release workflow design](../design/release-workflow.md).
 
 ## Desktop updates and rollback
 
-The desktop app keeps upstream's update flow (`DesktopUpdateCoordinator` in `apps/desktop/src/update-coordinator.ts`: download and install each on the person's click, `allowDowngrade` false) on Delo's feed, with these additions:
-
-- Before `install` hands the download to electron-updater's `quitAndInstall`, the app verifies a fresh timestamp, the manifest's signature, the downloaded file's SHA-512 and SHA-256 against the manifest's `desktop` entry and the manifest's log entry ([C18](c18-release-log.md)). Any failure refuses the install and leaves the running version unchanged.
-- After an update applies, the app keeps the installer or update archive of the release it replaced in its update cache directory, verified against that release's manifest. The cache keeps exactly one previous release.
-- The feed refuses an automatic downgrade: a feed that names a version lower than or equal to the running one offers nothing.
-- A rollback the person requests installs the cached previous release, or an earlier release the person names, downloaded from GitHub Releases. The target must verify as signed (manifest and file digests) and logged (inclusion proof); an unsigned, unlogged or mismatching target is refused. After the install, the profile is restored from history ([C3](c03-update-report.md)).
+The desktop app is upstream's, unchanged, and Delo builds none. Its updater (`DesktopUpdateCoordinator` in `apps/desktop/src/update-coordinator.ts`) downloads and installs each update on the person's click and refuses a downgrade (`allowDowngrade` false). It checks no Delo timestamp, manifest or log entry, keeps no previous release and offers no rollback. The rules for a desktop app that verifies each update and rolls back to a signed, logged release are in the [update and rollback design](../design/update-and-rollback.md#the-desktop-app).
 
 ## Values and limits
 
 | Value | Number |
 | --- | --- |
 | Timestamp expiry | 3 days (259,200 seconds) after `issued` |
-| Timestamp re-signing | every 24 hours, and at each release |
 | Root expiry | at most 365 days after `issued`; the next version is signed at least 30 days before expiry |
 | Thresholds | 1 for each role; root moves to 2 of N once maintainers hold root keys |
 | Clock tolerance | 0 seconds |
-| Desktop update cache | 1 previous release |
 | Size limits before parsing | root 64 KiB, timestamp 16 KiB, manifest 1 MiB, file list 32 MiB, rebuild record 1 MiB, advisory report 8 MiB |
 | Metadata request timeout | 30 seconds per request |
 
 ## Consumers
 
-- `delo/apps/release/` (WP3.1): builds, compares, checks advisories, signs and publishes.
+- `delo/apps/release/` (WP3.1): builds, compares, checks advisories and signs.
 - `delo/apps/install/` and `delo/apps/npm-launcher/` (WP3.2): verify and install.
 - `delo/packages/runtime-store/` (WP3.3): the start check, switching and rollback.
-- The desktop updater (WP6.3): verified updates and rollback.
-- `@delo/integrity` and `delorun verify` ([C15](c15-verification-checks.md)), the Docker supervisor's image check ([C9](c09-runtime-supervisor.md)) and the catalogue's key ([C13](c13-catalogue-revocation.md)).
+- `delorun verify` ([C15](c15-verification-checks.md)), the Docker supervisor's image check ([C9](c09-runtime-supervisor.md)) and the catalogue's key ([C13](c13-catalogue-revocation.md)).
 
 ## Compatibility
 
-Each file's `schema` names its major version; a change that an older reader would misread adds a new major version, and the release publishes both versions of a file while clients that read only the old one are supported. New optional fields need a new major version too, because readers refuse unknown fields. Upstream's desktop update flow, `latest.yml` feeds and electron-updater stay as upstream ships them; the manifest check is added before installation, so an upstream feed file alone never installs anything.
+Each file's `schema` names its major version; a change that an older reader would misread adds a new major version, and the release publishes both versions of a file while clients that read only the old one are supported. New optional fields need a new major version too, because readers refuse unknown fields. Upstream's desktop update flow, `latest.yml` feeds and electron-updater stay as upstream ships them.
 
 ## Security
 
 ### Requirements
 
 - R1. Root and targets keys are offline; the timestamp key is online and signs only freshness; the catalogue key signs only [C13](c13-catalogue-revocation.md)'s files.
-- R2. Timestamp metadata expires 3 days after issue and is re-signed every 24 hours; a client refuses an expired or older timestamp, and a manifest the timestamp does not name for the channel is not offered.
-- R3. No client downgrades on its own; a person-requested rollback reaches only a signed, logged release.
+- R2. Timestamp metadata expires 3 days after issue; a client refuses an expired or older timestamp, and `delorun update` does not offer a manifest the timestamp does not name for the channel. Re-signing every 24 hours is not built ([release workflow design](../design/release-workflow.md)).
+- R3. No client downgrades on its own; a person-requested rollback reaches only a signed, logged release. Partly built: nothing installs or switches without the person's confirmation, and no client compares versions ([freshness and rollback protection](#freshness-and-rollback-protection)).
 - R4. Rotation is by root version, signed by the old and new root thresholds; a revoked targets key verifies nothing.
-- R5. The CLI launcher checks every runtime file against the signed file list at every start in every verification mode; one changed, missing or extra file stops the start.
-- R6. The desktop app verifies the manifest, the file digests and the log entry before every update applies, on every platform.
-- R7. Signing refuses without a matching rebuild record from the targets-key holder's machine outside CI; once maintainers sign, two of N builders with at least one outside CI.
-- R8. The advisory check fails the release on any advisory without a valid acceptance, on a lapsed acceptance and on an unreachable feed; the release notes show every acceptance.
-- R9. Nothing lands under `~/.delo/runtimes/` before signature, digest and log checks pass; the install script's digest is published, and the script verifies the closure before installing.
-- R10. npm packages publish only through trusted publishing with an OIDC build attestation; no npm token exists in the workflow.
-- R11. Every PE file in a Windows closure and the desktop app carries an Authenticode signature, and the manifest records the signed files' digests.
+- R5. The CLI launcher checks every runtime file against the signed file list at every start; one changed, missing or extra file stops the start.
+- R6. The desktop app verifies the manifest, the file digests and the log entry before every update applies, on every platform. Not built: the desktop app is upstream's ([update and rollback design](../design/update-and-rollback.md#the-desktop-app)).
+- R7. Signing refuses without a matching rebuild record from the targets-key holder's machine outside CI. Two of N builders once maintainers sign is not built ([release workflow design](../design/release-workflow.md)).
+- R8. The advisory check fails the release on any advisory without a valid acceptance, on a lapsed acceptance and on an unreachable feed. Listing every acceptance in the release notes is not built.
+- R9. Nothing lands under `~/.delo/runtimes/` before signature, digest and log checks pass. The install scripts, with their published digests, are not built.
+- R10. npm packages publish only through trusted publishing with an OIDC build attestation; no npm token exists in the workflow. Not built: no workflow publishes them.
+- R11. Every PE file in a Windows closure and the desktop app carries an Authenticode signature, and the manifest records the signed files' digests. Not built.
 
 ### Denial tests
 
 | Test | Owner | Behaviour it shows |
 | --- | --- | --- |
-| `c02-start-stops-on-changed-byte` | WP3.3 | One changed byte in an installed runtime file stops the CLI start in `warn`, `enforce` and `off`, and offers reinstall or rollback. |
+| `c02-start-stops-on-changed-byte` | WP3.3 | One changed byte in an installed runtime file stops the CLI start and offers reinstall or rollback. |
 | `c02-start-stops-on-extra-file` | WP3.3 | An added regular file under the installation stops the start. |
 | `c02-install-refuses-bad-signature` | WP3.2 | A manifest signed by a key outside the targets role is refused, and no file appears under `~/.delo/runtimes/`. |
 | `c02-install-refuses-tampered-archive` | WP3.2 | An archive whose SHA-256 differs from the manifest is refused before extraction. |
-| `c02-refuses-expired-timestamp` | WP3.1, WP3.2, WP6.3 | A timestamp one second past `expires` blocks the update and names the expiry. |
-| `c02-refuses-replayed-timestamp` | WP3.2, WP6.3 | A validly signed timestamp with a lower `version` than the stored one is refused. |
-| `c02-refuses-replayed-manifest` | WP3.1, WP3.2, WP6.3 | A validly signed older manifest that the fresh timestamp does not name is not offered or installed. |
+| `c02-refuses-expired-timestamp` | WP3.1, WP3.2 | A timestamp one second past `expires` blocks the update and names the expiry. |
+| `c02-refuses-replayed-timestamp` | WP3.2 | A validly signed timestamp with a lower `version` than the stored one is refused. |
+| `c02-refuses-replayed-manifest` | WP3.1, WP3.2 | A validly signed older manifest that the fresh timestamp does not name is not offered or installed. |
 | `c02-root-rotation-needs-both-thresholds` | WP3.2 | A new root version signed only by its own keys, or only by the previous ones, is refused. |
 | `c02-revoked-targets-key-verifies-nothing` | WP3.2, WP3.3 | After a root revokes a targets key, a manifest signed only by it fails install and the start check. |
-| `c02-desktop-refuses-bad-manifest` | WP6.3 | A desktop update whose manifest signature fails, or whose downloaded file's SHA-512 differs from the manifest, is refused before `quitAndInstall`. |
-| `c02-desktop-refuses-unrequested-downgrade` | WP6.3 | A feed naming a lower version offers no update. |
-| `c02-desktop-rollback-signed-logged` | WP6.3 | A requested rollback to a signed, logged earlier release applies and restores the profile from history. |
-| `c02-desktop-rollback-refuses-unsigned-or-unlogged` | WP6.3 | A requested rollback to a release without a verifying manifest, or without a verified log entry, is refused. |
 | `c02-rebuild-difference-blocks-signing` | WP3.1 | `compare-rebuild.ts` exits 1 on a difference outside `rebuild-exceptions.json`, and the signing step stops. |
 | `c02-signing-refuses-without-rebuild` | WP3.1 | Signing without a rebuild record refuses with the message naming the required source. |
 | `c02-signing-refuses-ci-rebuild` | WP3.1 | A record with `ci: true`, a signing run with `GITHUB_ACTIONS` set, or a record whose digests the local output directory does not reproduce, refuses with the same message. |
@@ -307,8 +307,6 @@ Each file's `schema` names its major version; a change that an older reader woul
 | `c02-advisory-acceptance-passes-and-shows` | WP3.1 | The same lockfile passes with a matching acceptance, and the assembled release notes show the advisory, its package, range, reason, approver, lapse release and date. |
 | `c02-advisory-lapsed-acceptance-fails` | WP3.1 | A release whose version is above the acceptance's `lapsesAfter` fails the check. |
 | `c02-advisory-feed-unreachable-fails` | WP3.1 | A feed stand-in that refuses connections fails the check. |
-| `c02-npm-publish-has-no-token` | WP3.2 | A workflow lint fails when the npm publish job references an npm token or lacks `id-token: write`. |
-| `c02-pe-files-signed` | WP3.1 | `signtool verify /pa` passes on every PE file in the Windows closure. |
 
 ### What this does not prove
 

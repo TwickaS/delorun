@@ -11,10 +11,22 @@ English | [中文](c11-setup-answers.zh.md)
 
 Setup answers are what `delorun setup` asks, the schema that stores each answer, the profile writes each answer produces, and the `--yes` and `--config` forms that give the same answers without a terminal. Setup opens with Quick or Full. Quick asks the privacy note, the model key and the prompts question; Full adds the sections that change the computer. Every question takes effect or is not asked. Delo has no telemetry of its own, and the privacy note says that upstream's two opt-ins are off and are changed in Settings → Privacy, where the studio's consent screen owns them.
 
+<a id="status"></a>
+## Status
+
+`delorun setup` with its Quick and Full flows, the `--yes` and `--config` forms and the profile writes below are built; the reach, identity-factor, runtime and stock-home sections are not, and the opt-ins stay off only in the CLI profile.
+
+- **Built and reached:** the sections `privacy`, `key`, `prompts`, `background` and `profile`; the schema with its refusals of removed keys, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile.
+- **Not built:** the reach and identity-factor sections and the enrolment request; the runtime section; the stock-home import; the check that `modelProvider.id` is a provider upstream ships, which accepts any non-empty id; the feedback dialog and its send, because the CLI profile disables upstream's feedback rows, while setup's privacy note still prints the feedback statement; the rule that a failed key check's reason is not printed, because setup prints it (the reason names the origin and the HTTP status and holds no part of the key).
+- **Not reached by Delo's writes:** `delorun headless` runs upstream's headless profile, which carries none of these writes, so DeepSeek's session-log upload is on there by upstream's default and the requirement that the opt-ins are off does not hold for it.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Modes and sections](#modes-and-sections)
   - [Questions](#questions)
@@ -61,7 +73,7 @@ Setup asks these questions, in this order. The default applies when the person a
 
 Reach from anywhere, the identity factor, the runtime and the stock-home import are not asked yet; their packages add the sections. Setup reads a stock home only to copy from it, and never modifies it.
 
-The live key check sends one authenticated model-listing request to the provider's origin, `https://api.deepseek.com` or the origin of `DEEPSEEK_BASE_URL`, and to no other; redirects fail. A failed check says why and lets the person enter the key again or continue without a successful check. `--yes`, `--config` and a key read from the environment skip the check unless `--check-key` is given; with `--check-key` a key the provider does not accept stops an unattended run.
+The live key check sends one authenticated model-listing request to the provider's origin, `https://api.deepseek.com` or the origin of `DEEPSEEK_BASE_URL`, and to no other; redirects fail. A failed check prints its reason, which names the origin and the HTTP status and never the key, and lets the person enter the key again or continue without a successful check. `--yes`, `--config` and a key read from the environment skip the check unless `--check-key` is given; with `--check-key` a key the provider does not accept stops an unattended run.
 
 <a id="answer-schema"></a>
 ### Answer schema
@@ -84,7 +96,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 | Field | Type and values | Default | Rule |
 | --- | --- | --- | --- |
 | `schemaVersion` | Integer `2`. | `2` | Setup refuses any other value. |
-| `modelProvider.id` | A provider id that upstream ships. | `deepseek-official` | Setup refuses an id that upstream does not ship. |
+| `modelProvider.id` | A provider id. | `deepseek-official` | Any non-empty string is accepted; no check against the providers upstream ships runs. |
 | `modelProvider.credential` | `{ "source": "prompt" }` or `{ "source": "environment", "name": "<variable>" }`. | `{ "source": "prompt" }` | `prompt` is accepted only in the interactive form. |
 | `prompts` | `safer` or `stock`. | `safer` | Sets the prompt switches of the parity registry. |
 | `background` | Boolean. | `true` | Read back by the start commands. |
@@ -116,7 +128,7 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | `importStockHome` | The import of a stock home under the archive contract. | Not a profile write. |
 | `sections` | Recorded in `setup-answers.json`. | The profile directory. |
 
-Upstream's session-telemetry row `session-telemetry-otel` is not an answer. It sends a session-log prefix only after the person submits feedback, and setup states that behaviour in the statements below. The feedback dialog shows the exact payload, the session-log prefix included, and its destination before the person sends it.
+Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In upstream's profiles it sends a session-log prefix only after the person submits feedback. The CLI profile disables it together with upstream's feedback command and message feedback rows, so nothing sends feedback there.
 
 <a id="yes-and-config-forms"></a>
 ### The --yes and --config forms
@@ -136,7 +148,7 @@ Setup shows the privacy note at the start of every terminal run, and prints it b
 
 - Delo has no telemetry of its own.
 - Upstream's desktop analytics and DeepSeek's session-log upload are off unless you turn them on, and Settings → Privacy changes them.
-- Upstream's feedback send includes a session-log prefix, and it happens only when you send feedback.
+- Upstream's feedback send includes a session-log prefix, and it happens only when you send feedback. The CLI profile has no feedback send, so this statement describes upstream's profiles only.
 
 The statements about recovery and Docker belong to the sections that add those topics.
 
@@ -145,7 +157,7 @@ The statements about recovery and Docker belong to the sections that add those t
 
 - `delo/apps/cli/src/setup/`: the setup flow, its sections and its `--yes` and `--config` forms.
 - `delo/packages/bundle-local`: the upstream opt-in rows and their consent screen in the studio, and the rows the prompts answer sets.
-- The studio's onboarding, which reads `sections`, is not built; its rules are in the [first-run design](../design/first-run.md).
+- `delo/packages/plugin-onboarding`, which `@delo/bundle-studio` mounts: the studio's onboarding reads `sections` from `setup-answers.json`; the rest of its rules are in the [first-run design](../design/first-run.md).
 - `delo/packages/contract-setup-answers/`: the answer types, the defaults and the profile row names.
 
 <a id="compatibility"></a>

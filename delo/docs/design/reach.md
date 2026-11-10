@@ -20,9 +20,10 @@ Reach lets a person open their studio from their own phone or laptop over their 
 
 ## What exists today
 
-- `@delo/home-auth` serves three routes, each answered only on the loopback studio: the owner claim with a single-use owner code, the device list, and device removal, which ends the device's sessions and closes its reach connections. A claim that arrives on a reach listener, or whose `Host` names a reach address, is refused with `OWNER_CLAIM_LOOPBACK_ONLY` and claims nothing. The device list and removal refuse a `Host` that names a reach address, and removal refuses a request from another origin.
-- A request that no listener stamped is read as a loopback arrival. The routes above also require a loopback `Host`, so such a request that names a reach address is still refused.
-- There is no sign-in route, no device approval, no reach listener, and no `delorun reach` or `delorun devices` command. Setup records reach as off: `--yes` leaves it off, and a `--config` document that names any reach option other than `none` is refused.
+- No shipped profile mounts `@delo/home-auth`, and no `delorun` command uses it, so none of its routes is served. The package serves three routes, each answered only on the loopback studio: the owner claim with a single-use owner code, the device list, and device removal, which ends the device's sessions and closes its reach connections. A claim that arrives on a reach listener, or whose `Host` names a reach address, is refused with `OWNER_CLAIM_LOOPBACK_ONLY` and claims nothing. The device list and removal refuse a `Host` that names a reach address, and removal refuses a request from another origin. A request that no listener stamped is read as a loopback arrival; the routes above also require a loopback `Host`, so such a request that names a reach address is still refused.
+- Upstream's connection carries Delo's reach listener with the dispatch order, Content Security Policy and Trusted Types of [C4](../contracts/c04-admission.md), and the `authenticator` Service Definition. Nothing outside tests opens a reach listener, and no package provides `authenticator`, so upstream's own admission runs.
+- The loopback studio admits upstream's launch token and its stateless `dsh-auth-*` cookies, which expire 30 days after they are minted, have no idle limit and no server-side record, and stay valid until the browser session secret in `.credentials.yaml` changes; Delo never changes it. Every browser holding such a cookie acts as the one owner. The loopback studio sends no Content Security Policy.
+- There is no sign-in route, no device approval, no reach provider, and no `delorun reach` or `delorun devices` command. Setup records reach as off: `--yes` leaves it off, and a `--config` document that names any reach option other than `none` is refused.
 
 ## The rules
 
@@ -44,9 +45,15 @@ Reach lets a person open their studio from their own phone or laptop over their 
 8. It may not, and the home refuses each with `LOOPBACK_REQUIRED`: grant full access, by the per-call escalation or by the per-workspace consent; approve or remove a device; reset the home; use the recovery kit; enrol an identity factor; change reach settings; or change the protection setting of [changes](changes.md). The approval's answer carries the session's factor to the code that grants, so the refusal does not depend on the remote page. The remote studio shows "This needs you at your computer" with the action's name.
 9. Installing a plugin from a remote session is therefore not possible: upstream requires a full-access approval for each `plugin_manager` write action.
 
+### Loopback credentials
+
+10. `@delo/home-auth` records every loopback credential when upstream's connection mints it (the `authenticator/minted` event, which carries the SHA-256 hash of the credential and never its value), and refuses a loopback credential that verifies but has no record with `401 SESSION_EXPIRED`.
+11. A loopback credential expires 7 days after its last use or 30 days after it was minted, whichever comes first, and the rotation events of [C4](../contracts/c04-admission.md#rotation-and-revocation) replace it.
+12. `delorun devices reset` replaces the browser session secret in upstream's `.credentials.yaml`, so every loopback cookie minted before it stops working.
+
 ### Commands
 
-10. `delorun reach status | on tailscale | off` and `delorun devices list | approve | remove | code`. `delorun reach on tailscale` checks that `tailscale` is installed and running, that the tailnet has HTTPS certificates on, and that the person may run `tailscale serve`; for the last it prints the one command the person runs themselves, and Delo never runs `sudo`. A home with no owner is claimed through the home socket as the local person.
+13. `delorun reach status | on tailscale | off` and `delorun devices list | approve | remove | code`. `delorun reach on tailscale` checks that `tailscale` is installed and running, that the tailnet has HTTPS certificates on, and that the person may run `tailscale serve`; for the last it prints the one command the person runs themselves, and Delo never runs `sudo`. A home with no owner is claimed through the home socket as the local person.
 
 ## What this does not protect against
 
@@ -68,7 +75,10 @@ Reach lets a person open their studio from their own phone or laptop over their 
 - `a foreign Host on the serve target is refused`
 - `owner claim on the tailnet route is refused`
 - `tailnet-membership is refused on a Funnel or own-domain address`
+- `idle and absolute limits refuse a loopback credential`
+- `a loopback credential without a record is refused`
+- `a loopback cookie minted before devices reset is refused after it`
 
 ## What is built so far
 
-The loopback-only owner claim, device list and device removal are built, and fundamental F11 records them as enforced ([fundamentals](../security/fundamentals.md)). Sign-in, the approval window, local approval, the `tailnet-membership` factor, fail-closed arrival, the refusals of a remote session, the provider and the commands are not built; fundamentals F12 and F13 record them as designed.
+The loopback-only owner claim, device list and device removal are built in `@delo/home-auth`, and the reach listener's dispatcher in upstream's connection, but no shipped profile mounts either, so they protect no one; fundamental F11 names them ([fundamentals](../security/fundamentals.md)). Sign-in, the approval window, local approval, the `tailnet-membership` factor, fail-closed arrival, the refusals of a remote session, the loopback credential records and limits, the provider and the commands are not built; fundamentals F12 and F13 record them as designed.

@@ -10,8 +10,19 @@ English | [中文](c19-home-process.zh.md)
 
 This contract defines the background process that keeps a person's CLI home running and the handshake through which an update reaches it. One home process per CLI profile holds that profile's lock under `~/.delo`, runs its Host and writes a new start token each time it starts. `delorun update` and the studio's "Update now" reach it through the update channel, a socket under `~/.delo` that accepts only requests carrying the current token. An update waits until no chat runs on the old runtime, hands the profile to a process on the new runtime, checks that it is healthy and rolls back when it is not, so an interrupted update always leaves one whole version current. The desktop app keeps upstream's own Host and profile and updates on its own. The types package [`@delo/contract-home-process`](../../packages/contract-home-process/README.md) carries the protocol, states and limits.
 
+## Status
+
+The home process, the update channel with its token check and fixed request set, the handshake, interrupted updates and rollback are built and reached by `delorun`, `delorun start`, `stop`, `status`, `update` and `recover`; the supervisor launch, the confinement probes, start at login, the studio's caller and the Windows pipe are not.
+
+- **Built and reached:** the lock, the per-start token compared in constant time, the update channel on the Unix socket `run/<profile>/update.sock` with its request, size, time and connection limits, the drain with the CLI profile's turn refusal, the handover over an inherited pipe, the health check and automatic rollback, and the journal that finishes an interrupted update at the next start.
+- **Not built:** step 6 of the start sequence, because `delorun start` passes the home process no supervisor ([C9](c09-runtime-supervisor.md)); step 8, the confinement probes, and `delorun verify` reporting their results; start at login, `--at-login` and the launcher copy it runs; the Host's update plugin, so the studio's "Update now" and rollback do not exist and the channel serves only the `delorun` command; `delorun status --follow`; the named pipe on Windows: the channel takes the same socket path on every platform, no test shows it opening on Windows, and windows-acl has no rule that denies a confined command the connect or the read of the token; the escalation prompt wording requirement 10 names ([C1](c01-home-layout.md)).
+- **Not reached by Delo's sandbox rules:** a command run by `delorun headless`, which uses upstream's headless profile without Delo's protected home and denied sockets, can read the start token and connect to the channel while a home process runs; the closed request set of requirement 4 still applies to it.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 ## Contents
 
+- [Status](#status)
 - [The home process](#the-home-process)
 - [Commands](#commands)
 - [Start at login](#start-at-login)
@@ -41,22 +52,22 @@ The home process is one operating-system process per CLI profile. It runs the pr
   3. finish an interrupted update from the update journal ([interrupted updates](#interrupted-updates));
   4. write a new start token ([C1](c01-home-layout.md));
   5. listen on the update channel, which answers `status` with `starting` from this point;
-  6. start the Docker supervisor when the machine is set up for Docker ([C9](c09-runtime-supervisor.md));
+  6. start the Docker supervisor when the machine is set up for Docker ([C9](c09-runtime-supervisor.md)); not built, so no supervisor starts;
   7. boot the Host;
-  8. run [C1](c01-home-layout.md)'s confinement probes and record their results;
+  8. run [C1](c01-home-layout.md)'s confinement probes and record their results; not built, so no probe runs;
   9. enter `running`.
 - **Clean stop.** The process closes the Host, removes the token file, closes the update channel, stops the supervisor it started, removes the lock and exits.
 
 ## Commands
 
-- **`delorun start`** starts the home process for the profile and waits until it reports `running`, for at most 120 seconds; a start that does not reach `running` prints the failure and the log's location. When a live home process already answers `status`, the command prints its state and exits 0. `--foreground` runs the process in the terminal and also writes its log. `--at-login` installs the login item first ([start at login](#start-at-login)).
+- **`delorun start`** starts the home process for the profile and waits until it reports `running`, for at most 120 seconds; a start that does not reach `running` prints the failure and the log's location. When a live home process already answers `status`, the command prints its state and exits 0. `--foreground` runs the process in the terminal and also writes its log. `--at-login`, which would install the login item first ([start at login](#start-at-login)), is not built.
 - **`delorun`** with no arguments runs setup on a home without a CLI profile; otherwise it starts the home process as `delorun start` does and opens the studio.
 - **`delorun stop`** sends `stop` with the mode `drain`: the home process refuses new turns and waits for running chats for at most 1,800 seconds, then stops. `--now` sends the mode `cancel`, which cancels running turns and background jobs through upstream's cancellation and then stops. `--at-login` also removes the login item. With no home process running, the command prints that and exits 0.
-- **`delorun status`** prints the state, process id, `startId`, the `current`, `previous` and running runtime versions, the launcher version, the update phase if one runs, the number of running chats and whether the login item is installed. `--json` prints the `status` response. It exits 0 when the home process runs, 3 when none runs and 1 on an error.
+- **`delorun status`** prints the state, process id, `startId`, the `current`, `previous` and running runtime versions, the launcher version, the update phase if one runs, and the number of running chats; it shows no login item, because none is built. `--json` prints the `status` response. It exits 0 when the home process runs, 3 when none runs and 1 on an error.
 
 ## Start at login
 
-Start at login is off by default. The person turns it on with `delorun start --at-login` or the setup question, and off with `delorun stop --at-login`.
+Start at login is not built: `delorun start` and `delorun stop` take no `--at-login` option, setup asks no such question, and no login item is installed. The rules below are the requirement. Start at login is off by default. The person turns it on with `delorun start --at-login` or the setup question, and off with `delorun stop --at-login`.
 
 | Platform | Login item |
 | --- | --- |
@@ -71,7 +82,7 @@ Start at login is off by default. The person turns it on with `delorun start --a
 
 The update channel is the socket [C1](c01-home-layout.md) places at `run/<profile>/update.sock`, or the named pipe [C1](c01-home-layout.md) names on Windows. It carries every request that reads or changes the home process's state.
 
-- **Callers.** It serves two callers: the person's `delorun` command, which reads the token file, and the Host's update plugin, which acts for a studio session that the studio's own authentication admitted (upstream's loopback authentication, or C4's admission on a reach listener) and attaches the token it holds in memory. The studio's "Update now" reaches the home process only through this channel.
+- **Callers.** It serves the person's `delorun` command, which reads the token file. The Host's update plugin, which would act for a studio session that the studio's own authentication admitted (upstream's loopback authentication, or C4's admission on a reach listener) and attach the token it holds in memory, is not built, so no studio action reaches the channel.
 - **The token check.** The first line of each connection is a request with the field `token`. The home process compares it in constant time with the current start's token. A missing, malformed, wrong or previous start's token receives `UNAUTHENTICATED`, and the connection closes; that response carries no other information.
 - **Framing.** Each connection carries one request, encoded as one line of UTF-8 JSON of at most 16,384 bytes, and the response lines that answer it, each one JSON object followed by a newline. The home process closes the connection after the final response line.
 - **Timing.** A request line that has not arrived 5 seconds after the connection opens closes the connection with `REQUEST_TIMEOUT`. At most 8 connections are open at once; a further connection is closed at once with `BUSY`.
@@ -93,7 +104,7 @@ Every request has the fields `v` (the protocol version, 1), `token`, `op` and, w
 - **Response lines.** Each line has `ok` (a boolean); a failed line has `error`, a code from [errors](#errors), and a progress line has `phase`, or, while `update.prepare` installs the target, `line`: one line of the install's progress with its newline, the same text the launcher prints while it installs a release. A report expires 600 seconds after `update.prepare` returns it; `update.apply` with an expired or unknown `reportId` fails with `REPORT_EXPIRED`.
 - **`failed`.** An `update.apply` or `rollback` that ends `failed` leaves a rollback the home process may not finish itself; the home process stops once the final line is sent, and the update record stays for the next start ([interrupted updates](#interrupted-updates)).
 - **One at a time.** Only one update or rollback runs at a time; a second one fails with `UPDATE_IN_PROGRESS`.
-- **Detached requesters.** A requester that disconnects does not change a running update. `delorun status --follow` shows the phase of the update in progress.
+- **Detached requesters.** A requester that disconnects does not change a running update. `delorun status` shows the phase of the update in progress; `delorun status --follow` is not built.
 
 ## The update handshake
 
@@ -196,7 +207,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 - `delo/apps/cli`: `delorun`, `delorun start`, `stop`, `status`, `update` and `recover`.
 - `delo/packages/runtime-store`: the pointer writes and installs the handshake calls ([C1](c01-home-layout.md)).
 - `delo/packages/logs`: the home process's operational log ([C20](c20-operational-logs.md)).
-- The Host's update plugin in `@delo/bundle-local`: "Update now" and the studio's rollback.
+- The Host's update plugin, "Update now" and the studio's rollback, which are not built; no shipped bundle mounts an update plugin.
 - The `delo-update-gate` row of `@delo/bundle-local`: the `deloTurnGate` service, which refuses new turns while the CLI's chat gate is held.
 - The update report and its screens ([C3](c03-update-report.md)), which read the phases and outcomes.
 

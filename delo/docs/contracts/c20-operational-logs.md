@@ -10,8 +10,19 @@ English | [中文](c20-operational-logs.zh.md)
 
 This contract defines the files where Delo's own processes record how they behaved, so a person or their agent can find out why something failed without a studio. The CLI home process, the desktop Host, the Docker supervisor and the self-hosted relay each write their own log at a fixed location, as JSON lines that carry upstream's session and turn ids where a record belongs to a chat. Logs rotate at 10 MiB, keep 5 files and, while Delo runs, are deleted after 14 days, which also bounds how long fragments of a purged chat can stay in them. Every record passes a redaction step, so no secret, token, key, owner code or cookie reaches a log. `delorun logs` shows each log and its location. Session logs are a different thing: they record chats and stay permanent. The types package [`@delo/contract-operational-logs`](../../packages/contract-operational-logs/README.md) carries the record type, surfaces and limits.
 
+## Status
+
+The CLI home process's log, its format, rotation, the redactor's field and pattern steps, pruning at each `delorun` invocation, `delorun logs` and purge's offer are built; the desktop Host's log, the hourly age check, session and turn keys and the registration of most secret values are not.
+
+- **Built and reached:** the `home-<profile>` surface, which records the home process and captures its Host's standard output and standard error; rotation at 10 MiB with 5 files; modes 0700 and 0600; the redactor's structured-field and pattern steps on every record; the start token registered as a known value; pruning of expired files when any `delorun` command starts and on `delorun logs --prune`; `delorun logs` with its flags; purge's statement and its offer to clear.
+- **Built, reached by nothing:** the `supervisor-<profile>` surface, because the supervisor never runs ([C9](c09-runtime-supervisor.md)); `startAgeChecks`, the check every 3,600 seconds, which no process calls, so a home process that runs for longer than the retention keeps expired records until the next `delorun` command starts; `attachCordisLogs`, which no process calls, so records carry no `sessionId` or `turn`. The relay's surface is built in `delo/apps/relay`, which registers its relay key.
+- **Not built:** the desktop Host's log file; registration with the redactor of model and provider keys, session secrets, cookie values, owner codes and device keys, so these are caught only when they match a field name or a listed pattern; requirement 7, because `delorun headless` and `delorun plugin` run upstream's command line, which writes upstream's `startup-*.log` report on a start failure.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 ## Contents
 
+- [Status](#status)
 - [Surfaces and destinations](#surfaces-and-destinations)
 - [What a log holds](#what-a-log-holds)
 - [Record format](#record-format)
@@ -38,7 +49,7 @@ Each surface writes one log through Delo's logger, `@delo/logs`. Paths are relat
 
 - **The desktop Host.** The desktop app's main process writes the Host child's output to the file, as well as keeping the in-memory tail of standard error that upstream keeps, so the Host's diagnostic trail is never only in Electron's console.
 - **The relay container.** Its standard output carries only a one-line start record and fatal errors, both redacted; its log is the file.
-- **Upstream's reports.** Upstream's `logs/startup-*.log` files are written only by upstream's own `dsh` entry, which records raw diagnostics and states that they may contain credential values. `delorun` never writes them: a start failure of a `delorun` process is written through Delo's logger to that process's surface. `delorun logs` lists existing `startup-*.log` files with upstream's warning, and purge's offer covers them.
+- **Upstream's reports.** Upstream's `logs/startup-*.log` files are written only by upstream's own `dsh` entry, which records raw diagnostics and states that they may contain credential values. A start failure of a `delorun` process is written through Delo's logger to that process's surface, except under `delorun headless` and `delorun plugin`, which run upstream's command line and write upstream's report on a start failure. `delorun logs` lists existing `startup-*.log` files with upstream's warning, and purge's offer covers them.
 - **Session logs.** Session logs are upstream's session records under `sessions/`. This contract never rotates, redacts, deletes or reads them.
 
 ## What a log holds
@@ -81,14 +92,14 @@ A log file is UTF-8 JSON Lines: one JSON object per line, each line at most 16,3
 
 - **Rotation.** Before a write that would take the active file past 10 MiB, the writer renames `<name>.log.3` to `<name>.log.4`, then each lower number up, the active file to `<name>.log.1`, and opens a new active file. A rotated file beyond `.4` is deleted. Each surface therefore holds at most 50 MiB.
 - **Age.** At each age check, every file of a surface whose oldest record is older than 14 days is deleted; when that file is the active file, it is rotated first. Upstream's `logs/startup-*.log` reports are aged too, by their own last write, because a report carries no records to date it. Any Delo process that starts prunes the expired files of every local surface it can reach and those reports, so the logs of a stopped home process are pruned too, and `delorun logs --prune` prunes them on demand.
-- **The bound, while Delo runs.** While a Delo process runs on the machine, a record is deleted at the first age check after it is 14 days old, at most 3,600 seconds later. While no Delo process runs, expired records stay until a Delo process starts or `delorun logs --prune` runs.
+- **The bound, while Delo runs.** While a Delo process runs on the machine, a record is required to be deleted at the first age check after it is 14 days old, at most 3,600 seconds later. No process runs the hourly check: expired files are deleted when a `delorun` command starts or `delorun logs --prune` runs, so a home process that keeps running keeps expired records until then. While no Delo process runs, expired records stay until a Delo process starts or `delorun logs --prune` runs.
 - **Session logs** are never rotated or deleted by these rules.
 
 ## Redaction
 
 Every record passes the redactor before it is written, both Delo's own records and captured output. The redactor runs before truncation, so it never sees a secret cut in half.
 
-1. **Known values.** Every secret value a process holds or reads is registered with the redactor when it is loaded: model and provider keys, the start token, session secrets, cookie values, owner codes, device and relay keys, the S2 helper channel key and forwarded deploy keys and tokens. Each occurrence of a registered value of at least 8 characters is replaced with `[redacted:<kind>]`, including its base64, base64url, hexadecimal and URL-encoded forms.
+1. **Known values.** Every secret value a process holds or reads is required to be registered with the redactor when it is loaded: model and provider keys, the start token, session secrets, cookie values, owner codes, device and relay keys, the S2 helper channel key and forwarded deploy keys and tokens. The home process and the supervisor register the start token, and the relay its relay key; no other value is registered. Each occurrence of a registered value of at least 8 characters is replaced with `[redacted:<kind>]`, including its base64, base64url, hexadecimal and URL-encoded forms.
 2. **Structured fields.** Before serialisation, the value of every object key whose name contains `key`, `token`, `secret`, `password`, `passwd`, `cookie`, `credential`, `authorization` or `session` (in any case) is replaced with `[redacted]`. Ids that this contract names (`sessionId`, `startId`, `workspaceId`) are exempt.
 3. **Patterns.** Text matching these forms is replaced with `[redacted:<kind>]`: the value of an `Authorization`, `Proxy-Authorization`, `Cookie` or `Set-Cookie` header; a `Bearer` or `Basic` credential; the user information of a URL; the value of a URL query parameter whose name contains `token`, `key`, `secret`, `password`, `code` or `sig`; a PEM private key block, and a key body whose `BEGIN` line the text does not hold, which is two or more 64-character base64 lines; a provider key beginning with `sk-`; GitHub tokens beginning with `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_` or `github_pat_`; AWS access key ids beginning with `AKIA`; JSON Web Tokens; Slack tokens beginning with `xox`; a run of exactly 26 characters from the base32 alphabet between non-alphanumeric characters, in either case and either compact or in groups separated by a space or a hyphen, the spellings an owner code is pasted in, where a lower-case run with no digit and no grouping is a word and stays; and the value of a `NAME=value` pair whose name contains `KEY`, `TOKEN`, `SECRET`, `PASSWORD` or `COOKIE`.
 4. **Errors.** An error's message and stack pass steps 1 and 3; an error's own properties pass step 2.

@@ -10,8 +10,18 @@ English | [中文](c18-release-log.zh.md)
 
 Every signed release manifest of [C2](c02-release-manifest.md) has an entry in Sigstore's public Rekor log, an append-only transparency log that Delo does not operate. Rekor signs checkpoints of its tree, and an independent witness from the public witness network cosigns them, so a log that showed one client a different history from another would be caught by the witness. Each release publishes a bundle with the entry, its inclusion proof and a witnessed checkpoint. Clients refuse an entry without a valid witness cosignature. Installing a release always requires a verified inclusion proof. When the log cannot be reached, gives no checkpoint its key signed, its latest checkpoint lacks the witness's cosignature, or its newest cosignature is stale, an install or update warns, continues on the release's signature and records that the online check did not run; a log whose signed checkpoint then contradicts the release, or a witness cosignature that is present and invalid, refuses. A start without network starts with a warning naming the unchecked release and checks at the next connection. The types live in [`@delo/contract-release-log`](../../packages/contract-release-log/README.md).
 
+## Status
+
+The bundle format, its verification and the online check are built and reached at install, at every launcher start and by `delorun verify`; publishing is a command a person runs, and the running home's retries, the desktop updater and the mode switch are not built.
+
+- **Built and reached:** the npm launcher and `delorun update` require a verified bundle and run the online check before anything installs; the launcher verifies the stored bundle and runs the online check at every start, warns and continues on `unchecked` and stops on `failed`; `delorun verify` reports the state. The release's `log-release` command writes the entry and writes the bundle only after it verifies with the root's log and witness keys.
+- **Not built:** a release workflow in this repository that runs the log command and publishes the bundle, so publishing after verification rests on the person who runs the commands; the running home process's retry every 15 minutes, because the start check runs only in the launcher; the start warning in the operational log and in `delorun status`, which shows no release-log state; the studio's "Update now" and Verification panel; the desktop updater's checks; `integrity.mode: off`, which nothing reads, so the online check always runs.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 ## Contents
 
+- [Status](#status)
 - [The log and the witness](#the-log-and-the-witness)
 - [Log entry](#log-entry)
 - [Release-log bundle](#release-log-bundle)
@@ -33,7 +43,7 @@ Every signed release manifest of [C2](c02-release-manifest.md) has an entry in S
 
 ## Log entry
 
-One entry per signed manifest file, written by the release workflow after the targets key signs and before the release is published:
+One entry per signed manifest file, submitted by the release's `log-release` command after the targets key signs and before the release is published:
 
 | Entry field | Value |
 | --- | --- |
@@ -43,7 +53,7 @@ One entry per signed manifest file, written by the release workflow after the ta
 | Key details | `PKIX_ED25519_PH` |
 | Public key | The active targets public key, DER-encoded PKIX |
 
-The release workflow submits these fields as a `hashedRekordRequestV002` to the log's `/api/v2/log/entries`; the log builds the entry body from them, and the log's leaf is the RFC 8785 serialization of that body. Rekor v2 accepts an Ed25519 key only with Ed25519ph, so the log refuses a pure Ed25519 (`PKIX_ED25519`) entry, and clients refuse one too.
+The `log-release` command submits these fields as a `hashedRekordRequestV002` to the log's `/api/v2/log/entries`; the log builds the entry body from them, and the log's leaf is the RFC 8785 serialization of that body. Rekor v2 accepts an Ed25519 key only with Ed25519ph, so the log refuses a pure Ed25519 (`PKIX_ED25519`) entry, and clients refuse one too.
 
 A re-signed manifest after a targets-key revocation ([C2](c02-release-manifest.md#key-rotation)) gets its own entry. A release is "logged" when its manifest file's entry verifies as this page states.
 
@@ -58,7 +68,7 @@ A re-signed manifest after a targets-key revocation ([C2](c02-release-manifest.m
 | `inclusion` | `{ "treeSize", "rootHash", "hashes": [hex...], "logIndex" }` | The RFC 6962 inclusion proof of the entry's leaf in that tree. |
 | `checkpoint` | string | The signed-note checkpoint for `treeSize` and `rootHash`, with Rekor's signature and at least 1 witness cosignature line. |
 
-The release workflow publishes the bundle on GitHub Releases beside the manifest, after a witness has cosigned a checkpoint at or above the entry's tree size. A release is not published before its bundle verifies.
+The bundle is published on GitHub Releases beside the manifest. The `log-release` command writes it only after a witness has cosigned a checkpoint at or above the entry's tree size and the bundle verifies; no workflow in this repository publishes a release, so the rule that a release is not published before its bundle verifies rests on the person who publishes it.
 
 ## Verifying a bundle
 
@@ -95,9 +105,9 @@ A `trust/checkpoint.json` an earlier install wrote with only a tree size and a r
 | `unchecked` | The online check has not passed yet: the log was not reachable, gave no checkpoint its key signed, or its witnesses had not cosigned its latest checkpoint within 24 hours; the bundle, if present, verifies. |
 | `failed` | The bundle or the online check failed verifiably. |
 
-The state is stored per installed release in `trust/release-log.json` (schema `delo.release-log-state/1`, one entry per release with its `state`, `lastAttempt`, for `unchecked` the reason as `detail` and the first attempt of the current `unchecked` run as `uncheckedSince`, and the attempt's `notices`, such as a stored checkpoint that did not read), beside the checkpoint [C1](c01-home-layout.md) names. An install records `verified` or `unchecked` for the release it installs, and the start check updates the same entry. `delorun verify`, `delorun status` and the studio's Verification panel show it with the release's version ([C15](c15-verification-checks.md)).
+The state is stored per installed release in `trust/release-log.json` (schema `delo.release-log-state/1`, one entry per release with its `state`, `lastAttempt`, for `unchecked` the reason as `detail` and the first attempt of the current `unchecked` run as `uncheckedSince`, and the attempt's `notices`, such as a stored checkpoint that did not read), beside the checkpoint [C1](c01-home-layout.md) names. An install records `verified` or `unchecked` for the release it installs, and the start check updates the same entry. `delorun verify` shows it with the release's version ([C15](c15-verification-checks.md)); `delorun status` and the studio show no release-log state.
 
-Under `integrity.mode: off` ([C15](c15-verification-checks.md#modes)), the online check does not run. A release whose bundle verifies offline then stays `unchecked`, and the start warning and retries do not apply. The offline verification still runs at each start, and a verified failure of it stops the start in every mode, as R5 requires.
+Under `integrity.mode: off` ([C15](c15-verification-checks.md#modes)), the online check does not run. Nothing reads `integrity.mode`, and the launcher always runs the online check. A release whose bundle verifies offline then stays `unchecked`, and the start warning and retries do not apply. The offline verification still runs at each start, and a verified failure of it stops the start in every mode, as R5 requires.
 
 ## Behaviour per client
 

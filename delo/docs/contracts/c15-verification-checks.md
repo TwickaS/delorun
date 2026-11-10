@@ -11,10 +11,21 @@ English | [中文](c15-verification-checks.zh.md)
 
 Verification checks report whether a person's own Delo is what the person expects. A check is a registered function that inspects one part of the home and yields one of four results. The checks run in the home's process with the person's access. Their report lists each result with a short detail that never contains a secret or file content, and the badge is green only when the mode is `enforce` and every check passes. The checks detect drift, tampering by other programs and misconfiguration. They do not hold back the person who owns the machine, and the mode decides which results block a start or reach.
 
+<a id="status"></a>
+## Status
+
+Two of the eleven checks run, only on `delorun verify`, and only in `warn`; the other checks, the stages, the selectable modes and the Verification panel are not built.
+
+- **Built and reached:** `delorun verify` with `--release`, `--offline` and `--json` runs `release-signature` (the stored root anchored on the roots the launcher ships, the manifest's signature, the timestamp's freshness and the release-log bundle, with the online check unless `--offline`) and `runtime-files` (every installed file against the signed file list), and reports every other registry entry as `unknown` with the detail "delorun verify does not run this check yet". Its report carries the notice, a detail of at most 512 characters, the mode `warn` and the badge `not-green`. The launcher's start check of the runtime files and the release log runs at every start, outside the registry.
+- **Not built:** the checks `workspace-isolation`, `confinement-rule`, `reach-binding`, `own-domain-caa`, `certificates`, `owner-and-devices`, `plugin-pins`, `data-sharing` and `home-modes`; runs at the `start`, `update` and `change` stages; the `integrity.mode` setting and `delorun verify --mode`, so `enforce` and `off` cannot be selected and the badge is never `green`; the `@delo/integrity` package; the studio's Verification panel; `delorun status` showing the mode and the last results; the signed machine report.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Registry entry](#registry-entry)
   - [Checks and stages](#checks-and-stages)
@@ -33,7 +44,7 @@ Verification checks report whether a person's own Delo is what the person expect
 <a id="registry-entry"></a>
 ### Registry entry
 
-Each check is one entry in the check registry of `@delo/integrity`. An entry has these fields.
+Each check is one entry in the check registry, `VERIFICATION_CHECKS` of `@delo/contract-verification-checks`. An entry has these fields.
 
 | Field | Type | Rule |
 | --- | --- | --- |
@@ -44,7 +55,7 @@ Each check is one entry in the check registry of `@delo/integrity`. An entry has
 <a id="checks-and-stages"></a>
 ### Checks and stages
 
-The stages are `start`, `update`, `change` and `verify`. `start` runs when the home starts. `update` runs after an update applies. `change` runs after a reach option or the runtime changes. `verify` runs on `delorun verify` and when the studio's Verification panel refreshes. Every registered check runs in every run, and the report names the stage of the run.
+The stages are `start`, `update`, `change` and `verify`. `start` runs when the home starts. `update` runs after an update applies. `change` runs after a reach option or the runtime changes. `verify` runs on `delorun verify` and when the studio's Verification panel refreshes. Every registered check runs in every run, and the report names the stage of the run. Only the `verify` stage runs, through `delorun verify`, and it runs `release-signature` and `runtime-files`; every other entry yields `unknown` with the detail "delorun verify does not run this check yet".
 
 The registry contains these checks.
 
@@ -62,7 +73,7 @@ The registry contains these checks.
 | `data-sharing` | `none` | The two upstream opt-ins, which are on or off as the person set them. |
 | `home-modes` | `none` | The mode of `~/.delo` and of its secret files. A mode with group or other bits is a `fail`, and the detail names the `chmod` command that fixes it. |
 
-The launcher's runtime hash check is outside the registry. It stops a changed runtime in every mode, so a modified `@delo/integrity` package does not disable it.
+The launcher's runtime hash check is outside the registry: the npm launcher calls `@delo/runtime-store` at every start, and a changed, missing or extra runtime file stops the start in every mode, so a change to the registry or to `delorun verify` does not disable it.
 
 Each confinement rule state maps to a verification check result: `enforced` is `pass`, `not-enforced` is `not-enforced`, `unconfined` is `fail` and `unknown` is `unknown`. The `confinement-rule` check applies that mapping to each rule of [C1](c01-home-layout.md#confinement-rules).
 
@@ -79,7 +90,7 @@ A check yields one of four results.
 <a id="modes"></a>
 ### Modes
 
-The mode is `warn`, `enforce` or `off`. The person sets it in settings under the key `integrity.mode`, or with `delorun verify --mode`.
+The mode is `warn`, `enforce` or `off`. The contract sets it in settings under the key `integrity.mode`, or with `delorun verify --mode`. Neither exists: nothing reads `integrity.mode`, `delorun verify` has no `--mode` option and always reports in `warn`, and the launcher always applies its start rules as `enforce` does, so a person cannot select `enforce` or `off`.
 
 - `warn`, the default: the checks run at their stages and report every result. No result stops a start or reach, except a `start-always` `fail`. The launcher's runtime hash check still stops a changed runtime.
 - `enforce`: a `fail` from a check whose `blocks` is `start` stops the start. A `fail` from a check whose `blocks` is `reach` stops reach until the result passes. A `fail` from a check whose `blocks` is `none` has no effect beyond the report and the badge.
@@ -128,9 +139,9 @@ The badge is `green` only when the mode is `enforce` and every check in the run 
 <a id="consumers"></a>
 ## Consumers
 
-- `delo/packages/integrity/`: the check registry, the checks, the result and mode handling, the report and the badge rule.
-- `delo/apps/cli`: `delorun verify` with its `--json` and `--mode` options, and `delorun status`, which shows the mode and the last results.
-- The studio's Verification panel and badge.
+- `delo/apps/cli`: `delorun verify` with its `--release`, `--offline` and `--json` options, which runs the two built checks, the report and the badge rule. `delorun status` shows no verification result.
+- `delo/apps/npm-launcher` and `delo/packages/runtime-store`: the launcher's start check, outside the registry.
+- The `@delo/integrity` package, the studio's Verification panel and badge, and `delorun verify --mode` are not built.
 - `delo/packages/contract-verification-checks/`: the registry entry, result, mode, stage and report types.
 
 <a id="compatibility"></a>

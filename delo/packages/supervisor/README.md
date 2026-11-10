@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package is the Docker supervisor of [contract C9](../../docs/contracts/c09-runtime-supervisor.md), the only Delo component that calls Docker. It runs as a separate process of the person's user, which the home process launches. It serves a fixed-schema API on `run/<profile>/supervisor.sock` under the Delo home and accepts a request only with the current home-process start's token ([C1](../../docs/contracts/c01-home-layout.md)). It builds the capability report by inspecting a probe container, resolves every workspace root against the roots file that only `delorun setup` writes, runs only images whose digests the verified release manifest lists, and logs to [C20](../../docs/contracts/c20-operational-logs.md)'s `supervisor-<profile>` surface through [`@delo/logs`](../logs/README.md). The contract's values and types come from [`@delo/contract-runtime-supervisor`](../contract-runtime-supervisor/README.md).
+This package is the Docker supervisor of [contract C9](../../docs/contracts/c09-runtime-supervisor.md), the only Delo component that calls Docker. It runs as a separate process of the person's user, which the home process launches when it is given a supervisor setup. No shipped command does that: `delorun start` passes no supervisor setup and no setup step writes the roots file, so the supervisor never runs and no Docker workspace exists for a person today. It serves a fixed-schema API on `run/<profile>/supervisor.sock` under the Delo home and accepts a request only with the current home-process start's token ([C1](../../docs/contracts/c01-home-layout.md)). It builds the capability report by inspecting a probe container, resolves every workspace root against the supervisor's roots file, which no command writes, runs only images whose digests the verified release manifest lists, and logs to [C20](../../docs/contracts/c20-operational-logs.md)'s `supervisor-<profile>` surface through [`@delo/logs`](../logs/README.md). The contract's values and types come from [`@delo/contract-runtime-supervisor`](../contract-runtime-supervisor/README.md).
 
 ## Contents
 
@@ -111,6 +111,7 @@ Every Engine API call has the deadline `engineCallMs` and every pull `pullMs`; a
 
 ## Not yet implemented
 
+- A launch by a shipped command: `delorun start` passes no supervisor setup, and no setup step writes the roots file.
 - The S2 helper (`helper.start`), the S3 container (`s3.*`) and credential forwarding are refused with `SHAPE_UNAVAILABLE` until their shapes add them.
 - The egress proxy program is the S2 image's; until the image ships it, the proxy container does not start, and `egress-allowlist` is reported `unknown`.
 - Windows named pipes with C1's DACL: the supervisor listens only on a Unix socket.

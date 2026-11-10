@@ -36,7 +36,7 @@ Every failure the contract defines is a `HomeLayoutError` with C1's `code`, the 
 
 ## The tree and its modes
 
-`ensureHomeTree(home, profile)` creates the home, each of Delo's top-level entries (`runtimes/`, `staging/`, `trust/`, `status/`, `catalogue/`, `secrets/`, `run/`, `supervisor/`, `bin/`, `alerts/`) and `run/<profile>/` at mode 0700 through `mkdir` with that mode, so the umask can only narrow it. It then checks the home, `secrets/` and `run/<profile>/` with `checkPrivateDirectory`, which refuses a symbolic link, another user's directory or one with a group or other bit set with `HOME_MODE` and the fix `chmod 700 <path>`. `checkPrivateDirectorySync(path)` runs the same check synchronously, for a caller on a synchronous path such as the log writer of [`@delo/logs`](../logs/README.md). An existing directory keeps its mode: nothing here changes a mode. Upstream's entries keep upstream's layout and modes, and this package creates none of them.
+`ensureHomeTree(home, profile)` creates the home, each of Delo's top-level entries (`runtimes/`, `staging/`, `trust/`, `status/`, `catalogue/`, `secrets/`, `run/`, `supervisor/`, `bin/`, `alerts/`) and `run/<profile>/` at mode 0700 through `mkdir` with that mode, so the umask can only narrow it. It then checks the home, `secrets/` and `run/<profile>/` with `checkPrivateDirectory`, which refuses a symbolic link, another user's directory or one with a group or other bit set with `HOME_MODE` and the fix `chmod 700 <path>`. `checkPrivateDirectorySync(path)` runs the same check synchronously, for a caller on a synchronous path such as the log writer of [`@delo/logs`](../logs/README.md). An existing directory keeps its mode: nothing here changes a mode. On Windows, which has no mode bits, neither check refuses anything ([not yet implemented](#not-yet-implemented)). Upstream's entries keep upstream's layout and modes, and this package creates none of them.
 
 ## Protected files
 
@@ -70,7 +70,7 @@ C1's protected files are every file under `secrets/`, `trust/`, `status/` and `c
 
 ## Not yet implemented
 
-- The Windows DACL check of C1's Windows rule ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory and protected-file checks look only at the file type.
+- The Windows DACL check of C1's Windows rule ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory check returns without checking anything, and the protected-file check looks only at the file type, so a home or a secret file that other users can read is not refused there.
 - The Windows named pipes with C1's DACL: the token channels listen only on Unix sockets.
 
 ## Development

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@delo/plugin-workspaces` provides the `deloWorkspaces` service, whose [Service Definition](src/service.ts) the main chat's account tools call. It creates empty workspace folders under one configured root, imports a repository into a new folder with `git clone`, reads and writes a workspace's `AGENTS.md`, and moves a folder with the workspaces in it to `root/.delo-trash` and back. Each workspace is an entry of upstream's workspace registry; the trash unregisters the workspaces it moves and registers them again on a restore. Imports and trash rows live in the plugin's own storage domain, so they survive a restart. The stock composition does not mount the plugin; Delo's studio bundle mounts it with its configuration.
+`@delo/plugin-workspaces` provides the `deloWorkspaces` service, whose [Service Definition](src/service.ts) the main chat's account tools call. It creates empty workspace folders under one configured root, imports a repository into a new folder with `git clone`, reads and writes a workspace's `AGENTS.md`, and moves a folder with the workspaces in it to `root/.delo-trash` and back. Each workspace is an entry of upstream's workspace registry; the trash unregisters the workspaces it moves and registers them again on a restore. Imports and trash rows live in the plugin's own storage domain, so they survive a restart. Neither the stock composition nor any Delo profile mounts the plugin; it is a bundle of its own that a profile can install, and the main chat, which calls it, is not mounted either.
 
 ## Contents
 

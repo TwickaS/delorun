@@ -10,8 +10,18 @@ English | [中文](c09-runtime-supervisor.zh.md)
 
 This contract defines how a workspace chooses where its commands run, and the one Delo component that talks to Docker. A runtime provider reports what the machine can isolate and enforce, and runs each workspace natively or in Docker in one of two shapes: S2, where each Docker workspace has its own container, and the limited S3, where one container isolates the computer but not the workspaces from each other. The Docker supervisor runs workspace containers only from image digests the verified release lists, under roots the person chose at setup, through a fixed-schema API on a socket under `~/.delo` that accepts only the current home-process start's token; it never passes a request through to Docker. Each limit is reported as enforced only when inspecting the machine shows it. The types package [`@delo/contract-runtime-supervisor`](../../packages/contract-runtime-supervisor/README.md) carries the interface, the schemas, the presets and the limits.
 
+## Status
+
+Nothing on this page is reached: no command or shipped profile runs a Docker workspace, and every workspace is native.
+
+- **Built, reached by nothing:** `@delo/supervisor`, with its fixed-schema API on the per-start token, its roots check, the capability report by probe container, the S2 workspace container with its hardening and internal network, and the image digest check. `delorun start` passes the home process no supervisor, so the home process never launches it, and nothing writes the supervisor's roots file. The container denial marker is built in upstream's sandbox, shell and PTC packages, and the sandbox's `containerDenialMarker` option is off by default and set by no shipped profile.
+- **Not built:** the `deloRuntime` provider and the `@delo/runtime-docker` package; the S2 helper channel and every S3 operation, which the supervisor refuses with `SHAPE_UNAVAILABLE`; credential forwarding other than none, which the supervisor refuses; the egress proxy program in the S2 image; setup's Docker step, its list of limits and the rootless engine offer; the studio's runtime choice; the `workspace-isolation` check, which `delorun verify` reports as not run; the named pipes on Windows.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them. What a native workspace's commands can reach on each platform is [C1](c01-home-layout.md)'s subject.
+
 ## Contents
 
+- [Status](#status)
 - [The runtime provider](#the-runtime-provider)
 - [The capability report](#the-capability-report)
 - [Docker shapes](#docker-shapes)

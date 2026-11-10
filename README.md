@@ -11,10 +11,12 @@ Delo is independent. It is not a DeepSeek product, and DeepSeek does not endorse
 Delo is pre-release. It has no tagged release yet, and interfaces and defaults can still change. Today the `delorun` command provides:
 
 - `setup`, `start`, `stop` and `status` to create the Delo home, run the home process and inspect it.
-- `doctor` to check the home, the profile and the installed plugins.
+- `doctor` to check the home's permissions, Docker, the DeepSeek API key's format and whether the studio's port is free.
 - `logs` to find, read, follow, clear and prune Delo's operational logs.
-- `recover` to see where the profile stands after an update and to roll back, restore a version or enter safe mode.
-- `plugin` and `headless`, which pass through to DeepSeek Harness's own commands unchanged.
+- `update` to show the newest release's report and apply it after you confirm, and `recover` to see where the profile stands after an update and to roll back, restore a version or enter safe mode.
+- `verify` to check the installed release against its signed manifest and the release log.
+- `trash`, `export` and `import` to restore or purge deleted chats and workspaces, and to move a chat or a workspace between homes as a signed archive.
+- `plugin` and `headless`, which run DeepSeek Harness's own commands and profiles unchanged. Delo's protections, consents and privacy defaults belong to the CLI profile that `delorun` starts, so none of them applies to `delorun headless`, which also uploads session logs to DeepSeek as stock does.
 
 Review the [safety notice](SAFETY.md) before running the project.
 
@@ -36,7 +38,7 @@ pnpm dsh web
 
 ## Compatibility with stock
 
-A stock user's plugins, profiles and sessions always load in Delo, and a recorded-session replay proves it at every upstream merge. Delo's interface and defaults may differ from stock. [Delo and stock DeepSeek Harness](delo/docs/guide/delo-vs-stock.md) lists every difference.
+Delo keeps upstream's plugin API, profile and Session formats compatible with stock. Before a change reaches the trunk, a check replays upstream's recorded scenarios with every model-visible Delo change switched off; it does not load a stock user's own plugins or profiles. Delo's interface and defaults may differ from stock. [Delo and stock DeepSeek Harness](delo/docs/guide/delo-vs-stock.md) lists every difference.
 
 ## Relationship to upstream
 

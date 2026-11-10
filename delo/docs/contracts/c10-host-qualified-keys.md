@@ -11,10 +11,22 @@ English | [中文](c10-host-qualified-keys.zh.md)
 
 The studio can hold connections to several homes, and two connections can share one browser origin. Host-qualified keys keep their client state and browser storage apart. Each connection has a host id, which the browser generates and never sends. A host-qualified key joins that host id with an upstream session or workspace id, and it names every persisted browser entry the studio writes. Upstream's ids, its request and response formats and its session events are unchanged, so no upstream client, SDK or stored session needs a new field. This page defines the host id, the key forms, the inventory of persisted browser keys and the rule that every persisted key carries a host id.
 
+<a id="status"></a>
+## Status
+
+The key forms are built; no host id is ever set, so the studio writes every entry under upstream's stock name.
+
+- **Built, reached by nothing:** `setPersistenceHostId` and `qualifiedPersistKey` in `packages/client/store`, which `ui-conversation`, `ui-schedule` and `ui-sidebar-right` use for their entries. Nothing outside tests calls `setPersistenceHostId`, and without a host id `qualifiedPersistKey` returns the bare stock name.
+- **Built and reached:** a purge from the studio's Trash section removes the purged chat's draft entries under the bare name and under every host-qualified name in the browser that performs it.
+- **Not built:** the studio's connection list and the creation of a host id per connection; host-qualified names for the shortcuts, terminal, user-question, workspace-view and sidebar-browser entries, which do not call `qualifiedPersistKey`; the rule that every persisted entry carries a host id and that stock entries are not read, since the studio reads and writes the stock names; the enumeration spec and the separation of two connections' browser state.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Host id](#host-id)
   - [Host-qualified keys](#host-qualified-keys)

@@ -23,7 +23,7 @@ Import the names and limits instead of restating them:
 import { PRIVATE_DIR_MODE, RUN_ENTRIES, type ConfinementReport } from '@delo/contract-home-layout'
 ```
 
-The package is a dependency of `delo/apps/cli`, `delo/packages/home`, `delo/packages/runtime-store`, `delo/packages/home-process`, `delo/packages/supervisor` and `delo/packages/integrity`, and of the other contract packages that share its token and version types.
+The package is a dependency of `delo/apps/cli`, `delo/packages/home`, `delo/packages/runtime-store`, `delo/packages/home-process`, `delo/packages/supervisor` and the other Delo packages that read or write the home, and of the other contract packages that share its token and version types.
 
 ## Exports
 

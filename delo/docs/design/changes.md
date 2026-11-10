@@ -32,7 +32,7 @@ Delo runs upstream's plugin loading unchanged, so this is also what Delo does to
 
 ## What exists today
 
-- `delorun recover --safe-mode` marks the next start to boot the profile without its third-party bundles and the person's rows for them, without writing any profile file; `--exit-safe-mode` ends it. `delorun recover` also reports the profile's state, rolls back to the snapshot an update took and restores a profile history version.
+- `delorun recover safe-mode` marks the next start to boot the profile without its third-party bundles and the person's rows for them, without writing any profile file; `delorun recover exit-safe-mode` ends it. `delorun recover` (or `recover status`) also reports the profile's state, `recover rollback` rolls back the last recorded update, and `recover restore <version>` restores a profile history version.
 - `delorun doctor` checks Docker, the DeepSeek API key's format, the home and the studio's port. It reports nothing about plugins.
 - There is no Changes surface, no store of approved content, no work session, no protection setting, and no per-plugin safe mode. `delorun verify` checks the installed release's files and its signature, and reports its other checks, the plugin check among them, as not run.
 
@@ -55,7 +55,7 @@ Delo runs upstream's plugin loading unchanged, so this is also what Delo does to
 12. **A bad start leaves the last change out.** When a start fails, or fails the update health check, and the newest entry in Changes is a plugin or harness change, Delo tries once more without that entry. The entry is marked "left out at start" with the failure, and the terminal and the studio name it and offer Apply again and Undo. The retry writes no profile file: the change is left out by the same overlay safe mode uses. A second failure stops with the full safe-mode command. Nothing is deleted.
 13. **A recovery screen that needs no plugin.** The studio's page carries a small built-in screen, part of the boot page and of no plugin, that shows when the studio fails to render and at a fixed loopback address: what failed, the recent changes, and the actions Turn off, Undo and Safe mode. Its routes are the Host's own, owner-only and loopback-only; a remote session gets "This needs you at your computer".
 14. **A failed reload goes back.** When replacing a plugin fails, Delo reloads the last version that loaded, from the approved store or, in a work session, the last content that loaded, and shows the error in the studio and the terminal. A work session stays open and keeps watching for the next edit.
-15. **Safe mode in two sizes.** `delorun recover --safe-mode` starts without every third-party plugin; `delorun changes off <plugin>` and `on <plugin>`, and the recovery screen, start without one. Both are entries in Changes, so they are visible and undone the same way.
+15. **Safe mode in two sizes.** `delorun recover safe-mode` starts without every third-party plugin; `delorun changes off <plugin>` and `on <plugin>`, and the recovery screen, start without one. Both are entries in Changes, so they are visible and undone the same way.
 16. **`doctor` names the cause.** For a failed start or a failed render, `delorun doctor` names the plugin whose code failed and the change that introduced it.
 
 ## What this does not protect against

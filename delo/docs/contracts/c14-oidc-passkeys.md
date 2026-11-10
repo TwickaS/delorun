@@ -11,10 +11,21 @@ English | [中文](c14-oidc-passkeys.zh.md)
 
 Reach asks for an identity factor in addition to device approval: a passkey, or a sign-in at the person's own OpenID Connect provider. The home is the relying party for both. This page defines which factors each reach address can use, the passkey relying-party ID of each address, how the home registers as a client at the person's provider, the authorization flow with its nonce, PKCE and issuer checks, the claims and audience the home requires, the owner identity it pins, how it fetches and rotates signing keys, and the rules that bind the Delo Run issuer, a fast-follow. A factor never replaces device approval ([C5](c05-device-approval.md)). The types package [`@delo/contract-oidc-passkeys`](../../packages/contract-oidc-passkeys/README.md) carries the rules, claims, codes and limits.
 
+<a id="status"></a>
+## Status
+
+Nothing on this page is built: the home has no passkey relying party, no OpenID Connect client and no sign-in route, and no reach address exists.
+
+- **Built and reached:** setup's answers schema names `reach.identityFactor` and refuses any value other than `null` in a `--config` document ([C11](c11-setup-answers.md)).
+- **Not built:** passkey enrolment and assertion with user verification and counters; client registration at the person's provider; the authorization flow with `state`, `nonce`, PKCE and issuer checks; ID token checks and signing-key rotation; the pinned owner subject; re-authentication; the Delo Run issuer.
+
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them. The [reach design](../design/reach.md) states that the private tailnet route signs in with the approved device key alone, with no passkey or OpenID Connect; where this page lists an identity factor for `tailscale-private`, the design supersedes it.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Relying-party IDs](#relying-party-ids)
   - [Enrolment](#enrolment)

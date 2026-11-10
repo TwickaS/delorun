@@ -10,7 +10,7 @@ English | [中文](README.zh.md)
 
 This app is the relay data plane of [contract C6](../../docs/contracts/c06-relay-protocol.md): one Node service that accepts browser connections on TCP port 443 and the homes' outbound WebSocket tunnels, then passes each browser connection's encrypted bytes to the home that registered its name.
 The person runs it on their own server and domain.
-`delo/packages/reach/` is the home's side of the same contract, and `@delo/contract-relay-protocol` carries the frame types, codes and limits.
+The home's side of the same contract, the relay client, is not built: no home can open a tunnel to this relay, so no Delo installation uses it. `@delo/contract-relay-protocol` carries the frame types, codes and limits.
 
 The data plane takes no socket of its own: `src/relay.ts` holds the state and every refusal, and `src/node/server.ts` is the transport that reads the ClientHello, terminates TLS for the tunnel host and upgrades the tunnel.
 A spec therefore drives the whole plane through in-memory connections, and one spec drives it through the real listener on loopback.
@@ -162,6 +162,6 @@ The app also registers a driver for C20's cross-surface denial suite (`delo/pack
 
 ## Not in this app yet
 
-- **Rebinding's 60-second delay and announcement.** The configuration checks a rebind statement's self-consistency, and a changed binding's statement, its delay and C6's `tunnel-rebound` announcement wait for the binding history in `stateDir`.
-- **Certificate monitoring.** C6 gives it to `delo/packages/certificates/`.
+- **Rebinding's signature check, 60-second delay and announcement.** The configuration checks that a rebind statement names its binding's name and new key, and does not verify the old key's signature. A changed binding takes effect when the relay restarts with the edited configuration, with no delay and no `tunnel-rebound` announcement; those wait for the binding history in `stateDir`.
+- **Certificate monitoring.** C6 gives it to the home, and no home-side certificate monitoring is built.
 - **The Delo relay.** Relay control and `delo.run` names are C6's fast-follow, and the data plane serves the self-hosted relay only.

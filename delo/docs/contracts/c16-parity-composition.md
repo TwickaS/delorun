@@ -11,10 +11,19 @@ English | [中文](c16-parity-composition.zh.md)
 
 The parity composition is the configuration under which Delo replays upstream's recorded scenarios at the base tag `dsh-v0.2.2-rc.1` and reproduces their expected output byte for byte. It is Delo's runtime with the studio bundle, which the studio packages deliver, switched off, every model-visible Delo change switched off, and each listed Delo default set to its upstream value wherever the replay exercises it. Delo's default composition is not held to this contract; Delo's own recorded scenarios prove it. This page defines the composition, the switch registry that makes each model-visible change switchable, how the replay lane selects the composition, the pass rule and the switch sweep.
 
+<a id="status"></a>
+## Status
+
+The parity composition, the overlay, the registry and the replay lane are built; four registry defaults and one changed default are not applied by any shipped profile.
+
+- **Built and reached:** the overlay, which only the replay lane selects through `DSH_SNAPSHOT_PATCH`; the registry `PARITY_SWITCHES`; and the CLI profile's rows for the consent and guard switches, the update gate and the protected home, each with its switch on.
+- **Not applied:** no shipped row sets `preset_inspect`, `plugin_manager_read_exemption`, `profile_history` or `container_denial_marker`, so the CLI profile runs each at its Config default, the parity value, off, although the registry's default is on; and no shipped row selects `ptc` as the onboarding preset, so the CLI profile keeps upstream's `standard`.
+
 <a id="contents"></a>
 ## Contents
 
 - [Summary](#summary)
+- [Status](#status)
 - [Contract](#contract)
   - [Composition](#composition)
   - [Changed defaults](#changed-defaults)
@@ -49,12 +58,12 @@ Delo changes the following upstream defaults on purpose. The parity composition 
 | Default | Delo default composition | Parity composition | Reason for the parity value |
 | --- | --- | --- | --- |
 | Studio additions (`studio_additions`) | On, with one switch for the stock look | Off, which is the stock look | Recorded web scenarios compare upstream's interface output. |
-| Agent preset selected in studio onboarding (`agent-preset-registry.config.default`) | `ptc` | `standard`, upstream's composed default | A scenario that does not name a preset runs on the composed default, so the replay needs upstream's value. |
+| Agent preset selected in studio onboarding (`agent-preset-registry.config.default`) | `ptc` in the registry; no shipped row sets it, so the CLI profile keeps `standard` | `standard`, upstream's composed default | A scenario that does not name a preset runs on the composed default, so the replay needs upstream's value. |
 | Per-workspace permission preset (`permission_defaults`) | A new workspace starts on `workspace-write`. Selecting `danger-full-access` for a workspace needs one consent for that workspace. | Upstream's composed defaults (`sandbox-policy.config.mode` `workspace-write`, `approval.config.policy` `ask`) with no consent requirement | The resolved permission policy reaches each model request through the system prompt context, and the recorded scenario `permission-policy-context` replays it. |
 | Desktop analytics (`product-analytics.config.enabled`) | `false` | `false`, Delo's value kept | Not needed: the replay mounts no desktop Host, because the `sdk-desktop` composition runs the `sdk` profile. |
 | DeepSeek session-log upload (`session-log-deepseek.config.enabled`) | `false` | `true`, upstream's value | Recorded scenarios ran with the upload on unless their replay layer sets it to `false`; the overlay precedes those layers. |
 | `web_fetch` guard (`fetch_guard`) | On | Off | Recorded fetch scenarios call loopback fixtures, which the guard refuses. |
-| `preset_inspect` (`preset_inspect`) | On, and switchable | Off | The tool is model-visible and absent from the base tag. |
+| `preset_inspect` (`preset_inspect`) | On in the registry; no shipped row sets it, so the CLI profile runs it off | Off | The tool is model-visible and absent from the base tag. |
 | Doctor (`doctor`) | On, and switchable | Off | The doctor is a command the person runs, not a model-visible tool; it is absent from the base tag. |
 
 DeepSeek session-log upload is off in every profile that mounts `@delo/bundle-local`: `delorun`'s CLI profile, and any other profile that adds the bundle. A profile that does not mount it keeps the plugin's own default, on: upstream's bare `dsh` launcher on the `web` profile, which Delo also ships, still uploads the session log, and the recorded-session replay keeps upstream's value for the corpora whose replay layer does not turn it off. The difference is the entry point, not a switch — Delo writes the row from a bundle it delivers, and edits no upstream default for a profile it does not run.
@@ -83,7 +92,7 @@ The registry has these entries.
 | `update_turn_refusal` | `@delo/bundle-local`, its `delo-update-gate` row | On | Off | The refusal of the first step of every new turn with `UPDATE_PENDING` while `delorun`'s chat gate is held ([C19](c19-home-process.md)), so the turn ends with that message and no model request. |
 | `sandbox_protected_reads` | Delo's edit of upstream's `glob`, `grep` and `present` tools | On: `@delo/bundle-local`'s `sandbox` row sets `protectedHome` | Off: the parity overlay leaves the `sandbox` row to upstream, which sets no `protectedHome` | Whether the search tools and `present` refuse the sandbox provider's protected reads: a search rooted under the Delo home is refused and its paths are left out of a wider search, and a file under the home is not presented, as `read` and `read_image` already refuse them. |
 
-A registry entry's `defaultValue` applies in Delo's default composition, and its `parityValue` applies in the parity composition. A built switch's field is either a boolean Config field, whose schema default is the parity value, or a presence field: a Config key whose JSDoc names the switch and which Delo's default composition sets on the module's row and the parity composition does not. A presence switch is on by default and off at parity, and `parity-switches` with its specs checks both compositions' rows. Configuration sets each switch value. A switch registered by an upstream edit is a hook or configuration field added upstream, and the behaviour it controls lives under `delo/`.
+A registry entry's `defaultValue` is the value the registry gives Delo's default composition, and its `parityValue` applies in the parity composition. The CLI profile applies the `defaultValue` of every built switch except `preset_inspect`, `plugin_manager_read_exemption`, `profile_history` and `container_denial_marker`, which no shipped row sets, so each runs its Config default, off. A built switch's field is either a boolean Config field, whose schema default is the parity value, or a presence field: a Config key whose JSDoc names the switch and which Delo's default composition sets on the module's row and the parity composition does not. A presence switch is on by default and off at parity, and `parity-switches` with its specs checks both compositions' rows. Configuration sets each switch value. A switch registered by an upstream edit is a hook or configuration field added upstream, and the behaviour it controls lives under `delo/`.
 
 <a id="replay-lane"></a>
 ### Replay lane
