@@ -38,7 +38,9 @@
  * of WSL only (`checks/machine.ts`). Logs, the report and each check's last
  * duration go under `node_modules/.cache/delo-checks/`; a check that declares its
  * inputs and passed under the same key is served from the pass cache
- * (`checks/cache.ts`). A run of a tree that a record covers reports the record and starts nothing, and a passing
+ * (`checks/cache.ts`), from this worktree's passes or from the machine-wide store
+ * under the user's cache directory (`checks/shared-cache.ts`) for the checks
+ * `checks/sharing.ts` shares; `--no-shared-cache` keeps a run to its worktree. A run of a tree that a record covers reports the record and starts nothing, and a passing
  * pre-push run records its pass (`checks/tree-pass.ts`) in the git common directory, shared by every worktree of the clone.
  *
  * @module @delo/tools/run-checks
@@ -50,13 +52,15 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { z } from 'zod'
-import { contentId, createPassCache, passCacheEnabled, type PassCache } from './checks/cache.ts'
-import { GATES } from './checks/gates/index.ts'
+import { cacheUse, contentId, createPassCache, type PassCache, type SharedUse } from './checks/cache.ts'
+import { FUNDAMENTALS_INPUTS, GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, withSecurityPackages, type Budgets, type Check, type ForkPackage, type GateTier, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { isLightPlan, gatePriority, processGuard, takeTurn } from './checks/run-queue.ts'
 import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
+import { openSharedStore, sharedCacheDir } from './checks/shared-cache.ts'
+import { declarationReaders, securityPackageDirs, sharingPolicy } from './checks/sharing.ts'
 import { readWebSpecs } from './checks/web.ts'
 import { nodeWarning, pinnedNodeMajor } from './setup-worktree.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
@@ -366,7 +370,10 @@ function cacheState(check: Check, cache: PassCache | undefined): string {
   if (cache === undefined) return 'off (--no-cache, CI, or a full pre-push gate)'
   const key = cache.keyOf(check)
   if (key === undefined) return 'always runs (no declared inputs)'
-  return cache.has(check, key) ? `cached pass (${key.slice(0, 12)})` : 'runs (no stored pass for its key)'
+  const source = cache.lookup(check, key)
+  const unshared = cache.unshared(check)
+  const sharing = unshared === undefined ? 'shared across worktrees' : `not shared: ${unshared}`
+  return source === undefined ? `runs (no stored pass for its key; ${sharing})` : `cached pass (${source}, ${key.slice(0, 12)}; ${sharing})`
 }
 
 /**
@@ -392,17 +399,31 @@ function commandText(check: Check): string {
  * @param root - the repository root.
  * @param results - the run's results.
  */
-function writeReport(root: string, results: readonly Result[]): void {
+function writeReport(root: string, results: readonly Result[], sharedDir: string | undefined): void {
   const memory = memoryReport()
   const report = {
     peakBytes: memory?.peakBytes ?? null,
     oomKills: memory?.oomKills ?? null,
+    passCache: { ...cacheCounts(results), sharedDir: sharedDir ?? null },
     checks: results.map(result => ({
-      check: result.id, status: result.outcome, cached: result.cached === true, reason: result.detail ?? null, logPath: result.log === undefined ? null : relative(root, result.log),
+      check: result.id, status: result.outcome, cached: result.cached === true, cacheSource: result.cacheSource ?? null, reason: result.detail ?? null, logPath: result.log === undefined ? null : relative(root, result.log),
       durationSeconds: Math.round(result.seconds * 10) / 10, peakBytes: result.peakBytes ?? null, oomKilled: result.oomKilled === true,
     })),
   }
   writeFileSync(join(root, REPORT), `${JSON.stringify(report, null, 2)}\n`)
+}
+
+/**
+ * How the run's checks were served: from this worktree's passes, from the machine-wide store, or run.
+ * @param results - the run's results.
+ * @returns the counts.
+ */
+export function cacheCounts(results: readonly Result[]): { readonly local: number, readonly shared: number, readonly ran: number } {
+  return {
+    local: results.filter(result => result.cacheSource === 'local').length,
+    shared: results.filter(result => result.cacheSource === 'shared').length,
+    ran: results.filter(result => result.cached !== true && (result.outcome === 'passed' || result.outcome === 'failed')).length,
+  }
 }
 
 /**
@@ -424,12 +445,13 @@ function summarize(results: readonly Result[], milliseconds: number, root: strin
   const count = (predicate: (result: Result) => boolean): number => results.filter(predicate).length
   const passed = count(result => result.outcome === 'passed' && result.cached !== true)
   const cached = count(result => result.cached === true)
+  const sources = cacheCounts(results)
   const skipped = count(result => result.outcome === 'skipped')
   const peak = memory?.peakBytes === undefined ? '' : `, peak memory ${(memory.peakBytes / GIB).toFixed(1)} GiB`
   const oom = memory !== undefined && memory.oomKills > 0 ? `, ${String(memory.oomKills)} process(es) stopped at the memory ceiling` : ''
   for (const each of declined) console.log(`\n── ${each.id} declined: ${each.detail ?? 'this host cannot run it'}`)
   const named = failures.length === 0 ? '' : ` (${failures.map(failure => failure.id).join(', ')})`
-  console.log(`\ndelo checks: ${String(passed)} passed, ${String(cached)} cached, ${String(failures.length)} failed${named}, ${String(declined.length)} declined, ${String(skipped)} skipped in ${formatSeconds(milliseconds / 1000)}${peak}${oom}; report: ${REPORT}`)
+  console.log(`\ndelo checks: ${String(passed)} passed, ${String(cached)} cached (${String(sources.local)} in this worktree, ${String(sources.shared)} shared), ${String(failures.length)} failed${named}, ${String(declined.length)} declined, ${String(skipped)} skipped in ${formatSeconds(milliseconds / 1000)}${peak}${oom}; report: ${REPORT}`)
   return failures.length === 0 ? 0 : 1
 }
 
@@ -493,6 +515,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
       'workers': { type: 'string' },
       'no-scope': { type: 'boolean', default: false },
       'no-cache': { type: 'boolean', default: false },
+      'no-shared-cache': { type: 'boolean', default: false },
       'tier': { type: 'string' },
     },
   })
@@ -569,8 +592,14 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     if (gateTier !== undefined) mode += `, ${gateTier} tier`
     if (values['pre-push']) console.log(pushBase === undefined ? 'delo checks: the full gate for this push' : `delo checks: what changed since ${pushBase.slice(0, 10)} for this push (DELO_FULL_GATE=1 for the full gate)`)
   }
-  const cache = passCacheEnabled({ noCache: values['no-cache'], fullGate }, env)
-    ? createPassCache({ root, dir: join(root, CACHE_DIR, 'pass'), env, nodeVersion: process.version, pnpmVersion: () => pnpmVersionOf(root) })
+  const use = cacheUse({ preCommit: values['pre-commit'], tier: gateTier, only: list(values.only), noCache: values['no-cache'], noSharedCache: values['no-shared-cache'], fullGate }, env)
+  const shared: SharedUse | undefined = use.shared
+    ? { store: openSharedStore(sharedCacheDir(env), { root, uid: process.getuid?.() ?? -1, now: () => Date.now() }), noReads: use.noReads }
+    : undefined
+  const configs = tree.programs.map(program => ({ config: program.config, references: /"references"\s*:/.test(readFileSync(join(root, program.config), 'utf8')) }))
+  const policy = sharingPolicy({ packages: tree.packages, upstream: tree.upstream, securityPackages: securityPackageDirs(FUNDAMENTALS_INPUTS), declarationReaders: declarationReaders(configs, tree.packages) })
+  const cache = use.on
+    ? createPassCache({ root, dir: join(root, CACHE_DIR, 'pass'), env, nodeVersion: process.version, pnpmVersion: () => pnpmVersionOf(root), platform: `${process.platform}-${process.arch}`, policy, shared, strict: use.strict, warn: line => { console.warn(line) } })
     : undefined
 
   if (values.plan) {
@@ -657,7 +686,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   })
   rmSync(scratch, { recursive: true, force: true })
   writeDurations(root, durations, results)
-  writeReport(root, results)
+  writeReport(root, results, shared?.store.dir)
   if (before !== undefined && !results.some(result => gateFailure(result, gateTier))) {
     const written = recordTreePass(treeRecords, { before, after: treeState(root), base: changed === undefined ? null : treeOfRef(root, changed.base), plan, results }, facts, new Date())
     console.log(written.recorded ? `delo checks: this tree's pass is recorded in ${treePassPath(treeRecords, before.tree, process.version)}` : `delo checks: this tree's pass is not recorded: ${written.reason}`)

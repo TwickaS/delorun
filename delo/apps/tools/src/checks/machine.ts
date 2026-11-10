@@ -18,6 +18,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { RUNNER_CONTROL_ENV } from './cache.ts'
 
 const GIB = 1024 ** 3
 
@@ -180,13 +181,14 @@ function confineToLinux(env: NodeJS.ProcessEnv): void {
  * test lanes: React's entry then loads its production build, whose `act`
  * throws under @testing-library/react. Unset, vitest defaults it to `test`,
  * the value upstream's CI specs run under; build tools keep their own
- * production defaults.
+ * production defaults. The variables that steer the runner ({@link RUNNER_CONTROL_ENV}) are removed too: a check's
+ * result must not depend on the tier or priority of the run that started it, since the pass cache does not key them.
  * @param env - the environment to start from.
  * @param scratch - the run's scratch directory.
  * @returns a new environment.
  */
 export function checkEnvironment(env: NodeJS.ProcessEnv, scratch: string): NodeJS.ProcessEnv {
-  const clean: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('GIT_') && name !== 'NODE_ENV'))
+  const clean: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('GIT_') && name !== 'NODE_ENV' && !RUNNER_CONTROL_ENV.includes(name)))
   confineToLinux(clean)
   return { ...clean, TMPDIR: scratch, TMP: scratch, TEMP: scratch, NO_COLOR: '1', FORCE_COLOR: '0' }
 }

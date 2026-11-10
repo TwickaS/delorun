@@ -10,7 +10,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createWriteStream, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PassCache } from './cache.ts'
+import type { PassCache, PassSource } from './cache.ts'
 import type { GateTier, Planned } from './plan.ts'
 
 /** How a check ended. */
@@ -67,6 +67,8 @@ export interface Result {
   readonly detail?: string
   /** Whether a stored pass with the same key served the result, so the check did not run. */
   readonly cached?: boolean
+  /** Where the stored pass that served the result was kept: this worktree or the machine-wide store. */
+  readonly cacheSource?: PassSource
   /** The resident memory of its process group at its peak, sampled every half second. */
   readonly peakBytes?: number
   /** Whether the kernel's out-of-memory killer stopped one of its processes. */
@@ -220,8 +222,9 @@ export async function runPlan(plan: readonly Planned[], options: RunOptions): Pr
         }
         if (unmet.length > 0) continue
         const key = keys.get(check.id)
-        if (key !== undefined && options.cache?.has(check, key) === true) {
-          finish(check, { id: check.id, outcome: 'passed', seconds: 0, cached: true, detail: `cached pass (${key.slice(0, 12)})` })
+        const source = key === undefined ? undefined : options.cache?.lookup(check, key)
+        if (key !== undefined && source !== undefined) {
+          finish(check, { id: check.id, outcome: 'passed', seconds: 0, cached: true, cacheSource: source, detail: `cached pass (${source === 'shared' ? 'shared, ' : ''}${key.slice(0, 12)})` })
           continue
         }
         if (alone || (check.exclusive === true && running.size > 0)) continue

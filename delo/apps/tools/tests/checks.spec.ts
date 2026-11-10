@@ -633,6 +633,11 @@ describe('the machine budget', () => {
     expect(env).not.toHaveProperty('NODE_ENV')
   })
 
+  it('hands checks none of the variables that steer the runner, which the pass cache does not key', () => {
+    const env = checkEnvironment({ PATH: '/usr/bin', DELO_TIER: 'merge', DELO_GATE_PRIORITY: 'trunk', DELO_FULL_GATE: '1', DELO_PUSH_SKIP: 'tests', DELO_CHECKS_SCOPE: '1', DELO_DOCKER_SPECS: '1' }, '/dev/shm/run')
+    expect(Object.keys(env).filter(name => name.startsWith('DELO_'))).toEqual(['DELO_DOCKER_SPECS'])
+  })
+
   it('confines checks to the Linux side of WSL: no Windows PATH directories, no WSL interop variables', () => {
     const env = checkEnvironment({ PATH: '/usr/bin:/mnt/c/Windows/system32:/usr/local/bin', WSL_DISTRO_NAME: 'Ubuntu', WSL_INTEROP: '/run/WSL/1_interop', WSLENV: 'X', DISPLAY: ':0', NoDefaultCurrentDirectoryInExePath: '1' }, '/tmp/run')
     expect(env['PATH']).toBe('/usr/bin:/usr/local/bin')

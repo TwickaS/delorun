@@ -15,7 +15,7 @@ const GATE_DIR = 'delo/apps/tools/src/checks/gates'
  * page names. The gate fails when the page names a file this list does not, so a pass is never reused after a named
  * file changed.
  */
-const FUNDAMENTALS_INPUTS = [
+export const FUNDAMENTALS_INPUTS: readonly string[] = [
   'delo/docs/security/fundamentals.md',
   `${GATE_DIR}/fundamentals.ts`,
   `${GATE_DIR}/index.ts`,

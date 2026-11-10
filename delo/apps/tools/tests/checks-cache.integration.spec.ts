@@ -10,10 +10,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createPassCache, passCacheEnabled, type PassCache } from '../src/checks/cache.ts'
+import { cacheUse, createPassCache, keyedEnvironment, passCacheEnabled, type PassCache, type PassCacheOptions } from '../src/checks/cache.ts'
 import type { Planned } from '../src/checks/plan.ts'
+import { openSharedStore } from '../src/checks/shared-cache.ts'
+import { sharingPolicy } from '../src/checks/sharing.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
-import { main, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
+import { cacheCounts, main, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
 
 const ZERO = '0'.repeat(40)
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -77,8 +79,20 @@ function makeRepo(): string {
  * @param options - the Node version, the pnpm version and the environment.
  * @returns the cache.
  */
-function cacheFor(root: string, options: { nodeVersion?: string, pnpmVersion?: string, env?: NodeJS.ProcessEnv } = {}): PassCache {
-  return createPassCache({ root, dir: join(root, 'node_modules', '.cache', 'delo-checks', 'pass'), env: options.env ?? {}, nodeVersion: options.nodeVersion ?? 'v24.9.0', pnpmVersion: () => options.pnpmVersion ?? '11.28.5' })
+function cacheFor(root: string, options: { pnpmVersion?: string } & Partial<Omit<PassCacheOptions, 'pnpmVersion' | 'shared'>> & { shared?: PassCacheOptions['shared'] } = {}): PassCache {
+  return createPassCache({
+    root,
+    dir: join(root, 'node_modules', '.cache', 'delo-checks', 'pass'),
+    nodeVersion: options.nodeVersion ?? 'v24.9.0',
+    platform: 'linux-x64',
+    policy: sharingPolicy({ packages: [], upstream: [], securityPackages: [], declarationReaders: [] }),
+    strict: false,
+    warn: () => undefined,
+    ...options,
+    env: options.env ?? {},
+    pnpmVersion: () => options.pnpmVersion ?? '11.28.5',
+    shared: options.shared,
+  })
 }
 
 /**
@@ -188,10 +202,11 @@ describe('the pass cache', () => {
   })
 
   it('invalidates when a listed environment variable changes, and not when an unlisted one does', async () => {
-    const listed = plan.map(check => check.id === 'a' ? { ...check, env: ['DELO_CACHE_TEST_VALUE'] } : check)
-    await runWith(root, listed, cacheFor(root, { env: { DELO_CACHE_TEST_VALUE: '1' } }))
-    expect(cachedFlags(await runWith(root, listed, cacheFor(root, { env: { DELO_CACHE_TEST_VALUE: '2' } })))).toEqual([['a', false], ['b', true], ['c', false]])
-    expect(cachedFlags(await runWith(root, listed, cacheFor(root, { env: { DELO_CACHE_TEST_VALUE: '2', UNLISTED: 'x' } })))).toEqual([['a', true], ['b', true], ['c', false]])
+    const listed = plan.map(check => check.id === 'a' ? { ...check, env: ['CACHE_TEST_VALUE'] } : check)
+    await runWith(root, listed, cacheFor(root, { env: { CACHE_TEST_VALUE: '1' } }))
+    expect(cachedFlags(await runWith(root, listed, cacheFor(root, { env: { CACHE_TEST_VALUE: '2' } })))).toEqual([['a', false], ['b', true], ['c', false]])
+    expect(cachedFlags(await runWith(root, listed, cacheFor(root, { env: { CACHE_TEST_VALUE: '2', UNLISTED: 'x' } })))).toEqual([['a', true], ['b', true], ['c', false]])
+    expect(cachedFlags(await runWith(root, listed, cacheFor(root, { env: {} })))).toEqual([['a', false], ['b', true], ['c', false]])
   })
 
   it('treats a corrupt or foreign pass entry as absent, so its check runs again', async () => {
@@ -229,6 +244,30 @@ describe('when the cache serves a run', () => {
   })
 })
 
+describe('how a run uses the cache', () => {
+  const run = { preCommit: false, tier: 'agent' as const, only: [], noCache: false, noSharedCache: false, fullGate: false }
+
+  it('reads shared passes in the agent tier and in an --only run without a tier', () => {
+    expect(cacheUse(run, {})).toEqual({ on: true, shared: true, strict: false })
+    expect(cacheUse({ ...run, tier: undefined, only: ['tests:fork'] }, {})).toEqual({ on: true, shared: true, strict: false })
+  })
+
+  it('reads no shared pass and serves security-class and merge-only checks from no cache in the merge tier, a trunk-priority run and the full gate', () => {
+    const last = { on: true, shared: true, strict: true, noReads: 'the merge tier and the full gate read no shared pass' }
+    expect(cacheUse({ ...run, tier: 'merge' }, {})).toEqual(last)
+    expect(cacheUse(run, { DELO_GATE_PRIORITY: 'trunk' })).toEqual(last)
+    expect(cacheUse({ ...run, tier: undefined }, {})).toEqual(last)
+  })
+
+  it('reads no shared pass in the pre-commit tier, and shares nothing with --no-shared-cache, --no-cache, CI or a full pre-push gate', () => {
+    expect(cacheUse({ ...run, tier: undefined, preCommit: true }, {})).toEqual({ on: true, shared: true, strict: false, noReads: 'the pre-commit tier reads no shared pass' })
+    expect(cacheUse({ ...run, noSharedCache: true }, {})).toEqual({ on: true, shared: false, strict: false })
+    expect(cacheUse({ ...run, noCache: true }, {})).toMatchObject({ on: false, shared: false })
+    expect(cacheUse(run, { CI: '1' })).toMatchObject({ on: false, shared: false })
+    expect(cacheUse({ ...run, fullGate: true }, {})).toMatchObject({ on: false, shared: false })
+  })
+})
+
 describe('the pre-push base', () => {
   it('measures a new branch from its merge base with v5, and a pushed branch from its remote tip, and runs the full gate when asked', () => {
     const root = makeRepo()
@@ -254,7 +293,8 @@ describe('the --plan mode', () => {
   const invocations: Array<readonly [string[]]> = [[['--plan']], [['--', '--plan']], [['--changed', '--', '--plan']]]
   it.each(invocations)('prints the selection and runs nothing for the arguments %j: no log directory, no report, and no pass cache', (args: string[]) => {
     const root = makeRepo()
-    const output = execFileSync(tsx, [join(repoRoot, 'delo', 'apps', 'tools', 'src', 'run-checks.ts'), ...args], { cwd: root, env: gitEnv(), encoding: 'utf8', timeout: 60_000 })
+    const store = join(tempDir('delo-cache-plan-store-'), 'store')
+    const output = execFileSync(tsx, [join(repoRoot, 'delo', 'apps', 'tools', 'src', 'run-checks.ts'), ...args], { cwd: root, env: { ...gitEnv(), DELO_CHECKS_SHARED_CACHE: store }, encoding: 'utf8', timeout: 60_000 })
     expect(output).toMatch(/^delo checks \(plan\): \d+ checks/m)
     expect(output).toContain('pass cache:')
     expect(existsSync(join(root, 'node_modules', '.cache', 'delo-checks', 'logs'))).toBe(false)
@@ -292,5 +332,169 @@ describe('the gate tier of a run', () => {
     await expect(main(['--changed', '--tier', 'full'])).rejects.toThrow('--tier takes agent or merge, got full')
     await expect(main(['--pre-commit', '--tier', 'merge'])).rejects.toThrow('does not apply to --pre-commit or the full gate')
     await expect(main(['--tier', 'merge'])).rejects.toThrow('does not apply to --pre-commit or the full gate')
+  })
+})
+
+describe('the machine-wide pass store', { timeout: 30_000 }, () => {
+  let store: string
+  let markers: string
+  const ID = 'gates:package-states'
+  const shareable = (marker: string, extra: Partial<Planned> = {}): Planned => markedCheck(ID, marker, { inputs: ['src/**'], ...extra })
+
+  /**
+   * A second worktree of a repository, detached at its HEAD.
+   * @param root - the repository.
+   * @returns the worktree's root.
+   */
+  function worktreeOf(root: string): string {
+    const dir = join(tempDir('delo-cache-worktree-'), 'tree')
+    git(root, ['worktree', 'add', '-q', '--detach', dir, 'HEAD'])
+    return dir
+  }
+
+  beforeEach(() => {
+    store = tempDir('delo-cache-store-')
+    markers = tempDir('delo-cache-markers-')
+  })
+
+  /**
+   * A cache of a repository that shares through the test's store.
+   * @param root - the repository, standing for one worktree.
+   * @param extra - options over the defaults, such as `strict` or the store's `noReads`.
+   * @returns the cache.
+   */
+  function sharing(root: string, extra: Partial<Omit<PassCacheOptions, 'shared' | 'pnpmVersion'>> & { noReads?: string } = {}): PassCache {
+    const { noReads, ...rest } = extra
+    return cacheFor(root, { shared: { store: openSharedStore(store, { root, uid: process.getuid?.() ?? 0, now: () => Date.now() }), ...noReads === undefined ? {} : { noReads } }, ...rest })
+  }
+
+  it('serves a pass proven in one worktree to another worktree with the same inputs, and names the source', async () => {
+    const first = makeRepo()
+    const second = worktreeOf(first)
+    const marker = join(markers, 'shared')
+    await runWith(first, [shareable(marker)], sharing(first))
+    const results = await runWith(second, [shareable(marker)], sharing(second))
+    expect(results.map(result => [result.cached, result.cacheSource])).toEqual([[true, 'shared']])
+    expect(results[0]?.detail).toMatch(/^cached pass \(shared, [0-9a-f]{12}\)$/)
+    expect(runs(marker)).toBe(1)
+    expect(cacheCounts(results)).toEqual({ local: 0, shared: 1, ran: 0 })
+  })
+
+  it('refuses a pass that another clone with the same files stored', async () => {
+    const first = makeRepo()
+    const marker = join(markers, 'shared')
+    await runWith(first, [shareable(marker)], sharing(first))
+    const clone = makeRepo()
+    expect(cachedFlags(await runWith(clone, [shareable(marker)], sharing(clone)))).toEqual([[ID, false]])
+  })
+
+  it('keys HEAD for a check that reads history, so a new commit with the same files runs it again in the same worktree', async () => {
+    const root = makeRepo()
+    const marker = join(markers, 'history')
+    const check = markedCheck('gates:history', marker, { inputs: ['src/**'], history: true })
+    await runWith(root, [check], cacheFor(root))
+    expect(cachedFlags(await runWith(root, [check], cacheFor(root)))).toEqual([['gates:history', true]])
+    git(root, ['commit', '-q', '--allow-empty', '-m', 'empty'])
+    expect(cachedFlags(await runWith(root, [check], cacheFor(root)))).toEqual([['gates:history', false]])
+  })
+
+  it('refuses the changed-upstream lane\'s pass once the generated file it reads appears', async () => {
+    const root = makeRepo()
+    const lane = markedCheck('tests:upstream-changed', join(markers, 'upstream'), { inputs: ['src/**'] })
+    await runWith(root, [lane], sharing(root))
+    expect(cachedFlags(await runWith(root, [lane], sharing(root)))).toEqual([['tests:upstream-changed', true]])
+    mkdirSync(join(root, 'packages', 'experimental', 'liveshare', 'lib'), { recursive: true })
+    writeFileSync(join(root, 'packages', 'experimental', 'liveshare', 'lib', 'typert.remote-client.js'), 'export {}\n')
+    expect(cachedFlags(await runWith(root, [lane], sharing(root)))).toEqual([['tests:upstream-changed', false]])
+  })
+
+  it('refuses the shared pass to a worktree whose input differs, and runs the check', async () => {
+    const first = makeRepo()
+    const second = worktreeOf(first)
+    writeFileSync(join(second, 'src', 'a.txt'), 'different\n')
+    const marker = join(markers, 'shared')
+    await runWith(first, [shareable(marker)], sharing(first))
+    expect(cachedFlags(await runWith(second, [shareable(marker)], sharing(second)))).toEqual([[ID, false]])
+    expect(runs(marker)).toBe(2)
+  })
+
+  it('refuses the shared pass when the install differs from the other worktree\'s', async () => {
+    const first = makeRepo()
+    const second = worktreeOf(first)
+    mkdirSync(join(second, 'node_modules', '.pnpm'), { recursive: true })
+    writeFileSync(join(second, 'node_modules', '.pnpm', 'lock.yaml'), 'lockfileVersion: 8\n')
+    const marker = join(markers, 'shared')
+    await runWith(first, [shareable(marker)], sharing(first))
+    expect(cachedFlags(await runWith(second, [shareable(marker)], sharing(second)))).toEqual([[ID, false]])
+  })
+
+  it('refuses the shared pass when a keyed variable differs, and writes each worktree\'s root as <root>', async () => {
+    const first = makeRepo()
+    const second = worktreeOf(first)
+    const marker = join(markers, 'shared')
+    await runWith(first, [shareable(marker)], sharing(first, { env: { NODE_OPTIONS: `--require ${first}/x.cjs`, PATH: '/a' } }))
+    expect(cachedFlags(await runWith(second, [shareable(marker)], sharing(second, { env: { NODE_OPTIONS: `--require ${second}/x.cjs`, PATH: '/b', DELO_TIER: 'merge' } })))).toEqual([[ID, true]])
+    expect(cachedFlags(await runWith(second, [shareable(marker)], sharing(second, { env: { NODE_OPTIONS: '--inspect' } })))).toEqual([[ID, false]])
+    expect(keyedEnvironment({ DSH_X: '1', LANG: 'C', HOME: '/h', DELO_GATE_PRIORITY: 'trunk', LC_ALL: undefined, DEEPSEEK_API_KEY: 'secret', DOCKER_HOST: 'unix:///r/d.sock' }, '/r')).toEqual([['DEEPSEEK_API_KEY', 'set'], ['DOCKER_HOST', 'unix://<root>/d.sock'], ['DSH_X', '1'], ['LANG', 'C']])
+  })
+
+  it('invalidates a check when the code its command runs changes, though its declared inputs did not', async () => {
+    const root = makeRepo()
+    mkdirSync(join(root, 'delo', 'apps', 'tools', 'src'), { recursive: true })
+    writeFileSync(join(root, 'delo', 'apps', 'tools', 'src', 'gate.ts'), 'export {}\n')
+    const policy = sharingPolicy({ packages: [{ name: '@delo/tools', dir: 'delo/apps/tools', forkDependencies: [], upstreamDependencies: [], ownWorkspace: false }], upstream: [], securityPackages: [], declarationReaders: [] })
+    const marker = join(markers, 'shared')
+    const check = shareable(marker, { command: [...shareable(marker).command, 'delo/apps/tools/src/gate.ts'] })
+    await runWith(root, [check], cacheFor(root, { policy }))
+    expect(cachedFlags(await runWith(root, [check], cacheFor(root, { policy })))).toEqual([[ID, true]])
+    writeFileSync(join(root, 'delo', 'apps', 'tools', 'src', 'gate.ts'), 'export const changed = 1\n')
+    expect(cachedFlags(await runWith(root, [check], cacheFor(root, { policy })))).toEqual([[ID, false]])
+  })
+
+  it('never shares a check the rules do not name or refuse, and says why in its plan state', async () => {
+    const first = makeRepo()
+    const second = worktreeOf(first)
+    const unaudited = markedCheck('a', join(markers, 'a'), { inputs: ['src/**'] })
+    const history = markedCheck('boundary', join(markers, 'boundary'), { inputs: ['src/**'] })
+    await runWith(first, [unaudited, history], sharing(first))
+    expect(cachedFlags(await runWith(second, [unaudited, history], sharing(second)))).toEqual([['a', false], ['boundary', false]])
+    expect(sharing(second).unshared(unaudited)).toBe('its inputs have not been audited for sharing')
+    expect(sharing(second).unshared(history)).toMatch(/^reads git history/)
+    expect(existsSync(join(store, 'passes'))).toBe(false)
+  })
+
+  it('reads no shared pass in the merge tier and the full gate, but stores the passes it proves', async () => {
+    const first = makeRepo()
+    const second = worktreeOf(first)
+    const marker = join(markers, 'shared')
+    await runWith(first, [shareable(marker)], sharing(first, { noReads: 'the merge tier and the full gate read no shared pass' }))
+    expect(sharing(first, { noReads: 'merge' }).unshared(shareable(marker))).toBe('merge')
+    expect(cachedFlags(await runWith(second, [shareable(marker)], sharing(second, { noReads: 'merge' })))).toEqual([[ID, false]])
+    expect(cachedFlags(await runWith(worktreeOf(first), [shareable(marker)], sharing(second)))).toEqual([[ID, true]])
+  })
+
+  it('runs a security-class or merge-only check in a strict run even when this worktree stored its pass', async () => {
+    const root = makeRepo()
+    const security = markedCheck('gates:fundamentals', join(markers, 'fundamentals'), { inputs: ['src/**'] })
+    const mergeOnly = markedCheck('tests:docker', join(markers, 'docker'), { inputs: ['src/**'], mergeOnly: true })
+    const plain = shareable(join(markers, 'shared'))
+    await runWith(root, [security, mergeOnly, plain], cacheFor(root))
+    expect(cachedFlags(await runWith(root, [security, mergeOnly, plain], cacheFor(root)))).toEqual([['gates:fundamentals', true], ['tests:docker', true], [ID, true]])
+    expect(cachedFlags(await runWith(root, [security, mergeOnly, plain], cacheFor(root, { strict: true })))).toEqual([['gates:fundamentals', false], ['tests:docker', false], [ID, true]])
+  })
+
+  it('warns and keeps the result when the store cannot write a pass', async () => {
+    const root = makeRepo()
+    const warnings: string[] = []
+    const cache = sharing(root, { warn: line => { warnings.push(line) } })
+    writeFileSync(join(store, 'passes'), 'not a directory')
+    const results = await runWith(root, [shareable(join(markers, 'shared'))], cache)
+    expect(results.map(result => result.outcome)).toEqual(['passed'])
+    expect(warnings).toEqual([expect.stringMatching(/^delo checks: the pass of gates:package-states is not shared: Error: (EEXIST|ENOTDIR)/)])
+  })
+
+  it('shares nothing for a run without a store, as with --no-shared-cache', () => {
+    const root = makeRepo()
+    expect(cacheFor(root).unshared(shareable(join(markers, 'shared')))).toBe('the run shares no pass (--no-shared-cache, --no-cache or CI)')
   })
 })
