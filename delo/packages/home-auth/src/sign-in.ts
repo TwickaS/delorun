@@ -20,12 +20,19 @@ interface Issued {
 /** The unused challenges of a home's devices, in memory. */
 export class Challenges {
   private readonly issued = new Map<DeviceId, Issued[]>()
+  /** The clock. */
+  private readonly now: () => number
+  /** The random source. */
+  private readonly random: RandomBytes
 
   /**
    * @param now - the clock.
    * @param random - the random source.
    */
-  constructor(private readonly now: () => number, private readonly random: RandomBytes) {}
+  constructor(now: () => number, random: RandomBytes) {
+    this.now = now
+    this.random = random
+  }
 
   /**
    * Issue a challenge, dropping the device's oldest unused one past the bound of 5.

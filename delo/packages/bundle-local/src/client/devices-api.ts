@@ -105,13 +105,20 @@ export type HostFailure =
 
 /** A failed request to the home, carrying its {@link HostFailure}. */
 export class HostRequestError extends Error {
+  /** The route that failed. */
+  readonly path: string
+  /** Why it failed. */
+  readonly failure: HostFailure
+
   /**
    * @param path - the route that failed.
    * @param failure - why it failed.
    */
-  constructor(readonly path: string, readonly failure: HostFailure) {
+  constructor(path: string, failure: HostFailure) {
     super(`${path}: ${failure.kind === 'refused' ? `${failure.code}: ${failure.message}` : failure.kind}`, failure.kind === 'unreachable' ? { cause: failure.cause } : undefined)
     this.name = 'HostRequestError'
+    this.path = path
+    this.failure = failure
   }
 }
 

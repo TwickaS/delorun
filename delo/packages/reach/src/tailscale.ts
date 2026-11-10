@@ -33,13 +33,20 @@ export type TailscaleRunner = (args: readonly string[]) => Promise<TailscaleResu
 
 /** A provider refusal with C7's code and the sentence a person reads. */
 export class ReachError extends Error {
+  /** C7's code. */
+  readonly code: ReachErrorCode
+  /** The sentence, which names what to do. */
+  readonly detail: string
+
   /**
    * @param code - C7's code.
    * @param detail - the sentence, which names what to do.
    */
-  constructor(readonly code: ReachErrorCode, readonly detail: string) {
+  constructor(code: ReachErrorCode, detail: string) {
     super(`${code}: ${detail}`)
     this.name = 'ReachError'
+    this.code = code
+    this.detail = detail
   }
 }
 

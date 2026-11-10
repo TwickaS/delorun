@@ -106,13 +106,16 @@ export class ReachService extends Service {
 
   private readonly providers = new Map<ReachOptionId, ReachProvider>()
   private readonly states = new Map<ReachOptionId, ReachStatus>()
+  /** The rows. */
+  private readonly config: Config
 
   /**
    * @param ctx - the plugin context, which injects `homeAuth` and `connection`.
    * @param config - the rows.
    */
-  constructor(ctx: Context, private readonly config: Config) {
+  constructor(ctx: Context, config: Config) {
     super(ctx, 'reach')
+    this.config = config
   }
 
   /**

@@ -71,8 +71,11 @@ class Phone {
   readonly keys = generateKeyPairSync('ec', { namedCurve: 'P-256' })
   readonly jwk = this.keys.publicKey.export({ format: 'jwk' }) as { kty: string; crv: string; x: string; y: string }
   cookie: string | undefined
+  private readonly port: () => number
 
-  constructor(private readonly port: () => number) {}
+  constructor(port: () => number) {
+    this.port = port
+  }
 
   async deviceId(): Promise<string> {
     return deviceIdOf(this.jwk) as Promise<string>

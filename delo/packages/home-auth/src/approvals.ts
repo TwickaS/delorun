@@ -85,11 +85,14 @@ export class Approvals {
   private windowClosesAt: number | undefined
   private readonly requests = new Map<string, ApprovalRecord>()
   private readonly sources: AttemptLimiter
+  /** The clock, the random source and the home key. */
+  private readonly options: ApprovalsOptions
 
   /**
    * @param options - the clock, the random source and the home key.
    */
-  constructor(private readonly options: ApprovalsOptions) {
+  constructor(options: ApprovalsOptions) {
+    this.options = options
     this.sources = new AttemptLimiter({
       limit: DEVICE_APPROVAL_LIMITS.approvalRequestsPerMinutePerSource,
       windowMs: MINUTE_MS,

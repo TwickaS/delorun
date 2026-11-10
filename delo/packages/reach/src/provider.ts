@@ -99,11 +99,15 @@ export function tailscaleAddress(dnsName: string, servePort: number): StudioAddr
 export class TailscalePrivateProvider implements ReachProvider {
   readonly option = 'tailscale-private' as const
   readonly factor = 'tailnet-membership' as const
+  /** The `tailscale` runner. */
+  private readonly run: TailscaleRunner
 
   /**
    * @param run - the `tailscale` runner.
    */
-  constructor(private readonly run: TailscaleRunner) {}
+  constructor(run: TailscaleRunner) {
+    this.run = run
+  }
 
   /** @inheritdoc */
   resolve(rows: ReachConfigRows): ReachSpec | undefined {
