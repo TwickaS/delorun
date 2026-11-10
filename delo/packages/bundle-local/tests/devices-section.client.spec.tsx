@@ -3,7 +3,7 @@
  * The Devices section reads the reach state and the device list from the home, adds a device through the approval
  * window, removes a device after confirmation, and says in place when the home needs the person at its own computer.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
 import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
@@ -61,6 +61,12 @@ function fakeHost(script: Partial<Record<RouteKey, Answer>> = {}) {
 }
 
 const NOW = Date.UTC(2026, 10, 10, 12, 0, 0)
+
+// The fixtures carry times around a fixed moment; the page's own clock reads that moment too, so a window the fixtures
+// open is open whatever the day the suite runs. Specs that also step timers replace this with `fakeClock()`.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'], now: NOW })
+})
 const DEVICE_A = {
   id: 'a'.repeat(43), label: 'Pixel 9', platform: 'Android', address: 'https://home.example.ts.net',
   approvedAt: NOW - 86_400_000, approvedBy: 'local', lastSignInAt: NOW - 3_600_000,
