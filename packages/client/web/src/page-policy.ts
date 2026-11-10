@@ -164,6 +164,20 @@ const TRUSTED_TYPES_STASH = '__DSH_TRUSTED_TYPES__'
  * @returns the sanitised markup.
  */
 export function sanitiseHtml(html: string): string {
+  // The parse below is itself a Trusted Types sink and would call this policy again without end.
+  if (sanitising) return html
+  sanitising = true
+  try {
+    return sanitiseParsed(html)
+  } finally {
+    sanitising = false
+  }
+}
+
+/** Whether {@link sanitiseHtml} is running, so its own parse reaches the sink without a second pass. */
+let sanitising = false
+
+function sanitiseParsed(html: string): string {
   const parsed = new DOMParser().parseFromString(html, 'text/html')
   for (const script of parsed.querySelectorAll('script')) script.remove()
   for (const element of parsed.querySelectorAll('*')) {

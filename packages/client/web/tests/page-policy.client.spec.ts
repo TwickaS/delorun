@@ -143,3 +143,22 @@ it('createScriptURL admits only same-origin plugin bundle URLs the registered bo
 it('createScriptURL refuses every plugin URL until a boot manifest is registered', () => {
   expect(pluginScriptUrl('/plugins/a/client.js?rev=1')).toBeNull()
 })
+
+it('does not run the sanitiser again on the markup its own parse is given', () => {
+  // A browser that enforces Trusted Types sends the parse's string through the default policy, which is this function.
+  const realParse = DOMParser.prototype.parseFromString
+  const nested: string[] = []
+  const parse = vi.spyOn(DOMParser.prototype, 'parseFromString').mockImplementation(function (this: DOMParser, markup: string, type: DOMParserSupportedType) {
+    nested.push(sanitiseHtml(markup))
+    return realParse.call(this, markup, type)
+  })
+  expect(sanitiseHtml('<p onclick="x()">kept</p>')).toBe('<p>kept</p>')
+  expect(nested).toEqual(['<p onclick="x()">kept</p>'])
+  parse.mockRestore()
+  // The guard is released afterwards, and when the parse throws.
+  expect(sanitiseHtml('<b onload="y()">next</b>')).toBe('<b>next</b>')
+  vi.spyOn(DOMParser.prototype, 'parseFromString').mockImplementation(() => { throw new Error('parse failed') })
+  expect(() => sanitiseHtml('<i>x</i>')).toThrow('parse failed')
+  vi.restoreAllMocks()
+  expect(sanitiseHtml('<u onerror="z()">after</u>')).toBe('<u>after</u>')
+})
