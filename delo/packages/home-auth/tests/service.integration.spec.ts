@@ -13,6 +13,23 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
 import { DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH } from '../src/routes.ts'
+import { REACH_PATHS } from '../src/reach-routes.ts'
+
+/** Every route the service registers, in registration order. */
+const ROUTES: readonly (readonly [string, string])[] = [
+  ['exact', OWNER_CLAIM_PATH],
+  ['exact', DEVICES_PATH],
+  ['exact', DEVICE_REMOVE_PATH],
+  ['exact', REACH_PATHS.signIn],
+  ['prefix', REACH_PATHS.assets],
+  ['exact', REACH_PATHS.request],
+  ['prefix', REACH_PATHS.request],
+  ['exact', REACH_PATHS.challenge],
+  ['exact', REACH_PATHS.session],
+  ['exact', REACH_PATHS.window],
+  ['exact', REACH_PATHS.pending],
+  ['exact', REACH_PATHS.approve],
+]
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
 
@@ -56,15 +73,11 @@ async function mount(extra: { readonly connection?: unknown } = {}): Promise<Mou
 }
 
 describe('the homeAuth service', () => {
-  it('mounts under its name and registers the claim and device routes', async () => {
+  it('mounts under its name and registers the claim, device and reach routes', async () => {
     const mounted = await mount()
     try {
       expect(mounted.ctx.get('homeAuth')).toBeInstanceOf(HomeAuthService)
-      expect(mounted.registered.map(route => [route.kind, route.path])).toEqual([
-        ['exact', OWNER_CLAIM_PATH],
-        ['exact', DEVICES_PATH],
-        ['exact', DEVICE_REMOVE_PATH],
-      ])
+      expect(mounted.registered.map(route => [route.kind, route.path])).toEqual(ROUTES)
     } finally {
       await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })
@@ -77,7 +90,7 @@ describe('the homeAuth service', () => {
     try {
       // Pins the routes living inside `ctx.effect()`: a registration made outside it outlives the plugin and answers
       // requests with a store that is gone.
-      expect(mounted.unregistered).toEqual([OWNER_CLAIM_PATH, DEVICES_PATH, DEVICE_REMOVE_PATH])
+      expect(mounted.unregistered).toEqual(ROUTES.map(([, path]) => path))
       expect(mounted.ctx.get('homeAuth')).toBeUndefined()
     } finally {
       await rm(mounted.directory, { recursive: true, force: true })
@@ -91,11 +104,66 @@ describe('the homeAuth service', () => {
       const service = mounted.ctx.get('homeAuth') as HomeAuthService
       const issued = await service.issueOwnerCode()
       await service.claim(claimOf(issued.code, { address: ADDRESS }))
-      await service.openSession({ deviceId: deviceIdOf(keyOf(1)), address: ADDRESS, lifetimeMs: HOUR })
+      await service.openSession({ deviceId: deviceIdOf(keyOf(1)), listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       await expect(service.revokeDevice(deviceIdOf(keyOf(1)))).resolves.toMatchObject({ sessions: 1, connections: 2 })
       // Pins the closer wiring: without `ctx.get('connection')` a revoked device's streams and upgraded sockets stay
       // open, and the sessions that admitted them are gone.
       expect(closed).toEqual([{ deviceId: deviceIdOf(keyOf(1)) }])
+    } finally {
+      await mounted.fiber.dispose()
+      await rm(mounted.directory, { recursive: true, force: true })
+    }
+  })
+
+  it('serves a reach listener, announces each policy change and runs the window and the local approval', async () => {
+    const mounted = await mount()
+    const announced: string[] = []
+    mounted.ctx.on('authenticator/policy', (listener) => { announced.push(listener) })
+    try {
+      const service = mounted.ctx.homeAuth
+      const address = brandString<StudioAddress>('https://home.example.ts.net')
+      const off = service.serve({ listener: 'reach-tailscale-private', address, factor: 'tailnet-membership' })
+      expect(service.servedListener('reach-tailscale-private')).toMatchObject({ address })
+      expect(service.admitToken('unknown', 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+      expect(service.approvalWindowOpenUntil()).toBeUndefined()
+      await service.openApprovalWindow()
+      expect(service.approvalWindowOpenUntil()).toBeGreaterThan(Date.now())
+      expect(service.pendingApprovals()).toEqual([])
+      await expect(service.approveLocally('unknown', '12345678')).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' })
+      const removed: string[] = []
+      const stop = service.onDeviceRemoved((deviceId) => { removed.push(deviceId) })
+      await service.revokeDevice(deviceIdOf(keyOf(5)))
+      stop()
+      expect(removed).toEqual([deviceIdOf(keyOf(5))])
+      off()
+      // Pins the announcements: a reach listener rereads its policy only when the provider announces a change.
+      expect(announced).toEqual(['reach-tailscale-private', 'reach-tailscale-private'])
+      expect(service.servedListener('reach-tailscale-private')).toBeUndefined()
+    } finally {
+      await mounted.fiber.dispose()
+      await rm(mounted.directory, { recursive: true, force: true })
+    }
+  })
+
+  it('admits nothing before it started, and refuses every other call', () => {
+    const ctx = new Context()
+    const service = new HomeAuthService(ctx, { secretsDirectory: '/nowhere' })
+    expect(service.admitToken('x', 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+    expect(service.servedListener('reach-tailscale-private')).toBeUndefined()
+    expect(() => service.owner()).toThrow(/has not started/)
+  })
+
+  it('answers the owner, the device list, the code and a session through the service', async () => {
+    const mounted = await mount()
+    try {
+      const service = mounted.ctx.homeAuth
+      await expect(service.assertOwner()).rejects.toMatchObject({ code: 'NO_OWNER' })
+      const issued = await service.issueOwnerCode()
+      await expect(service.ownerCodeOutstanding()).resolves.toBe(true)
+      await service.claim(claimOf(issued.code, { address: ADDRESS }))
+      await expect(service.devices()).resolves.toMatchObject({ devices: [{ id: deviceIdOf(keyOf(1)) }] })
+      const opened = await service.openSession({ deviceId: deviceIdOf(keyOf(1)), listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
+      await expect(service.sessionOf(opened.token)).resolves.toMatchObject({ factor: 'tailnet-membership' })
     } finally {
       await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })

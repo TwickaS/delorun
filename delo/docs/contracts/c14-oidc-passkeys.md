@@ -37,6 +37,7 @@ The requirements and denial tests below that this list names as not built or rea
   - [Re-authentication](#re-authentication)
   - [Signing keys](#signing-keys)
   - [Tailnet identity](#tailnet-identity)
+  - [Tailnet membership](#tailnet-membership)
   - [Limits](#limits)
   - [Errors](#errors)
   - [Delo Run issuer](#delo-run-issuer)
@@ -57,11 +58,11 @@ Every rule is per studio address: a passkey or a redirect URI of one address is 
 | Address | Passkeys | Passkey relying-party ID | OpenID Connect redirect URI |
 | --- | --- | --- | --- |
 | Loopback | Not used: the loopback listener needs no identity factor | — | — |
-| Tailscale private, `https://<machine>.<tailnet>.ts.net[:<port>]` | Current contract: not available | — | `https://<address>/auth/oidc/callback` |
+| Tailscale private, `https://<machine>.<tailnet>.ts.net[:<port>]` | Current contract: not available; the address signs in with [tailnet membership](#tailnet-membership) | — | Not built in `0.1.0` |
 | Tailscale Funnel, `https://<machine>.<tailnet>.ts.net[:<port>]` | Current contract: not available | — | `https://<address>/auth/oidc/callback` |
 | Own domain, `https://<name>` | Available | `<name>`, the address's host exactly | `https://<name>/auth/oidc/callback` |
 
-`<address>` is the address's host with its port when the port is not 443. On a `ts.net` address under the current contract, the person's OpenID Connect provider is the identity factor, and setup and the reach screens say that passkeys are not available on that address.
+`<address>` is the address's host with its port when the port is not 443. On the Tailscale private address the identity factor is [tailnet membership](#tailnet-membership), and no OpenID Connect sign-in is built for it, because enrolling one from a phone would pin the owner identity from the weaker session. On a Funnel address under the current contract, the person's OpenID Connect provider is the identity factor, and setup and the reach screens say that passkeys are not available on that address.
 
 - **The ts.net rule, current contract.** Passkeys are not available on `ts.net` addresses. This holds until a spike result recorded under [compatibility](#compatibility) shows otherwise.
 - **The ts.net rule, adopted by a passing spike.** The relying-party ID of a `ts.net` address is its host, `<machine>.<tailnet>.ts.net`. A Tailscale private address and a Funnel address of the same machine share that host and so share a relying-party ID; the home therefore binds each passkey to the address it was enrolled on and refuses an assertion whose `clientDataJSON.origin` is not that address.
@@ -139,6 +140,13 @@ On an address without passkeys, a device approval carries an OpenID Connect re-a
 
 The `tailnet` identity factor exists only under C7's socket variant ([C7](c07-reach-providers.md#identity-headers)): a request on the serve socket whose `Tailscale-User-Login` is on the tailnet login allowlist proves the factor for `tailscale-private`. Under the current contract it is refused with `TAILNET_IDENTITY_UNAVAILABLE`. The recovery kit never accepts it ([C5](c05-device-approval.md#recovery-kit)).
 
+<a id="tailnet-membership"></a>
+### Tailnet membership
+
+The `tailnet-membership` factor carries no proof: it states that a request came through the serve target of a reach provider that declares the factor. Only the `reach-tailscale-private` provider may declare it ([C7](c07-reach-providers.md#provider-service-definition)), and the home refuses the declaration with `TAILNET_IDENTITY_UNAVAILABLE` for any other listener and for any address that is not a `ts.net` address. On that listener a fresh device-key signature of an approved device alone creates a full session ([C5](c05-device-approval.md#sign-in)), and the session record carries the factor ([C4](c04-admission.md#sessions)).
+
+The home refuses a session whose factor is `tailnet-membership` with `403 LOOPBACK_REQUIRED` for each action granted only at the home's own computer: granting full access, whether an escalation to `danger-full-access` (including `plugin_manager`'s) or a workspace's full-access consent; opening the approval window and approving or removing a device; reset; the recovery kit; enrolling an identity factor; and changing reach settings. The home refuses where the action is granted, not the client: an approval prompt that grants full access carries `grants: "full-access"`, and the answer of a Peer admitted with this factor is not applied, so the prompt stays open for the studio on the home's own computer. The remote studio shows "This needs you at your computer" with the action's name. Watching, replying, starting chats, answering every other prompt and stopping a run are allowed, so a plugin cannot be installed from a phone.
+
 <a id="limits"></a>
 ### Limits
 
@@ -179,7 +187,8 @@ The `tailnet` identity factor exists only under C7's socket variant ([C7](c07-re
 | `PASSKEY_ASSERTION_INVALID` | An assertion that fails a check, including another address's relying-party ID or origin. |
 | `PASSKEY_USER_VERIFICATION_REQUIRED` | The user-verified flag is not set. |
 | `PASSKEY_COUNTER_REGRESSED` | A counter that did not increase. |
-| `TAILNET_IDENTITY_UNAVAILABLE` | The `tailnet` factor outside C7's socket variant. |
+| `TAILNET_IDENTITY_UNAVAILABLE` | The `tailnet` factor outside C7's socket variant, or `tailnet-membership` declared for a listener or address other than the Tailscale private one. |
+| `LOOPBACK_REQUIRED` | A session whose factor is `tailnet-membership` answers a prompt or sends a request for an action granted only at the home's own computer ([tailnet membership](#tailnet-membership)). |
 
 <a id="delo-run-issuer"></a>
 ### Delo Run issuer
@@ -228,6 +237,7 @@ Requirements:
 - ID tokens are signed with an asymmetric algorithm under a `kid` from the issuer's key set, which the home refreshes on a fixed interval and on an unknown key.
 - Dynamic registration is used only when the provider advertises it and the person chooses it.
 - The client secret lives in a secret file, never in a configuration row.
+- `tailnet-membership` is declared only for the Tailscale private address, and a session with it is refused every action of the home's own computer where the action is granted.
 
 Denial tests:
 
@@ -244,6 +254,9 @@ Denial tests:
 | `a passkey without user verification is refused` | An assertion without the user-verified flag is refused. |
 | `a regressed counter is refused` | An assertion whose counter is not greater than a non-zero stored counter is refused. |
 | `a passkey on a ts.net address is refused under the current contract` | Passkey registration and assertion options on a `ts.net` address answer `PASSKEY_UNAVAILABLE`. |
+| `tailnet-membership is refused on a Funnel or own-domain address` | A provider that declares `tailnet-membership` for the Funnel listener or an own-domain address is refused with `TAILNET_IDENTITY_UNAVAILABLE`. |
+| `a tailnet-route session cannot grant full access by the escalation prompt or the workspace consent` | An `allowed-once` answer from a `tailnet-membership` session to a prompt that grants full access is refused with `LOOPBACK_REQUIRED`; the escalated call does not run and the workspace records no consent, and the same prompt answered on the loopback studio grants. |
+| `a tailnet-route session cannot remove a device, reset, enrol a factor or change reach` | Each such request from a `tailnet-membership` session is refused, and the home's devices and reach state are unchanged. |
 | `a stale re-authentication is refused` | A `reauth` token with `auth_time` older than 120 seconds, or with a `nonce` other than the approval hash, does not approve. |
 
 <a id="what-this-does-not-prove"></a>
@@ -252,6 +265,8 @@ Denial tests:
 - **User verification under `attestation: "none"`.** The home reads the user-verified flag the authenticator sets and does not verify the authenticator, so the flag is only as trustworthy as the authenticator that made the assertion.
 - **The person's provider.** The OpenID Connect provider can sign a valid token for the pinned subject, and an attacker who controls the person's account there can sign in with it; device approval is the control that still applies.
 - **Shared relying-party IDs.** Where a spike result makes passkeys available on `ts.net`, a private address and a Funnel address of one machine share a relying-party ID; the per-address binding in the home, not the browser, keeps their passkeys apart.
+
+- **A phone that is approved and unlocked.** On the Tailscale private address an approved device signs in with its key alone. A person who holds that device unlocked has the chats and can drive the agent within what was already granted: a workspace put on full access at the computer can still be driven from it, and a command there can do anything the person's user can, including writing the device records. The protections are the phone's own lock, removing the device at the computer and the remote session's idle limit of 12 hours.
 
 <a id="decided-values"></a>
 ## Decided values

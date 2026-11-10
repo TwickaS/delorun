@@ -31,9 +31,11 @@ The requirements and denial tests below that this list names as not built or rea
   - [Binding to an address](#binding-to-an-address)
   - [Owner claim](#owner-claim)
   - [Approval request](#approval-request)
+  - [Approval window](#approval-window)
   - [Match code](#match-code)
   - [Approval](#approval)
   - [Approval prompt](#approval-prompt)
+  - [Local approval](#local-approval)
   - [Sign-in](#sign-in)
   - [Removal](#removal)
   - [Reset](#reset)
@@ -87,6 +89,7 @@ A home has no owner until a device claims it, and reach stays off until it has o
 - **Owner code.** When the home has no owner, `delorun setup` and `delorun start` print an owner code to their terminal, and `delorun devices code` prints a fresh one. A code is 26 characters of the RFC 4648 base32 alphabet (`A`–`Z`, `2`–`7`), printed as one run. Each command prints a code only when its standard output is a terminal; otherwise it prints the instruction to run `delorun devices code` in a terminal. A new code replaces the previous one. A code is single-use and expires 10 minutes after it is printed. Input is accepted in either case, with spaces and hyphens ignored. No service logs a code, and C20's redactor treats every registered code as a secret ([C20](c20-operational-logs.md#redaction)).
 - **Claim with the code.** `POST /auth/owner/claim` on the loopback listener carries `{ "v": 1, "ownerCode", "devicePublicKey", "label" }`. The home compares the code's hash in constant time, consumes the code, creates the owner record and records the device as the first trusted device. A wrong, used or expired code receives `403 OWNER_CODE_INVALID`. There is no lockout: the code has 128 bits of entropy, and claim attempts are limited to 10 a minute per source.
 - **Claim from a loopback session.** A request on the loopback listener with an upstream launch-token credential may claim the home without a code, as the first step of turning reach on.
+- **Local claim.** Opening the first [approval window](#approval-window) at the home's own computer, from the loopback studio or the person's own `delorun devices approve` through the home socket ([C19](c19-home-process.md#requests-and-responses)), claims a home that has no owner for the local person: the owner record names `local` as its first device, and no device record is written.
 - **Reach listeners.** Every reach listener answers `POST /auth/owner/claim` with `403 OWNER_CLAIM_LOOPBACK_ONLY` and a message that names the loopback listener and SSH port forwarding, without reading the body ([C4](c04-admission.md#pre-login-allowlist)). This is the current contract, because C7's [fallback](c07-reach-providers.md#tailscale-serve-target) is in force: no identity factor exists before reach is on, and identity headers are trusted on no listener.
 - **Claim on the Tailscale socket variant.** Where C7 adopts its socket variant, `reach-tailscale-private` also accepts a claim with an owner code from a request whose Tailscale identity headers C7 trusts. The claiming tailnet login becomes the first entry of the tailnet login allowlist ([C7](c07-reach-providers.md#identity-headers)).
 
@@ -105,14 +108,19 @@ A new device on a reach address sends `POST /auth/device/request`:
 
 The home binds the request to the listener's studio address and answers `201` with `requestId` (16 random bytes), `requestSecret` (16 random bytes), `homePublicKey` (the 32-byte raw home public key), `homeNonce` (16 random bytes) and `expiresAt`. A request expires 5 minutes after it is created. A home holds at most 5 pending requests; a sixth is refused with `429 APPROVAL_PENDING_LIMIT`. A source may make at most 10 requests a minute; an eleventh is refused with `429 APPROVAL_RATE_LIMITED`. A source is the address that the [approval prompt](#approval-prompt) shows.
 
-The new device reads its request's state with `GET /auth/device/request/<request id>` and the header `Authorization: Delo-Request <request secret>`, at most once every 2 seconds. The states are `pending`, `approved`, `cancelled`, `recovery-pending` and `expired`.
+The new device reads its request's state with `GET /auth/device/request/<request id>` and the header `Authorization: Delo-Request <request secret>`, at most once every 2 seconds. The states are `pending`, `approved`, `cancelled`, `recovery-pending` and `expired`. An unknown request and a wrong secret are both answered `410 APPROVAL_EXPIRED`, and a request stays readable for 5 minutes after it expires.
+
+<a id="approval-window"></a>
+### Approval window
+
+On a listener whose identity factor is `tailnet-membership` ([C14](c14-oidc-passkeys.md#tailnet-membership)), the home accepts approval requests only while an approval window is open, which replaces the standing queue there: every request on that route has the source `127.0.0.1`, so any device on the tailnet could otherwise keep the 5 pending slots full. The person opens a window at the home's own computer only, with the loopback studio's "Add a device" (`POST /auth/devices/window` on the loopback listener, from the studio's own origin) or with `delorun devices approve`. A window lasts 5 minutes and closes at the first approval. Outside a window `POST /auth/device/request` answers `403 APPROVALS_CLOSED` without reading the body. A request accepted in a window keeps its own 5-minute expiry.
 
 <a id="match-code"></a>
 ### Match code
 
 The match code is 8 decimal digits derived from both public keys, both nonces and the address:
 
-`SHA-256("delo-match-v1" ‖ 0x00 ‖ home public key ‖ device id ‖ homeNonce ‖ deviceNonce ‖ address)`, whose first 8 bytes, read as an unsigned big-endian integer modulo 10⁸, are written with leading zeros as `1234 5678`.
+`SHA-256("delo-match-v1" ‖ 0x00 ‖ home public key ‖ device id ‖ homeNonce ‖ deviceNonce ‖ address)`, whose first 8 bytes, read as an unsigned big-endian integer modulo 10⁸, are written with leading zeros as `1234 5678`. The home public key is its 32 raw bytes; the device id and both nonces are the bytes their base64url text decodes to; the address is its UTF-8 text. A typed code is compared after removing spaces and hyphens.
 
 The new device computes the code from the home public key it received and shows it. The trusted device computes it from the home public key it was approved with and the request it reads from the home. A home key substituted between the new device and the home therefore produces a code that the trusted device does not compute.
 
@@ -141,6 +149,11 @@ The home accepts the approval only when all of these hold: the request is admitt
 
 The trusted device's prompt shows the new device's label and platform, the time of the request, its source address and the match code field, which the person must fill. The source address is the socket peer address of a direct connection, shown as verified, or an address that a relay, `tailscaled` or a forwarding header asserted, shown with the label "unverified" or omitted. A relay-asserted address is never shown as a plain fact. The prompt derives no place name from an address.
 
+<a id="local-approval"></a>
+### Local approval
+
+At the home's own computer a request is approved without a session or a device signature: the person's presence there stands in for both. The two forms are the loopback studio's approval form (`GET /auth/devices/pending` and `POST /auth/devices/approve` on the loopback listener, from the studio's own origin) and `delorun devices approve`, the home socket's `devices.approve` operation, which C19 accepts only with the person's own token. Each shows the request's label, platform and time and asks for the 8-digit match code shown on the new device. The home checks that the request is pending and unexpired and that the typed code equals the match code; after 3 wrong codes it cancels the request. On acceptance it records the device with the approver `local`, every session rotates ([C4](c04-admission.md#rotation-and-revocation)) and the window closes. A request a reach listener admitted is answered `403 LOOPBACK_REQUIRED` on every one of these routes ([C14](c14-oidc-passkeys.md#tailnet-membership)).
+
 <a id="sign-in"></a>
 ### Sign-in
 
@@ -149,7 +162,7 @@ A trusted device signs in on a reach listener with a fresh challenge.
 1. `POST /auth/device/challenge` with `{ "deviceId" }` returns a 32-byte `challenge` that expires after 60 seconds. A device holds at most 5 unused challenges.
 2. `POST /auth/session` carries `deviceId`, `challenge`, `signature` over `"delo-signin-v1" ‖ 0x00 ‖ address ‖ challenge` and either an identity-factor proof for the address (a passkey assertion or an OpenID Connect sign-in ticket, [C14](c14-oidc-passkeys.md)) or the session token being rotated. On an address with no enrolled identity factor, a request with neither creates an enrolment session ([C14](c14-oidc-passkeys.md#enrolment)).
 
-A challenge is single-use. A device id with no record for the listener's address receives `401 DEVICE_NOT_TRUSTED`, and a reused, expired or foreign challenge `401 CHALLENGE_INVALID`. A valid identity-factor proof without an approved device key creates no session.
+A challenge is single-use. A device id with no record for the listener's address receives `401 DEVICE_NOT_TRUSTED`, and a reused, expired or foreign challenge, or a signature that does not verify, `401 CHALLENGE_INVALID`; a failed attempt uses its challenge up. A valid identity-factor proof without an approved device key creates no session. On a listener whose factor is `tailnet-membership` the signature alone creates a full session with that factor, and no enrolment session exists there, because no factor is enrolled on that address. The session cookie a sign-in request carries names the session it rotates when that session is the device's on that listener; any other cookie is left alone and the signature creates a fresh session.
 
 <a id="removal"></a>
 ### Removal
@@ -211,6 +224,7 @@ Every home delivers every alert through all of these channels; a home with no sc
 | Approval request expiry | 5 minutes |
 | Pending approval requests per home | 5 |
 | Approval requests per source | 10 a minute |
+| Approval window | 5 minutes, closed at the first approval |
 | Request state reads | 1 every 2 seconds per request |
 | Wrong typed codes per request | 3, then the request is cancelled |
 | Approval clock skew | 60 seconds |
@@ -244,6 +258,7 @@ Every home delivers every alert through all of these channels; a home with no sc
 | `HOME_RUNNING` | CLI exit 1 | `delorun devices reset` while the home runs. |
 | `TLS_PIN_MISMATCH` | Desktop refusal | A leaf key other than the pinned one. |
 | `HOME_KEY_MISMATCH` | Desktop refusal | A home key other than the one an earlier approval committed to. |
+| `APPROVALS_CLOSED` | 403 | An approval request on a `tailnet-membership` listener while no approval window is open. |
 
 <a id="delo-run-mailbox"></a>
 ### Delo Run mailbox
@@ -280,6 +295,7 @@ Requirements:
 - Owner claim, first and after reset, is accepted only on the loopback listener, SSH port forwarding included; under C7's fallback, a claim on the Tailscale private target is refused with a message directing the person to loopback.
 - Owner codes have 128 bits of entropy, are single-use, expire after 10 minutes, are printed only to a terminal and are never logged.
 - `delorun devices reset` refuses while the home runs, turns reach off and notifies former devices.
+- On a `tailnet-membership` listener, approval requests are accepted only within a window opened at the home's own computer, and a device is approved only there, by a local approval.
 - The recovery kit is single-use, needs the enrolled passkey or OpenID Connect sign-in, is replaced on completion, and waits 72 hours during which any trusted device can cancel it; without such a factor it is refused, and setup and the devices screen say that recovery is from the terminal only.
 - A desktop app on another home is approved like any device, its match code commits to the home key it observed, it pins the TLS leaf key only on a home that keeps it, re-pins only with the home key's signature, and states that no pin applies on `ts.net`.
 - Alerts are written to a signed file and shown on the home's screen and on every trusted device's next connection, never only through Delo infrastructure.
@@ -296,6 +312,9 @@ Denial tests:
 | `a valid identity without a device key creates no session` | A valid passkey assertion or OpenID Connect ticket with an unknown device id creates no session. |
 | `an approval with a wrong typed code is refused and the third cancels` | Wrong codes are refused with `APPROVAL_CODE_MISMATCH`, and after the third the request is cancelled. |
 | `an approval on a reach listener without user verification is refused` | An approval whose assertion lacks the user-verified flag, has none, or carries a re-authentication token whose `nonce` is not the approval hash or whose `auth_time` is older than 120 seconds, is refused. |
+| `a request outside a window is refused unread` | On the Tailscale private listener, `POST /auth/device/request` without an open window answers `APPROVALS_CLOSED` while its announced body is still unsent. |
+| `an unapproved device on the tailnet route gets no session` | A key with no record, with or without forged `Tailscale-*` headers, receives `DEVICE_NOT_TRUSTED` and no cookie. |
+| `a tailnet-route session cannot approve a device` | A `tailnet-membership` session's window, approval and removal requests answer `LOOPBACK_REQUIRED`, and no window opens. |
 | `approval limits hold` | A sixth pending request and an eleventh request in one minute from one source are refused. |
 | `a used owner code fails a second time` | An owner code that claimed the home, or one older than 10 minutes, receives `OWNER_CODE_INVALID`. |
 | `owner codes never reach a log` | A claim with a planted code leaves no occurrence of it in any operational log. |

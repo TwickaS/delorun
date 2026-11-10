@@ -17,7 +17,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { DeviceId } from '@delo/contract-admission'
 import { DEVICE_APPROVAL_VERSION } from '@delo/contract-device-approval'
-import { HomeAuth } from './home-auth.ts'
+import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError, refusalBody } from './errors.ts'
 import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from './arrival.ts'
 import { isRecord } from './files.ts'
@@ -69,7 +69,7 @@ export function reachClaimRefusal(): { readonly status: number; readonly body: s
  */
 export function claimHandler(auth: HomeAuth): RouteHandler {
   return async (request, response) => {
-    const arrival = HomeAuth.arrivalOf(request)
+    const arrival = auth.arrivalOf(request)
     // C5: the arrival is decided before the body is read, and its refusal names what to do instead.
     if (arrival.listener !== 'loopback' || !isLoopbackHost(arrival.host)) {
       sendError(response, new HomeAuthError('OWNER_CLAIM_LOOPBACK_ONLY', LOOPBACK_ONLY_SENTENCE))
@@ -124,7 +124,7 @@ export function devicesHandler(auth: HomeAuth): RouteHandler {
   return async (request, response) => {
     // The listing names the owner and every device, so it answers on the loopback listener only, under a `Host` that
     // names it: a rebinding name reaches this port while its `Host` still says whose page asked.
-    if (!arrivedOnLoopback(request, response)) return
+    if (!arrivedOnLoopback(auth, request, response, 'The device list')) return
     if (request.method !== 'GET') {
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'Read the device list with a GET to /auth/devices'))
       return
@@ -146,7 +146,7 @@ export function removeDeviceHandler(auth: HomeAuth): RouteHandler {
   return async (request, response) => {
     // Removing a device ends its sessions, so the arrival is decided before anything is read: a foreign `Host` is a
     // rebinding name, and a foreign `Origin` or a cross-site fetch is a page the person never asked to remove anything.
-    if (!arrivedOnLoopback(request, response)) return
+    if (!arrivedOnLoopback(auth, request, response, 'Removing a device')) return
     if (request.method !== 'POST') {
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'Remove a device with a POST to /auth/devices/remove'))
       return
@@ -171,13 +171,23 @@ export function removeDeviceHandler(auth: HomeAuth): RouteHandler {
  * Answer a request that did not arrive on the loopback listener under a `Host` naming it, which both device routes
  * require: the loopback listener is the only place this home claims, lists and removes devices, and the `Host` answer is
  * what keeps a page on another origin, reached through a name that resolves to `127.0.0.1`, away from the records.
+ * A request a reach listener admitted is answered `403 LOOPBACK_REQUIRED` naming the action, which is what the remote
+ * studio shows; any other foreign arrival is answered `421 HOST_MISMATCH`.
+ * @param auth - the home-auth instance, which decides the arrival.
  * @param request - the request.
  * @param response - the response, answered with the refusal when the arrival is foreign.
+ * @param action - the action's name as the refusal states it, in sentence case.
  * @returns whether the route may answer the request.
  */
-function arrivedOnLoopback(request: IncomingMessage, response: ServerResponse): boolean {
+export function arrivedOnLoopback(auth: HomeAuth, request: IncomingMessage, response: ServerResponse, action = 'This'): boolean {
   const host = request.headers.host
-  if (HomeAuth.arrivalOf(request).listener !== 'loopback' || !isLoopbackHost(host) || loopbackAddressOf(host) === undefined) {
+  const listener = auth.arrivalOf(request).listener
+  // A request a reach listener admitted carries a session of a remote device: the home names what it needs instead.
+  if (listener !== undefined && listener !== 'loopback') {
+    sendError(response, new HomeAuthError('LOOPBACK_REQUIRED', `${action} needs you at your computer: open the studio on the home's own computer`))
+    return false
+  }
+  if (listener !== 'loopback' || !isLoopbackHost(host) || loopbackAddressOf(host) === undefined) {
     sendError(response, new HomeAuthError('HOST_MISMATCH', DEVICE_ROUTE_SENTENCE))
     return false
   }
@@ -192,7 +202,7 @@ function arrivedOnLoopback(request: IncomingMessage, response: ServerResponse): 
  * @param response - the response, answered with the refusal when the origin is foreign.
  * @returns whether the route may answer the request.
  */
-function cameFromOwnOrigin(request: IncomingMessage, response: ServerResponse): boolean {
+export function cameFromOwnOrigin(request: IncomingMessage, response: ServerResponse): boolean {
   if (isForeignFetchSite(request.headers['sec-fetch-site'])) {
     sendError(response, new HomeAuthError('ORIGIN_MISMATCH', FOREIGN_ORIGIN_SENTENCE))
     return false
@@ -211,7 +221,7 @@ function cameFromOwnOrigin(request: IncomingMessage, response: ServerResponse): 
  * @param response - the response, answered with a refusal and left open on failure.
  * @returns the message, or undefined when the body was refused.
  */
-async function readMessage(request: IncomingMessage, response: ServerResponse): Promise<Readonly<Record<string, unknown>> | undefined> {
+export async function readMessage(request: IncomingMessage, response: ServerResponse): Promise<Readonly<Record<string, unknown>> | undefined> {
   const chunks: Uint8Array[] = []
   let bytes = 0
   try {
@@ -250,7 +260,7 @@ async function readMessage(request: IncomingMessage, response: ServerResponse): 
  * @param response - the response.
  * @param error - the thrown value.
  */
-function sendThrown(response: ServerResponse, error: unknown): void {
+export function sendThrown(response: ServerResponse, error: unknown): void {
   if (error instanceof HomeAuthError) {
     sendError(response, error)
     return
@@ -265,7 +275,7 @@ function sendThrown(response: ServerResponse, error: unknown): void {
  * @param response - the response.
  * @param error - the refusal.
  */
-function sendError(response: ServerResponse, error: HomeAuthError): void {
+export function sendError(response: ServerResponse, error: HomeAuthError): void {
   response.statusCode = error.status
   response.setHeader('content-type', 'application/json; charset=utf-8')
   response.end(refusalBody(error.code, error.detail))
@@ -277,7 +287,7 @@ function sendError(response: ServerResponse, error: HomeAuthError): void {
  * @param status - the status code.
  * @param value - the value, written as JSON.
  */
-function sendJson(response: ServerResponse, status: number, value: unknown): void {
+export function sendJson(response: ServerResponse, status: number, value: unknown): void {
   response.statusCode = status
   response.setHeader('content-type', 'application/json; charset=utf-8')
   response.end(JSON.stringify(value))

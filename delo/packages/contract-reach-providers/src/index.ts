@@ -143,6 +143,8 @@ export const REACH_ERROR_CODES = [
   'TAILSCALE_NOT_INSTALLED',
   'TAILSCALE_NOT_LOGGED_IN',
   'TAILSCALE_ADDRESS_MISMATCH',
+  'TAILSCALE_HTTPS_DISABLED',
+  'TAILSCALE_SERVE_NOT_PERMITTED',
   'FUNNEL_NOT_PERMITTED',
   'PORT_CONFLICT',
   'NO_OWNER',
@@ -158,6 +160,12 @@ export const REACH_ERROR_CODES = [
 
 /** One code of {@link REACH_ERROR_CODES}. */
 export type ReachErrorCode = (typeof REACH_ERROR_CODES)[number]
+
+/**
+ * The one command a person runs to let their user configure `tailscale serve` on Linux. The provider prints it and never
+ * runs it, nor any command through `sudo`.
+ */
+export const TAILSCALE_OPERATOR_COMMAND = 'sudo tailscale set --operator=$USER' as const
 
 /** Payload of the `reach/state` event. */
 export interface ReachStateChange {

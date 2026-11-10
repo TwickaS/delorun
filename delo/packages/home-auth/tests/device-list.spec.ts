@@ -125,7 +125,7 @@ describe('the device list of a claimed home', () => {
       // and an owner-only operation acts for a device nobody approved here.
       await expect(home.auth.devices()).rejects.toMatchObject({ code: 'STORE_INVALID', status: 500 })
       await expect(home.auth.revokeDevice(claimed.device.id)).rejects.toMatchObject({ code: 'STORE_INVALID' })
-      await expect(home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: 60 * 1000 }))
+      await expect(home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 60 * 1000 }))
         .rejects.toMatchObject({ code: 'STORE_INVALID' })
     } finally {
       await home.dispose()

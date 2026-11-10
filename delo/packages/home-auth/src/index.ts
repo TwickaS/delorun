@@ -2,7 +2,11 @@
  * `@delo/home-auth`: the owner's claim and the device list of a home (contract C5), over the protected records of
  * `~/.delo/secrets/home-auth/`.
  *
- * - {@link HomeAuth} — the coordinator: claim, owner, device list, revocation and the sessions a revocation ends.
+ * - {@link HomeAuth} — the coordinator: claim, owner, device list, revocation and the sessions a revocation ends; the
+ *   reach listeners it serves, the approval window and local approval, sign-in and the synchronous admission of a
+ *   session token.
+ * - {@link HomeAuthAuthenticator} — the provider of upstream's `authenticator`, which also refuses a full-access grant
+ *   answered from a `tailnet-membership` session.
  * - {@link HomeAuthService} — the same behind Cordis as the `homeAuth` service, with the routes registered.
  * - The claim route, the device list route and the removal route, and the refusal a reach listener answers a claim
  *   with; the arrival helpers that decide whether a request came from the loopback listener and which address a claim
@@ -22,7 +26,17 @@ export {
   type HomeAuthOptions,
   type OwnerSummary,
   type RevocationResult,
+  type ServedListener,
+  type SignInRequest,
+  type SignedIn,
+  type TokenAdmission,
 } from './home-auth.ts'
+export { HomeAuthAuthenticator, FULL_ACCESS_REFUSAL, matchesPreLogin, type ReachPeer } from './authenticator.ts'
+export { Approvals, type ApprovalRecord, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
+export { formatMatchCode, matchCode, typedCodeMatches, type MatchCodeInputs } from './match-code.ts'
+export { Challenges, signInMessage, signInVerifies } from './sign-in.ts'
+export { loadHomeKey, type HomeKey } from './home-key.ts'
+export { REACH_PATHS, REACH_PRE_LOGIN_ROUTES, SIGN_IN_ASSETS } from './reach-routes.ts'
 export { HomeAuthService, Config as HomeAuthConfig, type Config } from './service.ts'
 export {
   DEVICE_REMOVE_PATH,
@@ -35,7 +49,7 @@ export {
   removeDeviceHandler,
   type RouteHandler,
 } from './routes.ts'
-export { REQUEST_LISTENER, isLoopbackHost, listenerOf, type StampedRequest } from './arrival.ts'
+export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from './arrival.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,
   isForeignFetchSite,

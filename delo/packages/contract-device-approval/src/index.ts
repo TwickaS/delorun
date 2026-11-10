@@ -127,6 +127,20 @@ export interface Approval {
   readonly oidcReauth?: string
 }
 
+/** The approver a local approval records: the person's own `delorun devices approve` or the loopback studio. */
+export const LOCAL_APPROVER = 'local' as const
+
+/**
+ * The local approval form: approval at the home's own computer, through the home socket's `devices.approve` or the
+ * loopback studio. It carries no session and no signature; the home socket's caller rule and the loopback arrival stand
+ * in for them.
+ */
+export interface LocalApproval {
+  readonly requestId: ApprovalRequestId
+  /** The 8 digits the person typed from the new device's screen. */
+  readonly typedCode: string
+}
+
 /** Domain-separation label of a sign-in signature. */
 export const SIGN_IN_LABEL = 'delo-signin-v1' as const
 
@@ -218,6 +232,11 @@ export const DEVICE_APPROVAL_LIMITS = {
   ownerCodeExpiryMs: 10 * MINUTE_MS,
   ownerClaimAttemptsPerMinutePerSource: 10,
   approvalRequestExpiryMs: 5 * MINUTE_MS,
+  /**
+   * How long an approval window stays open on a route whose identity factor is `tailnet-membership`; it closes at the
+   * first approval. Outside a window a request is refused with `APPROVALS_CLOSED`.
+   */
+  approvalWindowMs: 5 * MINUTE_MS,
   pendingRequestsPerHome: 5,
   approvalRequestsPerMinutePerSource: 10,
   requestStateReadIntervalMs: 2000,
@@ -259,6 +278,7 @@ export const DEVICE_APPROVAL_ERROR_CODES = [
   'HOME_RUNNING',
   'TLS_PIN_MISMATCH',
   'HOME_KEY_MISMATCH',
+  'APPROVALS_CLOSED',
 ] as const
 
 /** One code of {@link DEVICE_APPROVAL_ERROR_CODES}. */

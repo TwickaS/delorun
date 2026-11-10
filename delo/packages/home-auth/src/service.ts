@@ -12,11 +12,20 @@
  */
 import { Context, Service } from '@deepseek-ai/cordis'
 import schema from '@deepseek-ai/schemastery'
-import type { DeviceId } from '@delo/contract-admission'
+import type { DeviceId, ReachListenerId } from '@delo/contract-admission'
+import type { DeviceRecord } from './records.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
-import { HomeAuth, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult } from './home-auth.ts'
+import {
+  HomeAuth, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
+} from './home-auth.ts'
+import type { PendingSummary } from './approvals.ts'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler } from './routes.ts'
+import {
+  approvalRequestHandler, approveHandler, assetHandler, challengeHandler, pendingHandler, REACH_PATHS, sessionHandler, signInPageHandler,
+  windowHandler,
+} from './reach-routes.ts'
+import { HomeAuthAuthenticator } from './authenticator.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -69,19 +78,109 @@ export class HomeAuthService extends Service {
     const core = new HomeAuth({
       directory: this.config.secretsDirectory,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
+      loopbackPort: () => this.ctx.webServer.port,
     })
     await core.start()
     this.core = core
+    this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
     this.ctx.effect(() => {
+      const server = this.ctx.webServer
       const registered = [
-        this.ctx.webServer.register({ kind: 'exact', path: OWNER_CLAIM_PATH, handler: claimHandler(core) }),
-        this.ctx.webServer.register({ kind: 'exact', path: DEVICES_PATH, handler: devicesHandler(core) }),
-        this.ctx.webServer.register({ kind: 'exact', path: DEVICE_REMOVE_PATH, handler: removeDeviceHandler(core) }),
+        server.register({ kind: 'exact', path: OWNER_CLAIM_PATH, handler: claimHandler(core) }),
+        server.register({ kind: 'exact', path: DEVICES_PATH, handler: devicesHandler(core) }),
+        server.register({ kind: 'exact', path: DEVICE_REMOVE_PATH, handler: removeDeviceHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.signIn, handler: signInPageHandler(core) }),
+        server.register({ kind: 'prefix', path: REACH_PATHS.assets, handler: assetHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.request, handler: approvalRequestHandler(core) }),
+        server.register({ kind: 'prefix', path: REACH_PATHS.request, handler: approvalRequestHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.challenge, handler: challengeHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.session, handler: sessionHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.window, handler: windowHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.pending, handler: pendingHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.approve, handler: approveHandler(core) }),
       ]
       return () => {
         for (const off of registered) off()
       }
     }, 'home-auth routes')
+    this.ctx.plugin(HomeAuthAuthenticator)
+  }
+
+  /**
+   * Serve one reach listener with the identity factor its provider declares, and announce the policy change.
+   * @param served - the listener, its address and the declared factor.
+   * @returns the disposer, which stops serving it and announces that too.
+   */
+  serve(served: ServedListener): () => void {
+    const off = this.state().serve(served)
+    this.ctx.emit('authenticator/policy', served.listener)
+    return () => {
+      off()
+      this.ctx.emit('authenticator/policy', served.listener)
+    }
+  }
+
+  /**
+   * The served listener of an id.
+   * @param listener - the listener id.
+   * @returns its declaration, or undefined.
+   */
+  servedListener(listener: string): ServedListener | undefined {
+    return this.core?.servedListener(listener)
+  }
+
+  /**
+   * Admit a session token on a reach listener, synchronously; refuses until the service has started.
+   * @param token - the token.
+   * @param listener - the listener.
+   * @returns the admission.
+   */
+  admitToken(token: string, listener: ReachListenerId): TokenAdmission {
+    return this.core?.admitToken(token, listener) ?? { kind: 'refused', code: 'NOT_SIGNED_IN' }
+  }
+
+  /**
+   * Call a listener for each removed device.
+   * @param listener - called with the device id.
+   * @returns the disposer.
+   */
+  onDeviceRemoved(listener: (deviceId: DeviceId) => void): () => void {
+    return this.state().onDeviceRemoved(listener)
+  }
+
+  /**
+   * Open the approval window, claiming the home for the local person when it has no owner. Callers are the home's own
+   * computer only.
+   * @returns when the window closes.
+   */
+  openApprovalWindow(): Promise<number> {
+    return this.state().openApprovalWindow()
+  }
+
+  /**
+   * When the open approval window closes.
+   * @returns the time, or undefined with no window open.
+   */
+  approvalWindowOpenUntil(): number | undefined {
+    return this.state().approvals.windowOpenUntil()
+  }
+
+  /**
+   * The pending approval requests.
+   * @returns their summaries.
+   */
+  pendingApprovals(): readonly PendingSummary[] {
+    return this.state().pendingApprovals()
+  }
+
+  /**
+   * Approve a request at the home's own computer.
+   * @param requestId - the request.
+   * @param typedCode - the match code the person typed.
+   * @returns the new device's record.
+   */
+  approveLocally(requestId: string, typedCode: string): Promise<DeviceRecord> {
+    return this.state().approveLocally(requestId, typedCode)
   }
 
   /**

@@ -11,6 +11,7 @@
  */
 import { ADMISSION_REFUSAL_CODES, ADMISSION_REFUSAL_STATUS, type AdmissionRefusalCode } from '@delo/contract-admission'
 import type { DeviceApprovalErrorCode } from '@delo/contract-device-approval'
+import type { IdentityErrorCode } from '@delo/contract-oidc-passkeys'
 
 /** Codes this package answers with that neither contract names. */
 export const HOME_AUTH_LOCAL_CODES = [
@@ -25,12 +26,16 @@ export const HOME_AUTH_LOCAL_CODES = [
 export type HomeAuthLocalCode = (typeof HOME_AUTH_LOCAL_CODES)[number]
 
 /** Every code a home-auth refusal carries. */
-export type HomeAuthErrorCode = DeviceApprovalErrorCode | AdmissionRefusalCode | HomeAuthLocalCode
+export type HomeAuthErrorCode =
+  | DeviceApprovalErrorCode
+  | AdmissionRefusalCode
+  | HomeAuthLocalCode
+  | Extract<IdentityErrorCode, 'TAILNET_IDENTITY_UNAVAILABLE' | 'LOOPBACK_REQUIRED'>
 
 /**
  * The HTTP status of each code this package answers over HTTP. C5's table gives the first group, C4's refusal table the
  * four arrival and claim refusals, and this package's own codes the rest. Codes C5 reserves for the command line and the
- * desktop app are absent because no route raises them.
+ * desktop app are absent because no route raises them. C14 gives `TAILNET_IDENTITY_UNAVAILABLE` and `LOOPBACK_REQUIRED`.
  */
 export const HOME_AUTH_HTTP_STATUS = {
   NO_OWNER: 403,
@@ -48,6 +53,12 @@ export const HOME_AUTH_HTTP_STATUS = {
   CHALLENGE_INVALID: 401,
   RECOVERY_NEEDS_FACTOR: 403,
   RECOVERY_KIT_INVALID: 403,
+  APPROVALS_CLOSED: 403,
+  TAILNET_IDENTITY_UNAVAILABLE: 403,
+  LOOPBACK_REQUIRED: 403,
+  NOT_SIGNED_IN: ADMISSION_REFUSAL_STATUS.NOT_SIGNED_IN,
+  SESSION_EXPIRED: ADMISSION_REFUSAL_STATUS.SESSION_EXPIRED,
+  ROTATION_REQUIRED: ADMISSION_REFUSAL_STATUS.ROTATION_REQUIRED,
   OWNER_CLAIM_LOOPBACK_ONLY: ADMISSION_REFUSAL_STATUS.OWNER_CLAIM_LOOPBACK_ONLY,
   HOST_MISMATCH: ADMISSION_REFUSAL_STATUS.HOST_MISMATCH,
   ORIGIN_MISMATCH: ADMISSION_REFUSAL_STATUS.ORIGIN_MISMATCH,

@@ -1,0 +1,166 @@
+/**
+ * The provider of upstream's `authenticator` over a bare Cordis context with a recording connection: the policy of the
+ * listeners a reach provider asked the home to serve, the stamp and the pre-login routes, one Peer per device and
+ * listener disposed with its device, and the refusal of a full-access grant answered from a reach Peer.
+ *
+ * Each test's comment names the check whose removal makes that test fail.
+ */
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { Context, type Fiber } from '@deepseek-ai/cordis'
+import type { Admission, ConnectionIndexRequest } from '@deepseek-ai/dsh-client-connection'
+import type { PeerId, PeerScope } from '@deepseek-ai/dsh-typert-protocol'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { StudioAddress } from '@delo/contract-admission'
+import { HomeAuthService } from '../src/service.ts'
+import { HomeAuthAuthenticator, matchesPreLogin } from '../src/authenticator.ts'
+import { REQUEST_LISTENER } from '../src/arrival.ts'
+import { DeviceStore } from '../src/devices.ts'
+import { claimOf, recordOf } from './fixtures/home.ts'
+
+const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
+const HOUR = 60 * 60 * 1000
+
+/** A Peer double that records its disposal. */
+interface FakePeer extends PeerScope {
+  readonly disposal: { disposed: boolean }
+}
+
+/**
+ * A Peer double.
+ * @param id - its id.
+ * @returns the Peer.
+ */
+function fakePeer(id: string): FakePeer {
+  const disposal = { disposed: false }
+  return {
+    id: brandString<PeerId>(id), ctx: new Context(), principal: { kind: 'owner' }, signal: new AbortController().signal, interactions: 'answer', disposal,
+    dispose: async () => { disposal.disposed = true },
+  }
+}
+
+let ctx: Context
+let fiber: Fiber
+let directory: string
+const created: FakePeer[] = []
+const builtin: ConnectionIndexRequest[] = []
+
+beforeEach(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'delo-home-auth-provider-'))
+  ctx = new Context()
+  created.length = 0
+  builtin.length = 0
+  ctx.provide('webServer', { register: () => () => {}, port: undefined } as never)
+  ctx.provide('connection', {
+    builtinAdmission: (request: ConnectionIndexRequest): Admission => {
+      builtin.push(request)
+      return { kind: 'refused', status: 401, code: 'NOT_SIGNED_IN' }
+    },
+    createPeer: (): PeerScope => {
+      const peer = fakePeer(`peer-${String(created.length)}`)
+      created.push(peer)
+      return peer
+    },
+    closeReachConnections: () => 0,
+  } as never)
+  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+  await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
+})
+
+afterEach(async () => {
+  await fiber.dispose()
+  await rm(directory, { recursive: true, force: true })
+})
+
+/** A session for a device recorded at the served address. */
+async function session(fill: number): Promise<string> {
+  const store = new DeviceStore({ file: join(directory, 'home-auth', 'devices.json') })
+  if (await ctx.homeAuth.owner() === undefined) {
+    await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
+  }
+  await store.add(recordOf(fill, ADDRESS))
+  const opened = await ctx.homeAuth.openSession({ deviceId: recordOf(fill, ADDRESS).id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
+  return opened.token
+}
+
+function provider(): HomeAuthAuthenticator {
+  const value = ctx.authenticator
+  if (!(value instanceof HomeAuthAuthenticator)) throw new Error('home-auth did not provide the authenticator')
+  return value
+}
+
+const request = (fields: Partial<ConnectionIndexRequest> = {}): ConnectionIndexRequest => ({ headers: {}, method: 'GET', url: '/', ...fields })
+
+describe('the authenticator provider', () => {
+  it('serves only the listeners a reach provider asked for, with the reach policy', () => {
+    expect(provider().policy('reach-tailscale-private')).toBeUndefined()
+    const off = ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    expect(provider().policy('reach-tailscale-private')).toMatchObject({
+      scheme: 'https', hostRule: { kind: 'equals-address', address: ADDRESS }, acceptsLaunchToken: false,
+    })
+    expect(provider().policy('reach-tailscale-private')?.preLogin).not.toContainEqual({ method: 'POST', path: '/auth/recovery' })
+    off()
+    expect(provider().policy('reach-tailscale-private')).toBeUndefined()
+  })
+
+  it('keeps upstream\'s admission on loopback and stamps every reach request', async () => {
+    const loopback = request()
+    provider().admit(loopback, 'loopback')
+    expect(builtin).toEqual([loopback])
+    // An unserved listener admits nothing.
+    expect(provider().admit(request(), 'reach-tailscale-private')).toMatchObject({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const signIn = request({ url: '/auth/sign-in' })
+    expect(provider().admit(signIn, 'reach-tailscale-private')).toEqual({ kind: 'pre-login', route: { method: 'GET', path: '/auth/sign-in' } })
+    // Pins the stamp: without it a route decides the arrival from the socket alone.
+    expect(Reflect.get(signIn, REQUEST_LISTENER)).toBe('reach-tailscale-private')
+    expect(provider().admit(request({ url: '/auth/device/request/abc' }), 'reach-tailscale-private')).toMatchObject({ kind: 'pre-login' })
+    expect(provider().admit(request({ url: undefined }), 'reach-tailscale-private')).toMatchObject({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+    expect(provider().admit(request({ url: '/auth/session' }), 'reach-tailscale-private')).toMatchObject({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+    expect(provider().admit(request({ headers: { cookie: 'other=1' } }), 'reach-tailscale-private')).toMatchObject({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+    expect([
+      matchesPreLogin({ method: 'GET', path: '/auth/device/request/<id>' }, 'GET', '/auth/device/request/a/b'),
+      matchesPreLogin({ method: 'GET', path: '/auth/device/request/<id>' }, 'GET', '/auth/device/request/'),
+      matchesPreLogin({ method: 'GET', path: '/auth/device/request/<id>' }, 'GET', '/auth/other/x'),
+    ]).toEqual([false, false, false])
+  })
+
+  it('admits a live session as one Peer per device, from either header carrier, and disposes it with the device', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const first = await session(2)
+    const second = await session(3)
+    const one = provider().admit(request({ headers: { cookie: `a=b; __Host-delo-session=${first}` } }), 'reach-tailscale-private')
+    const again = provider().admit(request({ headers: new Headers({ cookie: `__Host-delo-session=${first}` }) }), 'reach-tailscale-private')
+    const other = provider().admit(request({ headers: { cookie: ['x=y', `__Host-delo-session=${second}`] } }), 'reach-tailscale-private')
+    if (one.kind !== 'admitted' || again.kind !== 'admitted' || other.kind !== 'admitted') throw new Error('not admitted')
+    expect(again.peer).toBe(one.peer)
+    expect(other.peer).not.toBe(one.peer)
+    expect(provider().reachPeer(one.peer.id)).toEqual({ deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private', factor: 'tailnet-membership' })
+    expect(provider().admit(request({ headers: new Headers() }), 'reach-tailscale-private')).toMatchObject({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+    await ctx.homeAuth.revokeDevice(recordOf(2, ADDRESS).id)
+    // Pins the removal: the removed device's Peer ends, and the other device's stays.
+    expect(created.map(peer => peer.disposal.disposed)).toEqual([true, false])
+    expect(provider().reachPeer(one.peer.id)).toBeUndefined()
+    await fiber.dispose()
+    expect(created.map(peer => peer.disposal.disposed)).toEqual([true, true])
+  })
+
+  it('refuses a full-access grant answered from a reach Peer, and nothing else', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    const local = fakePeer('local')
+    const check = (peer: PeerScope, fields: { event?: string; request?: object; value?: unknown } = {}): void => {
+      provider().checkAnswer({ peer, event: fields.event ?? 'approval/request', request: fields.request ?? { grants: 'full-access' }, value: fields.value ?? 'allowed-once' })
+    }
+    // Pins the refusal for a Peer a reach listener admitted.
+    expect(() => { check(admitted.peer) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', details: { action: 'full-access-escalation' } }))
+    expect(() => { check(local) }).not.toThrow()
+    expect(() => { check(admitted.peer, { value: 'rejected' }) }).not.toThrow()
+    expect(() => { check(admitted.peer, { request: {} }) }).not.toThrow()
+    expect(() => { check(admitted.peer, { event: 'question/ask' }) }).not.toThrow()
+    expect(ctx.get('remoteAnswerGuard')).toBeDefined()
+  })
+})

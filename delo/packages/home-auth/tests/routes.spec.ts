@@ -4,9 +4,9 @@
  * page on another origin, an unclaimed home refuses the device list with `NO_OWNER`, and a removal is the end of a
  * device's sessions.
  *
- * The test server plays the part of both listeners: a request under `?reach` is stamped with a reach listener, as a
- * reach dispatcher stamps the requests it forwards, and every other request arrives unstamped, as the loopback
- * listener's do.
+ * The test server plays the part of both listeners: a request under `?reach` is stamped with a reach listener, as the
+ * provider stamps the requests a reach listener admits, and every other request arrives unstamped on the socket the
+ * fixture names as the loopback listener's.
  *
  * Each test's comment names the check whose removal makes that test fail, so the suite is also the mutation record.
  */
@@ -20,12 +20,11 @@ import { describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ListenerId, StudioAddress } from '@delo/contract-admission'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
-import type { HomeAuth } from '../src/home-auth.ts'
 import { deviceIdOf } from '../src/records.ts'
 import {
   claimHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, OWNER_CLAIM_PATH, reachClaimRefusal, removeDeviceHandler,
 } from '../src/routes.ts'
-import { claimOf, homeFixture, keyOf } from './fixtures/home.ts'
+import { claimOf, homeFixture, keyOf, type Home } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('http://127.0.0.1:3080')
 const HOUR = 60 * 60 * 1000
@@ -40,10 +39,11 @@ interface Server {
 
 /**
  * Serve the three routes, stamping a request under `?reach` with a reach listener as a dispatcher would.
- * @param auth - the home-auth instance the routes answer from.
+ * @param home - the fixture whose home-auth instance the routes answer from; its loopback port becomes the server's.
  * @returns the running server.
  */
-async function serve(auth: HomeAuth): Promise<Server> {
+async function serve(home: Home): Promise<Server> {
+  const auth = home.auth
   const handlers: Record<string, (request: IncomingMessage, response: ServerResponse) => Promise<void>> = {
     [OWNER_CLAIM_PATH]: claimHandler(auth),
     [DEVICES_PATH]: devicesHandler(auth),
@@ -65,6 +65,7 @@ async function serve(auth: HomeAuth): Promise<Server> {
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const { port } = server.address() as AddressInfo
+  home.loopback.port = port
   return { port, close: () => new Promise((resolve) => { server.close(() => { resolve() }) }) }
 }
 
@@ -144,7 +145,7 @@ function json(reply: Reply): Record<string, unknown> {
 describe('the claim route', () => {
   it('claims the home from an unstamped loopback request', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       const reply = await postJson(server.port, OWNER_CLAIM_PATH, {
@@ -161,7 +162,7 @@ describe('the claim route', () => {
 
   it('refuses a claim a reach listener forwards, with the contract code, and claims nothing', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       const reply = await postJson(server.port, `${OWNER_CLAIM_PATH}?reach`, {
@@ -180,9 +181,35 @@ describe('the claim route', () => {
     }
   })
 
+  it('a request without a listener stamp is not loopback', async () => {
+    const home = await homeFixture()
+    const server = await serve(home)
+    try {
+      const issued = await home.auth.issueOwnerCode()
+      // The server is no longer the loopback listener's socket, as a reach listener that forwarded a request without
+      // stamping it would be: its requests carry a loopback Host and no stamp.
+      home.loopback.port = server.port + 1
+      const claim = await postJson(server.port, OWNER_CLAIM_PATH, {
+        v: 1, ownerCode: issued.code, devicePublicKey: keyOf(1), label: 'This computer',
+      })
+      // Pins the fail-closed arrival: reading an absent stamp as loopback lets this claim take the home.
+      expect(claim.status).toBe(403)
+      expect(json(claim)).toMatchObject({ error: 'OWNER_CLAIM_LOOPBACK_ONLY' })
+      await expect(home.auth.owner()).resolves.toBeUndefined()
+      const listing = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
+      expect(listing.status).toBe(421)
+      home.loopback.port = undefined
+      const unbound = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
+      expect(unbound.status).toBe(421)
+    } finally {
+      await server.close()
+      await home.dispose()
+    }
+  })
+
   it('refuses a claim whose Host names a reach address', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       const reply = await postJson(server.port, OWNER_CLAIM_PATH, {
@@ -200,7 +227,7 @@ describe('the claim route', () => {
 
   it('records the loopback listener\'s own origin, whatever spelling of loopback the claim used', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       const reply = await postJson(server.port, OWNER_CLAIM_PATH, {
@@ -220,7 +247,7 @@ describe('the claim route', () => {
 
   it('refuses a claim whose Host is no loopback authority', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       // A URL parser reads userinfo, a path or a fragment as the loopback host; none of them is an authority a device may
@@ -242,7 +269,7 @@ describe('the claim route', () => {
 
   it('answers the refusal before the body has arrived', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       // A body of 4096 bytes that is never finished: a route that read it first would hold the response until the
       // socket closed, and this test would time out with no reply.
@@ -263,7 +290,7 @@ describe('the claim route', () => {
 
   it('refuses a message of another version, a malformed body and a wrong method', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       const version = await postJson(server.port, OWNER_CLAIM_PATH, {
@@ -292,7 +319,7 @@ describe('the claim route', () => {
 describe('the device routes', () => {
   it('refuses the device list on an unclaimed home with NO_OWNER', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const reply = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
       // Pins "refuses rather than failing open": a route that answered the store's empty list would send 200 here.
@@ -307,12 +334,12 @@ describe('the device routes', () => {
 
   it('lists the device and ends its sessions when it is removed', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       await postJson(server.port, OWNER_CLAIM_PATH, { v: 1, ownerCode: issued.code, devicePublicKey: keyOf(1), label: 'This computer' })
       const deviceId = deviceIdOf(keyOf(1))
-      const session = await home.auth.openSession({ deviceId, address: ADDRESS, lifetimeMs: HOUR })
+      const session = await home.auth.openSession({ deviceId, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       const listing = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
       expect(listing.status).toBe(200)
       expect(json(listing)).toMatchObject({ owner: { firstDeviceId: deviceId }, devices: [{ id: deviceId, label: 'This computer' }] })
@@ -330,7 +357,7 @@ describe('the device routes', () => {
 
   it('refuses a removal without a device id', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       await postJson(server.port, OWNER_CLAIM_PATH, { v: 1, ownerCode: issued.code, devicePublicKey: keyOf(1), label: 'This computer' })
@@ -346,7 +373,7 @@ describe('the device routes', () => {
 
   it('refuses the device list whose Host names a reach address', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
@@ -368,11 +395,11 @@ describe('the device routes', () => {
 
   it('refuses a removal whose Host names a reach address, before it reads the body', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
-      const session = await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+      const session = await home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       // A body of 4096 bytes that never finishes: a route that read it first would hold the response until the socket
       // closed, and this test would time out with no reply.
       const reply = await raw(server.port, [
@@ -395,11 +422,11 @@ describe('the device routes', () => {
 
   it('refuses a removal that a page on another origin sent', async () => {
     const home = await homeFixture()
-    const server = await serve(home.auth)
+    const server = await serve(home)
     try {
       const issued = await home.auth.issueOwnerCode()
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
-      const session = await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+      const session = await home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       const foreign = await postJson(server.port, DEVICE_REMOVE_PATH, { v: 1, deviceId: claimed.device.id }, {
         headers: ['Origin: https://evil.example'],
       })

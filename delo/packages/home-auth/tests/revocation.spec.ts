@@ -37,7 +37,7 @@ describe('a device credential at rest', () => {
     const home = await homeFixture()
     try {
       const deviceId = await claimed(home)
-      const opened = await home.auth.openSession({ deviceId, address: ADDRESS, lifetimeMs: HOUR })
+      const opened = await home.auth.openSession({ deviceId, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       const file = join(home.directory, SESSIONS_FILE)
       const text = await readFile(file, 'utf8')
       // Pins "stored hashed": a store that keyed the session by its token would put the token in this file.
@@ -59,7 +59,7 @@ describe('a device credential at rest', () => {
     const home = await homeFixture()
     try {
       const deviceId = await claimed(home)
-      const opened = await home.auth.openSession({ deviceId, address: ADDRESS, lifetimeMs: HOUR })
+      const opened = await home.auth.openSession({ deviceId, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       home.clock.advance(HOUR - 1)
       await expect(home.auth.sessionOf(opened.token)).resolves.toBeDefined()
       home.clock.advance(1)
@@ -76,8 +76,8 @@ describe('revoking a device', () => {
     const home = await homeFixture()
     try {
       const deviceId = await claimed(home)
-      const first = await home.auth.openSession({ deviceId, address: ADDRESS, lifetimeMs: HOUR })
-      const second = await home.auth.openSession({ deviceId, address: ADDRESS, lifetimeMs: HOUR })
+      const first = await home.auth.openSession({ deviceId, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
+      const second = await home.auth.openSession({ deviceId, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       const result = await home.auth.revokeDevice(deviceId)
       expect(result).toEqual({ removed: true, sessions: 2, connections: 1 })
       // Pins "revoking a device invalidates its live sessions": without the session revocation both tokens stay live.
@@ -91,7 +91,7 @@ describe('revoking a device', () => {
     }
   })
 
-  it('leaves another device\'s sessions live', async () => {
+  it('keeps another device\'s sessions and rotates them', async () => {
     const home = await homeFixture()
     try {
       const firstDevice = await claimed(home)
@@ -99,16 +99,12 @@ describe('revoking a device', () => {
       // A session is minted only for a device the home records at the address it signs in on, so the second device is
       // recorded first, as an approval records one.
       await new DeviceStore({ file: join(home.directory, 'devices.json') }).add(recordOf(9, ADDRESS))
-      const kept = await home.auth.openSession({ deviceId: secondDevice, address: ADDRESS, lifetimeMs: HOUR })
-      await home.auth.openSession({ deviceId: firstDevice, address: ADDRESS, lifetimeMs: HOUR })
-      // Pins the per-device filter: revoking every session instead of this device's makes the kept session fail.
-      //
-      // This test also holds the one deviation from C5's "Removal" that the README records: C5 says a removal "rotates
-      // every other session", and this home does not rotate a session yet, so a removal ends exactly the removed device's
-      // sessions and every other device keeps signing in. Rotation arrives with the sign-in routes that redeem a rotated
-      // token; until then ending another device's session is a behaviour no contract asks this package for.
+      const kept = await home.auth.openSession({ deviceId: secondDevice, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
+      await home.auth.openSession({ deviceId: firstDevice, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
+      // Pins the per-device filter: revoking every session instead of this device's removes the kept session's record.
       await expect(home.auth.revokeDevice(firstDevice)).resolves.toMatchObject({ sessions: 1 })
-      await expect(home.auth.sessionOf(kept.token)).resolves.toMatchObject({ deviceId: secondDevice })
+      // C5's "Removal" rotates every other session: the record stays, and its next request needs a fresh signature.
+      await expect(home.auth.sessionOf(kept.token)).resolves.toMatchObject({ deviceId: secondDevice, rotated: true })
     } finally {
       await home.dispose()
     }
@@ -118,7 +114,7 @@ describe('revoking a device', () => {
     const home = await homeFixture()
     try {
       const deviceId = await claimed(home)
-      await home.auth.openSession({ deviceId, address: ADDRESS, lifetimeMs: HOUR })
+      await home.auth.openSession({ deviceId, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       let sessionsAtClose: string | undefined
       const auth = new HomeAuth({
         directory: home.directory,

@@ -3,15 +3,17 @@
  * loopback request binds its device to.
  *
  * C5 accepts an owner claim, and answers the device list and the removal, only on the loopback listener, so the
- * question "did this request arrive on loopback?" decides a security rule. Two independent answers are available and
- * both must say loopback:
+ * question "did this request arrive on loopback?" decides a security rule. The answer fails closed: a request is a
+ * loopback request only when it is positively identified as one, and two independent answers must both say loopback:
  *
- * - The stamp. A reach listener's dispatcher forwards a pre-login request to the web server's route, and stamps the
- *   request with the listener it serves ([`REQUEST_LISTENER`](#request_listener)), so the reach listener's own id is
- *   readable where the route runs.
+ * - The listener. The provider stamps every request a reach listener admits with that listener's id
+ *   ([`REQUEST_LISTENER`](#request_listener)) before any route runs. A request with no stamp is a loopback request only
+ *   when the socket that accepted it is the loopback listener's own: its local port is the configured listener's bound
+ *   port and its local address is a loopback address. A request with neither is unstamped, and an unstamped request is
+ *   never loopback, so a reach listener that forwarded a request without a stamp gains nothing from the omission.
  * - The `Host` header. The loopback listener is reached as `localhost`, `127.0.0.1` or `[::1]`, and every reach listener
- *   refuses exactly those (`HOST_MISMATCH`), so a request that names a reach address is refused even when no stamp
- *   reached the route.
+ *   refuses exactly those (`HOST_MISMATCH`), so a request that names a reach address is refused even when it arrived on
+ *   the loopback listener's socket.
  *
  * A browser can be made to send a request to the loopback listener while its `Host` names an attacker's name — that is
  * what DNS rebinding does — so the `Host` answer is the one that keeps a page on another origin away from the home's
@@ -24,25 +26,60 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { LOOPBACK_LISTENER_ADDRESS, type ListenerId, type StudioAddress } from '@delo/contract-admission'
 
 /**
- * The symbol a reach listener's dispatcher stamps on a request it forwards, whose value is that listener's id. The
- * loopback listener has no dispatcher and stamps nothing, so an absent stamp is read as the one listener that does not
- * stamp — and the `Host` check then answers for it.
+ * The symbol the provider stamps on every request a reach listener admits, whose value is that listener's id. The
+ * loopback listener has no dispatcher; its requests are identified by the socket that accepted them instead.
  */
 export const REQUEST_LISTENER: unique symbol = Symbol.for('delo.home-auth.request-listener')
 
-/** A request a dispatcher may have stamped. */
+/** A request a reach listener may have stamped, with the socket that accepted it. */
 export interface StampedRequest {
-  /** The listener that forwarded the request, when one did. */
+  /** The reach listener that admitted the request, when one did. */
   readonly [REQUEST_LISTENER]?: ListenerId
+  /** The accepted socket's local end; absent for a stream that is not a TCP socket. */
+  readonly socket?: { readonly localAddress?: string | undefined; readonly localPort?: number | undefined }
 }
 
 /**
- * The listener a request arrived on.
- * @param request - the request.
- * @returns the stamped listener, or `loopback` when nothing stamped the request.
+ * The loopback listener's bound port, read when a request arrives; `undefined` before it is bound, which makes every
+ * unstamped request unstamped rather than loopback.
  */
-export function listenerOf(request: StampedRequest): ListenerId {
-  return request[REQUEST_LISTENER] ?? 'loopback'
+export type LoopbackPort = () => number | undefined
+
+/**
+ * Stamp a request with the reach listener that admitted it. The provider calls this in `admit`, before the dispatcher
+ * hands the request to any route.
+ * @param request - the admitted request.
+ * @param listener - the reach listener.
+ */
+export function stampListener(request: object, listener: ListenerId): void {
+  Object.defineProperty(request, REQUEST_LISTENER, { value: listener, configurable: false, enumerable: false, writable: false })
+}
+
+/**
+ * The listener a request arrived on, failing closed.
+ * @param request - the request.
+ * @param loopbackPort - the loopback listener's bound port.
+ * @returns the stamped reach listener; `loopback` when the request carries no stamp and arrived on the loopback
+ *   listener's own socket; otherwise `undefined`, which no rule reads as loopback.
+ */
+export function listenerOf(request: StampedRequest, loopbackPort: LoopbackPort): ListenerId | undefined {
+  const stamped = request[REQUEST_LISTENER]
+  if (stamped !== undefined) return stamped
+  const port = loopbackPort()
+  const socket = request.socket
+  if (port === undefined || socket?.localPort !== port) return undefined
+  return isLoopbackAddress(socket.localAddress) ? 'loopback' : undefined
+}
+
+/**
+ * Whether a socket's local address is a loopback address, IPv4-mapped forms included.
+ * @param address - the socket's `localAddress`.
+ * @returns whether it is in `127.0.0.0/8` or is `::1`.
+ */
+function isLoopbackAddress(address: string | undefined): boolean {
+  if (address === undefined) return false
+  const v4 = address.startsWith('::ffff:') ? address.slice(7) : address
+  return v4 === '::1' || /^127(?:\.\d{1,3}){3}$/.test(v4)
 }
 
 /**

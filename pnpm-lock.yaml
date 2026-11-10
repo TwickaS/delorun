@@ -2004,9 +2004,18 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:*
+        version: link:../../../packages/typert/protocol
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -2016,6 +2025,12 @@ importers:
       '@delo/contract-device-approval':
         specifier: workspace:*
         version: link:../contract-device-approval
+      '@delo/contract-oidc-passkeys':
+        specifier: workspace:*
+        version: link:../contract-oidc-passkeys
+      '@delo/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../contract-reach-providers
       '@delo/home':
         specifier: workspace:*
         version: link:../home
@@ -2023,15 +2038,9 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
-      '@deepseek-ai/dsh-client-connection':
-        specifier: workspace:*
-        version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../../packages/host/webserver
-      '@deepseek-ai/dsh-typert-protocol':
-        specifier: workspace:*
-        version: link:../../../packages/typert/protocol
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local

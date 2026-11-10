@@ -9,11 +9,37 @@
  */
 import type { ReachOptionId } from '@delo/contract-reach-providers'
 
-/** Identity factors. `tailnet` exists only under the reach contract's socket variant. */
-export const IDENTITY_FACTORS = ['passkey', 'oidc', 'tailnet'] as const
+/**
+ * Identity factors. `tailnet` exists only under the reach contract's socket variant. `tailnet-membership` carries no
+ * proof: it states that the request came through the serve target of a provider that declares it, and only
+ * {@link TAILNET_MEMBERSHIP_OPTIONS} may.
+ */
+export const IDENTITY_FACTORS = ['passkey', 'oidc', 'tailnet', 'tailnet-membership'] as const
 
 /** One factor of {@link IDENTITY_FACTORS}. */
 export type IdentityFactor = (typeof IDENTITY_FACTORS)[number]
+
+/** The reach options whose provider may declare `tailnet-membership`; every other address refuses it. */
+export const TAILNET_MEMBERSHIP_OPTIONS = ['tailscale-private'] as const satisfies readonly ReachOptionId[]
+
+/**
+ * Actions the home refuses with `LOOPBACK_REQUIRED` to a session whose factor is `tailnet-membership`. Each is granted
+ * only at the home's own computer: a loopback studio session or the person's own `delorun` command.
+ */
+export const LOOPBACK_REQUIRED_ACTIONS = [
+  'full-access-escalation',
+  'full-access-consent',
+  'device-approve',
+  'device-remove',
+  'approval-window',
+  'reset',
+  'recovery-kit',
+  'factor-enrol',
+  'reach-settings',
+] as const
+
+/** One action of {@link LOOPBACK_REQUIRED_ACTIONS}. */
+export type LoopbackRequiredAction = (typeof LOOPBACK_REQUIRED_ACTIONS)[number]
 
 /**
  * Passkey availability per reach option under the current contract. `ts.net` addresses
@@ -151,6 +177,7 @@ export const IDENTITY_ERROR_CODES = [
   'PASSKEY_USER_VERIFICATION_REQUIRED',
   'PASSKEY_COUNTER_REGRESSED',
   'TAILNET_IDENTITY_UNAVAILABLE',
+  'LOOPBACK_REQUIRED',
 ] as const
 
 /** One code of {@link IDENTITY_ERROR_CODES}. */

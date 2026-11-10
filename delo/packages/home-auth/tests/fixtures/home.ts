@@ -55,6 +55,8 @@ export interface Home {
   readonly random: (size: number) => Uint8Array
   /** A home-auth instance over this directory and clock. */
   readonly auth: HomeAuth
+  /** The port the fixture names as the loopback listener's; a spec's server sets it once it is bound. */
+  readonly loopback: { port: number | undefined }
   /** What a `closeReachConnections` stub recorded, in call order. */
   readonly closed: { readonly deviceId?: string }[]
   /** Dispose the directory. */
@@ -83,7 +85,9 @@ export async function homeFixture(options: { readonly fill?: number } = {}): Pro
     return new Uint8Array(size).fill(value)
   }
   const closed: { readonly deviceId?: string }[] = []
+  const loopback: { port: number | undefined } = { port: undefined }
   const auth = new HomeAuth({
+    loopbackPort: () => loopback.port,
     directory,
     now: clock.read,
     random,
@@ -93,7 +97,13 @@ export async function homeFixture(options: { readonly fill?: number } = {}): Pro
     },
   })
   await auth.start()
-  return { directory, clock, random, auth, closed, dispose: () => rm(directory, { recursive: true, force: true }) }
+  return {
+    directory, clock, random, auth, loopback, closed,
+    dispose: async () => {
+      await auth.stop()
+      await rm(directory, { recursive: true, force: true })
+    },
+  }
 }
 
 /**

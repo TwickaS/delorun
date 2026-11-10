@@ -10,8 +10,9 @@
  * @module @delo/home-auth/sessions
  */
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { DeviceId, SessionId, StudioAddress } from '@delo/contract-admission'
-import { SESSION_STORE_VERSION } from '@delo/contract-admission'
+import type { DeviceId, ReachListenerId, SessionId, StudioAddress } from '@delo/contract-admission'
+import { LISTENER_IDS, SESSION_STORE_VERSION } from '@delo/contract-admission'
+import { IDENTITY_FACTORS, type IdentityFactor } from '@delo/contract-oidc-passkeys'
 import { HomeAuthError } from './errors.ts'
 import { isRecord, isTime, readStoreFile, writeStoreFile } from './files.ts'
 import { SESSION_TOKEN_BYTES, hashSecret, newSecret, systemRandom, type RandomBytes } from './secret.ts'
@@ -30,8 +31,17 @@ export const MAX_LIVE_SESSIONS_PER_DEVICE = 16
 export interface SessionRecord {
   /** The device the session speaks for. */
   readonly deviceId: DeviceId
+  /** The reach listener the session was created on; a session is admitted only there. */
+  readonly listener: ReachListenerId
   /** The studio address the session was created on; a session is used only there. */
   readonly address: StudioAddress
+  /**
+   * The identity factor the session was created with. The home reads it wherever it grants an action C14 reserves for
+   * the home's own computer: a `tailnet-membership` session is refused those with `LOOPBACK_REQUIRED`.
+   */
+  readonly factor: IdentityFactor
+  /** Whether a rotation trigger fired since the token was minted; its next request is refused with `ROTATION_REQUIRED`. */
+  readonly rotated: boolean
   /** When the token was minted, in milliseconds since the epoch. */
   readonly createdAt: number
   /** When the session last presented its token, in milliseconds since the epoch. */
@@ -46,16 +56,24 @@ export interface OpenedSession {
   readonly sessionId: SessionId
   /** The credential itself, which no store holds. */
   readonly token: string
+  /** When the token stops being accepted, in milliseconds since the epoch, for the cookie's `Max-Age`. */
+  readonly expiresAt: number
 }
 
 /** What opening a session takes. */
 export interface OpenSessionRequest {
   /** The device the session speaks for. */
   readonly deviceId: DeviceId
+  /** The reach listener the session is bound to. */
+  readonly listener: ReachListenerId
   /** The studio address the session is bound to. */
   readonly address: StudioAddress
+  /** The identity factor the session is created with. */
+  readonly factor: IdentityFactor
   /** How long the token may be used, in milliseconds. */
   readonly lifetimeMs: number
+  /** For a rotation: the session the new token replaces, whose absolute expiry it keeps and whose record it deletes. */
+  readonly replaces?: SessionId
 }
 
 /** What the session store reads and writes. */
@@ -103,6 +121,8 @@ export class SessionStore {
     for (const [id, record] of Object.entries(sessions)) {
       if (record.expiresAt <= at) delete sessions[id]
     }
+    const replaced = request.replaces === undefined ? undefined : sessions[request.replaces]
+    if (request.replaces !== undefined) delete sessions[request.replaces]
     const live = Object.values(sessions).filter(record => record.deviceId === request.deviceId).length
     if (live >= MAX_LIVE_SESSIONS_PER_DEVICE) {
       throw new HomeAuthError(
@@ -111,15 +131,20 @@ export class SessionStore {
         { limit: MAX_LIVE_SESSIONS_PER_DEVICE, deviceId: request.deviceId },
       )
     }
+    // A rotation never extends the absolute limit.
+    const expiresAt = replaced?.expiresAt ?? at + request.lifetimeMs
     sessions[sessionId] = {
       deviceId: request.deviceId,
+      listener: request.listener,
       address: request.address,
-      createdAt: at,
+      factor: request.factor,
+      rotated: false,
+      createdAt: replaced?.createdAt ?? at,
       lastUsedAt: at,
-      expiresAt: at + request.lifetimeMs,
+      expiresAt,
     }
     await this.write(sessions)
-    return { sessionId: brandString<SessionId>(sessionId), token }
+    return { sessionId: brandString<SessionId>(sessionId), token, expiresAt }
   }
 
   /**
@@ -161,6 +186,55 @@ export class SessionStore {
   }
 
   /**
+   * Every session record, keyed by session id, for the provider's in-memory copy that `admit` reads.
+   * @returns the map.
+   */
+  async all(): Promise<Readonly<Record<string, SessionRecord>>> {
+    return this.read()
+  }
+
+  /**
+   * Mark every session rotated, as a rotation trigger requires (C4, "Rotation and revocation").
+   * @returns how many sessions were marked.
+   */
+  async rotateAll(): Promise<number> {
+    const sessions = await this.read()
+    const ids = Object.keys(sessions)
+    if (ids.length === 0) return 0
+    await this.write(Object.fromEntries(Object.entries(sessions).map(([id, record]) => [id, { ...record, rotated: true }])))
+    return ids.length
+  }
+
+  /**
+   * Remove the given sessions, which invalidates their tokens before this returns.
+   * @param ids - the session ids.
+   * @returns how many were removed.
+   */
+  async remove(ids: readonly string[]): Promise<number> {
+    const sessions = await this.read()
+    const remaining = Object.entries(sessions).filter(([id]) => !ids.includes(id))
+    const removed = Object.keys(sessions).length - remaining.length
+    if (removed > 0) await this.write(Object.fromEntries(remaining))
+    return removed
+  }
+
+  /**
+   * Record the last use of sessions that `admit` saw, keeping a later time already on file.
+   * @param used - the last-use time of each session id.
+   */
+  async touch(used: ReadonlyMap<string, number>): Promise<void> {
+    const sessions = await this.read()
+    let changed = false
+    for (const [id, at] of used) {
+      const record = sessions[id]
+      if (record === undefined || record.lastUsedAt >= at) continue
+      sessions[id] = { ...record, lastUsedAt: at }
+      changed = true
+    }
+    if (changed) await this.write(sessions)
+  }
+
+  /**
    * Read the session map.
    * @returns the map, keyed by session id.
    * @throws {HomeAuthError} `STORE_INVALID` when the file is not a version 1 session store.
@@ -195,17 +269,42 @@ export class SessionStore {
  */
 function sessionRecordOf(value: unknown): SessionRecord {
   if (!isRecord(value)) throw new HomeAuthError('STORE_INVALID', 'sessions.json holds an entry that is not a session')
-  const { deviceId, address, createdAt, lastUsedAt, expiresAt } = value
+  const { deviceId, listener, address, factor, rotated, createdAt, lastUsedAt, expiresAt } = value
   if (typeof deviceId !== 'string' || deviceId === '') throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session with no device')
   if (typeof address !== 'string' || address === '') throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session with no address')
+  if (!isReachListener(listener)) throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session with no reach listener')
+  // A record without its factor would leave the home unable to tell which actions the session may be granted.
+  if (!isFactor(factor)) throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session with no identity factor')
+  if (typeof rotated !== 'boolean') throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session without its rotation mark')
   if (!isTime(createdAt) || !isTime(lastUsedAt) || !isTime(expiresAt)) {
     throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session without its times')
   }
   return {
     deviceId: brandString<DeviceId>(deviceId),
+    listener,
     address: brandString<StudioAddress>(address),
+    factor,
+    rotated,
     createdAt,
     lastUsedAt,
     expiresAt,
   }
+}
+
+/**
+ * Whether a stored value names a reach listener.
+ * @param value - the stored value.
+ * @returns whether it is a listener id other than `loopback`.
+ */
+function isReachListener(value: unknown): value is ReachListenerId {
+  return value !== 'loopback' && LISTENER_IDS.some(id => id === value)
+}
+
+/**
+ * Whether a stored value names an identity factor.
+ * @param value - the stored value.
+ * @returns whether it is one of C14's factors.
+ */
+function isFactor(value: unknown): value is IdentityFactor {
+  return IDENTITY_FACTORS.some(factor => factor === value)
 }

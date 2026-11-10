@@ -29,7 +29,7 @@ describe('minting a session', () => {
     try {
       const issued = await home.auth.issueOwnerCode()
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
-      const opened = await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+      const opened = await home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       await expect(home.auth.sessionOf(opened.token)).resolves.toMatchObject({ deviceId: claimed.device.id, address: ADDRESS })
     } finally {
       await home.dispose()
@@ -40,7 +40,7 @@ describe('minting a session', () => {
     const home = await homeFixture()
     try {
       // Pins the owner check: without it a token is minted for a key nobody decided to trust on a home nobody claimed.
-      await expect(home.auth.openSession({ deviceId: deviceIdOf(keyOf(1)), address: ADDRESS, lifetimeMs: HOUR }))
+      await expect(home.auth.openSession({ deviceId: deviceIdOf(keyOf(1)), listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR }))
         .rejects.toMatchObject({ code: 'NO_OWNER', status: 403 })
       await expect(readFile(join(home.directory, SESSIONS_FILE), 'utf8')).rejects.toThrow(/ENOENT/)
     } finally {
@@ -56,7 +56,7 @@ describe('minting a session', () => {
       await writeFile(join(home.directory, 'owner.json'), '{"v":1,"claimedAt":"yesterday"}', { mode: 0o600 })
       // Pins "a corrupt owner refuses a session": a reader that treated a broken owner record as no owner would mint a
       // token for a home whose owner nobody can name.
-      await expect(home.auth.openSession({ deviceId: deviceIdOf(keyOf(1)), address: ADDRESS, lifetimeMs: HOUR }))
+      await expect(home.auth.openSession({ deviceId: deviceIdOf(keyOf(1)), listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR }))
         .rejects.toMatchObject({ code: 'STORE_INVALID' })
     } finally {
       await home.dispose()
@@ -71,7 +71,7 @@ describe('minting a session', () => {
       await home.auth.revokeDevice(claimed.device.id)
       // Pins the device-record check: without it a revoked device's key mints a fresh token, and the removal it just
       // ended means nothing.
-      await expect(home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR }))
+      await expect(home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR }))
         .rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED', status: 401 })
     } finally {
       await home.dispose()
@@ -84,7 +84,7 @@ describe('minting a session', () => {
       const issued = await home.auth.issueOwnerCode()
       await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
       // Pins the same check for a key that was never approved here, which is what a key of another home looks like.
-      await expect(home.auth.openSession({ deviceId: deviceIdOf(keyOf(9)), address: ADDRESS, lifetimeMs: HOUR }))
+      await expect(home.auth.openSession({ deviceId: deviceIdOf(keyOf(9)), listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR }))
         .rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED' })
     } finally {
       await home.dispose()
@@ -98,9 +98,9 @@ describe('minting a session', () => {
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
       // Pins "a device is trusted on one address": without the address comparison a key approved on loopback signs in on
       // the reach address it was never approved for.
-      await expect(home.auth.openSession({ deviceId: claimed.device.id, address: ELSEWHERE, lifetimeMs: HOUR }))
+      await expect(home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ELSEWHERE, factor: 'tailnet-membership', lifetimeMs: HOUR }))
         .rejects.toMatchObject({ code: 'DEVICE_NOT_TRUSTED' })
-      await expect(home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR }))
+      await expect(home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR }))
         .resolves.toMatchObject({ sessionId: expect.any(String) })
     } finally {
       await home.dispose()
@@ -114,7 +114,7 @@ describe('reading a live session', () => {
     try {
       const issued = await home.auth.issueOwnerCode()
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
-      const opened = await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+      const opened = await home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       // The record is removed without the session, as an approval-time removal or a hand-written store leaves it, so the
       // token's own record is still in the file and only the device check can refuse it.
       await new DeviceStore({ file: join(home.directory, 'devices.json') }).remove(claimed.device.id)
@@ -133,7 +133,7 @@ describe('reading a live session', () => {
     try {
       const issued = await home.auth.issueOwnerCode()
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
-      const opened = await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+      const opened = await home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       // A device record whose address moved, as C5's "Changing an address" leaves it: the session was minted at the old
       // address and is not a session at the new one.
       await new DeviceStore({ file: join(home.directory, 'devices.json') })
@@ -151,7 +151,7 @@ describe('reading a live session', () => {
     try {
       const issued = await home.auth.issueOwnerCode()
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
-      const opened = await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+      const opened = await home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       // A missing session file is what a reset leaves; the fast path of a removal deletes the record the same way.
       await unlink(join(home.directory, SESSIONS_FILE))
       await expect(home.auth.sessionOf(opened.token)).resolves.toBeUndefined()
@@ -168,14 +168,14 @@ describe('the sessions one device holds', () => {
       const issued = await home.auth.issueOwnerCode()
       const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
       for (let count = 0; count < MAX_LIVE_SESSIONS_PER_DEVICE; count += 1) {
-        await home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR })
+        await home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
       }
       // Pins the bound: without it one device fills the session store with tokens that never stop answering.
-      await expect(home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR }))
+      await expect(home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR }))
         .rejects.toMatchObject({ code: 'SESSION_LIMIT_REACHED', status: 429 })
       home.clock.advance(HOUR)
       // Pins the pruning before the bound: a count over expired records refuses every later sign-in for good.
-      await expect(home.auth.openSession({ deviceId: claimed.device.id, address: ADDRESS, lifetimeMs: HOUR }))
+      await expect(home.auth.openSession({ deviceId: claimed.device.id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR }))
         .resolves.toMatchObject({ sessionId: expect.any(String) })
       const store = JSON.parse(await readFile(join(home.directory, SESSIONS_FILE), 'utf8')) as { sessions: Record<string, unknown> }
       expect(Object.keys(store.sessions)).toHaveLength(1)

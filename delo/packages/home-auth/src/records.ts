@@ -10,7 +10,7 @@
  */
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { DeviceId, StudioAddress } from '@delo/contract-admission'
-import { DEVICE_APPROVAL_LIMITS, DEVICE_APPROVAL_VERSION, type Base64Url, type DevicePublicKeyJwk } from '@delo/contract-device-approval'
+import { DEVICE_APPROVAL_LIMITS, DEVICE_APPROVAL_VERSION, LOCAL_APPROVER, type Base64Url, type DevicePublicKeyJwk } from '@delo/contract-device-approval'
 import { HomeAuthError } from './errors.ts'
 import { isRecord, isTime } from './files.ts'
 import { hashSecret } from './secret.ts'
@@ -24,8 +24,11 @@ export interface OwnerRecord {
   readonly v: typeof DEVICE_APPROVAL_VERSION
   /** When the home was claimed, in milliseconds since the epoch. */
   readonly claimedAt: number
-  /** The device that claimed the home. */
-  readonly firstDeviceId: DeviceId
+  /**
+   * The device that claimed the home, or `local` for C5's local claim: the person at the home's own computer opening the
+   * first approval window, with no device of the studio's.
+   */
+  readonly firstDeviceId: DeviceId | typeof LOCAL_APPROVER
   /** The owner's pinned identity factors ([C14](../../../docs/contracts/c14-oidc-passkeys.md#owner-subject)); empty until one is enrolled. */
   readonly identities: readonly string[]
 }
@@ -46,8 +49,11 @@ export interface DeviceRecord {
   readonly platform: string
   /** When the device became trusted, in milliseconds since the epoch. */
   readonly approvedAt: number
-  /** The device that approved it, or null for the device that claimed the home. */
-  readonly approvedBy: DeviceId | null
+  /**
+   * The device that approved it; `local` for an approval at the home's own computer (C5's local approval); null for the
+   * device that claimed the home.
+   */
+  readonly approvedBy: DeviceId | typeof LOCAL_APPROVER | null
   /** When it last signed in, or null before its first sign-in. */
   readonly lastSignInAt: number | null
 }
@@ -100,7 +106,12 @@ export function ownerRecordOf(value: unknown): OwnerRecord | undefined {
   if (!Array.isArray(identities) || identities.some(identity => typeof identity !== 'string')) {
     throw new HomeAuthError('STORE_INVALID', 'owner.json holds no list of pinned identities')
   }
-  return { v: DEVICE_APPROVAL_VERSION, claimedAt: value.claimedAt, firstDeviceId: brandString<DeviceId>(firstDeviceId), identities }
+  return {
+    v: DEVICE_APPROVAL_VERSION,
+    claimedAt: value.claimedAt,
+    firstDeviceId: firstDeviceId === LOCAL_APPROVER ? LOCAL_APPROVER : brandString<DeviceId>(firstDeviceId),
+    identities,
+  }
 }
 
 /**
@@ -147,19 +158,19 @@ function deviceRecordOf(value: unknown): DeviceRecord {
     label,
     platform,
     approvedAt,
-    approvedBy: approvedBy === null ? null : brandString<DeviceId>(approvedBy),
+    approvedBy: approvedBy === null ? null : approvedBy === LOCAL_APPROVER ? LOCAL_APPROVER : brandString<DeviceId>(approvedBy),
     lastSignInAt,
   }
 }
 
 /**
- * Read a claim message's label: 1 to 64 characters after trimming, which is C5's limit.
+ * Read a claim or approval request's label: 1 to 64 characters after trimming, which is C5's limit.
  * @param value - the label from the message.
  * @returns the label.
  * @throws {HomeAuthError} `BAD_REQUEST` when the label is missing, blank or longer than the limit.
  */
 export function claimLabelOf(value: unknown): string {
-  if (typeof value !== 'string') throw new HomeAuthError('BAD_REQUEST', 'a claim carries the device label')
+  if (typeof value !== 'string') throw new HomeAuthError('BAD_REQUEST', 'a device carries its label')
   const label = value.trim()
   if (label === '' || label.length > DEVICE_APPROVAL_LIMITS.labelMaxChars) {
     throw new HomeAuthError('BAD_REQUEST', `a device label is 1 to ${String(DEVICE_APPROVAL_LIMITS.labelMaxChars)} characters`)
