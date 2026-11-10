@@ -1293,9 +1293,15 @@ importers:
       '@delo/bundle-studio':
         specifier: workspace:*
         version: link:../../packages/bundle-studio
+      '@delo/contract-admission':
+        specifier: workspace:*
+        version: link:../../packages/contract-admission
       '@delo/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../../packages/contract-archive-and-trash
+      '@delo/contract-device-approval':
+        specifier: workspace:*
+        version: link:../../packages/contract-device-approval
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../../packages/contract-home-layout
@@ -1311,6 +1317,9 @@ importers:
       '@delo/contract-plugin-versions':
         specifier: workspace:*
         version: link:../../packages/contract-plugin-versions
+      '@delo/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../../packages/contract-reach-providers
       '@delo/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
@@ -1326,6 +1335,9 @@ importers:
       '@delo/home':
         specifier: workspace:*
         version: link:../../packages/home
+      '@delo/home-auth':
+        specifier: workspace:*
+        version: link:../../packages/home-auth
       '@delo/home-process':
         specifier: workspace:*
         version: link:../../packages/home-process
@@ -1344,6 +1356,9 @@ importers:
       '@delo/profile-safety':
         specifier: workspace:*
         version: link:../../packages/profile-safety
+      '@delo/reach':
+        specifier: workspace:*
+        version: link:../../packages/reach
       '@delo/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
@@ -1718,6 +1733,9 @@ importers:
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
+      '@delo/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
@@ -1736,6 +1754,9 @@ importers:
       '@delo/plugin-trash':
         specifier: workspace:*
         version: link:../plugin-trash
+      '@delo/reach':
+        specifier: workspace:*
+        version: link:../reach
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -2872,6 +2893,52 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+
+  delo/packages/reach:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-admission':
+        specifier: workspace:*
+        version: link:../contract-admission
+      '@delo/contract-oidc-passkeys':
+        specifier: workspace:*
+        version: link:../contract-oidc-passkeys
+      '@delo/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../contract-reach-providers
+      '@delo/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+    devDependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:*
+        version: link:../../../packages/typert/protocol
+      '@delo/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
+      '@delo/tools':
+        specifier: workspace:*
+        version: link:../../apps/tools
 
   delo/packages/release-formats:
     dependencies:

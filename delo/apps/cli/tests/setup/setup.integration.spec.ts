@@ -166,7 +166,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
     const resumed: SetupStep[] = []
     // The key was stored before the interruption, so a resume that asks for it again fails on the empty script.
     expect(await setup(asked([false]), {}, { afterStep: step => void resumed.push(step) })).toBe(EXIT.ok)
-    expect(resumed).toEqual([sectionStep('prompts'), sectionStep('background'), sectionStep('profile')])
+    expect(resumed).toEqual([sectionStep('prompts'), sectionStep('background'), sectionStep('reach'), sectionStep('profile')])
     expect(recording.asked.filter(question => question.startsWith('secret'))).toEqual([])
     expect(lines.join('')).toContain('Resuming the setup')
 
@@ -189,7 +189,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('records every step in order when nothing interrupts', async () => {
     const steps: SetupStep[] = []
     expect(await setup({ kind: 'yes' }, undefined, { afterStep: step => void steps.push(step) })).toBe(EXIT.ok)
-    expect(steps).toEqual([PROFILE_STEP, ...['privacy', 'import', 'key', 'prompts', 'background', 'profile'].map(sectionStep)])
+    expect(steps).toEqual([PROFILE_STEP, ...['privacy', 'import', 'key', 'prompts', 'background', 'reach', 'profile'].map(sectionStep)])
     expect(existsSync(join(runDirectory(home, PROFILE), 'setup-progress.json'))).toBe(false)
     expect(statSync(join(profileDirectory(home, PROFILE), 'setup-answers.json')).mode & 0o777).toBe(0o600)
   })

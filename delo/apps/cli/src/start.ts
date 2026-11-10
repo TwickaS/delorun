@@ -30,7 +30,8 @@ import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh
 import { assertDeloInvariants, composeDeloProfile, NO_APPROVED_CONTENT, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
 import { HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import { START_WAIT_MS } from '@delo/contract-home-process'
-import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
+import { localDeviceApproval } from './devices/host.ts'
+import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalDeviceApproval, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
@@ -193,6 +194,8 @@ export interface BootedProfile {
    * @returns the link, or why none can be made for this computer.
    */
   readonly studioLink: (port: number | undefined) => StudioLinkResult
+  /** The local device approval of `@delo/home-auth`, when the profile loads it. */
+  readonly devices?: () => LocalDeviceApproval | undefined
 }
 
 /**
@@ -316,6 +319,7 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
     shutdown: code => shutdown.shutdown(code),
     dispose: async () => { await ctx.fiber.dispose() },
     watchChats: (gate) => { watchChats(ctx, gate) },
+    devices: () => localDeviceApproval(ctx),
     // The CLI profile's invariants require the service, so it is absent only in a profile that holds no turn.
     releaseTurns: () => { ctx.get('deloTurnGate')?.release() },
     studio: () => {
@@ -537,6 +541,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
   const failed = inactiveRows(atBoot)
   const atBootRows = bootRowsOf(atBoot)
   return {
+    ...withDevices(booted),
     chats,
     studio: () => {
       const address = booted.studio()
@@ -555,6 +560,16 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
       await removeSandboxOverlay(request.home, request.profile)
     },
   }
+}
+
+/**
+ * The running Host's local device approval, for the update channel's `devices.approve`.
+ * @param booted - the booted profile.
+ * @returns `devices` when the profile loads `@delo/home-auth`, otherwise nothing.
+ */
+function withDevices(booted: BootedProfile): { readonly devices?: LocalDeviceApproval } {
+  const devices = booted.devices?.()
+  return devices === undefined ? {} : { devices }
 }
 
 /**

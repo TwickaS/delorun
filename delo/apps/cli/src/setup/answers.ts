@@ -10,6 +10,7 @@
 import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 import {
+  IDENTITY_FACTORS,
   PROMPTS_OPTIONS,
   REMOVED_ANSWER_KEYS,
   SECTION_STATUSES,
@@ -35,7 +36,7 @@ const modelCredential = z.discriminatedUnion('source', [
 
 const reach = z.strictObject({
   option: z.enum(['none', 'tailscale-private', 'tailscale-funnel', 'self-hosted-relay']),
-  identityFactor: z.enum(['passkey', 'oidc', 'tailnet']).nullable(),
+  identityFactor: z.enum(IDENTITY_FACTORS).nullable(),
 })
 
 /** The answers document schema: the fields and their value types, before the rules that need two fields at once. */

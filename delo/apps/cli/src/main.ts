@@ -18,6 +18,8 @@
  * | `delorun import <file>` | an archive checked, shown and imported after the person confirms (contract C8; [import](./import/command.ts)) |
  * | `delorun import-home [--from <dir>] [--dry-run] [--merge] [--max-size <bytes>]` | a DeepSeek Harness home previewed, then copied after the person confirms (contract C8; [import-home](./import-home/index.ts)) |
  * | `delorun verify [--release <version>] [--offline] [--json]` | the release against its signed manifest and the release log (contracts C15 and C18; [verify](./verify/index.ts)) |
+ * | `delorun reach status \| on tailscale \| off` | remote access to the studio over the person's tailnet (contract C7; [reach](./reach/command.ts)) |
+ * | `delorun devices list \| approve \| remove <id> \| code` | the devices this home trusts, managed at this computer (contract C5; [devices](./devices/command.ts)) |
  * | `delorun --version [--json]` | Delo's version and the DSH version it runs on (contract C17; [version](./version.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |
  *
@@ -53,9 +55,11 @@ import { pruneLogsAtStart } from './logs/startup.ts'
 import { headlessCommand, pluginCommand } from './upstream.ts'
 import { applyDeloVersionEnvironment, versionCommand } from './version.ts'
 import { verifyCommand } from './verify/index.ts'
+import { reachCommand } from './reach/command.ts'
+import { devicesCommand } from './devices/command.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, openCommand, stopCommand, statusCommand, doctorCommand, logsCommand, updateCommand, recoverCommand, trashCommand, exportCommand, importCommand, importHomeCommand, verifyCommand, pluginCommand, headlessCommand]
+export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, openCommand, stopCommand, statusCommand, doctorCommand, logsCommand, updateCommand, recoverCommand, reachCommand, devicesCommand, trashCommand, exportCommand, importCommand, importHomeCommand, verifyCommand, pluginCommand, headlessCommand]
 
 /**
  * The help text.

@@ -49,12 +49,15 @@ export async function storeCredential(home: string, name: string, value: string)
   })
 }
 
+/** One scalar value of a patch row's config. */
+export type PatchValue = boolean | number | string
+
 /** One row of a profile patch: an upstream row's id and the config keys setup sets on it. */
 export interface PatchRow {
   /** The row's entry id. */
   readonly id: string
-  /** The config keys to set; other keys already on the row stay. */
-  readonly config: Readonly<Record<string, boolean | number | string>>
+  /** The config keys to set; other keys already on the row stay. A nested record replaces that key's whole value. */
+  readonly config: Readonly<Record<string, PatchValue | Readonly<Record<string, PatchValue>>>>
 }
 
 /**

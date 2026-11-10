@@ -25,6 +25,8 @@ import type { KeyCheck } from './key-check.ts'
 import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { setPatchRow, storeCredential } from './writes.ts'
+import { systemTailscale } from '@delo/reach'
+import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 
 /** The run's mode: Quick asks the `quick` sections, Full asks every section. */
 export type SetupMode = 'quick' | 'full'
@@ -358,7 +360,7 @@ export const profileSection: SetupSection = {
 
 /**
  * The registry of the sections this build ships. Later packages register theirs into it.
- * @returns a registry holding privacy, the stock-home import, key, prompts, background and profile.
+ * @returns a registry holding privacy, the stock-home import, key, prompts, background, remote access and profile.
  */
 export function defaultRegistry(): SectionRegistry {
   const registry = new SectionRegistry()
@@ -367,6 +369,7 @@ export function defaultRegistry(): SectionRegistry {
   registry.register(keySection, { order: 20 })
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })
+  registry.register(reachSection(systemTailscale()), { order: REACH_SECTION_ORDER })
   registry.register(profileSection, { order: 50 })
   return registry
 }

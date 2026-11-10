@@ -22,7 +22,7 @@ export const REACH_OPTIONS = ['none', 'tailscale-private', 'tailscale-funnel', '
 export type ReachOption = (typeof REACH_OPTIONS)[number]
 
 /** Identity factors that setup can request for a reach address. */
-export const IDENTITY_FACTORS = ['passkey', 'oidc', 'tailnet'] as const
+export const IDENTITY_FACTORS = ['passkey', 'oidc', 'tailnet', 'tailnet-membership'] as const
 
 /** One identity factor of {@link IDENTITY_FACTORS}. */
 export type IdentityFactor = (typeof IDENTITY_FACTORS)[number]

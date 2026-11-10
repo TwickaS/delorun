@@ -8,7 +8,7 @@ import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
 import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES } from '@delo/contract-home-layout'
-import { HostNotStoppedError } from '@delo/home-process'
+import { HostNotStoppedError, sendHomeRequest, type LocalDeviceApproval } from '@delo/home-process'
 import { parse } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
@@ -455,6 +455,26 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(events.indexOf('release')).toBeGreaterThan(events.lastIndexOf('rows', events.indexOf('release')))
     expect(events).not.toContain('shutdown')
     expect(events).not.toContain('dispose')
+  })
+
+  it('answers the person\'s devices.approve with the booted profile\'s local approval', async () => {
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    const approved: string[] = []
+    const devices: LocalDeviceApproval = {
+      openWindow: () => Promise.resolve(0),
+      windowOpenUntil: () => undefined,
+      pending: () => [],
+      approve: (requestId, typedCode) => {
+        approved.push(`${requestId} ${typedCode}`)
+        return Promise.resolve({ id: 'device', label: 'Phone', address: 'https://home.example.ts.net' })
+      },
+    }
+    const base = recording([])
+    const withApproval: StartDependencies = { ...base, runProfile: async options => ({ ...await base.runProfile(options), devices: () => devices }) }
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, withApproval)).toBeUndefined()
+    const lines = await sendHomeRequest(deloHome, 'default', { op: 'devices.approve', args: { requestId: 'A'.repeat(22), typedCode: '12345678' } })
+    expect(lines.at(-1)).toMatchObject({ ok: true, device: { label: 'Phone' } })
+    expect(approved).toEqual([`${'A'.repeat(22)} 12345678`])
   })
 })
 

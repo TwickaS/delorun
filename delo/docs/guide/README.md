@@ -14,4 +14,6 @@ The user guide is for people who use Delo. Start with [Delo and stock DeepSeek H
 
 [Your Delo home](home.md) explains where `delorun` keeps your data, how to move it, how profiles work, and how to fix a home or secret file that other users can read.
 
+[Reach the studio from your phone](reach.md) explains remote access over your own tailnet: turning it on, approving a device at your computer, what an approved phone can and cannot do, and removing a device.
+
 [Where Delo keeps its logs](logs.md) lists every operational log's location, what a log holds and never holds, how long logs are kept and how `delorun logs` shows and clears them.
