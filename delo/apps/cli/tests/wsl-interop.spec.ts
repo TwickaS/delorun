@@ -45,6 +45,30 @@ function missingBwrap(): string | undefined {
 const interopReason = missingInterop()
 const bwrapReason = missingBwrap()
 
+/**
+ * A writable temporary directory on the C: drive, found without interop, which the check tooling's environment may
+ * lack: the first user profile's `AppData/Local/Temp` this process can create a directory in.
+ */
+function windowsTemp(): string | undefined {
+  let users: string[]
+  try {
+    users = readdirSync('/mnt/c/Users')
+  } catch (_absent) {
+    // No C: drive mounted: nothing to test the workspace on.
+    return undefined
+  }
+  for (const user of users) {
+    const temp = join('/mnt/c/Users', user, 'AppData', 'Local', 'Temp')
+    try {
+      rmSync(mkdtempSync(join(temp, 'dsh-interop-probe-')), { recursive: true })
+      return temp
+    } catch (_unwritable) {
+      // Another user's profile, or a profile without a temporary directory: try the next.
+    }
+  }
+  return undefined
+}
+
 /** Skip the running case by name with its reason when the machine cannot show the property. */
 function requireWsl(test: TestContext, needsBwrap: boolean): void {
   const reason = interopReason ?? (needsBwrap ? bwrapReason : undefined)
@@ -143,11 +167,10 @@ describe('wsl-interop-denied: a command the bwrap sandbox confines under WSL', {
 
   it('still reads and writes a workspace on a Windows drive', async (test) => {
     requireWsl(test, true)
-    const answer = spawnSync('cmd.exe', ['/c', 'echo %TEMP%'], { encoding: 'utf8', timeout: 20_000, cwd: '/mnt/c' })
-    const converted = spawnSync('wslpath', ['-u', answer.stdout.trim()], { encoding: 'utf8', timeout: 5_000 })
-    expect(converted.status).toBe(0)
+    const base = windowsTemp()
+    if (base === undefined) return test.skip('no writable temporary directory on the C: drive')
     const sandbox = await provider()
-    const workspace = directory(converted.stdout.trim(), 'dsh-interop-drive-')
+    const workspace = directory(base, 'dsh-interop-drive-')
     const result = await confined(sandbox, `printf kept > ${workspace}/file && cat ${workspace}/file`, workspace)
     expect(result.status, String(result.stderr)).toBe(0)
     expect(result.stdout).toBe('kept')
