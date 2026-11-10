@@ -1,16 +1,23 @@
 /**
- * Assembles a release's changelog fragments into the `CHANGELOG.md` block and the release notes, then moves the
- * consumed fragments into `delo/changelog/releases/<version>/`. Run from the repository root:
- * `node_modules/.bin/tsx delo/apps/release/src/changelog/assemble.ts --version <version> [--dry-run] [--first-public-release]
- * [--advisories <delorun-<version>.advisories.json> --manifest <delorun-<version>.manifest.json>]`. With `--advisories`,
- * the notes end with every advisory the release ships with under an acceptance: its id, package, range, reason,
- * approver, the date its entry records and its lapse release. The report must be the one the signed manifest names
- * by length and SHA-256, with the accepted ids the manifest lists, so the notes come from the report signing checked.
- * `--dry-run` prints both documents and writes nothing. The command exits 1 with one line per refusal.
+ * Assembles a version's changelog fragments into the changelog data file, `CHANGELOG.md` and the release notes, then
+ * moves the consumed fragments into `delo/changelog/releases/<version>/`. Run from the repository root:
+ * `node_modules/.bin/tsx delo/apps/release/src/changelog/assemble.ts --version <version> [--date <YYYY-MM-DD>] [--dry-run]
+ * [--first-public-release] [--advisories <delorun-<version>.advisories.json> --manifest <delorun-<version>.manifest.json>]`,
+ * or `... --list-unreleased` to print the unreleased fragments by area and the pending ones with what they wait for.
+ * The version is a release (`0.1.0`) or a preview sub-version (`0.1.0-preview.2`); assembling `0.1.0` folds the entries
+ * of its previews into it.
  *
- * The "From upstream" section names the upstream release in `delo/upstream-patches.json`, `upstream.ref`, and
- * lists the `From upstream` fragments after it. `CHANGELOG.md` is Delo's own file at the repository root: upstream's
- * tag has none, so the assembly creates it, and the first release that commits it adds its ledger entry.
+ * `delo/changelog/changelog.json` is the record: the standing comparison with the upstream release and every assembled
+ * version. `CHANGELOG.md` is rendered from it, so the two cannot disagree, and the release notes from the new entry.
+ * With `--advisories`, the notes end with every advisory the release ships with under an acceptance: its id, package,
+ * range, reason, approver, the date its entry records and its lapse release. The report must be the one the signed
+ * manifest names by length and SHA-256, with the accepted ids the manifest lists, so the notes come from the report
+ * signing checked. `--dry-run` prints the entry and the notes and writes nothing. The command exits 1 with one line
+ * per refusal.
+ *
+ * The "From upstream" section names the upstream release in `delo/upstream-patches.json`, `upstream.ref`.
+ * `CHANGELOG.md` is Delo's own file at the repository root: upstream's tag has none, so the assembly creates it, and
+ * the first release that commits it adds its ledger entry. Pending fragments are validated and never assembled.
  *
  * @module @delo/release/changelog/assemble
  */
@@ -24,55 +31,12 @@ import { repositoryRoot } from '@delo/tools/src/git.ts'
 import type { AdvisoryAcceptance, FileRef } from '@delo/contract-release-manifest'
 import type { AdvisoryReport } from '../advisory/check.ts'
 import { readEnvelope } from '../sign/schemas.ts'
-import { fragmentPaths, parseFragment, SECTIONS, type Fragment, type Section } from './fragment.ts'
-import { versionErrors } from './version.ts'
-
-/** The changelog at the repository root, which the first assembly creates. */
-export const CHANGELOG_PATH = 'CHANGELOG.md'
-
-/** The folder of release notes and of the fragments each release consumed. */
-export const RELEASES_DIR = 'delo/changelog/releases'
-
-/** One assembled release, ready to write or to print. */
-export interface Assembly {
-  /** The release version. */
-  readonly version: string
-  /** The upstream release the version is based on. */
-  readonly upstreamRef: string
-  /** The `## <version>` block to prepend to `CHANGELOG.md`, ending with one newline. */
-  readonly block: string
-  /** The release notes file text. */
-  readonly notes: string
-  /** The fragments the release consumes, in the order they print. */
-  readonly fragments: readonly Fragment[]
-}
-
-/**
- * The bullet lines of one section, with the upstream line first in `From upstream`.
- * @param section - the section to collect.
- * @param fragments - every fragment of the release.
- * @param upstreamRef - the upstream release the version is based on.
- * @returns the bullet lines; empty when the section has nothing to print.
- */
-function sectionBullets(section: Section, fragments: readonly Fragment[], upstreamRef: string): string[] {
-  const bullets = fragments.filter(fragment => fragment.section === section).flatMap(fragment => fragment.bullets)
-  if (section !== 'From upstream') return bullets
-  return [`- Based on DeepSeek Harness \`${upstreamRef}\`.`, ...bullets]
-}
-
-/**
- * The section blocks of a document: one heading per section that has bullets, in the fixed section order.
- * @param heading - the heading prefix of each section, such as `###`.
- * @param fragments - every fragment of the release.
- * @param upstreamRef - the upstream release the version is based on.
- * @returns the lines of every section block, each block followed by one blank line.
- */
-function sectionLines(heading: string, fragments: readonly Fragment[], upstreamRef: string): string[] {
-  return SECTIONS.flatMap((section) => {
-    const bullets = sectionBullets(section, fragments, upstreamRef)
-    return bullets.length === 0 ? [] : [`${heading} ${section}`, ...bullets, '']
-  })
-}
+import { addVersion, buildCompared, buildEntry, foldedPreviews, parseData, renderChangelog, renderEntry, renderNotes, replacesErrors, type ChangelogData, type VersionEntry } from './data.ts'
+import { fragmentPaths, readFragments, releasedPaths, type Fragment } from './fragment.ts'
+import { listUnreleased } from './list.ts'
+import { messageOf, type Output } from './output.ts'
+import { CHANGELOG_PATH, DATA_PATH, RELEASES_DIR } from './paths.ts'
+import { isPreview, releaseOf, versionErrors } from './version.ts'
 
 /** One advisory the release ships with under an acceptance, as the advisory report records it. */
 export type AcceptedAdvisory = AdvisoryAcceptance & { readonly added: string }
@@ -123,118 +87,174 @@ export function acceptedAdvisories(bytes: Uint8Array, version: string, signed: S
   return [...accepted.values()]
 }
 
-/**
- * Build a release's assembly from its version and fragments.
- * @param version - the release version, already validated.
- * @param upstreamRef - the upstream release the version is based on.
- * @param fragments - the parsed fragments the release consumes.
- * @param accepted - the advisories the release ships with under an acceptance; the notes list each one.
- * @returns the CHANGELOG block, the notes text and the fragments.
- */
-export function renderAssembly(version: string, upstreamRef: string, fragments: readonly Fragment[], accepted: readonly AcceptedAdvisory[] = []): Assembly {
-  const block = [`## ${version}`, '', ...sectionLines('###', fragments, upstreamRef)].join('\n')
-  const notes = [`# Delo ${version}`, '', ...sectionLines('##', fragments, upstreamRef), ...advisoryLines(accepted)].join('\n')
-  return { version, upstreamRef, block: `${block}\n`, notes: `${notes}\n`, fragments }
+/** One assembled version, ready to write or to print. */
+export interface Assembly {
+  /** The version. */
+  readonly version: string
+  /** The upstream release the version is based on. */
+  readonly upstreamRef: string
+  /** The version's entry, as the data file records it. */
+  readonly entry: VersionEntry
+  /** The data file after this version. */
+  readonly data: ChangelogData
+  /** The `CHANGELOG.md` text after this version. */
+  readonly changelog: string
+  /** The release notes file text. */
+  readonly notes: string
+  /** The fragments the version consumes, in the order they print. */
+  readonly fragments: readonly Fragment[]
+}
+
+/** The date to record for a version assembled now: today in UTC, `YYYY-MM-DD`. */
+function today(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
 /**
- * Assemble a release from a repository's unreleased fragments.
- * @param root - the repository root.
- * @param version - the release version.
- * @param options - `firstPublicRelease` admits `1.0.0`; `accepted` lists the release's accepted advisories.
- * @returns the assembly; nothing is written.
- * @throws Error listing every refusal, when the version is not accepted, a fragment does not parse, the upstream ledger
- * does not read, or the release already has notes or a changelog block.
+ * Build a version's assembly from its fragments and the data file before it.
+ * @param version - the version, already validated.
+ * @param upstream - the upstream release and commit from the divergence ledger.
+ * @param fragments - the parsed fragments the version consumes.
+ * @param options - `accepted` lists the advisories the version ships with under an acceptance, which the notes list;
+ * `date` is the date to record, today in UTC by default; `existing` is the data file before this version; `released`
+ * are the fragments earlier versions consumed, oldest first, which the standing comparison keeps.
+ * @returns the entry, the data after it, the `CHANGELOG.md` and notes texts, and the fragments.
  */
-export function assembleRelease(root: string, version: string, options: { readonly firstPublicRelease: boolean, readonly accepted?: readonly AcceptedAdvisory[] }): Assembly {
+export function renderAssembly(
+  version: string,
+  upstream: string | ChangelogData['upstream'],
+  fragments: readonly Fragment[],
+  accepted: readonly AcceptedAdvisory[] = [],
+  options: { readonly date?: string | undefined, readonly existing?: ChangelogData | undefined, readonly released?: readonly Fragment[] | undefined } = {},
+): Assembly {
+  const ledger = typeof upstream === 'string' ? { ref: upstream, commit: '' } : upstream
+  const entry = buildEntry(version, options.date ?? today(), ledger.ref, fragments, foldedPreviews(options.existing, version))
+  const data = addVersion(options.existing, ledger, entry, buildCompared([...options.released ?? [], ...fragments]))
+  const advisories = advisoryLines(accepted)
+  const notes = advisories.length === 0 ? renderNotes(entry) : `${renderNotes(entry)}\n${advisories.join('\n').trimEnd()}\n`
+  return { version, upstreamRef: ledger.ref, entry, data, changelog: renderChangelog(data), notes, fragments }
+}
+
+/**
+ * The data file of a repository.
+ * @param root - the repository root.
+ * @returns the parsed data; undefined when no version was assembled yet.
+ * @throws Error when the file exists and is not a data file.
+ */
+export function readData(root: string): ChangelogData | undefined {
+  const path = join(root, DATA_PATH)
+  return existsSync(path) ? parseData(readFileSync(path, 'utf8')) : undefined
+}
+
+/**
+ * Assemble a version from a repository's unreleased fragments.
+ * @param root - the repository root.
+ * @param version - the version.
+ * @param options - `firstPublicRelease` admits `1.0.0`; `accepted` lists the version's accepted advisories; `date` is
+ * the date to record, today in UTC by default.
+ * @returns the assembly; nothing is written.
+ * @throws Error listing every refusal, when the version is not accepted, is already assembled or follows its final
+ * release, a fragment does not parse or replaces nothing, a fragment name repeats, there is nothing to assemble, or
+ * the upstream ledger or the data file does not read.
+ */
+export function assembleRelease(root: string, version: string, options: { readonly firstPublicRelease: boolean, readonly accepted?: readonly AcceptedAdvisory[] | undefined, readonly date?: string | undefined }): Assembly {
   const errors = versionErrors(version, options.firstPublicRelease)
-  const fragments: Fragment[] = []
-  for (const path of fragmentPaths(root)) {
-    const result = parseFragment(path, readFileSync(join(root, path), 'utf8'))
-    if (result.ok) fragments.push(result.fragment)
-    else errors.push(...result.errors.map(error => `${path}: ${error}`))
-  }
+  const current = readFragments(root, fragmentPaths(root), 'unreleased')
+  const released = readFragments(root, releasedPaths(root), 'unreleased')
+  errors.push(...current.errors, ...released.errors, ...replacesErrors([...released.fragments, ...current.fragments]))
   const notesPath = join(root, RELEASES_DIR, `${version}.md`)
   if (existsSync(notesPath) || existsSync(join(root, RELEASES_DIR, version))) errors.push(`release ${version} already has notes under ${RELEASES_DIR}`)
-  const changelog = existsSync(join(root, CHANGELOG_PATH)) ? readFileSync(join(root, CHANGELOG_PATH), 'utf8') : ''
-  if (changelog.split('\n').includes(`## ${version}`)) errors.push(`${CHANGELOG_PATH} already has a \`## ${version}\` block`)
+  const existing = readData(root)
+  const assembled = existing?.versions.map(entry => entry.version) ?? []
+  if (errors.length === 0 && assembled.includes(version)) errors.push(`${DATA_PATH} already has version ${version}`)
+  if (errors.length === 0 && isPreview(version) && assembled.includes(releaseOf(version))) errors.push(`${releaseOf(version)} is already assembled; a preview of it would follow its release`)
+  if (errors.length === 0 && current.fragments.length === 0 && foldedPreviews(existing, version).length === 0) errors.push('there is nothing to assemble: no unreleased fragment and no preview to fold')
   if (errors.length > 0) throw new Error(errors.join('\n'))
-  return renderAssembly(version, readManifest(root).upstream.ref, fragments, options.accepted)
+  const { ref, commit } = readManifest(root).upstream
+  return renderAssembly(version, { ref, commit }, current.fragments, options.accepted, { date: options.date, existing, released: released.fragments })
 }
 
 /**
- * Prepend a release block to the changelog text, after its `#` title.
- * @param existing - the current `CHANGELOG.md` text; empty when the file does not exist.
- * @param block - the `## <version>` block, ending with one newline.
- * @returns the new file text, with the block before the first release heading.
- */
-export function prependBlock(existing: string, block: string): string {
-  if (existing.trim() === '') return `# Changelog\n\n${block}`
-  const lines = existing.split('\n')
-  const first = lines.findIndex(line => line.startsWith('## '))
-  if (first < 0) return `${existing.trimEnd()}\n\n${block}`
-  const head = lines.slice(0, first).join('\n').trimEnd()
-  return `${head}\n\n${block}\n${lines.slice(first).join('\n')}`
-}
-
-/**
- * Write an assembly: the notes, the changelog block, and the moved fragments.
+ * Write an assembly: the notes, the data file, `CHANGELOG.md`, and the moved fragments.
  * @param root - the repository root.
  * @param assembly - the assembly to write.
  * @returns the repository-relative paths written, in order.
  */
 export function writeAssembly(root: string, assembly: Assembly): string[] {
   const releaseDir = join(root, RELEASES_DIR, assembly.version)
-  const changelogPath = join(root, CHANGELOG_PATH)
-  const existing = existsSync(changelogPath) ? readFileSync(changelogPath, 'utf8') : ''
   mkdirSync(releaseDir, { recursive: true })
   const notesRel = `${RELEASES_DIR}/${assembly.version}.md`
   writeFileSync(join(root, notesRel), assembly.notes)
-  writeFileSync(changelogPath, prependBlock(existing, assembly.block))
+  writeFileSync(join(root, DATA_PATH), `${JSON.stringify(assembly.data, undefined, 2)}\n`)
+  writeFileSync(join(root, CHANGELOG_PATH), assembly.changelog)
   for (const fragment of assembly.fragments) {
     renameSync(join(root, fragment.path), join(releaseDir, basename(fragment.path)))
   }
-  return [notesRel, CHANGELOG_PATH, ...assembly.fragments.map(fragment => `${RELEASES_DIR}/${assembly.version}/${basename(fragment.path)}`)]
+  return [notesRel, DATA_PATH, CHANGELOG_PATH, ...assembly.fragments.map(fragment => `${RELEASES_DIR}/${assembly.version}/${basename(fragment.path)}`)]
 }
 
-function main(argv: readonly string[]): number {
-  const { values } = parseArgs({
-    args: [...argv],
-    options: {
-      version: { type: 'string' },
-      'dry-run': { type: 'boolean', default: false },
-      'first-public-release': { type: 'boolean', default: false },
-      advisories: { type: 'string' },
-      manifest: { type: 'string' },
-    },
-    strict: true,
-  })
-  if (values.version === undefined) {
-    console.error('assemble: pass --version <version>')
+/**
+ * The command, with its repository and output given.
+ * @param argv - the arguments after the script.
+ * @param root - the repository root.
+ * @param output - where the command prints.
+ * @returns the exit code: 0 done, 1 a refusal, 2 a wrong command line.
+ */
+export function run(argv: readonly string[], root: string, output: Output): number {
+  let values
+  try {
+    values = parseArgs({
+      args: [...argv],
+      options: {
+        version: { type: 'string' },
+        date: { type: 'string' },
+        'dry-run': { type: 'boolean', default: false },
+        'list-unreleased': { type: 'boolean', default: false },
+        'first-public-release': { type: 'boolean', default: false },
+        advisories: { type: 'string' },
+        manifest: { type: 'string' },
+      },
+      strict: true,
+    }).values
+  } catch (error) {
+    output.error(`assemble: ${messageOf(error)}`)
     return 2
   }
-  const root = repositoryRoot(process.cwd())
+  if (values['list-unreleased']) {
+    const overview = listUnreleased(root)
+    output.log(overview.text.trimEnd())
+    for (const error of overview.errors) output.error(`assemble: ${error}`)
+    return overview.errors.length === 0 ? 0 : 1
+  }
+  if (values.version === undefined) {
+    output.error('assemble: pass --version <version>, or --list-unreleased')
+    return 2
+  }
+  if (values.date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(values.date)) {
+    output.error('assemble: --date must be YYYY-MM-DD')
+    return 2
+  }
   let assembly: Assembly
   try {
     if ((values.advisories === undefined) !== (values.manifest === undefined)) throw new Error('pass --advisories and --manifest together')
     const accepted = values.advisories === undefined || values.manifest === undefined
       ? []
       : acceptedAdvisories(readFileSync(values.advisories), values.version, readEnvelope('manifest', readFileSync(values.manifest)).signed.advisories)
-    assembly = assembleRelease(root, values.version, { firstPublicRelease: values['first-public-release'], accepted })
+    assembly = assembleRelease(root, values.version, { firstPublicRelease: values['first-public-release'], accepted, date: values.date })
   } catch (error) {
-    console.error(`assemble: ${error instanceof Error ? error.message : String(error)}`)
+    output.error(`assemble: ${messageOf(error)}`)
     return 1
   }
   if (values['dry-run']) {
-    console.log(`--- ${CHANGELOG_PATH} (block to prepend) ---\n${assembly.block}`)
-    console.log(`--- ${RELEASES_DIR}/${assembly.version}.md ---\n${assembly.notes}`)
-    console.log(`fragments to move: ${String(assembly.fragments.length)}`)
+    output.log(`--- ${CHANGELOG_PATH} (the entry for ${assembly.version}; the standing comparison above it is regenerated) ---\n${renderEntry(assembly.entry)}`)
+    output.log(`--- ${RELEASES_DIR}/${assembly.version}.md ---\n${assembly.notes}`)
+    output.log(`standing comparison: ${String(assembly.data.compared.length)} bullets; fragments to move: ${String(assembly.fragments.length)}`)
     return 0
   }
-  for (const path of writeAssembly(root, assembly)) console.log(`assemble: wrote ${path}`)
+  for (const path of writeAssembly(root, assembly)) output.log(`assemble: wrote ${path}`)
   return 0
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = main(process.argv.slice(2))
+  process.exitCode = run(process.argv.slice(2), repositoryRoot(process.cwd()), { log: console.log, error: console.error })
 }

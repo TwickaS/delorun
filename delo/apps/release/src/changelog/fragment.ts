@@ -1,13 +1,16 @@
 /**
- * Changelog fragments: one Markdown file per perceptible change, with front matter that names its section and a body of
- * bullet lines. The format is documented in `delo/changelog/unreleased/README.md`.
+ * Changelog fragments: one Markdown file per thing a person can perceive, with front matter that names its area and
+ * section and a body of bullet lines. A fragment is unreleased (`delo/changelog/unreleased/`), pending
+ * (`delo/changelog/pending/`: it describes something a person cannot reach yet and names what must be wired first) or
+ * released (`delo/changelog/releases/<version>/`). The format is documented in `delo/changelog/README.md`.
  *
  * @module @delo/release/changelog/fragment
  */
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { FRAGMENTS } from '@delo/tools/src/check-commits.ts'
-import { isFragmentPath } from './paths.ts'
+import { isFragmentPath, isPendingPath, PENDING, RELEASES_DIR } from './paths.ts'
+import { compareVersions } from './version.ts'
 
 /** The sections of the release notes, in the order they print. */
 export const SECTIONS = ['Security', 'Added', 'Changed', 'Fixed', 'Removed', 'From upstream'] as const
@@ -15,14 +18,29 @@ export const SECTIONS = ['Security', 'Added', 'Changed', 'Fixed', 'Removed', 'Fr
 /** One release-notes section. */
 export type Section = (typeof SECTIONS)[number]
 
+/** The areas of a person's path from stock DeepSeek Harness to Delo, in the order they print. */
+export const AREAS = ['Install and update', 'Setup', 'Studio', 'Chats and workspaces', 'Safety and privacy', 'Reach', 'Plugins', 'Commands', 'Compatibility'] as const
+
+/** One area. */
+export type Area = (typeof AREAS)[number]
+
+/** Which folder a fragment lives in; a pending fragment also carries `waits`. */
+export type FragmentKind = 'unreleased' | 'pending'
+
 /** One parsed fragment. */
 export interface Fragment {
   /** The repository-relative path of the fragment file. */
   readonly path: string
+  /** The area the front matter names. */
+  readonly area: Area
   /** The section the front matter names. */
   readonly section: Section
   /** The body's bullet lines, each starting with `- `. */
   readonly bullets: readonly string[]
+  /** The file name of an earlier fragment whose bullets this one supersedes in the standing comparison; undefined when none. */
+  readonly replaces: string | undefined
+  /** What must be wired before a person can reach the feature; set on a pending fragment only. */
+  readonly waits: string | undefined
 }
 
 /** The outcome of parsing one fragment: its parsed form, or one message per violation. */
@@ -38,13 +56,65 @@ const INTERNAL_REFERENCES: readonly { readonly pattern: RegExp; readonly kind: s
   { pattern: /\b[ACD]\d{1,3}\b/, kind: 'a decision or contract identifier' },
 ]
 
+/** The front matter fields a fragment may hold. */
+const FIELDS = ['section', 'area', 'replaces', 'waits'] as const
+
+/**
+ * Read the front matter lines into fields.
+ * @param lines - the lines between the two `---` lines.
+ * @param errors - receives one message per malformed or repeated line.
+ * @returns the field values, unquoted.
+ */
+function readFields(lines: readonly string[], errors: string[]): Map<string, string> {
+  const fields = new Map<string, string>()
+  for (const line of lines.filter(candidate => candidate.trim() !== '')) {
+    const colon = line.indexOf(':')
+    const name = line.slice(0, colon)
+    const value = line.slice(colon + 1).trim()
+    if (colon < 0 || !/^[a-z]+$/.test(name) || value === '') {
+      errors.push(`front matter line "${line}" is not \`<field>: <value>\``)
+    } else if (!(FIELDS as readonly string[]).includes(name)) {
+      errors.push(`front matter field "${name}" is not one of ${FIELDS.join(', ')}`)
+    } else if (fields.has(name)) {
+      errors.push(`front matter field "${name}" appears twice`)
+    } else {
+      fields.set(name, value.replace(/^"(.*)"$/, '$1'))
+    }
+  }
+  return fields
+}
+
+/**
+ * Check the front matter values against the fragment's kind.
+ * @param fields - the field values.
+ * @param kind - the folder the fragment lives in.
+ * @param errors - receives one message per violation.
+ */
+function checkFields(fields: ReadonlyMap<string, string>, kind: FragmentKind, errors: string[]): void {
+  const section = fields.get('section')
+  const area = fields.get('area')
+  const replaces = fields.get('replaces')
+  if (section === undefined) errors.push('the front matter has no `section:` line')
+  else if (!(SECTIONS as readonly string[]).includes(section)) errors.push(`section "${section}" is not one of ${SECTIONS.join(', ')}`)
+  if (area === undefined) errors.push('the front matter has no `area:` line')
+  else if (!(AREAS as readonly string[]).includes(area)) errors.push(`area "${area}" is not one of ${AREAS.join(', ')}`)
+  if (replaces !== undefined && !FRAGMENT_NAME.test(replaces)) errors.push(`replaces "${replaces}" is not a fragment file name such as \`some-feature.md\``)
+  if (kind === 'pending') {
+    if (!fields.has('waits')) errors.push('a pending fragment needs a `waits:` line that says what must be wired before a person can reach the feature')
+    if (replaces !== undefined) errors.push('a pending fragment cannot carry `replaces:`; nothing was ever released from it')
+  } else if (fields.has('waits')) {
+    errors.push('`waits:` belongs to a fragment in the pending folder')
+  }
+}
+
 /**
  * Parse one fragment's front matter and body, and report each violation of the format.
  * @param path - the repository-relative path of the fragment, used in the file-name check.
  * @param text - the file's text.
+ * @param kind - the folder the fragment lives in; `unreleased` by default, which also fits a released fragment.
  * @returns the parsed fragment, or the messages of every violation found.
  */
-export function parseFragment(path: string, text: string): FragmentResult {
+export function parseFragment(path: string, text: string, kind: FragmentKind = 'unreleased'): FragmentResult {
   const errors: string[] = []
   const name = path.slice(path.lastIndexOf('/') + 1)
   if (!FRAGMENT_NAME.test(name)) errors.push('the file name is not a lowercase `<slug>.md` of hyphen-separated words')
@@ -52,13 +122,8 @@ export function parseFragment(path: string, text: string): FragmentResult {
   if (lines[0] !== '---') return { ok: false, errors: [...errors, 'the front matter does not open with `---` on the first line'] }
   const close = lines.indexOf('---', 1)
   if (close < 0) return { ok: false, errors: [...errors, 'the front matter does not close with `---`'] }
-  const keys = lines.slice(1, close).filter(line => line.trim() !== '')
-  const field = keys.length === 1 ? /^section:[ \t]*(.+?)[ \t]*$/.exec(keys[0] ?? '') : null
-  if (field === null) errors.push('the front matter must hold exactly one `section:` line and no other field')
-  const section = field === null ? undefined : field[1]?.replace(/^"(.*)"$/, '$1')
-  if (section !== undefined && !(SECTIONS as readonly string[]).includes(section)) {
-    errors.push(`section "${section}" is not one of ${SECTIONS.join(', ')}`)
-  }
+  const fields = readFields(lines.slice(1, close), errors)
+  checkFields(fields, kind, errors)
   const body = lines.slice(close + 1).map(line => line.trimEnd()).filter(line => line !== '')
   if (body.length === 0) errors.push('the body has no bullet line')
   for (const line of body) {
@@ -66,12 +131,29 @@ export function parseFragment(path: string, text: string): FragmentResult {
       errors.push(`body line "${line}" is not a bullet starting with \`- \``)
       continue
     }
-    for (const { pattern, kind } of INTERNAL_REFERENCES) {
-      if (pattern.test(line)) errors.push(`body line "${line}" names ${kind}; write the change in words a person using Delo understands`)
+    for (const { pattern, kind: referenceKind } of INTERNAL_REFERENCES) {
+      if (pattern.test(line)) errors.push(`body line "${line}" names ${referenceKind}; write the change in words a person using Delo understands`)
     }
   }
-  if (errors.length > 0 || section === undefined || !(SECTIONS as readonly string[]).includes(section)) return { ok: false, errors }
-  return { ok: true, fragment: { path, section: section as Section, bullets: body } }
+  const section = fields.get('section')
+  const area = fields.get('area')
+  if (errors.length > 0 || section === undefined || area === undefined) return { ok: false, errors }
+  return { ok: true, fragment: { path, area: area as Area, section: section as Section, bullets: body, replaces: fields.get('replaces'), waits: fields.get('waits') } }
+}
+
+/**
+ * The entries of a folder, or none when the folder does not exist.
+ * @param folder - the absolute folder path.
+ * @returns the entries with their kinds, unsorted.
+ * @throws Error when the folder cannot be read for a reason other than being absent.
+ */
+function entriesOf(folder: string): { readonly name: string; readonly directory: boolean }[] {
+  try {
+    return readdirSync(folder, { withFileTypes: true }).map(entry => ({ name: entry.name, directory: entry.isDirectory() }))
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return []
+    throw error
+  }
 }
 
 /**
@@ -80,12 +162,42 @@ export function parseFragment(path: string, text: string): FragmentResult {
  * @returns the repository-relative paths; empty when the folder does not exist.
  */
 export function fragmentPaths(root: string): string[] {
-  let names: string[]
-  try {
-    names = readdirSync(join(root, FRAGMENTS))
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return []
-    throw error
+  return entriesOf(join(root, FRAGMENTS)).map(entry => `${FRAGMENTS}${entry.name}`).filter(isFragmentPath).sort()
+}
+
+/**
+ * The fragment files in the pending folder of a repository, in name order.
+ * @param root - the repository root.
+ * @returns the repository-relative paths; empty when the folder does not exist.
+ */
+export function pendingPaths(root: string): string[] {
+  return entriesOf(join(root, PENDING)).map(entry => `${PENDING}${entry.name}`).filter(isPendingPath).sort()
+}
+
+/**
+ * The fragment files that earlier assemblies moved under `releases/<version>/`, oldest version first.
+ * @param root - the repository root.
+ * @returns the repository-relative paths, ordered by version and then by name; empty when nothing was released.
+ */
+export function releasedPaths(root: string): string[] {
+  const versions = entriesOf(join(root, RELEASES_DIR)).filter(entry => entry.directory).map(entry => entry.name).sort(compareVersions)
+  return versions.flatMap(version => entriesOf(join(root, RELEASES_DIR, version)).filter(entry => !entry.directory && entry.name.endsWith('.md')).map(entry => `${RELEASES_DIR}/${version}/${entry.name}`).sort())
+}
+
+/**
+ * Parse fragment files.
+ * @param root - the repository root.
+ * @param paths - the repository-relative fragment paths.
+ * @param kind - the folder the fragments live in.
+ * @returns the parsed fragments in path order, and one message per violation, each prefixed by its path.
+ */
+export function readFragments(root: string, paths: readonly string[], kind: FragmentKind = 'unreleased'): { readonly fragments: Fragment[]; readonly errors: string[] } {
+  const fragments: Fragment[] = []
+  const errors: string[] = []
+  for (const path of paths) {
+    const result = parseFragment(path, readFileSync(join(root, path), 'utf8'), kind)
+    if (result.ok) fragments.push(result.fragment)
+    else errors.push(...result.errors.map(error => `${path}: ${error}`))
   }
-  return names.map(name => `${FRAGMENTS}${name}`).filter(isFragmentPath).sort()
+  return { fragments, errors }
 }

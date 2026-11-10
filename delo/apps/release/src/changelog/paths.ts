@@ -20,6 +20,18 @@ const NON_PRODUCT_PREFIXES = [
 /** File suffixes of documentation: Markdown, and the bilingual pairing records that sit beside it. */
 const DOCUMENTATION_SUFFIXES = ['.md', '.i18n.yaml'] as const
 
+/** The changelog at the repository root, rendered from the data file. */
+export const CHANGELOG_PATH = 'CHANGELOG.md'
+
+/** The changelog as data: the one record that the Markdown, the harness and the documentation read. */
+export const DATA_PATH = 'delo/changelog/changelog.json'
+
+/** The folder of release notes and of the fragments each release consumed. */
+export const RELEASES_DIR = 'delo/changelog/releases'
+
+/** The folder of fragments that describe something a person cannot reach yet; they are validated and never assembled. */
+export const PENDING = 'delo/changelog/pending/'
+
 /** The README basenames of the fragment folder, which describe the format and never count as a fragment. */
 const FOLDER_README = /^README(?:\.zh)?\.md$/
 
@@ -41,5 +53,16 @@ export function isProductPath(path: string): boolean {
 export function isFragmentPath(path: string): boolean {
   if (!path.startsWith(FRAGMENTS) || !path.endsWith('.md')) return false
   const name = path.slice(FRAGMENTS.length)
+  return !name.includes('/') && !FOLDER_README.test(name)
+}
+
+/**
+ * Whether a path is a pending fragment: a Markdown file directly in the pending folder, other than its READMEs.
+ * @param path - a repository-relative path, using `/` separators.
+ * @returns true when the path names a pending fragment file.
+ */
+export function isPendingPath(path: string): boolean {
+  if (!path.startsWith(PENDING) || !path.endsWith('.md')) return false
+  const name = path.slice(PENDING.length)
   return !name.includes('/') && !FOLDER_README.test(name)
 }

@@ -83,3 +83,52 @@ export function runTsx(cwd: string, script: string, args: readonly string[]): { 
   })
   return { status: result.status ?? 1, output: `${result.stdout}${result.stderr}` }
 }
+
+/** The folder of unreleased fragments. */
+export const UNRELEASED = 'delo/changelog/unreleased/'
+
+/** The folder of pending fragments. */
+export const PENDING_DIR = 'delo/changelog/pending/'
+
+/** A commit message trailer that satisfies the sign-off rule of the fixture history. */
+export const SIGNED = 'Signed-off-by: Fixture Author <fixture@example.test>'
+
+/** The divergence ledger the assembly reads for the upstream release. */
+export const LEDGER = JSON.stringify({
+  upstream: { repository: 'https://example.invalid/upstream.git', ref: 'dsh-v0.2.2-rc.1', commit: 'a'.repeat(40) },
+  forkOwned: ['delo/'],
+  patches: [],
+  retired: [],
+})
+
+/**
+ * A fragment file's text.
+ * @param area - the area the front matter names.
+ * @param section - the section the front matter names.
+ * @param bullets - the bullet texts of the body.
+ * @param extra - further front matter lines, such as `waits: the update command`.
+ * @returns the file text.
+ */
+export function fragmentText(area: string, section: string, bullets: readonly string[], extra: readonly string[] = []): string {
+  return `---\narea: ${area}\nsection: ${section}\n${extra.map(line => `${line}\n`).join('')}---\n\n${bullets.map(bullet => `- ${bullet}`).join('\n')}\n`
+}
+
+/** Captured command output. */
+export interface Captured {
+  /** Lines printed to standard output. */
+  readonly out: string[]
+  /** Lines printed to standard error. */
+  readonly err: string[]
+  /** The two streams' lines, standard output first. */
+  readonly all: () => string
+}
+
+/**
+ * An output sink that keeps what the command prints.
+ * @returns the captured lines and the sink to pass to the command.
+ */
+export function capture(): Captured & { readonly sink: { readonly log: (line: string) => void, readonly error: (line: string) => void } } {
+  const out: string[] = []
+  const err: string[] = []
+  return { out, err, all: () => [...out, ...err].join('\n'), sink: { log: line => out.push(line), error: line => err.push(line) } }
+}
