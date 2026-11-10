@@ -30,12 +30,24 @@ function bench(rows: readonly Row[] | 'refused' | 'rejects' | 'no-remote', optio
     setBundleEnabled: vi.fn(async () => ({ ok: true as const, value: options.change ?? { application: 'applied' } })),
     installBundle: vi.fn(async () => ({ ok: true as const, value: options.change ?? { application: 'applied' } })),
   }
-  if (rows !== 'no-remote') ctx.provide('remote', { pluginManager } as never)
+  if (rows !== 'no-remote') ctx.provide('remote.pluginManager', pluginManager as never)
   const openList = vi.fn()
   ctx.provide('pluginNavigation', { openList } as never)
   const installer = createBundleInstaller(ctx)
   return { ctx, installer, pluginManager, openList, state: (name: string) => installer.views.getSnapshot()[name] }
 }
+
+describe('the plugin manager', () => {
+  it('is read from the remote.pluginManager service upstream provides, not from a property of remote', async () => {
+    const { ctx, installer, pluginManager, state } = bench([{ name: '@deepseek-ai/dsh-subagent-codex', availability: 'missing', installed: false, enabled: false, installTarget: { spec: 'link:/x' } } as never])
+    // A `remote` service whose namespaces a plugin did not inject has no pluginManager property.
+    ctx.provide('remote', {} as never)
+    installer.refresh(['@deepseek-ai/dsh-subagent-codex'])
+    await flush()
+    expect(pluginManager.listBundles).toHaveBeenCalledOnce()
+    expect(state('@deepseek-ai/dsh-subagent-codex')?.state).toBe('available')
+  })
+})
 
 describe('where a listed bundle stands', () => {
   it.each<readonly [string, Row | undefined, string]>([

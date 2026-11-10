@@ -69,8 +69,20 @@ export function stateOf(bundle: BundleInfo | undefined): BundleState {
 }
 
 /**
+ * The plugin manager's remote namespace. Upstream provides each remote namespace as its own service,
+ * `remote.pluginManager`, and `ctx.remote.pluginManager` reaches it only for a plugin that injects it; onboarding reads
+ * the service from the store when it needs it, so a profile without a plugin manager still opens the guide.
+ * @param ctx - the studio context.
+ * @returns the namespace, or `undefined` where no plugin manager is mounted.
+ */
+function pluginManager(ctx: Context): ClientRemote['pluginManager'] | undefined {
+  const namespace: ClientRemote['pluginManager'] | undefined = ctx.get('remote.pluginManager')
+  return namespace
+}
+
+/**
  * Create the installer over the plugin manager's remote.
- * @param ctx - the studio context; `remote` and `pluginNavigation` are read when needed, so a profile without them shows `failed`.
+ * @param ctx - the studio context; `remote.pluginManager` and `pluginNavigation` are read when needed, so a profile without them shows `failed`.
  * @returns the installer.
  */
 export function createBundleInstaller(ctx: Context): BundleInstaller {
@@ -81,7 +93,7 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
     views.set({ ...views.getSnapshot(), ...Object.fromEntries(names.map(name => [name, { state }])) })
   }
   const read = async (names: readonly string[]): Promise<void> => {
-    const remote = ctx.get('remote')?.pluginManager
+    const remote = pluginManager(ctx)
     if (remote === undefined) {
       setAll(names, 'failed')
       return
@@ -113,7 +125,7 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
     },
     install: async (name) => {
       const bundle = known.get(name)
-      const remote = ctx.get('remote')?.pluginManager
+      const remote = pluginManager(ctx)
       const before = views.getSnapshot()[name]
       if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
       set(name, { ...before, state: 'installing' })
