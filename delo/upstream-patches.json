@@ -1883,8 +1883,8 @@
     {
       "path": "scripts/install-lefthook.mjs",
       "class": "security",
-      "reason": "Trunk gate: the installed pre-commit and pre-push hooks exit 1 and name the install command when they cannot find Lefthook, where Lefthook's own template exits 0 and passes a gate that never ran; the installer refuses a template that lacks that branch. Denial tests in scripts/install-lefthook.spec.ts fail without the change and pass with it, against the installed Lefthook's template too. Authorised by the coordinator (2026-11-10); the lead's review is pending.",
-      "sha256": "6e0656ba39aee1555446d0cdd7366cb3e675591768cc9618dfe8684763c2b118"
+      "reason": "Trunk gate: the installed commit-msg, pre-commit and pre-push hooks exit 1 and name the install command when they cannot find Lefthook, where Lefthook's own template exits 0 and passes a gate that never ran; the installer refuses a template that lacks that branch. Denial tests in scripts/install-lefthook.spec.ts fail without the change and pass with it, against the installed Lefthook's template too. Lead verdict: approved, security class (2026-11-10).",
+      "sha256": "0d73ee4d3077db420bf10eada129c8de26228a86428356abe414ec14758e36c4"
     }
   ],
   "retired": []

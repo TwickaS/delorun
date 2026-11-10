@@ -99,7 +99,7 @@ if (!shouldFail) {
   // The tail of Lefthook's template: its search for a binary ends in the not-found branch when DSH_TEST_LEFTHOOK_MISSING=1.
   const search = 'if [ "$DSH_TEST_LEFTHOOK_MISSING" != "1" ]; then\\n  exit 0\\nelse\\n  echo "Can\\'t find lefthook in PATH"\\nfi\\n'
   const hook = header + (process.env.DSH_TEST_LEFTHOOK_BARE_TEMPLATE === '1' ? 'exit 0\\n' : search)
-  for (const name of ['pre-commit', 'pre-merge-commit', 'pre-push']) writeFileSync(join(hooksPath, name), hook, { mode: 0o755 })
+  for (const name of ['commit-msg', 'pre-commit', 'pre-merge-commit', 'pre-push']) writeFileSync(join(hooksPath, name), hook, { mode: 0o755 })
 }
 if (existsSync(running)) unlinkSync(running)
 if (process.env.DSH_TEST_LEFTHOOK_BREAK_WORKTREE_CONFIG === '1') {
@@ -433,12 +433,12 @@ syncBuiltinESMExports()
   })
 
   // Windows runs these sh hooks through Git's own shell, which this spawn does not locate.
-  it.skipIf(process.platform === 'win32')('makes the pre-commit and pre-push hooks exit 1 with the fix when Lefthook cannot be found', async () => {
+  it.skipIf(process.platform === 'win32')('makes the commit-msg, pre-commit and pre-push hooks exit 1 with the fix when Lefthook cannot be found', async () => {
     const fixture = createFixture()
     const result = await runInstaller(fixture, fixture.main)
     expect(result.status, result.stderr).toBe(0)
     const hooks = hooksPath(fixture, fixture.main)
-    for (const name of ['pre-commit', 'pre-push']) {
+    for (const name of ['commit-msg', 'pre-commit', 'pre-push']) {
       const missing = spawnSync('sh', [join(hooks, name)], { cwd: fixture.main, encoding: 'utf8', env: { ...fixture.env, DSH_TEST_LEFTHOOK_MISSING: '1' } })
       expect(missing.status, name).toBe(1)
       expect(missing.stderr).toContain(`Can't find lefthook, so the ${name} checks cannot run; run pnpm install`)
@@ -464,14 +464,34 @@ syncBuiltinESMExports()
     } else {
       write(join(binDirectory, 'lefthook'), `#!/bin/sh\nexec "${process.execPath}" "${real}" "$@"\n`, 0o755)
     }
-    write(join(fixture.main, 'lefthook.yml'), 'pre-commit:\n  jobs:\n    - run: "true"\npre-push:\n  jobs:\n    - run: "true"\n')
+    write(join(fixture.main, 'lefthook.yml'), 'commit-msg:\n  jobs:\n    - run: "true"\npre-commit:\n  jobs:\n    - run: "true"\npre-push:\n  jobs:\n    - run: "true"\n')
     const result = await runInstaller(fixture, fixture.main)
     expect(result.status, result.stderr).toBe(0)
-    for (const name of ['pre-commit', 'pre-push']) {
+    for (const name of ['commit-msg', 'pre-commit', 'pre-push']) {
       const hook = readFileSync(join(hooksPath(fixture, fixture.main), name), 'utf8')
       expect(hook).toMatch(/echo "Can't find lefthook, so the [a-z-]+ checks cannot run; run pnpm install[^\n]*" >&2\n\s*exit 1\n/)
       expect(hook).not.toContain('echo "Can\'t find lefthook in PATH"')
     }
+  })
+
+  it('installs without a commit-msg hook when no config defines one, and refuses a config without pre-push', async () => {
+    const fixture = createFixture()
+    const real = fileURLToPath(new URL('../node_modules/lefthook/bin/index.js', import.meta.url))
+    const binDirectory = join(fixture.main, 'node_modules/.bin')
+    if (process.platform === 'win32') {
+      writeFileSync(join(binDirectory, 'lefthook.cmd'), `@echo off\r\n"${process.execPath}" "${real}" %*\r\n`)
+    } else {
+      write(join(binDirectory, 'lefthook'), `#!/bin/sh\nexec "${process.execPath}" "${real}" "$@"\n`, 0o755)
+    }
+    write(join(fixture.main, 'lefthook.yml'), 'pre-commit:\n  jobs:\n    - run: "true"\npre-push:\n  jobs:\n    - run: "true"\n')
+    const result = await runInstaller(fixture, fixture.main)
+    expect(result.status, result.stderr).toBe(0)
+    expect(existsSync(join(hooksPath(fixture, fixture.main), 'commit-msg'))).toBe(false)
+    write(join(fixture.main, 'lefthook.yml'), 'pre-commit:\n  jobs:\n    - run: "true"\n')
+    rmSync(join(hooksPath(fixture, fixture.main), 'pre-push'))
+    const refused = await runInstaller(fixture, fixture.main)
+    expect(refused.status).toBe(1)
+    expect(refused.stderr).toContain('Lefthook installed no pre-push hook')
   })
 
   it('repairs its owned absolute hook path after the checkout moves', async () => {

@@ -28,9 +28,11 @@ const INSTALL_LOCK_POLL_MS = 50
 const ALLOW_HOOKS_PATH_OVERRIDE = 'DSH_LEFTHOOK_ALLOW_HOOKS_PATH_OVERRIDE'
 const REPOSITORY_EXTENSION_PATTERN = '^extensions\\.'
 // Lefthook's hook template ends its search for a binary with this line and then exits 0, which would pass a gate
-// that never ran. The gating hooks print the fix and exit 1 instead.
+// that never ran. The gating hooks print the fix and exit 1 instead. The root lefthook.yml defines pre-commit and pre-push;
+// commit-msg exists only where a local config adds it.
 const LEFTHOOK_NOT_FOUND = 'echo "Can\'t find lefthook in PATH"'
-const GATING_HOOKS = ['pre-commit', 'pre-push']
+const GATING_HOOKS = ['commit-msg', 'pre-commit', 'pre-push']
+const REQUIRED_GATING_HOOKS = ['pre-commit', 'pre-push']
 function errorCode(error) {
   return typeof error === 'object' && error !== null && 'code' in error
     ? error.code
@@ -582,7 +584,10 @@ function runLefthook(root, lefthook) {
 function failGatingHooksWithoutLefthook(hooksPath) {
   for (const name of GATING_HOOKS) {
     const hookPath = join(hooksPath, name)
-    if (!existsSync(hookPath)) throw new Error(`Lefthook installed no ${name} hook in ${hooksPath}; lefthook.yml must define ${name}`)
+    if (!existsSync(hookPath)) {
+      if (REQUIRED_GATING_HOOKS.includes(name)) throw new Error(`Lefthook installed no ${name} hook in ${hooksPath}; lefthook.yml must define ${name}`)
+      continue
+    }
     const lines = readFileSync(hookPath, 'utf8').split('\n')
     const index = lines.findIndex(line => line.trim() === LEFTHOOK_NOT_FOUND)
     if (index < 0) {
