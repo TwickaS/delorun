@@ -305,6 +305,10 @@ export class FixtureHost implements RunningHost {
    */
   constructor(private readonly behaviour: FixtureBehaviour, readonly access: UpdateChannelAccess) {}
 
+  studio(): string | undefined {
+    return 'http://127.0.0.1:1/'
+  }
+
   failedRows(): readonly string[] {
     return this.behaviour.disabled
   }

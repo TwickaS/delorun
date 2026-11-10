@@ -104,6 +104,15 @@ function tamper(installedVersion: RuntimeVersion): void {
   writeFileSync(path, '{"name":"changed"}\n')
 }
 
+/**
+ * Whether a version passes the start check now.
+ * @param version - the version.
+ * @returns true when it is installed and whole.
+ */
+async function isInstalledNow(version: RuntimeVersion): Promise<boolean> {
+  return fixture.store.checkRuntime(version, fixture.root).then(() => true, () => false)
+}
+
 describe('pointers', () => {
   it('reads current and previous from the store', async () => {
     await fixture.install(V1)
@@ -130,6 +139,18 @@ describe('prepare', () => {
     expect(prepared).toEqual({ version: V2, report: { for: V2 }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false })
     expect(await fixture.store.pointers()).toEqual({ current: V1 })
     expect(await fixture.store.checkRuntime(V2, fixture.root)).toMatchObject({ version: V2 })
+  })
+
+  it('asks a channel that records installs to record the release once the store installed it, and not when nothing installs', async () => {
+    await fixture.install(V1)
+    const recorded: string[] = []
+    const channel = Object.assign(new FixtureChannel(offered(V2, closureFiles('0.2.0'))), {
+      recordInstalled: async (release: ChannelRelease) => { recorded.push(`${release.version} installed=${String(await isInstalledNow(release.version))}`) },
+    })
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel, report: new FixtureReporter() })
+    await store.prepare(undefined, () => {})
+    await store.prepare(undefined, () => {})
+    expect(recorded).toEqual([`${V2} installed=true`])
   })
 
   it('skips the install of an installed target whose files match its manifest, and fetches again only once', async () => {

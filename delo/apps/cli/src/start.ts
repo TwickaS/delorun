@@ -390,6 +390,10 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   const ids = atBoot.map(row => row.id)
   return {
     chats,
+    studio: () => {
+      const address = booted.studio()
+      return address === undefined ? undefined : `http://${address.host.includes(':') ? `[${address.host}]` : address.host}:${String(address.port)}/`
+    },
     failedRows: () => failed,
     rows: () => ids,
     check: expect => checkHealth({
@@ -410,15 +414,16 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
 
 /**
  * `delorun start` without `--foreground`: start the home process detached from the terminal and wait for it to report
- * `running`.
+ * `running`, then say that it keeps running, where the studio is and how to watch and stop it.
  * @param home - the prepared Delo home.
  * @param profile - the CLI profile.
  * @param output - where the command writes.
+ * @param open - whether the home process opens the studio in the browser once it runs.
  * @returns {@link EXIT.ok} when the home process runs, {@link EXIT.failed} when it exited or did not report `running`
  *   within 120 seconds.
  * @throws {CliError} when the home has no CLI profile.
  */
-export async function startDetached(home: string, profile: string, output: CommandOutput): Promise<CommandResult> {
+export async function startDetached(home: string, profile: string, output: CommandOutput, open = false): Promise<CommandResult> {
   if (!hasCliProfile(home, profile)) throw new CliError(EXIT.failed, `delorun: the CLI profile ${profile} is not set up in ${home}; run: delorun setup`)
   const running = await answeringStatus(home, profile)
   if (running !== undefined) {
@@ -427,7 +432,7 @@ export async function startDetached(home: string, profile: string, output: Comma
   }
   const entry = process.argv[1]
   if (entry === undefined) throw new CliError(EXIT.failed, 'delorun: the command\'s own entry point is unknown, so the home process cannot be started')
-  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile], { detached: true, stdio: 'ignore', env: process.env })
+  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', ...open ? ['--open'] : [], '--profile', profile], { detached: true, stdio: 'ignore', env: process.env })
   let exitCode: number | null | undefined
   child.once('exit', (code) => { exitCode = code })
   child.unref()
@@ -436,7 +441,11 @@ export async function startDetached(home: string, profile: string, output: Comma
   while (Date.now() < deadline) {
     const status = await answeringStatus(home, profile)
     if (status?.state === 'running' && status.pid === child.pid) {
-      output.stdout(`Delo is running for the profile ${profile} (process ${String(status.pid)}).\n`)
+      output.stdout([
+        `Delo is running in the background for the profile ${profile} (process ${String(status.pid)})${status.studio === undefined ? '' : ` at ${status.studio}`}; it keeps running after this terminal closes.`,
+        'See it with delorun status, follow its log with delorun logs --follow, and stop it with delorun stop.',
+        '',
+      ].join('\n'))
       return EXIT.ok
     }
     if (exitCode !== undefined) {
@@ -455,10 +464,11 @@ export async function startDetached(home: string, profile: string, output: Comma
  * @param profile - the CLI profile.
  * @returns the status, or `undefined` when no home process answers.
  */
-async function answeringStatus(home: string, profile: string): Promise<{ readonly pid: number, readonly state: string } | undefined> {
+async function answeringStatus(home: string, profile: string): Promise<{ readonly pid: number, readonly state: string, readonly studio?: string } | undefined> {
   try {
     const answer = await queryHomeStatus(home, profile, HOME_STATUS_TIMEOUT_MS)
-    return 'state' in answer && typeof answer.pid === 'number' && typeof answer.state === 'string' ? { pid: answer.pid, state: answer.state } : undefined
+    if (!('state' in answer) || typeof answer.pid !== 'number' || typeof answer.state !== 'string') return undefined
+    return { pid: answer.pid, state: answer.state, ...typeof answer.studio === 'string' ? { studio: answer.studio } : {} }
   } catch (_notAnswering) {
     // No token file, no socket or no answer: no home process answers for the profile.
     return undefined
@@ -481,9 +491,9 @@ export const startCommand: CliCommand = {
   name: 'start',
   summary: 'Start the home process in the background, or in this terminal with --foreground',
   async run(args, context) {
-    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, profile: { type: 'string' } })
+    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' } })
     const { home, profile } = await prepareHome(context, values.profile)
-    if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) return startDetached(home.path, profile, context)
-    return startForeground({ home: home.path, profile, open: false, output: context })
+    if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) return startDetached(home.path, profile, context, values.open === true)
+    return startForeground({ home: home.path, profile, open: values.open === true, output: context })
   },
 }

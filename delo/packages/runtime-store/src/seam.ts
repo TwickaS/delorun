@@ -56,6 +56,13 @@ export interface RuntimeChannel {
    * @throws when the download or a check fails.
    */
   fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes>
+  /**
+   * Record that the store installed a release the channel resolved, so the install leaves C18's release-log check
+   * record. The packaging lane's `LauncherChannel.recordInstalled` implements it; a channel without it records nothing.
+   * @param release - the release the store installed.
+   * @returns when the record is written.
+   */
+  recordInstalled?(release: ChannelRelease): Promise<void>
 }
 
 /** What C3's health check holds a target to, as the report predicts it. */
@@ -203,6 +210,7 @@ export class HomeRuntimeStore {
           root: resolved.root,
           fill: directory => this.options.channel.fill(resolved, directory),
         })
+        await this.options.channel.recordInstalled?.(resolved)
       }
       version = resolved.version
     }

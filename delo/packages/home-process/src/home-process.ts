@@ -245,12 +245,14 @@ export class HomeProcess implements HandshakeSubject {
   async status(): Promise<HomeStatus> {
     const pointers = this.options.updates === undefined ? { current: this.running } : await this.options.updates.store.pointers()
     const update = this.handshake?.update
+    const studio = this.host?.studio()
     return {
       state: this.state,
       pid: process.pid,
       startId: this.options.startId,
       runtime: { current: pointers.current, ...pointers.previous === undefined ? {} : { previous: pointers.previous }, running: this.running },
       chats: this.host?.chats.running() ?? 0,
+      ...studio === undefined ? {} : { studio },
       ...update === undefined ? {} : { update },
     }
   }

@@ -250,6 +250,11 @@ export interface RunningHost {
   /** Its running chats. */
   readonly chats: ChatGate
   /**
+   * The studio's loopback address.
+   * @returns the URL, or `undefined` when the Host serves no studio.
+   */
+  studio(): string | undefined
+  /**
    * The rows that did not load at boot, which a successor's H4 allows.
    * @returns their ids or names.
    */

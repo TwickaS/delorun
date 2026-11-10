@@ -198,6 +198,8 @@ export interface HomeStatus {
   }
   /** Running chats on this Host. */
   readonly chats: number
+  /** The studio's loopback address, such as `http://127.0.0.1:5173/`, once the Host serves it. */
+  readonly studio?: string
   /** The update in progress, when one runs. */
   readonly update?: {
     /** Its phase. */

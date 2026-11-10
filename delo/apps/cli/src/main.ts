@@ -4,9 +4,9 @@
  *
  * | Command | What it does |
  * | --- | --- |
- * | `delorun [--profile <name>]` | runs setup on a home without the CLI profile; otherwise starts the home process in this terminal and opens the studio |
+ * | `delorun [--profile <name>] [--foreground]` | runs setup on a home without the CLI profile; otherwise starts the home process in the background, or in this terminal when setup's answer or `--foreground` says so, and opens the studio |
  * | `delorun setup [<section>] [--profile <name>] [--list]` | setup, Quick or Full, or one section again ([setup](./setup/index.ts)) |
- * | `delorun start [--foreground] [--profile <name>]` | the home process in the background, or in this terminal ([start](./start.ts)) |
+ * | `delorun start [--foreground] [--open] [--profile <name>]` | the home process in the background, or in this terminal ([start](./start.ts)) |
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
  * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
@@ -30,10 +30,10 @@
 import { CliError, EXIT, type ExitCode } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { HomeLayoutError } from '@delo/home'
-import { hasCliProfile } from './profile.ts'
+import { hasCliProfile, profileDirectory } from './profile.ts'
 import { runSetup, setupCommand } from './setup/index.ts'
 import { SetupCancelled } from './setup/prompts.ts'
-import { startCommand, startForeground } from './start.ts'
+import { startCommand, startDetached, startForeground, startsDetached } from './start.ts'
 import { statusCommand } from './status.ts'
 import { stopCommand } from './stop.ts'
 import { doctorCommand } from './doctor/index.ts'
@@ -58,10 +58,10 @@ export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stop
 function usage(): string {
   const width = Math.max(...COMMANDS.map(command => command.name.length))
   return [
-    'Usage: delorun [--profile <name>]',
+    'Usage: delorun [--profile <name>] [--foreground]',
     '       delorun <command> [options]',
     '',
-    'With no command, delorun sets up a new home, or starts Delo and opens the studio.',
+    'With no command, delorun sets up a new home, or starts Delo in the background and opens the studio.',
     '',
     'Commands:',
     ...COMMANDS.map(command => `  ${command.name.padEnd(width)}  ${command.summary}`),
@@ -80,9 +80,11 @@ function usage(): string {
  * @returns the command's result.
  */
 async function bare(args: readonly string[], context: CommandContext): Promise<CommandResult> {
-  const values = parseOptions('', args, { profile: { type: 'string' } })
+  const values = parseOptions('', args, { profile: { type: 'string' }, foreground: { type: 'boolean', default: false } })
   const { home, profile } = await prepareHome(context, values.profile)
   if (!hasCliProfile(home.path, profile)) return runSetup({ home: home.path, profile, output: context, env: context.env, form: { kind: 'interactive' } })
+  // The setup answer decides as it does for `delorun start`; either way the studio opens once Delo runs.
+  if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) return startDetached(home.path, profile, context, true)
   return startForeground({ home: home.path, profile, open: true, output: context })
 }
 
