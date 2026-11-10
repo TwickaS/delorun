@@ -9,7 +9,9 @@
  * session's file policy without calling a tool, web requests, the plugin
  * manager's changes, and any tool a plugin adds. The account tools ask from
  * inside their own execution instead. Messaging or stopping another chat
- * asks only in a turn that read another chat's or workspace's text.
+ * asks only in a turn that read another chat's or workspace's text. Every
+ * question but that one carries the `workspace-management` grant marker, so a
+ * Host may keep its granting answer for the home's own computer.
  *
  * @module @delo/plugin-main-chat/guard
  */
@@ -64,9 +66,12 @@ export function guardOtherTools(ctx: Context): void {
     const agent = exec.agent
     if (agent?.session.id !== MAIN || guardFree(exec)) return next()
     const read = readThisTurn(agent.session)
-    if (GUARD_AFTER_READ.has(exec.name) && !read) return next()
+    const afterRead = GUARD_AFTER_READ.has(exec.name)
+    if (afterRead && !read) return next()
     return Promise.resolve({
       kind: 'ask',
+      // A command or write here reaches every workspace's files; a message or stop runs under the other chat's own workspace.
+      ...afterRead ? {} : { grants: 'workspace-management' as const },
       reason: `${exec.name}: the main chat asks to run it; it runs in the directory that holds every workspace.${read ? ' This turn read another chat or workspace, whose text can carry instructions.' : ''}`,
       displayReason: {
         en: `The main chat asks to run ${exec.name}, in the directory that holds every workspace.${read ? ' This turn read another chat or workspace, whose text can carry instructions.' : ''}`,

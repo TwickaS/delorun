@@ -110,9 +110,11 @@ export class InstructionConsent extends Service implements WriteConsentService {
   /**
    * Classify one pending mutation.
    * @param request - the tool, the resolved target path and the tool's diff.
-   * @returns `{ required: true, note }` when the target is an instruction-layer
-   *   file — the note names the effect of that scope and carries the diff
-   *   verbatim — or undefined when the write proceeds without asking.
+   * @returns `{ required: true, note, grants }` when the target is an
+   *   instruction-layer file — the note names the effect of that scope and
+   *   carries the diff verbatim, and `grants` is `workspace-management`, so a
+   *   Host may keep the granting answer for the home's own computer — or
+   *   undefined when the write proceeds without asking.
    * @throws the filesystem or launcher error when the target or a root cannot be resolved; the seam then refuses the
    *   write.
    */
@@ -125,7 +127,7 @@ export class InstructionConsent extends Service implements WriteConsentService {
       caseInsensitive: this.caseProbe,
     })
     if (target === undefined) return undefined
-    return { required: true, note: reviewNote(target, request.diff) }
+    return { required: true, note: reviewNote(target, request.diff), grants: 'workspace-management' }
   }
 }
 

@@ -59,6 +59,14 @@ declare module '@deepseek-ai/dsh-session/types' {
   }
 }
 
+/**
+ * What an `allowed-once` answer to an approval request grants, which a Host may reserve for some Peers:
+ * - `full-access`: an escalation to `danger-full-access`, or a workspace's full-access consent;
+ * - `workspace-management`: a change to which workspaces exist (create, clone, trash, restore), to an instruction-layer
+ *   file (an `AGENTS.md`, a skill or a preset), or a command or write that runs where every workspace is reachable.
+ */
+export type ApprovalGrant = 'full-access' | 'workspace-management'
+
 /** Client-safe payload declared for the approval answerer waterfall. */
 export interface ApprovalRequestEvent {
   /** Agent identity projected to the corresponding Client Context in transit. */
@@ -72,10 +80,10 @@ export interface ApprovalRequestEvent {
   /** Localized presentation only; never persisted in approval audit events. */
   readonly displayReason?: { readonly en: string; readonly [locale: string]: string }
   /**
-   * What an `allowed-once` answer grants, when it grants full access: an escalation to `danger-full-access` or a
-   * workspace's full-access consent. A Host may refuse that answer from a Peer that may not grant it. Never persisted.
+   * What an `allowed-once` answer grants beyond an ordinary tool call, when it does ({@link ApprovalGrant}). A Host may
+   * refuse a granting answer from a Peer that may not give that grant; a refusal still applies. Never persisted.
    */
-  readonly grants?: 'full-access'
+  readonly grants?: ApprovalGrant
   /** Cancellation lifetime of the pending request. */
   readonly signal?: AbortSignal
 }

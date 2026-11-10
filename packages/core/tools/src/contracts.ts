@@ -4,6 +4,7 @@ import type { ToolCallId, ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
+import type { ApprovalGrant } from '@deepseek-ai/dsh-user-approval/types'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { JsonSchemaNode } from './json-schema.ts'
 import type { ToolCallView, ToolResultView } from './presentation.ts'
@@ -350,15 +351,15 @@ export type ToolExecutionResult = ToolExecutionSuccess | ToolExecutionFailure
  * model-facing reason and optional structured error identity; `cancel` selects
  * the canonical cancellation result without presenting a policy denial; `ask`
  * runs only after an approval service returns `allowed-once` and otherwise
- * denies; its `reason` is the audited approval reason and its optional
- * `displayReason` is the localized prompt text. Input rewriting is excluded because arguments are already logged and
- * presented.
+ * denies; its `reason` is the audited approval reason, its optional
+ * `displayReason` is the localized prompt text, and its optional `grants` is the approval request's marker of what
+ * allowing the call grants. Input rewriting is excluded because arguments are already logged and presented.
  */
 export type PreToolDecision =
   | { kind: 'allow' }
   | { kind: 'deny'; reason: string; info?: ToolErrorInfo }
   | { kind: 'cancel' }
-  | { kind: 'ask'; reason?: string; displayReason?: { readonly en: string; readonly [locale: string]: string } }
+  | { kind: 'ask'; reason?: string; displayReason?: { readonly en: string; readonly [locale: string]: string }; grants?: ApprovalGrant }
 
 /**
  * Post-dispatch decision: accept, replace one projection, attach context for the

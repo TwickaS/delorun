@@ -6,7 +6,7 @@ The instruction-layer consent: the service behind the seam that keeps a person's
 English | [中文](README.zh.md)
 ## What it provides
 
-- `writeConsent` — consulted by the write tools before a model-authored file commits. A write whose target classifies as an instruction-layer file requires an approval whose text says these instructions load in every future chat of that scope and carries the diff; a refusal leaves the file unchanged.
+- `writeConsent` — consulted by the write tools before a model-authored file commits. A write whose target classifies as an instruction-layer file requires an approval whose text says these instructions load in every future chat of that scope and carries the diff, and carries `grants: "workspace-management"`, so a Host may keep the granting answer for its own computer (`@delo/home-auth` refuses it from a reach device); a refusal leaves the file unchanged.
 
 The `sandboxModeGuard` of the session-mode seam is not this plugin's to provide: that seam keeps one provider, the full-access consent of [`@delo/plugin-permission-defaults`](../plugin-permission-defaults/README.md). A guard that refuses no switch would prove nothing the seam's own spec does not prove.
 

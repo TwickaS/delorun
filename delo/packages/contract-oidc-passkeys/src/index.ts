@@ -29,6 +29,7 @@ export const TAILNET_MEMBERSHIP_OPTIONS = ['tailscale-private'] as const satisfi
 export const LOOPBACK_REQUIRED_ACTIONS = [
   'full-access-escalation',
   'full-access-consent',
+  'workspace-management',
   'device-approve',
   'device-remove',
   'approval-window',

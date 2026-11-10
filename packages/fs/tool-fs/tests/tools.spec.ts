@@ -1168,7 +1168,7 @@ describe('write consent seam (write/edit/apply_patch)', () => {
     const agent = escalationAgent()
     const { ctx, fs } = await setupConsent({ review })
     try {
-      const approval = vi.fn(() => Promise.resolve('allowed-once' as const))
+      const approval = vi.fn((_request: object) => Promise.resolve('allowed-once' as const))
       ctx.on('approval/request', approval)
       const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, agent)
       expect(result.isError, text(result)).toBe(false)
@@ -1177,6 +1177,7 @@ describe('write consent seam (write/edit/apply_patch)', () => {
       expect(review).toHaveBeenCalledWith({ tool: 'write', path: '/abs/a.txt', diff: { old: null, new: 'x' } })
       expect(approval).toHaveBeenCalledTimes(1)
       expect(approval.mock.calls.at(0)?.at(0)).toMatchObject({ toolName: 'write', reason: note })
+      expect(approval.mock.calls.at(0)?.at(0)).not.toHaveProperty('grants')
       // The ask is audited on the session log as the asked/decided pair.
       const session = (agent as { session: { snapshotEvents(): Array<{ type: string; data: Record<string, unknown> }> } }).session
       const audit = session.snapshotEvents().filter(event => event.type.startsWith('approval/'))
@@ -1203,11 +1204,13 @@ describe('write consent seam (write/edit/apply_patch)', () => {
     }
   })
 
-  it('a refused consent ask leaves the file unchanged with the typed refusal', async () => {
-    const { ctx, fs } = await setupConsent({ review: () => ({ required: true, note: 'needs consent' }) })
+  it('a refused consent ask carries the review\'s grant marker and leaves the file unchanged with the typed refusal', async () => {
+    const { ctx, fs } = await setupConsent({ review: () => ({ required: true, note: 'needs consent', grants: 'workspace-management' }) })
     try {
-      ctx.on('approval/request', () => Promise.resolve('rejected' as const))
+      const approval = vi.fn((_request: object) => Promise.resolve('rejected' as const))
+      ctx.on('approval/request', approval)
       const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, escalationAgent())
+      expect(approval.mock.calls.at(0)?.at(0)).toMatchObject({ grants: 'workspace-management' })
       expect(result.isError).toBe(true)
       expect(text(result)).toContain('the user refused the write to "/abs/a.txt"')
       expect(result.error?.info).toEqual({ name: 'WriteConsentRefusedError', code: 'FS_CONSENT_DENIED' })

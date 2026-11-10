@@ -153,7 +153,8 @@ describe('the writeConsent review', () => {
 
   it('requires consent for a workspace AGENTS.md write and carries the edit pair', () => {
     const verdict = consent.review({ tool: 'edit', path: '/work/app/AGENTS.md', diff: { old: 'old rules', new: 'new rules' } })
-    expect(verdict).toMatchObject({ required: true })
+    // Pins the marker a Host reads to keep the granting answer for the home's own computer.
+    expect(verdict).toMatchObject({ required: true, grants: 'workspace-management' })
     const note = (verdict as { required: true; note: string }).note
     expect(note).toContain('these instructions load in every future chat that works in this folder')
     expect(note).toContain('--- old ---\nold rules\n--- new ---\nnew rules')

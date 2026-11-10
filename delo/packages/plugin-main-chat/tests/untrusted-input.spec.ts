@@ -115,10 +115,10 @@ async function setup(options: { readonly approval?: boolean, readonly ptc?: bool
   if (options.approval !== false) await ctx.plugin(ApprovalService)
   // The person's answers, in order, and every question the approval service put to them.
   const answers: ApprovalOutcome[] = []
-  const asked: { readonly toolName: string, readonly reason: string | undefined }[] = []
+  const asked: { readonly toolName: string, readonly reason: string | undefined, readonly grants: string | undefined }[] = []
   if (options.approval !== false) {
     ctx.on('approval/request', (request) => {
-      asked.push({ toolName: request.toolName, reason: request.reason })
+      asked.push({ toolName: request.toolName, reason: request.reason, grants: request.grants })
       return Promise.resolve(answers.shift() ?? 'rejected')
     })
   }
@@ -164,6 +164,8 @@ describe('a main-chat turn whose only untrusted input is a fetched page', () => 
     adapter.script.push(toolCall('f1', 'web_fetch', { url: 'https://news.example/release' }), ...WRITES.map(([id, name, args]) => toolCall(id, name, args)), text('done'))
     await run(main, 'Summarise the release notes at https://news.example/release.')
     expect(asked.map(question => question.toolName)).toEqual(['web_fetch', 'workspace_instructions_write', 'workspace_import', 'workspace_restore'])
+    // Each question reaches the approval waterfall with the marker a Host reads to keep the grant for its own computer.
+    expect(asked.map(question => question.grants)).toEqual(Array.from({ length: 4 }, () => 'workspace-management'))
     expect(outcomes).toEqual([
       { tool: 'web_fetch', code: null },
       { tool: 'workspace_instructions_write', code: 'MAIN_CHAT_DECLINED' },

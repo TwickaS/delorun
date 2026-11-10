@@ -19,7 +19,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
-import type {} from '@deepseek-ai/dsh-user-approval'
+import type { ApprovalGrant } from '@deepseek-ai/dsh-user-approval'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -55,10 +55,13 @@ export interface WriteConsentRequest {
   diff?: WriteConsentDiff
 }
 
-/** One review verdict. */
+/**
+ * One review verdict. A verdict that requires consent may name what allowing the write grants, which the approval
+ * request carries as its `grants` marker.
+ */
 export type WriteConsentReview =
   | { required: false }
-  | { required: true; note: string }
+  | { required: true; note: string; grants?: ApprovalGrant }
 
 /** The optional consent service the mutating tools consult before a mutation. */
 export interface WriteConsentService {
@@ -189,6 +192,7 @@ export async function reviewWriteConsent(
     toolName: tool,
     ...exec.callId !== undefined ? { callId: exec.callId } : {},
     reason: verdict.note,
+    ...verdict.grants !== undefined ? { grants: verdict.grants } : {},
     ...exec.signal ? { signal: exec.signal } : {},
   })
   switch (outcome) {

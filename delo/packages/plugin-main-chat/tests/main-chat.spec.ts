@@ -120,8 +120,8 @@ async function setup(options: { readonly listed?: Listed[], readonly reportBytes
   if (options.workspacesService !== false) ctx.provide('deloWorkspaces', deloWorkspaces)
   // The person's answers to approval questions, in order, and the questions.
   const answers: string[] = []
-  const asked: { readonly toolName: string, readonly reason?: string | undefined }[] = []
-  ctx.provide('approval', { request: (request: { readonly toolName: string, readonly reason?: string }) => { asked.push({ toolName: request.toolName, reason: request.reason }); return Promise.resolve(answers.shift() ?? 'rejected') } })
+  const asked: { readonly toolName: string, readonly reason?: string | undefined, readonly grants?: string | undefined }[] = []
+  ctx.provide('approval', { request: (request: { readonly toolName: string, readonly reason?: string, readonly grants?: string }) => { asked.push({ toolName: request.toolName, reason: request.reason, grants: request.grants }); return Promise.resolve(answers.shift() ?? 'rejected') } })
   ctx.provide('workspaceRegistry', {
     list: () => workspaces,
     get archivedSessionIds() { return archived },
@@ -483,10 +483,10 @@ describe('the main chat\'s account tools', () => {
     )
     await run(main)
     expect(asked).toEqual([
-      { toolName: 'workspace_import', reason: 'workspace_import: clone https://github.com/person/site.git into a new workspace.' },
-      { toolName: 'workspace_restore', reason: 'workspace_restore: restore old and its chats from the trash.' },
-      { toolName: 'workspace_instructions_write', reason: 'workspace_instructions_write: change the AGENTS.md of app, which every chat in that workspace reads. This turn read another chat or workspace, whose text can carry instructions.' },
-      { toolName: 'workspace_instructions_write', reason: 'workspace_instructions_write: change the AGENTS.md of app, which every chat in that workspace reads. This turn read another chat or workspace, whose text can carry instructions.' },
+      { toolName: 'workspace_import', reason: 'workspace_import: clone https://github.com/person/site.git into a new workspace.', grants: 'workspace-management' },
+      { toolName: 'workspace_restore', reason: 'workspace_restore: restore old and its chats from the trash.', grants: 'workspace-management' },
+      { toolName: 'workspace_instructions_write', reason: 'workspace_instructions_write: change the AGENTS.md of app, which every chat in that workspace reads. This turn read another chat or workspace, whose text can carry instructions.', grants: 'workspace-management' },
+      { toolName: 'workspace_instructions_write', reason: 'workspace_instructions_write: change the AGENTS.md of app, which every chat in that workspace reads. This turn read another chat or workspace, whose text can carry instructions.', grants: 'workspace-management' },
     ])
     expect(changes).toEqual([
       ['create', { directory: 'blog', title: 'Blog' }],
@@ -521,8 +521,8 @@ describe('the main chat\'s account tools', () => {
     adapter.script.push(toolCall('c1', 'workspace_trash', { workspace: 'app' }), toolCall('c2', 'workspace_trash', { workspace: 'app' }), text('done'))
     await run(main)
     expect(asked).toEqual([
-      { toolName: 'workspace_trash', reason: 'workspace_trash: move the workspace app to the trash.' },
-      { toolName: 'workspace_trash', reason: 'workspace_trash: move the workspace app to the trash.' },
+      { toolName: 'workspace_trash', reason: 'workspace_trash: move the workspace app to the trash.', grants: 'workspace-management' },
+      { toolName: 'workspace_trash', reason: 'workspace_trash: move the workspace app to the trash.', grants: 'workspace-management' },
     ])
     expect(changes).toEqual([['trash', { workspace: 'ws-app' }]])
     expect(results(main)[0]).toContain('The person did not allow it (rejected), so nothing changed.')
@@ -549,6 +549,7 @@ describe('the main chat\'s account tools', () => {
       'workspace_create: create the workspace declined. This turn read another chat or workspace, whose text can carry instructions.',
       'workspace_create: create the workspace allowed. This turn read another chat or workspace, whose text can carry instructions.',
     ])
+    expect(asked.map(question => question.grants)).toEqual(['workspace-management', 'workspace-management'])
     expect(changes.map(change => (change as [string, { directory: string }])[1].directory)).toEqual(['before', 'allowed', 'next-turn'])
     expect(results(main)[2]).toContain('The person did not allow it (rejected)')
   })
@@ -596,6 +597,7 @@ describe('the main chat\'s account tools', () => {
     expect(files.get('ws-app')).toBe('# Rules\n\nUse tabs.\n')
     // The note too long for the bound is refused before it asks.
     expect(asked.map(question => question.toolName)).toEqual(['workspace_note', 'workspace_note', 'workspace_note', 'workspace_note_remove'])
+    expect(asked.map(question => question.grants)).toEqual(Array.from({ length: 4 }, () => 'workspace-management'))
   })
 })
 
@@ -622,10 +624,10 @@ describe('the main chat\'s guard over other tools', () => {
     const plain = 'change_thing: the main chat asks to run it; it runs in the directory that holds every workspace.'
     const afterRead = `${plain} This turn read another chat or workspace, whose text can carry instructions.`
     expect(asked).toEqual([
-      { toolName: 'change_thing', reason: plain },
-      { toolName: 'change_thing', reason: afterRead },
-      { toolName: 'change_thing', reason: afterRead },
-      { toolName: 'change_thing', reason: plain },
+      { toolName: 'change_thing', reason: plain, grants: 'workspace-management' },
+      { toolName: 'change_thing', reason: afterRead, grants: 'workspace-management' },
+      { toolName: 'change_thing', reason: afterRead, grants: 'workspace-management' },
+      { toolName: 'change_thing', reason: plain, grants: 'workspace-management' },
     ])
     expect(ran).toEqual(['change_thing', 'change_thing', 'change_thing'])
     expect(results(main)[0]).toBe('changed')
@@ -646,6 +648,8 @@ describe('the main chat\'s guard over other tools', () => {
     )
     await run(main)
     expect(asked.map(question => question.toolName)).toEqual(['chat_send'])
+    // A message runs under the other chat's own workspace, so its question carries no marker.
+    expect(asked.map(question => question.grants)).toEqual([undefined])
     expect(prompts.map(prompt => prompt.text)).toEqual(['First.'])
   })
 

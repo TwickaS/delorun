@@ -15,7 +15,9 @@
  * record {@link READ_RECORD}, and a report the turn took in is a
  * `delo-main-chat` message. The question is asked from inside the tool
  * call's own execution, so no `tools/pre-execute` listener can let the
- * change through unasked, and only `allowed-once` lets it run.
+ * change through unasked, and only `allowed-once` lets it run. Each question
+ * carries the `workspace-management` grant marker, so a Host may keep its
+ * granting answer for the home's own computer.
  *
  * @module @delo/plugin-main-chat/account-tools
  */
@@ -108,7 +110,7 @@ export function accountTools(ctx: Context, root: string, limits: AccountLimits, 
     const outcome = approval === undefined
       ? 'unavailable'
       : await approval.request({
-        agent, toolName: exec.name, callId: exec.callId, signal: exec.signal,
+        agent, toolName: exec.name, callId: exec.callId, signal: exec.signal, grants: 'workspace-management',
         reason: `${exec.name}: ${change.en}.${why}`,
         displayReason: { en: `The main chat asks to ${change.en}.${why}`, zh: `主对话请求${change.zh}。${guarded ? '本轮读取了另一个对话或工作区，其内容可能带有指令。' : ''}` },
       })

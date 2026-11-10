@@ -452,6 +452,7 @@ export class ToolExecutionPipeline {
       callId: exec.callId,
       ...ask.reason !== undefined ? { reason: ask.reason } : {},
       ...ask.displayReason !== undefined ? { displayReason: ask.displayReason } : {},
+      ...ask.grants !== undefined ? { grants: ask.grants } : {},
       signal: exec.signal,
     })
     switch (outcome) {
