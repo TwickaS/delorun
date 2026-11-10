@@ -68,7 +68,7 @@ Every Host Delo boots over a home goes through one composition: the foreground s
 
 - each required row, the `sandbox` row and in the CLI profile every row a Delo bundle inserts, is inserted once, by the bundle that declares it (upstream's `@deepseek-ai/dsh-base` for `sandbox`, a Delo bundle for a Delo row), and runs the plugin that bundle names: a second insert of the id by any other bundle, the profile patch, the home patch or an overlay is refused, because upstream mounts both entries and the later one replaces the row;
 - each required row is enabled and active, and safe mode's overlay never exempts one;
-- the `sandbox` row's `protectedHome` is the home's real path, its `deniedSockets` hold every socket C1 denies, and it sets no `runnerCommand` or `runnerFailureSignatures`;
+- the `sandbox` row's `protectedHome` is the home's real path, its `deniedSockets` hold every socket C1 denies, its `escapeSocketDirectories` hold every directory the start names, such as WSL's `/run/WSL`, and it sets no `runnerCommand` or `runnerFailureSignatures`;
 - in the CLI profile, each prompt row's switch has the value the recorded prompts answer gives it (Delo's default for "Safer prompts", the parity value for "Same as stock"), and `delo-fetch-guard` and `delo-update-gate` are on, the update gate with `holdUntilChecked`;
 - after boot, each service a required row provides is provided by that row's fiber or a fiber under it, not merely present: `sandbox` by `sandbox`, `fetchGuard` by `delo-fetch-guard`, `deloTurnGate` by `delo-update-gate`, `writeConsent`, `mcpAddConsent` and `scheduleConsent` by their consent rows, and `permissionDefaults` and `sandboxModeGuard` by `delo-permission-defaults`; a service is absent only when its row's switch is off.
 

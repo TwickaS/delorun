@@ -127,6 +127,21 @@ export async function sandboxProtection(home: string, profile: string, env: Read
 }
 
 /**
+ * The escape directories the start set that a booted sandbox row's settings do not name. The provider hides, and under
+ * bwrap filters vsock for, only the directories its settings name, so the invariants in `compose.ts` refuse a Host whose
+ * row dropped one, before boot and after it, whichever layer replaced the list.
+ * @param protection - the settings the start set.
+ * @param config - the sandbox row's `config` as the Loader mounted it.
+ * @returns the missing directories in the start's order; empty when the row names each of them.
+ */
+export function missingEscapeSocketDirectories(protection: Pick<SandboxProtection, 'escapeSocketDirectories'>, config: unknown): string[] {
+  const named = typeof config === 'object' && config !== null && 'escapeSocketDirectories' in config && Array.isArray(config.escapeSocketDirectories)
+    ? new Set(config.escapeSocketDirectories)
+    : new Set()
+  return protection.escapeSocketDirectories.filter(directory => !named.has(directory))
+}
+
+/**
  * Whether a value holds only YAML scalars, arrays and plain objects, which the overlay can write again.
  * @param value - the value.
  * @returns false for an expression node or any other object.

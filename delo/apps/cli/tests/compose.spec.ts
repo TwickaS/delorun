@@ -236,14 +236,22 @@ describe('a booted Host', { timeout: 60_000 }, () => {
     expect(message).toContain(`${TURN_GATE_SERVICE} is not provided`)
   })
 
-  it('refuses a sandbox row that protects another home, misses a denied socket, or sets the runner', async () => {
+  it('refuses a sandbox row that protects another home, misses a denied socket or an escape directory, or sets the runner', async () => {
     const composed = await compose()
     const message = await refused(() => {
       assertDeloInvariants(composed, booted(composed, [{ id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'active', config: { protectedHome: '/elsewhere', deniedSockets: [], runnerCommand: ['/bin/true'] } }]))
     })
     expect(message).toContain(`sandbox protects "/elsewhere", not the home ${deloHome}`)
     expect(message).toContain(`does not deny ${join(deloHome, 'run', 'default', 'update.sock')}`)
+    expect(message).toContain('sandbox does not hide the escape directories /run/WSL')
     expect(message).toContain('sandbox sets runnerCommand')
+  })
+
+  it('accepts a booted sandbox row that names every escape directory the start set, among its own', async () => {
+    const composed = await compose()
+    const [row] = composedRows(composed).filter(candidate => candidate.id === 'sandbox')
+    const config = { ...isRecord(row?.config) ? row.config : {}, escapeSocketDirectories: ['/run/mine', '/run/WSL'] }
+    expect(() => { assertDeloInvariants(composed, booted(composed, [{ ...row!, config }])) }).not.toThrow()
   })
 
   it('refuses a Host without a sandbox row, and one whose row config is not an object', async () => {

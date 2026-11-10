@@ -21,8 +21,9 @@
  *   runs the plugin that bundle names; no other bundle, the profile's patch, the home's patch or an overlay inserts the
  *   id again, which would replace the row;
  * - each required row is enabled and active; safe mode's overlay never exempts one;
- * - the `sandbox` row's `protectedHome` is the home's real path, its `deniedSockets` hold every socket C1 denies, and it
- *   sets no `runnerCommand` or `runnerFailureSignatures`;
+ * - the `sandbox` row's `protectedHome` is the home's real path, its `deniedSockets` hold every socket C1 denies, its
+ *   `escapeSocketDirectories` hold every directory the start names, and it sets no `runnerCommand` or
+ *   `runnerFailureSignatures`;
  * - in the CLI profile, each prompt row's switch has the value the recorded prompts answer gives it ("Safer prompts"
  *   Delo's default, "Same as stock" the parity value), and the guard rows `delo-fetch-guard` and `delo-update-gate`
  *   are on;
@@ -44,7 +45,7 @@ import { deloRowIds, isDeloPackage, refuseSkippedDeloBundles, type BootedRow } f
 import { CliError, EXIT } from './exit.ts'
 import { composedRow, isRecord, patchLayers, rowInserts, sourcesSetting, type PatchLayer } from './patch-layers.ts'
 import { safeModeNotice, safeModeStart, type SafeModeStart } from './safe-mode.ts'
-import { SANDBOX_ROW, sandboxProtection, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
+import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
 import { promptRows, readPromptsAnswer } from './setup/prompt-switches.ts'
 
 /**
@@ -339,6 +340,8 @@ function sandboxViolations(composed: ComposedStart, row: BootedRow): Violation[]
   const denied = Array.isArray(config.deniedSockets) ? config.deniedSockets : []
   const missing = composed.protection.deniedSockets.filter(socket => !denied.includes(socket))
   if (missing.length > 0) violations.push({ subject: SANDBOX_ROW, problem: `does not deny ${missing.join(', ')}`, sources: sources('deniedSockets') })
+  const unhidden = missingEscapeSocketDirectories(composed.protection, config)
+  if (unhidden.length > 0) violations.push({ subject: SANDBOX_ROW, problem: `does not hide the escape directories ${unhidden.join(', ')}`, sources: sources('escapeSocketDirectories') })
   for (const key of ['runnerCommand', 'runnerFailureSignatures']) {
     if (config[key] !== undefined) violations.push({ subject: SANDBOX_ROW, problem: `sets ${key}`, sources: sources(key) })
   }
