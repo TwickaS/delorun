@@ -689,6 +689,27 @@ function eventSource(ctx: Context): (dispatch: TypertRemoteEventDispatch) => voi
   }
 }
 
+/** Open one forwarded-event stream for `peer` and read its ready frame. */
+async function openEvents(
+  ctx: Context, peer: PeerScope, signal: AbortSignal,
+): Promise<{ readonly events: AsyncIterator<unknown>; readonly clientId: unknown }> {
+  const events = (await ctx.typertGateway.wireStream.open('$events', { args: {} }, (async function* () {})(), peer, signal))[Symbol.asyncIterator]()
+  const ready = await events.next()
+  return { events, clientId: Reflect.get(ready.value as object, 'clientId') }
+}
+
+/** Answer one forwarded event `allowed-once` as `peer` through the shared `/api` channel. */
+function answerEvent(ctx: Context, peer: PeerScope, clientId: unknown, eventId: string): Promise<Response> {
+  return ctx.connection.createSharedFetchHandler('/api').fetch(new Request('http://host/api/$events/result', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      type: 'client-request', rpcId: 'rpc-answer', method: '$events/result',
+      payload: { args: { clientId, eventId, outcome: { kind: 'result', value: 'allowed-once' } } },
+    }),
+  }), peer)
+}
+
 describe('Gateway forwarded events for non-owner Peers', () => {
   it('denies event streams and results for passive owner and guest Peers', async () => {
     const { ctx } = await setup({ connection: true })
@@ -727,11 +748,7 @@ describe('Gateway forwarded events for non-owner Peers', () => {
       },
     })
     const abort = new AbortController()
-    const open = async (peer: PeerScope): Promise<{ readonly events: AsyncIterator<unknown>; readonly clientId: unknown }> => {
-      const events = (await ctx.typertGateway.wireStream.open('$events', { args: {} }, (async function* () {})(), peer, abort.signal))[Symbol.asyncIterator]()
-      const ready = await events.next()
-      return { events, clientId: Reflect.get(ready.value as object, 'clientId') }
-    }
+    const open = (peer: PeerScope): ReturnType<typeof openEvents> => openEvents(ctx, peer, abort.signal)
     const refused = await open(refusedPeer)
     const allowed = await open(ctx.connection.browserPeer)
     const subject = {}
@@ -739,14 +756,7 @@ describe('Gateway forwarded events for non-owner Peers', () => {
     push({ event: 'fixture/ask', request: { question: 'q', agent: subject }, context: { value: ctx.extend({}), subject, agentId: 'agent-1' }, resolve: settled, reject: settled })
     const frame = (await refused.events.next()).value as { readonly eventId: string }
     await allowed.events.next()
-    const answer = (peer: PeerScope, clientId: unknown): Promise<Response> => ctx.connection.createSharedFetchHandler('/api').fetch(new Request('http://host/api/$events/result', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        type: 'client-request', rpcId: 'rpc-answer', method: '$events/result',
-        payload: { args: { clientId, eventId: frame.eventId, outcome: { kind: 'result', value: 'allowed-once' } } },
-      }),
-    }), peer)
+    const answer = (peer: PeerScope, clientId: unknown): Promise<Response> => answerEvent(ctx, peer, clientId, frame.eventId)
     const first = await answer(refusedPeer, refused.clientId)
     expect(await first.json()).toMatchObject({ result: { ok: false, error: { code: 'gateway/bad-request' } } })
     // Pins the guard: without its call the refused Peer's answer settles the event.
@@ -806,6 +816,7 @@ describe('Gateway forwarded events for non-owner Peers', () => {
     // The global notice and the denied shelf never reach the non-owner; the allowed one arrives whole.
     await expect(guestEvents.next()).resolves.toEqual({ done: false, value: { type: 'emit', event: 'fixture/shelf', args: ['s1'] } })
     expect(decide.mock.calls.map(([request]) => request)).toEqual([
+      { principal: GUEST, action: 'event:fixture/ask', resources: [GLOBAL] },
       { principal: GUEST, action: 'event:fixture/notice', resources: [GLOBAL] },
       { principal: GUEST, action: 'event:fixture/shelf', resources: [shelf('s2')] },
       { principal: GUEST, action: 'event:fixture/shelf', resources: [shelf('s1')] },
@@ -829,6 +840,65 @@ describe('Gateway forwarded events for non-owner Peers', () => {
     abort.abort()
     await guestEvents.return?.()
     await ownerEvents.return?.()
+  })
+
+  it('delivers a scoped waterfall a non-owner\'s policy lists, applies its answer, and refuses one the policy withdrew', async () => {
+    const { ctx, bindings } = await setup({ connection: true })
+    let answering = true
+    const askRole: RemoteAccessBinding = { role: { name: 'test:ask', resource: 'global', actions: ['event:fixture/ask'] }, resource: GLOBAL }
+    bindings.mockImplementation(() => answering ? [askRole] : [])
+    const guarded: unknown[] = []
+    ctx.provide('remoteAnswerGuard', { check: (answer) => { guarded.push({ event: answer.event, value: answer.value, guest: answer.peer.principal.kind }) } })
+    const push = eventSource(ctx)
+    const abort = new AbortController()
+    const open = (peer: PeerScope): ReturnType<typeof openEvents> => openEvents(ctx, peer, abort.signal)
+    const guest = ctx.connection.createPeer({ principal: GUEST })
+    const first = await open(guest)
+    const answer = (stream: { readonly clientId: unknown }, eventId: string): Promise<Response> =>
+      answerEvent(ctx, guest, stream.clientId, eventId)
+    const ask = (subject: object, settled: () => void): void => {
+      push({ event: 'fixture/ask', request: { question: 'q', agent: subject }, context: { value: ctx.extend({}), subject, agentId: 'agent-1' }, resolve: settled, reject: settled })
+    }
+    const subject = {}
+    const settled = vi.fn()
+    ask(subject, settled)
+    // Pins the delivery decision: without it a non-owner stream receives no waterfall.
+    const delivered = (await first.events.next()).value as { readonly type: string; readonly eventId: string }
+    expect(delivered).toMatchObject({ type: 'waterfall', event: 'fixture/ask' })
+    // Pins the open-time decision: a stream opened while the event is pending receives it too.
+    const second = await open(guest)
+    await expect(second.events.next()).resolves.toMatchObject({ value: { type: 'waterfall', eventId: delivered.eventId } })
+    expect(await (await answer(first, delivered.eventId)).json()).toMatchObject({ result: { ok: true } })
+    expect(settled).toHaveBeenCalledWith({ kind: 'result', value: 'allowed-once' })
+    // The remote answer guard still sees a non-owner's answer before it applies.
+    expect(guarded).toEqual([{ event: 'fixture/ask', value: 'allowed-once', guest: 'test-guest' }])
+
+    const later = vi.fn()
+    ask({}, later)
+    const pending = (await first.events.next()).value as { readonly eventId: string }
+    answering = false
+    // Pins the answer-time decision: a policy that withdrew the event refuses the answer and leaves the event pending.
+    expect(await (await answer(first, pending.eventId)).json()).toMatchObject({
+      result: { ok: false, error: { code: 'gateway/invocation-unavailable', details: { endpoint: '$events/result' } } },
+    })
+    // Another Peer of the same principal cannot answer through this Peer's stream.
+    answering = true
+    const other = ctx.connection.createPeer({ principal: GUEST })
+    expect(await (await answerEvent(ctx, other, first.clientId, pending.eventId)).json()).toMatchObject({
+      result: { ok: false, error: { code: 'gateway/invocation-unavailable' } },
+    })
+    answering = false
+    // A stream that opened after the withdrawal received no delivery, so its answer is refused too.
+    const third = await open(guest)
+    expect(await (await answer(third, pending.eventId)).json()).toMatchObject({
+      result: { ok: false, error: { code: 'gateway/invocation-unavailable' } },
+    })
+    expect(later).not.toHaveBeenCalled()
+    expect(ctx.typertGateway.getPendingRemoteEvents()).toEqual([{ event: 'fixture/ask', agentId: 'agent-1' }])
+    abort.abort()
+    await first.events.return?.()
+    await second.events.return?.()
+    await third.events.return?.()
   })
 
   it('delivers a global event that a global role lists, and drops one whose resource is missing without asking remoteAccess', async () => {

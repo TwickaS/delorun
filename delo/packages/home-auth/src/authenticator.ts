@@ -8,15 +8,21 @@
  *   pre-login routes this package answers. Every request `admit` sees is stamped with the listener before any route
  *   runs, so the routes decide its arrival from the stamp. A request on a pre-login route is `pre-login`; any other
  *   request is admitted only with a live session cookie of that listener, and is refused with C4's code otherwise.
- * - **Peers.** Each device is one owner Peer per listener, created on its first admitted request and disposed when the
- *   device is removed or the provider stops. The provider keeps each Peer's device and identity factor, which is what the
- *   home reads where it grants an action that C14 reserves for the home's own computer.
+ * - **Peers.** Each device is one Peer per listener, created on its first admitted request and disposed when the device
+ *   is removed or the provider stops. Its principal is the device's `reach-device` principal, never the owner, so
+ *   upstream's Gateway decides each of its calls and forwarded events from the `reach-device` policy this provider
+ *   registers (`./reach-access.ts`), and refuses what C14 reserves for the home's own computer with
+ *   `loopback-required: <action>`. The provider keeps each Peer's device and identity factor, which is what the home
+ *   reads where it grants an action that C14 reserves for the home's own computer.
  *
  * `admit` is synchronous: it reads `homeAuth`'s in-memory copy of the stores, which refuses until the stores were read.
  *
  * @module @delo/home-auth/authenticator
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-api-remote-access'
+import type {} from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-workspace'
 import { Authenticator, LOOPBACK_LISTENER, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PreLoginRoute } from '@deepseek-ai/dsh-client-connection'
 import type { RemoteEventAnswer } from '@deepseek-ai/dsh-api-gateway'
 import { RemoteError, type PeerId, type PeerScope } from '@deepseek-ai/dsh-typert-protocol'
@@ -25,6 +31,7 @@ import type { IdentityFactor, LoopbackRequiredAction } from '@delo/contract-oidc
 import { stampListener } from './arrival.ts'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie } from './reach-routes.ts'
+import { createReachAccessPolicy, REACH_DEVICE, reachDevicePrincipal } from './reach-access.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -114,6 +121,23 @@ export class HomeAuthAuthenticator extends Authenticator {
     }, 'home-auth reach peers')
     ctx.effect(() => ctx.homeAuth.onDeviceRemoved((deviceId) => { this.disposeDevice(deviceId) }), 'home-auth peer removal')
     ctx.effect(() => ctx.provide('remoteAnswerGuard', { check: (answer: RemoteEventAnswer) => { this.checkAnswer(answer) } }), 'home-auth full-access grant guard')
+    // Without remote access no Gateway is mounted, so no reach Peer's call is dispatched at all.
+    ctx.inject(['remoteAccess'], (access) => {
+      access.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({
+        admitted: deviceId => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId),
+        workspaces: () => access.get('workspaceRegistry')?.list() ?? [],
+        liveSessions: () => (access.get('sessions')?.list() ?? []).map(session => session.id),
+      }))
+      // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
+      const invalidate = (): void => {
+        for (const deviceId of new Set([...this.reachPeers.values()].map(peer => peer.deviceId))) {
+          access.remoteAccess.invalidate(reachDevicePrincipal(deviceId))
+        }
+      }
+      access.on('session/created', invalidate)
+      access.on('session/disposed', invalidate)
+      access.on('domain/changed', (change) => { if (change.domain === 'workspace') invalidate() })
+    })
   }
 
   /**
@@ -163,7 +187,7 @@ export class HomeAuthAuthenticator extends Authenticator {
     const key = `${served.listener}\u0000${session.deviceId}`
     let peer = this.peers.get(key)
     if (peer === undefined) {
-      peer = this.ctx.connection.createPeer({ principal: { kind: 'owner' } })
+      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId) })
       this.peers.set(key, peer)
       this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor })
     }

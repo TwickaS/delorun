@@ -64,7 +64,7 @@ An `Admission` is one of three results:
 | `pre-login` | `route` | The request is unauthenticated and its method and path are on the listener's pre-login allowlist. Only that route may answer it. |
 | `refused` | `status`, `code` | The dispatcher answers `status` with the body `{"error":"<code>"}` and dispatches nothing. |
 
-**One Peer per device.** The provider creates one Peer for each trusted device on each listener it is admitted on, through upstream's `createPeer`. The Peer's principal is upstream's `{ kind: 'owner' }`, because every trusted device acts for the person, so upstream's authorization is unchanged; the provider keeps the map from Peer id to device id. The Peer is disposed when the device is removed, when its last session ends or when the listener stops, and disposing it ends every stream that speaks for it.
+**One Peer per device.** The provider creates one Peer for each trusted device on each listener it is admitted on, through upstream's `createPeer`. The Peer's principal is `{ kind: 'reach-device', deviceId }`, never upstream's owner, so upstream's Gateway decides each call and each forwarded event of the Peer from the `reach-device` remote access policy the provider registers, which allows only what [C14](c14-oidc-passkeys.md#tailnet-membership) allows a device; the provider keeps the map from Peer id to device id. The Peer is disposed when the device is removed, when its last session ends or when the listener stops, and disposing it ends every stream that speaks for it.
 
 <a id="listeners"></a>
 ### Listeners

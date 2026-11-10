@@ -130,9 +130,12 @@ interface RemoteEventClient {
   readonly queue: RemoteEventQueue
   readonly signal: AbortSignal
   readonly deliveries: Map<RemoteEventId, PendingRemoteEvent>
-  /** The stream's Peer principal: only the owner answers scoped waterfalls and receives every broadcast. */
+  /** The stream's Peer principal: the owner answers every scoped waterfall and receives every broadcast. */
   readonly principal: Principal
-  /** Only owner streams receive scoped waterfalls they could answer; other Peers receive admitted broadcasts only. */
+  /**
+   * Owner streams receive every scoped waterfall; another Peer's stream receives the waterfalls and the broadcasts
+   * its access policy allows.
+   */
   readonly answers: boolean
 }
 
@@ -155,6 +158,8 @@ const EMPTY_ASYNC_ITERABLE: AsyncIterable<never> = {
 }
 const UPLINK_DONE: IteratorReturnResult<undefined> = { value: undefined, done: true }
 const SRC_JSON_CODEC: TypertCodec = { mode: 'src-json' }
+/** A scoped waterfall names no resource identity, so a non-owner's answer is decided on the global resource. */
+const WATERFALL_RESOURCES: readonly RemoteAccessResource[] = Object.freeze([Object.freeze({ kind: 'global' })])
 
 /** Gateway transport configuration. */
 export interface Config {
@@ -500,11 +505,11 @@ export class TypertGatewayService extends Service implements TypertGateway {
       try {
         assertPeerLive(peer, endpoint)
         requireInteractions(peer, endpoint)
-        // oxlint-disable-next-line typescript/no-unnecessary-condition -- other packages merge non-owner kinds into PrincipalMap.
-        if (peer.principal.kind !== 'owner') {
-          throw new TypertGatewayError('gateway/invocation-unavailable', endpoint, 'only owner Peers answer forwarded Remote events')
-        }
         const result = parseRemoteEventResultPayload(payload)
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- other packages merge non-owner kinds into PrincipalMap.
+        if (peer.principal.kind !== 'owner' && !this.answerAllowed(peer, result)) {
+          throw new TypertGatewayError('gateway/invocation-unavailable', endpoint, 'this Peer may not answer that forwarded Remote event')
+        }
         const client = this.remoteEventClients.get(result.clientId)
         if (client === undefined) {
           throw new Error('typert gateway: Remote event result identifies no active event stream')
@@ -586,8 +591,8 @@ export class TypertGatewayService extends Service implements TypertGateway {
       answers: peer.principal.kind === 'owner',
     }
     this.remoteEventClients.set(clientId, client)
-    if (client.answers) {
-      for (const pending of this.pendingRemoteEvents.values()) this.deliverRemoteEvent(pending, client)
+    for (const pending of this.pendingRemoteEvents.values()) {
+      if (this.answersWaterfall(client, pending.source.event)) this.deliverRemoteEvent(pending, client)
     }
     try {
       yield { ...REMOTE_EVENT_STREAM_READY, clientId, host: registration.host }
@@ -693,12 +698,35 @@ export class TypertGatewayService extends Service implements TypertGateway {
       if ([...signals].some(signal => signal.aborted)) abort()
       else {
         for (const client of this.remoteEventClients.values()) {
-          if (client.answers) this.deliverRemoteEvent(pending, client)
+          if (this.answersWaterfall(client, source.event)) this.deliverRemoteEvent(pending, client)
         }
       }
     } catch (error) {
       source.reject(error)
     }
+  }
+
+  /**
+   * Whether one event stream receives a scoped waterfall and may answer it: an owner stream always; another Peer's
+   * stream while its access policy allows `event:<name>` on the global resource, asked at delivery and again at its
+   * answer.
+   */
+  private answersWaterfall(client: RemoteEventClient, event: string): boolean {
+    return client.answers || this.ctx.remoteAccess.decide({
+      principal: client.principal,
+      action: `event:${event}`,
+      resources: WATERFALL_RESOURCES,
+    }).kind === 'allow'
+  }
+
+  /**
+   * Whether a non-owner Peer may answer one forwarded event: the event is pending, was delivered to that Peer's own
+   * stream, and its access policy still allows it.
+   */
+  private answerAllowed(peer: PeerScope, result: ReturnType<typeof parseRemoteEventResult>): boolean {
+    const client = this.remoteEventClients.get(result.clientId)
+    const pending = this.pendingRemoteEvents.get(result.eventId)
+    return client?.peer === peer && pending?.deliveries.has(client) === true && this.answersWaterfall(client, pending.source.event)
   }
 
   private deliverRemoteEvent(pending: PendingRemoteEvent, client: RemoteEventClient): void {

@@ -1919,14 +1919,14 @@
     {
       "path": "packages/api/gateway/src/index.ts",
       "class": "security",
-      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; absent, behaviour is upstream's.",
-      "sha256": "955ef80226e34821963485ca2bc9974496006e1552b4608b16d0be26973ea4bc"
+      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's.",
+      "sha256": "049e26a1086be5dcdf2c3d180f47312b02b8b93a29d5f7aa062720ae48e76e55"
     },
     {
       "path": "packages/api/gateway/src/types.ts",
       "class": "security",
-      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; absent, behaviour is upstream's.",
-      "sha256": "0223ecfecca3e551141cd1a81aeab6513aa326676c41f863d408e07db3dd2b45"
+      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's.",
+      "sha256": "b485d505ed4f4d3197db8a7a2acf7c08689f7671bf8411db8c4e1d00f898e9d7"
     },
     {
       "path": "packages/interaction/user-approval/src/types.ts",

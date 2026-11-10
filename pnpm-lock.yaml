@@ -2028,15 +2028,24 @@ importers:
       '@deepseek-ai/dsh-api-gateway':
         specifier: workspace:*
         version: link:../../../packages/api/gateway
+      '@deepseek-ai/dsh-api-remote-access':
+        specifier: workspace:*
+        version: link:../../../packages/api/remote-access
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../../packages/typert/protocol
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -2056,6 +2065,9 @@ importers:
         specifier: workspace:*
         version: link:../home
     devDependencies:
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:*
+        version: link:../../../packages/api/remotes
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot

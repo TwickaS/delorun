@@ -1,7 +1,8 @@
 /**
  * The provider of upstream's `authenticator` over a bare Cordis context with a recording connection: the policy of the
  * listeners a reach provider asked the home to serve, the stamp and the pre-login routes, one Peer per device and
- * listener disposed with its device, and the refusal of a full-access grant answered from a reach Peer.
+ * listener disposed with its device, the refusal of a full-access grant answered from a reach Peer, and the
+ * `reach-device` principal of its Peers with the remote access policy it registers for them.
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
@@ -11,11 +12,13 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import type { Admission, ConnectionIndexRequest } from '@deepseek-ai/dsh-client-connection'
-import type { PeerId, PeerScope } from '@deepseek-ai/dsh-typert-protocol'
+import type { PeerId, PeerScope, Principal } from '@deepseek-ai/dsh-typert-protocol'
+import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
 import { HomeAuthAuthenticator, matchesPreLogin } from '../src/authenticator.ts'
+import { reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
 import { DeviceStore } from '../src/devices.ts'
 import { claimOf, recordOf } from './fixtures/home.ts'
@@ -45,12 +48,15 @@ let ctx: Context
 let fiber: Fiber
 let directory: string
 const created: FakePeer[] = []
+/** The principal each created Peer was asked for. */
+const principals: Principal[] = []
 const builtin: ConnectionIndexRequest[] = []
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'delo-home-auth-provider-'))
   ctx = new Context()
   created.length = 0
+  principals.length = 0
   builtin.length = 0
   ctx.provide('webServer', { register: () => () => {}, port: undefined } as never)
   ctx.provide('connection', {
@@ -58,7 +64,8 @@ beforeEach(async () => {
       builtin.push(request)
       return { kind: 'refused', status: 401, code: 'NOT_SIGNED_IN' }
     },
-    createPeer: (): PeerScope => {
+    createPeer: (options: { readonly principal: Principal }): PeerScope => {
+      principals.push(options.principal)
       const peer = fakePeer(`peer-${String(created.length)}`)
       created.push(peer)
       return peer
@@ -192,5 +199,64 @@ describe('the authenticator provider', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  describe('the reach-device principal and policy', () => {
+    /** A remote access double that records the policy and every invalidation. */
+    async function fakeRemoteAccess(): Promise<{ policy: () => RemoteAccessPolicy<ReachDevicePrincipal>; readonly invalidated: Principal[] }> {
+      let registered: { readonly kind: string; readonly policy: RemoteAccessPolicy<ReachDevicePrincipal> } | undefined
+      const invalidated: Principal[] = []
+      ctx.provide('remoteAccess')
+      ctx.set('remoteAccess', {
+        registerPolicy: (kind: string, policy: RemoteAccessPolicy<ReachDevicePrincipal>) => { registered = { kind, policy }; return () => {} },
+        invalidate: (principal: Principal) => { invalidated.push(principal) },
+      } as never)
+      await new Promise<void>((resolve) => { ctx.inject(['remoteAccess'], () => { resolve() }) })
+      return {
+        policy: () => {
+          if (registered?.kind !== 'reach-device') throw new Error('no reach-device policy was registered')
+          return registered.policy
+        },
+        invalidated,
+      }
+    }
+
+    it('creates every reach Peer for the device\'s principal, never the owner', async () => {
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+      // Pins the principal: an owner Peer passes every remote access check.
+      expect(principals).toEqual([reachDevicePrincipal(recordOf(2, ADDRESS).id)])
+    })
+
+    it('binds an admitted device to the global resource, every Workspace and every Session it can name', async () => {
+      const access = await fakeRemoteAccess()
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id)
+      // Pins the registry fallbacks: without a Workspace registry or a Session store only the global resource is bound.
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      expect(access.policy().bindings(device)).toEqual([])
+      provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+      expect(access.policy().bindings(device).map(binding => binding.resource)).toEqual([{ kind: 'global' }])
+      ctx.provide('workspaceRegistry', { list: () => [{ id: 'w-1', sessionIds: ['s-1'] }] } as never)
+      ctx.provide('sessions', { list: () => [{ id: 's-1' }, { id: 's-live' }] } as never)
+      // Pins the facts the authenticator gives the policy: the admitted device, the Workspaces and the live Sessions.
+      expect(access.policy().bindings(device).map(binding => binding.resource)).toEqual([
+        { kind: 'global' }, { kind: 'workspace', id: 'w-1' }, { kind: 'session', id: 's-1' }, { kind: 'session', id: 's-live' },
+      ])
+      expect(access.policy().bindings(reachDevicePrincipal('another-device'))).toEqual([])
+    })
+
+    it('recomputes each admitted device\'s snapshot when a Session or a Workspace changes', async () => {
+      const access = await fakeRemoteAccess()
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      const token = await session(2)
+      provider().admit(request({ headers: { cookie: `__Host-delo-session=${token}` } }), 'reach-tailscale-private')
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id)
+      ctx.emit('session/created', {} as never)
+      ctx.emit('session/disposed', {} as never)
+      ctx.emit('domain/changed', { domain: 'settings' } as never)
+      ctx.emit('domain/changed', { domain: 'workspace' } as never)
+      // Pins each invalidation: a stale snapshot hides a new chat from the device or keeps a removed one.
+      expect(access.invalidated).toEqual([device, device, device])
+    })
   })
 })

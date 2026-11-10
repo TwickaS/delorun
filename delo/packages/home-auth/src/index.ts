@@ -7,6 +7,8 @@
  *   session token.
  * - {@link HomeAuthAuthenticator} — the provider of upstream's `authenticator`, which also refuses a full-access grant
  *   answered from a `tailnet-membership` session.
+ * - The `reach-device` principal of an approved device's Peers, and the remote access policy that allows it only the
+ *   actions of {@link REACH_ALLOWED_ACTIONS} and refuses every other with `loopback-required: <action>`.
  * - {@link HomeAuthService} — the same behind Cordis as the `homeAuth` service, with the routes registered.
  * - The claim route, the device list route and the removal route, and the refusal a reach listener answers a claim
  *   with; the arrival helpers that decide whether a request came from the loopback listener and which address a claim
@@ -32,6 +34,17 @@ export {
   type TokenAdmission,
 } from './home-auth.ts'
 export { HomeAuthAuthenticator, FULL_ACCESS_REFUSAL, matchesPreLogin, type ReachPeer } from './authenticator.ts'
+export {
+  REACH_ALLOWED_ACTIONS,
+  REACH_DENIED_ACTIONS,
+  REACH_DEVICE,
+  assertDisjoint,
+  createReachAccessPolicy,
+  reachDevicePrincipal,
+  reachRefusal,
+  type ReachAccessFacts,
+  type ReachDevicePrincipal,
+} from './reach-access.ts'
 export { Approvals, type ApprovalRecord, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
 export { formatMatchCode, matchCode, typedCodeMatches, type MatchCodeInputs } from './match-code.ts'
 export { Challenges, signInMessage, signInVerifies } from './sign-in.ts'
