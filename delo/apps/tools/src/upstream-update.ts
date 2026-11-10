@@ -145,6 +145,7 @@ export interface UpdateOutcome {
 
 /** A failure that stops the run before it can check anything: a bad input, or git failing under the path. */
 export class UpstreamUpdateError extends Error {
+  /** The failure's code, such as `target-tag-missing`. */
   readonly code: string
 
   /**

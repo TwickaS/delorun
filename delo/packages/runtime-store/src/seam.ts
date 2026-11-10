@@ -174,6 +174,7 @@ function startArguments(profile: string): readonly string[] {
  * handshake's waiting phase has seen no running chat.
  */
 export class HomeRuntimeStore {
+  /** The store, the profile, the channel and the report builder. */
   private readonly options: HomeRuntimeStoreOptions
 
   /**

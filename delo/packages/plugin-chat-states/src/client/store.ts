@@ -36,7 +36,9 @@ export class ChatStateStore {
   /** The number of the latest change whose answer was shown, so a slower answer to an earlier change does not replace it. */
   #changeShown = 0
 
+  /** The routes. */
   private readonly api: ChatStatesApi
+  /** The clock. */
   private readonly now: () => number
 
   /**

@@ -68,6 +68,7 @@ const REFUSALS: Readonly<Record<ChatStateRefusalCode, { readonly status: number;
 
 /** A change the plugin refuses, with a stable code the route turns into its answer. */
 export class ChatStateRefusedError extends Error {
+  /** Why the change was refused. */
   readonly code: Exclude<ChatStateRefusalCode, 'failed'>
 
   /** @param code - why the change was refused. */
@@ -103,8 +104,11 @@ export class ChatStates {
   /** The last operation: operations run one after another, since each reads and then writes the same records. */
   #last: Promise<unknown> = Promise.resolve()
 
+  /** The storage table, by session id. */
   private readonly table: KvTable<SessionId, unknown>
+  /** The harness's clock, in epoch milliseconds. */
   private readonly now: () => number
+  /** Called once for each session whose stored record is malformed and therefore left out. */
   private readonly report: (session: SessionId, problem: string) => void
 
   /**

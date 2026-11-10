@@ -113,6 +113,7 @@ export class LauncherChannel implements RuntimeChannel {
   private readonly now: () => number
   private readonly resolved = new Map<string, Resolved>()
 
+  /** The home, the platform, the embedded roots, the channel, the log, the source, the downloader and the clock. */
   private readonly options: LauncherChannelOptions
 
   /**

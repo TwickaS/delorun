@@ -13,7 +13,9 @@ export type LogsErrorCode = 'PROFILE_INVALID' | 'LOG_WRITE_FAILED'
 export class LogsError extends Error {
   override readonly name = 'LogsError'
 
+  /** What failed. */
   readonly code: LogsErrorCode
+  /** The path concerned, when one is. */
   readonly path?: string | undefined
 
   /**

@@ -19,6 +19,7 @@ const EXEC_POLL_MS = 100
 
 /** A call the engine refused or answered with an error. */
 export class EngineError extends Error {
+  /** The HTTP status, such as 404 for an absent object, or 0 when the engine did not answer. */
   readonly status: number
 
   /**

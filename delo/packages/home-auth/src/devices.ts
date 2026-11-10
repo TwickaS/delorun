@@ -23,6 +23,7 @@ export const MAX_TRUSTED_DEVICES = 32
 
 /** The one list of trusted devices of a home. */
 export class DeviceStore {
+  /** The absolute path of `devices.json`. */
   private readonly options: { readonly file: string }
 
   /**

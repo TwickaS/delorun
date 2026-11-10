@@ -22,6 +22,7 @@ export type ExitCode = (typeof EXIT)[keyof typeof EXIT]
 
 /** A failure the entry point reports on standard error and exits with. */
 export class CliError extends Error {
+  /** The code to exit with. */
   readonly exit: ExitCode
 
   /**

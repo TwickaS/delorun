@@ -8,7 +8,9 @@ import type { SupervisorErrorCode, SupervisorFailure } from '@delo/contract-runt
 
 /** A refusal or failure with C9's error code (`delo/docs/contracts/c09-runtime-supervisor.md`, "Errors"). */
 export class SupervisorError extends Error {
+  /** C9's error code. */
   readonly code: SupervisorErrorCode
+  /** The refused value or the reason, never a secret, token, credential or environment value. */
   readonly detail?: string | undefined
 
   /**

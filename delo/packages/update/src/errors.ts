@@ -18,7 +18,9 @@ export type UpdateReportErrorCode =
 
 /** A refused report. */
 export class UpdateReportError extends Error {
+  /** The refusal's code. */
   readonly code: UpdateReportErrorCode
+  /** The refused value or the reason, for the person reading the failure. */
   readonly detail?: string | undefined
 
   /**
@@ -50,7 +52,9 @@ export type DataSafetyErrorCode =
 
 /** A refused session-data copy, restore or rollback; nothing has changed when it is thrown before a step ran. */
 export class DataSafetyError extends Error {
+  /** The refusal's code. */
   readonly code: DataSafetyErrorCode
+  /** The reason, for the person reading the failure. */
   readonly detail: string
 
   /**

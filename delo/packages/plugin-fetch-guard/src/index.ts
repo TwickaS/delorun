@@ -62,6 +62,7 @@ export class FetchGuardService extends Service implements FetchGuard {
 
   static Config = Config
 
+  /** The switch; off, the service refuses nothing. */
   private readonly config: Config
 
   /**

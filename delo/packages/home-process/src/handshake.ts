@@ -172,7 +172,9 @@ export class UpdateHandshake {
   private committedSuccessor: Successor | undefined
   private failedRollback = false
 
+  /** The home process. */
   private readonly subject: HandshakeSubject
+  /** The store, the profile history and the session-data copies. */
   private readonly support: UpdateSupport
 
   /**

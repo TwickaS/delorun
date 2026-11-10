@@ -126,6 +126,7 @@ export interface DeleteWorkspaceInput {
 
 /** Error of the trash store and service. */
 export class TrashError extends Error {
+  /** The stable refusal code. */
   readonly code: TrashErrorCode
 
   /**
@@ -174,6 +175,7 @@ export function isSafeOrigin(path: string): boolean {
  * trashed item keeps its secrets until the purge.
  */
 export class TrashStore {
+  /** The trash root directory, `<home>/trash` by deployment. */
   private readonly root: string
 
   /**

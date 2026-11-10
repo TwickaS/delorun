@@ -63,7 +63,9 @@ const STATUS_OF: Partial<Record<HomeAuthErrorCode, number>> = HOME_AUTH_HTTP_STA
 
 /** A refusal or failure of the home's sign-in. */
 export class HomeAuthError extends Error {
+  /** The contract code, or this package's own code for a malformed message. */
   readonly code: HomeAuthErrorCode
+  /** The fields the refusal is about, such as the device id that is not trusted; they never hold a secret. */
   readonly details: Readonly<Record<string, unknown>>
 
   /**

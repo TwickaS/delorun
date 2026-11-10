@@ -291,6 +291,7 @@ class Stager {
   private readonly inodes = new Map<string, string>()
   readonly items: Item[] = []
 
+  /** The staging root. */
   private readonly root: string
 
   /**

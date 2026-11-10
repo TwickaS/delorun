@@ -29,6 +29,7 @@ export type MainChatToolErrorCode = 'MAIN_CHAT_ONLY' | 'MAIN_CHAT_INVALID' | 'MA
 
 /** A main chat tool call that was refused, with a message that says what to do. */
 export class MainChatToolError extends HarnessError {
+  /** Why. */
   override readonly code: MainChatToolErrorCode
 
   /**

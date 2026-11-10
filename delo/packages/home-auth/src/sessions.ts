@@ -73,6 +73,7 @@ export class SessionStore {
   private readonly now: () => number
   private readonly random: RandomBytes
 
+  /** The file, the clock and the random source. */
   private readonly options: SessionStoreOptions
 
   /**

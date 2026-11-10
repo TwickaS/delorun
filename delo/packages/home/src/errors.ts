@@ -9,9 +9,13 @@ import type { HomeLayoutErrorCode } from '@delo/contract-home-layout'
 
 /** A refusal or failure defined by contract C1 (`delo/docs/contracts/c01-home-layout.md`). */
 export class HomeLayoutError extends Error {
+  /** C1's error code. */
   readonly code: HomeLayoutErrorCode
+  /** The absolute path the failure concerns. */
   readonly path: string
+  /** What is wrong with the path, without the fix. */
   readonly detail: string
+  /** The shell command that fixes it, such as `chmod 600 <path>`, when one exists. */
   readonly fix?: string | undefined
 
   /**

@@ -56,7 +56,9 @@ export class StorePaths {
   /** `runtimes/store.lock`. */
   readonly lock: string
 
+  /** The resolved Delo home. */
   readonly home: string
+  /** The platform whose file list each installation keeps. */
   readonly platform: RuntimePlatform
 
   /**

@@ -76,10 +76,15 @@ export interface RefusedSubject {
 export class ProfileSafetyError extends Error {
   override readonly name = 'ProfileSafetyError'
 
+  /** The failure's code. */
   readonly code: ProfileSafetyCode
+  /** The absolute path the failure concerns. */
   readonly path: string
+  /** What is wrong, naming the subjects; the message is the code and this. */
   readonly detail: string
+  /** What the person is offered, in order; empty when nothing is offered. */
   readonly remedies: readonly ProfileSafetyRemedy[]
+  /** The rows, configurations, plugins or bundles the refusal is about. */
   readonly subjects: readonly RefusedSubject[]
 
   /**

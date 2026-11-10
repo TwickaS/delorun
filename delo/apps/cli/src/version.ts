@@ -26,6 +26,7 @@ const MODULE = 'version.ts'
 
 /** A version Delo cannot read or validate, naming where it was read from and what to do about it. */
 export class DeloVersionError extends Error {
+  /** The file or variable the version was read from. */
   readonly source: string
 
   /**

@@ -43,6 +43,7 @@ export type WorkspaceRefusalCode = 'invalid' | 'not-found' | 'taken' | 'outside'
 
 /** A refusal of the workspaces service, with an English message for the person. */
 export class WorkspaceRefusedError extends Error {
+  /** Why it refused. */
   readonly code: WorkspaceRefusalCode
 
   /**

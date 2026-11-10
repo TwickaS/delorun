@@ -24,6 +24,7 @@ import { parseCheckpoint, parseVerifier, splitNote, verifySignature } from './no
 export class LogVerificationError extends Error {
   override readonly name = 'LogVerificationError'
 
+  /** The reason code. */
   readonly failure: ReleaseLogFailure
 
   /**

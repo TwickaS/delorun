@@ -23,6 +23,7 @@ export class OptIn {
   /** Observable write state. */
   readonly state = createSnapshotStore<OptInMutation>({ busy: false, failed: false })
 
+  /** The Host form of the opt-in's profile row. */
   readonly form: ConfigForm<OptInSettings>
 
   /** @param form - the Host form of the opt-in's profile row. */

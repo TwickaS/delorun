@@ -52,6 +52,7 @@ const HOME_PROCESS_COMMAND = 'start'
 
 /** A refusal that names what holds the data. */
 export class DataInUseError extends Error {
+  /** What holds the data, for the person. */
   readonly detail: string
 
   /**

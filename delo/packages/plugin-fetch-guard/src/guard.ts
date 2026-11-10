@@ -43,7 +43,9 @@ export type FetchGuardRefusalCode =
  * into a tool result without leaking anything but what was asked for.
  */
 export class FetchGuardRefusedError extends Error {
+  /** Why the destination is refused. */
   readonly code: FetchGuardRefusalCode
+  /** The refused hop's host, as the request spells it. */
   readonly host: string
 
   /**

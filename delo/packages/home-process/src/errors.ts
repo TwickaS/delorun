@@ -19,7 +19,9 @@ export interface HomeProcessFailure {
 
 /** A refusal or failure with C19's error code (`delo/docs/contracts/c19-home-process.md`, "Errors"). */
 export class HomeProcessError extends Error {
+  /** C19's error code. */
   readonly code: HomeProcessErrorCode
+  /** The refused value or the reason, never a token or a secret. */
   readonly detail?: string | undefined
 
   /**

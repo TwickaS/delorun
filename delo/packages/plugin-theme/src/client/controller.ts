@@ -40,8 +40,11 @@ export class ThemeController {
   private faces: HTMLStyleElement | undefined
   private applied: string | undefined
 
+  /** Upstream's theme service. */
   private readonly theme: TokenLayers
+  /** The font faces' CSS text. */
   private readonly fonts: string
+  /** The studio's document, which holds the faces and the effort mark. */
   private readonly doc: Document
 
   /**

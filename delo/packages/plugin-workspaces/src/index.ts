@@ -122,6 +122,7 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
   /** The tail of the queue of changes to the folders, the registry and the rows. */
   private queue: Promise<unknown> = Promise.resolve()
 
+  /** The root, the limits and the optional credential and CA bundle. */
   private readonly config: Config
 
   /**

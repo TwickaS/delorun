@@ -195,6 +195,7 @@ export class Workspaces {
    */
   private readonly retired = new Map<WorkspaceId, Retired>()
 
+  /** The engine, owner, roots, manifest and inspection. */
   private readonly context: WorkspaceContext
 
   /** @param context - the engine, owner, roots, manifest and inspection. */

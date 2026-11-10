@@ -24,6 +24,7 @@ export class AttemptLimiter {
   private readonly now: () => number
   private readonly attempts = new Map<string, number[]>()
 
+  /** The limit, the window and the clock. */
   private readonly options: AttemptLimiterOptions
 
   /**

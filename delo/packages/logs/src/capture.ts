@@ -25,8 +25,11 @@ export class LineCapture {
   private dropped = 0
   private inPrivateKey = false
 
+  /** The surface's log. */
   private readonly log: SurfaceLog
+  /** Which stream this capture reads; records carry it as their `logger`. */
   private readonly stream: CapturedStream
+  /** The level of this stream's records. */
   private readonly level: LogLevel
 
   /**

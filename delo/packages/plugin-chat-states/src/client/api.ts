@@ -6,7 +6,9 @@ import { CHAT_STATE_PATHS, ChatStatesResponse, type ChatStateRequest } from '../
 
 /** A route answered with a status outside 200 to 299. */
 export class ChatStatesRequestError extends Error {
+  /** The route. */
   readonly path: string
+  /** The HTTP status it answered. */
   readonly status: number
 
   /**

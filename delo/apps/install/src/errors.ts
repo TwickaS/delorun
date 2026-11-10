@@ -53,8 +53,11 @@ export class InstallError extends Error {
   /** Whether the failure is a body that passed its size limit. */
   readonly oversize: boolean
 
+  /** The failure's code. */
   readonly code: InstallErrorCode
+  /** The URL or path the failure concerns. */
   readonly source: string
+  /** What is wrong, naming the host, file or version; the message is the code and this. */
   readonly detail: string
 
   /**

@@ -134,9 +134,13 @@ export class SourceReader {
   private readonly links = new Map<string, number>()
   private readonly directories = new Map<string, string>()
 
+  /** The absolute, real path of the stock home. */
   readonly root: string
+  /** The most names the walk lists before it refuses the home. */
   private readonly maxEntries: number
+  /** The device of the home's root; an entry on another device is left behind. */
   readonly rootDevice: number
+  /** The file-system calls a spec stages a change between; the real ones by default. */
   private readonly probe: SourceProbe
 
   /**

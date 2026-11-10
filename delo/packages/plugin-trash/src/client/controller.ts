@@ -41,7 +41,9 @@ export interface TrashControllerDeps {
 
 /** A route's refusal or failed answer. */
 export class TrashRequestError extends Error {
+  /** The HTTP status. */
   readonly status: number
+  /** The refusal's code, or an empty string when the answer carried none. */
   readonly code: string
 
   /**
@@ -103,6 +105,7 @@ export class TrashController {
   private readonly hides = new Map<string, readonly (() => void)[]>()
   private disposed = false
 
+  /** The page's hide, draft storage and toast. */
   private readonly deps: TrashControllerDeps
 
   /** @param deps - the page's hide, draft storage and toast. */

@@ -178,7 +178,9 @@ class RefusalLog {
   private suppressed = 0
   private last = Number.NEGATIVE_INFINITY
 
+  /** The channel's logger. */
   private readonly logger: ChannelLogger
+  /** The shortest time between two records. */
   private readonly intervalMs: number
 
   /**

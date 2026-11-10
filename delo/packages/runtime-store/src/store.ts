@@ -88,6 +88,7 @@ export class RuntimeStore {
   /** The store's paths. */
   readonly paths: StorePaths
 
+  /** The home, the platform and the logger. */
   private readonly options: RuntimeStoreOptions
 
   /**

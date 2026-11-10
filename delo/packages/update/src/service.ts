@@ -151,6 +151,7 @@ export class UpdateReportService extends Service {
 
   private disposed = false
 
+  /** The installation and the sources. */
   private readonly options: UpdateReportOptions
 
   /**

@@ -22,7 +22,9 @@ const STRING = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"/uy
 class StrictReader {
   private index = 0
 
+  /** The text to read. */
   private readonly text: string
+  /** The refusal a malformed text makes. */
   private readonly refusal: ReleaseLogRefusal
 
   /**

@@ -46,6 +46,7 @@ export class HomeAuthService extends Service {
 
   private core: HomeAuth | undefined
 
+  /** The secrets directory. */
   private readonly config: Config
 
   /**

@@ -32,6 +32,7 @@ export interface TrashOperationsConfig {
 
 /** A refusal of a trash operation that names what the person asked for. */
 export class TrashOperationError extends Error {
+  /** The refusal code. */
   readonly code: 'WORKSPACE_NOT_FOUND'
 
   /**
@@ -68,6 +69,7 @@ export function entryOf(item: TrashItem): TrashEntry {
 export class TrashOperations {
   private tail: Promise<unknown> = Promise.resolve()
 
+  /** The trash root, the stores, the registry and the warning sink. */
   private readonly config: TrashOperationsConfig
 
   /**

@@ -389,8 +389,11 @@ class Planner {
   /** The stock home patch's text when the plan read it, and the home patch a profile runs under in the Delo home. */
   private homePatches: { readonly stock: string | undefined, readonly landed: string | null | undefined, readonly own: boolean } = { stock: undefined, landed: undefined, own: false }
 
+  /** The stock home's reader. */
   private readonly reader: SourceReader
+  /** The Delo home. */
   private readonly target: string
+  /** The plan's options. */
   private readonly options: DshImportOptions
 
   /**
