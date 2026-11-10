@@ -7,13 +7,16 @@
  * node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts [paths...] [options]
  * ```
  *
- * A change run has a gate tier. The agent tier, the default, leaves out the merge-only checks (`Check.mergeOnly`: the
- * recorded-session replays, the web lane and the Docker lane); the merge tier runs them too, and only its pass lets a commit
- * reach the trunk. `--tier agent|merge` chooses it. A push takes the merge tier when a pushed ref is `refs/heads/v5` or
- * `DELO_TIER=merge` is set.
+ * A change run has a gate tier. The agent tier, the default of `--changed`, leaves out the merge-only checks
+ * (`Check.mergeOnly`: the recorded-session replays, the web lane and the Docker lane); the merge tier runs them too, and only
+ * its pass lets a commit reach the trunk; the lane tier, a branch push's default, runs the mechanical rules, the changed
+ * packages' typecheck and their own specs (`laneKeeps` in `checks/plan.ts`). `--tier lane|agent|merge` chooses it. A push
+ * takes the merge tier when a pushed ref is `refs/heads/v5` whatever else is set, or when `DELO_TIER=merge` is set, and
+ * the agent tier with `DELO_TIER=agent`. `--preflight` is the lane tier without the test lanes.
  *
- * Heavy runs wait in a first-come queue under the system's temporary directory (`checks/run-queue.ts`); a push to the trunk or
- * `DELO_GATE_PRIORITY=trunk` goes ahead of waiting runs, and a plan of unexclusive, unmerged checks within 2 GiB takes no turn.
+ * Heavy runs share the machine's CPU slots, memory and disk-heavy places, first come, first served (`checks/slots.ts`);
+ * a push to the trunk or `DELO_GATE_PRIORITY=trunk` goes ahead of waiting runs, and a light plan takes no slots.
+ * `--queue` prints the holders and the waiting runs.
  *
  * The invocations, which `lefthook.yml` and `pnpm check` use:
  *
@@ -47,16 +50,19 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { availableParallelism, tmpdir, totalmem } from 'node:os'
+import { availableParallelism, totalmem } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { z } from 'zod'
 import { cacheUse, contentId, createPassCache, type PassCache, type SharedUse } from './checks/cache.ts'
 import { FUNDAMENTALS_INPUTS, GATES } from './checks/gates/index.ts'
-import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
+import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, withSecurityPackages, type Budgets, type Check, type ForkPackage, type GateTier, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
-import { isLightPlan, gatePriority, processGuard, takeTurn } from './checks/run-queue.ts'
+import { checksToRun, fitToGrant, runDemand } from './checks/demand.ts'
+import { isLightPlan, gatePriority } from './checks/run-queue.ts'
+import { machineBudget, nodeSlotHost, slotPaths } from './checks/slot-host.ts'
+import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, readSlots, takeSlots, type SlotGrant } from './checks/slots.ts'
 import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { openSharedStore, sharedCacheDir } from './checks/shared-cache.ts'
@@ -436,9 +442,10 @@ function commandText(check: Check): string {
  * @param root - the repository root.
  * @param results - the run's results.
  */
-function writeReport(root: string, results: readonly Result[], sharedDir: string | undefined): void {
+function writeReport(root: string, results: readonly Result[], sharedDir: string | undefined, machine: Readonly<Record<string, number | null>>): void {
   const memory = memoryReport()
   const report = {
+    ...machine,
     peakBytes: memory?.peakBytes ?? null,
     oomKills: memory?.oomKills ?? null,
     passCache: { ...cacheCounts(results), sharedDir: sharedDir ?? null },
@@ -495,31 +502,6 @@ function summarize(results: readonly Result[], milliseconds: number, root: strin
 }
 
 /**
- * Wait in the machine-wide queue for this run's turn (`checks/run-queue.ts`).
- * @param priority - 0 for a push to the trunk, otherwise 1.
- * @returns when this process holds the machine.
- */
-async function holdRunLock(priority: 0 | 1): Promise<void> {
-  const base = tmpdir()
-  await takeTurn({
-    fs: {
-      ensureDir: path => { mkdirSync(path, { recursive: true }) },
-      list: path => existsSync(path) ? readdirSync(path) : [],
-      create: (path, text) => { writeFileSync(path, text, { flag: 'wx' }) },
-      rename: renameSync,
-      remove: path => { rmSync(path, { force: true }) },
-      read: path => existsSync(path) ? readFileSync(path, 'utf8') : undefined,
-    },
-    now: () => Date.now(),
-    pid: process.pid,
-    alive: pid => { try { process.kill(pid, 0); return true } catch (gone) { return gone instanceof Error && 'code' in gone && gone.code === 'EPERM' } },
-    sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
-    say: line => process.stderr.write(line),
-    guard: processGuard(process),
-  }, { dir: join(base, 'delo-run-checks.queue'), oldLock: join(base, 'delo-run-checks.lock') }, priority)
-}
-
-/**
  * The arguments without the first `--`. pnpm forwards the separator it reads before a script's own arguments, so
  * `pnpm check -- --plan` reaches the runner as `--changed -- --plan`, where `util.parseArgs` reads `--plan` as a path.
  * @param argv - the arguments.
@@ -557,6 +539,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
       'no-shared-cache': { type: 'boolean', default: false },
       'tier': { type: 'string' },
       'preflight': { type: 'boolean', default: false },
+      'queue': { type: 'boolean', default: false },
     },
   })
   // The pre-flight is the lane tier of a change run without its test lanes, and it waits in no queue.
@@ -586,6 +569,11 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     throw new Error(`run-checks: Node ${process.version} is running and the repository pins Node ${String(pinned)} (.nvmrc); run \`nvm use\` and retry`)
   }
 
+  if (values.queue) {
+    const budgetNow = machineBudget(cpus, memory, env)
+    for (const line of describeSlots(readSlots(nodeSlotHost(text => process.stderr.write(text)), slotPaths()), budgetNow, Date.now())) console.log(line)
+    return 0
+  }
   const workers = workerCounts(cpus, memory)
   const forkWorkers = values.workers === undefined ? workers.fork : Number(values.workers)
   if (!Number.isSafeInteger(forkWorkers) || forkWorkers < 1) throw new Error(`--workers must be a positive integer, got ${String(values.workers)}`)
@@ -692,13 +680,26 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   // Answered before the lock: a covered tree starts nothing, so it does not wait for a gate running on this machine.
   if (covered(treeRecordsOn ? treeState(root) : undefined, false)) return 0
 
-  // One heavy run at a time on this machine, in arrival order; a light plan takes no ticket.
-  if (!light && !preflight && env[IN_SCOPE] === undefined && !isLightPlan(plan)) await holdRunLock(gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)))
+  // Heavy runs share the machine's slots, first come, first served (`checks/slots.ts`); a light plan, the pre-flight and a
+  // plan whose every check a stored pass serves take none.
+  const running = checksToRun(plan, cache)
+  const slotBudget = machineBudget(cpus, memory, env)
+  const inherited = grantFromEnv(env[GRANT_ENV])
+  let grant: SlotGrant | undefined = inherited
+  if (!light && !preflight && inherited === undefined && running.length > 0 && !isLightPlan(running)) {
+    const demand = runDemand(running, slotBudget.slots, gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)), `${relative(dirname(root), root)}: ${running.map(check => check.id).slice(0, 6).join(', ')}${running.length > 6 ? ', ...' : ''}`)
+    grant = await takeSlots(nodeSlotHost(line => process.stderr.write(line)), slotPaths(), slotBudget, demand)
+  }
   if (!light && !preflight && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
     const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)
-    const child = spawnSync(command, args, { stdio: [pushInput === undefined ? 'inherit' : 'pipe', 'inherit', 'inherit'], env: { ...env, [IN_SCOPE]: '1' }, ...pushInput === undefined ? {} : { input: pushInput } })
+    const child = spawnSync(command, args, { stdio: [pushInput === undefined ? 'inherit' : 'pipe', 'inherit', 'inherit'], env: { ...env, [IN_SCOPE]: '1', ...grant === undefined ? {} : { [GRANT_ENV]: grantToEnv(grant) } }, ...pushInput === undefined ? {} : { input: pushInput } })
     return child.status ?? 1
   }
+  // A granted run fits its test runners to its slots and schedules its checks inside its share of the memory.
+  if (grant !== undefined) plan = fitToGrant(plan, grant.slots)
+  const runCpus = grant?.slots ?? cpus
+  const runMemory = grant === undefined ? memory : Math.min(memory, grant.memoryBytes)
+  const ioAtStart = ioPressure(name => readFileSync(name, 'utf8'))
   // A gate that ran while this run waited for the lock may have recorded the tree, so the record is read again here.
   const startState = treeRecordsOn ? treeState(root) : undefined
   if (covered(startState, true)) return 0
@@ -713,7 +714,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   rmSync(logDir, { recursive: true, force: true })
   mkdirSync(logDir, { recursive: true })
   mkdirSync(join(root, CACHE_DIR, 'tsbuildinfo'), { recursive: true })
-  console.log(`delo checks: ${String(plan.length)} checks, ${mode}, ${header}; temporary files in ${scratch}`)
+  console.log(`delo checks: ${String(plan.length)} checks, ${mode}, ${header}${grant === undefined ? '' : `; granted ${String(grant.slots)} of ${String(slotBudget.slots)} slots and ${(runMemory / GIB).toFixed(1)} GiB after waiting ${formatSeconds(grant.waitedMs / 1000)}`}; temporary files in ${scratch}`)
   if (left.length > 0) console.log(`delo checks: left for the merge tier: ${left.join(', ')}`)
 
   const started = performance.now()
@@ -722,8 +723,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     root,
     env: childEnv,
     logDir,
-    cpus,
-    memoryBytes: memory,
+    cpus: runCpus,
+    memoryBytes: runMemory,
     oomKills: () => memoryReport()?.oomKills,
     bail: values.bail,
     ...gateTier === undefined ? {} : { tier: gateTier },
@@ -740,7 +741,9 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   })
   rmSync(scratch, { recursive: true, force: true })
   writeDurations(root, durations, results)
-  writeReport(root, results, shared?.store.dir)
+  const ioAtEnd = ioPressure(name => readFileSync(name, 'utf8'))
+  const machine = { waitedSeconds: Math.round((grant?.waitedMs ?? 0) / 100) / 10, slots: grant?.slots ?? null, ioPressureAtStart: ioAtStart ?? null, ioPressureAtEnd: ioAtEnd ?? null }
+  writeReport(root, results, shared?.store.dir, machine)
   if (before !== undefined && !results.some(result => gateFailure(result, gateTier))) {
     const written = recordTreePass(treeRecords, { before, after: treeState(root), base: changed === undefined ? null : treeOfRef(root, changed.base), plan, results }, facts, new Date())
     console.log(written.recorded ? `delo checks: this tree's pass is recorded in ${treePassPath(treeRecords, before.tree, process.version)}` : `delo checks: this tree's pass is not recorded: ${written.reason}`)
@@ -748,6 +751,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const elapsed = (performance.now() - started) / 1000
   const tierSeconds = values['pre-commit'] ? budgets.tiers['pre-commit']?.seconds : undefined
   if (tierSeconds !== undefined && elapsed > tierSeconds) console.log(`  the pre-commit tier took ${formatSeconds(elapsed)}, over its ${String(tierSeconds)} s budget (budgets.json)`)
+  if (grant !== undefined || ioAtStart !== undefined) console.log(`delo checks: waited ${formatSeconds(machine.waitedSeconds)} for slots${ioAtStart === undefined ? '' : `; disk pressure (some, avg10) ${String(ioAtStart)}% at the start and ${String(ioAtEnd ?? '?')}% at the end`}`)
   return summarize(results, performance.now() - started, root, gateTier)
 }
 

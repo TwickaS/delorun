@@ -243,3 +243,19 @@ export function cgroupBudget(cpus: number, memoryBytes: number, read: (name: str
   }
   return { cpus: effectiveCpus, memoryBytes: effectiveMemory }
 }
+
+/**
+ * The share of the last ten seconds in which some task waited for the disk (`/proc/pressure/io`, `some avg10`).
+ * @param read - reads a file, or throws when there is none.
+ * @returns the percentage, or undefined where the kernel reports no pressure.
+ */
+export function ioPressure(read: (path: string) => string): number | undefined {
+  try {
+    const avg10 = /^some avg10=([\d.]+)/m.exec(read('/proc/pressure/io'))?.[1]
+    return avg10 === undefined ? undefined : Number(avg10)
+  } catch (error) {
+    // ENOENT: not Linux, or a kernel without pressure stall information.
+    void error
+    return undefined
+  }
+}

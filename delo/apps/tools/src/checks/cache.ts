@@ -41,7 +41,7 @@ export const KEYED_PRESENCE = /^DEEPSEEK_/
  * The variables that steer the runner itself and that no check receives (`machine.ts` removes them from the checks'
  * environment), so no key records them.
  */
-export const RUNNER_CONTROL_ENV: readonly string[] = ['DELO_CHECKS_SCOPE', 'DELO_FULL_GATE', 'DELO_GATE_PRIORITY', 'DELO_PUSH_SKIP', 'DELO_TIER']
+export const RUNNER_CONTROL_ENV: readonly string[] = ['DELO_CHECKS_GRANT', 'DELO_CHECKS_SCOPE', 'DELO_FULL_GATE', 'DELO_GATE_PRIORITY', 'DELO_PUSH_SKIP', 'DELO_TIER']
 
 /** Where a stored pass came from. */
 export type PassSource = 'local' | 'shared'
@@ -290,7 +290,7 @@ export function createPassCache(options: PassCacheOptions): PassCache {
   return {
     keyOf(check) {
       if (check.inputs === undefined || check.inputs.length === 0) return undefined
-      return keyFrom(check, check.id, check.inputs, check.command, check.history === true)
+      return keyFrom(check, check.id, check.inputs, check.command.filter(arg => !arg.startsWith('--maxWorkers=')), check.history === true)
     },
     unitKey(check, unit) {
       const command = commandFor(check, []).filter(arg => !arg.startsWith('--maxWorkers='))

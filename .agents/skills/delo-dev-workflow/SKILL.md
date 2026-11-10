@@ -63,5 +63,6 @@ A spec that fixes "now" fixes every time it compares against, file modification 
 
 - `gh` defaults to the upstream remote in this repository: pass `--repo` with the Delo repository on every call.
 - Upstream's plugin-manager specs run through `pnpm exec vitest`; a bare `vitest` finds a global pnpm and fails the spec that needs the workspace's pnpm.
-- Heavy runs of `run-checks.ts` wait their turn in a first-come queue (a second run prints the holder's pid and its position); a run of a few small checks, such as `--only gates:docs`, takes no turn, and the lead's trunk push sets `DELO_GATE_PRIORITY=trunk` to go ahead of waiting runs.
+- Heavy runs of `run-checks.ts` share the machine's CPU slots, memory and disk-heavy places, first come, first served; a waiting run prints why it waits, its position and how long it has waited, and `run-checks.ts --queue` shows who holds slots. A run of a few small checks takes none, and the lead's trunk push sets `DELO_GATE_PRIORITY=trunk` to go ahead of waiting runs.
+- Run your own heavy commands (a build, `tsc`, a focused `vitest` run) inside the same budget: `node_modules/.bin/tsx delo/apps/tools/src/with-slots.ts --slots 4 -- <command>`, with `--disk` for an install, a build or the fork suite; a test runner takes `--maxWorkers=$DELO_SLOTS`. Never start one beside the budget.
 - To wait on a long command in the background, wait on its process id (`while kill -0 <pid>; do sleep 5; done`). A `pgrep -f '<pattern>'` loop matches its own command line, which contains the pattern, and never ends.
