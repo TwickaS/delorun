@@ -2,6 +2,7 @@
  * `delorun plugin check <directory>` (`delo/apps/cli/src/plugin-check.ts`): what a plugin's declared ranges admit
  * against a release, by the installer's own evaluation, read from its `package.json` alone.
  */
+// spec-lanes-allow: one mkfifo makes the FIFO the special-file denial test reads; no other process starts.
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -132,7 +133,8 @@ describe('delorun plugin check', () => {
   it.skipIf(process.platform === 'win32')('plugin-check-refuses-special-files: refuses a manifest that is a FIFO or a symbolic link, without waiting or following it', async () => {
     const fifo = mkdtempSync(join(tmpdir(), 'dpc-'))
     directories.push(fifo)
-    execFileSync('mkfifo', [join(fifo, 'package.json')])
+    // spec-lanes-allow: mkfifo makes the FIFO and exits at once.
+    execFileSync('mkfifo', [join(fifo, 'package.json')], { timeout: 10_000 })
     await expect(check(fifo)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('it is not a regular file') })
     const target = plugin({ name: 'linked', version: '1.0.0' })
     const linked = mkdtempSync(join(tmpdir(), 'dpc-'))
