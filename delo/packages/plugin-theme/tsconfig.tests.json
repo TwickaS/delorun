@@ -1,0 +1,25 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "tests",
+    "scripts"
+  ],
+  "exclude": [
+    "tests/**/*.client.ts",
+    "tests/**/*.client.spec.ts",
+    "tests/**/*.client.spec.tsx"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.host.json"
+    }
+  ]
+}

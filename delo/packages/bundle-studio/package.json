@@ -1,0 +1,33 @@
+{
+  "name": "@delo/bundle-studio",
+  "description": "Delo's studio bundle: mounts the theme, the sidebar, chat states, the settings layout and onboarding, with the Delo look on and one switch back to the stock look",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@delo/plugin-chat-states": "workspace:*",
+    "@delo/plugin-onboarding": "workspace:*",
+    "@delo/plugin-settings-layout": "workspace:*",
+    "@delo/plugin-sidebar": "workspace:*",
+    "@delo/plugin-theme": "workspace:*"
+  },
+  "devDependencies": {
+    "@delo/contract-parity-composition": "workspace:*",
+    "js-yaml": "^4.3.2"
+  }
+}

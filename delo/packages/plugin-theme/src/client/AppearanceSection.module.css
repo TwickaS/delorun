@@ -1,0 +1,497 @@
+/* One card: each setting a block separated by a hairline. Tiles span the
+   card's width; a single control sits at the right edge of its row. */
+.section {
+  display: flex;
+  flex-direction: column;
+  padding: 0 20px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: calc(14px * var(--dsh-density, 1));
+  padding: calc(20px * var(--dsh-density, 1)) 0;
+}
+
+.block + .block {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+
+.block.row {
+  flex-direction: row;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row > .heading {
+  flex: 1 1 220px;
+}
+
+.title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.lead {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Preview tiles: the whole tile is the target. */
+.schemeTiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.paletteTiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px;
+}
+
+.block[data-muted='true'] {
+  opacity: 0.55;
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 280px);
+}
+
+.sliderValue {
+  min-width: 44px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary);
+  text-align: right;
+}
+
+/* The notch button sits under the track at its value. */
+.sliderTrack {
+  position: relative;
+  flex: 1;
+  padding-bottom: 22px;
+}
+
+.sliderTrack input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.notch {
+  position: absolute;
+  top: 22px;
+  translate: -50% 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--dsw-radius-xs);
+  background: none;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.notch::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 1px;
+  height: 5px;
+  background: currentColor;
+}
+
+.notch[aria-pressed='true'] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.notch:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+}
+
+.typeTiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+@media (hover: hover) {
+  .tile:hover:not(:disabled) {
+    border-color: var(--dsw-alias-label-tertiary);
+  }
+}
+
+.tile[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.tile:focus-visible,
+.swatch:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.tile:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.tileFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.tileLabel {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A radio mark: a ring, filled with the accent when chosen. */
+.radio {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+}
+
+.tile[aria-checked='true'] .radio {
+  border: 5px solid var(--dsw-alias-brand-primary);
+}
+
+/* The miniature studio, drawn from the scheme's own colours. */
+.mock {
+  display: flex;
+  aspect-ratio: 16 / 9;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--mock-page);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--mock-text) 14%, transparent);
+}
+
+.mockSidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 6%;
+  width: 30%;
+  padding: 10% 5%;
+  box-sizing: border-box;
+  background: var(--mock-sidebar);
+}
+
+.mockRow,
+.mockRowActive {
+  height: 8%;
+  min-height: 4px;
+  border-radius: var(--dsw-radius-panel);
+  background: color-mix(in srgb, var(--mock-quiet) 45%, transparent);
+}
+
+.mockRowActive {
+  width: 80%;
+  background: color-mix(in srgb, var(--mock-text) 70%, transparent);
+}
+
+.mockRow:last-child {
+  width: 60%;
+}
+
+.mockMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6%;
+  min-width: 0;
+  padding: 12% 9% 8%;
+}
+
+.mockLine,
+.mockLineShort {
+  height: 7%;
+  min-height: 4px;
+  border-radius: var(--dsw-radius-panel);
+  background: color-mix(in srgb, var(--mock-text) 55%, transparent);
+}
+
+.mockLineShort {
+  width: 62%;
+  background: color-mix(in srgb, var(--mock-quiet) 50%, transparent);
+}
+
+.mockComposer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 26%;
+  margin-top: auto;
+  padding: 0 4%;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--mock-layer);
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--mock-text) 16%, transparent);
+}
+
+.mockSend {
+  height: 56%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--mock-accent);
+}
+
+/* System: the light studio with the dark one over its right half. */
+.mockPair {
+  position: relative;
+  display: block;
+}
+
+.mockDarkHalf {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 0 0 50%);
+}
+
+/* The accent: one row of round swatches, each a 44px target. */
+.accentPicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.accentName {
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.swatches {
+  display: flex;
+  gap: 4px;
+}
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.swatch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--chip-light);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+:global(body[data-ds-dark-theme]) .dot {
+  background-color: var(--chip-dark);
+}
+
+@media (hover: hover) {
+  .swatch:hover:not(:disabled) .dot {
+    transform: scale(1.06);
+  }
+}
+
+.swatch[aria-checked='true'] .dot {
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-1), 0 0 0 4px var(--dsw-alias-label-primary);
+}
+
+/* Custom: the chosen colour inside a colour-wheel ring. */
+.dot.customDot {
+  background: radial-gradient(circle, var(--custom) 0 9px, transparent 9.5px), conic-gradient(from 0deg, var(--dsw-static-red-500), var(--dsw-static-amber-500), var(--dsw-static-green-500), var(--dsw-static-blue-500), var(--dsw-static-violet-600), var(--dsw-static-red-500));
+}
+
+:global(body[data-ds-dark-theme]) .dot.customDot {
+  background: radial-gradient(circle, var(--custom) 0 9px, transparent 9.5px), conic-gradient(from 0deg, var(--dsw-static-red-500), var(--dsw-static-amber-500), var(--dsw-static-green-500), var(--dsw-static-blue-500), var(--dsw-static-violet-600), var(--dsw-static-red-500));
+}
+
+.customRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.picker {
+  width: 40px;
+  height: 40px;
+  padding: 3px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  cursor: pointer;
+}
+
+.hex {
+  width: 120px;
+  height: 40px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 13px;
+}
+
+.hex[aria-invalid='true'] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The typeface specimen. */
+.specimen {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 12px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
+}
+
+.specimenGlyphs {
+  flex: none;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 36px;
+}
+
+.specimenLine {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.failure {
+  margin: 0;
+  padding: 0 0 16px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Density: rows drawn at each density's spacing. */
+.densityTiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.densityMock {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 64px;
+  padding: 0 12px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
+}
+
+.densityMock span {
+  height: 4px;
+  border-radius: var(--dsw-radius-panel);
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 55%, transparent);
+}
+
+.densityMock span:nth-child(even) {
+  width: 70%;
+}
+
+[data-density='compact'] .densityMock { gap: 5px; }
+[data-density='comfortable'] .densityMock { gap: 8px; }
+[data-density='spacious'] .densityMock { gap: 11px; }
+
+/* A phone keeps each row of tiles side by side, smaller: the previews stay
+   recognisable at a third of the width, and the page stays one screen of choices. */
+@media (max-width: 560px) {
+  .schemeTiles,
+  .typeTiles,
+  .densityTiles {
+    gap: 8px;
+  }
+
+  .tile {
+    gap: 6px;
+    padding: 6px 6px 8px;
+  }
+
+  .mock {
+    aspect-ratio: 1 / 1;
+  }
+
+  .densityMock {
+    height: 48px;
+    padding: 0 8px;
+  }
+}

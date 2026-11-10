@@ -1,0 +1,407 @@
+/* Appearance → Conversation: one card of settings, as the Appearance card. */
+.section {
+  display: flex;
+  flex-direction: column;
+  padding: 0 20px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: calc(14px * var(--dsh-density, 1));
+  padding: calc(20px * var(--dsh-density, 1)) 0;
+}
+
+.block + .block {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+
+.block.row {
+  flex-direction: row;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row > .heading {
+  flex: 1 1 220px;
+}
+
+.title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.lead {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.segmented {
+  flex: none;
+  width: auto;
+}
+
+/* The display tiles: a bar for each kind of thing the mode shows. */
+.modeTiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.modeTile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+@media (hover: hover) {
+  .modeTile:hover:not(:disabled) {
+    border-color: var(--dsw-alias-label-tertiary);
+  }
+}
+
+.modeTile[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.modeTile:focus-visible,
+.chip:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 3px;
+  width: 100%;
+  height: 34px;
+  margin-bottom: 6px;
+}
+
+.bar {
+  height: 3px;
+  border-radius: var(--dsw-radius-panel);
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 55%, transparent);
+}
+
+.bar:nth-child(odd) {
+  width: 70%;
+}
+
+.bar:last-child {
+  width: 100%;
+  background: var(--dsw-alias-label-secondary);
+}
+
+.modeTile[aria-checked='true'] .bar:last-child {
+  background: var(--dsw-alias-brand-primary);
+}
+
+/* Custom's glyph: three sliders. */
+.sliders {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 7px;
+  height: 100%;
+}
+
+.sliders span {
+  position: relative;
+  display: block;
+  height: 2px;
+  border-radius: var(--dsw-radius-panel);
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 55%, transparent);
+}
+
+.sliders span::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 30%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-secondary);
+}
+
+.sliders span:nth-child(2)::after {
+  left: 70%;
+}
+
+.sliders span:nth-child(3)::after {
+  left: 45%;
+}
+
+.modeTile[aria-checked='true'] .sliders span::after {
+  background: var(--dsw-alias-brand-primary);
+}
+
+.modeName {
+  font-weight: 500;
+}
+
+.modeLead {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+/* The thinking choices. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-panel);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chip[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, var(--dsw-alias-bg-layer-2));
+}
+
+.chip:disabled {
+  cursor: default;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.soon {
+  padding: 0 6px;
+  border-radius: var(--dsw-radius-panel);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* The preview: a sample chat inside a quiet frame. */
+.previewFrame {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-base);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
+}
+
+.previewBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.previewLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pvChat {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--dsh-density, 1));
+  max-width: 640px;
+  padding: 4px 4px 8px;
+}
+
+.pvUser {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-md) var(--dsw-radius-md) var(--dsw-radius-xs) var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
+}
+
+.pvRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.pvIcon {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.pvPreview {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+}
+
+.pvPreview::before {
+  content: '·';
+  margin-right: 6px;
+}
+
+.chevron {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 3px;
+  border-right: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-bottom: 1.5px solid var(--dsw-alias-label-tertiary);
+  transform: rotate(-45deg);
+  transition: transform 160ms ease;
+}
+
+.chevron[data-open] {
+  transform: rotate(45deg);
+}
+
+.pvThinking {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pvThinkingBody {
+  margin: 0;
+  padding-left: 32px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: normal;
+}
+
+/* The sliding window: a few lines that follow the stream. */
+.pvWindow {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: calc(var(--lines, 6) * 20px);
+  overflow: hidden;
+}
+
+.pvWindow[data-streaming] {
+  mask-image: linear-gradient(to bottom, transparent 0, var(--dsw-alias-label-primary) 20px);
+}
+
+.pvReply {
+  margin: 0;
+}
+
+.pvMuted {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.pvDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 7px 0 4px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary, var(--dsw-alias-label-tertiary));
+}
+
+.pvDot[data-running] {
+  background: var(--dsw-alias-label-deep-diving);
+}
+
+.pvTerminal {
+  margin: 0 0 0 20px;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.pvShimmer {
+  color: var(--dsw-alias-label-deep-diving);
+}
+
+.pvWorking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-deep-diving);
+}
+
+.pvPulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-deep-diving);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pvPulse { animation: none; }
+  .chevron, .modeTile { transition: none; }
+}
+
+.failure {
+  margin: 0;
+  padding: 0 0 16px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+@media (max-width: 720px) {
+  .modeTiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -22,6 +22,7 @@
     "@deepseek-ai/dsh-sandbox-local": "workspace:*",
     "@delo/archive": "workspace:*",
     "@delo/bundle-local": "workspace:*",
+    "@delo/bundle-studio": "workspace:*",
     "@delo/contract-archive-and-trash": "workspace:*",
     "@delo/contract-home-layout": "workspace:*",
     "@delo/contract-home-process": "workspace:*",

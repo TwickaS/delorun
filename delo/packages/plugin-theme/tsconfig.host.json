@@ -1,0 +1,35 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
+  },
+  "files": [
+    "src/index.ts",
+    "src/config.ts",
+    "src/palette/color.ts",
+    "src/palette/generate.ts",
+    "src/palette/layers.ts",
+    "src/palette/soft.ts",
+    "src/palette/stock.ts",
+    "src/palette/stock-css.ts",
+    "src/palette/t3.ts",
+    "src/palette/t3-source.ts",
+    "src/palette/t3-themes.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../packages/host/webserver"
+    },
+    {
+      "path": "../../../packages/settings/settings"
+    }
+  ]
+}
