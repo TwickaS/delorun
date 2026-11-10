@@ -168,20 +168,20 @@ describe('a change that fails to load', () => {
 })
 
 describe('the recovery state and safe mode', () => {
-  it('names what failed at the last start, what was left out and the work session', async () => {
+  it('names what failed at the last start, what was left out with its failure, and the work session', async () => {
     const { ctx } = await approvedPlugin()
     const run = join(ctx.home, 'run', ctx.profile)
     mkdirSync(run, { recursive: true, mode: 0o700 })
     writeFileSync(join(run, 'changes-boot.json'), JSON.stringify({ schema: 'delo.changes-boot/1', at: '2026-11-10T10:00:00.000Z', plugins: [{ plugin: 'plug', rows: [{ id: 'plug-row', state: 'failed' }], loaded: false, error: 'TypeError: boom' }], failure: 'the profile did not boot' }), { mode: 0o600 })
     const log = await readChangeLog(ctx.home, ctx.profile)
-    await writeChangeLog(ctx.home, ctx.profile, { ...log, entries: [...log.entries, { id: 'c00000000ff' as never, kind: 'plugin-edit', state: 'left-out-at-start', subject: { plugin: 'plug', source: '/elsewhere' }, summary: 'Edits plug', createdAt: '2026-11-10T09:00:00.000Z', lastFailure: { at: '2026-11-10T10:00:00.000Z', failure: 'did not load' } }] })
+    await writeChangeLog(ctx.home, ctx.profile, { ...log, entries: [...log.entries, { id: 'c00000000ff' as never, kind: 'plugin-edit', state: 'left-out-at-start', subject: { plugin: 'plug', source: '/elsewhere' }, summary: 'Edits plug', createdAt: '2026-11-10T09:00:00.000Z', leftOut: { at: '2026-11-10T10:00:00.000Z', failure: 'plug did not load' }, lastFailure: { at: '2026-11-10T10:00:00.000Z', failure: 'did not load' } }] })
     const server = await serveRoutes(ctx)
     await post(server.port, ACTION_PATHS.work, { plugin: 'plug', minutes: 5 })
     const state = json(await get(server.port, STATE_PATH))
     expect(state).toMatchObject({
       atComputer: true,
       lastStart: { at: '2026-11-10T10:00:00.000Z', failure: 'the profile did not boot', plugins: [{ plugin: 'plug', loaded: false, error: 'TypeError: boom' }] },
-      leftOut: [{ id: 'c00000000ff', summary: 'Edits plug', lastFailure: { failure: 'did not load' }, undoable: false }],
+      leftOut: [{ id: 'c00000000ff', summary: 'Edits plug', leftOut: { failure: 'plug did not load' }, lastFailure: { failure: 'did not load' }, undoable: false }],
       workSession: { plugin: 'plug' },
       problems: [],
     })

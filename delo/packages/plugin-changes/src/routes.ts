@@ -61,30 +61,27 @@ import {
 } from '@delo/changes'
 import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, type StampedRequest } from '@delo/home'
 import { isProfileSafetyError, readSafeMode, recover } from '@delo/profile-safety'
+import {
+  ACTION_PATHS,
+  CHANGED_SINCE_REVIEW,
+  CONFIRM_RISK,
+  LOOPBACK_REQUIRED,
+  SHOW_PATH,
+  STATE_PATH,
+  type ActionView,
+  type ChangesAction,
+  type ChangesStateView,
+  type ChangeView,
+  type DiscardView,
+  type DoneView,
+  type EntryView,
+  type RiskView,
+  type ShownView,
+  type StartedView,
+  type WorkReviewView,
+} from './wire.ts'
 
-/** The path prefix of every Changes route. */
-export const CHANGES_ROUTE_PREFIX = '/delo/changes'
-
-/** What failed, the recent changes and the actions the screen offers. */
-export const STATE_PATH = `${CHANGES_ROUTE_PREFIX}/state`
-
-/** One change by `?id=`, or the open work session's folder by `?work=<plugin>`. */
-export const SHOW_PATH = `${CHANGES_ROUTE_PREFIX}/show`
-
-/** The actions, each a `POST` whose body names the change or the plugin. */
-export const ACTION_PATHS = {
-  apply: `${CHANGES_ROUTE_PREFIX}/apply`,
-  discard: `${CHANGES_ROUTE_PREFIX}/discard`,
-  undo: `${CHANGES_ROUTE_PREFIX}/undo`,
-  off: `${CHANGES_ROUTE_PREFIX}/off`,
-  on: `${CHANGES_ROUTE_PREFIX}/on`,
-  work: `${CHANGES_ROUTE_PREFIX}/work`,
-  done: `${CHANGES_ROUTE_PREFIX}/done`,
-  'safe-mode': `${CHANGES_ROUTE_PREFIX}/safe-mode`,
-} as const
-
-/** One action route. */
-export type ChangesAction = keyof typeof ACTION_PATHS
+export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, type ChangesAction } from './wire.ts'
 
 /** The largest body an action reads, in bytes; a body names one change or plugin. */
 export const MAX_BODY_BYTES = 16 * 1024
@@ -310,7 +307,7 @@ function confirmedRiskOf(value: unknown): boolean {
  */
 function requireRiskConfirmation(risk: RiskSummary, confirmed: boolean): void {
   if (!risk.needsSecondConfirmation || confirmed) return
-  throw new RouteRefusal(409, 'CONFIRM_RISK', `This change ${risk.kinds.map(kind => riskKindPhrase(kind).toLowerCase()).join('; ')}. A plugin's code can do anything Delo can. Confirm again to apply it.`, {
+  throw new RouteRefusal(409, CONFIRM_RISK, `This change ${risk.kinds.map(kind => riskKindPhrase(kind).toLowerCase()).join('; ')}. A plugin's code can do anything Delo can. Confirm again to apply it.`, {
     kinds: risk.kinds,
     notShown: risk.findings.filter(finding => finding.kind === 'not-shown').map(finding => finding.excerpt),
   })
@@ -320,7 +317,7 @@ function requireRiskConfirmation(risk: RiskSummary, confirmed: boolean): void {
  * @param risk - a risk summary.
  * @returns what the person reads of it.
  */
-function riskView(risk: RiskSummary): Readonly<Record<string, unknown>> {
+function riskView(risk: RiskSummary): RiskView {
   return {
     kinds: risk.kinds,
     phrases: risk.kinds.map(riskKindPhrase),
@@ -333,7 +330,7 @@ function riskView(risk: RiskSummary): Readonly<Record<string, unknown>> {
  * @param change - a change computed from a folder.
  * @returns what the person reads of it: no content version, path under the home or store name.
  */
-function changeView(change: Omit<ListedChange, 'lastFailure'> & { readonly lastFailure?: ListedChange['lastFailure'] }): Readonly<Record<string, unknown>> {
+function changeView(change: Omit<ListedChange, 'lastFailure'> & { readonly lastFailure?: ListedChange['lastFailure'] }): ChangeView {
   return {
     id: change.id,
     kind: change.kind,
@@ -351,7 +348,7 @@ function changeView(change: Omit<ListedChange, 'lastFailure'> & { readonly lastF
  * @param entry - a logged change.
  * @returns what the person reads of it.
  */
-function entryView(entry: ChangeEntry): Readonly<Record<string, unknown>> {
+function entryView(entry: ChangeEntry): EntryView {
   return {
     id: entry.id,
     kind: entry.kind,
@@ -363,6 +360,7 @@ function entryView(entry: ChangeEntry): Readonly<Record<string, unknown>> {
     ...entry.decidedAt === undefined ? {} : { decidedAt: entry.decidedAt },
     ...entry.decidedFrom === undefined ? {} : { decidedFrom: entry.decidedFrom },
     ...entry.lastFailure === undefined ? {} : { lastFailure: entry.lastFailure },
+    ...entry.leftOut === undefined ? {} : { leftOut: entry.leftOut },
     undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
   }
 }
@@ -400,7 +398,7 @@ async function part<T>(problems: string[], what: string, read: () => Promise<T> 
  * @param atComputer - whether the request could act.
  * @returns the state.
  */
-async function stateOf(ctx: ChangesContext, atComputer: boolean): Promise<Readonly<Record<string, unknown>>> {
+async function stateOf(ctx: ChangesContext, atComputer: boolean): Promise<ChangesStateView> {
   const problems: string[] = []
   const boot = await part(problems, 'The record of the last start', () => readBootRecord(ctx.home, ctx.profile))
   const log = await part(problems, 'The change log', () => readChangeLog(ctx.home, ctx.profile))
@@ -452,7 +450,7 @@ async function stateOf(ctx: ChangesContext, atComputer: boolean): Promise<Readon
  * @returns what the person reads.
  * @throws {RouteRefusal} `400 BAD_REQUEST` without exactly one well-formed query.
  */
-async function shownOf(ctx: ChangesContext, url: URL): Promise<Readonly<Record<string, unknown>>> {
+async function shownOf(ctx: ChangesContext, url: URL): Promise<ShownView | WorkReviewView> {
   const names = [...url.searchParams.keys()]
   if (names.length !== 1 || (names[0] !== 'id' && names[0] !== 'work')) throw new RouteRefusal(400, 'BAD_REQUEST', 'Ask for one change with ?id=<id>, or the work session with ?work=<plugin>.')
   if (names[0] === 'work') return workView(await reviewWork(ctx, pluginOf(url.searchParams.get('work'))))
@@ -464,7 +462,7 @@ async function shownOf(ctx: ChangesContext, url: URL): Promise<Readonly<Record<s
  * @param review - what `done` shows.
  * @returns what the person reads of it; `version` is what `done` approves.
  */
-function workView(review: WorkReview): Readonly<Record<string, unknown>> {
+function workView(review: WorkReview): WorkReviewView {
   return {
     kind: 'work',
     plugin: review.session.plugin,
@@ -481,7 +479,7 @@ function workView(review: WorkReview): Readonly<Record<string, unknown>> {
  * @param result - what an action that changes what the Host runs did.
  * @returns what the person reads.
  */
-function actionView(result: ActionResult): Readonly<Record<string, unknown>> {
+function actionView(result: ActionResult): ActionView {
   return { entry: entryView(result.entry), reload: result.reload }
 }
 
@@ -489,7 +487,7 @@ function actionView(result: ActionResult): Readonly<Record<string, unknown>> {
  * @param started - what opening a work session did.
  * @returns what the person reads.
  */
-function startedView(started: WorkStarted): Readonly<Record<string, unknown>> {
+function startedView(started: WorkStarted): StartedView {
   const { plugin, source, startedAt, endsAt } = started.session
   return { session: { plugin, source, startedAt, endsAt }, load: started.load.kind === 'went-back' ? { kind: 'went-back', failure: started.load.failure } : { kind: started.load.kind } }
 }
@@ -498,7 +496,7 @@ function startedView(started: WorkStarted): Readonly<Record<string, unknown>> {
  * @param done - what ending a work session did.
  * @returns what the person reads.
  */
-function doneView(done: WorkDone): Readonly<Record<string, unknown>> {
+function doneView(done: WorkDone): DoneView {
   if (done.kind === 'went-back') return { kind: 'went-back', plugin: done.plugin, failure: done.load.failure }
   return { kind: 'ended', plugin: done.plugin, ...done.entry === undefined ? {} : { entry: entryView(done.entry) } }
 }
@@ -514,7 +512,7 @@ function doneView(done: WorkDone): Readonly<Record<string, unknown>> {
  * @throws {RouteRefusal} for a body the action does not take, an agent's plugin request, an unconfirmed risk, or safe
  *   mode without the installation's bundles; {@link ChangesError} for a refusal of Changes.
  */
-async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies): Promise<Readonly<Record<string, unknown>>> {
+async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies): Promise<ActionView | DiscardView | StartedView | DoneView | { readonly lines: readonly string[], readonly skipped: readonly string[] | undefined }> {
   const options = { reload: dependencies.reload }
   switch (action) {
     case 'apply': {
@@ -554,7 +552,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       const version = body.version as ContentVersion
       const confirmed = confirmedRiskOf(body.confirmedRisk)
       const review = await reviewWork(ctx, plugin)
-      if (review.folder !== version) throw new RouteRefusal(409, 'CHANGED_SINCE_REVIEW', `The folder of ${plugin} changed since you were shown it; look at it again.`)
+      if (review.folder !== version) throw new RouteRefusal(409, CHANGED_SINCE_REVIEW, `The folder of ${plugin} changed since you were shown it; look at it again.`)
       if (review.change !== undefined) requireRiskConfirmation(review.change.risk, confirmed)
       return doneView(await finishWork(ctx, plugin, presence, { ...options, approve: version }))
     }
@@ -626,7 +624,7 @@ function profileOf(dependencies: RouteDependencies): ChangesContext {
  * @param dependencies - what the routes reach.
  * @returns the handler.
  */
-function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean) => Promise<Readonly<Record<string, unknown>>>, dependencies: RouteDependencies): RouteHandler {
+function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean) => Promise<object>, dependencies: RouteDependencies): RouteHandler {
   return async (request, response) => {
     const admission = admitted(request, response, dependencies.connection)
     if (admission === undefined) return
@@ -651,7 +649,7 @@ function actionRoute(action: ChangesAction, dependencies: RouteDependencies): Ro
     if (admission === undefined) return
     try {
       if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'Changes are made with a POST.')
-      if (!atComputer(admission.arrival)) throw new RouteRefusal(403, 'LOOPBACK_REQUIRED', LOOPBACK_REQUIRED_SENTENCE)
+      if (!atComputer(admission.arrival)) throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
       const presence = attestStudio(admission.arrival)
       if (isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
       const ctx = profileOf(dependencies)
