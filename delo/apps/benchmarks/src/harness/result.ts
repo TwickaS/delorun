@@ -67,8 +67,14 @@ export interface BenchmarkResult {
   readonly commit: string
   /** The machine. */
   readonly machine: MachineFacts
-  /** Load averages before and after the run. */
-  readonly load: { readonly before: readonly number[], readonly after: readonly number[] }
+  /** Load averages before and after the run, and the storage pressure (`some avg10` of `/proc/pressure/io`, percent) before, after and at its highest sample during it. */
+  readonly load: {
+    readonly before: readonly number[]
+    readonly after: readonly number[]
+    readonly ioBefore?: number
+    readonly ioAfter?: number
+    readonly ioMax?: number
+  }
   /** The run's options. */
   readonly options: Readonly<Record<string, string | number | boolean | readonly string[]>>
   /** Each suite. */

@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BUDGETS_SCHEMA, checkBudgets, proposeBudgets, proposeCeiling, readBudgets, type BudgetFile } from '../src/harness/budgets.ts'
+import { BUDGETS_SCHEMA, checkBudgets, IO_PRESSURE_LIMIT, proposeBudgets, proposeCeiling, readBudgets, unjudgeable, type BudgetFile } from '../src/harness/budgets.ts'
 import { assertIsolated, IsolationRefusal, isolatedCommand, nonLoopbackInterfaces } from '../src/harness/isolation.ts'
-import { clonesFiles, fileSystemType, loadAverages, machineFacts } from '../src/harness/machine.ts'
+import { clonesFiles, fileSystemType, ioPressure, loadAverages, machineFacts } from '../src/harness/machine.ts'
 import { parseCommandLine, selection, UsageError } from '../src/harness/options.ts'
 import { RESULT_SCHEMA, Samples, Scrubber, type BenchmarkResult, type ScenarioResult } from '../src/harness/result.ts'
 import { median, summarize } from '../src/harness/stats.ts'
@@ -91,6 +91,14 @@ describe('budgets', () => {
     expect(proposed).toEqual({ schema: BUDGETS_SCHEMA, rule: 'rule', suites: { update: { a: { total: 8000 } } } })
   })
 
+  it('refuses to judge a run whose storage pressure went over the limit, and judges one at or under it', () => {
+    expect(unjudgeable({ before: [], after: [], ioBefore: 3, ioAfter: IO_PRESSURE_LIMIT, ioMax: 12 })).toBeUndefined()
+    expect(unjudgeable({ before: [], after: [] })).toBeUndefined()
+    expect(unjudgeable({ before: [], after: [], ioBefore: 2, ioMax: 75.2 })).toContain('storage pressure reached 75.2%')
+    expect(unjudgeable({ before: [], after: [], ioAfter: 21 })).toContain('rerun on a quiet machine')
+    expect(unjudgeable({ before: [], after: [], ioBefore: 30 })).toContain('30%')
+  })
+
   it('reads a budget file and refuses one that is not', () => {
     const directory = mkdtempSync(join(tmpdir(), 'delo-bench-spec-'))
     made.push(directory)
@@ -115,13 +123,13 @@ describe('the table', () => {
     const result: BenchmarkResult = {
       schema: RESULT_SCHEMA, startedAt: '2026-11-10T00:00:00.000Z', commit: '0123456789abcdef0123', options: {},
       machine: { platform: 'linux', arch: 'x64', kernel: '6.6', cpus: 8, cpuModel: 'CPU', memoryGiB: 16, node: 'v24.22.0', fileSystem: 'ext2/ext3', clone: false },
-      load: { before: [1, 2, 3], after: [4, 5, 6] },
+      load: { before: [1, 2, 3], after: [4, 5, 6], ioBefore: 1.5, ioMax: 7 },
       suites: [{ suite: 'update', scenarios: [scenario('a', [1000]), { ...scenario('b', [], ['boom']), parameters: {} }], skipped: [{ item: 'clone', reason: 'no clones' }] }],
     }
     expect(resultTable(result)).toEqual([
       'Delo benchmarks at 0123456789ab, 2026-11-10T00:00:00.000Z',
       'Machine: 8 CPUs (CPU), 16 GiB, linux-x64 6.6, Node v24.22.0, ext2/ext3 without clones',
-      'Load average before 1 / 2 / 3, after 4 / 5 / 6',
+      'Load average before 1 / 2 / 3, after 4 / 5 / 6; storage pressure before 1.5%, after unknown, highest 7%',
       '',
       'update / a (1 run; chats=20)',
       '  item    median      min      max  n',
@@ -140,14 +148,14 @@ describe('the command line', () => {
   it('takes the defaults, and a leading -- from the package manager', () => {
     expect(parseCommandLine(['--'], [SUITE])).toEqual({
       prepare: false, list: false, suites: [], scenarios: [], repeat: 3, chatsSmall: 20, chatsLarge: 400, plugins: 20,
-      rootBase: undefined, closureFrom: undefined, out: undefined, checkBudgets: false, proposeBudgets: undefined,
+      rootBase: undefined, closureFrom: undefined, out: undefined, checkBudgets: false, proposeBudgets: undefined, keepRoots: false,
     })
   })
 
   it('reads every option', () => {
-    expect(parseCommandLine(['--suite', 'update', '--scenario', 'b', '--repeat', '5', '--chats-small', '2', '--chats-large', '9', '--plugins', '7', '--root-base', '/r', '--closure-from', '/c', '--out', '/o', '--check-budgets', '--propose-budgets', '/p', '--prepare', '--list'], [SUITE])).toEqual({
+    expect(parseCommandLine(['--suite', 'update', '--scenario', 'b', '--repeat', '5', '--chats-small', '2', '--chats-large', '9', '--plugins', '7', '--root-base', '/r', '--closure-from', '/c', '--out', '/o', '--check-budgets', '--propose-budgets', '/p', '--prepare', '--list', '--keep-roots'], [SUITE])).toEqual({
       prepare: true, list: true, suites: ['update'], scenarios: ['b'], repeat: 5, chatsSmall: 2, chatsLarge: 9, plugins: 7,
-      rootBase: '/r', closureFrom: '/c', out: '/o', checkBudgets: true, proposeBudgets: '/p',
+      rootBase: '/r', closureFrom: '/c', out: '/o', checkBudgets: true, proposeBudgets: '/p', keepRoots: true,
     })
   })
 
@@ -201,6 +209,14 @@ describe('machine facts', () => {
     expect(facts.clone).toBe(clonesFiles(directory))
     expect(fileSystemType(join(directory, 'absent'))).toBe('unknown')
     expect(loadAverages()).toHaveLength(3)
+  })
+
+  it('reads the storage pressure of the last ten seconds, and nothing where the kernel reports none', () => {
+    expect(ioPressure('some avg10=75.23 avg60=69.39 avg300=71.27 total=1\nfull avg10=69.41 avg60=63.31 avg300=63.72 total=1\n')).toBe(75.23)
+    expect(ioPressure('some avg10=0 avg60=0.00 avg300=0.00 total=0\n')).toBe(0)
+    expect(ioPressure('nothing here')).toBeUndefined()
+    const live = ioPressure()
+    expect(live === undefined || live >= 0).toBe(true)
   })
 })
 

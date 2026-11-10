@@ -115,12 +115,13 @@ export function createRoot(base: string = tmpdir(), homes: readonly string[] = r
 }
 
 /**
- * Remove a directory tree, first making it writable: an installed runtime is read-only (contract C1).
+ * Remove a directory tree, first making its directories writable: an installed runtime is read-only (contract C1).
+ * Files keep their modes, because a repetition's runtime files are hard links to its template's.
  * @param path - the tree; nothing happens when it does not exist.
  */
 export function removeTree(path: string): void {
   if (!existsSync(path)) return
-  execFileSync('chmod', ['-R', 'u+rwX', path])
+  execFileSync('find', [path, '-type', 'd', '-exec', 'chmod', 'u+rwx', '{}', '+'])
   rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
 }
 

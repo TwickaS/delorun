@@ -4,7 +4,7 @@
  * (`homeUpdateSupport` over C1's store, the CLI's report sources, profile history and session-data copies), except that
  * its release channel reads the benchmark's loopback channel and log instead of the published hosts, which the runtime
  * names as constants. The channel is `@delo/install`'s `LauncherChannel`, anchored on the root chain the home stored at
- * install, exactly as `homeReleaseChannel` builds it.
+ * install, as `homeReleaseChannel` builds it, with the download rule a launcher built for a loopback channel uses.
  *
  * Every other step is unchanged. The driver only observes: it wraps the support's store, channel, downloader, report
  * sources, profile history and copies to append one timing record per step boundary to a JSON-lines file, and changes
@@ -77,7 +77,8 @@ function updates(homePath, profileName, running, logger) {
       channel: release.manifest.channel,
       log: () => tilesTransport({ fetch, checkpoint: `${logOrigin}/checkpoint`, tiles: logOrigin }),
       source: { metadata: channelOrigin, files: (version, name) => `${channelOrigin}/releases/download/v${version}/${name}` },
-      downloader: timed(new Downloader(), 'download', ['bytes', 'file']),
+      // The download rule a launcher built for a loopback channel uses: that origin's scheme and host only.
+      downloader: timed(new Downloader({ hosts: { scheme: new URL(channelOrigin).protocol, hosts: [new URL(channelOrigin).hostname], maxRedirects: 5 } }), 'download', ['bytes', 'file']),
       progress: (event) => {
         mark(`install.${event.step}`)
         progress(event)

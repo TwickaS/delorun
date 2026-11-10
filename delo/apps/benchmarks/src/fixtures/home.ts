@@ -8,7 +8,7 @@
  * @module @delo/benchmarks/fixtures/home
  */
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync, realpathSync, symlinkSync } from 'node:fs'
+import { appendFileSync, chmodSync, copyFileSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { childEnvironment, type BenchRoot } from '../harness/roots.ts'
 import { expectSuccess, run, start, type Finished, type ProcessRequest, type Running } from '../harness/processes.ts'
@@ -106,12 +106,20 @@ export async function installHome(root: BenchRoot, launcher: string, version: st
 }
 
 /**
- * Copy an installed home into another root, keeping modes, links and times.
+ * Copy an installed home into another root, keeping modes, links and times. The installed runtimes' files are hard
+ * links to the template's, not copies: they are read-only (contract C1), the store replaces its records and pointers by
+ * rename and removes a runtime by unlinking it, so neither home changes the other's, and a repetition writes no
+ * runtime it did not install itself.
  * @param from - the template root.
  * @param to - the new root.
  */
 export function copyHome(from: BenchRoot, to: BenchRoot): void {
-  execFileSync('cp', ['-a', `${from.home}/.`, to.home])
+  for (const entry of readdirSync(from.home)) if (entry !== '.delo') execFileSync('cp', ['-a', join(from.home, entry), to.home])
+  const source = join(from.home, '.delo')
+  const target = join(to.home, '.delo')
+  mkdirSync(target)
+  chmodSync(target, statSync(source).mode & 0o7777)
+  for (const entry of readdirSync(source)) execFileSync('cp', [entry === 'runtimes' ? '-al' : '-a', join(source, entry), target])
 }
 
 /**

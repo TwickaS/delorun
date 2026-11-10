@@ -7,7 +7,7 @@
  * @module @delo/benchmarks/harness/machine
  */
 import { execFileSync } from 'node:child_process'
-import { constants, copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { constants, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { arch, cpus, loadavg, platform, release, totalmem } from 'node:os'
 import { join } from 'node:path'
 
@@ -93,4 +93,24 @@ export function machineFacts(rootsDirectory: string): MachineFacts {
 export function loadAverages(): readonly [number, number, number] {
   const [one, five, fifteen] = loadavg().map(value => Math.round(value * 100) / 100)
   return [one!, five!, fifteen!]
+}
+
+/**
+ * The share of the last ten seconds in which some task waited on storage: `some avg10` of `/proc/pressure/io`, in
+ * percent. A run that measures while the disk is this busy measures the disk.
+ * @param text - the file's text; read from `/proc/pressure/io` by default.
+ * @returns the percentage, or `undefined` where the kernel reports no pressure information.
+ */
+export function ioPressure(text?: string): number | undefined {
+  let content = text
+  if (content === undefined) {
+    try {
+      content = readFileSync('/proc/pressure/io', 'utf8')
+    } catch (_unavailable) {
+      // A kernel without pressure stall information, or a system other than Linux.
+      return undefined
+    }
+  }
+  const match = /^some avg10=(\d+(?:\.\d+)?)/mu.exec(content)
+  return match === null ? undefined : Number(match[1])
 }

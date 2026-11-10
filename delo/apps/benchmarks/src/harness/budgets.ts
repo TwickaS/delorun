@@ -36,6 +36,19 @@ export interface Violation {
   readonly problem: string
 }
 
+/** The storage pressure above which a run's timings are not judged: they measure a busy disk, not Delo. */
+export const IO_PRESSURE_LIMIT = 20
+
+/**
+ * Why a run's timings cannot be judged against the budgets, if they cannot.
+ * @param load - the run's load.
+ * @returns the reason, or `undefined` when the run can be judged.
+ */
+export function unjudgeable(load: BenchmarkResult['load']): string | undefined {
+  const highest = Math.max(load.ioBefore ?? 0, load.ioAfter ?? 0, load.ioMax ?? 0)
+  return highest > IO_PRESSURE_LIMIT ? `storage pressure reached ${String(highest)}% (some avg10 of /proc/pressure/io), over the ${String(IO_PRESSURE_LIMIT)}% above which timings measure the disk; rerun on a quiet machine` : undefined
+}
+
 /**
  * Read and validate a budget file.
  * @param path - the file.

@@ -5,7 +5,8 @@
  * re-runs itself in a loopback-only network namespace ([isolation](./harness/isolation.ts)), writes the JSON result,
  * prints the table and, with `--check-budgets`, fails when a median is over its ceiling in `budgets.json`.
  *
- * Exit codes: 0 measured (and within budgets when checked), 1 a refusal, a failure or a budget violation, 2 a usage error.
+ * Exit codes: 0 measured (and within budgets when checked), 1 a refusal, a failure or a budget violation, 2 a usage error,
+ * 3 budgets not judged because storage pressure was over the limit during the run.
  *
  * @module @delo/benchmarks/run
  */
@@ -18,9 +19,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { CleanupScope } from '@delo/release/tests/local/support'
 import { createChannel, type LocalChannel } from './fixtures/channel.ts'
 import { BENCH_PLATFORM, buildBase, cachedBase, closureCache, closureFrom, derivedClosure, type ClosureDirectory } from './fixtures/closure.ts'
-import { checkBudgets, proposeBudgets, readBudgets } from './harness/budgets.ts'
+import { checkBudgets, proposeBudgets, readBudgets, unjudgeable } from './harness/budgets.ts'
 import { assertIsolated, ISOLATED_ENV, rerunIsolated } from './harness/isolation.ts'
-import { loadAverages, machineFacts } from './harness/machine.ts'
+import { ioPressure, loadAverages, machineFacts } from './harness/machine.ts'
 import { parseCommandLine, selection, USAGE, UsageError, type CommandLine } from './harness/options.ts'
 import { RESULT_SCHEMA, Scrubber, type BenchmarkResult, type SuiteResult } from './harness/result.ts'
 import { canonical, createRoot, realHomes, type BenchRoot } from './harness/roots.ts'
@@ -37,6 +38,21 @@ export const BUDGETS_PATH = join(PACKAGE, 'budgets.json')
 
 /** The rule the ceilings follow, written into a proposed budget file. */
 export const CEILING_RULE = 'Each ceiling is four times the median measured on the recorded machine and load, at least one second, rounded up to two significant digits; see delo/docs/performance/README.md.'
+
+/** The exit code of a run whose timings the budget check refused to judge. */
+export const NOT_JUDGED = 3
+
+/**
+ * The storage pressure fields a result carries, without the unknown ones.
+ * @param before - at the start.
+ * @param after - at the end.
+ * @param max - the highest sample.
+ * @returns the fields.
+ */
+function pressures(before: number | undefined, after: number | undefined, max: number | undefined): { ioBefore?: number, ioAfter?: number, ioMax?: number } {
+  const highest = max === undefined && after === undefined ? undefined : Math.max(max ?? 0, after ?? 0)
+  return { ...before === undefined ? {} : { ioBefore: before }, ...after === undefined ? {} : { ioAfter: after }, ...highest === undefined ? {} : { ioMax: highest } }
+}
 
 /**
  * Write a progress line.
@@ -91,7 +107,8 @@ async function measure(line: CommandLine, facts: { readonly repository: string, 
   const rootBase = canonical(line.rootBase ?? tmpdir())
   const roots: BenchRoot[] = []
   const newRoot = (): BenchRoot => {
-    const root = createRoot(rootBase, homes)
+    const created = createRoot(rootBase, homes)
+    const root = line.keepRoots ? { ...created, dispose: () => {} } : created
     scrubber.addRoot(root.path)
     roots.push(root)
     return root
@@ -99,6 +116,12 @@ async function measure(line: CommandLine, facts: { readonly repository: string, 
   const machine = machineFacts(rootBase)
   const startedAt = new Date().toISOString()
   const before = loadAverages()
+  const ioBefore = ioPressure()
+  let ioMax = ioBefore
+  const sampler = setInterval(() => {
+    const now = ioPressure()
+    if (now !== undefined) ioMax = Math.max(ioMax ?? 0, now)
+  }, 5000)
   let shared: Promise<SharedFixtures> | undefined
   const fixtures = (): Promise<SharedFixtures> => {
     shared ??= (async () => {
@@ -132,12 +155,14 @@ async function measure(line: CommandLine, facts: { readonly repository: string, 
       suites.push(await suite.run(context, scenarios))
     }
   } finally {
+    clearInterval(sampler)
     for (const cleanup of cleanups.reverse()) await cleanup()
     for (const root of roots) root.dispose()
+    if (line.keepRoots) log(`kept the roots: ${roots.map(root => root.path).join(' ')}`)
   }
   const result: BenchmarkResult = {
     schema: RESULT_SCHEMA, startedAt, commit: facts.commit, machine,
-    load: { before, after: loadAverages() },
+    load: { before, after: loadAverages(), ...pressures(ioBefore, ioPressure(), ioMax) },
     options: { repeat: line.repeat, chatsSmall: line.chatsSmall, chatsLarge: line.chatsLarge, plugins: line.plugins, suites: line.suites, scenarios: line.scenarios },
     suites,
   }
@@ -149,6 +174,11 @@ async function measure(line: CommandLine, facts: { readonly repository: string, 
   if (line.proposeBudgets !== undefined) writeFileSync(line.proposeBudgets, `${JSON.stringify(proposeBudgets(result, CEILING_RULE), undefined, 2)}\n`)
   const failed = suites.some(suite => suite.scenarios.some(scenario => scenario.failures.length > 0))
   if (!line.checkBudgets) return failed ? 1 : 0
+  const refusal = unjudgeable(result.load)
+  if (refusal !== undefined) {
+    process.stdout.write(`budgets not judged: ${refusal}\n`)
+    return NOT_JUDGED
+  }
   const violations = checkBudgets(result, readBudgets(BUDGETS_PATH))
   for (const violation of violations) process.stdout.write(`over budget: ${violation.where}: ${violation.problem}\n`)
   if (violations.length === 0) process.stdout.write('every measured item is within its ceiling\n')

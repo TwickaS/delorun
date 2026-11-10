@@ -16,6 +16,15 @@ export function formatDuration(milliseconds: number): string {
 }
 
 /**
+ * A percentage, or `unknown`.
+ * @param value - the value.
+ * @returns the text.
+ */
+function percent(value: number | undefined): string {
+  return value === undefined ? 'unknown' : `${String(value)}%`
+}
+
+/**
  * Pad the columns of rows to a common width.
  * @param rows - the rows, the first being the header.
  * @returns the lines.
@@ -35,7 +44,7 @@ export function resultTable(result: BenchmarkResult): readonly string[] {
   const lines = [
     `Delo benchmarks at ${result.commit.slice(0, 12)}, ${result.startedAt}`,
     `Machine: ${String(machine.cpus)} CPUs (${machine.cpuModel}), ${String(machine.memoryGiB)} GiB, ${machine.platform}-${machine.arch} ${machine.kernel}, Node ${machine.node}, ${machine.fileSystem}${machine.clone ? ' with clones' : ' without clones'}`,
-    `Load average before ${load.before.join(' / ')}, after ${load.after.join(' / ')}`,
+    `Load average before ${load.before.join(' / ')}, after ${load.after.join(' / ')}; storage pressure before ${percent(load.ioBefore)}, after ${percent(load.ioAfter)}, highest ${percent(load.ioMax)}`,
   ]
   for (const suite of result.suites) {
     for (const scenario of suite.scenarios) {

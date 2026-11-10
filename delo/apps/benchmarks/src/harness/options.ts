@@ -10,7 +10,7 @@ import type { Suite } from './suite.ts'
 export const USAGE = [
   'usage: pnpm run benchmark:delo -- [--prepare] [--list] [--suite <id>]... [--scenario <id>]... [--repeat <n>]',
   '         [--chats-small <n>] [--chats-large <n>] [--plugins <n>] [--root-base <dir>] [--closure-from <dir>]',
-  '         [--out <file>] [--check-budgets] [--propose-budgets <file>]',
+  '         [--out <file>] [--check-budgets] [--propose-budgets <file>] [--keep-roots]',
   '',
   '  --prepare           build the base runtime closure of this commit into the cache (needs the built artifacts); no measurement',
   '  --list              print the suites, their scenarios and their measured items',
@@ -25,6 +25,7 @@ export const USAGE = [
   '  --out               the result file; .cache/delo-benchmarks/results/<time>.json by default',
   '  --check-budgets     fail when a median is over its ceiling in budgets.json',
   '  --propose-budgets   write ceilings proposed from this run\'s medians to a file',
+  '  --keep-roots        keep every throwaway root after the run, to read its homes\' logs after a failure',
 ].join('\n')
 
 /** The parsed command line. */
@@ -42,6 +43,7 @@ export interface CommandLine {
   readonly out: string | undefined
   readonly checkBudgets: boolean
   readonly proposeBudgets: string | undefined
+  readonly keepRoots: boolean
 }
 
 /** A command line the harness refuses. */
@@ -92,6 +94,7 @@ export function parseCommandLine(argv: readonly string[], suites: readonly Suite
         'out': { type: 'string' },
         'check-budgets': { type: 'boolean', default: false },
         'propose-budgets': { type: 'string' },
+        'keep-roots': { type: 'boolean', default: false },
       },
     }))
   } catch (error) {
@@ -117,6 +120,7 @@ export function parseCommandLine(argv: readonly string[], suites: readonly Suite
     out: values.out,
     checkBudgets: values['check-budgets'],
     proposeBudgets: values['propose-budgets'],
+    keepRoots: values['keep-roots'],
   }
 }
 
