@@ -17,7 +17,7 @@ import { SUPERVISOR_ROOTS_FILE } from '@delo/contract-home-layout'
 import { HELPER_CHANNEL_DIR, HELPER_SOCKET_DIR, IMAGES, LABELS, PRESETS, type DockerLimit } from '@delo/contract-runtime-supervisor'
 import type { FileRef, OciDigest, Sha256Hex } from '@delo/contract-release-manifest'
 import { writeProtectedFile } from '@delo/home'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, type TestContext } from 'vitest'
 import { homeIdOf, PROBE_COMMANDS } from '../src/index.ts'
 import { ABSENT_DIGEST, fixtureManifest, send, startSupervisor, tempHome, type RunningSupervisor, type TempHome } from './support.ts'
 
@@ -27,12 +27,24 @@ const DOCKER_MS = 180_000
 
 const docker = (...args: string[]): string => execFileSync('docker', args, { encoding: 'utf8', timeout: DOCKER_MS }).trim()
 const dockerUp = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], { stdio: 'ignore', timeout: 30_000 }).status === 0
+/** The Docker lane sets this: a missing engine or fixture image fails the specs instead of skipping them. */
+const required = process.env['DELO_DOCKER_SPECS'] === '1'
 
 let digest: OciDigest | undefined
 let buildProblem: string | undefined
 const homes: string[] = []
 let temp: TempHome | undefined
 let running: RunningSupervisor | undefined
+
+/**
+ * Skip a spec for want of the fixture image, or fail it where the Docker lane requires the specs.
+ * @param test - the running spec.
+ */
+function missingImage(test: TestContext): void {
+  const why = buildProblem ?? 'no fixture image'
+  if (required) throw new Error(`${why}; the Docker lane (DELO_DOCKER_SPECS=1) requires this spec to run. Use an engine that records repository digests for local images (Docker Desktop: Settings, General, "Use containerd for pulling and storing images"), restart it, and run the lane again`)
+  test.skip(why)
+}
 
 /** Remove every container and network labelled with one home's id. */
 function removeOwned(home: string): void {
@@ -97,7 +109,7 @@ async function start(manifestDigest: OciDigest | undefined, seccomp?: { readonly
 
 describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { timeout: DOCKER_MS }, () => {
   it('capability-report-inspected: every enforced limit matches the probe container\'s inspect record, and the probe leaves nothing behind', async (test) => {
-    if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
+    if (digest === undefined) return missingImage(test)
     const { home, socket, token } = await start(digest)
     const response = await send(socket, { v: 1, token, op: 'capabilities', args: { refresh: true } })
     expect(response).toMatchObject({ ok: true })
@@ -132,7 +144,7 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
   })
 
   it('runs the probe under the seccomp profile the manifest lists, and refuses a listed profile whose file differs', async (test) => {
-    if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
+    if (digest === undefined) return missingImage(test)
     const listed: FileRef = { name: 's2.seccomp.json', length: Buffer.byteLength(PROFILE_TEXT), sha256: createHash('sha256').update(PROFILE_TEXT).digest('hex') as Sha256Hex }
     const { socket, token } = await start(digest, { listed, text: PROFILE_TEXT })
     expect(await send(socket, { v: 1, token, op: 'capabilities', args: { refresh: true } })).toMatchObject({ ok: true })
@@ -147,14 +159,14 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
   })
 
   it('the cap-drop probe fails for a non-root user who keeps the bounding set, which CapEff alone does not show', async (test) => {
-    if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
+    if (digest === undefined) return missingImage(test)
     const run = (...flags: string[]): number | null => spawnSync('docker', ['run', '--rm', '--user', '1000:1000', ...flags, TAG, ...PROBE_COMMANDS.capabilities], { stdio: 'ignore', timeout: DOCKER_MS }).status
     expect(run()).not.toBe(0)
     expect(run('--cap-drop', 'ALL')).toBe(0)
   })
 
   it('supervisor-schema-closed: requests naming an image, a mount, an environment variable, a command or an unknown op create no container', async (test) => {
-    if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
+    if (digest === undefined) return missingImage(test)
     const { home, socket, token, parent } = await start(digest)
     const root = join(parent, 'w')
     mkdirSync(root)
@@ -167,7 +179,7 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
   })
 
   it('supervisor-image-unlisted: a digest the verified manifest does not list is never run, even with an image of C9\'s name present', async (test) => {
-    if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
+    if (digest === undefined) return missingImage(test)
     const { home, socket, token, parent } = await start(ABSENT_DIGEST)
     const root = join(parent, 'w')
     mkdirSync(root)
@@ -181,7 +193,7 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
   })
 
   it('a workspace container carries C9\'s settings and only the resolved mounts, and is removed whole', async (test) => {
-    if (digest === undefined) return test.skip(buildProblem ?? 'no fixture image')
+    if (digest === undefined) return missingImage(test)
     const { home, socket, token, parent } = await start(digest)
     const s2 = running?.supervisor.current.shapes.s2
     if (s2?.available !== true) return test.skip(`S2 is not offered on this engine (${s2?.reason ?? 'unknown'}); its container runs where it is`)
@@ -202,5 +214,11 @@ describe.skipIf(!dockerUp)('the supervisor against the active Docker engine', { 
 })
 
 describe.skipIf(dockerUp)('the supervisor against the active Docker engine', () => {
-  it.skip('not run on this host: no Docker engine answers at the active context', () => {})
+  if (required) {
+    it('needs a Docker engine, which the Docker lane requires', () => {
+      throw new Error('DELO_DOCKER_SPECS=1 requires a Docker engine, and none answers at the active context; start Docker Desktop (or the Docker engine), wait until `docker info` answers, and run the lane again')
+    })
+  } else {
+    it.skip('not run on this host: no Docker engine answers at the active context', () => {})
+  }
 })

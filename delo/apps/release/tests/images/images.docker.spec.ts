@@ -1,7 +1,7 @@
 /**
  * Docker lane: the S2 and S3 images built twice from the same fixture closures have the same index and platform
  * digests and Debian package lists. It builds both architectures with BuildKit and needs Docker with emulation, so it runs only with
- * `DELO_DOCKER_SPECS=1`; Delo's check runner has no Docker lane yet.
+ * `DELO_DOCKER_SPECS=1`, which the check runner's Docker lane (`tests:docker`) sets once a Docker engine answers.
  */
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'

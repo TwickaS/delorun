@@ -11,18 +11,49 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createWriteStream, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PassCache } from './cache.ts'
-import type { Planned } from './plan.ts'
+import type { GateTier, Planned } from './plan.ts'
 
 /** How a check ended. */
 export type Outcome = 'passed' | 'failed' | 'declined' | 'skipped'
 
 /**
- * Whether an outcome fails the run: `declined` (this host cannot run it) and `skipped` do not.
+ * Whether an outcome fails the run on its own: `declined` (this host cannot run it) and `skipped` do not.
+ * {@link gateFailure} adds the declined merge-only check.
  * @param outcome - how a check ended.
  * @returns true when the run fails.
  */
 export function failing(outcome: Outcome): boolean {
   return outcome === 'failed'
+}
+
+/**
+ * Whether a result fails a run of a tier: a failed check, and in the merge tier a merge-only check this host could not run
+ * (`Result.unrun`), because only the merge tier's pass lets a commit reach the trunk and it passes nothing it did not run.
+ * @param result - one check's result.
+ * @param tier - the run's gate tier; absent (the full gate) counts as the merge tier.
+ * @returns true when the run fails.
+ */
+export function gateFailure(result: Result, tier: GateTier | undefined): boolean {
+  return failing(result.outcome) || (result.unrun === true && tier !== 'agent')
+}
+
+/** The command that asks Docker whether an engine answers, and how long it may take. */
+const DOCKER_ASK = { args: ['info', '--format', '{{.ServerVersion}}'], timeoutMs: 30_000 } as const
+
+/** What {@link probeDocker} needs from a process runner. */
+export type DockerRun = (command: string, args: readonly string[], timeoutMs: number) => { readonly status: number | null, readonly stderr: string, readonly error?: Error | undefined }
+
+/**
+ * Ask the Docker engine of the active context whether it answers, for the Docker lane's plan.
+ * @param run - runs `docker` with arguments within a timeout.
+ * @returns undefined when an engine answers, otherwise why none does and how to start one.
+ */
+export function probeDocker(run: DockerRun): string | undefined {
+  const answer = run('docker', DOCKER_ASK.args, DOCKER_ASK.timeoutMs)
+  if (answer.status === 0) return undefined
+  const line = answer.stderr.split('\n').find(text => text.trim() !== '')?.trim()
+  const why = answer.error?.message ?? line ?? (answer.status === null ? 'no answer within the timeout' : `exit ${String(answer.status)}`)
+  return `no Docker engine answers at the active context (${why}); start Docker Desktop (on a WSL host, start it on Windows and enable its WSL integration) or the Docker engine, wait until \`docker info\` answers, and run the lane again`
 }
 
 /** One check's result. */
@@ -40,6 +71,8 @@ export interface Result {
   readonly peakBytes?: number
   /** Whether the kernel's out-of-memory killer stopped one of its processes. */
   readonly oomKilled?: boolean
+  /** True when a merge-only check was declined for a limit of this host and never ran; {@link gateFailure} fails the merge tier for it. */
+  readonly unrun?: true
 }
 
 /** What the run needs from its caller. */
@@ -58,6 +91,8 @@ export interface RunOptions {
   readonly oomKills?: () => number | undefined
   /** Stop starting checks after the first failure. */
   readonly bail: boolean
+  /** The gate tier, which decides whether a declined merge-only check fails the run ({@link gateFailure}); absent counts as the merge tier. */
+  readonly tier?: GateTier
   /** Which ready check to start first: a higher value first, such as `criticalPath` (plan.ts) gives; ties keep plan order. */
   readonly priority?: ReadonlyMap<string, number>
   /** The pass cache; undefined runs every check. */
@@ -160,7 +195,7 @@ export async function runPlan(plan: readonly Planned[], options: RunOptions): Pr
 
   const finish = (check: Planned, result: Result): void => {
     results.set(check.id, result)
-    if (failing(result.outcome)) failed = true
+    if (gateFailure(result, options.tier)) failed = true
     options.report({ kind: 'end', check, result })
   }
 
@@ -176,11 +211,11 @@ export async function runPlan(plan: readonly Planned[], options: RunOptions): Pr
           continue
         }
         if (check.declined !== undefined) {
-          finish(check, { id: check.id, outcome: 'declined', seconds: 0, detail: check.declined })
+          finish(check, { id: check.id, outcome: 'declined', seconds: 0, detail: check.declined, ...check.mergeOnly === true && check.declinedByHost === true ? { unrun: true } : {} })
           continue
         }
         if (check.memoryBytes > options.memoryBytes) {
-          finish(check, { id: check.id, outcome: 'declined', seconds: 0, detail: `it needs ${gib(check.memoryBytes)} and the run's ceiling is ${gib(options.memoryBytes)}; run it on a bigger host` })
+          finish(check, { id: check.id, outcome: 'declined', seconds: 0, detail: `it needs ${gib(check.memoryBytes)} and the run's ceiling is ${gib(options.memoryBytes)}; run it on a bigger host`, ...check.mergeOnly === true ? { unrun: true } : {} })
           continue
         }
         if (unmet.length > 0) continue

@@ -68,8 +68,16 @@ export interface Check {
   readonly memoryBytes: number
   /** Run with no other check beside it. */
   readonly exclusive?: boolean
-  /** Why this host cannot run it; the runner reports it declined, which fails no run. */
+  /**
+   * Why the runner does not run it: this host cannot, or the selection leaves it nothing to run. The runner reports it
+   * declined, which fails no run unless {@link Check.declinedByHost} marks a merge-only check in the merge tier.
+   */
   readonly declined?: string
+  /**
+   * True when {@link Check.declined} is a limit of this host (no Docker engine answers) and not an empty selection. A
+   * merge-only check declined for it never ran, so in the merge tier the run fails instead of passing without it.
+   */
+  readonly declinedByHost?: true
   /** True when the verdict reads commits beyond the tree; a tree pass covers the check only at the same HEAD and range base. */
   readonly history?: boolean
   /** What a narrowed check runs over: the paths or package directories its command appends. Absent when the command is whole. */
@@ -91,6 +99,16 @@ export interface ForkPackage {
   readonly ownWorkspace: boolean
   /** Whether its `tests/` holds Docker specs (`*.docker.spec.ts`), which the Docker lane runs. */
   readonly dockerSpecs?: boolean
+  /** The runtime files its `build` script writes, from {@link declaredBuildOutputs}; absent when it declares no build or no output. */
+  readonly buildOutputs?: readonly string[]
+}
+
+/** A Delo package whose built output is missing or older than its sources. */
+export interface StaleDeloBuild {
+  /** The package name, which the build check filters on. */
+  readonly name: string
+  /** Why it is stale, for the check's title. */
+  readonly reason: string
 }
 
 /** A fork TypeScript program, type-checked with `tsc -p`. */
@@ -110,6 +128,8 @@ export interface UpstreamPackage {
   readonly runtimeDependencies: readonly string[]
   /** How many spec files its `tests` directory holds. */
   readonly specs: number
+  /** True when a `security` ledger entry lies in the package: a change to it always runs its direct dependents' specs in the merge tier. */
+  readonly security?: boolean
 }
 
 /** What the runner found in the tree. */
@@ -147,6 +167,8 @@ export interface Host {
   readonly budgets: Budgets
   /** Why the build is not current: upstream packages whose runtime bundles are missing or older than their sources. Empty when it is current; lanes that run built code need `build:artifacts` while it is not. */
   readonly staleRuntime: readonly string[]
+  /** Delo packages that declare a build and whose output is missing or older than their sources, from {@link staleDeloBuilds}. Upstream's `build:artifacts` does not build them, so they get their own check, `build:delo`. Absent counts as none. */
+  readonly staleDeloBuilds?: readonly StaleDeloBuild[]
   /** The repository gates the runner schedules, from `checks/gates/index.ts`. */
   readonly gates: readonly GateCheck[]
 }
@@ -187,7 +209,8 @@ const SNAPSHOT_CONCURRENCY = 5
  * package's direct dependents. A package with 39 direct dependents measured
  * 643 spec files and 185 s; the median package has 3. Above the budget the
  * lane runs the changed packages' own specs and leaves the dependents to
- * upstream's full suite.
+ * upstream's full suite. A `security` package's dependents are exempt in the
+ * merge tier ({@link upstreamSpecDirs}).
  */
 export const UPSTREAM_CHANGED_SPEC_BUDGET = 150
 // The changed-upstream lane's workers: path-filtered runs measured well inside this beside the compilers.
@@ -215,8 +238,58 @@ export const DOCS_SITE_ID = 'docs-site'
 /** The check that the committed `THIRD_PARTY_NOTICES.md` matches what upstream's generator writes from the installed manifests. */
 export const NOTICES_ID = 'generated:notices'
 
+/** The check that builds the Delo packages whose output is missing or older than their sources. */
+export const DELO_BUILD_ID = 'build:delo'
+
 /** The check that builds the host's native system addon, which upstream's suites load and git ignores. */
 export const NATIVE_CHECK_ID = 'generate:native'
+
+/**
+ * The runtime files a package's build writes, as its manifest declares them: the JavaScript files under `lib/` that its
+ * `exports` and `files` name, without a pattern or a declaration file. A package with no `build` script declares none.
+ * @param manifest - the `scripts`, `exports` and `files` fields of its `package.json`.
+ * @returns the paths relative to the package, such as `lib/index.js`, in first-seen order.
+ */
+export function declaredBuildOutputs(manifest: { readonly scripts?: Readonly<Record<string, string>> | undefined, readonly exports?: unknown, readonly files?: readonly string[] | undefined }): string[] {
+  if (manifest.scripts?.['build'] === undefined) return []
+  const named: string[] = []
+  const collect = (value: unknown): void => {
+    if (typeof value === 'string') named.push(value)
+    else if (typeof value === 'object' && value !== null) Object.values(value).forEach(collect)
+  }
+  collect(manifest.exports)
+  named.push(...manifest.files ?? [])
+  const outputs = named.map(path => path.replace(/^\.\//, '')).filter(path => path.startsWith('lib/') && /\.[cm]?js$/.test(path) && !path.includes('*'))
+  return [...new Set(outputs)]
+}
+
+/** What {@link staleDeloBuilds} reads from the file system. */
+export interface BuildProbe {
+  /** Whether a repository-relative path exists. */
+  readonly exists: (path: string) => boolean
+  /** The newest modification time under a package's `lib/`, ignoring its declarations; 0 when none. */
+  readonly newestOutput: (dir: string) => number
+  /** The newest modification time under a package's `src/`; 0 when none. */
+  readonly newestSource: (dir: string) => number
+}
+
+/**
+ * The Delo packages that declare a build and whose output is missing or older than their sources, so a lane that
+ * loads the output (the CLI's start spec, the profile's bundle) would fail on the missing build and not on the change.
+ * A package that declares no build or no runtime output is ignored.
+ * @param packages - the fork's packages.
+ * @param probe - the file system facts.
+ * @returns the stale packages, in package order.
+ */
+export function staleDeloBuilds(packages: readonly ForkPackage[], probe: BuildProbe): StaleDeloBuild[] {
+  return packages.flatMap((pkg) => {
+    const outputs = pkg.buildOutputs ?? []
+    if (outputs.length === 0) return []
+    const missing = outputs.find(output => !probe.exists(`${pkg.dir}/${output}`))
+    if (missing !== undefined) return [{ name: pkg.name, reason: `${pkg.dir}/${missing} is missing` }]
+    return probe.newestSource(pkg.dir) > probe.newestOutput(pkg.dir) ? [{ name: pkg.name, reason: `${pkg.dir} is older than its sources` }] : []
+  })
+}
 
 /**
  * Whether a changed path can change the third-party notices: a manifest, the lockfile, the notices file or its generator.
@@ -297,11 +370,14 @@ function draft(tree: ForkTree, host: Host): Draft[] {
   const { workers, cacheDir } = host
   // Lanes that execute upstream's built code wait for a build when it is missing or stale, instead of failing every scenario on it.
   const built = host.staleRuntime.length > 0 ? ['build:artifacts'] : []
+  const staleDelo = host.staleDeloBuilds ?? []
+  // Delo's packages with a build are not part of upstream's `build:artifacts`; a lane that loads their output needs it too.
+  const deloBuilt = staleDelo.length > 0 ? [DELO_BUILD_ID] : []
   // The lanes that run a suite upstream prepares with `build:native-system` (`pnpm run test`, whose script is that build and
   // `vitest run`, and the snapshot gate that needs the whole build). The addon is git-ignored, so a fresh worktree that ran
   // `setup-worktree.ts` has none, and every scenario fails with `Cannot find module …/system.node`; declaring the build as the
   // lane's need pulls it into the plan whatever the tier selects, and rebuilds it on any later run whose tree lost it.
-  const upstreamSuiteNeeds = [NATIVE_CHECK_ID, ...built]
+  const upstreamSuiteNeeds = [NATIVE_CHECK_ID, ...built, ...deloBuilt]
   const checks: Draft[] = [
     { id: 'boundary', group: 'boundary', title: 'Every difference from upstream is fork-owned, a ledger entry or a path rule', cwd: '', command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-fork-boundary.ts'], needs: [], inputs: ['**'], history: true, tiers: ['changed', 'full'], cpus: 1 },
   ]
@@ -341,6 +417,19 @@ function draft(tree: ForkTree, host: Host): Draft[] {
   if (built.length > 0) {
     const [first = ''] = host.staleRuntime
     checks.push({ id: 'build:artifacts', group: 'generate', title: `Upstream's runtime bundles (\`pnpm run build:artifacts\`): ${String(host.staleRuntime.length)} reason(s), such as ${first}`, cwd: '', command: ['pnpm', 'run', '--silent', 'build:artifacts'], needs: [], tiers: ['changed', 'full'], cpus: 4 })
+  }
+  if (staleDelo.length > 0) {
+    checks.push({
+      id: DELO_BUILD_ID,
+      group: 'generate',
+      title: `Delo's built packages (\`pnpm --filter <package> run build\`): ${staleDelo.map(pkg => `${pkg.name} (${pkg.reason})`).join('; ')}`,
+      cwd: '',
+      // One package at a time, after upstream's own build whose declarations they read.
+      command: ['pnpm', '--silent', '--workspace-concurrency=1', ...staleDelo.flatMap(pkg => ['--filter', pkg.name]), 'run', 'build'],
+      needs: built,
+      tiers: ['changed', 'full'],
+      cpus: 2,
+    })
   }
   checks.push(
     // Builds the site from its own install, so its verdict reads the site's sources, Delo's pages and the release version it names.
@@ -387,9 +476,12 @@ function draft(tree: ForkTree, host: Host): Draft[] {
           id: DOCKER_CHECK_ID,
           mergeOnly: true,
           group: 'tests',
-          title: 'Every `*.docker.spec.ts` spec, against the Docker engine of the active context (`delo/vitest.docker.config.ts`)',
+          title: 'Every `*.docker.spec.ts` spec, against the Docker engine of the active context (`delo/vitest.docker.config.ts`); declined while no engine answers',
           cwd: '',
           command: [VITEST, 'run', '--config', DOCKER_CONFIG, '--passWithNoTests'],
+          // The specs run only where the lane says they are required: the opt-in of the image build spec, and the switch that
+          // makes the supervisor spec fail instead of skip when the engine or its image digest is missing.
+          environment: { DELO_DOCKER_SPECS: '1' },
           needs: built,
           inputs: ['delo/**', ...UPSTREAM_CODE],
           env: TEST_ENV,
@@ -400,7 +492,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     {
       id: 'tests:upstream-changed',
       group: 'tests',
-      title: 'The specs of each changed upstream package and, within a spec budget, of its direct dependents',
+      title: 'The specs of each changed upstream package and, within a spec budget or when it is a security-ledger package, of its direct dependents',
       cwd: '',
       command: [VITEST, 'run', '--config', UPSTREAM_CONFIG, `--maxWorkers=${String(Math.min(workers.upstream, UPSTREAM_CHANGED_WORKERS))}`, '--passWithNoTests'],
       // Upstream's setting for lanes on shared hosts: it raises the default test, hook and expect.poll timeouts together, which its process- and Git-heavy specs need at this parallelism.
@@ -527,22 +619,68 @@ export function affectsUpstreamRuntime(path: string): boolean {
 }
 
 /**
+ * What the changed-upstream lane runs for a set of changed paths.
+ */
+export interface UpstreamSpecSelection {
+  /** The package directories, with a trailing slash. */
+  readonly dirs: string[]
+  /** Whether the direct dependents are among them. */
+  readonly dependents: boolean
+  /** True when the dependents are included only because a `security` package changed and the tier is not the agent tier, whatever their spec count. */
+  readonly forced?: true
+  /** The names of the direct dependents of a changed `security` package that the agent tier left for the merge tier; absent when none were. */
+  readonly left?: string[]
+}
+
+/**
  * The upstream package directories whose specs the changed-upstream lane
  * runs: each package a path lies in and, when their specs fit
  * {@link UPSTREAM_CHANGED_SPEC_BUDGET}, every package that depends on one of
- * them directly.
+ * them directly, in any dependency section (a development dependency counts:
+ * a spec of the dependent can load the package). A change to a `security`
+ * package ({@link UpstreamPackage.security}) always runs its direct dependents,
+ * whatever their spec count, except in the agent tier, which leaves the ones
+ * over the budget to the merge tier and names them in `left`.
  * @param upstream - upstream's packages.
  * @param paths - repository-relative changed paths.
- * @returns the directories, with a trailing slash, and whether the direct dependents are among them.
+ * @param tier - the gate tier; absent counts as the merge tier.
+ * @returns the directories and what the budget did with the dependents.
  */
-export function upstreamSpecDirs(upstream: readonly UpstreamPackage[], paths: readonly string[]): { dirs: string[], dependents: boolean } {
+export function upstreamSpecDirs(upstream: readonly UpstreamPackage[], paths: readonly string[], tier?: GateTier): UpstreamSpecSelection {
   const changed = upstream.filter(pkg => paths.some(path => path.startsWith(`${pkg.dir}/`)))
   if (changed.length === 0) return { dirs: [], dependents: false }
   const names = new Set(changed.map(pkg => pkg.name))
   const direct = upstream.filter(pkg => !names.has(pkg.name) && pkg.dependencies.some(dependency => names.has(dependency)))
   const specs = [...changed, ...direct].reduce((sum, pkg) => sum + pkg.specs, 0)
-  const dependents = specs <= UPSTREAM_CHANGED_SPEC_BUDGET
-  return { dirs: (dependents ? [...changed, ...direct] : changed).map(pkg => `${pkg.dir}/`), dependents }
+  const securityNames = new Set(changed.filter(pkg => pkg.security === true).map(pkg => pkg.name))
+  if (specs <= UPSTREAM_CHANGED_SPEC_BUDGET) return { dirs: [...changed, ...direct].map(pkg => `${pkg.dir}/`), dependents: true }
+  if (securityNames.size > 0 && tier !== 'agent') return { dirs: [...changed, ...direct].map(pkg => `${pkg.dir}/`), dependents: true, forced: true }
+  const left = direct.filter(pkg => pkg.dependencies.some(dependency => securityNames.has(dependency))).map(pkg => pkg.name)
+  return { dirs: changed.map(pkg => `${pkg.dir}/`), dependents: false, ...left.length === 0 ? {} : { left } }
+}
+
+/**
+ * The upstream packages a `security` ledger entry lies in, marked on the inventory.
+ * @param upstream - upstream's packages.
+ * @param patches - the ledger's entries, of every class.
+ * @returns the packages, each with `security` set where a `security` entry's path lies under its directory.
+ */
+export function withSecurityPackages(upstream: readonly UpstreamPackage[], patches: readonly { readonly path: string, readonly class: string }[]): UpstreamPackage[] {
+  const securityPaths = patches.filter(patch => patch.class === 'security').map(patch => patch.path)
+  return upstream.map(pkg => securityPaths.some(path => path.startsWith(`${pkg.dir}/`)) ? { ...pkg, security: true } : pkg)
+}
+
+/**
+ * The direct dependents of a changed `security` upstream package that the agent tier leaves to the merge tier because
+ * their specs exceed {@link UPSTREAM_CHANGED_SPEC_BUDGET}, for the plan to name.
+ * @param tree - the fork's packages and upstream's.
+ * @param selection - the selection; only an `agent` tier change leaves any out.
+ * @returns one line naming the dependents, or an empty list.
+ */
+export function dependentsLeftForMerge(tree: ForkTree, selection: Selection): string[] {
+  if (selection.tier !== 'agent' || selection.changed === undefined) return []
+  const { left } = upstreamSpecDirs(tree.upstream, selection.changed.paths.filter(path => !path.startsWith('delo/') && !/\.(?:md|i18n\.yaml)$/.test(path)), 'agent')
+  return left === undefined ? [] : [`specs of the direct dependents of a security-ledger package (${left.join(', ')})`]
 }
 
 /**
@@ -646,8 +784,11 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     } else if (check.id === WEB_CHECK_ID) {
       if (web.reached) pick(check, web.reason)
     } else if (check.id === 'tests:upstream-changed') {
-      const { dirs, dependents } = upstreamSpecDirs(tree.upstream, paths.filter(path => !path.startsWith('delo/') && !/\.(?:md|i18n\.yaml)$/.test(path)))
-      if (dirs.length > 0) pick(check, dependents ? `${String(dirs.length)} upstream package(s): the changed ones and their direct dependents` : `the changed upstream package(s) only; their direct dependents exceed ${String(UPSTREAM_CHANGED_SPEC_BUDGET)} spec files and run in upstream's full suite`)
+      const { dirs, dependents, forced, left } = upstreamSpecDirs(tree.upstream, paths.filter(path => !path.startsWith('delo/') && !/\.(?:md|i18n\.yaml)$/.test(path)), selection.tier)
+      if (dirs.length > 0) pick(check, forced === true ? `${String(dirs.length)} upstream package(s): the changed ones and the direct dependents of a security-ledger package, whatever their spec count`
+        : dependents ? `${String(dirs.length)} upstream package(s): the changed ones and their direct dependents`
+          : left === undefined ? `the changed upstream package(s) only; their direct dependents exceed ${String(UPSTREAM_CHANGED_SPEC_BUDGET)} spec files and run in upstream's full suite`
+            : `the changed upstream package(s) only; the direct dependents of a security-ledger package exceed ${String(UPSTREAM_CHANGED_SPEC_BUDGET)} spec files and run in the merge tier`)
     }
   }
   for (const check of checks) {
@@ -685,6 +826,19 @@ export function leftForMerge(checks: readonly Check[], tree: ForkTree, selection
 }
 
 /**
+ * Decline the Docker lane while no engine answers, so a merge-tier run fails instead of passing on specs that skip.
+ * Probes only when the plan holds the lane.
+ * @param plan - the plan.
+ * @param probe - asks the engine; returns why none answers, or undefined when one does.
+ * @returns the plan, with the lane declined for a host limit when the probe names a reason.
+ */
+export function declineUnansweredDocker(plan: readonly Planned[], probe: () => string | undefined): Planned[] {
+  if (!plan.some(check => check.id === DOCKER_CHECK_ID)) return [...plan]
+  const reason = probe()
+  return plan.map(check => check.id === DOCKER_CHECK_ID && reason !== undefined ? { ...check, declined: reason, declinedByHost: true } : check)
+}
+
+/**
  * The checks the pre-commit tier runs: each one with the tier, over the staged paths the runner appends to its command.
  * With no staged path a check is declined, since the whole tree is not what a commit changes.
  * @param checks - the catalog.
@@ -715,7 +869,7 @@ export function selectPreCommit(checks: readonly Check[], staged: readonly strin
 function narrowed(check: Check, selection: Selection, paths: readonly string[], reachedDirs: readonly string[] | undefined, upstream: readonly UpstreamPackage[], web: WebSelection): Check {
   if (check.id === WEB_CHECK_ID) return web.declined !== undefined ? { ...check, declined: web.declined } : { ...check, command: [...check.command, ...web.specs], scope: web.specs }
   if (check.id === 'tests:upstream-changed') {
-    const { dirs } = upstreamSpecDirs(upstream, paths.filter(path => !path.startsWith('delo/')))
+    const { dirs } = upstreamSpecDirs(upstream, paths.filter(path => !path.startsWith('delo/')), selection.tier)
     // With no directory it would run every upstream spec, which the full gate does not run in this lane.
     return dirs.length === 0 ? { ...check, declined: 'no upstream package changed' } : { ...check, command: [...check.command, ...dirs], scope: dirs }
   }

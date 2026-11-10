@@ -53,13 +53,14 @@ import { z } from 'zod'
 import { contentId, createPassCache, passCacheEnabled, type PassCache } from './checks/cache.ts'
 import { GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
-import { catalog, criticalPath, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type Check, type ForkPackage, type GateTier, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
+import { catalog, criticalPath, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, withSecurityPackages, type Budgets, type Check, type ForkPackage, type GateTier, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { isLightPlan, gatePriority, processGuard, takeTurn } from './checks/run-queue.ts'
-import { failing, logTail, runPlan, type Outcome, type Result } from './checks/run.ts'
+import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { readWebSpecs } from './checks/web.ts'
 import { nodeWarning, pinnedNodeMajor } from './setup-worktree.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
+import { MANIFEST_PATH, parseManifest } from './fork-boundary.ts'
 
 /** Where the runner keeps its state, relative to the repository root. */
 const CACHE_DIR = 'node_modules/.cache/delo-checks'
@@ -80,6 +81,9 @@ const manifestSchema = z.object({
   dependencies: z.record(z.string(), z.string()).optional(),
   devDependencies: z.record(z.string(), z.string()).optional(),
   peerDependencies: z.record(z.string(), z.string()).optional(),
+  scripts: z.record(z.string(), z.string()).optional(),
+  exports: z.unknown().optional(),
+  files: z.array(z.string()).optional(),
 })
 
 /** The shape of `checks/budgets.json`. */
@@ -117,12 +121,14 @@ function readTree(root: string): ForkTree {
       const ownWorkspace = existsSync(join(root, dir, 'pnpm-workspace.yaml'))
       const tests = join(root, dir, 'tests')
       const dockerSpecs = existsSync(tests) && readdirSync(tests, { recursive: true, encoding: 'utf8' }).some(entry => entry.endsWith('.docker.spec.ts'))
-      packages.push({ name: manifest.name, dir, forkDependencies: dependencies.filter(dependency => dependency.startsWith('@delo/')), upstreamDependencies: dependencies.filter(dependency => dependency.startsWith('@deepseek-ai/')), ownWorkspace, dockerSpecs })
+      packages.push({ name: manifest.name, dir, forkDependencies: dependencies.filter(dependency => dependency.startsWith('@delo/')), upstreamDependencies: dependencies.filter(dependency => dependency.startsWith('@deepseek-ai/')), ownWorkspace, dockerSpecs, buildOutputs: declaredBuildOutputs(manifest) })
       if (ownWorkspace) continue
       for (const file of readdirSync(join(root, dir)).filter(entry => /^tsconfig(\..+)?\.json$/.test(entry)).sort()) programs.push({ config: `${dir}/${file}` })
     }
   }
-  const upstream = readUpstream(root)
+  // A package holding a `security` ledger entry runs its direct dependents' specs in the merge tier whatever their number.
+  const patches = existsSync(join(root, MANIFEST_PATH)) ? parseManifest(readFileSync(join(root, MANIFEST_PATH), 'utf8')).patches : []
+  const upstream = withSecurityPackages(readUpstream(root), patches)
   return { packages, programs, upstream, webSpecs: readWebSpecs(root, upstream) }
 }
 
@@ -404,13 +410,14 @@ function writeReport(root: string, results: readonly Result[]): void {
  * @param results - the run's results.
  * @param milliseconds - the run's wall time.
  * @param root - the repository root, for the paths printed.
+ * @param tier - the run's gate tier, which decides whether a declined merge-only check fails it.
  * @returns 0 when no check failed, otherwise 1.
  */
-function summarize(results: readonly Result[], milliseconds: number, root: string): number {
-  const failures = results.filter(result => failing(result.outcome))
-  const declined = results.filter(result => result.outcome === 'declined')
+function summarize(results: readonly Result[], milliseconds: number, root: string, tier: GateTier | undefined): number {
+  const failures = results.filter(result => gateFailure(result, tier))
+  const declined = results.filter(result => result.outcome === 'declined' && !failures.includes(result))
   for (const failure of failures) {
-    console.log(`\n── ${failure.id}: ${failure.detail ?? failure.outcome}${failure.log === undefined ? '' : ` (full log: ${relative(root, failure.log)})`}`)
+    console.log(`\n── ${failure.id}: ${failure.outcome === 'declined' ? 'declined, which fails the merge tier: ' : ''}${failure.detail ?? failure.outcome}${failure.log === undefined ? '' : ` (full log: ${relative(root, failure.log)})`}`)
     if (failure.log !== undefined) console.log(logTail(failure.log, 60))
   }
   const memory = memoryReport()
@@ -513,7 +520,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   if (!Number.isSafeInteger(forkWorkers) || forkWorkers < 1) throw new Error(`--workers must be a positive integer, got ${String(values.workers)}`)
   const tree = readTree(root)
   const budgets: Budgets = BudgetsFile.parse(JSON.parse(readFileSync(new URL('./checks/budgets.json', import.meta.url), 'utf8')))
-  const checks = catalog(tree, { workers: { ...workers, fork: forkWorkers }, cacheDir: CACHE_DIR, budgets, staleRuntime: staleRuntime(root, tree.upstream), gates: GATES })
+  const checks = catalog(tree, { workers: { ...workers, fork: forkWorkers }, cacheDir: CACHE_DIR, budgets, staleRuntime: staleRuntime(root, tree.upstream), staleDeloBuilds: staleDeloBuilds(tree.packages, { exists: path => existsSync(join(root, path)), newestOutput: dir => newestFile(join(root, dir, 'lib'), true), newestSource: dir => newestFile(join(root, dir, 'src'), false) }), gates: GATES })
   // A name that selects or skips nothing would turn a typo into a pass, so the run stops before any check starts.
   const unknown = unknownSelectors(checks, [...list(values.only), ...list(values.skip)])
   if (unknown.length > 0) throw new Error(`--only and --skip name no check: ${unknown.join(', ')}; the catalogue is printed by --list`)
@@ -556,8 +563,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     const fullRun = changed === undefined && targets.length === 0
     gateTier = fullRun || fullGate ? undefined : values.tier ?? (pushInput === undefined ? 'agent' : pushTier(pushInput, env))
     const selection = { targets, ...changed === undefined ? {} : { changed }, ...gateTier === undefined ? {} : { tier: gateTier }, only: list(values.only), skip: list(values.skip) }
-    plan = select(checks, tree, selection)
-    left = leftForMerge(checks, tree, selection)
+    plan = declineUnansweredDocker(select(checks, tree, selection), () => probeDocker((command, args, timeout) => spawnSync(command, [...args], { encoding: 'utf8', timeout })))
+    left = [...leftForMerge(checks, tree, selection), ...dependentsLeftForMerge(tree, selection)]
     mode = changed === undefined ? (targets.length === 0 ? 'full gate' : `targets ${targets.join(', ')}`) : `${String(changed.paths.length)} paths changed since ${changed.base}`
     if (gateTier !== undefined) mode += `, ${gateTier} tier`
     if (values['pre-push']) console.log(pushBase === undefined ? 'delo checks: the full gate for this push' : `delo checks: what changed since ${pushBase.slice(0, 10)} for this push (DELO_FULL_GATE=1 for the full gate)`)
@@ -636,6 +643,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     memoryBytes: memory,
     oomKills: () => memoryReport()?.oomKills,
     bail: values.bail,
+    ...gateTier === undefined ? {} : { tier: gateTier },
     priority: criticalPath(plan, durations),
     ...cache === undefined ? {} : { cache },
     report: event => {
@@ -650,14 +658,14 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   rmSync(scratch, { recursive: true, force: true })
   writeDurations(root, durations, results)
   writeReport(root, results)
-  if (before !== undefined && !results.some(result => failing(result.outcome))) {
+  if (before !== undefined && !results.some(result => gateFailure(result, gateTier))) {
     const written = recordTreePass(treeRecords, { before, after: treeState(root), base: changed === undefined ? null : treeOfRef(root, changed.base), plan, results }, facts, new Date())
     console.log(written.recorded ? `delo checks: this tree's pass is recorded in ${treePassPath(treeRecords, before.tree, process.version)}` : `delo checks: this tree's pass is not recorded: ${written.reason}`)
   }
   const elapsed = (performance.now() - started) / 1000
   const tierSeconds = values['pre-commit'] ? budgets.tiers['pre-commit']?.seconds : undefined
   if (tierSeconds !== undefined && elapsed > tierSeconds) console.log(`  the pre-commit tier took ${formatSeconds(elapsed)}, over its ${String(tierSeconds)} s budget (budgets.json)`)
-  return summarize(results, performance.now() - started, root)
+  return summarize(results, performance.now() - started, root, gateTier)
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {

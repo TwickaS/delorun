@@ -10,8 +10,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
-import { affectsParity, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, type Budgets, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents } from '../src/checks/plan.ts'
-import { runPlan, type Result } from '../src/checks/run.ts'
+import { affectsParity, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
+import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
 const GIB = 1024 ** 3
@@ -347,6 +347,126 @@ describe('the documentation website check', () => {
   })
 })
 
+describe('the Docker lane', () => {
+  const dockerTree: ForkTree = { ...TREE, packages: TREE.packages.map(pkg => pkg.name === '@delo/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
+  const checks = catalog(dockerTree, HOST)
+  const changed = { base: 'v5', paths: ['delo/packages/providers/src/index.ts'] }
+  const planned = (): Planned[] => select(checks, dockerTree, { ...NONE, changed, tier: 'merge' })
+
+  it('requires the Docker specs of the lane through the environment its command runs under', () => {
+    expect(checks.find(check => check.id === 'tests:docker')?.environment).toEqual({ DELO_DOCKER_SPECS: '1' })
+  })
+
+  it('declines the lane for a limit of this host while no engine answers, and probes only when the plan holds it', () => {
+    let asked = 0
+    const down = (): string => { asked += 1; return 'no engine' }
+    const declined = declineUnansweredDocker(planned(), down).find(check => check.id === 'tests:docker')
+    expect(declined).toMatchObject({ declined: 'no engine', declinedByHost: true, mergeOnly: true })
+    expect(asked).toBe(1)
+    const up = declineUnansweredDocker(planned(), () => undefined).find(check => check.id === 'tests:docker')
+    expect(up?.declined).toBeUndefined()
+    asked = 0
+    const without = select(checks, dockerTree, { ...NONE, changed: { base: 'v5', paths: ['delo/apps/cell/src/index.ts'] }, tier: 'merge' })
+    expect(declineUnansweredDocker(without, down)).toEqual(without)
+    expect(asked).toBe(0)
+  })
+
+  it('names why the engine does not answer and how to start one', () => {
+    const answer = (status: number | null, stderr = '', error?: Error): DockerRun => () => ({ status, stderr, error })
+    expect(probeDocker(answer(0))).toBeUndefined()
+    const refused = probeDocker(answer(1, '\nCannot connect to the Docker daemon at unix:///var/run/docker.sock\nIs the daemon running?\n'))
+    expect(refused).toContain('(Cannot connect to the Docker daemon at unix:///var/run/docker.sock)')
+    expect(refused).toContain('start Docker Desktop')
+    expect(refused).toContain('docker info')
+    expect(probeDocker(answer(null, '', new Error('spawn docker ENOENT')))).toContain('(spawn docker ENOENT)')
+    expect(probeDocker(answer(null))).toContain('(no answer within the timeout)')
+    expect(probeDocker(answer(125))).toContain('(exit 125)')
+    const seen: unknown[] = []
+    probeDocker((command, args, timeoutMs) => { seen.push(command, args, timeoutMs); return { status: 0, stderr: '' } })
+    expect(seen).toEqual(['docker', ['info', '--format', '{{.ServerVersion}}'], 30_000])
+  })
+
+  it('fails the merge tier for a merge-only check this host could not run, and no other tier or decline', async () => {
+    const lane = declineUnansweredDocker(planned(), () => 'no engine').find(check => check.id === 'tests:docker')
+    if (lane === undefined) throw new Error('the lane is planned')
+    const { results } = await runDeclined([lane])
+    expect(results).toEqual([expect.objectContaining({ id: 'tests:docker', outcome: 'declined', detail: 'no engine', unrun: true })])
+    expect(gateFailure(results[0]!, 'merge')).toBe(true)
+    expect(gateFailure(results[0]!, undefined)).toBe(true)
+    expect(gateFailure(results[0]!, 'agent')).toBe(false)
+    // An empty selection is not a limit of the host: the web lane declines when no spec maps to the change.
+    const { declinedByHost, ...rest } = lane
+    const web = await runDeclined([{ ...rest, id: 'tests:web-changed', declined: 'no web e2e spec maps to the change' }])
+    expect(web.results[0]).toMatchObject({ outcome: 'declined' })
+    expect(web.results[0]?.unrun).toBeUndefined()
+    expect(gateFailure(web.results[0]!, 'merge')).toBe(false)
+    expect(gateFailure({ id: 'x', outcome: 'failed', seconds: 0 }, 'agent')).toBe(true)
+    expect(gateFailure({ id: 'x', outcome: 'passed', seconds: 0 }, 'merge')).toBe(false)
+  })
+
+  it('fails the merge tier for a merge-only check too large for the run\'s memory, and leaves other checks declined without failing', async () => {
+    const huge = (extra: Partial<Planned>): Planned => ({ id: 'huge', group: 'tests', title: 'huge', cwd: '', command: [process.execPath, '-e', ''], needs: [], cpus: 1, memoryBytes: 5000, tiers: ['changed'], budget: { memoryGiB: 0.001 }, reason: 'test', ...extra })
+    const { results } = await runDeclined([huge({ id: 'merge-only', mergeOnly: true }), huge({ id: 'plain' })])
+    expect(results.map(result => [result.id, result.outcome, result.unrun])).toEqual([['merge-only', 'declined', true], ['plain', 'declined', undefined]])
+  })
+})
+
+/**
+ * Run a plan whose checks are all declined, in the merge tier.
+ * @param plan - the declined checks.
+ * @returns the results.
+ */
+async function runDeclined(plan: Planned[]): Promise<{ results: Result[] }> {
+  const logDir = mkdtempSync(join(tmpdir(), 'delo-checks-spec-'))
+  try {
+    return { results: await runPlan(plan, { root: process.cwd(), env: process.env, logDir, cpus: 1, memoryBytes: 1000, bail: false, tier: 'merge', report: () => {} }) }
+  } finally {
+    rmSync(logDir, { recursive: true, force: true })
+  }
+}
+
+describe('the build of Delo\'s packages', () => {
+  const MANIFEST = {
+    scripts: { build: 'tsc -b tsconfig.json && tsdown' },
+    exports: { '.': { types: './lib/types/index.d.ts', default: './lib/index.js' }, './client': { default: './lib/client.js' }, './wire': './src/wire.ts', './package.json': './package.json' },
+    files: ['lib/index.js', 'lib/client.js', 'lib/types/**/*.d.ts', 'locale/*.json'],
+  }
+
+  it('reads the runtime files under lib that the exports and files name, and none for a package without a build', () => {
+    expect(declaredBuildOutputs(MANIFEST)).toEqual(['lib/index.js', 'lib/client.js'])
+    expect(declaredBuildOutputs({ ...MANIFEST, scripts: { test: 'vitest' } })).toEqual([])
+    expect(declaredBuildOutputs({ exports: './lib/index.js', files: ['./lib/other.mjs'], scripts: { build: 'x' } })).toEqual(['lib/index.js', 'lib/other.mjs'])
+    expect(declaredBuildOutputs({ scripts: { build: 'x' } })).toEqual([])
+  })
+
+  const pkg = (name: string, buildOutputs?: readonly string[]): ForkPackage => ({ name, dir: `delo/packages/${name}`, forkDependencies: [], upstreamDependencies: [], ownWorkspace: false, ...buildOutputs === undefined ? {} : { buildOutputs } })
+  const probe = (facts: { missing?: readonly string[], source?: number, output?: number }): BuildProbe => ({
+    exists: path => !(facts.missing ?? []).includes(path),
+    newestOutput: () => facts.output ?? 10,
+    newestSource: () => facts.source ?? 5,
+  })
+
+  it('marks a package with no output stale, a fresh one not, and a package without a build ignored', () => {
+    const packages = [pkg('trash', ['lib/index.js', 'lib/client.js']), pkg('plain'), pkg('no-output', [])]
+    expect(staleDeloBuilds(packages, probe({ missing: ['delo/packages/trash/lib/client.js'] }))).toEqual([{ name: 'trash', reason: 'delo/packages/trash/lib/client.js is missing' }])
+    expect(staleDeloBuilds(packages, probe({ source: 20, output: 10 }))).toEqual([{ name: 'trash', reason: 'delo/packages/trash is older than its sources' }])
+    expect(staleDeloBuilds(packages, probe({}))).toEqual([])
+  })
+
+  it('adds a build check that runs after upstream\'s build, and every lane that loads built code waits for it', () => {
+    expect(CHECKS.some(check => check.id === 'build:delo')).toBe(false)
+    const stale = [{ name: '@delo/plugin-trash', reason: 'delo/packages/plugin-trash/lib/index.js is missing' }, { name: '@delo/plugin-main-chat', reason: 'older' }]
+    const checks = catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'], staleDeloBuilds: stale })
+    const build = checks.find(check => check.id === 'build:delo')
+    expect(build).toMatchObject({ needs: ['build:artifacts'], tiers: ['changed', 'full'] })
+    expect(build?.command).toEqual(['pnpm', '--silent', '--workspace-concurrency=1', '--filter', '@delo/plugin-trash', '--filter', '@delo/plugin-main-chat', 'run', 'build'])
+    for (const id of ['tests:fork', 'tests:snapshots', 'parity-replay', 'tests:upstream-changed']) expect(checks.find(check => check.id === id)?.needs).toEqual(['generate:native', 'build:artifacts', 'build:delo'])
+    const alone = catalog(TREE, { ...HOST, staleDeloBuilds: stale })
+    expect(alone.find(check => check.id === 'build:delo')?.needs).toEqual([])
+    expect(alone.find(check => check.id === 'tests:fork')?.needs).toEqual(['generate:native', 'build:delo'])
+  })
+})
+
 describe('the changed-upstream lane', () => {
   it('builds upstream\'s runtime first only when its bundles are missing or stale, and the replay waits for that build', () => {
     const plan = select(catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] }), TREE, { ...NONE, changed: { base: 'base', paths: ['packages/core/session/src/index.ts'] } })
@@ -365,6 +485,64 @@ describe('the changed-upstream lane', () => {
     expect(upstreamSpecDirs(wide, ['packages/core/session/src/index.ts'])).toEqual({ dirs: ['packages/core/session/'], dependents: false })
     const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'base', paths: ['packages/core/session/src/index.ts'] } })
     expect(plan.find(check => check.id === 'tests:upstream-changed')?.command.slice(-2)).toEqual(['packages/core/session/', 'packages/core/agent-loop/'])
+  })
+
+  describe('a security-ledger package', () => {
+    const CONNECTION = '@deepseek-ai/dsh-client-connection'
+    const wide: UpstreamPackage[] = [
+      { name: CONNECTION, dir: 'packages/client/connection', dependencies: [], runtimeDependencies: [], specs: 30, security: true },
+      // A development dependency still reaches the dependent: its specs load the package.
+      { name: '@deepseek-ai/dsh-api-gateway', dir: 'packages/api/gateway', dependencies: [CONNECTION], runtimeDependencies: [], specs: 100 },
+      { name: '@deepseek-ai/dsh-web-app', dir: 'packages/bundle/web-app', dependencies: [CONNECTION], runtimeDependencies: [CONNECTION], specs: 60 },
+      { name: '@deepseek-ai/dsh-unrelated', dir: 'packages/core/unrelated', dependencies: [], runtimeDependencies: [], specs: 400 },
+    ]
+    const change = ['packages/client/connection/src/api-request-trust.ts']
+
+    it('runs every direct dependent in the merge tier above the spec budget, development dependents included', () => {
+      for (const tier of [undefined, 'merge'] as const) {
+        expect(upstreamSpecDirs(wide, change, tier)).toEqual({ dirs: ['packages/client/connection/', 'packages/api/gateway/', 'packages/bundle/web-app/'], dependents: true, forced: true })
+      }
+    })
+
+    it('leaves the dependents over the budget to the merge tier in the agent tier, and names them', () => {
+      expect(upstreamSpecDirs(wide, change, 'agent')).toEqual({ dirs: ['packages/client/connection/'], dependents: false, left: ['@deepseek-ai/dsh-api-gateway', '@deepseek-ai/dsh-web-app'] })
+      const tree: ForkTree = { ...TREE, upstream: wide }
+      const selection: Selection = { ...NONE, changed: { base: 'v5', paths: change }, tier: 'agent' }
+      expect(dependentsLeftForMerge(tree, selection)).toEqual(['specs of the direct dependents of a security-ledger package (@deepseek-ai/dsh-api-gateway, @deepseek-ai/dsh-web-app)'])
+      expect(dependentsLeftForMerge(tree, { ...selection, tier: 'merge' })).toEqual([])
+      expect(dependentsLeftForMerge(tree, { ...selection, changed: { base: 'v5', paths: ['packages/client/connection/README.md', 'delo/apps/control/src/index.ts'] } })).toEqual([])
+      expect(dependentsLeftForMerge(tree, { ...NONE, tier: 'agent' })).toEqual([])
+    })
+
+    it('says in the plan why the lane runs the dependents or leaves them', () => {
+      const tree: ForkTree = { ...TREE, upstream: wide }
+      const checks = catalog(tree, HOST)
+      const lane = (tier: 'agent' | 'merge'): Planned | undefined => select(checks, tree, { ...NONE, changed: { base: 'v5', paths: change }, tier }).find(check => check.id === 'tests:upstream-changed')
+      expect(lane('merge')?.scope).toEqual(['packages/client/connection/', 'packages/api/gateway/', 'packages/bundle/web-app/'])
+      expect(lane('merge')?.reason).toBe('3 upstream package(s): the changed ones and the direct dependents of a security-ledger package, whatever their spec count')
+      expect(lane('agent')?.scope).toEqual(['packages/client/connection/'])
+      expect(lane('agent')?.reason).toBe('the changed upstream package(s) only; the direct dependents of a security-ledger package exceed 150 spec files and run in the merge tier')
+    })
+
+    it('keeps the budget for a package without a ledger entry, and runs the dependents that fit in either tier', () => {
+      const plain = wide.map(({ security, ...pkg }) => pkg)
+      for (const tier of ['agent', 'merge'] as const) expect(upstreamSpecDirs(plain, change, tier)).toEqual({ dirs: ['packages/client/connection/'], dependents: false })
+      const small = wide.map(pkg => pkg.name === '@deepseek-ai/dsh-api-gateway' ? { ...pkg, specs: 20 } : pkg.name === '@deepseek-ai/dsh-web-app' ? { ...pkg, specs: 20 } : pkg)
+      expect(upstreamSpecDirs(small, change, 'agent')).toEqual({ dirs: ['packages/client/connection/', 'packages/api/gateway/', 'packages/bundle/web-app/'], dependents: true })
+      const tree: ForkTree = { ...TREE, upstream: plain }
+      const lane = select(catalog(tree, HOST), tree, { ...NONE, changed: { base: 'v5', paths: change }, tier: 'merge' }).find(check => check.id === 'tests:upstream-changed')
+      expect(lane?.reason).toBe('the changed upstream package(s) only; their direct dependents exceed 150 spec files and run in upstream\'s full suite')
+    })
+
+    it('marks the packages that hold a security entry\'s path', () => {
+      const plain = wide.map(({ security, ...pkg }) => pkg)
+      const marked = withSecurityPackages(plain, [
+        { path: 'packages/client/connection/src/api-request-trust.ts', class: 'security' },
+        { path: 'packages/api/gateway-extra/src/a.ts', class: 'security' },
+        { path: 'packages/core/unrelated/src/a.ts', class: 'generic-fix' },
+      ])
+      expect(marked.filter(pkg => pkg.security === true).map(pkg => pkg.name)).toEqual([CONNECTION])
+    })
   })
 
   it('hands the changed-upstream lane pnpm\'s script environment even when no other planned check runs pnpm', () => {
