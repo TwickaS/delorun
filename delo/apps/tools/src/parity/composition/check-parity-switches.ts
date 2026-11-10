@@ -2,7 +2,8 @@
  * The `parity-switches` check: `node_modules/.bin/tsx delo/apps/tools/src/parity/composition/check-parity-switches.ts`.
  * It holds the C16 registry against the switch fields in the tree, the parity
  * overlay and the model-visible contributions of Delo-owned sources and
- * ledgered upstream edits, and prints the switch sweep. It prints one line per
+ * ledgered upstream edits, less the diff hunks a security entry records as not
+ * model-visible, and prints the switch sweep. It prints one line per
  * violation and exits 1; a scenario pending recording is reported as such and
  * fails nothing.
  *
@@ -14,7 +15,7 @@ import { pathToFileURL } from 'node:url'
 import { PARITY_OVERLAY_PATH, PARITY_REGISTRY_VERSION, PARITY_SWITCHES, type ParitySwitchEntry } from '@delo/contract-parity-composition'
 import { readManifest } from '../../check-fork-boundary.ts'
 import { repositoryRoot, runGit } from '../../git.ts'
-import { changedLines, contributionErrors, findContributions, type Contribution } from './contributions.ts'
+import { contributionErrors, diffHunks, findContributions, hunkLines, passNonModelVisibleHunks, type Contribution, type DiffHunk } from './contributions.ts'
 import { LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parsePatchFile, readOverlay, type ParsedOverlay } from './overlay.ts'
 import { presenceErrors, registryErrors, switchMarkers, type RowSetting, type SwitchMarker } from './switches.ts'
 import { sweep, sweepLine, type SweepRow } from './sweep.ts'
@@ -35,10 +36,10 @@ export interface ParityScan {
 export interface ScanOptions {
   readonly registry?: readonly ParitySwitchEntry[]
   /**
-   * The lines a ledgered upstream file changed against the pinned commit, or `all` for a file the commit lacks.
+   * The hunks of a ledgered upstream file's diff against the pinned commit, or `all` for a file the commit lacks.
    * The default asks git.
    */
-  readonly upstreamChanges?: (path: string) => 'all' | ReadonlySet<number>
+  readonly upstreamChanges?: (path: string) => 'all' | readonly DiffHunk[]
 }
 
 const SOURCE = /\.tsx?$/u
@@ -65,12 +66,18 @@ export function deloSources(root: string): string[] {
   return files.filter(path => SOURCE.test(path) && path.split('/').includes('src') && !TEST.test(path)).sort()
 }
 
-function gitChanges(root: string, commit: string): (path: string) => 'all' | ReadonlySet<number> {
+/**
+ * Read the zero-context diff hunks of each ledgered upstream file's working-tree content against a commit.
+ * @param root - the repository root.
+ * @param commit - the pinned upstream commit.
+ * @returns a reader that gives `all` for a path the commit lacks, otherwise the file's hunks.
+ */
+export function gitChanges(root: string, commit: string): (path: string) => 'all' | DiffHunk[] {
   return (path) => {
     if (runGit(root, ['cat-file', '-e', `${commit}:${path}`]).status !== 0) return 'all'
     const diff = runGit(root, ['diff', '--unified=0', '--no-color', '--no-ext-diff', commit, '--', path])
     if (diff.status !== 0) throw new Error(`git diff ${commit} -- ${path} exited ${String(diff.status)}: ${diff.stderr.trim()}`)
-    return changedLines(diff.stdout)
+    return diffHunks(diff.stdout)
   }
 }
 
@@ -133,18 +140,29 @@ export function scanParity(root: string, options: ScanOptions = {}): ParityScan 
   const upstreamChanges = options.upstreamChanges ?? gitChanges(root, manifest.upstream.commit)
   const read = (path: string): string => readFileSync(join(root, path), 'utf8')
   const delo = deloSources(root)
-  const upstream = manifest.patches.map(patch => patch.path)
-    .filter(path => /^(?:packages|apps)\//u.test(path) && SOURCE.test(path) && !TEST.test(path) && existsSync(join(root, path)))
-    .sort()
+  const scanned = manifest.patches
+    .filter(({ path }) => /^(?:packages|apps)\//u.test(path) && SOURCE.test(path) && !TEST.test(path) && existsSync(join(root, path)))
+    .sort((a, b) => a.path < b.path ? -1 : 1)
+  const upstream = scanned.map(patch => patch.path)
   const fieldSources = registry.flatMap(entry => entry.state === 'built' && existsSync(join(root, entry.field.source)) ? [entry.field.source] : [])
   const markers = [...new Set([...delo, ...upstream, ...fieldSources])].flatMap(path => switchMarkers(path, read(path)))
+  const recordErrors = manifest.patches.flatMap(patch => patch.nonModelVisibleHunks !== undefined && !upstream.includes(patch.path)
+    ? [`${patch.path}: records \`nonModelVisibleHunks\`, but parity-switches reads no contributions in this file; remove them`]
+    : [])
   const contributions = [
     ...delo.flatMap(path => findContributions(path, read(path), 'all')),
-    ...upstream.flatMap(path => findContributions(path, read(path), upstreamChanges(path))),
+    ...scanned.flatMap((patch) => {
+      const edited = upstreamChanges(patch.path)
+      const found = findContributions(patch.path, read(patch.path), edited === 'all' ? 'all' : hunkLines(edited))
+      const passed = passNonModelVisibleHunks(patch.path, found, edited, patch.class === 'security' ? patch.nonModelVisibleHunks ?? [] : [])
+      recordErrors.push(...passed.errors)
+      return passed.contributions
+    }),
   ]
   const errors = [
     ...registryErrors(registry, markers, path => existsSync(join(root, path))),
     ...contributionErrors(contributions, registry),
+    ...recordErrors,
   ]
   let overlay: ParsedOverlay | undefined
   try {

@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PARITY_OVERLAY_PATH, PARITY_SWITCHES, type BuiltParitySwitch, type ParitySwitchEntry } from '@delo/contract-parity-composition'
 import { BASE_PATCH_PATH, compositionSettings, report, scanParity, STUDIO_BUNDLE_PATCH_PATH } from '../../src/parity/composition/check-parity-switches.ts'
-import { changedLines, contributionErrors, findContributions } from '../../src/parity/composition/contributions.ts'
+import { contributionErrors, diffHunks, findContributions, passNonModelVisibleHunks, type DiffHunk } from '../../src/parity/composition/contributions.ts'
+import type { NonModelVisibleHunk, Patch } from '../../src/fork-boundary.ts'
+import { patchDigest } from '../../src/ledger-digests.ts'
 import { DEFAULT_PARITY, LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parseOverlay, readOverlay } from '../../src/parity/composition/overlay.ts'
 import { presenceErrors, registryErrors, scenarioName, switchMarkers } from '../../src/parity/composition/switches.ts'
 import { STAGED_ROOT, sweep, sweepLine } from '../../src/parity/composition/sweep.ts'
@@ -336,11 +338,131 @@ describe('the model-visible contributions', () => {
       'function render() { return "c" }',
     ].join('\n')
     expect(findContributions('packages/x/src/a.ts', text, new Set([1, 6]))).toEqual([])
-    expect(findContributions('packages/x/src/a.ts', text, new Set([3]))).toEqual([{ path: 'packages/x/src/a.ts', line: 3, api: 'tools.register, defineTool' }])
+    expect(findContributions('packages/x/src/a.ts', text, new Set([4, 3]))).toEqual([{ path: 'packages/x/src/a.ts', line: 3, api: 'tools.register, defineTool', lines: [3, 4] }])
   })
 
-  it('reads the new-file lines of a zero-context diff, a pure deletion as the line before it', () => {
-    expect([...changedLines('@@ -3,0 +4,2 @@\n+a\n+b\n@@ -10 +12 @@\n-c\n+d\n@@ -20,2 +21,0 @@\n-e\n-f\n')]).toEqual([4, 5, 12, 21])
+  it('reads each hunk of a zero-context diff at the lines it adds, a deletion-only hunk at the line before it', () => {
+    const hunks = diffHunks('diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -3,0 +4,2 @@\n+a\n+b\n@@ -10 +12 @@ fn()\n-c\n+d\n@@ -20,2 +21,0 @@\n-e\n-f\n@@ -1 +0,0 @@\n-g\n')
+    expect(hunks.map(hunk => hunk.lines)).toEqual([[4, 5], [12], [21], [1]])
+    expect(diffHunks('')).toEqual([])
+  })
+
+  it('digests a hunk\'s counts and marked lines, not its start lines or function context', () => {
+    const [hunk] = diffHunks('@@ -10 +12 @@ fn()\n-c\n+d\n\\ No newline at end of file\n')
+    expect(hunk?.sha256).toBe(patchDigest('@@ -1 +1 @@\n-c\n+d\n\\ No newline at end of file\n'))
+    expect(diffHunks('@@ -40,1 +2 @@ other()\n-c\n+d\n\\ No newline at end of file\n')[0]?.sha256).toBe(hunk?.sha256)
+    expect(diffHunks('@@ -10 +12 @@\n-c\n+d\n')[0]?.sha256).not.toBe(hunk?.sha256)
+    expect(diffHunks('@@ -10 +12 @@\n-c\n+ d\n')[0]?.sha256).not.toBe(diffHunks('@@ -10 +12 @@\n-c\n+d\n')[0]?.sha256)
+  })
+})
+
+describe('a security entry\'s non-model-visible hunk records', () => {
+  const FILE = 'packages/x/src/index.ts'
+  /** The fork's file; lines 5 and 8 hold the same text. */
+  const APPLY = [
+    'export function apply(ctx) {',
+    '  const git = confined(runner())',
+    '  ctx.on("tools/pre-execute", (call, next) => {',
+    '    check(call)',
+    '  })',
+    '  ctx.on("tools/result", (result, next) => {',
+    '    render(result)',
+    '  })',
+    '}',
+    'export const unrelated = 1',
+    '',
+  ].join('\n')
+  const GIT = '@@ -2 +2 @@\n-  const git = runner()\n+  const git = confined(runner())\n'
+  const CHECK = '@@ -4 +4 @@\n-    check()\n+    check(call)\n'
+  const UNRELATED = '@@ -10 +10 @@\n-export const unrelated = 0\n+export const unrelated = 1\n'
+  const POST_EXECUTE = '-  ctx.on("tools/post-execute", (call, next) => next())\n'
+  const record = (diff: string): NonModelVisibleHunk => ({ sha256: diffHunks(diff)[0]?.sha256 ?? '', reason: 'reviewed' })
+
+  /**
+   * Scan a fixture whose ledger lists {@link FILE} with the given entry fields, against an empty registry.
+   * @param entry - the entry's class and records.
+   * @param edited - the file's diff, or `all`.
+   * @returns the errors the scan reports for {@link FILE}.
+   */
+  function scan(entry: Partial<Patch>, edited: 'all' | string): string[] {
+    const patch = { path: FILE, class: 'security', reason: 'confines git', sha256: patchDigest(APPLY), ...entry }
+    const ledger = { upstream: { repository: 'r', ref: 't', commit: '0'.repeat(40) }, forkOwned: ['delo/'], patches: [patch], retired: [] }
+    const root = fixtureTree({ [FILE]: APPLY, 'delo/upstream-patches.json': JSON.stringify(ledger) })
+    const hunks: 'all' | DiffHunk[] = edited === 'all' ? 'all' : diffHunks(edited)
+    return scanParity(root, { registry: [], upstreamChanges: () => hunks }).errors.filter(error => error.startsWith(FILE))
+  }
+  const uncovered = (line: number, api = 'on(\'tools/pre-execute\'), on(\'tools/result\')'): string =>
+    `${FILE}:${String(line)}: ${api} is a model-visible contribution that no built C16 switch turns off; register the switch in PARITY_SWITCHES with this file in its sources`
+  const stale = (diff: string): string =>
+    `${FILE}: the non-model-visible hunk record ${record(diff).sha256} matches no hunk of the edit in a statement that registers a model-visible contribution; it is stale, so remove it`
+
+  it('passes a recorded hunk in a registering statement, and counts it again once the hunk changes', () => {
+    expect(scan({}, GIT)).toEqual([uncovered(2)])
+    expect(scan({ nonModelVisibleHunks: [record(GIT)] }, GIT)).toEqual([])
+    expect(scan({ nonModelVisibleHunks: [record(GIT)] }, GIT.replace('confined(runner())', 'confined(other())'))).toEqual([uncovered(2), stale(GIT)])
+  })
+
+  it('keeps passing a recorded hunk that an edit elsewhere shifts', () => {
+    expect(scan({ nonModelVisibleHunks: [record(GIT)] }, GIT.replace('@@ -2 +2 @@', '@@ -7 +2 @@ export function apply(ctx) {'))).toEqual([])
+  })
+
+  it('fails a record that matches no hunk in a registering statement as stale', () => {
+    expect(scan({ nonModelVisibleHunks: [record(UNRELATED)] }, UNRELATED)).toEqual([stale(UNRELATED)])
+  })
+
+  it('still counts an unrecorded hunk in the statement that holds a recorded one', () => {
+    expect(scan({ nonModelVisibleHunks: [record(GIT)] }, GIT + CHECK)).toEqual([uncovered(4)])
+  })
+
+  it('does not pass a deleted registration call unless that exact hunk is recorded', () => {
+    const merged = GIT.replace('@@ -2 +2 @@', '@@ -2,2 +2 @@').replace('+  const', `${POST_EXECUTE}+  const`)
+    expect(scan({ nonModelVisibleHunks: [record(GIT)] }, merged)).toEqual([uncovered(2), stale(GIT)])
+    expect(scan({ nonModelVisibleHunks: [record(merged)] }, merged)).toEqual([])
+    const replaced = GIT.replace('-  const git = runner()\n', POST_EXECUTE)
+    expect(scan({ nonModelVisibleHunks: [record(GIT)] }, replaced)).toEqual([uncovered(2), stale(GIT)])
+    const deletion = `@@ -3 +2,0 @@\n${POST_EXECUTE}`
+    expect(scan({ nonModelVisibleHunks: [record(GIT)] }, GIT + deletion)).toEqual([uncovered(2)])
+    expect(scan({ nonModelVisibleHunks: [record(GIT), record(deletion)] }, GIT + deletion)).toEqual([])
+  })
+
+  it('lets one record pass one hunk, so a record does not cover a second hunk with the same lines', () => {
+    const first = '@@ -5 +5 @@\n-  }\n+  })\n'
+    const second = '@@ -8 +8 @@\n-  }\n+  })\n'
+    expect(record(first)).toEqual(record(second))
+    expect(scan({ nonModelVisibleHunks: [record(first)] }, first + second)).toEqual([
+      uncovered(5),
+      `${FILE}: 1 non-model-visible hunk record(s) ${record(first).sha256} for 2 hunk(s) with that digest, read at line(s) 5, 8; each hunk needs one record, which \`ledger-record.ts --non-model-visible-hunk\` writes`,
+    ])
+    expect(scan({ nonModelVisibleHunks: [record(first), record(second)] }, first + second)).toEqual([])
+  })
+
+  it('passes nothing for a file the pinned commit lacks, whose every contribution counts', () => {
+    expect(scan({ nonModelVisibleHunks: [record(GIT)] }, 'all')).toEqual([
+      uncovered(3, 'on(\'tools/pre-execute\')'),
+      uncovered(6, 'on(\'tools/result\')'),
+      stale(GIT),
+    ])
+  })
+
+  it('passes nothing for the records of an entry that is not of class security', () => {
+    expect(scan({ class: 'generic-fix', feature: 'f', nonModelVisibleHunks: [record(GIT)] }, GIT)).toEqual([uncovered(2)])
+  })
+
+  it('fails records on a ledgered file whose contributions it does not read', () => {
+    const root = fixtureTree({
+      'delo/upstream-patches.json': JSON.stringify({
+        upstream: { repository: 'r', ref: 't', commit: '0'.repeat(40) }, forkOwned: ['delo/'], retired: [],
+        patches: [{ path: 'docs/a.md', class: 'security', reason: 'r', sha256: patchDigest('a'), nonModelVisibleHunks: [record(GIT)] }],
+      }),
+    })
+    expect(scanParity(root, { registry: [], upstreamChanges: () => 'all' }).errors).toContain(
+      'docs/a.md: records `nonModelVisibleHunks`, but parity-switches reads no contributions in this file; remove them',
+    )
+  })
+
+  it('keeps the contributions as they are when the entry records no hunk', () => {
+    const found = findContributions(FILE, APPLY, new Set([2]))
+    expect(passNonModelVisibleHunks(FILE, found, diffHunks(GIT), [])).toEqual({ contributions: found, errors: [] })
   })
 })
 

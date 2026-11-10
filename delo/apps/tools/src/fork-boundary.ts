@@ -26,6 +26,11 @@ export const GENERATED_HEAD_LINES = 5
 
 const commitId = z.string().regex(/^[0-9a-f]{40}$/u, { error: 'must be a full 40-character lowercase commit id' })
 
+const sha256Hex = (subject: string): z.ZodString => z.string().regex(/^[0-9a-f]{64}$/u, { error: `must be the SHA-256 digest of ${subject}, in lowercase hexadecimal` })
+
+/** One line of text that holds a non-space character: the form of a non-model-visible hunk record's `reason`. */
+export const ONE_LINE_REASON = /^[^\r\n]*\S[^\r\n]*$/u
+
 /**
  * Report whether a string is a path inside the repository: not absolute, no `..` segment and no control character.
  * @param path - the candidate path or pattern.
@@ -67,7 +72,11 @@ const manifestSchema = z.strictObject({
     class: z.enum(['delo-feature', 'generic-fix', 'security']),
     feature: z.string().optional(),
     reason: z.string(),
-    sha256: z.string().regex(/^[0-9a-f]{64}$/u, { error: 'must be the SHA-256 digest of the file, in lowercase hexadecimal' }).optional(),
+    sha256: sha256Hex('the file').optional(),
+    nonModelVisibleHunks: z.array(z.strictObject({
+      sha256: sha256Hex('a hunk of the file\'s zero-context diff'),
+      reason: z.string().regex(ONE_LINE_REASON, { error: 'must be one line that holds a non-space character' }),
+    })).min(1).optional(),
   })),
   retired: z.array(z.strictObject({
     path: repoPath,
@@ -82,9 +91,18 @@ export type PatchManifest = z.infer<typeof manifestSchema>
 
 /**
  * One listed patch: an upstream path the fork edits, with its class and reason. A `security` entry records the
- * `sha256` of its file and names no feature; any other entry names the `feature` it serves and records no digest.
+ * `sha256` of its file and names no feature; any other entry names the `feature` it serves and records no digest. Only
+ * a `security` entry may hold `nonModelVisibleHunks`, which `ledger-record.ts --non-model-visible-hunk` writes.
  */
 export type Patch = PatchManifest['patches'][number]
+
+/**
+ * One hunk of a security entry's zero-context diff against the pinned commit that the lead reviewed as not
+ * model-visible although it touches a top-level statement that registers a model-visible contribution: the hunk's
+ * digest, as `DiffHunk.sha256` in `parity/composition/contributions.ts` defines it, and why the model sees no
+ * difference. `parity-switches` passes one hunk with that digest per record.
+ */
+export type NonModelVisibleHunk = NonNullable<Patch['nonModelVisibleHunks']>[number]
 
 /** One path rule: a glob over repository-relative paths, the kind of path it covers, and why the fork changes them. */
 export type PathRule = PatchManifest['rules'][number]
@@ -284,8 +302,9 @@ function isFeatureId(feature: string): boolean {
 }
 
 /**
- * Validate what the ledger's entries and rules say: reasons, duplicates, entries that claim fork-owned paths, the digest
- * and feature each class requires or forbids, placeholder values, and rules that would cover upstream source.
+ * Validate what the ledger's entries and rules say: reasons, duplicates, entries that claim fork-owned paths, the digest,
+ * feature and non-model-visible hunks each class requires or forbids, placeholder values, and rules that would cover
+ * upstream source.
  * @param manifest - the parsed ledger.
  * @param paths - the repository's paths, against which each rule is held so that it covers no source; the built-in
  * source probes are always added.
@@ -307,7 +326,8 @@ export function manifestErrors(manifest: PatchManifest, paths: Iterable<string> 
 }
 
 /**
- * Validate one listed patch: its reason, and the digest and feature its class requires or forbids.
+ * Validate one listed patch: its reason, and the digest, feature and non-model-visible hunks its class requires or
+ * forbids.
  * @param patch - the listed patch.
  * @returns one message per defect.
  */
@@ -322,6 +342,9 @@ function patchErrors(patch: Patch): string[] {
     return errors
   }
   if (patch.sha256 !== undefined) errors.push(`${path}: only a security entry records a sha256; remove it from this ${patch.class} entry`)
+  if (patch.nonModelVisibleHunks !== undefined) {
+    errors.push(`${path}: only a security entry records \`nonModelVisibleHunks\`; remove them from this ${patch.class} entry`)
+  }
   if (patch.feature === undefined) {
     errors.push(`${path}: a ${patch.class} entry names the feature it serves in \`feature\``)
   } else if (patch.feature === TODO_VALUE) {

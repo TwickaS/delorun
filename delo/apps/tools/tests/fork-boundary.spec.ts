@@ -325,6 +325,35 @@ describe('ledger parsing', () => {
     expect(() => parseManifest(JSON.stringify({ ...base, patches: [{ path: 'a.ts', class: 'security', reason: 'edit', sha256: 'ABC' }] })))
       .toThrow(/patches\.0\.sha256/)
   })
+
+  describe('non-model-visible hunk records', () => {
+    const sha256 = patchDigest('a\n')
+    const entry = (nonModelVisibleHunks: unknown): string =>
+      JSON.stringify({ ...base, patches: [{ path: 'a.ts', class: 'security', reason: 'edit', sha256, nonModelVisibleHunks }] })
+
+    it('accepts a security entry\'s records of a hunk digest and a one-line reason', () => {
+      const records = [{ sha256: patchDigest('@@ -1 +1 @@\n-a\n+b\n'), reason: 'renames a local' }]
+      const ledger = parseManifest(entry(records))
+      expect(ledger.patches[0]?.nonModelVisibleHunks).toEqual(records)
+      expect(manifestErrors(ledger)).toEqual([])
+    })
+
+    it('refuses an empty list, a digest that is not a SHA-256, and a reason that is empty, blank or spans lines', () => {
+      expect(() => parseManifest(entry([]))).toThrow(/patches\.0\.nonModelVisibleHunks/)
+      expect(() => parseManifest(entry([{ sha256: 'ABC', reason: 'r' }]))).toThrow(/patches\.0\.nonModelVisibleHunks\.0\.sha256/)
+      for (const reason of ['', '  ', 'first line\nsecond line', 'first line\r\n']) {
+        expect(() => parseManifest(entry([{ sha256, reason }])), JSON.stringify(reason)).toThrow(/nonModelVisibleHunks\.0\.reason: must be one line/)
+      }
+      expect(() => parseManifest(entry([{ sha256, reason: 'r', line: 3 }]))).toThrow(/line/)
+    })
+
+    it('refuses records on an entry that is not of class security', () => {
+      const ledger = parseManifest(JSON.stringify({
+        ...base, patches: [{ path: 'a.ts', class: 'generic-fix', feature: 'f', reason: 'edit', nonModelVisibleHunks: [{ sha256, reason: 'r' }] }],
+      }))
+      expect(manifestErrors(ledger)).toEqual(['a.ts: only a security entry records `nonModelVisibleHunks`; remove them from this generic-fix entry'])
+    })
+  })
 })
 
 describe('upstream source', () => {

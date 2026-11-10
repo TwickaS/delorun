@@ -38,13 +38,14 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 `upstream.commit` pins the upstream commit that the differences are measured against.
 `forkOwned` lists paths and globs that Delo owns outright. `*` matches within one path segment and `**` across segments. An entry covers the paths it matches and every path below a matching directory.
 `rules` lists path rules, each with a `pattern`, a `kind` and a `reason`. A rule covers the differing paths its glob matches that are not upstream source; only an exact `generated` rule may name a source file, and no rule covers a path under `vendor/`. Patterns are matched whole and case-sensitively by `path.posix.matchesGlob`, whose `*` and `**` do not match a segment that starts with `.`.
-`patches` lists each upstream path that needs an entry, with its `class` (`delo-feature`, `generic-fix` or `security`) and a `reason`. A `security` entry records the `sha256` of its file; any other entry names its `feature` and records no digest.
+`patches` lists each upstream path that needs an entry, with its `class` (`delo-feature`, `generic-fix` or `security`) and a `reason`. A `security` entry records the `sha256` of its file; any other entry names its `feature` and records no digest. A `security` entry may also list `nonModelVisibleHunks`, each a `sha256` of one hunk of the file's zero-context diff against the pinned commit and a one-line `reason`: hunks the lead reviewed as not model-visible although they touch a statement that registers a model-visible contribution, which `parity-switches` then passes (see [What `parity-switches` detects](#what-parity-switches-detects)).
 `retired` lists entries whose change upstream absorbed. Each names the upstream commit that absorbed it and the hunks it had.
 
 The checker fails when:
 
 - the ledger does not parse, or a patch lacks its class or reason;
-- a reason or feature is `TODO`, a feature is not a kebab-case id, a security entry records no digest or names a feature, or another entry records a digest or names no feature;
+- a reason or feature is `TODO`, a feature is not a kebab-case id, a security entry records no digest or names a feature, or another entry records a digest or `nonModelVisibleHunks` or names no feature;
+- `nonModelVisibleHunks` is empty, or a record's digest is not a SHA-256 or its reason is not one line that holds a non-space character;
 - a rule is a bare `**`, repeats a pattern, has no reason, or matches a source path in the tree or one of the checker's source probes that it may not cover, naming the pattern and that path;
 - a non-security entry names a path that a rule also covers;
 - the pinned commit is not in the clone or is not an ancestor of HEAD;
@@ -62,9 +63,12 @@ It prints how many differing paths each rule covers, and a warning line for a ru
 
 ```sh
 node_modules/.bin/tsx delo/apps/tools/src/ledger-record.ts [--check]
+node_modules/.bin/tsx delo/apps/tools/src/ledger-record.ts --non-model-visible-hunk <path>:<line> --reason "<one line>"
 ```
 
 It compares the working tree with the pinned commit. It adds a stub entry, class `delo-feature` with `TODO` as its feature and reason, for each differing path that neither an entry nor a rule covers; removes each entry whose path no longer differs; and re-records the digest of each security entry whose file changed, printing the old and new digest. It exits 3 when it re-recorded a security digest, because the changed file needs the lead's re-review, 1 when a security entry holds no file to digest, and 2 for a bad command line or an unusable ledger. `--check` changes nothing and exits 1 when a run would change the ledger. Agents run only `--check`; the lead runs the writing form when merging a lane, fills each stub's class, feature and reason, and writes the path rules.
+
+`--non-model-visible-hunk` makes the same run and also adds one record to the path's security entry's `nonModelVisibleHunks`: the digest of the hunk the working tree's file has at the line, with the reason. The line is one the hunk adds or, for a deletion-only hunk, the line before the deletion. It exits 3 after writing, because the entry's verdict now covers the record and needs the lead's review. It exits 2 and writes nothing when the path has no security entry, the pinned commit lacks the file, no hunk is read at the line, the hunk touches no top-level statement that registers a model-visible contribution, every hunk with that digest already has its record, or the reason is empty, blank or spans lines.
 
 [`src/ledger-merge.ts`](src/ledger-merge.ts) is git's merge driver for the ledger, and [`.gitattributes`](../../../.gitattributes) routes `delo/upstream-patches.json` to it. Each clone configures the driver once, and every worktree of that clone shares the setting:
 
@@ -364,6 +368,9 @@ The check reads the TypeScript sources under `delo/**/src` and every ledgered up
 - a property of an interface named `Config`, or of the interface a `const Config: z<…>` schema is typed by, whose JSDoc names `` C16 switch `<id>` `` has no built registry entry with that field, or its entry is still planned;
 - a built entry's source has no such field, the field's `z.boolean().default(…)` is not the parity value, the entry's parity value equals its default, or a model-visible entry names no source file or no scenario `<profile>/delo-<id>`;
 - a Delo-owned source calls a model-visible registration API, or a ledgered upstream edit changes a line inside a top-level statement that calls one, and no built, model-visible entry lists that file in its sources;
+- a security entry's `nonModelVisibleHunks` hold a digest whose record count differs from the number of the file's diff hunks with that digest that touch such statements, or the entry's file is not one the check reads.
+
+A hunk's digest is the SHA-256 of `@@ -<old count> +<new count> @@` followed by each of its lines as `git diff --unified=0` prints them, `-`, `+` or `\` marker included, every line ending in a newline. It leaves out the start lines and the function context, so an edit elsewhere that shifts a hunk keeps its digest. A hunk touches a statement when a line it adds, or for a deletion-only hunk the line before the deletion, lies in it. A record passes the changed lines of one hunk with its digest, a deletion-only hunk as any other. The hunks with one digest pass only when the records with that digest are exactly as many, so a record covers no second hunk with the same lines, and a record that matches no such hunk is stale. Any further change inside or next to a recorded hunk, such as a deleted registration call that the diff joins to it, changes its digest, so its lines count again. Records on an entry of another class pass nothing.
 - an overlay row names a module with no built switch, sets a key that is no switch of that module or a value that is not the parity value, or sets anything besides `id`, `name` and `config`, or a built switch is neither in the overlay nor in `DEFAULT_PARITY` in `overlay.ts` with its reason;
 - a model-visible built switch has neither a recorded scenario nor a staged one.
 
@@ -375,6 +382,7 @@ The scan matches names, not types or data flow, so it misses:
 
 - text that reaches the model through a helper outside the registering statement, such as a renderer module or a constant at the top of a file, when no changed line falls inside a registering statement;
 - a call through another receiver name, an alias or a dynamic property, and a model-visible event that is not in its list;
+- a recorded non-model-visible hunk whose same removed and added lines move to another place in a registering statement: a record binds a hunk's lines and counts, not its place;
 - whether a listed switch really gates the contribution at its parity value. The replay proves that for the scenarios that reach the contribution, and the switch-on scenario proves the switch's on-path once it is recorded.
 
 It also accepts any contribution in a listed source file, so a second, unswitched contribution added to the same file passes the scan and must fail the replay.

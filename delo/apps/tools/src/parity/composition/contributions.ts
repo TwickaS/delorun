@@ -12,10 +12,23 @@
  * call, which covers a tool's description, parameters, output schema and
  * result rendering written inside its definition or its plugin's `apply`.
  *
+ * A `security` ledger entry may list `nonModelVisibleHunks`: the digest
+ * ({@link DiffHunk}) of each zero-context hunk of the file's diff that touches
+ * such a statement and that the lead reviewed as not model-visible, with a
+ * one-line reason. `ledger-record.ts --non-model-visible-hunk` writes them. A
+ * record passes the changed lines of one hunk with its digest, a deletion-only
+ * hunk as any other. The hunks with one digest pass only when the records with
+ * that digest are exactly as many, so a record covers no second hunk with the
+ * same lines; a record that matches no such hunk fails as stale, and any
+ * further change inside or next to a recorded hunk changes its digest, so its
+ * lines count again.
+ *
  * @module @delo/tools/parity/composition/contributions
  */
 import ts from 'typescript'
 import type { ParitySwitchEntry } from '@delo/contract-parity-composition'
+import type { NonModelVisibleHunk } from '../../fork-boundary.ts'
+import { patchDigest } from '../../ledger-digests.ts'
 
 /** The registration APIs whose calls reach a model request. */
 export const CONTRIBUTION_APIS = {
@@ -37,6 +50,20 @@ export interface Contribution {
   readonly line: number
   /** The API, such as `systemPrompt.context` or `defineTool`. */
   readonly api: string
+  /** In an upstream edit, the statement's changed lines, ascending; absent in a Delo-owned or a new file. */
+  readonly lines?: readonly number[]
+}
+
+/** One hunk of a ledgered upstream file's zero-context diff against the pinned commit. */
+export interface DiffHunk {
+  /** The 1-based new-file lines the hunk is read at: the lines it adds, or for a deletion-only hunk the line before it. */
+  readonly lines: readonly number[]
+  /**
+   * The SHA-256 of `@@ -<old count> +<new count> @@` followed by each of the hunk's lines as git prints them, `-`, `+`
+   * or `\` marker included, every line ending in `\n`. The start lines and the function context are left out, so an
+   * edit elsewhere that shifts the hunk keeps its digest.
+   */
+  readonly sha256: string
 }
 
 function receiverName(expression: ts.Expression): string | undefined {
@@ -91,27 +118,102 @@ export function findContributions(path: string, text: string, changed: 'all' | R
     }
     const first = lineOf(statement.getStart(source))
     const last = lineOf(statement.getEnd())
-    const line = [...changed].filter(candidate => candidate >= first && candidate <= last).sort((a, b) => a - b)[0]
-    if (line !== undefined) found.push({ path, line, api: [...new Set(calls.map(call => call.api))].join(', ') })
+    const lines = [...changed].filter(candidate => candidate >= first && candidate <= last).sort((a, b) => a - b)
+    const [line] = lines
+    if (line !== undefined) found.push({ path, line, api: [...new Set(calls.map(call => call.api))].join(', '), lines })
   }
   return found
 }
 
 /**
- * The new-file lines a zero-context diff changes. A pure deletion counts as the line before it, so a removal inside a
- * statement still counts for that statement.
+ * Read the hunks of a zero-context diff of one file.
  * @param diff - `git diff --unified=0` output for one file.
- * @returns the 1-based lines.
+ * @returns the hunks, in diff order.
  */
-export function changedLines(diff: string): Set<number> {
-  const lines = new Set<number>()
-  for (const match of diff.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gmu)) {
-    const start = Number(match[1])
-    const count = match[2] === undefined ? 1 : Number(match[2])
-    if (count === 0) lines.add(Math.max(start, 1))
-    for (let line = start; line < start + count; line += 1) lines.add(line)
+export function diffHunks(diff: string): DiffHunk[] {
+  const hunks: DiffHunk[] = []
+  let open: { lines: number[]; text: string[] } | undefined
+  const close = (): void => {
+    if (open !== undefined) hunks.push({ lines: open.lines, sha256: patchDigest(open.text.map(line => `${line}\n`).join('')) })
   }
-  return lines
+  for (const line of diff.split('\n')) {
+    const header = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u.exec(line)
+    if (header !== null) {
+      close()
+      const start = Number(header[2])
+      const count = header[3] === undefined ? 1 : Number(header[3])
+      const lines = count === 0 ? [Math.max(start, 1)] : Array.from({ length: count }, (_, index) => start + index)
+      open = { lines, text: [`@@ -${header[1] ?? '1'} +${String(count)} @@`] }
+    } else if (open !== undefined && /^[-+\\]/u.test(line)) {
+      open.text.push(line)
+    }
+  }
+  close()
+  return hunks
+}
+
+/**
+ * The changed lines of a file's hunks.
+ * @param hunks - the file's hunks.
+ * @returns every line a hunk is read at.
+ */
+export function hunkLines(hunks: readonly DiffHunk[]): Set<number> {
+  return new Set(hunks.flatMap(hunk => hunk.lines))
+}
+
+/**
+ * The hunks a non-model-visible hunk record may pass: those read at a changed line of a statement that registers a
+ * contribution.
+ * @param contributions - one file's contributions, as {@link findContributions} gives them for an upstream edit.
+ * @param hunks - the file's hunks.
+ * @returns the hunks by digest, each list in diff order.
+ */
+export function recordableHunks(contributions: readonly Contribution[], hunks: readonly DiffHunk[]): Map<string, DiffHunk[]> {
+  const statementLines = new Set(contributions.flatMap(contribution => contribution.lines ?? []))
+  const byDigest = new Map<string, DiffHunk[]>()
+  for (const hunk of hunks.filter(candidate => candidate.lines.some(line => statementLines.has(line)))) {
+    byDigest.set(hunk.sha256, [...byDigest.get(hunk.sha256) ?? [], hunk])
+  }
+  return byDigest
+}
+
+/**
+ * Pass the changed lines of one ledgered upstream file that its security entry's non-model-visible hunk records cover.
+ * The hunks with one digest pass when the records with that digest are exactly as many; otherwise none of them pass.
+ * @param path - the repository path.
+ * @param contributions - the file's contributions, as {@link findContributions} gives them.
+ * @param edited - the file's hunks, or `all` for a file the pinned commit lacks, whose records pass nothing.
+ * @param records - the entry's records.
+ * @returns the contributions that keep a changed line of an unpassed hunk, each at its first such line, and one message
+ * per digest whose record count differs from the number of recordable hunks with that digest.
+ */
+export function passNonModelVisibleHunks(
+  path: string, contributions: readonly Contribution[], edited: 'all' | readonly DiffHunk[], records: readonly NonModelVisibleHunk[],
+): { readonly contributions: Contribution[]; readonly errors: string[] } {
+  if (records.length === 0) return { contributions: [...contributions], errors: [] }
+  const recordable = recordableHunks(contributions, edited === 'all' ? [] : edited)
+  const counts = new Map<string, number>()
+  for (const record of records) counts.set(record.sha256, (counts.get(record.sha256) ?? 0) + 1)
+  const errors: string[] = []
+  for (const [digest, count] of counts) {
+    const hunks = recordable.get(digest) ?? []
+    if (hunks.length === count) {
+      recordable.delete(digest)
+    } else if (hunks.length === 0) {
+      errors.push(`${path}: the non-model-visible hunk record ${digest} matches no hunk of the edit in a statement that registers a model-visible contribution; it is stale, so remove it`)
+    } else {
+      errors.push(`${path}: ${String(count)} non-model-visible hunk record(s) ${digest} for ${String(hunks.length)} hunk(s) with that digest, read at line(s) ${hunks.map(hunk => hunk.lines[0]).join(', ')}; each hunk needs one record, which \`ledger-record.ts --non-model-visible-hunk\` writes`)
+    }
+  }
+  const open = new Set([...recordable.values()].flat().flatMap(hunk => hunk.lines))
+  return {
+    contributions: contributions.flatMap((contribution) => {
+      if (contribution.lines === undefined) return [contribution]
+      const [line] = contribution.lines.filter(candidate => open.has(candidate))
+      return line === undefined ? [] : [{ ...contribution, line }]
+    }),
+    errors,
+  }
 }
 
 /**

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type TestContext } fro
 import { manifestErrors, MANIFEST_PATH, parseManifest, type PatchManifest, type PathRule } from '../src/fork-boundary.ts'
 import { patchDigest } from '../src/ledger-digests.ts'
 import { main, planRecord, SECURITY_CHANGED_STATUS } from '../src/ledger-record.ts'
+import { diffHunks } from '../src/parity/composition/contributions.ts'
 import { scratchRepo, type Scratch } from './gates/support.ts'
 
 const UPSTREAM = { repository: 'https://example.invalid/upstream.git', ref: 'v1' }
@@ -30,11 +31,12 @@ afterEach(() => {
  * @param test - the running test.
  * @param fork - the fork's edits.
  * @param ledger - the ledger's fields beside the pin.
+ * @param upstream - upstream files that replace or join the base's.
  * @returns the repository.
  */
-function forkRepo(test: TestContext, fork: Record<string, string>, ledger: Partial<Omit<PatchManifest, 'upstream'>>): Scratch {
+function forkRepo(test: TestContext, fork: Record<string, string>, ledger: Partial<Omit<PatchManifest, 'upstream'>>, upstream: Record<string, string> = {}): Scratch {
   const repo = scratchRepo(test)
-  const base = repo.commit({ [SOURCE]: 'a\n', [GATE]: 'gate\n', 'docs/a.md': 'a\n' })
+  const base = repo.commit({ [SOURCE]: 'a\n', [GATE]: 'gate\n', 'docs/a.md': 'a\n', ...upstream })
   const manifest = { upstream: { ...UPSTREAM, commit: base }, forkOwned: ['delo/'], rules: [], patches: [], retired: [], ...ledger }
   repo.commit({ ...fork, [MANIFEST_PATH]: `${JSON.stringify(manifest, null, 2)}\n` })
   return repo
@@ -123,11 +125,135 @@ describe('the ledger writer', () => {
 
   it('exits 2 for an unknown option and for a repository without a ledger', (test) => {
     expect(main(['--write'], process.cwd())).toBe(2)
-    expect(printed).toContain('usage: ledger-record.ts [--check]')
+    expect(printed).toContain('usage: ledger-record.ts [--check] | --non-model-visible-hunk <path>:<line> --reason "<one line>"')
     const repo = scratchRepo(test)
     repo.commit({ 'a.md': 'a\n' })
     expect(main([], repo.root)).toBe(2)
     expect(printed.at(-1)).toMatch(/^ledger-record: Error: ENOENT/u)
+  })
+})
+
+describe('recording a non-model-visible hunk', () => {
+  /** Upstream's gate. */
+  const UPSTREAM_GATE = [
+    'export function apply(ctx) {',
+    '  const git = runner()',
+    '  ctx.on("tools/pre-execute", (call, next) => next())',
+    '  ctx.on("tools/result", (result, next) => next())',
+    '}',
+    'export const unrelated = 1',
+    '',
+  ].join('\n')
+  /**
+   * The fork's gate: hunk `-2 +2` changes line 2, hunk `-4 +3,0` deletes upstream's line 4 after line 3, and hunk
+   * `-6 +5` changes line 5, outside the registering statement.
+   */
+  const FORK_GATE = [
+    'export function apply(ctx) {',
+    '  const git = confined(runner())',
+    '  ctx.on("tools/pre-execute", (call, next) => next())',
+    '}',
+    'export const unrelated = 2',
+    '',
+  ].join('\n')
+  const GIT_HUNK = diffHunks('@@ -2 +2 @@\n-  const git = runner()\n+  const git = confined(runner())\n')[0]?.sha256
+  const DELETION_HUNK = diffHunks('@@ -4 +3,0 @@\n-  ctx.on("tools/result", (result, next) => next())\n')[0]?.sha256
+  const NEW_GATE = 'packages/sandbox/sandbox/src/new-gate.ts'
+  const reviewed = { path: GATE, class: 'security' as const, reason: 'moves a gate', sha256: patchDigest(FORK_GATE) }
+  const REASON = 'binds git to the Session sandbox; no tool text changes'
+
+  /**
+   * A repository whose fork edits upstream's gate into {@link FORK_GATE}.
+   * @param test - the running test.
+   * @param ledger - the ledger's fields beside the pin.
+   * @param fork - further fork edits.
+   * @returns the repository.
+   */
+  const gateRepo = (test: TestContext, ledger: Partial<Omit<PatchManifest, 'upstream'>>, fork: Record<string, string> = {}): Scratch =>
+    forkRepo(test, { [GATE]: FORK_GATE, ...fork }, ledger, { [GATE]: UPSTREAM_GATE })
+
+  /**
+   * Run the recorder for one hunk.
+   * @param repo - the repository.
+   * @param target - `<path>:<line>`.
+   * @param reason - the record's reason.
+   * @returns the exit status.
+   */
+  const record = (repo: Scratch, target: string, reason = REASON): number => main(['--non-model-visible-hunk', target, '--reason', reason], repo.root)
+
+  it('records the digest of the hunk a line selects and exits with the security re-review status', (test) => {
+    const feature = { path: SOURCE, class: 'delo-feature' as const, feature: 'f', reason: 'r' }
+    const repo = gateRepo(test, { patches: [feature, reviewed] }, { [SOURCE]: 'b\n' })
+    expect(record(repo, `${GATE}:2`)).toBe(SECURITY_CHANGED_STATUS)
+    expect(record(repo, `${GATE}:3`)).toBe(SECURITY_CHANGED_STATUS)
+    expect(ledgerOf(repo).patches).toEqual([feature, { ...reviewed, nonModelVisibleHunks: [{ sha256: GIT_HUNK, reason: REASON }, { sha256: DELETION_HUNK, reason: REASON }] }])
+    expect(printed).toContain(`ledger-record: ${GATE}:2: recorded the non-model-visible hunk sha256 ${String(GIT_HUNK)}; the lead re-reviews the entry`)
+    expect(printed).toContain(`ledger-record: updated ${MANIFEST_PATH}`)
+    expect(main(['--check'], repo.root)).toBe(0)
+  })
+
+  it('re-records a stale digest of the entry in the same write, so the lead\'s verdict covers the record', (test) => {
+    const repo = gateRepo(test, { patches: [{ ...reviewed, sha256: patchDigest(UPSTREAM_GATE) }] })
+    expect(record(repo, `${GATE}:2`)).toBe(SECURITY_CHANGED_STATUS)
+    expect(ledgerOf(repo).patches[0]?.sha256).toBe(patchDigest(FORK_GATE))
+    expect(printed).toContain(`ledger-record: ${GATE}: security file changed; re-recorded sha256 ${patchDigest(UPSTREAM_GATE)} → ${patchDigest(FORK_GATE)}; the lead re-reviews it`)
+  })
+
+  it('refuses a path whose entry is not of class security, and a path with no entry', (test) => {
+    const repo = gateRepo(test, { patches: [{ path: SOURCE, class: 'delo-feature', feature: 'f', reason: 'r' }] }, { [SOURCE]: FORK_GATE })
+    const before = readFileSync(join(repo.root, MANIFEST_PATH), 'utf8')
+    expect(record(repo, `${SOURCE}:2`)).toBe(2)
+    expect(printed).toContain(`ledger-record: ${SOURCE}:2: ${SOURCE} has no security entry; only a security entry records non-model-visible hunks`)
+    expect(record(repo, `${GATE}:2`)).toBe(2)
+    expect(printed).toContain(`ledger-record: ${GATE}:2: ${GATE} has no security entry; only a security entry records non-model-visible hunks`)
+    expect(readFileSync(join(repo.root, MANIFEST_PATH), 'utf8')).toBe(before)
+  })
+
+  it('refuses a line no hunk is read at, and a file the pinned commit lacks', (test) => {
+    const repo = gateRepo(test, { patches: [reviewed, { path: NEW_GATE, class: 'security', reason: 'adds a gate', sha256: patchDigest(FORK_GATE) }] }, { [NEW_GATE]: FORK_GATE })
+    for (const line of [1, 40]) {
+      expect(record(repo, `${GATE}:${String(line)}`)).toBe(2)
+      expect(printed).toContain(`ledger-record: ${GATE}:${String(line)}: no hunk of the edit against the pinned commit adds this line or deletes after it`)
+    }
+    expect(record(repo, `${NEW_GATE}:2`)).toBe(2)
+    expect(printed).toContain(`ledger-record: ${NEW_GATE}:2: the pinned commit lacks ${NEW_GATE}, so every contribution in it counts and no hunk can be recorded`)
+    expect(ledgerOf(repo).patches.some(patch => patch.nonModelVisibleHunks !== undefined)).toBe(false)
+  })
+
+  it('refuses a hunk that touches no statement that registers a model-visible contribution', (test) => {
+    const repo = gateRepo(test, { patches: [reviewed] })
+    expect(record(repo, `${GATE}:5`)).toBe(2)
+    expect(printed).toContain(`ledger-record: ${GATE}:5: the hunk touches no top-level statement that registers a model-visible contribution, so parity-switches does not count it`)
+  })
+
+  it('refuses a second record of a hunk whose digest has a record for every hunk with it', (test) => {
+    const repo = gateRepo(test, { patches: [reviewed] })
+    expect(record(repo, `${GATE}:2`)).toBe(SECURITY_CHANGED_STATUS)
+    expect(record(repo, `${GATE}:2`)).toBe(2)
+    expect(printed).toContain(`ledger-record: ${GATE}:2: every hunk with this digest (read at line 2) already has its record`)
+    expect(ledgerOf(repo).patches[0]?.nonModelVisibleHunks).toHaveLength(1)
+  })
+
+  it('refuses an empty, blank or multi-line reason', (test) => {
+    const repo = gateRepo(test, { patches: [reviewed] })
+    for (const reason of ['', '   ', 'binds git\nto the sandbox']) {
+      expect(record(repo, `${GATE}:2`, reason), JSON.stringify(reason)).toBe(2)
+      expect(printed).toContain(`ledger-record: ${GATE}:2: the reason must be one line that holds a non-space character`)
+    }
+    expect(ledgerOf(repo).patches).toEqual([reviewed])
+  })
+
+  it('exits 2 for a malformed line, a line without a reason, a reason without a line, and a line with --check', () => {
+    for (const argv of [
+      ['--non-model-visible-hunk', GATE, '--reason', 'r'],
+      ['--non-model-visible-hunk', `${GATE}:0`, '--reason', 'r'],
+      ['--non-model-visible-hunk', `${GATE}:3`],
+      ['--reason', 'r'],
+      ['--check', '--non-model-visible-hunk', `${GATE}:3`, '--reason', 'r'],
+    ]) {
+      expect(main(argv, process.cwd()), argv.join(' ')).toBe(2)
+    }
+    expect(printed.filter(line => line.startsWith('usage: '))).toHaveLength(5)
   })
 })
 
