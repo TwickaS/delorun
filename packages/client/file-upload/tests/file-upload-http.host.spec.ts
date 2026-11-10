@@ -1,8 +1,9 @@
 import { runInNewContext } from 'node:vm'
-import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import type { RemoteAccessDecision } from '@deepseek-ai/dsh-api-remote-access'
+import { RemoteError, type PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
-import { handleFileUploadHttp } from '../src/http-route.ts'
+import { admitsUploadPeer, handleFileUploadHttp } from '../src/http-route.ts'
 import type { FileUploads } from '../src/index.ts'
 
 function request(input: {
@@ -42,6 +43,26 @@ function uploads(result: unknown): FileUploads & {
     uploadedChunks: Uint8Array[]
   }
 }
+
+describe('background file upload Peer admission', () => {
+  const peer = { principal: { kind: 'owner' } } as PeerScope
+
+  it('asks remote access for the upload Remote method on the Session the query names', () => {
+    const decide = vi.fn((): RemoteAccessDecision => ({ kind: 'allow' }))
+    expect(admitsUploadPeer({ decide }, request({ sessionId: 's1' }), peer)).toBe(true)
+    expect(decide).toHaveBeenCalledWith({ principal: peer.principal, action: 'fileUploads/upload', resources: [{ kind: 'session', id: 's1' }] })
+    decide.mockReturnValue({ kind: 'deny', reason: 'no-allow' })
+    expect(admitsUploadPeer({ decide }, request({ sessionId: 's2' }), peer)).toBe(false)
+  })
+
+  it('refuses a request naming no Session, and every request without remote access', () => {
+    const decide = vi.fn((): RemoteAccessDecision => ({ kind: 'allow' }))
+    expect(admitsUploadPeer({ decide }, request(), peer)).toBe(false)
+    expect(admitsUploadPeer({ decide }, request({ sessionId: '' }), peer)).toBe(false)
+    expect(decide).not.toHaveBeenCalled()
+    expect(admitsUploadPeer(undefined, request({ sessionId: 's1' }), peer)).toBe(false)
+  })
+})
 
 describe('background file upload Fetch route', () => {
   it('accepts one authenticated streaming POST request', async () => {

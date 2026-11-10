@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type { CommandFileReceiptResolver } from '@deepseek-ai/dsh-commands'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { Remote, RemoteError, remoteErrorOf, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { handleFileUploadHttp } from './http-route.ts'
+import { admitsUploadPeer, handleFileUploadHttp } from './http-route.ts'
 import { FILE_UPLOAD_PATH } from './protocol.ts'
 import type {
   EncodedFileUploadRequest, FileUploadReceiptId, FileUploadValue, ImageUploadValue, StagedAttachment,
@@ -83,6 +83,7 @@ export class FileUploads extends TypertRemoteService {
         requestBody: 'streaming',
         // Raw bytes, not JSON: the exact-route gate refuses every other declared type.
         requestMediaType: 'application/octet-stream',
+        admitPeer: (request, peer) => admitsUploadPeer(ctx.get('remoteAccess'), request, peer),
         fetch: request => handleFileUploadHttp(this, request),
       }),
       'file-upload: streaming route',

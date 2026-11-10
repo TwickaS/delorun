@@ -204,7 +204,7 @@
       "path": "packages/api/gateway/tests/gateway.client.spec.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): the gateway client fixture's ConnectionHandle mocks carry `remoteMedia: 'load'`, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
-      "sha256": "09f27152ac300c07e91aee6fbd40c4e68bd9b58767f2bd7d18c7e30c651c5fac"
+      "sha256": "e7b2e95339791c0bbf2afc57edfdbc5be96393f31eaa3b4a16932fca70a0c6ef"
     },
     {
       "path": "packages/api/job-controller/tests/client-apply.client.spec.ts",
@@ -1674,7 +1674,7 @@
       "path": "packages/client/connection/tests/fetch-routes.host.spec.ts",
       "class": "security",
       "reason": "Spec of the exact-route media-type gate: a body arriving with any media type but the route's own is refused, which the streaming upload route relies on. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "f05b33975564667c318423ca02418c7c7a1d51b53e5e07b1b26441f13aa3662d"
+      "sha256": "7a0a79afc2518a3e2de3a35749493f5a0ca37a6b4aa5618fe405599715274aec"
     },
     {
       "path": "packages/client/connection/tests/node-half.host.spec.ts",
@@ -1686,7 +1686,7 @@
       "path": "packages/client/file-upload/src/index.ts",
       "class": "security",
       "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "310def93d68cd7324dcc5529a561688ac279701ed2eb3f89380329ca05e12774"
+      "sha256": "113fd54d90ec0f66410f47b278e3502f541285ecf2ac82f810404b4847c970eb"
     },
     {
       "path": "packages/client/hmr/package.json",
@@ -1926,13 +1926,31 @@
       "path": "packages/api/gateway/src/types.ts",
       "class": "security",
       "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's.",
-      "sha256": "b485d505ed4f4d3197db8a7a2acf7c08689f7671bf8411db8c4e1d00f898e9d7"
+      "sha256": "415f39cf6b3fd2b11b94361205462715be21a60ca359b0ae5f4bd5bf437adbf8"
     },
     {
       "path": "packages/interaction/user-approval/src/types.ts",
       "class": "security",
       "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's.",
       "sha256": "f3623d79dcffe879835bf5765240c8c43f32f29526706c8626d85c0f2f73214b"
+    },
+    {
+      "path": "packages/api/gateway/src/client/index.ts",
+      "class": "security",
+      "reason": "Declares the client event `remote/answer-refused`, which the Client emits when the Host refuses a forwarded prompt's answer with LOOPBACK_REQUIRED; nothing emits it in upstream's own compositions.",
+      "sha256": "0fddfa25da7f3c6edd39caedfebccf9fa01adda19bb53c7629862bffca44782b"
+    },
+    {
+      "path": "packages/api/gateway/src/client/remote-events.ts",
+      "class": "security",
+      "reason": "When the Host refuses a forwarded prompt's answer with LOOPBACK_REQUIRED, the Client emits `remote/answer-refused` and keeps the event stream instead of failing the generation; every other refusal keeps upstream's behaviour.",
+      "sha256": "9664d32b92399589ec764650943977dc084aaa2cff1d6891bfc65bd91c6bdabb"
+    },
+    {
+      "path": "packages/client/file-upload/src/http-route.ts",
+      "class": "security",
+      "reason": "The raw upload route admits a non-owner Peer only when remote access allows `fileUploads/upload` on the Session the query names; without remote access or a Session it refuses, and owner behaviour is upstream's.",
+      "sha256": "6e1cbdd6574e45876d195bcb2e20e9584a91dbfb2a41f3eeb5df82587a35beaf"
     }
   ],
   "retired": []

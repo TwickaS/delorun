@@ -15,6 +15,8 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import FileUploads from '@deepseek-ai/dsh-client-file-upload'
+import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
+import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import type { FileUploadReceiptId } from '@deepseek-ai/dsh-client-file-upload/types'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { ApiSessionAgentController } from '../src/agent.ts'
@@ -55,6 +57,7 @@ async function uploadHarness(origin?: 'subagent', imageLimits: ImageAttachmentLi
   resolveModelInfo: ReturnType<typeof vi.fn>
   disposeAgent: () => Promise<void>
   uploadRoute: (request: Request) => Promise<Response>
+  admitPeer: NonNullable<ConnectionFetchRoute['admitPeer']>
 }> {
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
@@ -108,10 +111,12 @@ async function uploadHarness(origin?: 'subagent', imageLimits: ImageAttachmentLi
     AttachmentStore.prototype,
   ) as never)
   let uploadRoute: ((request: Request) => Promise<Response>) | undefined
+  let admitPeer: ConnectionFetchRoute['admitPeer']
   ctx.provide('connection', {
     fetch: {
-      register: (route: { readonly fetch: (request: Request) => Promise<Response> }) => {
+      register: (route: ConnectionFetchRoute) => {
         uploadRoute = route.fetch
+        admitPeer = route.admitPeer
         return () => {}
       },
     },
@@ -130,7 +135,7 @@ async function uploadHarness(origin?: 'subagent', imageLimits: ImageAttachmentLi
   const agents = new ApiSessionAgentController(ctx)
   vi.spyOn(agents, 'resolveAgent').mockResolvedValue({ agent })
   const uploads = new FileUploads(ctx)
-  if (uploadRoute === undefined) throw new Error('file upload route was not registered')
+  if (uploadRoute === undefined || admitPeer === undefined) throw new Error('file upload route was not registered')
   return {
     ctx,
     controller: new SessionCommandController(ctx, agents, '/workspace'),
@@ -143,6 +148,7 @@ async function uploadHarness(origin?: 'subagent', imageLimits: ImageAttachmentLi
     resolveModelInfo,
     disposeAgent,
     uploadRoute,
+    admitPeer,
   }
 }
 
@@ -163,6 +169,18 @@ describe('Session file uploads', () => {
     const { uploadRoute } = await uploadHarness()
     await expect(uploadRoute(new Request('http://host/upload')))
       .resolves.toMatchObject({ status: 405 })
+  })
+
+  it('admits a non-owner Peer to the HTTP route only through the Host\'s remote access', async () => {
+    const { ctx, admitPeer } = await uploadHarness()
+    const peer = { principal: { kind: 'owner' } } as PeerScope
+    const upload = new Request(`http://host/upload?sessionId=${SESSION}`, { method: 'POST' })
+    // Without remote access no decision can admit a Peer.
+    expect(admitPeer(upload, peer)).toBe(false)
+    const decide = vi.fn(() => ({ kind: 'allow' as const }))
+    ctx.provide('remoteAccess', { decide } as never)
+    expect(admitPeer(upload, peer)).toBe(true)
+    expect(decide).toHaveBeenCalledWith({ principal: peer.principal, action: 'fileUploads/upload', resources: [{ kind: 'session', id: SESSION }] })
   })
 
   it('stages one verbatim upload and preserves its order with an admitted image', async () => {

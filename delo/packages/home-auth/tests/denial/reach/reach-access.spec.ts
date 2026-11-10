@@ -6,9 +6,11 @@
  *
  * - Each family C14 reserves for the home's own computer is refused, naming the action: plugin management, profile
  *   history undo and restore, a settings write in every settings namespace, credentials, terminals, file reads by path,
- *   slash commands, schedule changes, dynamic plugin code, workspace management, account and the directory picker.
- * - Reading the chat list and the redacted settings, starting a chat, sending a message and stopping the run succeed,
- *   and the device's event stream carries the chat events and no plugin management event.
+ *   slash commands, schedule changes, dynamic plugin code, workspace management, archiving and reordering chats,
+ *   account and the directory picker.
+ * - Reading the chat list and the redacted settings, starting a chat, sending a message, stopping the run, and renaming,
+ *   pinning and unpinning a chat succeed, and the device's event stream carries the chat events and no plugin
+ *   management event.
  * - Every Remote method the composition registers and every event it forwards is on the allow list or the deny table,
  *   and every entry of either names one that exists.
  *
@@ -216,14 +218,112 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('officeToPdf/generation', {})
   })
 
-  it('refuses slash commands, schedule changes, dynamic plugin code, workspace management and chat organization', async () => {
+  it('renames, pins and unpins a chat', async () => {
+    // Pins the allow list's chat organization entries: each is refused as `loopback-required` without them.
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    await expect(expectAllowed('session/rename', { request: { sessionId: created.sessionId, title: 'Renamed on the phone' } }))
+      .resolves.toMatchObject({ title: 'Renamed on the phone' })
+    await expect(expectAllowed('workspace/pinSession', { request: { sessionId: created.sessionId } }))
+      .resolves.toMatchObject({ pinnedSessionIds: expect.arrayContaining([created.sessionId]) })
+    const unpinned = await expectAllowed('workspace/unpinSession', { request: { sessionId: created.sessionId } }) as { readonly pinnedSessionIds: readonly string[] }
+    expect(unpinned.pinnedSessionIds).not.toContain(created.sessionId)
+  })
+
+  it('refuses slash commands, schedule changes, dynamic plugin code, workspace management, archiving and reordering', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    const other = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     await expectRefused('commands/execute', { agentId: created.sessionId, line: '/plugins', submittedAttachments: [] })
     await expectRefused('schedule/deleteInactive', {})
     await expectRefused('dynamicCordisRunner/inventory', {})
     await expectRefused('workspace/create', { request: { path: directory } })
     await expectRefused('workspace/initializeDefault', {})
-    await expectRefused('session/rename', { request: { sessionId: created.sessionId, title: 'Renamed' } })
+    await expectRefused('workspace/archiveSession', { request: { sessionId: created.sessionId } })
+    await expectRefused('workspace/unarchiveSession', { request: { sessionId: created.sessionId } })
+    await expectRefused('workspace/insertSessionBefore', { request: { workspaceId, sessionId: created.sessionId, beforeSessionId: other.sessionId } })
+  })
+})
+
+describe('a reach device and the exact Fetch routes', () => {
+  /** The raw upload route, the one exact route a device reaches. */
+  const UPLOAD = '/api/session/uploadFileBinary'
+  /** A one-pixel PNG. */
+  const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+
+  /**
+   * Request one exact route as the device, through the shared `/api` channel the reach listener serves.
+   * @param path - the route path and query.
+   * @param init - the request's method, headers and body.
+   * @returns the response.
+   */
+  function send(path: string, init: RequestInit = {}): Promise<Response> {
+    return studio.ctx.connection.createSharedFetchHandler('/api').fetch(new Request(`http://127.0.0.1${path}`, init), peer)
+  }
+
+  /**
+   * Upload one image to a chat as the device.
+   * @param sessionId - the chat the query names.
+   * @returns the response.
+   */
+  function uploadPixel(sessionId: string): Promise<Response> {
+    return send(`${UPLOAD}?${new URLSearchParams({ sessionId, mediaType: 'image/png', name: 'pixel.png' }).toString()}`, {
+      method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: PIXEL,
+    })
+  }
+
+  /**
+   * The exact Fetch routes the composition registers, read from Connection's private route table as the Gateway
+   * claims and the route registry above read theirs.
+   * @returns each route path with its methods.
+   */
+  function exactRoutes(): Map<string, readonly string[]> {
+    const connection: unknown = studio.ctx.connection
+    const original: unknown = typeof connection === 'object' && connection !== null ? Reflect.get(connection, symbols.original) : undefined
+    const table: unknown = typeof original === 'object' && original !== null ? Reflect.get(original, 'fetchRoutes') : undefined
+    if (!(table instanceof Map)) throw new Error('reach access: Connection has no exact Fetch route table')
+    const routes = new Map<string, readonly string[]>()
+    for (const [path, route] of table as Map<string, { readonly methods: ReadonlySet<string> }>) routes.set(path, [...route.methods])
+    return routes
+  }
+
+  it('reaches no exact route but the raw upload route: no file read by path, deliverable action or change', async () => {
+    const routes = exactRoutes()
+    // The routes this rule is about: a file read by path, deliverable actions and change reads.
+    expect([...routes.keys()]).toEqual(expect.arrayContaining(['/api/file', '/api/present.open', '/api/changes.summary', '/api/changes.diff', UPLOAD]))
+    for (const [path, methods] of routes) {
+      if (path === UPLOAD) continue
+      for (const method of methods) {
+        // Pins Connection's owner rule for exact routes: a route that declares no `admitPeer` refuses every other Peer.
+        const response = await send(`${path}?path=${encodeURIComponent(directory)}&sessionId=any&seq=0&index=0`, { method })
+        expect(response.status, `${method} ${path}`).toBe(403)
+      }
+    }
+  })
+
+  it('refuses a file read by path, even inside a workspace it may name', async () => {
+    await expect(send(`/api/file?path=${encodeURIComponent(join(directory, 'workspace'))}`)).resolves.toMatchObject({ status: 403 })
+  })
+
+  it('uploads an image to a chat it may name and reads it back by its id through that chat', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    // Pins the upload route's `admitPeer`: without it the route refuses every Peer but the owner.
+    const response = await uploadPixel(created.sessionId)
+    expect(response.status).toBe(200)
+    const uploaded = await response.json() as { readonly ok: boolean; readonly value: { readonly image: { readonly attachmentId: string } } }
+    expect(uploaded).toMatchObject({ ok: true, value: { image: { mediaType: 'image/png' } } })
+    const read = await expectAllowed('session/attachment', { request: { sessionId: created.sessionId, attachment: uploaded.value.image } }) as { readonly data: string }
+    expect(read.data).toBe(PIXEL.toString('base64'))
+  })
+
+  it('refuses an upload to a chat it cannot name, and an image read through one', async () => {
+    // Pins the upload route's decision: it asks remote access about the Session its query names.
+    await expect(uploadPixel('no-such-session')).resolves.toMatchObject({ status: 403 })
+    const response = await send(UPLOAD, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: PIXEL })
+    expect(response.status).toBe(403)
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    const uploaded = await (await uploadPixel(created.sessionId)).json() as { readonly value: { readonly image: unknown } }
+    expect(await call('session/attachment', { request: { sessionId: 'no-such-session', attachment: uploaded.value.image } })).toMatchObject({
+      ok: false, error: { code: 'remote-access/denied', details: { action: 'session/attachment', reason: 'resource-unlisted: session/attachment' } },
+    })
   })
 })
 

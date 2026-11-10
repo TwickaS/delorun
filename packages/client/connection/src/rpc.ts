@@ -191,9 +191,19 @@ export interface ConnectionFetchRoute {
    */
   readonly requestMediaType?: string | undefined
   /**
+   * Admit one Peer other than the owner, called before the media-type gate and
+   * before `fetch` reads any body. The route answers from the request URL and
+   * headers and the Peer's principal, normally through the Host's remote
+   * access decision for the action it performs on the resource the URL names;
+   * `false` answers 403. Absent, only owner Peers reach the route. Owner Peers
+   * never reach this check.
+   */
+  readonly admitPeer?: ((request: Request, peer: PeerScope) => boolean) | undefined
+  /**
    * Handle one request after the physical carrier has applied its trust and
-   * authentication policy. Only owner Peers reach an exact route; the shared
-   * handler answers 403 for every other principal.
+   * authentication policy. Owner Peers reach an exact route; another Peer
+   * reaches it only when `admitPeer` admits it, and the shared handler
+   * answers 403 otherwise.
    */
   readonly fetch: (request: Request) => Promise<Response>
 }
@@ -324,7 +334,7 @@ export interface ConnectionFetchHandler {
    * Dispatch one already-authenticated request.
    * @param request - Fetch request below the shared channel.
    * @param peer - Peer to dispatch as; required, never defaulted.
-   * @returns the registered response, a 403 response for an exact route and a non-owner Peer, or a 404 response.
+   * @returns the registered response, a 403 response for an exact route and a non-owner Peer it does not admit, or a 404 response.
    */
   fetch(request: Request, peer: PeerScope): Promise<Response>
 }

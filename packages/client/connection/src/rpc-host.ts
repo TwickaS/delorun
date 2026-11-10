@@ -58,6 +58,7 @@ interface RegisteredFetchRoute {
   readonly requestBody: ConnectionFetchRoute['requestBody']
   /** Essence of the media type a body-carrying request must declare. */
   readonly requestMediaType: string
+  readonly admitPeer: ConnectionFetchRoute['admitPeer']
   readonly fetch: ConnectionFetchRoute['fetch']
 }
 
@@ -343,9 +344,11 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
         const pathname = new URL(request.url).pathname
         const route = this.fetchRoutes.get(pathname)
         if (route?.methods.has(request.method) === true) {
-          // Exact routes bypass Gateway access checks, so only the owner reaches them.
+          // Exact routes bypass Gateway access checks, so another Peer reaches one only when the route admits it.
           // oxlint-disable-next-line typescript/no-unnecessary-condition -- other packages merge non-owner kinds into PrincipalMap.
-          if (peer.principal.kind !== 'owner') return Promise.resolve(new Response('forbidden', { status: 403 }))
+          if (peer.principal.kind !== 'owner' && route.admitPeer?.(request, peer) !== true) {
+            return Promise.resolve(new Response('forbidden', { status: 403 }))
+          }
           // An exact route is a named endpoint a cross-site page can address
           // directly, so it carries the same media-type gate the shared channel
           // applies: a body the browser sends without a preflight (`text/plain`)
@@ -373,6 +376,7 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
       methods: new Set(route.methods),
       requestBody: route.requestBody,
       requestMediaType: route.requestMediaType ?? JSON_MEDIA_TYPE,
+      admitPeer: route.admitPeer,
       fetch: route.fetch,
     }
     return owner.effect(() => {

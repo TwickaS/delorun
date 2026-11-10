@@ -56,9 +56,9 @@ export function reachDevicePrincipal(deviceId: string): ReachDevicePrincipal {
 
 /**
  * Every action a device may take over a reach listener, with what it lets the person do from it. The owner's rule
- * for a phone: read chats, workspaces and the redacted settings, start chats, send messages, stop runs, and answer
- * ordinary prompts. An endpoint whose name ends in a read is listed here only when it reads no secret and no file by
- * path.
+ * for a phone: read chats, workspaces and the redacted settings, start chats, send messages, stop runs, answer
+ * ordinary prompts, and rename, pin and unpin chats, which organize the list reversibly and change no run. An
+ * endpoint whose name ends in a read is listed here only when it reads no secret and no file by path.
  */
 export const REACH_ALLOWED_ACTIONS = {
   'remoteAccess/follow': 'read its own access snapshot, which remote access allows every Peer before any policy',
@@ -82,6 +82,7 @@ export const REACH_ALLOWED_ACTIONS = {
   'session/prompt': 'send a message',
   'session/updateQueue': 'edit or withdraw a message still waiting in a chat\'s queue',
   'session/cancel': 'stop a run',
+  'session/rename': 'rename a chat, which changes no run',
   'fileUploads/upload': 'attach a file to a message',
   'commands/list': 'read the slash commands the composer offers; running one is refused',
   'skills/list': 'read the skills a chat can use',
@@ -106,6 +107,8 @@ export const REACH_ALLOWED_ACTIONS = {
   'schedule/history': 'read a scheduled follow-up\'s runs',
   'schedule/deliveryLimits': 'read the delivery limits of scheduled follow-ups',
   'workspace/follow': 'read the workspaces and their chats',
+  'workspace/pinSession': 'pin a chat to the top of the list, which changes no run',
+  'workspace/unpinSession': 'unpin a chat, which changes no run',
   'settings/describe': 'read the settings with every secret redacted, which the studio renders from',
   'event:approval/request': 'answer an ordinary approval prompt; the answer guard still refuses a full-access grant',
   'event:user-questions/request': 'answer a question the agent asks',
@@ -134,7 +137,7 @@ const DIRECTORY_PICKER = 'the directory picker browses and creates folders on th
 const FILE_BY_PATH = 'reads a file by path on the home\'s computer, outside the sandbox\'s protected-home rule'
 const CHANGES = 'the Changes surface reads the working tree of the home\'s computer'
 const WORKSPACE_MANAGEMENT = 'workspace management registers or removes folders of the home\'s computer'
-const CHAT_ORGANIZATION = 'organizing chats is not in the device rule'
+const CHAT_ORGANIZATION = 'archiving or reordering chats is not in the device rule; renaming and pinning are'
 const DEFAULT_MODEL = 'saves the default model, a settings write'
 const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer'
 const GOAL_CHANGE = 'changing a chat\'s standing goal is not in the device rule'
@@ -224,9 +227,6 @@ export const REACH_DENIED_ACTIONS = {
   'workspace/archiveSession': CHAT_ORGANIZATION,
   'workspace/unarchiveSession': CHAT_ORGANIZATION,
   'workspace/insertSessionBefore': CHAT_ORGANIZATION,
-  'workspace/pinSession': CHAT_ORGANIZATION,
-  'workspace/unpinSession': CHAT_ORGANIZATION,
-  'session/rename': CHAT_ORGANIZATION,
   'session/selectModel': DEFAULT_MODEL,
   'session/initializeDefaultModel': DEFAULT_MODEL,
   'session/openWorkspacePath': OPEN_ON_COMPUTER,

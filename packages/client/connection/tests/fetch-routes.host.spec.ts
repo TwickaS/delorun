@@ -160,6 +160,35 @@ describe('Connection exact Fetch routes', () => {
     await disposeRoute()
     await disposeFiber()
   })
+
+  it('lets a non-owner Peer reach an exact route only when the route admits it, before its media-type gate', async () => {
+    const { connection, dispose: disposeFiber } = await mounted()
+    const route = vi.fn(async () => new Response('route'))
+    const admitPeer = vi.fn((request: Request, _peer: PeerScope) => new URL(request.url).searchParams.get('sessionId') === 'mine')
+    const disposeRoute = connection.fetch.register({
+      path: '/api/file.upload', methods: ['POST'], requestBody: 'streaming', requestMediaType: 'application/octet-stream', admitPeer, fetch: route,
+    })
+    const guest = connection.createPeer({ principal: GUEST })
+    const shared = connection.createSharedFetchHandler('/api')
+    const send = (query: string, peer: PeerScope, type = 'application/octet-stream'): Promise<Response> =>
+      shared.fetch(new Request(`http://host/api/file.upload?${query}`, { method: 'POST', headers: { 'content-type': type }, body: 'BLOB' }), peer)
+
+    expect((await send('sessionId=other', guest)).status).toBe(403)
+    expect(route).not.toHaveBeenCalled()
+    // A refused Peer learns nothing from the media-type gate.
+    expect((await send('sessionId=other', guest, 'text/plain')).status).toBe(403)
+    expect((await send('sessionId=mine', guest)).status).toBe(200)
+    expect(admitPeer).toHaveBeenLastCalledWith(expect.any(Request), guest)
+    // An admitted Peer still meets the route's media-type gate.
+    expect((await send('sessionId=mine', guest, 'text/plain')).status).toBe(415)
+    const asked = admitPeer.mock.calls.length
+    // The owner never asks the route.
+    expect((await send('sessionId=other', connection.browserPeer)).status).toBe(200)
+    expect(admitPeer).toHaveBeenCalledTimes(asked)
+    expect(route).toHaveBeenCalledTimes(2)
+    await disposeRoute()
+    await disposeFiber()
+  })
 })
 
 describe('Connection in-process Peers', () => {

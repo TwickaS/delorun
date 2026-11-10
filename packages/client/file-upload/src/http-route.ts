@@ -1,8 +1,9 @@
 /** Authenticated raw-byte upload route registered on the Connection fetch registry. */
 
+import type { RemoteAccessService } from '@deepseek-ai/dsh-api-remote-access'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import { remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import { remoteErrorOf, type PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import type { FileUploads } from './index.ts'
 import type { FileUploadValue, ImageUploadValue } from './types.ts'
 
@@ -12,6 +13,26 @@ type FileUploadHttpResult =
     readonly ok: false
     readonly error: { readonly code: string; readonly message: string; readonly details: object }
   }
+
+/**
+ * Admit a Peer other than the owner to the raw route exactly where remote
+ * access allows it the `fileUploads/upload` Remote method on the Session the
+ * `sessionId` query names, so the route grants no Peer more than that method.
+ * @param access - the Host's remote access, absent when the composition mounts none.
+ * @param request - the raw upload request; only its URL is read.
+ * @param peer - the calling Peer.
+ * @returns whether the Peer may upload to the named Session; false without a
+ *   named Session or without remote access.
+ */
+export function admitsUploadPeer(access: Pick<RemoteAccessService, 'decide'> | undefined, request: Request, peer: PeerScope): boolean {
+  const sessionId = new URL(request.url).searchParams.get('sessionId')
+  if (access === undefined || sessionId === null || sessionId === '') return false
+  return access.decide({
+    principal: peer.principal,
+    action: 'fileUploads/upload',
+    resources: [{ kind: 'session', id: brandString<SessionId>(sessionId) }],
+  }).kind === 'allow'
+}
 
 /**
  * Handle one authenticated raw-byte upload. A `mediaType` query parameter
