@@ -246,6 +246,22 @@ describe('reach on the Tailscale private address', () => {
       expect(studio.ctx.homeAuth.approvalWindowOpenUntil()).toBeUndefined()
     })
 
+    it('a markerless state change on the tailnet route needs the session, and never reaches the device routes', async () => {
+      const list = { type: 'client-request', rpcId: 'markerless', method: 'session/list', payload: { args: { _request: {} } } }
+      // No Origin and no Fetch-Metadata, as a program sends: without the session cookie nothing is admitted.
+      const anonymous = await send(reachPort, 'POST', '/api/session/list', { host: HOST }, list)
+      expect({ status: anonymous.status, error: json(anonymous).error }).toEqual({ status: 401, error: 'NOT_SIGNED_IN' })
+      // A foreign Origin is refused even with the session, before admission.
+      const foreign = await send(reachPort, 'POST', '/api/session/list', { host: HOST, cookie: phone.cookie ?? '', origin: 'https://attacker.example' }, list)
+      expect(json(foreign).error).toBe('ORIGIN_MISMATCH')
+      // With the session, a markerless request is the device itself, and the device routes still answer LOOPBACK_REQUIRED.
+      for (const path of ['/auth/devices/window', '/auth/devices/approve', '/auth/devices/remove']) {
+        const reply = await send(reachPort, 'POST', path, { host: HOST, cookie: phone.cookie ?? '' }, { v: 1 })
+        expect({ path, error: json(reply).error }).toEqual({ path, error: 'LOOPBACK_REQUIRED' })
+      }
+      expect(studio.ctx.homeAuth.approvalWindowOpenUntil()).toBeUndefined()
+    })
+
     it('a tailnet-route session cannot remove a device, reset, enrol a factor or change reach', async () => {
       const deviceId = await phone.deviceId()
       const removal = await phone.send('POST', '/auth/devices/remove', { v: 1, deviceId })
