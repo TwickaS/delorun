@@ -73,6 +73,8 @@ export class ZipArchive {
   private readonly bytes: Uint8Array
   private readonly centralDirectoryOffset: number
   private readonly records: readonly ZipCentralRecord[]
+  private readonly byName = new Map<string, ZipCentralRecord>()
+  private readonly entryNames: readonly string[]
 
   /**
    * @param bytes - the whole archive.
@@ -83,6 +85,9 @@ export class ZipArchive {
     this.bytes = bytes
     this.centralDirectoryOffset = centralDirectoryOffset
     this.records = records
+    // The first record of a name is the one a read returns; a repeated name is refused by the path rules.
+    for (const record of records) if (!this.byName.has(record.name)) this.byName.set(record.name, record)
+    this.entryNames = records.map(record => record.name)
   }
 
   /**
@@ -183,7 +188,7 @@ export class ZipArchive {
    * @throws ArchiveError `ARCHIVE_TRUNCATED` when the header or the data ends early, when a declared size disagrees with the bytes, when the bytes inflate past the declared size, or when the stored checksum disagrees; `ARCHIVE_PATH_REJECTED` for a name that is not UTF-8.
    */
   read(name: string): Uint8Array {
-    const record = this.records.find(candidate => candidate.name === name)
+    const record = this.byName.get(name)
     if (record === undefined) throw new ArchiveError('ARCHIVE_PATH_REJECTED', `the archive holds no entry named ${JSON.stringify(name)}`)
     const bytes = this.bytes
     const local = record.localHeaderOffset
@@ -234,8 +239,17 @@ export class ZipArchive {
    * The name the archive gives every entry, in archive order.
    * @returns the entry names.
    */
-  names(): string[] {
-    return this.records.map(record => record.name)
+  names(): readonly string[] {
+    return this.entryNames
+  }
+
+  /**
+   * Whether the archive holds an entry of one name.
+   * @param name - the entry name.
+   * @returns true when the central directory names it.
+   */
+  has(name: string): boolean {
+    return this.byName.has(name)
   }
 }
 
@@ -320,10 +334,10 @@ function inflate(record: ZipCentralRecord, stored: Uint8Array): Uint8Array {
         `the stored entry ${JSON.stringify(record.name)} declares ${String(record.compressedSize)} stored bytes for ${String(record.uncompressedSize)} bytes`,
       )
     }
-    return Uint8Array.from(stored)
+    return stored
   }
   try {
-    return new Uint8Array(inflateRawSync(stored, { maxOutputLength: Math.max(record.uncompressedSize, 1) }))
+    return inflateRawSync(stored, { maxOutputLength: Math.max(record.uncompressedSize, 1) })
   } catch (error: unknown) {
     // Every inflate failure, a stream past its declared size included, is the same refusal; the cause is not shown to the person.
     void error

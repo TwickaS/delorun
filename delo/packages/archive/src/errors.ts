@@ -36,3 +36,13 @@ export class ArchiveError extends Error {
 export function isArchiveError(error: unknown): error is ArchiveError {
   return error instanceof ArchiveError
 }
+
+/**
+ * The system error code a failure carries, for a refusal message that names
+ * the reason without a host path.
+ * @param error - the failure.
+ * @returns its string `code`, or `unexpected error` when it carries none.
+ */
+export function failureCode(error: unknown): string {
+  return error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'unexpected error'
+}

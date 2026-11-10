@@ -19,7 +19,9 @@ import {
   type ArchiveWorkspace,
 } from '@delo/contract-archive-and-trash'
 import { ArchiveError } from './errors.ts'
+import { keyFingerprint } from './fingerprint.ts'
 import { checkArchivePath } from './paths.ts'
+import { hasControlCharacter } from './text.ts'
 
 /** The path of the customisation document, which every archive carries. */
 export const CUSTOMISATION_PATH = 'customisation.json'
@@ -104,6 +106,9 @@ function parseOrigin(value: unknown): ArchiveOrigin {
   }
   if (!BASE64URL.test(publicKey) || Buffer.from(publicKey, 'base64url').length !== ED25519_PUBLIC_KEY_BYTES) {
     throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${MANIFEST_PATH} origin publicKey is not a base64url Ed25519 key`)
+  }
+  if (homeKeyId !== keyFingerprint(publicKey)) {
+    throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${MANIFEST_PATH} origin homeKeyId is not the fingerprint of its publicKey`)
   }
   return { homeKeyId, publicKey }
 }
@@ -276,15 +281,18 @@ function requireFields(value: Record<string, unknown>, fields: readonly string[]
 }
 
 /**
- * Require a parsed value to be a non-empty string.
+ * Require a parsed value to be a non-empty string without a control character.
  * @param value - the parsed value.
  * @param where - the value's name, for the refusal's message.
  * @returns the string.
- * @throws ArchiveError `ARCHIVE_SCHEMA_INVALID` when the value is not a non-empty string.
+ * @throws ArchiveError `ARCHIVE_SCHEMA_INVALID` when the value is not a non-empty string, or holds a C0 or C1 control, DEL or a bidirectional control.
  */
 function requireText(value: unknown, where: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${where} is not a non-empty string`)
+  }
+  if (hasControlCharacter(value)) {
+    throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${where} holds a control character, which an archive's text may not carry`)
   }
   return value
 }

@@ -23,16 +23,17 @@ import {
   SIGNATURE_PATH,
   ZipWriter,
   encodePublicKey,
+  keyFingerprint,
   signManifest,
   type ArchiveWorkspaceStore,
   type ZipEntryInput,
 } from '../src/index.ts'
 
-/** The home key identifier every fixture manifest declares. */
-export const HOME_KEY_ID = 'fixture-home-key'
-
 /** The public key every fixture manifest declares: 32 bytes of one value, which no real key is. */
 export const HOME_PUBLIC_KEY = Buffer.alloc(32, 7).toString('base64url')
+
+/** The home key identifier every fixture manifest declares: the fingerprint of {@link HOME_PUBLIC_KEY}. */
+export const HOME_KEY_ID = keyFingerprint(HOME_PUBLIC_KEY)
 
 /** The UTF-8 encoder the fixtures write their documents with. */
 const ENCODER = new TextEncoder()
@@ -110,6 +111,8 @@ export interface FixtureArchive {
   readonly customisationDeclaredSize?: number
   /** The origin the manifest declares; by default the fixture home key, which no private key signs for. */
   readonly origin?: ArchiveOrigin
+  /** The Delo version the manifest names as its writer; by default the fixture's own name. */
+  readonly createdBy?: string
   /** The key the fixture signs its manifest with, which adds `signature.json` to the archive. */
   readonly sign?: { readonly homeKeyId: string, readonly privateKey: KeyObject }
 }
@@ -130,7 +133,7 @@ export function buildArchive(fixture: FixtureArchive = {}): Uint8Array {
   ]
   const manifest = {
     formatVersion: ARCHIVE_FORMAT_VERSION,
-    createdBy: 'delo-archive-fixture',
+    createdBy: fixture.createdBy ?? 'delo-archive-fixture',
     exportedAt: '2026-01-01T00:00:00Z',
     origin: fixture.origin ?? { homeKeyId: HOME_KEY_ID, publicKey: HOME_PUBLIC_KEY },
     workspaces: fixture.workspaces ?? [],

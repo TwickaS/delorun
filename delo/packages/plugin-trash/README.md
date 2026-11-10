@@ -29,14 +29,14 @@ Upstream offers no way to delete a chat: its menu archives one, and its persiste
 - **Move a chat to the trash**: archive it through upstream's workspace registry with its running work stopped, then move its session directory into the trash. A chat that a live writer holds stays at its origin, archived, until the next start moves it in.
 - **Move a workspace to the trash**: archive its chats the same way, move them into one item that records the registration, then remove the registration.
 - **Restore**: move the chats back, register a deleted workspace again with its chats, and unarchive every chat the delete archived. A restore that would overwrite a chat at its origin is refused with `TRASH_RESTORE_CONFLICT`.
-- **Delete forever and empty**: purge the item from every store the harness mounts: the full-text index through the session-query engine's `forgetSessions`, the live projection cache's `forget` and its documents, the spill files under the spill store's root, the session generations and the trash's copy. `clearLogs` accepts the offer to clear the operational logs now.
-- **At start**: move in the chats that were live when deleted, then purge every item whose 30 days ended.
+- **Delete forever and empty**: purge the item from every store the harness mounts: the full-text index through the session-query engine's `forgetSessions`, the live projection cache's `forget` and its documents, the attachments no other chat names, the spill files under the spill store's root, the session generations and the trash's copy. `clearLogs` accepts the offer to clear every operational log of the home now; Empty trash clears them with its last purge, and each log that could not be cleared is reported.
+- **At start**: move in the chats that were live when deleted, then purge every item whose 30 days ended, unless the clock is behind an item or the last pass, or jumped more than a year, which is logged.
 
 A failure the plugin cannot name answers `TRASH_FAILED` and is logged with its cause.
 
 ## The studio half
 
-[`src/client/`](src/client/index.ts) registers the menu actions, hides every chat in the trash from the sidebar through `uiWorkspace.hideSession`, reports each outcome in a frame-wide toast, and adds the Trash section (`settings.section`, after Privacy). Delete forever and Empty trash ask first, state that fragments may remain in the operational logs for up to 14 days, and offer to clear them now. After a purge the page removes the item's draft entries from its own `localStorage` with `@delo/trash/drafts`.
+[`src/client/`](src/client/index.ts) registers the menu actions, hides every chat in the trash from the sidebar through `uiWorkspace.hideSession`, reports each outcome in a frame-wide toast, and adds the Trash section (`settings.section`, after Privacy). Delete forever and Empty trash ask first, state that fragments may remain in the operational logs for up to 14 days, and offer to clear every operational log now. The section lists each damaged item directory with its reason. After a purge the page removes the item's draft entries from its own `localStorage` with `@delo/trash/drafts`.
 
 ## Configuration
 

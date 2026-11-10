@@ -141,6 +141,15 @@ describe('opening a container', () => {
 })
 
 describe('reading an entry', () => {
+  it('reads the first of two entries that share a name, and lists both for the path rules to refuse', () => {
+    const bytes = Buffer.from(container([{ name: 'objects/a', bytes: utf8('first') }, { name: 'objects/b', bytes: utf8('second') }]))
+    for (let at = bytes.indexOf('objects/b'); at !== -1; at = bytes.indexOf('objects/b', at)) bytes.write('objects/a', at)
+    const archive = ZipArchive.open(bytes)
+
+    expect(new TextDecoder().decode(archive.read('objects/a'))).toBe('first')
+    expect(archive.names()).toEqual(['objects/a', 'objects/a'])
+  })
+
   it('returns the bytes of a stored entry and of a deflated entry', () => {
     const archive = ZipArchive.open(container([
       { name: 'stored.txt', bytes: utf8('hello'), method: 'store' },
@@ -148,8 +157,8 @@ describe('reading an entry', () => {
     ]))
 
     expect(archive.names()).toEqual(['stored.txt', 'deflated.txt'])
-    expect(archive.read('stored.txt')).toEqual(utf8('hello'))
-    expect(archive.read('deflated.txt')).toEqual(utf8('a'.repeat(100)))
+    expect(Buffer.from(archive.read('stored.txt'))).toEqual(Buffer.from(utf8('hello')))
+    expect(Buffer.from(archive.read('deflated.txt'))).toEqual(Buffer.from(utf8('a'.repeat(100))))
   })
 
   it('refuses a name the archive does not hold', () => {

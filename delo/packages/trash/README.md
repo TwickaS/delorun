@@ -26,13 +26,15 @@ This package implements the trash half of [contract C8](../../docs/contracts/c08
 
 One directory per item under the trash root, `<home>/trash`: the item's record `item.json` at 0600 inside a 0700 directory, and a `chats/` tree holding the session directories the delete moved in. A deleted chat's content lives in this one location and nowhere else, so the trash keeps the item's secrets until the purge, and the live stores hold none of them.
 
+A record is written whole, to a temporary file renamed into place, and validated whenever it is read: each chat's origin and its place in the trash are two encoded path segments, so a tampered record cannot name a directory outside the configured sessions root or another item's content. `scan` returns the readable items and every damaged item directory with the reason; nothing restores, purges or expires a damaged item, and a person inspects its directory.
+
 ## Deleting
 
-`TrashService.deleteChat` locates the chat's session directory under the session-persistence root — first through the project directory the chat's cwd derives, then across every project directory, because a session id is unique across the root — and moves it into the item, with every generation in it. `deleteWorkspace` moves every chat of a workspace into one item and records the workspace id that the workspace's browser entries name. A delete also records the chats the deleting home archived for it and, for a workspace, the registration it removed, so a restore can unarchive them and register the workspace again. A chat with nothing materialized still lands in the trash as a record without content, so its purge still reaches every store that names it.
+`TrashService.deleteChat` locates the chat's session directory under the session-persistence root — first through the project directory the chat's cwd derives, then across every project directory, because a session id is unique across the root — and moves it into the item, with every generation in it. The record names the chat's place in the trash before the move, so a crash between the two leaves either the chat at its origin, which `settle` moves in at the next start, or a record that follows it. `deleteWorkspace` moves every chat of a workspace into one item and records the workspace id that the workspace's browser entries name. A delete also records the chats the deleting home archived for it and, for a workspace, the registration it removed, so a restore can unarchive them and register the workspace again. A chat with nothing materialized still lands in the trash as a record without content, so its purge still reaches every store that names it.
 
 ## Restoring
 
-`restore` moves every moved chat back to its origin session directory, byte for byte, and removes the item. It never overwrites a session directory that appeared at the origin after the delete; that refusal destroys nothing.
+`restore` moves every moved chat back to its origin session directory, byte for byte, and removes the item. It checks every target first and never overwrites a session directory that appeared at an origin after the delete; that refusal moves nothing. The record is rewritten after each chat returns, so a restore that stops partway leaves a record of exactly what the trash still holds, and a later purge never reaches a restored chat. An item directory that still holds chat content is never removed.
 
 ## Purging
 
@@ -41,7 +43,7 @@ One directory per item under the trash root, `<home>/trash`: the item's record `
 - the item's rows in the SQLite FTS5 full-text index of `session-query-sqlite`, through the index seam;
 - the session directory of each chat, with every generation in it, plus any generation that reappeared at an origin between the delete and the purge;
 - each chat's projection-cache document under `<home>/storages/session_projcache/sessions`, including the copy the cache moved aside when it discarded an invalid record, because that document holds the chat's cached title, first message, plan, goal and todos;
-- the item's attachment objects under the versioned attachment root;
+- the attachments the item's chats name that no chat under the sessions root and no other item names: the image object, the file object and the file's alias directory of each, under the versioned attachment root; the report counts the attachments it kept because another chat names them;
 - the item's spill directories in the `spill` storage;
 - the item's draft entries in the browser that performs the purge, under every host scope, as the host-qualified keys contract sets.
 
@@ -49,11 +51,11 @@ The report names every store the purge reached. A store root that is a symbolic 
 
 ## The clear-logs offer
 
-A purge states that fragments of the purged content may remain in the operational logs for up to 14 days, the retention of contract C20. `purge(id, { clearLogs: true })` accepts the offer and clears the home's local logs: rotated files and startup reports are deleted, active files are emptied in place. A retention purge is not a person's choice, so it never clears the logs; the residue stays until the operational logs' own retention removes it.
+A purge states that fragments of the purged content may remain in the operational logs for up to 14 days, the retention of contract C20. `purge(id, { clearLogs: true })` accepts the offer and clears every local log of the home, not only the item's records: rotated files and startup reports are deleted, active files are emptied in place. The report says `cleared` only when nothing failed, and lists each log it could not clear. A retention purge is not a person's choice, so it never clears the logs; the residue stays until the operational logs' own retention removes it.
 
 ## Retention
 
-An item's `expiresAt` is its `deletedAt` plus 30 days. `enforceRetention` purges every item whose retention has ended, and `list` marks each item expired or not, so a screen can show what the trash keeps.
+An item's `expiresAt` is its `deletedAt` plus 30 days. `enforceRetention` purges every item whose retention has ended, and `list` marks each item expired or not, so a screen can show what the trash keeps. The pass trusts the clock only within bounds: it purges nothing and reports `clock-behind` when an item was deleted later than the clock reads or the clock reads earlier than the last pass recorded in `retention.json`, and `clock-jump` once when the clock reads more than 365 days past it.
 
 ## Live chats
 
@@ -61,7 +63,7 @@ The JSONL session backend holds a kernel lock on `session.lock` inside a chat's 
 
 ## Wiring
 
-The stores are the service's constructor config: `sessionsRoot`, `storagesRoot`, `spillRoots`, `attachmentsRoot` and `logsHome`, plus three seams: `sessionIndex`, the full-text index engine's `forgetSessions`; `projectionCache`, the live projection cache's `forget`, so a pending write-behind flush cannot write a purged chat's values back; and `draftStorage`, the browser storage of the connection performing the purge. A deployment that runs none of them passes no binding, and the report states only what the purge reached. [`@delo/plugin-trash`](../plugin-trash/README.md) wires the harness's services and `delorun trash` the home's files. The browser half is the separate module `@delo/trash/drafts`, which imports nothing that needs Node, so the studio clears a purged item's drafts from its own `localStorage`, under the host-qualified keys and under the unqualified key a page without a host id writes.
+The stores are the service's constructor config: `sessionsRoot`, `storagesRoot`, `spillRoots`, `attachmentsRoot` and `logsHome`, plus three seams: `sessionIndex`, the full-text index engine's `forgetSessions`; `projectionCache`, the live projection cache's `forget`, so a pending write-behind flush cannot write a purged chat's values back; and `draftStorage`, the browser storage of the connection performing the purge. A deployment that runs none of them passes no binding, and the report states only what the purge reached. [`@delo/plugin-trash`](../plugin-trash/README.md) wires the harness's services and `delorun trash` the home's files. The `session-text` helpers read a chat's generations, decompressing within 1 GiB, and the attachment digests they name; `delorun export` reads chats through them too. The browser half is the separate module `@delo/trash/drafts`, which imports nothing that needs Node, so the studio clears a purged item's drafts from its own `localStorage`, under the host-qualified keys and under the unqualified key a page without a host id writes.
 
 ## Tests
 

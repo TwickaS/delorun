@@ -1,12 +1,14 @@
 /**
  * `delorun trash` as a row of the command table: it resolves the home and the
- * CLI profile without creating anything, reads whether the profile's home
- * process runs, and asks its questions on the terminal.
+ * CLI profile, runs every change while holding the home lock of every profile,
+ * and asks its questions on the terminal. A listing creates nothing and takes
+ * no lock.
  *
  * @module @delo/cli/trash/command
  */
-import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
+import { resolveDeloHome } from '@delo/home'
 import type { CliCommand } from '../command.ts'
+import { withHomeExclusive } from '../home-exclusion.ts'
 import { selectProfile } from '../profile.ts'
 import { runTrash } from './index.ts'
 import { askOnTerminal } from './terminal.ts'
@@ -28,21 +30,10 @@ export function takeProfile(args: readonly string[]): { readonly profile: string
   return { profile, rest }
 }
 
-/**
- * Whether one profile's home process runs now.
- * @param home - the Delo home.
- * @param profile - the CLI profile.
- * @returns true when its lock names a live process.
- */
-export function homeProcessRuns(home: string, profile: string): boolean {
-  const record = readHomeLock(runDirectory(home, profile))
-  return record !== undefined && processExists(record.pid)
-}
-
 /** `delorun trash list | restore <id> | purge <id> | empty` (contract C8). */
 export const trashCommand: CliCommand = {
   name: 'trash',
-  summary: 'List deleted chats and workspaces; restore one, or delete one or all forever',
+  summary: 'List deleted chats and workspaces; restore a chat, or delete one item or all forever',
   async run(args, context) {
     const { profile: flag, rest } = takeProfile(args)
     const profile = selectProfile(flag, context.env)
@@ -51,7 +42,7 @@ export const trashCommand: CliCommand = {
       home: home.path,
       stdout: context.stdout,
       ask: askOnTerminal,
-      homeRunning: () => homeProcessRuns(home.path, profile),
+      exclusive: run => withHomeExclusive({ home: home.path, profile, command: 'trash', instead: 'use the Trash section in the studio\'s Settings' }, run),
       now: Date.now,
     })
   },

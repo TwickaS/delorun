@@ -26,7 +26,7 @@ export interface DeclaredEntrySize {
 }
 
 /** The limits one check applies, which default to the ones contract C8 sets. */
-export type ArchiveSizeLimits = typeof ARCHIVE_LIMITS
+export type ArchiveSizeLimits = { readonly [Limit in keyof typeof ARCHIVE_LIMITS]: number }
 
 /**
  * Check one archive's entry count, per-entry size, total size and compression
@@ -80,14 +80,15 @@ export function checkEntrySizes(entries: readonly DeclaredEntrySize[], limits: A
  * breaks the per-entry, total or ratio limit on its declarations is refused
  * here rather than after the bytes it declares exist in memory.
  * @param archive - the open archive, whose central directory declares each entry's stored and uncompressed size.
+ * @param limits - the limits to apply, by default the ones contract C8 sets.
  * @throws ArchiveError `ARCHIVE_TOO_MANY_ENTRIES`, `ARCHIVE_ENTRY_TOO_LARGE`, `ARCHIVE_TOTAL_TOO_LARGE` or `ARCHIVE_RATIO_EXCEEDED` from {@link checkEntrySizes}.
  */
-export function checkContainerDeclarations(archive: ZipArchive): void {
+export function checkContainerDeclarations(archive: ZipArchive, limits: ArchiveSizeLimits = ARCHIVE_LIMITS): void {
   checkEntrySizes(archive.entries.map(record => ({
     path: record.name,
     uncompressedSize: record.uncompressedSize,
     compressedSize: record.compressedSize,
-  }) satisfies DeclaredEntrySize))
+  }) satisfies DeclaredEntrySize), limits)
 }
 
 /**
@@ -95,8 +96,9 @@ export function checkContainerDeclarations(archive: ZipArchive): void {
  * part of its limits step, beside the central directory's declarations, so an
  * archive cannot pass a limit in one place and break it in the other.
  * @param manifest - the validated manifest, whose entries declare each document's size.
+ * @param limits - the limits to apply, by default the ones contract C8 sets.
  * @throws ArchiveError `ARCHIVE_TOO_MANY_ENTRIES`, `ARCHIVE_ENTRY_TOO_LARGE` or `ARCHIVE_TOTAL_TOO_LARGE` from {@link checkEntrySizes}.
  */
-export function checkManifestDeclarations(manifest: ArchiveManifest): void {
-  checkEntrySizes(manifest.entries.map(entry => ({ path: entry.path, uncompressedSize: entry.size })))
+export function checkManifestDeclarations(manifest: ArchiveManifest, limits: ArchiveSizeLimits = ARCHIVE_LIMITS): void {
+  checkEntrySizes(manifest.entries.map(entry => ({ path: entry.path, uncompressedSize: entry.size })), limits)
 }

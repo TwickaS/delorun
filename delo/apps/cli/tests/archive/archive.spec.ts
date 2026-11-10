@@ -5,24 +5,42 @@
  * key's fingerprint. Every hostile archive is refused before anything is
  * written outside the staging directory: a signature that does not verify, a
  * changed member, a path that leaves the destination, an absolute path, a
- * link member, a declared size smaller than the real one, a size bomb, a file
- * larger than an archive may be, and an unknown signer or an unsigned archive
- * without the person's confirmation. An export that finds a secret writes
- * nothing until the person confirms. Each spec fails when its check is
- * removed.
+ * link member, a declared size smaller than the real one, a size bomb, an
+ * entry or a file over the terminal's ceilings, and an unknown signer or an
+ * unsigned archive without the person's typed confirmation. What Delo checked
+ * is printed before anything the archive states, and every archive-controlled
+ * string is printed escaped. An import first finishes one a crash
+ * interrupted, and neither command runs beside a live home process. An export
+ * that finds a secret writes nothing until the person confirms. Each spec
+ * fails when its check is removed.
  */
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { zstdCompressSync } from 'node:zlib'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ARCHIVE_LIMITS } from '@delo/contract-archive-and-trash'
-import { ZipArchive, ZipWriter, keyFingerprint, loadHomeKey, type ZipEntryInput } from '@delo/archive'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { RuntimeVersion } from '@delo/contract-home-layout'
+import { PUBLISHING_JOURNAL_SUFFIX, ZipArchive, ZipWriter, keyFingerprint, loadHomeKey, type ZipEntryInput } from '@delo/archive'
+import { acquireHomeLock, newStartId, runDirectory } from '@delo/home'
 import { sessionDirectoryPath } from '@delo/trash'
 import { CliError } from '../../src/exit.ts'
 import { exportTarget, findChatDirectory, readChatText, runExport } from '../../src/export/index.ts'
-import { previewLines, runImport } from '../../src/import/index.ts'
+import { withHomeExclusive } from '../../src/home-exclusion.ts'
+import { IMPORT_MAX_FILE_BYTES, previewLines, runImport } from '../../src/import/index.ts'
 import { main } from '../../src/main.ts'
+
+const RUNTIME = brandString<RuntimeVersion>('0.0.0')
+
+/**
+ * The exclusion a command run takes over a home, with a probe every holder answers.
+ * @param home - the home.
+ * @param command - the command's name.
+ * @returns the exclusion.
+ */
+function exclusiveOver(home: string, command: string): <T>(run: () => Promise<T>) => Promise<T> {
+  return run => withHomeExclusive({ home, profile: 'default', command, instead: '' }, run, { probe: () => async () => 'answered', runtime: RUNTIME })
+}
 
 const scratch: string[] = []
 
@@ -77,7 +95,7 @@ async function exporting(home: string, args: readonly string[], answers: readonl
   let out = ''
   const asked: string[] = []
   const queue = [...answers]
-  const code = await runExport(args, { home, version: '0.1.0', stdout: (text) => { out += text }, ask: async (question) => { asked.push(question); return queue.shift() ?? '' } })
+  const code = await runExport(args, { home, version: '0.1.0', stdout: (text) => { out += text }, ask: async (question) => { asked.push(question); return queue.shift() ?? '' }, exclusive: exclusiveOver(home, 'export') })
   return { code, out, asked }
 }
 
@@ -92,7 +110,7 @@ async function importing(home: string, file: string, answers: readonly string[] 
   let out = ''
   const asked: string[] = []
   const queue = [...answers]
-  const code = await runImport([file], { home, stdout: (text) => { out += text }, ask: async (question) => { asked.push(question); return queue.shift() ?? '' } })
+  const code = await runImport([file], { home, stdout: (text) => { out += text }, ask: async (question) => { asked.push(question); return queue.shift() ?? '' }, exclusive: exclusiveOver(home, 'import') })
   return { code, out, asked }
 }
 
@@ -163,9 +181,10 @@ describe('an exported archive', () => {
 
     const run = await importing(home, file, ['y'])
 
-    expect(run.out).toContain(`Signed by key ${key.keyId}, which this home trusts.`)
+    expect(run.out.startsWith(`Signed by this home's key ${keyFingerprint(key.publicKey)}, which this home trusts.\nWhat the archive states about itself:\n`)).toBe(true)
     expect(run.out).toContain('"chat-a": 1 chat, 0 attachments')
-    expect(run.out).toContain('the signature is verified')
+    expect(run.out).toContain('Imported "chat-a" to archive/imported/chat-a.\n')
+    expect(run.out).toContain('opening imported chats in the studio is not available yet')
     expect(run.asked).toHaveLength(1)
     expect(written(home).imported).toEqual(['chat-a'])
     expect(statSync(file).mode & 0o777).toBe(0o600)
@@ -185,11 +204,11 @@ describe('an exported archive', () => {
     expect(written(other)).toEqual({ imported: [], staging: [] })
 
     const run = await importing(other, file, [fingerprint, 'y'])
-    expect(run.out).toContain('which this home does not know')
+    expect(run.out.startsWith(`Signed by a key this home does not know, fingerprint ${fingerprint}.`)).toBe(true)
     expect(written(other).imported).toEqual(['chat-a'])
 
     const again = await importing(other, file, [fingerprint, 'yes'])
-    expect(again.out).toMatch(/Imported "chat-a" as [0-9a-f-]{36} \(the archive's chat-a was taken\)/)
+    expect(again.out).toMatch(/Imported "chat-a" to archive\/imported\/[0-9a-f-]{36}; the archive's identifier "chat-a" was taken\./)
   })
 
   it('carries a workspace with its Zstandard chats and the attachments they name', async () => {
@@ -351,26 +370,54 @@ describe('a hostile archive', () => {
     expect(written(home)).toEqual({ imported: [], staging: [] })
   })
 
-  it('that is unsigned imports only after the person accepts it unverified', async () => {
+  it('that is unsigned imports only after the person types unverified, which a yes is not', async () => {
     const { home, file } = await exportedChat()
     const unsigned = rewrite(file, entry => entry.name === 'signature.json' ? undefined : entry)
 
-    expect((await refusal(importing(home, unsigned, ['n']))).message).toContain('nothing was imported')
-    expect(written(home)).toEqual({ imported: [], staging: [] })
+    for (const answer of ['n', 'y', 'yes']) {
+      expect((await refusal(importing(home, unsigned, [answer]))).message).toBe('delorun import: the unsigned archive was not accepted, so nothing was imported')
+      expect(written(home)).toEqual({ imported: [], staging: [] })
+    }
 
-    const run = await importing(home, unsigned, ['y'])
-    expect(run.out).toContain('Not signed')
-    expect(run.out).toContain('carries no signature, so it is unverified')
+    const run = await importing(home, unsigned, ['unverified'])
+    expect(run.out.startsWith('Not signed: nothing shows who made this archive or that it is unchanged.\n')).toBe(true)
+    expect(run.asked).toEqual(['To import 1 workspace from this unsigned archive anyway, type unverified: '])
     expect(written(home).imported).toEqual(['chat-a'])
   })
 
-  it('that is larger than an archive may be is refused before it is read', async () => {
+  it('that is larger than the terminal imports is refused before it is read', async () => {
     const home = fresh('home')
     const file = join(fresh('big'), 'big.delo')
     writeFileSync(file, '')
-    truncateSync(file, ARCHIVE_LIMITS.maxTotalBytes + 1)
+    truncateSync(file, IMPORT_MAX_FILE_BYTES + 1)
 
-    expect((await refusal(importing(home, file, ['y']))).message).toContain('more than an archive may hold')
+    expect((await refusal(importing(home, file, ['y']))).message).toContain(`more than the ${String(IMPORT_MAX_FILE_BYTES)} the terminal imports; nothing was read`)
+    expect(written(home)).toEqual({ imported: [], staging: [] })
+  })
+
+  it('with an entry over the terminal\'s lower ceiling is refused on its declarations', async () => {
+    const { home, file } = await exportedChat()
+    const hostile = rewrite(file, entry => entry.name === 'signature.json' ? undefined : entry, [{
+      name: 'objects/big',
+      bytes: new TextEncoder().encode('small'),
+      declaredUncompressedSize: 600 * 1024 * 1024,
+      declaredCompressedSize: 20 * 1024 * 1024,
+    }])
+
+    expect((await refusal(importing(home, hostile, ['unverified']))).message).toContain('ARCHIVE_ENTRY_TOO_LARGE')
+    expect(written(home)).toEqual({ imported: [], staging: [] })
+  })
+
+  it('whose text holds a control character is refused with the character escaped', async () => {
+    const { home, file } = await exportedChat()
+    const hostile = rewrite(file, entry => entry.name === 'signature.json' ? undefined : entry.name === 'manifest.json'
+      ? { ...entry, bytes: new TextEncoder().encode(new TextDecoder().decode(entry.bytes).replace('"name": "chat-a"', '"name": "x\\u001b[2K\\rSigned by this home\'s key"')) }
+      : entry)
+
+    const refused = await refusal(importing(home, hostile, ['unverified']))
+
+    expect(refused.message).toContain('ARCHIVE_SCHEMA_INVALID')
+    expect(refused.message).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/)
   })
 
   it('that is not a regular file or does not exist is refused', async () => {
@@ -389,6 +436,33 @@ describe('a hostile archive', () => {
 })
 
 describe('the preview an import shows', () => {
+  it('prints the file name it was given escaped', async () => {
+    const { home, file } = await exportedChat()
+    const named = join(fresh('named'), 'evil\u001b[2K\u202e.delo')
+    writeFileSync(named, readFileSync(file))
+
+    const run = await importing(home, named, ['y'])
+
+    expect(run.out).toContain('File "evil\\u001b[2K\\u202e.delo", written by "0.1.0"')
+    expect(run.out).not.toMatch(/[\u001b\u202e]/)
+  })
+
+  it('escapes every archive-controlled field, after the line Delo checked', () => {
+    const lines = previewLines({
+      state: 'unverified', reason: 'key-not-trusted', label: 'x', source: 'a\u009b.delo', signed: true, createdBy: 'v\u2066', exportedAt: 't\u202e',
+      signer: { declaredKeyId: 'k', publicKey: 'p', fingerprint: 'f' },
+      workspaces: [{ id: 'a', name: 'A\u0085', chats: 1, attachments: 0 }],
+      customisation: [{ kind: 'theme', target: 'dusk\u2028\u061c' }],
+      totalBytes: 1,
+    })
+
+    expect(lines.split('\n')[0]).toBe('Signed by a key this home does not know, fingerprint f. Compare it with the fingerprint the sending home shows before you trust it.')
+    expect(lines).toContain('File "a\\u009b.delo", written by "v\\u2066" at "t\\u202e".')
+    expect(lines).toContain('"A\\u0085": 1 chat, 0 attachments')
+    expect(lines).toContain('theme "dusk\\u2028\\u061c"')
+    expect(lines).not.toMatch(/[\u0085\u009b\u061c\u2028\u2066\u202e]/)
+  })
+
   it('counts several workspaces and lists the customisation rows it will not apply', () => {
     const lines = previewLines({
       state: 'verified', label: 'verified', source: 'a.delo', signed: true, createdBy: '0.1.0', exportedAt: '2026-01-01T00:00:00Z',
@@ -398,10 +472,10 @@ describe('the preview an import shows', () => {
       totalBytes: 10,
     })
 
-    expect(lines).toContain('It holds 2 workspaces (10 bytes):')
+    expect(lines).toContain('  2 workspaces (10 bytes):')
     expect(lines).toContain('"A": 2 chats, 1 attachment')
     expect(lines).toContain('"B": 1 chat, 2 attachments')
-    expect(lines).toContain('Customisation it carries, listed and not applied:\n  theme "dusk"')
+    expect(lines).toContain('  Customisation it carries, listed and not applied:\n    theme "dusk"')
   })
 
   it('asks to import every workspace of an archive that holds several', async () => {
@@ -416,9 +490,35 @@ describe('the preview an import shows', () => {
       ? { ...entry, bytes: new TextEncoder().encode(JSON.stringify({ ...manifest, workspaces: [manifest.workspaces[0], { ...manifest.workspaces[0], id: 'chat-copy', name: 'copy' }] })) }
       : entry)
 
-    const run = await importing(home, doubled, ['y'])
+    const run = await importing(home, doubled, ['unverified'])
 
-    expect(run.asked[0]).toContain('Import 2 workspaces into this home?')
+    expect(run.asked[0]).toContain('To import 2 workspaces from this unsigned archive anyway')
+  })
+})
+
+describe('an import', () => {
+  it('first finishes an import a crash interrupted, withdrawing what it published', async () => {
+    const { home, file } = await exportedChat()
+    mkdirSync(join(home, 'archive', 'imported', 'ws-orphan'), { recursive: true })
+    mkdirSync(join(home, 'archive', 'staging', 'crashed', 'workspaces'), { recursive: true })
+    writeFileSync(join(home, 'archive', 'staging', `crashed${PUBLISHING_JOURNAL_SUFFIX}`), JSON.stringify({ workspaces: ['ws-orphan'] }))
+
+    const run = await importing(home, file, ['y'])
+
+    expect(run.out.startsWith('Finished an import that was interrupted: withdrew the 1 workspace it had published and removed what it had staged.\n')).toBe(true)
+    expect(written(home)).toEqual({ imported: ['chat-a'], staging: [] })
+  })
+
+  it('is refused while a home process runs, and writes nothing', async () => {
+    const { home, file } = await exportedChat()
+    const running = await acquireHomeLock({ runDirectory: runDirectory(home, 'default'), runtime: RUNTIME, probe: async () => 'answered', startId: newStartId() })
+    try {
+      expect((await refusal(importing(home, file, ['y']))).message).toContain('Delo is running for the profile default')
+      expect((await refusal(exporting(home, ['chat-a', '--out', join(fresh('out'), 'again.delo')]))).message).toContain('Delo is running for the profile default')
+    } finally {
+      running.release()
+    }
+    expect(written(home)).toEqual({ imported: [], staging: [] })
   })
 })
 
@@ -452,7 +552,7 @@ describe('the command rows', () => {
   it('refuse a wrong import command line', async () => {
     const home = fresh('home')
     for (const args of [[], ['a', 'b'], ['a', '--bogus']]) {
-      const error = await runImport(args, { home, stdout: () => undefined, ask: async () => '' }).then(() => undefined, (failure: unknown) => failure)
+      const error = await runImport(args, { home, stdout: () => undefined, ask: async () => '', exclusive: exclusiveOver(home, 'import') }).then(() => undefined, (failure: unknown) => failure)
       expect(error).toBeInstanceOf(CliError)
       expect((error as CliError).exit).toBe(2)
     }

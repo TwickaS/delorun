@@ -117,7 +117,7 @@ const HOME_LOG_LEVEL = 'info'
  * The runtime version recorded in the lock: this package's version, until the runtime store names the running version.
  * @returns the version.
  */
-function runningVersion(): RuntimeVersion {
+export function runningVersion(): RuntimeVersion {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
   return brandString<RuntimeVersion>(manifest.version)
 }

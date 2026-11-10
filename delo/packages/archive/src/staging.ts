@@ -11,9 +11,9 @@
  *
  * @module @delo/archive/staging
  */
-import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
-import { ArchiveError } from './errors.ts'
+import { lstat, mkdir, rm, writeFile } from 'node:fs/promises'
+import { basename, dirname } from 'node:path'
+import { ArchiveError, failureCode } from './errors.ts'
 import { resolveInside } from './paths.ts'
 
 /** The permission bits of the staging root: readable by its owner only. */
@@ -26,8 +26,8 @@ export const STAGED_FILE_MODE = 0o600
 export interface StagedEntry {
   /** The archive path of the entry, relative to the staging root. */
   readonly path: string
-  /** The entry's bytes. */
-  readonly bytes: Uint8Array
+  /** The entry's bytes, or the read that produces them when the entry is written, so an import holds one entry at a time. */
+  readonly bytes: Uint8Array | (() => Uint8Array)
 }
 
 /**
@@ -49,8 +49,9 @@ export async function writeStaging(root: string, entries: readonly StagedEntry[]
     const target = resolveInside(root, entry.path)
     try {
       await mkdir(dirname(target), { recursive: true, mode: STAGING_DIRECTORY_MODE })
+      const bytes = typeof entry.bytes === 'function' ? entry.bytes() : entry.bytes
       // `wx` fails on an existing path, so an entry never replaces a file this import did not write.
-      await writeFile(target, entry.bytes, { flag: 'wx', mode: STAGED_FILE_MODE })
+      await writeFile(target, bytes, { flag: 'wx', mode: STAGED_FILE_MODE })
     } catch (error: unknown) {
       if (error instanceof ArchiveError) throw error
       throw stagingFailure(entry.path, error)
@@ -83,7 +84,28 @@ export async function removeStaging(root: string): Promise<void> {
  * @returns the refusal, for the caller to throw.
  */
 function stagingFailure(subject: string | undefined, error: unknown): ArchiveError {
-  const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'unexpected error'
+  const code = failureCode(error)
   if (subject === undefined) return new ArchiveError('ARCHIVE_STAGING_FAILED', `the staging root could not be created (${code})`)
   return new ArchiveError('ARCHIVE_STAGING_FAILED', `the staging directory could not hold the entry ${JSON.stringify(subject)} (${code})`)
+}
+
+/**
+ * Refuse a directory, or the directory that holds it, that is a symbolic
+ * link: an import writes only into directories that are what they name, so a
+ * link planted at `archive/` or `archive/staging` cannot redirect staged chat
+ * content or a published workspace elsewhere.
+ * @param path - the directory an import writes into.
+ * @throws ArchiveError `ARCHIVE_STAGING_FAILED` naming the link.
+ */
+export async function refuseLinkedDirectory(path: string): Promise<void> {
+  for (const candidate of [dirname(path), path]) {
+    let linked: boolean
+    try {
+      linked = (await lstat(candidate)).isSymbolicLink()
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      throw error
+    }
+    if (linked) throw new ArchiveError('ARCHIVE_STAGING_FAILED', `${basename(candidate)} is a symbolic link, and an import writes only into a directory that is what it names`)
+  }
 }

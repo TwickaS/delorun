@@ -2,9 +2,10 @@
  * The signature of contract C8. `signature.json` covers the exact bytes of
  * `manifest.json`, and its algorithm is Ed25519. A signature that verifies
  * against the archive's own origin key but whose key the importing home does
- * not vouch for still leaves the archive in the unverified state, and so does
- * a signature that fails: the contract's denial test says such an archive
- * imports, and imports labelled. The verified state therefore needs both a
+ * not vouch for leaves the archive in the unverified state, which an import
+ * accepts only once the person confirms the key. A signature that does not
+ * verify is reported as `signature-invalid`, and an import refuses that
+ * archive outright. The verified state therefore needs both a
  * signature that verifies and a key the home vouches for — one it already
  * holds, or one the person confirmed by its fingerprint. A confirmation names
  * the key itself, never the identifier alone: `homeKeyId` is a string the
@@ -13,7 +14,7 @@
  *
  * @module @delo/archive/signature
  */
-import { createHash, createPublicKey, sign, verify, type KeyObject } from 'node:crypto'
+import { createPublicKey, sign, verify, type KeyObject } from 'node:crypto'
 import { ARCHIVE_SIGNATURE_ALGORITHM, type ArchiveOrigin, type ArchiveSignature } from '@delo/contract-archive-and-trash'
 import { ArchiveError } from './errors.ts'
 import { SIGNATURE_PATH } from './manifest.ts'
@@ -177,16 +178,4 @@ export function encodePublicKey(publicKey: KeyObject): string {
  */
 export function archiveOrigin(homeKeyId: string, publicKey: KeyObject): ArchiveOrigin {
   return { homeKeyId, publicKey: encodePublicKey(publicKey) }
-}
-
-/**
- * The fingerprint a person confirms an archive's signer by: the SHA-256 of the
- * raw 32-byte Ed25519 public key, base64url, which is how contract C5 derives
- * a home key id. The archive declares its own key identifier, so a person
- * confirms this value, which the archive cannot choose apart from its key.
- * @param publicKey - the base64url raw public key.
- * @returns the base64url SHA-256 of the raw key.
- */
-export function keyFingerprint(publicKey: string): string {
-  return createHash('sha256').update(Buffer.from(publicKey, 'base64url')).digest('base64url')
 }

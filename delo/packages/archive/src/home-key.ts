@@ -17,7 +17,8 @@ import { join } from 'node:path'
 import { HOME_AUTH_FILES } from '@delo/contract-device-approval'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE, PROTECTED_FILE_MODE } from '@delo/contract-home-layout'
 import { checkPrivateDirectory, readProtectedFile } from '@delo/home'
-import { encodePublicKey, keyFingerprint } from './signature.ts'
+import { keyFingerprint } from './fingerprint.ts'
+import { encodePublicKey } from './signature.ts'
 
 /** The directory under the home's `secrets/` that holds the home key, as contract C5 names it. */
 export const HOME_AUTH_DIRECTORY = 'home-auth'

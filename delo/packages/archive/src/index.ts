@@ -7,6 +7,8 @@
  * @module @delo/archive
  */
 export { ArchiveError, isArchiveError } from './errors.ts'
+export { keyFingerprint } from './fingerprint.ts'
+export { hasControlCharacter } from './text.ts'
 export { RESERVED_DEVICE_NAMES, checkArchivePath, checkPathCollisions, resolveInside } from './paths.ts'
 export {
   ZIP_CENTRAL_HEADER_SIGNATURE,
@@ -51,7 +53,6 @@ export {
   archiveOrigin,
   checkArchiveSignature,
   encodePublicKey,
-  keyFingerprint,
   parseSignature,
   signManifest,
   verifyArchiveSignature,
@@ -61,12 +62,14 @@ export {
   type SignatureReason,
   type SignatureState,
 } from './signature.ts'
-export { STAGED_FILE_MODE, STAGING_DIRECTORY_MODE, removeStaging, writeStaging, type StagedEntry } from './staging.ts'
+export { STAGED_FILE_MODE, STAGING_DIRECTORY_MODE, refuseLinkedDirectory, removeStaging, writeStaging, type StagedEntry } from './staging.ts'
 export {
   ArchiveImporter,
   DirectoryWorkspaceStore,
+  PUBLISHING_JOURNAL_SUFFIX,
   STAGED_WORKSPACE_DOCUMENT,
   signatureLabel,
+  type AcceptedReason,
   type ArchiveImportReport,
   type ArchiveImporterConfig,
   type ArchivePreview,
@@ -74,6 +77,7 @@ export {
   type ArchiveWorkspaceStore,
   type PreviewWorkspace,
   type ImportedWorkspace,
+  type RecoveryReport,
   type StagedWorkspaceDocument,
 } from './importer.ts'
 export {

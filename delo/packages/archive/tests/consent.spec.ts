@@ -19,7 +19,6 @@ import {
   exportArchive,
   keyFingerprint,
   signManifest,
-  signatureLabel,
   type ArchiveImporterConfig,
 } from '../src/index.ts'
 import { HOME_KEY_ID, RecordingStore, buildArchive, makeKey, makeScratch, sha256, utf8, type FixtureKey, type Scratch } from './support.ts'
@@ -199,10 +198,6 @@ describe('the preview of an archive', () => {
     expect(preview.signed).toBe(false)
     expect(preview.reason).toBe('absent')
     expect(preview.source).toBe(HOME_KEY_ID)
-  })
-
-  it('states a signature that does not verify in the label a report would carry', () => {
-    expect(signatureLabel('unverified', 'signature-invalid', 'a.delo')).toContain('does not verify')
   })
 })
 

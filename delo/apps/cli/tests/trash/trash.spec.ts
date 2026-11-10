@@ -1,22 +1,25 @@
 /**
- * `delorun trash`: the listing of what was deleted, a restore that returns a
- * chat to the session root, a purge and an empty that delete only after the
- * person says yes and state the log residue, and the refusal of every change
- * while the home process runs. Each refusal spec fails when its check is
- * removed: a declined purge would delete, a running home would be changed.
+ * `delorun trash`: the listing of what was deleted and of damaged items, a
+ * restore that returns a chat to the session root and leaves a workspace to
+ * the studio, a purge and an empty that delete only after the person says yes,
+ * reach the attachment and spill stores, and state the log residue or every
+ * log they could not clear, and the refusal of every change while a home
+ * process runs. Each refusal spec fails when its check is removed: a declined
+ * purge would delete, a running home would be changed.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { acquireHomeLock, newStartId } from '@delo/home'
-import { DAY_MS, TrashStore, sessionDirectoryPath } from '@delo/trash'
+import { DAY_MS, TrashStore, attachmentObjectPath, sessionDirectoryPath, spillSessionDirectoryPath } from '@delo/trash'
 import { CliError } from '../../src/exit.ts'
+import { withHomeExclusive } from '../../src/home-exclusion.ts'
 import { main } from '../../src/main.ts'
-import { homeProcessRuns, takeProfile } from '../../src/trash/command.ts'
-import { runTrash, type TrashIo } from '../../src/trash/index.ts'
+import { takeProfile } from '../../src/trash/command.ts'
+import { homeTrash, runTrash, type TrashIo } from '../../src/trash/index.ts'
 
 let home: string | undefined
 
@@ -41,12 +44,15 @@ function newHome(): string {
  * @param id - the chat.
  * @returns the directory.
  */
-function plantChat(root: string, id: string): string {
+function plantChat(root: string, id: string, text = '{}\n'): string {
   const directory = sessionDirectoryPath(join(root, 'sessions'), '/work', id)
   mkdirSync(directory, { recursive: true })
-  writeFileSync(join(directory, 'session.jsonl'), '{}\n')
+  writeFileSync(join(directory, 'session.jsonl'), text)
   return directory
 }
+
+/** The runtime version the specs' locks record. */
+const RUNTIME = brandString<RuntimeVersion>('0.0.0')
 
 /** One run's output and the questions it asked. */
 interface Run {
@@ -69,10 +75,17 @@ async function trash(root: string, args: readonly string[], options: { answer?: 
     home: root,
     stdout: (text) => { out += text },
     ask: async (question) => { asked.push(question); return options.answer ?? '' },
-    homeRunning: () => options.running === true,
+    exclusive: run => withHomeExclusive({ home: root, profile: 'default', command: 'trash', instead: 'use the Trash section in the studio\'s Settings' }, run, { probe: () => async () => 'answered', runtime: RUNTIME }),
     now: () => options.now ?? Date.now(),
   }
-  return { code: await runTrash(args, io), out, asked }
+  if (options.running !== true) return { code: await runTrash(args, io), out, asked }
+  mkdirSync(join(root, 'run', 'default'), { recursive: true, mode: 0o700 })
+  const lock = await acquireHomeLock({ runDirectory: join(root, 'run', 'default'), runtime: RUNTIME, probe: async () => 'answered', startId: newStartId() })
+  try {
+    return { code: await runTrash(args, io), out, asked }
+  } finally {
+    lock.release()
+  }
 }
 
 /**
@@ -87,21 +100,32 @@ async function refusal(run: Promise<unknown>): Promise<CliError> {
 }
 
 /**
- * Delete one chat into the home's trash, as the studio does.
+ * Delete one chat into the home's trash over the same stores the studio's trash row names.
  * @param root - the home.
  * @param id - the chat.
  * @param label - its name.
  * @returns the item's id.
  */
 async function deleteChat(root: string, id: string, label: string): Promise<string> {
-  const { TrashService } = await import('@delo/trash')
-  const service = new TrashService({ root: join(root, 'trash'), stores: { sessionsRoot: join(root, 'sessions') } })
-  return (await service.deleteChat({ sessionId: id, label })).id
+  return (await homeTrash(root).deleteChat({ sessionId: id, label })).id
 }
 
 describe('delorun trash list', () => {
   it('states an empty trash and its retention', async () => {
     expect((await trash(newHome(), ['list'])).out).toBe('The trash is empty. Deleted chats and workspaces stay here for 30 days.\n')
+  })
+
+  it('lists a damaged item with its directory and reason, as text and as JSON', async () => {
+    const root = newHome()
+    mkdirSync(join(root, 'trash', 'items', '1-a'), { recursive: true })
+    writeFileSync(join(root, 'trash', 'items', '1-a', 'item.json'), '{"schemaVersion":1')
+
+    const listed = await trash(root, ['list'])
+    const json = JSON.parse((await trash(root, ['list', '--json'])).out) as { damaged: { id: string, directory: string, reason: string }[] }
+
+    expect(listed.out).toContain('Damaged items: nothing restores, deletes or expires these; inspect each directory:\n')
+    expect(listed.out).toContain(`  ${join(root, 'trash', 'items', '1-a')}: the trash record of "1-a" is not JSON\n`)
+    expect(json.damaged).toEqual([{ id: '1-a', directory: join(root, 'trash', 'items', '1-a'), reason: 'the trash record of "1-a" is not JSON' }])
   })
 
   it('lists each item with what it is and the days left, and as JSON', async () => {
@@ -146,8 +170,35 @@ describe('delorun trash restore', () => {
 
     const refused = await refusal(trash(root, ['restore', id], { running: true }))
 
-    expect(refused.message).toContain('the home process is running')
+    expect(refused.message).toContain('Delo is running for the profile default')
+    expect(refused.message).toContain('use the Trash section in the studio\'s Settings')
     expect((await trash(root, ['list'])).out).toContain(id)
+  })
+
+  it('leaves a workspace to the studio, which registers it again, and moves nothing', async () => {
+    const root = newHome()
+    const store = new TrashStore(join(root, 'trash'))
+    const workspace = await store.createItem('workspace', 'Project', { chats: [], sessionIds: [], workspaceIds: ['ws-1'], registration: { title: 'Project', path: '/work' } }, Date.now())
+
+    const refused = await refusal(trash(root, ['restore', workspace.id]))
+
+    expect(refused.message).toContain('"Project" is a workspace')
+    expect(refused.message).toContain('restore it from the Trash section in the studio\'s Settings')
+    expect((await trash(root, ['list'])).out).toContain(workspace.id)
+  })
+
+  it('moves in a chat a crash left at its origin before it restores', async () => {
+    const root = newHome()
+    const directory = plantChat(root, 'chat-a')
+    const store = new TrashStore(join(root, 'trash'))
+    const origin = directory.slice(join(root, 'sessions').length + 1)
+    const item = await store.createItem('chat', 'chat', { chats: [{ id: 'chat-a', origin, movedAs: origin }], sessionIds: ['chat-a'] }, Date.now())
+
+    const run = await trash(root, ['restore', item.id])
+
+    expect(run.out).toContain('Restored chat "chat"')
+    expect(existsSync(join(directory, 'session.jsonl'))).toBe(true)
+    expect(existsSync(store.itemPath(item.id))).toBe(false)
   })
 
   it('refuses an id the trash does not hold', async () => {
@@ -178,18 +229,58 @@ describe('delorun trash purge', () => {
     const run = await trash(root, ['purge', id], { answer: 'yes' })
 
     expect(run.asked[0]).toContain('Delete chat "Fix the footer" forever?')
-    expect(run.out).toContain('Deleted chat "Fix the footer" forever, from: session-generations, projection-cache, trash-content.')
+    expect(run.out).toMatch(/Deleted chat "Fix the footer" forever, from: [a-z-, ]*trash-content\.\n/)
     expect(run.out).toContain('may remain in the operational logs for up to 14 days')
     expect(existsSync(join(root, 'trash', 'items', id))).toBe(false)
   })
 
-  it('clears the operational logs at once with --clear-logs', async () => {
+  it('removes the attachments only this chat names and its spill files, and keeps the attachments another chat names', async () => {
+    const root = newHome()
+    const own = 'a'.repeat(64)
+    const shared = 'b'.repeat(64)
+    const alsoShared = 'c'.repeat(64)
+    plantChat(root, 'chat-a', `{"a":"sha256:${own}","b":"sha256:${shared}","c":"sha256:${alsoShared}"}\n`)
+    plantChat(root, 'chat-b', `{"b":"sha256:${shared}","c":"sha256:${alsoShared}"}\n`)
+    for (const digest of [own, shared, alsoShared]) {
+      const path = attachmentObjectPath(join(root, 'attachments', 'v1'), digest)
+      mkdirSync(join(path, '..'), { recursive: true })
+      writeFileSync(path, digest)
+    }
+    const spill = spillSessionDirectoryPath(join(root, 'spill'), 'chat-a')
+    mkdirSync(spill, { recursive: true })
+    writeFileSync(join(spill, 'output.txt'), 'spilled output')
+    const id = await deleteChat(root, 'chat-a', 'with attachments')
+
+    const run = await trash(root, ['purge', id], { answer: 'y' })
+
+    expect(run.out).toContain('attachments')
+    expect(run.out).toContain('spill')
+    expect(run.out).toContain('Kept 2 attachments another chat still uses.')
+    expect(existsSync(attachmentObjectPath(join(root, 'attachments', 'v1'), own))).toBe(false)
+    expect(existsSync(attachmentObjectPath(join(root, 'attachments', 'v1'), shared))).toBe(true)
+    expect(existsSync(spill)).toBe(false)
+  })
+
+  it('clears every operational log at once with --clear-logs, and says so before it asks', async () => {
     const root = newHome()
     const id = await deleteChat(root, 'chat-a', 'chat')
 
     const run = await trash(root, ['purge', id, '--clear-logs'], { answer: 'y' })
 
-    expect(run.out).toContain('The operational logs were cleared')
+    expect(run.asked[0]).toContain('Every operational log of this home is cleared too')
+    expect(run.out).toContain('Every operational log of this home was cleared')
+  })
+
+  it.skipIf(process.getuid?.() === 0)('reports each log it could not clear, and never says the logs were cleared', async () => {
+    const root = newHome()
+    const id = await deleteChat(root, 'chat-a', 'chat')
+    chmodSync(join(root, 'logs'), 0o755)
+
+    const run = await trash(root, ['purge', id, '--clear-logs'], { answer: 'y' })
+
+    expect(run.out).toContain('These operational logs could not be cleared:\n  ')
+    expect(run.out).toContain('may remain in the operational logs for up to 14 days')
+    expect(run.out).not.toContain('was cleared')
   })
 
   it('refuses an id the trash does not hold, and refuses while the home process runs', async () => {
@@ -197,7 +288,7 @@ describe('delorun trash purge', () => {
     const id = await deleteChat(root, 'chat-a', 'chat')
 
     expect((await refusal(trash(root, ['purge', 'missing'], { answer: 'y' }))).message).toContain('no trash item carries the id "missing"')
-    expect((await refusal(trash(root, ['purge', id], { answer: 'y', running: true }))).message).toContain('the home process is running')
+    expect((await refusal(trash(root, ['purge', id], { answer: 'y', running: true }))).message).toContain('Delo is running for the profile default')
     expect((await trash(root, ['list'])).out).toContain(id)
   })
 })
@@ -213,6 +304,14 @@ describe('delorun trash empty', () => {
     expect(run.asked[0]).toContain('Delete every item in the trash (2) forever?')
     expect(run.out.match(/Deleted chat/g)).toHaveLength(2)
     expect((await trash(root, ['list'])).out).toContain('The trash is empty.')
+  })
+
+  it('deletes nothing when the person does not say yes', async () => {
+    const root = newHome()
+    const id = await deleteChat(root, 'chat-a', 'one')
+
+    expect((await refusal(trash(root, ['empty'], { answer: 'n' }))).message).toBe('delorun trash empty: nothing was deleted')
+    expect((await trash(root, ['list'])).out).toContain(id)
   })
 
   it('asks nothing when the trash is empty', async () => {
@@ -243,20 +342,6 @@ describe('the command line', () => {
     expect(takeProfile(['list', '--profile', 'work'])).toEqual({ profile: 'work', rest: ['list'] })
     expect(takeProfile(['--profile=play', 'list'])).toEqual({ profile: 'play', rest: ['list'] })
     expect(takeProfile(['list'])).toEqual({ profile: undefined, rest: ['list'] })
-  })
-
-  it('reads whether the profile\'s home process runs from its lock', async () => {
-    const root = newHome()
-    const run = join(root, 'run', 'default')
-    mkdirSync(run, { recursive: true, mode: 0o700 })
-    expect(homeProcessRuns(root, 'default')).toBe(false)
-
-    const lock = await acquireHomeLock({ runDirectory: run, runtime: brandString<RuntimeVersion>('0.0.0'), probe: async () => 'silent', startId: newStartId() })
-    try {
-      expect(homeProcessRuns(root, 'default')).toBe(true)
-    } finally {
-      lock.release()
-    }
   })
 
   it('runs from the command table over the home the environment names', async () => {

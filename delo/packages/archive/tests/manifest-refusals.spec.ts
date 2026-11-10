@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { ARCHIVE_FORMAT_VERSION } from '@delo/contract-archive-and-trash'
-import { parseManifest } from '../src/index.ts'
+import { keyFingerprint, parseManifest } from '../src/index.ts'
 import { refusal } from './refusals.ts'
 import { utf8 } from './support.ts'
 
@@ -46,7 +46,7 @@ function workspace(overrides: Record<string, unknown> = {}): Record<string, unkn
  * @returns the origin.
  */
 function origin(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { homeKeyId: 'home-key', publicKey: Buffer.alloc(32, 7).toString('base64url'), ...overrides }
+  return { homeKeyId: keyFingerprint(Buffer.alloc(32, 7).toString('base64url')), publicKey: Buffer.alloc(32, 7).toString('base64url'), ...overrides }
 }
 
 /**
@@ -74,7 +74,7 @@ describe('a well-formed manifest', () => {
   it('parses into its origin, entries and workspaces', () => {
     const parsed = parseManifest(manifest())
 
-    expect(parsed.origin.homeKeyId).toBe('home-key')
+    expect(parsed.origin.homeKeyId).toBe(keyFingerprint(Buffer.alloc(32, 7).toString('base64url')))
     expect(parsed.entries.map(item => item.path)).toEqual(['customisation.json', OBJECT_PATH])
     expect(parsed.workspaces).toEqual([{ id: 'ws-1', name: 'Project', chats: [OBJECT_PATH], attachments: [], objects: [] }])
   })
@@ -131,6 +131,7 @@ describe('a manifest origin', () => {
     ['has a key identifier that is not base64url', origin({ homeKeyId: 'home key' })],
     ['has a public key that is not base64url', origin({ publicKey: 'not base64url!' })],
     ['has a public key that is not 32 bytes', origin({ publicKey: Buffer.alloc(31, 7).toString('base64url') })],
+    ['has a key identifier that is not its key\'s fingerprint', origin({ homeKeyId: 'home-key' })],
   ])('is refused when it %s', (_name, value) => {
     expect(refusal(() => parseManifest(manifest({ origin: value }))).code).toBe('ARCHIVE_SCHEMA_INVALID')
   })

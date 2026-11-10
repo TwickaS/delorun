@@ -19,6 +19,7 @@ import {
   ZipArchive,
   checkContainerDeclarations,
   exportArchive,
+  keyFingerprint,
   signManifest,
   type ArchiveImportReport,
   type ArchiveImporterConfig,
@@ -100,8 +101,8 @@ describe('the signature state of an import', () => {
   it('shows a signed archive whose key this home already holds as verified', async () => {
     const key = makeKey()
     const bytes = buildArchive({
-      origin: { homeKeyId: HOME_KEY_ID, publicKey: key.publicKey },
-      sign: { ...key, homeKeyId: HOME_KEY_ID },
+      origin: { homeKeyId: keyFingerprint(key.publicKey), publicKey: key.publicKey },
+      sign: { ...key, homeKeyId: keyFingerprint(key.publicKey) },
     })
 
     const tree = makeScratch()
@@ -120,13 +121,13 @@ describe('the signature state of an import', () => {
   it('shows a signed archive as verified when the person confirmed the key itself', async () => {
     const key = makeKey()
     const bytes = buildArchive({
-      origin: { homeKeyId: HOME_KEY_ID, publicKey: key.publicKey },
-      sign: { ...key, homeKeyId: HOME_KEY_ID },
+      origin: { homeKeyId: keyFingerprint(key.publicKey), publicKey: key.publicKey },
+      sign: { ...key, homeKeyId: keyFingerprint(key.publicKey) },
     })
 
     const report = await importInto(bytes, {
       store: new RecordingStore(),
-      confirmedHomeKeyId: HOME_KEY_ID,
+      confirmedHomeKeyId: keyFingerprint(key.publicKey),
       confirmedPublicKey: key.publicKey,
     })
 
@@ -137,15 +138,17 @@ describe('the signature state of an import', () => {
     const home = makeKey()
     const impostor = makeKey()
     expect(impostor.publicKey).not.toBe(home.publicKey)
+    const homeKeyId = keyFingerprint(home.publicKey)
     const bytes = buildArchive({
-      origin: { homeKeyId: HOME_KEY_ID, publicKey: impostor.publicKey },
-      sign: { homeKeyId: HOME_KEY_ID, privateKey: impostor.privateKey },
+      origin: { homeKeyId, publicKey: impostor.publicKey },
+      sign: { homeKeyId, privateKey: impostor.privateKey },
     })
 
     const store = new RecordingStore()
-    const { refusal, staged } = await importRefusal(bytes, { store, confirmedHomeKeyId: HOME_KEY_ID })
+    const { refusal, staged } = await importRefusal(bytes, { store, confirmedHomeKeyId: homeKeyId })
 
-    expect(refusal.code).toBe('ARCHIVE_SIGNER_UNTRUSTED')
+    expect(refusal.code).toBe('ARCHIVE_SCHEMA_INVALID')
+    expect(refusal.message).toContain('not the fingerprint')
     expect(staged).toEqual([])
     expect(store.published).toEqual([])
   })
@@ -263,7 +266,7 @@ describe('the export of an archive an import accepts', () => {
 
     const exported = exportArchive({
       createdBy: 'delo-archive-fixture',
-      origin: { homeKeyId: HOME_KEY_ID, publicKey: key.publicKey },
+      origin: { homeKeyId: keyFingerprint(key.publicKey), publicKey: key.publicKey },
       workspaces: [{
         id: 'ws-chat',
         name: 'Project',
@@ -272,7 +275,7 @@ describe('the export of an archive an import accepts', () => {
         attachments: [],
       }],
       customisation: { schemaVersion: ARCHIVE_CUSTOMISATION_SCHEMA_VERSION, rows: [] },
-      sign: manifestBytes => signManifest(manifestBytes, HOME_KEY_ID, key.privateKey),
+      sign: manifestBytes => signManifest(manifestBytes, keyFingerprint(key.publicKey), key.privateKey),
     })
 
     expect(exported.cancelled).toBe(false)

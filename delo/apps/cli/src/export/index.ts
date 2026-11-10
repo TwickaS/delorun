@@ -6,6 +6,9 @@
  * each of its chats that has a session directory. An attachment a chat names
  * by its content digest is carried when the home's attachment store holds it.
  * The archive is signed with the home key, which the home gets on first use.
+ * The export reads the stores while this process holds the home lock of every
+ * profile, so no home process writes a chat while it is read, and it is
+ * refused while a home process runs.
  *
  * Before anything is written, the export scans the chat history for secrets.
  * When it finds one it names each finding by kind and chat, never by value,
@@ -19,12 +22,12 @@ import { constants } from 'node:fs'
 import { lstat, open, readdir, readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { zstdDecompressSync } from 'node:zlib'
 import { z } from 'zod'
-import { ARCHIVE_CUSTOMISATION_SCHEMA_VERSION, ARCHIVE_LIMITS } from '@delo/contract-archive-and-trash'
+import { ARCHIVE_CUSTOMISATION_SCHEMA_VERSION } from '@delo/contract-archive-and-trash'
 import { exportArchive, loadHomeKey, signManifest, type ArchiveExportInput, type ExportWorkspace, type SecretFinding } from '@delo/archive'
-import { encodeSegment, isSessionGenerationFilename } from '@delo/trash'
+import { attachmentDigests, attachmentPaths, encodeSegment, generationFiles, readGeneration } from '@delo/trash'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
+import { quoted } from '../terminal-text.ts'
 import { isYes } from '../trash/terminal.ts'
 
 /** The usage line. */
@@ -40,6 +43,8 @@ export interface ExportIo {
   readonly stdout: (text: string) => void
   /** Ask one question; the empty string when no terminal can ask. */
   readonly ask: (question: string) => Promise<string>
+  /** Run the export while this process holds every profile's home lock; refuses while a home process runs. */
+  readonly exclusive: <T>(run: () => Promise<T>) => Promise<T>
 }
 
 /** The registry's record of one workspace, as `storages/workspace.json` holds it. */
@@ -47,9 +52,6 @@ const WorkspaceRecord = z.object({ path: z.string(), title: z.string(), sessionI
 
 /** The part of the workspace registry's storage document the export reads. */
 const WorkspaceDocument = z.object({ tables: z.object({ workspaces: z.record(z.string(), WorkspaceRecord) }) })
-
-/** A content digest as upstream's attachment ids name it. */
-const ATTACHMENT_REFERENCE = /sha256:([0-9a-f]{64})/g
 
 /**
  * Whether a path is a directory, without following a link.
@@ -84,15 +86,6 @@ export async function findChatDirectory(sessionsRoot: string, sessionId: string)
 }
 
 /**
- * The version of one generation file name: `session.jsonl` is 0, `session.vN.jsonl` is N.
- * @param name - a generation file name.
- * @returns its version.
- */
-function generationVersion(name: string): number {
-  return Number(/^session\.v([0-9]+)\./.exec(name)?.[1] ?? 0)
-}
-
-/**
  * Read one chat's newest session generation as text, decompressing a Zstandard generation within the archive's
  * per-entry limit.
  * @param directory - the chat's session directory.
@@ -100,20 +93,18 @@ function generationVersion(name: string): number {
  * @throws {CliError} when a Zstandard generation is damaged or larger than one archive entry may be.
  */
 export async function readChatText(directory: string): Promise<string | undefined> {
-  const generations = (await readdir(directory)).filter(isSessionGenerationFilename).sort((left, right) => generationVersion(right) - generationVersion(left))
-  const newest = generations[0]
+  const newest = (await generationFiles(directory))[0]
   if (newest === undefined) return undefined
-  const bytes = await readFile(join(directory, newest))
-  if (!newest.endsWith('.zstd')) return new TextDecoder().decode(bytes)
   try {
-    return new TextDecoder().decode(zstdDecompressSync(bytes, { maxOutputLength: ARCHIVE_LIMITS.maxEntryBytes }))
+    return await readGeneration(join(directory, newest))
   } catch (error: unknown) {
     throw new CliError(EXIT.failed, `delorun export: the chat in ${basename(directory)} cannot be read: ${(error as Error).message}`)
   }
 }
 
 /**
- * Read the attachments one chat's text names by digest, from the home's attachment store.
+ * Read the attachments one chat's text names by digest, from the home's attachment store: the image object, or else
+ * the file object, of each digest.
  * @param home - the Delo home.
  * @param text - the chat's text.
  * @returns the bytes of every named attachment the store holds as a regular file.
@@ -121,9 +112,8 @@ export async function readChatText(directory: string): Promise<string | undefine
 async function readAttachments(home: string, text: string): Promise<Uint8Array[]> {
   const root = join(home, 'attachments', 'v1')
   const found: Uint8Array[] = []
-  for (const digest of new Set([...text.matchAll(ATTACHMENT_REFERENCE)].map(match => match[1]!))) {
-    for (const store of ['objects', 'file-objects']) {
-      const path = join(root, store, digest.slice(0, 2), digest)
+  for (const digest of attachmentDigests(text)) {
+    for (const path of attachmentPaths(root, digest).slice(0, 2)) {
       const stats = await lstat(path).catch((error: unknown) => {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
         throw error
@@ -240,6 +230,18 @@ export async function runExport(args: readonly string[], io: ExportIo): Promise<
   const [target, ...extra] = parsed.positionals
   const out = parsed.values.out
   if (target === undefined || extra.length > 0 || out === undefined || out.length === 0) throw new CliError(EXIT.usage, EXPORT_USAGE)
+  return io.exclusive(() => writeExport(target, out, io))
+}
+
+/**
+ * Read one chat or workspace, ask about any secret it holds, and write it as a signed archive.
+ * @param target - the chat's or the workspace's id.
+ * @param out - the archive file to create.
+ * @param io - the home, the version, the output and the question.
+ * @returns the exit code.
+ * @throws {CliError} for an unknown id, a declined secret warning or an existing file.
+ */
+async function writeExport(target: string, out: string, io: ExportIo): Promise<ExitCode> {
   const workspace = await exportTarget(io.home, target)
   const key = (await loadHomeKey(io.home, { create: true }))!
   const input: ArchiveExportInput = {
@@ -257,6 +259,6 @@ export async function runExport(args: readonly string[], io: ExportIo): Promise<
     result = exportArchive({ ...input, confirmSecrets: true })
   }
   await writeNewFile(out, result.bytes!)
-  io.stdout(`Wrote ${basename(out)}: ${JSON.stringify(workspace.name)}, ${String(workspace.chats.length)} chat${workspace.chats.length === 1 ? '' : 's'}, ${String(workspace.attachments.length)} attachment${workspace.attachments.length === 1 ? '' : 's'}, signed by this home's key ${key.keyId}.\n`)
+  io.stdout(`Wrote ${quoted(basename(out))}: ${quoted(workspace.name)}, ${String(workspace.chats.length)} chat${workspace.chats.length === 1 ? '' : 's'}, ${String(workspace.attachments.length)} attachment${workspace.attachments.length === 1 ? '' : 's'}, signed by this home's key ${key.keyId}.\n`)
   return EXIT.ok
 }

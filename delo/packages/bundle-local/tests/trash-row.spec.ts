@@ -3,7 +3,9 @@
  * stores: a Delo CLI profile composes the `delo-trash` row with the trash
  * root, the session root, the storage root and the home itself, each under
  * the harness home, which C1 sets to the Delo home. The parity form leaves the
- * row disabled, so recorded scenarios mount nothing of it.
+ * row disabled, so recorded scenarios mount nothing of it. No row reads the
+ * workspaces `delorun import` publishes under `archive/`: the studio does not
+ * open imported chats yet, and those chats stay out of every model request.
  */
 import { interpolate } from '@deepseek-ai/cordis-plugin-loader'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
@@ -36,5 +38,14 @@ describe('the shipped composition\'s trash row', () => {
     })
     const [parity] = parityPatches([{ insert: [{ id: 'delo-trash', name: '@delo/plugin-trash' }] }])
     expect(parity).toEqual({ insert: [{ id: 'delo-trash', name: '@delo/plugin-trash', disabled: true }] })
+  })
+})
+
+describe('the workspaces an import publishes', () => {
+  it('are read by no row of the shipped composition', () => {
+    const composed = JSON.stringify(home.rows(DELO_PROFILE))
+
+    expect(composed).toContain("dshHomePath('trash')")
+    expect(composed).not.toMatch(/['"/]archive['"/]/)
   })
 })

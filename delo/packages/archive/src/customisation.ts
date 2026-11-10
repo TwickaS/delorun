@@ -19,6 +19,7 @@ import {
   type ArchiveCustomisationRow,
   type ArchiveRowKind,
 } from '@delo/contract-archive-and-trash'
+import { hasControlCharacter } from './text.ts'
 import { ArchiveError } from './errors.ts'
 import { CUSTOMISATION_PATH } from './manifest.ts'
 
@@ -201,11 +202,14 @@ function requireObject(value: unknown, where: string): Record<string, unknown> {
  * @param value - the parsed value.
  * @param where - the value's name, for the refusal's message.
  * @returns the string.
- * @throws ArchiveError `ARCHIVE_SCHEMA_INVALID` when the value is not a non-empty string.
+ * @throws ArchiveError `ARCHIVE_SCHEMA_INVALID` when the value is not a non-empty string or holds a control character.
  */
 function requireText(value: unknown, where: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${where} is not a non-empty string`)
+  }
+  if (hasControlCharacter(value)) {
+    throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `${where} holds a control character, which an archive's text may not carry`)
   }
   return value
 }
