@@ -68,10 +68,15 @@ function presetReview(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict {
   return review.creationPreset === review.currentPreset ? { kind: 'allow' } : { kind: 'refuse', reason: REFUSAL }
 }
 
-async function setup(options: { consent?: ScheduleConsentService; presets?: Presets } = {}) {
+async function setup(options: {
+  consent?: ScheduleConsentService
+  presets?: Presets
+  titles?: { get(session: { id: string }): { title: string } | undefined }
+} = {}) {
   const test = await harness({ onContext: (ctx) => {
     if (options.consent !== undefined) ctx.provide('scheduleConsent', options.consent)
     if (options.presets !== undefined) ctx.provide('permissionPresets', options.presets)
+    if (options.titles !== undefined) ctx.provide('sessionTitle', options.titles as never)
   } })
   tests.push(test)
   const agent = agentFor(test.ctx, 'original')
@@ -138,9 +143,9 @@ describe('Schedule consent approval naming', () => {
     await call(test, 'schedule_create', TASK)
     expect(request).toHaveBeenCalledOnce()
     expect(nameEffect).toHaveBeenCalledOnce()
-    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({
       tool: 'schedule_create', recurrence: DAILY, targetSessionId: test.agent.session.id, targetPreset: undefined,
-    } satisfies ScheduleEffect)
+    } satisfies Partial<ScheduleEffect>)
     expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(`${ASK_REASON} ${NAMED}`)
   })
 
@@ -153,9 +158,9 @@ describe('Schedule consent approval naming', () => {
     askPolicy(test)
     await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
     expect(nameEffect).toHaveBeenCalledOnce()
-    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({
       tool: 'schedule_edit', recurrence: DAILY, targetSessionId: test.agent.session.id, targetPreset: undefined,
-    } satisfies ScheduleEffect)
+    } satisfies Partial<ScheduleEffect>)
   })
 
   it('keeps the approval unnamed when the consent names no effect', async () => {
@@ -189,9 +194,9 @@ describe('Schedule consent approval naming', () => {
     }, test.agent.session.id)
     askPolicy(test)
     await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
-    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({
       tool: 'schedule_edit', recurrence: DAILY, targetSessionId: undefined, targetPreset: DEPLOYMENT_DEFAULT,
-    } satisfies ScheduleEffect)
+    } satisfies Partial<ScheduleEffect>)
   })
 
   it('names no preset for a stored target chat that holds no live Agent', async () => {
@@ -208,9 +213,9 @@ describe('Schedule consent approval naming', () => {
     askPolicy(test)
     await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
     // The caller's preset belongs to another chat, so the approval states no preset at all.
-    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({
       tool: 'schedule_edit', recurrence: DAILY, targetSessionId: 'other', targetPreset: undefined,
-    } satisfies ScheduleEffect)
+    } satisfies Partial<ScheduleEffect>)
   })
 
   it('leaves a delete approval unnamed, so it states no delivery', async () => {
@@ -271,9 +276,9 @@ describe('Schedule consent creation baseline', () => {
     const created = await call(test, 'schedule_create', { ...TASK, rrule: ONCE, target: 'new' }) as { id: string }
 
     // The approval names the preset the chat this call opens will run, not the caller's.
-    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({
       tool: 'schedule_create', recurrence: ONCE, targetSessionId: undefined, targetPreset: DEPLOYMENT_DEFAULT,
-    } satisfies ScheduleEffect)
+    } satisfies Partial<ScheduleEffect>)
     expect(request.mock.calls.at(0)?.at(0)?.reason).toContain(`which runs the ${DEPLOYMENT_DEFAULT} permission preset`)
     // The task stores that same default, so its baseline is the preset its deliveries will meet.
     expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({ creationPreset: DEPLOYMENT_DEFAULT })
@@ -506,9 +511,9 @@ describe('Schedule consent facts from raw call arguments', () => {
     approving(test)
     const { target: _target, ...untargeted } = TASK
     await attempt(test, 'schedule_create', untargeted)
-    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({
       tool: 'schedule_create', recurrence: DAILY, targetSessionId: undefined, targetPreset: DEPLOYMENT_DEFAULT,
-    } satisfies ScheduleEffect)
+    } satisfies Partial<ScheduleEffect>)
   })
 
   it('names the rule and the target an edit restates instead of the stored ones', async () => {
@@ -518,9 +523,9 @@ describe('Schedule consent facts from raw call arguments', () => {
     const created = await call(test, 'schedule_create', TASK) as { id: string }
     nameEffect.mockClear()
     await call(test, 'schedule_edit', { id: created.id, action: 'update', rrule: ONCE, target: 'new' })
-    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({
       tool: 'schedule_edit', recurrence: ONCE, targetSessionId: undefined, targetPreset: DEPLOYMENT_DEFAULT,
-    } satisfies ScheduleEffect)
+    } satisfies Partial<ScheduleEffect>)
   })
 
   it('states only the naming when another policy asks without a reason', async () => {
@@ -532,5 +537,99 @@ describe('Schedule consent facts from raw call arguments', () => {
     })
     await call(test, 'schedule_create', TASK)
     expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(NAMED)
+  })
+})
+
+describe('Schedule consent naming of a chat opened in a Workspace with its own preset', () => {
+  it('names the Workspace preset the opened chat will run and binds the task to it', async () => {
+    const nameEffect = vi.fn((_effect: ScheduleEffect) => NAMED)
+    const test = await setup({
+      consent: { nameEffect, presetFor: () => 'workspace-project', reviewDelivery: () => ({ kind: 'allow' }) },
+      presets: presetsOf(),
+    })
+    approving(test)
+    const created = await call(test, 'schedule_create', { ...TASK, target: 'new' }) as { id: string }
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({ targetSessionId: undefined, targetPreset: 'workspace-project' })
+    expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({ creationPreset: 'workspace-project' })
+  })
+})
+
+describe('Schedule consent baseline bound to the approved ask', () => {
+  it('stores the preset the ask named although the chat moved before the person answered', async () => {
+    let preset = CALLER_PRESET
+    const test = await setup({
+      consent: { nameEffect: () => NAMED, reviewDelivery: () => ({ kind: 'allow' }) },
+      presets: { defaultPreset: DEPLOYMENT_DEFAULT, current: () => preset },
+    })
+    const request = approving(test)
+    request.mockImplementation(async () => {
+      preset = 'danger-full-access'
+      return 'allowed-once'
+    })
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({ creationPreset: CALLER_PRESET })
+
+    preset = 'narrow'
+    request.mockImplementation(async () => {
+      preset = 'danger-full-access'
+      return 'allowed-once'
+    })
+    await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
+    expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({ creationPreset: 'narrow' })
+  })
+
+  it('binds the preset the ask named even when the consent edits the effect it is handed', async () => {
+    const test = await setup({
+      consent: {
+        nameEffect: (effect) => {
+          Object.assign(effect, { targetPreset: 'danger-full-access' })
+          return NAMED
+        },
+        reviewDelivery: () => ({ kind: 'allow' }),
+      },
+      presets: presetsOf(),
+    })
+    approving(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({ creationPreset: CALLER_PRESET })
+  })
+})
+
+describe('Schedule consent facts a person reads', () => {
+  it('names the title, the start of the instruction and the chat title, bounded and without control characters', async () => {
+    const nameEffect = vi.fn((_effect: ScheduleEffect) => NAMED)
+    const test = await setup({
+      consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) },
+      titles: { get: () => ({ title: 'Inbox\u0007 triage\u202e' }) },
+    })
+    approving(test)
+    await call(test, 'schedule_create', { ...TASK, title: 'Queue\ncheck', prompt: `Check\tthe queue ${'x'.repeat(300)}` })
+    const named = nameEffect.mock.calls.at(0)?.at(0)
+    expect(named).toMatchObject({ title: 'Queue check', targetTitle: 'Inbox triage' })
+    expect(named?.prompt.startsWith('Check the queue x')).toBe(true)
+    expect(named?.prompt).toHaveLength(200)
+    expect(named?.prompt.endsWith('…')).toBe(true)
+  })
+
+  it('names the new instruction of an edit that changes only the instruction', async () => {
+    const nameEffect = vi.fn((_effect: ScheduleEffect) => NAMED)
+    const test = await setup({ consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) } })
+    approving(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    nameEffect.mockClear()
+    await call(test, 'schedule_edit', { id: created.id, action: 'update', prompt: 'Delete the archive' })
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({ title: TASK.title, prompt: 'Delete the archive' })
+  })
+
+  it('names the directory a stored target opens its chat in', async () => {
+    const nameEffect = vi.fn((_effect: ScheduleEffect) => NAMED)
+    const test = await setup({ consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) } })
+    approving(test)
+    const created = await test.service.create({
+      title: 'Queue check', prompt: 'Check the queue', timing: { kind: 'rrule', rrule: DAILY },
+      target: { kind: 'new', create: { cwd: '/work/app' } },
+    }, test.agent.session.id)
+    await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({ targetSessionId: undefined, targetCwd: '/work/app', targetTitle: undefined })
   })
 })

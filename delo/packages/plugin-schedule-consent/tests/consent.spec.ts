@@ -6,14 +6,18 @@
  * presets deliver, as upstream does without a preset service.
  */
 import { describe, expect, it } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
 import type { ScheduleDeliveryReview, ScheduleEffect } from '@deepseek-ai/dsh-schedule'
-import { ConfigSchema, nameConsentEffect, reviewConsentDelivery } from '../src/index.ts'
+import { apply, ConfigSchema, nameConsentEffect, reviewConsentDelivery, workspacePreset } from '../src/index.ts'
 
 /** A stand-in Session: the review and the naming read only its id. */
 const session = { id: 'chat-1' }
 
 function effect(parts: Partial<ScheduleEffect>): ScheduleEffect {
-  return { tool: 'schedule_create', recurrence: 'RRULE:FREQ=DAILY;COUNT=1', targetSessionId: undefined, targetPreset: undefined, ...parts }
+  return {
+    tool: 'schedule_create', title: 'Queue check', prompt: 'Check the queue', recurrence: 'RRULE:FREQ=DAILY;COUNT=1',
+    targetSessionId: undefined, targetTitle: undefined, targetCwd: undefined, targetPreset: undefined, ...parts,
+  }
 }
 
 function review(parts: Partial<ScheduleDeliveryReview>): ScheduleDeliveryReview {
@@ -65,19 +69,31 @@ describe('the delivery review', () => {
 })
 
 describe('the approval naming', () => {
-  it('names the recurrence, the target chat and its preset', () => {
+  const sends = 'The task "Queue check" sends "Check the queue" on "RRULE:FREQ=DAILY;COUNT=1"'
+
+  it('names the title, the instruction, the recurrence, the target chat and its preset', () => {
     expect(nameConsentEffect(effect({ targetSessionId: session.id, targetPreset: 'standard' })))
-      .toBe('The task delivers on "RRULE:FREQ=DAILY;COUNT=1" into the chat chat-1, which runs the standard permission preset.')
+      .toBe(`${sends} into the chat chat-1, which runs the standard permission preset.`)
   })
 
-  it('names the new chat a created target opens, with the inherited preset', () => {
+  it('names the target chat by its title when it has one', () => {
+    expect(nameConsentEffect(effect({ targetSessionId: session.id, targetTitle: 'Inbox triage', targetPreset: 'standard' })))
+      .toBe(`${sends} into the chat "Inbox triage" (chat-1), which runs the standard permission preset.`)
+  })
+
+  it('names the new chat a created target opens, with the preset it will be opened under', () => {
     expect(nameConsentEffect(effect({ targetSessionId: undefined, targetPreset: 'standard' })))
-      .toBe('The task delivers on "RRULE:FREQ=DAILY;COUNT=1" into a new chat that its first delivery opens, which runs the standard permission preset.')
+      .toBe(`${sends} into a new chat that its first delivery opens, which runs the standard permission preset.`)
+  })
+
+  it('names the directory the new chat opens in', () => {
+    expect(nameConsentEffect(effect({ targetSessionId: undefined, targetCwd: '/work/app', targetPreset: 'workspace-write' })))
+      .toBe(`${sends} into a new chat in /work/app that its first delivery opens, which runs the workspace-write permission preset.`)
   })
 
   it('names no preset while the deployment composes no preset roster', () => {
     expect(nameConsentEffect(effect({ targetSessionId: session.id, targetPreset: undefined })))
-      .toBe('The task delivers on "RRULE:FREQ=DAILY;COUNT=1" into the chat chat-1.')
+      .toBe(`${sends} into the chat chat-1.`)
   })
 
   it('names nothing without a recurrence', () => {
@@ -94,5 +110,36 @@ describe('the configuration schema', () => {
 
   it('keeps an explicit value', () => {
     expect(ConfigSchema.parse({ enabled: true })).toEqual({ enabled: true })
+  })
+})
+
+describe('the preset a new chat starts with', () => {
+  const defaults = { defaultPreset: (cwd: string) => cwd === '/work' ? 'danger-full-access' : 'workspace-write' }
+
+  it('reads the workspace preset of the directory the chat opens in', () => {
+    expect(workspacePreset(defaults, { cwd: '/work' })).toBe('danger-full-access')
+  })
+
+  it('leaves the deployment default without a directory or without permission defaults', () => {
+    expect(workspacePreset(defaults, {})).toBeUndefined()
+    expect(workspacePreset(undefined, { cwd: '/work' })).toBeUndefined()
+  })
+})
+
+describe('the mounted service', () => {
+  it('provides the naming, the review and the workspace preset once enabled', async () => {
+    const ctx = new Context()
+    ctx.provide('permissionDefaults', { defaultPreset: () => 'workspace-write' })
+    await ctx.plugin({ apply }, { enabled: true })
+    const consent = ctx.get('scheduleConsent')
+    expect(consent?.presetFor?.({ cwd: '/work' })).toBe('workspace-write')
+    expect(consent?.nameEffect(effect({ recurrence: '' }))).toBeUndefined()
+    expect(consent?.reviewDelivery(review({}))).toEqual({ kind: 'allow' })
+  })
+
+  it('mounts nothing while disabled', async () => {
+    const ctx = new Context()
+    await ctx.plugin({ apply })
+    expect(ctx.get('scheduleConsent')).toBeUndefined()
   })
 })

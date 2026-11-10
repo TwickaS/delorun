@@ -23,8 +23,8 @@ import {
 } from '@deepseek-ai/dsh-schedule'
 import type { SchedulePermissionPresets } from '@deepseek-ai/dsh-schedule'
 import type {
-  InternalScheduleError, ScheduleConsentRefusal, ScheduleEditRequest, ScheduleEffect, ScheduleRecord, ScheduleTarget,
-  ScheduleTargetRequest, ScheduleToolError,
+  InternalScheduleError, ScheduleConsentApproval, ScheduleConsentRefusal, ScheduleEditRequest, ScheduleEffect, ScheduleRecord,
+  ScheduleSessionCreateSpec, ScheduleTarget, ScheduleTargetRequest, ScheduleToolError,
   ScheduleCatalogEntry, ScheduleDeliveryReceipt, SubagentSessionError,
 } from '@deepseek-ai/dsh-schedule'
 
@@ -295,17 +295,63 @@ function recurrenceText(record: ScheduleRecord): string {
   }
 }
 
-/** The target facts a consent names: the chat the deliveries reach and the preset it runs. */
+/** Longest task title, instruction excerpt, chat title or directory an approval names. */
+const MAX_FACT_LENGTH = 200
+
+/**
+ * One text fact as an approval states it: control and format characters, which could break or disguise the
+ * sentence, become spaces, runs of whitespace collapse, and a fact longer than {@link MAX_FACT_LENGTH} ends in an
+ * ellipsis.
+ * @param text - The text as stored or as the caller wrote it.
+ * @returns The bounded, printable fact.
+ */
+function shownFact(text: string): string {
+  const plain = text.replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim()
+  return plain.length <= MAX_FACT_LENGTH ? plain : `${plain.slice(0, MAX_FACT_LENGTH - 1)}…`
+}
+
+/** The target facts a consent names: the chat the deliveries reach, its title or directory, and the preset it runs. */
 interface TargetFacts {
   readonly targetSessionId: ScheduleEffect['targetSessionId']
+  readonly targetTitle: string | undefined
+  readonly targetCwd: string | undefined
   readonly targetPreset: string | undefined
 }
 
-/** The facts of a destination that opens its own Session: no chat yet, and the preset that chat will run. */
-function createdFacts(presets: SchedulePermissionPresets | undefined): TargetFacts {
-  // A created Session is pinned to the deployment default, not to the caller's preset, so that is
-  // the preset the approval names and the preset the first delivery will actually run.
-  return { targetSessionId: undefined, targetPreset: presets?.defaultPreset }
+/**
+ * The facts of a destination that opens its own Session: no chat yet, the directory it opens in, and the preset it
+ * will be opened under — the one the consent names for those creation values, such as its Workspace's, or the
+ * deployment default every fresh Session is pinned to, never the caller's.
+ * @param ctx - Scope holding the preset service and the consent.
+ * @param create - Creation values of the Session a delivery opens.
+ * @returns The facts the approval names.
+ */
+function createdFacts(ctx: Context, create: ScheduleSessionCreateSpec): TargetFacts {
+  const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
+  return {
+    targetSessionId: undefined,
+    targetTitle: undefined,
+    targetCwd: create.cwd === undefined ? undefined : shownFact(create.cwd),
+    targetPreset: presets === undefined ? undefined : ctx.get('scheduleConsent')?.presetFor?.(create) ?? presets.defaultPreset,
+  }
+}
+
+/**
+ * The facts of a live or stored chat the deliveries reach.
+ * @param ctx - Scope holding the preset service and the chat titles.
+ * @param sessionId - The chat.
+ * @param agent - Its live Agent; without one, neither its title nor its preset can be read.
+ * @returns The facts the approval names.
+ */
+function chatFacts(ctx: Context, sessionId: string, agent: Agent | undefined): TargetFacts {
+  const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
+  const title = agent === undefined ? undefined : ctx.get('sessionTitle')?.get(agent.session)?.title
+  return {
+    targetSessionId: sessionId,
+    targetTitle: title === undefined ? undefined : shownFact(title),
+    targetCwd: undefined,
+    targetPreset: agent === undefined ? undefined : presets?.current(agent.session),
+  }
 }
 
 /**
@@ -315,35 +361,23 @@ function createdFacts(presets: SchedulePermissionPresets | undefined): TargetFac
  * @param target - Model target choice of the pending call.
  * @returns The chat the deliveries reach and the preset it runs.
  */
-function targetFacts(
-  ctx: Context,
-  agent: Agent,
-  target: typeof TARGET_CHOICES[number],
-): TargetFacts {
-  const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
-  if (target !== 'this_session') return createdFacts(presets)
-  return { targetSessionId: agent.session.id, targetPreset: presets?.current(agent.session) }
+function targetFacts(ctx: Context, agent: Agent, target: typeof TARGET_CHOICES[number]): TargetFacts {
+  return target === 'this_session' ? chatFacts(ctx, agent.session.id, agent) : createdFacts(ctx, createSpecFor(agent))
 }
 
 /**
  * The target facts of a stored destination the pending call keeps.
  *
  * A stored Session target with no live Agent runs no readable preset: the approval names none
- * rather than the caller's, which is a different chat's. A stored destination that opens its own
- * Session names the deployment default the created Session will be pinned to.
+ * rather than the caller's, which is a different chat's.
  * @param ctx - Scope whose live Agent registry supplies a stored target's Session.
- * @param presets - The composed preset service, when one is.
  * @param target - Destination stored on the task.
  * @returns The chat the deliveries reach and the preset it runs.
  */
-function storedFacts(
-  ctx: Context,
-  presets: SchedulePermissionPresets | undefined,
-  target: ScheduleTarget,
-): TargetFacts {
-  if (target.kind !== 'session') return createdFacts(presets)
-  const agent = ctx.agents.get(target.sessionId)
-  return { targetSessionId: target.sessionId, targetPreset: agent === undefined ? undefined : presets?.current(agent.session) }
+function storedFacts(ctx: Context, target: ScheduleTarget): TargetFacts {
+  return target.kind === 'session'
+    ? chatFacts(ctx, target.sessionId, ctx.agents.get(target.sessionId))
+    : createdFacts(ctx, target.create)
 }
 
 /** What one pending management call puts to the composed consent. */
@@ -355,54 +389,63 @@ interface ConsentFacts {
 }
 
 /**
- * Read the facts one Schedule management call puts to the consent. An update that restates no rule
- * names the stored rule, so the approval always carries the recurrence the task keeps; a task that
- * cannot be read leaves the approval unnamed, and a delete creates no effect to name at all. An
- * edit of a task the consent refused reports that refusal, so the ask states why the delivery
- * stopped before the person re-approves it.
+ * Read the facts one Schedule management call puts to the consent. An update names what the task
+ * will be after it: the title, instruction, rule and target the call restates, and the stored ones
+ * it keeps, so an edit of the instruction alone still states a changed fact. A task that cannot be
+ * read leaves the approval unnamed, and a delete creates no effect to name at all. An edit of a task
+ * the consent refused reports that refusal, so the ask states why the delivery stopped before the
+ * person re-approves it. The arguments are the model's JSON before the tool's schema checks them.
  * @param ctx - Scope whose `schedule` service stores the tasks.
  * @param exec - Pending management call with its parsed arguments.
  * @param agent - Calling root Agent.
  * @returns The effect and the edited task's stored refusal; both are undefined when the call names no effect.
  */
 async function consentFacts(ctx: Context, exec: ToolExecution, agent: Agent): Promise<ConsentFacts> {
-  const args = exec.arguments as { rrule?: unknown; target?: unknown; id?: unknown; action?: unknown } | undefined
+  const args = exec.arguments as {
+    title?: unknown
+    prompt?: unknown
+    rrule?: unknown
+    target?: unknown
+    id?: unknown
+    action?: unknown
+  } | undefined
   const none: ConsentFacts = { effect: undefined, refusal: undefined }
   if (args === undefined || typeof args !== 'object') return none
   // A delete only removes the task: nothing starts delivering, so the approval states nothing.
   if (exec.name === 'schedule_edit' && args.action === 'delete') return none
-  const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
-  let recurrence: string | undefined
+  const stated = (value: unknown, kept: string): string => shownFact(typeof value === 'string' ? value : kept)
+  let tool: ScheduleEffect['tool']
+  let title: string
+  let prompt: string
+  let recurrence: string
   let facts: TargetFacts
   let refusal: ScheduleConsentRefusal | undefined
   if (exec.name === 'schedule_create') {
+    tool = 'schedule_create'
     if (typeof args.rrule !== 'string') return none
+    title = stated(args.title, '')
+    prompt = stated(args.prompt, '')
     recurrence = args.rrule
     facts = targetFacts(ctx, agent, typeof args.target === 'string'
       ? args.target as typeof TARGET_CHOICES[number]
       : 'new_once')
   } else {
     if (typeof args.id !== 'string') return none
+    tool = 'schedule_edit'
     const stored = await ctx.schedule.view({ id: ScheduleId(args.id) })
     // A lookup miss names no task, so the approval states neither an effect nor a refusal; every stored task states
     // its rule, and the refusal a paused one carries, so the person sees why the delivery stopped before they
     // re-approve it.
     if ('code' in stored) return none
     refusal = stored.consentRefusal
+    title = stated(args.title, stored.title)
+    prompt = stated(args.prompt, stored.prompt)
     recurrence = typeof args.rrule === 'string' ? args.rrule : recurrenceText(stored)
     facts = typeof args.target === 'string'
       ? targetFacts(ctx, agent, args.target as typeof TARGET_CHOICES[number])
-      : storedFacts(ctx, presets, stored.target)
+      : storedFacts(ctx, stored.target)
   }
-  return {
-    effect: {
-      tool: exec.name,
-      recurrence,
-      ...facts.targetSessionId === undefined ? {} : { targetSessionId: facts.targetSessionId },
-      targetPreset: facts.targetPreset,
-    } as ScheduleEffect,
-    refusal,
-  }
+  return { effect: { tool, title, prompt, recurrence, ...facts }, refusal }
 }
 
 /** The ask text a mounted consent uses when it names no effect of its own. */
@@ -414,12 +457,22 @@ function refusalText(refusal: ScheduleConsentRefusal): string {
 }
 
 /**
- * The calls this plugin raised a consent ask for. A `tools/pre-execute` `ask` runs the body only
- * after the approval service answered `allowed-once` and denies every other outcome, so a call that
- * reaches its body with an entry here was answered by the person for exactly the effect the ask
- * named.
+ * The calls this plugin raised a consent ask for, with the effect each ask named. A `tools/pre-execute`
+ * `ask` runs the body only after the approval service answered `allowed-once` and denies every other
+ * outcome, so a call that reaches its body with an entry here was answered by the person for exactly
+ * that effect, whose preset becomes the task's delivery baseline.
  */
-const consentAsks = new WeakSet<ToolExecution>()
+const consentAsks = new WeakMap<ToolExecution, ScheduleEffect>()
+
+/**
+ * The person's answer to the consent ask one call passed, when it passed one.
+ * @param exec - The executing call.
+ * @returns The approval, binding the baseline to the preset the ask named, or undefined.
+ */
+function approvalOf(exec: ToolRunContext): ScheduleConsentApproval | undefined {
+  const effect = consentAsks.get(exec)
+  return effect === undefined ? undefined : { preset: effect.targetPreset }
+}
 
 /** Stable error for failures not safe to expose. */
 function internalError(): InternalScheduleError {
@@ -468,14 +521,21 @@ async function runForCaller<T, const C extends ScheduleToolError['code']>(
  */
 function targetFor(agent: Agent, target: typeof TARGET_CHOICES[number]): ScheduleTargetRequest {
   if (target === 'this_session') return { kind: 'session', sessionId: agent.session.id }
+  return { kind: target, create: createSpecFor(agent) }
+}
+
+/**
+ * The creation values of a Session a delivery opens for the calling Agent: its working directory and current
+ * composed preset.
+ * @param agent - Calling root Agent.
+ * @returns The creation values.
+ */
+function createSpecFor(agent: Agent): ScheduleSessionCreateSpec {
   const cwd = agent.session.header.cwd
   const agentPreset = agent.ctx.get('agentPresets')?.composedPreset(agent.ctx)
   return {
-    kind: target,
-    create: {
-      ...(cwd === undefined ? {} : { cwd }),
-      ...(agentPreset === undefined ? {} : { agentPreset }),
-    },
+    ...(cwd === undefined ? {} : { cwd }),
+    ...(agentPreset === undefined ? {} : { agentPreset }),
   }
 }
 
@@ -521,20 +581,21 @@ function registerScheduleTools(ctx: Context): void {
     if (consent === undefined || agent === undefined) return gate
     const { effect, refusal } = await consentFacts(ctx, exec, agent)
     if (effect === undefined) return gate
-    // A consent that throws here fails the call before anything is asked or stored.
-    const named = consent.nameEffect(effect)
+    // A consent that throws here fails the call before anything is asked or stored. It names a copy, so it cannot
+    // change the preset this call binds as the baseline.
+    const named = consent.nameEffect({ ...effect })
     // A whitespace-only naming names nothing, so the ask never ends in a blank sentence.
     const stated = [named, refusal === undefined ? undefined : refusalText(refusal)]
       .filter((part): part is string => part !== undefined && part.trim() !== '')
     if (gate.kind === 'ask') {
       // Another composed policy asked without the consent's text, so the consent took no part in it.
       if (stated.length === 0) return gate
-      consentAsks.add(exec)
+      consentAsks.set(exec, effect)
       return { ...gate, reason: gate.reason === undefined ? stated.join(' ') : `${gate.reason} ${stated.join(' ')}` }
     }
     // An edit of a task the consent refused is approved again only by an answer to this ask, so the
     // service learns about it the same way it learns about every other consent ask.
-    consentAsks.add(exec)
+    consentAsks.set(exec, effect)
     return { kind: 'ask', reason: stated.length === 0 ? UNNAMED_CONSENT_ASK : stated.join(' ') }
   })
 
@@ -558,7 +619,7 @@ function registerScheduleTools(ctx: Context): void {
     execute(args, exec) {
       return runForCaller(exec, CREATE_ERRORS, agent => ctx.schedule.create({
         title: args.title, prompt: args.prompt, timing: { kind: 'rrule', rrule: args.rrule }, target: targetFor(agent, args.target),
-      }, agent.session.id, exec.signal).then(modelTask))
+      }, agent.session.id, exec.signal, approvalOf(exec)).then(modelTask))
     },
     presentCall: args => present('Create scheduled task', 'other', args.title),
   }))
@@ -647,17 +708,11 @@ function registerScheduleTools(ctx: Context): void {
           if (Object.keys(patch).length === 0) {
             throw new ScheduleInputError('invalid_selector', 'update requires at least one of title, prompt, rrule, target, or active.')
           }
-          request = {
-            id,
-            action: 'update',
-            patch,
-            ...expected,
-            // The consent ask this call passed names the delivery the edit arms, so the person
-            // answered for that delivery: the edit may re-capture the baseline it was approved under.
-            ...consentAsks.has(exec) ? { consentApproval: 'allowed-once' as const } : {},
-          }
+          request = { id, action: 'update', patch, ...expected }
         }
-        return ctx.schedule.edit(request, agent.session.id, exec.signal)
+        // The consent ask this call passed names the delivery the edit arms, so the person answered for that
+        // delivery: the edit re-captures the baseline the ask named.
+        return ctx.schedule.edit(request, agent.session.id, exec.signal, approvalOf(exec))
           .then(result => 'kind' in result ? modelTask(result) : result)
       })
     },

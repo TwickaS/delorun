@@ -10,7 +10,7 @@
  */
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type {
-  ScheduleConsentService, ScheduleDeliveryReview, ScheduleDeliveryVerdict, ScheduleEffect,
+  ScheduleConsentService, ScheduleDeliveryReview, ScheduleDeliveryVerdict, ScheduleEffect, ScheduleSessionCreateSpec,
 } from '@deepseek-ai/dsh-schedule'
 
 import { z } from 'zod'
@@ -31,22 +31,46 @@ export const ConfigSchema = z.object({
 }).default({ enabled: false })
 
 /**
- * Name what one approved Schedule management call creates: the recurrence it
- * arms or keeps, the chat its deliveries reach, and that chat's permission
- * preset. The text joins the approval's reason, so the ask states what would
- * start running before the person answers it.
+ * Name what one approved Schedule management call creates: the task's title,
+ * the start of the instruction it sends, the recurrence it arms or keeps, the
+ * chat its deliveries reach — by title when it has one, or the directory a new
+ * chat opens in — and that chat's permission preset. The text joins the
+ * approval's reason, so the ask states what would start running before the
+ * person answers it. The runtime hands over every text fact bounded and free of
+ * control characters.
  * @param schedule - The effect the approved call would create.
  * @returns The naming, or undefined when the effect names no recurrence.
  */
 export function nameConsentEffect(schedule: ScheduleEffect): string | undefined {
   if (schedule.recurrence === '') return undefined
-  const target = schedule.targetSessionId === undefined
-    ? 'a new chat that its first delivery opens'
-    : `the chat ${schedule.targetSessionId}`
+  const opened = schedule.targetCwd === undefined ? 'a new chat' : `a new chat in ${schedule.targetCwd}`
+  const chat = schedule.targetTitle === undefined
+    ? `the chat ${schedule.targetSessionId}`
+    : `the chat "${schedule.targetTitle}" (${schedule.targetSessionId})`
+  const target = schedule.targetSessionId === undefined ? `${opened} that its first delivery opens` : chat
   const preset = schedule.targetPreset === undefined
     ? ''
     : `, which runs the ${schedule.targetPreset} permission preset`
-  return `The task delivers on "${schedule.recurrence}" into ${target}${preset}.`
+  return `The task "${schedule.title}" sends "${schedule.prompt}" on "${schedule.recurrence}" into ${target}${preset}.`
+}
+
+/** The per-workspace defaults `@delo/plugin-permission-defaults` provides as `permissionDefaults`. */
+export interface WorkspacePresets {
+  /** The preset new chats in a workspace start with. */
+  defaultPreset(cwd: string): string
+}
+
+/**
+ * The preset a chat opened in a directory starts with: its workspace's, which
+ * `@delo/plugin-permission-defaults` seeds into every new chat. Unknown without
+ * that service or a directory, so the runtime keeps the deployment default and
+ * reviews the opened chat again under the preset it really got.
+ * @param defaults - The `permissionDefaults` service, when it is mounted.
+ * @param create - Creation values of the chat a delivery opens.
+ * @returns The workspace's preset, or undefined.
+ */
+export function workspacePreset(defaults: WorkspacePresets | undefined, create: ScheduleSessionCreateSpec): string | undefined {
+  return create.cwd === undefined ? undefined : defaults?.defaultPreset(create.cwd)
 }
 
 /**
@@ -91,9 +115,10 @@ export function reviewConsentDelivery(review: ScheduleDeliveryReview): ScheduleD
 }
 
 /**
- * The `scheduleConsent` service. It holds no state and reads no other service:
- * the runtime hands it both presets to compare, and the tools hand it the effect
- * to name. Mounting it fills the seam's context slot; disposing it empties the
+ * The `scheduleConsent` service. It holds no state: the runtime hands it both
+ * presets to compare, and the tools hand it the effect to name. Its one read is
+ * the workspace preset a new chat starts with, from `permissionDefaults` when
+ * that service is mounted. Mounting it fills the seam's context slot; disposing it empties the
  * slot again, so a plugin that mounts or disposes it mid-session changes only
  * the later approvals and deliveries.
  */
@@ -104,6 +129,11 @@ export class ScheduleConsent extends Service implements ScheduleConsentService {
 
   nameEffect(schedule: ScheduleEffect): string | undefined {
     return nameConsentEffect(schedule)
+  }
+
+  presetFor(create: ScheduleSessionCreateSpec): string | undefined {
+    // The service is optional and declares no typed `Context` slot, so it is read by name.
+    return workspacePreset(this.ctx.get('permissionDefaults') as WorkspacePresets | undefined, create)
   }
 
   reviewDelivery(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict {

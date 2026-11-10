@@ -23,7 +23,7 @@ import { formatScheduleLocalTime } from './domain.ts'
 import { appendDelivery } from './delivery-history.ts'
 import type { ScheduleTask } from './storage.ts'
 import type {
-  DeliveryRetentionBounds, ScheduleDeliveryReceipt, ScheduleDeliveryVerdict, ScheduleId,
+  DeliveryRetentionBounds, ScheduleConsentService, ScheduleDeliveryReceipt, ScheduleDeliveryVerdict, ScheduleId,
   ScheduleSessionCreateSpec,
 } from './types.ts'
 
@@ -48,20 +48,33 @@ interface DeliveryTarget {
 }
 
 /**
- * Target of one delivery found without creating anything: a `session` target's activated Session, or the Session a
- * target that opens its own reserves, with its live Agent only when that Session already exists.
+ * Target of one delivery found without creating anything: a `session` target's activated Session, the existing
+ * Session a target that opens its own reserved, or the Session such a target has yet to open.
  */
 type LocatedTarget =
   | { readonly kind: 'session'; readonly sessionId: SessionIdType; readonly agent: Agent }
-  | {
-    readonly kind: 'reserved'
-    readonly sessionId: SessionIdType
-    readonly agent: Agent | undefined
-    readonly create: ScheduleSessionCreateSpec
-  }
+  | { readonly kind: 'reserved'; readonly sessionId: SessionIdType; readonly agent: Agent; readonly create: ScheduleSessionCreateSpec }
+  | { readonly kind: 'unopened'; readonly sessionId: SessionIdType; readonly agent: undefined; readonly create: ScheduleSessionCreateSpec }
 
 /** One refusal the consent seam stores on a task and reports. */
 type ConsentRefusal = Extract<ScheduleDeliveryVerdict, { readonly kind: 'refuse' }>
+
+/** The preset one consent review read for its target, or undefined when no consent is composed and nothing was reviewed. */
+type ReviewedPreset = { readonly preset: string | undefined } | undefined
+
+/**
+ * Text for a value a consent threw, for the log line that reports the failure.
+ * @param error - The thrown value.
+ * @returns Its string form, or a fixed description when it has none.
+ */
+function describe(error: unknown): string {
+  try {
+    return String(error)
+  } catch (_error: unknown) {
+    // A value without a string conversion, such as an object with no prototype, still needs its log line.
+    return 'a thrown value that cannot be converted to text'
+  }
+}
 
 /** Refusal reason recorded when a consent answers anything but one of the two declared verdicts. */
 const UNRECOGNISED_VERDICT = 'the scheduled-task consent returned no verdict the Schedule recognises, so the delivery was refused'
@@ -190,19 +203,18 @@ export class ScheduleRuntime {
   > {
     return this.ctx.agents.withoutInitiator(() => this.transact(async () => {
       signal?.throwIfAborted()
-      const task = this.tasks().find(candidate => candidate.record.id === id)
-      if (task === undefined) return
-      if (this.executing.has(id)
-        || this.nextAdmissionAt(task) > Date.now()
-        || await this.recoverOutstandingExecution(task)) {
-        return { task, admitted: false }
-      }
-      const located = await this.locateTarget(task)
+      const stored = this.tasks().find(candidate => candidate.record.id === id)
+      if (stored === undefined) return
+      if (this.executing.has(id) || this.nextAdmissionAt(stored) > Date.now()) return { task: stored, admitted: false }
+      const recovered = await this.recoverOutstandingExecution(stored)
+      if (recovered === 'held') return { task: stored, admitted: false }
+      if (recovered !== 'free') throw new RemoteError('schedule/consent-refused', recovered.reason, { reason: recovered.reason })
+      const located = await this.locateTarget(stored)
       // The consent reviews before a target that opens its own Session creates it, so a refusal creates nothing.
-      await this.reviewDelivery(task, located)
-      const target = await this.openTarget(task, located)
+      const reviewed = await this.reviewDelivery(stored, located)
+      const { target, task } = await this.openTarget(stored, located)
       if (this.stopping) throw new Error('Schedule runtime is stopping')
-      if (this.openedOtherPreset(located, target)) await this.reviewDelivery(task, target)
+      if (this.presetMoved(reviewed, target)) await this.reviewDelivery(task, target)
       // Sample the occurrence after Session restoration, which can take longer than one recurrence interval.
       const occurrenceAt = new Date(Date.now()).toISOString()
       const held = task.target.kind !== 'new' ? [id] : []
@@ -288,7 +300,7 @@ export class ScheduleRuntime {
     try {
       const candidates: ScheduleTask[] = []
       for (const member of group) {
-        if (this.nextAdmissionAt(member) > Date.now() || await this.recoverOutstandingExecution(member)) continue
+        if (this.nextAdmissionAt(member) > Date.now() || await this.recoverOutstandingExecution(member) !== 'free') continue
         candidates.push(member)
       }
       // The check precedes target resolution, so a target made future by clock rollback creates no Session.
@@ -298,11 +310,15 @@ export class ScheduleRuntime {
       if (first === undefined) return []
       const located = await this.locateTarget(first)
       // The consent screens before a target that opens its own Session creates it, so a refusal creates nothing.
-      admitted = await this.screenDelivery(admitted, located)
+      const screened = await this.screenDelivery(admitted, located)
+      admitted = screened.kept
       if (admitted.length === 0) return []
-      const target = await this.openTarget(first, located)
+      const opened = await this.openTarget(first, located)
+      const { target } = opened
+      // Opening a target that creates its Session records the reservation; later writes keep it.
+      admitted = admitted.map(member => member === first ? opened.task : member)
       if (this.stopping) return []
-      if (this.openedOtherPreset(located, target)) admitted = await this.screenDelivery(admitted, target)
+      if (this.presetMoved(screened.reviewed, target)) admitted = (await this.screenDelivery(admitted, target)).kept
       const now = Date.now()
       // Session restoration can span a wall-clock rollback; future members keep their timer obligation.
       admitted = admitted.filter(member => Date.parse(member.record.scheduledAt) <= now)
@@ -365,14 +381,15 @@ export class ScheduleRuntime {
    * and the refusal surfaces as the typed `schedule/consent-refused` error.
    * @param task - Due task whose delivery is pending.
    * @param target - Delivery target, with its live Agent once its Session exists.
+   * @returns The preset the consent reviewed, or undefined when no consent is composed.
    * @throws RemoteError `schedule/consent-refused` carrying the consent's reason.
    * @throws RemoteError `schedule/consent-failed` when the consent could not review; the task stays armed.
    */
-  private async reviewDelivery(task: ScheduleTask, target: DeliveryTarget | LocatedTarget): Promise<void> {
-    const verdict = this.consentVerdict(task, target)
-    if (verdict === undefined) return
-    await this.commit(this.refused(task, verdict.reason))
-    throw new RemoteError('schedule/consent-refused', verdict.reason, { reason: verdict.reason })
+  private async reviewDelivery(task: ScheduleTask, target: DeliveryTarget | LocatedTarget): Promise<ReviewedPreset> {
+    const { refusals, reviewed } = await this.screenDelivery([task], target)
+    const refusal = refusals.get(task.record.id)
+    if (refusal !== undefined) throw new RemoteError('schedule/consent-refused', refusal.reason, { reason: refusal.reason })
+    return reviewed
   }
 
   /**
@@ -389,105 +406,183 @@ export class ScheduleRuntime {
 
   /**
    * Screen one due group through the consent seam before the shared message is built; a refused
-   * member pauses instead of delivering, and the remaining members keep one message.
+   * member pauses instead of delivering, and the remaining members keep one message. Every member
+   * is reviewed under one reading of the target's preset.
    * @param group - Due members of one delivery message.
    * @param target - Delivery target, with its live Agent once its Session exists.
-   * @returns The members whose delivery the consent allows.
+   * @returns The members whose delivery the consent allows, the refusals of the others, and the preset the consent
+   *   reviewed them under.
    * @throws RemoteError `schedule/consent-failed` when the consent could not review; every member stays armed.
    */
-  private async screenDelivery(
-    group: readonly ScheduleTask[],
-    target: DeliveryTarget | LocatedTarget,
-  ): Promise<readonly ScheduleTask[]> {
+  private async screenDelivery(group: readonly ScheduleTask[], target: DeliveryTarget | LocatedTarget): Promise<{
+    readonly kept: readonly ScheduleTask[]
+    readonly refusals: ReadonlyMap<ScheduleId, ConsentRefusal>
+    readonly reviewed: ReviewedPreset
+  }> {
+    const refusals = new Map<ScheduleId, ConsentRefusal>()
+    const consent = this.ctx.get('scheduleConsent')
+    if (consent === undefined) return { kept: group, refusals, reviewed: undefined }
+    const ids = group.map(task => task.record.id)
+    let preset: string | undefined
+    try {
+      preset = this.presetOf(target)
+    } catch (error: unknown) {
+      throw this.consentFailure(ids, error)
+    }
+    const verdicts: Array<{ readonly task: ScheduleTask; readonly refusal: ConsentRefusal | undefined }> = []
+    // Every member is asked before any refusal is written, so a consent that throws for one member leaves all armed.
+    for (const task of group) verdicts.push({ task, refusal: this.consentVerdict(consent, task, target, preset) })
     const kept: ScheduleTask[] = []
-    for (const task of group) {
-      const verdict = this.consentVerdict(task, target)
-      if (verdict === undefined) {
+    for (const { task, refusal } of verdicts) {
+      if (refusal === undefined) {
         kept.push(task)
         continue
       }
-      await this.commit(this.refused(task, verdict.reason))
-      this.ctx.logger.warn(`schedule: delivery of task "${task.record.id}" was refused (schedule_consent_refused): ${verdict.reason}`)
+      refusals.set(task.record.id, refusal)
+      await this.commit(this.refused(task, refusal.reason))
+      this.ctx.logger.warn(`schedule: delivery of task "${task.record.id}" was refused (schedule_consent_refused): ${refusal.reason}`)
     }
-    return kept
+    return { kept, refusals, reviewed: { preset } }
   }
 
   /**
-   * Ask the optional consent service about one pending delivery, or `undefined` when no consent is
-   * composed or it allows the delivery. A target whose Session is not opened yet is reviewed under
-   * the deployment default that the permission-preset service pins into a fresh Session.
+   * Ask the composed consent about one pending delivery.
+   * @param consent - The composed consent service.
    * @param task - Due task whose delivery is pending.
    * @param target - Delivery target, with its live Agent once its Session exists.
+   * @param preset - The preset the target runs under, read once for the group.
    * @returns The refusal, or undefined when the delivery may proceed.
-   * @throws RemoteError `schedule/consent-failed` when the consent or the preset read throws.
+   * @throws RemoteError `schedule/consent-failed` when the consent throws.
    */
-  private consentVerdict(task: ScheduleTask, target: DeliveryTarget | LocatedTarget): ConsentRefusal | undefined {
-    const consent = this.ctx.get('scheduleConsent')
-    if (consent === undefined) return undefined
+  private consentVerdict(
+    consent: ScheduleConsentService,
+    task: ScheduleTask,
+    target: DeliveryTarget | LocatedTarget,
+    preset: string | undefined,
+  ): ConsentRefusal | undefined {
     let verdict: ScheduleDeliveryVerdict
     try {
       verdict = consent.reviewDelivery({
         creationPreset: task.creationPreset,
-        currentPreset: this.presetOf(target.agent),
+        currentPreset: preset,
         targetSessionId: target.agent?.session.id ?? target.sessionId,
       })
     } catch (error: unknown) {
-      this.ctx.logger.warn(`schedule: the consent could not review the delivery of task "${task.record.id}": ${String(error)}`)
-      throw new RemoteError('schedule/consent-failed', 'The scheduled-task consent could not review this delivery.', {}, {
-        cause: error,
-      })
+      throw this.consentFailure([task.record.id], error)
     }
     return refusalOf(verdict)
   }
 
   /**
-   * Read the permission preset one target runs under: its live Session's, or, for a Session not opened yet, the
-   * deployment default a fresh Session is pinned to.
-   * @param agent - Live Agent of the target Session, when it exists.
-   * @returns The preset, or undefined when no preset service is composed.
+   * Report one review the consent could not complete and build its typed failure.
+   * @param ids - Tasks whose delivery was under review.
+   * @param error - What the consent or the preset read threw.
+   * @returns The `schedule/consent-failed` error; the tasks stay armed.
    */
-  private presetOf(agent: Agent | undefined): string | undefined {
-    const presets = this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
-    return agent === undefined ? presets?.defaultPreset : presets?.current(agent.session)
+  private consentFailure(ids: readonly ScheduleId[], error: unknown): RemoteError<'schedule/consent-failed'> {
+    this.ctx.logger.warn(`schedule: the consent could not review the delivery of task ${ids.map(id => `"${id}"`).join(', ')}: ${describe(error)}`)
+    return new RemoteError('schedule/consent-failed', 'The scheduled-task consent could not review this delivery.', {}, { cause: error })
   }
 
   /**
-   * Whether a delivery opened a Session that runs a preset other than the default the consent reviewed it under, as
-   * when a distribution seeds a new chat with its Workspace's preset. Such a Session is reviewed again before it is
-   * woken. Without a consent nothing is reviewed, so nothing is read.
-   * @param located - Target as the consent reviewed it.
-   * @param target - Target after its Session was opened.
-   * @returns Whether the opened Session needs a review of its live preset.
+   * Read the permission preset one target runs under: its live Session's, or, for a Session not opened yet, the
+   * preset the consent says a Session opened with the target's creation values gets — such as its Workspace's —
+   * and otherwise the deployment default a fresh Session is pinned to.
+   * @param target - Delivery target, with its live Agent once its Session exists.
+   * @returns The preset, or undefined when no preset service is composed.
    */
-  private openedOtherPreset(located: LocatedTarget, target: DeliveryTarget): boolean {
-    if (located.agent !== undefined || this.ctx.get('scheduleConsent') === undefined) return false
+  private presetOf(target: DeliveryTarget | LocatedTarget): string | undefined {
+    const presets = this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
+    if (!('kind' in target) || target.kind !== 'unopened') return presets?.current(target.agent.session)
+    if (presets === undefined) return undefined
+    return this.ctx.get('scheduleConsent')?.presetFor?.(target.create) ?? presets.defaultPreset
+  }
+
+  /**
+   * Whether the target's preset is no longer the one the consent reviewed, read again after its Session was opened
+   * and its Workspace joined. Such a target is reviewed again before it is woken.
+   * @param reviewed - The preset the consent reviewed, or undefined when nothing was reviewed.
+   * @param target - Target after its Session was opened.
+   * @returns Whether the target needs another review.
+   */
+  private presetMoved(reviewed: ReviewedPreset, target: DeliveryTarget): boolean {
+    if (reviewed === undefined) return false
     try {
-      return this.presetOf(target.agent) !== this.presetOf(undefined)
-    } catch {
-      // A preset read that throws is the consent review's own failure, which the second review reports.
+      return this.presetOf(target) !== reviewed.preset
+    } catch (_error: unknown) {
+      // The second review reads the preset again and reports the same failure as `schedule/consent-failed`.
       return true
     }
   }
 
   /**
+   * Review a reminder that is still queued from an earlier delivery before recovery wakes it: the preset its chat
+   * runs may have changed since it was reviewed. A task the consent already refused counts as refused. On a refusal
+   * the reminder leaves the inbox, so no turn ever reads it, and each refused task pauses with its reason.
+   * @param agent - Live Agent of the reminder's Session.
+   * @param message - The queued reminder.
+   * @param receipt - The delivery that queued it.
+   * @returns The tasks the reminder serves that were refused; empty when no consent is composed or all are allowed.
+   * @throws RemoteError `schedule/consent-failed` when the consent could not review; the reminder stays queued.
+   */
+  private async reviewQueuedReminder(
+    agent: Agent,
+    message: { readonly id: ScheduleDeliveryReceipt['messageId'] },
+    receipt: ScheduleDeliveryReceipt,
+  ): Promise<ReadonlyMap<ScheduleId, ConsentRefusal>> {
+    const refused = new Map<ScheduleId, ConsentRefusal>()
+    const consent = this.ctx.get('scheduleConsent')
+    if (consent === undefined) return refused
+    const served = this.tasks().filter(candidate => candidate.lastDelivery?.messageId === receipt.messageId
+      && candidate.lastDelivery.targetSessionId === receipt.targetSessionId)
+    const target: DeliveryTarget = { sessionId: receipt.targetSessionId, agent }
+    let preset: string | undefined
+    try {
+      preset = this.presetOf(target)
+    } catch (error: unknown) {
+      throw this.consentFailure(served.map(task => task.record.id), error)
+    }
+    for (const task of served) {
+      const refusal = task.consentRefusal === undefined
+        ? this.consentVerdict(consent, task, target, preset)
+        : { kind: 'refuse' as const, reason: task.consentRefusal.reason }
+      if (refusal !== undefined) refused.set(task.record.id, refusal)
+    }
+    if (refused.size === 0) return refused
+    agent.inbox.remove(message.id)
+    const flushed = await this.ctx.sessions.flush(agent.session)
+    if (!flushed) throw new Error('Session persistence did not acknowledge the withdrawn reminder')
+    for (const task of served) {
+      const refusal = refused.get(task.record.id)
+      if (refusal === undefined || task.consentRefusal !== undefined) continue
+      await this.commit(this.refused(task, refusal.reason))
+      this.ctx.logger.warn(`schedule: the queued reminder of task "${task.record.id}" was withdrawn (schedule_consent_refused): ${refusal.reason}`)
+    }
+    return refused
+  }
+
+  /**
    * Reconstruct a still-queued last delivery after a Host restart without storing model completion state.
    * @param task - Task whose last delivered message may still wait in its target inbox.
-   * @returns Whether the task holds its slot for that delivery; a woken reminder of a `new` target holds none.
+   * @returns `held` while the task holds its slot for that delivery (a woken reminder of a `new` target holds none),
+   *   the consent's refusal when it withdrew the reminder, and otherwise `free`.
    */
-  private async recoverOutstandingExecution(task: ScheduleTask): Promise<boolean> {
-    if (this.executing.has(task.record.id)) return true
+  private async recoverOutstandingExecution(task: ScheduleTask): Promise<'held' | 'free' | ConsentRefusal> {
+    if (this.executing.has(task.record.id)) return 'held'
     const receipt = task.lastDelivery
     // The archived-Session gate blocks the turn that a requeued reminder would wake.
-    if (receipt === undefined || this.archived(receipt.targetSessionId)) return false
+    if (receipt === undefined || this.archived(receipt.targetSessionId)) return 'free'
     let agent: Agent
     try {
       agent = await this.activate(receipt.targetSessionId)
     } catch (error: unknown) {
       this.ctx.logger.warn(`schedule: could not restore the last delivery's Session for task "${task.record.id}": ${String(error)}`)
-      return false
+      return 'free'
     }
     const message = [...agent.inbox.nextTurn, ...agent.inbox.nextStep].find(candidate => candidate.id === receipt.messageId)
-    if (message === undefined) return false
+    if (message === undefined) return 'free'
+    const withdrawn = await this.reviewQueuedReminder(agent, message, receipt)
+    if (withdrawn.size > 0) return withdrawn.get(task.record.id) ?? 'free'
     const held = this.tasks().filter(candidate => candidate.target.kind !== 'new'
       && candidate.lastDelivery?.messageId === receipt.messageId
       && candidate.lastDelivery.targetSessionId === receipt.targetSessionId).map(candidate => candidate.record.id)
@@ -506,7 +601,7 @@ export class ScheduleRuntime {
       } else if (held.length > 0) {
         this.watchExecution(held, agent.whenIdle())
       }
-      return held.includes(task.record.id)
+      return held.includes(task.record.id) ? 'held' : 'free'
     } catch (error: unknown) {
       for (const id of held) this.executing.delete(id)
       throw error
@@ -601,7 +696,9 @@ export class ScheduleRuntime {
     }
     const sessionId = reserved ?? SessionId(`session-${randomUUID()}`)
     const agent = reserved === undefined ? undefined : await this.reservedAgent(reserved)
-    return { kind: 'reserved', sessionId, agent, create: target.create }
+    return agent === undefined
+      ? { kind: 'unopened', sessionId, agent, create: target.create }
+      : { kind: 'reserved', sessionId, agent, create: target.create }
   }
 
   /**
@@ -611,20 +708,28 @@ export class ScheduleRuntime {
    * has it, because the Session controller creates a Session with a different id when the named Session has already
    * started a turn. A created Session joins the Workspace registered at `create.cwd` and takes the task title; a `new`
    * target's title adds its launch time in the task's time zone. Neither step blocks delivery.
+   * @returns The opened target, and the task as stored after opening it, with any reservation it recorded.
    */
-  private async openTarget(task: ScheduleTask, located: LocatedTarget): Promise<DeliveryTarget> {
-    if (located.kind === 'session') return located
+  private async openTarget(
+    task: ScheduleTask,
+    located: LocatedTarget,
+  ): Promise<{ readonly target: DeliveryTarget; readonly task: ScheduleTask }> {
+    if (located.kind === 'session') return { target: located, task }
     const { sessionId, create } = located
-    let { agent } = located
-    if (agent === undefined) {
+    let stored = task
+    let agent: Agent
+    if (located.kind === 'unopened') {
       if (task.target.kind === 'new' && task.pendingDelivery === undefined) {
-        await this.commit({ ...task, pendingDelivery: { targetSessionId: sessionId } })
+        stored = { ...task, pendingDelivery: { targetSessionId: sessionId } }
+        await this.commit(stored)
       }
       agent = await this.createAgent(sessionId, create)
+    } else {
+      agent = located.agent
     }
     await this.joinWorkspace(sessionId, create.cwd)
-    this.nameSession(agent, task)
-    return { sessionId, agent }
+    this.nameSession(agent, stored)
+    return { target: { sessionId, agent }, task: stored }
   }
 
   /** Resolve the live Agent of a reserved Session; `undefined` means that no Session has its id yet. */

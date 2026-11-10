@@ -19,7 +19,7 @@ import {
   ScheduleInputError, ScheduleId, MIN_EVERY_INTERVAL_SECONDS,
 } from './domain.ts'
 import type {
-  ScheduleCatalogEntry, ScheduleCreateRequest, ScheduleDeleteInactiveResult, ScheduleDeliveryHistoryRequest,
+  ScheduleCatalogEntry, ScheduleConsentApproval, ScheduleCreateRequest, ScheduleDeleteInactiveResult, ScheduleDeliveryHistoryRequest,
   ScheduleDeliveryHistoryResult, ScheduleEditRequest, ScheduleEditResult, ScheduleListRequest,
   ScheduleListResult, SchedulePatch, ScheduleRecord, ScheduleRunRequest, ScheduleRunResult,
   ScheduleSessionCreateSpec, ScheduleTarget, ScheduleTargetRequest, ScheduleViewRequest, ScheduleViewResult,
@@ -116,25 +116,22 @@ const SUBAGENT_SESSION_REFUSAL = 'This Session belongs to subagent routing, whic
 
 /**
  * Read the permission preset a task is approved under: the preset of the target Session when one is
- * live, otherwise — for a target that opens its own Session — the deployment default that the
- * permission-preset service pins into every fresh Session. Absent when no preset service is composed
- * or the target Session is not live.
+ * live, otherwise — for a target that opens its own Session — the preset that Session will be opened
+ * under: the one the composed consent names for its creation values, such as its Workspace's, or the
+ * deployment default that the permission-preset service pins into every fresh Session. Absent when no
+ * preset service is composed or the target Session is not live.
  *
- * A created Session runs the deployment default, not the acting Session's preset, so capturing the
- * caller's preset there would store a baseline no delivery of that Session could ever match.
- * @param presets - The composed permission-preset service, when one is.
- * @param agents - The live Agent registry.
+ * A created Session does not run the acting Session's preset, so capturing the caller's preset there
+ * would store a baseline no delivery of that Session could ever match.
+ * @param ctx - Scope holding the preset service, the consent and the live Agent registry.
  * @param target - Destination after the change.
  * @returns The captured preset, or undefined.
  */
-function creationPresetOf(
-  presets: SchedulePermissionPresets | undefined,
-  agents: Context['agents'],
-  target: ScheduleTarget,
-): string | undefined {
+function creationPresetOf(ctx: Context, target: ScheduleTarget): string | undefined {
+  const presets = ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
   if (presets === undefined) return undefined
-  if (target.kind !== 'session') return presets.defaultPreset
-  const agent = agents.get(target.sessionId)
+  if (target.kind !== 'session') return ctx.get('scheduleConsent')?.presetFor?.(target.create) ?? presets.defaultPreset
+  const agent = ctx.agents.get(target.sessionId)
   return agent === undefined ? undefined : presets.current(agent.session)
 }
 
@@ -401,12 +398,15 @@ export class ScheduleService extends TypertRemoteService {
    * @param request - Title, prompt, recurrence, and delivery destination.
    * @param actorSessionId - Session of the acting Agent, or undefined for a human caller.
    * @param signal - Cancellation checked before the durable write begins, including after FIFO waits.
+   * @param approval - The person's answer to the composed consent's ask for this call, whose named preset becomes
+   *   the delivery baseline; omitted, the baseline is read from the target.
    * @returns The stored task. Cancellation does not roll back an in-flight write.
    */
   async create(
     request: ScheduleCreateRequest,
     actorSessionId?: SessionId,
     signal?: AbortSignal,
+    approval?: ScheduleConsentApproval,
   ): Promise<ScheduleCatalogEntry> {
     const id = ScheduleId(`schedule-${randomUUID()}`)
     const now = Date.now()
@@ -418,10 +418,8 @@ export class ScheduleService extends TypertRemoteService {
       await this.validateTarget(target, signal)
       signal?.throwIfAborted()
       const createdAt = new Date(now).toISOString()
-      const creationPreset = creationPresetOf(
-        this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined,
-        this.ctx.agents, target,
-      )
+      // An approved ask binds the baseline to the preset it named, which the person saw.
+      const creationPreset = approval?.preset ?? creationPresetOf(this.ctx, target)
       const task = scheduleTaskSchema.parse({
         record, target, involvedSessionIds: involved(actorSessionId, target, []), status: 'active',
         createdAt, updatedAt: createdAt,
@@ -584,12 +582,15 @@ export class ScheduleService extends TypertRemoteService {
    * @param request - Task identity and one update or delete operation.
    * @param actorSessionId - Session of the acting Agent, or undefined for a human caller.
    * @param signal - Cancellation checked before the durable write begins, including after FIFO waits.
+   * @param approval - The person's answer to the composed consent's ask for this edit; only an approved edit
+   *   re-captures the delivery baseline and settles a refusal the consent recorded.
    * @returns The updated task, the deletion outcome, or a non-mutating miss or conflict.
    */
   async edit(
     request: ScheduleEditRequest,
     actorSessionId?: SessionId,
     signal?: AbortSignal,
+    approval?: ScheduleConsentApproval,
   ): Promise<ScheduleEditResult> {
     if (request.action === 'update' && Object.keys(request.patch).length === 0) {
       throw new ScheduleInputError('invalid_rule', 'An update patch requires at least one field.')
@@ -617,10 +618,7 @@ export class ScheduleService extends TypertRemoteService {
         await this.validateTarget(effectiveTarget, signal)
         signal?.throwIfAborted()
       }
-      const task = this.reapproved(
-        revisedTask(current, request.patch, target, actorSessionId, Date.now()),
-        request.consentApproval === 'allowed-once',
-      )
+      const task = this.reapproved(revisedTask(current, request.patch, target, actorSessionId, Date.now()), approval)
       await tasks.put(request.id, task)
       this.emitChanged()
       this.runtime?.requestDrive()
@@ -633,25 +631,22 @@ export class ScheduleService extends TypertRemoteService {
    * Refresh the management baselines of an edited task the way creation captures them.
    *
    * An edit the person approved through the composed consent's ask is a fresh approval of the
-   * task, so the preset its deliveries are reviewed against becomes the one its effective target
-   * runs now — the live target Session's preset, or the deployment default when the target opens a
-   * Session at delivery — instead of the preset captured when the task was created. The same
-   * approval settles any refusal the consent recorded, because the person has re-approved the task.
+   * task, so the preset its deliveries are reviewed against becomes the one the approved ask named
+   * — read from the effective target when the ask named none — instead of the preset captured when
+   * the task was created. The same approval settles any refusal the consent recorded, because the
+   * person has re-approved the task.
    *
    * An edit nobody approved keeps both. A refusal is the consent's record of a delivery it stopped;
    * re-capturing the baseline without an answer would lift that refusal, and drop the preset the
    * delivery was refused against, on a change the person never saw.
    * @param revised - The updated task before its management baselines are refreshed.
-   * @param approved - Whether this edit carries the consent's `allowed-once` for the delivery it arms.
+   * @param approval - The person's answer to the consent's ask for the delivery this edit arms, when there was one.
    * @returns The task to store.
    */
-  private reapproved(revised: ScheduleTask, approved: boolean): ScheduleTask {
-    if (!approved) return revised
+  private reapproved(revised: ScheduleTask, approval: ScheduleConsentApproval | undefined): ScheduleTask {
+    if (approval === undefined) return revised
     const { consentRefusal: _settled, ...task } = revised
-    const creationPreset = creationPresetOf(
-      this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined,
-      this.ctx.agents, task.target,
-    )
+    const creationPreset = approval.preset ?? creationPresetOf(this.ctx, task.target)
     // An unreadable target preset keeps the stored baseline instead of clearing it.
     return creationPreset === undefined ? task : { ...task, creationPreset }
   }

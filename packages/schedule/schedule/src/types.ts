@@ -558,13 +558,6 @@ export type ScheduleEditRequest =
     readonly patch: SchedulePatch
     /** `updatedAt` value that the editor read; a different stored value returns `schedule_conflict`. */
     readonly expectedUpdatedAt?: string | null
-    /**
-     * The person's `allowed-once` answer to the composed consent's ask for this edit. Only a
-     * present grant re-captures the delivery baseline and settles a refusal the consent recorded;
-     * an edit that asked nothing leaves both as they stand, so it cannot launder a delivery the
-     * consent stopped.
-     */
-    readonly consentApproval?: 'allowed-once'
   }
   | {
     /** Task to remove. */
@@ -615,15 +608,36 @@ export interface ScheduleConsentRefusal {
   readonly refusedAt: string
 }
 
-/** The effect one approved Schedule management call creates, which a consent may name. */
+/**
+ * The person's `allowed-once` answer to the composed consent's ask for one `schedule_create` or `schedule_edit`
+ * call. It travels beside the request, never in it, so no Remote caller can claim it. An approved edit re-captures
+ * the delivery baseline and settles a refusal the consent recorded; an edit without one leaves both as they stand.
+ */
+export interface ScheduleConsentApproval {
+  /** The permission preset the approved ask named for the target chat, which becomes the baseline; undefined when it named none. */
+  readonly preset: string | undefined
+}
+
+/**
+ * The effect one approved Schedule management call creates, which a consent may name. Every text field is bounded
+ * in length and free of control characters.
+ */
 export interface ScheduleEffect {
   /** The tool whose approval asks. */
   readonly tool: 'schedule_create' | 'schedule_edit'
+  /** The task title the call sets or keeps. */
+  readonly title: string
+  /** The start of the instruction each delivery sends, as the call sets or keeps it. */
+  readonly prompt: string
   /** The recurrence the call arms or keeps, as the caller wrote it. */
   readonly recurrence: string
   /** Id of the Session the deliveries reach; undefined while the target opens a new Session at its first delivery. */
   readonly targetSessionId: string | undefined
-  /** The permission preset that Session runs under at approval time; a created target names the deployment default. */
+  /** Title of the chat the deliveries reach, when it has one and is live. */
+  readonly targetTitle: string | undefined
+  /** Working directory of the chat a delivery opens, when the target opens one and names it. */
+  readonly targetCwd: string | undefined
+  /** The permission preset that chat runs under at approval time, or, for a chat a delivery opens, the preset it will be opened under. */
   readonly targetPreset: string | undefined
 }
 
@@ -657,6 +671,13 @@ export interface ScheduleConsentService {
    * The returned text joins the approval, and `undefined` adds nothing.
    */
   nameEffect(schedule: ScheduleEffect): string | undefined
+  /**
+   * The permission preset a chat opened with these creation values runs under, when the consent knows it better than
+   * the deployment default, such as a Workspace's own preset. Undefined, or an absent member, leaves the deployment
+   * default. The approval names this preset, the task stores it as its baseline, and a delivery that opens the chat
+   * is reviewed under it before the chat exists.
+   */
+  presetFor?(create: ScheduleSessionCreateSpec): string | undefined
   /**
    * Review one due delivery before it wakes its Session, and before a target that opens its own Session creates it.
    * Only an `allow` delivers; any other answer, a `refuse` without a reason included, refuses. A throw delivers
