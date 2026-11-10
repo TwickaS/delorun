@@ -6,12 +6,17 @@ import { CHAT_STATE_PATHS, ChatStatesResponse, type ChatStateRequest } from '../
 
 /** A route answered with a status outside 200 to 299. */
 export class ChatStatesRequestError extends Error {
+  readonly path: string
+  readonly status: number
+
   /**
    * @param path - the route.
    * @param status - the HTTP status it answered.
    */
-  constructor(readonly path: string, readonly status: number) {
+  constructor(path: string, status: number) {
     super(`delo chat states: ${path} answered ${String(status)}`)
+    this.path = path
+    this.status = status
     this.name = 'ChatStatesRequestError'
   }
 }

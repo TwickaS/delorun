@@ -33,6 +33,11 @@ export type RuntimeRemedy = 'reinstall' | 'rollback' | 'update' | 'launcher-upda
 export class RuntimeStoreError extends Error {
   override readonly name = 'RuntimeStoreError'
 
+  readonly code: RuntimeStoreErrorCode
+  readonly path: string
+  readonly detail: string
+  readonly remedies: readonly RuntimeRemedy[]
+
   /**
    * @param code - the failure's code.
    * @param path - the absolute path the failure concerns.
@@ -41,13 +46,17 @@ export class RuntimeStoreError extends Error {
    * @param options - the underlying error.
    */
   constructor(
-    readonly code: RuntimeStoreErrorCode,
-    readonly path: string,
-    readonly detail: string,
-    readonly remedies: readonly RuntimeRemedy[] = [],
+    code: RuntimeStoreErrorCode,
+    path: string,
+    detail: string,
+    remedies: readonly RuntimeRemedy[] = [],
     options?: ErrorOptions,
   ) {
     super(`${code}: ${detail}`, options)
+    this.code = code
+    this.path = path
+    this.detail = detail
+    this.remedies = remedies
   }
 }
 

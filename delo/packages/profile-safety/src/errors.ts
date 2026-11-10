@@ -76,6 +76,12 @@ export interface RefusedSubject {
 export class ProfileSafetyError extends Error {
   override readonly name = 'ProfileSafetyError'
 
+  readonly code: ProfileSafetyCode
+  readonly path: string
+  readonly detail: string
+  readonly remedies: readonly ProfileSafetyRemedy[]
+  readonly subjects: readonly RefusedSubject[]
+
   /**
    * @param code - the failure's code.
    * @param path - the absolute path the failure concerns.
@@ -85,14 +91,19 @@ export class ProfileSafetyError extends Error {
    * @param options - the underlying error.
    */
   constructor(
-    readonly code: ProfileSafetyCode,
-    readonly path: string,
-    readonly detail: string,
-    readonly remedies: readonly ProfileSafetyRemedy[] = [],
-    readonly subjects: readonly RefusedSubject[] = [],
+    code: ProfileSafetyCode,
+    path: string,
+    detail: string,
+    remedies: readonly ProfileSafetyRemedy[] = [],
+    subjects: readonly RefusedSubject[] = [],
     options?: ErrorOptions,
   ) {
     super(`${code}: ${detail}`, options)
+    this.code = code
+    this.path = path
+    this.detail = detail
+    this.remedies = remedies
+    this.subjects = subjects
   }
 
   /**

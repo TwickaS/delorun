@@ -62,12 +62,15 @@ export class FetchGuardService extends Service implements FetchGuard {
 
   static Config = Config
 
+  private readonly config: Config
+
   /**
    * @param ctx - the plugin context.
    * @param config - the switch; off, the service refuses nothing.
    */
-  constructor(ctx: Context, private readonly config: Config) {
+  constructor(ctx: Context, config: Config) {
     super(ctx, 'fetchGuard')
+    this.config = config
   }
 
   /** Whether the C16 switch `fetch_guard` is on. */

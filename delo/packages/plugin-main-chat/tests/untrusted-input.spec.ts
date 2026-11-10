@@ -61,12 +61,15 @@ class ProgramRuntime extends PtcRuntime {
   readonly language = 'typescript'
   readonly isolation = 'fixture'
 
+  private readonly config: { readonly root: string }
+
   /**
    * @param ctx - the plugin context.
    * @param config - the directory that holds the fixture workspaces.
    */
-  constructor(ctx: Context, private readonly config: { readonly root: string }) {
+  constructor(ctx: Context, config: { readonly root: string }) {
     super(ctx)
+    this.config = config
   }
 
   /**

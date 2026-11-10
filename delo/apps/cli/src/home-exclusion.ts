@@ -52,11 +52,14 @@ const HOME_PROCESS_COMMAND = 'start'
 
 /** A refusal that names what holds the data. */
 export class DataInUseError extends Error {
+  readonly detail: string
+
   /**
    * @param detail - what holds the data, for the person.
    */
-  constructor(readonly detail: string) {
+  constructor(detail: string) {
     super(detail)
+    this.detail = detail
     this.name = 'DataInUseError'
   }
 }

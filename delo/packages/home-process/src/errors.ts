@@ -19,12 +19,17 @@ export interface HomeProcessFailure {
 
 /** A refusal or failure with C19's error code (`delo/docs/contracts/c19-home-process.md`, "Errors"). */
 export class HomeProcessError extends Error {
+  readonly code: HomeProcessErrorCode
+  readonly detail?: string | undefined
+
   /**
    * @param code - C19's error code.
    * @param detail - the refused value or the reason, never a token or a secret.
    */
-  constructor(readonly code: HomeProcessErrorCode, readonly detail?: string) {
+  constructor(code: HomeProcessErrorCode, detail?: string) {
     super(detail === undefined ? code : `${code}: ${detail}`)
+    this.code = code
+    this.detail = detail
     this.name = 'HomeProcessError'
   }
 

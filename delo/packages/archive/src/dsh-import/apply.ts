@@ -291,12 +291,15 @@ class Stager {
   private readonly inodes = new Map<string, string>()
   readonly items: Item[] = []
 
+  private readonly root: string
+
   /**
    * @param source - the stock home's real path.
    * @param device - the device of the stock home's root.
    * @param root - the staging root.
    */
-  constructor(source: string, device: number, private readonly root: string) {
+  constructor(source: string, device: number, root: string) {
+    this.root = root
     this.reader = new SourceReader(source, Number.POSITIVE_INFINITY, device)
   }
 

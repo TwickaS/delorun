@@ -383,10 +383,14 @@ export class FixtureWitness {
   /** The witness's note key. */
   readonly key: KeyObject = generateKeyPairSync('ed25519').privateKey
 
+  readonly name: string
+
   /**
    * @param name - the witness's name.
    */
-  constructor(readonly name = 'witness.example.test') {}
+  constructor(name = 'witness.example.test') {
+    this.name = name
+  }
 
   /** The witness's verifier key, as a trusted root carries it. */
   get vkey(): string {
@@ -531,12 +535,20 @@ export class FixtureTiles {
   /** The cosigned note `/checkpoint` serves. */
   note = ''
 
+  readonly prefix: string
+  readonly hashes: readonly Buffer[]
+  public size: number
+
   /**
    * @param prefix - the tiles prefix, `https://<origin>`.
    * @param hashes - the leaf hashes of the log's tree.
    * @param size - the tree size the tiles are served for; every leaf by default.
    */
-  constructor(readonly prefix: string, readonly hashes: readonly Buffer[], public size: number = hashes.length) {}
+  constructor(prefix: string, hashes: readonly Buffer[], size: number = hashes.length) {
+    this.prefix = prefix
+    this.hashes = hashes
+    this.size = size
+  }
 
   /** The fetch to inject. */
   readonly fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {

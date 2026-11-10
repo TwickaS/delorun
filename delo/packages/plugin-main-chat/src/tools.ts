@@ -29,13 +29,16 @@ export type MainChatToolErrorCode = 'MAIN_CHAT_ONLY' | 'MAIN_CHAT_INVALID' | 'MA
 
 /** A main chat tool call that was refused, with a message that says what to do. */
 export class MainChatToolError extends HarnessError {
+  override readonly code: MainChatToolErrorCode
+
   /**
    * @param code - why.
    * @param message - what happened and what to do, for the agent.
    * @param options - the underlying failure as `cause`.
    */
-  constructor(override readonly code: MainChatToolErrorCode, message: string, options?: ErrorOptions) {
+  constructor(code: MainChatToolErrorCode, message: string, options?: ErrorOptions) {
     super(message, code, options)
+    this.code = code
   }
 }
 

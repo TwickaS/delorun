@@ -178,11 +178,17 @@ class RefusalLog {
   private suppressed = 0
   private last = Number.NEGATIVE_INFINITY
 
+  private readonly logger: ChannelLogger
+  private readonly intervalMs: number
+
   /**
    * @param logger - the channel's logger.
    * @param intervalMs - the shortest time between two records.
    */
-  constructor(private readonly logger: ChannelLogger, private readonly intervalMs: number) {}
+  constructor(logger: ChannelLogger, intervalMs: number) {
+    this.logger = logger
+    this.intervalMs = intervalMs
+  }
 
   /** Count one refusal and write a record when the interval has passed since the last one. */
   refused(): void {

@@ -38,9 +38,12 @@ const callHold: StreamChunk[] = [
 class ScriptedAdapter extends LlmAdapter {
   requests = 0
 
+  readonly script: StreamChunk[][]
+
   /** @param script - the steps, consumed in order. */
-  constructor(readonly script: StreamChunk[][] = []) {
+  constructor(script: StreamChunk[][] = []) {
     super()
+    this.script = script
   }
 
   override async * stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {

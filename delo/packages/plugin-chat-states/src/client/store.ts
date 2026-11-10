@@ -36,11 +36,17 @@ export class ChatStateStore {
   /** The number of the latest change whose answer was shown, so a slower answer to an earlier change does not replace it. */
   #changeShown = 0
 
+  private readonly api: ChatStatesApi
+  private readonly now: () => number
+
   /**
    * @param api - the routes.
    * @param now - the clock.
    */
-  constructor(private readonly api: ChatStatesApi, private readonly now: () => number = Date.now) {}
+  constructor(api: ChatStatesApi, now: () => number = Date.now) {
+    this.api = api
+    this.now = now
+  }
 
   /**
    * Read the states now, at the interval and on focus.

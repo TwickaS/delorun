@@ -23,8 +23,12 @@ export class OptIn {
   /** Observable write state. */
   readonly state = createSnapshotStore<OptInMutation>({ busy: false, failed: false })
 
+  readonly form: ConfigForm<OptInSettings>
+
   /** @param form - the Host form of the opt-in's profile row. */
-  constructor(readonly form: ConfigForm<OptInSettings>) {}
+  constructor(form: ConfigForm<OptInSettings>) {
+    this.form = form
+  }
 
   /**
    * Write the opt-in's `enabled` field; this changes no other row or field.

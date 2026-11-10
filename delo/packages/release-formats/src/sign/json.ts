@@ -43,7 +43,11 @@ export function canonicalJson(value: JsonValue): string {
 class StrictReader {
   private index = 0
 
-  constructor(private readonly text: string) {}
+  private readonly text: string
+
+  constructor(text: string) {
+    this.text = text
+  }
 
   read(): JsonValue {
     const value = this.value(0)

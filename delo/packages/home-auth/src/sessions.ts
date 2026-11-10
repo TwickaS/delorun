@@ -73,10 +73,13 @@ export class SessionStore {
   private readonly now: () => number
   private readonly random: RandomBytes
 
+  private readonly options: SessionStoreOptions
+
   /**
    * @param options - the file, the clock and the random source.
    */
-  constructor(private readonly options: SessionStoreOptions) {
+  constructor(options: SessionStoreOptions) {
+    this.options = options
     this.now = options.now ?? Date.now
     this.random = options.random ?? systemRandom
   }

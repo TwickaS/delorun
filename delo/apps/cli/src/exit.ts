@@ -22,12 +22,15 @@ export type ExitCode = (typeof EXIT)[keyof typeof EXIT]
 
 /** A failure the entry point reports on standard error and exits with. */
 export class CliError extends Error {
+  readonly exit: ExitCode
+
   /**
    * @param exit - the code to exit with.
    * @param message - what went wrong and what to do.
    */
-  constructor(readonly exit: ExitCode, message: string) {
+  constructor(exit: ExitCode, message: string) {
     super(message)
+    this.exit = exit
     this.name = 'CliError'
   }
 }

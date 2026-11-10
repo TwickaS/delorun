@@ -46,12 +46,15 @@ export class HomeAuthService extends Service {
 
   private core: HomeAuth | undefined
 
+  private readonly config: Config
+
   /**
    * @param ctx - the plugin context, which injects the web server.
    * @param config - the secrets directory.
    */
-  constructor(ctx: Context, private readonly config: Config) {
+  constructor(ctx: Context, config: Config) {
     super(ctx, 'homeAuth')
+    this.config = config
   }
 
   /**

@@ -8,12 +8,17 @@ import type { SupervisorErrorCode, SupervisorFailure } from '@delo/contract-runt
 
 /** A refusal or failure with C9's error code (`delo/docs/contracts/c09-runtime-supervisor.md`, "Errors"). */
 export class SupervisorError extends Error {
+  readonly code: SupervisorErrorCode
+  readonly detail?: string | undefined
+
   /**
    * @param code - C9's error code.
    * @param detail - the refused value or the reason, never a secret, token, credential or environment value.
    */
-  constructor(readonly code: SupervisorErrorCode, readonly detail?: string) {
+  constructor(code: SupervisorErrorCode, detail?: string) {
     super(detail === undefined ? code : `${code}: ${detail}`)
+    this.code = code
+    this.detail = detail
     this.name = 'SupervisorError'
   }
 

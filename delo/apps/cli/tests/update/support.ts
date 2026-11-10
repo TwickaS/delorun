@@ -229,6 +229,11 @@ export class FakeChannel implements UpdateReleaseChannel {
   readonly recorded: RuntimeVersion[] = []
   private line: (text: string) => void = () => {}
 
+  private readonly root: RootMetadata
+  private readonly key: KeyObject
+  private readonly platform: RuntimePlatform
+  private readonly releases: ReadonlyMap<string, FakeBehaviour>
+
   /**
    * @param root - the root the releases verify under.
    * @param key - the targets key.
@@ -236,7 +241,11 @@ export class FakeChannel implements UpdateReleaseChannel {
    * @param releases - each release's behaviour.
    * @param first - the first release to name.
    */
-  constructor(private readonly root: RootMetadata, private readonly key: KeyObject, private readonly platform: RuntimePlatform, private readonly releases: ReadonlyMap<string, FakeBehaviour>, first: RuntimeVersion) {
+  constructor(root: RootMetadata, key: KeyObject, platform: RuntimePlatform, releases: ReadonlyMap<string, FakeBehaviour>, first: RuntimeVersion) {
+    this.root = root
+    this.key = key
+    this.platform = platform
+    this.releases = releases
     this.next = first
   }
 

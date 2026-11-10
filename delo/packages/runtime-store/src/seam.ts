@@ -174,10 +174,14 @@ function startArguments(profile: string): readonly string[] {
  * handshake's waiting phase has seen no running chat.
  */
 export class HomeRuntimeStore {
+  private readonly options: HomeRuntimeStoreOptions
+
   /**
    * @param options - the store, the profile, the channel and the report builder.
    */
-  constructor(private readonly options: HomeRuntimeStoreOptions) {}
+  constructor(options: HomeRuntimeStoreOptions) {
+    this.options = options
+  }
 
   /** The C1 store this serves, for the launch plan, the start check and retention. */
   get store(): RuntimeStore {

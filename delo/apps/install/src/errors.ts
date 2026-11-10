@@ -53,6 +53,10 @@ export class InstallError extends Error {
   /** Whether the failure is a body that passed its size limit. */
   readonly oversize: boolean
 
+  readonly code: InstallErrorCode
+  readonly source: string
+  readonly detail: string
+
   /**
    * @param code - the failure's code.
    * @param source - the URL or path the failure concerns.
@@ -60,12 +64,15 @@ export class InstallError extends Error {
    * @param options - the underlying error, the HTTP status and whether a body passed its limit.
    */
   constructor(
-    readonly code: InstallErrorCode,
-    readonly source: string,
-    readonly detail: string,
+    code: InstallErrorCode,
+    source: string,
+    detail: string,
     options: InstallErrorOptions = {},
   ) {
     super(`${code}: ${detail}`, options.cause === undefined ? undefined : { cause: options.cause })
+    this.code = code
+    this.source = source
+    this.detail = detail
     this.status = options.status
     this.oversize = options.oversize === true
   }

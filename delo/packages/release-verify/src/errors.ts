@@ -91,12 +91,17 @@ const CONTRACT_FAILURES: Readonly<Record<ReleaseLogRefusal, ReleaseLogFailure | 
 export class ReleaseLogRefusalError extends Error {
   override readonly name = 'ReleaseLogRefusalError'
 
+  readonly refusal: ReleaseLogRefusal
+  readonly detail: string
+
   /**
    * @param refusal - which check refused.
    * @param detail - what the check saw, in words.
    */
-  constructor(readonly refusal: ReleaseLogRefusal, readonly detail: string) {
+  constructor(refusal: ReleaseLogRefusal, detail: string) {
     super(`${refusal}: ${detail}`)
+    this.refusal = refusal
+    this.detail = detail
   }
 }
 

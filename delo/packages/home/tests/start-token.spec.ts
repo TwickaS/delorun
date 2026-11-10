@@ -130,8 +130,11 @@ describe('the home lock\'s handover', () => {
 
 /** A refusal of the test channel. */
 class Refused extends Error {
-  constructor(readonly code: string) {
+  readonly code: string
+
+  constructor(code: string) {
     super(code)
+    this.code = code
   }
 }
 

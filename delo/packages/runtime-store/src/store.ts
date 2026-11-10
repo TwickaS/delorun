@@ -88,10 +88,13 @@ export class RuntimeStore {
   /** The store's paths. */
   readonly paths: StorePaths
 
+  private readonly options: RuntimeStoreOptions
+
   /**
    * @param options - the home, the platform and the logger.
    */
-  constructor(private readonly options: RuntimeStoreOptions) {
+  constructor(options: RuntimeStoreOptions) {
+    this.options = options
     this.paths = new StorePaths(options.home, options.platform)
   }
 

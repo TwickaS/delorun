@@ -128,7 +128,11 @@ export class LogStandIn {
 export class WitnessStandIn {
   readonly key: KeyObject = generateKeyPairSync('ed25519').privateKey
 
-  constructor(readonly name = 'witness.example.test') {}
+  readonly name: string
+
+  constructor(name = 'witness.example.test') {
+    this.name = name
+  }
 
   /** The witness's verifier key. */
   get vkey(): string {

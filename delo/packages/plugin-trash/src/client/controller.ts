@@ -41,12 +41,17 @@ export interface TrashControllerDeps {
 
 /** A route's refusal or failed answer. */
 export class TrashRequestError extends Error {
+  readonly status: number
+  readonly code: string
+
   /**
    * @param status - the HTTP status.
    * @param code - the refusal's code, or an empty string when the answer carried none.
    */
-  constructor(readonly status: number, readonly code: string) {
+  constructor(status: number, code: string) {
     super(`delo-trash: the harness answered ${String(status)}${code === '' ? '' : ` ${code}`}`)
+    this.status = status
+    this.code = code
   }
 }
 
@@ -98,8 +103,12 @@ export class TrashController {
   private readonly hides = new Map<string, readonly (() => void)[]>()
   private disposed = false
 
+  private readonly deps: TrashControllerDeps
+
   /** @param deps - the page's hide, draft storage and toast. */
-  constructor(private readonly deps: TrashControllerDeps) {}
+  constructor(deps: TrashControllerDeps) {
+    this.deps = deps
+  }
 
   /**
    * Read the listing and hide the chats of every item in it. A failure keeps a listing already shown.

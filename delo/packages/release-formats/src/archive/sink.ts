@@ -23,7 +23,13 @@ export interface ByteSink {
 export class FileSink implements ByteSink {
   length = 0
 
-  private constructor(private readonly handle: FileHandle, private readonly limit: number) {}
+  private readonly handle: FileHandle
+  private readonly limit: number
+
+  private constructor(handle: FileHandle, limit: number) {
+    this.handle = handle
+    this.limit = limit
+  }
 
   /**
    * Create the file; an existing file is never replaced.

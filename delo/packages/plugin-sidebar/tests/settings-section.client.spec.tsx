@@ -292,7 +292,12 @@ describe('Settings → Sidebar swipe strip', () => {
       static readonly all: Observer[] = []
       readonly observe = vi.fn()
       readonly disconnect = vi.fn()
-      constructor(readonly notify: () => void) { Observer.all.push(this) }
+      readonly notify: () => void
+
+      constructor(notify: () => void) {
+        this.notify = notify
+        Observer.all.push(this)
+      }
     }
     vi.stubGlobal('ResizeObserver', Observer)
     mockSizes()

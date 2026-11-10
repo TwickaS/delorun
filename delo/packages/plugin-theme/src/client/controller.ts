@@ -40,12 +40,20 @@ export class ThemeController {
   private faces: HTMLStyleElement | undefined
   private applied: string | undefined
 
+  private readonly theme: TokenLayers
+  private readonly fonts: string
+  private readonly doc: Document
+
   /**
    * @param theme - upstream's theme service.
    * @param fonts - the font faces' CSS text.
    * @param doc - the studio's document, which holds the faces and the effort mark.
    */
-  constructor(private readonly theme: TokenLayers, private readonly fonts: string, private readonly doc: Document) {}
+  constructor(theme: TokenLayers, fonts: string, doc: Document) {
+    this.theme = theme
+    this.fonts = fonts
+    this.doc = doc
+  }
 
   /**
    * Apply a set of settings; a set equal to the applied one changes nothing, and a set with the studio additions off removes everything.

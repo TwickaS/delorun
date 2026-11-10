@@ -156,11 +156,17 @@ export class FixtureStore implements RuntimeStore {
   /** Every switch, as `from>to`, and every restore, as `restore:<current>`. */
   readonly switches: string[] = []
 
+  private readonly home: string
+  private readonly profile: string
+
   /**
    * @param home - the Delo home.
    * @param profile - the CLI profile.
    */
-  constructor(private readonly home: string, private readonly profile: string) {}
+  constructor(home: string, profile: string) {
+    this.home = home
+    this.profile = profile
+  }
 
   /**
    * Point `current`, and `previous` when given, at installed versions.
@@ -272,8 +278,12 @@ export class FixtureCopies implements SessionDataCopies {
   /** Runs at the start of each rollback, before the preflight. */
   beforeRollback: ((record: UpdateJournal) => void) | undefined
 
+  private readonly snapshots: FixtureSnapshots
+
   /** @param snapshots - the profile history the rollback restores through. */
-  constructor(private readonly snapshots: FixtureSnapshots) {}
+  constructor(snapshots: FixtureSnapshots) {
+    this.snapshots = snapshots
+  }
 
   /**
    * Record the home process's pre-start steps, which finish an interrupted restore before any Host starts.
@@ -346,11 +356,17 @@ export class FixtureHost implements RunningHost {
   readonly chats = new CountingChatGate()
   closed = false
 
+  private readonly behaviour: FixtureBehaviour
+  readonly access: UpdateChannelAccess
+
   /**
    * @param behaviour - how it behaves.
    * @param access - its way to the update channel.
    */
-  constructor(private readonly behaviour: FixtureBehaviour, readonly access: UpdateChannelAccess) {}
+  constructor(behaviour: FixtureBehaviour, access: UpdateChannelAccess) {
+    this.behaviour = behaviour
+    this.access = access
+  }
 
   studio(): string | undefined {
     return 'http://127.0.0.1:1/'
@@ -403,8 +419,12 @@ export class FixtureHostRunner implements HostRunner {
   /** Every Host booted, latest last. */
   readonly booted: FixtureHost[] = []
 
+  private readonly behaviour: () => FixtureBehaviour
+
   /** @param behaviour - how each booted Host behaves. */
-  constructor(private readonly behaviour: () => FixtureBehaviour) {}
+  constructor(behaviour: () => FixtureBehaviour) {
+    this.behaviour = behaviour
+  }
 
   /** The latest Host. */
   get latest(): FixtureHost {

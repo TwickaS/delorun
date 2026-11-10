@@ -32,12 +32,15 @@ export interface TrashOperationsConfig {
 
 /** A refusal of a trash operation that names what the person asked for. */
 export class TrashOperationError extends Error {
+  readonly code: 'WORKSPACE_NOT_FOUND'
+
   /**
    * @param code - the refusal code.
    * @param message - one sentence for the log.
    */
-  constructor(readonly code: 'WORKSPACE_NOT_FOUND', message: string) {
+  constructor(code: 'WORKSPACE_NOT_FOUND', message: string) {
     super(message)
+    this.code = code
     this.name = 'TrashOperationError'
   }
 }
@@ -65,10 +68,14 @@ export function entryOf(item: TrashItem): TrashEntry {
 export class TrashOperations {
   private tail: Promise<unknown> = Promise.resolve()
 
+  private readonly config: TrashOperationsConfig
+
   /**
    * @param config - the trash root, the stores, the registry and the warning sink.
    */
-  constructor(private readonly config: TrashOperationsConfig) {}
+  constructor(config: TrashOperationsConfig) {
+    this.config = config
+  }
 
   /**
    * At start: move in the chats a live writer held when they were deleted,

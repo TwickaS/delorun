@@ -40,8 +40,11 @@ function text(value: string): StreamChunk[] {
 
 /** Streams one scripted step per request. */
 class ScriptedAdapter extends LlmAdapter {
-  constructor(private readonly script: StreamChunk[][]) {
+  private readonly script: StreamChunk[][]
+
+  constructor(script: StreamChunk[][]) {
     super()
+    this.script = script
   }
 
   override async * stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {

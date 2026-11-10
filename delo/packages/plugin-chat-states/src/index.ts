@@ -68,9 +68,12 @@ const REFUSALS: Readonly<Record<ChatStateRefusalCode, { readonly status: number;
 
 /** A change the plugin refuses, with a stable code the route turns into its answer. */
 export class ChatStateRefusedError extends Error {
+  readonly code: Exclude<ChatStateRefusalCode, 'failed'>
+
   /** @param code - why the change was refused. */
-  constructor(readonly code: Exclude<ChatStateRefusalCode, 'failed'>) {
+  constructor(code: Exclude<ChatStateRefusalCode, 'failed'>) {
     super(REFUSALS[code].message)
+    this.code = code
     this.name = 'ChatStateRefusedError'
   }
 }
@@ -100,16 +103,24 @@ export class ChatStates {
   /** The last operation: operations run one after another, since each reads and then writes the same records. */
   #last: Promise<unknown> = Promise.resolve()
 
+  private readonly table: KvTable<SessionId, unknown>
+  private readonly now: () => number
+  private readonly report: (session: SessionId, problem: string) => void
+
   /**
    * @param table - the storage table, by session id.
    * @param now - the harness's clock, in epoch milliseconds.
    * @param report - called once for each session whose stored record is malformed and therefore left out.
    */
   constructor(
-    private readonly table: KvTable<SessionId, unknown>,
-    private readonly now: () => number,
-    private readonly report: (session: SessionId, problem: string) => void,
-  ) {}
+    table: KvTable<SessionId, unknown>,
+    now: () => number,
+    report: (session: SessionId, problem: string) => void,
+  ) {
+    this.table = table
+    this.now = now
+    this.report = report
+  }
 
   /**
    * Every chat that is settled, snoozed or woke now; a snooze that ended by its time becomes a waking.

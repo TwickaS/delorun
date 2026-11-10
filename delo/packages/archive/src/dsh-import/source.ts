@@ -134,13 +134,22 @@ export class SourceReader {
   private readonly links = new Map<string, number>()
   private readonly directories = new Map<string, string>()
 
+  readonly root: string
+  private readonly maxEntries: number
+  readonly rootDevice: number
+  private readonly probe: SourceProbe
+
   /**
    * @param root - the absolute, real path of the stock home.
    * @param maxEntries - the most names the walk lists before it refuses the home.
    * @param rootDevice - the device of the home's root; an entry on another device is left behind.
    * @param probe - the file-system calls a spec stages a change between; the real ones by default.
    */
-  constructor(readonly root: string, private readonly maxEntries: number, readonly rootDevice: number, private readonly probe: SourceProbe = REAL_PROBE) {
+  constructor(root: string, maxEntries: number, rootDevice: number, probe: SourceProbe = REAL_PROBE) {
+    this.root = root
+    this.maxEntries = maxEntries
+    this.rootDevice = rootDevice
+    this.probe = probe
     this.directories.set('', '')
   }
 

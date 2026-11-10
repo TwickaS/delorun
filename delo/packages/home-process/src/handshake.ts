@@ -146,8 +146,11 @@ interface KeptReport {
 
 /** Why the waiting phase stopped before running chats reached zero. */
 class WaitEnded extends Error {
-  constructor(readonly reason: 'DRAIN_TIMEOUT' | 'CANCELLED') {
+  readonly reason: 'DRAIN_TIMEOUT' | 'CANCELLED'
+
+  constructor(reason: 'DRAIN_TIMEOUT' | 'CANCELLED') {
     super(reason)
+    this.reason = reason
   }
 }
 
@@ -169,11 +172,17 @@ export class UpdateHandshake {
   private committedSuccessor: Successor | undefined
   private failedRollback = false
 
+  private readonly subject: HandshakeSubject
+  private readonly support: UpdateSupport
+
   /**
    * @param subject - the home process.
    * @param support - the store, the profile history and the session-data copies.
    */
-  constructor(private readonly subject: HandshakeSubject, private readonly support: UpdateSupport) {}
+  constructor(subject: HandshakeSubject, support: UpdateSupport) {
+    this.subject = subject
+    this.support = support
+  }
 
   /** The update in progress, or `undefined`. */
   get update(): UpdateState | undefined {

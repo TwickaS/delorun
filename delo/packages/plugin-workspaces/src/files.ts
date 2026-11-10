@@ -114,12 +114,15 @@ export function probeProcFd(procRoot = PROC_FD): boolean {
  * `unavailable`: the proc walk cannot name the directories it holds, so the file was not checked.
  */
 export class InstructionsRefusedError extends Error {
+  readonly code: 'conflict' | 'too-large' | 'unavailable'
+
   /**
    * @param code - why the files module refused.
    * @param reason - an English message for the person.
    */
-  constructor(readonly code: 'conflict' | 'too-large' | 'unavailable', reason: string) {
+  constructor(code: 'conflict' | 'too-large' | 'unavailable', reason: string) {
     super(reason)
+    this.code = code
     this.name = 'InstructionsRefusedError'
   }
 }

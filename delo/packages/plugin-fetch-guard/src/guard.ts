@@ -43,13 +43,18 @@ export type FetchGuardRefusalCode =
  * into a tool result without leaking anything but what was asked for.
  */
 export class FetchGuardRefusedError extends Error {
+  readonly code: FetchGuardRefusalCode
+  readonly host: string
+
   /**
    * @param code - why the destination is refused.
    * @param host - the refused hop's host, as the request spells it.
    * @param reason - the refusal, in words the model reads.
    */
-  constructor(readonly code: FetchGuardRefusalCode, readonly host: string, reason: string) {
+  constructor(code: FetchGuardRefusalCode, host: string, reason: string) {
     super(reason)
+    this.code = code
+    this.host = host
     this.name = 'FetchGuardRefusedError'
   }
 }

@@ -126,12 +126,15 @@ export interface DeleteWorkspaceInput {
 
 /** Error of the trash store and service. */
 export class TrashError extends Error {
+  readonly code: TrashErrorCode
+
   /**
    * @param code - the stable refusal code.
    * @param message - the human-facing refusal.
    */
-  constructor(readonly code: TrashErrorCode, message: string) {
+  constructor(code: TrashErrorCode, message: string) {
     super(message)
+    this.code = code
     this.name = 'TrashError'
   }
 }

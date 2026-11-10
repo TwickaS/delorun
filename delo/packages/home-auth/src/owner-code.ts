@@ -49,10 +49,13 @@ export class OwnerCodeStore {
   private readonly now: () => number
   private readonly random: RandomBytes
 
+  private readonly options: OwnerCodeStoreOptions
+
   /**
    * @param options - the file, the clock and the random source.
    */
-  constructor(private readonly options: OwnerCodeStoreOptions) {
+  constructor(options: OwnerCodeStoreOptions) {
+    this.options = options
     this.now = options.now ?? Date.now
     this.random = options.random ?? systemRandom
   }

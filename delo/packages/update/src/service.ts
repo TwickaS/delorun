@@ -151,12 +151,15 @@ export class UpdateReportService extends Service {
 
   private disposed = false
 
+  private readonly options: UpdateReportOptions
+
   /**
    * @param ctx - the context that owns the service and the build.
    * @param options - the installation and the sources.
    */
-  constructor(ctx: Context, private readonly options: UpdateReportOptions) {
+  constructor(ctx: Context, options: UpdateReportOptions) {
     super(ctx, 'updateReport')
+    this.options = options
     this.ctx.effect(() => () => this.dispose(), 'update: the pre-update report')
   }
 

@@ -18,12 +18,17 @@ export type UpdateReportErrorCode =
 
 /** A refused report. */
 export class UpdateReportError extends Error {
+  readonly code: UpdateReportErrorCode
+  readonly detail?: string | undefined
+
   /**
    * @param code - the refusal's code.
    * @param detail - the refused value or the reason, for the person reading the failure.
    */
-  constructor(readonly code: UpdateReportErrorCode, readonly detail?: string) {
+  constructor(code: UpdateReportErrorCode, detail?: string) {
     super(detail === undefined ? code : `${code}: ${detail}`)
+    this.code = code
+    this.detail = detail
     this.name = 'UpdateReportError'
   }
 }
@@ -45,13 +50,18 @@ export type DataSafetyErrorCode =
 
 /** A refused session-data copy, restore or rollback; nothing has changed when it is thrown before a step ran. */
 export class DataSafetyError extends Error {
+  readonly code: DataSafetyErrorCode
+  readonly detail: string
+
   /**
    * @param code - the refusal's code.
    * @param detail - the reason, for the person reading the failure.
    * @param options - the cause.
    */
-  constructor(readonly code: DataSafetyErrorCode, readonly detail: string, options?: ErrorOptions) {
+  constructor(code: DataSafetyErrorCode, detail: string, options?: ErrorOptions) {
     super(`${code}: ${detail}`, options)
+    this.code = code
+    this.detail = detail
     this.name = 'DataSafetyError'
   }
 }

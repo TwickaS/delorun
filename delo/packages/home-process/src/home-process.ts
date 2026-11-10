@@ -164,7 +164,10 @@ export class HomeProcess implements HandshakeSubject {
     },
   }
 
-  private constructor(private readonly options: HomeProcessOptions) {
+  private readonly options: HomeProcessOptions
+
+  private constructor(options: HomeProcessOptions) {
+    this.options = options
     this.handshake = options.updates === undefined ? undefined : new UpdateHandshake(this, options.updates)
   }
 

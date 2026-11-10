@@ -24,10 +24,13 @@ export class AttemptLimiter {
   private readonly now: () => number
   private readonly attempts = new Map<string, number[]>()
 
+  private readonly options: AttemptLimiterOptions
+
   /**
    * @param options - the limit, the window and the clock.
    */
-  constructor(private readonly options: AttemptLimiterOptions) {
+  constructor(options: AttemptLimiterOptions) {
+    this.options = options
     this.now = options.now ?? Date.now
   }
 

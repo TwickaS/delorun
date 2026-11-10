@@ -389,12 +389,19 @@ class Planner {
   /** The stock home patch's text when the plan read it, and the home patch a profile runs under in the Delo home. */
   private homePatches: { readonly stock: string | undefined, readonly landed: string | null | undefined, readonly own: boolean } = { stock: undefined, landed: undefined, own: false }
 
+  private readonly reader: SourceReader
+  private readonly target: string
+  private readonly options: DshImportOptions
+
   /**
    * @param reader - the stock home's reader.
    * @param target - the Delo home.
    * @param options - the plan's options.
    */
-  constructor(private readonly reader: SourceReader, private readonly target: string, private readonly options: DshImportOptions) {
+  constructor(reader: SourceReader, target: string, options: DshImportOptions) {
+    this.reader = reader
+    this.target = target
+    this.options = options
     this.id = options.planId ?? randomUUID()
   }
 

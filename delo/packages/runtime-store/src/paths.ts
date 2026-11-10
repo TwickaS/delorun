@@ -56,11 +56,16 @@ export class StorePaths {
   /** `runtimes/store.lock`. */
   readonly lock: string
 
+  readonly home: string
+  readonly platform: RuntimePlatform
+
   /**
    * @param home - the resolved Delo home.
    * @param platform - the platform whose file list each installation keeps.
    */
-  constructor(readonly home: string, readonly platform: RuntimePlatform) {
+  constructor(home: string, platform: RuntimePlatform) {
+    this.home = home
+    this.platform = platform
     this.root = join(home, DELO_HOME_ENTRIES.runtimes)
     this.staging = join(home, DELO_HOME_ENTRIES.staging)
     this.layout = join(this.root, STORE_ENTRIES.layout)

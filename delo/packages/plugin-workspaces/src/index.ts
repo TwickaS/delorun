@@ -122,12 +122,15 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
   /** The tail of the queue of changes to the folders, the registry and the rows. */
   private queue: Promise<unknown> = Promise.resolve()
 
+  private readonly config: Config
+
   /**
    * @param ctx - the plugin context with the injected services.
    * @param config - the root, the limits and the optional credential and CA bundle.
    */
-  constructor(ctx: Context, private readonly config: Config) {
+  constructor(ctx: Context, config: Config) {
     super(ctx, 'deloWorkspaces')
+    this.config = config
   }
 
   /**

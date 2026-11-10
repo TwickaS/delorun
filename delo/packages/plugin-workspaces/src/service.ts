@@ -43,12 +43,15 @@ export type WorkspaceRefusalCode = 'invalid' | 'not-found' | 'taken' | 'outside'
 
 /** A refusal of the workspaces service, with an English message for the person. */
 export class WorkspaceRefusedError extends Error {
+  readonly code: WorkspaceRefusalCode
+
   /**
    * @param code - why it refused.
    * @param reason - what happened, in words the main chat passes on.
    */
-  constructor(readonly code: WorkspaceRefusalCode, reason: string) {
+  constructor(code: WorkspaceRefusalCode, reason: string) {
     super(reason)
+    this.code = code
     this.name = 'WorkspaceRefusedError'
   }
 }

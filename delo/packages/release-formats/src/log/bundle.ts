@@ -24,12 +24,15 @@ import { parseCheckpoint, parseVerifier, splitNote, verifySignature } from './no
 export class LogVerificationError extends Error {
   override readonly name = 'LogVerificationError'
 
+  readonly failure: ReleaseLogFailure
+
   /**
    * @param failure - the reason code.
    * @param message - what failed.
    */
-  constructor(readonly failure: ReleaseLogFailure, message: string) {
+  constructor(failure: ReleaseLogFailure, message: string) {
     super(message)
+    this.failure = failure
   }
 }
 

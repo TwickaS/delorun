@@ -13,6 +13,9 @@ export type LogsErrorCode = 'PROFILE_INVALID' | 'LOG_WRITE_FAILED'
 export class LogsError extends Error {
   override readonly name = 'LogsError'
 
+  readonly code: LogsErrorCode
+  readonly path?: string | undefined
+
   /**
    * @param code - what failed.
    * @param message - the report, naming the path.
@@ -20,12 +23,14 @@ export class LogsError extends Error {
    * @param options - the underlying failure.
    */
   constructor(
-    readonly code: LogsErrorCode,
+    code: LogsErrorCode,
     message: string,
-    readonly path?: string,
+    path?: string,
     options?: ErrorOptions,
   ) {
     super(message, options)
+    this.code = code
+    this.path = path
   }
 }
 

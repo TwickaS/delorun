@@ -48,14 +48,21 @@ export type BundleReadErrorCode =
 
 /** A bundle whose metadata Delo could not read; the report names the bundle as an unverified skip. */
 export class BundleReadError extends Error {
+  readonly code: BundleReadErrorCode
+  readonly bundle: string
+  readonly detail: string
+
   /**
    * @param code - why.
    * @param bundle - the bundle's package name.
    * @param detail - the failure for a person, which the report's item quotes.
    * @param options - the cause.
    */
-  constructor(readonly code: BundleReadErrorCode, readonly bundle: string, readonly detail: string, options?: ErrorOptions) {
+  constructor(code: BundleReadErrorCode, bundle: string, detail: string, options?: ErrorOptions) {
     super(`${code}: ${bundle}: ${detail}`, options)
+    this.code = code
+    this.bundle = bundle
+    this.detail = detail
     this.name = 'BundleReadError'
   }
 }

@@ -195,8 +195,12 @@ export class Workspaces {
    */
   private readonly retired = new Map<WorkspaceId, Retired>()
 
+  private readonly context: WorkspaceContext
+
   /** @param context - the engine, owner, roots, manifest and inspection. */
-  constructor(private readonly context: WorkspaceContext) {}
+  constructor(context: WorkspaceContext) {
+    this.context = context
+  }
 
   /**
    * Run one workspace operation.

@@ -51,7 +51,13 @@ export function tilePath(level: number, index: number, width?: number): string {
 class TileTree {
   private readonly tiles = new Map<string, Promise<Buffer>>()
 
-  constructor(private readonly size: number, private readonly fetchTile: TileFetcher) {}
+  private readonly size: number
+  private readonly fetchTile: TileFetcher
+
+  constructor(size: number, fetchTile: TileFetcher) {
+    this.size = size
+    this.fetchTile = fetchTile
+  }
 
   /** The hashes a tile holds for this tree size, from the partial tile or, when the log no longer serves it, the full one. */
   private async tile(level: number, index: number): Promise<Buffer> {

@@ -9,6 +9,11 @@ import type { HomeLayoutErrorCode } from '@delo/contract-home-layout'
 
 /** A refusal or failure defined by contract C1 (`delo/docs/contracts/c01-home-layout.md`). */
 export class HomeLayoutError extends Error {
+  readonly code: HomeLayoutErrorCode
+  readonly path: string
+  readonly detail: string
+  readonly fix?: string | undefined
+
   /**
    * @param code - C1's error code.
    * @param path - the absolute path the failure concerns.
@@ -16,12 +21,16 @@ export class HomeLayoutError extends Error {
    * @param fix - the shell command that fixes it, such as `chmod 600 <path>`, when one exists.
    */
   constructor(
-    readonly code: HomeLayoutErrorCode,
-    readonly path: string,
-    readonly detail: string,
-    readonly fix?: string,
+    code: HomeLayoutErrorCode,
+    path: string,
+    detail: string,
+    fix?: string,
   ) {
     super(`${code}: ${detail}${fix === undefined ? '' : `; fix it with: ${fix}`}`)
+    this.code = code
+    this.path = path
+    this.detail = detail
+    this.fix = fix
     this.name = 'HomeLayoutError'
   }
 }

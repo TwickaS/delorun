@@ -47,9 +47,12 @@ export class ScriptedAdapter extends LlmAdapter {
   /** Each request's messages as JSON, in request order. */
   readonly requests: string[] = []
 
+  readonly script: StreamChunk[][]
+
   /** @param script - the steps, consumed in order; each test pushes its own. */
-  constructor(readonly script: StreamChunk[][] = []) {
+  constructor(script: StreamChunk[][] = []) {
     super()
+    this.script = script
   }
 
   override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {

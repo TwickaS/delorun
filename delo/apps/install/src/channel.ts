@@ -113,11 +113,14 @@ export class LauncherChannel implements RuntimeChannel {
   private readonly now: () => number
   private readonly resolved = new Map<string, Resolved>()
 
+  private readonly options: LauncherChannelOptions
+
   /**
    * @param options - the home, the platform, the embedded roots, the channel, the log, the source, the downloader and
    *   the clock.
    */
-  constructor(private readonly options: LauncherChannelOptions) {
+  constructor(options: LauncherChannelOptions) {
+    this.options = options
     this.source = options.source ?? RELEASE_SOURCE
     this.downloader = options.downloader ?? new Downloader()
     this.now = options.now ?? Date.now

@@ -30,10 +30,14 @@ export class FixtureWorkspaces implements DeloWorkspaces {
   /** Every call that would change something, in order. */
   readonly changes: (readonly [string, unknown])[] = []
 
+  readonly workspaces: readonly FixtureWorkspace[]
+
   /**
    * @param workspaces - the fixture workspaces, each a folder that exists.
    */
-  constructor(readonly workspaces: readonly FixtureWorkspace[]) {}
+  constructor(workspaces: readonly FixtureWorkspace[]) {
+    this.workspaces = workspaces
+  }
 
   /**
    * The workspace with an id.

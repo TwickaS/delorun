@@ -25,16 +25,24 @@ export class LineCapture {
   private dropped = 0
   private inPrivateKey = false
 
+  private readonly log: SurfaceLog
+  private readonly stream: CapturedStream
+  private readonly level: LogLevel
+
   /**
    * @param log - the surface's log.
    * @param stream - which stream this capture reads; records carry it as their `logger`.
    * @param level - the level of this stream's records.
    */
   constructor(
-    private readonly log: SurfaceLog,
-    private readonly stream: CapturedStream,
-    private readonly level: LogLevel,
-  ) {}
+    log: SurfaceLog,
+    stream: CapturedStream,
+    level: LogLevel,
+  ) {
+    this.log = log
+    this.stream = stream
+    this.level = level
+  }
 
   /**
    * Add output. Each complete line becomes a record; a partial line is held until its newline.

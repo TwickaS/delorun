@@ -76,14 +76,27 @@ export class Supervisor {
   private readonly queues = new Map<string, Promise<unknown>>()
   private listener: SupervisorListener | undefined
 
+  private readonly options: SupervisorOptions
+  private readonly home: string
+  private readonly owner: Owner
+  private readonly context: DockerContext | undefined
+  private readonly engine: Engine | undefined
+  private readonly workspaces: Workspaces
+
   private constructor(
-    private readonly options: SupervisorOptions,
-    private readonly home: string,
-    private readonly owner: Owner,
-    private readonly context: DockerContext | undefined,
-    private readonly engine: Engine | undefined,
-    private readonly workspaces: Workspaces,
+    options: SupervisorOptions,
+    home: string,
+    owner: Owner,
+    context: DockerContext | undefined,
+    engine: Engine | undefined,
+    workspaces: Workspaces,
   ) {
+    this.options = options
+    this.home = home
+    this.owner = owner
+    this.context = context
+    this.engine = engine
+    this.workspaces = workspaces
     this.inspection = { shapes: shapesOf(undefined, 'docker-unavailable', {}) }
   }
 

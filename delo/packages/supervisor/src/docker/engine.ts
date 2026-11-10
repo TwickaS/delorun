@@ -19,12 +19,15 @@ const EXEC_POLL_MS = 100
 
 /** A call the engine refused or answered with an error. */
 export class EngineError extends Error {
+  readonly status: number
+
   /**
    * @param status - the HTTP status, such as 404 for an absent object, or 0 when the engine did not answer.
    * @param reason - the engine's message.
    */
-  constructor(readonly status: number, reason: string) {
+  constructor(status: number, reason: string) {
     super(`docker engine: ${reason}`)
+    this.status = status
     this.name = 'EngineError'
   }
 }
