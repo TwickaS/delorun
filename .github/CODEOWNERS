@@ -1,13 +1,13 @@
 # Code owners receive review requests for the paths they own.
-* @VadimAlexeev0
+* @Delo-Run/maintainers
 
 # Security-sensitive paths.
-packages/sandbox/ @VadimAlexeev0
-packages/shell/ @VadimAlexeev0
-packages/interaction/ @VadimAlexeev0
-packages/credentials/ @VadimAlexeev0
-packages/boot/plugin-manager/ @VadimAlexeev0
-delo/upstream-patches.json @VadimAlexeev0
-.github/ @VadimAlexeev0
-scripts/ @VadimAlexeev0
-SECURITY.md @VadimAlexeev0
+packages/sandbox/ @Delo-Run/maintainers
+packages/shell/ @Delo-Run/maintainers
+packages/interaction/ @Delo-Run/maintainers
+packages/credentials/ @Delo-Run/maintainers
+packages/boot/plugin-manager/ @Delo-Run/maintainers
+delo/upstream-patches.json @Delo-Run/maintainers
+.github/ @Delo-Run/maintainers
+scripts/ @Delo-Run/maintainers
+SECURITY.md @Delo-Run/maintainers

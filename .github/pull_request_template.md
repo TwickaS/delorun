@@ -20,7 +20,9 @@
 ## Checklist
 
 - [ ] Each commit carries a `Signed-off-by` line from `git commit -s`. A pseudonym is accepted.
-- [ ] Edits to upstream files have entries in `delo/upstream-patches.json`.
+- [ ] If the pull request changes a file outside `delo/`, the Motivation names the Delo feature the change serves. Maintainers' tooling writes the ledger entry at merge; do not edit `delo/upstream-patches.json`.
+- [ ] A generic fix to an upstream file is in its own commit.
+- [ ] A visible change has a recording, or the Testing section says it is a small fix and a maintainer records it at merge.
 - Changelog: a fragment path under `delo/changelog/unreleased/`, or `Changelog: none (reason)`.
 
 ## AI Usage
@@ -38,3 +40,7 @@
 | testing 验收测试 | level to fill in | ?% | description to fill in |
 | implementation 技术实现 | level to fill in | ?% | description to fill in |
 | review 评审处理 | n/a 暂不适用 | — | No review comments handled yet. |
+
+The person who opens the pull request is responsible for it, whether or not an AI agent wrote it. A pull request written with an agent gets the same checks and review as any other.
+
+Model used (optional): <!-- The model that wrote or helped with the change, such as its name and version. -->

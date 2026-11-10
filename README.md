@@ -1,77 +1,61 @@
-# DeepSeek Harness
+# Delo
 
 English | [中文](README.zh.md)
 
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
+Delo is the community fork of DeepSeek Harness made for daily use: compatible with stock, safe to update, reachable from your phone, and built in the open.
 
-It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
+Delo is independent. It is not a DeepSeek product, and DeepSeek does not endorse it.
 
-Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
+## Status
 
-## Developer preview
+Delo is pre-release. It has no tagged release yet, and interfaces and defaults can still change. Today the `delorun` command provides:
 
-DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
+- `setup`, `start`, `stop` and `status` to create the Delo home, run the home process and inspect it.
+- `doctor` to check the home, the profile and the installed plugins.
+- `logs` to find, read, follow, clear and prune Delo's operational logs.
+- `recover` to see where the profile stands after an update and to roll back, restore a version or enter safe mode.
+- `plugin` and `headless`, which pass through to DeepSeek Harness's own commands unchanged.
 
 Review the [safety notice](SAFETY.md) before running the project.
 
 ## Run
 
-### Run from `npm`
-
-Install `Node.js`, then run:
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
+Delo has no published package yet, so run it from a checkout.
 
 ### Run from source
 
-To run from a repository checkout:
+Install Node.js 24.9 or later and pnpm, then run from a checkout:
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
 pnpm install
 pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+`pnpm run build` prepares the artifacts, and `pnpm dsh web` starts the Web UI from them. `pnpm dsh --profile headless "task"` runs one task and needs a `DEEPSEEK_API_KEY`. To run the checks that cover your change, use `pnpm check`. [AGENTS.md](AGENTS.md) lists every command.
 
-## Community and support
+## Compatibility with stock
 
-- Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/4MrtZUhpxg">DeepSeek Harness Discord community</a>.
+A stock user's plugins, profiles and sessions always load in Delo, and a recorded-session replay proves it at every upstream merge. Delo's interface and defaults may differ from stock. [Delo and stock DeepSeek Harness](delo/docs/guide/delo-vs-stock.md) lists every difference.
 
-## Contributing
+## Relationship to upstream
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Delo is a fork of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`), the open-source agent harness from [DeepSeek AI](https://deepseek.com). Delo's own code lives under `delo/`, and a change to one of upstream's files is recorded with the feature it serves. The [divergence index](delo/docs/reference/divergence/README.md) describes the record. For the stock documentation, see [upstream's repository](https://github.com/deepseek-ai/deepseek-harness) and its [documentation site](https://deepseek-harness.github.io/deepseek-harness/).
 
-## Development
+## Documentation
 
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
+- [Delo documentation](delo/docs/README.md)
+- [Architecture](delo/docs/architecture/README.md)
+- [Security and threat model](delo/docs/security/README.md)
 
-`pnpm run dev:web` builds, serves, and rebuilds client bundles on source edits in one terminal, and `make help` lists the matching Make targets for Web and Desktop; the guide's application commands section owns the full table.
+## Community
 
-For agents, follow [AGENTS.md](AGENTS.md).
+- [CONTRIBUTING.md](CONTRIBUTING.md) explains how to report a bug, propose a feature and open a pull request.
+- [SECURITY.md](SECURITY.md) explains how to report a vulnerability privately.
+- [GOVERNANCE.md](GOVERNANCE.md) explains who decides what merges.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) applies in every project space.
+- Ask questions in GitHub Discussions, or write to support@delorun.com.
 
-## Citation
+## Licence
 
-```bibtex
-@misc{deepseek-harness2026,
-  title={DeepSeek Harness: Everything is a Plugin},
-  author={DeepSeek-AI},
-  year={2026},
-  publisher={GitHub},
-  howpublished={\url{https://github.com/deepseek-ai/deepseek-harness}},
-}
-```
-
-## License
-
-[MIT](LICENSE)
-
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE). The upstream copyright line stays in the licence file, and Delo Run and contributors hold the copyright of Delo's own changes. Third-party dependencies and their licences are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
