@@ -37,8 +37,11 @@ The rows are the guarantees a person reasonably expects of a native workspace. "
 | A confined command cannot read the rest of your account (`~/.ssh`, `~/.aws`, `/etc`) | no | no, as stock | no |
 | A confined command cannot reach the network | no | no, as stock | no |
 | A confined command cannot connect to the Docker socket | no | yes on bwrap and Seatbelt for the active context's socket; no on Landlock and Windows | no |
+| A confined command cannot start a Windows program through WSL interop | no | yes under WSL on bwrap; on Landlock every confined command is refused while interop exists | no |
+| A program a confined command names in a repository's git settings, attributes or hooks never runs outside the sandbox when the harness summarises the turn's changed files | no | yes | not applicable: the change summary is not mounted |
 | `web_fetch` refuses loopback, link-local and private-network targets | no | yes | no |
 | A model-authored write to instructions needs an approval that names the effect | no | through the file tools only; a shell command or PTC code writes without it | no |
+| A chat cannot switch off, reconfigure or remove Delo's guards through `plugin_manager` | no | yes, judged on the profile's composed rows; a full-access command can still edit the profile's files | no |
 | A new stdio MCP server needs the person's consent | no | a new stdio server is refused with its command named, and no surface asks for or records a consent, so it stays refused | no |
 | A scheduled delivery is refused when the target chat's permission preset changed | no | yes | no |
 | A switch of a workspace to full access needs the person's consent | no | the switch is refused, because no surface asks the consent; a per-call escalation still goes through upstream's approval | no |
