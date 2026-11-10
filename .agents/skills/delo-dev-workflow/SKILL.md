@@ -50,7 +50,7 @@ A new spec goes in its package's `tests/` directory, which `tests:fork` runs.
 
 ## Commit
 
-1. A change people can perceive adds a fragment under [`delo/changelog/unreleased/`](../../../delo/changelog/unreleased/README.md).
+1. A change people can perceive adds one fragment per feature under [`delo/changelog/unreleased/`](../../../delo/changelog/README.md); a later change to the same feature edits its fragment instead of adding another, and `assemble.ts --list-unreleased` shows where a change belongs.
 2. `git commit -s` with a Conventional Commits subject; a change nobody can perceive ends with `Changelog: none (<reason>)`.
 3. The `commit-msg` hook checks the message against the commit standard; the pre-push gate checks what changed since the remote branch's tip. Merging by fast-forward after the branch push does not rerun the gate, because the tree pass record covers the same commit ([tools README](../../../delo/apps/tools/README.md#local-checks)).
 4. Open the pull request with `dsh-pr-description`.

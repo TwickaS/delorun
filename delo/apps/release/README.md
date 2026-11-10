@@ -25,11 +25,11 @@ English | [中文](README.zh.md)
 
 ## Assembly
 
-`node_modules/.bin/tsx delo/apps/release/src/changelog/assemble.ts --version <version> [--dry-run] [--first-public-release]` builds a release from the unreleased fragments. The version is `0.x.y`, optionally with an `-alpha.N`, `-beta.N` or `-rc.N` suffix. `1.0.0` is refused unless `--first-public-release` is passed.
+`node_modules/.bin/tsx delo/apps/release/src/changelog/assemble.ts --version <version> [--date <YYYY-MM-DD>] [--dry-run] [--first-public-release]` assembles the unreleased fragments into one version. The version is a preview sub-version `0.x.y-preview.N` (N from 1), a release `0.x.y`, or an `-alpha.N`, `-beta.N` or `-rc.N` pre-release; `1.0.0` is refused unless `--first-public-release` is passed. Assembling `0.x.y` folds the entries of its previews into it.
 
-The "From upstream" section names the upstream release in `upstream.ref` of `delo/upstream-patches.json`. The assembly prepends a `## <version>` block to `CHANGELOG.md` at the repository root and writes the release notes to `delo/changelog/releases/<version>.md`. Upstream's tag has no `CHANGELOG.md`, so the file is Delo's own. The first release that commits it adds its divergence-ledger entry in the same commit. A version that already has notes or a block is refused.
+The assembly writes `delo/changelog/changelog.json` (the standing comparison with the upstream release in `upstream.ref` of `delo/upstream-patches.json`, and every version), renders `CHANGELOG.md` at the repository root from it, writes the release notes to `delo/changelog/releases/<version>.md`, and moves each consumed fragment into `delo/changelog/releases/<version>/`. Pending fragments are never assembled. A version that is already assembled is refused. The first release that commits `CHANGELOG.md` adds its divergence-ledger entry in the same commit.
 
-The assembly moves each consumed fragment into `delo/changelog/releases/<version>/`. `--dry-run` prints the block and the notes and writes nothing.
+`--dry-run` prints the entry and the notes and writes nothing; `--list-unreleased` prints the unreleased fragments by area and the pending ones with what each waits for. The fragment format, the areas and the data file are described in [`delo/changelog/README.md`](../../changelog/README.md).
 
 ## Runtime closures
 
