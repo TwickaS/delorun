@@ -6,23 +6,25 @@
  * [--platform <platform>]... [--cache <dir>] [--write-pins] [--artifacts build|existing]
  * [--attestation-key <file> --attestation <file>]`
  *
- * It exports the commit's tree to the fixed build root `closure.json` names, so absolute paths that bundlers embed
+ * It refuses a platform whose native system addon `toolchain.json` marks `unbuilt` before any step runs. It exports the
+ * commit's tree to the fixed build root `closure.json` names, so absolute paths that bundlers embed
  * are the same on every builder, holding the root's lock so a second build on the computer refuses
  * ([build root](./closure/build-root.ts)); installs the locked dependencies and builds the artifacts, with the client title
  * `closure.json` names, and Delo's packages there under `SOURCE_DATE_EPOCH` (the commit's committer time) and
- * `-ffile-prefix-map=<build root>=.`; and for each platform deploys the closure's root package with production
+ * `-ffile-prefix-map=<build root>=.`; compiles upstream's native system addon from `native/system` for each platform
+ * whose route is `source`, in the pinned builder image with no network (`closure/native-build.ts`); and for each
+ * platform deploys the closure's root package with production
  * dependencies for that platform, transpiles Delo's packages to JavaScript, stamps the release version into the
- * `delorun` package, has the install anchor declare Delo's bundles, substitutes the pinned prebuilt
- * native packages, adds the pinned Node and pnpm, writes `data-formats.json` (contract C3) at the closure's root,
- * checks every native file against `prebuilt-pins.json`, and writes
- * the deterministic archive and its unsigned runtime file list to `--out`; when it built every platform, it also
+ * `delorun` package, has the install anchor declare Delo's bundles, adds the pinned Node and pnpm, writes
+ * `data-formats.json` (contract C3) at the closure's root, checks every native file against `prebuilt-pins.json`, and
+ * writes the deterministic archive and its unsigned runtime file list to `--out`; when it built every platform, it also
  * writes the release's SPDX SBOM derived from the archives. It refuses to run under a Node or pnpm
  * other than `toolchain.json` pins. `--artifacts existing` skips the artifact build and copies the worktree's built
- * `lib/` directories, client bundles and native addon into the exported tree instead, after checking that the worktree
+ * artifacts into the exported tree instead, after checking that the worktree
  * is at the commit, that tracked files are clean and that each package's `lib/` exists and is newer than its sources;
- * the closure then embeds the worktree's paths, so the build takes a fresh directory beside the fixed root and removes
- * it when it ends, keeps the worktree's own native addons instead of the pinned
- * publications and skips the native-file check, and is for a local release only. `--write-pins` records the native files found instead of checking them, for a
+ * the native step then replaces any copied native addon binaries, and the closure embeds the worktree's paths, so the
+ * build takes a fresh directory beside the fixed root and removes it when it ends, and is for a local release only.
+ * `--write-pins` records the native files found instead of checking them, for a
  * reviewed change of `prebuilt-pins.json`. On the targets-key holder's machine, `--attestation-key` and
  * `--attestation` write an HMAC over the version, commit and every file in `--out`, keyed with the holder's secret,
  * which signing checks; the attestation file lies outside `--out`.
@@ -46,7 +48,8 @@ import { claimBuildRoot } from './closure/build-root.ts'
 import { writeDataFormats } from './closure/data-formats.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { declareAnchorBundles, stampDeloVersion, transpileDeloPackages } from './closure/delo.ts'
-import { stageNode, stagePnpm, substitutePrebuilt } from './closure/sources.ts'
+import { buildNativeAddons, unbuiltPlatformProblems } from './closure/native-build.ts'
+import { stageNode, stagePnpm } from './closure/sources.ts'
 import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
 import { readImagesRecipe } from './images/build.ts'
@@ -146,6 +149,8 @@ export function buildEnvironment(inherited: NodeJS.ProcessEnv, buildRoot: string
  * @returns each platform's release files.
  */
 export async function buildClosures(repository: string, recipe: Recipe, request: BuildRequest): Promise<Map<RuntimePlatform, ClosureFiles>> {
+  const unbuilt = unbuiltPlatformProblems(recipe.toolchain, request.platforms)
+  if (unbuilt.length > 0) throw new Error(unbuilt.join('\n'))
   const epoch = Number(execFileSync('git', ['log', '-1', '--format=%ct', request.commit], { cwd: repository, encoding: 'utf8' }).trim())
   if (process.env.SOURCE_DATE_EPOCH !== undefined && process.env.SOURCE_DATE_EPOCH !== String(epoch)) {
     throw new Error(`SOURCE_DATE_EPOCH is ${process.env.SOURCE_DATE_EPOCH}, but the commit's committer time is ${String(epoch)}`)
@@ -179,6 +184,7 @@ async function buildIn(buildRoot: string, repository: string, recipe: Recipe, re
     run('pnpm', ['run', 'build:artifacts'], source, env)
   }
   run('pnpm', ['--filter', './delo/packages/*', 'run', 'build'], source, env)
+  await buildNativeAddons({ toolchain: recipe.toolchain, base: readImagesRecipe().base, source, platforms: request.platforms, cache: request.cache, epoch, user: `${String(process.getuid?.())}:${String(process.getgid?.())}` })
   const results = new Map<RuntimePlatform, ClosureFiles>()
   for (const platform of request.platforms) {
     const stage = join(buildRoot, 'stage', platform)
@@ -198,12 +204,10 @@ async function buildIn(buildRoot: string, repository: string, recipe: Recipe, re
     await transpileDeloPackages(join(app, 'node_modules'))
     await stampDeloVersion(join(app, 'node_modules'), request.version)
     await declareAnchorBundles(join(app, 'node_modules'), recipe.closure.anchor.package, recipe.closure.anchor.bundles)
-    // A build from existing artifacts keeps the worktree's own native addons; the pinned publications are of other versions.
-    if (!existing) await substitutePrebuilt(recipe.pins.substitutes[platform], join(app, 'node_modules'), request.cache)
     await stageNode(recipe.toolchain, platform, stage, request.cache)
     await stagePnpm(recipe.toolchain, stage, request.cache)
     await writeDataFormats(stage, source)
-    const files = await archiveClosure({ stage, outDir: request.out, version: request.version, platform, epoch, pins: request.writePins || existing ? undefined : recipe.pins.files[platform], requireLaunchFiles: true })
+    const files = await archiveClosure({ stage, outDir: request.out, version: request.version, platform, epoch, pins: request.writePins ? undefined : recipe.pins.files[platform], requireLaunchFiles: true })
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)
   }

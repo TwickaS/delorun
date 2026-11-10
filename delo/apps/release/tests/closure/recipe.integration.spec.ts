@@ -1,7 +1,8 @@
 /**
  * The recipe's inputs: the committed recipe files validate and refuse unknown or incomplete entries; the build
- * refuses a toolchain other than the pinned one and passes only its own environment; and every pinned download is
- * used only when its bytes match the pin, against a local HTTP stand-in.
+ * refuses a toolchain other than the pinned one and a platform whose native addon it does not build, and passes only
+ * its own environment; and every pinned download is used only when its bytes match the pin, against a local HTTP
+ * stand-in.
  */
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -10,10 +11,11 @@ import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { create as createTar } from 'tar'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { buildClosuresChecked, buildEnvironment, toolchainProblems } from '../../src/build-closure.ts'
-import { readRecipe, readRecipeFile, RebuildExceptions, RECIPE_DIR } from '../../src/closure/config.ts'
-import { fetchPinned, stageNpmPackage, substitutePrebuilt } from '../../src/closure/sources.ts'
-import { scratch } from '../support.ts'
+import { buildClosures, buildClosuresChecked, buildEnvironment, toolchainProblems } from '../../src/build-closure.ts'
+import { readRecipe, readRecipeFile, RebuildExceptions, RECIPE_DIR, Toolchain } from '../../src/closure/config.ts'
+import { archiveClosure } from '../../src/closure/archive-closure.ts'
+import { fetchPinned, stageNode, stageNpmPackage, stagePnpm } from '../../src/closure/sources.ts'
+import { scratch, writeTree } from '../support.ts'
 
 const routes = new Map<string, Buffer>()
 let server: Server
@@ -63,6 +65,24 @@ describe('recipe files', () => {
     writeFileSync(path, JSON.stringify({ schema: 'delo.rebuild-exceptions/1', exceptions: [{ id: 'all', applies: 'everything', reason: 'a reason that is long enough' }] }))
     expect(() => readRecipeFile(RebuildExceptions, path)).toThrow(/applies/u)
     expect(() => readRecipeFile(RebuildExceptions, join(RECIPE_DIR, 'missing.json'))).toThrow(/missing\.json/u)
+    writeFileSync(path, '{ not json')
+    expect(() => readRecipeFile(RebuildExceptions, path)).toThrow(/rebuild-exceptions\.json: .*JSON/u)
+  })
+
+  it('pin the native builder by exact Debian versions and name a route for every platform', (test) => {
+    const directory = scratch(test)
+    const path = join(directory, 'toolchain.json')
+    const toolchain = JSON.parse(readFileSync(join(RECIPE_DIR, 'toolchain.json'), 'utf8')) as { native: { builder: object, platforms: object } }
+    const write = (native: object): void => { writeFileSync(path, JSON.stringify({ ...toolchain, native: { ...toolchain.native, ...native } })) }
+    write({ builder: { ...toolchain.native.builder, packages: ['gcc'] } })
+    expect(() => readRecipeFile(Toolchain, path)).toThrow(/name=version/u)
+    write({ builder: { ...toolchain.native.builder, snapshot: 'latest' } })
+    expect(() => readRecipeFile(Toolchain, path)).toThrow(/snapshot\.debian\.org timestamp/u)
+    write({ platforms: { ...toolchain.native.platforms, 'linux-x64': 'prebuilt' } })
+    expect(() => readRecipeFile(Toolchain, path)).toThrow(/linux-x64/u)
+    const { 'win32-x64': _omitted, ...withoutWindows } = toolchain.native.platforms as Record<string, string>
+    write({ platforms: withoutWindows })
+    expect(() => readRecipeFile(Toolchain, path)).toThrow(/win32-x64/u)
   })
 })
 
@@ -111,24 +131,53 @@ describe('pinned downloads', () => {
     await expect(fetchPinned(`${origin}/tampered`, digest, cache)).rejects.toThrow(/does not match the pinned digest/u)
     writeFileSync(join(cache, `sha256-${digest.hex}`), 'changed in the cache')
     await expect(fetchPinned(`${origin}/tampered`, digest, cache)).rejects.toThrow(/the cached copy was removed/u)
+    await expect(fetchPinned(`${origin}/absent`, { algorithm: 'sha256', hex: '0'.repeat(64) }, cache)).rejects.toThrow(`download of ${origin}/absent failed with HTTP 404`)
+    mkdirSync(join(cache, `sha256-${'1'.repeat(64)}`))
+    await expect(fetchPinned(`${origin}/absent`, { algorithm: 'sha256', hex: '1'.repeat(64) }, cache)).rejects.toMatchObject({ code: 'EISDIR' })
   })
 
   it('refuses an npm tarball that holds another package or version', async (test) => {
     const directory = scratch(test)
-    const tarball = await npmTarball(directory, { name: '@deepseek-ai/node-addon-system-linux-x64', version: '0.1.3' })
-    routes.set('/addon.tgz', tarball)
-    const expected = { name: '@deepseek-ai/node-addon-system-linux-x64', version: '0.1.2', integrity: integrity(tarball) }
-    await expect(stageNpmPackage(`${origin}/addon.tgz`, expected, join(directory, 'out'), join(directory, 'cache'))).rejects.toThrow(/holds @deepseek-ai\/node-addon-system-linux-x64@0\.1\.3, not .*@0\.1\.2/u)
+    const tarball = await npmTarball(directory, { name: 'pnpm', version: '11.0.1' })
+    routes.set('/pnpm.tgz', tarball)
+    const expected = { name: 'pnpm', version: '11.0.0', integrity: integrity(tarball) }
+    await expect(stageNpmPackage(`${origin}/pnpm.tgz`, expected, join(directory, 'out'), join(directory, 'cache'))).rejects.toThrow(/holds pnpm@11\.0\.1, not pnpm@11\.0\.0/u)
   })
+})
 
-  it('refuses a prebuilt substitute whose version differs from the deployed source package', async (test) => {
+describe('the staged Node and pnpm', () => {
+  it('take the executable and licence of a tarball or ZIP distribution, and pnpm, from the cache', async (test) => {
     const directory = scratch(test)
-    const modules = join(directory, 'node_modules')
-    mkdirSync(join(modules, '@deepseek-ai', 'node-addon-system-linux-x64'), { recursive: true })
-    writeFileSync(join(modules, '@deepseek-ai', 'node-addon-system-linux-x64', 'package.json'), JSON.stringify({ version: '0.2.0' }))
-    const substitute = { name: '@deepseek-ai/node-addon-system-linux-x64', version: '0.1.2', integrity: `sha512-${'A'.repeat(86)}==` }
-    await expect(substitutePrebuilt([substitute], modules, join(directory, 'cache'))).rejects.toThrow(/does not match the deployed source version 0\.2\.0/u)
-    await expect(substitutePrebuilt([{ ...substitute, name: '@deepseek-ai/absent' }], modules, join(directory, 'cache'))).rejects.toThrow(/none is deployed/u)
+    const cache = join(directory, 'cache')
+    mkdirSync(cache)
+    const cached = (bytes: Buffer, algorithm: 'sha256' | 'sha512'): string => {
+      const hex = createHash(algorithm).update(bytes).digest('hex')
+      writeFileSync(join(cache, `${algorithm}-${hex}`), bytes)
+      return hex
+    }
+    writeTree(join(directory, 'linux'), { 'node-v24.22.0-linux-x64/bin/node': 'linux node', 'node-v24.22.0-linux-x64/LICENSE': 'licence', 'node-v24.22.0-linux-x64/README.md': 'left out' })
+    await createTar({ gzip: true, file: join(directory, 'linux.tar.gz'), cwd: join(directory, 'linux') }, ['node-v24.22.0-linux-x64'])
+    writeTree(join(directory, 'windows'), { 'node-v24.22.0-win-x64/node.exe': 'windows node', 'node-v24.22.0-win-x64/LICENSE': 'licence' })
+    const zip = await archiveClosure({ stage: join(directory, 'windows'), outDir: directory, version: '0.1.0', platform: 'win32-x64', epoch: 1_793_981_656, pins: undefined })
+    const pnpm = await npmTarball(directory, { name: 'pnpm', version: '11.0.0' })
+    const toolchain = readRecipe().toolchain
+    const pinned = {
+      ...toolchain,
+      node: { ...toolchain.node, distributions: {
+        ...toolchain.node.distributions,
+        'linux-x64': { file: 'node-v24.22.0-linux-x64.tar.gz', sha256: cached(readFileSync(join(directory, 'linux.tar.gz')), 'sha256') },
+        'win32-x64': { file: 'node-v24.22.0-win-x64.zip', sha256: cached(readFileSync(join(directory, zip.archive.name)), 'sha256') },
+      } },
+      pnpm: { version: '11.0.0', tarball: `${origin}/absent.tgz`, integrity: integrity(pnpm) },
+    }
+    cached(pnpm, 'sha512')
+    await stageNode(pinned, 'linux-x64', join(directory, 'stage-linux'), cache)
+    await stageNode(pinned, 'win32-x64', join(directory, 'stage-windows'), cache)
+    await stagePnpm(pinned, join(directory, 'stage-linux'), cache)
+    expect(readFileSync(join(directory, 'stage-linux', 'node', 'bin', 'node'), 'utf8')).toBe('linux node')
+    expect(readFileSync(join(directory, 'stage-linux', 'node', 'LICENSE'), 'utf8')).toBe('licence')
+    expect(readFileSync(join(directory, 'stage-windows', 'node', 'node.exe'), 'utf8')).toBe('windows node')
+    expect(JSON.parse(readFileSync(join(directory, 'stage-linux', 'pnpm', 'package.json'), 'utf8'))).toEqual({ name: 'pnpm', version: '11.0.0' })
   })
 })
 
@@ -139,5 +188,11 @@ describe('the checked build', () => {
     test.onTestFinished(() => { vi.restoreAllMocks() })
     await expect(buildClosuresChecked(root, { version: '0.1.0', commit: 'HEAD', out: join(root, 'out'), platforms: ['linux-x64'], cache: join(root, 'cache'), writePins: false }))
       .rejects.toThrow('Node v1.0.0 runs the build, but toolchain.json pins v24.22.0')
+  })
+
+  it('refuses a platform whose native addon the recipe does not build before it exports the tree', async (test) => {
+    const root = scratch(test)
+    await expect(buildClosures(root, readRecipe(), { version: '0.1.0', commit: 'HEAD', out: join(root, 'out'), platforms: ['linux-x64', 'darwin-arm64'], cache: join(root, 'cache'), writePins: false }))
+      .rejects.toThrow(/^darwin-arm64: toolchain\.json builds no native system addon for this platform/u)
   })
 })

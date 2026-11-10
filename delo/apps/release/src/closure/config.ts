@@ -1,7 +1,7 @@
 /**
  * The committed recipe files of the runtime closure build, read and validated before any build step runs:
- * `toolchain.json` (the pinned Node distributions, pnpm and the native-addon route), `prebuilt-pins.json` (the
- * prebuilt native packages substituted for workspace builds and the SHA-256 of every native file each closure holds),
+ * `toolchain.json` (the pinned Node distributions, pnpm, and the builder image and route of upstream's native addon),
+ * `prebuilt-pins.json` (the SHA-256 of every native file each closure holds),
  * `closure.json` (the fixed build root and the deployed package) and `rebuild-exceptions.json` (the differences the
  * rebuild comparison accepts, each with its reason). Unknown fields fail the read.
  *
@@ -21,6 +21,13 @@ export const RECIPE_FILES = ['toolchain.json', 'prebuilt-pins.json', 'closure.js
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u, 'a lowercase hex SHA-256')
 const integrity = z.string().regex(/^sha512-[A-Za-z0-9+/]{86}==$/u, 'an npm sha512 integrity string')
 const exactVersion = z.string().regex(/^\d+\.\d+\.\d+$/u, 'an exact version')
+/**
+ * How a closure obtains upstream's native system addon: `source` compiles it in the pinned builder image, `none` is a
+ * platform `native/system` publishes no package for, and `unbuilt` is a platform whose package the recipe cannot
+ * compile, so the recipe refuses to build that platform's closure.
+ */
+export const NATIVE_ROUTES = ['source', 'none', 'unbuilt'] as const
+
 const perPlatform = <T extends z.ZodType>(schema: T) => z.strictObject(Object.fromEntries(RUNTIME_PLATFORMS.map(platform => [platform, schema])) as Record<RuntimePlatform, T>)
 
 /** `toolchain.json`. */
@@ -32,7 +39,20 @@ export const Toolchain = z.strictObject({
     distributions: perPlatform(z.strictObject({ file: z.string().regex(/^node-v[\d.]+-[a-z0-9-]+\.(tar\.gz|zip)$/u), sha256 })),
   }),
   pnpm: z.strictObject({ version: exactVersion, tarball: z.url({ protocol: /^https$/u }), integrity }),
-  native: z.strictObject({ route: z.literal('prebuilt'), compiler: z.string().min(1), linker: z.string().min(1) }),
+  /** Upstream's native system addon under `native/system`, which the recipe compiles in the pinned builder image. */
+  native: z.strictObject({
+    builder: z.strictObject({
+      /** The Dockerfile of the builder image, relative to the recipe directory; its base is `images.json`'s. */
+      dockerfile: z.string().regex(/^[A-Za-z0-9._/-]+$/u, 'a path relative to the recipe directory'),
+      /** The Debian snapshot (`snapshot.debian.org`) apt installs from, which fixes every package version it can resolve. */
+      snapshot: z.string().regex(/^\d{8}T\d{6}Z$/u, 'a snapshot.debian.org timestamp such as 20261104T212339Z'),
+      /** The compiler, linker, C library and kernel header packages, each at its exact Debian version. */
+      packages: z.array(z.string().regex(/^[a-z0-9][a-z0-9+.-]*=[A-Za-z0-9.+~:-]+$/u, 'a Debian package as name=version')).min(1),
+    }),
+    platforms: perPlatform(z.enum(NATIVE_ROUTES)),
+    compiler: z.string().min(1),
+    linker: z.string().min(1),
+  }),
   /** The Docker Engine and BuildKit versions that build the S2 and S3 images. */
   images: z.strictObject({ docker: exactVersion, buildkit: z.string().regex(/^v\d+\.\d+\.\d+$/u, 'a BuildKit version such as v0.34.0') }),
 })
@@ -40,16 +60,9 @@ export const Toolchain = z.strictObject({
 /** {@link Toolchain}'s parsed value. */
 export type Toolchain = z.output<typeof Toolchain>
 
-/** A prebuilt npm package that replaces the workspace package of the same name in a closure. */
-export const PrebuiltPackage = z.strictObject({ name: z.string().min(1), version: exactVersion, integrity })
-
-/** {@link PrebuiltPackage}'s parsed value. */
-export type PrebuiltPackage = z.output<typeof PrebuiltPackage>
-
-/** `prebuilt-pins.json`. */
+/** `prebuilt-pins.json`: the SHA-256 of every native file each closure holds, whether compiled by the recipe or prebuilt. */
 export const PrebuiltPins = z.strictObject({
-  schema: z.literal('delo.prebuilt-pins/1'),
-  substitutes: perPlatform(z.array(PrebuiltPackage)),
+  schema: z.literal('delo.prebuilt-pins/2'),
   files: perPlatform(z.record(z.string(), sha256)),
 })
 
@@ -102,7 +115,7 @@ export function parseRecipeText<T extends z.ZodType>(schema: T, text: string, wh
   try {
     value = JSON.parse(text)
   } catch (error) {
-    throw new Error(`${where}: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+    throw new Error(`${where}: ${(error as SyntaxError).message}`, { cause: error })
   }
   const parsed = schema.safeParse(value)
   if (!parsed.success) throw new Error(`${where}: ${z.prettifyError(parsed.error)}`)
@@ -121,7 +134,7 @@ export function readRecipeFile<T extends z.ZodType>(schema: T, path: string): z.
   try {
     text = readFileSync(path, 'utf8')
   } catch (error) {
-    throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+    throw new Error(`${path}: ${(error as NodeJS.ErrnoException).message}`, { cause: error })
   }
   return parseRecipeText(schema, text, path)
 }

@@ -1,41 +1,10 @@
 {
-  "schema": "delo.prebuilt-pins/1",
-  "substitutes": {
-    "linux-x64": [
-      {
-        "name": "@deepseek-ai/node-addon-system-linux-x64",
-        "version": "0.1.2",
-        "integrity": "sha512-S2aPVHvYCpNCppCFyNlooMYuTB7ucK5lvD9oXQQ42v5Z2s5AoaiCdjz9r2l+ED2rI5oS1x0cUZmKjJH2dxV0pg=="
-      }
-    ],
-    "linux-arm64": [
-      {
-        "name": "@deepseek-ai/node-addon-system-linux-arm64",
-        "version": "0.1.2",
-        "integrity": "sha512-Z/DQtqgEYzjBzb2ocHGjMzx51W7xDILkJKKj89nyErr8gZMNiLs+JNL1uKzJqc3VLZB+vYCPaHGyQ3oX6EzEmA=="
-      }
-    ],
-    "darwin-x64": [
-      {
-        "name": "@deepseek-ai/node-addon-system-darwin-x64",
-        "version": "0.1.2",
-        "integrity": "sha512-XDbmquNapk9aT28y4EKn9lbONVr9YNs1NM/GKH1Gi5gUhjOT9wgRaTv72FJdNaVIInbPAYbPoyn7/y+MzQMNNg=="
-      }
-    ],
-    "darwin-arm64": [
-      {
-        "name": "@deepseek-ai/node-addon-system-darwin-arm64",
-        "version": "0.1.2",
-        "integrity": "sha512-IR0cx8um19mLCZaJ+H5PLblKr6Eg3PWvVo8eTQBr/SwH2nh5tM9CD9/5fHweNS9Pjt15UdFlGqnvLSd/w+O6Rw=="
-      }
-    ],
-    "win32-x64": []
-  },
+  "schema": "delo.prebuilt-pins/2",
   "files": {
     "linux-x64": {
-      "app/node_modules/@deepseek-ai/node-addon-system-linux-x64/bin/glibc/system.node": "54a9c25c05186c17520f6b7a5ced5f005752c08044c3eb76524cd517287600bc",
-      "app/node_modules/@deepseek-ai/node-addon-system-linux-x64/bin/landlock-run": "a752bc72f111fcc573c3e61fb90fa544541dac0ca498d2e279e1630d7c659b31",
-      "app/node_modules/@deepseek-ai/node-addon-system-linux-x64/bin/musl/system.node": "fb39a23ed7c414b48d6a8ee35b02016400997b0eb15926b1fd53946c7403f1d2",
+      "app/node_modules/@deepseek-ai/node-addon-system-linux-x64/bin/glibc/system.node": "b72670330d42e80852a6937d23de2faefdd5f1865fd4016884661e377331a9ac",
+      "app/node_modules/@deepseek-ai/node-addon-system-linux-x64/bin/landlock-run": "b1a6e3418569104bb8a69a6a4c27c70ec805eeac39cd909187651c9fb63dafb4",
+      "app/node_modules/@deepseek-ai/node-addon-system-linux-x64/bin/musl/system.node": "1700d20f2f3a330d14f24958e08aafc947d0bc3b4b626078cfb8ba1dff59fa2c",
       "app/node_modules/@img/sharp-libvips-linux-x64/lib/libvips-cpp.so.8.18.7": "4aa73553408c3964071728f4a231a8e86918e39bc49f1fbae75355f7ea933ea9",
       "app/node_modules/@img/sharp-linux-x64/lib/sharp-linux-x64-0.35.5.node": "cf896cc1b7f3ae9c3e8eb3d7b2b198b8de2824ff7d0681d684bab5a825def335",
       "app/node_modules/@koromix/koffi-linux-x64/linux_x64/koffi.node": "df687b8c68598c3ee83d06dcbc1d72fca032475e62b6108c4badfb5e43a3e7ff",
@@ -72,9 +41,9 @@
       "pnpm/dist/vendor/fastlist-0.3.0-x86.exe": "017411f3b0b5c0402cc3b2cb87c32c6fc71abd82e5b17ea6108990096c75a65d"
     },
     "linux-arm64": {
-      "app/node_modules/@deepseek-ai/node-addon-system-linux-arm64/bin/glibc/system.node": "63cb959a0efc1802f670ad92d2acfa4c72555d62dee998bd89e978861b7b1bec",
-      "app/node_modules/@deepseek-ai/node-addon-system-linux-arm64/bin/landlock-run": "f6ae2ad5893e3123f45329ade5518b33c3ac3b102978001ff1c6a6a8ebe2ad9b",
-      "app/node_modules/@deepseek-ai/node-addon-system-linux-arm64/bin/musl/system.node": "5a30225892269c7b9a6cf8db568fe8497e417dd8c4e163375784768c072427f0",
+      "app/node_modules/@deepseek-ai/node-addon-system-linux-arm64/bin/glibc/system.node": "f233c38235d81619f6838ddfcbb3c2917d5c5c6361fc7c27bb82481798fb1d57",
+      "app/node_modules/@deepseek-ai/node-addon-system-linux-arm64/bin/landlock-run": "ff9e4638e6eca152f7e73743d0ba80e8fd23d4583e0f779ffed3e7bb5d1f2870",
+      "app/node_modules/@deepseek-ai/node-addon-system-linux-arm64/bin/musl/system.node": "bcf9519881527abf0f3efe0391bbfb6491b62d03c6e3e7f3885689b59480ec81",
       "app/node_modules/@img/sharp-libvips-linux-arm64/lib/libvips-cpp.so.8.18.7": "97c2ae9a663cd3de58a34d68820994e49e0e261fddbd4616bd726a72610bbc8f",
       "app/node_modules/@img/sharp-linux-arm64/lib/sharp-linux-arm64-0.35.5.node": "6c3c549bd1bae0fe0b34832917a39950abd4db8feea874f8447ed07cded7854b",
       "app/node_modules/@koromix/koffi-linux-arm64/linux_arm64/koffi.node": "5504f375af55b834edac75590fdf3618a07fbf9c671fd02f96273eed5aa8e7a4",
@@ -112,7 +81,6 @@
     },
     "darwin-x64": {
       "app/node_modules/@deepseek-ai/libreoffice-kit-darwin-x64/bin/libreoffice-kit": "9675e7a84c5a77519bbf791f81f325b5889839413f3fb645e6a6422115b92967",
-      "app/node_modules/@deepseek-ai/node-addon-system-darwin-x64/bin/system.node": "a9ee57634c6b30e304799605a4b89e2de34b7afaf7a6043265b7ebd657f123be",
       "app/node_modules/@img/sharp-darwin-x64/lib/sharp-darwin-x64-0.35.5.node": "16c50ce1fc533e96979c2d2a8f06f0daf3500255ca560402ddddb34a0da71d4c",
       "app/node_modules/@img/sharp-libvips-darwin-x64/lib/libvips-cpp.8.18.7.dylib": "fb2101ad991f683a46204ea0ac96a4269c4c93ecef023a0f841c93ebc9843353",
       "app/node_modules/@koromix/koffi-darwin-x64/darwin_x64/koffi.node": "9124ac1608ce17157d793fbbd860f468dfe9e68e863a193f2563b482cd2ff086",
@@ -149,7 +117,6 @@
     },
     "darwin-arm64": {
       "app/node_modules/@deepseek-ai/libreoffice-kit-darwin-arm64/bin/libreoffice-kit": "ca1ee2a1449bcb07f81de66ea501ff45287641a66bb1bbd616ede25cfdecac30",
-      "app/node_modules/@deepseek-ai/node-addon-system-darwin-arm64/bin/system.node": "9534cde445a865250eb7bc8cfe5e231f3f91d0fda3f4aaa694e81f3531ad1130",
       "app/node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64-0.35.5.node": "791921f975371be33aed727e06283282cc001c960792eb52505b579fdaaf1b55",
       "app/node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.18.7.dylib": "c1a5b5633b21aeb8a229abf7d062e07e4d778c0b44ed43cd1f93362bda58c322",
       "app/node_modules/@koromix/koffi-darwin-arm64/darwin_arm64/koffi.node": "571168fbd60ffe51953b82e305cd721da603577649e8e58584f25233012253be",

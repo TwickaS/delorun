@@ -1,8 +1,7 @@
 /**
- * The pinned inputs of a runtime closure that do not come from the repository's lockfile: the Node distribution,
- * pnpm and the prebuilt native packages. Each is downloaded once into a cache named by its digest and used only after
- * its bytes match the digest `toolchain.json` or `prebuilt-pins.json` pins; a cached file that no longer matches is
- * removed and the build stops.
+ * The pinned inputs of a runtime closure that do not come from the repository's lockfile: the Node distribution and
+ * pnpm. Each is downloaded once into a cache named by its digest and used only after its bytes match the digest
+ * `toolchain.json` pins; a cached file that no longer matches is removed and the build stops.
  *
  * @module @delo/release/closure/sources
  */
@@ -12,7 +11,15 @@ import { join } from 'node:path'
 import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import extractZip from 'extract-zip'
 import { x as extractTar } from 'tar'
-import type { PrebuiltPackage, Toolchain } from './config.ts'
+import type { Toolchain } from './config.ts'
+
+/** An npm package pinned by exact version and integrity. */
+export interface PinnedPackage {
+  readonly name: string
+  readonly version: string
+  /** `sha512-<base64>`. */
+  readonly integrity: string
+}
 
 /** How long one download may take. */
 const DOWNLOAD_TIMEOUT_MS = 600_000
@@ -106,7 +113,7 @@ export async function stageNode(toolchain: Toolchain, platform: RuntimePlatform,
  * @param cache - the download cache.
  * @throws Error when the tarball does not match its integrity or names another package or version.
  */
-export async function stageNpmPackage(tarball: string, expected: PrebuiltPackage, destination: string, cache: string): Promise<void> {
+export async function stageNpmPackage(tarball: string, expected: PinnedPackage, destination: string, cache: string): Promise<void> {
   const archive = await fetchPinned(tarball, integrityDigest(expected.integrity), cache)
   await mkdir(destination, { recursive: false })
   await extractTar({ file: archive, cwd: destination, strip: 1 })
@@ -117,17 +124,6 @@ export async function stageNpmPackage(tarball: string, expected: PrebuiltPackage
 }
 
 /**
- * The registry tarball URL of a package version.
- * @param name - the package name, scoped or not.
- * @param version - the exact version.
- * @returns the npm registry's tarball URL.
- */
-export function registryTarball(name: string, version: string): string {
-  const base = name.startsWith('@') ? name.slice(name.indexOf('/') + 1) : name
-  return `https://registry.npmjs.org/${name}/-/${base}-${version}.tgz`
-}
-
-/**
  * Place pnpm at `<stage>/pnpm/`.
  * @param toolchain - the pinned toolchain.
  * @param stage - the staged tree's root.
@@ -135,28 +131,4 @@ export function registryTarball(name: string, version: string): string {
  */
 export async function stagePnpm(toolchain: Toolchain, stage: string, cache: string): Promise<void> {
   await stageNpmPackage(toolchain.pnpm.tarball, { name: 'pnpm', version: toolchain.pnpm.version, integrity: toolchain.pnpm.integrity }, join(stage, 'pnpm'), cache)
-}
-
-/**
- * Replace deployed workspace packages with their pinned prebuilt publications.
- * @param substitutes - the platform's prebuilt packages.
- * @param modules - the deployed `node_modules` directory.
- * @param cache - the download cache.
- * @throws Error when a substituted package is not deployed, or its deployed version differs from the prebuilt one.
- */
-export async function substitutePrebuilt(substitutes: readonly PrebuiltPackage[], modules: string, cache: string): Promise<void> {
-  for (const substitute of substitutes) {
-    const directory = join(modules, ...substitute.name.split('/'))
-    let deployed: { version?: unknown }
-    try {
-      deployed = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { version?: unknown }
-    } catch (error) {
-      throw new Error(`prebuilt ${substitute.name} replaces a deployed package, but none is deployed`, { cause: error })
-    }
-    if (deployed.version !== substitute.version) {
-      throw new Error(`prebuilt ${substitute.name}@${substitute.version} does not match the deployed source version ${String(deployed.version)}`)
-    }
-    await rm(directory, { recursive: true, force: true })
-    await stageNpmPackage(registryTarball(substitute.name, substitute.version), substitute, directory, cache)
-  }
 }

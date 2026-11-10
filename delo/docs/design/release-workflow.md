@@ -25,6 +25,7 @@ English
 - An advisory acceptance is valid only when its approver is a CODEOWNERS owner of `delo/release/` by login. `.github/CODEOWNERS` names only a team, which the check does not count, so no acceptance is valid and any advisory fails the check.
 - `delo/apps/npm-launcher/src/build.ts` packs the `delorun` npm package with the release roots it is given. No workflow publishes it, and no `install.sh` or `install.ps1` exists.
 - The release manifest's `desktop` entries name no Delo desktop build: the desktop app is upstream's.
+- The closure recipe compiles upstream's native system addon (`native/system`) from the tagged source for `linux-x64` and `linux-arm64` in a builder image pinned by base digest, Debian snapshot and exact package versions, with no network, and `prebuilt-pins.json` pins the binaries. It has no pinned toolchain for the macOS binaries and refuses the `darwin-x64` and `darwin-arm64` closures, so no release that includes them can be built, rebuilt or signed; every other native file in a closure is a prebuilt npm file the lockfile pins.
 
 ## The rules
 
@@ -40,6 +41,7 @@ English
 
 - **The signer's machine.** A rebuild shows that the tagged source and the published recipe produce the release, not that the signer's machine and toolchain are uncompromised.
 - **A malicious change in the tagged source or a pinned dependency.** The rebuild reproduces it and the signature covers it.
+- **The builder image's packages.** The rebuild shows that the pinned Debian compiler, linker and C libraries give the same binaries on both machines, not that those packages are free of a backdoor; both builds take them from the same Debian snapshot.
 - **The npm launcher before any Delo check.** `npx delorun` runs the launcher npm serves; the build attestation is what ties it to the release workflow.
 
 ## Denial tests

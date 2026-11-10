@@ -17,9 +17,14 @@
     "integrity": "sha512-SEVj0wtMKtJ8tIqpT/KzAtvOvI/2vyiBbCWJiG4UbOf3bzVPO8GkOOb16XaMMCqgpvet2CMpA81M+BQmy8FNng=="
   },
   "native": {
-    "route": "prebuilt",
-    "compiler": "none: every native addon is a prebuilt file prebuilt-pins.json lists",
-    "linker": "none: every native addon is a prebuilt file prebuilt-pins.json lists"
+    "builder": {
+      "dockerfile": "native/Dockerfile",
+      "snapshot": "20261104T212339Z",
+      "packages": ["gcc=4:12.2.0-3", "gcc-12=12.2.0-14+deb12u1", "cpp-12=12.2.0-14+deb12u1", "libgcc-12-dev=12.2.0-14+deb12u1", "binutils=2.40-2", "libc6-dev=2.36-9+deb12u14", "linux-libc-dev=6.1.190-1", "musl=1.2.3-1", "musl-dev=1.2.3-1", "musl-tools=1.2.3-1"]
+    },
+    "platforms": { "linux-x64": "source", "linux-arm64": "source", "darwin-x64": "unbuilt", "darwin-arm64": "unbuilt", "win32-x64": "none" },
+    "compiler": "GCC 12.2.0 (Debian 12.2.0-14+deb12u1), with musl-gcc of musl 1.2.3-1 for the static launcher and the musl addon",
+    "linker": "GNU ld of binutils 2.40-2"
   },
   "images": {
     "docker": "29.9.2",
