@@ -202,5 +202,5 @@ A profile from before Changes is migrated at its first start without changing wh
 ### What this does not prove
 
 - Plugin code, once approved, can do anything Delo can; the risk summary does not limit it.
-- A source checkout runs the whole harness from the checkout; its own code, Delo's bundles included, is not checked.
+- A source checkout is a developer mode, not an installed release: it runs the whole harness from the checkout, Delo's bundles included, so a model working inside the repository can edit the code the Host runs; Changes leaves those packages alone.
 - Installed dependencies outside a plugin's folder are not part of its approved content.
