@@ -78,6 +78,8 @@ export interface SigningRequest {
   readonly now: Date
   /** The advisory feed the check runs against again; the command passes contract C2's feed. */
   readonly feed: string
+  /** Whether the holder states that the release, a patch version, is the first of its major and minor; see `PatchRuleRequest.firstOfLine` in `patch-rule.ts`. */
+  readonly firstOfLine: boolean
 }
 
 /** What signing wrote: besides the signed files, the release-log entry body of the manifest, which the release workflow submits. */
@@ -258,7 +260,7 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   }
   if (draft.sbom.name !== sbomName(draft.version)) throw new SigningRefusal(`signing refuses: the draft names ${draft.sbom.name} as the SBOM; a release's SBOM is ${sbomName(draft.version)}`)
   const { record, recordBytes, comparison } = await checkRebuild(request, draft)
-  const patchProblem = patchRuleProblem({ repository: request.repository, version: draft.version, dsh: draft.dsh, commit: record.commit })
+  const patchProblem = patchRuleProblem({ repository: request.repository, version: draft.version, dsh: draft.dsh, commit: record.commit, firstOfLine: request.firstOfLine })
   if (patchProblem !== undefined) throw new SigningRefusal(`signing refuses: ${patchProblem}`)
   let built: ReleaseImages | undefined
   try {

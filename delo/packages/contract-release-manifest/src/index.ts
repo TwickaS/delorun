@@ -318,14 +318,18 @@ export interface ReleaseManifest {
 /** The most Unicode code points a release summary holds. */
 export const RELEASE_SUMMARY_MAX_LENGTH = 200
 
-/** {@link isValidSummary}'s rule; the `u` flag counts a surrogate pair as one character, and no `g` or `y` flag keeps `test` stateless. */
-const RELEASE_SUMMARY_PATTERN = /^(?!\s)(?!.*\s$)(?=.{1,200}$)[^\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+$/u
+/**
+ * {@link isValidSummary}'s rule. The `u` flag reads a surrogate pair as one code point and a lone surrogate as a code
+ * point of category Cs, which the class refuses; no `g` or `y` flag keeps `test` stateless.
+ */
+const RELEASE_SUMMARY_PATTERN = /^(?!\s)(?!.*\s$)(?=.{1,200}$)[^\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]+$/u
 
 /**
  * Whether a text is a valid release summary: 1 to {@link RELEASE_SUMMARY_MAX_LENGTH} Unicode code points (a surrogate
- * pair counts once), no control (Cc), format (Cf), line separator (Zl) or paragraph separator (Zp) character, and no
+ * pair counts once), no control (Cc), format (Cf), line separator (Zl) or paragraph separator (Zp) character, no lone
+ * UTF-16 surrogate (a high surrogate not followed by a low one, or a low one not preceded by a high one), and no
  * whitespace at either end, so it is never blank. Terminals and the studio print the summary, so it carries no line
- * break, terminal escape or bidirectional override.
+ * break, terminal escape, bidirectional override or text that is not valid Unicode.
  * @param text - the candidate summary.
  * @returns true when the text is a valid summary.
  */

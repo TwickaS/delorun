@@ -14,6 +14,7 @@
     { "kind": "service", "name": "updateReport", "side": "host", "source": "delo/packages/update/src/service.ts" },
     { "kind": "service", "name": "homeAuth", "side": "host", "source": "delo/packages/home-auth/src/service.ts" },
     { "kind": "service", "name": "reach", "side": "host", "source": "delo/packages/reach/src/service.ts" },
+    { "kind": "event", "name": "reach/state", "side": "host", "source": "delo/packages/reach/src/service.ts" },
     { "kind": "service", "name": "deloReach", "side": "browser", "source": "delo/packages/plugin-onboarding/src/client/index.ts" },
     { "kind": "service", "name": "deloSidebar", "side": "browser", "source": "delo/packages/plugin-sidebar/src/client/index.ts" }
   ]

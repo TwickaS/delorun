@@ -28,6 +28,8 @@ import { toJsonValue } from '@delo/release-formats/sign/json'
 import { signRelease, SigningRefusal } from '../../src/sign/release.ts'
 import { ManifestSchema } from '@delo/release-formats/sign/schemas'
 import { PERSISTENCE_SCHEMA_PATH } from '../../src/closure/data-formats.ts'
+import { CHANGELOG_SCHEMA } from '../../src/changelog/data.ts'
+import { DATA_PATH } from '../../src/changelog/paths.ts'
 import { DELO_RECORDS_PATH, UPSTREAM_VERSION_PATH } from '../../src/sign/patch-rule.ts'
 import { PLUGIN_INTERFACE_PATH, readPluginInterface } from '../../src/sign/plugin-interface.ts'
 import { REPO, runEntry, scratch, writeTree, type RunResult } from '../support.ts'
@@ -126,6 +128,20 @@ export interface FixtureOptions {
   readonly version?: string
   /** Earlier releases, oldest first, committed and tagged before the release. */
   readonly earlier?: readonly EarlierFixtureRelease[]
+  /** The versions the release commit's changelog lists; the earlier releases' and the release's by default. */
+  readonly changelog?: readonly string[]
+}
+
+/**
+ * Write `delo/changelog/changelog.json` listing assembled versions, newest last as given, with no previews and no
+ * bullets: the record the patch rule cross-checks the earlier releases' tags with.
+ * @param repo - the fixture repository's work tree.
+ * @param versions - the assembled versions.
+ */
+export function writeChangelog(repo: string, versions: readonly string[]): void {
+  const data = { schema: CHANGELOG_SCHEMA, upstream: { ref: 'dsh-v0.2.2-rc.1', commit: '0'.repeat(40) }, compared: [], versions: versions.map(version => ({ version, date: '2026-11-06', preview: false, areas: [], fromUpstream: { ref: 'dsh-v0.2.2-rc.1', items: [] }, previews: [] })).reverse() }
+  mkdirSync(dirname(join(repo, DATA_PATH)), { recursive: true })
+  writeFileSync(join(repo, DATA_PATH), `${JSON.stringify(data, undefined, 2)}\n`)
 }
 
 /**
@@ -168,8 +184,8 @@ export interface ReleaseFixture {
   readonly run: (entry: string, args: readonly string[], env?: NodeJS.ProcessEnv) => RunResult
   /** Record the rebuild with `record-rebuild.ts`. */
   readonly record: () => RunResult
-  /** Sign with the signing library against an advisory feed stand-in that answers with `advisories`, optionally from another rebuild output, record or attestation. */
-  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object }) => Promise<RunResult>
+  /** Sign with the signing library against an advisory feed stand-in that answers with `advisories`, optionally from another rebuild output, record or attestation, and with `firstOfLine` when given. */
+  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object, readonly firstOfLine?: boolean }) => Promise<RunResult>
 }
 
 /**
@@ -186,14 +202,18 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
   const git = (args: readonly string[]): string => execFileSync('git', args, { cwd: repo, env, encoding: 'utf8', timeout: 30_000 }).trim()
   git(['init', '-q', '-b', 'main'])
   writeFileSync(join(repo, 'README.md'), 'fixture\n')
+  const assembled: string[] = []
   for (const earlier of options.earlier ?? []) {
+    assembled.push(earlier.version)
     writeReleaseFacts(repo, earlier.dsh ?? FIXTURE_DSH)
+    writeChangelog(repo, assembled)
     earlier.change?.(repo)
     git(['add', '-A'])
     git(['commit', '-q', '--allow-empty', '-m', `release ${earlier.version}`])
     git(['tag', `v${earlier.version}`])
   }
   writeReleaseFacts(repo, FIXTURE_DSH)
+  writeChangelog(repo, options.changelog ?? [...assembled, version])
   mkdirSync(join(repo, 'delo/apps/release'), { recursive: true })
   for (const file of RECIPE_FILES) {
     let text = readFileSync(join(RECIPE_DIR, file), 'utf8')
@@ -295,6 +315,7 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
           env: { ...signEnv },
           now: new Date('2026-11-06T12:00:00Z'),
           feed: feed.url,
+          firstOfLine: args.firstOfLine ?? false,
         })
         return { status: 0, stdout: signed.manifestName, stderr: '' }
       } catch (error) {

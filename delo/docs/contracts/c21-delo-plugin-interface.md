@@ -37,11 +37,12 @@ The promise covers the entries under `covered` in the inventory `delo/packages/c
 | Kind | Covered | Where it is declared |
 | --- | --- | --- |
 | `service` | The Cordis services `deloStudio` and `deloOnboarding` in the browser, and `deloWorkspaces` and `deloChatStates`: their names and the members of the types they are declared with | The `interface Context` member in the named source file |
+| `event` | None: Delo documents no event for third-party plugins, so every event it declares is `internal` | The `interface Events` member in the named source file |
 | `manifest-field` | `engines.delo` and its evaluation ([C17](c17-plugin-versions.md#evaluation)) | Upstream's `plugin-compatibility.ts` with Delo's edit |
 
-Every other service a Delo package declares is listed under `internal`: Delo's own plugins use it, and a plugin that uses it gets no promise. Upstream's interfaces belong to the upstream axis. Delo's files under the home, its configuration rows and its Connection routes are not plugin interfaces.
+A `service` or `event` entry names the member, its source file and its side, `host` or `browser` (a source under a `client/` directory). Every other service, and every event, declared in `declare module '@deepseek-ai/cordis'` in a `.ts`, `.tsx` or `.d.ts` file under `delo/packages/*/src` or `delo/apps/*/src` is listed under `internal`: Delo's own code uses it, and a plugin that uses it gets no promise. Upstream's interfaces belong to the upstream axis. Delo's files under the home, its configuration rows and its Connection routes are not plugin interfaces.
 
-A spec of the release tool fails when a Delo package declares a service that the inventory does not list, or the inventory lists one that is no longer declared.
+A spec of the release tool fails when a Delo package or app declares a service or event that the inventory does not list, or the inventory lists one that is no longer declared.
 
 ## What each release may change
 
@@ -68,7 +69,7 @@ It also declares `engines.dsh` for the upstream interfaces it uses, because a la
 
 ## Checking a plugin
 
-`delorun plugin check <directory>` reads the directory's `package.json` as JSON, at most 1 MiB, and runs none of the plugin's files. It evaluates both axes against the running release with upstream's `evaluatePluginCompatibility`, the evaluation the installer and the start's preflight run, with no exemption, and prints:
+`delorun plugin check <directory>` reads the directory's `package.json` as JSON, at most 1 MiB, and runs none of the plugin's files. It refuses a `package.json` that is a symbolic link, a FIFO or anything but a regular file, without following or waiting on it, and prints the manifest's strings with terminal control characters escaped. It evaluates both axes against the running release with upstream's `evaluatePluginCompatibility`, the evaluation the installer and the start's preflight run, with no exemption, and prints:
 
 - the plugin's name and version, and the running Delo and DSH versions;
 - for the upstream axis, `engines.dsh` and whether it admits the running DSH, or each `@deepseek-ai/dsh*` peer range and whether it does, or that nothing is declared;
@@ -83,9 +84,9 @@ Signing refuses a release `x.y.z` when an earlier release tag `vx.y.w` exists, `
 
 - the upstream version, `packages/boot/app-boot/package.json`'s `version`, which must also equal the draft's `dsh`;
 - the data formats: `docs/persistence-schema.json` and `delo/packages/update/src/data-records.json`;
-- the `covered` list of the inventory, or a covered service that the release commit no longer declares.
+- the `covered` list of the inventory, or a covered service or event that the release commit no longer declares or a covered manifest field it no longer reads.
 
-A release with no earlier release in its minor is not a patch and is not checked.
+An `x.y.0` release is not a patch and is not compared. A patch version with no earlier release of its minor tagged refuses unless the signer passes `--first-of-line`, and the earlier tags must lie on the release commit's history and agree with the versions `delo/changelog/changelog.json` records at the release commit ([C2](c02-release-manifest.md)), so a checkout without the published tags does not skip the rule.
 
 ## Consumers
 
@@ -95,14 +96,14 @@ A release with no earlier release in its minor is not a patch and is not checked
 
 ## Compatibility
 
-The inventory's `schema` names its major version. Moving an entry from `internal` to `covered` is a minor release's change; moving one from `covered` to `internal` removes it from the promise, which from 1.0 needs a major release.
+The inventory's `schema` names its major version. The `event` kind was added to `delo.plugin-interface/1` before any release was published. Moving an entry from `internal` to `covered` is a minor release's change; moving one from `covered` to `internal` removes it from the promise, which from 1.0 needs a major release.
 
 ## Security
 
 ### Requirements
 
 - R1. `delorun plugin check` never imports, requires or runs a file of the plugin it checks.
-- R2. A patch release never moves the upstream base, changes the data formats or changes the covered inventory.
+- R2. A patch release never moves the upstream base, changes the data formats or changes the covered inventory, and a missing earlier release tag never skips this check.
 
 ### Denial tests
 
@@ -114,8 +115,10 @@ The inventory's `schema` names its major version. Moving an entry from `internal
 | `patch-rule-refuses-persistence-change`, `patch-rule-refuses-delo-record-change` | update-notice | A patch whose data formats differ refuses to sign. |
 | `patch-rule-refuses-interface-removal`, `patch-rule-refuses-interface-addition` | update-notice | A patch whose covered inventory differs refuses to sign. |
 | `patch-rule-refuses-missing-inventory` | update-notice | A patch whose earlier release has no inventory refuses to sign. |
+| `patch-rule-refuses-patch-without-earlier-release` | update-notice | A patch version with no earlier release of its minor refuses to sign without `--first-of-line`. |
+| `patch-rule-refuses-tag-on-wrong-commit`, `patch-rule-refuses-release-missing-from-changelog` | update-notice | An earlier release tag off the release commit's history, or one that disagrees with the committed changelog, refuses to sign. |
 
 ### What this does not prove
 
-- The patch rule compares names in the inventory, not the types or behaviour of a covered interface. A changed member type within a patch is caught only by review.
-- The rule reads the repository's tags. A release signed from a checkout without the earlier tags is not compared with them.
+- The rule compares names; it does not compare the declarations' text. Hashing the text of each covered declaration, which would catch a changed member type, is the rule's next step. A changed type or behaviour within a patch is caught only by review.
+- The rule finds earlier releases from the repository's tags, checked against git's history and the committed changelog. That changelog records versions, not commits, so a tag moved to another ancestor commit passes ([C2](c02-release-manifest.md#what-this-does-not-prove)).

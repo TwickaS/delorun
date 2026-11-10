@@ -6,14 +6,22 @@
  * changes the interface is at least a minor. Independently of patches, the draft's `dsh` must be the version of
  * `@deepseek-ai/dsh-app-boot` at the release commit, so every manifest states the base it was built on.
  *
+ * A missing tag must not skip the rule, so before comparing, {@link releaseLineProblem} checks the earlier releases the
+ * local tags name against git's history and the committed changelog, and a patch version with no earlier release
+ * needs the signer's explicit statement that it is the first of its line.
+ *
  * Every fact is read from git objects at the tags' and the release's commits, never from the checkout.
  *
  * @module @delo/release/sign/patch-rule
  */
 import { execFileSync } from 'node:child_process'
 import semver from 'semver'
+import { z } from 'zod'
+import { CHANGELOG_SCHEMA } from '../changelog/data.ts'
+import { DATA_PATH } from '../changelog/paths.ts'
 import { PERSISTENCE_SCHEMA_PATH } from '../closure/data-formats.ts'
 import type { PluginInterface } from '@delo/contract-plugin-versions'
+import { parseStrictJson, type JsonValue } from '@delo/release-formats/sign/json'
 import { describeEntry, entryKey, PLUGIN_INTERFACE_PATH, readPluginInterface, sourceOffers } from './plugin-interface.ts'
 
 /** The package whose `version` is the upstream DSH version a commit builds on (contract C17). */
@@ -32,6 +40,12 @@ export interface PatchRuleRequest {
   readonly dsh: string
   /** The commit the release's tag names. */
   readonly commit: string
+  /**
+   * The signer's statement (`sign-release.ts --first-of-line`) that this patch version, such as `0.1.3` when `0.1.0` to
+   * `0.1.2` were never released, is the first release of its major and minor. Without it, a patch version with no
+   * earlier release refuses, so a checkout that lacks the earlier tags never skips the rule.
+   */
+  readonly firstOfLine: boolean
 }
 
 /** An earlier release the version is a patch of. */
@@ -106,6 +120,110 @@ export function earlierReleases(repository: string, version: string): EarlierRel
   return earlier.sort((left, right) => semver.rcompare(left.version, right.version))
 }
 
+/** The changelog data file's size limit before parsing. */
+const CHANGELOG_SIZE_LIMIT = 16 * 1024 * 1024
+
+/** A version string the changelog lists: strict semantic version text. */
+const listedVersion = z.string().refine(version => semver.valid(version) === version, 'a semantic version')
+
+/** The fields of `delo/changelog/changelog.json` the rule reads: every assembled version and the previews folded into one. */
+const ChangelogVersionsSchema = z.object({
+  schema: z.literal(CHANGELOG_SCHEMA),
+  versions: z.array(z.object({ version: listedVersion, previews: z.array(z.object({ version: listedVersion })) })),
+})
+
+/**
+ * Whether git shows one commit to be an ancestor of another.
+ * @param repository - the repository.
+ * @param ancestor - the revision that must be an ancestor, such as `refs/tags/v0.1.2^{commit}`.
+ * @param commit - the descendant commit.
+ * @returns true when `git merge-base --is-ancestor` exits 0; false when it exits otherwise, including when git cannot
+ * resolve either revision, so an unknown answer refuses.
+ */
+function isAncestor(repository: string, ancestor: string, commit: string): boolean {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, commit], { cwd: repository, stdio: ['ignore', 'ignore', 'pipe'] })
+    return true
+  } catch (_notAncestor) {
+    // Exit 1 means "not an ancestor"; any other exit means git could not answer, which the caller refuses as well.
+    return false
+  }
+}
+
+/**
+ * The versions `delo/changelog/changelog.json` lists at a commit.
+ * @param repository - the repository.
+ * @param commit - the release commit.
+ * @returns every assembled version and folded preview, or why the file cannot be read there.
+ */
+function changelogVersionsAt(repository: string, commit: string): Set<string> | string {
+  const bytes = fileAt(repository, commit, DATA_PATH)
+  if (bytes === undefined) return `${DATA_PATH} is missing at the release commit ${commit}`
+  let value: JsonValue
+  try {
+    value = parseStrictJson(bytes, CHANGELOG_SIZE_LIMIT)
+  } catch (error) {
+    return `${DATA_PATH} at the release commit ${commit} is not strict JSON: ${(error as Error).message}`
+  }
+  const parsed = ChangelogVersionsSchema.safeParse(value)
+  if (!parsed.success) return `${DATA_PATH} at the release commit ${commit} is not a ${CHANGELOG_SCHEMA} version list: ${z.prettifyError(parsed.error).replaceAll('\n', '; ')}`
+  return new Set(parsed.data.versions.flatMap(entry => [entry.version, ...entry.previews.map(preview => preview.version)]))
+}
+
+/**
+ * Whether the earlier releases the local tags name are the whole line the release continues, before the patch rule
+ * compares the release with them. It applies to a patch version (patch number above 0, any pre-release suffix
+ * ignored) and checks, in order:
+ *
+ * 1. every earlier tag's commit is an ancestor of the release commit (`git merge-base --is-ancestor`), so a tag on
+ *    another line of history is refused;
+ * 2. `delo/changelog/changelog.json` at the release commit, the committed record of every assembled version, lists
+ *    every earlier tag's version, and every non-pre-release version of the same major and minor below the release
+ *    that it lists has a tag, so a tag missing from the checkout, or one the record never assembled, is refused;
+ * 3. the release has an earlier release, or the request says it is the first of its line, and not both.
+ *
+ * The changelog records versions, not commits, so this is the strongest cross-check the committed record supports. It
+ * does not prove that an earlier tag names the commit that release was published from: a tag moved to another
+ * ancestor commit passes. Both sources are written in the same repository, so a history whose changelog also omits a
+ * released version passes too; the published manifests and the release log, which would show it, are not consulted.
+ * @param request - the release being signed.
+ * @param earlier - the earlier releases {@link earlierReleases} found.
+ * @returns why signing must refuse, naming the check and the remedy; undefined when the line checks pass or the
+ * version is no patch.
+ * @throws Error when the version is not a semantic version.
+ */
+export function releaseLineProblem(request: PatchRuleRequest, earlier: readonly EarlierRelease[]): string | undefined {
+  const parsed = semver.parse(request.version)
+  if (parsed === null) throw new Error(`${request.version} is not a semantic version`)
+  const line = `${String(parsed.major)}.${String(parsed.minor)}`
+  if (parsed.patch === 0) {
+    return request.firstOfLine ? `--first-of-line is only for a patch version; release ${request.version} is the first of ${line} by its version, so sign it without --first-of-line` : undefined
+  }
+  const fetch = 'fetch the published tags (git fetch --tags) and sign again'
+  for (const release of earlier) {
+    if (!isAncestor(request.repository, `refs/tags/${release.tag}^{commit}`, request.commit)) {
+      return `the tag ${release.tag} does not name an ancestor of the release commit ${request.commit}, so it is not the ${release.version} that release ${request.version} continues; delete the local tag, ${fetch}`
+    }
+  }
+  const listed = changelogVersionsAt(request.repository, request.commit)
+  if (typeof listed === 'string') return `release ${request.version} is a patch version, and ${listed}, so the rule cannot cross-check the earlier releases of ${line} that the tags name with the assembled versions it records`
+  for (const release of earlier) {
+    if (!listed.has(release.version)) return `the tag ${release.tag} names release ${release.version}, which ${DATA_PATH} at the release commit does not list as assembled; a tag of a version never assembled is not a release, so delete the local tag, ${fetch}`
+  }
+  const tagged = new Set(earlier.map(release => release.version))
+  const core = `${line}.${String(parsed.patch)}`
+  for (const version of [...listed].sort(semver.compare)) {
+    const assembled = semver.parse(version)!
+    if (assembled.prerelease.length > 0 || assembled.major !== parsed.major || assembled.minor !== parsed.minor || !semver.lt(assembled, core) || tagged.has(version)) continue
+    return `${DATA_PATH} at the release commit lists release ${version}, but this repository has no tag v${version}, so the patch rule cannot compare release ${request.version} with it; ${fetch}`
+  }
+  if (earlier.length > 0 && request.firstOfLine) return `--first-of-line states that release ${request.version} is the first of ${line}, but ${earlier.map(release => release.tag).join(', ')} is tagged; sign without --first-of-line`
+  if (earlier.length === 0 && !request.firstOfLine) {
+    return `release ${request.version} is a patch version, but no earlier release of ${line} is tagged here and listed in ${DATA_PATH}, so the patch rule has nothing to compare it with; a missing tag must not skip the rule: ${fetch}, or, when ${request.version} is the first release of ${line}, sign with --first-of-line`
+  }
+  return undefined
+}
+
 /** The version a release that may not be a patch is released as instead. */
 function nextMinor(version: string): string {
   const parsed = semver.parse(version)!
@@ -172,7 +290,10 @@ export function patchRuleProblem(request: PatchRuleRequest): string | undefined 
   const base = upstreamVersionAt(request.repository, request.commit)
   if (base === undefined) return `${UPSTREAM_VERSION_PATH} at the release commit ${request.commit} names no version, so the draft's dsh ${request.dsh} cannot be shown to be the upstream base the release builds on`
   if (base !== request.dsh) return `the draft's dsh ${request.dsh} is not ${base}, the upstream version ${UPSTREAM_VERSION_PATH} names at the release commit ${request.commit}; draft the release with dsh ${base}`
-  for (const earlier of earlierReleases(request.repository, request.version)) {
+  const releases = earlierReleases(request.repository, request.version)
+  const line = releaseLineProblem(request, releases)
+  if (line !== undefined) return line
+  for (const earlier of releases) {
     const difference = differenceFrom(request, earlier)
     if (difference !== undefined) return difference
   }
