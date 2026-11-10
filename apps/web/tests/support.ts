@@ -218,6 +218,29 @@ export async function revealNavigationDrawer(page: Page, locale: 'en' | 'zh' | '
 }
 
 /**
+ * Acknowledge Delo's preview notice the way a person does: read the dialog and press Continue. A profile that mounts
+ * `@delo/bundle-local` shows the notice on the first visit and keeps the page behind it inert until then, so a spec
+ * that composes that bundle calls this once after the page loads and before it acts. Upstream's notice is
+ * pre-acknowledged by the scaffold and is not this one.
+ * @param page - the page under test, already navigated to the studio.
+ */
+export async function acknowledgeDeloNotice(page: Page): Promise<void> {
+  const notice = page.getByRole('dialog', { name: 'Preview', exact: true })
+  await notice.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 15_000 })
+  await notice.waitFor({ state: 'detached' })
+}
+
+/**
+ * Open Settings in a profile that mounts `@delo/bundle-local`, whose sidebar has no account menu: the Settings button
+ * at the foot of the sidebar opens it directly.
+ * @param page - the page under test, with the notice acknowledged ({@link acknowledgeDeloNotice}).
+ */
+export async function openDeloSettings(page: Page): Promise<void> {
+  await revealNavigationDrawer(page, 'en')
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+}
+
+/**
  * Drive the hero's workspace picker through the composed directory dialog
  * until the live composer unlocks. A fresh world has no Workspace, so the boot
  * lands in the Workspace-trigger view state (startup auto-selection has nothing to

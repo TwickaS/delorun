@@ -15,7 +15,7 @@ import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { startMockLlmServer } from '@deepseek-ai/dsh-llm-mock-server'
 import { launchWebScaffold, webSnapshotMode } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, openSettings, saveFailureShot } from './support.ts'
+import { acknowledgeDeloNotice, connectFreshWorkspace, newEnglishPage, openDeloSettings, saveFailureShot } from './support.ts'
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url))
 const BUNDLE_LOCAL = join(REPO, 'delo/packages/bundle-local')
@@ -45,6 +45,9 @@ it.skipIf(webSnapshotMode() === 'record')('turns each upstream opt-in on alone a
     { id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } },
     // The analytics row mounts only in the desktop profile; here it mounts with an exporter whose collector is a closed local port.
     { id: 'product-analytics', disabled: false },
+    // The client analytics plugin waits for the account service, which the bundle turns off with the account surfaces.
+    { id: 'deepseek-account', disabled: false },
+    { id: 'account-controller', disabled: false },
     { id: 'desktop-product-telemetry', disabled: false, config: {
       endpoint: 'http://127.0.0.1:9/v1/logs', serviceName: 'delo-privacy-fixture', serviceVersion: 'fixture',
       scheduledDelayMillis: 1000, timeoutMillis: 1000, exportTimeoutMillis: 2000, shutdownTimeoutMillis: 2000,
@@ -61,6 +64,7 @@ it.skipIf(webSnapshotMode() === 'record')('turns each upstream opt-in on alone a
   const page = await newEnglishPage(browser)
   onTestFailed(() => saveFailureShot(page, 'web-e2e-delo-privacy-consent'))
   await page.goto(scaffold.authenticatedUrl)
+  await acknowledgeDeloNotice(page)
   await connectFreshWorkspace(page, scaffold.workspaceCwd)
   const input = page.locator('[data-composer-input]').first()
   const send = async (text: string): Promise<void> => {
@@ -75,7 +79,7 @@ it.skipIf(webSnapshotMode() === 'record')('turns each upstream opt-in on alone a
     return { sessionLog: enabled('session-log-deepseek'), analytics: enabled('product-analytics') }
   }
   const openPrivacy = async (): Promise<void> => {
-    await openSettings(page, 'en')
+    await openDeloSettings(page)
     await page.getByRole('button', { name: 'Privacy', exact: true }).click()
     await page.getByText('Delo has no telemetry of its own.').waitFor()
   }
