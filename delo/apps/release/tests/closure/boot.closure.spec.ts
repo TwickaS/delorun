@@ -3,16 +3,21 @@
  * empty home with no pnpm on `PATH`, so setup must find Delo's bundle through the install anchor rather than link
  * it, and then `delorun start --foreground`'s own code starts the CLI profile with the CLI's own profile runner, and
  * every row whose module is a `@delo/` package is active. The client artifacts carry the title `closure.json` names. It runs only when
- * `DELO_CLOSURE_ARCHIVE` names a `linux-x64` closure archive that `build-closure.ts` built.
+ * `DELO_CLOSURE_ARCHIVE` names a `linux-x64` closure archive that `build-closure.ts` built (`DELO_CLOSURE_EXISTING_ARTIFACTS=1`
+ * when it was built with `--artifacts existing`, whose client carries the worktree build's title). A second spec starts the
+ * Host as the home process and requests the studio's index on loopback.
  */
-import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readRecipe } from '../../src/closure/config.ts'
 import { scratch } from '../support.ts'
 
 const ARCHIVE = process.env.DELO_CLOSURE_ARCHIVE
+
+/** Set when the archive was built with `build-closure.ts --artifacts existing`. */
+const EXISTING_ARTIFACTS = process.env.DELO_CLOSURE_EXISTING_ARTIFACTS === '1'
 
 /**
  * The start driver, written into the extracted `app/` so its imports resolve through the closure's `node_modules`.
@@ -108,12 +113,64 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
     expect(delo.map(row => row.id)).toContain('delo-privacy')
     expect(delo.filter(row => row.state !== 'active')).toEqual([])
 
+    // A closure built from existing artifacts carries the title the worktree's own artifact build used.
+    if (EXISTING_ARTIFACTS) return
     const title = readRecipe().closure.clientTitle
     const dist = join(extracted, 'app/node_modules/@deepseek-ai/dsh-web-frontend/dist')
     const html = readFileSync(join(dist, 'index.html'), 'utf8')
     expect(html).toContain(`<title>${title}</title>`)
     expect(html).toContain(`<meta name="apple-mobile-web-app-title" content="${title}" />`)
     if (existsSync(join(dist, 'manifest.webmanifest'))) expect(JSON.parse(readFileSync(join(dist, 'manifest.webmanifest'), 'utf8')).name).toBe(title)
+  })
+
+  it('starts the Host in the home process and serves the studio\'s index on loopback to a client that holds the start token', async (test) => {
+    const root = scratch(test, 'delo-closure-serve-')
+    const extracted = join(root, 'closure')
+    mkdirSync(extracted)
+    expect(spawnSync('tar', ['-x', '-z', '-f', ARCHIVE!, '-C', extracted]).status).toBe(0)
+    const node = join(extracted, 'node/bin/node')
+    const home = join(root, 'home')
+    mkdirSync(home)
+    const env = { HOME: home, PATH: `${join(extracted, 'node/bin')}:/usr/bin:/bin`, LANG: 'C.UTF-8', DEEPSEEK_API_KEY: 'sk-closure-boot-spec' }
+    const entry = join(extracted, 'app/node_modules/@delo/cli/src/bin.js')
+    expect(spawnSync(node, [entry, 'setup', '--yes'], { cwd: root, env, encoding: 'utf8' }).status).toBe(0)
+    const version = spawnSync(node, [entry, '--version'], { cwd: root, env, encoding: 'utf8' })
+    expect(version.stdout).toMatch(/^Delo \d+\.\d+\.\d+\nDSH \d+\.\d+\.\d+/u)
+    // The default port belongs to whichever Host runs on this computer, so the profile asks the system for one.
+    const bundle = readFileSync(join(extracted, 'app/node_modules/@deepseek-ai/dsh-web-app/cordis.patch.yml'), 'utf8').split('\n')
+    const indent = (line: string): number => line.length - line.trimStart().length
+    const row = bundle.findIndex(line => line.trim() === '- id: webserver')
+    const config = bundle.findIndex((line, index) => index > row && line.trim() === 'config:')
+    const block: string[] = []
+    for (const line of bundle.slice(config + 1)) {
+      if (line.trim() === '' || indent(line) <= indent(bundle[config]!)) break
+      block.push(line.slice(indent(bundle[config]!) + 2))
+    }
+    expect(block.filter(line => line.startsWith('port:'))).toHaveLength(1)
+    appendFileSync(join(home, '.delo/profiles/default/cordis.patch.yml'), ['- id: webserver', '  config:', ...block.map(line => line.startsWith('port:') ? '    port: 0' : `    ${line}`), ''].join('\n'))
+    const host = spawn(node, [entry, 'start', '--foreground'], { cwd: root, env })
+    test.onTestFinished(() => { host.kill('SIGKILL') })
+    let output = ''
+    const address = new Promise<string>((resolve, reject) => {
+      host.stdout.on('data', (chunk: Buffer) => {
+        output += chunk.toString('utf8')
+        const match = /dsh web: (http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+)/u.exec(output)
+        if (match !== null) resolve(match[1]!)
+      })
+      host.stderr.on('data', (chunk: Buffer) => { output += chunk.toString('utf8') })
+      host.on('exit', () => { reject(new Error(`the Host ended before it served: ${output}`)) })
+    })
+    const url = await address
+    // The start token is exchanged for a cookie by a redirect; a request without either is refused.
+    const served = await fetch(url, { redirect: 'manual' })
+    expect(served.status).toBe(303)
+    const cookie = (served.headers.get('set-cookie') ?? '').split(';')[0]!
+    const index = await fetch(new URL('/', url), { headers: { cookie } })
+    expect(index.status).toBe(200)
+    expect(index.headers.get('content-type')).toContain('text/html')
+    const html = await index.text()
+    expect(html).toContain('<div id="root"></div>')
+    expect((await fetch(new URL('/', url))).status).toBe(401)
   })
 
   it('needs the install anchor\'s declaration: without it, setup cannot make Delo\'s bundle importable', (test) => {
