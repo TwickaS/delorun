@@ -42,7 +42,7 @@ describe('a session record', () => {
     const home = await homeFixture()
     try {
       const store = new SessionStore({ file: join(home.directory, SESSIONS_FILE) })
-      const base = { deviceId: 'd', listener: 'reach-tailscale-private', address: REACH, factor: 'tailnet-membership', rotated: false, createdAt: 0, lastUsedAt: 0, expiresAt: HOUR }
+      const base = { deviceId: 'd', listener: 'reach-tailscale-private', address: REACH, factor: 'tailnet-membership', rotated: false, createdAt: 0, lastRolledAt: 0, lastUsedAt: 0, expiresAt: HOUR }
       const write = (record: Record<string, unknown>): Promise<void> =>
         writeFile(join(home.directory, SESSIONS_FILE), JSON.stringify({ v: 1, sessions: { id: record } }), { mode: 0o600 })
       await write(base)
@@ -57,6 +57,10 @@ describe('a session record', () => {
       await expect(store.all()).rejects.toMatchObject({ code: 'STORE_INVALID' })
       await write({ ...base, rotated: 'no' })
       await expect(store.all()).rejects.toMatchObject({ code: 'STORE_INVALID' })
+      await write({ ...base, graceUntil: 'soon' })
+      await expect(store.all()).rejects.toMatchObject({ code: 'STORE_INVALID' })
+      await write({ ...base, graceUntil: 5 })
+      await expect(store.all()).resolves.toMatchObject({ id: { graceUntil: 5 } })
     } finally {
       await home.dispose()
     }

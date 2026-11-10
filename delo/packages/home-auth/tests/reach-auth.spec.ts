@@ -451,3 +451,77 @@ describe('the coordinator\'s edges', () => {
     }
   })
 })
+
+describe('rolling a session', () => {
+  it('a rolled token stops after its grace', async () => {
+    const home = await served()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const first = await signIn(home.auth, phone)
+      const step = 11 * 60 * 60 * 1000
+      for (const by of [step, step, SESSION_LIMITS.reach.rollAfterMs - 2 * step - 1]) {
+        home.clock.advance(by)
+        expect(home.auth.admitToken(first.token, 'reach-tailscale-private', { roll: true })).not.toHaveProperty('rolled')
+      }
+      home.clock.advance(1)
+      // An upgrade does not roll: its 101 response cannot carry the new cookie.
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private', { roll: false })).not.toHaveProperty('rolled')
+      const rolled = home.auth.admitToken(first.token, 'reach-tailscale-private', { roll: true })
+      if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
+      // Pins "rolling never extends the absolute limit".
+      expect(rolled.rolled.expiresAt).toBe(first.expiresAt)
+      await home.auth.stop()
+      expect(home.auth.admitToken(rolled.rolled.token, 'reach-tailscale-private').kind).toBe('admitted')
+      // The old token admits for 30 seconds, and rolls no second time.
+      home.clock.advance(SESSION_LIMITS.reach.rollGraceMs - 1)
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private', { roll: true })).toMatchObject({ kind: 'admitted' })
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private', { roll: true })).not.toHaveProperty('rolled')
+      home.clock.advance(1)
+      // Pins the grace: without it the old token admits until the absolute limit.
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+      await home.auth.stop()
+      const file = JSON.parse(await readFile(join(home.directory, SESSIONS_FILE), 'utf8')) as { sessions: Record<string, unknown> }
+      expect(Object.keys(file.sessions)).toHaveLength(1)
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('rolls and ends a grace in memory when the store cannot be written, and rolls a session whose record left the file', async () => {
+    const home = await served()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const first = await signIn(home.auth, phone)
+      const step = 11 * 60 * 60 * 1000
+      for (const by of [step, step, SESSION_LIMITS.reach.rollAfterMs - 2 * step]) {
+        home.clock.advance(by)
+        expect(home.auth.admitToken(first.token, 'reach-tailscale-private').kind).toBe('admitted')
+      }
+      await rm(join(home.directory, SESSIONS_FILE))
+      const rolled = home.auth.admitToken(first.token, 'reach-tailscale-private', { roll: true })
+      if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
+      await home.auth.stop()
+      const file = JSON.parse(await readFile(join(home.directory, SESSIONS_FILE), 'utf8')) as { sessions: Record<string, unknown> }
+      // The old record was gone from the file, so only the new token's record is written.
+      expect(Object.keys(file.sessions)).toHaveLength(1)
+      await writeFile(join(home.directory, SESSIONS_FILE), 'broken', { mode: 0o600 })
+      for (const by of [step, step, SESSION_LIMITS.reach.rollAfterMs - 2 * step]) {
+        home.clock.advance(by)
+        expect(home.auth.admitToken(rolled.rolled.token, 'reach-tailscale-private').kind).toBe('admitted')
+      }
+      const again = home.auth.admitToken(rolled.rolled.token, 'reach-tailscale-private', { roll: true })
+      if (again.kind !== 'admitted' || again.rolled === undefined) throw new Error('the session did not roll again')
+      home.clock.advance(SESSION_LIMITS.reach.rollGraceMs)
+      // The grace ends in memory even though neither write reaches the file.
+      expect(home.auth.admitToken(rolled.rolled.token, 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+      expect(home.auth.admitToken(again.rolled.token, 'reach-tailscale-private').kind).toBe('admitted')
+      // Stopping writes the last use, which reports the store it cannot write.
+      await expect(home.auth.stop()).rejects.toMatchObject({ code: 'STORE_INVALID' })
+    } finally {
+      await home.dispose()
+    }
+  })
+})

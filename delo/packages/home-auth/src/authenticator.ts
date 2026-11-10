@@ -24,7 +24,7 @@ import { REACH_SESSION_COOKIE, type ReachListenerId } from '@delo/contract-admis
 import type { IdentityFactor, LoopbackRequiredAction } from '@delo/contract-oidc-passkeys'
 import { stampListener } from './arrival.ts'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
-import { pathnameOf, REACH_PRE_LOGIN_ROUTES } from './reach-routes.ts'
+import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie } from './reach-routes.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -66,10 +66,20 @@ export function matchesPreLogin(route: PreLoginRoute, method: string | undefined
  * @returns the header text, empty without one.
  */
 export function cookieOf(request: ConnectionIndexRequest): string {
+  return headerOf(request, 'cookie')
+}
+
+/**
+ * One request header, from either header carrier, with repeated lines joined.
+ * @param request - the request.
+ * @param name - the header's lower-case name.
+ * @returns the header text, empty without one.
+ */
+export function headerOf(request: ConnectionIndexRequest, name: string): string {
   const headers = request.headers
-  if (headers instanceof Headers) return headers.get('cookie') ?? ''
-  const cookie = headers.cookie
-  return typeof cookie === 'string' ? cookie : (cookie ?? []).join('; ')
+  if (headers instanceof Headers) return headers.get(name) ?? ''
+  const value = headers[name]
+  return typeof value === 'string' ? value : (value ?? []).join('; ')
 }
 
 /**
@@ -146,7 +156,8 @@ export class HomeAuthAuthenticator extends Authenticator {
     if (route !== undefined) return { kind: 'pre-login', route }
     const token = sessionTokenOf(cookieOf(request))
     if (token === undefined) return refused('NOT_SIGNED_IN')
-    const admission = this.ctx.homeAuth.admitToken(token, served.listener)
+    // A 101 response is written by the upgrade handler, so a session rolls only on a request without `Upgrade`.
+    const admission = this.ctx.homeAuth.admitToken(token, served.listener, { roll: headerOf(request, 'upgrade') === '' })
     if (admission.kind === 'refused') return refused(admission.code)
     const { session, sessionId } = admission
     const key = `${served.listener}\u0000${session.deviceId}`
@@ -156,7 +167,11 @@ export class HomeAuthAuthenticator extends Authenticator {
       this.peers.set(key, peer)
       this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor })
     }
-    return { kind: 'admitted', peer, deviceId: session.deviceId, sessionId }
+    const rolled = admission.rolled
+    return {
+      kind: 'admitted', peer, deviceId: session.deviceId, sessionId,
+      ...(rolled === undefined ? {} : { setCookie: sessionCookie(rolled.token, rolled.expiresAt, Date.now()) }),
+    }
   }
 
   /**

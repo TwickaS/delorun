@@ -265,8 +265,7 @@ export function sessionHandler(auth: HomeAuth): RouteHandler {
         listener,
         ...(rotate === undefined ? {} : { rotate }),
       })
-      const maxAge = Math.max(0, Math.floor((signedIn.expiresAt - Date.now()) / 1000))
-      response.setHeader('set-cookie', `${REACH_SESSION_COOKIE}=${signedIn.token}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${String(maxAge)}`)
+      response.setHeader('set-cookie', sessionCookie(signedIn.token, signedIn.expiresAt, Date.now()))
       sendJson(response, 201, { sessionId: signedIn.sessionId, expiresAt: signedIn.expiresAt })
     } catch (error) {
       sendThrown(response, error)
@@ -325,6 +324,19 @@ export function approveHandler(auth: HomeAuth): RouteHandler {
       sendThrown(response, error)
     }
   }
+}
+
+/**
+ * C4's session cookie: host-only, `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, for the seconds left to the absolute
+ * expiry.
+ * @param token - the session token.
+ * @param expiresAt - the absolute expiry, in milliseconds since the epoch.
+ * @param now - the time, in milliseconds since the epoch.
+ * @returns the complete `Set-Cookie` value.
+ */
+export function sessionCookie(token: string, expiresAt: number, now: number): string {
+  const maxAge = Math.max(0, Math.floor((expiresAt - now) / 1000))
+  return `${REACH_SESSION_COOKIE}=${token}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${String(maxAge)}`
 }
 
 /**

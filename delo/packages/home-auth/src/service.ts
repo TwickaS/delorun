@@ -16,7 +16,7 @@ import type { DeviceId, ReachListenerId } from '@delo/contract-admission'
 import type { DeviceRecord } from './records.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
 import {
-  HomeAuth, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
+  HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
@@ -133,10 +133,20 @@ export class HomeAuthService extends Service {
    * Admit a session token on a reach listener, synchronously; refuses until the service has started.
    * @param token - the token.
    * @param listener - the listener.
+   * @param options - whether the session may roll on this request.
    * @returns the admission.
    */
-  admitToken(token: string, listener: ReachListenerId): TokenAdmission {
-    return this.core?.admitToken(token, listener) ?? { kind: 'refused', code: 'NOT_SIGNED_IN' }
+  admitToken(token: string, listener: ReachListenerId, options?: { readonly roll: boolean }): TokenAdmission {
+    return this.core?.admitToken(token, listener, options) ?? { kind: 'refused', code: 'NOT_SIGNED_IN' }
+  }
+
+  /**
+   * Where a request arrived, failing closed: the listener that admitted it, its `Host` and its source.
+   * @param request - the request.
+   * @returns the arrival; `undefined` listener before the service started.
+   */
+  arrivalOf(request: Parameters<HomeAuth['arrivalOf']>[0]): ClaimArrival {
+    return this.core?.arrivalOf(request) ?? { listener: undefined, host: request.headers.host, source: 'unknown' }
   }
 
   /**

@@ -37,7 +37,7 @@ import { AttemptLimiter } from './rate-limit.ts'
 import { OwnerCodeStore, type IssuedOwnerCode } from './owner-code.ts'
 import { claimLabelOf, deviceIdOf, devicePublicKeyOf, ownerRecordOf, type DeviceRecord, type OwnerRecord } from './records.ts'
 import { SESSIONS_FILE, SessionStore, type OpenSessionRequest, type OpenedSession, type SessionRecord } from './sessions.ts'
-import { hashSecret, systemRandom, type RandomBytes } from './secret.ts'
+import { SESSION_TOKEN_BYTES, hashSecret, newSecret, systemRandom, type RandomBytes } from './secret.ts'
 import { loadHomeKey, type HomeKey } from './home-key.ts'
 import { Challenges, signInVerifies } from './sign-in.ts'
 
@@ -131,7 +131,13 @@ export interface ServedListener {
 
 /** What `admit` reads for one session token: the admitted session, or the refusal C4 names. */
 export type TokenAdmission =
-  | { readonly kind: 'admitted'; readonly sessionId: SessionId; readonly session: SessionRecord }
+  | {
+    readonly kind: 'admitted'
+    readonly sessionId: SessionId
+    readonly session: SessionRecord
+    /** The new token a roll minted, for the dispatcher's `Set-Cookie`. */
+    readonly rolled?: { readonly token: string; readonly expiresAt: number }
+  }
   | { readonly kind: 'refused'; readonly code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED' }
 
 /** A session sign-in created, with the absolute expiry its cookie needs. */
@@ -614,7 +620,7 @@ export class HomeAuth {
    * @param listener - the listener the request arrived on.
    * @returns the admitted session, or the refusal.
    */
-  admitToken(token: string, listener: ReachListenerId): TokenAdmission {
+  admitToken(token: string, listener: ReachListenerId, options: { readonly roll: boolean } = { roll: false }): TokenAdmission {
     const view = this.view
     if (view === undefined) return { kind: 'refused', code: 'NOT_SIGNED_IN' }
     const sessionId = hashSecret(token)
@@ -629,15 +635,52 @@ export class HomeAuth {
       return { kind: 'refused', code: 'SESSION_EXPIRED' }
     }
     if (session.rotated) return { kind: 'refused', code: 'ROTATION_REQUIRED' }
+    if (session.graceUntil !== undefined && at >= session.graceUntil) {
+      view.sessions.delete(sessionId)
+      void this.serial(() => this.sessions.remove([sessionId])).catch(() => undefined)
+      return { kind: 'refused', code: 'NOT_SIGNED_IN' }
+    }
     const used = { ...session, lastUsedAt: at }
     view.sessions.set(sessionId, used)
+    if (options.roll && session.graceUntil === undefined && at - session.lastRolledAt >= SESSION_LIMITS.reach.rollAfterMs) {
+      return this.roll(view, sessionId, used, at)
+    }
+    this.touch(sessionId, at)
+    return { kind: 'admitted', sessionId: brandString<SessionId>(sessionId), session: used }
+  }
+
+  /**
+   * Roll a session (C4, "Sessions"): mint a new token with the same creation time and absolute expiry, keep the old one
+   * for 30 seconds for requests in flight, and write both within the store's persistence delay.
+   * @param view - the in-memory copy.
+   * @param oldId - the session id being rolled.
+   * @param used - its record as this request used it.
+   * @param at - the time.
+   * @returns the admission, carrying the new token.
+   */
+  private roll(view: AdmissionView, oldId: string, used: SessionRecord, at: number): TokenAdmission {
+    const token = newSecret(SESSION_TOKEN_BYTES, this.random)
+    const newId = hashSecret(token)
+    const graceUntil = at + SESSION_LIMITS.reach.rollGraceMs
+    const record: SessionRecord = { ...used, lastRolledAt: at }
+    view.sessions.set(oldId, { ...used, graceUntil })
+    view.sessions.set(newId, record)
+    void this.serial(() => this.sessions.roll(oldId, graceUntil, newId, record)).catch(() => undefined)
+    return { kind: 'admitted', sessionId: brandString<SessionId>(newId), session: record, rolled: { token, expiresAt: record.expiresAt } }
+  }
+
+  /**
+   * Record a session's last use and write it within the store's persistence delay.
+   * @param sessionId - the session id.
+   * @param at - the time.
+   */
+  private touch(sessionId: string, at: number): void {
     this.touched.set(sessionId, at)
     this.persistTimer ??= setTimeout(() => {
       this.persistTimer = undefined
       void this.persistTouched().catch(() => undefined)
     }, SESSION_STORE_PERSIST_MS)
     this.persistTimer.unref()
-    return { kind: 'admitted', sessionId: brandString<SessionId>(sessionId), session: used }
   }
 
   /**

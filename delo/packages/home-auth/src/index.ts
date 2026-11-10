@@ -36,7 +36,7 @@ export { Approvals, type ApprovalRecord, type ApprovalRequestInput, type Pending
 export { formatMatchCode, matchCode, typedCodeMatches, type MatchCodeInputs } from './match-code.ts'
 export { Challenges, signInMessage, signInVerifies } from './sign-in.ts'
 export { loadHomeKey, type HomeKey } from './home-key.ts'
-export { REACH_PATHS, REACH_PRE_LOGIN_ROUTES, SIGN_IN_ASSETS } from './reach-routes.ts'
+export { REACH_PATHS, REACH_PRE_LOGIN_ROUTES, SIGN_IN_ASSETS, sessionCookie } from './reach-routes.ts'
 export { HomeAuthService, Config as HomeAuthConfig, type Config } from './service.ts'
 export {
   DEVICE_REMOVE_PATH,
@@ -100,3 +100,4 @@ export {
   systemRandom,
   type RandomBytes,
 } from './secret.ts'
+export { HomeAuthService as default } from './service.ts'

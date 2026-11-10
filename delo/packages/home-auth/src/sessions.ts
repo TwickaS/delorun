@@ -42,8 +42,15 @@ export interface SessionRecord {
   readonly factor: IdentityFactor
   /** Whether a rotation trigger fired since the token was minted; its next request is refused with `ROTATION_REQUIRED`. */
   readonly rotated: boolean
-  /** When the token was minted, in milliseconds since the epoch. */
+  /** When the session was created, in milliseconds since the epoch; a roll or a rotation keeps it. */
   readonly createdAt: number
+  /** When the current token was minted by a sign-in, a rotation or a roll, in milliseconds since the epoch. */
+  readonly lastRolledAt: number
+  /**
+   * For a token a roll replaced: the time until which it is still admitted for requests already in flight. Absent on a
+   * current token.
+   */
+  readonly graceUntil?: number
   /** When the session last presented its token, in milliseconds since the epoch. */
   readonly lastUsedAt: number
   /** When the token stops being accepted, in milliseconds since the epoch. */
@@ -140,6 +147,7 @@ export class SessionStore {
       factor: request.factor,
       rotated: false,
       createdAt: replaced?.createdAt ?? at,
+      lastRolledAt: at,
       lastUsedAt: at,
       expiresAt,
     }
@@ -219,6 +227,21 @@ export class SessionStore {
   }
 
   /**
+   * Record a roll: the old token is kept until its grace ends, and the new token's record is added.
+   * @param oldId - the rolled session id.
+   * @param graceUntil - when the old token stops being admitted.
+   * @param newId - the new token's session id.
+   * @param record - the new token's record.
+   */
+  async roll(oldId: string, graceUntil: number, newId: string, record: SessionRecord): Promise<void> {
+    const sessions = await this.read()
+    const old = sessions[oldId]
+    if (old !== undefined) sessions[oldId] = { ...old, graceUntil }
+    sessions[newId] = record
+    await this.write(sessions)
+  }
+
+  /**
    * Record the last use of sessions that `admit` saw, keeping a later time already on file.
    * @param used - the last-use time of each session id.
    */
@@ -269,14 +292,14 @@ export class SessionStore {
  */
 function sessionRecordOf(value: unknown): SessionRecord {
   if (!isRecord(value)) throw new HomeAuthError('STORE_INVALID', 'sessions.json holds an entry that is not a session')
-  const { deviceId, listener, address, factor, rotated, createdAt, lastUsedAt, expiresAt } = value
+  const { deviceId, listener, address, factor, rotated, createdAt, lastRolledAt, lastUsedAt, expiresAt, graceUntil } = value
   if (typeof deviceId !== 'string' || deviceId === '') throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session with no device')
   if (typeof address !== 'string' || address === '') throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session with no address')
   if (!isReachListener(listener)) throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session with no reach listener')
   // A record without its factor would leave the home unable to tell which actions the session may be granted.
   if (!isFactor(factor)) throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session with no identity factor')
   if (typeof rotated !== 'boolean') throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session without its rotation mark')
-  if (!isTime(createdAt) || !isTime(lastUsedAt) || !isTime(expiresAt)) {
+  if (!isTime(createdAt) || !isTime(lastRolledAt) || !isTime(lastUsedAt) || !isTime(expiresAt) || (graceUntil !== undefined && !isTime(graceUntil))) {
     throw new HomeAuthError('STORE_INVALID', 'sessions.json holds a session without its times')
   }
   return {
@@ -286,6 +309,8 @@ function sessionRecordOf(value: unknown): SessionRecord {
     factor,
     rotated,
     createdAt,
+    lastRolledAt,
+    ...(graceUntil === undefined ? {} : { graceUntil }),
     lastUsedAt,
     expiresAt,
   }

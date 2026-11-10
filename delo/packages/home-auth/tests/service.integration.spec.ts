@@ -149,6 +149,9 @@ describe('the homeAuth service', () => {
     const ctx = new Context()
     const service = new HomeAuthService(ctx, { secretsDirectory: '/nowhere' })
     expect(service.admitToken('x', 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+    // Pins the fail-closed arrival: before the home started, a request names no listener, so no route treats it as loopback.
+    expect(service.arrivalOf({ headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: '127.0.0.1', localAddress: '127.0.0.1', localPort: 3080 } }))
+      .toEqual({ listener: undefined, host: '127.0.0.1:3080', source: 'unknown' })
     expect(service.servedListener('reach-tailscale-private')).toBeUndefined()
     expect(() => service.owner()).toThrow(/has not started/)
   })
@@ -158,6 +161,7 @@ describe('the homeAuth service', () => {
     try {
       const service = mounted.ctx.homeAuth
       await expect(service.assertOwner()).rejects.toMatchObject({ code: 'NO_OWNER' })
+      expect(service.arrivalOf({ headers: { host: 'x' }, socket: { remoteAddress: '127.0.0.1' } })).toEqual({ listener: undefined, host: 'x', source: '127.0.0.1' })
       const issued = await service.issueOwnerCode()
       await expect(service.ownerCodeOutstanding()).resolves.toBe(true)
       await service.claim(claimOf(issued.code, { address: ADDRESS }))

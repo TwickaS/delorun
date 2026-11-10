@@ -8,12 +8,12 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import type { Admission, ConnectionIndexRequest } from '@deepseek-ai/dsh-client-connection'
 import type { PeerId, PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { StudioAddress } from '@delo/contract-admission'
+import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
 import { HomeAuthAuthenticator, matchesPreLogin } from '../src/authenticator.ts'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
@@ -75,13 +75,13 @@ afterEach(async () => {
 })
 
 /** A session for a device recorded at the served address. */
-async function session(fill: number): Promise<string> {
+async function session(fill: number, lifetimeMs = HOUR): Promise<string> {
   const store = new DeviceStore({ file: join(directory, 'home-auth', 'devices.json') })
   if (await ctx.homeAuth.owner() === undefined) {
     await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   }
   await store.add(recordOf(fill, ADDRESS))
-  const opened = await ctx.homeAuth.openSession({ deviceId: recordOf(fill, ADDRESS).id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
+  const opened = await ctx.homeAuth.openSession({ deviceId: recordOf(fill, ADDRESS).id, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs })
   return opened.token
 }
 
@@ -162,5 +162,35 @@ describe('the authenticator provider', () => {
     expect(() => { check(admitted.peer, { request: {} }) }).not.toThrow()
     expect(() => { check(admitted.peer, { event: 'question/ask' }) }).not.toThrow()
     expect(ctx.get('remoteAnswerGuard')).toBeDefined()
+  })
+
+  it('sets the rolled cookie on a plain request and never on an upgrade', async () => {
+    // The home reads the clock it was built with, so it is rebuilt over a faked `Date`.
+    await fiber.dispose()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+      await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      const token = await session(2, SESSION_LIMITS.reach.absoluteMs)
+      const cookie = { cookie: `__Host-delo-session=${token}` }
+      const step = 11 * HOUR
+      vi.setSystemTime(Date.now() + step)
+      expect(provider().admit(request({ headers: cookie }), 'reach-tailscale-private')).not.toHaveProperty('setCookie')
+      vi.setSystemTime(Date.now() + step)
+      expect(provider().admit(request({ headers: cookie }), 'reach-tailscale-private')).not.toHaveProperty('setCookie')
+      vi.setSystemTime(Date.now() + SESSION_LIMITS.reach.rollAfterMs - 2 * step)
+      // Pins the Upgrade rule: a 101 response cannot carry the new cookie, so an upgrade keeps the old token.
+      expect(provider().admit(request({ headers: { ...cookie, upgrade: 'websocket' } }), 'reach-tailscale-private')).not.toHaveProperty('setCookie')
+      const rolled = provider().admit(request({ headers: cookie }), 'reach-tailscale-private')
+      if (rolled.kind !== 'admitted') throw new Error('not admitted')
+      expect(rolled.setCookie).toMatch(/^__Host-delo-session=[^;]+; Path=\/; Secure; HttpOnly; SameSite=Strict; Max-Age=\d+$/)
+      const next = /^__Host-delo-session=([^;]+);/.exec(rolled.setCookie ?? '')?.[1]
+      expect(next).not.toBe(token)
+      const after = provider().admit(request({ headers: { cookie: `__Host-delo-session=${next ?? ''}` } }), 'reach-tailscale-private')
+      expect(after.kind === 'admitted' ? after.peer : undefined).toBe(rolled.peer)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

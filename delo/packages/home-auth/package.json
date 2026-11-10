@@ -28,7 +28,6 @@
     "@deepseek-ai/dsh-host-webserver": "workspace:*"
   },
   "delo": {
-    "state": "shipped",
-    "unreached": "reach"
+    "state": "shipped"
   }
 }
