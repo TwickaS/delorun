@@ -1830,7 +1830,25 @@
       "path": "packages/deliverables/workspace-changes/src/index.ts",
       "class": "security",
       "reason": "Binds each Session's git runner to that Session's sandbox through confinement.ts and treats a git older than 2.31, which ignores the command-scope overrides, as absent, so the change summary never runs repository-named programs unconfined where the Session's own commands are confined. Adds the validated `scratchRoot` Config field, defaulting at load to a package directory in the per-user cache directory, outside every root a confined command can write.",
-      "sha256": "65141c915c3e06ec797749f50366a7efa54edd552b91e15109b1ef06a4791828"
+      "sha256": "65141c915c3e06ec797749f50366a7efa54edd552b91e15109b1ef06a4791828",
+      "nonModelVisibleHunks": [
+        {
+          "sha256": "cc9266f259ccb82007e99f28eb9e6c9a9d24d13589809116616595813e9d31f7",
+          "reason": "Resolves the snapshot directory from Config once at load; no tool, prompt or result text changes"
+        },
+        {
+          "sha256": "031f498c3893aa4d745ccdd7256c18b0d1955b173ddb49b1921872680ff2bd2c",
+          "reason": "Logs why git is unavailable, such as a version below 2.31; the Host log is not model-visible"
+        },
+        {
+          "sha256": "6dc95b8d33509f3d48862914ae517d8ec854133878aee5c4fff9a5b8b93ab998",
+          "reason": "Builds the git runner from the resolved executable; no tool, prompt or result text changes"
+        },
+        {
+          "sha256": "9f27ef8b5496bb7a3feeeebc3a3a1a0fc69a7c5bbdb5cbc181a1f929f6cfb44c",
+          "reason": "Binds the git runner to the Session sandbox and the snapshot directory to its writable-root check; nothing model-visible changes"
+        }
+      ]
     },
     {
       "path": "packages/deliverables/workspace-changes/src/confinement.ts",
