@@ -26,7 +26,7 @@ Remote access lets you open the studio of the Delorun running on your computer f
 
 ## Turn remote access on
 
-Run `delorun reach on tailscale` in a terminal on your computer, or answer yes to "Remote access" in `delorun setup`'s Full mode. The command checks Tailscale, writes the setting into your profile and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. Delorun opens the remote listener when it starts, so restart Delorun if it is running: `delorun stop`, then `delorun start`. `delorun reach status` shows whether remote access is on and, while Delorun runs, whether the address is ready.
+Run `delorun reach on tailscale` in a terminal on your computer, or answer yes to "Remote access" in `delorun setup`'s Full mode. The command checks Tailscale, picks a fixed local port for the remote listener, writes both into your profile and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. It refuses when Tailscale Funnel is on for that address, because Funnel would put your sign-in page on the public internet; turn Funnel off with the command it prints. It also removes any other `tailscale serve` rule on the same port. Delorun opens the remote listener when it starts, so restart Delorun if it is running: `delorun stop`, then `delorun start`. `delorun reach status` shows whether remote access is on and whether Delorun runs; Settings → Devices in the studio on your computer shows whether the address is ready.
 
 ## Approve a device
 
@@ -34,7 +34,9 @@ A device is approved only at your computer.
 
 1. On your computer, run `delorun devices approve`, or choose **Add a device** in the studio's Settings, under Devices. This opens an approval window for 5 minutes.
 2. On your phone, open your address and choose **Ask for approval**. The phone shows an 8-digit code.
-3. On your computer, check the device's name and platform, and type the code the phone shows. Three wrong codes cancel the request.
+3. On your computer, the command lists every waiting device with a number, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. In the Devices section, each waiting device has its own code field. Three wrong codes cancel only that request.
+
+At most 5 requests wait at a time. When a phone is told that 5 requests are waiting, cancel the ones you do not know at your computer, then ask again from the phone; a waiting request is never replaced on its own. A device name or platform that contains control or text-direction characters is refused.
 
 The phone then signs in by itself with a key that never leaves it. Outside an approval window, the home refuses every request to be approved. `delorun devices list` and the Devices section list every approved device.
 
@@ -44,11 +46,28 @@ The code proves that the device you approve is the device whose screen you read:
 
 ## What an approved phone can and cannot do
 
-An approved phone can watch your chats, reply, start chats, approve ordinary prompts and stop a run.
+An approved phone speaks for a device, not for you at your computer. Delorun allows it a fixed list of actions and refuses everything else.
 
-It cannot grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; it cannot approve or remove devices, change remote access, or reset the home. Each of those needs you at your computer, and the phone shows "This needs you at your computer" with what it tried. Installing a plugin from the phone is therefore not possible.
+It can:
 
-The limit is partial. A workspace that you already put on full access at your computer can still be driven from the phone, and a command there can do anything your user can do. What protects you is the phone's own lock, removing the device when you lose it, and the sign-out after 12 hours without use; a session also ends 14 days after sign-in.
+- read your chats and workspaces, and follow a chat while it runs;
+- reply, attach images, start a chat in a workspace you already have, with your configured preset, and fork a chat;
+- rename and pin chats;
+- answer ordinary prompts and questions the agent asks, and stop a run or a background job.
+
+It cannot:
+
+- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the phone shows "This needs you at your computer: granting full access", and the prompt keeps waiting for your computer;
+- install, enable or remove plugins, undo profile changes, or change any setting, the model a chat saves as default, or a chat's preset;
+- run slash commands, open a terminal, browse folders, read files on your computer by path, or see the Changes panel;
+- start a chat in a folder of its choosing, create, rename or delete workspaces, archive or reorder chats, or create or edit scheduled follow-ups;
+- approve or remove devices, change remote access, or reset the home.
+
+Other refused actions show the studio's error message. Images that a reply shows as files on your computer, and file previews, do not show on the phone yet; images attached to messages do.
+
+The limit is partial. A workspace that you already put on full access at your computer can still be driven from the phone, and a command there can do anything your user can do. What protects you is the phone's own lock and removing the device when you lose it. A phone's session ends after 12 hours in which the phone sent nothing, and 14 days after sign-in; its open connections close at that moment. Approving or removing a device closes every phone's open connections; each phone then signs in again from the sign-in page, with its own key.
+
+No outside security review of remote access has happened yet.
 
 ## Remove a device
 
@@ -56,7 +75,9 @@ Run `delorun devices remove <device id>` with an id from `delorun devices list`,
 
 ## Turn remote access off
 
-Run `delorun reach off`. Tailscale stops serving your studio at once, and Delorun opens no remote listener at its next start; restart Delorun to close the listener now. Approved devices stay approved, so turning remote access on again does not ask for them again; remove them if you no longer want them.
+Run `delorun reach off`. It removes Tailscale's rule for your studio, checks that it is gone, and says so if it is not; Delorun opens no remote listener at its next start; restart Delorun to close the listener now. While Delorun runs, it rechecks Tailscale every minute and stops serving if Funnel is turned on for your address.
+
+If Delorun stops without cleaning up, for example when the computer loses power, Tailscale keeps forwarding your address to the fixed local port until Delorun starts again or you run `delorun reach off`. In that time another user of the same computer could serve a page on that port to your phone. Run `delorun reach off` if Delorun stopped that way and you share the computer. Approved devices stay approved, so turning remote access on again does not ask for them again; remove them if you no longer want them.
 
 ## What Tailscale sees
 
