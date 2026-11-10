@@ -97,7 +97,8 @@ function harness(options: { readonly studio?: boolean; readonly settings?: ChatS
   } as never)
   const workspaces = createSnapshotStore({ archivedSessionIds: [] as SessionId[] })
   ctx.provide('workspaces', { list: workspaces } as never)
-  const fiber = ctx.plugin({ name: 'delo-chat-states', inject: [...inject.filter(service => service !== 'deloStudio'), ...options.studio === false ? ['deloStudio'] : []], apply })
+  if (options.studio !== false) ctx.provide('deloStudio', {} as never)
+  const fiber = ctx.plugin({ name: 'delo-chat-states', inject: [...inject], apply })
   return {
     ctx, fiber, dictionaries, shelves, entries, menus, fetch, forms, workspaces, chats, locale,
     setSettings: (value: ChatStatesSettings) => { current = { ...current, value, status: 'ready' }; for (const listener of [...formListeners]) listener() },
@@ -148,8 +149,8 @@ describe('the studio half', () => {
     expect(h.ctx.get('deloChatStates')).toBeDefined()
   })
 
-  it('requires the Delo look among its services', () => {
-    expect(inject).toContain('deloStudio')
+  it('stays an active entry under the stock look: the Delo look is injected inside apply, not required', () => {
+    expect(inject).not.toContain('deloStudio')
   })
 
   it('shows the Snooze and settle section only while the settings are served', async () => {

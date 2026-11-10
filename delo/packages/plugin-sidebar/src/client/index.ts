@@ -62,8 +62,11 @@ export * from './sections.ts'
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'deloSidebar'
 
-/** Required services; `deloStudio` is the Delo look, which `@delo/plugin-theme` provides while it is on. */
-export const inject = ['slots', 'locale', 'uiWorkspace', 'configForms', 'contextMenus', 'deloStudio']
+/**
+ * Services every registration needs. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on,
+ * is injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
+ */
+export const inject = ['slots', 'locale', 'uiWorkspace', 'configForms', 'contextMenus']
 
 /** The Sidebar section's id and its place in Settings, after Appearance. */
 export const SECTION = { id: 'delo-sidebar', order: 2 } as const
@@ -191,11 +194,19 @@ export const preference: SidebarInjected['preference'] = {
 }
 
 /**
- * Register the dictionaries, the chat list, the header art, the Sidebar section and T3 Code's foot (its Settings
+ * While the Delo look provides `deloStudio`, register the dictionaries, the chat list, the header art, the Sidebar section and T3 Code's foot (its Settings
  * button and undo notice in one row), and hide upstream's New Session button while the list offers its own.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
+  ctx.inject(['deloStudio'], applyStudio)
+}
+
+/**
+ * Everything the plugin registers while the Delo look is on; disposed with the `deloStudio` service.
+ * @param ctx - the browser plugin context, holding `deloStudio`.
+ */
+export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delo-sidebar: dictionaries')
   const t = ctx.locale.bind(NS)
   const form = ctx.configForms.get<SidebarSettings>(SIDEBAR_ROW_ID)

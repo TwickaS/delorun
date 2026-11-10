@@ -85,7 +85,7 @@ const DOCK_KEY = `conversation.input.dock#${STARTER_ENTRY.id}`
 describe('the stock look', () => {
   it('registers nothing until the Delo look provides deloStudio, and everything leaves with it', async () => {
     const { ctx, dictionaries, entries, served, fiber } = await harness({ studio: false })
-    expect(inject).toContain('deloStudio')
+    expect(inject).not.toContain('deloStudio')
     expect([dictionaries.size, entries.size, served.ids]).toEqual([0, 0, []])
     expect(ctx.get('deloOnboarding')).toBeUndefined()
     const studio = ctx.plugin({ apply: (scope: Context) => { scope.provide('deloStudio', { useStockLook: () => Promise.resolve(true) } as never) } })

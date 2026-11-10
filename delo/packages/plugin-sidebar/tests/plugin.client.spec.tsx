@@ -140,8 +140,8 @@ describe('the studio half', () => {
     expect([h.shown, h.rows, h.widths]).toEqual([[false, true], [true, false], [{ default: 256, min: 256 }, 'restored']])
   })
 
-  it('requires the Delo look among its services', () => {
-    expect(inject).toContain('deloStudio')
+  it('stays an active entry under the stock look: the Delo look is injected inside apply, not required', () => {
+    expect(inject).not.toContain('deloStudio')
   })
 
   it('shows the Sidebar section only while the settings are served, and its Stock look row turns the Delo look off', async () => {

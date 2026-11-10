@@ -37,10 +37,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const PLUGIN_ID = '@delo/plugin-settings-layout'
 
 /**
- * Required services. `deloStudio` is provided by `@delo/plugin-theme` only
- * while the Delo look is on, so the stock look keeps upstream's flat list.
+ * Services every registration needs. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on,
+ * is injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
  */
-export const inject = ['locale', 'settingsLayout', 'slots', 'deloStudio']
+export const inject = ['locale', 'settingsLayout', 'slots']
 
 const NS = 'settings.deloLayout'
 
@@ -53,10 +53,18 @@ const NS = 'settings.deloLayout'
 export const PANEL_STYLE = ':root{--dsh-settings-panel-width:1080px;--dsh-settings-panel-height:88vh;--dsh-settings-nav-width:min(220px,40vw)}'
 
 /**
- * Register the layout, the panel size and the Tool settings section.
+ * While the Delo look provides `deloStudio`, register the layout, the panel size and the Tool settings section.
  * @param ctx - the client context.
  */
 export function apply(ctx: Context): void {
+  ctx.inject(['deloStudio'], applyStudio)
+}
+
+/**
+ * Everything the plugin registers while the Delo look is on; disposed with the `deloStudio` service.
+ * @param ctx - the browser plugin context, holding `deloStudio`.
+ */
+export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delo-settings-layout: dictionaries')
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.settingsLayout.register(deloSettingsLayout(t)), 'delo-settings-layout: layout')

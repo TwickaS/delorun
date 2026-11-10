@@ -36,7 +36,7 @@ kind: "package-bundle"
 ## The stock look
 
 - **One switch.** The theme row's `studioAdditions` is C16 switch `studio_additions`. Its Config default is `false`, the parity value; this bundle sets it to `true`, and the registry's default value, `true`, is checked against this row by the `parity-switches` specs, so the two cannot drift.
-- **How it reaches every plugin.** While the switch is on, the theme's browser half provides the `deloStudio` service. The browser half of every other plugin here requires that service, so turning the switch off unloads them all and the studio shows upstream's sidebar, Settings and look. The harness halves keep running: snoozed and settled chats stay stored and return when the switch is turned back on.
+- **How it reaches every plugin.** While the switch is on, the theme's browser half provides the `deloStudio` service. The browser half of every other plugin here registers everything inside an injection of that service, so turning the switch off disposes all of it and the studio shows upstream's sidebar, Settings and look. The harness halves keep running: snoozed and settled chats stay stored and return when the switch is turned back on.
 - **Where the person finds it.** With the Delo look on, Settings → Appearance offers the choice at its top; with the stock look, upstream's General section shows one row to turn the Delo look back on, and nothing else of Delo's look remains.
 - **The parity composition.** No profile the recorded-session replay runs mounts this bundle, so the switch stays at its Config default, off, and none of the plugins mounts.
 

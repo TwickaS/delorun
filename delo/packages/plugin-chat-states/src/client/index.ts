@@ -130,14 +130,25 @@ export const MENU_ICON_KEYS = {
   settled: 'delo-chat-states.settled',
 } as const
 
-/** Required services; `deloStudio` is the Delo look, which `@delo/plugin-theme` provides while it is on. */
-export const inject = ['slots', 'locale', 'uiWorkspace', 'configForms', 'contextMenus', 'workspaces', 'deloStudio']
+/**
+ * Services every registration needs. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on,
+ * is injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
+ */
+export const inject = ['slots', 'locale', 'uiWorkspace', 'configForms', 'contextMenus', 'workspaces']
 
 /**
- * Read the states, register the shelves and the sidebar's actions.
+ * While the Delo look provides `deloStudio`, read the states, register the shelves and the sidebar's actions.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
+  ctx.inject(['deloStudio'], applyStudio)
+}
+
+/**
+ * Everything the plugin registers while the Delo look is on; disposed with the `deloStudio` service.
+ * @param ctx - the browser plugin context, holding `deloStudio`.
+ */
+export function applyStudio(ctx: Context): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delo-chat-states: dictionaries')
   const store = new ChatStateStore(chatStatesApi)

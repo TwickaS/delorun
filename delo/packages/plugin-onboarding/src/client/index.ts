@@ -81,10 +81,10 @@ export const SHOW_AGAIN_ROW = { id: ONBOARDING_ROW_ID, order: 50 } as const
 export const STARTER_ENTRY = { id: 'delo-onboarding.starters', order: 10 } as const
 
 /**
- * Required services. `deloStudio` is provided by `@delo/plugin-theme` only while the Delo look is on, so the stock look
- * unloads onboarding and keeps the preview notice's own step.
+ * Services every registration needs. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on,
+ * is injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
  */
-export const inject = ['slots', 'locale', 'configForms', 'theme', 'deloStudio']
+export const inject = ['slots', 'locale', 'configForms', 'theme']
 
 /**
  * Read what the terminal setup recorded from the harness. Any failure leaves every step in the flow.
@@ -102,10 +102,18 @@ export async function loadSetupRecord(): Promise<SetupRecord> {
 }
 
 /**
- * Register the dictionaries, the onboarding service, the onboarding step, the General row and the starter prompts.
+ * While the Delo look provides `deloStudio`, register the dictionaries, the onboarding service, the onboarding step, the General row and the starter prompts.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
+  ctx.inject(['deloStudio'], applyStudio)
+}
+
+/**
+ * Everything the plugin registers while the Delo look is on; disposed with the `deloStudio` service.
+ * @param ctx - the browser plugin context, holding `deloStudio`.
+ */
+export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delo-onboarding: dictionaries')
   const progress = ctx.configForms.get<OnboardingSettings>(ONBOARDING_ROW_ID)
   const extra = createSnapshotStore<readonly OnboardingStep[]>([])
