@@ -21,6 +21,7 @@ import { git } from '../git.ts'
 import type { Check, GateTier } from './plan.ts'
 import type { SharedStore } from './shared-cache.ts'
 import type { SharingPolicy } from './sharing.ts'
+import { commandFor, type Unit } from './units.ts'
 
 /** The lockfile every key includes, since a dependency change can change any check's result. */
 const LOCKFILE = 'pnpm-lock.yaml'
@@ -66,6 +67,29 @@ export interface PassCache {
    * @param key - the key the check passed under.
    */
   store(check: Check, key: string): void
+  /**
+   * The key of one unit of a unitised suite (`units.ts`): the check's facts with the unit's inputs, and a command without
+   * its scope and worker count, which do not change what a package's specs prove.
+   * @param check - the suite.
+   * @param unit - the unit.
+   * @returns the key as a hex sha256.
+   */
+  unitKey(check: Check, unit: Unit): string
+  /**
+   * Where a pass of the unit under `key` is stored: the worktree first, then, for a unit that is not local, the store.
+   * @param check - the suite.
+   * @param unit - the unit.
+   * @param key - the unit's key.
+   * @returns the source, or undefined when no stored pass serves the unit.
+   */
+  lookupUnit(check: Check, unit: Unit, key: string): PassSource | undefined
+  /**
+   * Record a pass of the unit under `key`, in the worktree and, for a unit that is not local, in the store.
+   * @param check - the suite.
+   * @param unit - the unit.
+   * @param key - the unit's key.
+   */
+  storeUnit(check: Check, unit: Unit, key: string): void
   /**
    * Why the machine-wide store does not serve the check in this run, or undefined when it does.
    * @param check - the check.
@@ -232,6 +256,33 @@ export function createPassCache(options: PassCacheOptions): PassCache {
   let clone: string | undefined
   let head: string | undefined
   const file = (check: Check): string => join(options.dir, `${check.id.replaceAll(':', '-')}.json`)
+  const unitId = (check: Check, unit: Unit): string => `${check.id}@${unit.dir}`
+  const unitFile = (check: Check, unit: Unit): string => join(options.dir, 'units', `${unitId(check, unit).replaceAll(/[:/@]/g, '-')}.json`)
+  const keyFrom = (check: Check, id: string, inputs: readonly string[], command: readonly string[], history: boolean): string => {
+    pnpm ??= options.pnpmVersion()
+    clone ??= git(options.root, ['rev-parse', '--path-format=absolute', '--git-common-dir']).trim()
+    if (history) head ??= git(options.root, ['rev-parse', 'HEAD']).trim()
+    const facts = {
+      id,
+      inputs: fingerprint(inputs),
+      code: fingerprint(options.policy.codeInputs(check)),
+      state: options.policy.stateFiles(check).map(path => [path, contentId(options.root, path)]),
+      lockfile: fingerprint([LOCKFILE]),
+      installed,
+      node: options.nodeVersion,
+      pnpm,
+      platform: options.platform,
+      clone,
+      head: history ? head : null,
+      cwd: check.cwd,
+      command,
+      environment: check.environment ?? {},
+      budget: check.budget,
+      env: Object.fromEntries((check.env ?? []).map(name => [name, options.env[name] ?? null])),
+      runEnv,
+    }
+    return createHash('sha256').update(JSON.stringify(facts)).digest('hex')
+  }
   const unshared = (check: Check): string | undefined => {
     if (options.shared === undefined) return 'the run shares no pass (--no-shared-cache, --no-cache or CI)'
     return options.policy.unshared(check)
@@ -239,29 +290,24 @@ export function createPassCache(options: PassCacheOptions): PassCache {
   return {
     keyOf(check) {
       if (check.inputs === undefined || check.inputs.length === 0) return undefined
-      pnpm ??= options.pnpmVersion()
-      clone ??= git(options.root, ['rev-parse', '--path-format=absolute', '--git-common-dir']).trim()
-      if (check.history === true) head ??= git(options.root, ['rev-parse', 'HEAD']).trim()
-      const facts = {
-        id: check.id,
-        inputs: fingerprint(check.inputs),
-        code: fingerprint(options.policy.codeInputs(check)),
-        state: options.policy.stateFiles(check).map(path => [path, contentId(options.root, path)]),
-        lockfile: fingerprint([LOCKFILE]),
-        installed,
-        node: options.nodeVersion,
-        pnpm,
-        platform: options.platform,
-        clone,
-        head: check.history === true ? head : null,
-        cwd: check.cwd,
-        command: check.command,
-        environment: check.environment ?? {},
-        budget: check.budget,
-        env: Object.fromEntries((check.env ?? []).map(name => [name, options.env[name] ?? null])),
-        runEnv,
-      }
-      return createHash('sha256').update(JSON.stringify(facts)).digest('hex')
+      return keyFrom(check, check.id, check.inputs, check.command, check.history === true)
+    },
+    unitKey(check, unit) {
+      const command = commandFor(check, []).filter(arg => !arg.startsWith('--maxWorkers='))
+      return keyFrom(check, unitId(check, unit), unit.inputs, command, unit.local === true)
+    },
+    lookupUnit(check, unit, key) {
+      if (options.strict && options.policy.securityPackage(unit.dir)) return undefined
+      if (readPass(unitFile(check, unit))?.key === key) return 'local'
+      const shared = options.shared
+      if (shared === undefined || shared.noReads !== undefined || unit.local === true) return undefined
+      return shared.store.has(unitId(check, unit), key) ? 'shared' : undefined
+    },
+    storeUnit(check, unit, key) {
+      writePass(unitFile(check, unit), { id: unitId(check, unit), key })
+      if (options.shared === undefined || unit.local === true) return
+      const failure = options.shared.store.store(unitId(check, unit), key)
+      if (failure !== undefined) options.warn(`delo checks: the pass of ${unitId(check, unit)} is not shared: ${failure}`)
     },
     lookup(check, key) {
       if (options.strict && (check.mergeOnly === true || options.policy.security(check))) return undefined

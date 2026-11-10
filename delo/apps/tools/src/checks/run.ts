@@ -8,10 +8,12 @@
  * @module @delo/tools/checks/run
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { createWriteStream, readdirSync, readFileSync } from 'node:fs'
+import { createWriteStream, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PassCache, PassSource } from './cache.ts'
+import { z } from 'zod'
 import type { GateTier, Planned } from './plan.ts'
+import { commandFor, passedUnits, type Unit, type WithUnits } from './units.ts'
 
 /** How a check ended. */
 export type Outcome = 'passed' | 'failed' | 'declined' | 'skipped'
@@ -75,6 +77,35 @@ export interface Result {
   readonly oomKilled?: boolean
   /** True when a merge-only check was declined for a limit of this host and never ran; {@link gateFailure} fails the merge tier for it. */
   readonly unrun?: true
+  /** For a unitised suite: how many packages it covered, how many ran, and how many stored passes served. */
+  readonly units?: UnitCounts
+}
+
+/** How a unitised suite's packages were served. */
+export interface UnitCounts {
+  readonly total: number
+  readonly ran: number
+  readonly local: number
+  readonly shared: number
+}
+
+/** The fields of Vitest's JSON report that a unitised run reads. */
+const VitestReport = z.object({ testResults: z.array(z.object({ name: z.string(), status: z.string() })) })
+
+/**
+ * The spec files of a Vitest JSON report, or none when the report is missing or not one.
+ * @param path - the report's path.
+ * @returns each file's absolute path and status.
+ */
+export function readVitestReport(path: string): Array<{ readonly name: string, readonly status: string }> {
+  try {
+    const parsed = VitestReport.safeParse(JSON.parse(readFileSync(path, 'utf8')))
+    return parsed.success ? parsed.data.testResults : []
+  } catch (error) {
+    // ENOENT or a truncated file: the run wrote no report, so no package's pass is recorded.
+    void error
+    return []
+  }
 }
 
 /** What the run needs from its caller. */
@@ -177,11 +208,14 @@ export function groupResidentBytes(group: number): number {
  * @param options - the root, environment, logs, CPU budget, pass cache and reporter.
  * @returns each check's result, in plan order.
  */
-export async function runPlan(plan: readonly Planned[], options: RunOptions): Promise<Result[]> {
+export async function runPlan(plan: readonly WithUnits<Planned>[], options: RunOptions): Promise<Result[]> {
   const results = new Map<string, Result>()
   const running = new Map<string, ChildProcess>()
   // Each check's pass key, computed before any check runs: a check's key describes the inputs it started from.
-  const keys = new Map(plan.map(check => [check.id, options.cache?.keyOf(check)]))
+  // A unitised suite is keyed per package only: the whole suite's key would not record what each package reads.
+  const keys = new Map(plan.map(check => [check.id, (check.units?.length ?? 0) > 0 ? undefined : options.cache?.keyOf(check)]))
+  // Each unit's key, also computed before any check runs.
+  const unitKeys = new Map(plan.map(check => [check.id, options.cache === undefined ? [] : (check.units ?? []).map(unit => ({ unit, key: options.cache?.unitKey(check, unit) ?? '' }))]))
   let busy = 0
   let held = 0
   let alone = false
@@ -227,19 +261,30 @@ export async function runPlan(plan: readonly Planned[], options: RunOptions): Pr
           finish(check, { id: check.id, outcome: 'passed', seconds: 0, cached: true, cacheSource: source, detail: `cached pass (${source === 'shared' ? 'shared, ' : ''}${key.slice(0, 12)})` })
           continue
         }
+        const keyed = unitKeys.get(check.id) ?? []
+        const served = keyed.map(({ unit, key }) => ({ unit, key, source: options.cache?.lookupUnit(check, unit, key) }))
+        const pending = served.filter(each => each.source === undefined)
+        const counts = { total: served.length, ran: pending.length, local: served.filter(each => each.source === 'local').length, shared: served.filter(each => each.source === 'shared').length }
+        if (keyed.length > 0 && pending.length === 0) {
+          finish(check, { id: check.id, outcome: 'passed', seconds: 0, cached: true, cacheSource: counts.shared > 0 ? 'shared' : 'local', units: counts, detail: `cached pass of all ${String(counts.total)} packages (${String(counts.local)} in this worktree, ${String(counts.shared)} shared)` })
+          continue
+        }
         if (alone || (check.exclusive === true && running.size > 0)) continue
         if (busy > 0 && busy + check.cpus > options.cpus) continue
         if (held > 0 && held + check.memoryBytes > options.memoryBytes) continue
-        start(check)
+        start(check, keyed.length === 0 ? undefined : { pending, counts })
       }
       if (results.size === plan.length) resolve()
     }
 
-    const start = (check: Planned): void => {
+    const start = (check: Planned, units?: { readonly pending: ReadonlyArray<{ readonly unit: Unit, readonly key: string }>, readonly counts: UnitCounts }): void => {
       const log = join(options.logDir, `${check.id.replaceAll(':', '-')}.log`)
       const out = createWriteStream(log)
       const begun = performance.now()
-      const [command = '', ...args] = check.command
+      // A unitised suite runs only its packages without a stored pass, and reports each spec file's result for them.
+      const report = `${log}.vitest.json`
+      const argv = units === undefined ? check.command : [...commandFor(check, units.pending.map(each => each.unit)), '--reporter=default', '--reporter=json', `--outputFile.json=${report}`]
+      const [command = '', ...args] = argv
       const child = spawn(command, args, { cwd: join(options.root, check.cwd), env: { ...options.env, ...check.environment }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
       running.set(check.id, child)
       busy += check.cpus
@@ -262,8 +307,19 @@ export async function runPlan(plan: readonly Planned[], options: RunOptions): Pr
         const oomKilled = signal === 'SIGKILL' && oomBefore !== undefined && oomAfter !== undefined && oomAfter > oomBefore
         const key = keys.get(check.id)
         if (outcome === 'passed' && key !== undefined) options.cache?.store(check, key)
+        let unitNote: string | undefined
+        if (units !== undefined) {
+          // A failed run still records the packages whose every spec file passed, but only when failed files explain the failure.
+          const files = readVitestReport(report)
+          const explained = outcome === 'passed' || files.some(file => file.status === 'failed')
+          const passed = explained ? passedUnits(files, units.pending.map(each => each.unit), options.root) : []
+          for (const each of units.pending) if (outcome === 'passed' || passed.includes(each.unit)) options.cache?.storeUnit(check, each.unit, each.key)
+          rmSync(report, { force: true })
+          unitNote = `${String(units.counts.ran)} of ${String(units.counts.total)} packages ran, ${String(units.counts.local)} served from this worktree and ${String(units.counts.shared)} shared`
+        }
+        const text = detail === undefined ? unitNote : `${oomKilled ? `${detail}, at the memory ceiling` : detail}${unitNote === undefined ? '' : `; ${unitNote}`}`
         out.end(() => {
-          finish(check, { id: check.id, outcome, seconds: (performance.now() - begun) / 1000, log, ...detail === undefined ? {} : { detail: oomKilled ? `${detail}, at the memory ceiling` : detail }, ...peakBytes > 0 ? { peakBytes } : {}, ...oomKilled ? { oomKilled } : {} })
+          finish(check, { id: check.id, outcome, seconds: (performance.now() - begun) / 1000, log, ...text === undefined ? {} : { detail: text }, ...units === undefined ? {} : { units: units.counts }, ...peakBytes > 0 ? { peakBytes } : {}, ...oomKilled ? { oomKilled } : {} })
           pump()
         })
       }

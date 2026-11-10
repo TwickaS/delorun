@@ -61,6 +61,7 @@ import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result }
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { openSharedStore, sharedCacheDir } from './checks/shared-cache.ts'
 import { declarationReaders, securityPackageDirs, sharingPolicy } from './checks/sharing.ts'
+import { isForkSuite, suiteUnits, type WithUnits } from './checks/units.ts'
 import { readWebSpecs } from './checks/web.ts'
 import { nodeWarning, pinnedNodeMajor } from './setup-worktree.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
@@ -137,6 +138,21 @@ function readTree(root: string): ForkTree {
 }
 
 const SPEC = /\.(?:spec|test)\.[cm]?[jt]sx?$/
+
+/**
+ * The directories under `delo/apps` and `delo/packages` whose `tests/` holds a spec file, which the fork suite's units cover.
+ * @param root - the repository root.
+ * @returns the repository-relative directories, sorted.
+ */
+function forkSpecDirs(root: string): string[] {
+  return ['delo/apps', 'delo/packages'].flatMap((parent) => {
+    if (!existsSync(join(root, parent))) return []
+    return readdirSync(join(root, parent)).sort().map(name => `${parent}/${name}`).filter((dir) => {
+      const tests = join(root, dir, 'tests')
+      return existsSync(tests) && readdirSync(tests, { recursive: true, encoding: 'utf8' }).some(entry => SPEC.test(entry) && !entry.includes('node_modules'))
+    })
+  })
+}
 
 /**
  * Upstream's packages under `packages/<group>/` and `apps/`, with their upstream dependencies and spec counts.
@@ -382,10 +398,15 @@ const MARK: Record<Outcome, string> = { passed: '✓', failed: '✗', declined: 
  * @param cache - the cache, or undefined when the run has none.
  * @returns the cache state, for `--plan`.
  */
-function cacheState(check: Check, cache: PassCache | undefined): string {
+function cacheState(check: WithUnits<Check>, cache: PassCache | undefined): string {
   if (cache === undefined) return 'off (--no-cache, CI, or a full pre-push gate)'
   const key = cache.keyOf(check)
   if (key === undefined) return 'always runs (no declared inputs)'
+  if (check.units !== undefined) {
+    const sources = check.units.map(unit => cache.lookupUnit(check, unit, cache.unitKey(check, unit)))
+    const run = check.units.filter((_unit, index) => sources[index] === undefined).map(unit => unit.dir)
+    return `per package: ${String(sources.filter(source => source === 'local').length)} in this worktree, ${String(sources.filter(source => source === 'shared').length)} shared, ${String(run.length)} to run${run.length === 0 ? '' : ` (${run.join(', ')})`}`
+  }
   const source = cache.lookup(check, key)
   const unshared = cache.unshared(check)
   const sharing = unshared === undefined ? 'shared across worktrees' : `not shared: ${unshared}`
@@ -422,7 +443,7 @@ function writeReport(root: string, results: readonly Result[], sharedDir: string
     oomKills: memory?.oomKills ?? null,
     passCache: { ...cacheCounts(results), sharedDir: sharedDir ?? null },
     checks: results.map(result => ({
-      check: result.id, status: result.outcome, cached: result.cached === true, cacheSource: result.cacheSource ?? null, reason: result.detail ?? null, logPath: result.log === undefined ? null : relative(root, result.log),
+      check: result.id, status: result.outcome, cached: result.cached === true, cacheSource: result.cacheSource ?? null, units: result.units ?? null, reason: result.detail ?? null, logPath: result.log === undefined ? null : relative(root, result.log),
       durationSeconds: Math.round(result.seconds * 10) / 10, peakBytes: result.peakBytes ?? null, oomKilled: result.oomKilled === true,
     })),
   }
@@ -434,11 +455,13 @@ function writeReport(root: string, results: readonly Result[], sharedDir: string
  * @param results - the run's results.
  * @returns the counts.
  */
-export function cacheCounts(results: readonly Result[]): { readonly local: number, readonly shared: number, readonly ran: number } {
+export function cacheCounts(results: readonly Result[]): { readonly local: number, readonly shared: number, readonly ran: number, readonly packages: { readonly local: number, readonly shared: number, readonly ran: number } } {
+  const sum = (field: 'local' | 'shared' | 'ran'): number => results.reduce((total, result) => total + (result.units?.[field] ?? 0), 0)
   return {
     local: results.filter(result => result.cacheSource === 'local').length,
     shared: results.filter(result => result.cacheSource === 'shared').length,
     ran: results.filter(result => result.cached !== true && (result.outcome === 'passed' || result.outcome === 'failed')).length,
+    packages: { local: sum('local'), shared: sum('shared'), ran: sum('ran') },
   }
 }
 
@@ -590,7 +613,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   // A pre-push run reads the push lines once; a scoped child gets them on its standard input.
   const pushInput = values['pre-push'] ? readFileSync(0, 'utf8') : undefined
   const fullGate = values['pre-push'] && env['DELO_FULL_GATE'] === '1'
-  let plan: Planned[]
+  let plan: WithUnits<Planned>[]
   let mode: string
   // The gate tier of a change run; the pre-commit tier and the full gate have none.
   let gateTier: GateTier | undefined
@@ -612,6 +635,12 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     gateTier = fullRun || fullGate ? undefined : changeTier(values.tier, pushInput, env)
     const selection = { targets, ...changed === undefined ? {} : { changed }, ...gateTier === undefined ? {} : { tier: gateTier }, only: list(values.only), skip: list(values.skip) }
     plan = declineUnansweredDocker(select(checks, tree, selection), () => probeDocker((command, args, timeout) => spawnSync(command, [...args], { encoding: 'utf8', timeout })))
+    // The fork suite remembers a pass per package (`checks/units.ts`).
+    const specDirs = plan.some(check => isForkSuite(check.id)) ? forkSpecDirs(root) : []
+    plan = plan.map((check) => {
+      const units = suiteUnits(check, tree, specDirs)
+      return units === undefined ? check : { ...check, units }
+    })
     left = [...leftForMerge(checks, tree, selection), ...dependentsLeftForMerge(tree, selection)]
     mode = changed === undefined ? (targets.length === 0 ? 'full gate' : `targets ${targets.join(', ')}`) : `${String(changed.paths.length)} paths changed since ${changed.base}`
     if (gateTier !== undefined) mode += `, ${gateTier} tier`

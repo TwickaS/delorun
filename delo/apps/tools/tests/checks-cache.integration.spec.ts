@@ -391,7 +391,7 @@ describe('the machine-wide pass store', { timeout: 30_000 }, () => {
     expect(results.map(result => [result.cached, result.cacheSource])).toEqual([[true, 'shared']])
     expect(results[0]?.detail).toMatch(/^cached pass \(shared, [0-9a-f]{12}\)$/)
     expect(runs(marker)).toBe(1)
-    expect(cacheCounts(results)).toEqual({ local: 0, shared: 1, ran: 0 })
+    expect(cacheCounts(results)).toEqual({ local: 0, shared: 1, ran: 0, packages: { local: 0, shared: 0, ran: 0 } })
   })
 
   it('refuses a pass that another clone with the same files stored', async () => {

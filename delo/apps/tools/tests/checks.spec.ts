@@ -282,6 +282,15 @@ describe('the gate tiers', () => {
     expect(program === undefined ? undefined : laneKeeps({ ...program, command: ['tsc'] }, new Set(['delo/apps/control']))).toBe(false)
   })
 
+  it('selects no fork spec for documentation outside the packages, and still selects a package\'s specs for any file in it', () => {
+    for (const tier of ['lane', 'agent', 'merge'] as const) {
+      const docs = ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delo/docs/guide/a.md', 'delo/changelog/unreleased/a.md'] }, tier }))
+      expect(docs.filter(id => id.startsWith('tests:'))).toEqual([])
+      const readme = select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delo/packages/providers/README.md'] }, tier })
+      expect(readme.find(check => check.id === 'tests:fork')?.scope).toContain('delo/packages/providers/')
+    }
+  })
+
   it('runs the full gate in whole whatever the tier says', () => {
     expect(ids(select(CHECKS, TREE, { ...NONE, tier: 'agent' }))).toEqual(ids(select(CHECKS, TREE, NONE)))
     expect(leftForMerge(CHECKS, TREE, { ...NONE, tier: 'agent' })).toEqual([])

@@ -114,6 +114,12 @@ export interface SharingPolicy {
    */
   security(check: Check): boolean
   /**
+   * Whether a Delo package enforces a security fundamental, so its specs' pass serves no strict run.
+   * @param dir - the package directory.
+   * @returns true for a security package.
+   */
+  securityPackage(dir: string): boolean
+  /**
    * The source files of the code the check's command runs, as globs, which join its key: the source and manifest of a
    * Delo package a command argument lies in and of every Delo package it depends on, and `scripts/**` for upstream's
    * scripts.
@@ -217,6 +223,7 @@ export function sharingPolicy(facts: SharingFacts): SharingPolicy {
   }
   return {
     unshared: check => decide(check).reason,
+    securityPackage: dir => facts.securityPackages.includes(dir),
     security: check => decide(check).security,
     codeInputs: (check) => {
       const owned = check.command.flatMap(arg => facts.packages.filter(pkg => arg.startsWith(`${pkg.dir}/`)).map(pkg => pkg.dir))
