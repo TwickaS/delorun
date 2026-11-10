@@ -138,7 +138,7 @@ async function setup(options: { readonly approval?: boolean, readonly ptc?: bool
   ctx.provide('agentPresets', { select: () => Promise.resolve('cordis') })
   ctx.provide('connection', { fetch: { register: () => () => undefined } })
   ctx.provide('deloWorkspaces', provider)
-  await ctx.plugin(MainChat, { studioAdditions: true, root, preset: 'cordis', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 2_000 })
+  await ctx.plugin(MainChat, { enabled: true, root, preset: 'cordis', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 2_000 })
   const harness = await mountAgentLoopTestHarness(ctx)
   const adapter = new ScriptedAdapter()
   ctx.llm.registerAdapter(['mock'], adapter)

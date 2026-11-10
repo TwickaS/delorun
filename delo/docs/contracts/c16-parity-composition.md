@@ -35,7 +35,7 @@ The parity composition is the configuration under which Delo replays upstream's 
 The parity composition consists of the following parts.
 
 - Upstream's profiles, bundles and scenario layers at the base tag, unchanged. A scenario's profile and composition come from its `snapshot.yml`. Its replay layers apply as upstream applies them: the composition's `cordis.snapshot.yml`, the base composition's `model.cordis.yml` and the scenario's `runtime.cordis.yml` where present.
-- The Delo bundles `@delo/bundle-studio` and `@delo/bundle-local`, which the studio packages deliver, mounted, with the studio bundle's stock look switched on.
+- `@delo/bundle-local`, restated by the parity overlay in its parity form. `@delo/bundle-studio` is not mounted: the switch `studio_additions` stays at its Config default, off, which is the stock look.
 - Every switch in the [switch registry](#switch-registry) at its parity value. A switch that is off registers no model-visible contribution: no tool, tool schema, tool description, tool result text, system prompt context or runtime context.
 - Each changed default in the [table below](#changed-defaults) at its parity value.
 
@@ -68,7 +68,8 @@ The registry has these entries.
 
 | Switch id | Registered by | Default | Parity | Model-visible contributions it switches |
 | --- | --- | --- | --- | --- |
-| `studio_additions` | `@delo/bundle-studio`, which the studio packages deliver, with the main chat in `@delo/plugin-main-chat` | On | Off | Theme, sidebar, chat states, onboarding tour and the main chat, including its write-class tools. Off is the stock look. |
+| `studio_additions` | `@delo/plugin-theme`, which `@delo/bundle-studio` mounts with the switch on | On | Off | None: a feature switch for the theme, sidebar, chat states, settings layout and onboarding. Off is the stock look. |
+| `main_chat` | `@delo/plugin-main-chat`, an experimental plugin no Delo profile mounts | On wherever a row mounts it | Off | The main chat's tools, including its write-class tools, its guard and its reports. |
 | `permission_defaults` | `@delo/plugin-permission-defaults` | On | Off | The workspace default preset and the one-consent requirement for full access. |
 | `fetch_guard` | `@delo/plugin-fetch-guard` | On | Off | Refusal of loopback, link-local and private targets by `web_fetch` and the HTTP fetch provider, with a typed reason. |
 | `preset_inspect` | Delo's edit of upstream's preset tools | On | Off | The `preset_inspect` tool. |
@@ -107,7 +108,7 @@ A parity run passes when `pnpm run test:snapshot` with the overlay exits 0 for e
 - `delo/apps/tools/src/parity/composition/`: the parity overlay, the replay lane, the static scan and the switch sweep.
 - `delo/apps/tools/src/run-checks.ts`: the `parity-replay` and `parity-switches` checks.
 - `delo/apps/tools/src/parity/release/`: the release tooling delivers the parity run on built release artifacts.
-- `@delo/bundle-studio`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`, which the studio packages deliver, and `@delo/bundle-local`, which Delo's CLI profiles add: the packages that register switches.
+- `@delo/plugin-theme`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`: packages that register switches; `@delo/bundle-studio` sets `studio_additions` in Delo's default composition, and `@delo/bundle-local`, which Delo's CLI profiles add, registers its own.
 - `packages/boot/doctor`, launched by `apps/cli`: the doctor's registration.
 - Upstream's `vitest.snapshot.config.ts`, the snapshot adapters listed in `snapshotAdapters`, and the `snapshot.yml` and replay layer files of each scenario, which the lane reads without changing them.
 

@@ -17,8 +17,9 @@
  * ({@link mainChatReports}). Every other chat, the main chat's subagents
  * included, has the tools removed when its agent is created.
  *
- * Everything the plugin registers sits behind the C16 switch
- * `studio_additions` ({@link Config.studioAdditions}), off by default.
+ * Everything the plugin registers sits behind the C16 switch `main_chat`
+ * ({@link Config.enabled}), off by default: the main chat is an experimental
+ * plugin that no Delo profile mounts until a person adds it.
  *
  * The studio half (`./client`) adds the Main chat row to the top of the
  * sidebar, which opens the main chat through {@link MAIN_CHAT_PATHS}.
@@ -66,10 +67,10 @@ export const inject = ['tools', 'agents', 'agentPresets', 'sessionController', '
 /** The main chat's deployment settings. */
 export interface Config extends ToolLimits, ReportLimits, AccountLimits {
   /**
-   * C16 switch `studio_additions`: whether the plugin registers the main chat's tools, its guard, its reports and its
-   * routes. Off, the parity value and the default, it registers nothing. Delo's studio bundle turns it on.
+   * C16 switch `main_chat`: whether the plugin registers the main chat's tools, its guard, its reports and its routes.
+   * Off, the parity value and the default, it registers nothing; a row that mounts the plugin turns it on.
    */
-  readonly studioAdditions: boolean
+  readonly enabled: boolean
   /** The absolute directory that holds every workspace, which the main chat runs in. */
   readonly root: string
   /** The agent preset the main chat runs, and the only one it may select. */
@@ -78,7 +79,7 @@ export interface Config extends ToolLimits, ReportLimits, AccountLimits {
 
 /** Validated configuration. */
 export const Config: schema<Config> = schema.object({
-  studioAdditions: schema.boolean().description('C16 switch studio_additions: register the main chat\'s tools, guard, reports and routes.').default(false),
+  enabled: schema.boolean().description('C16 switch main_chat: register the main chat\'s tools, guard, reports and routes.').default(false),
   root: schema.string().pattern(/^\/\S*[^/]$/).required().description('The absolute directory that holds every workspace, which the main chat runs in.'),
   preset: schema.string().min(1).required().description('The agent preset the main chat runs, and the only one it may select.'),
   listLimit: schema.natural().min(1).default(30).description('How many chats chat_list answers at most.'),
@@ -90,14 +91,14 @@ export const Config: schema<Config> = schema.object({
 const MAIN = SessionId(MAIN_CHAT_SESSION_ID)
 
 /**
- * With the `studio_additions` switch on: register the tools, the account tools while a `deloWorkspaces` provider is
+ * With the `main_chat` switch on: register the tools, the account tools while a `deloWorkspaces` provider is
  * mounted, remove them from every other chat, keep the main chat on its preset, and register the routes that create
  * it when it is missing and count its reports.
  * @param ctx - the plugin context with the injected services.
  * @param config - the main chat's settings.
  */
 export function apply(ctx: Context, config: Config): void {
-  if (!config.studioAdditions) return
+  if (!config.enabled) return
   const reports = mainChatReports(ctx, config.root, config)
   for (const tool of mainChatTools(ctx, config.root, config, reports)) ctx.tools.register(tool)
   ctx.inject(['deloWorkspaces'], (child) => {

@@ -111,23 +111,43 @@ export interface PlannedParitySwitch extends ParitySwitchBase {
 export type ParitySwitchEntry = BuiltParitySwitch | PlannedParitySwitch
 
 /**
- * The registry: one entry per model-visible Delo change, plus the doctor's feature switch. `defaultValue` applies in
+ * The registry: one entry per model-visible Delo change, plus the feature switches of the doctor and the studio
+ * additions. `defaultValue` applies in
  * Delo's default composition and `parityValue` applies in the parity composition.
  */
 export const PARITY_SWITCHES = [
   {
     id: 'studio_additions',
     state: 'built',
-    registeredBy: '@delo/bundle-studio and @delo/plugin-main-chat',
+    registeredBy: '@delo/plugin-theme, which @delo/bundle-studio mounts with the switch on',
+    defaultValue: true,
+    parityValue: false,
+    // The theme, sidebar, chat states, settings layout and onboarding change what the person sees, not what reaches
+    // the model: a feature switch. The theme provides the `deloStudio` browser service only while it is on, and every
+    // other studio plugin requires that service.
+    modelVisible: false,
+    field: {
+      module: '@delo/plugin-theme',
+      source: 'delo/packages/plugin-theme/src/config.ts',
+      key: 'studioAdditions',
+    },
+    sources: [],
+  },
+  {
+    id: 'main_chat',
+    state: 'built',
+    registeredBy: '@delo/plugin-main-chat',
+    // The main chat is experimental and no Delo profile mounts it; every row that mounts it turns the switch on, so
+    // `true` is its value wherever Delo's composition includes it.
     defaultValue: true,
     parityValue: false,
     modelVisible: true,
-    scenario: 'web/delo-studio-additions',
+    scenario: 'web/delo-main-chat',
     scenarioState: 'pending recording',
     field: {
       module: '@delo/plugin-main-chat',
       source: 'delo/packages/plugin-main-chat/src/index.ts',
-      key: 'studioAdditions',
+      key: 'enabled',
     },
     sources: [
       'delo/packages/plugin-main-chat/src/account-tools.ts',

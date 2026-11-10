@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The main chat is one chat outside every workspace, at the directory that holds them, from which the person asks about and steers their other chats and starts work in a workspace. Its tools list, search and read the person's chats, send one a follow-up, stop one's turn, list the workspaces and delegate a brief to a new chat in one; with a workspaces provider mounted they also create, import, trash and restore workspaces and edit a workspace's `AGENTS.md` and its dated owner notes. Every tool that changes something outside the turn asks the person first, in every turn. The studio half adds a Main chat row at the top of the sidebar that opens it, and the composer for its first message. Everything is behind the [C16 switch](../../docs/contracts/c16-parity-composition.md) `studio_additions`, off by default; Delo's studio bundle turns it on.
+The main chat is one chat outside every workspace, at the directory that holds them, from which the person asks about and steers their other chats and starts work in a workspace. Its tools list, search and read the person's chats, send one a follow-up, stop one's turn, list the workspaces and delegate a brief to a new chat in one; with a workspaces provider mounted they also create, import, trash and restore workspaces and edit a workspace's `AGENTS.md` and its dated owner notes. Every tool that changes something outside the turn asks the person first, in every turn. The studio half adds a Main chat row at the top of the sidebar that opens it, and the composer for its first message. Everything is behind the [C16 switch](../../docs/contracts/c16-parity-composition.md) `main_chat`, off by default. The main chat is an experimental plugin: no Delo profile mounts it, and a row that mounts it sets `enabled: true`.
 
 ## Contents
 
@@ -44,7 +44,7 @@ The main chat runs in the directory that holds every workspace, and untrusted te
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `studioAdditions` | `false` | C16 switch `studio_additions`: off, the parity value, the plugin registers nothing. |
+| `enabled` | `false` | C16 switch `main_chat`: off, the parity value, the plugin registers nothing. |
 | `root` | required | The absolute directory that holds every workspace, the main chat's working directory. |
 | `preset` | required | The agent preset the main chat runs, and the only one it may select. |
 | `listLimit` | 30 | The most chats `chat_list` answers. |
@@ -62,7 +62,7 @@ The package is carried from Delo's earlier main chat and reviewed for this tree,
 - **Widened with it, as lead decisions.** `workspace_note` and `workspace_note_remove` always ask too, since an owner note is instructions every chat of the workspace reads. `workspace_instructions` records a read, so the rest of its turn asks before `workspace_create`, a message or a delegation. Every other tool that is not read-only asks in every turn, `web_fetch` and `run_code` included, because the main chat now runs in the directory that holds every workspace, where a file write, a command or a program reaches any workspace's `AGENTS.md`. The `deloWorkspaces` Service Definition lives here until Delo's workspace import package provides it and takes it over.
 - **Cut.** Everything tied to hosted cells: the command runner's separate home for the main chat, cell paths such as `/workspace`, private GitHub clones through account control's tokens, and the cell release and publishing tools named in the guard's tests. The workspaces plugin is not carried here; its operations are the `deloWorkspaces` seam above, which Delo's workspace import package provides. Deferred with Home: the Your chats tab beside the main chat and the studio opening on Home.
 - **`GUARD_FREE` checked against direct effects.** For each listed tool: can it change a file or state outside the session without a tool call the guard decides? `run_code` can, since a Node program runs under the session's standing file policy, so it was taken out and asks in every turn. The others cannot: `read`, `read_image`, `glob`, `grep`, `skill`, `job_list`, `job_output`, `get_goal`, `schedule_list`, `list_agents`, `cordis_inspect_list` and `cordis_inspect_query` only read; `working_directory`, `todo_write`, `present`, `exit_plan_mode` and `ask_user_question` change only the main chat's own session; `chat_read`, `chat_search` and `workspace_instructions` read and record the read in the main chat's log; the account tools ask from inside their execution.
-- **Adapted.** The row is labelled Main chat instead of Home. `preset` has no default, so the composition names the main chat's preset. Everything the plugin registers sits behind `studio_additions`.
+- **Adapted.** The row is labelled Main chat instead of Home. `preset` has no default, so the composition names the main chat's preset. Everything the plugin registers sits behind its own switch, `main_chat`.
 
 ## Known limitations
 

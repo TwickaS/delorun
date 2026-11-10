@@ -23,7 +23,7 @@ import { ScriptedAdapter, text, toolCall } from './scripted-adapter.ts'
 
 const ROOT = '/workspace'
 const MAIN = SessionId(MAIN_CHAT_SESSION_ID)
-const CONFIG = { studioAdditions: true, root: ROOT, preset: 'cordis', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 200 }
+const CONFIG = { enabled: true, root: ROOT, preset: 'cordis', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 200 }
 
 interface Listed {
   readonly sessionId: SessionId
@@ -41,7 +41,7 @@ afterEach(async () => {
   context = undefined
 })
 
-async function setup(options: { readonly listed?: Listed[], readonly reportBytes?: number, readonly workspacesService?: boolean, readonly studioAdditions?: boolean } = {}) {
+async function setup(options: { readonly listed?: Listed[], readonly reportBytes?: number, readonly workspacesService?: boolean, readonly enabled?: boolean } = {}) {
   const ctx = context = new Context()
   await mountAgentLoopTestDependencies(ctx)
   const listed: Listed[] = options.listed ?? []
@@ -134,7 +134,7 @@ async function setup(options: { readonly listed?: Listed[], readonly reportBytes
   })
   const routes = new Map<string, (request: Request) => Promise<Response>>()
   ctx.provide('connection', { fetch: { register: (route: { readonly path: string, readonly fetch: (request: Request) => Promise<Response> }) => { routes.set(route.path, route.fetch); return () => undefined } } })
-  const config = { ...CONFIG, ...options.reportBytes === undefined ? {} : { reportBytes: options.reportBytes }, ...options.studioAdditions === undefined ? {} : { studioAdditions: options.studioAdditions } }
+  const config = { ...CONFIG, ...options.reportBytes === undefined ? {} : { reportBytes: options.reportBytes }, ...options.enabled === undefined ? {} : { enabled: options.enabled } }
   let plugin = await ctx.plugin(MainChat, config)
   // The plugin started again, as at the harness's next start, over the same sessions.
   const restart = async (): Promise<void> => {
@@ -166,8 +166,8 @@ async function setup(options: { readonly listed?: Listed[], readonly reportBytes
 const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 20))
 
 describe('the main chat', () => {
-  it('registers nothing with the studio_additions switch off, its parity value', async () => {
-    const { ctx, routes } = await setup({ studioAdditions: false })
+  it('registers nothing with the main_chat switch off, its parity value', async () => {
+    const { ctx, routes } = await setup({ enabled: false })
     expect(routes.size).toBe(0)
     for (const name of MAIN_CHAT_TOOLS) expect(ctx.tools.get(name), name).toBeUndefined()
   })
