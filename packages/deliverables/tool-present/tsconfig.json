@@ -24,6 +24,12 @@
       "path": "../../llm/llm"
     },
     {
+      "path": "../../sandbox/sandbox"
+    },
+    {
+      "path": "../../sandbox/sandbox-policy"
+    },
+    {
       "path": "../../core/session"
     },
     {

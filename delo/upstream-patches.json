@@ -1110,25 +1110,19 @@
       "path": "packages/fs/tool-fs-search/src/glob.ts",
       "class": "security",
       "reason": "Protected home, read fence (review of #66): applies `protectedSearchFilter` to glob results.",
-      "sha256": "d1086f6ea5ee0604e16001b407726c7e014cee4c1a71d9eb417ead98078109f9"
+      "sha256": "f7c67d9e3044969eb1b46f6f9aa8c15d8faca0f97399d07ab864b15ddf1c45a4"
     },
     {
       "path": "packages/fs/tool-fs-search/src/grep.ts",
       "class": "security",
       "reason": "Protected home, read fence (review of #66): applies `protectedSearchFilter` to grep matches.",
-      "sha256": "d3952fe0a81c92053979cda2a512965c373dc8e81c13414c0040048090135036"
-    },
-    {
-      "path": "packages/fs/tool-fs-search/src/index.ts",
-      "class": "security",
-      "reason": "Protected home, read fence (review of #66): adds the `Config` field `protectedReads`, the switch field of the protected-read fence (Delo's C16 switch `sandbox_protected_reads`); the tools honour the sandbox provider's protected reads only while it is on. Lead verdict: kept; the field gates the search tools's honouring of the provider's protected reads, its default false keeps a bare profile at stock behaviour, the parity composition rests on that default, and the switch-state specs prove both sides.",
-      "sha256": "24d8fea7a383d6b72f07e4e7fa4348ce4a9b299271866a77a73459b0f80754f8"
+      "sha256": "600b59a36be7dd3d982dca0bb8f88e63dddd02ab8ba7d95d31e9b284c391f624"
     },
     {
       "path": "packages/fs/tool-fs-search/src/search-core.ts",
       "class": "security",
       "reason": "Protected home, read fence (review of #66): `protectedSearchFilter` refuses a glob or grep root under the sandbox provider's `protectedReads` with the new `SEARCH_SANDBOX_DENIED` and drops results under it from a wider search, unless the call runs under `danger-full-access`. Without protected reads nothing changes.",
-      "sha256": "1df35833d4602ee139f3902b5dd3b918d869561976f510c73ca173a19f1303dc"
+      "sha256": "4e45cccb1b3b228521bbf5ffbdac85b228b894893e094215f4990eeeb64de9f4"
     },
     {
       "path": "packages/fs/tool-fs/src/consent.ts",
@@ -1789,6 +1783,12 @@
       "class": "delo-feature",
       "feature": "instruction-consent",
       "reason": "Instruction-layer consent: the filesystem skill provider names its project skill directories and home store as exported constants and implements `configuredRoots()`, which reports the roots its configuration names without a workspace — the custom directories, the two default home stores and the bundled root. Discovery reads the same constants, so a configured root and a reviewed root cannot drift."
+    },
+    {
+      "path": "packages/deliverables/tool-present/src/index.ts",
+      "class": "security",
+      "reason": "`present` refuses a path under the sandbox provider's protected home, outside its readable entries, with `FS_SANDBOX_DENIED` before it inspects the path, as `read` does.",
+      "sha256": "7b62dcc52dac4c684fdc723dabf42157a83c3a1e14b3ed8100719d24b51cc03f"
     }
   ],
   "retired": []

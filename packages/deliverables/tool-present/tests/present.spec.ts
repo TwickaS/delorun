@@ -2,7 +2,7 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { unsupportedModel, provideWorkingDirectoryFixture, unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { mkdtemp, rm, writeFile, symlink, realpath } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile, symlink, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -11,6 +11,7 @@ import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { SandboxProvider, type ConfinedArgv, type ProtectedReads } from '@deepseek-ai/dsh-sandbox'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -198,4 +199,37 @@ it('refuses a file replaced by a directory after inspecting its final component'
   const directory = await ctx.fs.stat(await ctx.fs.resolve(root))
   vi.spyOn(ctx.fs, 'stat').mockResolvedValueOnce(directory)
   expect((await execute([{ path: 'source' }])).isError).toBe(true)
+})
+
+/** A sandbox provider stand-in that reports protected reads; it never confines anything. */
+class ProtectingProvider extends SandboxProvider {
+  static reads: ProtectedReads | undefined
+  override get protectedReads(): ProtectedReads | undefined {
+    return ProtectingProvider.reads
+  }
+  /* v8 ignore next 3 -- present never confines; only protectedReads is read. */
+  confine(): Promise<ConfinedArgv> {
+    throw new Error('not used')
+  }
+}
+
+it('refuses a file under the sandbox provider\'s protected home, directly and through a link, and presents one beside it', async () => {
+  const { ctx, root, execute, owner } = await setup()
+  const home = join(root, 'home')
+  await mkdir(join(home, 'secrets'), { recursive: true })
+  await mkdir(join(home, 'runtimes'))
+  await writeFile(join(home, 'secrets', 'key.txt'), 'secret')
+  await writeFile(join(home, 'runtimes', 'notes.txt'), 'notes')
+  await writeFile(join(root, 'report.txt'), 'report')
+  await symlink(home, join(root, 'home-link'))
+  const canonical = await realpath(home)
+  ProtectingProvider.reads = { roots: [canonical], readable: [join(canonical, 'runtimes')] }
+  cleanups.push(async () => { ProtectingProvider.reads = undefined })
+  await ctx.plugin(ProtectingProvider)
+  for (const path of ['home/secrets/key.txt', join(home, 'secrets', 'key.txt'), 'home-link/secrets/key.txt', 'home/missing.txt']) {
+    const result = await execute([{ path }])
+    expect(result).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
+  }
+  expect(owner.session.snapshotEvents().some(event => event.type === 'deliverables/presented')).toBe(false)
+  expect((await execute([{ path: 'report.txt' }, { path: 'home/runtimes/notes.txt' }])).isError).toBe(false)
 })

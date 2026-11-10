@@ -3,6 +3,8 @@ import type {} from '@deepseek-ai/dsh-working-directory'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { FsError } from '@deepseek-ai/dsh-fs'
+import { protectedReadGuard } from '@deepseek-ai/dsh-sandbox'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { defineTool, type ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
@@ -82,12 +84,17 @@ export function apply(ctx: Context, config: Config): void {
       if (args.files.length === 0 || args.files.length > config.maxFiles) throw new Error(`present accepts 1 to ${config.maxFiles} files`)
       const cwd = await ctx.workingDirectory.ensure(exec.agent, exec.signal)
       const options = { cwd, signal: exec.signal }
+      // The sandbox provider's protected home, as `read` refuses it: a presented path under it is refused before any
+      // inspection, so the tool reveals nothing of what the home holds.
+      const mode = ctx.get('sandboxPolicy')?.resolve({ session: exec.agent.session }).mode ?? 'read-only'
+      const refused = protectedReadGuard(ctx.get('sandbox')?.protectedReads, mode)
       const files: PresentedFile[] = []
       for (const file of args.files) {
         if (file.path.trim().length === 0) throw new Error('present requires a non-empty file path')
+        const target = await ctx.fs.resolve(file.path, options)
+        if (refused(target.targetKey)) throw new FsError(`Cannot present ${file.path}: file access denied under the protected home`, 'FS_SANDBOX_DENIED')
         const entry = await ctx.fs.lstat(file.path, { cwd }, exec.signal)
         if (entry !== undefined && entry.type !== 'file') throw new Error(`Cannot present ${file.path}: not a regular file`)
-        const target = await ctx.fs.resolve(file.path, options)
         const info = await ctx.fs.stat(target, exec.signal)
         if (info === undefined) throw new FsError(`Cannot present ${file.path}: file not found. Check the path, create the file if needed, and retry.`, 'FS_NOT_FOUND')
         if (info.type !== 'file') throw new Error(`Cannot present ${file.path}: not a regular file`)
