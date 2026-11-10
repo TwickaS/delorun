@@ -23,6 +23,13 @@ export const HEADLESS_BUNDLE = '@delo/bundle-headless'
 /** Upstream's shipped profile template that Delo's CLI profiles extend. */
 export const UPSTREAM_TEMPLATE = 'web'
 
+/**
+ * The environment variable the `workspace-controller` row reads its `defaultWorkspaceDirectory` from. `delorun start`
+ * sets it in the Host's own process before the profile boots; any other boot leaves it unset, so upstream's own
+ * documents lookup applies.
+ */
+export const DEFAULT_WORKSPACE_ENV = 'DELO_DEFAULT_WORKSPACE'
+
 const upstream = PROFILE_TEMPLATES[UPSTREAM_TEMPLATE]
 if (upstream === undefined) throw new Error(`@delo/bundle-local: upstream ships no ${UPSTREAM_TEMPLATE} profile template`)
 

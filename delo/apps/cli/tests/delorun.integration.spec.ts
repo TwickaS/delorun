@@ -20,6 +20,8 @@ import { requestStudioLink } from '../src/open/studio.ts'
 import { realPreStartSteps, startForeground, upstreamAddStudioBundle, upstreamDependencies, type StartDependencies } from '../src/start.ts'
 import { runtimeOfFile } from '../src/update/runtime.ts'
 import { composedBootRows, composedProviders } from './fixtures/composed-rows.ts'
+import { LINKING_PROGRESS } from '../src/delo-bundles.ts'
+import { DEFAULT_WORKSPACE_ENV } from '../src/default-workspace.ts'
 
 const BIN = join(import.meta.dirname, '../src/bin.ts')
 const BUNDLE_LOCAL_DIR = new URL('.', import.meta.resolve('@delo/bundle-local/package.json')).pathname
@@ -294,10 +296,13 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => name !== STUDIO_BUNDLE)
     delete manifest.dependencies?.[STUDIO_BUNDLE]
     writeFileSync(path, JSON.stringify(manifest))
-    const output = { ...context, stderr: () => undefined }
+    const progress: string[] = []
+    const output = { ...context, stdout: (text: string) => void progress.push(text), stderr: () => undefined }
     expect(await upstreamAddStudioBundle(deloHome, 'default', output)).toBe(true)
     expect((JSON.parse(readFileSync(path, 'utf8')) as { dsh: { profile: { bundles: string[] } } }).dsh.profile.bundles).toContain(STUDIO_BUNDLE)
+    expect(progress).toEqual([LINKING_PROGRESS, 'done\n'])
     expect(await upstreamAddStudioBundle(deloHome, 'default', output)).toBe(false)
+    expect(progress).toHaveLength(2)
   })
 
   it('adds the studio look once, at a fresh start, starts in the stock look while that fails, and never tries again once it is done', async () => {
@@ -357,6 +362,29 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, silent)).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })
     expect(seen).toHaveLength(1)
     expect(JSON.parse(readFileSync(join(deloHome, 'run', 'default', 'home.lock'), 'utf8'))).toEqual(lock)
+  })
+
+  it('sets the default workspace folder before the profile boots, creates nothing, and leaves a row the profile configures alone', async () => {
+    vi.stubEnv(DEFAULT_WORKSPACE_ENV, undefined)
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    const atBoot: (string | undefined)[] = []
+    const watching: StartDependencies = { ...recording([]), runProfile: (options) => {
+      atBoot.push(process.env[DEFAULT_WORKSPACE_ENV])
+      return recording([]).runProfile(options)
+    } }
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, watching)).toBeUndefined()
+    expect(atBoot).toHaveLength(1)
+    // The documents lookup runs on this host, so the base is its documents folder or the fixture home.
+    expect(atBoot[0]?.endsWith(join('Delo', 'default-workspace'))).toBe(true)
+    expect(existsSync(atBoot[0] ?? '')).toBe(false)
+    rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
+    vi.stubEnv(DEFAULT_WORKSPACE_ENV, undefined)
+    const patchPath = join(deloHome, 'profiles', 'default', 'cordis.patch.yml')
+    const parsed: unknown = parse(readFileSync(patchPath, 'utf8'))
+    const rows = Array.isArray(parsed) ? parsed : []
+    writeFileSync(patchPath, stringify([...rows, { id: 'workspace-controller', config: { defaultWorkspaceDirectory: join(osHome, 'mine') } }]))
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, watching)).toBeUndefined()
+    expect(atBoot).toEqual([atBoot[0], undefined])
   })
 
   it('releases the lock when the profile fails to boot, and refuses a home without the CLI profile', async () => {

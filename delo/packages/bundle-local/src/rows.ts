@@ -103,6 +103,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'upstream', reason: 'The switch\'s parity value is off: the overlay leaves the row to upstream\'s web bundle, so the recorded web scenarios sign in with the reusable process token, as they were recorded.' },
   },
   {
+    id: 'workspace-controller',
+    kind: 'changed',
+    reason: 'The studio\'s first-use workspace folder is the one `delorun start` resolves, `<documents>/Delo/default-workspace` or `<home>/Delo/default-workspace` where the platform reports no documents folder, so the studio has a default workspace on every platform; upstream\'s row sets none, and its own lookup gives up where the platform reports no documents folder.',
+    parity: { kind: 'upstream', reason: 'The C16 switch `default_workspace_directory` is a presence switch whose parity value is off: the overlay leaves the row out, so the replay places the first-use workspace by upstream\'s own lookup.' },
+  },
+  {
     id: 'ui-settings-models',
     kind: 'changed',
     reason: 'Upstream\'s preview notice is replaced by Delo\'s own notice (welcomeNotice off), and the other onboarding settings keep upstream\'s values.',

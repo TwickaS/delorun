@@ -194,7 +194,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     }
   })
 
-  it('checks the studio default port 3080 when no --port is given', () => {
+  it('checks the studio default port 3080 when no --port is given and the profile sets none', () => {
     const result = doctor([], { DEEPSEEK_API_KEY: GOOD_KEY })
     const line = /^(pass|fail) port: port 3080 /m.exec(result.stdout + result.stderr)
     expect(line).not.toBeNull()
@@ -214,7 +214,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const result = doctor(['--help'])
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('No model is contacted and no command runs')
-    expect(result.stdout).toContain('default 3080')
+    expect(result.stdout).toContain('default: the profile\'s studio port, or 3080 when the profile sets none')
   })
 
   it('reads the key stored in the home credentials document before the environment', async () => {

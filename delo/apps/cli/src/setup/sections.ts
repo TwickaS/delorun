@@ -24,7 +24,7 @@ import { CliError, EXIT } from '../exit.ts'
 import type { KeyCheck } from './key-check.ts'
 import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
-import { setPatchRow, storeCredential } from './writes.ts'
+import { readPatchRow, setPatchRow, storeCredential } from './writes.ts'
 import { systemTailscale } from '@delo/reach'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 
@@ -37,6 +37,8 @@ export interface Draft {
   readonly answers: SetupAnswers
   /** The typed key, kept in memory until the key section's write; never in the answers. */
   readonly secret: string | undefined
+  /** Why the live check of the key failed when the person continued without a successful check; never the key. */
+  readonly keyCheckFailure: string | undefined
 }
 
 /** What a section's question returns. */
@@ -45,6 +47,8 @@ export interface SectionAnswer {
   readonly answers: Partial<Omit<SetupAnswers, 'schemaVersion' | 'sections'>>
   /** The typed key, when the section took one. */
   readonly secret?: string
+  /** Why the live check of the key failed, when the person continued without a successful check. */
+  readonly keyCheckFailure?: string
   /** `answered` for a question asked, `seen` for a note shown. */
   readonly status: SectionStatus
 }
@@ -106,9 +110,10 @@ export interface SetupSection {
   ask(io: StepIO, draft: Draft, environment: SectionEnvironment): Promise<SectionAnswer | Back>
   /**
    * @param answers - the answers.
+   * @param draft - the run's answers so far, with what the questions found, such as a failed key check.
    * @returns the section's line of the review screen. A section without one omits the method.
    */
-  review?(answers: SetupAnswers): string
+  review?(answers: SetupAnswers, draft: Draft): string
   /**
    * Make the section's writes. A run that repeats a write leaves the same values.
    * @param context - the home, profile directory and typed key.
@@ -211,21 +216,21 @@ export const privacySection: SetupSection = {
  * Ask the key, and on a failed check say why and let the person enter it again or continue.
  * @param io - the questions.
  * @param environment - what the section may look at.
- * @returns the key, or {@link BACK}.
+ * @returns the key with the reason its check failed when the person continued anyway, or {@link BACK}.
  */
-async function askTypedKey(io: StepIO, environment: SectionEnvironment): Promise<string | Back> {
+async function askTypedKey(io: StepIO, environment: SectionEnvironment): Promise<{ readonly key: string, readonly failure?: string } | Back> {
   for (;;) {
     const key = await io.secret('DeepSeek API key')
     if (key === BACK) return BACK
     const result = await environment.checkKey(key)
-    if (result.ok) return key
+    if (result.ok) return { key }
     io.note(`The key was not checked successfully: ${result.reason}\nA wrong key means the model cannot answer; you can change it later with delorun setup key.`, 'Key check')
     const next = await io.select('What now?', [
       { value: 'again', label: 'Enter the key again' },
       { value: 'continue', label: 'Continue without a successful check' },
     ], 'again')
     if (next === BACK) return BACK
-    if (next === 'continue') return key
+    if (next === 'continue') return { key, failure: result.reason }
   }
 }
 
@@ -244,17 +249,29 @@ export const keySection: SetupSection = {
     if (source === BACK) return BACK
     if (source === 'environment') {
       const value = environment.env[SETUP_DEFAULT_CREDENTIAL_VARIABLE] ?? ''
+      const answers = { modelProvider: { id: draft.answers.modelProvider.id, credential: { source: 'environment', name: SETUP_DEFAULT_CREDENTIAL_VARIABLE } } } as const
       if (environment.checkEnvironmentKey && value !== '') {
         const result = await environment.checkKey(value)
-        if (!result.ok) io.note(`The key in ${SETUP_DEFAULT_CREDENTIAL_VARIABLE} was not checked successfully: ${result.reason}`, 'Key check')
+        if (!result.ok) {
+          io.note(`The key in ${SETUP_DEFAULT_CREDENTIAL_VARIABLE} was not checked successfully: ${result.reason}`, 'Key check')
+          return { answers, keyCheckFailure: result.reason, status: 'answered' }
+        }
       }
-      return { answers: { modelProvider: { id: draft.answers.modelProvider.id, credential: { source: 'environment', name: SETUP_DEFAULT_CREDENTIAL_VARIABLE } } }, status: 'answered' }
+      return { answers, status: 'answered' }
     }
-    const key = await askTypedKey(io, environment)
-    if (key === BACK) return BACK
-    return { answers: { modelProvider: { id: draft.answers.modelProvider.id, credential: { source: 'prompt' } } }, secret: key, status: 'answered' }
+    const typed = await askTypedKey(io, environment)
+    if (typed === BACK) return BACK
+    return {
+      answers: { modelProvider: { id: draft.answers.modelProvider.id, credential: { source: 'prompt' } } },
+      secret: typed.key,
+      ...typed.failure === undefined ? {} : { keyCheckFailure: typed.failure },
+      status: 'answered',
+    }
   },
-  review: answers => `DeepSeek API key: ${answers.modelProvider.credential.source === 'prompt' ? 'key entered now' : `read from ${answers.modelProvider.credential.name} at each start`}`,
+  review(answers, draft) {
+    const source = answers.modelProvider.credential.source === 'prompt' ? 'key entered now' : `read from ${answers.modelProvider.credential.name} at each start`
+    return `DeepSeek API key: ${source}${draft.keyCheckFailure === undefined ? '' : `, not verified: ${draft.keyCheckFailure}`}`
+  },
   apply(context, answers) {
     if (answers.modelProvider.credential.source === 'prompt') {
       if (context.secret === undefined) throw new CliError(EXIT.failed, 'delorun setup: the model key was not entered; run delorun setup in a terminal to finish')
@@ -326,6 +343,26 @@ function portProblem(value: string): string | undefined {
   return /^\d{1,5}$/u.test(value) && port >= 1024 && port <= 65535 ? undefined : 'Enter a port from 1024 to 65535.'
 }
 
+/** The id of the Web bundle's web server row, whose `port` the profile section sets. */
+export const STUDIO_ROW_ID = 'webserver'
+
+/**
+ * The studio port a profile's own patch sets, as the profile section writes it.
+ * @param directory - the profile's directory.
+ * @param command - the command that starts a refusal's message.
+ * @returns the port, or `undefined` when the patch sets none.
+ * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list, or its web server row's `port` is not a port number.
+ */
+export function profileStudioPort(directory: string, command: string): number | undefined {
+  const path = join(directory, 'cordis.patch.yml')
+  const port = readPatchRow(path, STUDIO_ROW_ID, command)?.['port']
+  if (port === undefined) return undefined
+  if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new CliError(EXIT.failed, `${command}: the ${STUDIO_ROW_ID} row of ${path} sets port to ${JSON.stringify(port)}, which is not a port number from 1 to 65535`)
+  }
+  return port
+}
+
 /** The profile section: the profile's name and the studio's port, which must be free. */
 export const profileSection: SetupSection = {
   id: 'profile',
@@ -352,7 +389,7 @@ export const profileSection: SetupSection = {
   apply(context, answers) {
     if (answers.profile.port !== null) {
       // The patch replaces the web server row's config, so its other keys are restated from the Web bundle.
-      setPatchRow(join(context.directory, 'cordis.patch.yml'), { id: 'webserver', config: { host: '127.0.0.1', port: answers.profile.port, compression: 'gzip', compressionLevel: 1, compressionThresholdBytes: 1024 } })
+      setPatchRow(join(context.directory, 'cordis.patch.yml'), { id: STUDIO_ROW_ID, config: { host: '127.0.0.1', port: answers.profile.port, compression: 'gzip', compressionLevel: 1, compressionThresholdBytes: 1024 } })
     }
     return Promise.resolve(undefined)
   },

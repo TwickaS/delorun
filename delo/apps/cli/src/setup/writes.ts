@@ -68,6 +68,40 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /**
+ * Read a profile's patch list; an absent file is an empty list.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @param command - the command that starts a refusal's message.
+ * @param after - the words that end a refusal's message.
+ * @returns the rows.
+ * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list.
+ */
+function readPatchList(path: string, command: string, after: string): unknown[] {
+  const text = existsSync(path) ? readFileSync(path, 'utf8') : ''
+  let list: unknown
+  try {
+    list = parse(text) ?? []
+  } catch {
+    // parse rejects a document whose text is not YAML or uses a tag delorun does not read.
+    throw new CliError(EXIT.failed, `${command}: ${path} is not a YAML patch list delorun can read${after}`)
+  }
+  if (!Array.isArray(list)) throw new CliError(EXIT.failed, `${command}: ${path} is not a patch list${after}`)
+  return list
+}
+
+/**
+ * Read the config of one row of a profile's patch list, as {@link setPatchRow} writes it.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @param id - the row's entry id.
+ * @param command - the command that starts a refusal's message.
+ * @returns the row's config, or `undefined` when the file, the row or its config is absent.
+ * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list.
+ */
+export function readPatchRow(path: string, id: string, command: string): Readonly<Record<string, unknown>> | undefined {
+  const row = readPatchList(path, command, '').find(entry => isRecord(entry) && entry['id'] === id)
+  return isRecord(row) && isRecord(row['config']) ? row['config'] : undefined
+}
+
+/**
  * Merge one row into a profile's patch list, creating the file when it is absent. The file is rewritten as a
  * YAML list: setup owns the rows it sets, and a row it does not name keeps its values. Comments in the file do
  * not survive the rewrite.
@@ -76,16 +110,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list; it is left unchanged.
  */
 export function setPatchRow(path: string, row: PatchRow): void {
-  const text = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  let list: unknown
-  try {
-    list = parse(text) ?? []
-  } catch {
-    // parse rejects a document whose text is not YAML or uses a tag setup does not read; the file is left unchanged.
-    throw new CliError(EXIT.failed, `delorun setup: ${path} is not a YAML patch list setup can read; it was not changed`)
-  }
-  if (!Array.isArray(list)) throw new CliError(EXIT.failed, `delorun setup: ${path} is not a patch list; it was not changed`)
-  const rows: unknown[] = list
+  const rows = readPatchList(path, 'delorun setup', '; it was not changed')
   const existing = rows.find(entry => isRecord(entry) && entry['id'] === row.id)
   if (isRecord(existing)) {
     const config = isRecord(existing['config']) ? existing['config'] : {}

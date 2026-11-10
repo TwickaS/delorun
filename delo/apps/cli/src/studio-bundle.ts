@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
-import { linkDeloBundles, type BundleLinking } from './delo-bundles.ts'
+import { linkDeloBundles, type BundleLinking, type LinkReport } from './delo-bundles.ts'
 import { profileDirectory } from './profile.ts'
 
 /**
@@ -56,16 +56,15 @@ export function lacksStudioBundle(bundles: readonly string[]): boolean {
  * @param home - the Delo home.
  * @param profile - the CLI profile.
  * @param linking - upstream's resolution and plugin operation, made only when the profile needs the bundle.
- * @param onOutput - receives the plugin operation's output.
+ * @param report - the log that receives the plugin operation's output, and the writer of the one progress line.
  * @returns true when the bundle was added; false when the profile already lists it or is not one Delo's setup made.
  * @throws {CliError} when the bundle cannot be added, as {@link linkDeloBundles} throws.
  */
 export async function addStudioBundle(
-  home: string, profile: string, linking: () => Promise<BundleLinking>,
-  onOutput: (text: string, stream: 'stdout' | 'stderr') => void,
+  home: string, profile: string, linking: () => Promise<BundleLinking>, report: LinkReport,
 ): Promise<boolean> {
   const bundles = profileBundles(home, profile)
   if (bundles === undefined || !lacksStudioBundle(bundles)) return false
-  await linkDeloBundles(home, profile, DELO_PROFILE_BUNDLES.filter(name => name === STUDIO_BUNDLE), await linking(), onOutput)
+  await linkDeloBundles(home, profile, DELO_PROFILE_BUNDLES.filter(name => name === STUDIO_BUNDLE), await linking(), report)
   return true
 }

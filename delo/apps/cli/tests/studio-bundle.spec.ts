@@ -4,15 +4,27 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
-import type { BundleLinking } from '../src/delo-bundles.ts'
+import { Redactor, resolveSurface, SurfaceLog } from '@delo/logs'
+import { LINKING_PROGRESS, type BundleLinking, type LinkReport } from '../src/delo-bundles.ts'
 import { addStudioBundle, lacksStudioBundle, profileBundles } from '../src/studio-bundle.ts'
 
 const UPSTREAM = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 
 let home: string
+let log: SurfaceLog
+let progress: string[]
+let report: LinkReport
 
-beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'delo-studio-bundle-')) })
-afterEach(() => { rmSync(home, { recursive: true, force: true }) })
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), 'delo-studio-bundle-'))
+  log = SurfaceLog.open({ location: resolveSurface({ kind: 'home', home, profile: 'default' }), redactor: new Redactor(), pid: process.pid, level: 'info', onFailure: () => {}, now: Date.now })
+  progress = []
+  report = { log, progress: (text) => { progress.push(text) } }
+})
+afterEach(() => {
+  log.close()
+  rmSync(home, { recursive: true, force: true })
+})
 
 /**
  * Write the CLI profile's manifest.
@@ -61,7 +73,8 @@ describe('adding the studio bundle', () => {
   it('adds it to a profile setup made before it existed, with the operation setup uses', async () => {
     manifest(JSON.stringify({ dsh: { profile: { bundles: [...UPSTREAM, LOCAL_BUNDLE] } } }))
     const calls: (readonly string[])[] = []
-    expect(await addStudioBundle(home, 'default', () => Promise.resolve(linking(calls)), () => undefined)).toBe(true)
+    expect(await addStudioBundle(home, 'default', () => Promise.resolve(linking(calls)), report)).toBe(true)
+    expect(progress).toEqual([LINKING_PROGRESS, 'done\n'])
     expect(calls).toHaveLength(1)
     expect(calls[0]?.[0]).toBe('add')
     expect(calls[0]?.[1]).toMatch(/^link:.*bundle-studio\/$/u)
@@ -70,11 +83,12 @@ describe('adding the studio bundle', () => {
   it('leaves a profile that lists it, and one Delo\'s setup did not make, without asking for a linking', async () => {
     const make = vi.fn(() => Promise.resolve(linking([])))
     manifest(JSON.stringify({ dsh: { profile: { bundles: [...UPSTREAM, LOCAL_BUNDLE, STUDIO_BUNDLE] } } }))
-    expect(await addStudioBundle(home, 'default', make, () => undefined)).toBe(false)
+    expect(await addStudioBundle(home, 'default', make, report)).toBe(false)
     manifest(JSON.stringify({ dsh: { profile: { bundles: UPSTREAM } } }))
-    expect(await addStudioBundle(home, 'default', make, () => undefined)).toBe(false)
+    expect(await addStudioBundle(home, 'default', make, report)).toBe(false)
     manifest('{')
-    expect(await addStudioBundle(home, 'default', make, () => undefined)).toBe(false)
+    expect(await addStudioBundle(home, 'default', make, report)).toBe(false)
     expect(make).not.toHaveBeenCalled()
+    expect(progress).toEqual([])
   })
 })

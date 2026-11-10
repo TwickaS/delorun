@@ -9,6 +9,12 @@
  * nothing writes the record, and a line about it would report a check that
  * reads nothing.
  *
+ * Without `--port`, the port check looks at the port the CLI profile's studio
+ * uses: the port its own `cordis.patch.yml` sets on the web server row, or
+ * upstream's default when it sets none. A port in use is reported as Delo's
+ * when this home's home process for the profile answers its `status` request
+ * over the update channel with a studio address on that port.
+ *
  * The command contacts no model, starts no container and runs no command
  * except the read-only `docker version` probe, and it creates no file. It reads
  * the DeepSeek key in the order the CLI profile's credential provider resolves
@@ -22,15 +28,20 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delo/contract-setup-answers'
-import { readProtectedFile, resolveDeloHome } from '@delo/home'
+import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
+import type { HomeStatus } from '@delo/contract-home-process'
+import { processExists, readHomeLock, readProtectedFile, resolveDeloHome, runDirectory } from '@delo/home'
+import { queryHomeStatus } from '@delo/home-process'
 import { parseDocument } from 'yaml'
 import { parseOptions, type CliCommand, type CommandContext } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
 import { applyLaunchEnvironment, loadDeloEnvironment } from '../launch-environment.ts'
-import { selectProfile } from '../profile.ts'
+import { profileDirectory, selectProfile } from '../profile.ts'
+import { profileStudioPort } from '../setup/sections.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
+import { studioAddress } from '../status.ts'
 import { deloVersion } from '../version.ts'
-import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
+import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 
 /** The `delorun doctor --help` text. */
@@ -45,7 +56,7 @@ const DOCTOR_USAGE = [
   'No model is contacted and no command runs, except the read-only probe `docker version` of the Docker engine; no container starts.',
   'The key is checked by its format alone, and it is never printed.',
   '',
-  '  --port <n>  the loopback port to check, from 1 to 65535 (default 3080, the studio\'s port)',
+  `  --port <n>  the loopback port to check, from 1 to 65535 (default: the profile's studio port, or ${String(STUDIO_DEFAULT_PORT)} when the profile sets none)`,
   '',
 ].join('\n')
 
@@ -134,18 +145,55 @@ async function guarded(name: CheckName, check: () => Promise<CheckResult>): Prom
 }
 
 /**
- * The `--port` value, or the studio's default port when none is given.
- * @param text - the option's value, if given.
+ * The `--port` value.
+ * @param text - the option's value.
  * @returns the port, from 1 to 65535.
  * @throws {CliError} with the usage code for anything but an integer in that range.
  */
-export function parsePort(text: string | undefined): number {
-  if (text === undefined) return STUDIO_DEFAULT_PORT
+export function parsePort(text: string): number {
   const port = /^\d+$/.test(text) ? Number(text) : Number.NaN
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new CliError(EXIT.usage, `delorun doctor: --port must be an integer from 1 to 65535, got ${JSON.stringify(text)}`)
   }
   return port
+}
+
+/**
+ * The port of the studio this home's home process for a profile serves, from its `status` answer over the update
+ * channel, as `delorun status` asks for it.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile.
+ * @returns the port, or `undefined` when no home process runs, it does not answer or refuses, or it serves no studio.
+ */
+export async function homeStudioPort(home: string, profile: string): Promise<number | undefined> {
+  const record = readHomeLock(runDirectory(home, profile))
+  if (record === undefined || !processExists(record.pid)) return undefined
+  let answer
+  try {
+    answer = await queryHomeStatus(home, profile, HOME_STATUS_TIMEOUT_MS)
+  } catch {
+    // No token file, no socket, a refused connection or no line in time: the holder did not answer, so the port is not shown to be Delo's.
+    return undefined
+  }
+  if (!('state' in answer)) return undefined
+  const address = studioAddress((answer as HomeStatus).studio)
+  if (address === undefined) return undefined
+  // URL leaves the port empty when it is the scheme's default.
+  return address.port !== '' ? Number(address.port) : address.protocol === 'https:' ? 443 : 80
+}
+
+/**
+ * The port check: choose the port, then check it.
+ * @param context - the command's environment.
+ * @param profile - the CLI profile.
+ * @param option - the `--port` value, if given.
+ * @returns the check's result.
+ */
+async function portCheck(context: CommandContext, profile: string, option: number | undefined): Promise<CheckResult> {
+  const home = async (): Promise<string> => (await resolveDeloHome(context.env)).path
+  // With --port the profile is not read, so a port can be checked while the home or its patch is unreadable.
+  const configured = option === undefined ? profileStudioPort(profileDirectory(await home(), profile), 'delorun doctor') : undefined
+  return checkPort(resolveStudioPort(option, configured, profile), async () => homeStudioPort(await home(), profile))
 }
 
 /** What the command reads besides the home and the environment. */
@@ -179,13 +227,13 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         return EXIT.ok
       }
       const values = parseOptions('doctor', args, { port: { type: 'string' } })
-      const port = parsePort(values.port)
+      const option = values.port === undefined ? undefined : parsePort(values.port)
       const profile = selectProfile(undefined, context.env)
       const results = [
         await guarded('home', () => checkHome(context.env, profile)),
         await guarded('docker', () => checkDocker(() => runDockerVersion(dockerProbeEnvironment(context.env)))),
         await guarded('key', () => keyCheck(context, profile)),
-        await guarded('port', () => checkPort(port)),
+        await guarded('port', () => portCheck(context, profile, option)),
         await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
       ]
       const { importRecord } = environment

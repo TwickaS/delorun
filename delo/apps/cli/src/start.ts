@@ -36,6 +36,7 @@ import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
+import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, type BootedRow, type RowState } from './delo-bundles.ts'
 import { registerHomeProcess } from './home-exclusion.ts'
 import { announceStudio } from './open/announce.ts'
@@ -44,7 +45,7 @@ import { computerOpener, type StudioOpener } from './open/studio.ts'
 import { shippedPackageManager } from './package-manager.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { readBackgroundAnswer } from './setup/background.ts'
-import { upstreamLinking } from './setup/index.ts'
+import { openSetupLog, upstreamLinking } from './setup/index.ts'
 import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
@@ -334,11 +335,16 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
  * Add the studio bundle through upstream's resolution and `dsh plugin add`.
  * @param home - the Delo home.
  * @param profile - the CLI profile.
- * @param output - where pnpm's output goes, on stderr.
+ * @param output - where the progress line goes; pnpm's output goes to the profile's `home-<profile>` log.
  * @returns whether the bundle was added.
  */
-export function upstreamAddStudioBundle(home: string, profile: string, output: CommandOutput): Promise<boolean> {
-  return addStudioBundle(home, profile, () => upstreamLinking(home, profile), (text) => { output.stderr(text) })
+export async function upstreamAddStudioBundle(home: string, profile: string, output: CommandOutput): Promise<boolean> {
+  const log = openSetupLog(home, profile)
+  try {
+    return await addStudioBundle(home, profile, () => upstreamLinking(home, profile), { log, progress: (text) => { output.stdout(text) } })
+  } finally {
+    log.close()
+  }
 }
 
 /**
@@ -478,9 +484,11 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * @param stored - the version this process runs from the store, whose files H1 checks; `undefined` outside the store.
  * @param logger - the home process's logger.
  * @returns the running Host, whose running chats feed the home process's gate and whose health check is C3's.
- * @throws {CliError} when the profile skipped a Delo bundle, fails to boot, a row of a Delo bundle did not activate, or
- *   the composed or booted profile breaks an invariant; a refused Host is first torn down within the home process's
- *   bound, without ending the process.
+ * Before the boot it sets {@link DEFAULT_WORKSPACE_ENV} to the studio's first-use workspace folder
+ * ([default workspace](./default-workspace.ts)).
+ * @throws {CliError} when the profile skipped a Delo bundle, no folder can hold the default workspace, the profile fails
+ *   to boot, a row of a Delo bundle did not activate, or the composed or booted profile breaks an invariant; a refused
+ *   Host is first torn down within the home process's bound, without ending the process.
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
@@ -491,6 +499,14 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     await removeSandboxOverlay(request.home, request.profile)
     throw error
   })
+  // The Host boots in this process, so `@delo/bundle-local`'s `workspace-controller` row reads the folder from here.
+  try {
+    const workspace = await resolveDefaultWorkspace(defaultWorkspaceRequest(request.home, composed.resolvedProfile.profile.patchPath))
+    if (workspace.kind === 'resolved') process.env[DEFAULT_WORKSPACE_ENV] = workspace.directory
+  } catch (error) {
+    await removeSandboxOverlay(request.home, request.profile)
+    throw error
+  }
   let booted: BootedProfile
   try {
     booted = await dependencies.runProfile({

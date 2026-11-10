@@ -24,6 +24,7 @@ export const DEFAULT_PARITY: Readonly<Partial<Record<ParitySwitchId, string>>> =
   preset_inspect: 'its row sits in each Web preset\'s plugin list, which a patch reaches only by replacing the whole preset row',
   container_denial_marker: 'the bundles and the root configurations set sandbox-policy\'s mode and workspace root, which a row would erase',
   sandbox_protected_reads: 'a presence switch: the overlay leaves the sandbox row to upstream, which sets no protectedHome, so no row can set it to its parity value',
+  default_workspace_directory: 'a presence switch: the overlay leaves the workspace-controller row to upstream, which sets no defaultWorkspaceDirectory, so no row can set it to its parity value',
   fetch_guard: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the fetchGuard service unmounted, and the provider reads its absence per hop and runs unguarded',
   doctor: 'only the doctor profile mounts the app, and the replay starts no doctor process',
   studio_additions: 'no profile the replay runs mounts @delo/bundle-studio, so the theme row that holds the switch is absent and every studio plugin, which requires the theme\'s deloStudio service, stays unmounted',

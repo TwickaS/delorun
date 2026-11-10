@@ -16,6 +16,7 @@
  */
 import type { Profile, RuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import type { PackageOperationContext, PackageOperationOptions } from '@deepseek-ai/dsh-plugin-manager/operations'
+import { LineCapture, type SurfaceLog } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { runsFromClosure } from './package-manager.ts'
 
@@ -80,6 +81,17 @@ export interface BundleLinking {
   readonly installAnchor: string
 }
 
+/** Where {@link linkDeloBundles} reports. */
+export interface LinkReport {
+  /** The operational log that receives the plugin operation's output, one captured record per line. */
+  readonly log: SurfaceLog
+  /** Receives the progress line, written in two parts: {@link LINKING_PROGRESS}, then `done` or `failed` with the line's end. */
+  readonly progress: (text: string) => void
+}
+
+/** The start of the progress line a link prints. */
+export const LINKING_PROGRESS = 'Linking Delo\'s parts into the profile… '
+
 /**
  * Make each Delo bundle of a new CLI profile importable the way upstream makes
  * its own bundles importable. A bundle that upstream's runtime resolution
@@ -87,36 +99,56 @@ export interface BundleLinking {
  * packages, is left alone. One that it does not supply, but that this `delorun`
  * carries, as a source checkout does, is added to the profile with upstream's
  * `dsh plugin add link:<directory>` operation, which records the dependency in
- * the profile's `package.json` and installs it with pnpm.
+ * the profile's `package.json` and installs it with pnpm. The operation runs with
+ * its output captured, not on the terminal: each line goes to `report.log`, and
+ * the terminal gets one progress line, which ends in `failed` when an operation
+ * fails or rejects. Nothing is printed when no bundle needs linking.
  * @param home - the Delo home.
  * @param profile - the CLI profile.
  * @param bundles - the profile's bundle list.
  * @param linking - upstream's resolution and plugin operation.
- * @param onOutput - receives the operation's output.
- * @throws {CliError} when a Delo bundle is neither supplied nor carried, or the operation fails.
+ * @param report - the log for the output and the writer of the progress line.
+ * @throws {CliError} when a Delo bundle is neither supplied nor carried, or the operation exits non-zero; the message names the log file.
  */
 export async function linkDeloBundles(
-  home: string, profile: string, bundles: readonly string[], linking: BundleLinking,
-  onOutput: (text: string, stream: 'stdout' | 'stderr') => void,
+  home: string, profile: string, bundles: readonly string[], linking: BundleLinking, report: LinkReport,
 ): Promise<void> {
   const { profile: loaded, resolution } = await linking.resolve()
   const importable = new Set([...resolution.entries.map(entry => entry.name), ...resolution.localPackageNames])
-  for (const bundle of bundles.filter(isDeloPackage)) {
+  const links = bundles.filter(isDeloPackage).flatMap((bundle) => {
     const layered = loaded.layers.some(layer => layer.packageName === bundle)
-    if (layered && importable.has(bundle)) continue
+    if (layered && importable.has(bundle)) return []
     const directory = carriedPackageDirectory(bundle)
     if (directory === undefined) {
       throw new CliError(EXIT.failed, `delorun setup: this installation of Delo does not carry ${bundle}, which the CLI profile ${profile} needs; reinstall Delo`)
     }
-    const result = await linking.runPluginCommand(
-      { profile, installAnchor: linking.installAnchor, cwd: process.cwd(), home },
-      ['add', `link:${directory}`],
-      { execution: 'cli', outputBytes: PLUGIN_OPERATION_OUTPUT_BYTES, lockWaitMs: PLUGIN_OPERATION_WAIT_MS, lookupTimeoutMs: PLUGIN_OPERATION_WAIT_MS, onOutput },
-    )
-    if (result.exitCode !== 0) {
-      throw new CliError(EXIT.failed, `delorun setup: could not add ${bundle} to the CLI profile ${profile} (pnpm exited ${String(result.exitCode)}); diagnostics: ${result.logPath}`)
+    return [{ bundle, directory }]
+  })
+  if (links.length === 0) return
+  report.progress(LINKING_PROGRESS)
+  // Captured as the home process captures its own output: standard output at `info`, standard error at `warn`.
+  const captures = { stdout: new LineCapture(report.log, 'stdout', 'info'), stderr: new LineCapture(report.log, 'stderr', 'warn') }
+  const onOutput = (text: string, stream: 'stdout' | 'stderr'): void => { captures[stream].write(text) }
+  try {
+    for (const { bundle, directory } of links) {
+      const result = await linking.runPluginCommand(
+        { profile, installAnchor: linking.installAnchor, cwd: process.cwd(), home },
+        ['add', `link:${directory}`],
+        // A service run pipes pnpm's output to onOutput and gives it no terminal; a CLI run would hand it the terminal.
+        { execution: 'service', outputBytes: PLUGIN_OPERATION_OUTPUT_BYTES, lockWaitMs: PLUGIN_OPERATION_WAIT_MS, lookupTimeoutMs: PLUGIN_OPERATION_WAIT_MS, onOutput },
+      )
+      if (result.exitCode !== 0) {
+        throw new CliError(EXIT.failed, `delorun setup: could not add ${bundle} to the CLI profile ${profile} (pnpm exited ${String(result.exitCode)}); its output is in ${report.log.location.file}`)
+      }
     }
+  } catch (error) {
+    report.progress('failed\n')
+    throw error
+  } finally {
+    captures.stdout.end()
+    captures.stderr.end()
   }
+  report.progress('done\n')
 }
 
 /**

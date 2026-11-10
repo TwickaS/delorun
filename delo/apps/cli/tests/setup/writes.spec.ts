@@ -6,7 +6,8 @@ import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import { CliError } from '../../src/exit.ts'
-import { setPatchRow, storeCredential } from '../../src/setup/writes.ts'
+import { profileStudioPort, STUDIO_ROW_ID } from '../../src/setup/sections.ts'
+import { readPatchRow, setPatchRow, storeCredential } from '../../src/setup/writes.ts'
 
 // The protected-file writer's rename, replaceable per test to stop a write at the moment before the rename.
 vi.mock('node:fs/promises', async (original) => {
@@ -126,7 +127,7 @@ describe('the profile patch', () => {
     writeFileSync(path, 'not: a list\n')
     expect(() => setPatchRow(path, { id: 'a', config: { enabled: true } })).toThrow('is not a patch list')
     writeFileSync(path, '- [unclosed\n')
-    expect(() => setPatchRow(path, { id: 'a', config: { enabled: true } })).toThrow('is not a YAML patch list setup can read')
+    expect(() => setPatchRow(path, { id: 'a', config: { enabled: true } })).toThrow('delorun setup: ' + path + ' is not a YAML patch list delorun can read; it was not changed')
     expect(readFileSync(path, 'utf8')).toBe('- [unclosed\n')
     writeFileSync(path, '')
     setPatchRow(path, { id: 'a', config: { enabled: true } })
@@ -134,5 +135,41 @@ describe('the profile patch', () => {
     rmSync(path)
     setPatchRow(path, { id: 'b', config: { enabled: false } })
     expect(parse(readFileSync(path, 'utf8'))).toEqual([{ id: 'b', config: { enabled: false } }])
+  })
+})
+
+describe('reading the profile patch', () => {
+  it('reads the config of one row, and none for an absent file, row or config', () => {
+    const path = join(directory, 'cordis.patch.yml')
+    expect(readPatchRow(path, 'webserver', 'delorun doctor')).toBeUndefined()
+    writeFileSync(path, '- id: webserver\n  config:\n    port: 4100\n- id: bare\n- plain text row\n')
+    expect(readPatchRow(path, 'webserver', 'delorun doctor')).toEqual({ port: 4100 })
+    expect(readPatchRow(path, 'bare', 'delorun doctor')).toBeUndefined()
+    expect(readPatchRow(path, 'missing', 'delorun doctor')).toBeUndefined()
+  })
+
+  it('refuses a file that is not a patch list, with the command\'s name', () => {
+    const path = join(directory, 'cordis.patch.yml')
+    writeFileSync(path, 'not: a list\n')
+    expect(() => readPatchRow(path, 'webserver', 'delorun doctor')).toThrow(`delorun doctor: ${path} is not a patch list`)
+    writeFileSync(path, '- [unclosed\n')
+    expect(() => readPatchRow(path, 'webserver', 'delorun doctor')).toThrow(`delorun doctor: ${path} is not a YAML patch list delorun can read`)
+  })
+})
+
+describe('the studio port a profile sets', () => {
+  it('reads back the port the profile section writes, and none when the profile sets none', () => {
+    expect(profileStudioPort(directory, 'delorun doctor')).toBeUndefined()
+    const path = join(directory, 'cordis.patch.yml')
+    setPatchRow(path, { id: STUDIO_ROW_ID, config: { host: '127.0.0.1', port: 4100 } })
+    expect(profileStudioPort(directory, 'delorun doctor')).toBe(4100)
+    writeFileSync(path, `- id: ${STUDIO_ROW_ID}\n  config:\n    host: 127.0.0.1\n`)
+    expect(profileStudioPort(directory, 'delorun doctor')).toBeUndefined()
+  })
+
+  it.each([['a text', '"4100"'], ['a fraction', '4100.5'], ['zero', '0'], ['a port above 65535', '65536'], ['null', 'null']])('refuses %s as the port, naming the row and the file', (_label, value) => {
+    const path = join(directory, 'cordis.patch.yml')
+    writeFileSync(path, `- id: ${STUDIO_ROW_ID}\n  config:\n    port: ${value}\n`)
+    expect(() => profileStudioPort(directory, 'delorun doctor')).toThrow(`delorun doctor: the ${STUDIO_ROW_ID} row of ${path} sets port to `)
   })
 })

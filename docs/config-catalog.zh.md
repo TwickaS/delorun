@@ -337,6 +337,7 @@ export interface Config {
    * Place the first-use Workspace at this fully qualified directory, in place of
    * `<Documents>/deepseek-harness/default-workspace`; no Documents lookup runs. Its last segment is the initial title,
    * which reads as the localized default name when it is `default-workspace`.
+   * Its presence is Delo's C16 switch `default_workspace_directory`, set in Delo's composition and absent in the parity one.
    */
   defaultWorkspaceDirectory?: string
   /** Maximum duration of the operating system's Documents lookup. */

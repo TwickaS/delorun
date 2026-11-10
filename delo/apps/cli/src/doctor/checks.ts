@@ -2,8 +2,9 @@
  * The four checks `delorun doctor` runs: the Delo home and its private
  * directories (contract C1), the Docker engine's version through one read-only
  * probe (contract C9), the DeepSeek API key's format, and the studio's loopback
- * port. Each check takes its inputs as arguments and returns one
- * {@link CheckResult} whose message is one line. None of them contacts
+ * port, which passes while this home's own studio holds it. Each check takes
+ * its inputs as arguments and returns one {@link CheckResult} whose message is
+ * one line. None of them contacts
  * DeepSeek, starts a container, or runs a command other than `docker version`.
  *
  * @module @delo/cli/doctor/checks
@@ -62,7 +63,8 @@ const LOOPBACK = '127.0.0.1'
 /**
  * The studio's default port. The web application's `webserver` row binds
  * `ctx.webStartup.port ?? 3080` (`packages/bundle/web-app/cordis.patch.yml`),
- * and `delorun start` passes no port, so the studio listens on this one.
+ * and `delorun start` passes no port, so the studio of a profile whose own
+ * patch sets no port on that row listens on this one.
  */
 export const STUDIO_DEFAULT_PORT = 3080
 
@@ -170,26 +172,80 @@ export function checkKey(key: string | undefined): CheckResult {
   return outcome('key', 'pass', `the DeepSeek API key is set and has the expected format (${note}).`)
 }
 
+/** Where the checked port came from: `--port`, the profile's studio row, or upstream's default because the profile sets none. */
+export type PortSource = 'option' | 'profile' | 'default'
+
+/** The port the port check looks at. */
+export interface StudioPort {
+  /** The TCP port, from 1 to 65535. */
+  readonly port: number
+  /** Where it came from. */
+  readonly source: PortSource
+  /** The CLI profile whose studio the check is about. */
+  readonly profile: string
+}
+
+/**
+ * Choose the port to check: the `--port` value when given, otherwise the port the profile's studio row sets, otherwise
+ * {@link STUDIO_DEFAULT_PORT}, the port upstream's web server row binds when no row sets one.
+ * @param option - the `--port` value, if given.
+ * @param configured - the port the profile's studio row sets, or `undefined` when it sets none; the caller need not read it when `option` is given.
+ * @param profile - the CLI profile.
+ * @returns the port and where it came from.
+ */
+export function resolveStudioPort(option: number | undefined, configured: number | undefined, profile: string): StudioPort {
+  if (option !== undefined) return { port: option, source: 'option', profile }
+  return configured === undefined ? { port: STUDIO_DEFAULT_PORT, source: 'default', profile } : { port: configured, source: 'profile', profile }
+}
+
+/**
+ * @param choice - the checked port.
+ * @returns the words naming the port and where it came from.
+ */
+function portWords(choice: StudioPort): string {
+  const port = `port ${String(choice.port)} on ${LOOPBACK}`
+  switch (choice.source) {
+    case 'option':
+      return port
+    case 'profile':
+      return `${port}, the studio port of the profile ${choice.profile},`
+    case 'default':
+      return `${port}, the studio's default port, which the profile ${choice.profile} does not change,`
+    default:
+      return assertNever(choice.source)
+  }
+}
+
 /**
  * Whether a port can be bound on the loopback address now. The socket is
- * closed again before the result is returned.
- * @param port - the TCP port, from 1 to 65535.
- * @returns the check's result: `fail` when the port is in use or cannot be bound, with its error code.
+ * closed again before the result is returned. A port in use is asked about
+ * once: when this home's own home process for the profile reports its studio
+ * on that port, the port is Delo's and the check passes.
+ * @param choice - the port, where it came from and the profile.
+ * @param ownStudioPort - the port of the studio this home's running home process for the profile serves, or `undefined` when none runs or it does not answer.
+ * @returns the check's result: `fail` when another process holds the port or it cannot be bound, with its error code.
  */
-export function checkPort(port: number): Promise<CheckResult> {
-  return new Promise((resolve) => {
+export function checkPort(choice: StudioPort, ownStudioPort: () => Promise<number | undefined>): Promise<CheckResult> {
+  const words = portWords(choice)
+  return new Promise<CheckResult | 'in-use'>((resolve) => {
     const server = createServer()
     server.once('error', (error: Error) => {
       const code = errorCode(error)
       resolve(code === 'EADDRINUSE'
-        ? outcome('port', 'fail', `port ${String(port)} is in use; stop the other process or pass --port`)
-        : outcome('port', 'fail', `port ${String(port)} cannot be bound on ${LOOPBACK} (${code ?? 'unknown error'}); pass --port with another port`))
+        ? 'in-use'
+        : outcome('port', 'fail', `${words} cannot be bound (${code ?? 'unknown error'}); pass --port with another port`))
     })
-    server.listen({ host: LOOPBACK, port }, () => {
+    server.listen({ host: LOOPBACK, port: choice.port }, () => {
       server.close(() => {
-        resolve(outcome('port', 'pass', `port ${String(port)} on ${LOOPBACK} is free.`))
+        resolve(outcome('port', 'pass', `${words} is free.`))
       })
     })
+  }).then(async (found) => {
+    if (found !== 'in-use') return found
+    if (await ownStudioPort() === choice.port) return outcome('port', 'pass', `${words} is in use by Delo's studio, which runs for the profile ${choice.profile}.`)
+    return outcome('port', 'fail', choice.source === 'option'
+      ? `port ${String(choice.port)} is in use; stop the other process or pass --port`
+      : `${words} is in use by another process, so the studio cannot listen on it; stop that process, or choose another port with delorun setup profile${choice.profile === 'default' ? '' : ` --profile ${choice.profile}`}`)
   })
 }
 

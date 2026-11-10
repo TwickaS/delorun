@@ -56,6 +56,7 @@ function askStep(section: SetupSection, environment: SectionEnvironment): RunSte
         mode: draft.mode,
         answers: { ...draft.answers, ...given.answers, sections: withRecord(draft.answers.sections, section.id, given.status) },
         secret: given.secret ?? draft.secret,
+        keyCheckFailure: given.keyCheckFailure ?? draft.keyCheckFailure,
       }
     },
   }
@@ -72,7 +73,7 @@ export function review(draft: Draft, sections: readonly SetupSection[]): string 
     `Setup: ${MODE_LABELS[draft.mode]}`,
     ...sections
       .filter(section => draft.answers.sections.find(record => record.id === section.id)?.status === 'answered')
-      .flatMap(section => section.review?.(draft.answers) ?? []),
+      .flatMap(section => section.review?.(draft.answers, draft) ?? []),
   ].join('\n')
 }
 
@@ -110,7 +111,7 @@ export async function askAnswers(prompter: Prompter, registry: SectionRegistry, 
       return draft
     },
   }
-  const initial: Draft = { mode: 'quick', answers: SETUP_DEFAULTS, secret: undefined }
+  const initial: Draft = { mode: 'quick', answers: SETUP_DEFAULTS, secret: undefined, keyCheckFailure: undefined }
   const done = await runSteps([modeStep, ...sections.map(section => askStep(section, environment)), reviewStep], initial, prompter)
   return { answers: done.answers, secret: done.secret }
 }

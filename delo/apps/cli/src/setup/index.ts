@@ -1,7 +1,8 @@
 /**
  * Setup's entry point: `delorun setup`, and `delorun` on a home without a CLI profile. In a terminal it asks the
  * sections of Quick or Full setup ([sections](./sections.ts)), or it reads `--yes` or `--config`; then it runs its
- * steps: create the CLI profile and make Delo's bundles importable in it ({@link linkDeloBundles}), then each
+ * steps: create the CLI profile and make Delo's bundles importable in it ({@link linkDeloBundles}), with the plugin
+ * operation's output in the profile's `home-<profile>` operational log and one progress line on the terminal, then each
  * section's writes in order (the model key, the prompts rows, the studio port), and record the run. The three forms
  * produce the same answers and so the same writes. An interrupted run resumes at the first step that did not finish.
  * Setup never replaces an existing profile. A terminal run then offers to install the command, starts Delorun and
@@ -20,6 +21,7 @@ import { parseArgs } from 'node:util'
 import { linkDeloBundles, type BundleLinking } from '../delo-bundles.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delo/home'
+import { Redactor, resolveSurface, SurfaceLog } from '@delo/logs'
 import { SETUP_DEFAULTS, type SetupAnswers } from '@delo/contract-setup-answers'
 import { answersSchema, readAnswersDocument, yesAnswers } from './answers.ts'
 import { computerEnding, finishSetup, type Ending } from './ending.ts'
@@ -179,6 +181,30 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry):
   return askAnswers(prompterFor(form), registry, sectionEnvironment(request, false))
 }
 
+/** The most detailed level setup writes to the operational log; the home process's log uses the same. */
+const SETUP_LOG_LEVEL = 'info'
+
+/**
+ * Open the profile's `home-<profile>` operational log (contract C20) for setup's records, as no home process writes it
+ * yet: the output of the plugin operation that links Delo's bundles goes there instead of the terminal.
+ * @param home - the Delo home.
+ * @param profile - the profile being set up.
+ * @returns the open log; the caller closes it.
+ * @throws {HomeLayoutError} when the log directory or file is laxer than C1 allows.
+ * @throws {LogsError} `PROFILE_INVALID` for a profile name the log's directory cannot carry.
+ */
+export function openSetupLog(home: string, profile: string): SurfaceLog {
+  return SurfaceLog.open({
+    location: resolveSurface({ kind: 'home', home, profile }),
+    redactor: new Redactor(),
+    pid: process.pid,
+    level: SETUP_LOG_LEVEL,
+    // A record the writer cannot write is dropped, as the home process's own log drops it; the link's outcome still reaches the terminal.
+    onFailure: () => {},
+    now: Date.now,
+  })
+}
+
 /**
  * Run one step. Each writes the same values when it runs again.
  * @param step - the step.
@@ -200,7 +226,12 @@ async function runStep(step: SetupStep, request: SetupRequest, registry: Section
       }
     }
     // Runs again when an interrupted run resumes this step; a bundle already importable is left alone.
-    await linkDeloBundles(request.home, profile, DELO_PROFILE_BUNDLES, await upstreamLinking(request.home, profile), (text) => { request.output.stderr(text) })
+    const log = openSetupLog(request.home, profile)
+    try {
+      await linkDeloBundles(request.home, profile, DELO_PROFILE_BUNDLES, await upstreamLinking(request.home, profile), { log, progress: (text) => { request.output.stdout(text) } })
+    } finally {
+      log.close()
+    }
     return undefined
   }
   const section = registry.all().find(candidate => sectionStep(candidate.id) === step) as SetupSection
@@ -305,7 +336,7 @@ export async function runSection(request: SetupRequest, id: string): Promise<Exi
   if (request.form.kind !== 'interactive') throw new CliError(EXIT.usage, 'delorun setup: a section asks its question in a terminal; --yes and --config do not apply to it')
   const prompter = prompterFor(request.form)
   const directory = profileDirectory(request.home, request.profile)
-  const draft: Draft = { mode: 'full', answers: recordedAnswers(directory), secret: undefined }
+  const draft: Draft = { mode: 'full', answers: recordedAnswers(directory), secret: undefined, keyCheckFailure: undefined }
   const given = await section.ask(stepIO(prompter, false), draft, environment) as Exclude<Awaited<ReturnType<SetupSection['ask']>>, typeof BACK>
   const answers: SetupAnswers = { ...draft.answers, ...given.answers, sections: withRecord(draft.answers.sections, section.id, given.status) }
   const note = await section.apply({ home: request.home, env: request.env, directory, secret: given.secret }, answers)

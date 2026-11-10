@@ -121,7 +121,7 @@ describe('a Delo CLI profile', () => {
     expect(LOCAL_ROWS.filter(row => row.kind === 'changed').map(row => row.id).sort())
       .toEqual([
         SETUP_OPT_IN_ROWS.desktopAnalytics, 'account-controller', 'command-feedback', 'connection', 'deepseek-account',
-        'plugin-manager', 'sandbox', 'session-telemetry-otel',
+        'plugin-manager', 'sandbox', 'session-telemetry-otel', 'workspace-controller',
         SETUP_OPT_IN_ROWS.sessionLogUpload, 'ui-message-feedback', 'ui-settings-account', 'ui-settings-models',
       ].sort())
   })

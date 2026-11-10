@@ -82,6 +82,19 @@
       - skills
       - dsh-runtimes
 
+# The studio's first-use workspace folder. `delorun start` resolves it before the
+# profile boots (`<documents>/Delo/default-workspace`, or `<home>/Delo/default-workspace`
+# where the platform reports no documents folder) and sets DELO_DEFAULT_WORKSPACE
+# (DEFAULT_WORKSPACE_ENV in src/profile.ts) in the Host's own process. A boot by
+# anything other than `delorun start` leaves the variable unset, so the key is
+# unset and upstream's own documents lookup applies. A person chooses another
+# folder by restating this row in the profile's own cordis.patch.yml, whose
+# `config` replaces this one. Upstream's web bundle mounts the row with no config.
+- id: workspace-controller
+  name: '@deepseek-ai/dsh-api-workspace-controller'
+  config:
+    defaultWorkspaceDirectory: !!js process.env.DELO_DEFAULT_WORKSPACE
+
 # Desktop analytics is off until the person turns it on (C11). The row keeps
 # the web bundle's `disabled` condition, so it mounts only in the desktop
 # profile; `appVersion` restates the web bundle's value.

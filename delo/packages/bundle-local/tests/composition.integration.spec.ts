@@ -6,11 +6,12 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import yaml from 'js-yaml'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { interpolate } from '@deepseek-ai/cordis-plugin-loader'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
-import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, LOCAL_ROWS, STUDIO_BUNDLE, UPSTREAM_TEMPLATE } from '../src/profile.ts'
+import { DEFAULT_WORKSPACE_ENV, DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, LOCAL_ROWS, STUDIO_BUNDLE, UPSTREAM_TEMPLATE } from '../src/profile.ts'
 // Relative: this package does not depend on the registry, and a test must not add a dependency.
 import { PARITY_SWITCHES } from '../../contract-parity-composition/src/index.ts'
 import { createTestHome, DELO_PROFILE, INSTALL_ANCHOR, PACKAGE_DIR, REPO, type TestHome } from './profiles.ts'
@@ -249,6 +250,18 @@ describe('a Delo CLI profile', () => {
       protectedHome: { __jsExpr: 'dshHomePath()' },
       protectedHomeReadable: [...READ_EXEMPTIONS],
     })
+  })
+
+  it('reads the default workspace folder `delorun start` resolves, and leaves the key unset in any other boot', () => {
+    const row = home.rows(DELO_PROFILE).find(entry => entry.id === 'workspace-controller')
+    expect(row).toMatchObject({ name: '@deepseek-ai/dsh-api-workspace-controller', config: { defaultWorkspaceDirectory: { __jsExpr: `process.env.${DEFAULT_WORKSPACE_ENV}` } } })
+    // The loader evaluates the expression in the Host's process, which `delorun start` boots in.
+    const config = row?.config ?? {}
+    vi.stubEnv(DEFAULT_WORKSPACE_ENV, '/srv/Delo/default-workspace')
+    expect(interpolate({}, config)).toEqual({ defaultWorkspaceDirectory: '/srv/Delo/default-workspace' })
+    vi.stubEnv(DEFAULT_WORKSPACE_ENV, undefined)
+    expect(interpolate({}, config)).toEqual({ defaultWorkspaceDirectory: undefined })
+    vi.unstubAllEnvs()
   })
 
   it('composes upstream\'s web profile except the listed rows', () => {

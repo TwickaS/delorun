@@ -8,7 +8,8 @@ import { PARITY_SWITCHES } from '@delo/contract-parity-composition'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { hasCliProfile, profileDirectory } from '../../src/profile.ts'
 import { readBackgroundAnswer } from '../../src/setup/background.ts'
-import { linkDeloBundles } from '../../src/delo-bundles.ts'
+import { LineCapture } from '@delo/logs'
+import { LINKING_PROGRESS, linkDeloBundles } from '../../src/delo-bundles.ts'
 import { runSection, runSetup, sectionList, type SetupRequest } from '../../src/setup/index.ts'
 import { readProgress } from '../../src/setup/progress.ts'
 import { SetupCancelled } from '../../src/setup/prompts.ts'
@@ -251,6 +252,32 @@ describe('the key check', { timeout: TIMEOUT_MS }, () => {
     const checkKey = (): Promise<{ ok: false, reason: string }> => Promise.resolve({ ok: false, reason: 'could not reach api.example.' })
     expect(await interactive(['quick', 'prompt', 'unchecked-key-2', 'continue', 'safer', 'save', false], { keyCheck: checkKey })).toBe(EXIT.ok)
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8')).refs.DEEPSEEK_API_KEY).toBe('unchecked-key-2')
+  })
+
+  it('says on the review that a key the person continued with was not verified, and why, without the key', async () => {
+    const checkKey = (): Promise<{ ok: false, reason: string }> => Promise.resolve({ ok: false, reason: 'could not reach api.example.' })
+    expect(await interactive(['quick', 'prompt', 'unchecked-key-4', 'continue', 'safer', 'save', false], { keyCheck: checkKey })).toBe(EXIT.ok)
+    const review = screen().split('# Review\n')[1]?.split('\n?')[0]
+    expect(review).toBe('  Setup: Quick\n  DeepSeek API key: key entered now, not verified: could not reach api.example.\n  Prompts: Safer prompts')
+    expect(screen()).not.toContain('unchecked-key-4')
+  })
+
+  it('shows no failed check on the review once a later key passed, or the person went back and chose the environment', async () => {
+    const checkKey = vi.fn((key: string) => Promise.resolve(key === TYPED_KEY ? { ok: true } as const : { ok: false, reason: 'api.example did not accept the key (HTTP 401).' } as const))
+    expect(await interactive(['quick', 'prompt', 'wrong-key-5', 'again', TYPED_KEY, 'safer', 'save', false], { keyCheck: checkKey })).toBe(EXIT.ok)
+    expect(screen()).toContain('# Review\n  Setup: Quick\n  DeepSeek API key: key entered now\n')
+    rmSync(profileDirectory(home, PROFILE), { recursive: true })
+    recording.screen.length = 0
+    expect(await interactive(['quick', 'prompt', 'wrong-key-6', 'continue', BACK_CHOICE, 'environment', 'safer', 'save', false], { keyCheck: checkKey })).toBe(EXIT.ok)
+    expect(screen()).toContain('# Review\n  Setup: Quick\n  DeepSeek API key: read from DEEPSEEK_API_KEY at each start\n')
+    expect(screen()).not.toContain('not verified')
+  })
+
+  it('says on the review that the environment\'s key failed its check with --check-key', async () => {
+    const checkKey = (): Promise<{ ok: false, reason: string }> => Promise.resolve({ ok: false, reason: 'api.example did not accept the key (HTTP 401).' })
+    expect(await interactive(['quick', 'environment', 'safer', 'save', false], { keyCheck: checkKey, env: { DEEPSEEK_API_KEY: 'env-key-value-8' }, checkEnvironmentKey: true })).toBe(EXIT.ok)
+    expect(screen()).toContain('  DeepSeek API key: read from DEEPSEEK_API_KEY at each start, not verified: api.example did not accept the key (HTTP 401).\n')
+    expect(screen()).not.toContain('env-key-value-8')
   })
 
   it('goes back from the failed-check choice to the source question', async () => {
@@ -619,13 +646,32 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
     expect(ending.started).toHaveLength(1)
   })
 
-  it('passes the bundle linking output to standard error', async () => {
-    vi.mocked(linkDeloBundles).mockImplementationOnce((_home, _profile, _bundles, _linking, onOutput) => {
-      onOutput('pnpm linked the bundle', 'stdout')
+  it('shows the bundle linking as one progress line, with its output in the profile\'s home log', async () => {
+    vi.mocked(linkDeloBundles).mockImplementationOnce((_home, _profile, _bundles, _linking, report) => {
+      report.progress(LINKING_PROGRESS)
+      new LineCapture(report.log, 'stdout', 'info').write('pnpm linked /abs/path/bundle\n')
+      report.progress('done\n')
       return Promise.resolve()
     })
     expect(await interactive(['quick', 'environment', 'safer', 'save', false])).toBe(EXIT.ok)
-    expect(screen()).toContain('stderr: pnpm linked the bundle')
+    // The scripted output records each write on a line of its own.
+    expect(screen()).toContain(`${LINKING_PROGRESS}\ndone\nSet up the CLI profile`)
+    expect(screen()).not.toContain('/abs/path/bundle')
+    expect(readFileSync(join(home, 'logs', `home-${PROFILE}`, 'home.log'), 'utf8')).toContain('pnpm linked /abs/path/bundle')
+  })
+
+  it('finishes setup when the home log cannot be written, dropping the linking\'s records', async () => {
+    vi.mocked(linkDeloBundles).mockImplementationOnce((_home, _profile, _bundles, _linking, report) => {
+      report.log.close()
+      rmSync(report.log.location.dir, { recursive: true })
+      writeFileSync(report.log.location.dir, 'a file where the log directory belongs')
+      new LineCapture(report.log, 'stdout', 'info').write('pnpm linked the bundle\n')
+      report.progress(`${LINKING_PROGRESS}done\n`)
+      return Promise.resolve()
+    })
+    expect(await interactive(['quick', 'environment', 'safer', 'save', false])).toBe(EXIT.ok)
+    expect(screen()).toContain(`${LINKING_PROGRESS}done`)
+    expect(screen()).not.toContain('pnpm linked the bundle')
   })
 
   it('stops with the cause when the profile cannot be created, and leaves the run to resume', async () => {

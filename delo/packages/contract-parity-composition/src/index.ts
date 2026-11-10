@@ -424,6 +424,27 @@ export const PARITY_SWITCHES = [
     },
     sources: [],
   },
+  {
+    id: 'default_workspace_directory',
+    state: 'built',
+    registeredBy: '@delo/bundle-local, its workspace-controller row, which `delorun start` fills',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'web/delo-default-workspace-directory',
+    scenarioState: 'pending recording',
+    // The workspace controller row's folder decides where the first-use workspace lies: Delo's composition sets it, and
+    // the parity composition leaves the row to upstream, which sets none and runs its own documents lookup.
+    field: {
+      kind: 'presence',
+      module: '@deepseek-ai/dsh-api-workspace-controller',
+      source: 'packages/api/workspace-controller/src/index.ts',
+      key: 'defaultWorkspaceDirectory',
+    },
+    // The folder reaches the model as the working directory of a chat in that workspace, through the absolute paths in
+    // tool results; this is the file that places the workspace there.
+    sources: ['packages/api/workspace-controller/src/index.ts'],
+  },
 ] as const satisfies readonly ParitySwitchEntry[]
 
 /** One registry entry, as declared. */

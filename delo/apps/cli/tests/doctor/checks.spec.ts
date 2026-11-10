@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, runDockerVersion, type DockerProbe } from '../../src/doctor/checks.ts'
+import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type DockerProbe } from '../../src/doctor/checks.ts'
 import { parsePort } from '../../src/doctor/index.ts'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { ANSWERING_DOCKER, closeServer, FAILING_DOCKER, GOOD_KEY, leaksPartOf, listenOnEphemeralPort, POSIX } from './fixtures.ts'
@@ -171,11 +171,22 @@ describe.runIf(POSIX)('runDockerVersion', { timeout: 60_000 }, () => {
   })
 })
 
+describe('resolveStudioPort', () => {
+  it('takes --port first, then the profile\'s studio port, then upstream\'s default when the profile sets none', () => {
+    expect(resolveStudioPort(4100, 4200, 'default')).toEqual({ port: 4100, source: 'option', profile: 'default' })
+    expect(resolveStudioPort(undefined, 4200, 'work')).toEqual({ port: 4200, source: 'profile', profile: 'work' })
+    expect(resolveStudioPort(undefined, undefined, 'default')).toEqual({ port: STUDIO_DEFAULT_PORT, source: 'default', profile: 'default' })
+    expect(STUDIO_DEFAULT_PORT).toBe(3080)
+  })
+})
+
 describe('checkPort', () => {
-  it('fails a port another process holds, and the message names it', async () => {
+  const notRunning = (): Promise<undefined> => Promise.resolve(undefined)
+
+  it('fails a --port another process holds, and the message names it', async () => {
     const { server, port } = await listenOnEphemeralPort()
     try {
-      expect(await checkPort(port)).toEqual({
+      expect(await checkPort(resolveStudioPort(port, undefined, 'default'), notRunning)).toEqual({
         name: 'port',
         status: 'fail',
         message: `port ${String(port)} is in use; stop the other process or pass --port`,
@@ -185,18 +196,53 @@ describe('checkPort', () => {
     }
   })
 
-  it('passes a free port, and the port can be bound again afterwards', async () => {
+  it('fails the profile\'s studio port when another process holds it, and names the setup section that changes it', async () => {
+    const { server, port } = await listenOnEphemeralPort()
+    try {
+      const ownStudio = vi.fn(() => Promise.resolve(port + 1))
+      expect(await checkPort(resolveStudioPort(undefined, port, 'work'), ownStudio)).toEqual({
+        name: 'port',
+        status: 'fail',
+        message: `port ${String(port)} on 127.0.0.1, the studio port of the profile work, is in use by another process, so the studio cannot listen on it; stop that process, or choose another port with delorun setup profile --profile work`,
+      })
+      expect(ownStudio).toHaveBeenCalledTimes(1)
+      expect((await checkPort(resolveStudioPort(undefined, port, 'default'), notRunning)).message).toMatch(/choose another port with delorun setup profile$/u)
+    } finally {
+      await closeServer(server)
+    }
+  })
+
+  it('passes a port this home\'s own studio holds, and says Delo holds it', async () => {
+    const { server, port } = await listenOnEphemeralPort()
+    try {
+      expect(await checkPort(resolveStudioPort(undefined, port, 'default'), () => Promise.resolve(port))).toEqual({
+        name: 'port',
+        status: 'pass',
+        message: `port ${String(port)} on 127.0.0.1, the studio port of the profile default, is in use by Delo's studio, which runs for the profile default.`,
+      })
+    } finally {
+      await closeServer(server)
+    }
+  })
+
+  it('refuses a port source it does not know', () => {
+    expect(() => checkPort({ port: 1, source: 'other' as never, profile: 'default' }, notRunning)).toThrow('unhandled case: "other"')
+  })
+
+  it('passes a free port without asking the home process, and the port can be bound again afterwards', async () => {
     const { server, port } = await listenOnEphemeralPort()
     await closeServer(server)
-    expect(await checkPort(port)).toEqual({ name: 'port', status: 'pass', message: `port ${String(port)} on 127.0.0.1 is free.` })
+    const ownStudio = vi.fn(notRunning)
+    expect(await checkPort(resolveStudioPort(port, undefined, 'default'), ownStudio)).toEqual({ name: 'port', status: 'pass', message: `port ${String(port)} on 127.0.0.1 is free.` })
+    expect(await checkPort({ port, source: 'default', profile: 'default' }, ownStudio)).toEqual({ name: 'port', status: 'pass', message: `port ${String(port)} on 127.0.0.1, the studio's default port, which the profile default does not change, is free.` })
+    expect(ownStudio).not.toHaveBeenCalled()
     const again = await listenOnEphemeralPort()
     await closeServer(again.server)
   })
 })
 
 describe('parsePort', () => {
-  it('accepts integers from 1 to 65535, and defaults to the studio port 3080', () => {
-    expect(parsePort(undefined)).toBe(3080)
+  it('accepts integers from 1 to 65535', () => {
     expect(parsePort('1')).toBe(1)
     expect(parsePort('65535')).toBe(65535)
     expect(parsePort('03080')).toBe(3080)
