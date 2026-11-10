@@ -1,7 +1,9 @@
 /**
  * The update notice at the bottom of the chat list: a newer Delorun release exists, what kind of update it is, how
- * many of the person's plugins it would turn off, its summary, and the command that applies it. It applies nothing
- * itself. It sits below the list's scrolling region, so it never covers or moves a row, and takes no focus.
+ * many of the person's plugins it would turn off, its summary under a "Release note" label, so the release's own text
+ * never reads as the studio's instruction, and the command that applies it. It applies nothing itself. It sits below
+ * the list's scrolling region, so it never covers or moves a row, and takes no focus. Its polite live region holds the
+ * title and the kind and plugin line only; the close and summary buttons sit outside it.
  * @module @delo/plugin-sidebar/client/UpdateNotice
  */
 import { IconCloseOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -22,8 +24,8 @@ export interface UpdateNoticeFace {
 /** The notice's props: what it reads and does, and the sidebar's copy. */
 export type UpdateNoticeCardProps = { readonly face: UpdateNoticeFace } & PropsLocale<'deloSidebar'>
 
-/** Stands in for the command while the sentence around it is translated, so the command renders as code. */
-const COMMAND_MARK = '\u0000'
+/** Stands in for an inserted value while the sentence around it is translated, so the value renders in its own element. */
+const MARK = '\u0000'
 
 /**
  * Render the notice while a newer release is known and not dismissed.
@@ -43,12 +45,23 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
   const title = release.dsh === running.dsh
     ? t('update.title', { version: release.delo })
     : t('update.title.base', { version: release.delo, dsh: release.dsh })
-  const [before = '', after = ''] = t(remote ? 'update.run.remote' : 'update.run', { command: COMMAND_MARK }).split(COMMAND_MARK)
+  const [before = '', after = ''] = t(remote ? 'update.run.remote' : 'update.run', { command: MARK }).split(MARK)
   const dismiss = face.dismiss
+  const [noteBefore = '', noteAfter = ''] = t('update.summary', { summary: MARK }).split(MARK)
+  const note = release.summary === undefined
+    ? null
+    : <><span className={css.summaryLabel}>{noteBefore}</span>{release.summary}{noteAfter}</>
   return (
-    <div className={css.notice} role="status" data-update-notice={release.delo}>
+    <div className={css.notice} data-update-notice={release.delo}>
       <div className={css.head}>
-        <p className={css.title}>{title}</p>
+        <div className={css.status} role="status">
+          <p className={css.title}>{title}</p>
+          <p className={css.facts}>
+            <span className={release.security ? css.security : undefined}>{kind}</span>
+            {t('update.separator')}
+            {plugins}
+          </p>
+        </div>
         {dismiss !== null && (
           <button type="button" className={css.dismiss} aria-label={t('update.dismiss')} title={t('update.dismiss')}
             onClick={() => { dismiss(release.delo) }}>
@@ -56,17 +69,12 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
           </button>
         )}
       </div>
-      <p className={css.facts}>
-        <span className={release.security ? css.security : undefined}>{kind}</span>
-        {t('update.separator')}
-        {plugins}
-      </p>
-      {release.summary !== undefined && (remote
-        ? <p className={css.summary}>{release.summary}</p>
+      {note !== null && (remote
+        ? <p className={css.summary}>{note}</p>
         : (
           <button type="button" className={css.summaryToggle} aria-expanded={expanded} data-expanded={expanded}
             onClick={() => { setExpanded(value => !value) }}>
-            {release.summary}
+            {note}
           </button>
         ))}
       <p className={css.run}>{before}<code className={css.command}>{UPDATE_COMMAND}</code>{after}</p>

