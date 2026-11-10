@@ -56,6 +56,24 @@ type RemoteEventReplyOutcome =
   | { readonly kind: 'next' }
   | { readonly kind: 'rejected'; readonly error: ReturnType<typeof projectRemoteEventRejection> }
 
+/**
+ * Failure code of an answer the Host's `RemoteAnswerGuard` refuses because it must be given at the Host's own computer.
+ * The Host keeps the event pending, so this Client reports the refusal and keeps its event generation.
+ */
+const ANSWER_REFUSED_CODE = 'LOOPBACK_REQUIRED'
+
+/** One answer to a forwarded waterfall that the Host refused with `LOOPBACK_REQUIRED`; the payload of `remote/answer-refused`. */
+export interface RemoteAnswerRefusal {
+  /** The forwarded Host event the answer was for, such as `approval/request`. */
+  readonly event: string
+  /** The Host's failure code. */
+  readonly code: 'LOOPBACK_REQUIRED'
+  /** The Host's sentence for the refusal. */
+  readonly message: string
+  /** The refused action from the failure's `details.action`, such as `full-access-escalation`; undefined when absent. */
+  readonly action: string | undefined
+}
+
 /** Private end-of-chain marker that cannot collide with a JSON listener result. */
 const REMOTE_EVENT_NEXT = Symbol('api-gateway.remote-event.next')
 
@@ -221,7 +239,15 @@ export class ClientRemoteEvents {
         { args: result },
         signal,
       )
-      if (!response.ok) throw new Error(response.error.message)
+      if (response.ok) return
+      if (response.error.code !== ANSWER_REFUSED_CODE) throw new Error(response.error.message)
+      // The Host kept the event pending for another Client, so this generation stays open.
+      this.reportRefusal({
+        event: frame.event,
+        code: ANSWER_REFUSED_CODE,
+        message: response.error.message,
+        action: refusedAction(response.error.details),
+      })
     } finally {
       owned?.[Symbol.dispose]()
     }
@@ -259,6 +285,21 @@ export class ClientRemoteEvents {
   private reportError(event: string, error: unknown): void {
     console.error(`client api: Remote event ${JSON.stringify(event)} listener threw:`, error)
   }
+
+  /** Emit `remote/answer-refused`, containing a throwing listener so the generation keeps delivering. */
+  private reportRefusal(refusal: RemoteAnswerRefusal): void {
+    try {
+      this.ownerCtx.emit('remote/answer-refused', refusal)
+    } catch (error) {
+      this.reportError('remote/answer-refused', error)
+    }
+  }
+}
+
+/** `details.action` of a refused answer when it is a string. */
+function refusedAction(details: object): string | undefined {
+  const action: unknown = Reflect.get(details, 'action')
+  return typeof action === 'string' ? action : undefined
 }
 
 /** Validate and return one generation's Client identity and Host facts. */

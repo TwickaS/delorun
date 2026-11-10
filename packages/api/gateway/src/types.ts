@@ -30,7 +30,9 @@ export interface RemoteEventAnswer {
  * Decides whether one Peer's answer to a forwarded Remote event may apply. Without a provider every answer the Gateway
  * accepts applies: an owner Peer's, or another Peer's whose access policy allows the event. The provider throws a
  * `RemoteError` to refuse: the answer is then not applied, the event stays pending for the other Clients it was
- * delivered to, and the answering Client receives the failure.
+ * delivered to, and the answering Client receives the failure with its code and details. The Client reports a
+ * `LOOPBACK_REQUIRED` refusal as its `remote/answer-refused` event and keeps its event stream; any other failure ends
+ * that Client's event generation.
  */
 export interface RemoteAnswerGuard {
   /**

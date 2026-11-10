@@ -2,17 +2,16 @@
 /**
  * The Devices section reads the reach state and the device list from the home, adds a device through the approval
  * window, removes a device after confirmation, and says in place when the home needs the person at its own computer.
- * On a remote studio page, a full-access grant answered there brings the notice that it must be answered at the home.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
-import { bindSnapshotSelector, makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  apply, applyRemoteNotice, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, inject, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER,
+  apply, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, inject, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER,
   readReachStatus, REMOTE_NOTICE_ID,
 } from '../src/client/index.ts'
 import {
@@ -21,7 +20,6 @@ import {
 } from '../src/client/devices-api.ts'
 import { en, zh } from '../src/client/devices-locales.ts'
 import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
-import { createRemoteNoticeSource, isLoopbackHostname, RemoteNotice, type RemoteNoticeProps } from '../src/client/RemoteNotice.tsx'
 
 afterEach(() => {
   cleanup()
@@ -450,81 +448,13 @@ describe('the device requests', () => {
   })
 })
 
-describe('the remote full-access notice', () => {
-  it.each(['localhost', 'studio.localhost', '127.0.0.1', '127.255.10.1', '[::1]'])('treats %s as the home\'s own computer', (hostname) => {
-    expect(isLoopbackHostname(hostname)).toBe(true)
-  })
-
-  it.each(['home.example.ts.net', '192.0.2.2', '127.0.0', '127.0.0.300', 'localhost.example.com'])('treats %s as a remote page', (hostname) => {
-    expect(isLoopbackHostname(hostname)).toBe(false)
-  })
-
-  /**
-   * Mount the plugin's remote notice on a page with one hostname.
-   * @param hostname - the page's hostname.
-   * @returns the approval listener, if one was registered, and the overlay entries.
-   */
-  async function mountNotice(hostname: string) {
-    const ctx = new Context()
-    await ctx.plugin(SlotRegistry).await()
-    const remote = new TestRemote(ctx)
-    const on = vi.spyOn(remote, '$on')
-    const slots = ctx.get('slots')
-    if (slots === undefined) throw new Error('no slot registry')
-    slots.register({ name: 'root', children: { 'shell.overlay': { kind: 'list', scope: 'root' } }, inject: () => ({}) },
-      ({ renderSlot }) => <>{renderSlot('shell.overlay', {})}</>)
-    await ctx.plugin({ inject: ['slots', 'remote'], apply: (scope: Context) => { applyRemoteNotice(scope, hostname) } }).await()
-    const listener = on.mock.calls.find(([event]) => event === 'approval/request')?.[1] as
-      ((request: { grants?: 'full-access' }, next: () => Promise<string>) => Promise<string>) | undefined
-    return { ctx, listener, overlays: slots.entries('shell.overlay') }
-  }
-
-  it('registers nothing on a loopback page', async () => {
-    const { ctx, listener, overlays } = await mountNotice('localhost')
-    expect(listener).toBeUndefined()
-    expect(overlays).toHaveLength(0)
-    await ctx.fiber.dispose()
-  })
-
-  it('shows only after this page grants full access, and returns the answer unchanged', async () => {
-    const { ctx, listener, overlays } = await mountNotice('home.example.ts.net')
-    try {
-      if (listener === undefined) throw new Error('no approval listener')
-      const [overlay] = overlays
-      expect(overlay?.options).toMatchObject({ id: REMOTE_NOTICE_ID })
-      const face = overlay?.inject?.() as Omit<RemoteNoticeProps, 't' | 'useNotice'> & { hooks: ReturnType<typeof createRemoteNoticeSource>['hooks'] }
-      render(<RemoteNotice t={makeTranslate(en)} useNotice={bindSnapshotSelector(face.hooks.notice)} dismiss={face.dismiss} />)
-      expect(await listener({ grants: 'full-access' }, () => Promise.resolve('rejected'))).toBe('rejected')
-      expect(await listener({}, () => Promise.resolve('allowed-once'))).toBe('allowed-once')
-      expect(screen.queryByRole('alert')).toBeNull()
-      await act(async () => { expect(await listener({ grants: 'full-access' }, () => Promise.resolve('allowed-once'))).toBe('allowed-once') })
-      expect(screen.getByRole('alert').textContent).toContain(en['remote.fullAccess'])
-      fireEvent.click(screen.getByRole('button', { name: en['remote.dismiss'] }))
-      expect(screen.queryByRole('alert')).toBeNull()
-    } finally {
-      await ctx.fiber.dispose()
-    }
-  })
-
-  it('goes away by itself after its hold', () => {
-    vi.useFakeTimers()
-    const source = createRemoteNoticeSource()
-    render(<RemoteNotice t={makeTranslate(en)} useNotice={bindSnapshotSelector(source.hooks.notice)} dismiss={source.dismiss} />)
-    act(() => { source.show() })
-    expect(screen.getByRole('alert')).toBeTruthy()
-    act(() => { vi.advanceTimersByTime(60_000) })
-    expect(screen.queryByRole('alert')).toBeNull()
-  })
-})
-
 describe('the plugin', () => {
-  it('registers the Devices section right after Privacy, with the browser\'s fetch, and no notice on a loopback page', async () => {
+  it('registers the Devices section right after Privacy, with the browser\'s fetch, and the refused-answer notice', async () => {
     const ctx = new Context()
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', new LocaleRuntime(ctx))
-      const remote = new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
-      const on = vi.spyOn(remote, '$on')
+      new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
@@ -538,8 +468,7 @@ describe('the plugin', () => {
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay')).toHaveLength(0)
-      expect(on.mock.calls.some(([event]) => event === 'approval/request')).toBe(false)
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([REMOTE_NOTICE_ID])
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
       const devicesEntry = slots.entries('settings.section')[1]

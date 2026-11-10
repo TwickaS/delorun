@@ -1779,6 +1779,73 @@ describe('Client Typert API', () => {
     await client.dispose()
   })
 
+  it('reports a LOOPBACK_REQUIRED refusal as remote/answer-refused and keeps the generation delivering', async () => {
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'LOOPBACK_REQUIRED', message: 'fixture: needs the computer', details: { action: 'full-access-escalation' } },
+      })
+      .mockResolvedValueOnce({ ok: false, error: { code: 'LOOPBACK_REQUIRED', message: 'fixture: no action', details: {} } })
+      .mockResolvedValue({ ok: true, value: undefined })
+    const { ctx, client, carrier, run } = await eventBench(call)
+    const refusals: unknown[] = []
+    ctx.on('remote/answer-refused', (refusal) => { refusals.push(refusal) })
+    const seen: string[] = []
+    ctx.remote.$on('fixture/changed', (namespace) => { seen.push(namespace) })
+    let settled = false
+    void run.done.finally(() => { settled = true })
+
+    carrier.emit(approvalFrame('event-refused', 'agent-missing', 'grant'))
+    await vi.waitFor(() => { expect(refusals).toHaveLength(1) })
+    carrier.emit(approvalFrame('event-refused-bare', 'agent-missing', 'grant'))
+    await vi.waitFor(() => { expect(refusals).toHaveLength(2) })
+    expect(refusals).toEqual([
+      { event: 'fixture/approval', code: 'LOOPBACK_REQUIRED', message: 'fixture: needs the computer', action: 'full-access-escalation' },
+      { event: 'fixture/approval', code: 'LOOPBACK_REQUIRED', message: 'fixture: no action', action: undefined },
+    ])
+    // The same generation keeps delivering notifications and answering later waterfalls.
+    carrier.emit({ type: 'emit', event: 'fixture/changed', args: ['after refusal'] })
+    carrier.emit(approvalFrame('event-after', 'agent-missing', 'later'))
+    await vi.waitFor(() => { expect(seen).toEqual(['after refusal']) })
+    await vi.waitFor(() => { expect(call).toHaveBeenCalledTimes(3) })
+    expect(carrier.calls).toHaveLength(1)
+    expect(carrier.activeConnections).toBe(1)
+    expect(settled).toBe(false)
+    await client.dispose()
+  })
+
+  it('contains a throwing remote/answer-refused listener', async () => {
+    const call = vi.fn<ConnectionHandle['rpc']['call']>().mockResolvedValue({
+      ok: false, error: { code: 'LOOPBACK_REQUIRED', message: 'fixture: needs the computer', details: { action: 7 } },
+    })
+    const { ctx, client, carrier } = await eventBench(call)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const refusals: unknown[] = []
+    ctx.on('remote/answer-refused', (refusal) => { refusals.push(refusal) })
+    ctx.on('remote/answer-refused', () => { throw new Error('fixture refusal listener failure') })
+    const seen: string[] = []
+    ctx.remote.$on('fixture/changed', (namespace) => { seen.push(namespace) })
+    try {
+      carrier.emit(approvalFrame('event-refused', 'agent-missing', 'grant'))
+      await vi.waitFor(() => {
+        expect(consoleError).toHaveBeenCalledWith(
+          'client api: Remote event "remote/answer-refused" listener threw:',
+          expect.objectContaining({ message: 'fixture refusal listener failure' }),
+        )
+      })
+      // A non-string `details.action` is reported as absent.
+      expect(refusals).toEqual([
+        { event: 'fixture/approval', code: 'LOOPBACK_REQUIRED', message: 'fixture: needs the computer', action: undefined },
+      ])
+      carrier.emit({ type: 'emit', event: 'fixture/changed', args: ['after refusal'] })
+      await vi.waitFor(() => { expect(seen).toEqual(['after refusal']) })
+      expect(carrier.calls).toHaveLength(1)
+    } finally {
+      consoleError.mockRestore()
+      await client.dispose()
+    }
+  })
+
   it('filters scoped waterfall listeners and returns the first claimed result', async () => {
     const call = vi.fn<ConnectionHandle['rpc']['call']>()
       .mockResolvedValue({ ok: true, value: undefined })

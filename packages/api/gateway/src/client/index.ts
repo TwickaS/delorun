@@ -28,7 +28,7 @@ import {
   RemoteStreamCarrierError,
   RemoteStreamMuxClient,
 } from './stream-client.ts'
-import { ClientRemoteEvents } from './remote-events.ts'
+import { ClientRemoteEvents, type RemoteAnswerRefusal } from './remote-events.ts'
 import {
   RemoteStream,
   type RemoteStreamOptions,
@@ -46,6 +46,7 @@ export { RemoteStream } from './remote-stream.ts'
 export type { RemoteStreamItem, RemoteStreamOptions } from './remote-stream.ts'
 export { RemoteSnapshotStream } from './snapshot-stream.ts'
 export type { RemoteSnapshotStreamOptions } from './snapshot-stream.ts'
+export type { RemoteAnswerRefusal } from './remote-events.ts'
 
 interface MountToken {
   active: boolean
@@ -128,6 +129,17 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Generated Remote namespaces selected by the Client assembly. */
     remote: ClientRemote
+  }
+
+  interface Events {
+    /**
+     * The Host refused this Client's answer to a forwarded waterfall with `LOOPBACK_REQUIRED`: the answer must be
+     * given at the Host's own computer. The Host kept the event pending, and this Client's event generation stays open.
+     * A throwing listener is reported and does not affect delivery.
+     * @mode emit
+     * @param refusal - the event, the Host's code and sentence, and the refused action.
+     */
+    'remote/answer-refused'(refusal: RemoteAnswerRefusal): void
   }
 }
 

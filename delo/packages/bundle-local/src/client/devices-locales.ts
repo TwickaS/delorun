@@ -1,4 +1,4 @@
-/** The Devices settings section's copy and the remote studio's full-access notice. */
+/** The Devices settings section's copy and the remote studio's refused-answer notice. */
 
 /** English dictionary. */
 export const en = {
@@ -40,7 +40,10 @@ export const en = {
   'action.remove': 'removing a device',
   'failed.unreachable': 'The home did not answer. Try again.',
   'failed.unreadable': 'The home\'s answer could not be read.',
-  'remote.fullAccess': 'This needs you at your computer: granting full access. Answer this prompt in the studio on the home\'s computer.',
+  'remote.refused': 'This needs you at your computer: {action}. Answer this prompt in the studio on the home\'s computer.',
+  'remote.action.fullAccessEscalation': 'granting full access',
+  'remote.action.other': 'the action “{action}”',
+  'remote.action.unknown': 'answering this prompt',
   'remote.dismiss': 'Dismiss',
   'time.locale': 'en',
 }
@@ -88,7 +91,10 @@ export const zh: typeof en = {
   'action.remove': '移除设备',
   'failed.unreachable': '主机没有响应，请重试',
   'failed.unreadable': '无法读取主机的响应',
-  'remote.fullAccess': '这需要你在电脑前操作：授予完全访问权限。请在主机所在电脑上的 studio 中回答这个提示',
+  'remote.refused': '这需要你在电脑前操作：{action}。请在主机所在电脑上的 studio 中回答这个提示',
+  'remote.action.fullAccessEscalation': '授予完全访问权限',
+  'remote.action.other': '操作“{action}”',
+  'remote.action.unknown': '回答这个提示',
   'remote.dismiss': '关闭',
   'time.locale': 'zh-CN',
 }
