@@ -95,6 +95,11 @@ export async function checkHealth(facts: HostHealthFacts, expect: HealthExpectat
       ? { passed: false, criterion: 'H3-only-named-disabled', detail: `row ${row.id} is disabled and the report did not name it` }
       : { passed: false, criterion: 'H4-unnamed-rows-load', detail: `row ${row.id} did not load (${row.state}) and the report did not name it` }
   }
+  const present = new Set(facts.rows().map(row => row.id))
+  for (const id of expect.previousRows) {
+    if (present.has(id) || named.has(id)) continue
+    return { passed: false, criterion: 'H3-only-named-disabled', detail: `row ${id} was in the profile before the update, is gone, and the report did not name it` }
+  }
   if (expect.bundles !== undefined) {
     const path = join(facts.profileDir, 'package.json')
     const manifest: unknown = JSON.parse(await readFile(path, 'utf8'))

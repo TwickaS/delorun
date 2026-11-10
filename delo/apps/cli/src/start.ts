@@ -385,10 +385,13 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   const chats = new CountingChatGate()
   booted.watchChats(chats)
-  const failed = inactiveRows(booted.rows())
+  const atBoot = booted.rows()
+  const failed = inactiveRows(atBoot)
+  const ids = atBoot.map(row => row.id)
   return {
     chats,
     failedRows: () => failed,
+    rows: () => ids,
     check: expect => checkHealth({
       rows: booted.rows,
       studio: booted.studio,

@@ -4,8 +4,9 @@
  * releases' data facts. Every fact is read from a file; no plugin module is imported. The target's bundle tables are
  * upstream's `@deepseek-ai/dsh-official-bundles`, read by the target runtime's own Node from its verified files.
  *
- * Not read yet, and stated in the report's README: the bundles' own layers (only the profile patch and the home patch
- * are walked), the bundles the target would skip, and the catalogue's revocation list.
+ * Not read yet, and named in the report's `notChecked`: the bundles' own layers (only the profile patch and the home
+ * patch are walked), the bundles the target would skip, and the catalogue's revocation list, which no 0.1.0 release
+ * publishes.
  *
  * @module @delo/cli/update/sources
  */
@@ -238,6 +239,7 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
         release: { manifest: brandString<Sha256Hex>(createHash('sha256').update(manifestBytes).digest('hex')), signature: 'passed', freshness: 'passed', log: 'passed' },
         bundles: bundleFactsOf(bundleListOf(manifest, join(profileDir, 'package.json')), await tables(directory, command.command)),
         revocations: [],
+        notChecked: ['revocations', 'bundle-layers', 'skipped-bundles'],
       }
     },
     data: async (version): Promise<DataFacts> => {

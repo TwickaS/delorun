@@ -84,6 +84,7 @@ export function reportLines(report: UpdateReport): readonly string[] {
   for (const item of changes) {
     lines.push(`  - ${item.effect}: ${reasonMessage(item, versions)}${item.verification === 'unverified' ? ` ${UNVERIFIED_NOTE}` : ''}`)
   }
+  if (report.notChecked.length > 0) lines.push(`Not checked: ${report.notChecked.join(', ')}; the health check after the switch holds what these would show.`)
   for (const item of report.items) {
     if (item.kind !== 'data') continue
     lines.push(`Chat data: ${reasonMessage(item, versions)}${item.verification === 'unverified' ? ` ${UNVERIFIED_NOTE}` : ''}`)

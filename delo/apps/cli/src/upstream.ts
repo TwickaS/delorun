@@ -4,9 +4,15 @@
  * line in this process, with the Delo home as `DSH_HOME`. Upstream's parser
  * refuses the desktop app's profile for `plugin`, as it does for `dsh`.
  *
+ * `delorun headless` writes chat data beside the home process, so it registers itself as a data user first and
+ * refuses while an update, a rollback or a restore of the chat data is in progress
+ * ([data users](./update/data-users.ts)); an update's copy and restore refuse while it runs.
+ *
  * @module @delo/cli/upstream
  */
+import { CliError, EXIT } from './exit.ts'
 import { prepareHome, type CliCommand } from './command.ts'
+import { assertNoUpdateInProgress, DataInUseError, registerDataUser } from './update/data-users.ts'
 
 /**
  * Run upstream's command line with these arguments.
@@ -29,7 +35,20 @@ function passThrough(name: string, summary: string): CliCommand {
     name,
     summary,
     async run(args, context) {
-      await prepareHome(context, undefined)
+      const { home } = await prepareHome(context, undefined)
+      if (name !== 'headless') {
+        await runUpstreamCli([name, ...args])
+        return undefined
+      }
+      const release = registerDataUser(home.path)
+      try {
+        await assertNoUpdateInProgress(home.path)
+      } catch (error) {
+        release()
+        if (error instanceof DataInUseError) throw new CliError(EXIT.failed, `delorun headless: ${error.detail}`)
+        throw error
+      }
+      process.once('exit', release)
       await runUpstreamCli([name, ...args])
       return undefined
     },

@@ -141,7 +141,7 @@ describe('checkHealth', () => {
     return { rows: () => [], studio: () => ({ host: '127.0.0.1', port }), profileDir: '/nowhere', verifyRuntime: async () => Promise.resolve(), ...change }
   }
 
-  const NOTHING_NAMED = { namedRows: [], previousFailures: [], disabledPlugins: [] }
+  const NOTHING_NAMED = { namedRows: [], previousFailures: [], previousRows: [], disabledPlugins: [] }
 
   it('fails H1 with the verification error when the runtime files no longer match, without asking the studio', async () => {
     const studio = vi.fn(() => undefined)
@@ -238,9 +238,18 @@ describe('checkHealth', () => {
       { id: 'fine', name: 'plugin-4', disabled: false, state: 'active' },
       { id: 'loader-id', name: 'plugin-5', disabled: true, state: 'active' },
     ]
-    const expectations = { namedRows: ['named', 'plugin-5'], previousFailures: ['failed-before'], disabledPlugins: ['plugin-3'] }
+    const expectations = { namedRows: ['named', 'plugin-5', 'dropped-but-named'], previousFailures: ['failed-before'], previousRows: ['named', 'fine', 'dropped-but-named'], disabledPlugins: ['plugin-3'] }
 
     expect(await checkHealth(facts(port, { rows: () => rows }), expectations)).toEqual({ passed: true })
+  })
+
+  it('fails H3 when a row the profile had before the update is gone and the report did not name it', async () => {
+    const port = await studioAnswering(200)
+    const rows: BootedRow[] = [{ id: 'kept', name: 'plugin-1', disabled: false, state: 'active' }]
+
+    expect(await checkHealth(facts(port, { rows: () => rows }), { ...NOTHING_NAMED, previousRows: ['kept', 'dropped'] })).toEqual({
+      passed: false, criterion: 'H3-only-named-disabled', detail: 'row dropped was in the profile before the update, is gone, and the report did not name it',
+    })
   })
 
   it('passes with no bundle prediction without reading the profile', async () => {

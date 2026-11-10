@@ -52,6 +52,7 @@ function report(change: Partial<UpdateReport> = {}): UpdateReport {
     generated: brandString<UtcTimestamp>('2026-11-10T00:00:00Z'),
     installations,
     items: [],
+    notChecked: [],
     counts: { disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0 },
     ...change,
   }
@@ -106,6 +107,12 @@ describe('reportLines', () => {
       '  A copy holds 12 file(s), 3.0 MiB; 512.0 MiB is free.',
       '  Without the copy, Delo cannot go back to 1.0.0 after 1.1.0 first starts.',
     ])
+  })
+
+  it('names the sources the report did not read', () => {
+    const lines = reportLines(report({ notChecked: ['revocations', 'bundle-layers'] }))
+
+    expect(lines).toContain('Not checked: revocations, bundle-layers; the health check after the switch holds what these would show.')
   })
 
   it('omits the size line when the report states no copy, and marks unverified chat data', () => {

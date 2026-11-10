@@ -22,7 +22,7 @@ import { DELO_PROFILE_BUNDLES } from '@delo/bundle-local/profile'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import { acquireHomeLock, newStartId, runDirectory } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
-import { journalPath, queryHomeStatus, readJournal, removeJournal, sendHomeRequest, updateChannelProbe } from '@delo/home-process'
+import { journalPath, queryHomeStatus, readJournal, removeJournal, removeStash, sendHomeRequest, stashPath, updateChannelProbe, writeJournal } from '@delo/home-process'
 import { isProfileSafetyError, recover, type RecoverAction } from '@delo/profile-safety'
 import { isStoreError, RuntimeStore } from '@delo/runtime-store'
 import { discardKeptData, isDataSafetyError, listKeptData, recoverDataCopies } from '@delo/update'
@@ -139,7 +139,9 @@ async function rollbackOffline(home: string, profile: string, profileOnly: boole
     await recoverDataCopies(home)
     const path = journalPath(home, profile)
     const record = await readJournal(path)
-    if (record === undefined || current === undefined || current !== record.to) {
+    // The record's target runs, or `current` is unreadable, or a rollback that began is to be completed.
+    const applies = record !== undefined && (current === undefined || current === record.to || record.phase === 'rolling-back')
+    if (record === undefined || !applies) {
       if (!profileOnly) {
         context.stderr('delorun recover: NO_UPDATE_RECORD: no update to the running release is recorded, so there is nothing to roll back; delorun recover rollback --profile-only restores the latest profile snapshot.\n')
         return EXIT.failed
@@ -148,9 +150,45 @@ async function rollbackOffline(home: string, profile: string, profileOnly: boole
       for (const line of report.lines) context.stdout(`${line}\n`)
       return EXIT.ok
     }
-    const result = await rollbackRecordedUpdate({ home, profile, now: () => new Date() }, record, { profileOnly, switchRuntime: () => store.switchTo(record.to, record.from) })
-    await removeJournal(path)
+    const switchRuntime = async (): Promise<void> => {
+      if (current === record.from) return
+      // A `current` that names no installed runtime is replaced whole; otherwise the two pointers swap.
+      if (current === undefined) await store.restore({ current: record.from })
+      else await store.switchTo(record.to, record.from)
+    }
+    const markRollingBack = (): Promise<void> => writeJournal(path, { ...record, previous: record.previous }, 'rolling-back')
+    const result = await rollbackRecordedUpdate({ home, profile, store, now: () => new Date() }, record, { profileOnly, switchRuntime, markRollingBack })
+    // A profile-only rollback keeps the running release, which ends the update and the previous update's way back;
+    // a runtime rollback's record goes once the version rolled back to starts healthy.
+    if (profileOnly) {
+      await removeJournal(path)
+      await removeStash(path)
+    }
     for (const line of result.lines) context.stdout(`${line}\n`)
+    if (!profileOnly) context.stdout(`Start Delo with delorun start; the rollback completes once Delo ${record.from} starts healthy.\n`)
+    return EXIT.ok
+  } finally {
+    lock.release()
+  }
+}
+
+/**
+ * `discard`: under the home lock, remove one copy or set-aside directory, never one a restore or a rollback is using
+ * and never a copy an update record still refers to.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @param path - the entry, as `status` lists it.
+ * @param context - the output.
+ * @returns the exit code.
+ * @throws {DataSafetyError} `DATA_IN_USE` or `NOT_KEPT_DATA`; {@link HomeLayoutError} `HOME_RUNNING` while Delo runs.
+ */
+async function discard(home: string, profile: string, path: string, context: CommandContext): Promise<CommandResult> {
+  const lock = await acquireHomeLock({ runDirectory: runDirectory(home, profile), runtime: runtimeOfFile(home, fileURLToPath(import.meta.url)).version, probe: updateChannelProbe(home, profile), startId: newStartId() })
+  try {
+    const records = [await readJournal(journalPath(home, profile)), await readJournal(stashPath(journalPath(home, profile)))]
+    const referenced = records.flatMap(record => record?.copy === true ? [record.to] : [])
+    await discardKeptData(home, path, { referenced, rollingBack: records.some(record => record?.phase === 'rolling-back') })
+    context.stdout(`Removed ${path}.\n`)
     return EXIT.ok
   } finally {
     lock.release()
@@ -196,9 +234,7 @@ export const recoverCommand: CliCommand = {
         case 'rollback':
           return await (await homeRunning(home.path, profile) ? rollbackLive : rollbackOffline)(home.path, profile, action.profileOnly, context)
         case 'discard':
-          await discardKeptData(home.path, action.path)
-          context.stdout(`Removed ${action.path}.\n`)
-          return EXIT.ok
+          return await discard(home.path, profile, action.path, context)
         default:
           break
       }

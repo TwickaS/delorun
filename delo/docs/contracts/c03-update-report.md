@@ -71,6 +71,7 @@ A report is built for one installation and one target release, after the target'
 | `generated` | timestamp | When the report was built. |
 | `installations` | list of `{ "id", "delo", "dsh", "state", "target"? }` | Both installations' versions and update states. |
 | `items` | list of item | Everything that changes, sorted by kind, then subject. |
+| `notChecked` | list of `revocations`, `bundle-layers`, `skipped-bundles` | The sources the report did not read; the report says so instead of counting them as checked. |
 | `counts` | `{ "disabled", "removed", "changed", "unverified", "data" }` | The number of items with each effect, of unverified items and of `data` items. |
 
 The report is stored in the snapshot's history version, so the history shows what the update was predicted to change.
@@ -121,12 +122,12 @@ The report compares the running and the target release. The chat data differs wh
 
 A `data` item offers `copy-session-data`, the default, and `continue-without-copy`. Its detail holds the copy's file count and size and the free space on the home's filesystem, and the report states beside it: `Without the copy, Delo cannot go back to <from.delo> after <to.delo> first starts.` When nothing differs no copy is offered, and `delorun update --data-copy` takes one anyway.
 
-A session-data copy holds the home's `sessions/` and `storages/` as real copies (`COPYFILE_FICLONE`, falling back to a full copy), never hard links. `attachments/` stays in place because nothing deletes from it, `cache/` is left out and rebuilds, and Delo's records under `secrets/` are never copied or restored: the previous release reads every record the current one writes. The copy is written to `data-copies/<to.delo>/` beside `copy.json` (both releases' `data-formats.json`, the file count and the byte total) after running chats have ended and the Host has stopped, while the home lock is held, under a temporary name that is renamed and synced before the runtime switches. A copy that does not fit refuses the update with `DATA_COPY_NO_SPACE`, unless the person chose to continue without it. One copy is kept: a later update's copy removes the older one.
+A session-data copy holds the home's `sessions/` and `storages/` as real copies (`COPYFILE_FICLONE`, falling back to a full copy), never hard links. `attachments/` stays in place because nothing deletes from it, `cache/` is left out and rebuilds, and Delo's records under `secrets/` are never copied or restored: the previous release reads every record the current one writes. The copy is written to `data-copies/<to.delo>/` beside `copy.json` (both releases' `data-formats.json`, the file count and the byte total) after running chats have ended and the Host has stopped, while the home lock is held, under a temporary name that is renamed and synced before the runtime switches. A copy that does not fit refuses the update with `DATA_COPY_NO_SPACE`, unless the person chose to continue without it. One copy is kept: when a later update commits, its copy replaces the older one, and the copy of an update that ended before switching is removed.
 
 ## Applying an update
 
 1. The person confirms the report; `delorun update` prints it and asks, and `delorun update --yes` confirms a report that has no `disabled` or `removed` item and no unverified item. With a `data` item the person also chooses about the copy: `--yes` takes it, and declining needs `--no-data-copy` or the prompt's second choice.
-2. A snapshot is written: a profile history version named "Before update to Delo <to.delo>", holding the profile patch, the home patch, the bundle list, both exemption files, the profile's `pnpm-workspace.yaml` and the report. The update record `run/<profile>/update.json` ([C1](c01-home-layout.md)) names the two versions, whether the data differs, whether a copy is taken and the snapshot.
+2. A snapshot is written: a profile history version named "Before update to Delo <to.delo>", holding the profile patch, the home patch, the bundle list, both exemption files, the profile's `pnpm-workspace.yaml` and the report. The update record `run/<profile>/update.json` ([C1](c01-home-layout.md)) names the two versions, whether the data differs, whether a copy is taken and the snapshot's history version (`snapshot`).
 3. Running chats finish, or the person stops them; the CLI switch goes through the home process's update handshake, which never switches under a running chat ([C19](c19-home-process.md)), and the desktop app does this in its pre-restart step. With the Host stopped and the home lock held, the session-data copy is written when the person chose it.
 4. The update record's `targetStarted` is written and synced, then the target starts and the health check runs.
 
@@ -154,7 +155,7 @@ A rollback restores the snapshot's files and switches the installation back to t
 
 ## Rollback
 
-Every way back for `cli-home` reads the update record and applies one table: the handshake's `rollback`, the automatic rollback, the restart after an interrupted update and `delorun recover rollback` with no home process running. None swaps the runtime pointers on its own.
+Every way back for `cli-home` reads the update record and applies one table: the handshake's `rollback`, the automatic rollback, the restart after an interrupted update and `delorun recover rollback` with no home process running. None swaps the runtime pointers on its own. A copy counts as present only when the record says a copy was taken and the copy is no older than the update. Before anything changes, the version rolled back to must be installed and pass its start check; then the record is marked `rolling-back`, and the data, the profile and the runtime follow in that order. A start or `delorun recover` that finds a `rolling-back` record completes it, and the record goes only after the version rolled back to has started healthy. After an automatic rollback the table refused, no start runs the new release unasked: the person chooses with `delorun recover rollback --profile-only` or safe mode.
 
 | Data differs | Target started | Copy | Rollback does |
 | --- | --- | --- | --- |
@@ -163,7 +164,7 @@ Every way back for `cli-home` reads the update record and applies one table: the
 | yes | yes | present | States how many chats were created or changed since the update and that they are set aside, not deleted. Moves the live `sessions/` and `storages/` to `data-set-aside/<to.delo>-<time>/`, moves the copy into place, restores the snapshot and switches the runtime. |
 | yes | yes | absent | Refuses with `ROLLBACK_NEEDS_DATA_COPY` and the reason, and offers `delorun recover rollback --profile-only`, which restores the snapshot and keeps the target runtime. |
 
-Nothing is deleted by a rollback: set-aside data stays until the person removes it, and `delorun recover status` lists it with its size. The restore writes the journal `data-copies/restore.json` before its first rename, and each step is one directory rename; `delorun start` and `delorun recover` complete a restore in progress before any Host starts.
+Nothing is deleted by a rollback: set-aside data stays until the person removes it, and `delorun recover status` lists it with its size. `delorun recover discard` takes the home lock and refuses while a restore or a rollback runs and for a copy an update record still refers to. `delorun headless` registers as a user of the chat data, refuses while an update, a rollback or a restore is in progress, and makes a copy, a restore or a rollback refuse while it runs. The restore writes the journal `data-copies/restore.json` before its first rename, and each step is one directory rename; `delorun start` and `delorun recover` complete a restore in progress before any Host starts.
 
 This procedure holds for `cli-home`, the only installation that applies it. The desktop Host shares `sessions/` and takes no home lock, so it is not shipped until a lock covers both installations and its updater uses this procedure.
 

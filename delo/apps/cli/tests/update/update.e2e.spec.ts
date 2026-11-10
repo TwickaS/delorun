@@ -87,7 +87,7 @@ interface Running {
 
 /** A Host that boots at once, counts no chats and passes the health check. */
 function host(): RunningHost {
-  return { chats: new CountingChatGate(), failedRows: () => [], check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve() }
+  return { chats: new CountingChatGate(), failedRows: () => [], rows: () => [], check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve() }
 }
 
 /**
@@ -155,7 +155,7 @@ describe('delorun update end to end', TIMEOUT, () => {
       expect(result.stdout).not.toContain('Chat data:')
       expect(result.stdout).toContain('Delo 1.1.0 runs now.')
       expect((await store.pointers()).current).toBe('1.1.0')
-      await until(async () => (await readJournal(journalPath(home, PROFILE)))?.phase === 'committed', 'the successor\'s commit')
+      await until(async () => (await readJournal(journalPath(home, PROFILE)).catch(() => undefined))?.phase === 'committed', 'the successor\'s commit')
       expect(existsSync(join(home, 'data-copies'))).toBe(false)
     } finally {
       await running.end()
@@ -187,7 +187,7 @@ describe('delorun update end to end', TIMEOUT, () => {
       expect(result.code).toBe(EXIT.ok)
       expect(result.stdout).toContain('Without the copy, Delo cannot go back to 1.1.0 after 1.3.0 first starts.')
       expect(result.stdout).toContain('The chat data from before is copied in data-copies/1.3.0.')
-      await until(async () => (await readJournal(journalPath(home, PROFILE)))?.phase === 'committed', 'the successor\'s commit')
+      await until(async () => (await readJournal(journalPath(home, PROFILE)).catch(() => undefined))?.phase === 'committed', 'the successor\'s commit')
     } finally {
       await running.end()
     }
@@ -204,16 +204,19 @@ describe('delorun update end to end', TIMEOUT, () => {
     expect(chat('opened-by-1.3.0')).toBe(false)
     expect(chat('from-before')).toBe(true)
     expect(readdirSync(join(home, 'data-set-aside')).some(name => name.startsWith('1.3.0-'))).toBe(true)
-    expect(await readJournal(journalPath(home, PROFILE))).toBeUndefined()
+    // The record goes once Delo 1.1.0 starts healthy, which the next round's start does.
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'rolling-back', from: '1.1.0', to: '1.3.0' })
   })
 
   it('without a copy, the rollback refuses with ROLLBACK_NEEDS_DATA_COPY and --profile-only keeps the target', async () => {
     const running = await startHome()
+    // Delo 1.1.0 started healthy: the rollback's record went, and the record of the update to 1.1.0 is back.
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'committed', from: '1.0.0', to: '1.1.0' })
     try {
       const result = await delorun(['update', '--yes', '--no-data-copy'])
       expect(result.code).toBe(EXIT.ok)
       expect(result.stdout).toContain('Continuing without the copy.')
-      await until(async () => (await readJournal(journalPath(home, PROFILE)))?.phase === 'committed', 'the successor\'s commit')
+      await until(async () => (await readJournal(journalPath(home, PROFILE)).catch(() => undefined))?.phase === 'committed', 'the successor\'s commit')
     } finally {
       await running.end()
     }
