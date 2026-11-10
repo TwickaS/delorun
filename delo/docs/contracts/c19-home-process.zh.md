@@ -100,7 +100,7 @@ home 进程是每个 CLI profile 一个的操作系统进程。它在同一进�
 | `rollback` | `wait` 与 `drainTimeoutS`，同 `update.apply` | 同 `update.apply`，目标为 `previous` |
 | `stop` | `mode`：`drain` 或 `cancel` | 进度行，然后是进程退出前的最后一行 |
 
-- **响应行。** 每行都有 `ok`（布尔值）；失败行带有 `error`，即[错误](#errors)中的代码；进度行带有 `phase`。报告在 `update.prepare` 返回后 600 秒过期；以过期或未知的 `reportId` 调用 `update.apply` 会以 `REPORT_EXPIRED` 失败。
+- **响应行。** 每行都有 `ok`（布尔值）；失败行带有 `error`，即[错误](#errors)中的代码；进度行带有 `phase`。报告在 `update.prepare` 返回后 600 秒过期；以过期或未知的 `reportId` 调用 `update.apply` 会以 `REPORT_EXPIRED` 失败。若请求以 home 进程不在通道上报告的方式失败，则该请求在没有最终行的情况下结束，失败记录在 home 进程的日志中；请求方将该请求的结果视为未知，`delorun update` 会说明这一点并指出 `delorun logs home`。
 - **一次一个。** 同一时间只运行一个更新或回滚；第二个以 `UPDATE_IN_PROGRESS` 失败。
 - **断开的请求方。** 请求方断开连接不会改变正在运行的更新。`delorun status --follow` 显示正在进行的更新的阶段。
 
@@ -110,7 +110,7 @@ home 进程是每个 CLI profile 一个的操作系统进程。它在同一进�
 
 更新把一个 profile 从正在运行的版本 `from` 移到目标版本 `to`。各阶段按以下顺序运行：
 
-1. **`checking`。** 获取并检查 `to` 的发布元数据（[C2](c02-release-manifest.zh.md)）与日志条目（[C18](c18-release-log.zh.md)）。
+1. **`checking`。** 获取并检查 `to` 的发布元数据（[C2](c02-release-manifest.zh.md)）与日志条目（[C18](c18-release-log.zh.md)）。在此阶段之前，若用于保存快照的 git 无法运行，`update.prepare` 以 `GIT_UNAVAILABLE` 拒绝；下载未能完成时以 `CHANNEL_UNREACHABLE` 结束，发布未通过检查时以 `VERIFY_FAILED` 结束。
 2. **`installing`。** 按 [C1](c01-home-layout.zh.md) 的校验把 `to` 安装到运行时仓库，除非它已安装且其文件与其 manifest 一致。
 3. **`reporting`。** 针对 `to` 计算更新报告（[C3](c03-update-report.zh.md)），并由 `update.prepare` 返回。在 `update.apply` 指定该报告之前，此阶段之后的步骤都不运行。
 4. **`snapshot`。** 保存一个以该更新命名的 profile 历史版本，包括 home patch（[C3](c03-update-report.zh.md)）。
@@ -119,7 +119,7 @@ home 进程是每个 CLI profile 一个的操作系统进程。它在同一进�
 7. **`health-check`。** 后继进程启动其 Host。满足以下条件即通过：Host 在 120 秒内完成启动，它在启动时禁用的插件是报告所列插件的子集，且 studio 监听器回答其健康请求。
 8. **`committed`。** 后继进程通过管道报告 `ready`。前任以原子方式把锁改写为后继的进程 id 与 `startId`，然后关闭其更新通道。后继写入新的启动令牌，在更新通道上监听，启动监管器，进入 `running` 并删除日志文件。前任退出。
 
-**`switching` 或 `health-check` 中的失败。** 后继进程退出、发送 `failed`，或未在 120 秒内报告 `ready` 时，前任停止它，把两个指针恢复为更新前的值，在 `from` 上重新启动自己的 Host，并回到 `running`。更新以带原因的 `rolled-back` 结束，[C3](c03-update-report.zh.md) 的回滚步骤恢复 profile 快照。
+**`switching` 或 `health-check` 中的失败。** 后继进程退出、发送 `failed`，或未在 120 秒内报告 `ready` 时，前任停止它，把两个指针恢复为更新前的值，在 `from` 上重新启动自己的 Host，并回到 `running`。更新以带原因的 `rolled-back` 结束，[C3](c03-update-report.zh.md) 的回滚步骤恢复 profile 快照；后继进程的 Host 已启动但未通过 [C3](c03-update-report.zh.md) 的某项标准时，结果还带有点名该标准的 `criterion`，例如 `H2-host-ready`，`delorun update` 会打印它。
 
 **由此保证的规则。** 只有在等待阶段确认运行中的 chat 为零且新轮次被拒绝之后，`current` 才切换，因此运行时从不在运行中的 chat 之下切换。从 `switching` 开始，到后继的监听器或恢复后的 Host 应答为止，studio 不可用。
 
@@ -191,7 +191,9 @@ home 进程是每个 CLI profile 一个的操作系统进程。它在同一进�
 | `CHATS_RUNNING` | `abort-if-busy` 发现有运行中的 chat |
 | `DRAIN_TIMEOUT` | 运行中的 chat 未在 `drainTimeoutS` 内降为零 |
 | `HEALTH_CHECK_FAILED` | 后继未通过健康检查，或未在 120 秒内报告 `ready` |
-| `VERIFY_FAILED` | 目标的元数据、日志条目或文件未通过 [C1](c01-home-layout.zh.md)、[C2](c02-release-manifest.zh.md) 或 [C18](c18-release-log.zh.md) 的检查 |
+| `VERIFY_FAILED` | 目标的元数据、日志条目或文件无法获取，或未通过 [C1](c01-home-layout.zh.md)、[C2](c02-release-manifest.zh.md) 或 [C18](c18-release-log.zh.md) 的检查；该行的 `detail` 是启动器对同一失败的拒绝说明及其补救办法 |
+| `CHANNEL_UNREACHABLE` | `update.prepare` 的某次下载未能完成：连接失败、停滞，或对方以 200 以外的状态应答；未安装任何内容，该行的 `detail` 是启动器对同一失败的拒绝说明 |
+| `GIT_UNAVAILABLE` | 保存与恢复配置档历史所用的 git 无法运行；`update.prepare` 与每次回滚都在任何步骤之前以它拒绝，因此回滚绝不会因此半途停止 |
 | `NO_PREVIOUS` | 请求了回滚，但不存在 `previous` 指针 |
 
 <a id="consumers"></a>

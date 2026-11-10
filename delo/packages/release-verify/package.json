@@ -30,7 +30,7 @@
     "@delo/contract-verification-checks": "workspace:*",
     "@delo/home": "workspace:*",
     "@delo/logs": "workspace:*",
-    "@delo/release": "workspace:*",
+    "@delo/release-formats": "workspace:*",
     "@noble/curves": "^2.4.0",
     "semver": "^7.8.5",
     "zod": "4.4.3"

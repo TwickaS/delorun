@@ -328,7 +328,7 @@ describe('health-check-rollback', TIMEOUT, () => {
     const home = await setUp({ disabled: ['@scope/plugin'] })
     const running = await start(home)
     const lines = await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
-    expect(final(lines)).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    expect(final(lines)).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED', criterion: 'H3-only-named-disabled' })
     expect(readPointer(home, 'current')).toBe(V1)
     expect(running.store?.switches).toEqual([`${V1}>${V2}`, `restore:${V1}`])
     expect(running.snapshots.calls).toEqual([`save:${V1}>${V2}`, `restore:${V1}>${V2}`])
@@ -339,10 +339,10 @@ describe('health-check-rollback', TIMEOUT, () => {
     expect(existsSync(journalPath(home, PROFILE))).toBe(false)
   })
 
-  it('a successor whose studio listener does not answer is rolled back', async () => {
+  it('a successor whose studio listener does not answer is rolled back, and the outcome names the criterion it failed', async () => {
     const home = await setUp({ healthy: false })
     await start(home)
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED', criterion: 'H2-host-ready' })
     expect(readPointer(home, 'current')).toBe(V1)
   })
 })
@@ -356,7 +356,7 @@ describe('rollback', TIMEOUT, () => {
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V2, 30_000, 'the successor')
     await until(async () => JSON.parse(await text(journalPath(home, PROFILE))).phase === 'committed', 30_000, 'the committed record')
     expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ from: V1, to: V2, phase: 'committed', targetStarted: true })
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toEqual({ ok: true, outcome: 'rolled-back' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toEqual({ ok: true, outcome: 'rolled-back', lines: [`Went back to ${V1}.`] })
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the rolled-back successor')
     // The record goes once the version rolled back to has passed its health check.
     await until(() => !existsSync(journalPath(home, PROFILE)), 30_000, 'the record to go')
@@ -792,7 +792,7 @@ describe('signals and stop', TIMEOUT, () => {
   it('after a failed switch and the Host\'s boot again, one SIGTERM stops the process once through its own stop', async () => {
     const home = await setUp({ disabled: ['@scope/plugin'] })
     const running = await start(home)
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED', criterion: 'H3-only-named-disabled' })
     expect(running.hosts.booted).toHaveLength(2)
     expect(running.signals.count).toBe(1)
     running.signals.send('SIGTERM')

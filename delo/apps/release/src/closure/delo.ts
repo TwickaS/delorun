@@ -44,13 +44,24 @@ function isTranspiled(path: string): boolean {
 }
 
 /**
- * Replace each entry-point path that names a transpiled file with its JavaScript file.
+ * Whether an entry-point target is a subpath pattern over transpiled sources, such as `./src/sign/*.ts`: every
+ * TypeScript file below `src/` becomes JavaScript, so every file such a pattern can name does.
+ * @param value - the target.
+ * @returns true for a `./src/` pattern that ends in `.ts` and is not a declaration pattern.
+ */
+function isTranspiledPattern(value: string): boolean {
+  return value.startsWith('./src/') && value.includes('*') && isTranspiled(value)
+}
+
+/**
+ * Replace each entry-point path that names a transpiled file, or a pattern over transpiled files, with its
+ * JavaScript form.
  * @param value - a field's value.
  * @param removed - the package-relative paths of the removed `.ts` files, as `./src/...`.
  * @returns the rewritten value.
  */
 function rewriteEntries(value: unknown, removed: ReadonlySet<string>): unknown {
-  if (typeof value === 'string') return removed.has(value) ? `${value.slice(0, -'.ts'.length)}.js` : value
+  if (typeof value === 'string') return removed.has(value) || isTranspiledPattern(value) ? `${value.slice(0, -'.ts'.length)}.js` : value
   if (Array.isArray(value)) return value.map(item => rewriteEntries(item, removed))
   if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, rewriteEntries(item, removed)]))
   return value

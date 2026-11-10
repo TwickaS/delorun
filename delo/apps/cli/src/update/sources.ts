@@ -66,14 +66,18 @@ export interface BundleTables {
   readonly retired: readonly string[]
   /** `INSTALLATION_OWNED_PROFILE_TUPLES`. */
   readonly tuples: Readonly<Record<string, readonly string[]>>
-  /** `PROFILE_TEMPLATES`, the lists that replace a matching tuple. */
+  /** The `bundles` list of each `PROFILE_TEMPLATES` entry, which replaces a matching tuple. */
   readonly templates: Readonly<Record<string, readonly string[]>>
 }
 
+/**
+ * The tables as the target's module exports them. A `PROFILE_TEMPLATES` entry is upstream's `ProfileTemplate`, an
+ * object whose `bundles` is the list; fields a later upstream adds to it are not read.
+ */
 const tablesSchema = z.strictObject({
   retired: z.array(z.string()),
   tuples: z.record(z.string(), z.array(z.string())),
-  templates: z.record(z.string(), z.array(z.string())),
+  templates: z.record(z.string(), z.object({ bundles: z.array(z.string()) })),
 })
 
 /** The module the target's Node runs to print its tables; it imports upstream's data module and nothing else. */
@@ -91,7 +95,8 @@ const TABLES_SCRIPT = [
  */
 export async function readBundleTables(runtime: string, node: string): Promise<BundleTables> {
   const { stdout } = await run(node, ['--input-type=module', '-e', TABLES_SCRIPT], { cwd: join(runtime, 'app'), env: {}, timeout: BUNDLE_TABLES_TIMEOUT_MS, maxBuffer: 1024 * 1024 })
-  return tablesSchema.parse(JSON.parse(stdout))
+  const tables = tablesSchema.parse(JSON.parse(stdout))
+  return { ...tables, templates: Object.fromEntries(Object.entries(tables.templates).map(([name, template]) => [name, template.bundles])) }
 }
 
 /**

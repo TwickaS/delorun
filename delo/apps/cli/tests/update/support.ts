@@ -23,8 +23,8 @@ import {
   type Sha256Hex,
   type UtcTimestamp,
 } from '@delo/contract-release-manifest'
-import { publicKeyEntry, signEnvelope } from '@delo/release/sign/envelope'
-import { toJsonValue } from '@delo/release/sign/json'
+import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
+import { toJsonValue } from '@delo/release-formats/sign/json'
 import { progressLines } from '@delo/install'
 import type { ChannelRelease, OpenUpdateChannel, ReleaseFileBytes, UpdateReleaseChannel } from '@delo/runtime-store'
 
@@ -68,7 +68,9 @@ pipe.on('data', (chunk) => {
       const record = JSON.parse(readFileSync(path, 'utf8'))
       writeFileSync(path + '.fake', JSON.stringify({ ...record, phase: 'committed' }) + '\\n', { mode: 0o600 })
       renameSync(path + '.fake', path)
-      process.exit(0)
+      // A home process keeps running after its commit; this one ends a moment later, still holding the lock until then,
+      // so a spec that takes the lock next waits for it to exit.
+      setTimeout(() => process.exit(0), 300)
     }
   }
 })
@@ -128,6 +130,20 @@ export function throwawayRoot(): { readonly keys: Keys, readonly bytes: Buffer, 
   }
   const envelope = signEnvelope({ signed: toJsonValue(metadata), signatures: [] }, [keys.root])
   return { keys, bytes: Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`), metadata }
+}
+
+/**
+ * The next root version over the same keys, signed by the root key, which both the trusted root's root role and its own
+ * require.
+ * @param previous - the root it follows.
+ * @param previous.keys - that root's keys.
+ * @param previous.metadata - that root's metadata.
+ * @returns the next root's bytes and metadata.
+ */
+export function nextThrowawayRoot(previous: { readonly keys: Keys, readonly metadata: RootMetadata }): { readonly bytes: Buffer, readonly metadata: RootMetadata } {
+  const metadata: RootMetadata = { ...previous.metadata, version: previous.metadata.version + 1, issued: brandString<UtcTimestamp>('2026-11-02T00:00:00Z') }
+  const envelope = signEnvelope({ signed: toJsonValue(metadata), signatures: [] }, [previous.keys.root])
+  return { bytes: Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`), metadata }
 }
 
 function sha256(bytes: Uint8Array): Sha256Hex {

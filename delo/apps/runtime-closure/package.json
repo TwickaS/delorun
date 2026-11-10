@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@delo/contract-release-manifest": "workspace:*",
+    "@delo/release-formats": "workspace:*",
     "@delo/runtime-store": "workspace:*"
   }
 }

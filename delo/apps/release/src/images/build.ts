@@ -19,12 +19,12 @@ import { dirname, join } from 'node:path'
 import type { FileRef, ImageRef, OciDigest } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
-import { archiveEntries } from '../archive/inspect.ts'
+import { archiveEntries } from '@delo/release-formats/archive/inspect'
 import { RECIPE_DIR, readRecipeFile } from '../closure/config.ts'
 import { closureFileNames } from '../closure/tree.ts'
-import { sha256Hex } from '../brands.ts'
-import { parseStrictJson } from '../sign/json.ts'
-import { ImageRefSchema } from '../sign/schemas.ts'
+import { sha256Hex } from '@delo/release-formats/brands'
+import { parseStrictJson } from '@delo/release-formats/sign/json'
+import { ImageRefSchema } from '@delo/release-formats/sign/schemas'
 
 /**
  * One image of `images.json`: its repository, and its build context, seccomp profile and the profile's licence, each

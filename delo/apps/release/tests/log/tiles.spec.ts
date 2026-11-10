@@ -4,8 +4,8 @@
  * partial tiles with the full-tile fallback, and refusals of missing or malformed tiles.
  */
 import { describe, expect, it } from 'vitest'
-import { consistencyProof, inclusionProof, leafHash, rootFromInclusionProof, treeRoot, verifyConsistency } from '../../src/log/merkle.ts'
-import { consistencyProofFromTiles, inclusionProofFromTiles, tilePath, TileError } from '../../src/log/tiles.ts'
+import { consistencyProof, inclusionProof, leafHash, rootFromInclusionProof, treeRoot, verifyConsistency } from '@delo/release-formats/log/merkle'
+import { consistencyProofFromTiles, inclusionProofFromTiles, tilePath, TileError } from '@delo/release-formats/log/tiles'
 import { LogStandIn } from './standin.ts'
 
 function served(log: LogStandIn): (path: string) => Promise<Uint8Array | undefined> {

@@ -4,7 +4,7 @@
  * `SOURCE_DATE_EPOCH`. A path longer than the ustar name and prefix fields allow is carried by a pax extended header
  * holding only a `path` record. The archive ends with two zero blocks and no further padding.
  *
- * @module @delo/release/archive/tar
+ * @module @delo/release-formats/archive/tar
  */
 import type { RuntimeFileMode } from '@delo/contract-release-manifest'
 import { ChunkReader } from './bytes.ts'

@@ -32,10 +32,28 @@ export interface HealthExpectations {
   readonly namedRows: readonly string[]
   /** H5: the bundle list the report predicts, or `undefined` when the report predicts none. */
   readonly bundles?: readonly string[]
-  /** H4: the rows that did not load on the previous release, by id or name. */
-  readonly previousFailures: readonly string[]
-  /** H3: the id of every row the previous release's Host had at boot, so a row the report did not name that is gone fails. */
-  readonly previousRows: readonly string[]
+  /** H3, H4: the rows that were disabled or did not load on the previous release. */
+  readonly previousFailures: readonly BootRow[]
+  /**
+   * H3: every row the previous release's Host had at boot, by id and plugin name, so a row that is gone fails unless the
+   * report named it or disabled its plugin.
+   */
+  readonly previousRows: readonly BootRow[]
+}
+
+/** A row a Host had at boot, as the next release's health check compares it with its own. */
+export interface BootRow {
+  /** The row's id. */
+  readonly id: string
+  /** The plugin's name: its package name for a package plugin. */
+  readonly name: string
+  /**
+   * Whether the Loader made the id up because the row's patch gives it none: such an id is new at each boot, so the
+   * check matches the row by its plugin instead, and only such a row.
+   */
+  readonly generated: boolean
+  /** For a row of a protected plugin (a guard, consent or sandbox row), the SHA-256 of its canonical config. */
+  readonly configHash?: string | undefined
 }
 
 /** The health check's answer: passed, or the first criterion that failed. */
@@ -206,10 +224,13 @@ export interface SessionDataCopies {
    * @param record - the update record.
    * @param steps - whether only the profile goes back, the caller's record mark and its runtime switch.
    * @throws {HomeProcessError} `ROLLBACK_NEEDS_DATA_COPY` when the data differs, the target started and no copy
-   *   exists, or `ROLLBACK_TARGET_UNUSABLE` when the version rolled back to is not installed or fails its start
-   *   check; either is thrown before any step, with nothing changed. Any other error means a step may have run.
+   *   exists, `ROLLBACK_TARGET_UNUSABLE` when the version rolled back to is not installed or fails its start check,
+   *   `CHATS_RUNNING` while another process uses the chat data, or `GIT_UNAVAILABLE` when the git the profile history
+   *   runs cannot start; each is thrown before any step, with nothing changed. Any other error means a step may have
+   *   run.
+   * @returns what the person reads about the rollback, one line each, such as the chats it set aside.
    */
-  rollback(record: UpdateJournal, steps: RollbackSteps): Promise<void>
+  rollback(record: UpdateJournal, steps: RollbackSteps): Promise<readonly string[]>
 }
 
 /** The running chats of one Host: sessions with an active turn or a running background job. */
@@ -286,15 +307,15 @@ export interface RunningHost {
    */
   studioLink(port: number | undefined): StudioLinkResult
   /**
-   * The rows that did not load at boot, which a successor's H4 allows.
-   * @returns their ids or names.
+   * The rows that were disabled or did not load at boot, which a successor's H3 and H4 allow.
+   * @returns the rows.
    */
-  failedRows(): readonly string[]
+  failedRows(): readonly BootRow[]
   /**
    * Every row the Host had at boot, which a successor's H3 compares with its own.
-   * @returns their ids.
+   * @returns their ids and plugin names.
    */
-  rows(): readonly string[]
+  rows(): readonly BootRow[]
   /**
    * Contract C3's health check: H1 to H5 against the report's expectations, or H1 and H2 alone without them.
    * @param expect - what the report predicted, or `undefined` for a start whose record keeps no expectations, such

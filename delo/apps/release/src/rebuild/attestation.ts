@@ -11,8 +11,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import type { FileRef } from '@delo/contract-release-manifest'
 import { z } from 'zod'
-import { sha256Hex } from '../brands.ts'
-import { canonicalJson, parseStrictJson, toJsonValue } from '../sign/json.ts'
+import { sha256Hex } from '@delo/release-formats/brands'
+import { canonicalJson, parseStrictJson, toJsonValue } from '@delo/release-formats/sign/json'
 
 /** The attestation file's schema id. */
 export const ATTESTATION_SCHEMA = 'delo.release-rebuild-attestation/1'

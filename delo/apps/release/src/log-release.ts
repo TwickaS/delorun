@@ -19,9 +19,9 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { logRelease } from './log/client.ts'
-import { readEntryRequest } from './log/entry.ts'
-import { readEnvelope } from './sign/schemas.ts'
-import { trustRootChain } from './sign/verify.ts'
+import { readEntryRequest } from '@delo/release-formats/log/entry'
+import { readEnvelope } from '@delo/release-formats/sign/schemas'
+import { trustRootChain } from '@delo/release-formats/sign/verify'
 
 async function main(argv: readonly string[]): Promise<number> {
   const { values } = parseArgs({ args: [...argv], strict: true, options: { root: { type: 'string' }, manifest: { type: 'string' }, entry: { type: 'string' }, submit: { type: 'string' }, checkpoint: { type: 'string' }, tiles: { type: 'string' }, out: { type: 'string' } } })

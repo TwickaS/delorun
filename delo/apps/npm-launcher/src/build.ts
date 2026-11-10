@@ -21,9 +21,10 @@ import { parseArgs, promisify } from 'node:util'
 import { build } from 'tsdown'
 import { RELEASE_REPOSITORY_URL } from '@delo/contract-release-manifest'
 import { messageOf } from '@delo/install'
-import { readRoot } from '@delo/release/sign/verify'
+import { readRoot } from '@delo/release-formats/sign/verify'
 import { MINIMUM_NODE, NODE_ENGINES_RANGE } from './node-version.ts'
-import { buildOrigin, channelPlan, logPlan, type BuildConstants } from './platform.ts'
+import { buildOrigin } from '@delo/install'
+import { channelPlan, logPlan, type BuildConstants } from './platform.ts'
 import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
 
 const run = promisify(execFile)

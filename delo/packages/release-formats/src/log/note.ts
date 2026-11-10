@@ -5,7 +5,7 @@
  * signature and type 0x04 a cosignature, whose signed message is `cosignature/v1\ntime <seconds>\n` followed by the
  * checkpoint body.
  *
- * @module @delo/release/log/note
+ * @module @delo/release-formats/log/note
  */
 import { createHash, createPublicKey, sign, verify, type KeyObject } from 'node:crypto'
 import { rawPublicKey } from '../sign/envelope.ts'

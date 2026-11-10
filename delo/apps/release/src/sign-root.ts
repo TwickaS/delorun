@@ -16,10 +16,10 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { RELEASE_FILE_SIZE_LIMITS } from '@delo/contract-release-manifest'
-import { readSigningKey, signEnvelope } from './sign/envelope.ts'
-import { parseStrictJson } from './sign/json.ts'
-import { RootSchema } from './sign/schemas.ts'
-import { trustRootChain } from './sign/verify.ts'
+import { readSigningKey, signEnvelope } from '@delo/release-formats/sign/envelope'
+import { parseStrictJson } from '@delo/release-formats/sign/json'
+import { RootSchema } from '@delo/release-formats/sign/schemas'
+import { trustRootChain } from '@delo/release-formats/sign/verify'
 
 function main(argv: readonly string[]): number {
   const { values } = parseArgs({ args: [...argv], strict: true, options: { draft: { type: 'string' }, key: { type: 'string', multiple: true }, previous: { type: 'string' }, out: { type: 'string' } } })

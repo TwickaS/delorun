@@ -12,7 +12,8 @@ import { mkdir, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE, ROOT_FILE_NAME_PATTERN, TRUST_FILES, TRUST_ROOTS_DIRECTORY } from '@delo/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delo/home'
-import { readRoot } from '@delo/release/sign/verify'
+import { readRoot } from '@delo/release-formats/sign/verify'
+import { z } from 'zod'
 import { InstallError, messageOf } from './errors.ts'
 
 /** The newest timestamp a client verified: its version and its bytes, which an equal version must repeat. */
@@ -198,4 +199,83 @@ export async function writeStoredRootChain(home: string, roots: readonly Uint8Ar
       throw new InstallError('TRUST_STATE_INVALID', path, `the walked root chain cannot be written: ${messageOf(error)}`, { cause: error })
     }
   }
+}
+
+/** The hosts an `http:` build origin may name: this machine only. */
+const LOOPBACK_HOSTS: readonly string[] = ['127.0.0.1', 'localhost', '[::1]']
+
+/**
+ * Check a build origin: an origin with no path, query or fragment, over `https:`, or over `http:` for this machine's
+ * loopback address so a local channel and log can serve a build.
+ * @param origin - the origin a build passes.
+ * @param what - what the origin is, for the refusal.
+ * @returns the origin without a trailing slash.
+ * @throws {Error} naming the origin and the rule it breaks.
+ */
+export function buildOrigin(origin: string, what: string): string {
+  let url: URL
+  try {
+    url = new URL(origin)
+  } catch {
+    // The URL constructor's own message names no origin, so the refusal below is the one reported.
+    throw new Error(`the ${what} ${JSON.stringify(origin)} is not a URL`)
+  }
+  if (url.pathname !== '/' || url.search !== '' || url.hash !== '' || url.username !== '' || url.password !== '') {
+    throw new Error(`the ${what} ${origin} must be an origin: a scheme, a host and a port, with no path, query, fragment or credentials`)
+  }
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && LOOPBACK_HOSTS.includes(url.hostname))) {
+    throw new Error(`the ${what} ${origin} must use https, or http on this machine's loopback address`)
+  }
+  return url.origin
+}
+
+/**
+ * Where a home's releases come from: the origins the launcher that installed its runtime was built with. An absent
+ * field is the production value, contract C2's publication and the log the trusted root names.
+ */
+export interface ChannelOrigins {
+  /** The origin that serves `timestamp.json`, `root/<n>.root.json` and `releases/download/v<version>/<file>`. */
+  readonly channelOrigin?: string
+  /** The log's `tlog-tiles` origin. */
+  readonly logOrigin?: string
+}
+
+const channelRecord = z.strictObject({
+  v: z.literal(1),
+  channelOrigin: z.string().min(1).optional(),
+  logOrigin: z.string().min(1).optional(),
+})
+
+/**
+ * Read the release channel this home updates from, `trust/channel.json`. Delo writes it only from a launcher, when it
+ * installs a runtime. The sandbox keeps confined commands from writing under `trust/`; an unconfined process of the same
+ * user, a Host plugin included, can write it as it can any file of the home, so it decides only where releases are
+ * fetched from, never which releases verify.
+ * @param home - the resolved Delo home.
+ * @returns the recorded origins; `undefined` when no launcher recorded any, which means the production channel.
+ * @throws {InstallError} `TRUST_STATE_INVALID` when the file is a link, belongs to another user, is laxer than 0600, is
+ *   not a channel record, or names an origin {@link buildOrigin} refuses.
+ */
+export async function readChannelRecord(home: string): Promise<ChannelOrigins | undefined> {
+  const path = trustFile(home, TRUST_FILES.channel)
+  const bytes = await readTrustFile(path)
+  if (bytes === undefined) return undefined
+  let parsed: z.output<typeof channelRecord>
+  try {
+    parsed = channelRecord.parse(JSON.parse(bytes.toString('utf8')))
+    if (parsed.channelOrigin !== undefined) buildOrigin(parsed.channelOrigin, 'channel origin')
+    if (parsed.logOrigin !== undefined) buildOrigin(parsed.logOrigin, 'log origin')
+  } catch (error) {
+    throw new InstallError('TRUST_STATE_INVALID', path, `the recorded release channel is not a channel record: ${messageOf(error)}`, { cause: error })
+  }
+  return { ...parsed.channelOrigin === undefined ? {} : { channelOrigin: parsed.channelOrigin }, ...parsed.logOrigin === undefined ? {} : { logOrigin: parsed.logOrigin } }
+}
+
+/**
+ * Record the release channel a launcher installed this home's runtime from, `trust/channel.json`, at mode 0600.
+ * @param home - the resolved Delo home.
+ * @param origins - the launcher's build origins; an empty object for the production channel.
+ */
+export async function writeChannelRecord(home: string, origins: ChannelOrigins): Promise<void> {
+  await writeTrustFile(home, TRUST_FILES.channel, Buffer.from(`${JSON.stringify({ v: 1, ...origins })}\n`, 'utf8'))
 }

@@ -82,6 +82,7 @@ export {
   currentFiles,
   HISTORY_TIMEOUT_MS,
   latestVersion,
+  historyGitProblem,
   openHistory,
   planRestore,
   recordSnapshot,

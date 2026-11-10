@@ -43,6 +43,10 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'The new release did not pass its health check.', remedies: [recoverStatus] }
     case 'VERIFY_FAILED':
       return { lead: 'Delo refused a release that did not verify.', remedies: ['See every check: delorun verify'] }
+    case 'CHANNEL_UNREACHABLE':
+      return { lead: 'Delo did not update: the release channel could not be reached, and nothing was downloaded or changed.', remedies: ['Check this computer\'s connection, then run the same command again.'] }
+    case 'GIT_UNAVAILABLE':
+      return { lead: 'Delo did not go ahead: git, which saves and restores the profile\'s history, cannot run here, and nothing was changed.', remedies: ['Install git, then run the same command again.'] }
     case 'NO_PREVIOUS':
       return { lead: 'Delo did not roll back: no previous release is installed.', remedies: [] }
     case 'NO_UPDATE_RECORD':

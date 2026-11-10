@@ -8,9 +8,9 @@
  */
 import { generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { RELEASE_LOG_ENTRY_KEY_DETAILS, type HashedRekordRequest, type ReleaseLogBundle } from '@delo/contract-release-log'
-import { entryBody } from '../../src/log/entry.ts'
-import { inclusionProof, leafHash, nodeHash, treeRoot } from '../../src/log/merkle.ts'
-import { checkpointBody, NOTE_COSIGNATURE, NOTE_ED25519, signatureLine, verifierKey } from '../../src/log/note.ts'
+import { entryBody } from '@delo/release-formats/log/entry'
+import { inclusionProof, leafHash, nodeHash, treeRoot } from '@delo/release-formats/log/merkle'
+import { checkpointBody, NOTE_COSIGNATURE, NOTE_ED25519, signatureLine, verifierKey } from '@delo/release-formats/log/note'
 
 /** An in-memory log. */
 export class LogStandIn {

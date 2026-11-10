@@ -27,10 +27,10 @@ import {
 import { brandString } from '@deepseek-ai/dsh-brand'
 import semver from 'semver'
 import { z } from 'zod'
-import { sha256Hex } from '../brands.ts'
-import { canonicalJson, parseStrictJson, type JsonValue } from './json.ts'
-import { readEnvelope } from './schemas.ts'
-import { channelAccepts, verifySignedManifest, verifyTimestamp, type TrustedRoot } from './verify.ts'
+import { sha256Hex } from '@delo/release-formats/brands'
+import { canonicalJson, parseStrictJson, type JsonValue } from '@delo/release-formats/sign/json'
+import { readEnvelope } from '@delo/release-formats/sign/schemas'
+import { channelAccepts, verifySignedManifest, verifyTimestamp, type TrustedRoot } from '@delo/release-formats/sign/verify'
 
 /** A manifest file a channel names. */
 export interface ManifestFile {

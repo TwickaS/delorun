@@ -41,8 +41,9 @@
     "@delo/home-process": "workspace:*",
     "@delo/install": "workspace:*",
     "@delo/logs": "workspace:*",
+    "@delo/npm-launcher": "workspace:*",
     "@delo/profile-safety": "workspace:*",
-    "@delo/release": "workspace:*",
+    "@delo/release-formats": "workspace:*",
     "@delo/release-verify": "workspace:*",
     "@delo/runtime-store": "workspace:*",
     "@delo/supervisor": "workspace:*",
@@ -55,10 +56,10 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-launch-environment": "workspace:*",
+    "@deepseek-ai/dsh-official-bundles": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-persistence": "workspace:*",
     "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:*",
-    "@delo/release": "workspace:*",
     "@types/semver": "^7.8.0"
   },
   "peerDependencies": {

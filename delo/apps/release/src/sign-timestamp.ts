@@ -25,10 +25,10 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { signEnvelope } from './sign/envelope.ts'
-import { toJsonValue } from './sign/json.ts'
+import { signEnvelope } from '@delo/release-formats/sign/envelope'
+import { toJsonValue } from '@delo/release-formats/sign/json'
 import { initialState, nextTimestamp, readTimestampState, stateAfter, type ManifestFile } from './sign/timestamp.ts'
-import { trustRootChain, verifyTimestamp } from './sign/verify.ts'
+import { trustRootChain, verifyTimestamp } from '@delo/release-formats/sign/verify'
 
 function manifestFile(path: string): ManifestFile {
   return { name: basename(path), bytes: readFileSync(resolve(path)) }

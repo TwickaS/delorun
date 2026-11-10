@@ -9,7 +9,7 @@
 import { readFile } from 'node:fs/promises'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { RELEASE_FILE_SIZE_LIMITS, type ReleaseManifest, type RootMetadata, type RuntimeFileList } from '@delo/contract-release-manifest'
-import { verifyFileList, verifySignedManifest } from '@delo/release/sign/verify'
+import { verifyFileList, verifySignedManifest } from '@delo/release-formats/sign/verify'
 import type { StorePaths } from './paths.ts'
 
 /** A version's manifest and file list, each verified with the trusted root. */

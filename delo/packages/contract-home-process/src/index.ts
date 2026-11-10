@@ -191,6 +191,8 @@ export type HomeProcessErrorCode =
   | 'DRAIN_TIMEOUT'
   | 'HEALTH_CHECK_FAILED'
   | 'VERIFY_FAILED'
+  | 'CHANNEL_UNREACHABLE'
+  | 'GIT_UNAVAILABLE'
   | 'NO_PREVIOUS'
   | 'NO_UPDATE_RECORD'
   | 'DATA_COPY_NO_SPACE'
@@ -299,5 +301,8 @@ export interface UpdateJournal {
   readonly health?: UpdateHealth
 }
 
-/** A message on the handover pipe from successor to predecessor. */
-export type HandoverMessage = { readonly type: 'ready' } | { readonly type: 'failed', readonly reason: HomeProcessErrorCode }
+/**
+ * A message on the handover pipe from successor to predecessor. A `failed` message names the first of C3's health
+ * criteria the successor's Host failed, such as `H2-host-ready`, when it booted far enough to run the check.
+ */
+export type HandoverMessage = { readonly type: 'ready' } | { readonly type: 'failed', readonly reason: HomeProcessErrorCode, readonly criterion?: string | undefined }

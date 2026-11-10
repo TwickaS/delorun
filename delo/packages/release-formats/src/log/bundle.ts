@@ -5,7 +5,7 @@
  * log signature, and at least the root metadata's threshold of cosignatures from listed witnesses. A bundle whose
  * checkpoint carries no valid listed cosignature fails, whatever its log signature says.
  *
- * @module @delo/release/log/bundle
+ * @module @delo/release-formats/log/bundle
  */
 import { createHash, createPublicKey } from 'node:crypto'
 import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_BUNDLE_SIZE_LIMIT, RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, RELEASE_LOG_ENTRY_KEY_DETAILS, MAX_PROOF_HASHES, WITNESS_THRESHOLD, type ReleaseLogBundle, type ReleaseLogFailure } from '@delo/contract-release-log'

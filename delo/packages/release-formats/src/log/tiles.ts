@@ -8,7 +8,7 @@
  * consistency proof; whether they reproduce a checkpoint's root is what the bundle verification and the online check
  * verify.
  *
- * @module @delo/release/log/tiles
+ * @module @delo/release-formats/log/tiles
  */
 import { nodeHash } from './merkle.ts'
 

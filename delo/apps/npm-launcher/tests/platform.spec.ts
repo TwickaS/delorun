@@ -9,7 +9,8 @@ import { RELEASE_DOWNLOAD_HOSTS } from '@delo/contract-home-layout'
 import { Downloader, isInstallError } from '@delo/install'
 import { logEndpoints, tilesTransport } from '@delo/release-verify/transport'
 import { RELEASE_SOURCE, RELEASE_HOSTS } from '@delo/install'
-import { BUILD_CONSTANTS, buildOrigin, channelPlan, logPlan, platformOf, RELEASE_LOG_API_PREFIX } from '../src/platform.ts'
+import { buildOrigin } from '@delo/install'
+import { BUILD_CONSTANTS, channelPlan, logPlan, platformOf, RELEASE_LOG_API_PREFIX } from '../src/platform.ts'
 
 describe('the platform a machine installs', () => {
   it('names the closure of a pair contract C2 publishes, and refuses one it does not', () => {

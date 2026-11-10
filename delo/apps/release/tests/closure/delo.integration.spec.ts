@@ -54,6 +54,21 @@ describe('Delo packages in a closure', () => {
     expect(manifest.imports).toEqual({ '#plain': null, '#flag': true })
   })
 
+  it('rewrites subpath patterns over sources, so a package that exports `./sign/*` is importable by plain Node', async (test) => {
+    const root = scratch(test)
+    writeTree(root, {
+      'node_modules/@delo/formats/package.json': JSON.stringify({ name: '@delo/formats', version: '0.0.0', type: 'module', exports: { './sign/*': './src/sign/*.ts', './types/*': './src/types/*.d.ts', './static/*': './static/*.ts', './package.json': './package.json' } }),
+      'node_modules/@delo/formats/src/sign/verify.ts': 'export function verify(): string {\n  return "verified"\n}\n',
+      'node_modules/@delo/cli/package.json': JSON.stringify({ name: '@delo/cli', version: '0.0.0', type: 'module', bin: { delorun: './src/bin.ts' } }),
+      'node_modules/@delo/cli/src/bin.ts': "import { verify } from '@delo/formats/sign/verify'\nconsole.log(verify())\n",
+    })
+    await transpileDeloPackages(join(root, 'node_modules'))
+    expect(JSON.parse(readFileSync(join(root, 'node_modules/@delo/formats/package.json'), 'utf8')).exports).toEqual({ './sign/*': './src/sign/*.js', './types/*': './src/types/*.d.ts', './static/*': './static/*.ts', './package.json': './package.json' })
+    const run = spawnSync(process.execPath, [join(root, 'node_modules/@delo/cli/src/bin.js')], { cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 60_000 })
+    expect(run.stderr).toBe('')
+    expect(run.stdout).toBe('verified\n')
+  })
+
   it('refuses a source that does not transpile, naming it', async (test) => {
     const root = scratch(test)
     writeTree(root, {

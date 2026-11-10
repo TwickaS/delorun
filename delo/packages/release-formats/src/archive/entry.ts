@@ -3,7 +3,7 @@
  * regular files, in byte-wise path order, with mode `0644` or `0755`, owner and group 0 with empty names, and every
  * mtime equal to the release's `SOURCE_DATE_EPOCH` (contract C2, rebuild before signing).
  *
- * @module @delo/release/archive/entry
+ * @module @delo/release-formats/archive/entry
  */
 import type { RuntimeFileMode, RuntimePlatform } from '@delo/contract-release-manifest'
 

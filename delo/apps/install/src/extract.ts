@@ -10,8 +10,8 @@
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
-import { entryPathError, modeBits, type ArchiveFormat } from '@delo/release/archive/entry'
-import { archiveEntries } from '@delo/release/archive/inspect'
+import { entryPathError, modeBits, type ArchiveFormat } from '@delo/release-formats/archive/entry'
+import { archiveEntries } from '@delo/release-formats/archive/inspect'
 import type { RuntimeFileList } from '@delo/contract-release-manifest'
 import { InstallError, messageOf } from './errors.ts'
 

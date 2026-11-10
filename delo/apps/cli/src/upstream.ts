@@ -1,6 +1,7 @@
 /**
  * Upstream's profile commands that `delorun` offers: `delorun plugin …` runs upstream's `dsh` command line in this
- * process unchanged, with the Delo home as `DSH_HOME`; upstream's parser refuses the desktop app's profile for
+ * process unchanged, with the Delo home as `DSH_HOME` and an installed Delo's own pnpm
+ * ([package manager](./package-manager.ts)); upstream's parser refuses the desktop app's profile for
  * `plugin`, as it does for `dsh`. `delorun headless …` boots upstream's `headless` profile through Delo's composition
  * ([headless](./headless.ts)), not through upstream's command line.
  *
@@ -16,6 +17,7 @@ import { refuseLauncherOptions, runHeadless, type HeadlessDependencies } from '.
 import { useHomeShared } from './home-exclusion.ts'
 import { selectCommandProfile } from './profile.ts'
 import { runUpstreamProfile, upstreamDependencies } from './start.ts'
+import { shippedPackageManager } from './package-manager.ts'
 
 /**
  * Run upstream's command line with these arguments.
@@ -24,7 +26,8 @@ import { runUpstreamProfile, upstreamDependencies } from './start.ts'
 async function runUpstreamCli(argv: readonly string[]): Promise<void> {
   // Loaded after the launch variables are set, so upstream resolves the Delo home.
   const { runCli } = await import('@deepseek-ai/dsh/lib/bin.js')
-  await runCli({ argv })
+  const packageManager = shippedPackageManager()
+  await runCli(packageManager === undefined ? { argv } : { argv, packageManager })
 }
 
 /** `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management. */

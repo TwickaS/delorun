@@ -211,6 +211,8 @@ export const TRUST_FILES = {
   checkpoint: 'checkpoint.json',
   /** The release-log check state of each installed release (C18, "Check states"). */
   releaseLog: 'release-log.json',
+  /** The release channel and log the launcher that installed the runtime was built for, which updates fetch from (C1). */
+  channel: 'channel.json',
 } as const
 
 /**

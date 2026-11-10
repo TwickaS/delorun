@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import { INSTALLATION_OWNED_PROFILE_TUPLES, PROFILE_TEMPLATES, RETIRED_BUNDLES } from '@deepseek-ai/dsh-official-bundles'
 import { DELO_HOME_ENTRIES, STATUS_FILES, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { EXEMPTION_FILES } from '@delo/contract-plugin-versions'
 import { ensureHomeTree } from '@delo/home'
@@ -44,12 +45,22 @@ const TABLES: BundleTables = {
 }
 
 /**
- * A bundles module that exports upstream's three tables.
+ * A bundles module that exports upstream's three tables in upstream's form: a set, a record of lists, and a record of
+ * `ProfileTemplate` objects.
  * @param tables - the tables.
  * @returns the module's source.
  */
 function tablesModule(tables: BundleTables): string {
-  return `export const RETIRED_BUNDLES = new Set(${JSON.stringify(tables.retired)})\nexport const INSTALLATION_OWNED_PROFILE_TUPLES = ${JSON.stringify(tables.tuples)}\nexport const PROFILE_TEMPLATES = ${JSON.stringify(tables.templates)}\n`
+  const templates = Object.fromEntries(Object.entries(tables.templates).map(([name, bundles]) => [name, { bundles }]))
+  return `export const RETIRED_BUNDLES = new Set(${JSON.stringify(tables.retired)})\nexport const INSTALLATION_OWNED_PROFILE_TUPLES = ${JSON.stringify(tables.tuples)}\nexport const PROFILE_TEMPLATES = ${JSON.stringify(templates)}\n`
+}
+
+/**
+ * Upstream's own bundles module, its three tables serialized from the workspace package.
+ * @returns the module's source.
+ */
+function upstreamTablesModule(): string {
+  return `export const RETIRED_BUNDLES = new Set(${JSON.stringify([...RETIRED_BUNDLES])})\nexport const INSTALLATION_OWNED_PROFILE_TUPLES = ${JSON.stringify(INSTALLATION_OWNED_PROFILE_TUPLES)}\nexport const PROFILE_TEMPLATES = ${JSON.stringify(PROFILE_TEMPLATES)}\n`
 }
 
 let rootOf: ReturnType<typeof throwawayRoot>
@@ -90,6 +101,8 @@ beforeAll(async () => {
   await installRelease('1.2.0', { healthy: true, persistence: SAME }, { [`app/node_modules/${BUNDLES}/index.js`]: 'export const RETIRED_BUNDLES = [1]\nexport const INSTALLATION_OWNED_PROFILE_TUPLES = {}\nexport const PROFILE_TEMPLATES = {}\n' })
   await installRelease('1.3.0', { healthy: true, persistence: SAME }, { [`app/node_modules/${BUNDLES}/package.json`]: undefined, [`app/node_modules/${BUNDLES}/index.js`]: undefined })
   await installRelease('1.4.0', { healthy: true, persistence: SAME }, { 'data-formats.json': 'not json' })
+  await installRelease('1.7.0', { healthy: true, persistence: SAME }, { [`app/node_modules/${BUNDLES}/index.js`]: 'export const RETIRED_BUNDLES = new Set()\nexport const INSTALLATION_OWNED_PROFILE_TUPLES = {}\nexport const PROFILE_TEMPLATES = { cli: [\'@a/new\'] }\n' })
+  await installRelease('1.6.0', { healthy: true, persistence: SAME }, { [`app/node_modules/${BUNDLES}/index.js`]: upstreamTablesModule() })
   await installRelease('1.5.0', { healthy: true, persistence: SAME }, {
     'app/node_modules/@t/bundle/package.json': JSON.stringify({ name: '@t/bundle', version: '1.5.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }),
     'app/node_modules/@t/bundle/cordis.patch.yml': '- insert:\n    - id: target-row\n      name: plugin-target\n',
@@ -159,6 +172,18 @@ describe('readBundleTables', () => {
   it('reads the tables a runtime\'s own bundles module exports, with the runtime\'s own Node', TIMEOUT, async () => {
     expect(await tablesOf('1.1.0')).toEqual(TABLES)
     expect(await tablesOf('1.0.0')).toEqual({ retired: [], tuples: {}, templates: {} })
+  })
+
+  it('reads upstream\'s own tables, whose templates are objects that carry the list', TIMEOUT, async () => {
+    const tables = await tablesOf('1.6.0')
+    expect(tables.retired).toEqual([...RETIRED_BUNDLES])
+    expect(tables.tuples).toEqual(INSTALLATION_OWNED_PROFILE_TUPLES)
+    expect(tables.templates).toEqual(Object.fromEntries(Object.entries(PROFILE_TEMPLATES).map(([name, template]) => [name, [...template.bundles]])))
+    expect(tables.templates.headless).toEqual(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'])
+  })
+
+  it('refuses a module whose templates are bare lists, not upstream\'s objects', TIMEOUT, async () => {
+    await expect(tablesOf('1.7.0')).rejects.toThrow()
   })
 
   it('refuses a module whose tables are not lists of names', TIMEOUT, async () => {

@@ -2,22 +2,30 @@
  * What the CLI's Host reports to the home process (contracts C19 and C3): its running chats, counted from upstream's
  * `agent/status` event with each agent's own cancellation and from the job registry's events with each job's kill, the
  * held state of the gate, which `@delo/bundle-local`'s `deloTurnGate` service reads to refuse new turns, and C3's
- * health check H1 to H5 over the booted rows, the studio's listener, the runtime's files and the profile's bundle list.
+ * health check H1 to H5 over the booted rows, the studio listener's health route ({@link serveHealth}), the runtime's
+ * files and the profile's bundle list.
  *
  * @module @delo/cli/update/host
  */
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
+import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { JobId } from '@deepseek-ai/dsh-jobs'
+import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@delo/bundle-local/update-gate'
-import type { CountingChatGate, HealthExpectations, HealthVerdict } from '@delo/home-process'
+import type { BootRow, CountingChatGate, HealthExpectations, HealthVerdict } from '@delo/home-process'
 import { bundleListOf } from '@delo/profile-safety'
 import type { BootedRow } from '../delo-bundles.ts'
 
-/** How long the studio's index has to answer H2's request. */
+/** How long the Host's health route has to answer H2's request. */
 export const STUDIO_HEALTH_TIMEOUT_MS = 10_000
+
+/** The path of the Host's health route, which H2 requests on the studio's loopback listener. */
+export const HEALTH_PATH = '/delo/health'
 
 /** The reason a turn or a job cancelled by the gate carries. */
 export const STOP_REASON = 'Delo is stopping or updating'
@@ -88,12 +96,166 @@ export interface HostHealthFacts {
 }
 
 /**
- * The rows that did not load at boot: disabled, failed, pending or not imported.
- * @param rows - the Loader's rows.
- * @returns their ids.
+ * Whether a request arrived on the Host's loopback listener from this computer, under a loopback `Host`: the connection
+ * comes from a loopback address to the listener's own port, so no reach listener, which listens on a port of its own,
+ * and no other computer is answered, and a page that rebinds a name of its own to `127.0.0.1` is refused by its `Host`.
+ * A listener bound to every address (`0.0.0.0` or `::`) also takes connections from other computers, which the first
+ * condition refuses; an origin that names no port is on its scheme's default port.
+ * @param request - the request.
+ * @param origin - the loopback listener's origin, such as `http://127.0.0.1:3080`.
+ * @returns true when all three hold.
  */
-export function inactiveRows(rows: readonly BootedRow[]): readonly string[] {
-  return rows.filter(row => row.disabled || row.state !== 'active').map(row => row.id)
+export function arrivedOnLoopbackListener(request: Pick<IncomingMessage, 'socket' | 'headers'>, origin: string): boolean {
+  const remote = request.socket.remoteAddress ?? ''
+  const fromLoopback = remote === '::1' || /^(?:::ffff:)?127(?:\.\d{1,3}){3}$/u.test(remote)
+  const listener = new URL(origin)
+  const listenerPort = listener.port === '' ? (listener.protocol === 'https:' ? '443' : '80') : listener.port
+  const toListener = String(request.socket.localPort) === listenerPort
+  const host = URL.parse(`http://${request.headers.host ?? ''}`)?.hostname.toLowerCase()
+  const loopbackHost = host !== undefined && (host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || /^127(?:\.\d{1,3}){3}$/u.test(host))
+  return fromLoopback && toListener && loopbackHost
+}
+
+/**
+ * The URL H2 asks: the health route of the studio listener at its address, or at `127.0.0.1` for a listener bound to
+ * every address (`0.0.0.0`, or `::`, which takes IPv4 connections too), so the request comes from and names a loopback
+ * address, as {@link arrivedOnLoopbackListener} requires.
+ * @param studio - the studio listener's bound address and port.
+ * @returns the URL, with an IPv6 address bracketed.
+ */
+export function studioHealthUrl(studio: { readonly host: string, readonly port: number }): string {
+  const address = studio.host === '0.0.0.0' || studio.host === '::' ? '127.0.0.1' : studio.host
+  return `http://${address.includes(':') ? `[${address}]` : address}:${String(studio.port)}${HEALTH_PATH}`
+}
+
+/**
+ * Serve H2's health route on the Host's web server, on its loopback listener only: a request that did not arrive there
+ * ({@link arrivedOnLoopbackListener}) is answered `421`. `GET` and `HEAD` read the studio's index in this process, as the
+ * owner's browser, through the web server's own responder, and answer `204` when it reads with status 200 and `503`
+ * otherwise, always with no body and `no-store`; every other method answers `405`. The answer tells only whether the
+ * studio could be served: it reads no cookie, returns no content and changes nothing, so the studio's sign-in still
+ * guards every page and API. The route is an effect of `ctx` and goes with it.
+ * @param ctx - the booted profile's root context.
+ * @returns nothing; a Host without a web server serves no route, and H2 reports that it has no studio listener.
+ */
+export function serveHealth(ctx: Context): void {
+  const server = ctx.get('webServer')
+  if (server === undefined) return
+  ctx.effect(() => server.register({
+    kind: 'exact',
+    path: HEALTH_PATH,
+    handler: async (request, response) => {
+      if (!arrivedOnLoopbackListener(request, server.getOrigin())) {
+        response.writeHead(421, { 'cache-control': 'no-store' })
+        response.end()
+        return
+      }
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        response.writeHead(405, { 'cache-control': 'no-store', allow: 'GET, HEAD' })
+        response.end()
+        return
+      }
+      let served = false
+      const peer = ctx.get('connection')?.browserPeer
+      if (peer !== undefined) {
+        try {
+          const index = await server.readResource(new Request(new URL('/', server.getOrigin())), peer)
+          await index.body?.cancel()
+          served = index.status === 200
+        } catch (error) {
+          // A responder that throws cannot serve the studio; the answer below says so, and the Host's log keeps why.
+          ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+        }
+      }
+      response.writeHead(served ? 204 : 503, { 'cache-control': 'no-store' })
+      response.end()
+    },
+  }), 'delo health route')
+}
+
+/**
+ * Whether a row's id is one the Loader made up because the row's patch gives it none: the Loader's `ensureId` takes
+ * eight hexadecimal digits of `Math.random()` (`vendor/loader/src/config/tree.ts`), new at each boot. A patch id of that
+ * form is read as generated too, which only lets the check match that row by its plugin.
+ * @param id - the row's id.
+ * @returns true for six to eight lowercase hexadecimal digits.
+ */
+export function isGeneratedRowId(id: string): boolean {
+  return /^[0-9a-f]{6,8}$/u.test(id)
+}
+
+/**
+ * The plugins the CLI profile protects: the `protectedPlugins` of its `plugin-manager` row, whose guard, consent and
+ * sandbox rows the `plugin_manager` tool may not disable or reconfigure.
+ * @param rows - the Loader's rows.
+ * @returns the plugin names; none when no `plugin-manager` row names any.
+ */
+export function protectedPluginsOf(rows: readonly BootedRow[]): ReadonlySet<string> {
+  const config = rows.find(row => row.id === 'plugin-manager')?.config
+  const listed = config !== null && typeof config === 'object' && 'protectedPlugins' in config ? config.protectedPlugins : undefined
+  return new Set(Array.isArray(listed) ? listed.filter((name): name is string => typeof name === 'string') : [])
+}
+
+/**
+ * JSON with each object's keys in sorted order, so the same config always gives the same text.
+ * @param value - the value.
+ * @returns the text.
+ */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value !== null && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(',')}}`
+  return JSON.stringify(value) ?? 'null'
+}
+
+/**
+ * The rows a Host had at boot as the next release's health check compares them: id, plugin, whether the Loader made
+ * the id up, and the config hash of a protected plugin's row.
+ * @param rows - the Loader's rows.
+ * @returns the rows.
+ */
+export function bootRowsOf(rows: readonly BootedRow[]): BootRow[] {
+  const protectedPlugins = protectedPluginsOf(rows)
+  return rows.map(row => ({
+    id: row.id,
+    name: row.name,
+    generated: isGeneratedRowId(row.id),
+    ...protectedPlugins.has(row.name) ? { configHash: createHash('sha256').update(canonicalJson(row.config ?? null)).digest('hex') } : {},
+  }))
+}
+
+/**
+ * The rows that were disabled or did not load at boot: disabled, failed, pending or not imported, which the next
+ * release's health check allows.
+ * @param rows - the Loader's rows.
+ * @returns those rows, as {@link bootRowsOf} describes them.
+ */
+export function inactiveRows(rows: readonly BootedRow[]): BootRow[] {
+  const inactive = new Set(rows.filter(row => row.disabled || row.state !== 'active').map(row => row.id))
+  return bootRowsOf(rows).filter(row => inactive.has(row.id))
+}
+
+/**
+ * Take one row of a plugin from a count of unclaimed rows.
+ * @param pool - unclaimed rows by plugin.
+ * @param name - the plugin.
+ * @returns true when one was left.
+ */
+function claim(pool: Map<string, number>, name: string): boolean {
+  const left = pool.get(name) ?? 0
+  if (left === 0) return false
+  pool.set(name, left - 1)
+  return true
+}
+
+/**
+ * Count rows by plugin.
+ * @param rows - the rows.
+ * @returns the count of each plugin's rows.
+ */
+function countByPlugin(rows: readonly { readonly name: string }[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const row of rows) counts.set(row.name, (counts.get(row.name) ?? 0) + 1)
+  return counts
 }
 
 /**
@@ -110,29 +272,44 @@ export async function checkHealth(facts: HostHealthFacts, expect: HealthExpectat
   }
   const studio = facts.studio()
   if (studio === undefined) return { passed: false, criterion: 'H2-host-ready', detail: 'the Host has no studio listener' }
-  const host = studio.host.includes(':') ? `[${studio.host}]` : studio.host
   try {
-    const answer = await fetch(`http://${host}:${String(studio.port)}/`, { signal: AbortSignal.timeout(STUDIO_HEALTH_TIMEOUT_MS) })
+    const answer = await fetch(studioHealthUrl(studio), { signal: AbortSignal.timeout(STUDIO_HEALTH_TIMEOUT_MS) })
     await answer.body?.cancel()
-    if (answer.status !== 200) return { passed: false, criterion: 'H2-host-ready', detail: `the studio's index answered ${String(answer.status)}` }
+    if (answer.status !== 204) return { passed: false, criterion: 'H2-host-ready', detail: `the studio listener's health route answered ${String(answer.status)}` }
   } catch (error) {
-    return { passed: false, criterion: 'H2-host-ready', detail: `the studio's index did not answer: ${error instanceof Error ? error.message : String(error)}` }
+    return { passed: false, criterion: 'H2-host-ready', detail: `the studio listener's health route did not answer: ${error instanceof Error ? error.message : String(error)}` }
   }
   if (expect === undefined) return { passed: true }
-  const named = new Set([...expect.namedRows, ...expect.previousFailures])
+  // The report names a row by its patch id, or by its plugin when the patch gives it none; it disables plugins by name.
+  const named = new Set(expect.namedRows)
   const disabledPlugins = new Set(expect.disabledPlugins)
+  const reported = (row: { readonly id: string, readonly name: string }): boolean => named.has(row.id) || named.has(row.name) || disabledPlugins.has(row.name)
+  const target = bootRowsOf(facts.rows())
+  const failedBefore = new Set(expect.previousFailures.map(row => row.id))
+  // A row the Loader gave a new id is matched by its plugin, one previous row for one target row; no other row is.
+  const failedSpares = countByPlugin(expect.previousFailures.filter(row => row.generated))
   for (const row of facts.rows()) {
     if (!row.disabled && row.state === 'active') continue
-    // A report names a row by its patch id, or by its plugin when the patch gives it none.
-    if (named.has(row.id) || named.has(row.name) || disabledPlugins.has(row.name)) continue
+    if (reported(row) || failedBefore.has(row.id)) continue
+    if (isGeneratedRowId(row.id) && claim(failedSpares, row.name)) continue
     return row.disabled
       ? { passed: false, criterion: 'H3-only-named-disabled', detail: `row ${row.id} is disabled and the report did not name it` }
       : { passed: false, criterion: 'H4-unnamed-rows-load', detail: `row ${row.id} did not load (${row.state}) and the report did not name it` }
   }
-  const present = new Set(facts.rows().map(row => row.id))
-  for (const id of expect.previousRows) {
-    if (present.has(id) || named.has(id)) continue
-    return { passed: false, criterion: 'H3-only-named-disabled', detail: `row ${id} was in the profile before the update, is gone, and the report did not name it` }
+  const present = new Map(target.map(row => [row.id, row]))
+  const previousIds = new Set(expect.previousRows.map(row => row.id))
+  const spares = countByPlugin(target.filter(row => row.generated && !previousIds.has(row.id)))
+  for (const row of expect.previousRows) {
+    const now = present.get(row.id)
+    if (now !== undefined) {
+      if (row.configHash !== undefined && now.configHash !== row.configHash && !reported(row)) {
+        return { passed: false, criterion: 'H3-only-named-disabled', detail: `the settings of protected row ${row.id} changed and the report did not name it` }
+      }
+      continue
+    }
+    if (reported(row)) continue
+    if (row.generated && claim(spares, row.name)) continue
+    return { passed: false, criterion: 'H3-only-named-disabled', detail: `row ${row.id} was in the profile before the update, is gone, and the report did not name it or disable its plugin` }
   }
   if (expect.bundles !== undefined) {
     const path = join(facts.profileDir, 'package.json')

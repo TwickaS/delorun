@@ -5,7 +5,7 @@
  * key is generated at run time, so no key material is committed and no two runs share one.
  */
 import { RELAY_LIMITS, RELAY_PROTOCOL_VERSION, RELAY_SUBPROTOCOL, type Announcement, type TunnelTokenClaims } from '@delo/contract-relay-protocol'
-import { canonicalJson } from '@delo/release/sign/json'
+import { canonicalJson } from '@delo/release-formats/sign/json'
 import type { KeyObject } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

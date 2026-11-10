@@ -72,7 +72,7 @@ Delo 在 home 顶层添加标为 Delo 的条目。其他每个条目都属于上
 
 [C20](c20-operational-logs.zh.md) 定义的运行日志位于上游 `logs/` 下的各入口子目录中，与上游的 `startup-*.log` 报告并列。
 
-- **`trust/`。** `root.json` 是最新通过校验的根，`timestamp.json` 是最新通过校验的时间戳，其 `version` 即所保存的最高版本（[C2](c02-release-manifest.zh.md)），`checkpoint.json` 是最新通过校验的日志检查点（[C18](c18-release-log.zh.md)）。每个文件都以原子方式替换，且从不替换为更旧的版本；CLI 启动器与桌面更新器共用它们。`roots/<n>.root.json` 按根版本各保存一个安装所走过的根，最旧的在前，供启动时证明所保存的根比启动器自带的每个根都新（[C2](c02-release-manifest.zh.md#key-rotation)）。
+- **`trust/`。** `root.json` 是最新通过校验的根，`timestamp.json` 是最新通过校验的时间戳，其 `version` 即所保存的最高版本（[C2](c02-release-manifest.zh.md)），`checkpoint.json` 是最新通过校验的日志检查点（[C18](c18-release-log.zh.md)）。每个文件都以原子方式替换，且从不替换为更旧的版本；CLI 启动器与桌面更新器共用它们。`roots/<n>.root.json` 按根版本各保存一个安装所走过的根，最旧的在前，供启动时证明所保存的根比启动器自带的每个根都新（[C2](c02-release-manifest.zh.md#key-rotation)）。`channel.json` 记录 home 的发行版来源：`{"v":1}`，并带有安装它的启动器构建时所用的 `channelOrigin` 与 `logOrigin`，取生产值时省略对应字段；启动器在运行时仓库安装了来自它的发行版后写入该文件，`delorun update` 从这些来源获取，并以所保存的根为锚点，这些根必须构成链，每个根都由前一个签名。Delo 的任何环境变量、设置或运行时命令都不能改变该通道：只有用户在终端中运行为另一通道构建的启动器时，Delo 才会改变它。该文件位于 `trust/` 下，沙箱禁止受限命令写入；同一用户的非受限进程（包括 Host 插件）可以像写入 home 中任何文件一样写入它，因此该记录只决定从何处获取发行版，而发行版只有在所保存的根下通过校验才会安装。
 - **`status/`。** `cli-home.json` 与 `desktop-host.json` 是 [C3](c03-update-report.zh.md) 的状态记录；每个安装只写自己的记录，并读取另一个的记录。
 - **`catalogue/`。** `index.json` 与 `revocations.json` 是最新通过校验的插件索引与撤销列表，`state.json` 保存二者各自的 `sequence` 与获取时间（[C13](c13-catalogue-revocation.zh.md)）。
 

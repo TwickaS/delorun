@@ -98,16 +98,23 @@ function host(): RunningHost {
 }
 
 /**
- * Start the home process on the version `current` names, with the CLI's update support.
- * @returns the process's exit codes and its stop.
+ * Wait until the process the home lock names has ended. After a commit the lock names the successor, a fake runtime's
+ * process that ends a moment after its commit and that this process then reaps; a home process, or a `recover
+ * rollback` with none running, that takes the lock before then meets a live holder that no longer answers.
  */
-async function startHome(): Promise<Running> {
-  // The previous round's successor holds the lock until it has exited and this process has reaped it; a start before
-  // then meets a live holder that no longer answers.
+async function successorEnded(): Promise<void> {
   await until(() => {
     const holder = readHomeLock(runDirectory(home, PROFILE))
     return holder === undefined || !processExists(holder.pid)
   }, 'the previous successor\'s exit')
+}
+
+/**
+ * Start the home process on the version `current` names, with the CLI's update support.
+ * @returns the process's exit codes and its stop.
+ */
+async function startHome(): Promise<Running> {
+  await successorEnded()
   const { current } = await store.pointers()
   const exits: number[] = []
   const listeners: (() => void)[] = []
@@ -212,6 +219,7 @@ describe('delorun update end to end', TIMEOUT, () => {
     expect(chat('opened-by-1.3.0')).toBe(true)
     const status = await delorun(['recover', 'status'])
     expect(status.stdout).toContain('Chat-data copy: data-copies/1.3.0')
+    await successorEnded()
     const rolled = await delorun(['recover', 'rollback'])
     expect(rolled.stderr).toBe('')
     expect(rolled.code).toBe(EXIT.ok)
@@ -237,6 +245,7 @@ describe('delorun update end to end', TIMEOUT, () => {
     } finally {
       await running.end()
     }
+    await successorEnded()
     const refused = await delorun(['recover', 'rollback'])
     expect(refused.code).toBe(EXIT.failed)
     expect(refused.stderr).toContain('ROLLBACK_NEEDS_DATA_COPY')

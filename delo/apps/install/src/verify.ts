@@ -21,9 +21,9 @@ import {
   type SemanticVersion,
   type TimestampMetadata,
 } from '@delo/contract-release-manifest'
-import { LogVerificationError, readBundle, verifyBundle, type VerifiedBundle } from '@delo/release/log/bundle'
-import { canonicalJson, toJsonValue } from '@delo/release/sign/json'
-import { readRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifyTimestamp, walkRootChain, type TrustedRoot } from '@delo/release/sign/verify'
+import { LogVerificationError, readBundle, verifyBundle, type VerifiedBundle } from '@delo/release-formats/log/bundle'
+import { canonicalJson, toJsonValue } from '@delo/release-formats/sign/json'
+import { readRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifyTimestamp, walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
 import { InstallError, messageOf } from './errors.ts'
 import type { StoredTimestamp } from './state.ts'
 

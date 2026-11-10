@@ -29,6 +29,7 @@ import { ANSWERS_FILENAME, PROFILE_STEP, readProgress, removeProgress, sectionSt
 import { defaultRegistry, statementLines, unattendedRecord, withRecord, type Draft, type SectionEnvironment, type SectionRegistry, type SetupSection } from './sections.ts'
 import { terminalPrompter, type Prompter } from './prompts.ts'
 import { BACK, stepIO } from './steps.ts'
+import { shippedPackageManager } from '../package-manager.ts'
 
 /** How setup gets its answers. */
 export type SetupForm =
@@ -75,7 +76,8 @@ export interface SetupRequest {
 }
 
 /**
- * Upstream's resolution and plugin operation for a profile under the home.
+ * Upstream's resolution and plugin operation for a profile under the home; the operation runs an installed Delo's own
+ * pnpm ([package manager](../package-manager.ts)).
  * @param home - the Delo home.
  * @param profile - the CLI profile.
  * @returns what {@link linkDeloBundles} uses.
@@ -90,7 +92,7 @@ export async function upstreamLinking(home: string, profile: string): Promise<Bu
       const loaded = loadProfile('delorun', profile, INSTALL_ANCHOR, home)
       return { profile: loaded, resolution: await createRuntimeResolution({ installAnchor: INSTALL_ANCHOR, profile: loaded, home }) }
     },
-    runPluginCommand,
+    runPluginCommand: (context, args, options) => runPluginCommand(context, args, { ...options, ...shippedPackageManager() }),
   }
 }
 

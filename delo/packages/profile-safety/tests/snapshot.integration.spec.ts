@@ -15,7 +15,7 @@ import {
   SAFETY_RECORD_FILENAME,
   UPDATE_REPORT_FILENAME,
 } from '../src/files.ts'
-import { currentFiles, openHistory, recordSnapshot, rollbackToSnapshot } from '../src/snapshot.ts'
+import { currentFiles, historyGitProblem, openHistory, recordSnapshot, rollbackToSnapshot } from '../src/snapshot.ts'
 import { fixture, readTree, report, rowItem, text } from './support.ts'
 
 /** Whether git can run here, which the profile history needs. */
@@ -27,6 +27,20 @@ const hasGit = ((): boolean => {
     return false
   }
 })()
+
+describe('historyGitProblem', () => {
+  it.skipIf(!hasGit)('finds nothing wrong with a git that runs', async () => {
+    expect(await historyGitProblem({})).toBeUndefined()
+  })
+
+  it('names a git command that is not on PATH', async () => {
+    expect(await historyGitProblem({ git: 'delo-no-such-git' })).toBe('no delo-no-such-git command is on PATH')
+  })
+
+  it('names a git command that fails', async () => {
+    expect(await historyGitProblem({ git: 'false' })).toMatch(/^false --version failed: /u)
+  })
+})
 
 describe.skipIf(!hasGit)('recordSnapshot', () => {
   it('writes one version holding the person\'s files, the home patch, the report and the record', async () => {

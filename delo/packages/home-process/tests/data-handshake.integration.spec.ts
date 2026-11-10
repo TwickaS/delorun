@@ -73,8 +73,8 @@ async function setUp(options: SetUpOptions = {}) {
       return { pid: 4242, result: Promise.resolve(answer), commit: async () => {}, stop: async () => { events.push('stop successor') } }
     },
     handOver: () => { events.push('handOver') },
-    failedRows: () => (hostRuns ? ['row-that-failed-before'] : []),
-    rows: () => (hostRuns ? ['row-a', 'row-b'] : []),
+    failedRows: () => (hostRuns ? [{ id: 'row-that-failed-before', name: 'plugin-f', generated: false }] : []),
+    rows: () => (hostRuns ? [{ id: 'row-a', name: 'plugin-a', generated: false }, { id: 'b08ab057', name: 'plugin-b', generated: true }] : []),
   }
   const handshake = new UpdateHandshake(subject, { store, snapshots, copies })
   return { home, events, handovers, store, snapshots, copies, handshake, journal, gate }
@@ -105,7 +105,7 @@ describe('an update with a session-data copy', () => {
   it('holds the successor to what the running Host had at boot, read before that Host stopped', async () => {
     const { handshake, handovers } = await setUp()
     await update(handshake, true)
-    expect(handovers[0]?.health).toEqual({ disabledPlugins: [], namedRows: [], previousFailures: ['row-that-failed-before'], previousRows: ['row-a', 'row-b'] })
+    expect(handovers[0]?.health).toEqual({ disabledPlugins: [], namedRows: [], previousFailures: [{ id: 'row-that-failed-before', name: 'plugin-f', generated: false }], previousRows: [{ id: 'row-a', name: 'plugin-a', generated: false }, { id: 'b08ab057', name: 'plugin-b', generated: true }] })
   })
 
   it('records the profile history version and the health expectations, so a start that finishes it runs H1 to H5', async () => {
@@ -252,11 +252,11 @@ describe('the person\'s rollback', () => {
     expect(handshake.running()).toBe(false)
   })
 
-  it('applies the table and starts the version rolled back to, leaving the record rolling-back for that version to remove', async () => {
+  it('applies the table, starts the version rolled back to and passes on what the table tells the person, leaving the record rolling-back for that version to remove', async () => {
     const { handshake, copies, events, home, journal } = await setUp({ running: V2 })
     copies.copies.add(V2)
     await committed(journal, true)
-    expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'rolled-back' })
+    expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'rolled-back', lines: ['Went back to 1.0.0; 1 chat(s) set aside.'] })
     expect(copies.calls).toEqual([`rollback:${V1}>${V2}`])
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V2)
@@ -301,7 +301,7 @@ describe('the person\'s rollback', () => {
   it('with profileOnly restores the profile, keeps the runtime and runs the Host again', async () => {
     const { handshake, copies, events, home, journal } = await setUp({ running: V2 })
     await committed(journal, false)
-    expect(await handshake.rollback('drain', undefined, true, () => {})).toEqual({ outcome: 'rolled-back' })
+    expect(await handshake.rollback('drain', undefined, true, () => {})).toEqual({ outcome: 'rolled-back', lines: ['Went back on the profile alone to 1.0.0.'] })
     expect(copies.calls).toEqual([`rollback:${V1}>${V2}:profile-only`])
     expect(readPointer(home, 'current')).toBe(V2)
     expect(events.at(-2)).toBe('resume')
@@ -431,11 +431,30 @@ describe('another process on the chat data', () => {
     expect(await readJournal(journal)).toMatchObject({ phase: 'committed' })
   })
 
+  it('refuses the person\'s rollback, the profile-only one too, before any step when git cannot run, and the Host runs again', async () => {
+    const { handshake, copies, events, journal } = await setUp({ running: V2 })
+    await writeJournal(journal, { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: true }, 'committed')
+    copies.gitMissing = true
+    for (const profileOnly of [false, true]) {
+      await expect(handshake.rollback('drain', undefined, profileOnly, () => {})).rejects.toMatchObject({ code: 'GIT_UNAVAILABLE' })
+      expect(events.at(-2)).toBe('resume')
+      expect(await readJournal(journal)).toMatchObject({ phase: 'committed' })
+    }
+  })
+
   it('stops an automatic rollback before any step, leaving the record for the next start', async () => {
     const { handshake, copies, journal } = await setUp({ answer: 'failed', dataDiffers: false })
     const { reportId } = await handshake.prepare(V2, () => {}) as { readonly reportId: string }
     copies.save = async () => { copies.othersRunning = true }
     expect(await handshake.apply(reportId, 'drain', undefined, true, () => {})).toEqual({ outcome: 'failed', reason: 'CHATS_RUNNING' })
+    expect(await readJournal(journal)).toMatchObject({ phase: 'health-check' })
+  })
+
+  it('stops an automatic rollback before any step when git cannot run, leaving the record for the next start', async () => {
+    const { handshake, copies, journal } = await setUp({ answer: 'failed', dataDiffers: false })
+    const { reportId } = await handshake.prepare(V2, () => {}) as { readonly reportId: string }
+    copies.save = async () => { copies.gitMissing = true }
+    expect(await handshake.apply(reportId, 'drain', undefined, true, () => {})).toEqual({ outcome: 'failed', reason: 'GIT_UNAVAILABLE' })
     expect(await readJournal(journal)).toMatchObject({ phase: 'health-check' })
   })
 })

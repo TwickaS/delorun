@@ -9,8 +9,10 @@
  *
  * @module @delo/profile-safety/snapshot
  */
+import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { parse, stringify } from 'yaml'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -38,6 +40,8 @@ import {
 } from './files.ts'
 import { readSafetyRecord, withDisabled, writeSafetyRecord, type DisabledPlugin } from './record.ts'
 
+const runFile = promisify(execFile)
+
 /** How long one git run of the history may take. */
 export const HISTORY_TIMEOUT_MS = 30_000
 
@@ -49,6 +53,23 @@ export interface HistoryOptions {
   readonly git?: string
   /** The bound on one git run; {@link HISTORY_TIMEOUT_MS} by default. */
   readonly timeoutMs?: number
+}
+
+/**
+ * Why the git the profile history runs cannot start, checked before an update so the person learns it before
+ * anything is fetched or written: an update's snapshot and a rollback both need it.
+ * @param options - the git command and its timeout, as {@link openHistory} takes them.
+ * @returns `undefined` when `git --version` exits 0; otherwise the reason, naming the command.
+ */
+export async function historyGitProblem(options: Pick<HistoryOptions, 'git' | 'timeoutMs'>): Promise<string | undefined> {
+  const git = options.git ?? 'git'
+  try {
+    await runFile(git, ['--version'], { timeout: options.timeoutMs ?? HISTORY_TIMEOUT_MS })
+    return undefined
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return `no ${git} command is on PATH`
+    return `${git} --version failed: ${error instanceof Error ? error.message.split('\n')[0]! : String(error)}`
+  }
 }
 
 /**

@@ -7,7 +7,8 @@
  * [--attestation-key <file> --attestation <file>]`
  *
  * It exports the commit's tree to the fixed build root `closure.json` names, so absolute paths that bundlers embed
- * are the same on every builder; installs the locked dependencies and builds the artifacts, with the client title
+ * are the same on every builder, holding the root's lock so a second build on the computer refuses
+ * ([build root](./closure/build-root.ts)); installs the locked dependencies and builds the artifacts, with the client title
  * `closure.json` names, and Delo's packages there under `SOURCE_DATE_EPOCH` (the commit's committer time) and
  * `-ffile-prefix-map=<build root>=.`; and for each platform deploys the closure's root package with production
  * dependencies for that platform, transpiles Delo's packages to JavaScript, stamps the release version into the
@@ -19,7 +20,8 @@
  * other than `toolchain.json` pins. `--artifacts existing` skips the artifact build and copies the worktree's built
  * `lib/` directories, client bundles and native addon into the exported tree instead, after checking that the worktree
  * is at the commit, that tracked files are clean and that each package's `lib/` exists and is newer than its sources;
- * the closure then embeds the worktree's paths, keeps the worktree's own native addons instead of the pinned
+ * the closure then embeds the worktree's paths, so the build takes a fresh directory beside the fixed root and removes
+ * it when it ends, keeps the worktree's own native addons instead of the pinned
  * publications and skips the native-file check, and is for a local release only. `--write-pins` records the native files found instead of checking them, for a
  * reviewed change of `prebuilt-pins.json`. On the targets-key holder's machine, `--attestation-key` and
  * `--attestation` write an HMAC over the version, commit and every file in `--out`, keyed with the holder's secret,
@@ -28,7 +30,6 @@
  * @module @delo/release/build-closure
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -38,9 +39,10 @@ import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delo/contract-release-
 import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { deduplicateStagedWorkspacePackages, materializeStagedLinks } from '../../../../scripts/build-exe-for-python-sdk-staging.ts'
 import { verifyStagedDependencies } from '../../../../scripts/executable-packaging.ts'
-import { semanticVersion } from './brands.ts'
+import { semanticVersion } from '@delo/release-formats/brands'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { artifactDirectories, artifactProblems, isArtifactSource, type ArtifactSource } from './closure/artifacts.ts'
+import { claimBuildRoot } from './closure/build-root.ts'
 import { writeDataFormats } from './closure/data-formats.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { declareAnchorBundles, stampDeloVersion, transpileDeloPackages } from './closure/delo.ts'
@@ -49,9 +51,6 @@ import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
 import { readImagesRecipe } from './images/build.ts'
 import { writeReleaseSbom } from './sbom/release-sbom.ts'
-
-/** The marker that identifies a build root this command created, so it never removes another directory. */
-const BUILD_ROOT_MARKER = '.delo-release-build-root'
 
 /** pnpm's deploy metadata, which the closure does not carry: it names local paths and install times. */
 const DEPLOY_METADATA = ['pnpm-workspace.yaml', 'node_modules/.modules.yaml', 'node_modules/.pnpm-workspace-state-v1.json', 'node_modules/.pnpm']
@@ -110,15 +109,6 @@ function run(command: string, args: readonly string[], cwd: string, env: NodeJS.
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} exited with ${String(result.status ?? result.signal)}`)
 }
 
-async function freshBuildRoot(buildRoot: string): Promise<void> {
-  if (existsSync(buildRoot)) {
-    if (!existsSync(join(buildRoot, BUILD_ROOT_MARKER))) throw new Error(`${buildRoot} exists and was not created by build-closure; remove it by hand`)
-    await rm(buildRoot, { recursive: true, force: true })
-  }
-  await mkdir(buildRoot, { recursive: true, mode: 0o755 })
-  await writeFile(join(buildRoot, BUILD_ROOT_MARKER), '')
-}
-
 /** The inherited variables the build keeps: what finds the tools, the home and the network proxy. */
 const INHERITED = ['PATH', 'HOME', 'USER', 'TMPDIR', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy']
 
@@ -165,9 +155,17 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
     const problems = artifactProblems(repository, request.commit)
     if (problems.length > 0) throw new Error(`the worktree's artifacts cannot be used:\n${problems.join('\n')}`)
   }
-  const buildRoot = recipe.closure.buildRoot
+  const claimed = await claimBuildRoot(recipe.closure.buildRoot, existing ? 'unique' : 'fixed')
+  try {
+    return await buildIn(claimed.path, repository, recipe, request, epoch)
+  } finally {
+    await claimed.release()
+  }
+}
+
+async function buildIn(buildRoot: string, repository: string, recipe: Recipe, request: BuildRequest, epoch: number): Promise<Map<RuntimePlatform, ClosureFiles>> {
+  const existing = request.artifacts === 'existing'
   const source = join(buildRoot, 'source')
-  await freshBuildRoot(buildRoot)
   await mkdir(source)
   const archive = spawnSync('git', ['archive', '--format=tar', request.commit], { cwd: repository, maxBuffer: 4 * 1024 ** 3 })
   if (archive.status !== 0) throw new Error(`git archive ${request.commit} failed: ${archive.stderr.toString('utf8')}`)

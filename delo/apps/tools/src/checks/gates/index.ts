@@ -29,7 +29,7 @@ export const FUNDAMENTALS_INPUTS: readonly string[] = [
   'delo/apps/npm-launcher/src/launcher.ts',
   'delo/apps/npm-launcher/src/root.ts',
   'delo/apps/npm-launcher/tests/launcher.spec.ts',
-  'delo/apps/release/src/sign/verify.ts',
+  'delo/packages/release-formats/src/sign/verify.ts',
   'delo/apps/release/tests/sign/verify.integration.spec.ts',
   'delo/packages/archive/src/importer.ts',
   'delo/packages/archive/tests/consent.integration.spec.ts',
@@ -86,6 +86,12 @@ export const GATES: readonly GateCheck[] = [
     title: 'Every Delo package records a state that agrees with what the shipped roots reach',
     command: [TSX, `${GATE_DIR}/package-states.ts`],
     inputs: ['delo/packages/*/package.json', 'delo/apps/*/package.json', `${GATE_DIR}/package-states.ts`],
+  },
+  {
+    id: 'gates:workspace-graph',
+    title: 'Delo packages have no dependency cycle and the runtime closure carries no release or developer tooling',
+    command: [TSX, `${GATE_DIR}/workspace-graph.ts`],
+    inputs: ['delo/packages/*/package.json', 'delo/apps/*/package.json', 'delo/apps/release/closure.json', `${GATE_DIR}/workspace-graph.ts`, `${GATE_DIR}/package-states.ts`],
   },
   {
     id: 'gates:secrets',

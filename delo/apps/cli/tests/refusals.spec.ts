@@ -10,9 +10,9 @@ import { UpdatePendingError } from '@delo/bundle-local/update-gate'
 import { describeFailure, homeLayoutDescriber, type Refusal } from '@delo/home'
 import { installDescriber } from '@delo/install'
 import { ProfileSafetyError, type ProfileSafetyRemedy } from '@delo/profile-safety'
-import { LogVerificationError } from '@delo/release/log/bundle'
-import { TileError } from '@delo/release/log/tiles'
-import { VerificationError } from '@delo/release/sign/verify'
+import { LogVerificationError } from '@delo/release-formats/log/bundle'
+import { TileError } from '@delo/release-formats/log/tiles'
+import { VerificationError } from '@delo/release-formats/sign/verify'
 import { RELEASE_VERIFY_DESCRIBERS } from '@delo/release-verify/refusal'
 import { runtimeStoreDescriber } from '@delo/runtime-store'
 import { TrashError } from '@delo/trash'
@@ -48,6 +48,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   OwnerNotesError: PLUGIN,
   MainChatToolError: PLUGIN,
   AcceptanceStoreError: PLUGIN,
+  BuildRootBusyError: 'raised by the release tooling\'s closure build, which no runtime carries',
   HomeAuthError: 'raised by the home process\'s Web sign-in, which answers the browser over HTTP',
   RelayError: 'raised by the relay server under delo/apps/relay, which delorun does not run',
   UsageError: TOOLS,

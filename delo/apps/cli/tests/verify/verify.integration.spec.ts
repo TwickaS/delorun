@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DELO_HOME_ENTRIES, TRUST_FILES } from '@delo/contract-home-layout'
 import { VERIFICATION_CHECK_IDS, VERIFICATION_DETAIL_MAX_LENGTH, VERIFICATION_NOTICE } from '@delo/contract-verification-checks'
+import { writeChannelRecord } from '@delo/install'
 import { checkStatePath, checkpointPath, serializeStoredCheckpoint, storedCheckpoint } from '@delo/release-verify'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { main } from '../../src/main.ts'
@@ -97,7 +98,9 @@ describe('a release that verifies', { timeout: 30_000 }, () => {
     expect(run.stderr).toBe('')
     const lines = run.stdout.split('\n')
     expect(lines[0]).toBe(`Release ${RELEASE}, verification mode warn; ${VERIFICATION_NOTICE}.`)
-    expect(lines[1]).toMatch(/^Trusted root: version 1, root keys [0-9a-f]{16}, anchored on the launcher's shipped root\.$/u)
+    expect(lines[1]).toMatch(/^Trusted root: version 1, root keys [0-9a-f]{16}, anchored on the shipped roots of the launcher that started this Delo, in \S+ \(DELO_LAUNCHER_ROOTS\)\.$/u)
+    expect(lines[1]).toContain(` in ${fixture.launcherRoots} (`)
+    expect(lines[2]).toBe('Release channel: production; release log: production; as the launcher that installed this Delo recorded them.')
     expect(lines.at(-2)).toBe('2 checks passed, 0 failed, 9 not run; this is not a full verification of this Delo.')
     expect(line(run, 'release-signature')).toMatch(/^passed\s+release-signature\s+trusted root 1 is anchored on the launcher's shipped roots; trusted root 1 is valid until 2027-10-01T00:00:00Z; the manifest's targets signature verifies; the stored timestamp is fresh; the release-log entry verifies and the log is consistent with the stored checkpoint$/u)
     expect(line(run, 'runtime-files')).toMatch(/^passed\s+runtime-files\s+all 5 files of runtime 0\.1\.0 match the signed file list$/u)
@@ -115,6 +118,26 @@ describe('a release that verifies', { timeout: 30_000 }, () => {
     expect(report).toMatchObject({ schemaVersion: 1, mode: 'warn', stage: 'verify', notice: VERIFICATION_NOTICE, badge: 'not-green', release: RELEASE, generatedAt: new Date(NOW * 1000).toISOString().replace('.000Z', 'Z') })
     expect(report.checks.map(check => check.id)).toEqual([...VERIFICATION_CHECK_IDS])
     expect(report.checks.slice(0, 2).map(check => check.result)).toEqual(['pass', 'pass'])
+    expect(report.root).toMatchObject({ anchored: 'shipped', rootsDirectory: fixture.launcherRoots })
+    expect(report.origins).toEqual({ channel: 'production', log: 'production' })
+  })
+
+  it('reads the release log at the origin the installing launcher recorded, not the one the root names', async () => {
+    const fixture = await home()
+    await writeChannelRecord(fixture.home, { logOrigin: 'http://127.0.0.1:9' })
+    const run = await verify(fixture)
+    expect(fixture.tiles.requested).toEqual(['http://127.0.0.1:9/checkpoint'])
+    expect(line(run, 'release-signature')).toContain('the online check could not complete')
+    expect(run.stdout).toContain('Release channel: production; release log: http://127.0.0.1:9; as the launcher that installed this Delo recorded them.')
+  })
+
+  it('says where releases come from is unknown, with a warning, when the channel record does not read', async () => {
+    const fixture = await home()
+    writeTrustFile(fixture.home, TRUST_FILES.channel, Buffer.from('{"v":1,"channelOrigin":"ftp://192.0.2.1"}\n'))
+    const run = await verify(fixture, ['--offline'])
+    expect(run.exit).toBe(EXIT.ok)
+    expect(run.stdout).toContain('Release channel: unknown, because the home\'s channel record does not read.')
+    expect(run.stderr).toContain('warning: the home\'s channel record does not read, so where its releases come from is unknown')
   })
 
   it('checks a release named with --release', async () => {
@@ -343,9 +366,10 @@ describe('the report', () => {
   })
 
   it('labels a result the machine cannot enforce', () => {
-    const text = reportLines(RELEASE, { results: [{ id: 'confinement-rule', result: 'not-enforced', detail: 'the dialect cannot deny it' }], root: undefined })
+    const text = reportLines(RELEASE, { results: [{ id: 'confinement-rule', result: 'not-enforced', detail: 'the dialect cannot deny it' }], root: undefined, origins: undefined })
     expect(text).toContain('not enforced  confinement-rule  the dialect cannot deny it')
     expect(text).toContain('Trusted root: none read.')
+    expect(text).toContain('Release channel: unknown, because the home\'s channel record does not read.')
     expect(text).toContain('0 checks passed, 0 failed, 0 not run, 1 not enforced; this is not a full verification of this Delo.')
   })
 })

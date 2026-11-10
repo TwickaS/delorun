@@ -5,7 +5,7 @@
  * key once. Private keys are read from PKCS #8 PEM files that only their owner can read; this module never creates
  * one.
  *
- * @module @delo/release/sign/envelope
+ * @module @delo/release-formats/sign/envelope
  */
 import { createHash, createPrivateKey, createPublicKey, sign, verify, type KeyObject } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'

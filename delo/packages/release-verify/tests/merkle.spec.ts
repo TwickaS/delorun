@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 // The log side's own verifier, read by path: a differential against the implementation the log serves proofs with, not
 // a second copy of the client's walk.
-import { verifyConsistency as referenceVerify } from '../../../apps/release/src/log/merkle.ts'
+import { verifyConsistency as referenceVerify } from '@delo/release-formats/log/merkle'
 import { isPowerOfTwo, leafHash, nodeHash, rootFromInclusionProof, verifyConsistencyProof } from '../src/merkle.ts'
 import { consistencyProof, inclusionProof, treeRoot } from './fixtures.ts'
 

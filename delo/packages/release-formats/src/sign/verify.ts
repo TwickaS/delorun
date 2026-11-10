@@ -5,7 +5,7 @@
  * on what it signs before publishing; the installers, the runtime store and the desktop updater apply the same
  * rules.
  *
- * @module @delo/release/sign/verify
+ * @module @delo/release-formats/sign/verify
  */
 import { createHash } from 'node:crypto'
 import {

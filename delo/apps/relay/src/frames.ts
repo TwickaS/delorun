@@ -9,7 +9,7 @@
  */
 import { FRAME_HEADER_BYTES, FRAME_TYPES, RELAY_LIMITS, STREAM_CLOSE_REASONS, type Announcement, type Base64Url, type OpenPayload } from '@delo/contract-relay-protocol'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { parseStrictJson, type JsonValue } from '@delo/release/sign/json'
+import { parseStrictJson, type JsonValue } from '@delo/release-formats/sign/json'
 import { z } from 'zod'
 import { RelayError } from './errors.ts'
 

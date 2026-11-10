@@ -2,7 +2,7 @@
  * What `delorun` prints when a command fails: `@delo/home`'s refusal format, the one the npm launcher shares. This
  * module composes the describer each package exports next to its errors, and describes the error classes of the
  * packages that do not depend on `@delo/home` (`@delo/profile-safety`, `@delo/update`, `@delo/trash`,
- * `@delo/bundle-local` and `@delo/release`) and of `delorun` itself.
+ * `@delo/bundle-local` and `@delo/release-formats`) and of `delorun` itself.
  *
  * @module @delo/cli/refusals
  */
@@ -13,9 +13,9 @@ import { HomeProcessError, homeProcessDescriber } from '@delo/home-process'
 import { installDescriber } from '@delo/install'
 import { logsDescriber } from '@delo/logs'
 import { ProfileSafetyError, type ProfileSafetyRemedy } from '@delo/profile-safety'
-import { LogVerificationError } from '@delo/release/log/bundle'
-import { TileError } from '@delo/release/log/tiles'
-import { VerificationError } from '@delo/release/sign/verify'
+import { LogVerificationError } from '@delo/release-formats/log/bundle'
+import { TileError } from '@delo/release-formats/log/tiles'
+import { VerificationError } from '@delo/release-formats/sign/verify'
 import { RELEASE_VERIFY_DESCRIBERS } from '@delo/release-verify/refusal'
 import { runtimeStoreDescriber } from '@delo/runtime-store'
 import { engineDescriber, supervisorDescriber } from '@delo/supervisor'

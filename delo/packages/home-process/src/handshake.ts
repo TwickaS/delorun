@@ -30,10 +30,10 @@ import {
   type UpdatePhase,
 } from '@delo/contract-home-process'
 import type { DeloLogger } from '@delo/logs'
-import { HomeProcessError } from './errors.ts'
+import { HomeProcessError, isRollbackRefusal } from './errors.ts'
 import type { HandoverLine, Successor } from './handover.ts'
 import { endUpdateRecord, journalledUpdate, journalRecord, readJournal, removeJournal, stashCommitted, writeJournal, type JournalledUpdate } from './journal.ts'
-import type { ChatGate, HealthExpectations, PreparedRuntime, ProfileSnapshots, RuntimePointers, RuntimeStore, SessionDataCopies } from './seams.ts'
+import type { BootRow, ChatGate, HealthExpectations, PreparedRuntime, ProfileSnapshots, RuntimePointers, RuntimeStore, SessionDataCopies } from './seams.ts'
 
 /** What the handshake needs from the home process it runs in. */
 export interface HandshakeSubject {
@@ -77,15 +77,15 @@ export interface HandshakeSubject {
    */
   startSuccessor(handover: HandoverLine): Successor
   /**
-   * The rows the running Host could not load at boot, which the successor's H4 allows.
-   * @returns their ids or names.
+   * The rows the running Host had disabled or that did not load at boot, which the successor's H3 and H4 allow.
+   * @returns the rows, or none without a running Host.
    */
-  failedRows(): readonly string[]
+  failedRows(): readonly BootRow[]
   /**
    * Every row the running Host had at boot, which the successor's H3 compares with its own.
-   * @returns their ids, or none without a running Host.
+   * @returns their ids and plugin names, or none without a running Host.
    */
-  rows(): readonly string[]
+  rows(): readonly BootRow[]
   /**
    * Hand the home lock to the successor.
    * @param successor - the successor.
@@ -111,6 +111,10 @@ export interface HandshakeResult extends Readonly<Record<string, unknown>> {
   readonly outcome: UpdateOutcome
   /** The reason code of a `rolled-back` or `aborted` outcome. */
   readonly reason?: HomeProcessErrorCode
+  /** The first of C3's health criteria the target failed, such as `H2-host-ready`, when its Host named one. */
+  readonly criterion?: string
+  /** What the person reads about a rollback that ended `rolled-back`, one line each, such as the chats it set aside. */
+  readonly lines?: readonly string[]
 }
 
 /** Writes one progress line. */
@@ -194,7 +198,8 @@ export class UpdateHandshake {
    * @param target - the version, or `undefined` for the newest release.
    * @param progress - writes progress lines.
    * @returns the final line's fields: the report id and the report.
-   * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while another update runs; the store's `VERIFY_FAILED`.
+   * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while another update runs; the store's `VERIFY_FAILED`,
+   *   `CHANNEL_UNREACHABLE`, `GIT_UNAVAILABLE` or `CHATS_RUNNING`.
    */
   async prepare(target: RuntimeVersion | undefined, progress: Progress): Promise<Readonly<Record<string, unknown>>> {
     this.claim()
@@ -246,8 +251,8 @@ export class UpdateHandshake {
    * @param progress - writes progress lines.
    * @returns the outcome.
    * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while another update runs; `NO_UPDATE_RECORD` without a committed
-   *   update this process runs; `ROLLBACK_NEEDS_DATA_COPY` or `ROLLBACK_TARGET_UNUSABLE` from the table, with
-   *   nothing changed and this Host running again.
+   *   update this process runs; `ROLLBACK_NEEDS_DATA_COPY`, `ROLLBACK_TARGET_UNUSABLE`, `CHATS_RUNNING` or
+   *   `GIT_UNAVAILABLE` from the table, with nothing changed and this Host running again.
    */
   async rollback(wait: DrainPolicy, drainTimeoutS: number | undefined, profileOnly: boolean, progress: Progress): Promise<HandshakeResult> {
     this.claim()
@@ -461,6 +466,7 @@ export class UpdateHandshake {
         }
       }
       let successor: Successor | undefined
+      let criterion: string | undefined
       try {
         await store.switchTo(from, to)
         // Written and synced before the spawn: from here a rollback treats the data as opened by `to`.
@@ -478,14 +484,15 @@ export class UpdateHandshake {
           this.subject.logger.info('update committed', { data: { from, to, successor: successor.pid } })
           return { outcome: 'committed' }
         }
-        this.subject.logger.warn('the successor failed its health check', { data: { to, reason: answer.reason } })
+        this.subject.logger.warn('the successor failed its health check', { data: { to, reason: answer.reason, criterion: answer.criterion ?? '' } })
+        criterion = answer.criterion
       } catch (error) {
         this.subject.logger.error('the switch failed; rolling back', { err: error, data: { from, to } })
         const back = await this.rollBackFailedUpdate(successor, before, update, end)
         if (back.outcome === 'failed') return back
         throw error
       }
-      return await this.rollBackFailedUpdate(successor, before, update, end)
+      return await this.rollBackFailedUpdate(successor, before, update, end, criterion)
     } catch (error) {
       // A failure before the switch changed nothing; the record of the phase it stopped in goes with it.
       if (!switching) {
@@ -523,10 +530,11 @@ export class UpdateHandshake {
    * C3's automatic rollback after a failed switch or health check: stop the successor and apply the rollback table
    * with the pointers restored to their values before the update; on success this process's Host runs again, the
    * record goes and the stashed record returns. When the table refuses, nothing is restored: the record stays with
-   * `refused`, the pointers name `to`, and this process stops. When a step may have run, the record stays
+   * `refused`, the pointers name `to`, and this process stops. A rolled-back outcome carries the health criterion the
+   * successor named, when it named one. When a step may have run, the record stays
    * `rolling-back` and this process stops; the next start completes the rollback.
    */
-  private async rollBackFailedUpdate(successor: Successor | undefined, before: RuntimePointers, update: JournalledUpdate, end: (result: HandshakeResult) => Promise<HandshakeResult>): Promise<HandshakeResult> {
+  private async rollBackFailedUpdate(successor: Successor | undefined, before: RuntimePointers, update: JournalledUpdate, end: (result: HandshakeResult) => Promise<HandshakeResult>, criterion?: string): Promise<HandshakeResult> {
     await successor?.stop()
     const journal = this.subject.journal
     const phase: UpdatePhase = update.targetStarted ? 'health-check' : 'switching'
@@ -548,10 +556,13 @@ export class UpdateHandshake {
       if (isRefusal(error, 'CHATS_RUNNING')) {
         return this.stopServing({ outcome: 'failed', reason: 'CHATS_RUNNING' }, 'the target failed its health check and another process uses the chat data, so the rollback did not start; stop it, and the next start completes the rollback', error, data)
       }
+      if (isRefusal(error, 'GIT_UNAVAILABLE')) {
+        return this.stopServing({ outcome: 'failed', reason: 'GIT_UNAVAILABLE' }, 'the target failed its health check and git, which restores the profile, cannot run, so the rollback did not start; install git, and the next start completes the rollback', error, data)
+      }
       return this.stopServing({ outcome: 'failed' }, 'the rollback stopped after a step may have run; the next start completes it', error, data)
     }
     await this.subject.resume()
-    return end({ outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    return end({ outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED', ...criterion === undefined ? {} : { criterion } })
   }
 
   /**
@@ -599,15 +610,16 @@ export class UpdateHandshake {
         await this.resumeAfterStopFailed(error, data)
         return result
       }
+      let lines: readonly string[]
       try {
-        await copies.rollback(record, {
+        lines = await copies.rollback(record, {
           profileOnly: health === undefined,
           switchRuntime: () => store.switchTo(running, record.from),
           // A profile-only rollback keeps this runtime, so its record stays `committed` and the person can run it again.
           markRollingBack: health === undefined ? async () => {} : () => writeJournal(journal, journalledUpdate(record), 'rolling-back'),
         })
       } catch (error) {
-        if (isRefusal(error, 'ROLLBACK_NEEDS_DATA_COPY') || isRefusal(error, 'ROLLBACK_TARGET_UNUSABLE') || isRefusal(error, 'CHATS_RUNNING')) {
+        if (isRollbackRefusal(error)) {
           // Refused before any step: this Host runs again with nothing changed.
           await this.subject.resume()
           end({ outcome: 'aborted' })
@@ -618,7 +630,7 @@ export class UpdateHandshake {
       if (health === undefined) {
         await this.subject.resume()
         await removeJournal(journal)
-        return end({ outcome: 'rolled-back' })
+        return end({ outcome: 'rolled-back', lines })
       }
       this.announce('health-check', record.from, progress)
       const startId = brandString<StartId>(randomId())
@@ -630,7 +642,7 @@ export class UpdateHandshake {
         this.subject.handOver(successor, startId, record.from)
         this.committedSuccessor = successor
         this.current = { phase: 'committed', target: record.from }
-        return { outcome: 'rolled-back' }
+        return { outcome: 'rolled-back', lines }
       }
       // The data and the profile are back for `from`, so `to` may not run on them: the pointers stay on `from`.
       await successor.stop()

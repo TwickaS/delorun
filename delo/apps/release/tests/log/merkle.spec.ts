@@ -3,7 +3,7 @@
  * spec holds its copy of the power-of-two test to.
  */
 import { describe, expect, it } from 'vitest'
-import { isPowerOfTwo, nodeHash, rootFromInclusionProof, verifyConsistency } from '../../src/log/merkle.ts'
+import { isPowerOfTwo, nodeHash, rootFromInclusionProof, verifyConsistency } from '@delo/release-formats/log/merkle'
 
 describe('trees beyond 32 bits', () => {
   it('tells powers of two apart by arithmetic exact for every safe integer, refusing 2^53 and beyond, where a 32-bit mask reads 2^32 + 2^31 as one', () => {

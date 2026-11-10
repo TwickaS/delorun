@@ -2,7 +2,7 @@
  * RFC 6962 Merkle tree hashing and proof verification, as the release log's inclusion and consistency proofs use it
  * (contract C18): a leaf hash is SHA-256 of 0x00 and the leaf, an interior node SHA-256 of 0x01 and its children.
  *
- * @module @delo/release/log/merkle
+ * @module @delo/release-formats/log/merkle
  */
 import { createHash } from 'node:crypto'
 import { MAX_PROOF_HASHES } from '@delo/contract-release-log'

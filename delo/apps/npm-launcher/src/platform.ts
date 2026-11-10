@@ -11,7 +11,7 @@
  * @module @delo/npm-launcher/platform
  */
 import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delo/contract-release-manifest'
-import { RELEASE_SOURCE, RELEASE_HOSTS, type HostRule, type ReleaseSource } from '@delo/install'
+import { buildOrigin, RELEASE_SOURCE, RELEASE_HOSTS, type ChannelOrigins, type HostRule, type ReleaseSource } from '@delo/install'
 
 /**
  * The path below a Rekor v2 log's host that serves its checkpoint and tiles (`/api/v2/checkpoint`,
@@ -37,48 +37,16 @@ export function platformOf(platform: string, arch: string): RuntimePlatform {
 }
 
 /**
- * The origins a build may replace. An absent field keeps the production value.
+ * The origins a build may replace, the same fields a home's channel record holds. An absent field keeps the production
+ * value.
  */
-export interface BuildConstants {
-  /** The origin that serves `timestamp.json`, `root/<n>.root.json` and `releases/download/v<version>/<file>`. */
-  readonly channelOrigin?: string
-  /** The log shard's `tlog-tiles` origin, which answers `/checkpoint` and `/proof/consistency`. */
-  readonly logOrigin?: string
-}
+export type BuildConstants = ChannelOrigins
 
 /** The bundler's replacement for the build's origins; `undefined` in a source run, which uses production values. */
 declare const __DELO_LAUNCHER_BUILD__: BuildConstants | undefined
 
 /** The origins this build was made with, or an empty object for the production channel and log. */
 export const BUILD_CONSTANTS: BuildConstants = typeof __DELO_LAUNCHER_BUILD__ === 'undefined' ? {} : __DELO_LAUNCHER_BUILD__
-
-/** The hosts an `http:` build origin may name: this machine only. */
-const LOOPBACK_HOSTS: readonly string[] = ['127.0.0.1', 'localhost', '[::1]']
-
-/**
- * Check a build origin: an origin with no path, query or fragment, over `https:`, or over `http:` for this machine's
- * loopback address so a local channel and log can serve a build.
- * @param origin - the origin a build passes.
- * @param what - what the origin is, for the refusal.
- * @returns the origin without a trailing slash.
- * @throws {Error} naming the origin and the rule it breaks.
- */
-export function buildOrigin(origin: string, what: string): string {
-  let url: URL
-  try {
-    url = new URL(origin)
-  } catch {
-    // The URL constructor's own message names no origin, so the refusal below is the one reported.
-    throw new Error(`the ${what} ${JSON.stringify(origin)} is not a URL`)
-  }
-  if (url.pathname !== '/' || url.search !== '' || url.hash !== '' || url.username !== '' || url.password !== '') {
-    throw new Error(`the ${what} ${origin} must be an origin: a scheme, a host and a port, with no path, query, fragment or credentials`)
-  }
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && LOOPBACK_HOSTS.includes(url.hostname))) {
-    throw new Error(`the ${what} ${origin} must use https, or http on this machine's loopback address`)
-  }
-  return url.origin
-}
 
 /** Where a build's release files are fetched from, and the download rule that covers it. */
 export interface ChannelPlan {

@@ -19,5 +19,5 @@ export { endUpdateRecord, hasStash, journalledUpdate, journalPath, journalRecord
 export { captureHomeOutput, HOME_LOGGER, openHomeLog, type HomeLog, type HomeLogOptions } from './log.ts'
 export { checkUpdateRequest, REPORT_ID_PATTERN } from './schema.ts'
 export { listenProcessSignals, SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
-export type { ChatGate, HealthExpectations, HealthVerdict, HomeCommand, HomeCommandMode, HostRunner, PreparedRuntime, ProfileSnapshots, RollbackSteps, RunningHost, RuntimePointers, RuntimeStore, SessionDataCopies, StudioLinkResult, UpdateChannelAccess } from './seams.ts'
+export type { BootRow, ChatGate, HealthExpectations, HealthVerdict, HomeCommand, HomeCommandMode, HostRunner, PreparedRuntime, ProfileSnapshots, RollbackSteps, RunningHost, RuntimePointers, RuntimeStore, SessionDataCopies, StudioLinkResult, UpdateChannelAccess } from './seams.ts'
 export { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup, type SupervisorStart } from './supervisor-launch.ts'

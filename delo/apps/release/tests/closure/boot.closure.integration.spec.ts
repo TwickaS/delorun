@@ -5,7 +5,9 @@
  * every row whose module is a `@delo/` package is active. The client artifacts carry the title `closure.json` names. It runs only when
  * `DELO_CLOSURE_ARCHIVE` names a `linux-x64` closure archive that `build-closure.ts` built (`DELO_CLOSURE_EXISTING_ARTIFACTS=1`
  * when it was built with `--artifacts existing`, whose client carries the worktree build's title). A second spec starts the
- * Host as the home process and requests the studio's index on loopback.
+ * Host as the home process and requests the studio's index on loopback. A third runs `--version` and one command of each
+ * top-level command `delorun --help` lists, with neither pnpm nor git on `PATH`, so a module the closure does not carry
+ * or a command that crashes instead of refusing fails it.
  */
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -179,6 +181,53 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
     const html = await index.text()
     expect(html).toContain('<div id="root"></div>')
     expect((await fetch(new URL('/', url))).status).toBe(401)
+  })
+
+  it('runs --version and one command of every top-level command, each ending in an answer or a readable refusal', (test) => {
+    const root = scratch(test, 'delo-closure-commands-')
+    const extracted = join(root, 'closure')
+    mkdirSync(extracted)
+    expect(spawnSync('tar', ['-x', '-z', '-f', ARCHIVE!, '-C', extracted], { timeout: 300_000 }).status).toBe(0)
+    const home = join(root, 'home')
+    mkdirSync(home)
+    // No pnpm and no git on PATH: what a command needs of them, the closure carries or the command refuses by name.
+    const env = { HOME: home, PATH: `${join(extracted, 'node/bin')}:/nonexistent`, LANG: 'C.UTF-8', DEEPSEEK_API_KEY: 'sk-closure-boot-spec' }
+    const node = join(extracted, 'node/bin/node')
+    const entry = join(extracted, 'app/node_modules/@delo/cli/src/bin.js')
+    const run = (args: readonly string[]): { readonly status: number | null, readonly output: string } => {
+      const result = spawnSync(node, [entry, ...args], { cwd: root, env, encoding: 'utf8', timeout: 120_000 })
+      return { status: result.status, output: `${result.stdout}${result.stderr}` }
+    }
+    expect(run(['setup', '--yes']).status).toBe(0)
+    expect(run(['--version']).output).toMatch(/^Delo \d+\.\d+\.\d+\nDSH \d+\.\d+\.\d+/u)
+    // One invocation per command that needs no running home process and changes nothing outside the scratch home.
+    const invocations: Readonly<Record<string, readonly string[]>> = {
+      setup: ['setup', '--list'],
+      start: ['start', '--no-such-option'],
+      stop: ['stop'],
+      status: ['status', '--json'],
+      doctor: ['doctor', '--help'],
+      logs: ['logs'],
+      update: ['update', '--check'],
+      recover: ['recover', 'status'],
+      trash: ['trash', 'list'],
+      export: ['export'],
+      import: ['import'],
+      verify: ['verify', '--offline', '--json'],
+      plugin: ['plugin', '--profile', 'default', 'list'],
+      headless: ['headless', '--help'],
+    }
+    const help = run(['--help']).output
+    const listed = help.slice(help.indexOf('Commands:')).split('\n').slice(1).map(line => /^ {2}(\S+)/u.exec(line)?.[1]).filter(name => name !== undefined)
+    expect(listed.sort()).toEqual(Object.keys(invocations).sort())
+    const crashed = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)|^\s+at .+:\d+:\d+\)?$/mu
+    const failures = Object.entries(invocations).flatMap(([command, args]) => {
+      const { status, output } = run(args)
+      return status === null || status > 3 || crashed.test(output) ? [`delorun ${args.join(' ')} (${command}) exited ${String(status)}:\n${output}`] : []
+    })
+    expect(failures).toEqual([])
+    // `plugin` runs the closure's own pnpm, which no PATH here provides.
+    expect(run(['plugin', '--profile', 'default', 'list']).status).toBe(0)
   })
 
   it('needs the install anchor\'s declaration: without it, setup cannot make Delo\'s bundle importable', (test) => {

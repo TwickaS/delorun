@@ -40,6 +40,7 @@ import { registerHomeProcess } from './home-exclusion.ts'
 import { announceStudio } from './open/announce.ts'
 import { hostStudioLink } from './open/host-link.ts'
 import { computerOpener, type StudioOpener } from './open/studio.ts'
+import { shippedPackageManager } from './package-manager.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { readBackgroundAnswer } from './setup/background.ts'
 import { upstreamLinking } from './setup/index.ts'
@@ -47,7 +48,7 @@ import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
 import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.ts'
-import { checkHealth, inactiveRows, watchChats } from './update/host.ts'
+import { bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
 import { checkStoredRuntime, storeUpdateSupport } from './update/store-support.ts'
 import { launcherAnchor } from './update/trusted-root.ts'
@@ -257,7 +258,8 @@ export interface StartRequest {
 const HOME_LOG_LEVEL = 'info'
 
 /**
- * Boot a profile with upstream's profile runner and read it as the start reads a booted profile.
+ * Boot a profile with upstream's profile runner and read it as the start reads a booted profile, with H2's health route
+ * on its web server ({@link serveHealth}).
  * @param options - the runner's options.
  * @param signals - whether upstream's runner installs its own termination-signal handlers: false under a home process,
  *   which owns them, and true for a one-shot run such as `delorun headless`.
@@ -266,7 +268,10 @@ const HOME_LOG_LEVEL = 'info'
 export async function runUpstreamProfile(options: RunProfileOptions, signals: boolean): Promise<BootedProfile> {
   // Loaded after the launch variables are set, so upstream resolves the Delo home.
   const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
-  const { ctx, shutdown } = await runProfile({ ...options, signals })
+  // An installed Delo's plugin manager runs the pnpm its closure carries ([package manager](./package-manager.ts)).
+  const packageManager = shippedPackageManager()
+  const { ctx, shutdown } = await runProfile({ ...options, signals, ...packageManager === undefined ? {} : { packageManager } })
+  serveHealth(ctx)
   return {
     rows: () => bootedRows(ctx),
     providerOf: name => serviceProvider(ctx, name),
@@ -461,7 +466,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
   booted.watchChats(chats)
   const atBoot = booted.rows()
   const failed = inactiveRows(atBoot)
-  const ids = atBoot.map(row => row.id)
+  const atBootRows = bootRowsOf(atBoot)
   return {
     chats,
     studio: () => {
@@ -470,7 +475,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
     },
     studioLink: booted.studioLink,
     failedRows: () => failed,
-    rows: () => ids,
+    rows: () => atBootRows,
     check: expect => checkHealth({ rows: booted.rows, studio: booted.studio, profileDir: join(request.home, 'profiles', request.profile), verifyRuntime }, expect),
     close: async () => {
       await booted.shutdown(EXIT.ok)

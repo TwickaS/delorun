@@ -28,7 +28,7 @@ import { parseArgs } from 'node:util'
 import { ADVISORY_FEED_URL } from '@delo/contract-release-manifest'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { readAttestationKey } from './rebuild/attestation.ts'
-import { readSigningKey } from './sign/envelope.ts'
+import { readSigningKey } from '@delo/release-formats/sign/envelope'
 import { signRelease, SigningRefusal } from './sign/release.ts'
 
 async function main(argv: readonly string[]): Promise<number> {

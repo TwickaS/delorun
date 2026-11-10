@@ -24,8 +24,8 @@ import {
   type UtcTimestamp,
 } from '@delo/contract-release-manifest'
 import type { DeloLogDetails, DeloLogger } from '@delo/logs'
-import { publicKeyEntry, signEnvelope } from '@delo/release/sign/envelope'
-import { toJsonValue } from '@delo/release/sign/json'
+import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
+import { toJsonValue } from '@delo/release-formats/sign/json'
 import { RuntimeStore, type ReleaseFileBytes } from '../src/index.ts'
 
 /** The platform every fixture uses. */

@@ -8,6 +8,7 @@
  */
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
 import { selectWebLane, WEB_CHECK_ID, WEB_LANE_MODULE, type WebSelection, type WebSpec } from './web.ts'
+import { CLOSURE_CHECK_ID, CLOSURE_LANE_MODULE } from './closure.ts'
 import type { GateCheck } from './types.ts'
 
 /**
@@ -96,8 +97,9 @@ export interface Check {
    */
   readonly declined?: string
   /**
-   * True when {@link Check.declined} is a limit of this host (no Docker engine answers) and not an empty selection. A
-   * merge-only check declined for it never ran, so in the merge tier the run fails instead of passing without it.
+   * True when {@link Check.declined} is a limit of this host (no Docker engine answers, or the closure lane on a host
+   * other than `linux-x64`) and not an empty selection. A merge-only check declined for it never ran, so in the merge
+   * tier the run fails instead of passing without it.
    */
   readonly declinedByHost?: true
   /** True when the verdict reads commits beyond the tree; a tree pass covers the check only at the same HEAD and range base. */
@@ -588,6 +590,19 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       tiers: ['changed'],
       cpus: WEB_LANE_CPUS,
     },
+    // A change to what the runtime closure carries can break the release build or the closure itself, which no other lane builds.
+    {
+      id: CLOSURE_CHECK_ID,
+      mergeOnly: true,
+      group: 'tests',
+      title: 'The `linux-x64` runtime closure of HEAD builds from the built artifacts, and boots, serves the studio and answers `--version` and every top-level command',
+      cwd: '',
+      command: ['node_modules/.bin/tsx', CLOSURE_LANE_MODULE],
+      needs: [...built, ...deloBuilt],
+      inputs: ['delo/**', ...UPSTREAM_CODE, 'pnpm-lock.yaml'],
+      tiers: ['changed', 'full'],
+      cpus: 4,
+    },
     {
       id: 'tests:snapshots',
       mergeOnly: true,
@@ -862,6 +877,9 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     } else if (check.id === DOCS_SITE_ID) {
       const site = paths.find(path => path.startsWith(`${DOCS_SITE_DIR}/`) || path.startsWith('delo/docs/') || path === 'delo/apps/release/package.json')
       if (site !== undefined) pick(check, `the documentation site or its pages changed (${site})`)
+    } else if (check.id === CLOSURE_CHECK_ID && selection.changed !== undefined) {
+      const closure = paths.find(path => affectsParity(path) || path === 'pnpm-lock.yaml')
+      if (closure !== undefined) pick(check, `a change reaches what the runtime closure carries (${closure})`)
     } else if (check.group === 'parity' && selection.changed !== undefined) {
       const parity = paths.find(affectsParity)
       if (parity !== undefined) pick(check, `${parity.startsWith('delo/') ? 'Delo code' : 'upstream-owned code'} changed (${parity})`)
@@ -909,6 +927,17 @@ export function leftForMerge(checks: readonly Check[], tree: ForkTree, selection
   if (selection.tier !== 'agent' && selection.tier !== 'lane') return []
   const kept = new Set(select(checks, tree, selection).map(check => check.id))
   return select(checks, tree, { ...selection, tier: 'merge' }).filter(check => (selection.tier === 'lane' || check.mergeOnly === true) && !kept.has(check.id)).map(check => check.id)
+}
+
+/**
+ * Decline the closure lane on a host that cannot build and boot the closure it checks, as a limit of the host, so a
+ * merge-tier run fails instead of passing without the closure, as it does for the Docker lane.
+ * @param plan - the plan.
+ * @param problem - why this host cannot run the lane, from `closureHostProblem`; undefined on a host that can.
+ * @returns the plan, with the lane declined for a host limit when there is a problem.
+ */
+export function declineClosureOffHost(plan: readonly Planned[], problem: string | undefined): Planned[] {
+  return plan.map(check => check.id === CLOSURE_CHECK_ID && problem !== undefined ? { ...check, declined: problem, declinedByHost: true } : check)
 }
 
 /**

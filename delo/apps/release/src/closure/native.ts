@@ -6,7 +6,7 @@
  *
  * @module @delo/release/closure/native
  */
-import { isPeFile } from '../rebuild/pe.ts'
+import { isPeFile } from '@delo/release-formats/archive/pe'
 
 /** The staged directory of the pinned Node distribution, which `toolchain.json` pins by archive digest. */
 export const NODE_DIRECTORY = 'node'

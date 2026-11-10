@@ -5,7 +5,7 @@
  * from it, and the log's leaf is the body's RFC 8785 serialization. Node's crypto has no Ed25519ph, so signing and
  * verifying use `@noble/curves`.
  *
- * @module @delo/release/log/entry
+ * @module @delo/release-formats/log/entry
  */
 import { createHash, createPublicKey, type KeyObject } from 'node:crypto'
 import { RELEASE_LOG_ENTRY_API_VERSION, RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, RELEASE_LOG_ENTRY_KEY_DETAILS, RELEASE_LOG_ENTRY_TYPE, type HashedRekordBody, type HashedRekordRequest } from '@delo/contract-release-log'

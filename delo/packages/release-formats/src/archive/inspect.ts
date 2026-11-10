@@ -4,14 +4,14 @@
  * deterministic writer. The archive is canonical when the re-encoding reproduces its bytes exactly, so every header
  * field, the entry order, the compression and the gzip framing are those the writer produces.
  *
- * @module @delo/release/archive/inspect
+ * @module @delo/release-formats/archive/inspect
  */
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createGunzip } from 'node:zlib'
 import type { RuntimeFileMode } from '@delo/contract-release-manifest'
-import { stripAuthenticode } from '../rebuild/pe.ts'
+import { stripAuthenticode } from './pe.ts'
 import { drain, gzip } from './bytes.ts'
 import { MAX_ARCHIVE_BYTES, type ArchiveEntry, type ArchiveFormat } from './entry.ts'
 import { fileDigest, HashSink } from './sink.ts'

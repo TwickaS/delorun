@@ -39,7 +39,7 @@
 
 `node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --out <dir> [--commit <rev>] [--platform <platform>]... [--cache <dir>]` 从某个提交（默认为 `HEAD`）构建所有平台的运行时发行包，或构建所指定平台的运行时发行包。它在 Linux 或 macOS 上运行；若 Node 或 pnpm 版本与 `toolchain.json` 所固定的不一致，则拒绝运行。对每次构建，它依次执行以下步骤：
 
-1. 将提交的目录树导出到 `closure.json` 所固定的构建根目录 `/var/tmp/delo-release-build/source`，使打包工具嵌入客户端产物的绝对路径在每台构建机上都相同；若该路径上已有本命令未创建的目录，则命令拒绝继续，并且从不删除该目录；
+1. 将提交的目录树导出到 `closure.json` 所固定的构建根目录 `/var/tmp/delo-release-build/source`，使打包工具嵌入客户端产物的绝对路径在每台构建机上都相同；构建期间持有记录其进程 id 的锁文件 `/var/tmp/delo-release-build.lock`，因此同一台计算机上的第二次构建会拒绝运行并指出持有者，而不会删除第一次构建的目录树；若该路径上已有本命令未创建的目录，则命令拒绝继续，并且从不删除该目录；
 2. 在构建根目录中运行 `pnpm install --frozen-lockfile` 与 `pnpm run build:artifacts`，环境变量仅保留构建机的 `PATH`、`HOME`、`USER`、`TMPDIR` 与代理变量，并额外设置 `SOURCE_DATE_EPOCH`（提交的 committer 时间）、`CFLAGS` 与 `CXXFLAGS` 中的 `-ffile-prefix-map=<build root>=.`、`TZ=UTC`、`LC_ALL=C`，客户端产物所嵌入的提交 id，以及设为客户端标题的 `DSH_CLIENT_TITLE`，使上游自身的客户端构建呈现该标题；随后构建 Delo 中带有 `build` 脚本的包（`pnpm --filter ./delo/packages/* run build`），`build:artifacts` 不构建它们；
 3. 对每个平台，以该平台的 `--os`、`--cpu` 与 `--libc` 对根包运行 `pnpm deploy --prod --ignore-scripts`，采用提升的 `node_modules` 并复制文件；将包链接替换为文件；像上游的可执行构建一样，让每个工作区包在其使用方之间共享；删除 pnpm 的 deploy 元数据以及根包的其他文件；把每个 `@delo/` 包的 `src/**/*.ts` 转译为同目录下的 JavaScript，并把相对导入与 `package.json` 入口改写为 `.js`，同时删除该包的 `tests`，因为 Node 不运行 `node_modules` 中的 TypeScript；把锚点必须声明的每个 Delo bundle 以其暂存版本加入锚点 `package.json` 的依赖；并将 `prebuilt-pins.json` 在 `substitutes` 下列出的每个工作区包替换为其已发布的 tarball，替换前检查该 tarball 的完整性，并检查其版本与所部署源码的版本相等；
 4. 添加 `toolchain.json` 按 SHA-256 固定的分发归档中的 Node 可执行文件，以及按完整性固定的 tarball 中的 pnpm；两者各下载一次到缓存（默认为 `~/.cache/delo-release`），且仅在字节匹配时才被使用；

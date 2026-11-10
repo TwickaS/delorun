@@ -2,7 +2,7 @@
  * Readers of contract C2's signed release files: each checks the file's size limit before parsing, refuses duplicate
  * keys, an unknown `schema` and unknown fields, and returns the envelope typed as the contract types it.
  *
- * @module @delo/release/sign/schemas
+ * @module @delo/release-formats/sign/schemas
  */
 import {
   DESKTOP_PLATFORMS,

@@ -2,7 +2,7 @@
  * Byte sinks the archive writers write to, one awaited chunk at a time, so a writer holds at most one entry in
  * memory: a file opened by exclusive creation, and a SHA-256 hash for the canonical-form check.
  *
- * @module @delo/release/archive/sink
+ * @module @delo/release-formats/archive/sink
  */
 import { createHash, type Hash } from 'node:crypto'
 import { createReadStream } from 'node:fs'

@@ -14,18 +14,18 @@ import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, type RuntimeVersion } from '@delo
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import { ensureHomeTree, resolveDeloHome } from '@delo/home'
-import { Downloader, LauncherChannel } from '@delo/install'
+import { Downloader, LauncherChannel, writeChannelRecord, type ChannelOrigins, type LauncherChannelOptions } from '@delo/install'
 import type { ReleaseLogTransport } from '@delo/release-verify/online'
 import { checkAndRecord } from '@delo/release-verify/record'
 import type { StartCheckResult } from '@delo/release-verify/start'
 import { tilesTransport } from '@delo/release-verify/transport'
 import type { DeloLogger } from '@delo/logs'
-import { parseRuntimeVersion, RuntimeStore, StorePaths, type LaunchCommand } from '@delo/runtime-store'
+import { parseRuntimeVersion, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
 import { runLauncher, launcherProfile, type LauncherOutput, type SpawnRuntime } from './launcher.ts'
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
 import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
-import { channelPlan, logPlan, platformOf, type BuildConstants } from './platform.ts'
+import { BUILD_CONSTANTS, channelPlan, logPlan, platformOf, type BuildConstants } from './platform.ts'
 
 /** The launcher's own flag for the CLI profile, which it also passes to the runtime. */
 export const PROFILE_FLAG = '--profile'
@@ -225,6 +225,27 @@ export async function startCheck(request: StartCheckRequest): Promise<StartCheck
 }
 
 /**
+ * The launcher's release channel, which records under `trust/channel.json` the origins this launcher was built with
+ * once the store has installed a release from it, so the runtime's own updates fetch from the channel its
+ * installation used ([C1](../../../docs/contracts/c01-home-layout.md)). Delo records it only here; a runtime's update
+ * reads it and never writes it.
+ */
+class RecordingChannel extends LauncherChannel {
+  /**
+   * @param origins - this launcher's build origins.
+   * @param options - the channel's options.
+   */
+  constructor(private readonly origins: ChannelOrigins, private readonly channelOptions: LauncherChannelOptions) {
+    super(channelOptions)
+  }
+
+  override async recordInstalled(release: ChannelRelease): Promise<void> {
+    await super.recordInstalled(release)
+    await writeChannelRecord(this.channelOptions.home, this.origins)
+  }
+}
+
+/**
  * Run one launcher invocation.
  * @param argv - the arguments after the script.
  * @param context - the environment and output; this process's by default. The other fields exist for specs: a run
@@ -283,7 +304,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       passedThrough: line.passedThrough,
       mode: LAUNCHER_MODE,
       store: new RuntimeStore({ home: home.path, platform, logger }),
-      channel: new LauncherChannel({
+      channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, {
         home: home.path,
         platform,
         roots,

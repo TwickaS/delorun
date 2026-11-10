@@ -14,8 +14,8 @@ import {
   type RuntimePlatform,
   type SignedEnvelope,
 } from '@delo/contract-release-manifest'
-import { compareEntryPaths, entryPathError } from '../archive/entry.ts'
-import { semanticVersion, sha256Hex } from '../brands.ts'
+import { compareEntryPaths, entryPathError } from '@delo/release-formats/archive/entry'
+import { semanticVersion, sha256Hex } from '@delo/release-formats/brands'
 
 /** One regular file of a staged tree. */
 export interface StagedFile {

@@ -17,6 +17,7 @@
 import type { Profile, RuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import type { PackageOperationContext, PackageOperationOptions } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { CliError, EXIT } from './exit.ts'
+import { runsFromClosure } from './package-manager.ts'
 
 /** The npm scope of Delo's bundles and plugins. */
 export const DELO_BUNDLE_SCOPE = '@delo/'
@@ -38,11 +39,16 @@ export function isDeloPackage(packageName: string): boolean {
 
 /**
  * The directory of a Delo package that this installation of `delorun` carries,
- * which a source checkout links into the profile.
+ * which a source checkout links into the profile. A runtime closure offers none:
+ * its directory is a version of the runtime store that an update replaces, so a
+ * link to it would break, and the closure's install anchor declares Delo's
+ * bundles instead.
  * @param packageName - the package name.
- * @returns the package directory, or `undefined` when `delorun` cannot resolve it.
+ * @returns the package directory, or `undefined` when `delorun` runs from a
+ *   runtime closure or cannot resolve the package.
  */
 export function carriedPackageDirectory(packageName: string): string | undefined {
+  if (runsFromClosure()) return undefined
   try {
     return new URL('.', import.meta.resolve(`${packageName}/package.json`)).pathname
   } catch {

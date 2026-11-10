@@ -8,7 +8,7 @@ import { capture, fragmentText, LEDGER, scratchRepo, UNRELEASED } from './suppor
 
 const signedManifest = vi.hoisted(() => ({ value: undefined as unknown }))
 
-vi.mock('../../src/sign/schemas.ts', () => ({ readEnvelope: () => ({ signed: { advisories: signedManifest.value } }) }))
+vi.mock('@delo/release-formats/sign/schemas', () => ({ readEnvelope: () => ({ signed: { advisories: signedManifest.value } }) }))
 
 const ACCEPTED = { advisory: 'GHSA-1111-2222-3333', package: 'example-parser', range: '<1.2.5', reason: 'The parser is not reachable.', approver: 'example-maintainer', lapsesAfter: '0.3.0', added: '2026-11-06' }
 

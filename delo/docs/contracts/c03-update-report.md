@@ -148,7 +148,7 @@ A session-data copy holds the home's `sessions/` and `storages/` as real copies 
 The update stands when all of these hold within 120 seconds after the target starts:
 
 - H1. The target's runtime files verify against its manifest; the release-log state is not read ([C2](c02-release-manifest.md#client-verification), [C18](c18-release-log.md#check-states)).
-- H2. The Host reaches ready: for `cli-home`, the home process's Host is ready and the studio answers its loopback listener's index with status 200; for `desktop-host`, the Host reports ready over the host protocol and the main window loads the studio.
+- H2. The Host reaches ready: for `cli-home`, the home process's Host is ready and its loopback listener answers `GET /delo/health`, a route that answers only a request from this computer to that listener under a loopback `Host` and any other with 421, with status 204 (a listener bound to every address is asked at `127.0.0.1`), which the route answers when the Host reads the studio's index in-process as the owner's browser with status 200; the route reads no cookie and returns no content, so the studio's sign-in, which answers every page and API without a session cookie with 401, stays in force; for `desktop-host`, the Host reports ready over the host protocol and the main window loads the studio.
 - H3. Every plugin, bundle and row the target disabled, skipped or removed is one the report named.
 - H4. Every row the report did not name loads without a plugin load error, except a row whose load error the previous release also recorded.
 - H5. The profile's bundle list equals the list the report predicted.

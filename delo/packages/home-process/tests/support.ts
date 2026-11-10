@@ -22,6 +22,7 @@ import {
   CountingChatGate,
   HomeProcess,
   HomeProcessError,
+  type BootRow,
   type HealthExpectations,
   type HealthVerdict,
   type HomeCommand,
@@ -264,6 +265,8 @@ export class FixtureCopies implements SessionDataCopies {
   noSpace = false
   /** Whether the preflight finds the version rolled back to unusable. */
   unusable = false
+  /** Whether the preflight finds that git, which restores the profile, cannot run. */
+  gitMissing = false
   /** The step that fails, after the steps before it ran. */
   failAt: RollbackStep | undefined
   /** Runs at the start of each rollback, before the preflight. */
@@ -318,10 +321,11 @@ export class FixtureCopies implements SessionDataCopies {
     return Promise.resolve()
   }
 
-  async rollback(record: UpdateJournal, steps: RollbackSteps): Promise<void> {
+  async rollback(record: UpdateJournal, steps: RollbackSteps): Promise<readonly string[]> {
     this.calls.push(`rollback:${record.from}>${record.to}${steps.profileOnly ? ':profile-only' : ''}`)
     this.beforeRollback?.(record)
     const restoresCopy = !steps.profileOnly && record.dataDiffers && record.targetStarted
+    if (this.gitMissing) throw new HomeProcessError('GIT_UNAVAILABLE', 'no git command is on PATH')
     if (!steps.profileOnly && this.unusable) throw new HomeProcessError('ROLLBACK_TARGET_UNUSABLE', `${record.from} does not start`)
     if (!steps.profileOnly && this.othersRunning) throw new HomeProcessError('CHATS_RUNNING', 'the home process of the profile other (process 1) uses the chat data')
     if (restoresCopy && !this.copies.has(record.to)) throw new HomeProcessError('ROLLBACK_NEEDS_DATA_COPY', 'no copy')
@@ -330,9 +334,10 @@ export class FixtureCopies implements SessionDataCopies {
     if (restoresCopy) this.copies.delete(record.to)
     this.snapshots.calls.push(`restore:${record.from}>${record.to}`)
     if (this.failAt === 'profile') throw new Error('the profile step failed')
-    if (steps.profileOnly) return
+    if (steps.profileOnly) return [`Went back on the profile alone to ${record.from}.`]
     if (this.failAt === 'switch') throw new Error('the switch step failed')
     await steps.switchRuntime()
+    return restoresCopy ? [`Went back to ${record.from}; 1 chat(s) set aside.`] : [`Went back to ${record.from}.`]
   }
 }
 
@@ -363,21 +368,22 @@ export class FixtureHost implements RunningHost {
     return { kind: 'link', link: { url: `http://127.0.0.1:${String(port ?? 1)}/?token=fixture-link-${String(this.links)}`, oneTime: true } }
   }
 
-  failedRows(): readonly string[] {
-    return this.behaviour.disabled
+  failedRows(): readonly BootRow[] {
+    return this.behaviour.disabled.map(name => ({ id: name, name, generated: false }))
   }
 
-  rows(): readonly string[] {
-    return this.behaviour.rows ?? []
+  rows(): readonly BootRow[] {
+    return (this.behaviour.rows ?? []).map(id => ({ id, name: `plugin-${id}`, generated: false }))
   }
 
   async check(expect: HealthExpectations | undefined): Promise<HealthVerdict> {
     if (!this.behaviour.healthy) return Promise.resolve({ passed: false, criterion: 'H2-host-ready', detail: 'the fixture is unhealthy' })
     if (expect === undefined) return Promise.resolve({ passed: true })
-    const allowed = new Set([...expect.disabledPlugins, ...expect.previousFailures])
+    const allowed = new Set([...expect.disabledPlugins, ...expect.previousFailures.map(row => row.id)])
     const unexpected = this.behaviour.disabled.filter(plugin => !allowed.has(plugin))
     if (unexpected.length > 0) return Promise.resolve({ passed: false, criterion: 'H3-only-named-disabled', detail: unexpected.join(',') })
-    const gone = expect.previousRows.filter(row => !this.rows().includes(row) && !expect.namedRows.includes(row))
+    const present = this.rows().map(row => row.id)
+    const gone = expect.previousRows.filter(row => !present.includes(row.id) && !expect.namedRows.includes(row.id)).map(row => row.id)
     return Promise.resolve(gone.length === 0 ? { passed: true } : { passed: false, criterion: 'H3-rows-kept', detail: gone.join(',') })
   }
 

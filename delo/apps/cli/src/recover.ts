@@ -10,8 +10,10 @@
  * | `safe-mode [--reason <text>]`, `exit-safe-mode` | starts without third-party plugins, and ends it |
  * | `discard <path>` | removes one copy or set-aside directory `status` lists |
  *
- * A rollback with no home process running first completes an interrupted restore of a session-data copy, then reads
- * the update record and applies the table; it never swaps the runtime pointers on its own.
+ * A rollback, with or without a home process, refuses with C19's `GIT_UNAVAILABLE` before any step when git, which
+ * restores the profile, cannot run. With no home process running it first completes an interrupted restore of a
+ * session-data copy, then reads the update record and applies the table; it never swaps the runtime pointers on its
+ * own.
  *
  * @module @delo/cli/recover
  */
@@ -32,7 +34,7 @@ import { prepareHome, type CliCommand, type CommandContext, type CommandResult }
 import { removeSafeModeOverlay } from './safe-mode.ts'
 import { runtimeOfFile } from './update/runtime.ts'
 import { runtimePlatformOf } from './update/channel.ts'
-import { rollbackRecordedUpdate } from './update/support.ts'
+import { assertHistoryGit, rollbackRecordedUpdate } from './update/support.ts'
 import { launcherAnchor } from './update/trusted-root.ts'
 
 /** The options `delorun recover` takes. */
@@ -120,8 +122,9 @@ async function updateLines(home: string, profile: string): Promise<string[]> {
 }
 
 /**
- * `rollback` with no home process: under the home lock, complete an interrupted restore, read the update record and
- * apply C3's table, switching the pointers from the record's target to its source.
+ * `rollback` with no home process: refuse with `GIT_UNAVAILABLE` before anything when git cannot run, then under the
+ * home lock complete an interrupted restore, read the update record and apply C3's table, switching the pointers from
+ * the record's target to its source.
  * @param home - the Delo home.
  * @param profile - the CLI profile.
  * @param profileOnly - restore only the profile snapshot.
@@ -129,6 +132,7 @@ async function updateLines(home: string, profile: string): Promise<string[]> {
  * @returns the exit code.
  */
 async function rollbackOffline(home: string, profile: string, profileOnly: boolean, context: CommandContext): Promise<CommandResult> {
+  await assertHistoryGit()
   const store = new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger: SILENT })
   const current = await store.pointers().then(pointers => pointers.current, (error: unknown) => {
     // A home without an installed runtime, as a source checkout runs: no update can be recorded against it.
@@ -213,6 +217,7 @@ async function rollbackLive(home: string, profile: string, profileOnly: boolean,
     context.stderr(`delorun recover: ${String(final?.error ?? 'no answer')}${typeof final?.detail === 'string' ? `: ${final.detail}` : ''}\n`)
     return EXIT.failed
   }
+  if (final.outcome === 'rolled-back' && Array.isArray(final.lines)) for (const line of final.lines) context.stdout(`${String(line)}\n`)
   context.stdout(final.outcome === 'rolled-back' ? 'Rolled back.\n' : `The rollback ended ${String(final.outcome)}${typeof final.reason === 'string' ? ` (${final.reason})` : ''}.\n`)
   return final.outcome === 'rolled-back' ? EXIT.ok : EXIT.failed
 }

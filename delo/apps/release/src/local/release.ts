@@ -34,16 +34,16 @@ import {
   type UtcTimestamp,
 } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { semanticVersion, sha256Hex } from '../brands.ts'
+import { semanticVersion, sha256Hex } from '@delo/release-formats/brands'
 import { closureFileNames } from '../closure/tree.ts'
-import { logEntryName } from '../log/bundle.ts'
+import { logEntryName } from '@delo/release-formats/log/bundle'
 import { logRelease, type LogEndpoints } from '../log/client.ts'
-import { entryRequest } from '../log/entry.ts'
-import { publicKeyEntry, signEnvelope } from '../sign/envelope.ts'
-import { toJsonValue } from '../sign/json.ts'
-import { ManifestSchema, readEnvelope } from '../sign/schemas.ts'
+import { entryRequest } from '@delo/release-formats/log/entry'
+import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
+import { toJsonValue } from '@delo/release-formats/sign/json'
+import { ManifestSchema, readEnvelope } from '@delo/release-formats/sign/schemas'
 import { initialState, nextTimestamp, readTimestampState, stateAfter } from '../sign/timestamp.ts'
-import { trustRootChain, verifyTimestamp } from '../sign/verify.ts'
+import { trustRootChain, verifyTimestamp } from '@delo/release-formats/sign/verify'
 
 /** The only platform a local release builds. */
 export const LOCAL_PLATFORM: RuntimePlatform = 'linux-x64'

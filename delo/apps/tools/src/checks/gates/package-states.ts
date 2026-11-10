@@ -49,6 +49,7 @@ const manifestFields = z.looseObject({
   dependencies: z.record(z.string(), z.string()).optional(),
   peerDependencies: z.record(z.string(), z.string()).optional(),
   optionalDependencies: z.record(z.string(), z.string()).optional(),
+  devDependencies: z.record(z.string(), z.string()).optional(),
 })
 
 /** A workspace package as the rules see it. */
@@ -62,6 +63,8 @@ export interface StatePackage {
   readonly unreached?: string | undefined
   /** Names of every package it depends on, in any of the three dependency sections. */
   readonly dependencies: readonly string[]
+  /** Names of the packages in its `devDependencies`, which the state rules ignore and the build order does not. */
+  readonly devDependencies: readonly string[]
 }
 
 /** The workspace as read from disk. */
@@ -101,6 +104,7 @@ export function readWorkspace(root: string): StateWorkspace {
           ...Object.keys(fields.peerDependencies ?? {}),
           ...Object.keys(fields.optionalDependencies ?? {}),
         ],
+        devDependencies: Object.keys(fields.devDependencies ?? {}),
       })
     }
   }

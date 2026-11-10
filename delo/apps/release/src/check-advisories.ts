@@ -20,7 +20,7 @@ import { parseArgs } from 'node:util'
 import { ADVISORY_FEED_URL } from '@delo/contract-release-manifest'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { advisoryReportName, releaseAdvisoryCheck } from './advisory/release.ts'
-import { semanticVersion } from './brands.ts'
+import { semanticVersion } from '@delo/release-formats/brands'
 import { commitOf } from './rebuild/record.ts'
 
 async function main(argv: readonly string[]): Promise<number> {

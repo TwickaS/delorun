@@ -12,9 +12,9 @@ import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_REQUEST_TIMEOUT_SECONDS, type Ha
 import type { RootMetadata } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
-import { LogVerificationError, verifyBundle } from './bundle.ts'
-import { parseCheckpoint, splitNote } from './note.ts'
-import { inclusionProofFromTiles, TILE_WIDTH } from './tiles.ts'
+import { LogVerificationError, verifyBundle } from '@delo/release-formats/log/bundle'
+import { parseCheckpoint, splitNote } from '@delo/release-formats/log/note'
+import { inclusionProofFromTiles, TILE_WIDTH } from '@delo/release-formats/log/tiles'
 
 /** Where the log and the witnessed checkpoints are. */
 export interface LogEndpoints {

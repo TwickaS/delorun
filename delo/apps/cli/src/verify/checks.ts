@@ -30,10 +30,11 @@ import {
   type VerificationResult,
 } from '@delo/contract-verification-checks'
 import { readProtectedFile } from '@delo/home'
-import { readStoredRootChain, verifyStoredRoot } from '@delo/install'
+import { readChannelRecord, readStoredRootChain, verifyStoredRoot } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
-import { readRoot, verifySignedManifest, verifyTimestamp, type TrustedRoot } from '@delo/release/sign/verify'
-import { checkAndStore, logEndpoints, recordResult, tilesTransport, uncheckedWarning, type Fetch, type RecordedCheck } from '@delo/release-verify'
+import { readRoot, verifySignedManifest, verifyTimestamp, type TrustedRoot } from '@delo/release-formats/sign/verify'
+import { checkAndStore, recordResult, uncheckedWarning, type Fetch, type RecordedCheck } from '@delo/release-verify'
+import { recordedLogTransport } from '../update/channel.ts'
 import { RuntimeStore, StorePaths } from '@delo/runtime-store'
 
 /** What one run of the checks reads. */
@@ -66,6 +67,16 @@ export interface RootAnchor {
   readonly anchored: 'shipped' | 'stored'
   /** Why the run anchored on the stored root only, when it did. */
   readonly reason?: string
+  /** The directory of the launcher's shipped roots, `DELO_LAUNCHER_ROOTS`, when the run anchored on them. */
+  readonly rootsDirectory?: string
+}
+
+/** Where this home's releases come from, as its channel record names them; `production` for an absent field. */
+export interface ReleaseOrigins {
+  /** The channel's origin, or `production` for contract C2's publication. */
+  readonly channel: string
+  /** The release log's origin, or `production` for the log the trusted root names. */
+  readonly log: string
 }
 
 /** What one run found. */
@@ -82,6 +93,8 @@ export interface ReleaseCheckOutcome {
   readonly warnings: readonly string[]
   /** What the release-log check noticed without it being a failure. */
   readonly notices: readonly string[]
+  /** Where this home's releases come from, or `undefined` when its channel record does not read. */
+  readonly origins: ReleaseOrigins | undefined
 }
 
 /** One part of the `release-signature` check. */
@@ -193,24 +206,24 @@ async function anchoredRoot(options: ReleaseCheckOptions): Promise<RootStep> {
   let root = own
   let anchor: RootAnchor
   const keyids = own.metadata.roles.root.keyids.map(String)
+  const rootsDirectory = options.launcherRoots
   let shipped: readonly Uint8Array[] | undefined
-  let reason: string | undefined
-  if (options.launcherRoots === undefined) reason = 'the launcher that started this runtime named no shipped roots'
-  else {
+  let reason = 'the launcher that started this runtime named no shipped roots'
+  if (rootsDirectory !== undefined) {
     try {
-      shipped = await shippedRoots(options.launcherRoots)
+      shipped = await shippedRoots(rootsDirectory)
     } catch (error) {
-      reason = `the launcher's roots at ${options.launcherRoots} do not read: ${reasonOf(error)}`
+      reason = `the launcher's roots at ${rootsDirectory} do not read: ${reasonOf(error)}`
     }
   }
-  if (shipped === undefined) anchor = { version: own.metadata.version, keyids, anchored: 'stored', reason: reason! }
+  if (shipped === undefined || rootsDirectory === undefined) anchor = { version: own.metadata.version, keyids, anchored: 'stored', reason }
   else {
     try {
       root = verifyStoredRoot({ stored, shipped, walked: await readStoredRootChain(options.home), source: path })
     } catch (error) {
       return { refused: { result: 'fail', detail: `the trusted root ${path} is not one the launcher's shipped roots lead to: ${reasonOf(error)}` } }
     }
-    anchor = { version: root.metadata.version, keyids, anchored: 'shipped' }
+    anchor = { version: root.metadata.version, keyids, anchored: 'shipped', rootsDirectory }
   }
   const expires = Date.parse(root.metadata.expires) / 1000
   const expiry: Part = options.now > expires + CLOCK_TOLERANCE_SECONDS
@@ -288,8 +301,8 @@ interface LogPart extends Part {
 }
 
 /**
- * The release-log part: contract C18's start check over the stored bundle, offline and, with a fetch, online, with its
- * state and verified checkpoint recorded.
+ * The release-log part: contract C18's start check over the stored bundle, offline and, with a fetch, online at the log
+ * the home's channel record names ({@link recordedLogTransport}), with its state and verified checkpoint recorded.
  * @param options - the run's options.
  * @param root - the trusted root.
  * @param paths - the store's paths.
@@ -306,7 +319,7 @@ async function releaseLogPart(options: ReleaseCheckOptions, root: TrustedRoot, p
       if (isMissing(error)) return undefined
       throw error
     })
-    const transport = options.fetch === undefined ? undefined : tilesTransport({ fetch: options.fetch, ...logEndpoints(root.metadata) })
+    const transport = options.fetch === undefined ? undefined : recordedLogTransport(await readChannelRecord(options.home) ?? {}, root.metadata, options.fetch)
     const result = await checkAndStore(options.home, { root: root.metadata, version: options.release, manifest, bundle, now: options.now, transport, mode: options.mode })
     record = await recordResult(options.home, options.release, options.now, result)
     notices = result.notices ?? []
@@ -380,7 +393,15 @@ export async function checkRelease(options: ReleaseCheckOptions): Promise<Releas
     const part = own.parts.get(entry.id)
     return part === undefined ? { id: entry.id, result: 'unknown', detail: NOT_RUN_HERE } : { id: entry.id, result: part.result, detail: boundedDetail(part.detail) }
   })
-  return { results, root: own.root, onlineOnly: own.onlineOnly ?? false, recorded: own.recorded, warnings: own.warnings ?? [], notices: own.notices ?? [] }
+  let origins: ReleaseOrigins | undefined
+  const warnings = [...own.warnings ?? []]
+  try {
+    const record = await readChannelRecord(options.home) ?? {}
+    origins = { channel: record.channelOrigin ?? 'production', log: record.logOrigin ?? 'production' }
+  } catch (error) {
+    warnings.push(`the home's channel record does not read, so where its releases come from is unknown: ${reasonOf(error)}`)
+  }
+  return { results, root: own.root, onlineOnly: own.onlineOnly ?? false, recorded: own.recorded, warnings, notices: own.notices ?? [], origins }
 }
 
 /**

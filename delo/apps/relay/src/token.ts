@@ -10,7 +10,7 @@
  */
 import { RELAY_LIMITS, RELAY_PROTOCOL_VERSION, type Base64Url, type RelayId, type TunnelTokenClaims } from '@delo/contract-relay-protocol'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { canonicalJson, parseStrictJson, toJsonValue } from '@delo/release/sign/json'
+import { canonicalJson, parseStrictJson, toJsonValue } from '@delo/release-formats/sign/json'
 import type { KeyObject } from 'node:crypto'
 import { z } from 'zod'
 import type { RelayBindingView } from './config.ts'

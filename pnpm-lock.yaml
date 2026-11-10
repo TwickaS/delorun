@@ -1332,12 +1332,15 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../../packages/logs
+      '@delo/npm-launcher':
+        specifier: workspace:*
+        version: link:../npm-launcher
       '@delo/profile-safety':
         specifier: workspace:*
         version: link:../../packages/profile-safety
-      '@delo/release':
+      '@delo/release-formats':
         specifier: workspace:*
-        version: link:../release
+        version: link:../../packages/release-formats
       '@delo/release-verify':
         specifier: workspace:*
         version: link:../../packages/release-verify
@@ -1369,6 +1372,9 @@ importers:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../../packages/util/launch-environment
+      '@deepseek-ai/dsh-official-bundles':
+        specifier: workspace:*
+        version: link:../../../packages/util/official-bundles
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session
@@ -1399,9 +1405,9 @@ importers:
       '@delo/home':
         specifier: workspace:*
         version: link:../../packages/home
-      '@delo/release':
+      '@delo/release-formats':
         specifier: workspace:*
-        version: link:../release
+        version: link:../../packages/release-formats
       '@delo/release-verify':
         specifier: workspace:*
         version: link:../../packages/release-verify
@@ -1411,6 +1417,9 @@ importers:
       semver:
         specifier: ^7.8.5
         version: 7.8.5
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/semver':
         specifier: ^7.8.0
@@ -1436,9 +1445,9 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../../packages/logs
-      '@delo/release':
+      '@delo/release-formats':
         specifier: workspace:*
-        version: link:../release
+        version: link:../../packages/release-formats
       '@delo/release-verify':
         specifier: workspace:*
         version: link:../../packages/release-verify
@@ -1464,9 +1473,9 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../../packages/logs
-      '@delo/release':
+      '@delo/release-formats':
         specifier: workspace:*
-        version: link:../release
+        version: link:../../packages/release-formats
       ws:
         specifier: ^8.21.3
         version: 8.21.3
@@ -1498,6 +1507,9 @@ importers:
       '@delo/contract-update-report':
         specifier: workspace:*
         version: link:../../packages/contract-update-report
+      '@delo/release-formats':
+        specifier: workspace:*
+        version: link:../../packages/release-formats
       '@delo/runtime-closure':
         specifier: workspace:*
         version: link:../runtime-closure
@@ -1551,6 +1563,9 @@ importers:
       '@delo/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
+      '@delo/release-formats':
+        specifier: workspace:*
+        version: link:../../packages/release-formats
       '@delo/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
@@ -2819,6 +2834,31 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
+  delo/packages/release-formats:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-release-log':
+        specifier: workspace:*
+        version: link:../contract-release-log
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@noble/curves':
+        specifier: ^2.4.0
+        version: 2.4.0
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
+
   delo/packages/release-verify:
     dependencies:
       '@deepseek-ai/dsh-brand':
@@ -2842,9 +2882,9 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../logs
-      '@delo/release':
+      '@delo/release-formats':
         specifier: workspace:*
-        version: link:../../apps/release
+        version: link:../release-formats
       '@noble/curves':
         specifier: ^2.4.0
         version: 2.4.0
@@ -2882,9 +2922,9 @@ importers:
       '@delo/logs':
         specifier: workspace:*
         version: link:../logs
-      '@delo/release':
+      '@delo/release-formats':
         specifier: workspace:*
-        version: link:../../apps/release
+        version: link:../release-formats
 
   delo/packages/supervisor:
     dependencies:

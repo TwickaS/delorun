@@ -10,7 +10,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, removeScratch, scratchDir, scratchPlace, statfsOf, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
-import { affectsParity, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
+import { affectsParity, declaredBuildOutputs, declineClosureOffHost, declineUnansweredDocker, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
+import { closureHostProblem } from '../src/checks/closure.ts'
 import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
@@ -129,7 +130,7 @@ describe('the catalog', () => {
 
 describe('selection', () => {
   it('runs every default check with no target, and neither the changed-upstream lane nor the native build by a tier of its own', () => {
-    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'generated:notices', 'generate:native', 'tests:fork', 'tests:fork:integration', 'tests:snapshots', 'parity-switches', 'parity-replay', 'parity-replay:control'])
+    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'generated:notices', 'generate:native', 'tests:fork', 'tests:fork:integration', 'tests:closure', 'tests:snapshots', 'parity-switches', 'parity-replay', 'parity-replay:control'])
     expect(CHECKS.find(check => check.id === 'generate:native')?.tiers).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['generate:native'] }))).toEqual(['generate:native'])
   })
@@ -238,13 +239,13 @@ describe('selection', () => {
 })
 
 describe('the gate tiers', () => {
-  const MERGE_ONLY = ['tests:snapshots', 'parity-replay', 'parity-replay:control']
+  const MERGE_ONLY = ['tests:closure', 'tests:snapshots', 'parity-replay', 'parity-replay:control']
   const dockerTree: ForkTree = { ...TREE, packages: TREE.packages.map(pkg => pkg.name === '@delo/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
   const upstreamChange = { base: 'v5', paths: ['packages/core/session/src/index.ts'] }
 
-  it('marks the replays, the web lane and the Docker lane merge-only, and no other check', () => {
+  it('marks the replays, the web lane, the closure lane and the Docker lane merge-only, and no other check', () => {
     const marked = catalog(dockerTree, HOST).filter(check => check.mergeOnly === true).map(check => check.id)
-    expect(marked).toEqual(['tests:docker', 'tests:web-changed', 'tests:snapshots', 'parity-replay', 'parity-replay:control'])
+    expect(marked).toEqual(['tests:docker', 'tests:web-changed', 'tests:closure', 'tests:snapshots', 'parity-replay', 'parity-replay:control'])
   })
 
   it('leaves each merge-only check out of the agent tier and names it, and the merge tier selects it', () => {
@@ -257,7 +258,7 @@ describe('the gate tiers', () => {
       expect(merge).toContain(id)
     }
     expect(agent).toContain('parity-switches')
-    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'agent' })).toEqual(['tests:docker', 'tests:snapshots', 'parity-replay', 'parity-replay:control'])
+    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'agent' })).toEqual(['tests:docker', 'tests:closure', 'tests:snapshots', 'parity-replay', 'parity-replay:control'])
     expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'merge' })).toEqual([])
     expect(ids(select(checks, dockerTree, { ...NONE, changed }))).toEqual(merge)
   })
@@ -275,7 +276,7 @@ describe('the gate tiers', () => {
     expect(ids(lane)).toEqual(['boundary', 'gates:commits', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:providers', 'generate:native', 'tests:fork', 'tests:fork:integration'])
     for (const id of ['tests:fork', 'tests:fork:integration']) expect(lane.find(check => check.id === id)?.scope).toEqual(['delo/packages/providers/'])
     expect(lane.find(check => check.id === 'typecheck:upstream')?.reason).toBe('needed by typecheck:delo:providers')
-    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'lane' })).toEqual(['gates:docs', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'tests:docker', 'tests:upstream-changed', 'tests:snapshots', 'parity-switches', 'parity-replay', 'parity-replay:control'])
+    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'lane' })).toEqual(['gates:docs', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'tests:docker', 'tests:upstream-changed', 'tests:closure', 'tests:snapshots', 'parity-switches', 'parity-replay', 'parity-replay:control'])
     // Without a changed package the lane tier runs no typecheck of Delo's programs and no specs.
     expect(ids(select(checks, dockerTree, { ...NONE, changed: { base: 'v5', paths: ['README.md'] }, tier: 'lane' }))).toEqual(['boundary', 'gates:commits'])
     const program = CHECKS.find(check => check.id === 'typecheck:delo:control')
@@ -391,6 +392,33 @@ describe('the documentation website check', () => {
     expect(packageDirOf('delo/apps/docs/source.config.ts')).toBeUndefined()
     expect(selected(['delo/apps/docs/source.config.ts'])).not.toContain('tests:fork')
     expect(selected(['delo/apps/docs/source.config.ts'])).toContain('docs-site')
+  })
+})
+
+describe('the closure lane', () => {
+  const merge = (paths: readonly string[]): Planned[] => select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths }, tier: 'merge' })
+
+  it('builds and boots the closure through its own module, after the builds it reads', () => {
+    const lane = catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] }).find(check => check.id === 'tests:closure')
+    expect(lane).toMatchObject({ mergeOnly: true, command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/checks/closure.ts'], exclusive: true })
+    expect(lane?.needs).toContain('build:artifacts')
+  })
+
+  it('runs in the merge tier for a change to Delo code, a manifest or the lockfile, and not for documentation', () => {
+    expect(ids(merge(['delo/apps/release/package.json']))).toContain('tests:closure')
+    expect(ids(merge(['delo/apps/cli/src/main.ts']))).toContain('tests:closure')
+    expect(ids(merge(['pnpm-lock.yaml']))).toContain('tests:closure')
+    expect(ids(merge(['delo/docs/contracts/c19-home-process.md']))).not.toContain('tests:closure')
+    expect(ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delo/apps/cli/src/main.ts'] }, tier: 'agent' }))).not.toContain('tests:closure')
+  })
+
+  it('declines the lane on a host other than linux-x64 as a host limit, naming it, and keeps it on linux-x64', () => {
+    expect(closureHostProblem('linux', 'x64')).toBeUndefined()
+    const problem = closureHostProblem('darwin', 'arm64')
+    expect(problem).toBe('the closure lane builds and boots the linux-x64 closure, and this host is darwin-arm64')
+    const declined = declineClosureOffHost(merge(['delo/apps/cli/src/main.ts']), problem).find(check => check.id === 'tests:closure')
+    expect(declined).toMatchObject({ declined: problem, declinedByHost: true, mergeOnly: true })
+    expect(declineClosureOffHost(merge(['delo/apps/cli/src/main.ts']), undefined).find(check => check.id === 'tests:closure')?.declined).toBeUndefined()
   })
 })
 

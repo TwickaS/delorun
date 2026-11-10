@@ -10,9 +10,12 @@ import { join } from 'node:path'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import type { UpdateJournal } from '@delo/contract-home-process'
 import { HomeProcessError, type ProfileSnapshots, type RollbackSteps, type SessionDataCopies, type UpdateSupport } from '@delo/home-process'
-import { readSafetyRecord, recordSnapshot, rollbackToSnapshot, withUpdate, writeSafetyRecord } from '@delo/profile-safety'
+import { historyGitProblem, readSafetyRecord, recordSnapshot, rollbackToSnapshot, withUpdate, writeSafetyRecord } from '@delo/profile-safety'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { assertSoleDataUser, DataInUseError } from '../home-exclusion.ts'
+import { describeFailure, renderRefusal } from '@delo/home'
+import { isInstallError } from '@delo/install'
+import { CLI_DESCRIBERS } from '../refusals.ts'
 import { HomeRuntimeStore, isStoreError, type HomeRuntimeStoreOptions, type OpenUpdateChannel, type RuntimeStore, type TrustedRootSource } from '@delo/runtime-store'
 import { assertCopyFits, buildFromSources, discardCopy, keepOnlyCopy, isDataSafetyError, planDataCopy, readDataFormats, rollbackUpdate, saveDataCopy, type ReportSources, type RollbackResult } from '@delo/update'
 
@@ -65,17 +68,31 @@ export function profileSnapshots(home: string, profile: string, now: () => Date)
 }
 
 /**
- * Run C3's one rollback function over the home's copies and the profile history: refuse while another process uses
- * the chat data, check that the version rolled back to is installed and passes its start check before anything
- * changes, then the caller's `rolling-back` mark, the data, the profile and the caller's runtime switch.
+ * Refuse with C19's `GIT_UNAVAILABLE` when the git the profile history runs cannot start: an update's snapshot and
+ * every rollback need it, so an update or a rollback checks it before anything is fetched or changed and never stops
+ * half-way for a missing git.
+ * @throws {HomeProcessError} `GIT_UNAVAILABLE`, naming the command and why it cannot run.
+ */
+export async function assertHistoryGit(): Promise<void> {
+  const problem = await historyGitProblem({})
+  if (problem !== undefined) throw new HomeProcessError('GIT_UNAVAILABLE', `Delo saves and restores the profile's history with git, and git cannot run here: ${problem}; nothing was fetched or changed`)
+}
+
+/**
+ * Run C3's one rollback function over the home's copies and the profile history: refuse when git cannot run or while
+ * another process uses the chat data, check that the version rolled back to is installed and passes its start check
+ * before anything changes, then the caller's `rolling-back` mark, the data, the profile and the caller's runtime
+ * switch.
  * @param options - the home, the profile, the store and the clock.
  * @param record - the update record.
  * @param steps - whether only the profile goes back, the caller's runtime switch and its `rolling-back` mark.
  * @returns what the rollback did.
- * @throws {DataSafetyError} `ROLLBACK_NEEDS_DATA_COPY` when the table refuses; {@link DataInUseError} while another
- *   process uses the chat data; the store's error when the version rolled back to is unusable; nothing has changed then.
+ * @throws {HomeProcessError} `GIT_UNAVAILABLE` when git cannot run; {@link DataSafetyError} `ROLLBACK_NEEDS_DATA_COPY`
+ *   when the table refuses; {@link DataInUseError} while another process uses the chat data; the store's error when the
+ *   version rolled back to is unusable; nothing has changed then.
  */
 export async function rollbackRecordedUpdate(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'root' | 'now'>, record: UpdateJournal, steps: RollbackSteps): Promise<RollbackResult> {
+  await assertHistoryGit()
   const snapshots = profileSnapshots(options.home, options.profile, options.now)
   if (!steps.profileOnly) assertSoleDataUser(options.home)
   return rollbackUpdate({
@@ -131,12 +148,23 @@ export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | '
     },
     async rollback(record, steps) {
       try {
-        await rollbackRecordedUpdate(options, record, steps)
+        return (await rollbackRecordedUpdate(options, record, steps)).lines
       } catch (error) {
         throw refusal(error)
       }
     },
   }
+}
+
+/**
+ * The detail of a prepare's `VERIFY_FAILED` or `CHANNEL_UNREACHABLE` line: the refusal `delorun` prints for the same
+ * failure, from the one refusal format with its remedies, so `delorun update` explains it as the launcher does.
+ * @param error - the failure.
+ * @param profile - the CLI profile, which a remedy's command names.
+ * @returns the text, without its trailing newline.
+ */
+export function prepareRefusal(error: unknown, profile: string): string {
+  return renderRefusal(describeFailure(error, CLI_DESCRIBERS, { profile })).trimEnd()
 }
 
 /**
@@ -154,28 +182,38 @@ function soleDataUser(home: string): void {
 
 /**
  * C1's store as the home process drives it, with C19's codes for the store refusals the handshake answers with a line
- * a person reads: a prepare whose release, installed runtime or stored root fails its check is `VERIFY_FAILED`, and a
- * version to roll back to that is not installed, fails its start check or cannot be checked is
- * `ROLLBACK_TARGET_UNUSABLE`. Any other failure reaches the handshake unchanged. A prepare, and the report of a rollback
- * that switches the runtime, refuse with `CHATS_RUNNING` while another process uses the chat data, another profile's
- * home process included, before anything is downloaded or changed: `current` and the chat data are the whole home's.
+ * a person reads: a prepare whose download did not finish is `CHANNEL_UNREACHABLE`, and one whose release the channel
+ * refuses, or whose installed runtime or stored root fails its check, is `VERIFY_FAILED`, each with the refusal
+ * `delorun` prints for the same failure as its detail ({@link prepareRefusal}); a version to roll back to that is not
+ * installed, fails its start check or cannot be checked is `ROLLBACK_TARGET_UNUSABLE`. Any other failure reaches the
+ * handshake unchanged. A prepare, and the report of a rollback that switches the runtime, refuse with `CHATS_RUNNING`
+ * while another process uses the chat data, another profile's home process included, and a prepare refuses with
+ * `GIT_UNAVAILABLE` when git cannot run, before anything is downloaded or changed: `current` and the chat data are the
+ * whole home's.
  */
 class CliHomeRuntimeStore extends HomeRuntimeStore {
+  /** The CLI profile, which a refusal's remedies name. */
+  private readonly profile: string
+
   /**
    * @param options - the store's options.
    * @param dataHome - the resolved Delo home whose data users are checked.
    */
   constructor(options: ConstructorParameters<typeof HomeRuntimeStore>[0], private readonly dataHome: string) {
     super(options)
+    this.profile = options.profile
   }
 
   /** @inheritdoc */
   override async prepare(...args: Parameters<HomeRuntimeStore['prepare']>): ReturnType<HomeRuntimeStore['prepare']> {
     soleDataUser(this.dataHome)
+    await assertHistoryGit()
     try {
       return await super.prepare(...args)
     } catch (error) {
-      if (isStoreError(error, 'ROOT_NOT_ANCHORED', 'INSTALL_VERIFY_FAILED', 'RUNTIME_CHANGED')) throw new HomeProcessError('VERIFY_FAILED', error.message)
+      // A download that did not finish is the network's or the disk's, not a release that failed a check.
+      if (isInstallError(error, 'DOWNLOAD_FAILED') && !error.oversize) throw new HomeProcessError('CHANNEL_UNREACHABLE', prepareRefusal(error, this.profile))
+      if (isInstallError(error) || isStoreError(error, 'ROOT_NOT_ANCHORED', 'INSTALL_VERIFY_FAILED', 'RUNTIME_CHANGED')) throw new HomeProcessError('VERIFY_FAILED', prepareRefusal(error, this.profile))
       throw error
     }
   }

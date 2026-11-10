@@ -14,7 +14,7 @@
     "@delo/contract-operational-logs": "workspace:*",
     "@delo/contract-relay-protocol": "workspace:*",
     "@delo/logs": "workspace:*",
-    "@delo/release": "workspace:*",
+    "@delo/release-formats": "workspace:*",
     "ws": "^8.21.3",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"

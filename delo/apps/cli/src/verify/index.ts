@@ -21,7 +21,7 @@ import { parseRuntimeVersion } from '@delo/runtime-store'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput } from '../command.ts'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { deloVersion } from '../version.ts'
-import { checkRelease, type ReleaseCheckOutcome, type RootAnchor } from './checks.ts'
+import { checkRelease, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
 
 /** The `delorun verify --help` text. */
 const VERIFY_USAGE = [
@@ -98,8 +98,20 @@ export function stderrLogger(output: CommandOutput): DeloLogger {
 export function rootLine(root: RootAnchor | undefined): string {
   if (root === undefined) return 'Trusted root: none read.\n'
   const keys = root.keyids.map(keyid => keyid.slice(0, 16)).join(', ')
-  const anchored = root.anchored === 'shipped' ? 'anchored on the launcher\'s shipped root' : 'anchored on the stored root only'
+  const anchored = root.anchored === 'shipped'
+    ? `anchored on the shipped roots of the launcher that started this Delo, in ${String(root.rootsDirectory)} (${DELO_LAUNCHER_ROOTS_ENV})`
+    : 'anchored on the stored root only'
   return `Trusted root: version ${String(root.version)}, root keys ${keys}, ${anchored}.\n`
+}
+
+/**
+ * The line that says where this home's releases come from, as its channel record names them.
+ * @param origins - the channel's and the log's origins, or `undefined` when the record does not read.
+ * @returns the line, ending with a newline.
+ */
+export function originsLine(origins: ReleaseOrigins | undefined): string {
+  if (origins === undefined) return 'Release channel: unknown, because the home\'s channel record does not read.\n'
+  return `Release channel: ${origins.channel}; release log: ${origins.log}; as the launcher that installed this Delo recorded them.\n`
 }
 
 /**
@@ -120,21 +132,21 @@ export function summaryLine(results: readonly VerificationCheckResult[]): string
  * @param outcome - what the run found.
  * @returns the text: a heading, the root line, one line per check and the summary.
  */
-export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root'>): string {
+export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins'>): string {
   const width = Math.max(...outcome.results.map(result => result.id.length))
   const lines = outcome.results.map(result => `${LABELS[result.result].padEnd(7)}  ${result.id.padEnd(width)}  ${result.detail}`)
-  return `Release ${release}, verification mode ${VERIFY_MODE}; ${VERIFICATION_NOTICE}.\n${rootLine(outcome.root)}${lines.join('\n')}\n${summaryLine(outcome.results)}`
+  return `Release ${release}, verification mode ${VERIFY_MODE}; ${VERIFICATION_NOTICE}.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${lines.join('\n')}\n${summaryLine(outcome.results)}`
 }
 
 /**
- * The run's report under contract C15, with the release it checked, the root it anchored on and the release-log state
- * it recorded.
+ * The run's report under contract C15, with the release it checked, the root it anchored on, the release-log state it
+ * recorded and where the home's releases come from.
  * @param release - the release.
  * @param outcome - what the run found.
  * @param now - the clock, in Unix seconds.
  * @returns the report.
  */
-export function report(release: string, outcome: ReleaseCheckOutcome, now: number): VerificationReport & { readonly release: string, readonly root: RootAnchor | null, readonly releaseLog: RecordedCheck | null } {
+export function report(release: string, outcome: ReleaseCheckOutcome, now: number): VerificationReport & { readonly release: string, readonly root: RootAnchor | null, readonly releaseLog: RecordedCheck | null, readonly origins: ReleaseOrigins | null } {
   return {
     schemaVersion: VERIFICATION_REPORT_SCHEMA_VERSION,
     mode: VERIFY_MODE,
@@ -147,6 +159,7 @@ export function report(release: string, outcome: ReleaseCheckOutcome, now: numbe
     release,
     root: outcome.root ?? null,
     releaseLog: outcome.recorded ?? null,
+    origins: outcome.origins ?? null,
   }
 }
 

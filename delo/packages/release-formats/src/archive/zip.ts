@@ -5,7 +5,7 @@
  * `SOURCE_DATE_EPOCH` in UTC, rounded down to an even second. An entry is deflated at level 9 unless that is larger
  * than the file, when it is stored. The format has no ZIP64 records, so an archive holds at most 65,535 entries.
  *
- * @module @delo/release/archive/zip
+ * @module @delo/release-formats/archive/zip
  */
 import { open } from 'node:fs/promises'
 import { crc32, deflateRawSync, inflateRawSync } from 'node:zlib'

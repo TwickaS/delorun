@@ -15,6 +15,7 @@
     "@delo/contract-release-log": "workspace:*",
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/contract-update-report": "workspace:*",
+    "@delo/release-formats": "workspace:*",
     "@delo/runtime-closure": "workspace:*",
     "@delo/tools": "workspace:*",
     "@delo/update": "workspace:*",

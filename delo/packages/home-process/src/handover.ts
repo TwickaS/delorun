@@ -43,6 +43,8 @@ export interface HandoverLine {
 export const HANDOVER_LINE_MAX_BYTES = 65_536
 
 const version = z.string().regex(new RegExp(RUNTIME_VERSION_PATTERN))
+/** A row of the previous release's Host, as the handover carries it for the successor's health check. */
+const bootRow = z.strictObject({ id: z.string(), name: z.string(), generated: z.boolean(), configHash: z.string().regex(/^[0-9a-f]{64}$/u).optional() })
 const handoverSchema = z.strictObject({
   type: z.literal('handover'),
   v: z.literal(1),
@@ -55,14 +57,14 @@ const handoverSchema = z.strictObject({
     disabledPlugins: z.array(z.string()),
     namedRows: z.array(z.string()),
     bundles: z.array(z.string()).optional(),
-    previousFailures: z.array(z.string()),
-    previousRows: z.array(z.string()),
+    previousFailures: z.array(bootRow),
+    previousRows: z.array(bootRow),
   }),
   startedAt: z.string().datetime(),
 })
 const messageSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('ready') }),
-  z.strictObject({ type: z.literal('failed'), reason: z.literal('HEALTH_CHECK_FAILED') }),
+  z.strictObject({ type: z.literal('failed'), reason: z.literal('HEALTH_CHECK_FAILED'), criterion: z.string().regex(/^H[1-5]-[a-z-]{1,40}$/u).optional() }),
 ])
 
 /**

@@ -12,7 +12,7 @@ import { gatePath, REPO, runTsx, scratchRepo } from './support.ts'
 
 /** A package fixture whose directory is `delo/packages/<name>`. */
 function pkg(name: string, state: StatePackage['state'], dependencies: string[] = [], unreached?: string): StatePackage {
-  return { name, dir: `delo/packages/${name}`, state, unreached, dependencies }
+  return { name, dir: `delo/packages/${name}`, state, unreached, dependencies, devDependencies: [] }
 }
 
 const ROOTS = ['delo/packages/root']

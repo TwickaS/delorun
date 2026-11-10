@@ -14,10 +14,11 @@
     "@delo/contract-release-log": "workspace:*",
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/home": "workspace:*",
-    "@delo/release": "workspace:*",
+    "@delo/release-formats": "workspace:*",
     "@delo/release-verify": "workspace:*",
     "@delo/runtime-store": "workspace:*",
-    "semver": "^7.8.5"
+    "semver": "^7.8.5",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/semver": "^7.8.0"

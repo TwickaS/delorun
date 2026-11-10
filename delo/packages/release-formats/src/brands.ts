@@ -2,7 +2,7 @@
  * Checked constructors of contract C2's branded values. Each validates its input, so a branded value in the release
  * tooling always has the form its brand names.
  *
- * @module @delo/release/brands
+ * @module @delo/release-formats/brands
  */
 import type { SemanticVersion, Sha256Hex } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'

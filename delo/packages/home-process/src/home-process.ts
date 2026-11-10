@@ -45,11 +45,11 @@ import {
 import type { DeloLogger, Redactor } from '@delo/logs'
 import { listenUpdateChannel, updateSocketPath } from './channel.ts'
 import { exchangeLines } from './client.ts'
-import { HomeProcessError } from './errors.ts'
+import { HomeProcessError, isRollbackRefusal } from './errors.ts'
 import { startSuccessor, type HandoverPipe, type Successor } from './handover.ts'
 import { UpdateHandshake, type HandshakeSubject, type UpdateSupport } from './handshake.ts'
 import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted, readJournal, removeJournal, removeStash, writeJournal } from './journal.ts'
-import type { ChatGate, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
+import type { BootRow, ChatGate, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
 import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
@@ -104,15 +104,6 @@ export interface HomeProcessOptions {
 
 /** The update's journal states that a start after a killed home process finishes. */
 const SWITCH_PHASES: ReadonlySet<UpdateJournal['phase']> = new Set(['switching', 'health-check'])
-
-/**
- * Whether an error is C3's table refusing a rollback before any step.
- * @param error - the error.
- * @returns true for `ROLLBACK_NEEDS_DATA_COPY` and `ROLLBACK_TARGET_UNUSABLE`.
- */
-function isRollbackRefusal(error: unknown): boolean {
-  return error instanceof HomeProcessError && (error.code === 'ROLLBACK_NEEDS_DATA_COPY' || error.code === 'ROLLBACK_TARGET_UNUSABLE' || error.code === 'CHATS_RUNNING')
-}
 
 /**
  * Stop a Host for a switch within a bound, keeping this process.
@@ -265,17 +256,21 @@ export class HomeProcess implements HandshakeSubject {
       await home.checkDirectories()
       home.listenSignals()
       let healthy = false
+      let criterion: string | undefined
       try {
         home.host = await home.bootedHost()
         const verdict = await home.host.check(handover.health)
-        if (!verdict.passed) options.logger.warn('the Host failed its health check on the new runtime', { data: { criterion: verdict.criterion, detail: verdict.detail } })
+        if (!verdict.passed) {
+          options.logger.warn('the Host failed its health check on the new runtime', { data: { criterion: verdict.criterion, detail: verdict.detail } })
+          criterion = verdict.criterion
+        }
         healthy = verdict.passed
       } catch (error) {
         options.logger.error('the Host did not boot on the new runtime', { err: error })
       }
       if (!healthy) {
-        pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED' })
-        throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${handover.to} failed its health check`)
+        pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED', ...criterion === undefined ? {} : { criterion } })
+        throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${handover.to} failed its health check${criterion === undefined ? '' : ` (${criterion})`}`)
       }
       pipe.send({ type: 'ready' })
       const committed = await pipe.committed
@@ -378,12 +373,12 @@ export class HomeProcess implements HandshakeSubject {
   }
 
   /** @inheritdoc */
-  failedRows(): readonly string[] {
+  failedRows(): readonly BootRow[] {
     return this.host?.failedRows() ?? []
   }
 
   /** @inheritdoc */
-  rows(): readonly string[] {
+  rows(): readonly BootRow[] {
     return this.host?.rows() ?? []
   }
 

@@ -5,18 +5,19 @@
  * profile `package.json` in a temporary directory.
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import { createServer, request as httpRequest, type Server } from 'node:http'
+import type { AddressInfo, Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { JobEvent, JobEventListener, JobView } from '@deepseek-ai/dsh-jobs'
+import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
 import * as UpdateGate from '@delo/bundle-local/update-gate'
 import { CountingChatGate } from '@delo/home-process'
 import type { BootedRow } from '../../src/delo-bundles.ts'
-import { checkHealth, inactiveRows, STOP_REASON, watchChats, type HostHealthFacts } from '../../src/update/host.ts'
+import { arrivedOnLoopbackListener, bootRowsOf, checkHealth, HEALTH_PATH, inactiveRows, serveHealth, STOP_REASON, studioHealthUrl, watchChats, type HostHealthFacts } from '../../src/update/host.ts'
 
 /** An agent that records the cancellations it is asked for. */
 interface FakeAgent {
@@ -230,17 +231,149 @@ describe('watchChats and the update gate of @delo/bundle-local', () => {
 describe('rows', () => {
   const row = (change: Partial<BootedRow>): BootedRow => ({ id: 'row-1', name: 'plugin-a', disabled: false, state: 'active', ...change })
 
-  it('lists the rows that are disabled or did not start, and none of the active ones', () => {
+  it('lists the rows that are disabled or did not start, and none of the active ones, marking the ids the Loader made up', () => {
     const rows = [
-      row({ id: 'active' }),
+      row({ id: 'active', name: 'plugin-active' }),
       row({ id: 'off', disabled: true }),
       row({ id: 'broken', state: 'failed' }),
       row({ id: 'waiting', state: 'pending' }),
       row({ id: 'skipped', state: 'not-imported' }),
-      row({ id: 'off-and-failed', disabled: true, state: 'failed' }),
+      row({ id: 'off-and-failed', disabled: true, state: 'failed', name: 'plugin-b' }),
+      row({ id: 'b08ab057', state: 'failed' }),
     ]
 
-    expect(inactiveRows(rows)).toEqual(['off', 'broken', 'waiting', 'skipped', 'off-and-failed'])
+    expect(inactiveRows(rows).map(({ id, generated }) => `${id}${generated ? ' (generated)' : ''}`)).toEqual(['off', 'broken', 'waiting', 'skipped', 'off-and-failed', 'b08ab057 (generated)'])
+  })
+
+  it('hashes the config of a protected plugin\'s rows, the same config the same way whatever its key order, and no other row\'s', () => {
+    const manager = row({ id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } })
+    const guard = (config: unknown): BootedRow => row({ id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config })
+    const [, first] = bootRowsOf([manager, guard({ block: true, hosts: ['a'] })])
+    const [, reordered] = bootRowsOf([manager, guard({ hosts: ['a'], block: true })])
+    const [, changed] = bootRowsOf([manager, guard({ block: false, hosts: ['a'] })])
+    expect(first?.configHash).toMatch(/^[0-9a-f]{64}$/u)
+    expect(reordered?.configHash).toBe(first?.configHash)
+    expect(changed?.configHash).not.toBe(first?.configHash)
+    expect(bootRowsOf([manager, row({ id: 'other', config: { a: 1 } })])[1]).toEqual({ id: 'other', name: 'plugin-a', generated: false })
+  })
+})
+
+describe('serveHealth', () => {
+  /**
+   * The route `serveHealth` registers on a stand-in web server whose in-process read of the index answers one status.
+   * @param index - the status of the studio's index, or `undefined` for a Host with no Connection service.
+   * @returns the registered route and the reads the route made.
+   */
+  function served(index: number | undefined): { readonly route: WebRoute | undefined, readonly reads: string[] } {
+    const routes = new Map<string, WebRoute>()
+    const reads: string[] = []
+    const root = new Context()
+    const server: Pick<WebServer, 'register' | 'readResource' | 'getOrigin'> = {
+      register: (route) => {
+        routes.set(route.path, route as WebRoute)
+        return () => { routes.delete(route.path) }
+      },
+      readResource: async (request) => {
+        reads.push(request.url)
+        return Promise.resolve(new Response(index === 200 ? 'index' : null, { status: index ?? 500 }))
+      },
+      getOrigin: () => listener.origin,
+    }
+    root.provide('webServer', server as WebServer)
+    if (index !== undefined) root.provide('connection', { browserPeer: {} } as Context['connection'])
+    serveHealth(root)
+    return { route: routes.get(HEALTH_PATH), reads }
+  }
+
+  /** The origin of the listener {@link answer} serves on, which the stand-in web server reports as its own. */
+  const listener = { origin: 'http://127.0.0.1:0' }
+
+  /**
+   * Answer one request with a registered route through a real loopback listener, which the stand-in web server reports
+   * as its loopback listener unless `elsewhere` says the route sits behind another one.
+   * @param route - the route.
+   * @param method - the request's method.
+   * @param request - the `Host` header to send, whether the web server's loopback listener is another port, and the
+   *   address the listener binds.
+   * @param request.host - the `Host` header; the listener's own address by default.
+   * @param request.elsewhere - true to report a loopback listener on another port, as a reach listener's request sees it.
+   * @param request.bind - the address the listener binds, which its origin names; `127.0.0.1` by default.
+   * @returns the status, the cache header and the body.
+   */
+  async function answer(route: WebRoute, method: string, request: { readonly host?: string, readonly elsewhere?: boolean, readonly bind?: string } = {}): Promise<{ readonly status: number, readonly cache: string | null, readonly body: string }> {
+    const server = createServer((incoming, response) => { void route.handler(incoming, response) })
+    const bind = request.bind ?? '127.0.0.1'
+    await new Promise<void>((resolve) => { server.listen(0, bind, resolve) })
+    const port = (server.address() as AddressInfo).port
+    listener.origin = `http://${bind}:${String(request.elsewhere === true ? port + 1 : port)}`
+    try {
+      const reply = await new Promise<{ status: number, cache: string | null, body: string }>((resolve, reject) => {
+        const outgoing = httpRequest({ host: '127.0.0.1', port, path: HEALTH_PATH, method, headers: { host: request.host ?? `127.0.0.1:${String(port)}` } }, (incoming) => {
+          let body = ''
+          incoming.setEncoding('utf8')
+          incoming.on('data', (chunk: string) => { body += chunk })
+          incoming.on('end', () => { resolve({ status: incoming.statusCode ?? 0, cache: (incoming.headers['cache-control'] as string | undefined) ?? null, body }) })
+        })
+        outgoing.on('error', reject)
+        outgoing.end()
+      })
+      return reply
+    } finally {
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
+  }
+
+  it('answers 204 with no body and no-store when the studio\'s index reads in-process, for GET and HEAD', async () => {
+    const { route, reads } = served(200)
+    expect(route).toMatchObject({ kind: 'exact', path: HEALTH_PATH })
+    expect(await answer(route!, 'GET')).toEqual({ status: 204, cache: 'no-store', body: '' })
+    expect(await answer(route!, 'HEAD')).toEqual({ status: 204, cache: 'no-store', body: '' })
+    expect(reads).toHaveLength(2)
+    expect(reads.every(read => read.endsWith('/') && read.startsWith('http://127.0.0.1:'))).toBe(true)
+  })
+
+  it('answers 503 when the studio\'s index does not read, or the Host has no Connection to read it as', async () => {
+    expect(await answer(served(404).route!, 'GET')).toEqual({ status: 503, cache: 'no-store', body: '' })
+    const unconnected = served(undefined)
+    expect((await answer(unconnected.route!, 'GET')).status).toBe(503)
+    expect(unconnected.reads).toEqual([])
+  })
+
+  it('answers 421 and reads nothing for a request that did not arrive on the loopback listener under a loopback name', async () => {
+    const { route, reads } = served(200)
+    expect(await answer(route!, 'GET', { elsewhere: true })).toEqual({ status: 421, cache: 'no-store', body: '' })
+    expect(await answer(route!, 'GET', { host: 'reach.example:3080' })).toEqual({ status: 421, cache: 'no-store', body: '' })
+    expect(await answer(route!, 'GET', { host: 'localhost:3080' })).toMatchObject({ status: 204 })
+    expect(reads).toHaveLength(1)
+  })
+
+  it('answers a loopback request on a listener bound to every address, which the origin names', async () => {
+    const { route } = served(200)
+    expect(await answer(route!, 'GET', { bind: '0.0.0.0' })).toMatchObject({ status: 204 })
+    expect(await answer(route!, 'GET', { bind: '0.0.0.0', host: '0.0.0.0:3080' })).toMatchObject({ status: 421 })
+  })
+
+  it('compares the listener\'s port with its scheme\'s default when its origin names none', () => {
+    const request = (localPort: number): Parameters<typeof arrivedOnLoopbackListener>[0] => ({ socket: { remoteAddress: '127.0.0.1', localPort } as Socket, headers: { host: 'localhost' } })
+    expect(arrivedOnLoopbackListener(request(80), 'http://localhost')).toBe(true)
+    expect(arrivedOnLoopbackListener(request(443), 'https://localhost')).toBe(true)
+    expect(arrivedOnLoopbackListener(request(3080), 'http://localhost')).toBe(false)
+  })
+
+  it('refuses a request from another computer on a listener bound to every address', () => {
+    const request = { socket: { remoteAddress: '192.0.2.7', localPort: 3080 } as Socket, headers: { host: '127.0.0.1:3080' } }
+    expect(arrivedOnLoopbackListener(request, 'http://0.0.0.0:3080')).toBe(false)
+    expect(arrivedOnLoopbackListener({ ...request, socket: { remoteAddress: '::ffff:127.0.0.1', localPort: 3080 } as Socket }, 'http://0.0.0.0:3080')).toBe(true)
+  })
+
+  it('refuses a method other than GET and HEAD without reading anything', async () => {
+    const { route, reads } = served(200)
+    expect((await answer(route!, 'POST')).status).toBe(405)
+    expect(reads).toEqual([])
+  })
+
+  it('registers nothing on a Host without a web server', () => {
+    expect(() => { serveHealth(new Context()) }).not.toThrow()
   })
 })
 
@@ -255,13 +388,14 @@ describe('checkHealth', () => {
   })
 
   /**
-   * Start a loopback HTTP server that answers every request with one status.
+   * Start a loopback HTTP server that answers the health route with one status and every other path with 401.
    * @param status - the status.
    * @param host - the address to bind.
    * @returns the port.
    */
   async function studioAnswering(status: number, host = '127.0.0.1'): Promise<number> {
-    const server = createServer((_request, response) => { response.writeHead(status).end(status === 200 ? 'index' : undefined) })
+    // Like the studio: the health route answers without a cookie, every other path asks the browser to sign in.
+    const server = createServer((request, response) => { response.writeHead(request.url === HEALTH_PATH ? status : 401).end() })
     servers.push(server)
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, host, resolve) })
     return (server.address() as AddressInfo).port
@@ -269,7 +403,7 @@ describe('checkHealth', () => {
 
   /** @returns a port nothing listens on. */
   async function closedPort(): Promise<number> {
-    const port = await studioAnswering(200)
+    const port = await studioAnswering(204)
     await new Promise<void>((resolve) => { servers.pop()?.close(() => { resolve() }) })
     return port
   }
@@ -319,27 +453,27 @@ describe('checkHealth', () => {
     expect(verdict).toEqual({ passed: false, criterion: 'H2-host-ready', detail: 'the Host has no studio listener' })
   })
 
-  it('fails H2 with the status when the studio index answers anything but 200', async () => {
+  it('fails H2 with the status when the health route answers anything but 204', async () => {
     const port = await studioAnswering(500)
 
     const verdict = await checkHealth(facts(port), undefined)
 
-    expect(verdict).toEqual({ passed: false, criterion: 'H2-host-ready', detail: 'the studio\'s index answered 500' })
+    expect(verdict).toEqual({ passed: false, criterion: 'H2-host-ready', detail: 'the studio listener\'s health route answered 500' })
   })
 
-  it('fails H2 when the studio answers 204, an answer that has no body to read', async () => {
-    const port = await studioAnswering(204)
+  it('fails H2 when the listener asks for sign-in on the health route, as it does on every studio page', async () => {
+    const port = await studioAnswering(401)
 
     const verdict = await checkHealth(facts(port), undefined)
 
-    expect(verdict).toMatchObject({ passed: false, criterion: 'H2-host-ready', detail: 'the studio\'s index answered 204' })
+    expect(verdict).toMatchObject({ passed: false, criterion: 'H2-host-ready', detail: 'the studio listener\'s health route answered 401' })
   })
 
   it('fails H2 with the connection error when nothing listens on the studio port', async () => {
     const verdict = await checkHealth(facts(await closedPort()), undefined)
 
     expect(verdict).toMatchObject({ passed: false, criterion: 'H2-host-ready' })
-    expect((verdict as { readonly detail: string }).detail).toMatch(/^the studio's index did not answer: /u)
+    expect((verdict as { readonly detail: string }).detail).toMatch(/^the studio listener's health route did not answer: /u)
   })
 
   it('fails H2 with the text of a request failure that is not an Error', async () => {
@@ -347,20 +481,29 @@ describe('checkHealth', () => {
 
     const verdict = await checkHealth(facts(1), undefined)
 
-    expect(verdict).toEqual({ passed: false, criterion: 'H2-host-ready', detail: 'the studio\'s index did not answer: socket hung up' })
+    expect(verdict).toEqual({ passed: false, criterion: 'H2-host-ready', detail: 'the studio listener\'s health route did not answer: socket hung up' })
   })
 
   it('asks an IPv6 studio listener at its bracketed address', async () => {
-    const fetched = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+    const fetched = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }))
 
     const verdict = await checkHealth(facts(0, { studio: () => ({ host: '::1', port: 4000 }) }), undefined)
 
     expect(verdict).toEqual({ passed: true })
-    expect(String(fetched.mock.calls[0]?.[0])).toBe('http://[::1]:4000/')
+    expect(String(fetched.mock.calls[0]?.[0])).toBe(`http://[::1]:4000${HEALTH_PATH}`)
+  })
+
+  it('asks a studio listener bound to every address at 127.0.0.1, so the route sees a loopback request', async () => {
+    expect(studioHealthUrl({ host: '0.0.0.0', port: 4000 })).toBe(`http://127.0.0.1:4000${HEALTH_PATH}`)
+    expect(studioHealthUrl({ host: '::', port: 4000 })).toBe(`http://127.0.0.1:4000${HEALTH_PATH}`)
+    expect(studioHealthUrl({ host: 'localhost', port: 4000 })).toBe(`http://localhost:4000${HEALTH_PATH}`)
+    const port = await studioAnswering(204, '0.0.0.0')
+
+    expect(await checkHealth(facts(port, { studio: () => ({ host: '0.0.0.0', port }) }), undefined)).toEqual({ passed: true })
   })
 
   it('passes H1 and H2 alone when the report predicted nothing', async () => {
-    const port = await studioAnswering(200)
+    const port = await studioAnswering(204)
     const rows: BootedRow[] = [{ id: 'unnamed', name: 'broken', disabled: true, state: 'failed' }]
 
     expect(await checkHealth(facts(port, { rows: () => rows }), undefined)).toEqual({ passed: true })
@@ -369,7 +512,7 @@ describe('checkHealth', () => {
   it('asks a studio on an IPv6 loopback address by its bracketed host', async () => {
     let port: number
     try {
-      port = await studioAnswering(200, '::1')
+      port = await studioAnswering(204, '::1')
     } catch (_noIpv6) {
       // This machine has no IPv6 loopback address, so the bracketed form cannot be exercised.
       return
@@ -381,7 +524,7 @@ describe('checkHealth', () => {
   })
 
   it('fails H3 for a disabled row the report did not name, and H4 for a row that did not load', async () => {
-    const port = await studioAnswering(200)
+    const port = await studioAnswering(204)
     const disabled: BootedRow = { id: 'row-off', name: 'plugin-off', disabled: true, state: 'active' }
     const failed: BootedRow = { id: 'row-bad', name: 'plugin-bad', disabled: false, state: 'failed' }
 
@@ -393,8 +536,11 @@ describe('checkHealth', () => {
     })
   })
 
-  it('accepts an inactive row the report named by id, one it listed as a previous failure and one of a disabled plugin', async () => {
-    const port = await studioAnswering(200)
+  /** A row as the previous release's Host handed it over. */
+  const before = (id: string, name: string, generated = false): { id: string, name: string, generated: boolean } => ({ id, name, generated })
+
+  it('accepts an inactive row the report named by id, one that failed before under the same id and one of a disabled plugin', async () => {
+    const port = await studioAnswering(204)
     const rows: BootedRow[] = [
       { id: 'named', name: 'plugin-1', disabled: true, state: 'active' },
       { id: 'failed-before', name: 'plugin-2', disabled: false, state: 'failed' },
@@ -402,35 +548,99 @@ describe('checkHealth', () => {
       { id: 'fine', name: 'plugin-4', disabled: false, state: 'active' },
       { id: 'loader-id', name: 'plugin-5', disabled: true, state: 'active' },
     ]
-    const expectations = { namedRows: ['named', 'plugin-5', 'dropped-but-named'], previousFailures: ['failed-before'], previousRows: ['named', 'fine', 'dropped-but-named'], disabledPlugins: ['plugin-3'] }
+    const expectations = {
+      namedRows: ['named', 'plugin-5', 'dropped-but-named'],
+      previousFailures: [before('failed-before', 'plugin-2')],
+      previousRows: [before('named', 'plugin-n'), before('fine', 'plugin-f'), before('dropped-but-named', 'plugin-d'), before('row-of-a-disabled-plugin', 'plugin-3')],
+      disabledPlugins: ['plugin-3'],
+    }
 
     expect(await checkHealth(facts(port, { rows: () => rows }), expectations)).toEqual({ passed: true })
   })
 
-  it('fails H3 when a row the profile had before the update is gone and the report did not name it', async () => {
-    const port = await studioAnswering(200)
-    const rows: BootedRow[] = [{ id: 'kept', name: 'plugin-1', disabled: false, state: 'active' }]
+  it('fails H4 for an active row of a plugin that had another row disabled before: a previous failure covers only its own row', async () => {
+    const port = await studioAnswering(204)
+    const rows: BootedRow[] = [{ id: 'guard-main', name: 'plugin-guard', disabled: false, state: 'failed' }]
 
-    expect(await checkHealth(facts(port, { rows: () => rows }), { ...NOTHING_NAMED, previousRows: ['kept', 'dropped'] })).toEqual({
-      passed: false, criterion: 'H3-only-named-disabled', detail: 'row dropped was in the profile before the update, is gone, and the report did not name it',
+    expect(await checkHealth(facts(port, { rows: () => rows }), { ...NOTHING_NAMED, previousFailures: [before('guard-spare', 'plugin-guard')], previousRows: [before('guard-main', 'plugin-guard'), before('guard-spare', 'plugin-guard')] })).toEqual({
+      passed: false, criterion: 'H4-unnamed-rows-load', detail: 'row guard-main did not load (failed) and the report did not name it',
     })
   })
 
+  it('fails H3 when a plugin\'s active row is gone and only its disabled spare row was a previous failure', async () => {
+    const port = await studioAnswering(204)
+    const rows: BootedRow[] = [{ id: 'guard-spare', name: 'plugin-guard', disabled: true, state: 'active' }]
+
+    expect(await checkHealth(facts(port, { rows: () => rows }), { ...NOTHING_NAMED, previousFailures: [before('guard-spare', 'plugin-guard')], previousRows: [before('guard-main', 'plugin-guard'), before('guard-spare', 'plugin-guard')] })).toEqual({
+      passed: false, criterion: 'H3-only-named-disabled', detail: 'row guard-main was in the profile before the update, is gone, and the report did not name it or disable its plugin',
+    })
+  })
+
+  it('fails H3 when a row the profile had before the update is gone and the report did not name it', async () => {
+    const port = await studioAnswering(204)
+    const rows: BootedRow[] = [{ id: 'kept', name: 'plugin-1', disabled: false, state: 'active' }]
+
+    expect(await checkHealth(facts(port, { rows: () => rows }), { ...NOTHING_NAMED, previousRows: [before('kept', 'plugin-k'), before('dropped', 'plugin-x')] })).toEqual({
+      passed: false, criterion: 'H3-only-named-disabled', detail: 'row dropped was in the profile before the update, is gone, and the report did not name it or disable its plugin',
+    })
+  })
+
+  it('matches a row whose id the Loader generated by its plugin, and still fails when one of a plugin\'s rows is gone', async () => {
+    const port = await studioAnswering(204)
+    const target: BootedRow[] = [{ id: 'c19d0a77', name: 'plugin-picker', disabled: false, state: 'active' }]
+    const generated = [before('b08ab057', 'plugin-picker', true)]
+
+    expect(await checkHealth(facts(port, { rows: () => target }), { ...NOTHING_NAMED, previousRows: generated })).toEqual({ passed: true })
+    expect(await checkHealth(facts(port, { rows: () => target }), { ...NOTHING_NAMED, previousRows: [...generated, before('5e7a11d0', 'plugin-picker', true)] })).toEqual({
+      passed: false, criterion: 'H3-only-named-disabled', detail: 'row 5e7a11d0 was in the profile before the update, is gone, and the report did not name it or disable its plugin',
+    })
+  })
+
+  it('does not match a gone row with a stable id against another row of its plugin', async () => {
+    const port = await studioAnswering(204)
+    const target: BootedRow[] = [{ id: 'c19d0a77', name: 'plugin-guard', disabled: false, state: 'active' }]
+
+    expect(await checkHealth(facts(port, { rows: () => target }), { ...NOTHING_NAMED, previousRows: [before('guard-main', 'plugin-guard')] })).toEqual({
+      passed: false, criterion: 'H3-only-named-disabled', detail: 'row guard-main was in the profile before the update, is gone, and the report did not name it or disable its plugin',
+    })
+  })
+
+  it('accepts a row disabled before the update under a generated id that the target disables under another', async () => {
+    const port = await studioAnswering(204)
+    const target: BootedRow[] = [{ id: 'c19d0a77', name: 'plugin-off', disabled: true, state: 'active' }]
+    const previous: BootedRow[] = [{ id: 'b08ab057', name: 'plugin-off', disabled: true, state: 'active' }]
+
+    expect(await checkHealth(facts(port, { rows: () => target }), { ...NOTHING_NAMED, previousFailures: inactiveRows(previous), previousRows: bootRowsOf(previous) })).toEqual({ passed: true })
+  })
+
+  it('fails H3 when a protected row\'s settings changed and the report did not name it, and passes when it did', async () => {
+    const port = await studioAnswering(204)
+    const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } }
+    const guard = (block: boolean): BootedRow => ({ id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', disabled: false, state: 'active', config: { block } })
+    const previous = bootRowsOf([manager, guard(true)])
+
+    expect(await checkHealth(facts(port, { rows: () => [manager, guard(true)] }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({ passed: true })
+    expect(await checkHealth(facts(port, { rows: () => [manager, guard(false)] }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({
+      passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row delo-fetch-guard changed and the report did not name it',
+    })
+    expect(await checkHealth(facts(port, { rows: () => [manager, guard(false)] }), { ...NOTHING_NAMED, namedRows: ['delo-fetch-guard'], previousRows: previous })).toEqual({ passed: true })
+  })
+
   it('passes with no bundle prediction without reading the profile', async () => {
-    const port = await studioAnswering(200)
+    const port = await studioAnswering(204)
 
     expect(await checkHealth(facts(port, { profileDir: '/does/not/exist' }), NOTHING_NAMED)).toEqual({ passed: true })
   })
 
   it('passes H5 when the profile\'s bundle list is the predicted one', async () => {
-    const port = await studioAnswering(200)
+    const port = await studioAnswering(204)
     const profileDir = profileWith(['bundle-a', 'bundle-b'])
 
     expect(await checkHealth(facts(port, { profileDir }), { ...NOTHING_NAMED, bundles: ['bundle-a', 'bundle-b'] })).toEqual({ passed: true })
   })
 
   it('fails H5 naming both lists when the bundle list differs in length or in order', async () => {
-    const port = await studioAnswering(200)
+    const port = await studioAnswering(204)
     const profileDir = profileWith(['bundle-a', 'bundle-b'])
 
     expect(await checkHealth(facts(port, { profileDir }), { ...NOTHING_NAMED, bundles: ['bundle-a'] })).toEqual({

@@ -11,7 +11,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ROOT_FILE_NAME_PATTERN, TRUST_FILES } from '@delo/contract-home-layout'
-import { walkRootChain, type TrustedRoot } from '@delo/release/sign/verify'
+import { walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
 import { InstallError, messageOf } from './errors.ts'
 import { readStoredRootBytes, readStoredRootChain, trustFile } from './state.ts'
 import { newestRootVersion, verifyStoredRoot } from './verify.ts'

@@ -10,7 +10,7 @@ import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
 import { launchFiles } from '@delo/runtime-store'
 import { launchProtocolFiles } from '../../release/src/closure/launch.ts'
 import { archiveClosure } from '../../release/src/closure/archive-closure.ts'
-import { readEnvelope } from '../../release/src/sign/schemas.ts'
+import { readEnvelope } from '@delo/release-formats/sign/schemas'
 import { scratch, writeTree } from '../../release/tests/support.ts'
 
 describe('launch protocol 1 files', () => {

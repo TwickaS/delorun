@@ -4,14 +4,16 @@
  * started this runtime ships ([trusted root](./trusted-root.ts)). The channel trusts the root this home stored only
  * when those roots lead to it, so the runtime trusts no root the launcher does not.
  *
- * The release log is the one the trusted root names, read through `@delo/release-verify`'s transport, as the
- * launcher reads it.
+ * The channel's origins are the ones the launcher that installed the runtime recorded in `trust/channel.json`, and
+ * the release log is the one the trusted root names unless that record names another, each read through the
+ * launcher's own `channelPlan` and `logPlan`, so an update fetches from where the installation did.
  *
  * @module @delo/cli/update/channel
  */
-import { RUNTIME_PLATFORMS, type ReleaseChannel, type RuntimePlatform } from '@delo/contract-release-manifest'
-import { Downloader, LauncherChannel, progressLines, type InstallProgress } from '@delo/install'
-import { logEndpoints, tilesTransport } from '@delo/release-verify'
+import { RUNTIME_PLATFORMS, type ReleaseChannel, type RootMetadata, type RuntimePlatform } from '@delo/contract-release-manifest'
+import { Downloader, LauncherChannel, progressLines, readChannelRecord, type ChannelOrigins, type InstallProgress } from '@delo/install'
+import { channelPlan, logPlan } from '@delo/npm-launcher'
+import { tilesTransport, type Fetch, type ReleaseLogTransport } from '@delo/release-verify'
 import type { UpdateReleaseChannel } from '@delo/runtime-store'
 
 /**
@@ -40,18 +42,44 @@ export function installLines(line: (text: string) => void): (event: InstallProgr
 }
 
 /**
- * The release channel of this home.
- * @param home - the resolved Delo home, whose `trust/` holds the root and the chain an install verified.
+ * The release log of a trusted root as this home reads it: the log origin the installing launcher recorded, or the one
+ * the root names when the record names none, through the launcher's own `logPlan`.
+ * @param origins - the home's channel record; an empty object for the production channel.
+ * @param root - the trusted root.
+ * @param fetch - the fetch the transport reads through.
+ * @returns the transport.
+ * @throws {Error} the launcher's refusal of an origin that breaks its rule.
+ */
+export function recordedLogTransport(origins: ChannelOrigins, root: RootMetadata, fetch: Fetch): ReleaseLogTransport {
+  const log = logPlan(root.log.origin, origins)
+  return tilesTransport({ fetch, checkpoint: `${log.origin}/checkpoint`, tiles: log.origin })
+}
+
+/**
+ * The release channel of this home: the one its installation recorded. The origins come from `trust/channel.json`,
+ * which Delo writes only from the launcher that installed the runtime; no environment variable or setting is read for
+ * them. `trust/` lies under the home at mode 0700, which the sandbox keeps confined commands from writing; an
+ * unconfined process of the same user, a Host plugin included, can write the record as it can any file of the home, so
+ * the record decides only where releases are fetched from: a release installs only when it verifies under the stored
+ * roots.
+ * @param home - the resolved Delo home, whose `trust/` holds the root, the chain an install verified and the channel record.
  * @param platform - the runtime platform.
  * @param channel - the person's release channel.
- * @param shipped - the release roots the launcher that started this runtime ships, oldest first.
+ * @param shipped - the root files the launcher that started this runtime ships, oldest first.
  * @param line - writes each line of the install's progress, the lines the launcher prints while it installs.
  * @returns the channel.
+ * @throws {InstallError} `TRUST_STATE_INVALID` when the channel record does not read; the launcher's refusal of a
+ *   recorded origin that breaks its rule.
  */
-export function homeReleaseChannel(home: string, platform: RuntimePlatform, channel: ReleaseChannel, shipped: readonly Uint8Array[], line: (text: string) => void): UpdateReleaseChannel {
+export async function homeReleaseChannel(home: string, platform: RuntimePlatform, channel: ReleaseChannel, shipped: readonly Uint8Array[], line: (text: string) => void): Promise<UpdateReleaseChannel> {
+  const origins = await readChannelRecord(home) ?? {}
+  const plan = channelPlan(origins)
   const fetch = globalThis.fetch.bind(globalThis)
   return new LauncherChannel({
-    home, platform, roots: shipped, channel, log: trusted => tilesTransport({ fetch, ...logEndpoints(trusted) }), downloader: new Downloader(),
+    home, platform, roots: shipped, channel,
+    log: trusted => recordedLogTransport(origins, trusted, fetch),
+    source: plan.source,
+    downloader: new Downloader({ hosts: plan.rule }),
     progress: installLines(line),
   })
 }

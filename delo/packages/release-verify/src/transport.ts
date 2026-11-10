@@ -1,7 +1,7 @@
 /**
  * The {@link ReleaseLogTransport} the online check of contract C18 reads through: a Rekor v2 log's latest cosigned
  * checkpoint, and RFC 6962 consistency proofs computed from its C2SP `tlog-tiles` hash tiles by
- * `@delo/release/log/tiles`, the one tile reader of this repository. The log serves both below
+ * `@delo/release-formats/log/tiles`, the one tile reader of this repository. The log serves both below
  * `https://<log origin>/api/v2`, where the origin is the trusted root's `log.origin` ({@link logEndpoints}); a build
  * for a local log passes its own endpoint set instead. The log has no proof endpoint, and the proof the tiles give is
  * verified against both signed roots by `online.ts`, so a tile served wrong makes a proof that does not verify.
@@ -17,7 +17,7 @@
  */
 import { RELEASE_LOG_REQUEST_TIMEOUT_SECONDS } from '@delo/contract-release-log'
 import type { RootMetadata } from '@delo/contract-release-manifest'
-import { consistencyProofFromTiles, TileError } from '@delo/release/log/tiles'
+import { consistencyProofFromTiles, TileError } from '@delo/release-formats/log/tiles'
 import { LogContradictionError, LogUnreachableError, type ReleaseLogTransport } from './online.ts'
 
 /** The path below a Rekor v2 log's host that serves its checkpoint and its tiles. */

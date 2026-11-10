@@ -19,7 +19,7 @@
     "@delo/home": "workspace:*",
     "@delo/install": "workspace:*",
     "@delo/logs": "workspace:*",
-    "@delo/release": "workspace:*",
+    "@delo/release-formats": "workspace:*",
     "@delo/release-verify": "workspace:*",
     "@delo/runtime-store": "workspace:*"
   },

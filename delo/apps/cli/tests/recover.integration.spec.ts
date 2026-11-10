@@ -5,10 +5,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createServer } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
-import { journalPath, writeJournal } from '@delo/home-process'
+import { journalPath, updateSocketPath, writeJournal } from '@delo/home-process'
 import { parseRuntimeVersion, RuntimeStoreError, type LaunchCommand } from '@delo/runtime-store'
+import { ensureHomeTree, writeNewStartToken } from '@delo/home'
 import { EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import { runLauncher } from '../../npm-launcher/src/launcher.ts'
@@ -94,6 +96,27 @@ describe('delorun recover', () => {
     expect(result.stderr).toContain('What you can do')
   })
 
+  it('prints what a rollback through the running home process tells the person, the chats it set aside included', async () => {
+    await ensureHomeTree(deloHome, 'default')
+    await writeNewStartToken(deloHome, 'default')
+    const server = createServer((socket) => {
+      socket.setEncoding('utf8')
+      socket.once('data', (chunk: string) => {
+        const op = (JSON.parse(chunk.split('\n')[0]!) as { op: string }).op
+        const lines = op === 'status' ? [{ ok: true, status: {} }] : [{ ok: true, phase: 'switching' }, { ok: true, outcome: 'rolled-back', lines: ['Went back from Delo 0.3.0 to Delo 0.1.0.', '1 chat(s) created or changed since the update are set aside in data-set-aside/0.3.0-1.'] }]
+        socket.end(lines.map(line => `${JSON.stringify(line)}\n`).join(''))
+      })
+    })
+    await new Promise<void>((resolve) => { server.listen(updateSocketPath(deloHome, 'default'), resolve) })
+    try {
+      const rolled = await delorun(['recover', 'rollback'])
+      expect(rolled.code).toBe(EXIT.ok)
+      expect(rolled.stdout).toBe('… switching\nWent back from Delo 0.3.0 to Delo 0.1.0.\n1 chat(s) created or changed since the update are set aside in data-set-aside/0.3.0-1.\nRolled back.\n')
+    } finally {
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
+  })
+
   it('refuses two actions, an unknown one, a missing argument and a misplaced option as usage errors', async () => {
     for (const args of [['rollback', 'safe-mode'], ['undo'], ['restore'], ['status', '--profile-only'], ['rollback', '--reason', 'x'], ['--bogus']]) {
       const result = await delorun(['recover', ...args])
@@ -132,6 +155,29 @@ describe('a rollback that reaches a root', () => {
     expect(stderr).toContain('ROOT_NOT_ANCHORED')
     expect(stderr).toContain('start Delo with its launcher')
     expect(readFileSync(path, 'utf8')).toBe(before)
+  })
+
+  it('refuses with GIT_UNAVAILABLE before any step when git cannot run, leaving the record and the lock untouched', async () => {
+    const path = journalPath(deloHome, 'default')
+    mkdirSync(join(deloHome, 'run', 'default'), { recursive: true, mode: 0o700 })
+    await writeJournal(path, { from: release('0.1.0'), to: release('0.2.0'), previous: undefined, startedAt: '2026-11-01T00:00:00.000Z', dataDiffers: false, copy: false, targetStarted: true }, 'committed')
+    const before = readFileSync(path, 'utf8')
+    const noGit = mkdtempSync(join(tmpdir(), 'delo-no-git-'))
+    const searchPath = process.env.PATH
+    process.env.PATH = noGit
+    try {
+      for (const args of [['recover', 'rollback'], ['recover', 'rollback', '--profile-only']]) {
+        const result = await delorun(args)
+        expect(result.code).toBe(EXIT.failed)
+        expect(result.stderr).toContain('GIT_UNAVAILABLE: Delo saves and restores the profile\'s history with git, and git cannot run here: no git command is on PATH')
+        expect(result.stderr).toContain('Install git, then run the same command again.')
+      }
+    } finally {
+      process.env.PATH = searchPath
+      rmSync(noGit, { recursive: true, force: true })
+    }
+    expect(readFileSync(path, 'utf8')).toBe(before)
+    expect(existsSync(join(deloHome, 'run', 'default', 'home.lock'))).toBe(false)
   })
 })
 

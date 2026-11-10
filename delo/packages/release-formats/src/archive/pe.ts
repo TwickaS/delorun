@@ -5,7 +5,7 @@
  * data directory entry and the optional header's `CheckSum`, then pads the file with zero bytes to a multiple of
  * 8 bytes, the alignment signing tools pad to before appending the table.
  *
- * @module @delo/release/rebuild/pe
+ * @module @delo/release-formats/archive/pe
  */
 
 const SECURITY_DIRECTORY = 4

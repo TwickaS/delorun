@@ -20,6 +20,7 @@
     "parity-replay": { "memoryGiB": 0.6, "perWorker": true, "exclusive": true },
     "parity-replay:control": { "memoryGiB": 1.5 },
     "tests:web-changed": { "memoryGiB": 5, "exclusive": true, "seconds": 1200 },
+    "tests:closure": { "memoryGiB": 4, "exclusive": true, "seconds": 1800 },
     "build:artifacts": { "memoryGiB": 4 },
     "build:delo": { "memoryGiB": 1.5 },
     "generate:native": { "memoryGiB": 1 },

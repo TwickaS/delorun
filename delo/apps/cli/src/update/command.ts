@@ -2,7 +2,9 @@
  * `delorun update` (contracts C3 and C19): the update of the CLI home through its home process. The home process
  * fetches and verifies the channel's newest release with `@delo/install`, installs it into C1's store and builds C3's
  * report; this command prints the report, asks, and applies it with the person's choice about the session-data copy.
- * The switch, the drain, the health check and the automatic rollback are the home process's.
+ * The switch, the drain, the health check and the automatic rollback are the home process's. The profile history's
+ * snapshot and every rollback run git, so the command refuses before it asks the home process for anything when git
+ * cannot run on this computer.
  *
  * - `--check` prints the report and changes nothing in the profile or the active runtime.
  * - `--yes` confirms a report with no `disabled` or `removed` item and no unverified item, and takes the copy when the
@@ -14,7 +16,8 @@
 import { confirm, isCancel, select } from '@clack/prompts'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { UpdateReport } from '@delo/contract-update-report'
-import { queryHomeStatus, sendHomeRequest, type ResponseLine } from '@delo/home-process'
+import { queryHomeStatus, sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
+import { historyGitProblem } from '@delo/profile-safety'
 import { confirmsWithoutAsking, dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE } from '@delo/update'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
@@ -95,20 +98,39 @@ export function reportLines(report: UpdateReport): readonly string[] {
   return lines
 }
 
+/** One `update.*` request as {@link ask} sends it, with what a refusal says about it. */
+interface Asked {
+  /** The request, for the refusal: `to prepare the update`. */
+  readonly what: string
+  /** The field the request's final line carries: `reportId` for `update.prepare`, `outcome` for `update.apply`. */
+  readonly field: string
+  /** What the person can do when no final line came. */
+  readonly unanswered: string
+}
+
 /**
- * The final line of a request, or a refusal naming it.
- * @param lines - every response line.
- * @param what - the request, for the refusal.
+ * Send a request and return its final line, or a refusal naming it. A connection that ends after progress lines, or
+ * with no line, carries no final line: the home process failed in a way it does not report on the channel, and its
+ * log records it.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile.
+ * @param request - the request.
+ * @param output - where the progress lines are printed.
+ * @param asked - what the refusal says.
  * @returns the final line, whose `ok` is true.
- * @throws {CliError} when the home process refused, or ended before its final line.
+ * @throws {CliError} when the home process refused, the connection failed, or the request ended without a final line.
  */
-function finalLine(lines: readonly ResponseLine[], what: string): ResponseLine {
-  const final = lines.at(-1)
-  // A connection that ends without a final line means the home process ended while it worked on the request.
-  if (final === undefined || (final.ok === true && ('phase' in final || 'line' in final))) {
-    throw new CliError(EXIT.failed, `delorun update: the home process ended before it answered ${what}, so Delo may have stopped; run delorun status, start Delo again with delorun start if it is not running, and see delorun logs for the reason`)
+async function ask(home: string, profile: string, request: UnsignedRequest, output: CommandOutput, asked: Asked): Promise<ResponseLine> {
+  const unanswered = (why: string): CliError => new CliError(EXIT.failed, `delorun update: ${why}. ${asked.unanswered} Its log records why: delorun logs home`)
+  let lines: readonly ResponseLine[]
+  try {
+    lines = await sendHomeRequest(home, profile, request, { onLine: phases(output) })
+  } catch (error) {
+    throw unanswered(`the connection to the home process failed during the request ${asked.what} (${error instanceof Error ? error.message : String(error)})`)
   }
-  if (final.ok !== true) throw new CliError(EXIT.failed, `delorun update: the home process refused ${what}: ${String(final.error)}${typeof final.detail === 'string' ? ` (${final.detail})` : ''}`)
+  const final = lines.at(-1)
+  if (final?.ok === false) throw new CliError(EXIT.failed, `delorun update: the home process refused ${asked.what}: ${String(final.error)}${typeof final.detail === 'string' ? `\n${final.detail}` : ''}`)
+  if (final === undefined || !(asked.field in final)) throw unanswered(`the home process ended the request ${asked.what} without an answer`)
   return final
 }
 
@@ -178,7 +200,11 @@ export async function runUpdate(args: readonly string[], context: CommandContext
     context.stderr(`delorun update: Delo is not running for the profile ${profile}; run delorun start, then delorun update.\n`)
     return EXIT.notRunning
   }
-  const prepared = finalLine(await sendHomeRequest(home.path, profile, { op: 'update.prepare', args: {} }, { onLine: phases(context) }), 'to prepare the update')
+  const gitProblem = await historyGitProblem({})
+  if (gitProblem !== undefined) {
+    throw new CliError(EXIT.failed, `delorun update: Delo saves the profile's history with git before it updates, so it can go back, and git cannot run here: ${gitProblem}. Install git, then run delorun update again. Nothing was fetched or changed.`)
+  }
+  const prepared = await ask(home.path, profile, { op: 'update.prepare', args: {} }, context, { what: 'to prepare the update', field: 'reportId', unanswered: 'Nothing was applied.' })
   const report = prepared.report as UpdateReport
   const reportId = String(prepared.reportId)
   if (report.to.delo === report.from.delo) {
@@ -192,13 +218,13 @@ export async function runUpdate(args: readonly string[], context: CommandContext
     context.stdout('Nothing changed.\n')
     return EXIT.ok
   }
-  const final = finalLine(await sendHomeRequest(home.path, profile, { op: 'update.apply', args: { reportId, wait: 'drain', dataCopy: decision.dataCopy } }, { onLine: phases(context) }), 'to apply the update')
+  const final = await ask(home.path, profile, { op: 'update.apply', args: { reportId, wait: 'drain', dataCopy: decision.dataCopy } }, context, { what: 'to apply the update', field: 'outcome', unanswered: 'Whether the update applied is unknown; delorun status shows which version runs.' })
   switch (final.outcome) {
     case 'committed':
       context.stdout(`Delo ${report.to.delo} runs now.${decision.dataCopy ? ` The chat data from before is copied in data-copies/${report.to.delo}.` : ''}\n`)
       return EXIT.ok
     case 'rolled-back':
-      context.stderr(`delorun update: Delo ${report.to.delo} failed its health check (${String(final.reason ?? 'no reason')}); Delo ${report.from.delo} runs again with the profile from before. See delorun logs.\n`)
+      context.stderr(`delorun update: Delo ${report.to.delo} failed its health check (${String(final.criterion ?? final.reason ?? 'no reason')}); Delo ${report.from.delo} runs again with the profile from before. See delorun logs.\n`)
       return EXIT.failed
     case 'failed':
       context.stderr(`delorun update: Delo ${report.to.delo} failed its health check, and going back needs the chat-data copy that was not taken. Run delorun recover rollback --profile-only, or delorun recover safe-mode.\n`)

@@ -14,13 +14,17 @@ export { formatSize, progressLines, type InstallerProgress, type InstallProgress
 export { extractArchive, extractionPath, type ExtractRequest } from './extract.ts'
 export { readAnchoredRoot, readShippedRoots } from './roots.ts'
 export {
+  buildOrigin,
+  readChannelRecord,
   readStoredRootBytes,
   readStoredRootChain,
   readStoredTimestamp,
   trustFile,
+  writeChannelRecord,
   writeStoredRootChain,
   writeStoredTimestamp,
   writeTrustedRoot,
+  type ChannelOrigins,
   type StoredTimestamp,
 } from './state.ts'
 export {

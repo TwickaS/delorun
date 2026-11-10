@@ -2,7 +2,7 @@
  * Byte-stream helpers for the archive writers and readers: draining a chunk generator into a sink, gzip framing with
  * a fixed header, and exact-length reads from a chunk stream.
  *
- * @module @delo/release/archive/bytes
+ * @module @delo/release-formats/archive/bytes
  */
 import { Readable } from 'node:stream'
 import { createDeflateRaw, crc32 } from 'node:zlib'

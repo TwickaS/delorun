@@ -29,8 +29,8 @@ import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { buildClosuresChecked, type BuildRequest } from './build-closure.ts'
 import type { ClosureFiles } from './closure/archive-closure.ts'
 import { isArtifactSource } from './closure/artifacts.ts'
-import { readSigningKey } from './sign/envelope.ts'
-import { semanticVersion } from './brands.ts'
+import { readSigningKey } from '@delo/release-formats/sign/envelope'
+import { semanticVersion } from '@delo/release-formats/brands'
 import { buildLocalRelease, copyClosureFiles, LOCAL_PLATFORM } from './local/release.ts'
 
 /** The upstream release name a commit is based on: `upstream.ref` of the divergence ledger, `dsh-v<version>`. */

@@ -3,7 +3,7 @@
  * cover, and a strict reader that refuses duplicate object keys, which `JSON.parse` silently resolves to the last
  * value, so a signed file has exactly one reading.
  *
- * @module @delo/release/sign/json
+ * @module @delo/release-formats/sign/json
  */
 
 /** A JSON value. */

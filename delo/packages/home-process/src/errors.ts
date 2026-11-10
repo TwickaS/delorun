@@ -36,3 +36,18 @@ export class HomeProcessError extends Error {
     return this.detail === undefined || this.code === 'UNAUTHENTICATED' ? { ok: false, error: this.code } : { ok: false, error: this.code, detail: this.detail }
   }
 }
+
+/**
+ * The codes of a rollback refused before any step, with nothing changed: C3's table refusing, the version to return
+ * to being unusable, another user of the chat data, and a git the profile history cannot run.
+ */
+export const ROLLBACK_REFUSALS: ReadonlySet<HomeProcessErrorCode> = new Set(['ROLLBACK_NEEDS_DATA_COPY', 'ROLLBACK_TARGET_UNUSABLE', 'CHATS_RUNNING', 'GIT_UNAVAILABLE'])
+
+/**
+ * Whether an error is a rollback refused before any step.
+ * @param error - the error.
+ * @returns true for a {@link HomeProcessError} whose code is in {@link ROLLBACK_REFUSALS}.
+ */
+export function isRollbackRefusal(error: unknown): boolean {
+  return error instanceof HomeProcessError && ROLLBACK_REFUSALS.has(error.code)
+}
