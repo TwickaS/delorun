@@ -393,7 +393,8 @@ async function readConfig(ctx: Context, patchId: string): Promise<JsonValue> {
 
 /**
  * Change a plugin entry's settings through the configuration editor, which validates the result against the plugin's
- * schema before saving and applies it; the plugin manager records the edit as a version.
+ * schema before saving and applies it; the plugin manager records the edit as a version. An entry the manager lists
+ * as `management-required`, or does not list, is refused before anything is saved.
  * @param ctx The tool's context, whose configuration editor edits the entry.
  * @param patchId The entry's profile patch id.
  * @param fields Top-level fields to set, each replacing that field's value.
@@ -404,6 +405,13 @@ async function readConfig(ctx: Context, patchId: string): Promise<JsonValue> {
 async function configure(ctx: Context, patchId: string, fields: Record<string, unknown>, reset: readonly string[]): Promise<JsonValue> {
   if (Object.keys(fields).length === 0 && reset.length === 0) throw new Error('configure needs config fields to set or reset fields to put back')
   const { editor, row } = configRow(ctx, patchId)
+  // The protection that refuses disabling an entry refuses changing its settings; an entry the inventory does not
+  // list, such as a group of rows, has no plugin settings of its own to change.
+  const listed = (await ctx.pluginManager.listPlugins()).find(plugin => plugin.entryId === row.entry.id)
+  if (listed === undefined) throw new Error(`The entry ${JSON.stringify(patchId)} is not a plugin that list_plugins lists, so its settings cannot be changed here`)
+  if (listed.readOnlyReason === 'management-required') {
+    throw new Error(`Plugin management protects the entry ${JSON.stringify(patchId)}, so its settings cannot be changed here; only the user can change them, outside this tool`)
+  }
   const native: unknown = row.entry.fiber?.runtime?.Config
   const previous: Record<string, unknown> = { ...row.entry.options.config as Record<string, unknown> | undefined }
   let next: Record<string, unknown> = {}

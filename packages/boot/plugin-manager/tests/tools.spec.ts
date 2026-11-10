@@ -336,8 +336,9 @@ const SWITCHED_ON: tool.Config = { readActionsExempt: true, profileHistory: true
 // A configuration editor with one entry whose Config is the given native schema, or none.
 const Settings = z.object({ enabled: z.boolean().default(true), limit: z.natural().default(5), token: z.string().role('secret') })
 type Fields = Record<string, unknown>
+// Its Loader entry id is one the stock manager lists without a read-only reason.
 function editor(config: Fields, inherited: Fields, override: Fields, native: unknown = Settings) {
-  const entry = { options: { id: 'delo-agent-context', name: '@delo/plugin-agent-context', config }, fiber: { runtime: { Config: native } } }
+  const entry = { id: 'include:1', options: { id: 'delo-agent-context', name: '@delo/plugin-agent-context', config }, fiber: { runtime: { Config: native } } }
   const saved: Array<Record<string, unknown>> = []
   return {
     saved,
@@ -411,7 +412,8 @@ it.each(['read-only', 'workspace-write'] as const)('approves each change once in
     expect((await call({ action, target: action === 'read_config' || action === 'configure' ? 'delo-agent-context' : 'bundle@1.0.0', enabled: true, runtimeVersion: '0.1.7-alpha.1', acceptRisk: true, config: { limit: 6 } }, agent)).isError).toBe(false)
   }
   expect(prompted).toHaveBeenCalledTimes(WRITE_ACTIONS.length)
-  for (const method of Object.values(manager)) expect(method).toHaveBeenCalledTimes(1)
+  // configure reads the plugin list once more, for the entry's protection.
+  for (const [name, method] of Object.entries(manager)) expect(method, name).toHaveBeenCalledTimes(name === 'listPlugins' ? 2 : 1)
   for (const method of [history.undo, history.restore, history.listHistory, settings.edit]) expect(method).toHaveBeenCalledTimes(1)
   expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(mode)
   const reasons = agent.session.snapshotEvents().flatMap(event => event.type === 'approval/asked' ? [event.data.reason] : [])
@@ -580,6 +582,26 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
     ctx.provide('configEditor', editor({ apiKey: 's3cret', a: 1 }, { a: 2 }, { a: 1 }, null) as never)
     const result: unknown = JSON.parse(resultText(await call({ action: 'configure', target: 'delo-agent-context', config: { apiKey: 'n3w' }, reset: ['a'] })))
     expect(result).toEqual({ patchId: 'delo-agent-context', valuesWithheld: true, changed: [{ field: 'apiKey' }, { field: 'a' }] })
+  })
+
+  it('refuses to change the settings of a protected entry, even in full access, before the configuration editor saves', async () => {
+    const { ctx, call, manager } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    const settings = editor({ enabled: true }, {}, {})
+    ctx.provide('configEditor', settings as never)
+    manager.listPlugins.mockResolvedValue([{ entryId: 'include:1', enabled: true, readOnlyReason: 'management-required' }] as never)
+    const result = await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false } })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('Plugin management protects the entry \\"delo-agent-context\\"')
+    expect(settings.edit).not.toHaveBeenCalled()
+  })
+
+  it('refuses to change the settings of an entry the plugin list does not list, before the configuration editor saves', async () => {
+    const { ctx, call, manager } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    const settings = editor({ enabled: true }, {}, {})
+    ctx.provide('configEditor', settings as never)
+    manager.listPlugins.mockResolvedValue([])
+    expect(JSON.stringify((await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false } })).content)).toContain('is not a plugin that list_plugins lists')
+    expect(settings.edit).not.toHaveBeenCalled()
   })
 
   it('refuses without a configuration editor, an entry it does not address, or nothing to change', async () => {

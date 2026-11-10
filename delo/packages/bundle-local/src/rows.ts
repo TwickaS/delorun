@@ -33,6 +33,12 @@ export interface LocalRow {
 /** Every row in which a Delo CLI profile's composition differs from upstream's web profile. */
 export const LOCAL_ROWS: readonly LocalRow[] = [
   {
+    id: 'plugin-manager',
+    kind: 'changed',
+    reason: 'Plugin management protects Delo\'s consent and guard rows, the update gate and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components.',
+    parity: { kind: 'upstream', reason: 'The replay runs upstream\'s protection: the overlay leaves the row out, so `plugin_manager` lists and refuses the recorded scenarios\' rows as upstream does.' },
+  },
+  {
     id: 'session-log-deepseek',
     kind: 'changed',
     reason: 'DeepSeek\'s session-log upload is off until the person turns it on, as contract C11 requires; upstream turns it on.',

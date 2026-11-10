@@ -40,7 +40,8 @@
 # `false`. The Privacy section and the Delo sidebar brand are present and
 # disabled, because recorded web scenarios compare upstream's interface output
 # and brand. The sandbox row is left out, so the replay runs upstream's
-# confinement with no protected home. The five consent and guard rows and the
+# confinement with no protected home. The plugin-manager row is left out, so
+# plugin management protects only upstream's own components. The five consent and guard rows and the
 # update gate row are present and disabled: the shipped composition mounts each
 # with its switch on, and a disabled row mounts nothing, which is each switch's
 # parity value. The

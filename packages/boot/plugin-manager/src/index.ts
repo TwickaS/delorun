@@ -96,6 +96,12 @@ export interface Config {
   detailFetchTimeoutMs?: number
   /** npm file CDNs that offered bundles are read from, in order; a read's `npmFileSources` moves the CDNs it names first. */
   detailNpmFileSources?: NpmFileSource[]
+  /**
+   * Plugin module names the manager refuses to disable or remove, as it refuses `PROTECTED_PLUGINS`, with the
+   * `management-required` reason; a bundle with a row of one of them can be neither deselected nor removed. These
+   * names add to `PROTECTED_PLUGINS` and cannot take any away.
+   */
+  protectedPlugins?: string[]
 }
 
 /** The Fetch route serving images beside bundle detail documents. */
@@ -348,7 +354,10 @@ export class PluginManager extends TypertRemoteService {
     detailImageMaxBytes: z.natural().min(1).default(5 * 1024 * 1024),
     detailFetchTimeoutMs: z.natural().min(1).max(MAX_TIMER_DELAY_MS).default(15000),
     detailNpmFileSources: z.array(z.union(NPM_FILE_SOURCES)).min(1).default([...NPM_FILE_SOURCES]),
+    protectedPlugins: z.array(z.string().min(1)).default([]),
   })
+  /** `PROTECTED_PLUGINS` and the configured `protectedPlugins`. */
+  private readonly protectedPlugins: ReadonlySet<string>
   /** Management bundles remain protected if their files become unreadable. */
   private readonly managementBundles = new Set<string>()
   /**
@@ -381,6 +390,7 @@ export class PluginManager extends TypertRemoteService {
     this.ownerEntryId = ctx.fiber.entry?.id
     this.ownerContext = ctx
     this.profile = ctx.profileContext
+    this.protectedPlugins = new Set([...PROTECTED_PLUGINS, ...(config as Required<Config>).protectedPlugins])
     for (const name of this.profile.startedBundles) this.protectsManager(name)
     this.outputBytes = (config as Required<Config>).outputBytes
     this.lockWaitMs = (config as Required<Config>).lockWaitMs
@@ -725,7 +735,7 @@ export class PluginManager extends TypertRemoteService {
       const actual = [...this.ctx.loader.entries()].find(row => row.id === entry.entryId)
       const candidates = rows.filter(row => row.id === actual?.options.id)
       const candidate = candidates[0]
-      if (PROTECTED_PLUGINS.has(entry.moduleName) || entry.entryId === this.ownerEntryId) {
+      if (this.protectedPlugins.has(entry.moduleName) || entry.entryId === this.ownerEntryId) {
         return { ...entry, readOnlyReason: 'management-required' as const }
       }
       if (candidate === undefined || candidates.length > 1 || candidate.name !== entry.moduleName
@@ -1488,7 +1498,7 @@ export class PluginManager extends TypertRemoteService {
       // Unreadable bundles contribute no new rows; listBundles reports their diagnostics.
       return false
     }
-    const protectedBundle = rows.some(row => PROTECTED_PLUGINS.has(row.name) || `include:${row.id}` === this.ownerEntryId)
+    const protectedBundle = rows.some(row => this.protectedPlugins.has(row.name) || `include:${row.id}` === this.ownerEntryId)
     if (protectedBundle) this.managementBundles.add(name)
     return protectedBundle
   }

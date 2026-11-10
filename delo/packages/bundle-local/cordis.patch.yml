@@ -144,6 +144,24 @@
       config:
         enabled: true
 
+# Plugin management protects the guard rows above and the sandbox rows as it
+# protects its own components: the `plugin_manager` tool, which runs without a
+# prompt in full access, cannot disable a protected row, change its settings,
+# or deselect or remove a bundle that carries one, this bundle included, so no
+# chat in one workspace turns a guard off for every workspace. Upstream's base
+# bundle gives the row no config, so `protectedPlugins` is the only key.
+- id: plugin-manager
+  config:
+    protectedPlugins:
+      - '@delo/plugin-instruction-consent'
+      - '@delo/plugin-mcp-consent'
+      - '@delo/plugin-permission-defaults'
+      - '@delo/plugin-schedule-consent'
+      - '@delo/plugin-fetch-guard'
+      - '@delo/bundle-local/update-gate'
+      - '@deepseek-ai/dsh-sandbox-local'
+      - '@deepseek-ai/dsh-sandbox-policy'
+
 # Contract C8's trash: deleting a chat or a workspace in the studio moves it to
 # the trash under the home, the Trash section in Settings restores it or
 # deletes it forever, and each start deletes what is older than 30 days. The
