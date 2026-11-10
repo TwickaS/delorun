@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OnboardingStepEntry, type OnboardingStepEntryProps } from '../src/client/Onboarding.tsx'
 import { en } from '../src/client/locales.ts'
-import type { OnboardingStep, ReachState } from '../src/client/types.ts'
+import type { OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
 import { NO_RECORD, type SetupRecord } from '../src/wire.ts'
 import { DEFAULT_WORKSPACE, liveForm, noticeFace, reachFace, settings, startFace, stepServices, t } from './fixtures.client.ts'
@@ -366,6 +366,28 @@ describe('the last button', () => {
     expect((button(en.chooseFolder) as HTMLButtonElement).disabled).toBe(true)
     await act(async () => { release({ kind: 'unavailable' }) })
     expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined)
+  })
+
+  it('holds the default-workspace notice while it shows and drops it once the Start step said there is no default workspace', async () => {
+    const start = startFace({ kind: 'none' }, { kind: 'chosen', workspaceId: DEFAULT_WORKSPACE })
+    await mountEntry({ start })
+    expect(start.holdNotice).toHaveBeenCalledOnce()
+    await toStart()
+    expect(start.release).not.toHaveBeenCalled()
+    await click(button(en.chooseFolder))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(start.release).toHaveBeenCalledExactlyOnceWith(true)
+  })
+
+  it.each<readonly [string, StartTarget, () => Promise<void>]>([
+    ['the default workspace resolved', { kind: 'default', workspaceId: DEFAULT_WORKSPACE }, async () => { await toStart(); await click(button(en.start)) }],
+    ['the person skipped before the Start step', { kind: 'none' }, () => click(button(en.skip))],
+  ])('lets the held notice show when the dialog closes and %s', async (_, target, close) => {
+    const start = startFace(target)
+    await mountEntry({ start })
+    await close()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(start.release).toHaveBeenCalledExactlyOnceWith(false)
   })
 
   it('changes the button when the lookup settles while the person is on the Start step', async () => {

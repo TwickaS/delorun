@@ -311,7 +311,7 @@ describe('the default workspace and the first chat', () => {
     const provide: Record<string, unknown> = {}
     const addWorkspace = vi.fn()
     if (options.sidebar !== undefined) provide.deloSidebar = { canAddWorkspace: () => options.sidebar?.canAdd === true, addWorkspace }
-    if (options.uiWorkspace !== null) provide.uiWorkspace = options.uiWorkspace ?? { openWorkspace, startSession, pickDirectory }
+    if (options.uiWorkspace !== null) provide.uiWorkspace = options.uiWorkspace ?? { openWorkspace, startSession, pickDirectory, holdDefaultWorkspaceNotice: () => () => {} }
     const list = { getSnapshot: () => ({ items: options.items ?? [] }) }
     if (options.workspaces === undefined) provide.workspaces = { initializeDefault, create, list }
     else if (options.workspaces !== 'absent') provide.workspaces = { list, ...options.workspaces as object }
@@ -344,6 +344,21 @@ describe('the default workspace and the first chat', () => {
     const { startChat, progress } = await chat({ uiWorkspace: null })
     await startChat()
     expect(progress.set).not.toHaveBeenCalled()
+  })
+
+  it('holds the workspace UI\'s default-workspace notice and passes on whether the person was told', async () => {
+    const release = vi.fn()
+    const holdDefaultWorkspaceNotice = vi.fn(() => release)
+    const { start } = await chat({ uiWorkspace: { holdDefaultWorkspaceNotice } })
+    start.holdNotice()(true)
+    start.holdNotice()(false)
+    expect(holdDefaultWorkspaceNotice).toHaveBeenCalledTimes(2)
+    expect(release.mock.calls).toEqual([[{ told: true }], [{ told: false }]])
+  })
+
+  it('holds nothing where the studio has no workspace navigation', async () => {
+    const { start } = await chat({ uiWorkspace: null })
+    expect(() => { start.holdNotice()(true) }).not.toThrow()
   })
 
   it('opens the workspace the person chose without asking for the default one', async () => {
@@ -465,7 +480,7 @@ describe('the default workspace and the first chat', () => {
 })
 
 describe('a fresh home with no default workspace', () => {
-  it('says so on the Start step, lets the person choose a folder, and then opens a chat there that offers the starter prompts', async () => {
+  it('says so on the Start step instead of the workspace UI\'s notice, lets the person choose a folder, and then opens a chat there that offers the starter prompts', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ reachSetUp: false }), { status: 200 })))
     const openWorkspace = vi.fn(async (_id: string, beforeOpen?: (sessionId: string) => void) => { beforeOpen?.('session-9') })
@@ -475,10 +490,13 @@ describe('a fresh home with no default workspace', () => {
       initializeDefault: async () => { throw new Error('system Documents directory is unavailable') },
       create, list: { getSnapshot: () => ({ items: [] }) },
     }
-    const made = await harness({ provide: { workspaces, uiWorkspace: { openWorkspace, startSession: vi.fn(), pickDirectory } } })
+    const release = vi.fn()
+    const holdDefaultWorkspaceNotice = vi.fn(() => release)
+    const uiWorkspace = { openWorkspace, startSession: vi.fn(), pickDirectory, holdDefaultWorkspaceNotice }
+    const made = await harness({ provide: { workspaces, uiWorkspace } })
     made.served.on()
     const Step = made.entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
-    render(<Step t={t} {...face<OnboardingInjected>(made.entries, STEP_KEY)} explicit complete={vi.fn()} />)
+    const view = render(<Step t={t} {...face<OnboardingInjected>(made.entries, STEP_KEY)} explicit complete={vi.fn()} />)
     await act(async () => { await flush() })
     for (let n = 0; n < 2; n++) await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.continue })) })
     expect(document.body.textContent).toContain('Delo could not set up a default workspace on this computer.')
@@ -489,6 +507,9 @@ describe('a fresh home with no default workspace', () => {
     expect(create).toHaveBeenCalledExactlyOnceWith({ path: '/work/folder' })
     expect(openWorkspace).toHaveBeenCalledExactlyOnceWith('workspace-7', expect.any(Function))
     expect(made.progress.value()).toMatchObject({ done: true, starterSession: 'session-9' })
+    expect(holdDefaultWorkspaceNotice).toHaveBeenCalledOnce()
+    view.unmount()
+    expect(release).toHaveBeenCalledExactlyOnceWith({ told: true })
   })
 })
 

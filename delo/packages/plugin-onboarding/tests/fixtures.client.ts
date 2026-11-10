@@ -111,14 +111,16 @@ export function reachFace(initial: ReachState = 'unavailable') {
   return { face, set: store.set }
 }
 
-/** A start face over a store, recording the dialog opening it and the folder chosen. */
+/** A start face over a store, recording the dialog opening it, the folder chosen and the notice hold. */
 export function startFace(initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE }, choice: FolderChoice = { kind: 'cancelled' }) {
   const store = createSnapshotStore<StartTarget>(initial)
   const resolve = vi.fn()
   const chooseFolder = vi.fn((): Promise<FolderChoice> => Promise.resolve(choice))
   const openInPage = vi.fn()
-  const face: StartFace = { target: store, resolve, chooseFolder, openInPage }
-  return { face, set: store.set, resolve, chooseFolder, openInPage }
+  const release = vi.fn((_told: boolean) => {})
+  const holdNotice = vi.fn(() => release)
+  const face: StartFace = { target: store, resolve, chooseFolder, openInPage, holdNotice }
+  return { face, set: store.set, resolve, chooseFolder, openInPage, holdNotice, release }
 }
 
 /** Step services with every part faked; each can be replaced. */

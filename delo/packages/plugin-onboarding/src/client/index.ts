@@ -236,7 +236,11 @@ export function applyStudio(ctx: Context): void {
     writeProgress('starterSession', PENDING_STARTERS)
     sidebar()?.addWorkspace()
   }
-  const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, openInPage }
+  const holdNotice = (): ((told: boolean) => void) => {
+    const release = ctx.get('uiWorkspace')?.holdDefaultWorkspaceNotice()
+    return (told) => { release?.({ told }) }
+  }
+  const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, openInPage, holdNotice }
 
   /**
    * Open a new chat and keep it as the one whose empty state offers starter prompts. Without a workspace the person

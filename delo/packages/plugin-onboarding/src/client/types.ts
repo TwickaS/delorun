@@ -168,6 +168,12 @@ export interface StartFace {
    * sidebar's add-workspace flow, which starts a chat in the folder the person picks.
    */
   readonly openInPage: () => void
+  /**
+   * Keep the workspace UI's "Unable to create default workspace" notice back while the dialog shows.
+   * @returns the release; `told` true says the Start step told the person there is no default workspace, which drops
+   * the notice, and false shows a kept notice.
+   */
+  readonly holdNotice: () => (told: boolean) => void
 }
 
 /** The reach service's state, followed as the service comes and goes. */

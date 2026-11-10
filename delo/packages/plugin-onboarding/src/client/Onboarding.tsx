@@ -36,16 +36,35 @@ export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode 
   return show ? <Dialog {...props} settings={settings} explicit={explicit} /> : null
 }
 
+/** Whether the Start step told the person there is no default workspace; the flow sets it. */
+interface Told { current: boolean }
+
+/**
+ * Keep the workspace UI's default-workspace notice back while the dialog shows. On close the notice is dropped when the
+ * Start step told the person there is no default workspace, and shows otherwise.
+ * @param start - the Start step's workspace face.
+ * @returns the flag the flow sets.
+ */
+function useNoticeHold(start: OnboardingInjected['services']['start']): Told {
+  const [told] = useState<Told>(() => ({ current: false }))
+  useEffect(() => {
+    const release = start.holdNotice()
+    return () => { release(told.current) }
+  }, [start, told])
+  return told
+}
+
 /** Load what the terminal setup recorded, then show the flow. */
 function Dialog(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean }): ReactNode {
   const { loadRecord } = props
+  const told = useNoticeHold(props.services.start)
   const [record, setRecord] = useState<SetupRecord | undefined>()
   useEffect(() => {
     let live = true
     void loadRecord().then((loaded) => { if (live) setRecord(loaded) })
     return () => { live = false }
   }, [loadRecord])
-  return record === undefined ? null : <Flow {...props} record={record} />
+  return record === undefined ? null : <Flow {...props} record={record} told={told} />
 }
 
 /** Keep the page's root inert behind the dialog. */
@@ -60,8 +79,8 @@ function useInertRoot(): void {
 }
 
 /** The steps, the current one and the buttons. */
-function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly record: SetupRecord }): ReactNode {
-  const { t, progress, extra, services: fixed, startChat, complete, settings, explicit, record } = props
+function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly record: SetupRecord; readonly told: Told }): ReactNode {
+  const { t, progress, extra, services: fixed, startChat, complete, settings, explicit, record, told } = props
   const { reach: reachFace, start } = fixed
   useInertRoot()
   const added = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
@@ -97,6 +116,7 @@ function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingS
   const last = current === steps.length - 1
   // Without a default workspace the last button chooses a folder first, and a closed chooser keeps the dialog open.
   const choosesFolder = last && target.kind === 'none'
+  useEffect(() => { if (choosesFolder) told.current = true }, [choosesFolder, told])
   const next = (): void => {
     step.onContinue?.()
     if (!last) {
