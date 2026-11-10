@@ -1,11 +1,13 @@
 /** The optional Schedule consent seam: a composed consent reviews each due delivery before it wakes its Session. */
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { createRRuleScheduleRecord, ScheduleId } from '../src/domain.ts'
 import type { ScheduleConsentService, ScheduleDeliveryReview, ScheduleDeliveryVerdict } from '../src/types.ts'
-import { agentFor, boundTask, harness, seedTasks, taskTable, SEED_TIME, type HarnessAgent } from './harness.ts'
+import { agentFor, boundTask, harness, seededTask, seedTasks, taskTable, SEED_TIME, type HarnessAgent } from './harness.ts'
 
 const ONCE = 'DTSTART:20260916T000001Z\nRRULE:FREQ=DAILY;COUNT=1'
+/** A rule whose first occurrence is not yet due, for cases that run the task by hand. */
+const DAILY_LATER = 'DTSTART:20260917T000000Z\nRRULE:FREQ=DAILY'
 const REFUSAL = 'the target Session moved wider than the creation preset'
 const DEPLOYMENT_DEFAULT = 'workspace-write'
 const CALLER_PRESET = 'auto'
@@ -70,7 +72,7 @@ function presetBook(entries: Record<string, string> = {}, defaultPreset = DEPLOY
 }
 
 /** Harness carrying a consent and the preset reader, for the cases that read a preset baseline. */
-async function presetHarness(consent: ScheduleConsentService, presets: PresetBook) {
+async function presetHarness(consent: ScheduleConsentService, presets: Pick<PresetBook, 'defaultPreset' | 'current'>) {
   const test = await harness({ onContext: (ctxOn) => {
     ctxOn.provide('scheduleConsent', consent)
     ctxOn.provide('permissionPresets', presets)
@@ -387,4 +389,275 @@ it('gates a manual run through the consent, delivers when it allows, and settles
   })
   expect(chat.followup).toHaveBeenCalledOnce()
   expect(await test.service.view({ id: created.id })).not.toHaveProperty('consentRefusal')
+})
+
+describe('Schedule consent review of a chat a delivery opens', () => {
+  it('refuses a due `new` delivery before it opens the chat, so a refusal creates nothing', async () => {
+    const reviews: ScheduleDeliveryReview[] = []
+    const test = await presetHarness({
+      nameEffect: () => undefined,
+      reviewDelivery: (review) => {
+        reviews.push(review)
+        return { kind: 'refuse', reason: REFUSAL }
+      },
+    }, presetBook())
+    test.resolve.mockImplementation(async sessionId => ({ agent: agentFor(test.ctx, sessionId) }))
+    const created = await test.service.remoteCreate({
+      title: 'Report', prompt: 'Write the report', timing: { kind: 'rrule', rrule: ONCE }, target: { kind: 'new', create: {} },
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // The review reads the preset the chat would be opened under, and its refusal leaves no chat and no reservation.
+    expect(reviews).toHaveLength(1)
+    expect(reviews[0]).toMatchObject({ creationPreset: DEPLOYMENT_DEFAULT, currentPreset: DEPLOYMENT_DEFAULT })
+    expect(test.createSession).not.toHaveBeenCalled()
+    expect(test.resolve).not.toHaveBeenCalled()
+    expect(taskTable(test.ctx).get(created.id)).not.toHaveProperty('pendingDelivery')
+    expect(await test.service.view({ id: created.id })).toMatchObject({ status: 'paused', consentRefusal: { reason: REFUSAL } })
+  })
+
+  it('refuses a manual run of a `new` target before it opens the chat', async () => {
+    const test = await presetHarness({
+      nameEffect: () => undefined,
+      reviewDelivery: () => ({ kind: 'refuse', reason: REFUSAL }),
+    }, presetBook())
+    test.resolve.mockImplementation(async sessionId => ({ agent: agentFor(test.ctx, sessionId) }))
+    const created = await test.service.remoteCreate({
+      title: 'Report', prompt: 'Write the report', timing: { kind: 'rrule', rrule: DAILY_LATER }, target: { kind: 'new', create: {} },
+    })
+
+    await expect(test.service.run({ id: created.id })).rejects.toMatchObject({ code: 'schedule/consent-refused' })
+    expect(test.createSession).not.toHaveBeenCalled()
+    expect(await test.service.view({ id: created.id })).toMatchObject({ status: 'paused' })
+  })
+
+  it('reviews the opened chat again when it runs a preset other than the default it was reviewed against', async () => {
+    const reviews: ScheduleDeliveryReview[] = []
+    // Every chat the delivery opens is seeded with a workspace preset instead of the deployment default.
+    const presets = { defaultPreset: DEPLOYMENT_DEFAULT, current: () => 'workspace-project' }
+    const test = await presetHarness({
+      ...presetConsent,
+      reviewDelivery: (review) => {
+        reviews.push(review)
+        return presetConsent.reviewDelivery(review)
+      },
+    }, presets)
+    const opened: HarnessAgent[] = []
+    test.resolve.mockImplementation(async (sessionId) => {
+      const agent = agentFor(test.ctx, sessionId)
+      opened.push(agent)
+      return { agent }
+    })
+    const created = await test.service.remoteCreate({
+      title: 'Report', prompt: 'Write the report', timing: { kind: 'rrule', rrule: ONCE }, target: { kind: 'new', create: {} },
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(reviews.map(review => review.currentPreset)).toEqual([DEPLOYMENT_DEFAULT, 'workspace-project'])
+    expect(opened.at(0)?.followup).not.toHaveBeenCalled()
+    expect(await test.service.view({ id: created.id })).toMatchObject({ status: 'paused', consentRefusal: { reason: REFUSAL } })
+  })
+
+  it('refuses a manual run whose opened chat runs a preset other than the one reviewed', async () => {
+    const test = await presetHarness(presetConsent, { defaultPreset: DEPLOYMENT_DEFAULT, current: () => 'workspace-project' })
+    const opened: HarnessAgent[] = []
+    test.resolve.mockImplementation(async (sessionId) => {
+      const agent = agentFor(test.ctx, sessionId)
+      opened.push(agent)
+      return { agent }
+    })
+    const created = await test.service.remoteCreate({
+      title: 'Report', prompt: 'Write the report', timing: { kind: 'rrule', rrule: DAILY_LATER }, target: { kind: 'new', create: {} },
+    })
+
+    await expect(test.service.run({ id: created.id })).rejects.toMatchObject({ code: 'schedule/consent-refused' })
+    expect(opened.at(0)?.followup).not.toHaveBeenCalled()
+    expect(await test.service.view({ id: created.id })).toMatchObject({ status: 'paused' })
+  })
+
+  it('fails a manual run with schedule/consent-failed when the opened chat\'s preset cannot be read', async () => {
+    const presets = { defaultPreset: DEPLOYMENT_DEFAULT, current: (): string => { throw new Error('presets are not ready') } }
+    const test = await presetHarness(presetConsent, presets)
+    const opened: HarnessAgent[] = []
+    test.resolve.mockImplementation(async (sessionId) => {
+      const agent = agentFor(test.ctx, sessionId)
+      opened.push(agent)
+      return { agent }
+    })
+    const created = await test.service.remoteCreate({
+      title: 'Report', prompt: 'Write the report', timing: { kind: 'rrule', rrule: DAILY_LATER }, target: { kind: 'new', create: {} },
+    })
+
+    await expect(test.service.run({ id: created.id })).rejects.toMatchObject({ code: 'schedule/consent-failed' })
+    expect(opened.at(0)?.followup).not.toHaveBeenCalled()
+    expect(await test.service.view({ id: created.id })).toMatchObject({ status: 'active' })
+  })
+
+  it('reviews the live preset of a reserved chat that already exists and opens no other', async () => {
+    const reviews: ScheduleDeliveryReview[] = []
+    const test = await harness({
+      beforeService: async (_ctx, facility) => {
+        await seedTasks(facility, [seededTask(
+          createRRuleScheduleRecord(ScheduleId('reserved'), 'Report', 'Write the report', ONCE, Date.parse(SEED_TIME)),
+          { kind: 'new_once', sessionId: SessionId('reserved-chat'), create: {} },
+          { creationPreset: 'wide' },
+        )])
+      },
+      onContext: (ctxOn) => {
+        ctxOn.provide('scheduleConsent', {
+          nameEffect: () => undefined,
+          reviewDelivery: (review) => {
+            reviews.push(review)
+            return presetConsent.reviewDelivery(review)
+          },
+        })
+        ctxOn.provide('permissionPresets', presetBook({ 'reserved-chat': 'wide' }))
+      },
+    })
+    active.push(test)
+    const chat = agentFor(test.ctx, 'reserved-chat')
+    test.resolve.mockResolvedValue({ agent: chat })
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(reviews).toEqual([{ creationPreset: 'wide', currentPreset: 'wide', targetSessionId: 'reserved-chat' }])
+    expect(test.createSession).not.toHaveBeenCalled()
+    expect(chat.followup).toHaveBeenCalledOnce()
+  })
+})
+
+describe('Schedule consent verdicts and failures', () => {
+  /** Seed one due task bound to `chat` and compose `consent`. */
+  async function seeded(consent: ScheduleConsentService) {
+    const test = await setup({
+      consent,
+      seed: [boundTask(SessionId('chat'), createRRuleScheduleRecord(ScheduleId('due'), 'Due', 'Run', ONCE, Date.parse(SEED_TIME)),
+        { creationPreset: 'wide' })],
+    })
+    const chat = agentFor(test.ctx, 'chat')
+    test.resolve.mockResolvedValue({ agent: chat })
+    return { test, chat }
+  }
+
+  // Each answer stands for a consent written against another version of the seam, outside the declared verdicts.
+  it.each([
+    ['an unrecognised kind', { kind: 'deny', reason: 'no' }],
+    ['a refusal without a reason', { kind: 'refuse' }],
+    ['a refusal with a blank reason', { kind: 'refuse', reason: '  ' }],
+    ['no verdict at all', null],
+  ])('refuses a due delivery whose consent answers %s', async (_label, answer) => {
+    const { test, chat } = await seeded({ nameEffect: () => undefined, reviewDelivery: () => answer as never })
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(chat.followup).not.toHaveBeenCalled()
+    const stored = taskTable(test.ctx).get(ScheduleId('due'))
+    expect(stored).toMatchObject({ status: 'paused' })
+    expect(stored?.consentRefusal?.reason).toContain('no verdict the Schedule recognises')
+  })
+
+  it('refuses a manual run whose consent answers an unrecognised verdict with the typed refusal', async () => {
+    const { test, chat } = await seeded({ nameEffect: () => undefined, reviewDelivery: () => ({ kind: 'permit' }) as never })
+
+    await expect(test.service.run({ id: ScheduleId('due') })).rejects.toMatchObject({ code: 'schedule/consent-refused' })
+    expect(chat.followup).not.toHaveBeenCalled()
+  })
+
+  it('never delivers when the consent throws, keeps the task armed and reports the failure', async () => {
+    const { test, chat } = await seeded({
+      nameEffect: () => undefined, reviewDelivery: () => { throw new Error('consent exploded') },
+    })
+    const warn = vi.spyOn(test.ctx.logger, 'warn')
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(chat.followup).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/could not review the delivery of task "due".*consent exploded/))
+    expect(await test.service.view({ id: ScheduleId('due') })).toMatchObject({ status: 'active' })
+    expect(taskTable(test.ctx).get(ScheduleId('due'))).not.toHaveProperty('consentRefusal')
+  })
+
+  it('fails a manual run with the typed schedule/consent-failed error, not a refusal, when the consent throws', async () => {
+    const failure = new Error('consent exploded')
+    const { test, chat } = await seeded({ nameEffect: () => undefined, reviewDelivery: () => { throw failure } })
+
+    await expect(test.service.run({ id: ScheduleId('due') })).rejects.toMatchObject({
+      code: 'schedule/consent-failed', details: {}, cause: failure,
+    })
+    expect(chat.followup).not.toHaveBeenCalled()
+    expect(await test.service.view({ id: ScheduleId('due') })).toMatchObject({ status: 'active' })
+  })
+
+  it('reviews every occurrence of a recurring task, not only the first', async () => {
+    const reviews: ScheduleDeliveryReview[] = []
+    let refuse = false
+    const test = await setup({
+      seed: [boundTask(SessionId('chat'), createRRuleScheduleRecord(ScheduleId('every-day'), 'Daily', 'Run',
+        'DTSTART:20260916T000001Z\nRRULE:FREQ=DAILY', Date.parse(SEED_TIME)), { creationPreset: 'wide' })],
+      consent: {
+        nameEffect: () => undefined,
+        reviewDelivery: (review) => {
+          reviews.push(review)
+          return refuse ? { kind: 'refuse', reason: REFUSAL } : { kind: 'allow' }
+        },
+      },
+    })
+    const chat = agentFor(test.ctx, 'chat')
+    test.resolve.mockResolvedValue({ agent: chat })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(reviews).toHaveLength(1)
+    refuse = true
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000)
+
+    expect(reviews).toHaveLength(2)
+    expect(chat.followup).toHaveBeenCalledOnce()
+    expect(await test.service.view({ id: ScheduleId('every-day') })).toMatchObject({ status: 'paused' })
+  })
+
+  it('keeps a delivery into a chat that no longer exists armed without consulting the consent', async () => {
+    const reviewDelivery = vi.fn((): ScheduleDeliveryVerdict => ({ kind: 'allow' }))
+    const { test } = await seeded({ nameEffect: () => undefined, reviewDelivery })
+    test.resolve.mockRejectedValue(new Error('Session chat is not available'))
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(reviewDelivery).not.toHaveBeenCalled()
+    expect(await test.service.view({ id: ScheduleId('due') })).toMatchObject({ status: 'active' })
+  })
+
+  it('refuses the first delivery into a chat that held no live Agent at creation, whose approval named no preset', async () => {
+    const test = await presetHarness(presetConsent, presetBook())
+    const created = await test.service.remoteCreate({
+      title: 'Reminder', prompt: 'Remind me', timing: { kind: 'rrule', rrule: ONCE },
+      target: { kind: 'session', sessionId: SessionId('cold-chat') },
+    })
+    expect(taskTable(test.ctx).get(created.id)).not.toHaveProperty('creationPreset')
+    const chat = agentFor(test.ctx, 'cold-chat')
+    test.resolve.mockResolvedValue({ agent: chat })
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(chat.followup).not.toHaveBeenCalled()
+    expect(await test.service.view({ id: created.id })).toMatchObject({ status: 'paused' })
+  })
+
+  it('keeps the stored task unchanged when the consent edits the review it is handed', async () => {
+    const { test, chat } = await seeded({
+      nameEffect: () => undefined,
+      reviewDelivery: (review) => {
+        Object.assign(review, { creationPreset: 'hijacked', targetSessionId: 'elsewhere' })
+        return { kind: 'allow' }
+      },
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(chat.followup).toHaveBeenCalledOnce()
+    expect(taskTable(test.ctx).get(ScheduleId('due'))).toMatchObject({
+      creationPreset: 'wide', target: { kind: 'session', sessionId: 'chat' },
+    })
+  })
 })

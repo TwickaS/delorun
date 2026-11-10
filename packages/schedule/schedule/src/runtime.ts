@@ -47,6 +47,40 @@ interface DeliveryTarget {
   readonly agent: Agent
 }
 
+/**
+ * Target of one delivery found without creating anything: a `session` target's activated Session, or the Session a
+ * target that opens its own reserves, with its live Agent only when that Session already exists.
+ */
+type LocatedTarget =
+  | { readonly kind: 'session'; readonly sessionId: SessionIdType; readonly agent: Agent }
+  | {
+    readonly kind: 'reserved'
+    readonly sessionId: SessionIdType
+    readonly agent: Agent | undefined
+    readonly create: ScheduleSessionCreateSpec
+  }
+
+/** One refusal the consent seam stores on a task and reports. */
+type ConsentRefusal = Extract<ScheduleDeliveryVerdict, { readonly kind: 'refuse' }>
+
+/** Refusal reason recorded when a consent answers anything but one of the two declared verdicts. */
+const UNRECOGNISED_VERDICT = 'the scheduled-task consent returned no verdict the Schedule recognises, so the delivery was refused'
+
+/**
+ * Read one consent answer, failing closed: only the declared `allow` delivers, a `refuse` keeps its reason, and any
+ * other answer refuses. The answer crosses a plugin seam and its reason is stored on the task, so a consent written
+ * against another version of the seam cannot deliver by answering something the runtime does not know.
+ * @param answer - The consent's answer, typed as wide as what a consent can return at run time.
+ * @returns The refusal to record, or undefined when the consent allowed the delivery.
+ */
+function refusalOf(answer: { readonly kind?: unknown; readonly reason?: unknown } | null | undefined): ConsentRefusal | undefined {
+  if (answer?.kind === 'allow') return undefined
+  if (answer?.kind === 'refuse' && typeof answer.reason === 'string' && answer.reason.trim() !== '') {
+    return { kind: 'refuse', reason: answer.reason }
+  }
+  return { kind: 'refuse', reason: UNRECOGNISED_VERDICT }
+}
+
 /** Message identity, acknowledgment time, and, while a delivered task holds its slot, Agent activity of one enqueued reminder. */
 interface SentReminder {
   readonly messageId: ScheduleDeliveryReceipt['messageId']
@@ -66,7 +100,6 @@ function batchSessionOf(task: ScheduleTask): SessionIdType | undefined {
     : undefined
 }
 
-/** Owns at most one timer across recomputations; delivery and management share the serialized operation. */
 /** The preset reads the consent seam makes when a deployment composes the permission-preset service. */
 export interface SchedulePermissionPresets {
   /** The permission preset one Session currently runs under. */
@@ -78,6 +111,7 @@ export interface SchedulePermissionPresets {
   readonly defaultPreset: string
 }
 
+/** Owns at most one timer across recomputations; delivery and management share the serialized operation. */
 export class ScheduleRuntime {
   private timer: ReturnType<typeof setTimeout> | undefined
   private running: Promise<void> | undefined
@@ -163,9 +197,12 @@ export class ScheduleRuntime {
         || await this.recoverOutstandingExecution(task)) {
         return { task, admitted: false }
       }
-      const target = await this.resolveTarget(task)
+      const located = await this.locateTarget(task)
+      // The consent reviews before a target that opens its own Session creates it, so a refusal creates nothing.
+      await this.reviewDelivery(task, located)
+      const target = await this.openTarget(task, located)
       if (this.stopping) throw new Error('Schedule runtime is stopping')
-      await this.reviewDelivery(task, target)
+      if (this.openedOtherPreset(located, target)) await this.reviewDelivery(task, target)
       // Sample the occurrence after Session restoration, which can take longer than one recurrence interval.
       const occurrenceAt = new Date(Date.now()).toISOString()
       const held = task.target.kind !== 'new' ? [id] : []
@@ -259,13 +296,16 @@ export class ScheduleRuntime {
       admitted = candidates.filter(member => Date.parse(member.record.scheduledAt) <= checkedAt)
       const first = admitted[0]
       if (first === undefined) return []
-      const target = await this.resolveTarget(first)
+      const located = await this.locateTarget(first)
+      // The consent screens before a target that opens its own Session creates it, so a refusal creates nothing.
+      admitted = await this.screenDelivery(admitted, located)
+      if (admitted.length === 0) return []
+      const target = await this.openTarget(first, located)
       if (this.stopping) return []
+      if (this.openedOtherPreset(located, target)) admitted = await this.screenDelivery(admitted, target)
       const now = Date.now()
       // Session restoration can span a wall-clock rollback; future members keep their timer obligation.
       admitted = admitted.filter(member => Date.parse(member.record.scheduledAt) <= now)
-      admitted = await this.screenDelivery(admitted, target)
-      if (admitted.length === 0) return []
       const deliveries = admitted.map(task => ({
         task, occurrence: isRecurringScheduleRecord(task.record)
           ? resolveRecurringOccurrence(task.record, now) : { occurrenceAt: task.record.scheduledAt },
@@ -324,10 +364,11 @@ export class ScheduleRuntime {
    * upstream's. A refusal never delivers: the task pauses so no later occurrence retries it,
    * and the refusal surfaces as the typed `schedule/consent-refused` error.
    * @param task - Due task whose delivery is pending.
-   * @param target - Resolved delivery target and its live Agent.
+   * @param target - Delivery target, with its live Agent once its Session exists.
    * @throws RemoteError `schedule/consent-refused` carrying the consent's reason.
+   * @throws RemoteError `schedule/consent-failed` when the consent could not review; the task stays armed.
    */
-  private async reviewDelivery(task: ScheduleTask, target: DeliveryTarget): Promise<void> {
+  private async reviewDelivery(task: ScheduleTask, target: DeliveryTarget | LocatedTarget): Promise<void> {
     const verdict = this.consentVerdict(task, target)
     if (verdict === undefined) return
     await this.commit(this.refused(task, verdict.reason))
@@ -350,10 +391,14 @@ export class ScheduleRuntime {
    * Screen one due group through the consent seam before the shared message is built; a refused
    * member pauses instead of delivering, and the remaining members keep one message.
    * @param group - Due members of one delivery message.
-   * @param target - Resolved delivery target and its live Agent.
+   * @param target - Delivery target, with its live Agent once its Session exists.
    * @returns The members whose delivery the consent allows.
+   * @throws RemoteError `schedule/consent-failed` when the consent could not review; every member stays armed.
    */
-  private async screenDelivery(group: readonly ScheduleTask[], target: DeliveryTarget): Promise<readonly ScheduleTask[]> {
+  private async screenDelivery(
+    group: readonly ScheduleTask[],
+    target: DeliveryTarget | LocatedTarget,
+  ): Promise<readonly ScheduleTask[]> {
     const kept: ScheduleTask[] = []
     for (const task of group) {
       const verdict = this.consentVerdict(task, target)
@@ -369,23 +414,59 @@ export class ScheduleRuntime {
 
   /**
    * Ask the optional consent service about one pending delivery, or `undefined` when no consent is
-   * composed or it allows the delivery.
+   * composed or it allows the delivery. A target whose Session is not opened yet is reviewed under
+   * the deployment default that the permission-preset service pins into a fresh Session.
    * @param task - Due task whose delivery is pending.
-   * @param target - Resolved delivery target and its live Agent.
+   * @param target - Delivery target, with its live Agent once its Session exists.
    * @returns The refusal, or undefined when the delivery may proceed.
+   * @throws RemoteError `schedule/consent-failed` when the consent or the preset read throws.
    */
-  private consentVerdict(
-    task: ScheduleTask,
-    target: DeliveryTarget,
-  ): Extract<ScheduleDeliveryVerdict, { readonly kind: 'refuse' }> | undefined {
+  private consentVerdict(task: ScheduleTask, target: DeliveryTarget | LocatedTarget): ConsentRefusal | undefined {
     const consent = this.ctx.get('scheduleConsent')
     if (consent === undefined) return undefined
-    const verdict = consent.reviewDelivery({
-      creationPreset: task.creationPreset,
-      currentPreset: (this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined)?.current(target.agent.session),
-      targetSessionId: target.agent.session.id,
-    })
-    return verdict.kind === 'refuse' ? verdict : undefined
+    let verdict: ScheduleDeliveryVerdict
+    try {
+      verdict = consent.reviewDelivery({
+        creationPreset: task.creationPreset,
+        currentPreset: this.presetOf(target.agent),
+        targetSessionId: target.agent?.session.id ?? target.sessionId,
+      })
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`schedule: the consent could not review the delivery of task "${task.record.id}": ${String(error)}`)
+      throw new RemoteError('schedule/consent-failed', 'The scheduled-task consent could not review this delivery.', {}, {
+        cause: error,
+      })
+    }
+    return refusalOf(verdict)
+  }
+
+  /**
+   * Read the permission preset one target runs under: its live Session's, or, for a Session not opened yet, the
+   * deployment default a fresh Session is pinned to.
+   * @param agent - Live Agent of the target Session, when it exists.
+   * @returns The preset, or undefined when no preset service is composed.
+   */
+  private presetOf(agent: Agent | undefined): string | undefined {
+    const presets = this.ctx.get('permissionPresets') as SchedulePermissionPresets | undefined
+    return agent === undefined ? presets?.defaultPreset : presets?.current(agent.session)
+  }
+
+  /**
+   * Whether a delivery opened a Session that runs a preset other than the default the consent reviewed it under, as
+   * when a distribution seeds a new chat with its Workspace's preset. Such a Session is reviewed again before it is
+   * woken. Without a consent nothing is reviewed, so nothing is read.
+   * @param located - Target as the consent reviewed it.
+   * @param target - Target after its Session was opened.
+   * @returns Whether the opened Session needs a review of its live preset.
+   */
+  private openedOtherPreset(located: LocatedTarget, target: DeliveryTarget): boolean {
+    if (located.agent !== undefined || this.ctx.get('scheduleConsent') === undefined) return false
+    try {
+      return this.presetOf(target.agent) !== this.presetOf(undefined)
+    } catch {
+      // A preset read that throws is the consent review's own failure, which the second review reports.
+      return true
+    }
   }
 
   /**
@@ -504,14 +585,11 @@ export class ScheduleRuntime {
   }
 
   /**
-   * Resolve the delivery target and its live Agent.
-   * A `new` target reserves its Session identity in the task before creation, so a failed delivery retries the same
-   * Session instead of creating another. A stored reserved identity is resolved first and created only when no Session
-   * has it, because the Session controller creates a Session with a different id when the named Session has already
-   * started a turn. A created Session joins the Workspace registered at `create.cwd` and takes the task title; a `new`
-   * target's title adds its launch time in the task's time zone. Neither step blocks delivery.
+   * Find the delivery target without creating anything: activate a `session` target, or pick the Session a target
+   * that opens its own uses — the stored reserved identity, resolved to its live Agent when a Session already has it,
+   * or a fresh identity for a `new` target that holds no reservation.
    */
-  private async resolveTarget(task: ScheduleTask): Promise<DeliveryTarget> {
+  private async locateTarget(task: ScheduleTask): Promise<LocatedTarget> {
     const { target } = task
     const reserved = target.kind === 'new' ? task.pendingDelivery?.targetSessionId : target.sessionId
     // An archived Session cannot run the reminder, including a retry in an already-created reserved Session.
@@ -519,22 +597,32 @@ export class ScheduleRuntime {
       throw new RemoteError('schedule/target-archived', `Session ${reserved} is archived`, { sessionId: reserved })
     }
     if (target.kind === 'session') {
-      return { sessionId: target.sessionId, agent: await this.activate(target.sessionId) }
+      return { kind: 'session', sessionId: target.sessionId, agent: await this.activate(target.sessionId) }
     }
-    let sessionId: SessionIdType
-    let agent: Agent | undefined
-    if (target.kind === 'new_once') {
-      sessionId = target.sessionId
-      agent = await this.reservedAgent(sessionId)
-    } else if (task.pendingDelivery === undefined) {
-      sessionId = SessionId(`session-${randomUUID()}`)
-      await this.commit({ ...task, pendingDelivery: { targetSessionId: sessionId } })
-    } else {
-      sessionId = task.pendingDelivery.targetSessionId
-      agent = await this.reservedAgent(sessionId)
+    const sessionId = reserved ?? SessionId(`session-${randomUUID()}`)
+    const agent = reserved === undefined ? undefined : await this.reservedAgent(reserved)
+    return { kind: 'reserved', sessionId, agent, create: target.create }
+  }
+
+  /**
+   * Open a located target's Session and return its live Agent.
+   * A `new` target reserves its Session identity in the task before creation, so a failed delivery retries the same
+   * Session instead of creating another. A stored reserved identity is resolved first and created only when no Session
+   * has it, because the Session controller creates a Session with a different id when the named Session has already
+   * started a turn. A created Session joins the Workspace registered at `create.cwd` and takes the task title; a `new`
+   * target's title adds its launch time in the task's time zone. Neither step blocks delivery.
+   */
+  private async openTarget(task: ScheduleTask, located: LocatedTarget): Promise<DeliveryTarget> {
+    if (located.kind === 'session') return located
+    const { sessionId, create } = located
+    let { agent } = located
+    if (agent === undefined) {
+      if (task.target.kind === 'new' && task.pendingDelivery === undefined) {
+        await this.commit({ ...task, pendingDelivery: { targetSessionId: sessionId } })
+      }
+      agent = await this.createAgent(sessionId, create)
     }
-    agent ??= await this.createAgent(sessionId, target.create)
-    await this.joinWorkspace(sessionId, target.create.cwd)
+    await this.joinWorkspace(sessionId, create.cwd)
     this.nameSession(agent, task)
     return { sessionId, agent }
   }

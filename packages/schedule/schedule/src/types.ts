@@ -623,7 +623,7 @@ export interface ScheduleEffect {
   readonly recurrence: string
   /** Id of the Session the deliveries reach; undefined while the target opens a new Session at its first delivery. */
   readonly targetSessionId: string | undefined
-  /** The permission preset that Session runs under at approval time; a created target inherits the caller's. */
+  /** The permission preset that Session runs under at approval time; a created target names the deployment default. */
   readonly targetPreset: string | undefined
 }
 
@@ -631,9 +631,12 @@ export interface ScheduleEffect {
 export interface ScheduleDeliveryReview {
   /** The permission preset the task captured at creation; undefined when the task stores none. */
   readonly creationPreset: string | undefined
-  /** The permission preset the target Session runs under now; undefined when no preset service is composed. */
+  /**
+   * The permission preset the target Session runs under now, or, for a Session the delivery has not opened yet, the
+   * deployment default a fresh Session is pinned to; undefined when no preset service is composed.
+   */
   readonly currentPreset: string | undefined
-  /** Id of the Session the delivery would wake. */
+  /** Id of the Session the delivery would wake, including one the delivery opens after an allowing review. */
   readonly targetSessionId: string
 }
 
@@ -654,7 +657,11 @@ export interface ScheduleConsentService {
    * The returned text joins the approval, and `undefined` adds nothing.
    */
   nameEffect(schedule: ScheduleEffect): string | undefined
-  /** Review one due delivery before it wakes its Session. */
+  /**
+   * Review one due delivery before it wakes its Session, and before a target that opens its own Session creates it.
+   * Only an `allow` delivers; any other answer, a `refuse` without a reason included, refuses. A throw delivers
+   * nothing and leaves the task armed, and a manual run reports it as `schedule/consent-failed`.
+   */
   reviewDelivery(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict
 }
 
@@ -666,6 +673,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'schedule/target-archived': { readonly sessionId: SessionId }
     /** A due delivery was refused by the composed Schedule consent. */
     'schedule/consent-refused': { readonly reason: string }
+    /** The composed Schedule consent threw while reviewing a delivery, so nothing was delivered and the task stays armed. */
+    'schedule/consent-failed': Record<string, never>
   }
 }
 

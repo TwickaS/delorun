@@ -363,7 +363,7 @@ interface ConsentFacts {
  * @param ctx - Scope whose `schedule` service stores the tasks.
  * @param exec - Pending management call with its parsed arguments.
  * @param agent - Calling root Agent.
- * @returns The effect and the stored refusal; both are undefined when the call names neither.
+ * @returns The effect and the edited task's stored refusal; both are undefined when the call names no effect.
  */
 async function consentFacts(ctx: Context, exec: ToolExecution, agent: Agent): Promise<ConsentFacts> {
   const args = exec.arguments as { rrule?: unknown; target?: unknown; id?: unknown; action?: unknown } | undefined
@@ -520,10 +520,12 @@ function registerScheduleTools(ctx: Context): void {
     const agent = exec.agent
     if (consent === undefined || agent === undefined) return gate
     const { effect, refusal } = await consentFacts(ctx, exec, agent)
-    if (effect === undefined && refusal === undefined) return gate
-    const named = effect === undefined ? undefined : consent.nameEffect(effect)
+    if (effect === undefined) return gate
+    // A consent that throws here fails the call before anything is asked or stored.
+    const named = consent.nameEffect(effect)
+    // A whitespace-only naming names nothing, so the ask never ends in a blank sentence.
     const stated = [named, refusal === undefined ? undefined : refusalText(refusal)]
-      .filter((part): part is string => part !== undefined && part.length > 0)
+      .filter((part): part is string => part !== undefined && part.trim() !== '')
     if (gate.kind === 'ask') {
       // Another composed policy asked without the consent's text, so the consent took no part in it.
       if (stated.length === 0) return gate
@@ -532,7 +534,7 @@ function registerScheduleTools(ctx: Context): void {
     }
     // An edit of a task the consent refused is approved again only by an answer to this ask, so the
     // service learns about it the same way it learns about every other consent ask.
-    if (effect !== undefined) consentAsks.add(exec)
+    consentAsks.add(exec)
     return { kind: 'ask', reason: stated.length === 0 ? UNNAMED_CONSENT_ASK : stated.join(' ') }
   })
 

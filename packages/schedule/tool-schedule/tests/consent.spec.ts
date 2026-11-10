@@ -6,7 +6,7 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { ScheduleId } from '@deepseek-ai/dsh-schedule'
 import type {
-  ScheduleConsentService, ScheduleDeliveryReview, ScheduleDeliveryVerdict, ScheduleEffect,
+  ScheduleConsentService, ScheduleDeliveryReview, ScheduleDeliveryVerdict, ScheduleEffect, ScheduleTiming,
 } from '@deepseek-ai/dsh-schedule'
 import { agentFor, harness, mountToolSchedule } from './harness.ts'
 import { taskTable, type HarnessAgent } from '../../schedule/tests/harness.ts'
@@ -408,5 +408,129 @@ describe('Schedule consent manual run', () => {
     // which the view result proves because the tool's output schema admits exactly the declared fields.
     await expect(test.service.run({ id: ScheduleId(created.id) })).rejects.toThrow(REFUSAL)
     expect(await call(test, 'schedule_view', { id: created.id })).toMatchObject({ id: created.id, kind: 'rrule' })
+  })
+})
+
+describe('Schedule consent naming failures', () => {
+  it('fails the call, asks nothing and stores nothing when the consent throws while naming', async () => {
+    const test = await setup({ consent: {
+      nameEffect: () => { throw new Error('naming exploded') },
+      reviewDelivery: () => ({ kind: 'allow' }),
+    } })
+    const request = approving(test)
+    const result = await executeToolFixture(test.ctx, {
+      callId: ToolCallId('consent-call'), signal: new AbortController().signal,
+      name: 'schedule_create', arguments: TASK, agent: test.agent,
+    })
+    expect(result.isError).toBe(true)
+    expect(request).not.toHaveBeenCalled()
+    expect(await call(test, 'schedule_list', {})).toMatchObject({ total: 0 })
+  })
+
+  it('keeps a consent that edits the effect it names out of the stored task', async () => {
+    const test = await setup({ consent: {
+      nameEffect: (effect) => {
+        Object.assign(effect, { recurrence: '', targetSessionId: 'elsewhere' })
+        return NAMED
+      },
+      reviewDelivery: () => ({ kind: 'allow' }),
+    } })
+    const request = approving(test)
+    askPolicy(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(`${ASK_REASON} ${NAMED}`)
+    expect(taskTable(test.ctx).get(ScheduleId(created.id))).toMatchObject({
+      target: { kind: 'session', sessionId: test.agent.session.id }, record: { kind: 'rrule', rrule: DAILY },
+    })
+  })
+
+  it('treats a whitespace-only naming as naming nothing', async () => {
+    const test = await setup({ consent: { nameEffect: () => ' \n ', reviewDelivery: () => ({ kind: 'allow' }) } })
+    const request = approving(test)
+    // Without another policy's ask, the consent asks with its own sentence instead of a blank one.
+    await call(test, 'schedule_create', TASK)
+    const unnamed = request.mock.calls.at(0)?.at(0)?.reason
+    expect(unnamed?.trim()).toBe(unnamed)
+    expect(unnamed).not.toBe('')
+    // Beside another policy's ask, the reason stays that policy's own, with nothing appended.
+    askPolicy(test)
+    await call(test, 'schedule_create', TASK)
+    expect(request.mock.calls.at(1)?.at(0)?.reason).toBe(ASK_REASON)
+  })
+})
+
+describe('Schedule consent naming of a stored rule', () => {
+  it.each<[string, ScheduleTiming, string]>([
+    ['cron', { kind: 'cron', cron: { expression: '0 9 * * 1', time_zone: 'UTC' } }, '0 9 * * 1'],
+    ['daily', { kind: 'daily', daily: { time: '09:00:00', time_zone: 'UTC' } }, 'daily at 09:00:00.000 (UTC)'],
+    ['weekly', { kind: 'weekly', weekly: { time: '09:00:00', time_zone: 'UTC', weekdays: [1] } }, 'weekly at 09:00:00.000 (UTC)'],
+    ['every', { kind: 'every', every_seconds: 3600 }, 'every 3600 seconds'],
+    ['one-shot', { kind: 'after', after_seconds: 3600 }, '2026-09-16T01:00:00.000Z'],
+  ])('names the stored %s rule on an edit that restates none', async (_label, timing, recurrence) => {
+    const nameEffect = vi.fn((_effect: ScheduleEffect) => NAMED)
+    const test = await setup({ consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) } })
+    approving(test)
+    const created = await test.service.create({
+      title: 'Queue check', prompt: 'Check the queue', timing, target: { kind: 'session', sessionId: test.agent.session.id },
+    }, test.agent.session.id)
+    await call(test, 'schedule_edit', { id: created.id, action: 'update', title: 'Renamed' })
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toMatchObject({ tool: 'schedule_edit', recurrence })
+  })
+})
+
+describe('Schedule consent facts from raw call arguments', () => {
+  /** Run one call whose arguments the tool's schema may refuse; the consent reads them before the schema does. */
+  async function attempt(test: Setup, name: string, args: unknown): Promise<void> {
+    await executeToolFixture(test.ctx, {
+      callId: ToolCallId('consent-raw'), signal: new AbortController().signal, name, arguments: args, agent: test.agent,
+    })
+  }
+
+  it.each([
+    ['schedule_create', 'not an object'],
+    ['schedule_create', { title: 'Queue check', prompt: 'Check the queue' }],
+    ['schedule_edit', { action: 'update', title: 'Renamed' }],
+    ['schedule_edit', { id: 'schedule-missing', action: 'update', title: 'Renamed' }],
+  ] as const)('names nothing and asks nothing for a %s call whose arguments name no effect: %j', async (name, args) => {
+    const nameEffect = vi.fn((_effect: ScheduleEffect) => NAMED)
+    const test = await setup({ consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) } })
+    const request = approving(test)
+    await attempt(test, name, args)
+    expect(nameEffect).not.toHaveBeenCalled()
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('names a create that states no target as a chat its first delivery opens', async () => {
+    const nameEffect = vi.fn((_effect: ScheduleEffect) => NAMED)
+    const test = await setup({ consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) }, presets: presetsOf() })
+    approving(test)
+    const { target: _target, ...untargeted } = TASK
+    await attempt(test, 'schedule_create', untargeted)
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+      tool: 'schedule_create', recurrence: DAILY, targetSessionId: undefined, targetPreset: DEPLOYMENT_DEFAULT,
+    } satisfies ScheduleEffect)
+  })
+
+  it('names the rule and the target an edit restates instead of the stored ones', async () => {
+    const nameEffect = vi.fn((_effect: ScheduleEffect) => NAMED)
+    const test = await setup({ consent: { nameEffect, reviewDelivery: () => ({ kind: 'allow' }) }, presets: presetsOf() })
+    approving(test)
+    const created = await call(test, 'schedule_create', TASK) as { id: string }
+    nameEffect.mockClear()
+    await call(test, 'schedule_edit', { id: created.id, action: 'update', rrule: ONCE, target: 'new' })
+    expect(nameEffect.mock.calls.at(0)?.at(0)).toEqual({
+      tool: 'schedule_edit', recurrence: ONCE, targetSessionId: undefined, targetPreset: DEPLOYMENT_DEFAULT,
+    } satisfies ScheduleEffect)
+  })
+
+  it('states only the naming when another policy asks without a reason', async () => {
+    const test = await setup({ consent: { nameEffect: () => NAMED, reviewDelivery: () => ({ kind: 'allow' }) } })
+    const request = approving(test)
+    test.ctx.on('tools/pre-execute', async (_exec, next) => {
+      const gate = await next()
+      return gate.kind === 'allow' ? { kind: 'ask' as const } : gate
+    })
+    await call(test, 'schedule_create', TASK)
+    expect(request.mock.calls.at(0)?.at(0)?.reason).toBe(NAMED)
   })
 })
