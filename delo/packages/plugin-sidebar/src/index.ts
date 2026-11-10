@@ -1,8 +1,8 @@
 /**
  * Host entry of Delo's sidebar. The chat list is browser-only; this half
  * keeps its settings (header art, palette, list view, shelves, sort order,
- * width and the workspace icons) as the row's live configuration, which the
- * studio's Sidebar section edits.
+ * width and the workspace icons) and the update notice's refresh interval as
+ * the row's live configuration, which the studio's Sidebar section edits.
  * @module @delo/plugin-sidebar
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 
 export {
   ART_PALETTES, ART_STRENGTHS, ART_STYLES, Config, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, MAX_WORKSPACE_ICONS, SIDEBAR_ROW_ID,
-  SIDEBAR_WIDTH, SORT_ORDERS,
+  SIDEBAR_WIDTH, SORT_ORDERS, UPDATE_NOTICE_REFRESH_MINUTES,
   type ArtPalette, type ArtStrength, type ArtStyle, type HeaderArt, type ListView, type SidebarSettings, type SortOrder,
 } from './config.ts'
 export {

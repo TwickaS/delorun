@@ -140,6 +140,10 @@ export interface FixtureOptions {
   readonly version?: string
   /** The platforms the manifest publishes a runtime for; every platform by default. */
   readonly released?: readonly RuntimePlatform[]
+  /** The upstream version the manifest names; `0.2.2` by default. */
+  readonly dsh?: string
+  /** The security mark and summary the manifest carries; neither by default, as in a manifest signed before they existed. */
+  readonly notice?: { readonly security: boolean, readonly summary: string }
 }
 
 /**
@@ -174,7 +178,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
   const manifest: ReleaseManifest = {
     schema: RELEASE_SCHEMAS.manifest,
     version: version(releaseVersion),
-    dsh: version('0.2.2'),
+    dsh: version(options.dsh ?? '0.2.2'),
     channel: 'stable',
     source: { repository: 'https://github.com/Delo-Run/delo', tag: `v${releaseVersion}`, commit: 'a'.repeat(40) },
     published: utc('2027-01-01T00:00:00Z'),
@@ -190,6 +194,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
     install: { sh: dummy('install.sh'), ps1: dummy('install.ps1') },
     rebuild: { record: dummy(`delorun-${releaseVersion}.rebuild.json`), builders: [{ name: 'the targets-key holder', ci: false }] },
     advisories: { report: dummy(`delorun-${releaseVersion}.advisories.json`), accepted: [] },
+    ...options.notice,
   }
   const manifestBytes = envelope(manifest, options.manifestSigners ?? [keys.targets])
   const bundledManifest = options.bundleOver?.manifest ?? manifestBytes

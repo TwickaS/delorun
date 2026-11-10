@@ -200,6 +200,30 @@ async function readStatus(path: string, id: InstallationStatus['id']): Promise<I
 }
 
 /**
+ * The profile as it is installed: its plugins with their own manifests' declarations, its bundle list, its patch
+ * layers' rows and both exemption files. The update report and the update check read it the same way.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile.
+ * @returns the profile's facts.
+ * @throws {Error} when the profile's `package.json` lists bundles in a form `@delo/profile-safety` refuses.
+ */
+export async function readProfileFacts(home: string, profile: string): Promise<ProfileFacts> {
+  const profileDir = join(home, 'profiles', profile)
+  const manifest = await readJson(join(profileDir, 'package.json'))
+  const inventory = readInventory({ profileDir, homeDir: home })
+  const layers: LayerFact[] = (['profile-patch', 'home-patch'] as const).map(layer => ({
+    layer: layer === 'profile-patch' ? 'profile patch' : 'home patch',
+    rows: inventory.rows.filter(row => row.layer === layer && !row.disabled).map(row => ({ ...row.id === undefined ? {} : { id: row.id }, name: row.name, plugins: [row.name] })),
+  }))
+  return {
+    plugins: await Promise.all(Object.entries(dependenciesOf(manifest)).map(([name, spec]) => readPlugin(profileDir, name, spec))),
+    bundles: bundleListOf(manifest, join(profileDir, 'package.json')),
+    layers,
+    exemptions: { dsh: await readExemptions(profileDir, 'dsh'), delo: await readExemptions(profileDir, 'delo') },
+  }
+}
+
+/**
  * The versions a verified runtime's manifest names.
  * @param runtime - the verified runtime.
  * @returns its Delo, DSH and channel.
@@ -219,20 +243,7 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
   const tables = options.bundleTables ?? readBundleTables
   const bundleLayers = options.bundleLayers ?? readBundleLayers
   const verified = async (version: string): Promise<VerifiedRuntime> => store.checkRuntime(brandString<RuntimeVersion>(version), await options.root())
-  const profileFacts = async (): Promise<ProfileFacts> => {
-    const manifest = await readJson(join(profileDir, 'package.json'))
-    const inventory = readInventory({ profileDir, homeDir: home })
-    const layers: LayerFact[] = (['profile-patch', 'home-patch'] as const).map(layer => ({
-      layer: layer === 'profile-patch' ? 'profile patch' : 'home patch',
-      rows: inventory.rows.filter(row => row.layer === layer && !row.disabled).map(row => ({ ...row.id === undefined ? {} : { id: row.id }, name: row.name, plugins: [row.name] })),
-    }))
-    return {
-      plugins: await Promise.all(Object.entries(dependenciesOf(manifest)).map(([name, spec]) => readPlugin(profileDir, name, spec))),
-      bundles: bundleListOf(manifest, join(profileDir, 'package.json')),
-      layers,
-      exemptions: { dsh: await readExemptions(profileDir, 'dsh'), delo: await readExemptions(profileDir, 'delo') },
-    }
-  }
+  const profileFacts = async (): Promise<ProfileFacts> => readProfileFacts(home, profile)
   return {
     running: async () => versionsOf(await verified(options.running)),
     statuses: async (): Promise<InstallationStatusFacts> => {

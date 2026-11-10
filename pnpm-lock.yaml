@@ -1537,6 +1537,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@delo/contract-plugin-versions':
+        specifier: workspace:*
+        version: link:../../packages/contract-plugin-versions
       '@delo/contract-release-log':
         specifier: workspace:*
         version: link:../../packages/contract-release-log
@@ -1751,6 +1754,9 @@ importers:
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
+      '@delo/contract-update-report':
+        specifier: workspace:*
+        version: link:../contract-update-report
       '@delo/home-auth':
         specifier: workspace:*
         version: link:../home-auth
@@ -1791,6 +1797,9 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: workspace:*
         version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../../packages/client/locale
@@ -2634,6 +2643,16 @@ importers:
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
   delo/packages/plugin-sidebar:
+    dependencies:
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delo/contract-update-report':
+        specifier: workspace:*
+        version: link:../contract-update-report
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -2644,6 +2663,12 @@ importers:
       '@deepseek-ai/dsh-api-workspace-controller':
         specifier: workspace:*
         version: link:../../../packages/api/workspace-controller
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../../packages/client/locale

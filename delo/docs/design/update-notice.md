@@ -1,0 +1,101 @@
+---
+description: "Design of the update notice: the check that verifies the channel's newest release and sends nothing about the person, when it runs, how the terminal and the studio show it, the one switch that turns it off, the patch rule that keeps a security fix a patch, and how a plugin targets Delo's own version."
+---
+
+# The update notice
+
+English
+
+## Summary
+
+Updates stay manual: `delorun update` shows its report, asks, copies the chat data and rolls back on a failed health check. The update notice tells the person that a newer release exists. A running installation checks the release channel at start and on a schedule, verifies what it fetches as an update verifies it, and shows one line in the terminal and a quiet notice in the studio's sidebar. The notice names the kind of update, whether it is a security fix, how many installed plugins it would turn off, and the command to run; it applies nothing. Delo has one release stream, so a security fix is a release with a mark, and the release tool keeps such a fix a patch that leaves every plugin compatible. Delo's version and upstream's are two axes ([C17](../contracts/c17-plugin-versions.md)); [C21](../contracts/c21-delo-plugin-interface.md) states what a Delo version promises a plugin, and `delorun plugin check` shows an author what their declared ranges admit.
+
+## Contents
+
+- [What exists today](#what-exists-today)
+- [The rules](#the-rules)
+- [What this does not protect against](#what-this-does-not-protect-against)
+- [Denial tests](#denial-tests)
+- [What is built so far](#what-is-built-so-far)
+
+## What exists today
+
+- `delorun update` asks the home process to resolve the channel's newest release through `@delo/install`'s `LauncherChannel`, which verifies the root chain, the timestamp, the manifest, the release-log bundle and the online log check ([C2](../contracts/c02-release-manifest.md), [C18](../contracts/c18-release-log.md)), installs it into the store and prints [C3](../contracts/c03-update-report.md)'s report. Nothing tells a person that a release exists until they run it.
+- The timestamp names each channel's current release and its manifest. The manifest states the release's Delo version and its upstream version, `dsh`. No signed file marks a security fix or carries a summary.
+- `@delo/update`'s `evaluateRequirement` decides each installed plugin's two axes against a target release, for the report.
+- Upstream's `evaluatePluginCompatibility` decides both axes at install and at start. Nothing shows a plugin author what their ranges admit before they install.
+- The release tool signs any version the draft names. Nothing compares a release with the earlier releases of its minor.
+
+## The rules
+
+### The check
+
+1. The check is `checkForUpdate` in `delo/apps/cli/src/update/notice.ts`. It opens the home's channel as `delorun update` does: from the release roots of the launcher that started Delo, named in `DELO_LAUNCHER_ROOTS`, at the origins the installation recorded in `trust/channel.json`, through the same `LauncherChannel`. A Delo the launcher did not start has no anchored root, and its check fails without a request, and calls `LauncherChannel.newest`, which fetches `timestamp.json`, any newer root files, the channel's manifest and its release-log bundle, and verifies them with the functions an update uses: the root chain, the timestamp's signature, expiry and version against the stored timestamp, the manifest's digest against the timestamp and its targets signature, and the bundle's inclusion proof and witness cosignature. It runs no online log check, downloads no archive and writes nothing under `trust/`.
+2. A request carries no query, cookie, body or identifier. Nothing about the installed plugins leaves the machine.
+3. The result is the channel's newest release: its Delo version, its upstream version, whether its manifest marks it as a security fix, and its summary. A manifest without the mark is not a security fix; one without a summary has none.
+4. The plugin count is computed on the machine: each installed plugin of the profile is evaluated on both axes against the newest release's two versions with `evaluateRequirement`, through the same reduction the report uses, and the notice counts the plugins it would disable.
+5. The check has one deadline for all its requests, the row's `timeoutSeconds`. A failed or unverifiable check adds nothing to the notice and says nothing in it: the notice keeps showing the last verified release, if any, and `delorun doctor` names the failure.
+6. The result is written to `run/<profile>/update-check.json` ([C3](../contracts/c03-update-report.md#update-check)) with the time of the check: the newest verified release, when it was verified, and the last failure.
+
+### The signed fields
+
+7. The release manifest gains two optional fields, `security` and `summary`, signed with the rest by the offline targets key. The timestamp, whose online key signs only freshness, carries neither. A reader treats a manifest without them as no security fix and no summary.
+8. A summary is one line of at most 200 characters with no control or format character, because terminals and the studio show it. Signing requires both fields in every new draft.
+
+### When it runs
+
+9. The check is the `delo-update-check` row of `@delo/bundle-local`. Its Config holds `enabled`, the C16 switch `update_check`; `intervalHours`, at least 1 and 24 by default; and `timeoutSeconds`. The row provides the `deloUpdateCheck` service, and `delorun` attaches the check to it once the profile boots, only when the runtime runs from the store.
+10. At start the row runs the check when the last one, successful or not, is at least the interval old, and then repeats it on the interval while the Host runs. A start never waits for it.
+11. Delo Run keeps no connection to an installation and pushes nothing; every check starts on the machine.
+
+### Where it shows
+
+12. The terminal shows one line, such as `Delorun 0.1.3 is available (security fix; all your plugins stay compatible). Run: delorun update`. `delorun start` and a bare `delorun` print it from the last check once the home process runs; a foreground start prints it when its first check completes.
+13. The studio's sidebar shows a quiet notice with the version, the kind of update, the plugin count, the summary and the command. It reads `/api/deloUpdateCheck.notice` over the studio's connection and refreshes on reconnect, focus and an interval. It can be dismissed for that version and comes back for a newer one. A remote session shows the text only.
+14. `delorun update --check` runs the check on demand, whatever the switch says, and prints the same line, the summary and any failure. `delorun doctor` reports the last check.
+
+### Consent and control
+
+15. One switch, Settings → Privacy → Check for new releases, writes the row's `enabled`. Turning it off stops every scheduled check, and `delorun` removes the record on the next start.
+16. Setup's privacy note, shown in Quick and Full setup, states what is requested, from where, that those hosts see the machine's address, and how to turn the check off.
+17. The parity composition restates the row disabled, because stock makes no such request ([C16](../contracts/c16-parity-composition.md)).
+
+### The patch rule
+
+18. Signing refuses a release whose version is a patch of an earlier release of the same major and minor, a non-pre-release tag `v<major>.<minor>.<patch>` below it, when its upstream version differs from that release's, when upstream's persistence schema or Delo's record versions differ, or when the plugin-facing interface inventory differs or names an interface the release no longer declares ([C21](../contracts/c21-delo-plugin-interface.md)). A release that moves the upstream base is therefore at least a minor, and a security fix ships as a patch that disables no plugin.
+
+### Targeting Delo
+
+19. The two axes stay independent: `engines.delo` never overrides the upstream axis.
+20. `delorun plugin check <directory>` reads the plugin's `package.json` without importing its code, evaluates both axes against the running release with upstream's `evaluatePluginCompatibility`, the installer's evaluation, and prints what each declared range admits, what is undeclared, and the `engines.delo` range that targets the running Delo minor.
+
+## What this does not protect against
+
+- The hosts see the machine's address and the time of each check, as for every other integrity request ([threat model](../security/threat-model.md#the-network)).
+- The notice does not run the online log check. A release whose signed bundle verifies but which the log does not hold is noticed, and `delorun update` refuses it.
+- A host that withholds a newer release is noticed only when the timestamp expires; until then the notice shows the release the timestamp names.
+- A process running with the person's own access can write the record under `run/<profile>/` and so choose what the notice says; the record's reader refuses a summary with a control character, so it cannot rewrite the terminal.
+- The plugin count, like the update report, reads `engines.dsh` and not upstream's rule for a plugin without it, under which every `@deepseek-ai/dsh*` peer range must admit the running DSH. A plugin that states its upstream range only through peer dependencies is not counted when a release moves the base, though the start's preflight disables it.
+- The plugin count covers the version axes only. A revocation, a retired bundle or a profile row the update would change shows only in `delorun update`'s report.
+- The patch rule checks the inventory's names, not the interfaces' types. A change of an interface's behaviour within a patch is caught only by review.
+
+## Denial tests
+
+| Test | Proves |
+| --- | --- |
+| `update-notice-sends-no-identifier` | Every request of a check is a bare `GET` of a channel file, with no query, cookie, body or plugin name. |
+| `update-notice-unverified-index-silent` | A timestamp or manifest that does not verify adds nothing to the notice, keeps the last verified release and records the failure. |
+| `update-notice-replayed-timestamp-refused` | A timestamp older than the stored one is refused. |
+| `update-notice-writes-no-trust-state` | A check leaves `trust/` byte for byte as it was. |
+| `update-notice-deadline` | A host that never answers ends the check at its deadline without a notice. |
+| `update-notice-off-makes-no-request` | With the switch off the row registers nothing and no request is made. |
+| `update-notice-remote-session-offers-no-action` | A remote session's notice offers no control. |
+| `c02-summary-control-characters-refused` | A summary with an escape, a line break or a direction override is refused by the reader and by signing. |
+| `patch-rule-refuses-base-move` | A patch whose upstream version differs from the earlier release's refuses to sign. |
+| `patch-rule-refuses-persistence-change`, `patch-rule-refuses-delo-record-change` | A patch whose data formats differ refuses to sign. |
+| `patch-rule-refuses-interface-removal`, `patch-rule-refuses-interface-addition` | A patch whose interface inventory differs refuses to sign. |
+| `plugin-check-imports-no-code` | `delorun plugin check` reads the manifest and runs none of the plugin's files. |
+
+## What is built so far
+
+The rules above are built. The contract pages state them as built facts: the check, its record and the notice in [C3](../contracts/c03-update-report.md#update-check), the signed fields in [C2](../contracts/c02-release-manifest.md), the switch in [C16](../contracts/c16-parity-composition.md), the record's path in [C1](../contracts/c01-home-layout.md), and the promise, the patch rule and `delorun plugin check` in [C21](../contracts/c21-delo-plugin-interface.md) and [C17](../contracts/c17-plugin-versions.md). This page keeps the reasons the rules are as they are.

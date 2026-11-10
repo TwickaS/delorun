@@ -18,12 +18,16 @@ import {
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { UndoNotice } from '../src/client/UndoNotice.tsx'
+import { UpdateNoticeCard } from '../src/client/UpdateNotice.tsx'
 import { DEFAULT_SIDEBAR_SETTINGS, MAX_WORKSPACE_ICONS, SIDEBAR_ROW_ID, type SidebarSettings } from '../src/config.ts'
 import { DEFAULT_WORKSPACE_ICON } from '../src/workspace-icon.ts'
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  window.localStorage.clear()
 })
 
 const t = makeTranslate(en)
@@ -34,8 +38,13 @@ interface Entry {
 }
 
 /** The services the studio half injects, recording what it registers and every layout change. */
-function harness(options: { readonly studio?: boolean; readonly settings?: SidebarSettings | undefined; readonly served?: boolean; readonly set?: ConfigForm<SidebarSettings>['set'] } = {}) {
+function harness(options: {
+  readonly studio?: boolean; readonly settings?: SidebarSettings | undefined; readonly served?: boolean; readonly set?: ConfigForm<SidebarSettings>['set']
+  /** The page's remote media mode, as the connection service states it; no connection service without it. */
+  readonly remoteMedia?: 'load' | 'placeholder'
+} = {}) {
   const ctx = new Context()
+  if (options.remoteMedia !== undefined) ctx.provide('connection', { remoteMedia: options.remoteMedia } as never)
   const dictionaries = new Map<string, unknown>()
   ctx.provide('locale', {
     bind: () => t,
@@ -286,6 +295,62 @@ describe('the studio half', () => {
     expect(h.face<UndoNoticeInjected>(`sidebar.footer.action#${UNDO_NOTICE.id}`).undoLine.getSnapshot()).toBeNull()
     await provider.dispose()
     expect(list.states()).toBeNull()
+  })
+})
+
+describe('the update notice in the studio', () => {
+  const NOTICE = {
+    running: { delo: '0.1.2', dsh: '0.2.2' }, release: { delo: '0.1.3', dsh: '0.2.2', channel: 'stable', security: true }, kind: 'patch', disables: 0,
+  }
+
+  /** Answer every read of the notice route with the notice. */
+  function serve() {
+    const fetch = vi.fn((_input: string) => Promise.resolve(new Response(JSON.stringify({ notice: NOTICE }))))
+    vi.stubGlobal('fetch', fetch)
+    return fetch
+  }
+
+  it('reads the notice when the studio starts, on each new connection and at the configured interval, and stops when disposed', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const fetch = serve()
+    const h = harness({ settings: { ...DEFAULT_SIDEBAR_SETTINGS, updateNoticeRefreshMinutes: 5 } })
+    await h.fiber.await()
+    const face = h.face<SidebarInjected>('sidebar.workspaces.list#').updateNotice
+    await vi.waitFor(() => { expect(face.notice.getSnapshot()?.release.delo).toBe('0.1.3') })
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual(['api/deloUpdateCheck.notice'])
+    h.ctx.emit('connection/reset')
+    expect(fetch).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(5 * 60_000)
+    expect(fetch).toHaveBeenCalledTimes(3)
+    h.change({ ...DEFAULT_SIDEBAR_SETTINGS, updateNoticeRefreshMinutes: 60 })
+    vi.advanceTimersByTime(5 * 60_000)
+    expect(fetch).toHaveBeenCalledTimes(3)
+    await h.fiber.dispose()
+    h.ctx.emit('connection/reset')
+    vi.advanceTimersByTime(24 * 60 * 60_000)
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('hides the notice for the dismissed release on this computer, and keeps the dismissal in the browser', async () => {
+    serve()
+    const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS, remoteMedia: 'load' })
+    await h.fiber.await()
+    const face = h.face<SidebarInjected>('sidebar.workspaces.list#').updateNotice
+    render(<UpdateNoticeCard face={face} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: en['update.dismiss'] }))
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(window.localStorage.getItem('delo:sidebar:update.dismissed')).toBe('0.1.3')
+  })
+
+  it('offers no control on a page a reach listener served', async () => {
+    serve()
+    const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS, remoteMedia: 'placeholder' })
+    await h.fiber.await()
+    const face = h.face<SidebarInjected>('sidebar.workspaces.list#').updateNotice
+    expect(face.dismiss).toBeNull()
+    render(<UpdateNoticeCard face={face} t={t} />)
+    expect((await screen.findByRole('status')).textContent).toContain(en['update.kind.security'])
+    expect(screen.queryAllByRole('button')).toEqual([])
   })
 })
 

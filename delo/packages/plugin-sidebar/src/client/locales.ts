@@ -1,6 +1,6 @@
 /**
  * The sidebar's copy: search, the workspace filter, sections and shelves, row states and actions, the undo line, the
- * workspace icon picker and Settings → Sidebar.
+ * workspace icon picker, the update notice and Settings → Sidebar.
  * @module @delo/plugin-sidebar/client/locales
  */
 
@@ -188,6 +188,19 @@ export const en = {
   'drop.wake': 'Wake',
   'undo': 'Undo',
   'foot.settings': 'Settings',
+  'update.title': 'Delorun {version} is available',
+  'update.title.base': 'Delorun {version} is available, on DeepSeek Harness {dsh}',
+  'update.kind.security': 'Security fix',
+  'update.kind.patch': 'Patch release',
+  'update.kind.minor': 'Minor release',
+  'update.kind.major': 'Major release',
+  'update.separator': ' · ',
+  'update.plugins.none': 'All your plugins stay compatible',
+  'update.plugins.one': 'It would turn off 1 of your plugins',
+  'update.plugins.other': 'It would turn off {count} of your plugins',
+  'update.run': 'Run {command} in a terminal on this computer.',
+  'update.run.remote': 'Run {command} in a terminal on the computer that runs Delo.',
+  'update.dismiss': 'Hide this notice until a newer release',
   'empty.none': 'No chats yet',
   'empty.scoped': 'No chats in {name} yet',
   'empty.scopedMany': 'No chats in these workspaces yet',
@@ -397,6 +410,19 @@ export const zh: Record<SidebarLocaleKey, string> = {
   'drop.wake': '唤醒',
   'undo': '撤销',
   'foot.settings': '设置',
+  'update.title': 'Delorun {version} 已发布',
+  'update.title.base': 'Delorun {version} 已发布，基于 DeepSeek Harness {dsh}',
+  'update.kind.security': '安全修复',
+  'update.kind.patch': '补丁版本',
+  'update.kind.minor': '次要版本',
+  'update.kind.major': '主要版本',
+  'update.separator': ' · ',
+  'update.plugins.none': '你的所有插件都保持兼容',
+  'update.plugins.one': '将停用你的 1 个插件',
+  'update.plugins.other': '将停用你的 {count} 个插件',
+  'update.run': '在这台电脑的终端中运行 {command}。',
+  'update.run.remote': '在运行 Delo 的电脑的终端中运行 {command}。',
+  'update.dismiss': '隐藏此提醒，直到有更新的版本',
   'empty.none': '还没有对话',
   'empty.scoped': '{name} 中还没有对话',
   'empty.scopedMany': '这些工作区中还没有对话',

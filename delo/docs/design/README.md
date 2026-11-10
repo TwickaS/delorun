@@ -21,6 +21,7 @@ A design changes through a pull request like any other document. A change to a d
 ## The designs
 
 - [Update and rollback](update-and-rollback.md): the update report's data item, the copy of chat data taken by default, the one rollback table, why a rollback deletes nothing, the refusal of a lower version, and verified updates for the desktop app.
+- [The update notice](update-notice.md): the verified check for a newer release that sends nothing about the person, the terminal line and the sidebar notice, the switch that turns it off, the patch rule, and how a plugin targets Delo's version.
 - [Reach on your own tailnet](reach.md): opening the studio from your own devices, device approval only at the home's computer, what a remote session may and may not do, and records and limits for loopback credentials.
 - [The first run](first-run.md): one command from install to a first chat, the launcher's progress, Quick and Full setup, the background start and onboarding in the studio.
 - [Changes to your harness](changes.md): your harness is the signed release plus the changes you approved; reviewing, applying and undoing a change, work sessions, the protection setting, and recovery when a change breaks something.

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The Privacy section turns each upstream opt-in on only after consent, alone, and off again from the same screen. */
+/** The Privacy section turns each switch on only after consent, alone, and off again from the same screen. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
@@ -18,9 +18,9 @@ import { TITLE_KEY } from '../src/client/title.ts'
 afterEach(cleanup)
 
 /** One opt-in's Host form, accepting each write as the Host would. */
-function hostForm(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready') {
+function hostForm(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready', enabled = false) {
   const state = createSnapshotStore<ConfigFormSnapshot<OptInSettings>>({
-    status, value: status === 'ready' ? { enabled: false } : undefined, base: {}, user: {}, revision: 0, writable: true,
+    status, value: status === 'ready' ? { enabled } : undefined, base: {}, user: {}, revision: 0, writable: true,
   })
   const set = vi.fn(async (_field: string, value: unknown) => {
     state.update((draft) => { draft.value = { enabled: value === true } })
@@ -33,8 +33,8 @@ function hostForm(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready')
   return { form, set, optIn: new OptIn(form) }
 }
 
-function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['status'] = 'ready') {
-  const forms = { sessionLog: hostForm(), analytics: hostForm(analyticsStatus) }
+function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['status'] = 'ready', updateCheck: { status?: ConfigFormSnapshot<OptInSettings>['status']; enabled?: boolean } = {}) {
+  const forms = { sessionLog: hostForm(), analytics: hostForm(analyticsStatus), updateCheck: hostForm(updateCheck.status, updateCheck.enabled) }
   // The renderer's standard props are absent: the section reads none of them.
   const props = {
     t: makeTranslate(en),
@@ -43,6 +43,8 @@ function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['statu
     useSessionLogMutation: bindSnapshotSelector(forms.sessionLog.optIn.state),
     useAnalytics: bindSnapshotSelector(forms.analytics.form),
     useAnalyticsMutation: bindSnapshotSelector(forms.analytics.optIn.state),
+    useUpdateCheck: bindSnapshotSelector(forms.updateCheck.form),
+    useUpdateCheckMutation: bindSnapshotSelector(forms.updateCheck.optIn.state),
     setEnabled: (id: OptInId, enabled: boolean) => forms[id].optIn.setEnabled(enabled),
   } as PrivacySectionProps
   render(<PrivacySection {...props} />)
@@ -52,9 +54,9 @@ function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['statu
 const switchOf = (name: string): HTMLElement => screen.getByRole('switch', { name })
 
 describe('the Privacy section', () => {
-  it('states that Delo has no telemetry and shows both opt-ins off', () => {
+  it('states that Delo has no telemetry and how the release check works, and shows both opt-ins off', () => {
     renderSection()
-    for (const key of ['statement.delo', 'statement.optIns', 'statement.feedback'] as const) expect(screen.getByText(en[key])).toBeTruthy()
+    for (const key of ['statement.delo', 'statement.optIns', 'statement.feedback', 'statement.updateCheck'] as const) expect(screen.getByText(en[key])).toBeTruthy()
     expect(switchOf(en['sessionLog.title']).getAttribute('aria-checked')).toBe('false')
     expect(switchOf(en['analytics.title']).getAttribute('aria-checked')).toBe('false')
   })
@@ -62,6 +64,7 @@ describe('the Privacy section', () => {
   it.each([
     { id: 'sessionLog', other: 'analytics' },
     { id: 'analytics', other: 'sessionLog' },
+    { id: 'updateCheck', other: 'sessionLog' },
   ] as const)('turns $id on alone after consent and off again from the same screen', async ({ id, other }) => {
     const forms = renderSection()
     const toggle = switchOf(en[`${id}.title`])
@@ -95,6 +98,51 @@ describe('the Privacy section', () => {
     expect(switchOf(en['sessionLog.title'])).toBeTruthy()
   })
 
+  it('shows the release check on by default, turns it off at once, and asks before it is on again', async () => {
+    const forms = renderSection('ready', { enabled: true })
+    const toggle = switchOf(en['updateCheck.title'])
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText(en['updateCheck.description'])).toBeTruthy()
+    fireEvent.click(toggle)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('false') })
+    fireEvent.click(toggle)
+    const dialog = screen.getByRole('dialog', { name: en['updateCheck.confirm.title'] })
+    expect(within(dialog).getByText(en['updateCheck.confirm.body']).textContent).toMatch(/Nothing is downloaded or installed until you run delorun update\.$/)
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.accept'] }))
+    await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('true') })
+    expect(forms.updateCheck.set.mock.calls).toEqual([['enabled', false], ['enabled', true]])
+    expect([forms.sessionLog.set, forms.analytics.set].map(set => set.mock.calls.length)).toEqual([0, 0])
+  })
+
+  it('closes the consent dialog from its close button without writing', () => {
+    const forms = renderSection()
+    fireEvent.click(switchOf(en['updateCheck.title']))
+    const dialog = screen.getByRole('dialog', { name: en['updateCheck.confirm.title'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.close'] }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(forms.updateCheck.set).not.toHaveBeenCalled()
+  })
+
+  it('writes a switch once while its first write is still crossing the wire', async () => {
+    const { set, optIn } = hostForm()
+    let release: (accepted: boolean) => void = () => {}
+    set.mockImplementationOnce(() => new Promise<boolean>((resolve) => { release = resolve }))
+    const first = optIn.setEnabled(true)
+    await optIn.setEnabled(false)
+    expect(set.mock.calls).toEqual([['enabled', true]])
+    release(true)
+    await first
+    expect(optIn.state.getSnapshot()).toEqual({ busy: false, failed: false })
+  })
+
+  it('says why the release check has no switch in a profile that does not serve it', () => {
+    renderSection('ready', { status: 'unavailable' })
+    expect(screen.getByText(en['updateCheck.unavailable'])).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: en['updateCheck.title'] })).toBeNull()
+    expect(screen.queryByText(en['analytics.unavailable'])).toBeNull()
+  })
+
   it.each(['refused', 'rejected'] as const)('keeps the accepted value and says so after a %s write', async (failure) => {
     const forms = renderSection()
     if (failure === 'refused') forms.sessionLog.set.mockResolvedValue(false)
@@ -112,7 +160,7 @@ describe('the Privacy section', () => {
 
 describe('the plugin', () => {
   it('registers the section and writes each opt-in to its own upstream row', async () => {
-    expect(OPT_IN_ROWS).toEqual({ sessionLog: 'session-log-deepseek', analytics: 'product-analytics' })
+    expect(OPT_IN_ROWS).toEqual({ sessionLog: 'session-log-deepseek', analytics: 'product-analytics', updateCheck: 'delo-update-check' })
     const ctx = new Context()
     const locale = new LocaleRuntime(ctx)
     try {
@@ -150,6 +198,10 @@ describe('the plugin', () => {
       expect(sessionLog).not.toHaveBeenCalled()
       await face.setEnabled('sessionLog', false)
       expect(sessionLog).toHaveBeenCalledWith('enabled', false)
+      const updateCheck = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.updateCheck), 'set').mockResolvedValue(true)
+      await face.setEnabled('updateCheck', false)
+      expect(updateCheck.mock.calls).toEqual([['enabled', false]])
+      expect(analytics).toHaveBeenCalledTimes(1)
       // No versions in the page: the stock version row stays.
       expect(slots.entries('settings.general.item')).toEqual([])
       // ctx.deloNotice records the notice's acknowledgement for a flow that shows its copy itself.

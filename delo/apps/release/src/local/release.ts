@@ -27,6 +27,7 @@ import {
   DESKTOP_PLATFORMS,
   RELEASE_REPOSITORY_URL,
   RELEASE_SCHEMAS,
+  RELEASE_SUMMARY_MAX_LENGTH,
   type FileRef,
   type ReleaseManifest,
   type RuntimePlatform,
@@ -40,7 +41,7 @@ import { logRelease, type LogEndpoints } from '../log/client.ts'
 import { entryRequest } from '@delo/release-formats/log/entry'
 import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { toJsonValue } from '@delo/release-formats/sign/json'
-import { ManifestSchema, readEnvelope } from '@delo/release-formats/sign/schemas'
+import { ManifestSchema, readEnvelope, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
 import { initialState, nextTimestamp, readTimestampState, stateAfter } from '../sign/timestamp.ts'
 import { trustRootChain, verifyTimestamp } from '@delo/release-formats/sign/verify'
 
@@ -68,6 +69,10 @@ export interface LocalReleaseRequest {
   readonly version: string
   /** The upstream release the commit is based on, such as `0.2.2-rc.1`. */
   readonly dsh: string
+  /** Whether the release is marked as a security fix; the manifest's `security`. */
+  readonly security: boolean
+  /** The release's one-line summary, the manifest's `summary`; it must match `RELEASE_SUMMARY_PATTERN`. */
+  readonly summary: string
   /** The channel directory; a version already in it is refused, and the timestamp is replaced. */
   readonly channel: string
   /** The root files, oldest first: the root the launcher ships, then each later root. */
@@ -145,6 +150,8 @@ function localManifest(request: LocalReleaseRequest, runtime: { readonly archive
     install: { sh: absent('install.sh'), ps1: absent('install.ps1') },
     rebuild: { record: absent(`delorun-${request.version}.rebuild.json`), builders: [{ name: LOCAL_BUILDER, ci: false }] },
     advisories: { report: absent(`delorun-${request.version}.advisories.json`), accepted: [] },
+    security: request.security,
+    summary: request.summary,
   })
 }
 
@@ -162,12 +169,15 @@ async function replaceFile(path: string, bytes: Uint8Array | string): Promise<vo
  * Build, sign and log one release into a channel directory.
  * @param request - the commit, version, channel, keys, log and closure build.
  * @returns the signed manifest and the timestamp's version.
- * @throws Error when the version is already in the channel, the closure build did not write its files, the targets key
- *   is not the newest root's active targets key, the log gives no witnessed checkpoint, or any signed file fails the
- *   verification the client will run. The channel's timestamp is replaced last, so a failed build leaves the channel
+ * @throws Error when the summary is not a valid release summary, the version is already in the channel, the closure
+ *   build did not write its files, the targets key is not the newest root's active targets key, the log gives no
+ *   witnessed checkpoint, or any signed file fails the verification the client will run. The channel's timestamp is replaced last, so a failed build leaves the channel
  *   serving the release it served before.
  */
 export async function buildLocalRelease(request: LocalReleaseRequest): Promise<LocalRelease> {
+  if (!ReleaseSummarySchema.safeParse(request.summary).success) {
+    throw new Error(`the summary ${JSON.stringify(request.summary)} is not a release summary: 1 to ${String(RELEASE_SUMMARY_MAX_LENGTH)} characters on one line, with no control or format character and no whitespace at either end`)
+  }
   const release = releaseDirectory(request.channel, request.version)
   if (existsSync(release)) throw new Error(`${release} exists; a local release never replaces a version already in the channel`)
   const now = Math.floor(request.now.getTime() / 1000)

@@ -175,9 +175,10 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     // Without HOME the home resolves from the account database, so the verdicts of the home and key checks depend on the machine.
     const result = doctorWithEnvironment(['--port', '1'], {})
     const lines = (result.stdout + result.stderr).split('\n').filter(line => line !== '')
-    expect(lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log'])
+    expect(lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log', 'update'])
     expect(lines.find(line => line.includes(' docker: '))).toMatch(/^(?:pass|warn) docker: /)
     expect(lines.find(line => line.includes(' port: '))).toMatch(/^(?:pass|fail) port: /)
+    expect(lines.find(line => / update: /.test(line))).toMatch(/^pass update: this Delo does not run from the runtime store/)
     expect(result.status).toBe(lines.some(line => line.startsWith('fail ')) ? 1 : 0)
     expect(result.stderr).not.toMatch(/\n\s+at /)
     expect(result.stdout + result.stderr).not.toContain('sk-')
@@ -213,7 +214,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
   it('prints help that says no model is contacted and no command runs, and exits 0', () => {
     const result = doctor(['--help'])
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain('No model is contacted and no command runs')
+    expect(result.stdout).toContain('No model is contacted, no request is sent and no command runs')
     expect(result.stdout).toContain('default: the profile\'s studio port, or 3080 when the profile sets none')
   })
 

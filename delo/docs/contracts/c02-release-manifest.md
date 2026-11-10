@@ -143,6 +143,10 @@ The timestamp command, `node_modules/.bin/tsx delo/apps/release/src/sign-timesta
 | `install` | `{ "sh": FileRef, "ps1": FileRef }` | The install scripts; the release notes and the Trust page print the same digests. |
 | `rebuild` | `{ "record": FileRef, "builders": [{ "name", "ci": false }] }` | The rebuild record and who rebuilt ([rebuild before signing](#rebuild-before-signing)). |
 | `advisories` | `{ "report": FileRef, "accepted": [advisory ids] }` | The advisory check's result and every accepted advisory. |
+| `security` | boolean, optional | Whether the release is marked as a security fix. A reader treats an absent value as `false`. |
+| `summary` | string, optional | The release's one-line summary: 1 to 200 Unicode code points, no control (Cc), format (Cf), line separator (Zl) or paragraph separator (Zp) character, and no whitespace at either end, so it prints as one plain line on a terminal and in the studio (`isValidSummary`). A reader treats an absent value as no summary. |
+
+Signing writes `security` and `summary` into every manifest, and an update notice shows them with `version` and `dsh`; they are in the targets-signed manifest because the timestamp key signs only freshness.
 
 A manifest carries no expiry: freshness is the timestamp's job, so a manifest stays valid for a rollback to its release for as long as its signing key verifies it.
 
@@ -275,7 +279,7 @@ The desktop app is upstream's, unchanged, and Delo builds none. Its updater (`De
 
 ## Compatibility
 
-Each file's `schema` names its major version; a change that an older reader would misread adds a new major version, and the release publishes both versions of a file while clients that read only the old one are supported. New optional fields need a new major version too, because readers refuse unknown fields. Upstream's desktop update flow, `latest.yml` feeds and electron-updater stay as upstream ships them.
+Each file's `schema` names its major version; a change that an older reader would misread adds a new major version, and the release publishes both versions of a file while clients that read only the old one are supported. New optional fields need a new major version too, because readers refuse unknown fields. The optional `security` and `summary` fields were added to `delo.release-manifest/1` before any release was published, so no reader that refuses them exists; from the first published release, a new field needs a new major version. Upstream's desktop update flow, `latest.yml` feeds and electron-updater stay as upstream ships them.
 
 ## Security
 
@@ -292,6 +296,8 @@ Each file's `schema` names its major version; a change that an older reader woul
 - R9. Nothing lands under `~/.delo/runtimes/` before signature, digest and log checks pass. The install scripts, with their published digests, are not built.
 - R10. npm packages publish only through trusted publishing with an OIDC build attestation; no npm token exists in the workflow. Not built: no workflow publishes them.
 - R11. Every PE file in a Windows closure and the desktop app carries an Authenticode signature, and the manifest records the signed files' digests. Not built.
+- R12. Signing refuses a draft whose `dsh` is not the `version` of `packages/boot/app-boot/package.json` at the release commit, and refuses a patch release (a version whose major and minor equal those of a lower `v<major>.<minor>.<patch>` tag without a pre-release suffix) whose upstream version, `docs/persistence-schema.json`, `delo/packages/update/src/data-records.json` or covered plugin-facing interface (`delo/packages/contract-plugin-versions/plugin-interface.json`) differs from that release's, or whose release commit no longer declares a covered service; a missing file refuses. A security fix therefore ships as a patch that disables no plugin, and a release that moves the upstream base is at least a minor.
+- R13. Signing refuses a draft without `security` or `summary`, or with a summary that is not one plain line within the limit; readers refuse such a manifest too.
 
 ### Denial tests
 
@@ -321,6 +327,21 @@ Each file's `schema` names its major version; a change that an older reader woul
 | `c02-advisory-acceptance-passes-and-shows` | WP3.1 | The same lockfile passes with a matching acceptance, and the assembled release notes show the advisory, its package, range, reason, approver, lapse release and date. |
 | `c02-advisory-lapsed-acceptance-fails` | WP3.1 | A release whose version is above the acceptance's `lapsesAfter` fails the check. |
 | `c02-advisory-feed-unreachable-fails` | WP3.1 | A feed stand-in that refuses connections fails the check. |
+| `c02-summary-control-characters-refused` | update-notice | A summary holding an ESC (`\u001b`), a newline or a U+202E right-to-left override is refused by the manifest reader and by signing. |
+| `c02-summary-too-long-refused` | update-notice | A summary of 201 code points is refused by the reader and by signing; 200 reads. |
+| `c02-security-not-boolean-refused` | update-notice | A `security` that is a string, a number or `null` is refused by the reader and by signing. |
+| `c02-manifest-without-notice-fields-reads` | update-notice | A manifest without `security` and `summary` reads, and its reader sees no security marker and no summary. |
+| `c02-draft-without-notice-fields-refused` | update-notice | Signing refuses a draft without `security`, and one without `summary`, and writes nothing. |
+| `patch-rule-refuses-base-move` | update-notice | A patch whose upstream version differs from the earlier release's is refused, naming both versions and the minor to release instead. |
+| `patch-rule-refuses-draft-base-mismatch` | update-notice | A draft whose `dsh` differs from the app-boot version at the release commit is refused, patch or not. |
+| `patch-rule-refuses-persistence-change` | update-notice | A patch whose `docs/persistence-schema.json` differs from, or is missing at, the earlier release or the release commit is refused. |
+| `patch-rule-refuses-delo-record-change` | update-notice | A patch whose `data-records.json` differs from the earlier release's is refused. |
+| `patch-rule-refuses-interface-removal` | update-notice | A patch that drops a covered entry, or whose release commit no longer declares a covered service or reads a covered manifest field, is refused. |
+| `patch-rule-refuses-interface-addition` | update-notice | A patch that adds or changes a covered entry is refused. |
+| `patch-rule-refuses-missing-inventory` | update-notice | A patch whose inventory is missing or unreadable at the earlier release or at the release commit is refused. |
+| `patch-rule-allows-equal-patch` | update-notice | A security-fix patch with the earlier release's base, data formats and covered interface signs, and its manifest carries `security: true`. |
+| `patch-rule-skips-new-minor` | update-notice | `0.2.0` after `0.1.x` signs on a moved upstream base. |
+| `patch-rule-ignores-prerelease-tags` | update-notice | A pre-release tag is no existing release, and `0.1.3-rc.1` is checked as `0.1.3`. |
 
 ### What this does not prove
 

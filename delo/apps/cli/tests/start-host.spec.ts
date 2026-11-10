@@ -86,6 +86,7 @@ describe('runningHost', () => {
         shutdown: (code) => { calls.push(`shutdown ${String(code)}`); return Promise.resolve() },
         dispose: () => { calls.push('dispose'); return Promise.resolve() },
         watchChats: () => { calls.push('watch') },
+        watchUpdates: () => Promise.resolve(),
         studio: () => studio,
         studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
       },

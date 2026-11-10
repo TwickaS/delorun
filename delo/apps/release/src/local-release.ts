@@ -2,9 +2,13 @@
  * Builds one signed release into a directory laid out as a release channel, for a launcher built with that directory's
  * origin as its channel origin. The same commit can be built as two versions, so an update exists to take:
  *
- * `node_modules/.bin/tsx delo/apps/release/src/local-release.ts --version <version> --out <channel dir> --root <root file>...
- * --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url> --log-checkpoint <url>
- * --log-tiles <url> [--log-poll-seconds <n>] [--artifacts build|existing] [--commit <rev>] [--closures-from <dir>] [--cache <dir>]`
+ * `node_modules/.bin/tsx delo/apps/release/src/local-release.ts --version <version> --summary <text> [--security] --out <channel dir>
+ * --root <root file>... --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url>
+ * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--artifacts build|existing] [--commit <rev>]
+ * [--closures-from <dir>] [--cache <dir>]`
+ *
+ * `--summary` is the release's one-line summary and `--security` marks the release as a security fix; the signed
+ * manifest carries both as `summary` and `security` (false without the flag), which an update notice shows.
  *
  * Without `--closures-from`, the command builds the Linux x64 runtime closure from `--commit` (`HEAD` by default) with
  * `build-closure.ts`'s recipe, which needs the pinned Node and pnpm and a long build (`--artifacts existing` reuses the
@@ -63,6 +67,8 @@ export async function main(argv: readonly string[], build: (repository: string, 
     strict: true,
     options: {
       'version': { type: 'string' },
+      'summary': { type: 'string' },
+      'security': { type: 'boolean', default: false },
       'out': { type: 'string' },
       'root': { type: 'string', multiple: true },
       'targets-key': { type: 'string' },
@@ -79,11 +85,11 @@ export async function main(argv: readonly string[], build: (repository: string, 
     },
   })
   try {
-    const { version, out, root, state } = values
+    const { version, summary, out, root, state } = values
     const keys = [values['targets-key'], values['timestamp-key']]
     const log = [values['log-submit'], values['log-checkpoint'], values['log-tiles']]
-    if (version === undefined || out === undefined || root === undefined || state === undefined || keys.includes(undefined) || log.includes(undefined)) {
-      throw new Error('pass --version, --out, --root, --targets-key, --timestamp-key, --state, --log-submit, --log-checkpoint and --log-tiles')
+    if (version === undefined || summary === undefined || out === undefined || root === undefined || state === undefined || keys.includes(undefined) || log.includes(undefined)) {
+      throw new Error('pass --version, --summary, --out, --root, --targets-key, --timestamp-key, --state, --log-submit, --log-checkpoint and --log-tiles')
     }
     semanticVersion(version)
     if (!isArtifactSource(values.artifacts)) throw new Error(`--artifacts is build or existing, not ${values.artifacts}`)
@@ -105,6 +111,8 @@ export async function main(argv: readonly string[], build: (repository: string, 
       commit,
       version,
       dsh: upstreamVersion(repository, commit),
+      security: values.security,
+      summary,
       channel: resolve(out),
       roots: root.map(path => readFileSync(resolve(path))),
       targetsKey: readSigningKey(resolve(values['targets-key']!)),

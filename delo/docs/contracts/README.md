@@ -33,6 +33,7 @@ A contract is a specification that work packages consume as written: the types, 
 | C18 | [C18 Release log and witness](c18-release-log.md) | [`@delo/contract-release-log`](../../packages/contract-release-log/README.md) | Partly | `delo/apps/release`, `delo/apps/install` and `delo/apps/npm-launcher`, `delo/packages/release-verify`, `delorun verify` |
 | C19 | [C19 Home process and update handshake](c19-home-process.md) | [`@delo/contract-home-process`](../../packages/contract-home-process/README.md) | Partly | `delo/packages/home-process`, `delo/apps/cli`, `delo/packages/runtime-store`, `delo/packages/logs` |
 | C20 | [C20 Operational logs](c20-operational-logs.md) | [`@delo/contract-operational-logs`](../../packages/contract-operational-logs/README.md) | Partly | `delo/packages/logs`, `delo/apps/cli` (`delorun logs` and purge), `delo/packages/home-process`, `delo/apps/relay` |
+| C21 | [C21 What a Delo version promises a plugin](c21-delo-plugin-interface.md) | [`@delo/contract-plugin-versions`](../../packages/contract-plugin-versions/README.md) | Partly | `delo/apps/release` (the patch rule), `delo/apps/cli` (`delorun plugin check`), plugin authors |
 
 ## Changing a contract
 

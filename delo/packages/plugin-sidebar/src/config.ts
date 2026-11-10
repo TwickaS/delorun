@@ -2,8 +2,9 @@
  * The sidebar's settings, shared by the host half that stores them and the
  * studio half that applies them: the header art and its palette, how the
  * chat list groups and sorts chats, whether working chats gather on their
- * shelf, whether unpinning asks first, the sidebar's width, and each
- * Workspace's icon (kept as stored; the studio validates each icon it reads).
+ * shelf, whether unpinning asks first, the sidebar's width, each
+ * Workspace's icon (kept as stored; the studio validates each icon it reads),
+ * and how often the studio asks the harness for the update notice.
  * @module @delo/plugin-sidebar/config
  */
 import type { Volatile } from '@deepseek-ai/cordis'
@@ -57,6 +58,9 @@ export const SIDEBAR_WIDTH = { min: 240, max: 420, step: 4, notches: [256, 280] 
 /** The most Workspace icons the setting holds; the studio drops the oldest beyond it, and a stored value above it is refused. */
 export const MAX_WORKSPACE_ICONS = 200
 
+/** The range, in minutes, of the studio's interval between reads of the update notice. */
+export const UPDATE_NOTICE_REFRESH_MINUTES = { min: 5, max: 1440 } as const
+
 /** The settings as the studio reads them. */
 export interface SidebarSettings {
   headerArt: HeaderArt
@@ -82,12 +86,17 @@ export interface SidebarSettings {
    * `readWorkspaceIcons`. A Workspace without a valid icon shows its monogram.
    */
   workspaceIcons: Record<string, unknown>
+  /**
+   * Minutes between the studio's reads of the update notice, within `UPDATE_NOTICE_REFRESH_MINUTES`; the studio also
+   * reads it when it starts, reconnects or regains focus.
+   */
+  updateNoticeRefreshMinutes: number
 }
 
 /** The settings a studio applies before its stored ones arrive. */
 export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettings = {
   headerArt: 'blueprint', artPalette: 'accent', view: 'cards', workingShelf: true, artSeed: 1, artStrength: 'standard', artStyle: 'artwork', sort: 'updated',
-  confirmUnpin: false, width: 256, workspaceIcons: {},
+  confirmUnpin: false, width: 256, workspaceIcons: {}, updateNoticeRefreshMinutes: 60,
 }
 
 /** The host half's live configuration: one field per setting. */
@@ -103,6 +112,7 @@ export interface Config {
   confirmUnpin: Volatile<boolean>
   width: Volatile<number>
   workspaceIcons: Volatile<Record<string, unknown>>
+  updateNoticeRefreshMinutes: Volatile<number>
 }
 
 /** The configuration schema: each field validated, defaulted, and changeable while the studio runs. */
@@ -121,4 +131,6 @@ export const Config = z.object({
     return icons
   }, true).default({}).volatile(),
   width: z.number().min(SIDEBAR_WIDTH.min).max(SIDEBAR_WIDTH.max).step(SIDEBAR_WIDTH.step).default(DEFAULT_SIDEBAR_SETTINGS.width).volatile(),
+  updateNoticeRefreshMinutes: z.natural().min(UPDATE_NOTICE_REFRESH_MINUTES.min).max(UPDATE_NOTICE_REFRESH_MINUTES.max)
+    .description('Minutes between the studio\'s reads of the update notice.').default(DEFAULT_SIDEBAR_SETTINGS.updateNoticeRefreshMinutes).volatile(),
 })

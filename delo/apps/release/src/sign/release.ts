@@ -39,18 +39,22 @@ import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
 import { signEnvelope } from '@delo/release-formats/sign/envelope'
 import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from '@delo/release-formats/sign/json'
-import { ManifestSchema, readEnvelope, readRebuildRecord } from '@delo/release-formats/sign/schemas'
+import { ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
+import { patchRuleProblem } from './patch-rule.ts'
 
 /** Signing refused; the message names what is missing or wrong. */
 export class SigningRefusal extends Error {
   override readonly name = 'SigningRefusal'
 }
 
-/** The manifest the release workflow drafts: everything but the signing time and the rebuild, which signing adds. */
-export const ManifestDraftSchema = ManifestSchema.omit({ published: true, rebuild: true })
+/**
+ * The manifest the release workflow drafts: everything but the signing time and the rebuild, which signing adds. Unlike
+ * a manifest a reader accepts, a draft must carry `security` and `summary`, so every manifest signing writes holds both.
+ */
+export const ManifestDraftSchema = ManifestSchema.omit({ published: true, rebuild: true }).extend({ security: z.boolean(), summary: ReleaseSummarySchema })
 
 /** {@link ManifestDraftSchema}'s parsed value. */
-export type ManifestDraft = Omit<ReleaseManifest, 'published' | 'rebuild'>
+export type ManifestDraft = Omit<ReleaseManifest, 'published' | 'rebuild' | 'security' | 'summary'> & { readonly security: boolean, readonly summary: string }
 
 /** The name of the release workflow's manifest draft in the release directory. */
 export const MANIFEST_DRAFT_NAME = 'manifest-draft.json'
@@ -245,10 +249,12 @@ async function writeAll(directory: string, outputs: ReadonlyArray<readonly [stri
 }
 
 /**
- * Check a release and sign it: the runtime file lists in place, then the manifest.
+ * Check a release and sign it: the runtime file lists in place, then the manifest. Besides the rebuild, the advisory
+ * check and the draft's files, the checks include the patch rule of `patch-rule.ts`.
  * @param request - the directories, rebuild record, key and environment.
  * @returns the signed manifest and the comparison.
  * @throws SigningRefusal when any check fails; nothing is written then.
+ * @throws Error when git cannot list the repository's tags for the patch rule; nothing is written then either.
  */
 export async function signRelease(request: SigningRequest): Promise<SignedRelease> {
   let draft: ManifestDraft
@@ -270,6 +276,8 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   }
   if (draft.sbom.name !== sbomName(draft.version)) throw new SigningRefusal(`signing refuses: the draft names ${draft.sbom.name} as the SBOM; a release's SBOM is ${sbomName(draft.version)}`)
   const { record, recordBytes, comparison } = await checkRebuild(request, draft)
+  const patchProblem = patchRuleProblem({ repository: request.repository, version: draft.version, dsh: draft.dsh, commit: record.commit })
+  if (patchProblem !== undefined) throw new SigningRefusal(`signing refuses: ${patchProblem}`)
   let built: ReleaseImages | undefined
   try {
     built = await readReleaseImages(request.release, draft.version)

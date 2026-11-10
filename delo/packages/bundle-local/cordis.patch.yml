@@ -162,13 +162,30 @@
         enabled: true
         holdUntilChecked: true
 
-# Plugin management protects the guard rows above, remote access and the home's
-# sign-in (so no chat turns remote access on or points its records elsewhere),
-# and the sandbox rows, as it
-# protects its own components: the `plugin_manager` tool, which runs without a
-# prompt in full access, cannot disable a protected row, change its settings,
-# or deselect or remove a bundle that carries one, this bundle included, so no
-# chat in one workspace turns a guard off for every workspace. Upstream's base
+# The update check (C16 switch `update_check`): when the last check is an
+# interval old, at start or at an hourly wake while the Host runs, the
+# channel's newest release is fetched and verified as an update verifies it,
+# and the studio's sidebar shows a notice when it is newer. `delorun`
+# attaches the check to the deloUpdateCheck service this row provides;
+# Settings → Privacy turns `enabled` off in the profile's own patch, which
+# comes after this one. The other two keys keep the plugin's defaults.
+- insert:
+    - id: delo-update-check
+      name: '@delo/bundle-local/update-check'
+      config:
+        enabled: true
+        intervalHours: 24
+        timeoutSeconds: 15
+
+# Plugin management protects the guard rows and the update check above, remote
+# access and the home's sign-in (so no chat turns remote access on or points
+# its records elsewhere), and the sandbox rows, as it protects its own
+# components: the `plugin_manager` tool, which runs without a prompt in full
+# access, cannot disable a protected row, change its settings, or deselect or
+# remove a bundle that carries one, this bundle included, so no chat in one
+# workspace turns a guard off, or silences the update check, for every
+# workspace. Settings → Privacy writes the update check's switch through the
+# settings service, which this list does not govern. Upstream's base
 # bundle gives the row no config, so `protectedPlugins` is the only key.
 - id: plugin-manager
   config:
@@ -179,6 +196,7 @@
       - '@delo/plugin-schedule-consent'
       - '@delo/plugin-fetch-guard'
       - '@delo/bundle-local/update-gate'
+      - '@delo/bundle-local/update-check'
       - '@delo/reach'
       - '@delo/home-auth'
       - '@deepseek-ai/dsh-sandbox-local'

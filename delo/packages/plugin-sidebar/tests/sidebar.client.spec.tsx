@@ -19,6 +19,7 @@ import { TOUCH_QUERY } from '../src/client/pointer.ts'
 import { createUndoLine } from '../src/client/undo.ts'
 import { UndoNotice } from '../src/client/UndoNotice.tsx'
 import { DEFAULT_SIDEBAR_SETTINGS, type SidebarSettings } from '../src/config.ts'
+import type { UpdateNotice } from '@delo/contract-update-report'
 import { DEFAULT_WORKSPACE_ICON } from '../src/workspace-icon.ts'
 
 afterEach(() => {
@@ -88,6 +89,8 @@ function show(fields: {
   workspacesLoaded?: boolean
   /** Whether the list sits in the phone-width drawer. */
   drawer?: boolean
+  /** The update notice below the list; none unless a test says so. */
+  update?: UpdateNotice
 } = {}) {
   const stored = new Map(Object.entries(fields.stored ?? {}))
   const undoLine = createUndoLine()
@@ -141,6 +144,7 @@ function show(fields: {
     attach: (owner: { current: unknown }) => { calls.attach(owner.current); return calls.detach },
     preference: { read: (key: string) => stored.get(key) ?? null, write: (key: string, value: string) => { stored.set(key, value) } },
     undoLine,
+    updateNotice: { notice: { getSnapshot: () => fields.update ?? null, subscribe: () => () => {} }, dismiss: null },
     t: makeTranslate(en),
   } as SidebarProps
   // The foot's undo notice offers what the list remembers, as in the studio.
@@ -165,6 +169,25 @@ describe('the chat list', () => {
     expect(container.querySelector('[class*="boundary"]')).toBeNull()
     expect(shelf('Snoozed').getAttribute('aria-expanded')).toBe('false')
     expect(within(row(container, 'b')).getAllByText(en['status.approval']).length).toBeGreaterThan(0)
+  })
+
+  it('shows the update notice below the list, outside the region that scrolls, and nothing without one', () => {
+    const { container } = show()
+    expect(container.querySelector('[data-update-notice]')).toBeNull()
+    cleanup()
+    const update: UpdateNotice = {
+      running: { delo: '0.1.2', dsh: '0.2.2' } as UpdateNotice['running'],
+      release: { delo: '0.1.3', dsh: '0.2.2', channel: 'stable', security: false } as UpdateNotice['release'],
+      kind: 'patch', disables: 0,
+    }
+    const withNotice = show({ update })
+    const notice = withNotice.container.querySelector<HTMLElement>('[data-update-notice="0.1.3"]')
+    expect(notice?.textContent).toContain('Delorun 0.1.3 is available')
+    // The notice is a sibling after the region that holds the list, so it never covers or moves a row.
+    const siblings = [...notice?.parentElement?.children ?? []]
+    const region = siblings.find(each => each.querySelector('[data-sidebar-row="a"]') !== null)
+    expect(region).toBeDefined()
+    expect(siblings.indexOf(notice as Element)).toBeGreaterThan(siblings.indexOf(region as Element))
   })
 
   it('unfolds a shelf, keeps the choice, and shows a snoozed chat\'s time left', () => {

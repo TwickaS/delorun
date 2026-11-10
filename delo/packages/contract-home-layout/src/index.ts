@@ -152,6 +152,8 @@ export const RUN_ENTRIES = {
   supervisorSocket: 'supervisor.sock',
   /** The update journal (C19). */
   updateJournal: 'update.json',
+  /** The update check's record (C3, "Update check"). */
+  updateCheck: 'update-check.json',
   /** Fixtures of the confinement probes run at each start. */
   probe: 'probe',
 } as const

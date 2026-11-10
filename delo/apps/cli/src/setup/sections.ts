@@ -195,10 +195,10 @@ export function unattendedRecord(sections: readonly SetupSection[]): readonly Se
  * @returns one line per statement.
  */
 export function statementLines(): string[] {
-  return [en['statement.delo'], en['statement.optIns'], en['statement.feedback']]
+  return [en['statement.delo'], en['statement.optIns'], en['statement.feedback'], en['statement.updateCheck']]
 }
 
-/** The privacy section: the note, and where the two upstream opt-ins are changed. */
+/** The privacy section: the note, where the two upstream opt-ins are changed, and the update check and its switch. */
 export const privacySection: SetupSection = {
   id: 'privacy',
   title: 'Privacy',

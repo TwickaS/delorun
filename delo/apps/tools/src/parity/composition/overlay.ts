@@ -36,6 +36,7 @@ export const DEFAULT_PARITY: Readonly<Partial<Record<ParitySwitchId, string>>> =
   scheduled_task_consent: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the consent plugin; the parity composition leaves the scheduleConsent service unmounted, and approvals and deliveries keep upstream\'s text and behaviour',
   one_time_launch_tokens: 'the connection row carries the web bundle\'s trustedHosts expression, which a row would erase; the overlay leaves @delo/bundle-local\'s patch of the row out, so upstream\'s reusable process token signs in, as the recorded web scenarios signed in',
   update_turn_refusal: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the deloTurnGate service unmounted, and every turn starts as upstream starts it',
+  update_check: 'the shipped composition mounts the plugin through @delo/bundle-local\'s inserted row, and the overlay restates that row disabled, so no row of the root tree mounts the plugin; the parity composition leaves the deloUpdateCheck service and its route unmounted, so no check runs, as in stock DSH',
 }
 
 /** One overlay row, as parsed. */

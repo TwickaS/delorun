@@ -18,6 +18,7 @@
     "./profile": "./src/profile.ts",
     "./rows": "./src/rows.ts",
     "./update-gate": "./src/update-gate.ts",
+    "./update-check": "./src/update-check.ts",
     "./statements": "./src/client/locales.ts",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
@@ -32,6 +33,7 @@
     "src/profile.ts",
     "src/rows.ts",
     "src/update-gate.ts",
+    "src/update-check.ts",
     "src/client/locales.ts"
   ],
   "dsh": {
@@ -54,6 +56,7 @@
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-official-bundles": "workspace:*",
     "@delo/contract-setup-answers": "workspace:*",
+    "@delo/contract-update-report": "workspace:*",
     "@delo/home-auth": "workspace:*",
     "@delo/plugin-fetch-guard": "workspace:*",
     "@delo/plugin-instruction-consent": "workspace:*",
@@ -66,6 +69,7 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~"
   },
   "devDependencies": {
@@ -74,6 +78,7 @@
     "@deepseek-ai/cordis-plugin-loader": "workspace:~",
     "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-agent-loop-testkit": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-client-locale": "workspace:*",
     "@deepseek-ai/dsh-client-product-analytics": "workspace:*",
     "@deepseek-ai/dsh-client-store": "workspace:*",

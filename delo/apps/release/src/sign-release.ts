@@ -14,8 +14,9 @@
  * holder's `--attestation-key` over the rebuild's files, or when comparing the workflow's output with the rebuild
  * again finds a difference, or when the dependency advisory check, run again against contract C2's feed with the
  * acceptances committed at the release's commit, fails. It also refuses a draft whose runtime files are not the
- * release's closure file names, or whose runtime platforms are not exactly the release platforms `closure.json` lists
- * at the release's commit.
+ * release's closure file names, whose runtime platforms are not exactly the release platforms `closure.json` lists
+ * at the release's commit, a draft without `security` or a valid `summary`, a draft whose `dsh` is not the app-boot
+ * version at the tagged commit, and a patch release that the patch rule of `sign/patch-rule.ts` refuses.
  * Otherwise it writes each signed runtime file list, the record as `delorun-<version>.rebuild.json` and
  * `delorun-<version>.manifest.json` under temporary names and renames them into place. The key is a PKCS #8 PEM file
  * with an Ed25519 private key and mode 0600; the guide in the package README states how the holder makes it and the
