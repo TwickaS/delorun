@@ -190,6 +190,12 @@ export interface Files {
    * @param path - the file.
    */
   readonly remove: (path: string) => void
+  /**
+   * Whether a file or a link to one exists.
+   * @param path - the file.
+   * @returns true when it exists.
+   */
+  readonly exists: (path: string) => boolean
 }
 
 /**
@@ -241,4 +247,5 @@ export const nodeFiles: Files = {
     renameSync(temporary, path)
   },
   remove: path => { rmSync(path, { force: true }) },
+  exists: path => existsSync(path),
 }

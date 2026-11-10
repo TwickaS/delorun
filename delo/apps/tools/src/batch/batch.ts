@@ -10,8 +10,10 @@
  * ```
  *
  * The candidate branch `batch/<id>` starts at `<remote>/<trunk>` and each lane's commits are replayed onto it in order
- * (`candidate.ts`). The gate is `git push <remote> batch/<id>:refs/heads/<trunk>`, whose pre-push hook runs the merge tier;
- * with `--no-land` it is the check runner's `--changed --tier merge` run and nothing is pushed. A failing gate's checks are
+ * (`candidate.ts`). The gate is the batch's own run of the check runner's `--changed --tier merge` on the candidate, which
+ * must leave a merge-tier tree-pass record for the candidate's commit; the push is never trusted as the gate. A landing batch
+ * then runs `git push <remote> batch/<id>:refs/heads/<trunk>`, and `--no-land` stops after the gate. A batch refuses to start
+ * when the pre-push hook is missing or a variable bypasses it (`hooks.ts`). A failing gate's checks are
  * rerun once on the same candidate, the ones that pass are reported flaky, and the rest are attributed to lanes by rerunning
  * only them on candidates without some lanes (`attribute.ts`); the candidate is then rebuilt without the faulted lanes and
  * gated again. Every step's outcome is recorded in `<git common dir>/delo-batch/<id>/state.json` before the next starts, and
@@ -23,10 +25,12 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { treeOfRef, treeRecordsDir, readTreePass } from '../checks/tree-pass.ts'
 import { repositoryRoot } from '../git.ts'
 import { narrow, suspectsOf, type LaneFacts, type TrialResult } from './attribute.ts'
 import { applyLane, assemble, commitOf, currentBranch, gitText, inspectLane, isClean, laneTip, lines, resetTo } from './candidate.ts'
 import { BatchError } from './errors.ts'
+import { assertHooksInstalled } from './hooks.ts'
 import { failuresOf, readReport, REPORT_PATH } from './logs.ts'
 import { readPlanSource, type PlanSource, type SelectedCheck } from './plan-source.ts'
 import { processPorts, spawnExec, type Ports } from './process.ts'
@@ -44,6 +48,8 @@ export type BatchOptions =
 export interface BatchDeps {
   /** The integrator worktree's root. */
   readonly root: string
+  /** The integrator's environment, which {@link assertHooksInstalled} checks for bypasses. */
+  readonly env: NodeJS.ProcessEnv
   readonly ports: Ports
   readonly files: Files
   /**
@@ -51,6 +57,12 @@ export interface BatchDeps {
    * @returns the selection.
    */
   readonly planSource: () => PlanSource
+  /**
+   * Read the check runner's tree-pass record for a commit's tree.
+   * @param commit - the commit.
+   * @returns the record's tier and head commit, or undefined when none exists.
+   */
+  readonly mergeRecord: (commit: string) => { readonly tier: string, readonly head: string } | undefined
   /**
    * The current time, which names a new batch.
    * @returns the time.
@@ -302,11 +314,12 @@ function proceed(state: BatchState, deps: BatchDeps): number {
   const gate = (commit: string): Gate => {
     resetTo(git, commit)
     deps.files.remove(reportPath)
-    if (!state.land) {
-      const status = deps.ports.checks(['--changed', '--base', state.start, '--tier', 'merge'])
-      return status === 0 ? { kind: 'passed' } : gateOf(`the merge tier exited ${String(status)}`)
-    }
-    deps.say(`delo batch: pushing batch/${state.id} to ${state.remote}/${state.trunk}; the pre-push hook runs the merge tier`)
+    const status = deps.ports.checks(['--changed', '--base', state.start, '--tier', 'merge'])
+    if (status !== 0) return gateOf(`the merge tier exited ${String(status)}`)
+    const record = deps.mergeRecord(commit)
+    if (record?.tier !== 'merge' || record.head !== commit) return { kind: 'gate-error', detail: `the merge tier left no merge-tier tree-pass record for ${commit.slice(0, 12)}` }
+    if (!state.land) return { kind: 'passed' }
+    deps.say(`delo batch: pushing batch/${state.id} to ${state.remote}/${state.trunk}`)
     const push = deps.ports.push(state.remote, `batch/${state.id}:refs/heads/${state.trunk}`)
     if (push.status === 0) return { kind: 'passed' }
     const rejected = lines(push.stderr).find(line => NON_FAST_FORWARD.test(line))
@@ -384,7 +397,17 @@ function proceed(state: BatchState, deps: BatchDeps): number {
  */
 export function runBatch(options: BatchOptions, deps: BatchDeps): number {
   if (options.kind === 'start' && options.plan) return printPlan(options, deps)
+  assertHooksInstalled(deps.ports.git, deps.root, deps.env, deps.files)
   return proceed(options.kind === 'start' ? begin(options, deps) : reopen(options.id, deps), deps)
+}
+
+/**
+ * Read the merge-tier record the check runner left for a commit.
+ * @param root - the repository root.
+ * @returns a reader of the record for a commit's tree under this Node major.
+ */
+export function mergeRecordOf(root: string): BatchDeps['mergeRecord'] {
+  return commit => readTreePass(treeRecordsDir(root), treeOfRef(root, commit) ?? '', process.version)
 }
 
 /**
@@ -400,9 +423,11 @@ export function main(argv: readonly string[], env: NodeJS.ProcessEnv = process.e
     const root = repositoryRoot(cwd)
     return runBatch(options, {
       root,
+      env,
       ports: processPorts(spawnExec, root, env),
       files: nodeFiles,
       planSource: () => readPlanSource(root),
+      mergeRecord: mergeRecordOf(root),
       now: () => new Date(),
       say: line => { console.log(line) },
     })

@@ -12,7 +12,7 @@ import type { Files } from '../../src/batch/state.ts'
  * @returns the port.
  */
 function memory(files: Record<string, string>): Files {
-  return { read: path => files[path], write: (path, text) => { files[path] = text }, remove: path => { Reflect.deleteProperty(files, path) } }
+  return { read: path => files[path], write: (path, text) => { files[path] = text }, remove: path => { Reflect.deleteProperty(files, path) }, exists: path => path in files }
 }
 
 describe('readReport', () => {

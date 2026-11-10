@@ -9,10 +9,10 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createPassCache, type PassCache, type PassCacheOptions } from '../src/checks/cache.ts'
 import type { ForkPackage, ForkTree, Planned, UpstreamPackage } from '../src/checks/plan.ts'
-import { readVitestReport, runPlan, type Result } from '../src/checks/run.ts'
+import { runPlan, type Result } from '../src/checks/run.ts'
 import { openSharedStore } from '../src/checks/shared-cache.ts'
 import { sharingPolicy } from '../src/checks/sharing.ts'
-import { commandFor, isForkSuite, passedUnits, SHARED_TEST_INPUTS, suiteUnits, unitOf, upstreamClosure, type Unit, type WithUnits } from '../src/checks/units.ts'
+import { commandFor, isForkSuite, SHARED_TEST_INPUTS, suiteUnits, unitOf, upstreamClosure, type Unit, type WithUnits } from '../src/checks/units.ts'
 
 const temporary: string[] = []
 afterEach(() => {
@@ -89,23 +89,14 @@ describe('the units of a suite', () => {
     expect(commandFor(suite(), units.slice(0, 1))).toEqual(['vitest', 'run', '--maxWorkers=4', 'delo/packages/a/'])
   })
 
-  it('pass when every spec file of the package passed, and not when one failed or none ran', () => {
-    const units = suiteUnits(suite(), TREE, SPEC_DIRS) ?? []
-    const report = [{ name: '/r/delo/packages/a/tests/x.spec.ts', status: 'passed' }, { name: '/r/delo/packages/b/tests/x.spec.ts', status: 'passed' }, { name: '/r/delo/packages/b/tests/y.spec.ts', status: 'failed' }]
-    expect(passedUnits(report, units, '/r').map(unit => unit.dir)).toEqual(['delo/packages/a'])
-  })
 })
 
-/** A fake Vitest: records its arguments, fails the packages `FAKE_FAIL` names, and writes Vitest's JSON report. */
+/** A fake Vitest: records its arguments and fails when `FAKE_FAIL` names a package or `FAKE_EXIT` is 1. */
 const FAKE = `
 const fs = require('node:fs')
 const args = process.argv.slice(2)
 fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify(args) + '\\n')
-const out = args.find(arg => arg.startsWith('--outputFile.json='))
-const dirs = args.filter(arg => arg.startsWith('delo/'))
 const failing = (process.env.FAKE_FAIL || '').split(',').filter(Boolean)
-const results = dirs.map(dir => ({ name: process.cwd() + '/' + dir + 'tests/x.spec.ts', status: failing.includes(dir) ? 'failed' : 'passed' }))
-if (out !== undefined && process.env.FAKE_NO_REPORT !== '1') fs.writeFileSync(out.slice('--outputFile.json='.length), JSON.stringify({ testResults: results }))
 process.exit(failing.length > 0 || process.env.FAKE_EXIT === '1' ? 1 : 0)
 `
 
@@ -205,19 +196,14 @@ describe('a run of a unitised suite', { timeout: 30_000 }, () => {
     expect((await run(repo, cacheFor(repo.root))).ran).toEqual(['delo/packages/d/'])
   })
 
-  it('records the packages that passed in a failed run, so the next run reruns only the failed one', async () => {
+  it('records no package from a failed run, even one whose spec files all report a pass, so the next run reruns them all', async () => {
     const repo = makeRepo()
     const failed = await run(repo, cacheFor(repo.root), { FAKE_FAIL: 'delo/packages/c/' })
     expect(failed.result).toMatchObject({ outcome: 'failed', detail: 'exit 1; 4 of 4 packages ran, 0 served from this worktree and 0 shared' })
-    expect((await run(repo, cacheFor(repo.root))).ran).toEqual(['delo/packages/c/'])
-  })
-
-  it('records no package when a failed run names no failed spec file or writes no report', async () => {
-    const repo = makeRepo()
+    // An error Vitest attributes to no spec file: every file passed, and the run failed.
     await run(repo, cacheFor(repo.root), { FAKE_EXIT: '1' })
-    await run(repo, cacheFor(repo.root), { FAKE_FAIL: 'delo/packages/c/', FAKE_NO_REPORT: '1' })
     expect((await run(repo, cacheFor(repo.root))).ran).toHaveLength(4)
-    expect(readVitestReport(join(repo.root, 'missing.json'))).toEqual([])
+    expect((await run(repo, cacheFor(repo.root))).ran).toEqual([])
   })
 
   it('serves another worktree\'s package passes from the store, and runs a security package in a strict run', async () => {

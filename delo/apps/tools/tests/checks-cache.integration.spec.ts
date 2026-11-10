@@ -15,7 +15,7 @@ import type { Planned } from '../src/checks/plan.ts'
 import { openSharedStore } from '../src/checks/shared-cache.ts'
 import { sharingPolicy } from '../src/checks/sharing.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
-import { cacheCounts, changeTier, invocationDir, main, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
+import { cacheCounts, changeTier, invocationDir, main, refuseTrunkNarrowing, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
 
 const ZERO = '0'.repeat(40)
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -347,6 +347,14 @@ describe('the gate tier of a run', () => {
     expect(changeTier(undefined, push('refs/heads/lane'), {})).toBe('lane')
     expect(changeTier(undefined, undefined, { DELO_TIER: 'lane' })).toBe('agent')
     expect(changeTier('merge', undefined, {})).toBe('merge')
+  })
+
+  it('refuses a push of the trunk that skips or narrows checks, and lets a lane push skip them', () => {
+    expect(() => { refuseTrunkNarrowing(push(TRUNK_REF), ['gates:secrets'], []) }).toThrow('unset DELO_PUSH_SKIP and drop --skip (gates:secrets)')
+    expect(() => { refuseTrunkNarrowing(push('refs/heads/lane') + push(TRUNK_REF), [], ['jsdoc']) }).toThrow('drop --only (jsdoc)')
+    expect(() => { refuseTrunkNarrowing(push(TRUNK_REF), [], []) }).not.toThrow()
+    expect(() => { refuseTrunkNarrowing(push('refs/heads/lane'), ['tests:snapshots'], []) }).not.toThrow()
+    expect(() => { refuseTrunkNarrowing(undefined, ['x'], ['y']) }).not.toThrow()
   })
 
   it('names a push of the trunk for the queue priority, but not DELO_TIER=merge or a deletion', () => {

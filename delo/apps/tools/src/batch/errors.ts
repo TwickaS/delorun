@@ -23,6 +23,8 @@ export type BatchErrorCode =
   | 'git'
   /** A process would have received an argument or variable that bypasses the merge tier. */
   | 'forbidden-argument'
+  /** The pre-push hook or its configuration is missing, or a variable would bypass it. */
+  | 'hooks-bypassed'
 
 /** A failure the batch tool reports as `delo batch: <message>` and exit status 2. */
 export class BatchError extends Error {

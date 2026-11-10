@@ -1,15 +1,16 @@
 /**
  * The batch against a temporary bare remote and an integrator clone, with a stand-in check runner and pre-push hook:
- * lanes replayed and landed, a failing lane found and set aside while the rest land, lanes that fail only together,
+ * lanes replayed, gated by the batch's own merge-tier run and landed, a failing lane found and set aside while the rest land, lanes that fail only together,
  * conflicts, flaky checks, failures no lane explains, a trunk that moved, `--no-land`, `--plan`, resumption after an
  * interruption, and the refusals before anything changes.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { batchId, main, parseOptions, runBatch, type BatchOptions } from '../../src/batch/batch.ts'
+import { batchId, main, mergeRecordOf, parseOptions, runBatch, type BatchOptions } from '../../src/batch/batch.ts'
 import { BatchError } from '../../src/batch/errors.ts'
-import { processPorts } from '../../src/batch/process.ts'
+import { processPorts, TSX } from '../../src/batch/process.ts'
+import { treePassPath, treeRecordsDir } from '../../src/checks/tree-pass.ts'
 import { parseState, stateText } from '../../src/batch/state.ts'
 import { batchDirOf, cleanUp, depsFor, fakeExec, git, gitEnv, makeSandbox, tempDir, type FakeOptions, type Rule, type Sandbox } from './fixtures.ts'
 
@@ -110,7 +111,7 @@ describe('attribution', () => {
     sandbox.lane('lane/bad', [{ files: { [A]: 'BUG\n' }, message: 'feat: bad' }])
     const { code, fake, said } = runIn(sandbox, start(['lane/good', 'lane/bad']), [passing, forkRule])
     expect(code).toBe(0)
-    expect(fake.pushes).toBe(2)
+    expect(fake.pushes).toBe(1)
     expect(git(sandbox.remote, ['log', '--format=%s', 'v5'])).toBe('feat: good\nchore: the trunk\n')
     const bad = report(sandbox, 'lane/bad.md')
     expect(bad).toContain('removing this lane alone from the candidate made every failing check pass')
@@ -222,7 +223,7 @@ describe('attribution', () => {
     sandbox.lane('lane/one', [{ files: { [A]: 'a2\n' }, message: 'feat: one' }])
     const { code, fake } = runIn(sandbox, start(['lane/one']), [{ check: 'elsewhere', fails: () => true }])
     expect(code).toBe(1)
-    expect(fake.runs).toHaveLength(1)
+    expect(fake.runs).toHaveLength(2)
     expect(report(sandbox, 'summary.md')).toContain('elsewhere fail with every suspect lane removed')
   })
 })
@@ -235,7 +236,7 @@ describe('flaky checks', () => {
     const once: Rule = { check: 'gates:dco', fails: () => (calls += 1) === 1 }
     const { code, fake } = runIn(sandbox, start(['lane/one']), [once])
     expect(code).toBe(0)
-    expect(fake.pushes).toBe(2)
+    expect(fake.pushes).toBe(1)
     expect(report(sandbox, 'summary.md')).toContain('## Flaky\n\n- gates:dco')
   })
 
@@ -328,11 +329,11 @@ describe('gate failures that stop the batch', () => {
     sandbox.lane('lane/one', [{ files: { [A]: 'BUG\n' }, message: 'feat: one' }])
     const fake = fakeExec(sandbox.root, [forkRule])
     const deps = depsFor(sandbox.root, fake)
-    // The gate's report is written by the push; every later run leaves none, so a failing run counts every check as failing.
+    // The gate's run leaves its report; every rerun leaves none, so a failing rerun counts every check as failing.
     const checks = deps.ports.checks
     const code = runBatch(start(['lane/one']), { ...deps, ports: { ...deps.ports, checks: args => {
       const status = checks(args)
-      deps.files.remove(join(sandbox.root, 'node_modules/.cache/delo-checks/report.json'))
+      if (args.includes('--only')) deps.files.remove(join(sandbox.root, 'node_modules/.cache/delo-checks/report.json'))
       return status
     } } })
     expect(code).toBe(1)
@@ -345,7 +346,7 @@ describe('resumption', () => {
     const sandbox = makeSandbox()
     sandbox.lane('lane/good', [{ files: { [B]: 'b2\n' }, message: 'feat: good' }])
     sandbox.lane('lane/bad', [{ files: { [A]: 'BUG\n' }, message: 'feat: bad' }])
-    expect(() => runIn(sandbox, start(['lane/good', 'lane/bad']), [passing, forkRule], { interruptAt: 1 })).toThrow('interrupted')
+    expect(() => runIn(sandbox, start(['lane/good', 'lane/bad']), [passing, forkRule], { interruptAt: 2 })).toThrow('interrupted')
     const recorded = parseState(report(sandbox, 'state.json'), 'state.json')
     expect(Object.keys(recorded.steps)).toEqual(['lane:lane/good', 'lane:lane/bad', 'round:0:gate'])
     git(sandbox.root, ['checkout', '-q', 'v5'])
@@ -463,7 +464,7 @@ describe('--plan', () => {
   })
 })
 
-describe('the invariant: nothing reaches the trunk except through the merge-tier push', () => {
+describe('the invariant: nothing reaches the trunk without the batch\'s own merge-tier run', () => {
   const FORBIDDEN = ['--force', '-f', '--no-verify', '--force-if-includes']
 
   it('starts no process with a forced push, a skipped hook, skipped checks or the agent tier, whatever the integrator\'s environment', { timeout: TIMEOUT }, () => {
@@ -471,7 +472,7 @@ describe('the invariant: nothing reaches the trunk except through the merge-tier
     sandbox.lane('lane/good', [{ files: { [B]: 'b2\n' }, message: 'feat: good' }])
     sandbox.lane('lane/bad', [{ files: { [A]: 'BUG\n' }, message: 'feat: bad' }])
     const fake = fakeExec(sandbox.root, [passing, forkRule])
-    const hostile = { ...gitEnv(), DELO_PUSH_SKIP: 'tests', DELO_TIER: 'agent' }
+    const hostile = { ...gitEnv(), DELO_PUSH_SKIP: 'tests', DELO_TIER: 'agent', LEFTHOOK: '0', LEFTHOOK_EXCLUDE: 'pre-push', LEFTHOOK_BIN: '/bin/true', GIT_CONFIG_COUNT: '1' }
     const code = runBatch(start(['lane/good', 'lane/bad']), { ...depsFor(sandbox.root, fake), ports: processPorts(fake.exec, sandbox.root, hostile) })
     expect(code).toBe(0)
     expect(fake.calls.length).toBeGreaterThan(10)
@@ -480,9 +481,10 @@ describe('the invariant: nothing reaches the trunk except through the merge-tier
       expect(call.args.join(' ')).not.toMatch(/--tier(?:=| )agent/)
       expect(call.env['DELO_PUSH_SKIP']).toBeUndefined()
       expect(call.env['DELO_TIER']).not.toBe('agent')
+      expect(Object.keys(call.env).filter(name => name.startsWith('LEFTHOOK') || name.startsWith('GIT_CONFIG'))).toEqual([])
     }
     const pushes = fake.calls.filter(call => call.args[0] === 'push')
-    expect(pushes.map(call => call.args)).toEqual([['push', 'origin', `batch/${ID}:refs/heads/v5`], ['push', 'origin', `batch/${ID}:refs/heads/v5`]])
+    expect(pushes.map(call => call.args)).toEqual([['push', 'origin', `batch/${ID}:refs/heads/v5`]])
     expect(pushes.every(call => call.env['DELO_TIER'] === 'merge')).toBe(true)
     expect(fake.runs.every(args => args.includes('--tier') && args[args.indexOf('--tier') + 1] === 'merge')).toBe(true)
   })
@@ -497,8 +499,72 @@ describe('the invariant: nothing reaches the trunk except through the merge-tier
     git(sandbox.root, ['checkout', '-q', 'v5'])
     const land = runIn(sandbox, start(['lane/bad']), [forkRule], {}, 1)
     expect(land.code).toBe(1)
-    expect(land.fake.pushes).toBe(1)
+    expect(land.fake.pushes).toBe(0)
     expect(sandbox.trunk()).toBe(before)
+  })
+})
+
+describe('the gate does not trust the push', () => {
+  const lane = (): Sandbox => {
+    const sandbox = makeSandbox()
+    sandbox.lane('lane/one', [{ files: { [A]: 'a2\n' }, message: 'feat: one' }])
+    return sandbox
+  }
+
+  it.each([
+    ['a runner that exits 0 and leaves no record', 'none'],
+    ['a record of the agent tier', 'agent'],
+    ['a record whose head is another commit', 'other'],
+  ] as const)('does not land after %s, and pushes nothing', (_name, record) => {
+    const sandbox = lane()
+    const before = sandbox.trunk()
+    const { code, fake } = runIn(sandbox, start(['lane/one']), [passing], { record })
+    expect(code).toBe(1)
+    expect(fake.pushes).toBe(0)
+    expect(sandbox.trunk()).toBe(before)
+    const commit = git(sandbox.root, ['rev-parse', `batch/${ID}`]).trim()
+    expect(report(sandbox, 'summary.md')).toContain(`the merge tier left no merge-tier tree-pass record for ${commit.slice(0, 12)}`)
+    expect(parseState(report(sandbox, 'state.json'), 'state.json').outcome?.kind).toBe('gate-error')
+  }, TIMEOUT)
+
+  it('pushes and lands when the runner left a merge record for the candidate, after the runner ran', { timeout: TIMEOUT }, () => {
+    const sandbox = lane()
+    const { code, fake } = runIn(sandbox, start(['lane/one']), [passing])
+    expect(code).toBe(0)
+    expect(fake.pushes).toBe(1)
+    const order = fake.calls.map(call => call.args[0] === 'push' ? 'push' : call.command === TSX ? 'runner' : '').filter(name => name !== '')
+    expect(order).toEqual(['runner', 'push'])
+    expect(sandbox.trunk()).toBe(git(sandbox.root, ['rev-parse', `batch/${ID}`]).trim())
+  })
+
+  it('reads the record the check runner stores for a commit\'s tree, and none for another', { timeout: TIMEOUT }, () => {
+    const sandbox = lane()
+    const commit = git(sandbox.root, ['rev-parse', 'lane/one']).trim()
+    const tree = git(sandbox.root, ['rev-parse', 'lane/one^{tree}']).trim()
+    const read = mergeRecordOf(sandbox.root)
+    expect(read(commit)).toBeUndefined()
+    const dir = treeRecordsDir(sandbox.root)
+    mkdirSync(dir, { recursive: true })
+    const record = { tree, base: null, head: commit, rangeBase: null, passedAt: 'now', tier: 'merge', checks: [], scopes: {}, lockfile: 'l', node: process.version, pnpm: 'p', env: {} }
+    writeFileSync(treePassPath(dir, tree, process.version), JSON.stringify(record))
+    expect(read(commit)).toMatchObject({ tier: 'merge', head: commit })
+    expect(read('v5')).toBeUndefined()
+  })
+})
+
+describe('a batch refuses to start or resume with the hook bypassed', () => {
+  it('refuses before anything changes, in a new batch and in a resumed one', { timeout: TIMEOUT }, () => {
+    const sandbox = makeSandbox()
+    sandbox.lane('lane/one', [{ files: { [A]: 'a2\n' }, message: 'feat: one' }])
+    const branches = git(sandbox.root, ['branch', '--list'])
+    const fake = fakeExec(sandbox.root, [passing])
+    const bypassed = { ...depsFor(sandbox.root, fake), env: { LEFTHOOK: '0' } }
+    for (const options of [start(['lane/one']), parseOptions(['--resume', ID])]) {
+      expect(() => runBatch(options, bypassed)).toThrow(expect.objectContaining({ code: 'hooks-bypassed' }))
+    }
+    expect(git(sandbox.root, ['branch', '--list'])).toBe(branches)
+    expect(fake.calls.filter(call => call.args[0] === 'fetch' || call.args[0] === 'checkout')).toEqual([])
+    expect(existsSync(join(sandbox.root, '.git', 'delo-batch'))).toBe(false)
   })
 })
 
@@ -526,8 +592,17 @@ describe('the command line', () => {
     sandbox.lane('lane/one', [{ files: { [A]: 'a2\n' }, message: 'feat: one' }])
     expect(main(['--lanes', 'lane/one', '--plan'], gitEnv(), sandbox.root)).toBe(0)
     expect(log).toHaveBeenCalledWith(expect.stringContaining('1. lane/one: 1 commit(s)'))
-    // The real check runner is absent from the sandbox, so the gate's start fails after the batch began.
-    expect(() => main(['--lanes', 'lane/one', '--no-land'], gitEnv(), sandbox.root)).toThrow(/ENOENT/)
+    // The sandbox has no installed hooks, so the batch is refused before it starts.
+    const env = { PATH: process.env['PATH'] ?? '' }
+    expect(main(['--lanes', 'lane/one', '--no-land'], env, sandbox.root)).toBe(2)
+    expect(error).toHaveBeenLastCalledWith(expect.stringContaining('pre-push'))
+    // With the hook files in place the batch starts, and fails when it reaches the real check runner, absent from the sandbox.
+    writeFileSync(join(sandbox.root, '.git', 'dsh-hooks', 'pre-push'), '#!/bin/sh\nlefthook run pre-push\n')
+    writeFileSync(join(sandbox.root, 'lefthook-local.yml'), 'extends:\n  - delo/lefthook.yml\n')
+    mkdirSync(join(sandbox.root, 'node_modules', '.bin'), { recursive: true })
+    writeFileSync(join(sandbox.root, 'node_modules', '.bin', 'lefthook'), '')
+    writeFileSync(join(sandbox.root, '.git', 'info', 'exclude'), 'lefthook-local.yml\n')
+    expect(() => main(['--lanes', 'lane/one', '--no-land'], env, sandbox.root)).toThrow(/ENOENT/)
     error.mockRestore()
     log.mockRestore()
   })

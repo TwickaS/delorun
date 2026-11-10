@@ -1,7 +1,7 @@
 /**
  * The batch tool's processes. Every git, check-runner and push invocation passes through {@link assertGated}, which
  * refuses the arguments and variables that would let a commit reach the trunk without the merge tier: a forced push, a
- * skipped hook, a skipped check or the agent tier.
+ * skipped or reconfigured hook, a skipped check or the agent tier.
  *
  * @module @delo/tools/batch/process
  */
@@ -43,14 +43,29 @@ export const RUN_CHECKS = 'delo/apps/tools/src/run-checks.ts'
 const FORBIDDEN = new Set(['--force', '-f', '--no-verify', '--force-if-includes'])
 /** The tiers lighter than the merge tier, which no batch process may ask for. */
 const LIGHTER_TIERS = ['agent', 'lane'] as const
-/** The runner's variables that skip checks or lower the tier; {@link childEnvironment} removes them. */
-const RUNNER_OVERRIDES = ['DELO_PUSH_SKIP', 'DELO_TIER']
+/** The variables that lower the tier or disable the hook; {@link childEnvironment} removes them from every child. */
+const OVERRIDES = ['DELO_PUSH_SKIP', 'DELO_TIER', 'LEFTHOOK', 'LEFTHOOK_EXCLUDE', 'LEFTHOOK_BIN']
+/** The values of `LEFTHOOK` that keep the hook enabled. */
+const LEFTHOOK_ON = ['1', 'true']
+
+/**
+ * The first variable that skips checks or disables, replaces or reconfigures the pre-push hook: `DELO_PUSH_SKIP`,
+ * `LEFTHOOK` set to anything but `1` or `true`, `LEFTHOOK_EXCLUDE`, `LEFTHOOK_BIN`, or any `GIT_CONFIG*` variable.
+ * @param env - the environment.
+ * @returns the variable's name, or undefined when there is none.
+ */
+export function bypassVariable(env: NodeJS.ProcessEnv): string | undefined {
+  const lefthook = env['LEFTHOOK']
+  if (lefthook !== undefined && !LEFTHOOK_ON.includes(lefthook)) return 'LEFTHOOK'
+  return Object.keys(env).find(name => name === 'DELO_PUSH_SKIP' || name === 'LEFTHOOK_EXCLUDE' || name === 'LEFTHOOK_BIN' || name.startsWith('GIT_CONFIG'))
+}
 
 /**
  * Refuse a process whose arguments or environment would let a commit reach the trunk without the merge tier: a forced push
  * (`--force`, `-f`, `--force-with-lease`, `--force-if-includes`, or a refspec starting with `+`), a skipped hook
- * (`--no-verify`), a tier lighter than the merge tier (`--tier agent|lane`, `--tier=agent|lane`, `DELO_TIER=agent|lane`), or
- * skipped checks (`DELO_PUSH_SKIP`).
+ * (`--no-verify`), skipped checks (`--skip`, `--skip=...` except `git cherry-pick --skip`, `DELO_PUSH_SKIP`), a tier lighter than the merge tier
+ * (`--tier agent|lane`, `--tier=agent|lane`, `DELO_TIER=agent|lane`), a reconfigured hook (`-c core.hooksPath=...`,
+ * `--config-env`), or a variable from {@link bypassVariable}.
  * @param args - the process's arguments.
  * @param env - the process's environment.
  * @throws BatchError with code `forbidden-argument` naming the offending argument or variable.
@@ -62,20 +77,25 @@ export function assertGated(args: readonly string[], env: NodeJS.ProcessEnv): vo
   args.forEach((arg, index) => {
     if (FORBIDDEN.has(arg) || arg.startsWith('--force-with-lease')) refuse(arg)
     if (arg.startsWith('+')) refuse(`the forced refspec ${arg}`)
+    if ((arg === '--skip' || arg.startsWith('--skip=')) && args[0] !== 'cherry-pick') refuse('--skip')
+    const lower = arg.toLowerCase()
+    const next = (args[index + 1] ?? '').toLowerCase()
+    if (lower.startsWith('--config-env') || (lower === '-c' && (next.includes('core.hookspath') || next.includes('--config-env'))) || (lower.startsWith('-c') && lower.includes('core.hookspath'))) refuse(`the git configuration override ${arg}`)
     for (const tier of LIGHTER_TIERS) if (arg === `--tier=${tier}` || (arg === '--tier' && args[index + 1] === tier)) refuse(`--tier ${tier}`)
   })
-  if (env['DELO_PUSH_SKIP'] !== undefined) refuse('DELO_PUSH_SKIP')
+  const bypass = bypassVariable(env)
+  if (bypass !== undefined) refuse(bypass)
   for (const tier of LIGHTER_TIERS) if (env['DELO_TIER'] === tier) refuse(`DELO_TIER=${tier}`)
 }
 
 /**
- * The environment the batch's processes inherit: the integrator's, without the runner's variables that skip checks or
- * choose the tier.
+ * The environment the batch's processes inherit: the integrator's, without the variables that skip checks, choose the
+ * tier or disable the hook (`DELO_PUSH_SKIP`, `DELO_TIER`, `LEFTHOOK*`, `GIT_CONFIG*`).
  * @param env - the integrator's environment.
  * @returns a new environment.
  */
 export function childEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(env).filter(([name]) => !RUNNER_OVERRIDES.includes(name)))
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !OVERRIDES.includes(name) && !name.startsWith('GIT_CONFIG')))
 }
 
 /** The three kinds of process the batch starts, each in the repository root and through {@link assertGated}. */

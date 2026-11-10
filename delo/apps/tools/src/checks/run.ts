@@ -8,12 +8,11 @@
  * @module @delo/tools/checks/run
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { createWriteStream, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { createWriteStream, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PassCache, PassSource } from './cache.ts'
-import { z } from 'zod'
 import type { GateTier, Planned } from './plan.ts'
-import { commandFor, passedUnits, type Unit, type WithUnits } from './units.ts'
+import { commandFor, type Unit, type WithUnits } from './units.ts'
 
 /** How a check ended. */
 export type Outcome = 'passed' | 'failed' | 'declined' | 'skipped'
@@ -94,25 +93,6 @@ export interface UnitCounts {
  * one at a time, so they never write the same files at once, and the later ones find the declarations the first emitted.
  */
 export const DECLARATION_WRITERS: readonly string[] = ['typecheck:upstream', 'build:artifacts', 'gates:docs']
-
-/** The fields of Vitest's JSON report that a unitised run reads. */
-const VitestReport = z.object({ testResults: z.array(z.object({ name: z.string(), status: z.string() })) })
-
-/**
- * The spec files of a Vitest JSON report, or none when the report is missing or not one.
- * @param path - the report's path.
- * @returns each file's absolute path and status.
- */
-export function readVitestReport(path: string): Array<{ readonly name: string, readonly status: string }> {
-  try {
-    const parsed = VitestReport.safeParse(JSON.parse(readFileSync(path, 'utf8')))
-    return parsed.success ? parsed.data.testResults : []
-  } catch (error) {
-    // ENOENT or a truncated file: the run wrote no report, so no package's pass is recorded.
-    void error
-    return []
-  }
-}
 
 /** What the run needs from its caller. */
 export interface RunOptions {
@@ -289,9 +269,8 @@ export async function runPlan(plan: readonly WithUnits<Planned>[], options: RunO
       const log = join(options.logDir, `${check.id.replaceAll(':', '-')}.log`)
       const out = createWriteStream(log)
       const begun = performance.now()
-      // A unitised suite runs only its packages without a stored pass, and reports each spec file's result for them.
-      const report = `${log}.vitest.json`
-      const argv = units === undefined ? check.command : [...commandFor(check, units.pending.map(each => each.unit)), '--reporter=default', '--reporter=json', `--outputFile.json=${report}`]
+      // A unitised suite runs only its packages without a stored pass.
+      const argv = units === undefined ? check.command : commandFor(check, units.pending.map(each => each.unit))
       const [command = '', ...args] = argv
       const child = spawn(command, args, { cwd: join(options.root, check.cwd), env: { ...options.env, ...check.environment }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
       running.set(check.id, child)
@@ -317,12 +296,9 @@ export async function runPlan(plan: readonly WithUnits<Planned>[], options: RunO
         if (outcome === 'passed' && key !== undefined) options.cache?.store(check, key)
         let unitNote: string | undefined
         if (units !== undefined) {
-          // A failed run still records the packages whose every spec file passed, but only when failed files explain the failure.
-          const files = readVitestReport(report)
-          const explained = outcome === 'passed' || files.some(file => file.status === 'failed')
-          const passed = explained ? passedUnits(files, units.pending.map(each => each.unit), options.root) : []
-          for (const each of units.pending) if (outcome === 'passed' || passed.includes(each.unit)) options.cache?.storeUnit(check, each.unit, each.key)
-          rmSync(report, { force: true })
+          // Only a passing run records its packages: an error Vitest does not attribute to a spec file can fail a run whose
+          // every file reports a pass.
+          if (outcome === 'passed') for (const each of units.pending) options.cache?.storeUnit(check, each.unit, each.key)
           unitNote = `${String(units.counts.ran)} of ${String(units.counts.total)} packages ran, ${String(units.counts.local)} served from this worktree and ${String(units.counts.shared)} shared`
         }
         const text = detail === undefined ? unitNote : `${oomKilled ? `${detail}, at the memory ceiling` : detail}${unitNote === undefined ? '' : `; ${unitNote}`}`

@@ -137,18 +137,3 @@ export function commandFor(check: Check, units: readonly Unit[]): string[] {
   const base = check.command.slice(0, check.command.length - (check.scope?.length ?? 0))
   return [...base, ...units.map(unit => unit.arg)]
 }
-
-/**
- * Which units passed, from a Vitest JSON report: a unit passes when it had at least one spec file and every one passed.
- * Paths in the report are absolute.
- * @param report - the report's parsed `testResults`, each with its file `name` and `status`.
- * @param units - the units the run covered.
- * @param root - the repository root.
- * @returns the passed units.
- */
-export function passedUnits(report: readonly { readonly name: string, readonly status: string }[], units: readonly Unit[], root: string): Unit[] {
-  return units.filter((unit) => {
-    const files = report.filter(file => file.name.startsWith(`${root}/${unit.arg}`))
-    return files.length > 0 && files.every(file => file.status === 'passed')
-  })
-}

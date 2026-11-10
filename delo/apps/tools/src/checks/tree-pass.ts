@@ -1,5 +1,5 @@
 /**
- * The tree pass record. A pre-push run that passes every check it planned leaves a record under HEAD's tree. A later
+ * The tree pass record. A pre-push or change run that passes every check it planned leaves a record under HEAD's tree. A later
  * run of the same tree reports that pass and starts nothing when the record covers every planned check. A record names
  * its checks, the scope each narrowed check ran over, the lockfile, Node and pnpm versions and the environment variables
  * the checks read, and the HEAD commit and range base the run measured.

@@ -44,7 +44,8 @@
  * (`checks/cache.ts`), from this worktree's passes or from the machine-wide store
  * under the user's cache directory (`checks/shared-cache.ts`) for the checks
  * `checks/sharing.ts` shares; `--no-shared-cache` keeps a run to its worktree. A run of a tree that a record covers reports the record and starts nothing, and a passing
- * pre-push run records its pass (`checks/tree-pass.ts`) in the git common directory, shared by every worktree of the clone.
+ * pre-push or change run of a clean tree records its pass (`checks/tree-pass.ts`) in the git common directory, shared by
+ * every worktree of the clone.
  *
  * @module @delo/tools/run-checks
  */
@@ -232,6 +233,20 @@ export function changeTier(option: string | undefined, pushInput: string | undef
   if (pushInput !== undefined && pushesTrunk(pushInput)) return 'merge'
   if (option === 'lane' || option === 'agent' || option === 'merge') return option
   return pushInput === undefined ? 'agent' : pushTier(pushInput, env)
+}
+
+/**
+ * Refuse a push of the trunk that leaves checks out: `--skip` (which the pre-push hook fills from `DELO_PUSH_SKIP`) or
+ * `--only` would let a commit reach the trunk without a check of the merge tier, a security-class one among them.
+ * @param pushInput - the pre-push hook's standard input, or undefined when the run is not a push.
+ * @param skip - the `--skip` names.
+ * @param only - the `--only` names.
+ * @throws Error when a pushed ref updates the trunk and either list is not empty.
+ */
+export function refuseTrunkNarrowing(pushInput: string | undefined, skip: readonly string[], only: readonly string[]): void {
+  if (pushInput === undefined || !pushesTrunk(pushInput)) return
+  if (skip.length > 0) throw new Error(`a push of the trunk runs every check of the merge tier; unset DELO_PUSH_SKIP and drop --skip (${skip.join(', ')})`)
+  if (only.length > 0) throw new Error(`a push of the trunk runs every check of the merge tier; drop --only (${only.join(', ')})`)
 }
 
 /**
@@ -553,6 +568,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
 
   // A pre-push run reads the push lines once; a scoped child gets them on its standard input.
   const pushInput = values['pre-push'] ? readFileSync(0, 'utf8') : undefined
+  refuseTrunkNarrowing(pushInput, list(values.skip), list(values.only))
   const fullGate = values['pre-push'] && env['DELO_FULL_GATE'] === '1'
   let plan: WithUnits<Planned>[]
   let mode: string
@@ -660,8 +676,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   // A gate that ran while this run waited for the lock may have recorded the tree, so the record is read again here.
   const startState = treeRecordsOn ? treeState(root) : undefined
   if (covered(startState, true)) return 0
-  // Only a pre-push run records its pass, and only from a clean tree.
-  const before = values['pre-push'] && startState?.clean === true ? startState : undefined
+  // A pre-push or change run of HEAD's tree records its pass, and only from a clean tree.
+  const before = startState?.clean === true ? startState : undefined
 
   if (place.fallback !== undefined) console.log(`delo checks: temporary files go to the disk: ${place.fallback}`)
   const scratch = scratchDir(place.base)

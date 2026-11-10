@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path'
 import { REPORT_PATH } from '../../src/batch/logs.ts'
 import type { PlanSource } from '../../src/batch/plan-source.ts'
 import { processPorts, spawnExec, TSX, type Exec, type ProcessRun } from '../../src/batch/process.ts'
-import { nodeFiles } from '../../src/batch/state.ts'
+import { nodeFiles, type Files } from '../../src/batch/state.ts'
 import type { BatchDeps } from '../../src/batch/batch.ts'
 
 const temporary: string[] = []
@@ -111,6 +111,9 @@ export function makeSandbox(): Sandbox {
   git(base, ['init', '-q', '--bare', '-b', 'v5', remote])
   git(base, ['clone', '-q', ...cloneConfig(hooks), remote, root])
   git(root, ['checkout', '-q', '-b', 'v5'])
+  // The installer's hooks directory, which the batch requires core.hooksPath to name.
+  mkdirSync(join(root, '.git', 'dsh-hooks'))
+  git(root, ['config', 'core.hooksPath', join(root, '.git', 'dsh-hooks')])
   const write = (dir: string, files: Readonly<Record<string, string>>): void => {
     for (const [path, text] of Object.entries(files)) {
       mkdirSync(dirname(join(dir, path)), { recursive: true })
@@ -180,6 +183,8 @@ export interface Fake {
   readonly runs: (readonly string[])[]
   /** How many pushes reached the stand-in hook. */
   pushes: number
+  /** The records the stand-in runner left, by the commit it ran on. */
+  readonly records: Map<string, { readonly tier: string, readonly head: string }>
 }
 
 /** Options of the stand-in runner. */
@@ -194,6 +199,11 @@ export interface FakeOptions {
   readonly declined?: readonly { readonly check: string, readonly reason: string | null }[]
   /** Runs before each push reaches the stand-in hook, such as another integrator moving the trunk. */
   readonly beforePush?: () => void
+  /**
+   * The tree-pass record the stand-in runner leaves behind a passing full change run: `merge` (default) records the merge
+   * tier for HEAD, `agent` the agent tier, `other` the merge tier for another commit, `none` nothing.
+   */
+  readonly record?: 'merge' | 'agent' | 'other' | 'none'
   /** Throw after this git invocation ran, as an interruption in the middle of a step would. */
   readonly interruptAfterGit?: (args: readonly string[]) => boolean
 }
@@ -227,6 +237,7 @@ export function fakeExec(root: string, rules: readonly Rule[], options: FakeOpti
     calls: [],
     runs: [],
     pushes: 0,
+    records: new Map(),
     exec: (command, args, execOptions): ProcessRun => {
       fake.calls.push({ command, args: [...args], env: { ...execOptions.env } })
       if (command === TSX) {
@@ -234,15 +245,19 @@ export function fakeExec(root: string, rules: readonly Rule[], options: FakeOpti
         if (fake.runs.length === options.interruptAt) throw new Error('interrupted')
         const at = args.indexOf('--only')
         const status = evaluate(at < 0 ? [] : (args[at + 1] ?? '').split(','))
+        const kind = options.record ?? 'merge'
+        if (status === 0 && at < 0 && kind !== 'none') {
+          const head = git(root, ['rev-parse', 'HEAD']).trim()
+          fake.records.set(head, { tier: kind === 'agent' ? 'agent' : 'merge', head: kind === 'other' ? 'f'.repeat(40) : head })
+        }
         return { status, stdout: '', stderr: '' }
       }
       if (command === 'git' && args[0] === 'push') {
         fake.pushes += 1
         options.beforePush?.()
         if (options.pushError !== undefined) return { status: 1, stdout: '', stderr: options.pushError }
-        if (evaluate([]) !== 0) return { status: 1, stdout: '', stderr: 'error: failed to push some refs to the remote\n' }
       }
-      const run = spawnExec(command, args, { ...execOptions, output: 'capture' })
+      const run = spawnExec(command, args, { ...execOptions, env: { ...execOptions.env, ...gitEnv() }, output: 'capture' })
       if (command === 'git' && options.interruptAfterGit?.(args) === true) throw new Error('interrupted')
       return run
     },
@@ -269,6 +284,24 @@ export const fakePlan: PlanSource = {
 }
 
 /**
+ * The file port with the hook files the installer would leave: the hooks directory's `pre-push`, `lefthook-local.yml` and
+ * the lefthook binary.
+ * @param root - the integrator worktree.
+ * @returns the port.
+ */
+export function hookFiles(root: string): Files {
+  return {
+    ...nodeFiles,
+    read: path => {
+      if (path === join(root, '.git', 'dsh-hooks', 'pre-push')) return '#!/bin/sh\nlefthook run pre-push\n'
+      if (path === join(root, 'lefthook-local.yml')) return 'extends:\n  - delo/lefthook.yml\n'
+      return nodeFiles.read(path)
+    },
+    exists: path => path === join(root, 'node_modules', '.bin', 'lefthook') || nodeFiles.exists(path),
+  }
+}
+
+/**
  * The batch's side effects over a sandbox and a stand-in starter.
  * @param root - the integrator worktree.
  * @param fake - the stand-in starter.
@@ -280,9 +313,11 @@ export function depsFor(root: string, fake: Fake, said: string[] = [], second = 
   let seconds = second
   return {
     root,
+    env: { PATH: process.env['PATH'] ?? '' },
     ports: processPorts(fake.exec, root, gitEnv()),
-    files: nodeFiles,
+    files: hookFiles(root),
     planSource: () => fakePlan,
+    mergeRecord: commit => fake.records.get(commit),
     now: () => new Date(Date.UTC(2026, 10, 10, 12, 0, seconds++)),
     say: line => { said.push(line) },
   }

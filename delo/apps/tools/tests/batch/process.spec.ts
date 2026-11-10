@@ -19,6 +19,13 @@ describe('assertGated', () => {
     [['--changed', '--tier=agent']],
     [['--changed', '--tier', 'lane']],
     [['--changed', '--tier=lane']],
+    [['--changed', '--skip', 'tests']],
+    [['--changed', '--skip=tests:fork']],
+    [['-c', 'core.hooksPath=/dev/null', 'push']],
+    [['-c', 'CORE.hookspath=/dev/null', 'push']],
+    [['-ccore.hooksPath=/dev/null', 'push']],
+    [['-c', '--config-env=core.hooksPath=X', 'push']],
+    [['--config-env=core.hooksPath=X', 'push']],
   ])('refuses %j', args => {
     expect(() => { assertGated(args, {}) }).toThrow(BatchError)
   })
@@ -29,17 +36,35 @@ describe('assertGated', () => {
     expect(() => { assertGated(['push'], { DELO_TIER: 'lane' }) }).toThrow(/DELO_TIER=lane/)
   })
 
+  it.each([
+    [{ LEFTHOOK: '0' }, 'LEFTHOOK'],
+    [{ LEFTHOOK_EXCLUDE: 'pre-push' }, 'LEFTHOOK_EXCLUDE'],
+    [{ LEFTHOOK_BIN: '/bin/true' }, 'LEFTHOOK_BIN'],
+    [{ GIT_CONFIG_COUNT: '1' }, 'GIT_CONFIG_COUNT'],
+    [{ GIT_CONFIG_KEY_0: 'core.hooksPath' }, 'GIT_CONFIG_KEY_0'],
+    [{ GIT_CONFIG_PARAMETERS: 'x' }, 'GIT_CONFIG_PARAMETERS'],
+    [{ GIT_CONFIG_GLOBAL: '/dev/null' }, 'GIT_CONFIG_GLOBAL'],
+    [{ GIT_CONFIG_SYSTEM: '/dev/null' }, 'GIT_CONFIG_SYSTEM'],
+    [{ GIT_CONFIG_NOSYSTEM: '1' }, 'GIT_CONFIG_NOSYSTEM'],
+  ])('refuses the hook variable %j', (env, name) => {
+    expect(() => { assertGated(['push'], env) }).toThrow(name)
+  })
+
   it('lets the merge tier and ordinary git through', () => {
     expect(() => { assertGated(['--changed', '--tier', 'merge'], { DELO_TIER: 'merge' }) }).not.toThrow()
     expect(() => { assertGated(['push', 'origin', 'batch/1:refs/heads/v5'], {}) }).not.toThrow()
     expect(() => { assertGated(['--tier'], {}) }).not.toThrow()
+    expect(() => { assertGated(['-c', 'user.name=x', 'commit'], { LEFTHOOK: '1', GIT_DIR: '.git' }) }).not.toThrow()
+    expect(() => { assertGated(['commit'], { LEFTHOOK: 'true' }) }).not.toThrow()
+    expect(() => { assertGated(['-c'], {}) }).not.toThrow()
+    expect(() => { assertGated(['cherry-pick', '--skip'], {}) }).not.toThrow()
   })
 })
 
 describe('processPorts', () => {
   it('removes the runner\'s overrides, runs the merge tier on the push and refuses before starting a forbidden process', () => {
     const exec = vi.fn<Exec>(() => ({ status: 0, stdout: 'out', stderr: '' }))
-    const ports = processPorts(exec, '/repo', { PATH: '/bin', DELO_PUSH_SKIP: 'tests', DELO_TIER: 'agent' })
+    const ports = processPorts(exec, '/repo', { PATH: '/bin', DELO_PUSH_SKIP: 'tests', DELO_TIER: 'agent', LEFTHOOK: '1', LEFTHOOK_EXCLUDE: 'x', LEFTHOOK_BIN: 'y', GIT_CONFIG_COUNT: '1', GIT_CONFIG_GLOBAL: '/dev/null' })
     expect(ports.git(['status'])).toEqual({ status: 0, stdout: 'out', stderr: '' })
     expect(exec).toHaveBeenLastCalledWith('git', ['status'], { cwd: '/repo', env: { PATH: '/bin' }, output: 'capture' })
     expect(ports.checks(['--changed'])).toBe(0)
