@@ -27,15 +27,26 @@ export function nodeHash(left: Uint8Array, right: Uint8Array): Buffer {
 }
 
 /**
+ * Whether a size is a power of two, by arithmetic exact for every safe integer: a 32-bit `&` would read `2^32 + 2^31`
+ * as one. `@delo/release-verify` keeps the same function; it depends on this package, so this one cannot import it.
+ * @param size - a positive safe integer.
+ * @returns `true` for 1, 2, 4, …; `false` for anything else, every size from 2^53 up included.
+ */
+export function isPowerOfTwo(size: number): boolean {
+  return Number.isSafeInteger(size) && size > 0 && 2 ** Math.round(Math.log2(size)) === size
+}
+
+/**
  * The root a leaf's inclusion proof reproduces, by the inclusion-proof verification algorithm of RFC 9162.
  * @param index - the leaf's index.
  * @param size - the tree size.
  * @param leaf - the leaf hash.
  * @param proof - the audit path.
- * @returns the root hash, or `undefined` when the proof's length does not fit the index and size.
+ * @returns the root hash, or `undefined` when the proof's length does not fit the index and size, or either is not a
+ *   safe integer.
  */
 export function rootFromInclusionProof(index: number, size: number, leaf: Uint8Array, proof: readonly Uint8Array[]): Buffer | undefined {
-  if (index >= size || proof.length > MAX_PROOF_HASHES) return undefined
+  if (!Number.isSafeInteger(index) || !Number.isSafeInteger(size) || index < 0 || index >= size || proof.length > MAX_PROOF_HASHES) return undefined
   let fn = index
   let sn = size - 1
   let r: Buffer = Buffer.from(leaf)
@@ -66,14 +77,14 @@ export function rootFromInclusionProof(index: number, size: number, leaf: Uint8A
  * @param root1 - the older root.
  * @param root2 - the newer root.
  * @param proof - the consistency proof.
- * @returns true when the proof verifies.
+ * @returns true when the proof verifies; false for a size that is negative or not a safe integer, 2^53 and beyond.
  */
 export function verifyConsistency(size1: number, size2: number, root1: Uint8Array, root2: Uint8Array, proof: readonly Uint8Array[]): boolean {
-  if (size1 > size2 || proof.length > MAX_PROOF_HASHES) return false
+  if (!Number.isSafeInteger(size1) || !Number.isSafeInteger(size2) || size1 < 0 || size1 > size2 || proof.length > MAX_PROOF_HASHES) return false
   if (size1 === size2) return proof.length === 0 && Buffer.from(root1).equals(Buffer.from(root2))
   if (size1 === 0) return proof.length === 0
   let path = [...proof]
-  if ((size1 & (size1 - 1)) === 0) path = [root1, ...path]
+  if (isPowerOfTwo(size1)) path = [root1, ...path]
   if (path.length === 0) return false
   let fn = size1 - 1
   let sn = size2 - 1
