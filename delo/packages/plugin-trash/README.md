@@ -45,6 +45,7 @@ A failure the plugin cannot name answers `TRASH_FAILED` and is logged with its c
 | `trashRoot` | `<home>/trash` |
 | `sessionsRoot` | `<home>/sessions` |
 | `storagesRoot` | `<home>/storages` |
+| `attachmentsRoot` | `<home>/attachments/v1` |
 | `logsHome` | `<home>` |
 
 ## Tests

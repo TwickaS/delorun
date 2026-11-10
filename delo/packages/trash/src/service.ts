@@ -1,16 +1,24 @@
 /**
  * The trash service of contract C8: deleting a chat or a workspace moves it to
  * the trash, the person can restore it before its 30-day retention ends, and a
- * purge — by hand or at the retention's end — removes it from every store that
+ * purge, by hand or at the retention's end, removes it from every store that
  * holds its content. A purge states that fragments may remain in the
  * operational logs until C20's 14-day retention, and it offers to clear the
- * affected log files at once; when the person accepts, it deletes them.
+ * home's operational logs at once; when the person accepts, it clears every
+ * local log, not only the records of the purged item.
+ *
+ * Every path the service writes is derived from the configured sessions root
+ * and the item's own directory; the record supplies only two-segment names,
+ * which the store validates. A delete records where each chat goes before it
+ * moves it, and a restore checks every target before it moves anything back,
+ * rewrites the record after each chat it returns, and never removes an item
+ * whose directory still holds chat content.
  *
  * @module @delo/trash/service
  */
-import { readdir, stat } from 'node:fs/promises'
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { clearLocalLogs, type RetentionReport } from '@delo/logs'
+import { clearLocalLogs } from '@delo/logs'
 import { PURGE_RESIDUE_MAX_DAYS, TRASH_RETENTION_DAYS } from '@delo/contract-archive-and-trash'
 import {
   removeAttachments,
@@ -23,11 +31,15 @@ import {
 import { removeDraftEntries, type DraftStorage } from './drafts.ts'
 import { takeSessionLock } from './lease.ts'
 import { encodeSegment, projectKey, sessionDirectoryPath } from './paths.ts'
+import { directoryDigests, treeDigests } from './session-text.ts'
 import {
+  contentName,
   DAY_MS,
   isSafeOrigin,
+  pathExists,
   TrashError,
   TrashStore,
+  type DamagedItem,
   type DeleteChatInput,
   type DeleteWorkspaceInput,
   type TrashedChat,
@@ -48,11 +60,15 @@ export type PurgeStore =
 /** What a purge did, per C8's report. */
 export interface PurgeReport {
   readonly itemId: string
-  /** Every store whose purge effect removed the item's content. */
+  /** Every store the purge reached for the item's content. */
   readonly removedFrom: readonly PurgeStore[]
+  /** Attachments the item's chats named that another chat still names, so they were kept. */
+  readonly attachmentsKept: number
   logs: {
-    /** Whether the affected log files, current and rotated, were deleted. */
+    /** Whether every local operational log was cleared without a failure. */
     readonly cleared: boolean
+    /** Each log the clear could not change, by message; empty when the clear was not asked for or succeeded. */
+    readonly failures: readonly string[]
     /**
      * Days purged fragments may remain in the retained process logs: 0 when
      * the logs were cleared, otherwise C20's retention.
@@ -62,6 +78,29 @@ export interface PurgeReport {
     readonly notice: string
   }
 }
+
+/** Why a retention pass purged nothing. */
+export type RetentionPause =
+  /** An item was deleted later than the clock now reads, or the clock reads earlier than the last pass. */
+  | 'clock-behind'
+  /** The clock reads more than {@link RETENTION_MAX_GAP_DAYS} days after the last pass. */
+  | 'clock-jump'
+
+/** What one retention pass did. */
+export interface RetentionOutcome {
+  /** One report per purged item. */
+  readonly purged: readonly PurgeReport[]
+  /** Set when the pass purged nothing because the clock is not trustworthy. */
+  readonly paused?: RetentionPause | undefined
+}
+
+/**
+ * The longest gap between two retention passes that the clock is trusted
+ * over. A clock that jumps further forward would make every item look
+ * expired; the pass pauses once, records the new time, and runs at the next
+ * start if the clock stays there.
+ */
+export const RETENTION_MAX_GAP_DAYS = 365
 
 /** The stores a trash service reaches. Each is optional: an effect without its store reports nothing for it. */
 export interface TrashStores {
@@ -86,7 +125,7 @@ export interface TrashStores {
   readonly projectionCache?: ProjectionCachePurge
   /** The browser draft storage of the connection performing the purge. */
   readonly draftStorage?: DraftStorage
-  /** The Delo home whose local operational logs the clear-logs offer deletes (C20). */
+  /** The Delo home whose local operational logs the clear-logs offer clears (C20). */
   readonly logsHome?: string
 }
 
@@ -110,8 +149,11 @@ export interface TrashServiceConfig {
 /** The residue statement a purge carries. */
 export const PURGE_RESIDUE_NOTICE =
   `Purged content may remain in the operational logs for up to ${PURGE_RESIDUE_MAX_DAYS} days, `
-  + 'until the operational logs\' own retention removes it. Accept the clear-logs offer to delete the '
-  + 'affected log files, current and rotated, at once.'
+  + 'until the operational logs\' own retention removes it. Accepting the clear-logs offer clears every '
+  + 'operational log of the home at once, current and rotated, not only the records of this item.'
+
+/** The file under the trash root that records the last retention pass. */
+export const RETENTION_RECORD = 'retention.json'
 
 /** One chat located under a sessions root. */
 interface LocatedChat {
@@ -152,15 +194,12 @@ export class TrashService {
   async deleteChat(input: DeleteChatInput, now: number = Date.now()): Promise<TrashItem> {
     const sessionsRoot = this.requireSessionsRoot()
     const located = await locateChat(sessionsRoot, input.sessionId, input.cwd)
-    const chats: TrashItem['chats'] = located === undefined
-      ? [{ id: input.sessionId }]
-      : [{ id: input.sessionId, origin: located.originRelative }]
+    const attachments = await this.attachmentsOf([located], input.attachments)
     const item = await this.store.createItem('chat', input.label ?? input.sessionId, {
-      chats,
+      chats: [chatRecord(input.sessionId, located)],
       sessionIds: [input.sessionId],
-      ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
+      attachments,
       ...(input.archived === undefined ? {} : { archived: input.archived }),
-      sessionsRoot,
     }, now)
     if (located !== undefined) await this.moveIn(item.id, located)
     return (await this.store.readItem(item.id))!
@@ -176,22 +215,15 @@ export class TrashService {
   async deleteWorkspace(input: DeleteWorkspaceInput, now: number = Date.now()): Promise<TrashItem> {
     const sessionsRoot = this.requireSessionsRoot()
     const locatedChats: Array<LocatedChat | undefined> = []
-    const chats: TrashedChat[] = []
-    const sessionIds: string[] = []
-    for (const chat of input.chats) {
-      const located = await locateChat(sessionsRoot, chat.sessionId, chat.cwd)
-      locatedChats.push(located)
-      chats.push(located === undefined ? { id: chat.sessionId } : { id: chat.sessionId, origin: located.originRelative })
-      sessionIds.push(chat.sessionId)
-    }
+    for (const chat of input.chats) locatedChats.push(await locateChat(sessionsRoot, chat.sessionId, chat.cwd))
+    const attachments = await this.attachmentsOf(locatedChats, [...input.attachments ?? [], ...input.chats.flatMap(chat => chat.attachments ?? [])])
     const item = await this.store.createItem('workspace', input.label ?? input.workspaceId, {
-      chats,
-      sessionIds,
+      chats: input.chats.map((chat, index) => chatRecord(chat.sessionId, locatedChats[index])),
+      sessionIds: input.chats.map(chat => chat.sessionId),
       workspaceIds: [input.workspaceId],
-      ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
+      attachments,
       ...(input.archived === undefined ? {} : { archived: input.archived }),
       ...(input.registration === undefined ? {} : { registration: input.registration }),
-      sessionsRoot,
     }, now)
     for (const located of locatedChats) {
       if (located !== undefined) await this.moveIn(item.id, located)
@@ -200,38 +232,61 @@ export class TrashService {
   }
 
   /**
-   * Move in every chat a live writer kept at its origin when it was deleted,
-   * now that the writer has let its session lock go. A home runs this at
-   * start, before any chat is live again.
+   * Move in every chat whose content is still at its origin: one a live
+   * writer kept there when it was deleted, or one a crash left there after
+   * the record named its place in the trash. A home runs this at start,
+   * before any chat is live again.
    * @returns how many chats moved into the trash.
    */
   async settle(): Promise<number> {
+    const sessionsRoot = this.stores.sessionsRoot
+    if (sessionsRoot === undefined) return 0
     let settled = 0
     for (const item of await this.store.listItems()) {
-      if (item.sessionsRoot === undefined) continue
       for (const chat of item.chats) {
-        if (chat.pending !== true || chat.origin === undefined || !isSafeOrigin(chat.origin)) continue
-        const originDir = join(item.sessionsRoot, chat.origin)
+        if (chat.origin === undefined) continue
+        if (chat.movedAs !== undefined && await this.store.holdsChat(item.id, chat.movedAs)) continue
+        const originDir = join(sessionsRoot, chat.origin)
         if (!await isDirectory(originDir)) continue
-        if (await this.moveIn(item.id, { id: chat.id, cwd: undefined, originDir, originRelative: chat.origin })) settled++
+        if (await this.moveIn(item.id, { id: chat.id, cwd: undefined, originDir, originRelative: chat.origin }, chat.movedAs)) settled++
       }
     }
     return settled
   }
 
   /**
-   * Restore one item before its retention ends: every moved chat returns to
-   * its origin session directory, byte for byte, and the item leaves the trash.
+   * Restore one item before its retention ends: every chat whose content the
+   * item holds returns to its origin session directory, byte for byte, and the
+   * item leaves the trash. Every target is checked before anything moves, and
+   * the record is rewritten after each chat returns, so a restore that stops
+   * partway leaves a record of exactly what is still in the trash.
    * @param itemId - the item to restore.
-   * @returns the item that was restored.
+   * @returns the item as it was before the restore.
+   * @throws {TrashError} `TRASH_RESTORE_CONFLICT` when a session directory stands at a target, before anything moves.
    */
   async restore(itemId: string): Promise<TrashItem> {
+    const sessionsRoot = this.requireSessionsRoot()
     const item = await this.store.readItem(itemId)
     if (item === undefined) throw new TrashError('TRASH_ITEM_NOT_FOUND', `no trash item carries the id "${itemId}"`)
+    const returning: TrashedChat[] = []
     for (const chat of item.chats) {
-      // A pending chat never left its origin, so it is restored where it is.
-      if (chat.movedAs === undefined) continue
-      await this.store.moveChatBack(item, chat)
+      if (chat.movedAs === undefined || !await this.store.holdsChat(item.id, chat.movedAs)) continue
+      if (chat.origin === undefined) {
+        throw new TrashError('TRASH_RECORD_INVALID', `item "${item.id}" holds chat "${chat.id}" without the origin to restore it to`)
+      }
+      if (await pathExists(join(sessionsRoot, chat.origin))) {
+        throw new TrashError('TRASH_RESTORE_CONFLICT', `restoring "${chat.id}" would overwrite the session directory at ${join(sessionsRoot, chat.origin)}`)
+      }
+      returning.push(chat)
+    }
+    let remaining = item
+    for (const chat of returning) {
+      await this.store.moveChatBack(item.id, chat.movedAs!, join(sessionsRoot, chat.origin!))
+      remaining = { ...remaining, chats: remaining.chats.filter(entry => entry !== chat), sessionIds: remaining.sessionIds.filter(id => id !== chat.id) }
+      await this.store.writeItem(remaining)
+    }
+    if (await this.store.holdsContent(item.id)) {
+      throw new TrashError('TRASH_RESTORE_CONFLICT', `item "${item.id}" still holds chat content after the restore, so it stays in the trash`)
     }
     await this.store.removeItem(itemId)
     return item
@@ -240,9 +295,9 @@ export class TrashService {
   /**
    * Purge one item permanently: the full-text index rows, the session
    * directories with every generation, the chat's projection-cache document,
-   * the attachments, the spill files, the browser draft entries and the
-   * trash's own copy all go in one purge, and the report states the log
-   * residue or, with the offer accepted, clears the affected log files.
+   * the attachments no other chat names, the spill files, the browser draft
+   * entries and the trash's own copy all go in one purge, and the report
+   * states the log residue or, with the offer accepted, clears the logs.
    * @param itemId - the item to purge.
    * @param options - `clearLogs` accepts the log-clearing offer.
    * @returns the purge report.
@@ -251,17 +306,22 @@ export class TrashService {
     const item = await this.store.readItem(itemId)
     if (item === undefined) throw new TrashError('TRASH_ITEM_NOT_FOUND', `no trash item carries the id "${itemId}"`)
     const removedFrom: PurgeStore[] = []
-    const sessionsRoot = this.stores.sessionsRoot ?? item.sessionsRoot
+    const sessionsRoot = this.stores.sessionsRoot
 
     if (item.sessionIds.length > 0 && this.stores.sessionIndex !== undefined) {
       await this.stores.sessionIndex.forgetSessions(item.sessionIds)
       removedFrom.push('full-text-index')
     }
+    let attachmentsKept = 0
+    let attachments: readonly string[] = []
+    if (this.stores.attachmentsRoot !== undefined && item.attachments.length > 0) {
+      const named = await this.namedElsewhere(item)
+      attachments = item.attachments.filter(digest => !named.has(digest))
+      attachmentsKept = item.attachments.length - attachments.length
+    }
     if (sessionsRoot !== undefined) {
       for (const chat of item.chats) {
-        if (chat.origin !== undefined && isSafeOrigin(chat.origin)) {
-          await removeStrayGenerations(sessionsRoot, chat.origin)
-        }
+        if (chat.origin !== undefined) await removeStrayGenerations(sessionsRoot, chat.origin)
         await removeSessionDirectory(sessionsRoot, chat.id)
       }
       removedFrom.push('session-generations')
@@ -271,8 +331,8 @@ export class TrashService {
       if (this.stores.storagesRoot !== undefined) await removeProjectionCache(this.stores.storagesRoot, item.sessionIds)
       removedFrom.push('projection-cache')
     }
-    if (this.stores.attachmentsRoot !== undefined && item.attachments.length > 0) {
-      await removeAttachments(this.stores.attachmentsRoot, item.attachments)
+    if (this.stores.attachmentsRoot !== undefined && attachments.length > 0) {
+      await removeAttachments(this.stores.attachmentsRoot, attachments)
       removedFrom.push('attachments')
     }
     if (this.stores.spillRoots !== undefined && this.stores.spillRoots.length > 0 && item.sessionIds.length > 0) {
@@ -287,15 +347,18 @@ export class TrashService {
     await this.store.removeItem(itemId)
     removedFrom.push('trash-content')
 
-    const clearLogs = options.clearLogs === true && this.stores.logsHome !== undefined
-    let clearedReport: RetentionReport | undefined
-    if (clearLogs) clearedReport = clearLocalLogs(this.stores.logsHome!)
+    const failures = options.clearLogs === true && this.stores.logsHome !== undefined
+      ? clearLocalLogs(this.stores.logsHome).failures.map(failure => failure.message)
+      : undefined
+    const cleared = failures !== undefined && failures.length === 0
     return {
       itemId,
       removedFrom,
+      attachmentsKept,
       logs: {
-        cleared: clearedReport !== undefined,
-        residueMaxDays: clearedReport !== undefined ? 0 : PURGE_RESIDUE_MAX_DAYS,
+        cleared,
+        failures: failures ?? [],
+        residueMaxDays: cleared ? 0 : PURGE_RESIDUE_MAX_DAYS,
         notice: PURGE_RESIDUE_NOTICE,
       },
     }
@@ -303,18 +366,27 @@ export class TrashService {
 
   /**
    * Purge every item whose retention has ended. A retention purge is not a
-   * person's choice, so it never clears the operational logs; the residue
-   * stays until C20's own retention removes it.
+   * person's choice, so it never clears the operational logs. The pass purges
+   * nothing when the clock is not trustworthy: when an item was deleted later
+   * than the clock now reads, when the clock reads earlier than the last pass,
+   * or when it reads more than {@link RETENTION_MAX_GAP_DAYS} days after it.
    * @param now - the retention check time, in epoch milliseconds.
-   * @returns one report per purged item.
+   * @returns the purged items, or the reason the pass paused.
    */
-  async enforceRetention(now: number = Date.now()): Promise<PurgeReport[]> {
-    const reports: PurgeReport[] = []
-    for (const item of await this.store.listItems()) {
+  async enforceRetention(now: number = Date.now()): Promise<RetentionOutcome> {
+    const items = await this.store.listItems()
+    const lastRunAt = await this.lastRetentionRun()
+    let paused: RetentionPause | undefined
+    if (items.some(item => item.deletedAt > now) || (lastRunAt !== undefined && now < lastRunAt)) paused = 'clock-behind'
+    else if (lastRunAt !== undefined && now - lastRunAt > RETENTION_MAX_GAP_DAYS * DAY_MS) paused = 'clock-jump'
+    if (paused !== 'clock-behind') await this.recordRetentionRun(now)
+    if (paused !== undefined) return { purged: [], paused }
+    const purged: PurgeReport[] = []
+    for (const item of items) {
       if (item.expiresAt > now) continue
-      reports.push(await this.purge(item.id))
+      purged.push(await this.purge(item.id))
     }
-    return reports
+    return { purged }
   }
 
   /**
@@ -330,39 +402,144 @@ export class TrashService {
     }))
   }
 
-  /** The sessions root delete needs, or the refusal for its absence. */
+  /**
+   * The item directories whose records cannot be read. Nothing restores,
+   * purges or expires them; a person inspects each directory.
+   * @returns each damaged directory with the reason.
+   */
+  async damaged(): Promise<readonly DamagedItem[]> {
+    return (await this.store.scan()).damaged
+  }
+
+  /** The sessions root delete and restore need, or the refusal for its absence. */
   private requireSessionsRoot(): string {
     const root = this.stores.sessionsRoot
     if (root === undefined) {
       throw new TrashError(
         'TRASH_SESSION_ROOT_UNAVAILABLE',
-        'deleting a chat needs the session-persistence root in the service stores',
+        'deleting or restoring a chat needs the session-persistence root in the service stores',
       )
     }
     return root
   }
 
   /**
+   * The attachment digests a delete records: the given ones and every one the chats' generations name, when the
+   * service reaches an attachment store.
+   * @param located - the chats' session directories.
+   * @param given - digests the caller names.
+   * @returns the digests, each once, sorted.
+   */
+  private async attachmentsOf(located: ReadonlyArray<LocatedChat | undefined>, given: readonly string[] = []): Promise<string[]> {
+    const found = new Set(given)
+    if (this.stores.attachmentsRoot !== undefined) {
+      for (const chat of located) {
+        if (chat !== undefined) for (const digest of await directoryDigests(chat.originDir)) found.add(digest)
+      }
+    }
+    return [...found].sort()
+  }
+
+  /**
+   * The attachment digests every chat outside one item names: each live chat
+   * under the sessions root and each chat of every other item in the trash.
+   * @param item - the item being purged.
+   * @returns the digests.
+   */
+  private async namedElsewhere(item: TrashItem): Promise<Set<string>> {
+    const sessionsRoot = this.stores.sessionsRoot
+    const skip = new Set(sessionsRoot === undefined ? [] : item.chats.flatMap(chat => chat.origin === undefined ? [] : [join(sessionsRoot, chat.origin)]))
+    const named = sessionsRoot === undefined ? new Set<string>() : await treeDigests(sessionsRoot, skip)
+    for (const other of await this.store.listItems()) {
+      if (other.id === item.id) continue
+      for (const digest of other.attachments) named.add(digest)
+      for (const digest of await treeDigests(join(this.store.itemPath(other.id), 'chats'))) named.add(digest)
+    }
+    return named
+  }
+
+  /**
    * Move one located chat into its item while holding the chat's session
-   * lock, or mark it pending when a live writer holds the lock.
+   * lock, or mark it pending when a live writer holds the lock. The record
+   * names the chat's place in the trash before the move, so a crash between
+   * the two leaves the content at its origin with a record that says where it
+   * was going, which settle and restore read against the disk.
    * @param itemId - the item the chat belongs to.
    * @param located - the chat's session directory.
+   * @param recorded - the name the record already gives the chat's place, if any.
    * @returns whether the chat's content moved.
    */
-  private async moveIn(itemId: string, located: LocatedChat): Promise<boolean> {
+  private async moveIn(itemId: string, located: LocatedChat, recorded?: string): Promise<boolean> {
     const lock = await takeSessionLock(located.originDir)
-    let chat: TrashedChat
+    const movedAs = recorded ?? contentName(located.cwd, located.id)
     try {
-      chat = lock === undefined
-        ? { id: located.id, origin: located.originRelative, pending: true }
-        : await this.store.moveChatIn(itemId, located.originDir, located.originRelative, located.cwd, located.id)
+      if (lock === undefined) {
+        await this.writeChat(itemId, { id: located.id, origin: located.originRelative, pending: true })
+        return false
+      }
+      await this.writeChat(itemId, { id: located.id, origin: located.originRelative, movedAs })
+      await this.store.moveChatIn(itemId, located.originDir, movedAs)
+      return true
     } finally {
       await lock?.release()
     }
+  }
+
+  /**
+   * Replace one chat's record within its item.
+   * @param itemId - the item.
+   * @param chat - the chat's new record.
+   */
+  private async writeChat(itemId: string, chat: TrashedChat): Promise<void> {
     const item = (await this.store.readItem(itemId))!
     await this.store.writeItem({ ...item, chats: item.chats.map(existing => existing.id === chat.id ? chat : existing) })
-    return chat.movedAs !== undefined
   }
+
+  /**
+   * The time of the last retention pass.
+   * @returns epoch milliseconds, or `undefined` when no pass is recorded or the record is not one.
+   */
+  private async lastRetentionRun(): Promise<number | undefined> {
+    let raw: string
+    try {
+      raw = await readFile(join(this.store.trashRoot, RETENTION_RECORD), 'utf8')
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return undefined
+      throw error
+    }
+    let value: unknown
+    try {
+      value = (JSON.parse(raw) as { lastRunAt?: unknown }).lastRunAt
+    } catch (error: unknown) {
+      // An unreadable record is the same as none: the pass then trusts the items' own times only.
+      void error
+      return undefined
+    }
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+  }
+
+  /**
+   * Record the time of a retention pass.
+   * @param now - the pass's time.
+   */
+  private async recordRetentionRun(now: number): Promise<void> {
+    try {
+      await writeFile(join(this.store.trashRoot, RETENTION_RECORD), `${JSON.stringify({ lastRunAt: now })}\n`, { mode: 0o600 })
+    } catch (error: unknown) {
+      // ENOENT: the trash root does not exist yet, so nothing was ever deleted and no pass needs recording.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+}
+
+/**
+ * The record of one chat before its content moves.
+ * @param sessionId - the chat.
+ * @param located - its session directory, when it has one.
+ * @returns the record.
+ */
+function chatRecord(sessionId: string, located: LocatedChat | undefined): TrashedChat {
+  return located === undefined ? { id: sessionId } : { id: sessionId, origin: located.originRelative }
 }
 
 /**
@@ -401,14 +578,14 @@ async function locateChat(
       id: sessionId,
       cwd,
       originDir: sessionDirectoryPath(sessionsRoot, cwd, sessionId),
-      originRelative: join(projectKey(cwd), encoded),
+      originRelative: `${projectKey(cwd)}/${encoded}`,
     })
   }
   candidates.push({
     id: sessionId,
     cwd: undefined,
     originDir: sessionDirectoryPath(sessionsRoot, undefined, sessionId),
-    originRelative: join('_no-cwd', encoded),
+    originRelative: `_no-cwd/${encoded}`,
   })
   let projects: string[] = []
   try {
@@ -423,16 +600,12 @@ async function locateChat(
       id: sessionId,
       cwd: undefined,
       originDir: join(sessionsRoot, project, encoded),
-      originRelative: join(project, encoded),
+      originRelative: `${project}/${encoded}`,
     })
   }
   for (const candidate of candidates) {
-    try {
-      if (!(await stat(candidate.originDir)).isDirectory()) continue
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') continue
-      throw error
-    }
+    if (!isSafeOrigin(candidate.originRelative)) continue
+    if (!await isDirectory(candidate.originDir)) continue
     return candidate
   }
   return undefined

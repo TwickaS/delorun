@@ -52,7 +52,7 @@ describe('retention', () => {
     const expired = await service().deleteChat({ sessionId: 'ses-expired', cwd }, now - TRASH_RETENTION_DAYS * DAY)
     const kept = await service().deleteChat({ sessionId: 'ses-kept', cwd }, now)
 
-    const reports = await service().enforceRetention(now)
+    const reports = (await service().enforceRetention(now)).purged
 
     expect(reports.map(report => report.itemId)).toEqual([expired.id])
     expect(existsSync(sessionDirectoryPath(tree.sessionsRoot, cwd, 'ses-expired'))).toBe(false)
@@ -72,9 +72,9 @@ describe('retention', () => {
     const item = await service().deleteChat({ sessionId: 'ses-boundary' }, now)
     expect(item.expiresAt - item.deletedAt).toBe(TRASH_RETENTION_DAYS * DAY)
 
-    expect(await service().enforceRetention(now + TRASH_RETENTION_DAYS * DAY - 1)).toEqual([])
+    expect(await service().enforceRetention(now + TRASH_RETENTION_DAYS * DAY - 1)).toEqual({ purged: [] })
     expect((await service().list(now + TRASH_RETENTION_DAYS * DAY - 1))[0]?.expired).toBe(false)
-    const reports = await service().enforceRetention(now + TRASH_RETENTION_DAYS * DAY)
+    const reports = (await service().enforceRetention(now + TRASH_RETENTION_DAYS * DAY)).purged
     expect(reports.map(report => report.itemId)).toEqual([item.id])
   })
 
@@ -85,7 +85,7 @@ describe('retention', () => {
     const now = 1_770_000_000_000
     await service().deleteChat({ sessionId: 'ses-retention-logs' }, now - TRASH_RETENTION_DAYS * DAY)
 
-    const reports = await service().enforceRetention(now)
+    const reports = (await service().enforceRetention(now)).purged
 
     expect(reports).toHaveLength(1)
     expect(reports[0]?.logs.cleared).toBe(false)

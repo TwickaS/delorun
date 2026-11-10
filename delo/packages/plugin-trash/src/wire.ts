@@ -43,10 +43,22 @@ export interface TrashEntry {
   readonly workspaceIds: readonly string[]
 }
 
+/** An item directory whose record cannot be read: nothing restores, purges or expires it. */
+export interface DamagedEntry {
+  /** The directory's name. */
+  readonly id: string
+  /** The item directory on the harness. */
+  readonly directory: string
+  /** Why its record cannot be read. */
+  readonly reason: string
+}
+
 /** The answer to {@link TRASH_PATHS}.list. */
 export interface TrashListing {
   /** Every item, oldest delete first. */
   readonly items: readonly TrashEntry[]
+  /** Every item directory whose record cannot be read. */
+  readonly damaged: readonly DamagedEntry[]
   /** Days the trash keeps an item. */
   readonly retentionDays: number
   /** Days purged fragments may remain in the operational logs unless they are cleared. */
@@ -59,8 +71,12 @@ export interface PurgeOutcome {
   readonly item: TrashEntry
   /** The stores the purge removed the item's content from. */
   readonly removedFrom: readonly string[]
-  /** Whether the affected operational logs were cleared. */
+  /** Attachments the item named that another chat still names, so they were kept. */
+  readonly attachmentsKept: number
+  /** Whether every operational log of the home was cleared without a failure. */
   readonly logsCleared: boolean
+  /** Each log the clear could not change; empty when no clear was asked for or it succeeded. */
+  readonly logFailures: readonly string[]
   /** Days purged fragments may remain in the operational logs: 0 when they were cleared. */
   readonly residueMaxDays: number
 }
@@ -69,8 +85,10 @@ export interface PurgeOutcome {
 export interface EmptyOutcome {
   /** Every purged item. */
   readonly items: readonly TrashEntry[]
-  /** Whether the affected operational logs were cleared. */
+  /** Whether every operational log of the home was cleared without a failure. */
   readonly logsCleared: boolean
+  /** Each log the clear could not change; empty when no clear was asked for or it succeeded. */
+  readonly logFailures: readonly string[]
   /** Days purged fragments may remain in the operational logs: 0 when they were cleared. */
   readonly residueMaxDays: number
 }

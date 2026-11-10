@@ -50,7 +50,7 @@ const DAY_MS = 86_400_000
 const SKELETON_ROWS = [0, 1, 2] as const
 
 /** The listing the section shows until the first one arrives. */
-const NOT_LOADED: TrashListing = { items: [], retentionDays: 0, residueDays: 0 }
+const NOT_LOADED: TrashListing = { items: [], damaged: [], retentionDays: 0, residueDays: 0 }
 
 /** What the confirmation dialog asks about: one item, or the whole trash. */
 type Asking = { readonly kind: 'item'; readonly entry: TrashEntry } | { readonly kind: 'all' }
@@ -136,6 +136,9 @@ export function TrashSection(props: TrashSectionProps) {
     {state.status === 'ready' && items.length === 0
       ? <p className={css.status}>{t(pluralKey('empty', listing.retentionDays), { days: listing.retentionDays })}</p>
       : null}
+    {listing.damaged.length === 0
+      ? null
+      : <p className={css.status} role="note">{t(pluralKey('damaged', listing.damaged.length), { n: listing.damaged.length })}</p>}
     {rows.length === 0 ? null : <ul className={css.rows}>{rows}</ul>}
     {asking === undefined ? null : <Modal open onClose={() => { setAsking(undefined) }}
       title={t(asking.kind === 'item' ? 'purge.title' : 'emptyAll.title')} closeLabel={t('confirm.close')}

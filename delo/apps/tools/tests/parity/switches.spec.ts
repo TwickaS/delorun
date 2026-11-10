@@ -363,6 +363,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
         trashRoot: { __jsExpr: 'dshHomePath(\'trash\')' },
         sessionsRoot: { __jsExpr: 'dshHomePath(\'sessions\')' },
         storagesRoot: { __jsExpr: 'dshHomePath(\'storages\')' },
+        attachmentsRoot: { __jsExpr: 'dshHomePath(\'attachments\', \'v1\')' },
         logsHome: { __jsExpr: 'dshHomePath()' },
       },
       disabled: true,

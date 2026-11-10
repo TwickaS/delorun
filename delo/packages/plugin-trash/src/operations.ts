@@ -12,7 +12,7 @@
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { WorkspaceUnknownSessionError, type WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import { PURGE_RESIDUE_MAX_DAYS, TRASH_RETENTION_DAYS } from '@delo/contract-archive-and-trash'
-import { TrashService, type PurgeReport, type TrashItem, type TrashStores } from '@delo/trash'
+import { TrashService, type RetentionOutcome, type TrashItem, type TrashStores } from '@delo/trash'
 import type { EmptyOutcome, PurgeOutcome, TrashEntry, TrashListing } from './wire.ts'
 
 /** The part of upstream's workspace registry the trash uses. */
@@ -74,9 +74,9 @@ export class TrashOperations {
    * At start: move in the chats a live writer held when they were deleted,
    * then purge every item whose retention has ended.
    * @param now - the start time.
-   * @returns the purge report of each expired item.
+   * @returns the retention pass's outcome: the purged items, or why it paused.
    */
-  start(now: number = Date.now()): Promise<PurgeReport[]> {
+  start(now: number = Date.now()): Promise<RetentionOutcome> {
     return this.serial(async () => {
       await this.service().settle()
       return await this.service().enforceRetention(now)
@@ -88,11 +88,15 @@ export class TrashOperations {
    * @returns the listing.
    */
   list(): Promise<TrashListing> {
-    return this.serial(async () => ({
-      items: (await this.service().list()).map(entryOf),
-      retentionDays: TRASH_RETENTION_DAYS,
-      residueDays: PURGE_RESIDUE_MAX_DAYS,
-    }))
+    return this.serial(async () => {
+      const service = this.service()
+      return {
+        items: (await service.list()).map(entryOf),
+        damaged: (await service.damaged()).map(({ id, directory, reason }) => ({ id, directory, reason })),
+        retentionDays: TRASH_RETENTION_DAYS,
+        residueDays: PURGE_RESIDUE_MAX_DAYS,
+      }
+    })
   }
 
   /**
@@ -170,7 +174,7 @@ export class TrashOperations {
   /**
    * Delete one item forever.
    * @param itemId - the item.
-   * @param clearLogs - whether the person accepted clearing the affected operational logs now.
+   * @param clearLogs - whether the person accepted clearing every operational log of the home now.
    * @returns what the purge did.
    */
   purge(itemId: string, clearLogs: boolean): Promise<PurgeOutcome> {
@@ -181,7 +185,9 @@ export class TrashOperations {
       return {
         item: entryOf(item!),
         removedFrom: report.removedFrom,
+        attachmentsKept: report.attachmentsKept,
         logsCleared: report.logs.cleared,
+        logFailures: report.logs.failures,
         residueMaxDays: report.logs.residueMaxDays,
       }
     })
@@ -189,7 +195,8 @@ export class TrashOperations {
 
   /**
    * Delete every item forever.
-   * @param clearLogs - whether the person accepted clearing the affected operational logs now.
+   * @param clearLogs - whether the person accepted clearing every operational log of the home now, which the last
+   *   purge does once.
    * @returns what the purges did.
    */
   empty(clearLogs: boolean): Promise<EmptyOutcome> {
@@ -197,11 +204,13 @@ export class TrashOperations {
       const service = this.service()
       const items = await service.list()
       let cleared = false
-      for (const item of items) {
-        const report = await service.purge(item.id, { clearLogs: clearLogs && !cleared })
-        cleared ||= report.logs.cleared
+      let failures: readonly string[] = []
+      for (const [index, item] of items.entries()) {
+        const report = await service.purge(item.id, { clearLogs: clearLogs && index === items.length - 1 })
+        cleared = report.logs.cleared
+        failures = report.logs.failures
       }
-      return { items: items.map(entryOf), logsCleared: cleared, residueMaxDays: cleared ? 0 : PURGE_RESIDUE_MAX_DAYS }
+      return { items: items.map(entryOf), logsCleared: cleared, logFailures: failures, residueMaxDays: cleared ? 0 : PURGE_RESIDUE_MAX_DAYS }
     })
   }
 

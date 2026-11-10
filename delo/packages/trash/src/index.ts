@@ -7,6 +7,7 @@
  */
 export {
   attachmentObjectPath,
+  attachmentPaths,
   encodeSegment,
   isSessionGenerationFilename,
   projectKey,
@@ -18,7 +19,11 @@ export {
   TrashStore,
   DAY_MS,
   isSafeOrigin,
+  contentName,
+  moveDirectory,
+  pathExists,
   TRASH_ITEM_SCHEMA_VERSION,
+  type DamagedItem,
   type DeleteChatInput,
   type DeleteWorkspaceInput,
   type TrashedChat,
@@ -36,10 +41,15 @@ export {
   type SessionIndexPurge,
 } from './effects.ts'
 export { removeDraftEntries, type DraftStorage } from './drafts.ts'
+export { MAX_GENERATION_BYTES, attachmentDigests, directoryDigests, generationFiles, generationVersion, readGeneration, treeDigests } from './session-text.ts'
 export { SESSION_LOCK_FILENAME, takeSessionLock, type HeldSessionLock } from './lease.ts'
 export {
   PURGE_RESIDUE_NOTICE,
+  RETENTION_MAX_GAP_DAYS,
+  RETENTION_RECORD,
   TrashService,
+  type RetentionOutcome,
+  type RetentionPause,
   type PurgeReport,
   type ProjectionCachePurge,
   type PurgeStore,

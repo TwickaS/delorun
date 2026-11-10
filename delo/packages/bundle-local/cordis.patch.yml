@@ -125,4 +125,5 @@
         trashRoot: !!js dshHomePath('trash')
         sessionsRoot: !!js dshHomePath('sessions')
         storagesRoot: !!js dshHomePath('storages')
+        attachmentsRoot: !!js dshHomePath('attachments', 'v1')
         logsHome: !!js dshHomePath()

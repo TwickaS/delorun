@@ -45,6 +45,8 @@ export interface Config {
   readonly sessionsRoot: string
   /** The storage backend's root, `<home>/storages`, which holds the projection cache's documents. */
   readonly storagesRoot: string
+  /** The versioned attachment root, `<home>/attachments/v1`, whose attachments a purge removes when no other chat names them. */
+  readonly attachmentsRoot: string
   /** The Delo home whose operational logs the clear-logs offer deletes. */
   readonly logsHome: string
 }
@@ -57,6 +59,7 @@ export const Config: schema<Config> = schema.object({
   trashRoot: schema.string().pattern(ABSOLUTE).required().description('The trash root, <home>/trash.'),
   sessionsRoot: schema.string().pattern(ABSOLUTE).required().description('The JSONL session-persistence root, <home>/sessions.'),
   storagesRoot: schema.string().pattern(ABSOLUTE).required().description('The storage backend\'s root, <home>/storages.'),
+  attachmentsRoot: schema.string().pattern(ABSOLUTE).required().description('The versioned attachment root, <home>/attachments/v1.'),
   logsHome: schema.string().pattern(ABSOLUTE).required().description('The Delo home whose operational logs the clear-logs offer deletes.'),
 })
 
@@ -109,6 +112,7 @@ export function apply(ctx: Context, config: Config): void {
   const stores = (): TrashStores => ({
     sessionsRoot: config.sessionsRoot,
     storagesRoot: config.storagesRoot,
+    attachmentsRoot: config.attachmentsRoot,
     spillRoots,
     logsHome: config.logsHome,
     ...(sessionIndex === undefined ? {} : { sessionIndex }),
@@ -121,8 +125,12 @@ export function apply(ctx: Context, config: Config): void {
     warn: message => { ctx.logger.warn(`${name}: ${message}`) },
   })
 
-  operations.start().then((reports) => {
-    if (reports.length > 0) ctx.logger.info(`${name}: deleted ${String(reports.length)} item(s) whose 30 days in the trash ended`)
+  operations.start().then((outcome) => {
+    if (outcome.paused !== undefined) {
+      ctx.logger.warn(`${name}: the trash's retention purged nothing at this start, because the clock is not trustworthy (${outcome.paused}); it runs again at the next start`)
+    } else if (outcome.purged.length > 0) {
+      ctx.logger.info(`${name}: deleted ${String(outcome.purged.length)} item(s) whose 30 days in the trash ended`)
+    }
   }, (error: unknown) => {
     ctx.logger.warn(`${name}: the trash's start pass failed, so expired items stay until the next start: ${String(error)}`)
   })

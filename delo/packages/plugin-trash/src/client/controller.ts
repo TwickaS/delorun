@@ -75,6 +75,16 @@ const SPECIFIC: Readonly<Partial<Record<string, TrashToastKey>>> = {
   WORKSPACE_NOT_FOUND: 'toast.workspaceMissing',
 }
 
+/**
+ * The notice for a purge whose log clear was asked for and did not fully succeed.
+ * @param asked - whether the person asked to clear the logs.
+ * @param cleared - whether every log was cleared.
+ * @returns the failure notice, or `undefined` when there is nothing to say beyond the purge itself.
+ */
+function logsOutcome(asked: boolean, cleared: boolean): TrashNotice | undefined {
+  return asked && !cleared ? { ok: false, key: 'toast.logsNotCleared' } : undefined
+}
+
 /** The browser's `localStorage` as the draft storage the purge clears. */
 export const localDrafts: DraftStorage = {
   keys: () => Array.from({ length: localStorage.length }, (_, index) => String(localStorage.key(index))),
@@ -156,7 +166,10 @@ export class TrashController {
    */
   async purge(itemId: string, clearLogs: boolean): Promise<void> {
     await this.act(() => post<PurgeOutcome>(TRASH_PATHS.purge, { itemId, clearLogs }),
-      'toast.purged', 'toast.purgeFailed', (outcome) => { this.forget(outcome.item) })
+      'toast.purged', 'toast.purgeFailed', (outcome) => {
+        this.forget(outcome.item)
+        return logsOutcome(clearLogs, outcome.logsCleared)
+      })
   }
 
   /**
@@ -166,7 +179,10 @@ export class TrashController {
    */
   async empty(clearLogs: boolean): Promise<void> {
     await this.act(() => post<EmptyOutcome>(TRASH_PATHS.empty, { clearLogs }),
-      'toast.emptied', 'toast.emptyFailed', (outcome) => { for (const item of outcome.items) this.forget(item) })
+      'toast.emptied', 'toast.emptyFailed', (outcome) => {
+        for (const item of outcome.items) this.forget(item)
+        return logsOutcome(clearLogs && outcome.items.length > 0, outcome.logsCleared)
+      })
   }
 
   /** Show every hidden chat again and ignore later answers. */
@@ -175,7 +191,7 @@ export class TrashController {
     for (const id of [...this.hides.keys()]) this.release(id)
   }
 
-  private async act<T>(request: () => Promise<T>, done: TrashToastKey, failed: TrashToastKey, apply: (result: T) => void): Promise<void> {
+  private async act<T>(request: () => Promise<T>, done: TrashToastKey, failed: TrashToastKey, apply: (result: T) => TrashNotice | void): Promise<void> {
     let result: T
     try {
       result = await request()
@@ -185,8 +201,7 @@ export class TrashController {
       await this.refresh()
       return
     }
-    apply(result)
-    this.deps.report({ ok: true, key: done })
+    this.deps.report(apply(result) ?? { ok: true, key: done })
     await this.refresh()
   }
 

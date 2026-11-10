@@ -8,7 +8,7 @@
  * refuse a malformed body and name a refusal by its code.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -61,6 +61,7 @@ const config = (): Trash.Config => ({
   trashRoot: join(home, 'trash'),
   sessionsRoot: join(home, 'sessions'),
   storagesRoot: join(home, 'storages'),
+  attachmentsRoot: join(home, 'attachments', 'v1'),
   logsHome: home,
 })
 
@@ -277,7 +278,41 @@ describe('deleting forever', () => {
 
     expect(emptied.json.items.map(item => item.sessionIds[0])).toEqual(['chat-a', 'chat-b'])
     expect(emptied.json).toMatchObject({ logsCleared: true, residueMaxDays: 0 })
-    expect(again.json).toEqual({ items: [], logsCleared: false, residueMaxDays: 14 })
+    expect(again.json).toEqual({ items: [], logsCleared: false, logFailures: [], residueMaxDays: 14 })
+  })
+
+  it('reports a log clear that failed, with each failure, and lists a damaged item without acting on it', async () => {
+    await mount()
+    mkdirSync(join(home, 'logs', 'home-default'), { recursive: true, mode: 0o700 })
+    chmodSync(join(home, 'logs'), 0o755)
+    const deleted = await post<TrashEntry>(TRASH_PATHS.deleteChat, { sessionId: 'chat-a' })
+    mkdirSync(join(home, 'trash', 'items', '1-a'), { recursive: true })
+    writeFileSync(join(home, 'trash', 'items', '1-a', 'item.json'), 'torn')
+
+    const purged = await post<PurgeOutcome>(TRASH_PATHS.purge, { itemId: deleted.json.id, clearLogs: true })
+    const listed = await listing()
+
+    expect(purged.json.logsCleared).toBe(false)
+    expect(purged.json.logFailures.length).toBeGreaterThan(0)
+    expect(listed.items).toEqual([])
+    expect(listed.damaged).toEqual([{ id: '1-a', directory: join(home, 'trash', 'items', '1-a'), reason: 'the trash record of "1-a" is not JSON' }])
+    chmodSync(join(home, 'logs'), 0o700)
+  })
+
+  it('deletes forever an attachment only the purged chat names, in every layout', async () => {
+    await mount()
+    const digest = 'f'.repeat(64)
+    plantChat('chat-a')
+    writeFileSync(join(sessionDirectoryPath(join(home, 'sessions'), '/work', 'chat-a'), 'session.jsonl'), `{"attachment":"sha256:${digest}"}\n`)
+    const object = join(home, 'attachments', 'v1', 'file-objects', 'ff', digest)
+    mkdirSync(join(object, '..'), { recursive: true })
+    writeFileSync(object, 'bytes')
+    const deleted = await post<TrashEntry>(TRASH_PATHS.deleteChat, { sessionId: 'chat-a' })
+
+    const purged = await post<PurgeOutcome>(TRASH_PATHS.purge, { itemId: deleted.json.id })
+
+    expect(purged.json).toMatchObject({ attachmentsKept: 0, removedFrom: expect.arrayContaining(['attachments']) })
+    expect(existsSync(object)).toBe(false)
   })
 
   it('refuses an item the trash does not hold', async () => {
@@ -313,6 +348,18 @@ describe('the start pass', () => {
     await mount()
 
     expect((await listing()).items.map(item => item.label)).toEqual(['new'])
+  })
+
+  it('purges nothing and warns when an item was deleted later than the clock reads', async () => {
+    const store = new TrashStore(config().trashRoot)
+    const now = Date.now()
+    await store.createItem('chat', 'old', { chats: [{ id: 'chat-old' }], sessionIds: ['chat-old'] }, now - 31 * DAY_MS)
+    await store.createItem('chat', 'future', { chats: [{ id: 'chat-new' }], sessionIds: ['chat-new'] }, now + DAY_MS)
+
+    await mount()
+
+    expect((await listing()).items.map(item => item.label)).toEqual(['old', 'future'])
+    expect(harness.warnings.join('\n')).toContain('clock is not trustworthy (clock-behind)')
   })
 
   it('warns when the trash cannot be read at start, and the harness keeps running', async () => {

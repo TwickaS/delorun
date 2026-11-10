@@ -84,15 +84,15 @@ describe('settle', () => {
     writeFileSync(join(sessionsRoot, 'project'), 'a file where the project directory belongs')
     const root = join(base, 'trash')
     const store = new TrashStore(root)
-    const item = await store.createItem('chat', 'pending', { chats: [{ id: 'chat-a', origin: 'project/chat-a', pending: true }], sessionIds: ['chat-a'], sessionsRoot }, 1)
+    const item = await store.createItem('chat', 'pending', { chats: [{ id: 'chat-a', origin: 'project/chat-a', pending: true }], sessionIds: ['chat-a'] }, 1)
 
-    await expect(new TrashService({ root }).settle()).rejects.toMatchObject({ code: 'ENOTDIR' })
+    await expect(new TrashService({ root, stores: { sessionsRoot } }).settle()).rejects.toMatchObject({ code: 'ENOTDIR' })
     expect((await store.readItem(item.id))!.chats[0]).toMatchObject({ pending: true })
   })
 })
 
 describe('purge', () => {
-  it('uses the sessions root the item recorded when the service has none, and removes a generation that reappeared at the origin', async () => {
+  it('removes a generation that reappeared at the origin between the move and the purge', async () => {
     const sessionsRoot = join(base, 'sessions')
     const root = join(base, 'trash')
     const deleting = new TrashService({ root, stores: { sessionsRoot } })
@@ -101,13 +101,13 @@ describe('purge', () => {
     mkdirSync(origin, { recursive: true })
     writeFileSync(join(origin, 'session.jsonl'), 'written between the move and the purge\n')
 
-    const report = await new TrashService({ root }).purge(item.id)
+    const report = await deleting.purge(item.id)
 
     expect(report.removedFrom).toContain('session-generations')
     expect(existsSync(origin)).toBe(false)
   })
 
-  it('skips the session store for an item that recorded no sessions root when the service has none', async () => {
+  it('skips the session store when the service has no sessions root, whatever the item recorded', async () => {
     const root = join(base, 'trash')
     const item = await new TrashStore(root).createItem('chat', 'no root', { chats: [{ id: 'chat-a' }], sessionIds: ['chat-a'] }, 1)
 

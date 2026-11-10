@@ -77,15 +77,19 @@ describe('the facts a restore needs', () => {
 })
 
 describe('the settle pass', () => {
-  it('skips an item without a sessions root, a chat with an unsafe origin and a chat whose origin is gone', async () => {
+  it('does nothing without a sessions root, and skips a chat without an origin, one whose origin is gone and one whose content is in the trash', async () => {
     const root = join(base, 'trash')
+    const sessionsRoot = join(base, 'sessions')
     const store = new TrashStore(root)
-    await store.createItem('chat', 'no root', { chats: [{ id: 'a', origin: 'p/a', pending: true }], sessionIds: ['a'] }, 1)
-    await store.createItem('chat', 'unsafe', { chats: [{ id: 'b', origin: '../b', pending: true }], sessionIds: ['b'], sessionsRoot: join(base, 'sessions') }, 2)
-    await store.createItem('chat', 'gone', { chats: [{ id: 'c', origin: 'p/c', pending: true }], sessionIds: ['c'], sessionsRoot: join(base, 'sessions') }, 3)
-    await store.createItem('chat', 'moved', { chats: [{ id: 'd', origin: 'p/d', movedAs: 'p/d' }], sessionIds: ['d'], sessionsRoot: join(base, 'sessions') }, 4)
+    await store.createItem('chat', 'pending', { chats: [{ id: 'a', origin: 'p/a', pending: true }], sessionIds: ['a'] }, 1)
+    await store.createItem('chat', 'no origin', { chats: [{ id: 'b' }], sessionIds: ['b'] }, 2)
+    await store.createItem('chat', 'gone', { chats: [{ id: 'c', origin: 'p/c', pending: true }], sessionIds: ['c'] }, 3)
+    const moved = await store.createItem('chat', 'moved', { chats: [{ id: 'd', origin: 'p/d', movedAs: 'p/d' }], sessionIds: ['d'] }, 4)
+    mkdirSync(join(store.itemPath(moved.id), 'chats', 'p', 'd'), { recursive: true })
+    mkdirSync(join(sessionsRoot, 'p', 'd'), { recursive: true })
 
     expect(await new TrashService({ root }).settle()).toBe(0)
+    expect(await new TrashService({ root, stores: { sessionsRoot } }).settle()).toBe(0)
   })
 
   it('moves a chat whose writer never left a lock file', async () => {
@@ -97,9 +101,9 @@ describe('the settle pass', () => {
     const store = new TrashStore(root)
     const origin = join('--work--', 'chat-a')
     expect(join(sessionsRoot, origin)).toBe(directory)
-    await store.createItem('chat', 'pending', { chats: [{ id: 'chat-a', origin, pending: true }], sessionIds: ['chat-a'], sessionsRoot }, 1)
+    await store.createItem('chat', 'pending', { chats: [{ id: 'chat-a', origin, pending: true }], sessionIds: ['chat-a'] }, 1)
 
-    expect(await new TrashService({ root }).settle()).toBe(1)
+    expect(await new TrashService({ root, stores: { sessionsRoot } }).settle()).toBe(1)
     expect((await store.listItems())[0]!.chats[0]!.movedAs).toBeDefined()
   })
 })

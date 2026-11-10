@@ -12,7 +12,7 @@
 import { lstat, readdir, rm, stat } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { attachmentObjectPath, encodeSegment, isSessionGenerationFilename, spillSessionDirectoryPath } from './paths.ts'
+import { attachmentPaths, encodeSegment, isSessionGenerationFilename, spillSessionDirectoryPath } from './paths.ts'
 import { TrashError } from './store.ts'
 
 /**
@@ -162,15 +162,30 @@ export async function removeProjectionCache(storagesRoot: string, sessionIds: re
 }
 
 /**
- * Remove the item's attachment objects from a versioned attachment root.
+ * Remove the item's attachments from a versioned attachment root, in every
+ * layout the local attachment store writes: an image object under `objects/`,
+ * a file object under `file-objects/`, and the file's named alias directory
+ * under `files/`. The caller passes only digests no remaining chat names.
  * @param attachmentsRoot - the versioned attachment root.
  * @param digests - the lowercase hexadecimal SHA-256 digests to remove.
+ * @returns the paths removed.
  */
-export async function removeAttachments(attachmentsRoot: string, digests: readonly string[]): Promise<void> {
-  if (!await requireStoreRoot(attachmentsRoot)) return
+export async function removeAttachments(attachmentsRoot: string, digests: readonly string[]): Promise<string[]> {
+  if (!await requireStoreRoot(attachmentsRoot)) return []
+  const removed: string[] = []
   for (const sha256 of digests) {
-    await rm(attachmentObjectPath(attachmentsRoot, sha256), { force: true })
+    for (const path of attachmentPaths(attachmentsRoot, sha256)) {
+      try {
+        await lstat(path)
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') continue
+        throw error
+      }
+      await rm(path, { recursive: true, force: true })
+      removed.push(path)
+    }
   }
+  return removed
 }
 
 /**

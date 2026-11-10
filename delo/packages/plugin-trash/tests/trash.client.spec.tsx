@@ -32,7 +32,7 @@ function harness(initial: readonly TrashEntry[] = []) {
     return items.splice(index, 1)[0] as TrashEntry
   }
   const routes: Record<string, Route> = {
-    [TRASH_PATHS.list]: () => Response.json({ items, retentionDays: 30, residueDays: 7 }),
+    [TRASH_PATHS.list]: () => Response.json({ items, damaged: [], retentionDays: 30, residueDays: 7 }),
     [TRASH_PATHS.deleteChat]: (body) => {
       const added = entry({ id: `item-${String(body.sessionId)}`, label: String(body.label), sessionIds: [String(body.sessionId)] })
       items.push(added)
@@ -264,7 +264,7 @@ describe('the Trash section', () => {
     const gate = new Promise<void>((resolve) => { release = resolve })
     fake.replace(TRASH_PATHS.list, async () => {
       await gate
-      return Response.json({ items: fake.items, retentionDays: 30, residueDays: 7 })
+      return Response.json({ items: fake.items, damaged: [], retentionDays: 30, residueDays: 7 })
     })
     const page = await load()
     page.mount('settings.section')
@@ -359,6 +359,40 @@ describe('the Trash section', () => {
     expect(fake.callsTo(TRASH_PATHS.purge)[1]).toEqual({ itemId: 'b', clearLogs: true })
   })
 
+  it('says so when the logs it was asked to clear could not all be cleared', async () => {
+    const fake = harness([entry({ id: 'a', label: 'Plan the move', sessionIds: ['a-1'] }), entry({ id: 'b', label: 'Docs', sessionIds: ['b-1'] })])
+    fake.replace(TRASH_PATHS.purge, body => Response.json({ item: entry({ id: String(body.itemId) }), removedFrom: [], attachmentsKept: 0, logsCleared: false, logFailures: ['logs: mode 0755'], residueMaxDays: 14 }))
+    fake.replace(TRASH_PATHS.empty, () => Response.json({ items: [], logsCleared: false, logFailures: [], residueMaxDays: 14 }))
+    const page = await load()
+    page.mount('shell.overlay')
+    page.mount('settings.section')
+    const row = (await screen.findByText('Plan the move')).closest('li') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: en.purge }))
+    const dialog = screen.getByRole('dialog', { name: en['purge.title'] })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: en.clearLogs }))
+    fireEvent.click(within(dialog).getByRole('button', { name: en.purge }))
+
+    await waitFor(() => { expect(screen.getAllByRole('alert').map(alert => alert.textContent)).toContain(en['toast.logsNotCleared']) })
+    fireEvent.click(screen.getByRole('button', { name: en.emptyAll }))
+    const emptying = screen.getByRole('dialog', { name: en['emptyAll.title'] })
+    fireEvent.click(within(emptying).getByRole('checkbox', { name: en.clearLogs }))
+    fireEvent.click(within(emptying).getByRole('button', { name: en.emptyAll }))
+    await waitFor(() => { expect(screen.getAllByRole('alert').map(alert => alert.textContent)).toContain(en['toast.emptied']) })
+  })
+
+  it('says how many items it cannot read, and leaves them alone', async () => {
+    const fake = harness([])
+    fake.replace(TRASH_PATHS.list, () => Response.json({ items: [], damaged: [{ id: '1-a', directory: '/h/trash/items/1-a', reason: 'torn' }, { id: '2-a', directory: '/h/trash/items/2-a', reason: 'torn' }], retentionDays: 30, residueDays: 14 }))
+    const page = await load()
+    page.mount('settings.section')
+
+    expect(await screen.findByText(en['damaged.other'].replace('{n}', '2'))).toBeTruthy()
+    fake.replace(TRASH_PATHS.list, () => Response.json({ items: [], damaged: [{ id: '1-a', directory: '/h/trash/items/1-a', reason: 'torn' }], retentionDays: 30, residueDays: 14 }))
+    cleanup()
+    page.mount('settings.section')
+    expect(await screen.findByText(en['damaged.one'].replace('{n}', '1'))).toBeTruthy()
+  })
+
   it('keeps the item, its drafts and its chats hidden when a delete forever fails', async () => {
     const fake = harness([entry({ id: 'a', label: 'Plan the move', sessionIds: ['a-1'] })])
     fake.replace(TRASH_PATHS.purge, () => Response.json({ code: 'TRASH_ITEM_NOT_FOUND', message: 'x' }, { status: 404 }))
@@ -411,7 +445,7 @@ describe('the Trash section', () => {
     page.mount('settings.section')
     expect((await screen.findByRole('alert')).textContent).toBe(en['list.failed'])
     expect(screen.queryByRole('listitem')).toBeNull()
-    fake.replace(TRASH_PATHS.list, () => Response.json({ items: fake.items, retentionDays: 30, residueDays: 7 }))
+    fake.replace(TRASH_PATHS.list, () => Response.json({ items: fake.items, damaged: [], retentionDays: 30, residueDays: 7 }))
     fireEvent.click(screen.getByRole('button', { name: en['list.retry'] }))
     expect(await screen.findByText('Plan the move')).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()

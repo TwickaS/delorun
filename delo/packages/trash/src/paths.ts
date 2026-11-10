@@ -121,3 +121,18 @@ export function attachmentObjectPath(attachmentsRoot: string, sha256: string): s
   if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error(`attachment digest is not a lowercase sha256: ${sha256}`)
   return join(attachmentsRoot, 'objects', sha256.slice(0, 2), sha256)
 }
+
+/**
+ * Every path the local attachment store keeps one attachment under: the image
+ * object `objects/<xx>/<sha256>`, the file object `file-objects/<xx>/<sha256>`
+ * and the file's alias directory `files/<xx>/<sha256>`, as
+ * `dsh-attachment-local` publishes them.
+ * @param attachmentsRoot - the versioned attachment root, `<home>/attachments/v1`.
+ * @param sha256 - the lowercase hexadecimal digest of the attachment's bytes.
+ * @returns the three paths.
+ */
+export function attachmentPaths(attachmentsRoot: string, sha256: string): string[] {
+  const object = attachmentObjectPath(attachmentsRoot, sha256)
+  const prefix = sha256.slice(0, 2)
+  return [object, join(attachmentsRoot, 'file-objects', prefix, sha256), join(attachmentsRoot, 'files', prefix, sha256)]
+}

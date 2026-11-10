@@ -37,7 +37,7 @@ describe('a store root that does not exist', () => {
     expect(await removeSessionDirectory(missing, 'chat-a')).toBeUndefined()
     expect(await removeStrayGenerations(missing, 'p/chat-a')).toEqual([])
     expect(await removeProjectionCache(missing, ['chat-a'])).toEqual([])
-    await expect(removeAttachments(missing, ['ab'.repeat(32)])).resolves.toBeUndefined()
+    expect(await removeAttachments(missing, ['ab'.repeat(32)])).toEqual([])
     await expect(removeSpill([missing], ['chat-a'])).resolves.toBeUndefined()
   })
 })

@@ -31,6 +31,7 @@ describe('the shipped composition\'s trash row', () => {
       trashRoot: join(home.dir, 'trash'),
       sessionsRoot: join(home.dir, 'sessions'),
       storagesRoot: join(home.dir, 'storages'),
+      attachmentsRoot: join(home.dir, 'attachments', 'v1'),
       logsHome: home.dir,
     })
     const [parity] = parityPatches([{ insert: [{ id: 'delo-trash', name: '@delo/plugin-trash' }] }])

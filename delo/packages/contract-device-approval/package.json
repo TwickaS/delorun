@@ -13,7 +13,6 @@
     "@delo/contract-admission": "workspace:*"
   },
   "delo": {
-    "state": "shipped",
-    "unreached": "reach"
+    "state": "shipped"
   }
 }
