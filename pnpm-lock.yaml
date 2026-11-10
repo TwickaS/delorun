@@ -1318,6 +1318,9 @@ importers:
       '@delo/bundle-studio':
         specifier: workspace:*
         version: link:../../packages/bundle-studio
+      '@delo/changes':
+        specifier: workspace:*
+        version: link:../../packages/changes
       '@delo/contract-admission':
         specifier: workspace:*
         version: link:../../packages/contract-admission
@@ -1946,6 +1949,33 @@ importers:
       js-yaml:
         specifier: ^4.3.2
         version: 4.3.2
+
+  delo/packages/changes:
+    dependencies:
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../../packages/util/atomic-write
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delo/profile-safety':
+        specifier: workspace:*
+        version: link:../profile-safety
+      diff:
+        specifier: ^9.0.0
+        version: 9.0.0
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   delo/packages/contract-admission:
     dependencies:

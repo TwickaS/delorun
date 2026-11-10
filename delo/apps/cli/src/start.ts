@@ -9,6 +9,10 @@
  * - `delorun start` starts the same command detached from the terminal, with standard input closed and its output
  *   in its log, and waits at most 120 seconds for the update channel to report `running`.
  *
+ * Before the profile boots, the pre-start steps run ([pre-start](./pre-start.ts)): among them, a fresh start from C1's
+ * store refuses a runtime whose files differ from the signed release, and each plugin the profile links from a folder
+ * is made to load the content Changes allows ([`@delo/changes`](../../../packages/changes/src/enforce.ts)).
+ *
  * A second start for a profile whose home process answers prints that process and exits 0. A profile that skipped a
  * Delo bundle is refused before it boots, and one in which a row of a Delo bundle did not activate is shut down and
  * refused after it boots ([delo-bundles](./delo-bundles.ts)).
@@ -27,12 +31,13 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
-import { assertDeloInvariants, composeDeloProfile, NO_APPROVED_CONTENT, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
+import { assertDeloInvariants, composeDeloProfile, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
 import { HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import { START_WAIT_MS } from '@delo/contract-home-process'
 import { localDeviceApproval } from './devices/host.ts'
 import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalDeviceApproval, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
+import { changesApprovedContent } from './changes/start.ts'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
@@ -116,13 +121,23 @@ export interface StartDependencies {
    */
   readonly updates: (home: string, profile: string, running: RuntimeVersion, logger: DeloLogger, env: Readonly<Record<string, string | undefined>>) => UpdateSupport
   /**
+   * C1's start check of the stored runtime a fresh start runs from, run by the pre-start step `changes`;
+   * {@link checkStoredRuntime} by default.
+   * @param home - the resolved Delo home.
+   * @param version - the installed version this process runs.
+   * @param logger - the home process's logger.
+   * @param root - the stored root, anchored on the launcher's roots.
+   * @throws {RuntimeStoreError} when the version's files do not match its signed file list.
+   */
+  readonly checkRuntime: typeof checkStoredRuntime
+  /**
    * The handover pipe when this process was started as an update's successor, which inherits it as file descriptor 3.
    * @returns the pipe, or `undefined` for a fresh start.
    */
   readonly handover: () => Promise<HandoverPipe | undefined>
   /** How a start that opens the studio asks the home process for a link and opens it ({@link computerOpener}). */
   readonly opener: StudioOpener
-  /** The composition's approved plugin content step ([compose](./compose.ts)); {@link NO_APPROVED_CONTENT} in a real start. */
+  /** The composition's approved plugin content step ([compose](./compose.ts)); {@link changesApprovedContent} in a real start. */
   readonly approvedPluginContent: ApprovedPluginContent
   /** The ordered steps before any Host boots ([pre-start](./pre-start.ts)); {@link realPreStartSteps} in a real start. */
   readonly preStartSteps: readonly PreStartStep[]
@@ -379,7 +394,7 @@ export async function upstreamAddHeadlessBundle(home: string, output: CommandOut
  */
 export function upstreamDependencies(): StartDependencies {
   return {
-    approvedPluginContent: NO_APPROVED_CONTENT,
+    approvedPluginContent: changesApprovedContent,
     preStartSteps: realPreStartSteps(upstreamAddStudioBundle, upstreamAddHeadlessBundle),
     async prepareProfile(profile) {
       // Loaded after the launch variables are set, so upstream resolves the Delo home.
@@ -400,6 +415,7 @@ export function upstreamDependencies(): StartDependencies {
     captureOutput: log => captureHomeOutput(log.log, true),
     runtime: home => runtimeOfFile(home, fileURLToPath(import.meta.url)),
     updates: storeUpdateSupport,
+    checkRuntime: checkStoredRuntime,
     handover: () => inheritedHandover(),
     opener: computerOpener(process.env),
   }
@@ -454,7 +470,15 @@ export async function startForeground(request: StartRequest, dependencies: Start
       host: {
         boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, tracked, runtime.store ? running : undefined, homeLog.logger),
       },
-      preStart: () => runPreStartSteps(dependencies.preStartSteps, { home: request.home, profile: request.profile, kind: 'cli', successor: handover !== undefined, output: request.output }),
+      preStart: () => runPreStartSteps(dependencies.preStartSteps, {
+        home: request.home,
+        profile: request.profile,
+        kind: 'cli',
+        successor: handover !== undefined,
+        output: request.output,
+        // A successor's runtime was checked by the update that started it.
+        ...runtime.store && handover === undefined ? { storedRuntime: { version: running, check: () => dependencies.checkRuntime(request.home, running, homeLog.logger, launcherAnchor(request.home, request.env).root) } } : {},
+      }),
       probe: dependencies.probe(request.home, request.profile),
       logger: homeLog.logger,
       redactor: homeLog.redactor,

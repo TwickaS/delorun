@@ -82,6 +82,7 @@ Delo adds the entries marked Delo at the top of the home. Every other entry is u
   alerts/                        0700  Delo: signed certificate-alert files (C5)
   trash/                         0700  Delo: deleted chats and workspaces until a purge, and the retention record (C8)
   archive/                       0700  Delo: imports in progress and imported workspaces (C8)
+  changes/                       0700  Delo: approved plugin content, the change log, protection and work sessions (C21)
 ```
 
 The operational logs that [C20](c20-operational-logs.md) defines live in per-surface directories under upstream's `logs/`, beside upstream's `startup-*.log` reports. The home tree creates `status/`, `catalogue/`, `supervisor/`, `bin/` and `alerts/` empty, and nothing writes into them: the features that own them are not built or not reached ([status](#status)).

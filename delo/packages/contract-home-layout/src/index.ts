@@ -132,6 +132,8 @@ export const DELO_HOME_ENTRIES = {
   trash: 'trash',
   /** Workspace archive imports: their staging root and the imported workspaces (C8). */
   archive: 'archive',
+  /** Approved plugin content, the change log, the protection setting and work sessions (Changes). */
+  changes: 'changes',
 } as const
 
 /**
