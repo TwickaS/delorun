@@ -148,6 +148,8 @@ export interface EscalationApprover<A = object, C = string> {
     callId: C
     reason: string
     displayReason?: { readonly en: string; readonly [locale: string]: string }
+    /** `full-access` on an escalation to `danger-full-access`, so a Host can refuse that grant from a Peer that may not give it. */
+    grants?: 'full-access'
     signal?: AbortSignal
   }): Promise<EscalationOutcome>
 }
@@ -217,6 +219,7 @@ export async function approveEscalation<A, C>(request: EscalationRequest, approv
     callId: approval.callId,
     reason: `escalate sandbox to ${mode}: ${justification}`,
     displayReason: escalationDisplayReason(mode, justification),
+    ...mode === 'danger-full-access' ? { grants: 'full-access' as const } : {},
     ...approval.signal ? { signal: approval.signal } : {},
   })
   switch (outcome) {

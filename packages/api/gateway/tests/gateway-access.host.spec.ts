@@ -11,6 +11,7 @@ import RemoteAccessService, {
 } from '@deepseek-ai/dsh-api-remote-access'
 import {
   Remote,
+  RemoteError,
   RemoteScope,
   TypertRemoteService,
   type InvocationDescriptor,
@@ -712,6 +713,55 @@ describe('Gateway forwarded events for non-owner Peers', () => {
     }
     push({ event: 'fixture/notice', args: ['ignored'] })
     expect(ctx.typertGateway.hasLiveClient()).toBe(false)
+  })
+
+  it('applies no answer the remote answer guard refuses, and leaves the event pending for another Client', async () => {
+    const { ctx } = await setup({ connection: true })
+    const push = eventSource(ctx)
+    const refusedPeer = ctx.connection.createPeer({ principal: OWNER })
+    const seen: unknown[] = []
+    ctx.provide('remoteAnswerGuard', {
+      check: (answer) => {
+        seen.push({ event: answer.event, request: answer.request, value: answer.value, refused: answer.peer === refusedPeer })
+        if (answer.peer === refusedPeer) throw new RemoteError('gateway/bad-request', 'answer refused', {})
+      },
+    })
+    const abort = new AbortController()
+    const open = async (peer: PeerScope): Promise<{ readonly events: AsyncIterator<unknown>; readonly clientId: unknown }> => {
+      const events = (await ctx.typertGateway.wireStream.open('$events', { args: {} }, (async function* () {})(), peer, abort.signal))[Symbol.asyncIterator]()
+      const ready = await events.next()
+      return { events, clientId: Reflect.get(ready.value as object, 'clientId') }
+    }
+    const refused = await open(refusedPeer)
+    const allowed = await open(ctx.connection.browserPeer)
+    const subject = {}
+    const settled = vi.fn()
+    push({ event: 'fixture/ask', request: { question: 'q', agent: subject }, context: { value: ctx.extend({}), subject, agentId: 'agent-1' }, resolve: settled, reject: settled })
+    const frame = (await refused.events.next()).value as { readonly eventId: string }
+    await allowed.events.next()
+    const answer = (peer: PeerScope, clientId: unknown): Promise<Response> => ctx.connection.createSharedFetchHandler('/api').fetch(new Request('http://host/api/$events/result', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'client-request', rpcId: 'rpc-answer', method: '$events/result',
+        payload: { args: { clientId, eventId: frame.eventId, outcome: { kind: 'result', value: 'allowed-once' } } },
+      }),
+    }), peer)
+    const first = await answer(refusedPeer, refused.clientId)
+    expect(await first.json()).toMatchObject({ result: { ok: false, error: { code: 'gateway/bad-request' } } })
+    // Pins the guard: without its call the refused Peer's answer settles the event.
+    expect(settled).not.toHaveBeenCalled()
+    expect(ctx.typertGateway.getPendingRemoteEvents()).toEqual([{ event: 'fixture/ask', agentId: 'agent-1' }])
+    const second = await answer(ctx.connection.browserPeer, allowed.clientId)
+    expect(await second.json()).toMatchObject({ result: { ok: true } })
+    expect(settled).toHaveBeenCalledWith({ kind: 'result', value: 'allowed-once' })
+    expect(seen).toEqual([
+      { event: 'fixture/ask', request: { question: 'q', agent: subject }, value: 'allowed-once', refused: true },
+      { event: 'fixture/ask', request: { question: 'q', agent: subject }, value: 'allowed-once', refused: false },
+    ])
+    abort.abort()
+    await refused.events.return?.()
+    await allowed.events.return?.()
   })
 
   it('delivers only allowed broadcasts and no answerable waterfall to a non-owner, and refuses its results', async () => {

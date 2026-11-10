@@ -104,6 +104,15 @@ describe('approveEscalation', () => {
     })
   })
 
+  it('marks only an escalation to full access as a full-access grant', async () => {
+    const seen: { grants?: string }[] = []
+    const sink = approver('allowed-once', r => seen.push(r as { grants?: string }))
+    await approveEscalation(req({ requestedMode: 'danger-full-access' }), ingredients({ approver: sink }))
+    await approveEscalation(req(), ingredients({ approver: sink }))
+    expect(seen[0]?.grants).toBe('full-access')
+    expect(seen[1]).not.toHaveProperty('grants')
+  })
+
   it.each(ESCALATION_TARGETS)('repeating %s succeeds without asking for approval', async (mode) => {
     const seen: unknown[] = []
     const request = req({ requestedMode: mode, effectiveMode: mode })

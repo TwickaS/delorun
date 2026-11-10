@@ -7,6 +7,38 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { PeerScope, RemoteUplinkWindow, TypertResourceReader } from '@deepseek-ai/dsh-typert-protocol'
 import type { RemoteEventAgentId, RemoteEventHostInfo } from './stream-protocol.ts'
 
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Optional {@link RemoteAnswerGuard}; `ctx.get` returns undefined while none is mounted. */
+    remoteAnswerGuard: RemoteAnswerGuard
+  }
+}
+
+/** One Client answer to a forwarded Remote event, as {@link RemoteAnswerGuard} sees it before it applies. */
+export interface RemoteEventAnswer {
+  /** The Peer that answered. */
+  readonly peer: PeerScope
+  /** The Host Cordis event the answer settles, such as `approval/request`. */
+  readonly event: string
+  /** The event's request argument, as the Host passed it. */
+  readonly request: object
+  /** The answer's value. */
+  readonly value: unknown
+}
+
+/**
+ * Decides whether one Peer's answer to a forwarded Remote event may apply. Without a provider every owner Peer's
+ * answer applies. The provider throws a `RemoteError` to refuse: the answer is then not applied, the event stays
+ * pending for the other Clients it was delivered to, and the answering Client receives the failure.
+ */
+export interface RemoteAnswerGuard {
+  /**
+   * Refuse an answer by throwing.
+   * @param answer - the answer and the Peer that gave it.
+   */
+  check(answer: RemoteEventAnswer): void
+}
+
 /** One Remote method request after a carrier has decoded its envelope. */
 export interface InvokeRemoteRequest {
   /** Remote namespace selected by the generated descriptor. */

@@ -262,7 +262,8 @@ export class PermissionDefaults extends Service {
     }
     let outcome: ApprovalOutcome
     try {
-      outcome = await approver.request({ agent, toolName: 'permission', reason: fullAccessNote(workspace) })
+      // `grants` lets the Host refuse this answer from a session that may not grant full access (C14, `LOOPBACK_REQUIRED`).
+      outcome = await approver.request({ agent, toolName: 'permission', reason: fullAccessNote(workspace), grants: 'full-access' })
     } catch (error) {
       throw new FullAccessConsentRefusedError(
         `full access for the workspace ${JSON.stringify(workspace)} was not granted: the consent could not be asked (${reasonOf(error)})`,

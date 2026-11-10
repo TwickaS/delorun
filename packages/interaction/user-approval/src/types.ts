@@ -71,6 +71,11 @@ export interface ApprovalRequestEvent {
   readonly reason?: string
   /** Localized presentation only; never persisted in approval audit events. */
   readonly displayReason?: { readonly en: string; readonly [locale: string]: string }
+  /**
+   * What an `allowed-once` answer grants, when it grants full access: an escalation to `danger-full-access` or a
+   * workspace's full-access consent. A Host may refuse that answer from a Peer that may not grant it. Never persisted.
+   */
+  readonly grants?: 'full-access'
   /** Cancellation lifetime of the pending request. */
   readonly signal?: AbortSignal
 }

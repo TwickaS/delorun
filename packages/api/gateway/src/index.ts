@@ -72,6 +72,8 @@ import {
 export type {
   InvokeRemoteRequest,
   PendingRemoteEventInfo,
+  RemoteAnswerGuard,
+  RemoteEventAnswer,
   TypertGateway,
   TypertGatewayErrorCode,
   TypertGatewayWireStream,
@@ -713,6 +715,12 @@ export class TypertGatewayService extends Service implements TypertGateway {
     // Settlement and Client replacement may race the result request. Results
     // from a completed event or a superseded delivery are idempotent no-ops.
     if (pending === undefined || !pending.deliveries.has(client)) return
+    if (result.outcome.kind === 'result') {
+      // A refused answer throws before the delivery is removed, so the event stays pending for the other Clients.
+      this.ctx.get('remoteAnswerGuard')?.check({
+        peer: client.peer, event: pending.source.event, request: pending.source.request, value: result.outcome.value,
+      })
+    }
     this.removeRemoteEventDelivery(pending, client)
     if (result.outcome.kind === 'result') {
       this.settleRemoteEvent(pending, {

@@ -179,6 +179,7 @@ describe('the full-access consent', () => {
     expect(asks).toHaveLength(1)
     expect(asks[0]?.toolName).toBe('permission')
     expect(asks[0]?.reason).toBe(fullAccessNote(workspaceKey(workspace)))
+    expect(asks[0]?.grants).toBe('full-access')
     expect(defaults.granted(workspace)).toBe(true)
     expect(knobs(ctx, agent.session)).toMatchObject({ preset: FULL_ACCESS_PRESET, sandbox: FULL_ACCESS_PRESET })
     // The grant is durable, so the person is not asked again in this workspace.
