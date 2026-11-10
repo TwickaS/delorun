@@ -2,11 +2,12 @@
  * Contract C18's online check, "Consistency with the current log": the launcher fetches the log's latest checkpoint
  * with its witness cosignatures, requires a valid log signature and at least the root's witness threshold of listed
  * cosignatures no older than 24 hours, verifies an RFC 6962 consistency proof from the checkpoint it verified before
- * (the bundle's, or the stored one) to the latest, and stores the latest. An unreachable log or distributor, or a
- * latest witnessed checkpoint older than 24 hours, leaves the release `unchecked`, which is not a failure; a bad
- * signature, a missing cosignature, a proof that does not verify or a checkpoint smaller than the stored one is
- * `failed`. An install goes on from `unchecked` with a warning and a record that the check did not run, and refuses
- * a `failed` check (contract C18, "Behaviour per client").
+ * (the bundle's, or the stored one) to the latest, and stores the latest. A log or distributor that does not answer, a
+ * latest checkpoint that no listed witness has cosigned, and a newest cosignature older than 24 hours leave the release
+ * `unchecked`, which is not a failure. A log or witness that answers and contradicts the release is `failed`: a bad
+ * signature on the checkpoint, a cosignature from a listed witness that does not verify or is dated in the future, a
+ * proof that does not verify, or a checkpoint smaller than the stored one. An install goes on from `unchecked` with a
+ * warning and a record that the check did not run, and refuses a `failed` check (contract C18, "Behaviour per client").
  *
  * @module @delo/install/log
  */
@@ -52,7 +53,7 @@ export interface OnlineCheckResult {
   readonly check: ReleaseLogCheck
   /** The latest checkpoint, to store, when the check verified. */
   readonly checkpoint?: StoredCheckpoint
-  /** Why the check did not run, when the state is `unchecked`. */
+  /** Why the check did not run, or what it found wrong when it failed. */
   readonly detail?: string
 }
 
@@ -68,42 +69,61 @@ function unchecked(release: SemanticVersion, now: number, detail: string): Onlin
 }
 
 /**
- * The record of a verifiable failure.
+ * The result of a verifiable failure.
  * @param release - the release.
  * @param failure - contract C18's reason code.
  * @param now - the client's clock in Unix seconds.
- * @returns the record, in the `failed` state.
+ * @param detail - what the log or witness answered that contradicts the release.
+ * @returns the record, in the `failed` state, with what was found.
  */
-function failed(release: SemanticVersion, failure: ReleaseLogFailure, now: number): ReleaseLogCheck {
-  return { release, state: 'failed', failure, lastAttempt: now }
+function failed(release: SemanticVersion, failure: ReleaseLogFailure, now: number, detail: string): OnlineCheckResult {
+  return { check: { release, state: 'failed', failure, lastAttempt: now }, detail }
 }
 
-/** The listed witnesses that cosigned a checkpoint, and the newest time they give it. */
+/** How far ahead of the client's clock a cosignature's time may be before it is refused, in seconds. */
+export const COSIGNATURE_CLOCK_SKEW_SECONDS = 300
+
+/** The listed witnesses that cosigned a checkpoint, and what is wrong with the cosignatures that are present. */
 interface Cosignatures {
-  /** How many distinct listed witnesses cosigned. */
+  /** How many distinct listed witnesses cosigned with a cosignature that verifies and is not dated in the future. */
   readonly count: number
   /** The newest cosigning time in Unix seconds, or `undefined` when none cosigned. */
   readonly time: number | undefined
+  /** One sentence per listed witness whose cosignature is present and does not verify or is dated in the future. */
+  readonly problems: readonly string[]
 }
 
 /**
- * Count the checkpoint's cosignatures from the root's listed witnesses; a key the root does not list counts for
- * nothing (contract C18, `c18-unlisted-witness-refused`).
+ * Read the checkpoint's cosignatures from the root's listed witnesses. A key the root does not list counts for nothing
+ * (contract C18, `c18-unlisted-witness-refused`). A listed witness that has not cosigned is absent, which is not a
+ * problem; one whose cosignature is present but does not verify, or is dated more than
+ * {@link COSIGNATURE_CLOCK_SKEW_SECONDS} after the client's clock, is a problem.
  * @param root - the trusted root, which lists the witnesses.
  * @param body - the checkpoint body the signatures cover.
  * @param signatures - the note's signature lines.
- * @returns the count and the newest cosigning time.
+ * @param now - the client's clock in Unix seconds.
+ * @returns the count, the newest cosigning time and the problems.
  */
-function cosignatures(root: RootMetadata, body: string, signatures: readonly NoteSignature[]): Cosignatures {
+function cosignatures(root: RootMetadata, body: string, signatures: readonly NoteSignature[], now: number): Cosignatures {
   const times = new Map<string, number>()
+  const problems: string[] = []
   for (const witness of root.witnesses.keys) {
     const verifier = parseVerifier(witness.vkey)
-    for (const line of signatures) {
-      const time = verifySignature(verifier, body, line)
-      if (typeof time === 'number') times.set(witness.vkey, Math.max(time, times.get(witness.vkey) ?? 0))
+    const present = signatures.filter(line => line.name === verifier.name && line.keyHash.equals(verifier.keyHash))
+    if (present.length === 0) continue
+    const verified = present.map(line => verifySignature(verifier, body, line)).filter((time): time is number => typeof time === 'number')
+    if (verified.length === 0) {
+      problems.push(`the cosignature of witness ${verifier.name} does not verify`)
+      continue
     }
+    const newest = Math.max(...verified)
+    if (newest > now + COSIGNATURE_CLOCK_SKEW_SECONDS) {
+      problems.push(`the cosignature of witness ${verifier.name} is dated ${String(newest - now)} seconds after this computer's clock`)
+      continue
+    }
+    times.set(witness.vkey, newest)
   }
-  return { count: times.size, time: times.size === 0 ? undefined : Math.max(...times.values()) }
+  return { count: times.size, time: times.size === 0 ? undefined : Math.max(...times.values()), problems }
 }
 
 /** What one online check is given. */
@@ -125,8 +145,8 @@ export interface OnlineCheckRequest {
 /**
  * Run contract C18's online check.
  * @param request - the root, the release, the bundle's checkpoint, the stored one, the service and the clock.
- * @returns the record, and the checkpoint to store when the check verified; an unreachable log gives `unchecked` and a
- *   verifiable failure gives `failed`, so the caller applies {@link refuseFailedLog} to refuse an install.
+ * @returns the record, and the checkpoint to store when the check verified; an unreachable log or an uncosigned or stale
+ *   checkpoint gives `unchecked` and a verifiable contradiction gives `failed`, so the caller applies {@link refuseFailedLog} to refuse an install.
  */
 export async function runOnlineCheck(request: OnlineCheckRequest): Promise<OnlineCheckResult> {
   const { root, release, now } = request
@@ -136,7 +156,7 @@ export async function runOnlineCheck(request: OnlineCheckRequest): Promise<Onlin
   } catch (error) {
     return unchecked(release, now, `the release log did not answer: ${messageOf(error)}`)
   }
-  if (Buffer.byteLength(note) > CHECKPOINT_MAX_BYTES) return { check: failed(release, 'log-signature-invalid', now) }
+  if (Buffer.byteLength(note) > CHECKPOINT_MAX_BYTES) return failed(release, 'log-signature-invalid', now, `the latest checkpoint is larger than ${String(CHECKPOINT_MAX_BYTES)} bytes`)
   let body: string
   let signatures: NoteSignature[]
   let latest: Checkpoint
@@ -145,21 +165,18 @@ export async function runOnlineCheck(request: OnlineCheckRequest): Promise<Onlin
     body = split.body
     signatures = split.signatures
     latest = parseCheckpoint(body)
-  } catch {
-    return { check: failed(release, 'log-signature-invalid', now) }
+  } catch (error) {
+    return failed(release, 'log-signature-invalid', now, `the latest checkpoint does not read: ${messageOf(error)}`)
   }
-  if (latest.origin !== root.log.origin) return { check: failed(release, 'log-signature-invalid', now) }
+  if (latest.origin !== root.log.origin) return failed(release, 'log-signature-invalid', now, `the latest checkpoint is for ${latest.origin}, not the log the root names`)
   const log = parseVerifier(root.log.vkey)
-  if (!signatures.some(line => verifySignature(log, body, line) === true)) return { check: failed(release, 'log-signature-invalid', now) }
-  const cosigned = cosignatures(root, body, signatures)
-  if (cosigned.count < root.witnesses.threshold) return { check: failed(release, 'witness-cosignature-missing', now) }
-  if (cosigned.time !== undefined && now - cosigned.time > MAX_WITNESSED_CHECKPOINT_AGE_SECONDS) {
-    return unchecked(release, now, `the log's newest witnessed checkpoint is ${String(Math.floor((now - cosigned.time) / 3600))} hours old, and a check needs one from the last ${String(MAX_WITNESSED_CHECKPOINT_AGE_SECONDS / 3600)} hours`)
-  }
+  if (!signatures.some(line => verifySignature(log, body, line) === true)) return failed(release, 'log-signature-invalid', now, 'the latest checkpoint carries no valid signature of the log')
+  const cosigned = cosignatures(root, body, signatures, now)
+  if (cosigned.problems.length > 0) return failed(release, 'witness-cosignature-missing', now, cosigned.problems.join('; '))
   const stored = request.stored
   const from = Math.max(request.log.treeSize, stored?.treeSize ?? 0)
   const fromRoot = stored !== undefined && stored.treeSize >= request.log.treeSize ? Buffer.from(stored.rootHash, 'hex') : Buffer.from(request.log.rootHash)
-  if (latest.size < from) return { check: failed(release, 'checkpoint-rolled-back', now) }
+  if (latest.size < from) return failed(release, 'checkpoint-rolled-back', now, `the latest checkpoint has ${String(latest.size)} entries, fewer than the ${String(from)} already verified`)
   let proof: readonly Uint8Array[]
   try {
     proof = await request.service.consistency(from, latest.size)
@@ -167,7 +184,13 @@ export async function runOnlineCheck(request: OnlineCheckRequest): Promise<Onlin
     return unchecked(release, now, `the release log gave no consistency proof: ${messageOf(error)}`)
   }
   if (!verifyConsistency(from, latest.size, fromRoot, latest.rootHash, proof)) {
-    return { check: failed(release, 'consistency-proof-invalid', now) }
+    return failed(release, 'consistency-proof-invalid', now, `the consistency proof from ${String(from)} to ${String(latest.size)} entries does not verify`)
+  }
+  if (cosigned.count < root.witnesses.threshold) {
+    return unchecked(release, now, `the latest checkpoint has ${String(cosigned.count)} of the ${String(root.witnesses.threshold)} witness cosignatures a check needs`)
+  }
+  if (cosigned.time !== undefined && now - cosigned.time > MAX_WITNESSED_CHECKPOINT_AGE_SECONDS) {
+    return unchecked(release, now, `the log's newest witnessed checkpoint is ${String(Math.floor((now - cosigned.time) / 3600))} hours old, and a check needs one from the last ${String(MAX_WITNESSED_CHECKPOINT_AGE_SECONDS / 3600)} hours`)
   }
   return {
     check: { release, state: 'verified', lastAttempt: now },
@@ -186,7 +209,7 @@ export async function runOnlineCheck(request: OnlineCheckRequest): Promise<Onlin
 export function refuseFailedLog(result: OnlineCheckResult, source: string): void {
   const { check } = result
   if (check.state !== 'failed') return
-  throw new InstallError('RELEASE_LOG_FAILED', source, `the release log failed its check (${check.failure ?? 'unknown'}); nothing was installed`)
+  throw new InstallError('RELEASE_LOG_FAILED', source, `the release log failed its check (${check.failure ?? 'unknown'}${result.detail === undefined ? '' : `: ${result.detail}`}); nothing was installed`)
 }
 
 /** What a tlog-tiles log service needs. */

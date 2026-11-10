@@ -14,7 +14,7 @@ import { checkpointBody, signatureLine } from '@delo/release/log/note'
 import { generateKeyPairSync } from 'node:crypto'
 import { Downloader, RELEASE_HOSTS } from '../src/download.ts'
 import { InstallError as InstallFailure, isInstallError, messageOf, type InstallError } from '../src/errors.ts'
-import { CHECKPOINT_MAX_BYTES, createTilesLogService, refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckRequest } from '../src/log.ts'
+import { CHECKPOINT_MAX_BYTES, COSIGNATURE_CLOCK_SKEW_SECONDS, createTilesLogService, refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckRequest } from '../src/log.ts'
 import { fixtureRelease, LOG_ORIGIN, NOW, WITNESS_NAME, logService, type Fixture } from './support.ts'
 
 /** The short timeouts these specs use, so a refusal is reported in milliseconds rather than in contract C1's minute. */
@@ -163,17 +163,50 @@ describe('the online check', () => {
     expect(stale).toMatchObject({ check: { state: 'unchecked' }, detail: expect.stringContaining('25 hours old') as string })
   })
 
-  it('fails a checkpoint that is not the log’s: too large, unreadable, another origin, unsigned by the log or not cosigned by a listed witness', async () => {
+  it('fails a checkpoint that is not the log’s: too large, unreadable, another origin or unsigned by the log', async () => {
     const fixture = await fixtureRelease()
     const failure = async (checkpoint: string): Promise<ReleaseLogCheck['failure']> => (await runOnlineCheck(request(fixture, logService(checkpoint)))).check.failure
     expect(await failure('x'.repeat(CHECKPOINT_MAX_BYTES + 1))).toBe('log-signature-invalid')
     expect(await failure('not a checkpoint')).toBe('log-signature-invalid')
     expect(await failure(note(fixture, fixture.leaves, { origin: 'other.example/log' }))).toBe('log-signature-invalid')
     expect(await failure(note(fixture, fixture.leaves, { logSignature: false }))).toBe('log-signature-invalid')
-    expect(await failure(note(fixture, fixture.leaves, { cosign: false }))).toBe('witness-cosignature-missing')
+  })
+
+  it('finds the release unchecked, not failed, when no listed witness has cosigned the latest checkpoint', async () => {
+    const fixture = await fixtureRelease()
+    const missing = await runOnlineCheck(request(fixture, logService(note(fixture, fixture.leaves, { cosign: false }))))
+    expect(missing).toMatchObject({ check: { state: 'unchecked' }, detail: 'the latest checkpoint has 0 of the 1 witness cosignatures a check needs' })
+    expect(missing.checkpoint).toBeUndefined()
     const stranger = generateKeyPairSync('ed25519').privateKey
     const body = checkpointBody(LOG_ORIGIN, 1, treeRoot([...fixture.leaves]))
-    expect(await failure(`${body}\n${signatureLine(LOG_ORIGIN, fixture.keys.log, body)}${signatureLine('stranger.example', stranger, body, NOW - 60)}`)).toBe('witness-cosignature-missing')
+    const unlisted = await runOnlineCheck(request(fixture, logService(`${body}\n${signatureLine(LOG_ORIGIN, fixture.keys.log, body)}${signatureLine('stranger.example', stranger, body, NOW - 60)}`)))
+    expect(unlisted.check.state).toBe('unchecked')
+  })
+
+  it('still fails a log that contradicts the release when its checkpoint lacks the cosignature', async () => {
+    const fixture = await fixtureRelease()
+    const two = [...fixture.leaves, leafHash(Buffer.from('second'))]
+    expect((await runOnlineCheck(request(fixture, logService(note(fixture, two, { cosign: false }))))).check.failure).toBe('consistency-proof-invalid')
+    const stored = { treeSize: 5, rootHash: 'cd'.repeat(32) }
+    expect((await runOnlineCheck(request(fixture, logService(note(fixture, fixture.leaves, { cosign: false })), { stored }))).check.failure).toBe('checkpoint-rolled-back')
+  })
+
+  it('fails a cosignature from a listed witness that is present and does not verify, with the witness named', async () => {
+    const fixture = await fixtureRelease()
+    const body = checkpointBody(LOG_ORIGIN, 1, treeRoot([...fixture.leaves]))
+    const other = checkpointBody(LOG_ORIGIN, 2, treeRoot([...fixture.leaves, leafHash(Buffer.from('second'))]))
+    const wrong = `${body}\n${signatureLine(LOG_ORIGIN, fixture.keys.log, body)}${signatureLine(WITNESS_NAME, fixture.keys.witness, other, NOW - 60)}`
+    const result = await runOnlineCheck(request(fixture, logService(wrong)))
+    expect(result).toMatchObject({ check: { state: 'failed', failure: 'witness-cosignature-missing' }, detail: `the cosignature of witness ${WITNESS_NAME} does not verify` })
+    expect(() => refuseFailedLog(result, 'release 0.1.0')).toThrow(`does not verify); nothing was installed`)
+  })
+
+  it('fails a cosignature dated in the future beyond the clock skew, and accepts one within it', async () => {
+    const fixture = await fixtureRelease()
+    const future = await runOnlineCheck(request(fixture, logService(note(fixture, fixture.leaves, { cosignedAt: NOW + COSIGNATURE_CLOCK_SKEW_SECONDS + 1 }))))
+    expect(future).toMatchObject({ check: { state: 'failed', failure: 'witness-cosignature-missing' }, detail: `the cosignature of witness ${WITNESS_NAME} is dated ${String(COSIGNATURE_CLOCK_SKEW_SECONDS + 1)} seconds after this computer's clock` })
+    const near = await runOnlineCheck(request(fixture, logService(note(fixture, fixture.leaves, { cosignedAt: NOW + COSIGNATURE_CLOCK_SKEW_SECONDS }))))
+    expect(near.check.state).toBe('verified')
   })
 
   it('fails a log that has gone backwards from the stored checkpoint, or whose proof does not verify', async () => {

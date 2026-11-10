@@ -4,10 +4,11 @@
  *
  * `node_modules/.bin/tsx delo/apps/release/src/local-release.ts --version <version> --out <channel dir> --root <root file>...
  * --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url> --log-checkpoint <url>
- * --log-tiles <url> [--log-poll-seconds <n>] [--commit <rev>] [--closures-from <dir>] [--cache <dir>]`
+ * --log-tiles <url> [--log-poll-seconds <n>] [--artifacts build|existing] [--commit <rev>] [--closures-from <dir>] [--cache <dir>]`
  *
  * Without `--closures-from`, the command builds the Linux x64 runtime closure from `--commit` (`HEAD` by default) with
- * `build-closure.ts`'s recipe, which needs the pinned Node and pnpm and a long build; with it, the command signs the
+ * `build-closure.ts`'s recipe, which needs the pinned Node and pnpm and a long build (`--artifacts existing` reuses the
+ * artifacts already built in the worktree instead of building them); with it, the command signs the
  * `delorun-<version>-linux-x64.tar.gz` and `.files.json` that a `build-closure.ts --platform linux-x64` run left there.
  * `--log-submit`, `--log-checkpoint` and `--log-tiles` are `log-release.ts`'s log endpoints: the command submits the
  * manifest's entry to the log they name, so point them at a log you run, never at a public log unless the release is
@@ -27,6 +28,7 @@ import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delo/contract-release-
 import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { buildClosuresChecked, type BuildRequest } from './build-closure.ts'
 import type { ClosureFiles } from './closure/archive-closure.ts'
+import { isArtifactSource } from './closure/artifacts.ts'
 import { readSigningKey } from './sign/envelope.ts'
 import { semanticVersion } from './brands.ts'
 import { buildLocalRelease, copyClosureFiles, LOCAL_PLATFORM } from './local/release.ts'
@@ -70,6 +72,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       'log-checkpoint': { type: 'string' },
       'log-tiles': { type: 'string' },
       'log-poll-seconds': { type: 'string', default: '30' },
+      'artifacts': { type: 'string', default: 'build' },
       'commit': { type: 'string', default: 'HEAD' },
       'closures-from': { type: 'string' },
       'cache': { type: 'string', default: join(homedir(), '.cache', 'delo-release') },
@@ -83,6 +86,8 @@ export async function main(argv: readonly string[], build: (repository: string, 
       throw new Error('pass --version, --out, --root, --targets-key, --timestamp-key, --state, --log-submit, --log-checkpoint and --log-tiles')
     }
     semanticVersion(version)
+    if (!isArtifactSource(values.artifacts)) throw new Error(`--artifacts is build or existing, not ${values.artifacts}`)
+    const artifacts = values.artifacts
     const poll = Number(values['log-poll-seconds'])
     if (!Number.isFinite(poll) || poll < 0) throw new Error(`--log-poll-seconds ${values['log-poll-seconds']} is not a number of seconds`)
     const repository = repositoryRoot(process.cwd())
@@ -92,7 +97,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       if (values['closures-from'] !== undefined) return copyClosureFiles(resolve(values['closures-from']), version, directory)
       // The build writes its files into a directory of its own, and only the Linux x64 files go on.
       const built = mkdtempSync(join(directory, 'closure-'))
-      await build(repository, { version, commit, out: built, platforms: [LOCAL_PLATFORM], cache, writePins: false })
+      await build(repository, { version, commit, out: built, platforms: [LOCAL_PLATFORM], cache, writePins: false, artifacts })
       await copyClosureFiles(built, version, directory)
       rmSync(built, { recursive: true, force: true })
     }

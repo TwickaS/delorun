@@ -16,6 +16,7 @@ import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { describe, expect, it, type TestContext } from 'vitest'
 import { buildLauncher } from '../../../npm-launcher/src/build.ts'
+import { copyClosureFiles } from '../../src/local/release.ts'
 import { scratch } from '../support.ts'
 import { closedPort, fixtureClosure, keyFile, runEntryAsync, serveChannel, serveLog, trust, type Trust } from './support.ts'
 
@@ -36,7 +37,7 @@ interface Served {
  * @param test - the running test.
  * @returns the served channel.
  */
-async function servedRelease(test: TestContext): Promise<Served> {
+async function servedRelease(test: TestContext, closureFiles?: string): Promise<Served> {
   const directory = scratch(test)
   // An installed runtime is read-only (contract C1), so the home is made writable again before the directory is removed.
   test.onTestFinished(() => { execFileSync('chmod', ['-R', 'u+rwX', directory]) })
@@ -44,7 +45,8 @@ async function servedRelease(test: TestContext): Promise<Served> {
   const log = await serveLog(test, trusted)
   const closures = join(directory, 'closures')
   mkdirSync(closures)
-  await fixtureClosure(test, VERSION)(closures)
+  if (closureFiles === undefined) await fixtureClosure(test, VERSION)(closures)
+  else await copyClosureFiles(closureFiles, VERSION, closures)
   const rootPath = join(directory, 'root.json')
   writeFileSync(rootPath, trusted.root)
   const channel = join(directory, 'channel')
@@ -194,5 +196,22 @@ describe('the built launcher against a local release', LIMIT, () => {
     expect(finished.stderr).toContain('This launcher cannot verify any release')
     expect(finished.stderr).toContain('install Delo from its release page instead')
     expect(readdirSync(join(served.directory, 'home', 'runtimes'))).toEqual([])
+  })
+})
+
+/** A directory holding the `linux-x64` archive and file list that `build-closure.ts --version 0.1.0` built from the real tree. */
+const REAL_CLOSURE = process.env.DELO_CLOSURE_FILES
+
+describe.skipIf(REAL_CLOSURE === undefined)('the built launcher against a closure built from the real tree', LIMIT, () => {
+  it('installs it and starts delorun, which reports the release’s version and upstream’s', async (test) => {
+    const served = await servedRelease(test, REAL_CLOSURE)
+    const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: `http://127.0.0.1:${String(await closedPort())}` }, version: '0.0.1-e2e' })
+    const home = join(served.directory, 'home')
+    const first = await node(built.tarball, home, ['--version'], served.directory)
+    expect(first.stderr).toContain('Installing release 0.1.0.')
+    expect(first.stdout).toMatch(/^Delo 0\.1\.0\nDSH \d+\.\d+\.\d+/u)
+    expect(first.status).toBe(0)
+    const second = await node(built.tarball, home, ['--version', '--json'], served.directory)
+    expect(JSON.parse(second.stdout)).toMatchObject({ delo: '0.1.0' })
   })
 })

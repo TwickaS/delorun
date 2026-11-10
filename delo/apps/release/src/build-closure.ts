@@ -3,7 +3,8 @@
  * targets-key holder run the same command from a checkout of the release's commit:
  *
  * `node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --out <dir> [--commit <rev>]
- * [--platform <platform>]... [--cache <dir>] [--write-pins] [--attestation-key <file> --attestation <file>]`
+ * [--platform <platform>]... [--cache <dir>] [--write-pins] [--artifacts build|existing]
+ * [--attestation-key <file> --attestation <file>]`
  *
  * It exports the commit's tree to the fixed build root `closure.json` names, so absolute paths that bundlers embed
  * are the same on every builder; installs the locked dependencies and builds the artifacts, with the client title
@@ -14,7 +15,10 @@
  * native packages, adds the pinned Node and pnpm, checks every native file against `prebuilt-pins.json`, and writes
  * the deterministic archive and its unsigned runtime file list to `--out`; when it built every platform, it also
  * writes the release's SPDX SBOM derived from the archives. It refuses to run under a Node or pnpm
- * other than `toolchain.json` pins. `--write-pins` records the native files found instead of checking them, for a
+ * other than `toolchain.json` pins. `--artifacts existing` skips the artifact build and copies the worktree's built
+ * `lib/` directories, client bundles and native addon into the exported tree instead, after checking that the worktree
+ * is at the commit, that tracked files are clean and that each package's `lib/` exists and is newer than its sources;
+ * the closure then embeds the worktree's paths and is for a local release only. `--write-pins` records the native files found instead of checking them, for a
  * reviewed change of `prebuilt-pins.json`. On the targets-key holder's machine, `--attestation-key` and
  * `--attestation` write an HMAC over the version, commit and every file in `--out`, keyed with the holder's secret,
  * which signing checks; the attestation file lies outside `--out`.
@@ -23,7 +27,7 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -34,6 +38,7 @@ import { deduplicateStagedWorkspacePackages, materializeStagedLinks } from '../.
 import { verifyStagedDependencies } from '../../../../scripts/executable-packaging.ts'
 import { semanticVersion } from './brands.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
+import { artifactDirectories, artifactProblems, isArtifactSource, type ArtifactSource } from './closure/artifacts.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { declareAnchorBundles, stampDeloVersion, transpileDeloPackages } from './closure/delo.ts'
 import { stageNode, stagePnpm, substitutePrebuilt } from './closure/sources.ts'
@@ -77,6 +82,8 @@ export interface BuildRequest {
   readonly platforms: readonly RuntimePlatform[]
   readonly cache: string
   readonly writePins: boolean
+  /** `build` runs the artifact build in the exported tree; `existing` reuses the worktree's built artifacts (a local, non-reproducible build). */
+  readonly artifacts?: ArtifactSource
 }
 
 /**
@@ -150,6 +157,11 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
   if (process.env.SOURCE_DATE_EPOCH !== undefined && process.env.SOURCE_DATE_EPOCH !== String(epoch)) {
     throw new Error(`SOURCE_DATE_EPOCH is ${process.env.SOURCE_DATE_EPOCH}, but the commit's committer time is ${String(epoch)}`)
   }
+  const existing = request.artifacts === 'existing'
+  if (existing) {
+    const problems = artifactProblems(repository, request.commit)
+    if (problems.length > 0) throw new Error(`the worktree's artifacts cannot be used:\n${problems.join('\n')}`)
+  }
   const buildRoot = recipe.closure.buildRoot
   const source = join(buildRoot, 'source')
   await freshBuildRoot(buildRoot)
@@ -160,7 +172,11 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
   if (unpack.status !== 0) throw new Error(`unpacking the commit's tree failed: ${unpack.stderr.toString('utf8')}`)
   const env = buildEnvironment(process.env, buildRoot, epoch, request.commit, recipe.closure.clientTitle)
   run('pnpm', ['install', '--frozen-lockfile'], source, env)
-  run('pnpm', ['run', 'build:artifacts'], source, env)
+  if (existing) {
+    for (const directory of artifactDirectories(repository)) await cp(join(repository, directory), join(source, directory), { recursive: true, force: true, verbatimSymlinks: true })
+  } else {
+    run('pnpm', ['run', 'build:artifacts'], source, env)
+  }
   run('pnpm', ['--filter', './delo/packages/*', 'run', 'build'], source, env)
   const results = new Map<RuntimePlatform, ClosureFiles>()
   for (const platform of request.platforms) {
@@ -225,6 +241,7 @@ async function main(argv: readonly string[]): Promise<number> {
       platform: { type: 'string', multiple: true },
       cache: { type: 'string', default: join(homedir(), '.cache', 'delo-release') },
       'write-pins': { type: 'boolean', default: false },
+      'artifacts': { type: 'string', default: 'build' },
       'attestation-key': { type: 'string' },
       'attestation': { type: 'string' },
     },
@@ -236,6 +253,7 @@ async function main(argv: readonly string[]): Promise<number> {
       if (!isRuntimePlatform(platform)) throw new Error(`unknown platform ${platform}; use ${RUNTIME_PLATFORMS.join(', ')}`)
       return platform
     })
+    if (!isArtifactSource(values.artifacts)) throw new Error(`--artifacts is build or existing, not ${values.artifacts}`)
     const recipe = readRecipe()
     const problems = toolchainProblems(recipe, process.version, execFileSync('pnpm', ['--version'], { encoding: 'utf8' }).trim())
     if (problems.length > 0) throw new Error(problems.join('\n'))
@@ -245,7 +263,7 @@ async function main(argv: readonly string[]): Promise<number> {
     if ((values['attestation-key'] === undefined) !== (values.attestation === undefined)) throw new Error('pass --attestation-key and --attestation together')
     const attestationKey = values['attestation-key'] === undefined ? undefined : readAttestationKey(resolve(values['attestation-key']))
     await mkdir(out, { recursive: true })
-    const results = await buildClosures(repository, recipe, { version: semanticVersion(values.version), commit, out, platforms, cache: resolve(values.cache), writePins: values['write-pins'] })
+    const results = await buildClosures(repository, recipe, { version: semanticVersion(values.version), commit, out, platforms, cache: resolve(values.cache), writePins: values['write-pins'], artifacts: values.artifacts })
     if (values['write-pins']) await writePins(results)
     if (attestationKey !== undefined && values.attestation !== undefined) {
       const path = resolve(values.attestation)

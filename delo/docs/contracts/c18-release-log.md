@@ -8,7 +8,7 @@ English | [中文](c18-release-log.zh.md)
 
 ## Summary
 
-Every signed release manifest of [C2](c02-release-manifest.md) has an entry in Sigstore's public Rekor log, an append-only transparency log that Delo does not operate. Rekor signs checkpoints of its tree, and an independent witness from the public witness network cosigns them, so a log that showed one client a different history from another would be caught by the witness. Each release publishes a bundle with the entry, its inclusion proof and a witnessed checkpoint. Clients refuse an entry without a valid witness cosignature. Installing a release always requires a verified inclusion proof. When the log or its witness cannot be reached, or its newest witnessed checkpoint is stale, an install or update warns, continues on the release's signature and records that the online check did not run; a log that answers and contradicts the release refuses. A start without network starts with a warning naming the unchecked release and checks at the next connection. The types live in [`@delo/contract-release-log`](../../packages/contract-release-log/README.md).
+Every signed release manifest of [C2](c02-release-manifest.md) has an entry in Sigstore's public Rekor log, an append-only transparency log that Delo does not operate. Rekor signs checkpoints of its tree, and an independent witness from the public witness network cosigns them, so a log that showed one client a different history from another would be caught by the witness. Each release publishes a bundle with the entry, its inclusion proof and a witnessed checkpoint. Clients refuse an entry without a valid witness cosignature. Installing a release always requires a verified inclusion proof. When the log or its witness cannot be reached, its latest checkpoint lacks the witness's cosignature, or its newest cosignature is stale, an install or update warns, continues on the release's signature and records that the online check did not run; a log or witness that answers and contradicts the release refuses. A start without network starts with a warning naming the unchecked release and checks at the next connection. The types live in [`@delo/contract-release-log`](../../packages/contract-release-log/README.md).
 
 ## Contents
 
@@ -77,11 +77,11 @@ A bundle without a valid witness cosignature fails step 5 and the entry is refus
 A verified bundle shows the entry was in the log at the checkpoint it carries. The online check also shows that the client's view of the log agrees with what the witnesses saw since:
 
 1. The client fetches the log's latest checkpoint with its witness cosignatures from the witness network's checkpoint distributor.
-2. It requires a valid log signature, at least `witnesses.threshold` valid listed cosignatures, and a newest cosigning time at most 24 hours before the client's clock.
+2. It requires a valid log signature. Each cosignature from a listed witness that is present must verify and must not be dated more than 5 minutes after the client's clock; a listed witness that has not cosigned is absent, which is not an error. It then wants at least `witnesses.threshold` valid cosignatures, with a newest cosigning time at most 24 hours before the client's clock.
 3. It fetches an RFC 6962 consistency proof from the bundle's (or its stored) checkpoint to the latest one from the log and verifies it.
 4. It stores the latest verified checkpoint, so the next check proves consistency from it.
 
-When the client cannot reach the distributor or the log, or the latest witnessed checkpoint is older than 24 hours, the online check is not done and the release stays `unchecked`; that is not a failure. A verifiable failure (a bad signature, a missing witness cosignature, a consistency proof that does not verify, a checkpoint smaller than the stored one) is `failed`.
+When the client cannot reach the distributor or the log, the latest checkpoint carries fewer than `witnesses.threshold` valid listed cosignatures because the witnesses have not cosigned it, or the newest cosignature is older than 24 hours, the online check is not completed and the release stays `unchecked`; that is not a failure. A log or witness that answers and contradicts the release is `failed`: a bad signature on the checkpoint, a cosignature from a listed witness that is present and does not verify or is dated in the future, a consistency proof that does not verify, or a checkpoint smaller than the stored one. The consistency and rollback checks run whether or not the checkpoint is cosigned, so a log that contradicts the release cannot avoid them by leaving the cosignature out. The failure code of a present invalid cosignature is `witness-cosignature-missing`, and the check's `detail` says which witness and why.
 
 An install or update that finds `unchecked` goes on with the release's signature alone and tells the person so. The launcher prints the step "Checking the release log: not checked" with the reason, then the warning "Release <version> has not been checked against the release log; Delo checks it at the next connection." It records the release as `unchecked`, with the reason as `detail`, in the check state file once the archive has verified. Whoever can block a person's connection to the log and its witness leaves that person with the signature alone; the inclusion proof in the release's own bundle is still verified, offline, before anything installs. An install or update that finds `failed` installs nothing and records nothing.
 
@@ -117,6 +117,7 @@ The first start of a desktop app installed from a downloaded installer has no st
 | --- | --- |
 | Witness threshold | 1 listed witness |
 | Maximum age of the latest witnessed checkpoint for the online check | 24 hours |
+| Largest forward difference between a cosignature's time and the client's clock | 5 minutes |
 | Retry interval while `unchecked` | 15 minutes |
 | Bundle size limit before parsing | 64 KiB |
 | Inclusion and consistency proof length | at most 64 hashes |
@@ -139,7 +140,7 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 ### Requirements
 
 - R1. Every manifest file, re-signed ones included, has a log entry before its release is published.
-- R2. A client refuses an entry whose checkpoint lacks a valid cosignature from a listed witness.
+- R2. A client refuses a bundle whose checkpoint lacks a valid cosignature from a listed witness. The online check differs: a latest checkpoint that no listed witness has cosigned leaves the release `unchecked`, and a present cosignature that is invalid or dated in the future is `failed`.
 - R3. Installing or updating, and a requested desktop rollback, require a verified bundle. An online check that could not run (`unchecked`) does not stop them: they warn, continue on the signature and record that the check did not run. An online check that failed verifiably stops them.
 - R4. A start without network starts with a warning that names the unchecked release, records `unchecked`, and checks at the next connection.
 - R5. A verifiable log failure stops the CLI start in every verification mode and fails `delorun verify`.
@@ -158,7 +159,9 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 | `c18-offline-start-warns` | WP2.11, WP3.9 | A start with the log and distributor stand-ins unreachable starts, prints the warning with the release's version and records `unchecked`. |
 | `c18-offline-recheck-on-connect` | WP3.9 | After the stand-ins become reachable, the home process's next retry records `verified`. |
 | `c18-offline-install-continues` | WP3.2, WP3.9, WP6.3 | An install or update attempted while the log is unreachable or its newest witnessed checkpoint is stale prints the reason and the warning, installs, and records `unchecked` with the reason. |
-| `c18-contradicting-log-refuses-install` | WP3.2, WP3.9, WP6.3 | An install or update attempted while the log answers with a checkpoint that does not verify, lacks the witness cosignature, is smaller than the stored one or is inconsistent with the bundle's installs nothing, records nothing, and the running version stays. |
+| `c18-missing-cosignature-install-continues` | WP3.2, WP3.9, WP6.3 | An install or update whose latest checkpoint carries no cosignature from a listed witness warns, installs, and records `unchecked` with the reason. |
+| `c18-invalid-cosignature-refuses-install` | WP3.2, WP3.9, WP6.3 | A cosignature from a listed witness that is present and does not verify, or is dated beyond the clock skew in the future, installs nothing and records nothing. |
+| `c18-contradicting-log-refuses-install` | WP3.2, WP3.9, WP6.3 | An install or update attempted while the log answers with a checkpoint whose signature does not verify, that is smaller than the stored one, or whose consistency proof from the stored or bundle checkpoint does not verify installs nothing, records nothing, and the running version stays. |
 | `c18-inconsistent-log-fails-start` | WP2.11 | A latest checkpoint whose consistency proof from the stored checkpoint does not verify records `failed` and stops the start in every verification mode. |
 | `c18-checkpoint-rollback-refused` | WP2.11 | A witnessed checkpoint with a smaller tree size than the stored one records `failed`. |
 | `c18-desktop-refuses-unlogged-update` | WP6.3 | A desktop update whose bundle fails is refused before `quitAndInstall`. |

@@ -248,6 +248,22 @@ describe('the local-release command', () => {
     expect(await main([...args, '--log-poll-seconds', '0'])).toBe(0)
   })
 
+  it('passes the artifact source to the closure build, and refuses one it does not know', async (test) => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { args } = await command(test, '0.4.0', ['--artifacts', 'existing'])
+    const asked: BuildRequest[] = []
+    expect(await main(args, async (_repository, request) => {
+      asked.push(request)
+      await fixtureClosure(test, request.version)(request.out)
+      return new Map()
+    })).toBe(0)
+    expect(asked[0]!.artifacts).toBe('existing')
+    const wrong = await command(test, '0.4.0', ['--artifacts', 'cached'])
+    expect(await main(wrong.args)).toBe(1)
+    expect(failure).toHaveBeenLastCalledWith('local-release: --artifacts is build or existing, not cached')
+  })
+
   it('refuses a poll interval that is not a number of seconds', async (test) => {
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const { args } = await command(test, '0.1.0', ['--closures-from', scratch(test), '--log-poll-seconds', 'soon'])

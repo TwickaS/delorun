@@ -14,9 +14,11 @@ import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { Downloader } from '../src/download.ts'
 import { isInstallError, type InstallError } from '../src/errors.ts'
 import { LauncherChannel, RELEASE_SOURCE, type LauncherChannelOptions, type ReleaseSource } from '../src/channel.ts'
+import { leafHash, treeRoot } from '@delo/release/log/merkle'
+import { checkpointBody, signatureLine } from '@delo/release/log/note'
 import { readCheckState } from '@delo/release-verify/state'
 import type { InstallProgress } from '../src/progress.ts'
-import { envelope, fixtureRelease, logService, nextRoot, NOW, releasePaths, sha256, standIn, unreachableLog, VERSION, type Fixture, type StandIn } from './support.ts'
+import { envelope, fixtureRelease, LOG_ORIGIN, logService, WITNESS_NAME, nextRoot, NOW, releasePaths, sha256, standIn, unreachableLog, VERSION, type Fixture, type StandIn } from './support.ts'
 
 /** The download rule the specs use: plain HTTP, so a stand-in server on loopback answers as a release host does. */
 const LOOPBACK = { scheme: 'http:', hosts: ['127.0.0.1'], maxRedirects: 5 }
@@ -233,6 +235,28 @@ describe('the release log', () => {
     const { channel } = await harness(fixture, { now: () => (NOW + 2 * 24 * 3600) * 1000, progress: event => events.push(event) })
     await channel.resolve()
     expect(events.at(-1)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the log\'s newest witnessed checkpoint is 48 hours old, and a check needs one from the last 24 hours' })
+  })
+
+  it('continues and records unchecked when the log’s latest checkpoint has no witness cosignature', async () => {
+    const fixture = await fixtureRelease()
+    const body = checkpointBody(LOG_ORIGIN, 1, treeRoot([...fixture.leaves]))
+    const events: InstallProgress[] = []
+    const { channel, home } = await harness(fixture, { log: logService(`${body}\n${signatureLine(LOG_ORIGIN, fixture.keys.log, body)}`), progress: event => events.push(event) })
+    await channel.fill(await channel.resolve(), await staging())
+    expect(events.at(-2)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the latest checkpoint has 0 of the 1 witness cosignatures a check needs' })
+    const state = JSON.parse(await readFile(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
+    expect(state.releases[VERSION]?.state).toBe('unchecked')
+  })
+
+  it('refuses, and records nothing, when a witness’s cosignature is present and invalid', async () => {
+    const fixture = await fixtureRelease()
+    const body = checkpointBody(LOG_ORIGIN, 1, treeRoot([...fixture.leaves]))
+    const other = checkpointBody(LOG_ORIGIN, 2, treeRoot([...fixture.leaves, leafHash(Buffer.from('second'))]))
+    const forged = `${body}\n${signatureLine(LOG_ORIGIN, fixture.keys.log, body)}${signatureLine(WITNESS_NAME, fixture.keys.witness, other, NOW - 60)}`
+    const { channel, home } = await harness(fixture, { log: logService(forged) })
+    const error = await refusal(channel.resolve(), 'RELEASE_LOG_FAILED')
+    expect(error.detail).toContain(`the cosignature of witness ${WITNESS_NAME} does not verify`)
+    await expect(readFile(join(home, 'trust', 'release-log.json'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('records a passing check as verified', async () => {
