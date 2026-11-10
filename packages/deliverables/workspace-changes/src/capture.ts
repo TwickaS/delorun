@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto'
 import { lstat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { isMissing, makeDirectory, openRegularFile, writeNewFile } from './files.ts'
+import { isMissing, openRegularFile, writeNewFile, type PrivateTree } from './files.ts'
 
 /** Bytes git inspects for a NUL byte before treating content as binary. */
 const BINARY_PROBE_BYTES = 8000
@@ -34,13 +34,15 @@ function digest(bytes: Uint8Array): string {
  */
 export class CaptureStore {
   private directory: Promise<string> | undefined
+  /** The tree the copies live in, verified before every write and read. */
+  private tree: PrivateTree | undefined
   /** Names of the copies this store wrote. */
   private readonly written = new Set<string>()
 
   /**
-   * @param parent - yields the private directory to hold `captures`; called before every write.
+   * @param parent - yields the private directory's tree to hold `captures`, verified; called before every write.
    */
-  constructor(private readonly parent: () => Promise<string>) {}
+  constructor(private readonly parent: () => Promise<PrivateTree>) {}
 
   /**
    * Store the current content of one path. The path's type is read without following a link and before it is
@@ -75,11 +77,13 @@ export class CaptureStore {
     } finally {
       await handle.close()
     }
-    const parent = await this.parent()
-    this.directory ??= makeDirectory(join(parent, 'captures'))
+    const tree = await this.parent()
+    this.tree = tree
+    this.directory ??= tree.directory('captures')
     const name = digest(bytes)
     const file = join(await this.directory, name)
     if (!this.written.has(name)) {
+      await tree.verify()
       await writeNewFile(file, bytes)
       this.written.add(name)
     }
@@ -94,6 +98,8 @@ export class CaptureStore {
    * @throws when the read is aborted, or the copy is no longer a regular file or its bytes no longer hash to its name.
    */
   async read(capture: Extract<Capture, { kind: 'file' }>, signal: AbortSignal): Promise<string> {
+    // A stored copy exists only after a write, which set the tree.
+    await (this.tree as PrivateTree).verify()
     const handle = await openRegularFile(capture.file)
     let bytes: Buffer
     try {

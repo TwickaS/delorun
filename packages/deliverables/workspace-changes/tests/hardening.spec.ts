@@ -12,6 +12,7 @@ import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import {
   GitRunner, blobText, diffTrees, gitlinkPaths, ignoredPaths, locateGitWorkspace, repositoryDrivers, snapshotTree, treeBlob,
 } from '../src/git.ts'
+import { PrivateTree } from '../src/files.ts'
 import { FIXED_GIT_OVERRIDES, driverOverrides, gitVersionProblem, hardenedGitEnvironment } from '../src/hardening.ts'
 import { git, scratchDir } from './support.ts'
 
@@ -59,8 +60,8 @@ async function hook(directory: string, markers: string, name: string): Promise<v
  */
 async function everyOperation(cwd: string, change: () => Promise<void>): Promise<string[]> {
   const command = await runner()
-  const store = await scratchDir('dsh-git-store-', cleanups)
-  const workspace = await locateGitWorkspace(command, cwd, () => Promise.resolve(store), signal)
+  const privateTree = PrivateTree.create(await scratchDir('dsh-git-store-', cleanups))
+  const workspace = await locateGitWorkspace(command, cwd, () => privateTree, signal)
   expect(workspace).not.toBeNull()
   const before = await snapshotTree(command, workspace!, signal)
   await change()
@@ -189,8 +190,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
 describe.skipIf(process.platform === 'win32')('the driver listing', () => {
   it('refuses to snapshot when the configuration cannot be listed completely', async () => {
     const { cwd } = await fixture()
-    const store = await scratchDir('dsh-git-store-', cleanups)
-    const workspace = (await locateGitWorkspace(await runner(), cwd, () => Promise.resolve(store), signal))!
+    const privateTree = PrivateTree.create(await scratchDir('dsh-git-store-', cleanups))
+    const workspace = (await locateGitWorkspace(await runner(), cwd, () => privateTree, signal))!
     for (let index = 0; index < 50; index += 1) git(cwd, 'config', `filter.f${index}.clean`, 'cat')
     const ctx = new Context()
     cleanups.push(() => ctx.fiber.dispose())
@@ -204,8 +205,8 @@ describe.skipIf(process.platform === 'win32')('the driver listing', () => {
 
   it('switches nothing off when the listing matches no key', async () => {
     const { cwd } = await fixture()
-    const store = await scratchDir('dsh-git-store-', cleanups)
-    const workspace = (await locateGitWorkspace(await runner(), cwd, () => Promise.resolve(store), signal))!
+    const privateTree = PrivateTree.create(await scratchDir('dsh-git-store-', cleanups))
+    const workspace = (await locateGitWorkspace(await runner(), cwd, () => privateTree, signal))!
     // The command-scope overrides always match the listing, so only a listing git reports as empty takes this path.
     const empty = (await runner()).confinedBy(() => Promise.resolve({ argv: ['/bin/sh', '-c', 'exit 1'], mode: 'read-only', runnerFailureRules: [] }))
     expect(await repositoryDrivers(empty, workspace, signal)).toEqual([])

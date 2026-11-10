@@ -1,13 +1,14 @@
 /**
  * The Host's file operations on the private directory and on the files it copies into it. Every open refuses a final
- * symbolic link and never blocks on a named pipe, every read accepts only a regular file, every file this plugin
+ * symbolic link and never blocks on a named pipe, every directory on the way from the scratch root is checked by
+ * device and inode before use ({@link PrivateTree}), every read accepts only a regular file, every file this plugin
  * writes is created exclusively with mode 0600, and every directory is created exclusively with mode 0700, so an
  * entry this plugin did not create is refused rather than followed or reused. Windows has no `O_NOFOLLOW` or
  * `O_NONBLOCK`; there the opens fall back to plain reads and exclusive creation.
  */
 import { constants } from 'node:fs'
-import { lstat, mkdir, mkdtemp, open, realpath, chmod, type FileHandle } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { lstat, mkdir, mkdtemp, open, readdir, realpath, rm, chmod, type FileHandle } from 'node:fs/promises'
+import { isAbsolute, join, sep } from 'node:path'
 
 /** Read without following a final link and without waiting for a writer on a named pipe. */
 const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
@@ -128,6 +129,104 @@ export async function makeDirectory(path: string): Promise<string> {
   return path
 }
 
+/** The device and inode a directory had when this plugin created or first checked it. */
+interface Identity {
+  dev: bigint
+  ino: bigint
+}
+
+/**
+ * One Session's private directory and the directories created in it, each remembered by its device and inode at
+ * creation, together with the scratch root's. {@link verify} checks every remembered directory with `lstat` before
+ * the Host touches anything inside: each must still be a directory, not a link, with the same device and inode, so a
+ * directory or one of its parents that was renamed away or replaced by a link, here or above the scratch root, is
+ * refused instead of followed. The check and the operation after it are separate calls, so a swap inside that window
+ * is not seen; the directory lies outside every root a live Session's confined commands can write, which is what
+ * keeps such a swap out of their reach.
+ */
+export class PrivateTree {
+  private readonly identities = new Map<string, Identity>()
+
+  private constructor(
+    /** The canonical scratch root. */
+    readonly root: string,
+    /** The canonical path of this Session's private directory. */
+    readonly path: string,
+  ) {}
+
+  /**
+   * Create one Session's private directory under the scratch root, as {@link createPrivateDirectory} does, and
+   * remember the identities of the root and the new directory.
+   * @param root - absolute scratch root.
+   * @returns the tree.
+   * @throws as {@link createPrivateDirectory}.
+   */
+  static async create(root: string): Promise<PrivateTree> {
+    const path = await createPrivateDirectory(root)
+    const tree = new PrivateTree(await realpath(root), path)
+    await tree.remember(tree.root)
+    await tree.remember(path)
+    return tree
+  }
+
+  /**
+   * Create a directory inside the private directory exclusively with mode 0700 and remember it.
+   * @param name - a single path component.
+   * @returns the directory's path.
+   * @throws when the tree no longer verifies or an entry already exists at the name.
+   */
+  async directory(name: string): Promise<string> {
+    await this.verify()
+    const path = await makeDirectory(join(this.path, name))
+    await this.remember(path)
+    return path
+  }
+
+  /**
+   * Create a uniquely named temporary directory inside the private directory and remember it until {@link remove}.
+   * @param prefix - the name's prefix.
+   * @returns the directory's path.
+   * @throws when the tree no longer verifies.
+   */
+  async temporary(prefix: string): Promise<string> {
+    await this.verify()
+    const path = await mkdtemp(join(this.path, prefix))
+    await this.remember(path)
+    return path
+  }
+
+  /**
+   * Remove a directory this tree created, or the private directory itself, after verifying the tree, and forget it.
+   * @param path - the directory, or {@link path}.
+   * @throws when the tree no longer verifies, in which case nothing is removed.
+   */
+  async remove(path: string): Promise<void> {
+    await this.verify()
+    await rm(path, { recursive: true, force: true })
+    for (const known of [...this.identities.keys()]) {
+      if (known === path || known.startsWith(`${path}${sep}`)) this.identities.delete(known)
+    }
+  }
+
+  /**
+   * Check every remembered directory.
+   * @throws when one is missing, is no longer a directory, or has another device or inode.
+   */
+  async verify(): Promise<void> {
+    for (const [path, identity] of this.identities) {
+      const stats = await lstat(path, { bigint: true })
+      if (!stats.isDirectory() || stats.dev !== identity.dev || stats.ino !== identity.ino) {
+        throw new Error(`private directory ${path} was replaced after it was created; nothing is read from or written to it`)
+      }
+    }
+  }
+
+  private async remember(path: string): Promise<void> {
+    const stats = await lstat(path, { bigint: true })
+    this.identities.set(path, { dev: stats.dev, ino: stats.ino })
+  }
+}
+
 /**
  * Create one Session's private directory under the scratch root. The root and its missing ancestors are created
  * first; the root must then be a directory, not a link, owned by the current user, and is narrowed to mode 0700.
@@ -142,5 +241,50 @@ export async function createPrivateDirectory(root: string): Promise<string> {
   const uid = process.getuid?.()
   if (uid !== undefined && stats.uid !== uid) throw new Error(`scratch root ${root} belongs to another user`)
   if ((stats.mode & 0o077) !== 0) await chmod(root, 0o700)
-  return realpath(await mkdtemp(join(root, SESSION_DIRECTORY_PREFIX)))
+  return realpath(await mkdtemp(join(root, `${SESSION_DIRECTORY_PREFIX}${process.pid}-`)))
+}
+
+/**
+ * Whether a process with this id is running, as `kill(pid, 0)` answers: a process this user may not signal is
+ * running too.
+ * @param pid - the process id.
+ * @returns false only when no such process exists.
+ */
+export function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error: unknown) {
+    return (error as { code?: unknown }).code !== 'ESRCH'
+  }
+}
+
+/**
+ * Remove the private directories that Host processes no longer running left under the scratch root: each
+ * `session-<pid>-*` directory, not a link, whose process is gone. A directory of this process or of a running one,
+ * a link, and any other entry are left alone; a missing root removes nothing.
+ * @param root - absolute scratch root.
+ * @param alive - whether a process id is running.
+ * @returns the directories removed.
+ */
+export async function removeStaleDirectories(root: string, alive: (pid: number) => boolean = processAlive): Promise<string[]> {
+  let entries: string[]
+  try {
+    entries = await readdir(root)
+  } catch (error: unknown) {
+    if (isMissing(error)) return []
+    throw error
+  }
+  const removed: string[] = []
+  for (const entry of entries) {
+    const match = new RegExp(`^${SESSION_DIRECTORY_PREFIX}(\\d+)-`).exec(entry)
+    if (match === null) continue
+    const pid = Number(match[1])
+    if (pid === process.pid || alive(pid)) continue
+    const path = join(root, entry)
+    if (!(await lstat(path)).isDirectory()) continue
+    await rm(path, { recursive: true, force: true })
+    removed.push(path)
+  }
+  return removed
 }

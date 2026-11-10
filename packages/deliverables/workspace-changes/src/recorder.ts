@@ -1,12 +1,12 @@
 /** Per-Session turn recorder: snapshots, captures around file-tool edits, the turn-end diff, and the records kept until disposal. */
-import { realpath, rm } from 'node:fs/promises'
+import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { relative, resolve } from 'node:path'
 import { pathWithin } from '@deepseek-ai/dsh-sandbox'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { CaptureStore, sameCapture, type Capture } from './capture.ts'
 import { compareText } from './compare.ts'
-import { createPrivateDirectory } from './files.ts'
+import { PrivateTree } from './files.ts'
 import {
   blobText, diffTrees, gitlinkPaths, ignoredPaths, locateGitWorkspace, snapshotTree, treeBlob, type GitRunner, type GitWorkspace,
 } from './git.ts'
@@ -24,6 +24,8 @@ export interface RecorderEnvironment {
    * none of them; read before each snapshot and each captured copy.
    */
   writableRoots: () => readonly string[]
+  /** Whether the sandbox protects a path from the Session's confined commands; such a path is never captured. */
+  protectedRead: (path: string) => boolean
   /** Maximum files carried by one summary. */
   maxFiles: number
   /** Inclusive byte cap on a captured copy and on a snapshot blob read for a comparison. */
@@ -122,7 +124,7 @@ export class TurnRecorder {
   /** The located repository, reused across turns once found; null keeps retrying each turn. */
   private repository: Repository | null = null
   /** Private directory holding this Session's snapshot objects, scratch indexes, and captured copies. */
-  private scratch: Promise<string> | undefined
+  private scratch: Promise<PrivateTree> | undefined
   private readonly store = new CaptureStore(() => this.privateDirectory())
   /** Records by the sequence of the event that announced them. */
   private readonly records = new Map<number, TurnRecord>()
@@ -169,7 +171,8 @@ export class TurnRecorder {
       const paths = this.paths
       if (paths === undefined) return
       const absolute = await canonicalPath(path)
-      if (state.captures.has(absolute)) return
+      // A file the Session's commands may not read is not copied where the person's other tools can read it.
+      if (state.captures.has(absolute) || this.env.protectedRead(absolute)) return
       const capture = await this.store.capture(absolute, this.env.maxFileBytes)
       if (capture !== undefined) state.captures.set(absolute, capture)
     })
@@ -255,7 +258,10 @@ export class TurnRecorder {
     this.lifetime.abort()
     this.records.clear()
     await this.chain
-    if (this.scratch !== undefined) await rm(await this.scratch, { recursive: true, force: true })
+    if (this.scratch === undefined) return
+    const tree = await this.scratch.catch(() => undefined)
+    // A tree that no longer verifies is left in place rather than removed through whatever replaced it.
+    await tree?.remove(tree.path).catch((error: unknown) => { this.env.warn(`workspace-changes: ${String(error)}`) })
   }
 
   private enqueue(task: (signal: AbortSignal) => Promise<void>): Promise<void> {
@@ -281,14 +287,16 @@ export class TurnRecorder {
    * @throws when the directory overlaps a root the Session's confined commands can write, so nothing is stored in or
    *   read from it while they could change it.
    */
-  private async privateDirectory(): Promise<string> {
-    this.scratch ??= createPrivateDirectory(this.env.scratchRoot)
-    const directory = await this.scratch
+  private async privateDirectory(): Promise<PrivateTree> {
+    this.scratch ??= PrivateTree.create(this.env.scratchRoot)
+    const tree = await this.scratch
+    const directory = tree.path
     const exposed = this.env.writableRoots().find(root => pathWithin(directory, root) || pathWithin(root, directory))
     if (exposed !== undefined) {
-      throw new Error(`private directory ${directory} overlaps ${exposed}, which this Session's confined commands can write; this turn records nothing`)
+      throw new Error(`private directory ${directory} overlaps ${exposed}, which a live Session's confined commands can write; this turn records nothing`)
     }
-    return directory
+    await tree.verify()
+    return tree
   }
 
   /** The repository enclosing the working directory, located once; null keeps retrying each turn. */

@@ -61,9 +61,16 @@ describe('sessionConfinement', () => {
     const confine = vi.fn()
     const resolve = vi.fn(() => ({ mode: 'danger-full-access', workspaceRoot: '/w' }))
     expect(await sessionConfinement(services({ sandboxPolicy: { resolve } }), session)(['git'], [], signal)).toBeUndefined()
-    expect(await sessionConfinement(services({ sandbox: { confine } }), session)(['git'], [], signal)).toBeUndefined()
+    expect(await sessionConfinement(services({}), session)(['git'], [], signal)).toBeUndefined()
     expect(await sessionConfinement(services({ sandbox: { confine }, sandboxPolicy: { resolve } }), session)(['git'], [], signal)).toBeUndefined()
     expect(resolve).toHaveBeenCalledWith({ session })
+    expect(confine).not.toHaveBeenCalled()
+  })
+
+  it('rejects a command when a sandbox is mounted but no policy says how the Session\'s commands run', async () => {
+    const confine = vi.fn()
+    const confinement = sessionConfinement(services({ sandbox: { confine } }), session)
+    await expect(confinement(['git'], [], signal)).rejects.toBeInstanceOf(SandboxUnavailableError)
     expect(confine).not.toHaveBeenCalled()
   })
 

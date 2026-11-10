@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CaptureStore, sameCapture } from '../src/capture.ts'
+import { PrivateTree } from '../src/files.ts'
 import { scratchDir } from './support.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
@@ -15,10 +16,16 @@ afterEach(async () => {
 const signal = new AbortController().signal
 const sha1 = (text: string): string => createHash('sha1').update(text).digest('hex')
 
+/** A store over one Session's private tree created under `root`; the same tree is yielded on every call. */
+async function storeUnder(root: string): Promise<{ store: CaptureStore; tree: PrivateTree }> {
+  const tree = await PrivateTree.create(root)
+  return { store: new CaptureStore(() => Promise.resolve(tree)), tree }
+}
+
 describe('CaptureStore', () => {
   it('stores text once by content, reads no more than the cap, and classifies absent, oversized, binary, and non-regular paths', async () => {
     const root = await scratchDir('dsh-capture-', cleanups)
-    const store = new CaptureStore(() => Promise.resolve(root))
+    const { store, tree } = await storeUnder(root)
     await writeFile(join(root, 'a.txt'), 'one\ntwo\n')
     await writeFile(join(root, 'same.txt'), 'one\ntwo\n')
     await writeFile(join(root, 'big.txt'), 'x'.repeat(17))
@@ -31,7 +38,7 @@ describe('CaptureStore', () => {
     expect(same).toEqual(a)
     if (a?.kind !== 'file' || same === undefined) throw new Error('expected a stored copy')
     expect(await store.read(a, signal)).toBe('one\ntwo\n')
-    expect(await readdir(join(root, 'captures'))).toHaveLength(1)
+    expect(await readdir(join(tree.path, 'captures'))).toHaveLength(1)
     expect(await store.capture(join(root, 'big.txt'), 16)).toEqual({ kind: 'oversized' })
     expect(await store.capture(join(root, 'missing.txt'), 16)).toEqual({ kind: 'absent' })
     expect(await store.capture(join(root, 'bin.dat'), 16)).toMatchObject({ kind: 'file', binary: true })
@@ -51,27 +58,28 @@ describe('CaptureStore', () => {
 
   it('refuses a captures entry it did not write instead of treating it as already captured', async () => {
     const root = await scratchDir('dsh-capture-planted-', cleanups)
-    const store = new CaptureStore(() => Promise.resolve(root))
+    const { store, tree } = await storeUnder(root)
     await writeFile(join(root, 'first.txt'), 'first\n')
     await writeFile(join(root, 'edited.txt'), 'original\n')
     await store.capture(join(root, 'first.txt'), 1024)
     // A copy named by the edited file's content, holding a harmless marker instead.
-    await writeFile(join(root, 'captures', sha1('original\n')), 'planted-marker\n')
+    await writeFile(join(tree.path, 'captures', sha1('original\n')), 'planted-marker\n')
     await expect(store.capture(join(root, 'edited.txt'), 1024)).rejects.toThrow('EEXIST')
   })
 
   it('refuses a captures directory it did not create', async () => {
     const root = await scratchDir('dsh-capture-planted-dir-', cleanups)
     const elsewhere = await scratchDir('dsh-capture-elsewhere-', cleanups)
-    await symlink(elsewhere, join(root, 'captures'))
+    const { store, tree } = await storeUnder(root)
+    await symlink(elsewhere, join(tree.path, 'captures'))
     await writeFile(join(root, 'edited.txt'), 'original\n')
-    await expect(new CaptureStore(() => Promise.resolve(root)).capture(join(root, 'edited.txt'), 1024)).rejects.toThrow('EEXIST')
+    await expect(store.capture(join(root, 'edited.txt'), 1024)).rejects.toThrow('EEXIST')
     expect(await readdir(elsewhere)).toEqual([])
   })
 
   it.skipIf(process.platform === 'win32')('reads a copy back only as the regular file it wrote, with the bytes it wrote', async () => {
     const root = await scratchDir('dsh-capture-readback-', cleanups)
-    const store = new CaptureStore(() => Promise.resolve(root))
+    const { store } = await storeUnder(root)
     await writeFile(join(root, 'a.txt'), 'one\n')
     await writeFile(join(root, 'b.txt'), 'two\n')
     await writeFile(join(root, 'marker.txt'), 'marker\n')

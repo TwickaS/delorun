@@ -159,7 +159,7 @@ describe('a private directory a confined command could write', { timeout: 60_000
     expect(changes(ctx, session)).toEqual([])
     const messages = warn.mock.calls.map(call => String(call[0]))
     // The turn-start snapshot refused the directory; the file tool's capture found no file and stored nothing.
-    expect(messages).toEqual([expect.stringMatching(/overlaps .*which this Session's confined commands can write/)])
+    expect(messages).toEqual([expect.stringMatching(/overlaps .*which a live Session's confined commands can write/)])
     expect(readdirSync(join(cwd, '.scratch'), { recursive: true })).toEqual([expect.stringMatching(/^session-/)])
     // The same directory is used once the Session's commands can no longer write it.
     policy.current = { mode: 'read-only', workspaceRoot: cwd }

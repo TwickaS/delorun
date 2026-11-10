@@ -4,13 +4,17 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
+import { PrivateTree } from '../src/files.ts'
 import { GitRunner, blobText, diffTrees, ignoredPaths, locateGitWorkspace, snapshotTree, treeBlob } from '../src/git.ts'
 import { TurnRecorder } from '../src/recorder.ts'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { git, scratchDir, startTurn, toolCall } from './support.ts'
 
-/** A private directory factory yielding an existing directory. */
-const objectsIn = (root: string) => () => Promise.resolve(root)
+/** A private directory factory creating one Session's tree under `root` on first use and yielding that tree on every call. */
+function objectsIn(root: string): () => Promise<PrivateTree> {
+  let tree: Promise<PrivateTree> | undefined
+  return () => (tree ??= PrivateTree.create(root))
+}
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => {
@@ -86,7 +90,8 @@ describe('snapshots and diffs', () => {
     const { git: runnerGit } = await runner()
     const store = objectsIn(await scratchDir('dsh-git-store-', cleanups))
     expect(await locateGitWorkspace(runnerGit, cwd, store, signal)).toBeNull()
-    const broken = { root: cwd, gitDir: join(cwd, 'missing'), scratch: cwd, env: {}, writes: [], excludes: [] }
+    const tree = await PrivateTree.create(await scratchDir('dsh-git-broken-store-', cleanups))
+    const broken = { root: cwd, gitDir: join(cwd, 'missing'), scratch: cwd, tree, env: {}, writes: [], excludes: [] }
     await expect(snapshotTree(runnerGit, broken, signal)).rejects.toThrow('git add in')
     await expect(ignoredPaths(runnerGit, broken, ['x'], signal)).rejects.toThrow('git check-ignore failed')
     expect(await ignoredPaths(runnerGit, broken, [], signal)).toEqual(new Set())
@@ -176,7 +181,7 @@ describe('TurnRecorder', () => {
     const gate = new Promise<GitRunner | null>((resolve) => { release = resolve })
     const scratchRoot = await scratchDir('dsh-git-store-', cleanups)
     const env = {
-      git: gate, scratchRoot, writableRoots: () => [], maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
+      git: gate, scratchRoot, writableRoots: () => [], protectedRead: () => false, maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
       warn: (m: string) => { warnings.push(m) },
     }
     const disposed = new TurnRecorder(session, cwd, env)
@@ -202,7 +207,8 @@ describe('TurnRecorder', () => {
     const scratchRoot = await scratchDir('dsh-git-store-', cleanups)
     const { ctx, git: runnerGit } = await runner()
     const env = {
-      git: Promise.resolve(runnerGit), scratchRoot, writableRoots: () => [], maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
+      git: Promise.resolve(runnerGit), scratchRoot, writableRoots: () => [], protectedRead: () => false,
+      maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
       warn: (m: string) => { throw new Error(m) },
     }
     const plain = new TurnRecorder(ctx.sessions.create(SessionId('plain'), { meta: { cwd: scratchRoot } }), scratchRoot, env)
@@ -232,7 +238,8 @@ describe('TurnRecorder', () => {
     const { ctx, git: runnerGit } = await runner()
     const session = ctx.sessions.create(SessionId('tmp-in-tree'), { meta: { cwd } })
     const env = {
-      git: Promise.resolve(runnerGit), scratchRoot, writableRoots: () => [], maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
+      git: Promise.resolve(runnerGit), scratchRoot, writableRoots: () => [], protectedRead: () => false,
+      maxFiles: 10, maxFileBytes: 1024, diffTimeoutMs: 100,
       warn: (m: string) => { throw new Error(m) },
     }
     const recorder = new TurnRecorder(session, cwd, env)

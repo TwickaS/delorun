@@ -1,9 +1,8 @@
 /** Git working-tree snapshots, tree diffs, and ignore checks through the subprocess capability. */
-import { mkdtemp, rm } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { SandboxUnavailableError, classifyRunnerFailure, type ConfinedSandboxMode, type RunnerFailureRule } from '@deepseek-ai/dsh-sandbox'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
-import { copyRegularFile, makeDirectory } from './files.ts'
+import { copyRegularFile, type PrivateTree } from './files.ts'
 import { DRIVER_LISTING_ARGS, FIXED_GIT_OVERRIDES, driverOverrides, hardenedGitEnvironment } from './hardening.ts'
 import { parseNumstat, type NumstatEntry } from './numstat.ts'
 import { canonicalPath, isInside, toPosix } from './paths.ts'
@@ -141,6 +140,8 @@ export interface GitWorkspace {
   gitDir: string
   /** Private directory holding the snapshot object store and each snapshot's scratch index. */
   scratch: string
+  /** The private directory's tree, verified before every operation on this repository. */
+  tree: PrivateTree
   /** Environment that routes object writes to the private store and object reads through the repository's store. */
   env: Readonly<Record<string, string>>
   /** Directories every command on this repository writes or reads beside it: the private directory. */
@@ -159,24 +160,25 @@ export interface GitWorkspace {
  * failure throws.
  * @param git - command runner.
  * @param cwd - absolute Session working directory.
- * @param scratch - yields the existing private directory for snapshot objects and scratch indexes; called only for a
+ * @param scratch - yields the private directory's tree for snapshot objects and scratch indexes; called only for a
  *   located repository, which gets an `objects` directory created inside it exclusively.
  * @param signal - cancellation.
  * @returns the repository, or null when the directory is not inside one.
  */
 export async function locateGitWorkspace(
-  git: GitRunner, cwd: string, scratch: () => Promise<string>, signal: AbortSignal,
+  git: GitRunner, cwd: string, scratch: () => Promise<PrivateTree>, signal: AbortSignal,
 ): Promise<GitWorkspace | null> {
   const found = await git.run(['rev-parse', '--show-toplevel', '--absolute-git-dir', '--git-path', 'objects'], { cwd, signal })
   if (found.exitCode === 128 && /not a git repository/i.test(found.stderr)) return null
   const lines = ok(found, 'git rev-parse').stdout.split('\n').map(line => resolve(cwd, line))
   const [root, gitDir, repositoryObjects] = lines as [string, string, string]
   // git reports the canonical root; compare the private directory in the same spelling.
-  const directory = await canonicalPath(await scratch())
-  const objects = await makeDirectory(join(directory, 'objects'))
+  const tree = await scratch()
+  const directory = await canonicalPath(tree.path)
+  const objects = await tree.directory('objects')
   const excludes = isInside(root, directory) ? [toPosix(relative(root, directory))] : []
   const env = { GIT_OBJECT_DIRECTORY: objects, GIT_ALTERNATE_OBJECT_DIRECTORIES: repositoryObjects }
-  return { root, gitDir, scratch: directory, env, writes: [directory], excludes }
+  return { root, gitDir, scratch: directory, tree, env, writes: [directory], excludes }
 }
 
 /**
@@ -190,6 +192,7 @@ export async function locateGitWorkspace(
  * @throws when the configuration cannot be listed.
  */
 export async function repositoryDrivers(git: GitRunner, workspace: GitWorkspace, signal: AbortSignal): Promise<Array<[string, string]>> {
+  await workspace.tree.verify()
   const listed = await git.run(DRIVER_LISTING_ARGS, { cwd: workspace.root, writes: workspace.writes, signal })
   // `--get-regexp` exits 1 when no key matches.
   if (listed.exitCode === 1) return []
@@ -212,11 +215,12 @@ export async function repositoryDrivers(git: GitRunner, workspace: GitWorkspace,
  * @throws when the repository's index is a link or not a regular file, or a git command fails.
  */
 export async function snapshotTree(git: GitRunner, workspace: GitWorkspace, signal: AbortSignal): Promise<string> {
-  const scratch = await mkdtemp(join(workspace.scratch, 'index-'))
+  const scratch = await workspace.tree.temporary('index-')
   try {
     const index = join(scratch, 'index')
     // A repository without an index yet (fresh `git init`) starts from scratch.
     await copyRegularFile(join(workspace.gitDir, 'index'), index)
+    // The listing verifies the tree again, after the copy and right before the commands that write into it.
     const drivers = await repositoryDrivers(git, workspace, signal)
     const options = { cwd: workspace.root, env: { ...workspace.env, GIT_INDEX_FILE: index }, writes: workspace.writes, drivers, signal }
     // `--ignore-errors` skips unreadable files and reports them through exit code 1; the index is still complete.
@@ -226,7 +230,7 @@ export async function snapshotTree(git: GitRunner, workspace: GitWorkspace, sign
     if (added.exitCode !== 1) ok(added, `git add in ${workspace.root}`)
     return ok(await git.run(['write-tree'], options), 'git write-tree').stdout.trim()
   } finally {
-    await rm(scratch, { recursive: true, force: true })
+    await workspace.tree.remove(scratch)
   }
 }
 
@@ -249,6 +253,7 @@ export interface TreeBlob {
 export async function treeBlob(
   git: GitRunner, workspace: GitWorkspace, tree: string, path: string, signal: AbortSignal,
 ): Promise<TreeBlob | null> {
+  await workspace.tree.verify()
   // The path is a pathspec; literal matching keeps `*`, `?`, and `[` in a file name from selecting another entry.
   const result = ok(await git.run(['ls-tree', '-z', '-l', tree, '--', path], {
     cwd: workspace.root, env: { ...workspace.env, GIT_LITERAL_PATHSPECS: '1' }, writes: workspace.writes, signal,
@@ -271,6 +276,7 @@ export async function treeBlob(
 export async function blobText(
   git: GitRunner, workspace: GitWorkspace, oid: string, maxBytes: number, signal: AbortSignal,
 ): Promise<string> {
+  await workspace.tree.verify()
   const result = ok(await git.run(['cat-file', 'blob', oid], { cwd: workspace.root, env: workspace.env, writes: workspace.writes, maxBytes, signal }), 'git cat-file')
   /* v8 ignore next -- callers size the blob with treeBlob first; a blob is immutable, so the cap cannot be exceeded here. */
   if (result.truncated) throw new Error(`blob ${oid} exceeds ${maxBytes} bytes`)
@@ -290,6 +296,7 @@ export async function blobText(
 export async function diffTrees(
   git: GitRunner, workspace: GitWorkspace, before: string, after: string, signal: AbortSignal,
 ): Promise<NumstatEntry[]> {
+  await workspace.tree.verify()
   if (before === after) return []
   const result = ok(await git.run(['diff-tree', '--no-ext-diff', '--no-textconv', '-r', '-M', '-z', '--numstat', before, after], {
     cwd: workspace.root, env: workspace.env, writes: workspace.writes, signal,
@@ -308,6 +315,7 @@ export async function diffTrees(
  * @returns slash-separated gitlink paths relative to the repository root.
  */
 export async function gitlinkPaths(git: GitRunner, workspace: GitWorkspace, signal: AbortSignal): Promise<Set<string>> {
+  await workspace.tree.verify()
   const result = ok(await git.run(['ls-files', '-z', '--stage'], { cwd: workspace.root, env: workspace.env, writes: workspace.writes, signal }), 'git ls-files')
   const links = new Set<string>()
   for (const entry of result.stdout.split('\0')) {
@@ -329,6 +337,7 @@ export async function gitlinkPaths(git: GitRunner, workspace: GitWorkspace, sign
 export async function ignoredPaths(
   git: GitRunner, workspace: GitWorkspace, paths: readonly string[], signal: AbortSignal,
 ): Promise<Set<string>> {
+  await workspace.tree.verify()
   if (paths.length === 0) return new Set()
   const result = await git.run(['check-ignore', '-z', '--stdin'], {
     cwd: workspace.root, env: workspace.env, writes: workspace.writes, stdin: `${paths.join('\0')}\0`, signal,

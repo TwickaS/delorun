@@ -19,8 +19,8 @@ import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
-import { confinedWritableRoots, sessionConfinement } from './confinement.ts'
-import { defaultScratchRoot } from './files.ts'
+import { everyConfinedWritableRoot, protectedReadOf, sessionConfinement } from './confinement.ts'
+import { defaultScratchRoot, removeStaleDirectories } from './files.ts'
 import { GitRunner } from './git.ts'
 import { gitVersionProblem } from './hardening.ts'
 import { TurnRecorder } from './recorder.ts'
@@ -146,6 +146,8 @@ export function apply(ctx: Context, config: Config): void {
     if (!Number.isSafeInteger(value) || value < 1) throw new Error(`workspace-changes requires a positive integer ${field}`)
   }
   const scratchRoot = resolveScratchRoot(config)
+  // Private directories that a Host process no longer running left behind hold copies of workspace files.
+  void removeStaleDirectories(scratchRoot).catch((error: unknown) => { ctx.logger.warn(`workspace-changes: ${String(error)}`) })
   const lifetime = new AbortController()
   const recorders = new Map<Session, TurnRecorder>()
   const mutations = new WeakMap<object, TurnRecorder>()
@@ -181,7 +183,8 @@ export function apply(ctx: Context, config: Config): void {
     if (recorder === undefined) {
       recorder = new TurnRecorder(session, cwd, {
         git: gitRunner().then(git => git?.confinedBy(sessionConfinement(ctx, session)) ?? null),
-        scratchRoot, writableRoots: () => confinedWritableRoots(ctx, session),
+        scratchRoot, writableRoots: () => everyConfinedWritableRoot(ctx, recorders.keys()),
+        protectedRead: protectedReadOf(ctx, session),
         maxFiles: config.maxFiles, maxFileBytes: config.maxFileBytes, diffTimeoutMs: config.diffTimeoutMs,
         warn: (message) => { ctx.logger.warn(message) },
       })

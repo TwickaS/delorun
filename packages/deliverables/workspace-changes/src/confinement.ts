@@ -4,7 +4,9 @@
  * @module @deepseek-ai/dsh-workspace-changes/confinement
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { SandboxUnavailableError, writableRoots, type ConfinedSandboxMode, type SandboxExecutionPolicy, type SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import {
+  SandboxUnavailableError, protectedReadGuard, writableRoots, type ConfinedSandboxMode, type SandboxExecutionPolicy, type SandboxPolicy,
+} from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { GitConfinement } from './git.ts'
@@ -35,9 +37,10 @@ export function gitPolicy(policy: SandboxExecutionPolicy & { mode: ConfinedSandb
 /**
  * The {@link GitConfinement} of one Session: its policy resolved per command through `ctx.sandboxPolicy` and wrapped
  * through `ctx.sandbox`. Commands run unconfined only where the Session's commands do: under `danger-full-access`, or
- * in a composition that mounts no sandbox policy. A policy in a confined mode with no sandbox service mounted, such
- * as while the sandbox reloads or after it failed to start, rejects the command with `SandboxUnavailableError`, as
- * the shell does; a sandbox that cannot confine a command rejects it too.
+ * in a composition that mounts neither a sandbox nor its policy. A policy in a confined mode with no sandbox service
+ * mounted, such as while the sandbox reloads or after it failed to start, and a sandbox mounted without its policy,
+ * reject the command with `SandboxUnavailableError`, as the shell does; a sandbox that cannot confine a command
+ * rejects it too.
  * @param ctx - context whose `sandbox` and `sandboxPolicy` services are read when each command starts.
  * @param session - the Session whose policy applies.
  * @returns the confinement.
@@ -45,7 +48,11 @@ export function gitPolicy(policy: SandboxExecutionPolicy & { mode: ConfinedSandb
 export function sessionConfinement(ctx: Context, session: Session): GitConfinement {
   return async (argv, writes, signal) => {
     const policies = ctx.get('sandboxPolicy')
-    if (policies === undefined) return undefined
+    if (policies === undefined) {
+      // A mounted sandbox without its policy cannot say which mode the Session's commands run in.
+      if (ctx.get('sandbox') !== undefined) throw new SandboxUnavailableError('read-only', 'the sandbox is mounted without its sandbox policy')
+      return undefined
+    }
     const policy = policies.resolve({ session })
     if (policy.mode === 'danger-full-access') return undefined
     const sandbox = ctx.get('sandbox')
@@ -70,4 +77,33 @@ export function sessionConfinement(ctx: Context, session: Session): GitConfineme
 export function confinedWritableRoots(ctx: Context, session: Session): readonly string[] {
   const policy = ctx.get('sandboxPolicy')?.resolve({ session })
   return policy === undefined ? [] : writableRoots(policy)
+}
+
+/**
+ * The canonical roots that any live Session's confined commands can write at this moment: the union of
+ * {@link confinedWritableRoots} over every Session the store holds and every Session given. A directory the
+ * unconfined Host writes must lie outside all of them, because a Session's confined commands can reach a path that
+ * another Session's commands cannot.
+ * @param ctx - context whose `sessions` and `sandboxPolicy` services are read on each call.
+ * @param sessions - Sessions to include beside the store's, such as the ones being recorded.
+ * @returns canonical directory paths without repeats.
+ */
+export function everyConfinedWritableRoot(ctx: Context, sessions: Iterable<Session>): string[] {
+  const all = new Set<Session>([...ctx.get('sessions')?.list() ?? [], ...sessions])
+  return [...new Set([...all].flatMap(session => confinedWritableRoots(ctx, session)))]
+}
+
+/**
+ * Whether a path is one the Session's confined commands cannot read because the sandbox protects it, such as Delo's
+ * home: the guard model-facing read tools apply, read when each path is checked. Under `danger-full-access`, or without
+ * a mounted sandbox, nothing is protected.
+ * @param ctx - context whose `sandbox` and `sandboxPolicy` services are read on each call.
+ * @param session - the Session whose mode applies.
+ * @returns the check.
+ */
+export function protectedReadOf(ctx: Context, session: Session): (path: string) => boolean {
+  return (path) => {
+    const mode = ctx.get('sandboxPolicy')?.resolve({ session }).mode ?? 'danger-full-access'
+    return protectedReadGuard(ctx.get('sandbox')?.protectedReads, mode)(path)
+  }
 }
