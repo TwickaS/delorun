@@ -11,6 +11,7 @@
   "include": ["src", "tests"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../../packages/boot/app-boot" },
     { "path": "../../../packages/context/agent-instructions" },
     { "path": "../../../packages/fs/tool-fs" },
     { "path": "../../../packages/sandbox/sandbox-policy" },

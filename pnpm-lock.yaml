@@ -2165,9 +2165,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      '@delo/contract-home-layout':
-        specifier: workspace:*
-        version: link:../contract-home-layout
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -2175,6 +2172,9 @@ importers:
       '@deepseek-ai/dsh-agent-instructions':
         specifier: workspace:*
         version: link:../../../packages/context/agent-instructions
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../../packages/util/home-paths
