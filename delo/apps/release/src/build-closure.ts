@@ -18,7 +18,8 @@
  * other than `toolchain.json` pins. `--artifacts existing` skips the artifact build and copies the worktree's built
  * `lib/` directories, client bundles and native addon into the exported tree instead, after checking that the worktree
  * is at the commit, that tracked files are clean and that each package's `lib/` exists and is newer than its sources;
- * the closure then embeds the worktree's paths and is for a local release only. `--write-pins` records the native files found instead of checking them, for a
+ * the closure then embeds the worktree's paths, keeps the worktree's own native addons instead of the pinned
+ * publications and skips the native-file check, and is for a local release only. `--write-pins` records the native files found instead of checking them, for a
  * reviewed change of `prebuilt-pins.json`. On the targets-key holder's machine, `--attestation-key` and
  * `--attestation` write an HMAC over the version, commit and every file in `--out`, keyed with the holder's secret,
  * which signing checks; the attestation file lies outside `--out`.
@@ -197,10 +198,11 @@ export async function buildClosures(repository: string, recipe: Recipe, request:
     await transpileDeloPackages(join(app, 'node_modules'))
     await stampDeloVersion(join(app, 'node_modules'), request.version)
     await declareAnchorBundles(join(app, 'node_modules'), recipe.closure.anchor.package, recipe.closure.anchor.bundles)
-    await substitutePrebuilt(recipe.pins.substitutes[platform], join(app, 'node_modules'), request.cache)
+    // A build from existing artifacts keeps the worktree's own native addons; the pinned publications are of other versions.
+    if (!existing) await substitutePrebuilt(recipe.pins.substitutes[platform], join(app, 'node_modules'), request.cache)
     await stageNode(recipe.toolchain, platform, stage, request.cache)
     await stagePnpm(recipe.toolchain, stage, request.cache)
-    const files = await archiveClosure({ stage, outDir: request.out, version: request.version, platform, epoch, pins: request.writePins ? undefined : recipe.pins.files[platform], requireLaunchFiles: true })
+    const files = await archiveClosure({ stage, outDir: request.out, version: request.version, platform, epoch, pins: request.writePins || existing ? undefined : recipe.pins.files[platform], requireLaunchFiles: true })
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)
   }

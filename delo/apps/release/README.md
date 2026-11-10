@@ -49,6 +49,8 @@ A runtime closure is one platform's installable runtime: the pinned Node executa
 
 `--write-pins` records the native files of the built platforms in `prebuilt-pins.json` instead of checking them; the recorded change is reviewed like any other change to the recipe.
 
+`--artifacts existing` builds a closure for a local release from artifacts already built in the worktree, instead of running `pnpm run build:artifacts` in the exported tree. It refuses unless the worktree is at `--commit`, its tracked files are clean, and every package whose `main` names a file under `lib/` has that file and a `lib/` newer than its `src/` (the artifact build through the check runner, `run-checks.ts --only build:artifacts`, makes them current). The ignored `lib/` directories, the client bundles and the native addon are then copied into the exported tree. Such a closure embeds the worktree's paths and keeps the worktree's own native addons instead of the pinned publications, and its native files are not checked against `prebuilt-pins.json`, so it is for a local release only, never for signing. The recipe's own build stops today at the pinned `@deepseek-ai/node-addon-system-*` publication, version 0.1.2, which differs from the 0.2.0 of the deployed source.
+
 Every native addon in a closure is a prebuilt file: upstream's `@deepseek-ai/node-addon-system` platform packages come from their npm publications, and the other addons from the npm tarballs the lockfile pins by integrity. `toolchain.json` therefore names no compiler or linker, and the prefix map applies only if a build step compiles code.
 
 ### Archive format
