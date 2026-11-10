@@ -128,6 +128,7 @@ export const DEVICE_ROUTES = {
   window: '/auth/devices/window',
   pending: '/auth/devices/pending',
   approve: '/auth/devices/approve',
+  cancel: '/auth/devices/cancel',
   remove: '/auth/devices/remove',
 } as const
 
@@ -168,6 +169,7 @@ const isPendingDevices = fields({
   })),
 })
 const isApprovedDevice = fields({ device: fields({ id: isString, label: isString, address: isString }) })
+const isCancelledRequest = fields({ cancelled: isString })
 const isRemovedDevice = fields({ removed: value => typeof value === 'boolean', sessions: isTime, connections: isTime })
 const isRefusal = fields({ error: isString, message: isString })
 
@@ -302,6 +304,24 @@ export function readPendingDevices(fetch: HostFetch): Promise<PendingDevices> {
  */
 export function approveDevice(fetch: HostFetch, requestId: ApprovalRequestId, typedCode: string): Promise<ApprovedDevice> {
   return call<ApprovedDevice>(fetch, DEVICE_ROUTES.approve, isApprovedDevice, { requestId, typedCode })
+}
+
+/** What `POST /auth/devices/cancel` answers. */
+export interface CancelledRequest {
+  /** The request that was cancelled. */
+  readonly cancelled: string
+}
+
+/**
+ * Cancel one pending request, which frees its place among the 5 pending; the device that asked reads it as cancelled.
+ * @param fetch - the request function.
+ * @param requestId - the pending request.
+ * @returns the cancelled request's id.
+ * @throws {HostRequestError} for a refusal (`APPROVAL_EXPIRED` for a request no longer pending), an unreachable Host or an
+ *   unreadable answer.
+ */
+export function cancelPendingDevice(fetch: HostFetch, requestId: ApprovalRequestId): Promise<CancelledRequest> {
+  return call<CancelledRequest>(fetch, DEVICE_ROUTES.cancel, isCancelledRequest, { requestId })
 }
 
 /**

@@ -15,6 +15,7 @@ describe('the Devices section\'s routes', () => {
       window: REACH_PATHS.window,
       pending: REACH_PATHS.pending,
       approve: REACH_PATHS.approve,
+      cancel: REACH_PATHS.cancel,
       remove: DEVICE_REMOVE_PATH,
     })
   })

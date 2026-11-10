@@ -15,7 +15,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
 import type { Base64Url } from '@delo/contract-device-approval'
 import { stampListener } from '../src/arrival.ts'
-import { approveHandler, pendingHandler, REACH_PATHS, windowHandler } from '../src/reach-routes.ts'
+import { approveHandler, cancelHandler, pendingHandler, REACH_PATHS, windowHandler } from '../src/reach-routes.ts'
 import { DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, removeDeviceHandler, type RouteHandler } from '../src/routes.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, homeFixture, keyOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
@@ -40,6 +40,7 @@ beforeEach(async () => {
     [REACH_PATHS.window]: windowHandler(home.auth, testCredential),
     [REACH_PATHS.pending]: pendingHandler(home.auth, testCredential),
     [REACH_PATHS.approve]: approveHandler(home.auth, testCredential),
+    [REACH_PATHS.cancel]: cancelHandler(home.auth, testCredential),
   }
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? '/', 'http://server.invalid')
@@ -87,6 +88,7 @@ function routeCalls(deviceId: string): readonly { readonly name: string; readonl
     { name: 'window', method: 'POST', path: REACH_PATHS.window },
     { name: 'pending', method: 'GET', path: REACH_PATHS.pending },
     { name: 'approve', method: 'POST', path: REACH_PATHS.approve, body: { requestId: 'A'.repeat(22), typedCode: '12345678' } },
+    { name: 'cancel', method: 'POST', path: REACH_PATHS.cancel, body: { requestId: 'A'.repeat(22) } },
   ]
 }
 
@@ -156,5 +158,28 @@ describe('the loopback device routes', () => {
     expect(wrong.body.error).toBe('APPROVAL_CODE_MISMATCH')
     expect(JSON.stringify(wrong.body)).not.toMatch(/\b\d{8}\b/)
     expect((await home.auth.devices()).devices.map(device => device.id)).not.toContain(deviceIdOf(keyOf(7)))
+  })
+
+  it('cancel a pending request only for the studio, and refuse a malformed one', async () => {
+    const requestId = await pendingRequest()
+    // Pins the gate on the cancellation: a local program without the credential cannot empty the pending list.
+    expect((await send('POST', REACH_PATHS.cancel, { origin: OWN() }, { requestId })).body.error).toBe('NOT_SIGNED_IN')
+    expect(home.auth.pendingApprovals().map(entry => entry.requestId)).toEqual([requestId])
+    expect((await send('POST', REACH_PATHS.cancel, { cookie: STUDIO_COOKIE, origin: OWN() }, {})).body.error).toBe('BAD_REQUEST')
+    const notJson = await new Promise<number>((resolve, reject) => {
+      const request = httpRequest({ host: '127.0.0.1', port, method: 'POST', path: REACH_PATHS.cancel, setHost: false, agent: false,
+        headers: { host: `127.0.0.1:${String(port)}`, cookie: STUDIO_COOKIE, origin: OWN(), 'content-type': 'application/json' } }, (response) => {
+        response.resume()
+        resolve(response.statusCode ?? 0)
+      })
+      request.on('error', reject)
+      request.end('not json')
+    })
+    expect(notJson).toBe(400)
+    expect((await send('GET', REACH_PATHS.cancel, { cookie: STUDIO_COOKIE })).body.error).toBe('METHOD_NOT_ALLOWED')
+    const cancelled = await send('POST', REACH_PATHS.cancel, { cookie: STUDIO_COOKIE, origin: OWN() }, { requestId })
+    expect(cancelled).toEqual({ status: 200, body: { cancelled: requestId } })
+    expect(home.auth.pendingApprovals()).toEqual([])
+    expect((await send('POST', REACH_PATHS.cancel, { cookie: STUDIO_COOKIE, origin: OWN() }, { requestId })).body.error).toBe('APPROVAL_EXPIRED')
   })
 })

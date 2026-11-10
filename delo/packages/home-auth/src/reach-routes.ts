@@ -54,6 +54,7 @@ export const REACH_PATHS = {
   window: '/auth/devices/window',
   pending: '/auth/devices/pending',
   approve: '/auth/devices/approve',
+  cancel: '/auth/devices/cancel',
 } as const
 
 /** A built asset of the sign-in page. */
@@ -322,6 +323,29 @@ export function approveHandler(auth: HomeAuth, credential: LoopbackCredential): 
       }
       const device = await auth.approveLocally(message.requestId, message.typedCode)
       sendJson(response, 200, { device: { id: device.id, label: device.label, address: device.address } })
+    } catch (error) {
+      sendThrown(response, error)
+    }
+  }
+}
+
+/**
+ * Build the route that cancels a pending request at the home's own computer: "Cancel" beside a waiting device in the
+ * loopback studio, which frees its place among the 5 pending.
+ * @param auth - the home-auth instance.
+ * @param credential - the loopback credential check.
+ * @returns the handler.
+ */
+export function cancelHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
+  return async (request, response) => {
+    if (!personAtComputer(auth, credential, request, response, 'Cancelling a device request', request.method === 'POST')) return
+    if (!method(request, response, 'POST')) return
+    try {
+      const message = await readMessage(request, response)
+      if (message === undefined) return
+      if (typeof message.requestId !== 'string') throw new HomeAuthError('BAD_REQUEST', 'a cancellation carries the request id')
+      auth.approvals.cancel(message.requestId)
+      sendJson(response, 200, { cancelled: message.requestId })
     } catch (error) {
       sendThrown(response, error)
     }

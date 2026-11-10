@@ -34,7 +34,7 @@ A device is approved only at your computer.
 
 1. On your computer, run `delorun devices approve`, or choose **Add a device** in the studio's Settings, under Devices. This opens an approval window for 5 minutes.
 2. On your phone, open your address and choose **Ask for approval**. The phone shows an 8-digit code.
-3. On your computer, the command lists every waiting device with a number, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. In the Devices section, each waiting device has its own code field. Three wrong codes cancel only that request.
+3. On your computer, the command lists every waiting device with a number, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. In the Devices section, each waiting device has its own code field and a **Cancel request** button. Three wrong codes cancel only that request.
 
 At most 5 requests wait at a time. When a phone is told that 5 requests are waiting, cancel the ones you do not know at your computer, then ask again from the phone; a waiting request is never replaced on its own. A device name or platform that contains control or text-direction characters is refused.
 

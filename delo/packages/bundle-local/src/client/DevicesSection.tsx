@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  approveDevice, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow, PENDING_POLL_MS, readDevices, readPendingDevices,
+  approveDevice, cancelPendingDevice, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow, PENDING_POLL_MS, readDevices, readPendingDevices,
   readReachStatus, removeDevice,
   type ApprovalRequestId, type Device, type DeviceList, type HostFetch, type PendingDevice, type ReachOptionStatus,
   type ReachStatus,
@@ -19,7 +19,7 @@ import css from './DevicesSection.module.css'
 export const REACH_ON_COMMAND = 'delorun reach on tailscale'
 
 /** What the section names in a refusal that needs the home's own computer. */
-export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'remove'
+export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove'
 
 /** The request function the plugin supplies. */
 export interface DevicesSectionInjected {
@@ -221,6 +221,17 @@ function DeviceManager({ t, fetch }: { t: Translate; fetch: HostFetch }): ReactN
     await refresh()
   }
 
+  const cancel = async (requestId: ApprovalRequestId): Promise<void> => {
+    setApproveFailure(undefined)
+    try {
+      await cancelPendingDevice(fetch, requestId)
+    } catch (error) {
+      setApproveFailure({ requestId, text: failureText(t, error, 'cancel') })
+      return
+    }
+    setPending(current => current.filter(entry => entry.requestId !== requestId))
+  }
+
   const remove = async (device: Device): Promise<void> => {
     setRemoving(undefined)
     setRemoveFailure(undefined)
@@ -263,7 +274,7 @@ function DeviceManager({ t, fetch }: { t: Translate; fetch: HostFetch }): ReactN
       {strayApproveFailure ? <p className={css.failed} role="alert">{approveFailure.text}</p> : null}
       {pending.map(request => <PendingRow key={request.requestId} t={t} request={request}
         failure={approveFailure?.requestId === request.requestId ? approveFailure.text : undefined}
-        onApprove={typed => approve(request.requestId, typed)} />)}
+        onApprove={typed => approve(request.requestId, typed)} onCancel={() => cancel(request.requestId)} />)}
     </div>}
     {removing === undefined ? null : <Modal open onClose={() => { setRemoving(undefined) }}
       title={t('remove.title', { label: removing.label })} closeLabel={t('remove.close')}
@@ -278,25 +289,28 @@ function DeviceManager({ t, fetch }: { t: Translate; fetch: HostFetch }): ReactN
 
 /**
  * One device asking for approval, with its code input.
- * @param props - the copy, the request, the refusal of its last approval, and the approval.
+ * @param props - the copy, the request, the refusal of its last approval or cancellation, the approval and the
+ *   cancellation.
  * @returns the row.
  */
-function PendingRow({ t, request, failure, onApprove }: {
+function PendingRow({ t, request, failure, onApprove, onCancel }: {
   t: Translate
   request: PendingDevice
   failure: string | undefined
   onApprove: (typed: string) => Promise<void>
+  onCancel: () => Promise<void>
 }): ReactNode {
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
-  const submit = async (): Promise<void> => {
+  const run = async (action: () => Promise<void>): Promise<void> => {
     setBusy(true)
     try {
-      await onApprove(typed)
+      await action()
     } finally {
       setBusy(false)
     }
   }
+  const submit = (): Promise<void> => run(() => onApprove(typed))
   return <div className={css.row} data-request-id={request.requestId}>
     <div className={css.details}>
       <div className={css.title}>{request.label}</div>
@@ -310,6 +324,7 @@ function PendingRow({ t, request, failure, onApprove }: {
         aria-label={t('pending.code', { label: request.label })} placeholder={t('pending.codePlaceholder')}
         onChange={(event) => { setTyped(event.target.value) }} />
       <Button variant="primary" size="sm" type="submit" disabled={busy || !isCompleteCode(typed)}>{t('pending.approve')}</Button>
+      <Button size="sm" type="button" disabled={busy} onClick={() => { void run(onCancel) }}>{t('pending.cancel')}</Button>
     </form>
   </div>
 }

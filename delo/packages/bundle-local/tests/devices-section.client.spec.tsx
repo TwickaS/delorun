@@ -269,6 +269,28 @@ describe('the Devices section', () => {
     expect(screen.getByRole('alert').textContent).toBe(mismatch)
   })
 
+  it('cancels a waiting device the person does not recognise, and shows a refusal in its row', async () => {
+    fakeClock()
+    const host = standardHost()
+    host.script[`POST ${DEVICE_ROUTES.cancel}`] = refusal(410, 'APPROVAL_EXPIRED', 'This request is no longer waiting.')
+    renderSection(host)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['pending.cancel'] }))
+    await settle()
+    const row = screen.getByText('iPad').closest('[data-request-id]')
+    if (!(row instanceof HTMLElement)) throw new Error('no pending row')
+    expect(within(row).getByRole('alert').textContent).toBe('This request is no longer waiting.')
+    host.script[`POST ${DEVICE_ROUTES.cancel}`] = { status: 200, body: { cancelled: 'request-1' } }
+    fireEvent.click(screen.getByRole('button', { name: en['pending.cancel'] }))
+    await settle()
+    expect(host.received.filter(request => request.key === `POST ${DEVICE_ROUTES.cancel}`).map(request => request.body))
+      .toEqual([{ requestId: 'request-1' }, { requestId: 'request-1' }])
+    // The cancelled request leaves the list at once; the Host no longer lists it either.
+    expect(screen.queryByText('iPad')).toBeNull()
+  })
+
   it('removes a device only after confirmation and refreshes the list', async () => {
     const host = standardHost()
     host.script[`POST ${DEVICE_ROUTES.remove}`] = { status: 200, body: { removed: true, sessions: 1, connections: 2 } }
@@ -327,6 +349,15 @@ describe('the Devices section', () => {
       fireEvent.change(await screen.findByRole('textbox', { name: 'Code shown on iPad' }), { target: { value: '12345678' } })
       fireEvent.click(screen.getByRole('button', { name: en['pending.approve'] }))
       expect((await screen.findByRole('alert')).textContent).toBe(atYourComputer(en['action.approve']))
+    })
+
+    it('says so for cancelling a device request', async () => {
+      const host = standardHost()
+      host.script[`POST ${DEVICE_ROUTES.cancel}`] = loopbackRefusal
+      renderSection(host)
+      fireEvent.click(await screen.findByRole('button', { name: en.add }))
+      fireEvent.click(await screen.findByRole('button', { name: en['pending.cancel'] }))
+      expect((await screen.findByRole('alert')).textContent).toBe(atYourComputer(en['action.cancel']))
     })
 
     it('says so for reading the pending requests, and stops reading them', async () => {

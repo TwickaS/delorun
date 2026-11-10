@@ -23,7 +23,7 @@ import type { PendingSummary } from './approvals.ts'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
 import {
-  approvalRequestHandler, approveHandler, assetHandler, challengeHandler, pendingHandler, REACH_PATHS, sessionHandler, signInPageHandler,
+  approvalRequestHandler, approveHandler, assetHandler, cancelHandler, challengeHandler, pendingHandler, REACH_PATHS, sessionHandler, signInPageHandler,
   windowHandler,
 } from './reach-routes.ts'
 import { HomeAuthAuthenticator } from './authenticator.ts'
@@ -100,6 +100,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: REACH_PATHS.window, handler: windowHandler(core, credential) }),
         server.register({ kind: 'exact', path: REACH_PATHS.pending, handler: pendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: REACH_PATHS.approve, handler: approveHandler(core, credential) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.cancel, handler: cancelHandler(core, credential) }),
       ]
       return () => {
         for (const off of registered) off()

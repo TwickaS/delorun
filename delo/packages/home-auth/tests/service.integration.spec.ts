@@ -34,6 +34,7 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', REACH_PATHS.window],
   ['exact', REACH_PATHS.pending],
   ['exact', REACH_PATHS.approve],
+  ['exact', REACH_PATHS.cancel],
 ]
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
