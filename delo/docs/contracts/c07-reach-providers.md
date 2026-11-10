@@ -52,7 +52,7 @@ The requirements and denial tests below that this list names as not built or rea
 
 | Option id | Listener | TLS ends at | Identity factor | Address |
 | --- | --- | --- | --- | --- |
-| `tailscale-private` | `reach-tailscale-private` | `tailscaled` on the home | A passkey or OpenID Connect sign-in; tailnet identity only under the [socket variant](#tailscale-serve-target) | `https://<machine>.<tailnet>.ts.net`, with the serve port when it is not 443 |
+| `tailscale-private` | `reach-tailscale-private` | `tailscaled` on the home | `tailnet-membership` ([C14](c14-oidc-passkeys.md#tailnet-membership)) under the fallback; tailnet identity only under the [socket variant](#tailscale-serve-target) | `https://<machine>.<tailnet>.ts.net`, with the serve port when it is not 443 |
 | `tailscale-funnel` | `reach-tailscale-funnel` | `tailscaled` on the home | A passkey or OpenID Connect sign-in | `https://<machine>.<tailnet>.ts.net`, with the Funnel port when it is not 443 |
 | `self-hosted-relay` | `reach-self-hosted-relay` | The home's reach listener, with its own certificate | A passkey or OpenID Connect sign-in | `https://<name>` on the person's own domain |
 
@@ -64,13 +64,14 @@ The option ids are those of setup's answers ([C11](c11-setup-answers.md)). Devic
 The capability seam has three roles. The Service Definition is the Cordis service `reach`, declared by `@delo/reach`, with a registry of providers. Its Service Providers are the three providers above, each registered by `@delo/reach`. Its consumers are the reach screens in `@delo/plugin-reach-ui`, `@delo/home-auth`, which rotates sessions on a reach-provider change, `@delo/certificates`, and the verification checks of [C15](c15-verification-checks.md).
 
 - **`reach.register(provider)`** registers a provider for one option id and returns the disposer. A second provider for the same id fails at load.
+- **`provider.factor`** declares the identity factor a session created through the option records. `@delo/home-auth` reads it from this declaration and refuses `tailnet-membership` for any option other than `tailscale-private`.
 - **`provider.resolve(rows)`** turns the option's configuration rows into a `ReachSpec`: the address, the listener, the ports and every value the provider would otherwise default. It runs at load, so a missing or invalid row fails there with its error code.
 - **`provider.start(spec, listener)`** connects the started reach listener to the outside and resolves when the provider reaches `ready` or a refusal state.
 - **`provider.stop()`** disconnects and resolves when the provider reaches `off`.
 - **`provider.visibility(spec)`** returns the option's [visibility note](#visibility-notes) for that spec.
 - **`reach/state`** is the event each state change emits, with the option id, the state and its cause.
 
-`start` runs only when every precondition holds: the home has an owner ([C5](c05-device-approval.md#owner-claim)); an identity factor that [C14](c14-oidc-passkeys.md) allows for the address is enrolled, or is enrolled as part of turning the option on; the person turned the option on interactively, never through `--yes` or `--config` ([C11](c11-setup-answers.md)); and the option's own checks below pass.
+`start` runs only when every precondition holds: the home has an owner ([C5](c05-device-approval.md#owner-claim)), or gains one by C5's local claim when the person opens the first approval window; an identity factor that [C14](c14-oidc-passkeys.md) allows for the address is enrolled, is enrolled as part of turning the option on, or is `tailnet-membership`, which needs no enrolment; the person turned the option on interactively, never through `--yes` or `--config` ([C11](c11-setup-answers.md)); and the option's own checks below pass.
 
 <a id="states"></a>
 ### States
@@ -130,9 +131,11 @@ No row sets a listener's address ([C4](c04-admission.md#listeners)). Secrets of 
 **Current contract: the fallback.** The Tailscale private target is a TCP port on `127.0.0.1` that the operating system assigns to `reach-tailscale-private`. The provider configures it with `tailscale serve --bg --https=<servePort> http://127.0.0.1:<bound port>` and removes it with `tailscale serve --https=<servePort> off`. Under the fallback:
 
 - identity headers are trusted on no listener, including this one;
-- tailnet-private reach needs a passkey or OpenID Connect identity factor, like public reach, and the `tailnet` identity factor is refused with `TAILNET_IDENTITY_UNAVAILABLE`;
+- tailnet-private reach signs a device in with `tailnet-membership` ([C14](c14-oidc-passkeys.md#tailnet-membership)): an approved device's key alone, after an approval at the home's own computer ([C5](c05-device-approval.md#local-approval)); the header-based `tailnet` identity factor is refused with `TAILNET_IDENTITY_UNAVAILABLE`;
 - owner claim is accepted only on the loopback listener ([C5](c05-device-approval.md#owner-claim));
 - a local process that connects to the target port is admitted only as any remote device would be.
+
+Before `start` configures the target, the provider checks that `tailscale` is installed (`TAILSCALE_NOT_INSTALLED`), runs and is signed in (`TAILSCALE_NOT_LOGGED_IN`), that the tailnet has HTTPS certificates on for this machine (`TAILSCALE_HTTPS_DISABLED`) and that the configured address is this machine's `ts.net` name (`TAILSCALE_ADDRESS_MISMATCH`). It runs every `tailscale` command itself, with an argument list and never through `sudo`; when the person's user may not configure `tailscale serve`, it refuses with `TAILSCALE_SERVE_NOT_PERMITTED` and prints the one command the person runs themselves, `sudo tailscale set --operator=$USER`.
 
 **Socket variant, adopted only by a passing spike.** Where the spike result recorded under [compatibility](#compatibility) passes for a platform, the target on that platform is the Unix socket `~/.delo/run/<profile>/serve.sock` ([C1](c01-home-layout.md)), created by the home process and set to mode 0600 after it binds. The provider configures it with the command the spike recorded. On each accepted connection the home reads the peer's credentials (`SO_PEERCRED` on Linux, `getpeereid` on macOS) and closes the connection unless the peer's user is the user `tailscaled` runs as and that user is not the person's user. Under the variant, identity headers are trusted on this socket only, a claim on it may set the tailnet login allowlist, and the `tailnet` identity factor is available for `tailscale-private`. When the peer-credential condition does not hold at start, for example because `tailscaled` runs as the person's user, the provider uses the fallback on that home and says so in its state.
 
@@ -177,6 +180,8 @@ Own-domain reach is the self-hosted relay option. The certificate authority this
 | `TAILSCALE_NOT_INSTALLED` | `tailscale` is not on the home's path. |
 | `TAILSCALE_NOT_LOGGED_IN` | The Tailscale client is not logged in to a tailnet. |
 | `TAILSCALE_ADDRESS_MISMATCH` | The configured address differs from the name Tailscale reports. |
+| `TAILSCALE_HTTPS_DISABLED` | The tailnet does not have HTTPS certificates on for this machine. |
+| `TAILSCALE_SERVE_NOT_PERMITTED` | The person's user may not configure `tailscale serve`. |
 | `FUNNEL_NOT_PERMITTED` | The tailnet policy does not grant the `funnel` attribute. |
 | `PORT_CONFLICT` | `funnelPort` equals an enabled `servePort`. |
 | `NO_OWNER` | The home has no owner. |
@@ -219,7 +224,7 @@ Every reach option is off in the parity composition ([C16](c16-parity-compositio
 Requirements:
 
 - Each provider publishes its visibility note, which names the IP addresses of the home and each device, connection times and traffic volume; for Tailscale it says that Tailscale can add a device unless Tailnet Lock is on and that Tailscale obtains the `ts.net` certificate.
-- Under the fallback, which is the current contract, identity headers are trusted on no listener and tailnet-private reach needs a passkey or OpenID Connect identity factor; the fallback also applies whenever a local process other than `tailscaled` can reach the serve target.
+- Under the fallback, which is the current contract, identity headers are trusted on no listener and tailnet-private reach signs in with `tailnet-membership`, so a device is approved only at the home's own computer and its session is refused every action C14 reserves for that computer; the fallback also applies whenever a local process other than `tailscaled` can reach the serve target.
 - Under the socket variant, identity headers are trusted only on the mode-0600 serve socket from a peer whose user is `tailscaled`'s, and dropped everywhere else; the tailnet login allowlist is set at owner claim.
 - Funnel targets its own listener, which trusts no identity header.
 - Own-domain reach requires the CAA record whose `accounturi` names the home's Let's Encrypt account, and `delorun verify` asserts only the parameters Let's Encrypt documents.

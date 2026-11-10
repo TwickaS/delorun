@@ -1,0 +1,29 @@
+{
+  "name": "@delo/reach",
+  "description": "Delo's reach providers (C7): the reach service and its provider registry, and the Tailscale private provider over a C4 reach listener",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-api-gateway": "workspace:*",
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@delo/contract-admission": "workspace:*",
+    "@delo/contract-oidc-passkeys": "workspace:*",
+    "@delo/contract-reach-providers": "workspace:*",
+    "@delo/home-auth": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*",
+    "@delo/bundle-local": "workspace:*",
+    "@delo/tools": "workspace:*"
+  }
+}
