@@ -20,12 +20,6 @@
     "@delo/contract-reach-providers": "workspace:*",
     "@delo/home-auth": "workspace:*"
   },
-  "devDependencies": {
-    "@deepseek-ai/dsh-app-boot": "workspace:*",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:*",
-    "@delo/bundle-local": "workspace:*",
-    "@delo/tools": "workspace:*"
-  },
   "delo": {
     "state": "shipped"
   }

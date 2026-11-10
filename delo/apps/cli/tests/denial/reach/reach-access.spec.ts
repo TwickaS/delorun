@@ -27,10 +27,8 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
-import { HomeAuthService } from '../../../src/service.ts'
-import { REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, reachDevicePrincipal } from '../../../src/reach-access.ts'
-import { DeviceStore } from '../../../src/devices.ts'
-import { claimOf, recordOf } from '../../fixtures/home.ts'
+import { DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
+import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')

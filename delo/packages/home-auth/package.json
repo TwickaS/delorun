@@ -1,12 +1,13 @@
 {
   "name": "@delo/home-auth",
-  "description": "Delo's sign-in for reach (C4, C5, C14): the owner claim and device list, the authenticator provider, its session store and pre-login routes, and the admission denial suite",
+  "description": "Delo's sign-in for reach (C4, C5, C14): the owner claim and device list, the authenticator provider, its session store and pre-login routes",
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./assets/sign-in.js": "./assets/sign-in.js"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:~",
@@ -23,13 +24,6 @@
     "@delo/contract-oidc-passkeys": "workspace:*",
     "@delo/contract-reach-providers": "workspace:*",
     "@delo/home": "workspace:*"
-  },
-  "devDependencies": {
-    "@delo/bundle-local": "workspace:*",
-    "@delo/tools": "workspace:*",
-    "@deepseek-ai/dsh-api-remotes": "workspace:*",
-    "@deepseek-ai/dsh-app-boot": "workspace:*",
-    "@deepseek-ai/dsh-host-webserver": "workspace:*"
   },
   "delo": {
     "state": "shipped"

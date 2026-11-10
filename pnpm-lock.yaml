@@ -1390,6 +1390,12 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:*
+        version: link:../../../packages/api/remotes
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../../packages/util/launch-environment
@@ -1405,6 +1411,18 @@ importers:
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: workspace:*
         version: link:../../../packages/session/session-persistence-jsonl
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:*
+        version: link:../../../packages/typert/protocol
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
+      '@delo/plugin-main-chat':
+        specifier: workspace:*
+        version: link:../../packages/plugin-main-chat
+      '@delo/tools':
+        specifier: workspace:*
+        version: link:../tools
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
@@ -2064,22 +2082,6 @@ importers:
       '@delo/home':
         specifier: workspace:*
         version: link:../home
-    devDependencies:
-      '@deepseek-ai/dsh-api-remotes':
-        specifier: workspace:*
-        version: link:../../../packages/api/remotes
-      '@deepseek-ai/dsh-app-boot':
-        specifier: workspace:*
-        version: link:../../../packages/boot/app-boot
-      '@deepseek-ai/dsh-host-webserver':
-        specifier: workspace:*
-        version: link:../../../packages/host/webserver
-      '@delo/bundle-local':
-        specifier: workspace:*
-        version: link:../bundle-local
-      '@delo/tools':
-        specifier: workspace:*
-        version: link:../../apps/tools
 
   delo/packages/home-process:
     dependencies:
@@ -2938,19 +2940,6 @@ importers:
       '@delo/home-auth':
         specifier: workspace:*
         version: link:../home-auth
-    devDependencies:
-      '@deepseek-ai/dsh-app-boot':
-        specifier: workspace:*
-        version: link:../../../packages/boot/app-boot
-      '@deepseek-ai/dsh-typert-protocol':
-        specifier: workspace:*
-        version: link:../../../packages/typert/protocol
-      '@delo/bundle-local':
-        specifier: workspace:*
-        version: link:../bundle-local
-      '@delo/tools':
-        specifier: workspace:*
-        version: link:../../apps/tools
 
   delo/packages/release-formats:
     dependencies:

@@ -26,10 +26,8 @@ import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
-import { FULL_ACCESS_REFUSAL } from '../../../src/authenticator.ts'
-import { HomeAuthService } from '../../../src/service.ts'
-import { DeviceStore } from '../../../src/devices.ts'
-import { claimOf, recordOf } from '../../fixtures/home.ts'
+import { DeviceStore, FULL_ACCESS_REFUSAL, HomeAuthService } from '@delo/home-auth'
+import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')

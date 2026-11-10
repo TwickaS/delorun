@@ -41,12 +41,12 @@ const TLS = 'it serves and verifies TLS certificates it makes with `Date`; OpenS
 
 /** The specs the check leaves out, each with its reason; `delo/vitest.moved-clock.config.ts` excludes them. */
 export const MOVED_CLOCK_EXCLUDED: readonly ExcludedSpec[] = [
+  { spec: 'apps/cli/tests/denial/admission/listeners.spec.ts', reason: TLS },
   { spec: 'apps/relay/tests/node/end-to-end.spec.ts', reason: TLS },
   { spec: 'apps/tools/tests/stack/acme.spec.ts', reason: TLS },
   { spec: 'apps/tools/tests/stack/certificate-transparency.spec.ts', reason: TLS },
   { spec: 'apps/tools/tests/stack/oidc-provider.spec.ts', reason: TLS },
   { spec: 'apps/tools/tests/stack/stack.spec.ts', reason: TLS },
-  { spec: 'packages/home-auth/tests/denial/admission/listeners.spec.ts', reason: TLS },
   { spec: 'packages/logs/tests/retention.spec.ts', reason: 'it compares `Date.now()` with the modification times of files it writes, which agree in a real run; the check moves `Date` and not the file times, so past the retention window every new file reads as expired' },
 ]
 

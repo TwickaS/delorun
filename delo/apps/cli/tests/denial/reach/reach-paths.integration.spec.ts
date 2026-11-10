@@ -20,11 +20,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ReachListener } from '@deepseek-ai/dsh-client-connection'
 import type { StudioAddress } from '@delo/contract-admission'
-// Relative: the main chat is an experimental plugin no profile mounts, so this package does not depend on it.
-import * as mainChat from '../../../../plugin-main-chat/src/index.ts'
-import { DeviceStore } from '../../../src/devices.ts'
-import { REACH_DEVICE_PATHS, reachesDevicePath } from '../../../src/reach-paths.ts'
-import { claimOf, recordOf } from '../../fixtures/home.ts'
+// The main chat is an experimental plugin no profile mounts; this spec mounts it to request its routes as a device.
+import * as mainChat from '@delo/plugin-main-chat'
+import { DeviceStore, REACH_DEVICE_PATHS, reachesDevicePath } from '@delo/home-auth'
+import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { tcpEndpoint, type Endpoint, type Reply } from '../admission/fixtures.ts'
 import { bootStudio, targetOf, type Registration, type Studio } from '../admission/studio.ts'
 
@@ -35,7 +34,7 @@ const LOOPBACK_REQUIRED = JSON.stringify({ error: 'LOOPBACK_REQUIRED' })
 
 /** Why the install-time files are served to a device. */
 const STATIC = 'upstream\'s frontend-static fallback: the studio page, its built assets and its install-time files'
-/** Why the routes of this package are reached by a device. */
+/** Why the routes of `@delo/home-auth` are reached by a device. */
 const HOME_AUTH = '@delo/home-auth: sign-in and the device routes, which refuse a reach session where C5 reserves them'
 
 /**
