@@ -255,6 +255,13 @@ describe('the order of requests', () => {
     expect(decide(disk, 3, budget)).toEqual({ waits: 'the 2 disk-heavy places are taken' })
   })
 
+  it('keeps for an earlier request the whole grant it asks for, so a later one polling first cannot take it', () => {
+    const big = (pid: number) => ({ ...request(pid, { min: 4, since: pid }), want: 20 })
+    const state = { holders: [], oldWaiting: [], waiting: [big(1), big(2)] }
+    expect(decide(state, 1, budget)).toEqual({ slots: 15, memoryBytes: 15 * GIB })
+    expect(decide(state, 2, budget)).toEqual({ slots: 5, memoryBytes: 5 * GIB })
+  })
+
   it('orders requests of the same time by process id', () => {
     const machine = new Machine()
     const host = machine.host(1)

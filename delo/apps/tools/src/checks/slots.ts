@@ -180,8 +180,10 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
   let disk = budget.diskRuns - state.holders.filter(holder => holder.disk).length
   const perSlot = budget.memoryBytes / budget.slots
   const reserve = Math.floor(budget.slots / 4)
+  // What a fitting request is granted from the free slots: what it asks for, at most the machine less the reserve.
+  const grantOf = (request: SlotRequest, free: number): number => Math.max(request.min, Math.min(request.want, free, request.priority === 0 ? budget.slots : budget.slots - reserve))
   // An earlier request that does not fit holds back every later one; one that waits only for a disk-heavy place holds back
-  // the later disk-heavy ones. Each earlier request that would start keeps its minimum for itself.
+  // the later disk-heavy ones. Each earlier request that would start keeps for itself the grant it would get.
   let ahead: string | undefined
   let diskAhead: string | undefined
   for (const request of state.waiting) {
@@ -196,8 +198,7 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
       if (request.min > slots) return { waits: `${String(slots)} of ${String(budget.slots)} slots are free and it needs ${String(request.min)}` }
       if (!fits) return { waits: `${(memory / 1024 ** 3).toFixed(1)} GiB of memory is free and it needs ${(need / 1024 ** 3).toFixed(1)} GiB` }
       if (!diskFree) return { waits: `the ${String(budget.diskRuns)} disk-heavy places are taken` }
-      const cap = request.priority === 0 ? budget.slots : budget.slots - reserve
-      const granted = Math.max(request.min, Math.min(request.want, slots, cap))
+      const granted = grantOf(request, slots)
       return { slots: granted, memoryBytes: Math.min(memory, Math.max(request.memoryBytes, granted * perSlot)) }
     }
     if (!fits) {
@@ -205,8 +206,9 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
       continue
     }
     if (ahead !== undefined) continue
-    slots -= request.min
-    memory -= need
+    const takes = grantOf(request, slots)
+    slots -= takes
+    memory -= Math.max(need, Math.min(memory, takes * perSlot))
     if (!request.disk) continue
     if (diskFree) disk -= 1
     else diskAhead ??= `the request of process ${String(request.pid)} waits ahead for a disk-heavy place`
