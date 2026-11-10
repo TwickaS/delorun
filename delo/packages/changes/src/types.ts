@@ -217,6 +217,22 @@ export interface ProtectionRecord {
 /** Schema tag of {@link ProtectionRecord}. */
 export const PROTECTION_RECORD_SCHEMA = 'delo.changes-protection/1'
 
+/**
+ * The file `changes/migration.json`: the profiles the home held when a start first brought a profile under Changes.
+ * Only these profiles approve their linked plugins as they are at their own first start under Changes; a profile
+ * created after it is a new profile whose linked plugins wait for review.
+ */
+export interface MigrationRecord {
+  readonly schema: typeof MIGRATION_RECORD_SCHEMA
+  /** When it was written, ISO 8601. */
+  readonly at: string
+  /** The profile names, sorted. */
+  readonly profiles: readonly string[]
+}
+
+/** Schema tag of {@link MigrationRecord}. */
+export const MIGRATION_RECORD_SCHEMA = 'delo.changes-migration/1'
+
 /** The file `changes/<profile>/work-session.json`: one plugin loaded from its folder with live reload. */
 export interface WorkSessionRecord {
   readonly schema: typeof WORK_SESSION_SCHEMA
@@ -230,6 +246,8 @@ export interface WorkSessionRecord {
   readonly startedAt: string
   /** Where it was started. */
   readonly startedFrom: 'terminal' | 'studio'
+  /** When it ends without the person, ISO 8601: at most `WORK_SESSION_MAX_MINUTES` after {@link WorkSessionRecord.startedAt}. */
+  readonly endsAt: string
   /** The last content that loaded, which a failed reload goes back to. */
   readonly lastLoaded?: ContentVersion
   /** The folder content whose reload failed after {@link WorkSessionRecord.lastLoaded}; ending the session never approves it. */
@@ -294,9 +312,14 @@ export type RiskKind =
   | 'home-read'
   /** Adds or changes a dependency, or a build or install script. */
   | 'dependency-or-build'
+  /**
+   * Has new content the diff does not show: a binary file Node can load, a file too large for the diff or past where it
+   * was cut short, or a dependency's file inside the folder.
+   */
+  | 'not-shown'
 
 /** Every {@link RiskKind}, in the order the summary lists them. */
-export const RISK_KINDS: readonly RiskKind[] = ['consent-guard-sandbox', 'model-tool', 'commands', 'network', 'home-read', 'dependency-or-build']
+export const RISK_KINDS: readonly RiskKind[] = ['consent-guard-sandbox', 'model-tool', 'commands', 'network', 'home-read', 'dependency-or-build', 'not-shown']
 
 /** One place in a change that a check matched. */
 export interface RiskFinding {
@@ -333,7 +356,16 @@ export interface ReviewedFile {
   readonly after?: string
   /** The old text, for a modified or removed text file. */
   readonly before?: string
+  /** Why the diff does not show the file's lines, when it does not. */
+  readonly notShown?: NotShownReason
 }
+
+/**
+ * Why a diff does not show a file's lines: `binary`, a file that is not text; `too-large`, a text file above the file
+ * limit; `cut-short`, a text file past where the diff reached its size limit; `dependency`, a file below a
+ * `node_modules` directory inside the folder.
+ */
+export type NotShownReason = 'binary' | 'too-large' | 'cut-short' | 'dependency'
 
 /** What a check reads: the changed files, and the plugin's `package.json` on each side when it has one. */
 export interface ReviewInput {
@@ -342,7 +374,7 @@ export interface ReviewInput {
   readonly manifestAfter?: unknown
 }
 
-/** One check of a change. Built-in checks are the six of {@link RiskKind}; a later extension point can add more. */
+/** One check of a change. Built-in checks are the seven of {@link RiskKind}; a later extension point can add more. */
 export interface RiskCheck {
   /** A stable id, recorded on each finding. */
   readonly id: string

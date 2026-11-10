@@ -3,7 +3,7 @@
  * applying one needs the person at their computer, runs upstream's plugin operation with the spec, records one history
  * version, and for a folder links the plugin to its active directory and leaves the folder's content waiting for review.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { applyChange, discardChange, listChanges, showChange, undoChange } from '../src/actions.ts'
@@ -37,13 +37,15 @@ function profileFiles(fx: Fixture): string[] {
   ]
 }
 
-/** An operation that succeeds and records its arguments. */
-function succeeding(): PluginOperation & { readonly calls: (readonly string[])[] } {
+/** An operation that succeeds and records its arguments and the folder it was asked to check. */
+function succeeding(): PluginOperation & { readonly calls: (readonly string[])[], readonly folders: (string | undefined)[] } {
   const calls: (readonly string[])[] = []
-  return Object.assign(async (args: readonly string[]) => {
+  const folders: (string | undefined)[] = []
+  return Object.assign(async (args: readonly string[], checked?: string) => {
     calls.push(args)
+    folders.push(checked)
     return { exitCode: 0, logPath: '/logs/op.log' }
-  }, { calls })
+  }, { calls, folders })
 }
 
 const NOT_RUNNING = async () => undefined
@@ -147,6 +149,46 @@ describe('applyInstallChange', () => {
     expect(retried.entry.lastFailure).toBeUndefined()
   })
 
+  it('puts the profile\'s files back after a failed operation and records the build scripts pnpm held back', async () => {
+    const fx = fixture()
+    const entry = await recordPluginRequest(context(fx), { action: 'install', spec: 'scripted' })
+    const before = profileFiles(fx)
+    writeFileSync(join(fx.profileDir, 'pnpm-workspace.yaml'), 'allowBuilds:\n  decided: false\n')
+    const failing: PluginOperation = async () => {
+      writeFileSync(join(fx.profileDir, 'package.json'), '{"dependencies":{"scripted":"1.0.0"}}')
+      writeFileSync(join(fx.profileDir, 'pnpm-lock.yaml'), 'changed\n')
+      return { exitCode: 1, logPath: '/logs/failed.log', output: ' ERR_PNPM_IGNORED_BUILDS  Ignored build scripts: scripted@1.0.0\n' }
+    }
+    const error = await rejection(applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run: failing }), 'OPERATION_FAILED')
+    expect(error.message).toBe(`Change ${entry.id} was not applied: the plugin operation exited 1; diagnostics: /logs/failed.log; nothing was installed, and pnpm holds back the build scripts of scripted@1.0.0 until you decide under allowBuilds in ${join(fx.profileDir, 'pnpm-workspace.yaml')}: true lets one run, false installs without it`)
+    expect(profileFiles(fx)).toEqual(before)
+    expect(readFileSync(join(fx.profileDir, 'pnpm-workspace.yaml'), 'utf8')).toBe('allowBuilds:\n  decided: false\n  scripted@1.0.0: set this to true or false\n')
+
+    // A lockfile the operation created goes again, and the operation's own reason is reported as it gave it.
+    rmSync(join(fx.profileDir, 'pnpm-lock.yaml'))
+    const refusing: PluginOperation = async () => {
+      writeFileSync(join(fx.profileDir, 'pnpm-lock.yaml'), 'created\n')
+      return { exitCode: 1, failure: 'scripted is no DSH plugin bundle' }
+    }
+    expect((await rejection(applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run: refusing }), 'OPERATION_FAILED')).message).toBe(`Change ${entry.id} was not applied: scripted is no DSH plugin bundle`)
+    expect(existsSync(join(fx.profileDir, 'pnpm-lock.yaml'))).toBe(false)
+
+    // pnpm settings that cannot be read record nothing, and the exit code reports the failure.
+    writeFileSync(join(fx.profileDir, 'pnpm-workspace.yaml'), '- not a mapping\n')
+    expect((await rejection(applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run: async () => ({ exitCode: 1, output: 'Ignored build scripts: scripted' }) }), 'OPERATION_FAILED')).message).toBe(`Change ${entry.id} was not applied: the plugin operation exited 1`)
+    expect(await history(fx)).toEqual([])
+  })
+
+  it('stops before the operation when the profile\'s files cannot be read', async () => {
+    const fx = fixture()
+    const entry = await recordPluginRequest(context(fx), { action: 'install', spec: 'new-plugin' })
+    rmSync(join(fx.profileDir, 'pnpm-lock.yaml'))
+    mkdirSync(join(fx.profileDir, 'pnpm-lock.yaml'))
+    const run = succeeding()
+    await expect(applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run })).rejects.toThrow('EISDIR')
+    expect(run.calls).toEqual([])
+  })
+
   it('removes a removed plugin\'s approval, so linking it again waits for review', async () => {
     const { fx } = await migrated()
     const remove = await recordPluginRequest(context(fx), { action: 'remove', spec: 'plug' })
@@ -164,8 +206,10 @@ describe('applyInstallChange', () => {
     const run = succeeding()
     const result = await applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run })
     const active = activeDirectory(fx.home, PROFILE, 'plug')
-    // The operation names the active directory, never the folder, so nothing from the folder can load before review.
+    // The operation names the active directory, never the folder, so nothing from the folder can load before review;
+    // it checks the folder's package instead.
     expect(run.calls).toEqual([['add', `plug@link:${active}`]])
+    expect(run.folders).toEqual([source])
     expect(readdirSync(active)).toEqual([])
     const log = await readChangeLog(fx.home, PROFILE)
     const waiting = log.entries.find(candidate => candidate.id === result.folderChange)
@@ -191,6 +235,7 @@ describe('applyInstallChange', () => {
     const run = succeeding()
     const result = await applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run })
     expect(run.calls).toEqual([['add', `plug@link:${activeDirectory(fx.home, PROFILE, 'plug')}`]])
+    expect(run.folders).toEqual([source])
     expect(result.folderChange).toBeUndefined()
     expect(readdirSync(activeDirectory(fx.home, PROFILE, 'plug')).sort()).toEqual(['index.js', 'package.json'])
   })

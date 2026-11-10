@@ -8,15 +8,16 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { enforceApprovedContent, listChanges, readChangeLog, recordPluginRequest, readProtection, type ChangesContext, type ContentVersion, type ReloadHost, type ReloadOutcome } from '@delo/changes'
+import { attestTerminal, enforceApprovedContent, listChanges, readApproved, readChangeLog, readWorkSession, recordPluginRequest, readProtection, setProtection, writeChangeLog, type ChangeId, type ChangesContext, type ContentVersion, type ReloadHost, type ReloadOutcome } from '@delo/changes'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { ensureHomeTree, newStartId, readHomeLock, runDirectory } from '@delo/home'
 import { CountingChatGate, HomeProcess, sendHomeRequest, updateChannelProbe, type RunningHost } from '@delo/home-process'
 import { Redactor, type DeloLogger } from '@delo/logs'
-import { NOT_AT_TERMINAL, reloadThroughChannel, runChanges, withProfileHost, type ChangesCommandDependencies } from '../src/changes/command.ts'
+import { NOT_AT_TERMINAL, pageLinesOf, reloadThroughChannel, runChanges, withProfileHost, type ChangesCommandDependencies } from '../src/changes/command.ts'
 import type { CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
+import { statusCommand } from '../src/status.ts'
 
 // Each case writes real git histories and scans folders; under a loaded host that takes longer than vitest's default.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 })
@@ -173,9 +174,9 @@ describe('delorun changes list and show', () => {
     context.printed.length = 0
     await runChanges(['list'], context, driven([]))
     expect(out()).toContain(`(2 changed files)\n    It failed to load when applied: boom`)
-    const { openWorkSession, attestTerminal } = await import('@delo/changes')
+    const { openWorkSession } = await import('@delo/changes')
     const approved = (JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8')) as { delo: { changes: { plugins: { plug: { version: string } } } } }).delo.changes.plugins.plug.version
-    await openWorkSession(home, PROFILE, { plugin: 'plug', source, from: brandString<ContentVersion>(approved) }, attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+    await openWorkSession(home, PROFILE, { plugin: 'plug', source, from: brandString<ContentVersion>(approved), minutes: 60 }, attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
     const other = join(base, 'other')
     mkdirSync(other)
     writeFileSync(join(other, 'package.json'), '{"name":"other"}\n')
@@ -434,50 +435,178 @@ describe('delorun changes discard, undo, off and on', () => {
 })
 
 describe('delorun changes work and done', () => {
-  it('starts a work session after asking, says where edits load from, and done makes the folder\'s content the approved version', async () => {
+  /** @returns the approved version of plug. */
+  async function approvedNow(): Promise<string | undefined> {
+    return (await readApproved(profileDir)).plugins.plug?.version
+  }
+
+  /** @returns the version plug's folder holds now, as the waiting change names it. */
+  async function folderNow(): Promise<string> {
+    const { pending } = await listChanges(ctx())
+    return pending[0]!.to
+  }
+
+  it('starts a session for the length asked, says until when edits load, and done approves exactly the version it showed', async () => {
+    const from = (await approvedNow())!
     const work = driven(['y'])
     expect(await runChanges(['work', 'plug'], context, work)).toBe(EXIT.ok)
-    expect(work.questions).toEqual(['Work on plug? Edits in its folder will load without your review until you run delorun changes done plug. [y/N] '])
-    expect(out()).toBe(`Working on plug: edits in ${source} load live until delorun changes done plug.\n`)
+    expect(work.questions).toEqual(['Work on plug for 120 minutes? Edits in its folder will load without your review until you run delorun changes done plug or the time is up. [y/N] '])
+    const session = (await readWorkSession(home, PROFILE))!
+    expect(Date.parse(session.endsAt) - Date.parse(session.startedAt)).toBe(120 * 60_000)
+    expect(out()).toBe(`Working on plug: edits in ${source} load live until delorun changes done plug, at the latest until ${session.endsAt}.\n`)
     expect(work.reloads()).toBe(1)
     edit('export default 2\n')
+    const shown = await folderNow()
+    context.printed.length = 0
     const done = driven(['y'])
     expect(await runChanges(['done', 'plug'], context, done)).toBe(EXIT.ok)
-    expect(done.questions).toEqual(['End your work session on plug? What its folder holds becomes the approved version. [y/N] '])
+    expect(done.questions).toEqual([`Approve version ${shown.slice(0, 7)} of plug and end your work session? [y/N] `])
+    expect(done.reloads()).toBe(1)
     const entry = (await readChangeLog(home, PROFILE)).entries.at(-1)!
-    expect(entry).toMatchObject({ kind: 'plugin-edit', state: 'applied', decidedFrom: 'terminal' })
-    expect(out()).toContain(`Your work session on plug ended. The folder's content is now the approved version of plug (${entry.id}).\n`)
+    expect(entry).toMatchObject({ kind: 'plugin-edit', state: 'applied', decidedFrom: 'terminal', from, to: shown })
+    expect(await approvedNow()).toBe(shown)
+    expect(out()).toContain(`Your work session on plug started at ${session.startedAt} and ends at ${session.endsAt}.\nVersion ${shown.slice(0, 7)} of plug, in ${source}, against the approved version ${from.slice(0, 7)}:\nFiles:\n  modified  index.js\n`)
+    expect(out()).toContain('+export default 2')
+    expect(out()).toContain(`Your work session on plug ended. Version ${shown.slice(0, 7)} is now the approved version of plug (${entry.id}).\n`)
     expect((await listChanges(ctx())).workSession).toBeUndefined()
   })
 
-  it('declining either question changes nothing', async () => {
+  it('takes --for in whole minutes up to the limit, and refuses a malformed or misplaced one, a missing plugin and an extra argument', async () => {
+    expect(await runChanges(['work', 'plug', '--for', '30'], context, driven(['y']))).toBe(EXIT.ok)
+    const session = (await readWorkSession(home, PROFILE))!
+    expect(Date.parse(session.endsAt) - Date.parse(session.startedAt)).toBe(30 * 60_000)
+    for (const args of [['work', 'plug', '--for', '0'], ['work', 'plug', '--for', '481'], ['work', 'plug', '--for', '1e2'], ['work', 'plug', '--for', '9999999999'], ['done', 'plug', '--for', '5'], ['work'], ['done'], ['work', 'plug', 'extra'], ['work', 'plug', '--json']]) {
+      const terminal = driven(['y'])
+      await expect(runChanges(args, context, terminal), args.join(' ')).rejects.toMatchObject({ exit: EXIT.usage })
+      expect(terminal.questions).toEqual([])
+    }
+    await expect(runChanges(['work', 'plug', '--for', 'abc'], context, driven(['y']))).rejects.toThrow('--for takes whole minutes from 1 to 480; "abc" is not\nusage: delorun changes work <plugin> [--for <minutes>]')
+    expect(await runChanges(['--profile', PROFILE, 'done', 'plug'], context, driven(['y']))).toBe(EXIT.ok)
+    expect(await readWorkSession(home, PROFILE)).toBeUndefined()
+  })
+
+  it('declining either question, or the second one a risk finding asks, changes nothing', async () => {
     const before = written()
     expect(await runChanges(['work', 'plug'], context, driven(['n']))).toBe(EXIT.ok)
+    expect(await readWorkSession(home, PROFILE)).toBeUndefined()
+    await runChanges(['work', 'plug'], context, driven(['y']))
+    edit('export default 2\nfetch("https://example.invalid/")\n')
+    context.printed.length = 0
     expect(await runChanges(['done', 'plug'], context, driven([]))).toBe(EXIT.ok)
-    expect(out()).toBe('Nothing was changed.\nNothing was changed.\n')
+    const risky = driven(['y', 'n'])
+    expect(await runChanges(['done', 'plug'], context, risky)).toBe(EXIT.ok)
+    expect(risky.questions[1]).toBe('Approve it anyway? [y/N] ')
+    expect(out()).toContain("This version opens network connections. A plugin's code can do anything Delo can.\n")
+    expect(out()).toContain('Opens network connections (index.js:2)')
+    expect(out().match(/Nothing was changed\.\n/g)).toHaveLength(2)
     expect(written()).toBe(before)
-    expect((await listChanges(ctx())).workSession).toBeUndefined()
+    expect((await readWorkSession(home, PROFILE))?.plugin).toBe('plug')
+    expect(await runChanges(['done', 'plug'], context, driven(['y', 'y']))).toBe(EXIT.ok)
+    expect(await readWorkSession(home, PROFILE)).toBeUndefined()
   })
 
-  it('reports a folder that failed to load at once, a session that stays open, and a plugin it cannot work on', async () => {
+  it('done refuses a folder that changed after it was shown, approves nothing, and the session stays open', async () => {
+    const from = await approvedNow()
+    await runChanges(['work', 'plug'], context, driven(['y']))
+    edit('export default 2\n')
+    const terminal = driven(['y'])
+    const changing: ChangesCommandDependencies = {
+      ...terminal,
+      ask: async (question) => {
+        edit('export default 3\n')
+        return terminal.ask(question)
+      },
+    }
+    expect(await runChanges(['done', 'plug'], context, changing)).toBe(EXIT.failed)
+    expect(err()).toBe('delorun changes: The folder of plug changed after it was shown, so nothing was approved and your work session stays open. Run delorun changes done plug again to see what it holds now.\n')
+    expect(await approvedNow()).toBe(from)
+    expect((await readChangeLog(home, PROFILE)).entries.filter(entry => entry.kind === 'plugin-edit')).toEqual([])
+    expect((await readWorkSession(home, PROFILE))?.plugin).toBe('plug')
+  })
+
+  it('reports a version that fails to load at done, keeps the session open, and says when it was loaded before and failed', async () => {
+    const from = await approvedNow()
+    await runChanges(['work', 'plug'], context, driven(['y']))
+    edit('throw new Error("broken")\n')
+    const shown = (await folderNow()).slice(0, 7)
+    expect(await runChanges(['done', 'plug'], context, driven(['y'], [{ ok: false, error: 'SyntaxError' }, { ok: false, error: 'still broken' }]))).toBe(EXIT.failed)
+    expect(err()).toBe(`delorun changes: version ${shown} of plug failed to load: SyntaxError\nNothing was approved; Delo runs the version that last loaded, and your work session stays open.\nLoading that version also failed: still broken. Restart Delo: delorun stop, then delorun start.\n`)
+    expect(await approvedNow()).toBe(from)
+    context.errors.length = 0
+    context.printed.length = 0
+    expect(await runChanges(['done', 'plug'], context, driven(['y'], [{ ok: false, error: 'SyntaxError' }, OK]))).toBe(EXIT.failed)
+    expect(out()).toContain('This version failed to load in your work session; approving it loads it again first.\n')
+    expect(err()).not.toContain('also failed')
+    expect((await readWorkSession(home, PROFILE))?.plugin).toBe('plug')
+  })
+
+  it('shows a folder that holds the approved version or is gone, dependency files, left-out paths, a cut diff, and escapes names', async () => {
+    const from = (await approvedNow())!.slice(0, 7)
+    await runChanges(['work', 'plug'], context, driven(['y']))
+    context.printed.length = 0
+    const same = driven(['y'])
+    expect(await runChanges(['done', 'plug'], context, same)).toBe(EXIT.ok)
+    expect(same.questions).toEqual(['End your work session on plug? [y/N] '])
+    expect(out()).toContain(`The folder of plug holds its approved version (${from}); there is nothing new to approve.\n`)
+    expect(out()).toContain(`Your work session on plug ended. plug keeps its approved version (${from}); its folder holds no change.\n`)
+    await runChanges(['work', 'plug'], context, driven(['y']))
+    mkdirSync(join(source, 'node_modules', 'dep'), { recursive: true })
+    writeFileSync(join(source, 'node_modules', 'dep', 'index.js'), 'module.exports = 1\n')
+    symlinkSync(join(base, 'nowhere'), join(source, 'dangling'))
+    writeFileSync(join(source, 'big.txt'), `${'x'.repeat(99)}\n`.repeat(3_000))
+    writeFileSync(join(source, 'a\u001b[31m.js'), 'export {}\n')
+    context.printed.length = 0
+    expect(await runChanges(['done', 'plug'], context, driven(['n']))).toBe(EXIT.ok)
+    expect(out()).toContain('Dependency files (1):\n')
+    expect(out()).toContain('Not included: dangling')
+    expect(out()).toContain('The diff was cut short at its size limit; left out: ')
+    expect(out()).toContain('a\\u001b[31m.js')
+    expect(out()).not.toContain('\u001b')
+    rmSync(source, { recursive: true })
+    context.printed.length = 0
+    expect(await runChanges(['done', 'plug'], context, driven(['y']))).toBe(EXIT.ok)
+    expect(out()).toContain(`The folder of plug, ${source}, is gone; ending the session keeps its approved version (${from}).\n`)
+    expect(out()).toContain(`Your work session on plug ended. The folder of plug is gone; plug keeps its approved version (${from}).\n`)
+  })
+
+  it('reports a folder that failed to load at once, and a plugin or a session it cannot find', async () => {
     edit('throw new Error("broken")\n')
     expect(await runChanges(['work', 'plug'], context, driven(['y'], [{ ok: false, error: 'SyntaxError' }, { ok: false, error: 'still broken' }]))).toBe(EXIT.failed)
     expect(err()).toBe('delorun changes: plug failed to load from its folder: SyntaxError\nDelo runs its approved version; your work session stays open, and the next edit in the folder loads again.\nLoading the approved version also failed: still broken. Restart Delo: delorun stop, then delorun start.\n')
     expect((await listChanges(ctx())).workSession?.plugin).toBe('plug')
+    edit('export default 1\n')
     await runChanges(['done', 'plug'], context, driven(['y']))
+    edit('throw new Error("broken")\n')
     context.errors.length = 0
     expect(await runChanges(['work', 'plug'], context, driven(['y'], [{ ok: false, error: 'SyntaxError' }, OK]))).toBe(EXIT.failed)
     expect(err()).not.toContain('also failed')
-    await runChanges(['done', 'plug'], context, driven(['y']))
-    expect(await runChanges(['work', 'plug'], context, driven(['y'], [{ ok: false, error: 'SyntaxError' }, undefined]))).toBe(EXIT.failed)
-    expect(err()).not.toContain('also failed')
+    edit('export default 1\n')
     await runChanges(['done', 'plug'], context, driven(['y']))
     context.errors.length = 0
     expect(await runChanges(['work', 'left-pad'], context, driven(['y']))).toBe(EXIT.failed)
     expect(err()).toContain('left-pad is not a plugin of the profile default that you approved from a folder')
     expect(await runChanges(['done', 'plug'], context, driven(['y']))).toBe(EXIT.failed)
     expect(err()).toContain('No work session on plug is open in the profile default.')
-    await expect(runChanges(['work'], context, driven(['y']))).rejects.toMatchObject({ exit: EXIT.usage })
+  })
+
+  it('refuses a profile that is not set up, and passes on a failure that is not one of Changes', async () => {
+    await expect(runChanges(['work', 'plug', '--profile', 'other'], context, driven(['y']))).rejects.toThrow('delorun changes: the CLI profile other is not set up in')
+    const lockTaken: ChangesCommandDependencies = { ...driven(['y']), withHost: async () => Promise.reject(new Error('a start took the lock')) }
+    await expect(runChanges(['work', 'plug'], context, lockTaken)).rejects.toThrow('a start took the lock')
+  })
+
+  it('delorun status names the open work session, its start and its end', async () => {
+    expect(await statusCommand.run([], context)).toBe(EXIT.notRunning)
+    expect(out()).not.toContain('work session:')
+    await runChanges(['work', 'plug'], context, driven(['y']))
+    const session = (await readWorkSession(home, PROFILE))!
+    context.printed.length = 0
+    await statusCommand.run([], context)
+    expect(out()).toContain(`work session: plug since ${session.startedAt}, ends at ${session.endsAt}\n`)
+    writeFileSync(join(home, 'changes', 'profiles', PROFILE, 'work-session.json'), '{}\n', { mode: 0o600 })
+    context.printed.length = 0
+    await statusCommand.run([], context)
+    expect(out()).toMatch(/work session: unreadable: .*work-session\.json is not a record Delo wrote/)
   })
 })
 
@@ -557,5 +686,131 @@ describe('the Host while delorun changes runs', () => {
       await running.shutdown(0)
       for (const listener of listeners) listener()
     }
+  })
+})
+
+describe('what delorun changes prints is escaped for the terminal', () => {
+  it('writes control and bidirectional characters in file names, diffs, summaries and failures as escapes, and wraps long lines', async () => {
+    const name = 'evil\u001b[2J\u202e.js'
+    writeFileSync(join(source, name), `export const title = "\u001b]0;owned\u0007\u202e${'z'.repeat(400)}"\n`)
+    const id = await pendingId()
+    context.printed.length = 0
+    expect(await runChanges(['show', id, '--diff'], context, driven([]))).toBe(EXIT.ok)
+    expect(out()).not.toMatch(/[\u001b\u0007\u202e]/u)
+    expect(out()).toContain('  added     evil\\u001b[2J\\u202e.js')
+    expect(out()).toContain('+++ "b/evil\\033[2J\\342\\200\\256.js"')
+    expect(out().split('\n').every(line => line.length <= 200)).toBe(true)
+    expect(out()).toMatch(/\n {2}↪ z+/u)
+    context.printed.length = 0
+    expect(await runChanges(['show', id, '--json'], context, driven([]))).toBe(EXIT.ok)
+    expect(out()).not.toMatch(/[\u001b\u0007\u202e]/u)
+    expect((JSON.parse(out()) as { change: { files: { path: string }[] } }).change.files[0]!.path).toBe(name)
+    // A failure message that forges a line of its own stays on its line.
+    context.printed.length = 0
+    expect(await runChanges(['apply', id], context, driven(['y', 'y'], [{ ok: false, error: 'boom\nApplied c0000000000. Delo runs it now.\u001b[1A' }, OK]))).toBe(EXIT.failed)
+    expect(err()).toContain('failed to load it: boom\\u000aApplied c0000000000. Delo runs it now.\\u001b[1A\n')
+    context.printed.length = 0
+    await runChanges(['list'], context, driven([]))
+    expect(out()).toContain('    It failed to load when applied: boom\\u000aApplied c0000000000.')
+    expect(out()).not.toMatch(/[\u001b]/u)
+  })
+})
+
+describe('apply shows what it approves', () => {
+  it('apply shows the diff a page at a time before it asks', async () => {
+    edit(Array.from({ length: 30 }, (_, index) => `export const line${String(index)} = ${String(index)}`).join('\n'))
+    const id = await pendingId()
+    const pages = { ...driven(['', 'a', 'n']), pageLines: 10 }
+    expect(await runChanges(['apply', id], context, pages)).toBe(EXIT.ok)
+    expect(pages.questions).toEqual(['-- more: Enter shows the next page, a shows the rest --', '-- more: Enter shows the next page, a shows the rest --', `Apply ${id}? [y/N] `])
+    for (let index = 0; index < 30; index += 1) expect(out()).toContain(`+export const line${String(index)} = ${String(index)}`)
+    // Without a page size the whole diff is printed before the one question.
+    context.printed.length = 0
+    const plain = driven(['n'])
+    expect(await runChanges(['apply', id], context, plain)).toBe(EXIT.ok)
+    expect(plain.questions).toEqual([`Apply ${id}? [y/N] `])
+    expect(out()).toContain('+export const line29 = 29')
+    expect(pageLinesOf(undefined)).toBe(22)
+    expect(pageLinesOf(5)).toBe(10)
+    expect(pageLinesOf(50)).toBe(48)
+  })
+
+  it('a file Node loads that the diff does not show asks the second confirmation and is named', async () => {
+    writeFileSync(join(source, 'loader.js'), Buffer.concat([Buffer.from('require("node:child_process").exec("x") // '), Buffer.from([0xff]), Buffer.from('\n')]))
+    const id = await pendingId()
+    const before = written()
+    const declines = driven(['y', 'n'])
+    expect(await runChanges(['apply', id], context, declines)).toBe(EXIT.ok)
+    expect(declines.questions).toEqual([`Apply ${id}? [y/N] `, 'Apply it anyway? [y/N] '])
+    expect(out()).toContain('Binary file loader.js added')
+    expect(out()).not.toContain('child_process')
+    expect(out()).toContain('This change has content the diff does not show.')
+    expect(out()).toContain('  Not shown: loader.js: not text, and Node can load it')
+    expect(written()).toBe(before)
+    expect(declines.hosted()).toBe(0)
+  })
+
+  it('names a change whose diff shows no lines', async () => {
+    writeFileSync(join(source, 'image.png'), Buffer.from([0, 1, 2]))
+    rmSync(join(source, 'index.js'))
+    writeFileSync(join(source, 'index.js'), 'export default 1\n')
+    const id = await pendingId()
+    expect(await runChanges(['apply', id], context, driven(['n']))).toBe(EXIT.ok)
+    expect(out()).toContain('Binary file image.png added')
+  })
+})
+
+describe('the plugins approved at upgrade', () => {
+  it('changes list names them until a terminal showed them', async () => {
+    const upgrade = 'Delo runs the approved copy of plug, linked from'
+    // An approval that names no folder is left out of the lines.
+    const log = await readChangeLog(home, PROFILE)
+    await writeChangeLog(home, PROFILE, { ...log, entries: [...log.entries, { ...log.entries[0]!, id: brandString<ChangeId>('c1111111111'), subject: { plugin: 'other' } }] })
+    expect(await runChanges(['list'], context, driven([], [OK], false))).toBe(EXIT.ok)
+    expect(out()).not.toContain('copy of other')
+    expect(out()).toMatch(new RegExp(`^${upgrade} ${source}, as it was when Changes began\\. Edits in that folder wait for your review\\.\\n\\n`, 'u'))
+    expect((await readChangeLog(home, PROFILE)).entries[0]!.shownAt).toBeUndefined()
+    context.printed.length = 0
+    expect(await runChanges(['list'], context, driven([]))).toBe(EXIT.ok)
+    expect(out()).toContain(upgrade)
+    expect((await readChangeLog(home, PROFILE)).entries[0]!.shownAt).toEqual(expect.any(String))
+    context.printed.length = 0
+    expect(await runChanges(['list'], context, driven([]))).toBe(EXIT.ok)
+    expect(out()).not.toContain(upgrade)
+  })
+})
+
+describe('plugin names', () => {
+  it('off and on refuse a name that is not a package name before any path is built', async () => {
+    const before = written()
+    for (const name of ['../outside', '@scope/a/b', 'a/b']) {
+      await expect(runChanges(['off', name], context, driven(['y']))).rejects.toThrow(/is not a package name/u)
+    }
+    expect(written()).toBe(before)
+  })
+})
+
+describe('delorun status and Changes', () => {
+  it('delorun status names the plugins approved at upgrade until a terminal showed them, the changes waiting and lowered protection', async () => {
+    const upgrade = `changes: Delo runs the approved copy of plug, linked from ${source}, as it was when Changes began. Edits in that folder wait for your review.\n`
+    expect(await statusCommand.run([], context)).toBe(EXIT.notRunning)
+    expect(out()).toContain(upgrade)
+    edit('export default 2\n')
+    await setProtection(home, 'warn', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+    await runChanges(['list'], context, driven([]))
+    context.printed.length = 0
+    await statusCommand.run([], context)
+    expect(out()).not.toContain(upgrade)
+    expect(out()).toMatch(/changes: plug has changes in .* waiting for your review: delorun changes show c[0-9a-f]{10}\n/u)
+    expect(out()).toContain('changes: Protection is warn: changes you have not approved run, and every start says so.\n')
+    context.printed.length = 0
+    expect(await statusCommand.run(['--json'], context)).toBe(EXIT.notRunning)
+    expect(out()).not.toContain('changes:')
+  })
+
+  it('delorun status says nothing about Changes for a home without the profile', async () => {
+    rmSync(join(profileDir, 'package.json'))
+    expect(await statusCommand.run([], context)).toBe(EXIT.notRunning)
+    expect(out()).not.toContain('changes:')
   })
 })

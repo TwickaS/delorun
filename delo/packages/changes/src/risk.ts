@@ -1,8 +1,10 @@
 /**
- * The six built-in risk checks, one per {@link RiskKind}. Each is a pure function of a {@link ReviewInput}: it reads the
+ * The seven built-in risk checks, one per {@link RiskKind}. Each is a pure function of a {@link ReviewInput}: it reads the
  * lines a change adds or alters in the files it can read as text, and the plugin's `package.json` on both sides. The
- * checks are heuristics that help a person read a change; they are not a protection, since plugin code can reach what
- * they look for in ways no line pattern sees.
+ * line checks are heuristics that help a person read a change; they are not a protection, since plugin code can reach
+ * what they look for in ways no line pattern sees. `not-shown` reports the new content the diff does not show, so
+ * applying it asks the second confirmation: a binary file Node can load, a file too large for the diff or past where
+ * it was cut short, and, once per package, a dependency's files inside the folder.
  *
  * Line checks read files whose name ends in `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.json`,
  * `.yaml` or `.yml`, and skip files below `node_modules`, which `dependency-or-build` reports once per package. A line
@@ -10,13 +12,19 @@
  *
  * @module @delo/changes/risk
  */
-import type { ReviewedFile, ReviewInput, RiskCheck, RiskFinding, RiskKind } from './types.ts'
+import type { NotShownReason, ReviewedFile, ReviewInput, RiskCheck, RiskFinding, RiskKind } from './types.ts'
 
 /** The longest excerpt a finding carries, in characters. */
 export const EXCERPT_LIMIT = 160
 
 /** File name endings the line checks read. */
 export const SCANNED_EXTENSIONS: readonly string[] = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.json', '.yaml', '.yml']
+
+/**
+ * File name endings Node loads as code or data: JavaScript, TypeScript under a type-stripping loader, JSON, native
+ * addons and WebAssembly. A binary file with one of them is a `not-shown` finding.
+ */
+export const LOADABLE_EXTENSIONS: readonly string[] = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.json', '.node', '.wasm']
 
 /** `package.json` sections whose added or changed entries `dependency-or-build` reports. */
 export const DEPENDENCY_SECTIONS: readonly string[] = ['dependencies', 'optionalDependencies', 'peerDependencies', 'bundleDependencies', 'bundledDependencies']
@@ -262,6 +270,44 @@ const dependencyOrBuild: RiskCheck = {
   },
 }
 
+/** What a `not-shown` finding says about a file, by why the diff does not show it. */
+const NOT_SHOWN_WORDS: Readonly<Record<Exclude<NotShownReason, 'dependency'>, string>> = {
+  binary: 'not text, and Node can load it',
+  'too-large': 'too large for the diff',
+  'cut-short': 'past where the diff was cut short',
+}
+
+/**
+ * @param path - a file's path relative to the plugin folder.
+ * @returns whether Node can load it as code or data: a name ending in one of {@link LOADABLE_EXTENSIONS}.
+ */
+function loadable(path: string): boolean {
+  return LOADABLE_EXTENSIONS.some(extension => path.endsWith(extension))
+}
+
+const notShown: RiskCheck = {
+  id: checkId('not-shown'),
+  check: input => {
+    const kind: RiskKind = 'not-shown'
+    const findings: RiskFinding[] = []
+    const packages = new Map<string, number>()
+    for (const file of input.files) {
+      // A removed file adds nothing that could run.
+      if (file.status === 'removed' || file.notShown === undefined) continue
+      if (file.notShown === 'dependency') {
+        const name = dependencyPackage(file.path)
+        packages.set(name, (packages.get(name) ?? 0) + 1)
+      } else if (file.notShown !== 'binary' || loadable(file.path)) {
+        findings.push({ kind, check: checkId(kind), file: file.path, excerpt: excerptOf(`${file.path}: ${NOT_SHOWN_WORDS[file.notShown]}`) })
+      }
+    }
+    for (const [name, count] of packages) {
+      findings.push({ kind, check: checkId(kind), file: name, excerpt: excerptOf(`${name}: ${String(count)} ${count === 1 ? 'file' : 'files'} inside the folder that the diff does not show`) })
+    }
+    return findings
+  },
+}
+
 /** The built-in checks, one per {@link RiskKind}, in `RISK_KINDS` order. */
 export const BUILT_IN_CHECKS: readonly RiskCheck[] = [
   lineCheck('consent-guard-sandbox', (text, path) => consentGuardSandboxLine(text, path) || (isYaml(path) && yamlGuardRow.test(text))),
@@ -270,4 +316,5 @@ export const BUILT_IN_CHECKS: readonly RiskCheck[] = [
   lineCheck('network', networkLine),
   lineCheck('home-read', homeReadLine),
   dependencyOrBuild,
+  notShown,
 ]

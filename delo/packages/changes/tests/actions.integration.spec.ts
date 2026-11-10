@@ -5,7 +5,7 @@ import { applyChange, changeProtection, discardChange, listChanges, showChange, 
 import { EMPTY_CONTENT_VERSION } from '../src/enforce.ts'
 import { changeId } from '../src/ids.ts'
 import { activeDirectory, changesDirectory } from '../src/paths.ts'
-import { attestStudio, openWorkSession, readActiveRecord, readApproved, readChangeLog, readProtection, writeApproved, writeChangeLog, type AtComputer } from '../src/records.ts'
+import { openWorkSession, readActiveRecord, readApproved, readChangeLog, readProtection, writeApproved, writeChangeLog, type AtComputer } from '../src/records.ts'
 import { holdsVersion } from '../src/store.ts'
 import type { ChangeId, PluginChange } from '../src/types.ts'
 import { fixture, folder, history, linkAs, migrated, NOW, PROFILE, start, terminal, type Fixture } from './profile-fixture.ts'
@@ -102,8 +102,8 @@ describe('listing and showing changes', () => {
     const upgrade = (await readChangeLog(fx.home, PROFILE)).entries[0]!
     expect(await showChange(ctx, upgrade.id)).toEqual({ kind: 'logged', entry: upgrade })
 
-    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved }, terminal())
-    expect((await listChanges(ctx)).workSession).toEqual({ plugin: 'plug', startedAt: expect.any(String) })
+    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
+    expect((await listChanges(ctx)).workSession).toEqual({ plugin: 'plug', startedAt: expect.any(String), endsAt: expect.any(String) })
   })
 
   it('lists a plugin linked after the first start as an install waiting for review, and reports a folder that is gone', async () => {
@@ -249,7 +249,7 @@ describe('applying a change', () => {
     const ctx = contextOf(fx)
     edit(source, 'export default "two"\n')
     const change = await onlyPending(ctx)
-    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved }, terminal())
+    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
     await rejection(applyChange(ctx, change.id, terminal(), reloads(OK)), 'NOT_ALLOWED')
   })
 
@@ -364,7 +364,7 @@ describe('undoing a change', () => {
     await rejection(undoChange(ctx, 'c0000000000' as ChangeId, terminal(), reloads(OK)), 'UNKNOWN_CHANGE')
     const weakening = await changeProtection(ctx, 'warn', terminal())
     await rejection(undoChange(ctx, weakening.entry!.id, terminal(), reloads(OK)), 'NOT_ALLOWED')
-    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved }, terminal())
+    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
     await rejection(undoChange(ctx, upgrade.id, terminal(), reloads(OK)), 'NOT_ALLOWED')
     await writeApproved(fx.profileDir, { schema: 'delo.changes-approved/1', plugins: {} })
     rmSync(join(changesDirectory(fx.home), 'profiles', PROFILE, 'work-session.json'))
@@ -476,14 +476,6 @@ describe('the protection setting', () => {
     expect(await readProtection(fx.home)).toBe('off')
     expect((await listChanges(ctx)).entries[0]).toEqual(lowered.entry)
     expect(await changeProtection(ctx, 'block', terminal())).toEqual({ before: 'off', level: 'block' })
-  })
-
-  it('protection cannot be lowered from the studio', async () => {
-    const { fx } = await migrated()
-    const before = written(fx)
-    await rejection(changeProtection(contextOf(fx), 'off', attestStudio({ loopback: true, credential: true, remoteSession: false })), 'NOT_AT_COMPUTER')
-    expect(await readProtection(fx.home)).toBe('block')
-    expect(written(fx)).toBe(before)
   })
 })
 

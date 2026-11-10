@@ -1,6 +1,6 @@
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { describe, expect, it, vi } from 'vitest'
-import { ChangesError, isChangesError } from '../src/errors.ts'
+import { ChangesError, changesDescriber, isChangesError } from '../src/errors.ts'
 import { CHANGE_ID_PATTERN, changeId, parseChangeId } from '../src/ids.ts'
 import type { ContentVersion } from '../src/types.ts'
 
@@ -43,5 +43,14 @@ describe('isChangesError', () => {
     expect(isChangesError(error)).toBe(true)
     expect(error).toMatchObject({ name: 'ChangesError', code: 'UNKNOWN_CHANGE', subject: 'c0123456789', message: 'No change has this id.', cause })
     expect(isChangesError(cause)).toBe(false)
+  })
+})
+
+describe('changesDescriber', () => {
+  it('says nothing changed, names the code and points to the list with the profile', () => {
+    const refusal = changesDescriber.describe(new ChangesError('UNKNOWN_CHANGE', 'c0123456789', 'no change has this id'), { profile: 'work' })
+    expect(refusal.lead).toBe('Delo did not change what your harness runs.')
+    expect(refusal.reason).toContain('UNKNOWN_CHANGE')
+    expect(refusal.remedies).toEqual(['See your changes: delorun changes list --profile work'])
   })
 })

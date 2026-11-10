@@ -23,7 +23,8 @@
  * The plugin's second consent, behind the C16 switch
  * `approved_plugin_write_consent` ([`Config.approvedPluginWrites`]), off by
  * default, asks before the agent's first write in a chat to the folder of a
- * plugin the person approved under Changes ([`./plugin-folders.ts`](./plugin-folders.ts)).
+ * plugin the person approved under Changes, and refuses a write into the
+ * profile's active directories ([`./plugin-folders.ts`](./plugin-folders.ts)).
  * @module @delo/plugin-instruction-consent
  */
 import { join } from 'node:path'
@@ -40,7 +41,7 @@ export {
   classifyTarget, createCaseProbe, INSTRUCTION_FILE_NAMES, probeCaseInsensitive, PROJECT_SKILLS_DIRS, reviewNote,
 } from './classify.ts'
 export type { CaseProbe, ClassifyOptions, CompositionFile, CompositionLayer, Homes, InstructionLayerTarget } from './classify.ts'
-export { approvedPluginFolders, callDiff, pluginOfTarget, pluginWriteAsk } from './plugin-folders.ts'
+export { activeRoot, approvedPluginFolders, callDiff, lands, pluginOfTarget, pluginWriteAsk } from './plugin-folders.ts'
 export type { ConsentProfile, PluginFolders } from './plugin-folders.ts'
 
 /** The plugin's name in the loader's diagnostics. */
@@ -59,7 +60,8 @@ export interface Config {
   /**
    * C16 switch `approved_plugin_write_consent`: whether the agent's first write
    * in a chat to the folder of a plugin the person approved under Changes asks
-   * first, naming the plugin and carrying the diff. Off, the parity value and
+   * first, naming the plugin and carrying the diff, and whether a write into
+   * the profile's active directories is refused. Off, the parity value and
    * the default, the plugin registers nothing for it and such a write commits
    * exactly as upstream does. Delo's composition turns it on.
    */
@@ -153,7 +155,8 @@ export class InstructionConsent extends Service implements WriteConsentService {
  * the mutating tools consult before a mutation commits; off — the parity
  * value — it provides nothing, so `ctx.get('writeConsent')` answers
  * `undefined`. With `approvedPluginWrites` on, it asks before the first write
- * in a chat to an approved plugin's folders; off, it registers nothing for
+ * in a chat to an approved plugin's folder and refuses one into the profile's
+ * active directories; off, it registers nothing for
  * them. With both off every write commits exactly as upstream does. The
  * session-mode guard is not this plugin's to provide: its one slot belongs to
  * the full-access consent of `@delo/plugin-permission-defaults` (A135).

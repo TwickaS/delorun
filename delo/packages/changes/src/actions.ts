@@ -4,7 +4,7 @@
  * section later, so both decide the same way.
  *
  * Every action that changes something takes an {@link AtComputer} proof and refuses, before it reads or writes
- * anything, a proof that {@link attestTerminal} or {@link attestStudio} did not issue. Each runs under upstream's
+ * anything, a proof that {@link attestTerminal} did not issue. Each runs under upstream's
  * profile write lock, `withFileLock(join(profileDir, 'package.json'), …)`, and every action that changes the
  * profile's files records one profile history version whose subject names the change id, so upstream's undo and
  * restore see it like any other change. Discarding changes no file the profile runs and records no version; the
@@ -63,7 +63,7 @@ import {
   type WorkSessionRecord,
 } from './types.ts'
 import { isPluginRequest } from './install-actions.ts'
-import { beginWork, endWork, type WorkFinished, type WorkStarted } from './work.ts'
+import { beginWork, endWork, type WorkDone, type WorkStarted } from './work.ts'
 
 /** The profile an action works on. */
 export interface ChangesContext {
@@ -140,7 +140,7 @@ export interface ChangesListing {
   /** Plugins whose folder no longer exists. */
   readonly missing: readonly MissingFolder[]
   /** The plugin whose folder loads live, while a work session is open. */
-  readonly workSession?: { readonly plugin: string, readonly startedAt: string }
+  readonly workSession?: { readonly plugin: string, readonly startedAt: string, readonly endsAt: string }
 }
 
 /** What `show` shows: a change waiting for review, or a logged one. */
@@ -438,7 +438,7 @@ export async function listChanges(ctx: ChangesContext): Promise<ChangesListing> 
     requests,
     entries,
     missing: state.missing,
-    ...session === undefined ? {} : { workSession: { plugin: session.plugin, startedAt: session.startedAt } },
+    ...session === undefined ? {} : { workSession: { plugin: session.plugin, startedAt: session.startedAt, endsAt: session.endsAt } },
   }
 }
 
@@ -721,14 +721,14 @@ async function switchBundle(ctx: ChangesContext, state: State, plugin: string, e
 }
 
 /**
- * Change the protection setting. Only a terminal proof changes it; the studio's is refused. A weaker level than
+ * Change the protection setting. Only a terminal proof changes it. A weaker level than
  * before is logged in the profile's change log as an applied `guard-weakening` change. The setting is read at the next
  * start.
  * @param ctx - the profile whose log records a weakening.
  * @param level - the new level.
  * @param presence - proof from `attestTerminal`.
  * @returns the level before and after, and the logged entry when the level is weaker.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue or one from the studio.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue.
  */
 export async function changeProtection(ctx: ChangesContext, level: ProtectionLevel, presence: AtComputer): Promise<ProtectionChange> {
   const before = await readProtection(ctx.home)
@@ -752,40 +752,39 @@ export async function changeProtection(ctx: ChangesContext, level: ProtectionLev
 
 /**
  * Start a work session on an approved plugin: its folder's content loads live in the running Host until the session
- * ends ([work sessions](./work.ts)). The folder's content loads at once; when that fails, the plugin runs its approved
- * content again, the failure is reported and the session stays open.
+ * ends, at the latest after `minutes` ([work sessions](./work.ts)). The folder's content loads at once; when that
+ * fails, the plugin runs its approved content again, the failure is reported and the session stays open.
  * @param ctx - the profile.
  * @param plugin - the package name.
  * @param presence - proof that the person is at their computer, recorded as where the session started.
- * @param options - the Host's reload.
+ * @param options - the Host's reload, and how many minutes the session lasts, from 1 to `WORK_SESSION_MAX_MINUTES`.
  * @returns the session and how the folder's content loaded.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `NOT_LINKED` for a plugin
- *   the profile does not load from its active directory with approved content, or whose folder is gone;
- *   `WORK_SESSION_OPEN` when the profile has a work session already; `NOT_ALLOWED` when Delo is not running for the
- *   profile, which leaves no session open.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `NOT_ALLOWED` for a length
+ *   outside that range; `NOT_LINKED` for a plugin the profile does not load from its active directory with approved
+ *   content, or whose folder is gone; `WORK_SESSION_OPEN` when the profile has a work session already; `NOT_ALLOWED`
+ *   when Delo is not running for the profile, which leaves no session open.
  */
-export async function startWork(ctx: ChangesContext, plugin: string, presence: AtComputer, options: ReloadOptions): Promise<WorkStarted> {
+export async function startWork(ctx: ChangesContext, plugin: string, presence: AtComputer, options: ReloadOptions & { readonly minutes: number }): Promise<WorkStarted> {
   requirePresence(presence, plugin)
-  return beginWork(ctx, plugin, presence, options.reload)
+  return beginWork(ctx, plugin, presence, options.reload, options.minutes)
 }
 
 /**
- * End the work session on a plugin: the folder's content becomes the approved version, or the content that last loaded
- * when the folder's newest content failed to load or the folder is gone, and the whole difference since the session
- * began is one applied change and one profile history version. Content the Host has not loaded yet loads first.
+ * End the work session on a plugin at the person's word: exactly the folder's content `done` showed becomes the
+ * approved version, as one applied change from the version the session started from and one profile history version.
+ * When the running Host does not run that version yet, it loads first, and a failed load approves nothing and leaves
+ * the session open.
  * @param ctx - the profile.
  * @param plugin - the package name.
  * @param presence - proof that the person is at their computer.
- * @param options - the Host's reload.
- * @returns what was done.
+ * @param options - the Host's reload, and the folder's content the person was shown (`WorkReview.folder` of
+ *   `reviewWork`), undefined when the folder was gone, which keeps the approved version.
+ * @returns what was done, or the failed load.
  * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `NO_WORK_SESSION` when no
- *   work session on the plugin is open.
+ *   work session on the plugin is open; `CHANGED_SINCE_REVIEW` when the folder holds anything other than what was
+ *   shown, which approves nothing and leaves the session open.
  */
-export async function finishWork(ctx: ChangesContext, plugin: string, presence: AtComputer, options: ReloadOptions): Promise<WorkFinished> {
+export async function finishWork(ctx: ChangesContext, plugin: string, presence: AtComputer, options: ReloadOptions & { readonly approve: ContentVersion | undefined }): Promise<WorkDone> {
   requirePresence(presence, plugin)
-  return locked(ctx, async () => {
-    const session = await readWorkSession(ctx.home, ctx.profile)
-    if (session?.plugin !== plugin) throw new ChangesError('NO_WORK_SESSION', plugin, `No work session on ${plugin} is open in the profile ${ctx.profile}.`)
-    return endWork(ctx, session, presence.kind, options.reload)
-  })
+  return endWork(ctx, plugin, presence.kind, options.reload, options.approve)
 }

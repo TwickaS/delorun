@@ -1,14 +1,16 @@
 /**
  * The home process's side of a work session (contract C21, "Work sessions"): the watcher loads each settled edit of
  * the open session's folder into the plugin's active directory and reloads the Host, goes back when the reload fails,
- * and follows sessions opened and ended by `delorun changes work` and `done`; Delo stopping ends the session, and a
- * start after a home process that did not stop ends it first.
+ * follows sessions opened and ended by `delorun changes work` and `done`, and ends a session at its end time; Delo
+ * stopping ends the session, and a start after a home process that did not stop ends it first, each without the person,
+ * so nothing new is approved.
  */
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, type FSWatcher, type WatchListener } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, type FSWatcher, type WatchListener } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { activeDirectory, attestTerminal, enforceApprovedContent, finishWork, readApproved, readChangeLog, readWorkFailure, readWorkSession, startWork, type ChangesContext, type ReloadHost, type ReloadOutcome } from '@delo/changes'
+import { activeDirectory, attestTerminal, enforceApprovedContent, finishWork, readApproved, readChangeLog, readWorkFailure, readWorkSession, reviewWork, startWork, type ChangesContext, type ReloadHost, type ReloadOutcome, type WorkFinished } from '@delo/changes'
+import { finishWorkWithoutPerson } from '@delo/changes/stop'
 import type { DeloLogger } from '@delo/logs'
 import { afterChangesBoot, startChanges } from '../src/changes/start.ts'
 import { WORK_DEBOUNCE_MS, watchWork, type WorkWatch } from '../src/changes/work-watch.ts'
@@ -83,9 +85,9 @@ function terminal(): ReturnType<typeof attestTerminal> {
 /**
  * A reload that answers each call with the next outcome, then `ok`.
  * @param outcomes - the first answers; undefined means Delo is not running.
- * @returns the reload and its number of calls.
+ * @returns the reload, its number of calls, and the session length `startWork` takes.
  */
-function host(...outcomes: (ReloadOutcome | undefined)[]): { readonly reload: ReloadHost, readonly calls: () => number } {
+function host(...outcomes: (ReloadOutcome | undefined)[]): { readonly reload: ReloadHost, readonly calls: () => number, readonly minutes: number } {
   let calls = 0
   return {
     reload: async () => {
@@ -93,18 +95,29 @@ function host(...outcomes: (ReloadOutcome | undefined)[]): { readonly reload: Re
       return Promise.resolve(outcomes.length === 0 ? OK : outcomes.shift())
     },
     calls: () => calls,
+    minutes: 60,
   }
 }
 
 /**
  * Start a watcher that the spec closes afterwards.
  * @param reload - the Host's reload.
+ * @param options - how it ends a session at its end time, and its clock.
  * @returns the watcher.
  */
-function watching(reload: ReloadHost): WorkWatch {
-  const watcher = watchWork({ home, profile: PROFILE, profileDir, reload, logger, debounceMs: 50 })
+function watching(reload: ReloadHost, options: { readonly expire?: () => Promise<WorkFinished | undefined>, readonly now?: () => Date } = {}): WorkWatch {
+  const watcher = watchWork({ home, profile: PROFILE, profileDir, reload, logger, debounceMs: 50, expire: options.expire ?? (async () => Promise.resolve(undefined)), ...options.now === undefined ? {} : { now: options.now } })
   open.push(watcher)
   return watcher
+}
+
+/**
+ * Make the open session end at another time, as a record Delo wrote.
+ * @param endsAt - the new end time.
+ */
+async function endingAt(endsAt: Date): Promise<void> {
+  const session = await readWorkSession(home, PROFILE)
+  writeFileSync(join(home, 'changes', 'profiles', PROFILE, 'work-session.json'), `${JSON.stringify({ ...session, endsAt: endsAt.toISOString() }, null, 2)}\n`, { mode: 0o600 })
 }
 
 /** @returns the text of `index.js` in the plugin's active directory. */
@@ -146,7 +159,7 @@ describe('a work session\'s edits load live', () => {
     folderWatch.listener('rename', null)
     writeFileSync(join(source, 'index.js'), 'export default "two"\n')
     await vi.waitFor(() => { expect(activeIndex()).toBe('export default "two"\n') }, { timeout: 60_000, interval: 50 })
-    await finishWork(ctx(), 'plug', terminal(), host())
+    await finishWork(ctx(), 'plug', terminal(), { ...host(), approve: (await reviewWork(ctx(), 'plug')).folder })
     await vi.waitFor(() => { expect(messages('info')).toContain(`Delo no longer watches ${source}: the work session on it ended.`) }, { timeout: 60_000, interval: 50 })
     expect(watcherHost.calls()).toBe(1)
     expect(await readWorkSession(home, PROFILE)).toBeUndefined()
@@ -205,14 +218,59 @@ describe('the watcher', () => {
     writeFileSync(join(source, 'index.js'), 'export default "two"\n')
     await vi.waitFor(() => { expect(messages('warn')).toContain('Delo could not load your work session\'s folder: Error: the Host is gone') }, { timeout: 60_000, interval: 50 })
     await watcher.close()
-    const idle = watchWork({ home, profile: PROFILE, profileDir, reload: host().reload, logger })
+    const idle = watchWork({ home, profile: PROFILE, profileDir, reload: host().reload, logger, expire: async () => Promise.resolve(undefined) })
     await idle.close()
     expect(WORK_DEBOUNCE_MS).toBeGreaterThan(0)
   })
 })
 
-describe('Delo stopping ends the work session', () => {
-  it('stops following sessions and approves what the folder holds when the Host closes', async () => {
+describe('a work session ends at its bound', () => {
+  it('ends the session at its end time without the person, puts the version it started from back and says why', async () => {
+    const from = (await readApproved(profileDir)).plugins.plug!.version
+    const watcherHost = host()
+    const end = afterChangesBoot({ home, profile: PROFILE, logger }, { reload: watcherHost.reload })
+    await startWork(ctx(), 'plug', terminal(), host())
+    writeFileSync(join(source, 'index.js'), 'export default "two"\n')
+    // The load rewrites the session record when it finishes, so the end time is changed after it.
+    await vi.waitFor(() => { expect(messages('info')).toContain('Loaded plug from its folder in your work session.') }, { timeout: 60_000, interval: 50 })
+    const endsAt = new Date(Date.now() + 500)
+    await endingAt(endsAt)
+    await vi.waitFor(async () => { expect(await readWorkSession(home, PROFILE)).toBeUndefined() }, { timeout: 60_000, interval: 50 })
+    expect(activeIndex()).toBe('export default "one"\n')
+    expect((await readApproved(profileDir)).plugins.plug?.version).toBe(from)
+    expect(Date.now()).toBeGreaterThanOrEqual(endsAt.getTime())
+    expect(watcherHost.calls()).toBe(2)
+    expect(messages('info')).toContain(`Your work session on plug ended at its time limit, ${endsAt.toISOString()}. Nothing was approved: plug keeps the version it had when the session started (${from.slice(0, 7)}), and what its folder holds waits for your review: delorun changes list`)
+    await end()
+    expect(messages('error')).toEqual([])
+  })
+
+  it('reports a Host that fails to load the approved version after the end, and an end that found no session', async () => {
+    const failing = host({ ok: false, error: 'plug threw' })
+    await startWork(ctx(), 'plug', terminal(), host())
+    await endingAt(new Date(Date.now() - 1))
+    const end = afterChangesBoot({ home, profile: PROFILE, logger }, { reload: failing.reload })
+    await vi.waitFor(() => { expect(messages('error')).toEqual(['Loading the approved version of plug after the session ended failed: plug threw. Restart Delo.']) }, { timeout: 60_000, interval: 50 })
+    await end()
+    const limits = messages('info').filter(message => message.includes('time limit')).length
+    await startWork(ctx(), 'plug', terminal(), host())
+    const nothingToEnd = vi.fn(async () => Promise.resolve(undefined))
+    const watcher = watching(host().reload, { now: () => new Date(Date.now() + 61 * 60_000), expire: nothingToEnd })
+    await vi.waitFor(() => { expect(nothingToEnd).toHaveBeenCalled() }, { timeout: 60_000, interval: 50 })
+    await watcher.close()
+    expect((await readWorkSession(home, PROFILE))?.plugin).toBe('plug')
+    expect(messages('info').filter(message => message.includes('time limit'))).toHaveLength(limits)
+    const late = () => new Date(Date.now() + 61 * 60_000)
+    watching(host().reload, { now: late, expire: () => finishWorkWithoutPerson({ ...ctx(), now: late }, 'expired') })
+    await vi.waitFor(async () => { expect(await readWorkSession(home, PROFILE)).toBeUndefined() }, { timeout: 60_000, interval: 50 })
+    expect(messages('info').filter(message => message.includes('time limit'))).toHaveLength(limits + 1)
+    expect(messages('error')).toHaveLength(1)
+  })
+})
+
+describe('ending a work session without the person approves nothing new', () => {
+  it('Delo stopping keeps the version the session started from when the Host closes, and the folder\'s state waits for review', async () => {
+    const from = (await readApproved(profileDir)).plugins.plug!.version
     const watcherHost = host()
     const end = afterChangesBoot({ home, profile: PROFILE, logger }, { reload: watcherHost.reload })
     await startWork(ctx(), 'plug', terminal(), host())
@@ -221,37 +279,40 @@ describe('Delo stopping ends the work session', () => {
     writeFileSync(join(source, 'index.js'), 'export default "three"\n')
     await end()
     expect(await readWorkSession(home, PROFILE)).toBeUndefined()
-    const approved = (await readApproved(profileDir)).plugins.plug
-    expect(activeIndex()).toBe('export default "three"\n')
-    expect((await readChangeLog(home, PROFILE)).entries.at(-1)).toMatchObject({ kind: 'plugin-edit', state: 'applied', to: approved?.version, decidedFrom: 'terminal' })
-    expect(messages('info')).toContain(`Your work session on plug ended as Delo stopped. The folder's content is now the approved version of plug (${(await readChangeLog(home, PROFILE)).entries.at(-1)!.id}).`)
+    expect((await readApproved(profileDir)).plugins.plug?.version).toBe(from)
+    expect(activeIndex()).toBe('export default "one"\n')
+    expect((await readChangeLog(home, PROFILE)).entries.filter(entry => entry.kind === 'plugin-edit')).toEqual([])
+    expect(messages('info')).toContain(`Your work session on plug ended as Delo stopped. Nothing was approved: plug keeps the version it had when the session started (${from.slice(0, 7)}), and what its folder holds waits for your review: delorun changes list`)
     await afterChangesBoot({ home, profile: PROFILE, logger }, { reload: host().reload })()
+  })
+
+  it('a start after a crash keeps the version the session started from, and the folder\'s state waits for review', async () => {
+    const printed: string[] = []
+    const from = (await readApproved(profileDir)).plugins.plug!.version
+    await startWork(ctx(), 'plug', terminal(), host())
+    writeFileSync(join(source, 'index.js'), 'export default "two"\n')
+    await startChanges({ home, profile: PROFILE }, text => void printed.push(text))
+    expect((await readWorkSession(home, PROFILE))?.plugin).toBe('plug')
+    await startChanges({ home, profile: PROFILE, ownsHome: true }, text => void printed.push(text))
+    expect(await readWorkSession(home, PROFILE)).toBeUndefined()
+    expect((await readApproved(profileDir)).plugins.plug?.version).toBe(from)
+    expect((await readChangeLog(home, PROFILE)).entries.filter(entry => entry.kind === 'plugin-edit')).toEqual([])
+    expect(activeIndex()).toBe('export default "one"\n')
+    expect(printed.join('')).toContain(`Your work session on plug ended when Delo stopped. Nothing was approved: plug keeps the version it had when the session started (${from.slice(0, 7)})`)
+  })
+
+  it('a session past its end keeps the version it started from', async () => {
+    const from = (await readApproved(profileDir)).plugins.plug!.version
+    await startWork(ctx(), 'plug', terminal(), host())
+    const late = { ...ctx(), now: () => new Date(Date.now() + 61 * 60_000) }
+    expect(await finishWorkWithoutPerson(late, 'expired')).toMatchObject({ ended: 'expired', approved: from })
+    expect((await readApproved(profileDir)).plugins.plug?.version).toBe(from)
   })
 
   it('logs a session it cannot end, which the next start ends', async () => {
     await startWork(ctx(), 'plug', terminal(), host())
-    chmodSync(source, 0o000)
-    await afterChangesBoot({ home, profile: PROFILE, logger }, { reload: host().reload })()
-    chmodSync(source, 0o700)
-    expect(messages('warn')).toEqual(expect.arrayContaining([expect.stringMatching(/^Delo could not end your work session as it stopped; the next start ends it: .*EACCES/)]))
     writeFileSync(join(home, 'changes', 'profiles', PROFILE, 'work-session.json'), '{}\n', { mode: 0o600 })
     await afterChangesBoot({ home, profile: PROFILE, logger }, { reload: host().reload })()
     expect(messages('warn')).toEqual(expect.arrayContaining([expect.stringMatching(/^Delo could not end your work session as it stopped; the next start ends it: .*not a record Delo wrote/)]))
-  })
-})
-
-describe('a start after a crash finishes the open work session first', () => {
-  it('ends a session a home process that did not stop left open before it loads anything, and says so', async () => {
-    const context = { printed: [] as string[] }
-    await startWork(ctx(), 'plug', terminal(), host())
-    writeFileSync(join(source, 'index.js'), 'export default "two"\n')
-    await startChanges({ home, profile: PROFILE }, text => void context.printed.push(text))
-    expect((await readWorkSession(home, PROFILE))?.plugin).toBe('plug')
-    await startChanges({ home, profile: PROFILE, ownsHome: true }, text => void context.printed.push(text))
-    expect(await readWorkSession(home, PROFILE)).toBeUndefined()
-    const entry = (await readChangeLog(home, PROFILE)).entries.at(-1)!
-    expect(entry).toMatchObject({ kind: 'plugin-edit', state: 'applied' })
-    expect(context.printed.join('')).toContain(`Your work session on plug ended when Delo stopped. The folder's content is now the approved version of plug (${entry.id}).\n`)
-    expect(activeIndex()).toBe('export default "two"\n')
   })
 })

@@ -248,7 +248,7 @@ describe('a start under block', () => {
 describe('a work session', () => {
   it('loads the folder\'s content live under block and says so', async () => {
     const { fx, source, approved } = await migrated()
-    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved }, terminal())
+    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
     writeFileSync(join(source, 'index.js'), 'export default "editing"\n')
     const changes = await start(fx)
     const active = activeDirectory(fx.home, PROFILE, 'plug')
@@ -260,7 +260,7 @@ describe('a work session', () => {
 
   it('is not reported for a plugin the profile does not link', async () => {
     const { fx, approved } = await migrated()
-    await openWorkSession(fx.home, PROFILE, { plugin: 'elsewhere', source: folder(fx, 'elsewhere'), from: approved }, terminal())
+    await openWorkSession(fx.home, PROFILE, { plugin: 'elsewhere', source: folder(fx, 'elsewhere'), from: approved, minutes: 60 }, terminal())
     expect((await start(fx)).workSession).toBeUndefined()
   })
 })

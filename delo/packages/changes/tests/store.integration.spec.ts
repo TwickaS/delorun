@@ -269,7 +269,7 @@ describe('materialize', () => {
     expect(await holdsVersion(target, second.version)).toBe(true)
   })
 
-  it('materializes a dereferenced package whose own dependencies stay links, and the copy holds the version', async () => {
+  it('with dependencies kept as links, materializes a dereferenced package whose own dependencies stay links, and the copy holds the version', async () => {
     const home = temporaryDirectory('delo-changes-home-')
     const workspace = temporaryDirectory('delo-changes-workspace-')
     writeFiles(workspace, { 'plugin/index.js': 'p', 'pkg/index.js': 'sibling', 'dep/index.js': 'dep' })
@@ -279,7 +279,7 @@ describe('materialize', () => {
     mkdirSync(join(workspace, 'pkg', 'node_modules'))
     symlinkSync('../../dep', join(workspace, 'pkg', 'node_modules', 'dep'))
     symlinkSync('../../plugin', join(workspace, 'pkg', 'node_modules', 'plugin'))
-    const { version } = await storeFolder(home, folder)
+    const { version } = await storeFolder(home, folder, { dependencies: 'link' })
     const target = join(home, 'active', 'plugin')
     await materialize(home, version, target)
     expect(readlinkSync(join(target, 'node_modules', 'pkg', 'node_modules', 'dep'))).toBe(join(workspace, 'dep'))
@@ -287,20 +287,45 @@ describe('materialize', () => {
     expect(await holdsVersion(target, version)).toBe(true)
   })
 
-  it('keeps a dependency link that leaves the folder resolving to the same directory from the copy', async () => {
+  it('with dependencies kept as links, keeps a dependency link that leaves the folder resolving to the same directory from the copy', async () => {
     const home = temporaryDirectory('delo-changes-home-')
     const workspace = temporaryDirectory('delo-changes-workspace-')
     writeFiles(workspace, { 'node_modules/.pnpm/dep@1/node_modules/dep/index.js': 'dependency', 'packages/plugin/index.js': 'plugin' })
     const folder = join(workspace, 'packages', 'plugin')
     writeFiles(folder, { 'node_modules/.keep': '' })
     symlinkSync('../../../node_modules/.pnpm/dep@1/node_modules/dep', join(folder, 'node_modules', 'dep'))
-    const { version, manifest } = await storeFolder(home, folder)
+    const { version, manifest } = await storeFolder(home, folder, { dependencies: 'link' })
     const dependency = join(workspace, 'node_modules', '.pnpm', 'dep@1', 'node_modules', 'dep')
     expect(manifest.entries.find((entry) => entry.path === 'node_modules/dep')).toEqual({ type: 'link', path: 'node_modules/dep', target: dependency, outside: true })
     const target = join(home, 'active', 'plugin')
     await materialize(home, version, target)
     expect(realpathSync(join(target, 'node_modules', 'dep'))).toBe(dependency)
     expect(readFileSync(join(target, 'node_modules', 'dep', 'index.js'), 'utf8')).toBe('dependency')
+    expect(await holdsVersion(target, version)).toBe(true)
+  })
+
+  it('copies an installed dependency and the dependency installed beside it into the active directory', async () => {
+    const home = temporaryDirectory('delo-changes-home-')
+    const workspace = temporaryDirectory('delo-changes-workspace-')
+    writeFiles(workspace, {
+      'node_modules/.pnpm/dep@1/node_modules/dep/package.json': '{"name":"dep","dependencies":{"inner":"1"}}',
+      'node_modules/.pnpm/dep@1/node_modules/dep/index.js': 'dependency',
+      'node_modules/.pnpm/inner@1/node_modules/inner/index.js': 'inner',
+      'packages/plugin/index.js': 'plugin',
+    })
+    symlinkSync('../../inner@1/node_modules/inner', join(workspace, 'node_modules', '.pnpm', 'dep@1', 'node_modules', 'inner'))
+    const folder = join(workspace, 'packages', 'plugin')
+    writeFiles(folder, { 'node_modules/.keep': '' })
+    symlinkSync('../../../node_modules/.pnpm/dep@1/node_modules/dep', join(folder, 'node_modules', 'dep'))
+    const { version, manifest } = await storeFolder(home, folder)
+    expect(manifest.entries.filter((entry) => entry.type === 'link')).toEqual([])
+    const target = join(home, 'active', 'plugin')
+    await materialize(home, version, target)
+    expect(lstatSync(join(target, 'node_modules', 'dep')).isDirectory()).toBe(true)
+    expect(readFileSync(join(target, 'node_modules', 'dep', 'node_modules', 'inner', 'index.js'), 'utf8')).toBe('inner')
+    writeFiles(workspace, { 'node_modules/.pnpm/dep@1/node_modules/dep/index.js': 'changed outside' })
+    expect(readFileSync(join(target, 'node_modules', 'dep', 'index.js'), 'utf8')).toBe('dependency')
+    expect(await holdsVersion(target, version)).toBe(true)
   })
 
   it('copies a dereferenced sibling package\'s files into the active directory', async () => {

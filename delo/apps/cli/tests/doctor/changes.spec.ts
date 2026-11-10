@@ -174,17 +174,37 @@ describe('the changes lines of delorun doctor', () => {
     await setProtection(home, 'warn', attestTerminal(TERMINAL))
     await start()
     const warned = await lines()
-    expect(warned[0]).toEqual({ name: 'changes', status: 'pass', message: 'protection is set to warn: changes you have not approved run, and every start says so.' })
+    expect(warned[0]).toEqual({ name: 'changes', status: 'warn', message: 'protection is set to warn: changes you have not approved run, and every start says so. Set it back with: delorun changes protection block' })
     expect(warned).toContainEqual(expect.objectContaining({ status: 'warn', message: expect.stringMatching(/^plug from .*: it loaded at the last start; it runs content you have not approved; /u) }))
     await setProtection(home, 'off', attestTerminal(TERMINAL))
-    expect((await lines())[0]!.message).toBe('protection is set to off: changes you have not approved run without notice.')
+    expect((await lines())[0]).toEqual({ name: 'changes', status: 'warn', message: 'protection is set to off: changes you have not approved run without notice. Set it back with: delorun changes protection block' })
+  })
+
+  it('doctor never passes lowered protection', async () => {
+    linkPlugin('plug')
+    await start()
+    for (const level of ['warn', 'off'] as const) {
+      await setProtection(home, level, attestTerminal(TERMINAL))
+      expect((await lines()).filter(result => result.message.startsWith('protection')).map(result => result.status)).toEqual(['warn'])
+    }
+  })
+
+  it('escapes control and bidirectional characters in a failure a plugin wrote, and cuts it at a line\'s length', async () => {
+    const source = linkPlugin('plug')
+    await start()
+    await booted([], `plug threw \u001b[2J\u001b]0;owned\u0007\u202e${'y'.repeat(400)}`)
+    const failed = (await lines()).find(result => result.message.startsWith('plug did not load'))!
+    expect(failed.message).not.toMatch(/[\u001b\u0007\u202e]/u)
+    expect(failed.message).toContain('plug threw \\u001b[2J\\u001b]0;owned\\u0007\\u202e')
+    expect(failed.message).toMatch(/… \(\d+ more characters\)\. It changed in /u)
+    expect(source).not.toBe('')
   })
 
   it('reports the work session, a plugin added since the last start, and a home where no start recorded anything', async () => {
     const source = linkPlugin('plug')
     await start()
     const { version } = (await readApproved(profileDir)).plugins.plug!
-    const session = await openWorkSession(home, PROFILE, { plugin: 'plug', source, from: version }, attestTerminal(TERMINAL))
+    const session = await openWorkSession(home, PROFILE, { plugin: 'plug', source, from: version, minutes: 60 }, attestTerminal(TERMINAL))
     expect((await lines())[1]).toEqual({ name: 'changes', status: 'pass', message: `you are working on plug since ${session.startedAt}: edits in its folder load live until delorun changes done plug.` })
     await start()
     expect((await lines())[2]!.message).toBe(`plug from ${source}: no start has recorded what loaded yet; it runs its folder in your work session; it declares no dsh or delo version requirement; ${NONE_REGISTERED}.`)
@@ -198,7 +218,7 @@ describe('the changes lines of delorun doctor', () => {
     const source = linkPlugin('plug')
     await start()
     const { version } = (await readApproved(profileDir)).plugins.plug!
-    await openWorkSession(home, PROFILE, { plugin: 'plug', source, from: version }, attestTerminal(TERMINAL))
+    await openWorkSession(home, PROFILE, { plugin: 'plug', source, from: version, minutes: 60 }, attestTerminal(TERMINAL))
     await writeWorkFailure(home, PROFILE, { plugin: 'plug', at: '2026-11-10T10:00:00.000Z', error: 'SyntaxError: Unexpected token' })
     expect((await lines())[2]).toEqual({ name: 'changes', status: 'warn', message: 'the last reload of plug in a work session failed at 2026-11-10T10:00:00.000Z: SyntaxError: Unexpected token. Delo went back to the version of it that last loaded.' })
     writeFileSync(workFailurePath(home, PROFILE), '{}\n', { mode: 0o600 })

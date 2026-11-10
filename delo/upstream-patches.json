@@ -2035,6 +2035,12 @@
       "class": "security",
       "reason": "Tunnelled requests in the browser preview carry one raw header line per name, so the web server's repeated-Host check reads them. Lead verdict (2026-11-11): kept; tunnelled requests carry one raw header line per name, so the repeated-Host check reads them without throwing.",
       "sha256": "29e8303e3b605120dbcbe78d967ee1ea4715df3d3b3b0b91a8488b4567bae2dc"
+    },
+    {
+      "path": "packages/boot/hmr/src/index.ts",
+      "class": "security",
+      "reason": "Changes (C21): the optional `profileReconcileCheck` service, which `reconcileProfile` awaits inside `runExclusive` before any plugin stops or module is evicted, so every recomposition (Plugin Manager's restore, undo and settings changes, the profile's own file watch, `changes.reload`) can be refused; `@delo/plugin-changes` provides it to move folder links to their active directories and refuse content the person did not approve. Without the service HMR behaves as stock. It decides what code loads.",
+      "sha256": "14650214b5b7ff16b4fdbd9508de2c7a200ab5d94cdab2336442d4bd95ad5aad"
     }
   ],
   "retired": []

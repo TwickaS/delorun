@@ -5,9 +5,14 @@
  * update in progress and the studio's loopback address, with the command that opens the studio. The address is printed
  * without any query, fragment or credentials, so no token reaches the output. `--json` prints the `status` answer alone. It creates nothing. Exit codes follow C19: 0 when
  * a home process runs, 3 when none runs, 1 on an error, such as a live lock holder whose channel does not answer.
+ * While a work session is open (contract C21, "Work sessions"), the text output names its plugin, start and end time.
+ * It also names the plugins approved at upgrade that no terminal has shown yet, the changes waiting for review and a
+ * lowered protection setting (C21, "What verify and doctor report"), since `delorun start` shows its start's notice
+ * only in the log.
  *
  * @module @delo/cli/status
  */
+import { workSessionFact } from '@delo/changes'
 import { DSH_HOME_ENV, HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { HomeStatus } from '@delo/contract-home-process'
 import { holderAlive, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
@@ -15,6 +20,24 @@ import { queryHomeStatus } from '@delo/home-process'
 import { EXIT } from './exit.ts'
 import { parseOptions, type CliCommand } from './command.ts'
 import { selectProfile } from './profile.ts'
+import { printable } from './terminal-text.ts'
+import { changesNotice } from './verify/changes.ts'
+
+/**
+ * The line that names the profile's open work session.
+ * @param home - the Delo home.
+ * @param profile - the profile's name.
+ * @returns the line with its line ending; empty when no session is open.
+ */
+async function workSessionLine(home: string, profile: string): Promise<string> {
+  try {
+    const session = await workSessionFact(home, profile)
+    return session === undefined ? '' : `work session: ${printable(session.plugin)} since ${session.startedAt}, ends at ${session.endsAt}\n`
+  } catch (error) {
+    // workSessionFact refuses a record Delo did not write with a ChangesError, whose message is its detail.
+    return `work session: unreadable: ${printable((error as Error).message)}\n`
+  }
+}
 
 /** The line that follows the studio's address. */
 export const OPEN_HINT = 'Run delorun open to open the studio in your browser.'
@@ -69,6 +92,8 @@ export const statusCommand: CliCommand = {
       if (home.ignoredDshHome !== undefined) {
         context.stdout(`note: ${DSH_HOME_ENV} is set to ${home.ignoredDshHome}; delorun ignores it and runs with ${DSH_HOME_ENV}=${home.path}\n`)
       }
+      context.stdout(await workSessionLine(home.path, profile))
+      context.stdout(await changesNotice(home.path, profile))
     }
     const record = readHomeLock(runDirectory(home.path, profile))
     if (record === undefined || !holderAlive(record)) {

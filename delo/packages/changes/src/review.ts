@@ -24,6 +24,7 @@ const KIND_PHRASES: Readonly<Record<RiskKind, string>> = {
   network: 'Opens network connections',
   'home-read': 'Reads files under the Delo home',
   'dependency-or-build': 'Adds or changes a dependency, or an install or build script',
+  'not-shown': 'Has content the diff does not show',
 }
 
 /**

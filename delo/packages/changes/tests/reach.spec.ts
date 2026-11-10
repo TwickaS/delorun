@@ -15,7 +15,7 @@ vi.setConfig({ testTimeout: 60_000 })
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
 
 /** The functions that decide a change or prove presence. */
-const GUARDED = ['applyChange', 'applyInstallChange', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal', 'attestStudio']
+const GUARDED = ['applyChange', 'applyInstallChange', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal']
 
 /** The function that ends a work session without a proof of presence, because Delo stops. */
 const STOP_ONLY = 'finishWorkWithoutPerson'
@@ -119,7 +119,7 @@ describe('no model tool or route reaches a changes action', () => {
     expect(guardedNames("import * as changes from '@delo/changes'")).toEqual(['*'])
     expect(guardedNames("export * from '@delo/changes'")).toEqual(['*'])
     expect(guardedNames("const changes = await import('@delo/changes')")).toEqual(['*'])
-    expect(IMPORTS_CHANGES.test("import { attestStudio } from '../../changes/src/records.ts'")).toBe(true)
+    expect(IMPORTS_CHANGES.test("import { attestTerminal } from '../../changes/src/records.ts'")).toBe(true)
     expect(IMPORTS_CHANGES.test("import { listChanges } from '@delo/changesets'")).toBe(false)
     expect(guardedNames("import { startWork, finishWork } from '@delo/changes'")).toEqual(['startWork', 'finishWork'])
     expect(IMPORTS_STOP.test("import { finishWorkWithoutPerson } from '@delo/changes/stop'")).toBe(true)

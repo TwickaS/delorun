@@ -79,6 +79,7 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   'delo.changes-active': 'changes-active',
   'delo.changes-boot': 'changes-boot',
   'delo.changes-work': 'changes-work',
+  'delo.changes-migration': 'changes-migration',
   // A cache of file digests that a start rebuilds when it cannot read it; never decides anything.
   'delo.changes-scan-cache': null,
   // Documents a person exports, passes in or reads; no release reads them back from the home's data.
@@ -137,6 +138,7 @@ describe('c03-previous-release-reads-delorun-records', () => {
       'changes-active': 1,
       'changes-boot': 1,
       'changes-work': 1,
+      'changes-migration': 1,
     }
     expect(DELO_RECORDS).toEqual(written)
   })

@@ -79,16 +79,25 @@ function activeAgent(): Agent {
  * this plugin mounted with the given switch.
  * @param enabled - the switch.
  * @param withProfile - whether the Host runs a profile launched by dsh.
+ * @param profileHistory - the tool's switch that offers `configure`, `undo` and `restore`.
  * @returns the context, the manager, the approval spy, the profile and a call.
  */
-async function harness(enabled: boolean, withProfile = true) {
+async function harness(enabled: boolean, withProfile = true, profileHistory = false) {
   const profile = home()
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
+  const applied = async () => ({ changed: true, application: 'applied' })
   const manager = {
-    installBundle: vi.fn(async () => ({ changed: true, application: 'applied' })),
-    removeBundle: vi.fn(async () => ({ changed: true, application: 'applied' })),
+    installBundle: vi.fn(applied),
+    removeBundle: vi.fn(applied),
     listPlugins: vi.fn(async () => []),
+    setBundleEnabled: vi.fn(applied),
+    setPluginEnabled: vi.fn(applied),
+    setVersionExemption: vi.fn(applied),
+    undo: vi.fn(applied),
+    restore: vi.fn(applied),
+    previewUndo: vi.fn(async () => ({ ok: false, error: { code: 'nothing-to-undo' } })),
+    previewRestore: vi.fn(async () => ({ ok: false, error: { code: 'unknown-version' } })),
   }
   ctx.provide('pluginManager', manager as unknown as PluginManager)
   if (withProfile) ctx.provide('profileContext', { name: PROFILE, dir: profile.profileDir, home: profile.home } as never)
@@ -98,7 +107,7 @@ async function harness(enabled: boolean, withProfile = true) {
   await ctx.plugin(SessionProjections)
   await ctx.plugin(SandboxPolicy, { mode: 'workspace-write' })
   await ctx.plugin(ApprovalService, { policy: 'ask' })
-  await ctx.plugin(tool, {})
+  await ctx.plugin(tool, { profileHistory })
   await ctx.plugin(plugin, { enabled })
   const approval = vi.fn(async () => 'allowed-once' as const)
   ctx.on('approval/request', approval)
@@ -189,10 +198,50 @@ describe('the model\'s plugin_manager changes wait for the person', () => {
     // Prepended after the plugin's, so it runs first and never calls next().
     ctx.on('tools/pre-execute', () => Promise.resolve({ kind: 'allow' as const }), { prepend: true })
     const result = await call({ action: 'install_bundle', target: 'new-plugin' })
-    expect(text(result)).toBe('Error: Plugin installs, updates and removals wait for the person\'s review at their computer; this call was not recorded as a change, so it does not run.')
+    expect(text(result)).toBe('Error: Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.')
     expect(approval).not.toHaveBeenCalled()
     expect(manager.installBundle).not.toHaveBeenCalled()
     expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+  })
+
+  it('the model\'s plugin_manager restore, undo and settings changes do not run and record nothing', async () => {
+    const { manager, approval, profile, call } = await harness(true, true, true)
+    const before = snapshot(profile.profileDir)
+    const calls: Record<string, Record<string, unknown>> = {
+      set_bundle: { target: 'installed-plugin', enabled: false },
+      set_plugin: { target: 'installed-plugin', enabled: false },
+      configure: { target: 'installed-plugin', config: { mode: 'fast' } },
+      set_version_exemption: { target: 'installed-plugin@1.0.0', runtimeVersion: '0.2.2', enabled: true },
+      undo: {},
+      restore: { target: 'version-1' },
+    }
+    expect(Object.keys(calls).toSorted()).toEqual([...plugin.AT_COMPUTER_ACTIONS].toSorted())
+    for (const [action, args] of Object.entries(calls)) {
+      const result = await call({ action, ...args })
+      expect(result.isError).toBe(true)
+      expect(result.error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
+      expect(text(result)).toBe(`Error: ${action} changes what the person's harness runs, so the person makes it at their computer, in the studio or with delorun plugin. Nothing was changed; tell the person what you would change and why.`)
+    }
+    for (const spy of [manager.setBundleEnabled, manager.setPluginEnabled, manager.setVersionExemption, manager.undo, manager.restore, manager.previewUndo, manager.previewRestore]) {
+      expect(spy).not.toHaveBeenCalled()
+    }
+    expect(approval).not.toHaveBeenCalled()
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+    expect(snapshot(profile.profileDir)).toEqual(before)
+  })
+
+  it('a listener that allows a restore without the plugin\'s listener is overruled by its guard', async () => {
+    const { ctx, manager, approval, profile, call } = await harness(true, true, true)
+    const before = snapshot(profile.profileDir)
+    // Prepended after the plugin's, so it runs first and never calls next().
+    ctx.on('tools/pre-execute', () => Promise.resolve({ kind: 'allow' as const }), { prepend: true })
+    const result = await call({ action: 'restore', target: 'version-1' })
+    expect(text(result)).toBe('Error: Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.')
+    expect(approval).not.toHaveBeenCalled()
+    expect(manager.previewRestore).not.toHaveBeenCalled()
+    expect(manager.restore).not.toHaveBeenCalled()
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+    expect(snapshot(profile.profileDir)).toEqual(before)
   })
 
   it('leaves every other tool and action to upstream', async () => {

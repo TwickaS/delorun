@@ -8,7 +8,7 @@ import { isUtf8 } from 'node:buffer'
 import { createTwoFilesPatch, FILE_HEADERS_ONLY } from 'diff'
 import { readObject } from './store.ts'
 import { compareCodeUnits } from './tree.ts'
-import type { BoundedDiff, FileChange, ObjectDigest, ReviewedFile, ReviewInput, VersionEntry, VersionManifest } from './types.ts'
+import type { BoundedDiff, FileChange, NotShownReason, ObjectDigest, ReviewedFile, ReviewInput, VersionEntry, VersionManifest } from './types.ts'
 
 /** The largest file, in bytes on either side, whose text the diff and the risk checks read. */
 export const DIFF_FILE_LIMIT = 1024 * 1024
@@ -157,6 +157,17 @@ function textRead(change: FileChange, fileLimit: number): boolean {
 }
 
 /**
+ * A file's name on a diff's `Binary file` line: quoted as a JSON string when it holds a control character, a quote or a
+ * backslash, as the diff library quotes such a name on its `---` and `+++` lines, so a name never starts a line of the
+ * diff of its own.
+ * @param path - the file's path.
+ * @returns the name.
+ */
+function binaryName(path: string): string {
+  return /[\u0000-\u001f\u007f"\\]/u.test(path) ? JSON.stringify(path) : path
+}
+
+/**
  * A unified diff of the changed text files, bounded in size. Dependency files never appear; a binary file is named on
  * one line without its lines; a text file above the file limit, and every text file from the first whose hunks do not
  * fit the total, is left out and listed in `omitted`.
@@ -182,7 +193,7 @@ export async function boundedDiff(home: string, before: VersionManifest | undefi
     if (change.dependency) continue
     let part: string
     if (change.binary) {
-      part = `Binary file ${change.path} ${change.status}\n`
+      part = `Binary file ${binaryName(change.path)} ${change.status}\n`
     } else if (full || !textRead(change, fileLimit)) {
       omitted.push(change.path)
       continue
@@ -228,17 +239,33 @@ async function packageManifest(home: string, cache: ObjectCache, entry: VersionE
 const PACKAGE_MANIFEST = 'package.json'
 
 /**
+ * Why the diff does not show a change's lines, when it does not.
+ * @param change - the change.
+ * @param read - whether its text is read.
+ * @param omitted - the files the diff left out.
+ * @returns the reason, or undefined when the diff shows the change.
+ */
+function notShownReason(change: FileChange, read: boolean, omitted: readonly string[]): NotShownReason | undefined {
+  if (change.dependency) return 'dependency'
+  if (change.binary) return 'binary'
+  if (!read) return 'too-large'
+  return omitted.includes(change.path) ? 'cut-short' : undefined
+}
+
+/**
  * What the risk checks read for a change: each changed file with the text of each side it has, when that side is text
- * within the file limit and not a dependency's file, and the root `package.json` parsed on each side.
+ * within the file limit and not a dependency's file, why the diff does not show it when it does not, and the root
+ * `package.json` parsed on each side.
  * @param home - the Delo home.
  * @param before - the content before; undefined for none.
  * @param after - the content after.
  * @param changes - the changes {@link compareVersions} gave for the two.
  * @param bounds - the file limit.
+ * @param omitted - the files the diff of the two left out ({@link BoundedDiff.omitted}); none by default.
  * @returns the review input.
  * @throws {ChangesError} `STORE_CORRUPT` when an object is missing or altered.
  */
-export async function reviewInputOf(home: string, before: VersionManifest | undefined, after: VersionManifest, changes: readonly FileChange[], bounds: DiffBounds = {}): Promise<ReviewInput> {
+export async function reviewInputOf(home: string, before: VersionManifest | undefined, after: VersionManifest, changes: readonly FileChange[], bounds: DiffBounds = {}, omitted: readonly string[] = []): Promise<ReviewInput> {
   const fileLimit = bounds.file ?? DIFF_FILE_LIMIT
   const old = byPath(before)
   const updated = byPath(after)
@@ -248,12 +275,14 @@ export async function reviewInputOf(home: string, before: VersionManifest | unde
     const a = old.get(change.path)
     const b = updated.get(change.path)
     const read = textRead(change, fileLimit)
+    const notShown = notShownReason(change, read, omitted)
     files.push({
       path: change.path,
       status: change.status,
       dependency: change.dependency,
       ...(read && a !== undefined ? { before: await sideText(home, cache, a) } : {}),
       ...(read && b !== undefined ? { after: await sideText(home, cache, b) } : {}),
+      ...(notShown === undefined ? {} : { notShown }),
     })
   }
   const manifestBefore = await packageManifest(home, cache, old.get(PACKAGE_MANIFEST))

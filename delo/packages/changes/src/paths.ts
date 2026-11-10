@@ -6,6 +6,7 @@
  * ```text
  * changes/                          0700
  *   protection.json                 the protection setting; absent means block
+ *   migration.json                  the profiles that existed at the first start under Changes
  *   store/objects/<sha256>          approved file contents, by digest, never rewritten
  *   store/versions/<sha256>.json    one content version's file list, by its digest
  *   profiles/<profile>/
@@ -16,10 +17,16 @@
  *     scan-cache.json               file digests by inode, size and times, to scan a folder quickly
  * ```
  *
+ * A plugin's name is checked against {@link PACKAGE_NAME_PATTERN} before any path is built from it.
+ *
  * @module @delo/changes/paths
  */
 import { join } from 'node:path'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
+import { ChangesError } from './errors.ts'
+
+/** What a package name under Changes is: npm's form, with an optional scope. */
+export const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/
 
 /** Files and directories under `changes/`. */
 export const CHANGES_ENTRIES = {
@@ -33,6 +40,7 @@ export const CHANGES_ENTRIES = {
   log: 'log.json',
   workSession: 'work-session.json',
   scanCache: 'scan-cache.json',
+  migration: 'migration.json',
 } as const
 
 /**
@@ -80,9 +88,20 @@ export function profileChangesDirectory(home: string, profile: string): string {
  * The directory name of one plugin's active content: the package name with `/` written as `+`, as pnpm writes it.
  * @param name - the package name, such as `@scope/plugin`.
  * @returns the name as one path segment.
+ * @throws {ChangesError} `NOT_LINKED` when the name is not a package name, which no plugin of a profile has; such a name
+ *   could name a path outside `active/`.
  */
 export function pluginSlug(name: string): string {
+  if (!PACKAGE_NAME_PATTERN.test(name)) throw new ChangesError('NOT_LINKED', name, `${JSON.stringify(name)} is not a package name, so no plugin of the profile has it.`)
   return name.replace('/', '+')
+}
+
+/**
+ * @param home - the Delo home.
+ * @returns the record of the first start under Changes.
+ */
+export function migrationPath(home: string): string {
+  return join(changesDirectory(home), CHANGES_ENTRIES.migration)
 }
 
 /**

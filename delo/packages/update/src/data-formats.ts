@@ -51,6 +51,7 @@ import deloRecords from './data-records.json' with { type: 'json' }
  * - `changes-active`: `changes/profiles/<profile>/active.json`, what each active directory holds (C21).
  * - `changes-boot`: `run/<profile>/changes-boot.json`, what loaded at the last start (C21).
  * - `changes-work`: `run/<profile>/changes-work.json`, the last failed reload in a work session (C21).
+ * - `changes-migration`: `changes/migration.json`, the home-wide record of the first start under Changes (C21).
  */
 export const DELO_RECORDS: Readonly<Record<string, number>> = Object.freeze({ ...deloRecords })
 

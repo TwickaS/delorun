@@ -417,7 +417,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(atBoot).toEqual([atBoot[0], undefined])
   })
 
-  it('Delo stopping ends the work session: the Host closes it and its folder\'s content becomes the approved version', { timeout: 300_000 }, async () => {
+  it('Delo stopping ends the work session: the Host closes it and approves nothing', { timeout: 300_000 }, async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const profileDir = join(deloHome, 'profiles', 'default')
     const folder = join(osHome, 'plug')
@@ -430,13 +430,15 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     const shutdowns: number[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([], [], shutdowns))).toBeUndefined()
     const ctx = { home: deloHome, profile: 'default', profileDir }
-    await startWork(ctx, 'plug', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }), { reload: () => reloadThroughChannel(deloHome, 'default') })
+    const from = (await readApproved(profileDir)).plugins.plug?.version
+    await startWork(ctx, 'plug', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }), { reload: () => reloadThroughChannel(deloHome, 'default'), minutes: 60 })
     writeFileSync(join(folder, 'index.js'), 'export default 2\n')
     await sendHomeRequest(deloHome, 'default', { op: 'stop', args: { mode: 'drain' } })
     await vi.waitFor(async () => { expect(await readWorkSession(deloHome, 'default')).toBeUndefined() }, { timeout: 60_000, interval: 100 })
     await vi.waitFor(() => { expect(shutdowns).toEqual([EXIT.ok]) }, { timeout: 60_000, interval: 100 })
-    const entry = (await readChangeLog(deloHome, 'default')).entries.at(-1)!
-    expect(entry).toMatchObject({ kind: 'plugin-edit', state: 'applied', decidedFrom: 'terminal', to: (await readApproved(profileDir)).plugins.plug?.version })
+    expect(from).toBeDefined()
+    expect((await readApproved(profileDir)).plugins.plug?.version).toBe(from)
+    expect((await readChangeLog(deloHome, 'default')).entries.filter(entry => entry.kind === 'plugin-edit')).toEqual([])
   })
 
   it('releases the lock when the profile fails to boot, and refuses a home without the CLI profile', async () => {

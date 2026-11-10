@@ -1278,3 +1278,28 @@ it.each(['group', 'include'] as const)('replaces the children of a nested %s', a
   await expect(f.reconcile()).resolves.toEqual({ warnings: [], pending: [] })
   expect(f.trace).toEqual(['stop:1', 'start:2:1:-'])
 })
+
+it('awaits the distribution\'s profile check with the profile before it recomposes', async () => {
+  const f = await fixture()
+  f.trace.length = 0
+  const checked: string[] = []
+  f.ctx.provide('profileReconcileCheck', { check: async (profile) => { checked.push(profile.name); f.trace.push('check') } })
+  addon(f.dir, '2', plugin('2'))
+  await expect(f.reconcile()).resolves.toEqual({ warnings: [], pending: [] })
+  expect(checked).toEqual(['test'])
+  expect(f.trace).toEqual(['check', 'stop:1', 'start:2:1:-'])
+})
+
+it('stops nothing and loads nothing when the distribution\'s profile check refuses', async () => {
+  const f = await fixture()
+  f.trace.length = 0
+  let refuse = true
+  f.ctx.provide('profileReconcileCheck', { check: () => refuse ? Promise.reject(new Error('not approved')) : Promise.resolve() })
+  addon(f.dir, '2', plugin('2'))
+  await expect(f.reconcile()).rejects.toThrow('not approved')
+  expect(f.trace).toEqual([])
+  // The first version kept running: the next recomposition the check allows stops it.
+  refuse = false
+  await expect(f.reconcile()).resolves.toEqual({ warnings: [], pending: [] })
+  expect(f.trace).toEqual(['stop:1', 'start:2:1:-'])
+})

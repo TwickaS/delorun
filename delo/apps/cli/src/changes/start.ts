@@ -8,13 +8,14 @@
  * headless`. After upstream prepared the profile, the composition's approved plugin content step holds it to every
  * invariant Changes keeps ([compose](../compose.ts)). After the profile booted, or failed to, the start records which
  * plugins under Changes loaded (`run/<profile>/changes-boot.json`), which `delorun doctor` reads; after it booted, the
- * home process follows work sessions ([work watch](./work-watch.ts)) until its Host stops, and stopping ends the open
- * one.
+ * home process follows work sessions ([work watch](./work-watch.ts)) until its Host stops, ending one at its end time,
+ * and stopping ends the open one. A session ended here ends without the person, so it approves nothing: the version it
+ * started from stays approved and what the folder holds waits for review.
  *
  * @module @delo/cli/changes/start
  */
 import { resolve } from 'node:path'
-import { checkChangesInvariants, enforceApprovedContent, isChangesError, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost } from '@delo/changes'
+import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges } from '@delo/changes'
 import { finishWorkWithoutPerson } from '@delo/changes/stop'
 import type { DeloLogger } from '@delo/logs'
 import { RuntimeStoreError } from '@delo/runtime-store'
@@ -23,7 +24,7 @@ import { carriedPackageDirectory } from '../delo-bundles.ts'
 import { CliError, EXIT } from '../exit.ts'
 import type { PreStartContext, StoredRuntime } from '../pre-start.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
-import { printable } from '../terminal-text.ts'
+import { printable, printableText } from '../terminal-text.ts'
 import { watchWork } from './work-watch.ts'
 
 /** The profile a start is about to boot. */
@@ -39,6 +40,13 @@ export interface ChangesStartRequest {
    * a home process that did not stop, so the start ends it first. Absent for `delorun headless`.
    */
   readonly ownsHome?: true
+  /**
+   * Whether `output` reaches a terminal the person reads. Only then are the plugins approved at upgrade recorded as
+   * shown; `delorun status` and `delorun changes list` name them until one did. By default, whether this process's
+   * standard output and standard error both are terminals: `delorun start` runs the home process with its output in
+   * the log only, so its start shows nothing.
+   */
+  readonly terminal?: boolean
 }
 
 /**
@@ -77,15 +85,25 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
   if (!hasCliProfile(home, profile)) return
   const profileDir = profileDirectory(home, profile)
   let notice = ''
+  let enforced: StartChanges
   try {
-    const ended = request.ownsHome === true ? await finishWorkWithoutPerson({ home, profile, profileDir }) : undefined
+    const ended = request.ownsHome === true ? await finishWorkWithoutPerson({ home, profile, profileDir }, 'stopped') : undefined
     if (ended !== undefined) notice = `Your work session on ${ended.plugin} ended when Delo stopped. ${workFinishedLine(ended)}\n`
-    notice += startNotice(await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage }))
+    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage })
   } catch (error) {
     const detail = isChangesError(error) ? error.detail : String(error)
     throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because the plugins it links from folders could not be prepared: ${detail}`)
   }
-  if (notice !== '') output(notice)
+  notice += startNotice(enforced)
+  if (notice !== '') output(printableText(notice.trimEnd()).map(line => `${line}\n`).join(''))
+  const shown = enforced.approvedAtUpgrade.map(({ plugin }) => plugin)
+  if (shown.length === 0 || !(request.terminal ?? (process.stdout.isTTY && process.stderr.isTTY))) return
+  try {
+    await markShownAtUpgrade({ home, profile, profileDir, lockWaitMs: PROFILE_LOCK_WAIT_MS }, shown, new Date().toISOString())
+  } catch (error) {
+    // The record only stops the notice from repeating; the start goes on and the next one names the plugins again.
+    output(`Delo could not record that you saw this, so the next start says it again: ${printable(isChangesError(error) ? error.detail : String(error))}\n`)
+  }
 }
 
 /**
@@ -161,17 +179,20 @@ export async function recordChangesBoot(request: ChangesBootRequest, rows: reado
  * Follow work sessions in the booted Host until Delo stops ([work watch](./work-watch.ts)).
  * @param request - the home, the profile and the logger.
  * @param booted - the booted profile's reload.
- * @returns what the Host's `close` and `suspend` call before they stop the profile: it stops following work sessions and ends the open
- *   one, so the folder's content becomes the approved version. A failure to end it is logged; the next start ends it.
+ * @returns what the Host's `close` and `suspend` call before they stop the profile: it stops following work sessions
+ *   and ends the open one without the person, which approves nothing. A failure to end it is logged; the next start
+ *   ends it.
  */
 export function afterChangesBoot(request: ChangesBootRequest, booted: { readonly reload: ReloadHost }): () => Promise<void> {
   const { home, profile, logger } = request
   const profileDir = profileDirectory(home, profile)
-  const watcher = watchWork({ home, profile, profileDir, reload: () => booted.reload(), logger })
+  const ctx = { home, profile, profileDir }
+  const reload: ReloadHost = () => booted.reload()
+  const watcher = watchWork({ ...ctx, reload, logger, expire: () => finishWorkWithoutPerson(ctx, 'expired', reload) })
   return async () => {
     await watcher.close()
     try {
-      const ended = await finishWorkWithoutPerson({ home, profile, profileDir })
+      const ended = await finishWorkWithoutPerson(ctx, 'stopped')
       if (ended !== undefined) logger.info(`Your work session on ${ended.plugin} ended as Delo stopped. ${workFinishedLine(ended)}`)
     } catch (error) {
       logger.warn(`Delo could not end your work session as it stopped; the next start ends it: ${isChangesError(error) ? error.detail : String(error)}`)

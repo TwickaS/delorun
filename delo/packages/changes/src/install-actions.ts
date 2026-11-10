@@ -2,8 +2,10 @@
  * The agent's plugin requests: with the C16 switch `plugin_changes_pending` on, an agent's `plugin_manager` call that
  * would install, update or remove a plugin runs nothing and records a pending change instead
  * ({@link recordPluginRequest}, the one function `@delo/plugin-changes` calls), and the person applies it at their
- * computer ({@link applyInstallChange}), which runs upstream's plugin operation, the one `delorun plugin` runs, under
- * the profile's write lock.
+ * computer ({@link applyInstallChange}), which runs upstream's plugin operation under the profile's write lock with the
+ * checks the plugin manager's `installBundle` runs: build scripts stay held back by pnpm's `allowBuilds` decisions, the
+ * ones pnpm reports blocked are recorded as waiting for the person's decision, and a failed or refused operation puts
+ * the profile's `package.json` and `pnpm-lock.yaml` back.
  *
  * A request whose spec names a folder never links the profile to that folder: applying it links the plugin to its
  * active directory under `changes/`, which holds nothing until the person applies the folder's content, and records
@@ -12,9 +14,12 @@
  *
  * @module @delo/changes/install-actions
  */
-import { readFile } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { recordPendingBuilds } from '@deepseek-ai/dsh-plugin-manager/src/build-approval.ts'
 import { InvalidInstallSpecError, parseInstallSpec, type ParsedInstallSpec } from '@deepseek-ai/dsh-plugin-manager/src/install-spec.ts'
+import { PROTECTED_FILE_MODE } from '@delo/contract-home-layout'
 import type { ChangesContext, ReloadHost } from './actions.ts'
 import { locked, recordVersion, timeOf } from './action-support.ts'
 import { holdContent, namesDirectory } from './enforce.ts'
@@ -49,13 +54,30 @@ export function isPluginRequest(entry: Pick<ChangeEntry, 'kind' | 'subject'>): b
   return REQUEST_KINDS.has(entry.kind) && entry.subject.spec !== undefined
 }
 
+/** What one plugin operation did. */
+export interface PluginOperationResult {
+  /** Zero when the operation changed the profile as asked. */
+  readonly exitCode: number
+  /** The operation's diagnostics file; absent when it refused before pnpm ran. */
+  readonly logPath?: string
+  /** pnpm's output, which names the build scripts pnpm held back. */
+  readonly output?: string
+  /** Why the operation refused, in the person's words: an incompatible version, or a package that is no plugin bundle. */
+  readonly failure?: string
+}
+
 /**
  * Upstream's profile plugin operation with these pnpm arguments, run by a caller that already holds the profile's write
- * lock: `runProfilePnpm` of `@deepseek-ai/dsh-plugin-manager/operations`, as `delorun plugin` runs it.
+ * lock, with the checks the plugin manager's `installBundle` runs around it: `runProfilePnpm` of
+ * `@deepseek-ai/dsh-plugin-manager/operations` run as the plugin manager runs it. The caller puts the profile's
+ * `package.json` and `pnpm-lock.yaml` back after a failure.
  * @param args - the pnpm arguments, such as `['add', spec]`.
- * @returns the exit code and the path of the operation's diagnostics.
+ * @param folder - for a spec that names a folder, the folder whose package the link will hold once the person applies
+ *   its content; the operation refuses it as the plugin manager refuses an incompatible package or one that is no
+ *   plugin bundle.
+ * @returns the exit code, the operation's diagnostics and why it refused.
  */
-export type PluginOperation = (args: readonly string[]) => Promise<{ readonly exitCode: number, readonly logPath: string }>
+export type PluginOperation = (args: readonly string[], folder?: string) => Promise<PluginOperationResult>
 
 /** What applying a plugin request is given. */
 export interface InstallApplyOptions {
@@ -177,6 +199,8 @@ interface Operation {
   readonly after: () => Promise<void>
   /** The change that holds a folder's content. */
   readonly folderChange?: ChangeId
+  /** The folder a spec names, whose package the operation checks. */
+  readonly folder?: string
 }
 
 /** An operation with nothing after it. */
@@ -215,13 +239,13 @@ async function folderOperation(ctx: ChangesContext, log: ChangeLog, folder: stri
   const approval = approvedOf(await readApproved(ctx.profileDir), plugin)
   await holdContent(ctx.home, active, approval?.version)
   const args = ['add', `${plugin}@${LINK_PREFIX}${active}`]
-  if (approval !== undefined) return { args, log, after: NOTHING_AFTER }
+  if (approval !== undefined) return { args, log, after: NOTHING_AFTER, folder }
   const scanCache = join(profileChangesDirectory(ctx.home, ctx.profile), CHANGES_ENTRIES.scanCache)
   const { version } = await storeFolder(ctx.home, folder, { scanCache })
   const subject = { plugin, source: folder }
   const id = changeId('plugin-install', subject, undefined, version)
   const entry: ChangeEntry = { id, kind: 'plugin-install', state: 'pending', subject, to: version, summary: `${plugin} from ${folder} waits for your review`, createdAt: at }
-  return { args, log: findEntry(log, id) === undefined ? withEntry(log, entry) : log, after: NOTHING_AFTER, folderChange: id }
+  return { args, log: findEntry(log, id) === undefined ? withEntry(log, entry) : log, after: NOTHING_AFTER, folderChange: id, folder }
 }
 
 /**
@@ -252,10 +276,67 @@ async function operationFor(ctx: ChangesContext, log: ChangeLog, entry: ChangeEn
   return { args: ['add', spec], log, after: NOTHING_AFTER }
 }
 
+/** The profile files a plugin operation may rewrite and a failed one puts back, as the plugin manager restores them. */
+const RESTORED_FILES = ['package.json', 'pnpm-lock.yaml'] as const
+
+/**
+ * @param profileDir - the profile's directory.
+ * @returns each restored file's path and its text, undefined when it does not exist.
+ */
+async function savedFiles(profileDir: string): Promise<ReadonlyMap<string, string | undefined>> {
+  const files = new Map<string, string | undefined>()
+  for (const name of RESTORED_FILES) {
+    const path = join(profileDir, name)
+    try {
+      files.set(path, await readFile(path, 'utf8'))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      files.set(path, undefined)
+    }
+  }
+  return files
+}
+
+/**
+ * Put the saved files back; a file that did not exist is removed.
+ * @param files - the files {@link savedFiles} read.
+ */
+async function restoreFiles(files: ReadonlyMap<string, string | undefined>): Promise<void> {
+  for (const [path, text] of files) {
+    if (text === undefined) await rm(path, { force: true })
+    else await writeFileAtomic(path, text, { mode: PROTECTED_FILE_MODE })
+  }
+}
+
+/**
+ * Why an operation failed, in the person's words: its own reason, or the build scripts pnpm held back, which
+ * `recordPendingBuilds` of upstream's plugin manager records in the profile's `pnpm-workspace.yaml` as it does after a
+ * failed `installBundle`, or its exit code.
+ * @param profileDir - the profile's directory.
+ * @param ran - what the operation did.
+ * @returns the failure.
+ */
+async function failureOf(profileDir: string, ran: PluginOperationResult): Promise<string> {
+  const diagnostics = ran.logPath === undefined ? '' : `; diagnostics: ${ran.logPath}`
+  if (ran.failure !== undefined) return `${ran.failure}${diagnostics}`
+  let pending: string[] = []
+  try {
+    pending = await recordPendingBuilds(profileDir, ran.output ?? '')
+  } catch (error) {
+    // An unreadable pnpm-workspace.yaml records nothing, and the plugin manager goes on after it the same way; the exit
+    // code still reports the failure.
+    void error
+  }
+  const exited = `the plugin operation exited ${String(ran.exitCode)}${diagnostics}`
+  if (pending.length === 0) return exited
+  return `${exited}; nothing was installed, and pnpm holds back the build scripts of ${pending.join(', ')} until you decide under allowBuilds in ${join(profileDir, 'pnpm-workspace.yaml')}: true lets one run, false installs without it`
+}
+
 /**
  * Apply an agent's plugin request the person reviewed: run upstream's plugin operation for its spec under the profile's
  * write lock, record one profile history version, mark the request applied and reload the running Host. A failed
- * operation leaves the request pending with the failure, and nothing else changes; a failed reload leaves the change
+ * operation puts the profile's `package.json` and `pnpm-lock.yaml` back, records the build scripts pnpm held back as
+ * waiting for the person's decision, and leaves the request pending with the failure; a failed reload leaves the change
  * applied, for the next start to load.
  * @param ctx - the profile.
  * @param id - the change id the person reviewed.
@@ -277,9 +358,11 @@ export async function applyInstallChange(ctx: ChangesContext, id: ChangeId, pres
     const at = timeOf(ctx)
     const operation = await operationFor(ctx, log, entry, at)
     const { lastFailure: _lastFailure, ...request } = entry
-    const ran = await options.run(operation.args)
+    const files = await savedFiles(ctx.profileDir)
+    const ran = await options.run(operation.args, operation.folder)
     if (ran.exitCode !== 0) {
-      const failure = `the plugin operation exited ${String(ran.exitCode)}; diagnostics: ${ran.logPath}`
+      await restoreFiles(files)
+      const failure = await failureOf(ctx.profileDir, ran)
       await writeChangeLog(ctx.home, ctx.profile, withEntry(log, { ...request, lastFailure: { at, failure } }))
       throw new ChangesError('OPERATION_FAILED', id, `Change ${id} was not applied: ${failure}`)
     }

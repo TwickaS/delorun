@@ -4,6 +4,7 @@
  *
  * @module @delo/changes/errors
  */
+import { codedReason, profileOption, refusalDescriber, type RefusalDescriber } from '@delo/home'
 
 /**
  * Every code a {@link ChangesError} carries.
@@ -15,14 +16,17 @@
  * - `CHANGED_SINCE_REVIEW`: the folder no longer holds the content the change id names.
  * - `UNKNOWN_CHANGE`: no change has the id.
  * - `NOT_ALLOWED`: the change's state does not allow the action, such as applying a discarded change.
- * - `NOT_AT_COMPUTER`: the action needs the person at their computer, and the caller is not a terminal or the
- *   loopback studio.
- * - `NOT_LINKED`: the plugin is not one the profile links from a folder.
+ * - `NOT_AT_COMPUTER`: the action needs the person at their computer, and the caller is not a terminal.
+ * - `NOT_LINKED`: the plugin is not one the profile links from a folder, or the name is not a package name.
  * - `WORK_SESSION_OPEN`: a work session is already open.
  * - `NO_WORK_SESSION`: no work session is open for the plugin.
  * - `RUNTIME_CHANGED`: the runtime in use differs from its signed file list under Block.
  * - `INVALID_REQUEST`: an agent's plugin request names no spec pnpm accepts, or no plugin of the profile to remove.
  * - `OPERATION_FAILED`: upstream's plugin operation for an applied plugin request failed; nothing was applied.
+ * - `CONTENT_TOO_LARGE`: a folder, with the installed packages it links, holds more than a content version may
+ *   ([tree](./tree.ts)), so Changes does not copy it.
+ * - `LOAD_REFUSED`: what the profile would load is not what Changes keeps (a link or an active directory differs), so a
+ *   start or a reload does not load it.
  */
 export type ChangesCode =
   | 'RECORD_UNREADABLE'
@@ -38,6 +42,8 @@ export type ChangesCode =
   | 'RUNTIME_CHANGED'
   | 'INVALID_REQUEST'
   | 'OPERATION_FAILED'
+  | 'CONTENT_TOO_LARGE'
+  | 'LOAD_REFUSED'
 
 /** A refusal or failure of Changes. */
 export class ChangesError extends Error {
@@ -60,3 +66,13 @@ export class ChangesError extends Error {
 export function isChangesError(error: unknown): error is ChangesError {
   return error instanceof ChangesError
 }
+
+/**
+ * How `delorun` prints a {@link ChangesError}: nothing was changed, the code and the detail, and the command that shows
+ * the current state of the changes.
+ */
+export const changesDescriber: RefusalDescriber<ChangesError> = refusalDescriber(ChangesError, (error, context) => ({
+  lead: 'Delo did not change what your harness runs.',
+  reason: codedReason(error.code, error.detail),
+  remedies: [`See your changes: delorun changes list${profileOption(context)}`],
+}))

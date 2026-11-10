@@ -107,13 +107,13 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     const home = await changesHome()
     const run = await verify(home.fixture)
     expect(run.exit).toBe(EXIT.ok)
-    expect(changesBlock(run)).toEqual(['Changes:', '1 change you approved:', `  plug from ${home.source} (approved at upgrade)`, PLAIN_SUMMARY])
+    expect(changesBlock(run)).toEqual(['Changes:', 'Protection is block: changes you have not approved do not run.', '1 change you approved:', `  plug from ${home.source} (approved at upgrade)`, PLAIN_SUMMARY])
     expect(changesBlock(run).join('\n')).not.toMatch(/integrity|trust|drift/iu)
     // An approval the person gave after the upgrade carries no mark.
     const approved = await readApproved(home.profileDir)
     const { source, version, approvedAt } = approved.plugins.plug!
     await writeApproved(home.profileDir, { ...approved, plugins: { plug: { source, version, approvedAt } } })
-    expect(changesBlock(await verify(home.fixture))[2]).toBe(`  plug from ${home.source}`)
+    expect(changesBlock(await verify(home.fixture))[3]).toBe(`  plug from ${home.source}`)
   })
 
   it('verify never prints a plain pass with unapproved content', async () => {
@@ -125,7 +125,8 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     const running = await verify(warned.fixture)
     const block = changesBlock(running)
     expect(block.at(-1)).not.toBe(PLAIN_SUMMARY)
-    expect(block.at(-1)).toBe('2 checks passed, 0 failed, 9 not run; 1 change you have not approved is present; this is not a full verification of this Delo.')
+    expect(block.at(-1)).toBe('2 checks passed, 0 failed, 9 not run; 1 change you have not approved is present; protection is lowered to warn, so changes you have not approved run; this is not a full verification of this Delo.')
+    expect(block[1]).toBe('Protection is warn: changes you have not approved run, and every start says so.')
     expect(block).toContain('  plug runs content you have not approved')
     expect(block).toContainEqual(expect.stringMatching(/^ {2}plug has changes in .* waiting for your review: delorun changes show c[0-9a-f]{10}$/u))
     expect(running.exit).toBe(EXIT.failed)
@@ -153,6 +154,7 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     expect(run.exit).toBe(EXIT.ok)
     expect(changesBlock(run)).toEqual([
       'Changes:',
+      'Protection is block: changes you have not approved do not run.',
       '1 change you approved:',
       `  plug from ${home.source} (approved at upgrade)`,
       'Not approved:',
@@ -169,7 +171,35 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     mkdirSync(profileDir, { recursive: true })
     writeFileSync(join(profileDir, 'package.json'), '{"name":"dsh-profile-default","private":true}\n')
     const run = await verify(fixture)
-    expect(changesBlock(run)).toEqual(['Changes:', '0 changes you approved.', PLAIN_SUMMARY])
+    expect(changesBlock(run)).toEqual(['Changes:', 'Protection is block: changes you have not approved do not run.', '0 changes you approved.', PLAIN_SUMMARY])
+  })
+
+  it('verify never prints a plain pass with protection lowered', async () => {
+    const home = await changesHome()
+    await setProtection(home.fixture.home, 'off', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+    const run = await verify(home.fixture)
+    const block = changesBlock(run)
+    expect(block[1]).toBe('Protection is off: changes you have not approved run without notice.')
+    expect(block.at(-1)).not.toBe(PLAIN_SUMMARY)
+    expect(block.at(-1)).toBe('2 checks passed, 0 failed, 9 not run; protection is lowered to off, so changes you have not approved run; this is not a full verification of this Delo.')
+    // A protection record that cannot be read is named as an invariant, never as a level.
+    writeFileSync(join(home.fixture.home, 'changes', 'protection.json'), '{}\n', { mode: 0o600 })
+    const unreadable = changesBlock(await verify(home.fixture))
+    expect(unreadable.some(line => line.startsWith('Protection is'))).toBe(false)
+    expect(unreadable.at(-1)).not.toBe(PLAIN_SUMMARY)
+  })
+
+  it('escapes control and bidirectional characters in what it prints, and wraps long lines', async () => {
+    const home = await changesHome()
+    const approved = await readApproved(home.profileDir)
+    const { version, approvedAt } = approved.plugins.plug!
+    const forged = `/tmp/plug\u001b[2K\rFAKE\u202e${'x'.repeat(300)}`
+    await writeApproved(home.profileDir, { ...approved, plugins: { plug: { source: forged, version, approvedAt } } })
+    const block = changesBlock(await verify(home.fixture))
+    expect(block.join('\n')).not.toMatch(/[\u001b\r\u202e]/u)
+    expect(block[3]).toMatch(/^ {2}plug from \/tmp\/plug\\u001b\[2K\\u000dFAKE\\u202ex+$/u)
+    expect(block[4]).toMatch(/^ {2}↪ x+$/u)
+    expect(block.every(line => line.length <= 200)).toBe(true)
   })
 
   it('says a run from outside the runtime store has no signed release to compare its files with', async () => {

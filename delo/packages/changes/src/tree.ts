@@ -1,24 +1,31 @@
 /**
  * Reading a plugin folder as a content version: its regular files by digest, its symbolic links by target, and the
- * canonical version id over them. A scan never opens a socket, FIFO or device, and leaves every directory named `.git`
- * out. A symbolic link is classified by where it points:
+ * canonical version id over them. A scan never opens a socket, FIFO or device, leaves every directory named `.git`
+ * out, and skips a name holding a backslash, which a version path cannot hold. A symbolic link is classified by where
+ * it points:
  *
- * - a relative target that stays inside the directory being walked: a `link` entry with the target as written;
- * - any other target whose real path lies below a `node_modules` directory, such as pnpm's `.pnpm` store: a `link`
- *   entry marked `outside` whose target is that absolute real path, so a copy of the folder (an active directory) still
- *   names the same place; a target that does not resolve is judged by its absolute path;
+ * - a relative target that stays inside the directory being walked, judged both by the path as written and by the
+ *   real path it resolves to (the nearest existing directory's real path for a target that does not exist yet): a
+ *   `link` entry with the target as written;
  * - any other target that does not resolve: skipped, since a copy holding the link would load whatever appears there;
- * - any other target, such as a sibling workspace package a source checkout links: dereferenced, so its files are part
- *   of the content under the link's path and nothing loads from outside the approved copy. A dereferenced directory is
- *   walked by the same rules with itself as the directory links are judged against. Each real directory is included
- *   once, at the first path the walk reaches it by (directories are walked in code-unit order, so the choice is
- *   stable): a later link to it, or to anything below it or below the folder, becomes a relative `link` entry to that
- *   path, so a copy resolves it inside itself; a link to a directory that contains an included one is skipped.
+ * - any other target, such as a sibling workspace package a source checkout links or an installed package in pnpm's
+ *   `.pnpm` store: dereferenced, so its files are part of the content under the link's path and nothing loads from
+ *   outside the approved copy. A dereferenced directory is walked by the same rules with itself as the directory links
+ *   are judged against. When it is a package installed in a `node_modules` directory, each dependency its
+ *   `package.json` names (`dependencies`, `optionalDependencies`, `peerDependencies`) that sits beside it in that
+ *   directory, as pnpm installs them, is included at `<its path>/node_modules/<name>` unless the package holds that
+ *   path itself, so the copy resolves it as Node resolves the original. Each real directory is included once, at the
+ *   first path the walk reaches it by (directories are walked in code-unit order, so the choice is stable): a later
+ *   link to it, or to anything below it or below the folder, becomes a relative `link` entry to that path, so a copy
+ *   resolves it inside itself; a link to a directory that contains an included one is skipped.
  *
- * Below every `node_modules` directory other than the folder's own top-level one, such as a dereferenced sibling
- * package's, links are classified the same way except that a link the scan would dereference stays a `link` entry
- * marked `outside` with its absolute real target: a sibling package included through a link loads its own
- * dependencies from where they are installed.
+ * With `dependencies: 'link'`, the scan an active directory and a plugin too large to copy with its dependencies under
+ * Warn and Off use, a link whose real path lies below a `node_modules` directory is instead a `link` entry marked
+ * `outside` with that absolute real path (its absolute path when it does not resolve), and below every `node_modules`
+ * directory other than the folder's own top-level one a link the scan would dereference is such an entry too.
+ *
+ * One version holds at most {@link CONTENT_ENTRY_LIMIT} files, links and directories and
+ * {@link CONTENT_BYTE_LIMIT} bytes; a scan that reaches either stops with `CONTENT_TOO_LARGE`.
  *
  * A scan reads one moment of a folder only when nothing writes to it; the store ({@link ./store.ts}) checks that by
  * scanning again after it copied.
@@ -33,6 +40,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delo/home'
 import { ChangesError } from './errors.ts'
+import { PACKAGE_NAME_PATTERN } from './paths.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry, type VersionManifest } from './types.ts'
 
 /** A file entry of a content version. */
@@ -57,8 +65,32 @@ export const CACHE_SETTLE_MS = 2000
 /** The size of one read while hashing or copying. */
 const CHUNK_SIZE = 64 * 1024
 
+/**
+ * The most files, links and directories one content version may hold, the installed packages it includes counted. A
+ * folder with more is not copied, so a folder that grows without end cannot fill the store or stall a start.
+ */
+export const CONTENT_ENTRY_LIMIT = 50_000
+
+/** The most bytes the files of one content version may hold, the installed packages it includes counted. */
+export const CONTENT_BYTE_LIMIT = 512 * 1024 * 1024
+
+/** The `package.json` fields whose names a package installed beside it resolves, in the order they are read. */
+const DEPENDENCY_FIELDS = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const
+
+/** The most bytes of an included package's `package.json` read for its dependency names. */
+const MANIFEST_BYTE_LIMIT = 1024 * 1024
+
+/**
+ * How a scan records a link to an installed package outside the directory it walks: `include` copies its files, and
+ * those of the dependencies installed beside it, into the version; `link` keeps a `link` entry to its absolute real
+ * path.
+ */
+export type DependencyMode = 'include' | 'link'
+
 /** What a scan reads. */
 export interface ScanOptions {
+  /** How links to installed packages are recorded; `include` by default. */
+  readonly dependencies?: DependencyMode
   /**
    * The scan cache file, such as `changes/profiles/<profile>/scan-cache.json`. A file whose device, inode, size and
    * modification and status-change times equal the cached ones is not hashed again. A cache that cannot be read is
@@ -82,7 +114,10 @@ export interface ScannedFolder {
   readonly entries: readonly VersionEntry[]
   /** The file entries with the paths they were read from, in the same order. */
   readonly files: readonly ScannedFile[]
-  /** Sockets, FIFOs, devices, link cycles and links that do not resolve, by relative path in code-unit order. */
+  /**
+   * Sockets, FIFOs, devices, names holding a backslash, link cycles and links that do not resolve, by relative path in
+   * code-unit order.
+   */
   readonly skipped: readonly string[]
 }
 
@@ -195,15 +230,43 @@ export function manifestOf(entries: readonly VersionEntry[]): VersionManifest {
 }
 
 /**
- * Whether a link's target is relative and stays inside a directory, outside every `.git` directory.
+ * Whether a link's target is relative and stays inside a directory, outside every `.git` directory, both as written
+ * and where it resolves on disk: a link through another link that leaves the directory is not inside.
  * @param root - the directory's real path.
  * @param linkDirectory - the link's directory below `root`.
  * @param target - the target as written.
  * @returns whether it is inside.
  */
-function linkInside(root: string, linkDirectory: string, target: string): boolean {
-  const resolved = resolve(linkDirectory, target)
-  return !isAbsolute(target) && contains(root, resolved) && !relative(root, resolved).split(sep).includes(EXCLUDED_DIRECTORY)
+async function linkInside(root: string, linkDirectory: string, target: string): Promise<boolean> {
+  if (isAbsolute(target)) return false
+  const within = (path: string): boolean => contains(root, path) && !relative(root, path).split(sep).includes(EXCLUDED_DIRECTORY)
+  return within(resolve(linkDirectory, target)) && within(await physicalPath(spelledTarget(linkDirectory, target)))
+}
+
+/**
+ * A link's target joined to its directory without resolving `..` by the spelling, so the filesystem resolves each
+ * segment where it leads.
+ * @param linkDirectory - the link's directory, absolute.
+ * @param target - the target as written.
+ * @returns the joined path; the target itself when it is absolute.
+ */
+function spelledTarget(linkDirectory: string, target: string): string {
+  return isAbsolute(target) ? target : `${linkDirectory}${sep}${target}`
+}
+
+/**
+ * Where a path is on disk: its real path, or for a path that does not exist, the real path of its nearest existing
+ * directory with the rest appended.
+ * @param path - an absolute path.
+ * @returns the physical path.
+ * @throws the filesystem error other than `ENOENT`, `ENOTDIR` or `ELOOP`.
+ */
+async function physicalPath(path: string): Promise<string> {
+  const real = await realTarget(path)
+  if (real !== undefined) return real
+  const parent = dirname(path)
+  // The filesystem root always resolves, so the walk up ends there.
+  return join(await physicalPath(parent), basename(path))
 }
 
 /**
@@ -290,6 +353,32 @@ interface Walk {
   readonly skipped: string[]
   /** The real path of the folder and of each dereferenced directory, to the relative path its files are under. */
   readonly included: Map<string, string>
+  /** How links to installed packages are recorded. */
+  readonly dependencies: DependencyMode
+  /** The folder scanned, named in a refusal. */
+  readonly folder: string
+  /** The files, links and directories counted so far. */
+  count: number
+  /** The bytes of the files counted so far. */
+  bytes: number
+}
+
+/**
+ * Count one entry of the version, and its bytes, against the limits.
+ * @param walk - the scan.
+ * @param bytes - the bytes it adds; zero for a link or a directory.
+ * @throws {ChangesError} `CONTENT_TOO_LARGE` when the version would pass {@link CONTENT_ENTRY_LIMIT} or
+ *   {@link CONTENT_BYTE_LIMIT}.
+ */
+function admit(walk: Walk, bytes: number): void {
+  walk.count += 1
+  walk.bytes += bytes
+  if (walk.count > CONTENT_ENTRY_LIMIT) {
+    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${CONTENT_ENTRY_LIMIT} files, links and directories, so Delo does not copy it.`)
+  }
+  if (walk.bytes > CONTENT_BYTE_LIMIT) {
+    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${CONTENT_BYTE_LIMIT / (1024 * 1024)} MiB, so Delo does not copy it.`)
+  }
 }
 
 /**
@@ -302,6 +391,7 @@ async function addFile(walk: Walk, source: string, path: string): Promise<void> 
   const { handle, stats } = await openRegularFile(source)
   let entry: FileEntry
   try {
+    admit(walk, stats.size)
     const executable = (stats.mode & 0o100) !== 0
     const cached = walk.cached.get(path)
     if (cached !== undefined && cacheMatches(cached, stats)) {
@@ -365,14 +455,15 @@ function includedPath(walk: Walk, real: string): string | undefined {
  */
 async function addLink(walk: Walk, root: string, directory: string, path: string, dereference: boolean): Promise<void> {
   const target = await readlink(join(directory, basename(path)))
-  if (linkInside(root, directory, target)) {
+  if (await linkInside(root, directory, target)) {
+    admit(walk, 0)
     walk.entries.push({ type: 'link', path, target, outside: false })
     return
   }
-  const resolved = resolve(directory, target)
-  const real = await realTarget(resolved)
-  const known = real ?? resolved
-  if (known.split(sep).includes(DEPENDENCY_DIRECTORY)) {
+  const real = await realTarget(spelledTarget(directory, target))
+  const known = real ?? resolve(directory, target)
+  if (walk.dependencies === 'link' && known.split(sep).includes(DEPENDENCY_DIRECTORY)) {
+    admit(walk, 0)
     walk.entries.push({ type: 'link', path, target: known, outside: true })
     return
   }
@@ -380,6 +471,17 @@ async function addLink(walk: Walk, root: string, directory: string, path: string
     walk.skipped.push(path)
     return
   }
+  await addTarget(walk, real, path, dereference)
+}
+
+/**
+ * Add what a link, or a dependency installed beside an included package, names once its real path is known.
+ * @param walk - the scan.
+ * @param real - the real path it names.
+ * @param path - its relative path in the version.
+ * @param dereference - whether a target this walk would include is dereferenced; when false it stays an outside link.
+ */
+async function addTarget(walk: Walk, real: string, path: string, dereference: boolean): Promise<void> {
   const stats = await stat(real)
   if (!stats.isDirectory() && !stats.isFile()) {
     walk.skipped.push(path)
@@ -388,19 +490,76 @@ async function addLink(walk: Walk, root: string, directory: string, path: string
   const included = includedPath(walk, real)
   if (included !== undefined) {
     const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+    admit(walk, 0)
     walk.entries.push({ type: 'link', path, target: versionRelative(parent, included), outside: false })
     return
   }
   if ([...walk.included.keys()].some((directory) => contains(real, directory))) {
     walk.skipped.push(path)
   } else if (!dereference) {
+    admit(walk, 0)
     walk.entries.push({ type: 'link', path, target: real, outside: true })
   } else if (stats.isDirectory()) {
     walk.included.set(real, path)
     await walkDirectory(walk, real, real, path, false)
+    if (walk.dependencies === 'include') await addInstalledDependencies(walk, real, path)
   } else {
     await addFile(walk, real, path)
   }
+}
+
+/**
+ * Include the dependencies an included package resolves from the `node_modules` directory it is installed in, as pnpm
+ * installs each package's dependencies beside it: each name its `package.json` lists that sits in that directory goes
+ * to `<path>/node_modules/<name>`, unless the package holds that path itself.
+ * @param walk - the scan.
+ * @param real - the package's real path.
+ * @param path - its relative path in the version.
+ */
+async function addInstalledDependencies(walk: Walk, real: string, path: string): Promise<void> {
+  const parent = dirname(real)
+  const installedIn = basename(parent).startsWith('@') ? dirname(parent) : parent
+  if (basename(installedIn) !== DEPENDENCY_DIRECTORY) return
+  for (const name of await dependencyNames(real)) {
+    const at = `${path}/${DEPENDENCY_DIRECTORY}/${name}`
+    if (walk.entries.some((entry) => entry.path === at || entry.path.startsWith(`${at}/`))) continue
+    const dependency = await realTarget(join(installedIn, ...name.split('/')))
+    // A dependency that is not installed beside the package resolves from nowhere in the copy, so it fails to load there.
+    if (dependency !== undefined) await addTarget(walk, dependency, at, true)
+  }
+}
+
+/**
+ * The dependency names a package's `package.json` lists.
+ * @param directory - the package's directory.
+ * @returns the valid package names of {@link DEPENDENCY_FIELDS}, without the package's own, sorted in code-unit order;
+ *   empty when it has no readable manifest.
+ */
+async function dependencyNames(directory: string): Promise<readonly string[]> {
+  let manifest: unknown
+  try {
+    const { handle, stats } = await openRegularFile(join(directory, 'package.json'))
+    try {
+      if (stats.size > MANIFEST_BYTE_LIMIT) return []
+      manifest = JSON.parse(await handle.readFile('utf8'))
+    } finally {
+      await handle.close()
+    }
+  } catch {
+    // ENOENT, a link or another kind of file, or text that is not JSON: the package names no dependency Delo can include.
+    return []
+  }
+  if (typeof manifest !== 'object' || manifest === null) return []
+  const fields = manifest as Record<string, unknown>
+  const names = new Set<string>()
+  for (const field of DEPENDENCY_FIELDS) {
+    const listed = fields[field]
+    if (typeof listed !== 'object' || listed === null) continue
+    for (const name of Object.keys(listed)) {
+      if (name !== fields.name && PACKAGE_NAME_PATTERN.test(name)) names.add(name)
+    }
+  }
+  return [...names].sort(compareCodeUnits)
 }
 
 /**
@@ -413,16 +572,20 @@ async function addLink(walk: Walk, root: string, directory: string, path: string
  * top-level one, where links are not dereferenced.
  */
 async function walkDirectory(walk: Walk, root: string, absolute: string, directory: string, dependencies: boolean): Promise<void> {
+  admit(walk, 0)
   const dirents = (await readdir(absolute, { withFileTypes: true })).sort((a, b) => compareCodeUnits(a.name, b.name))
   for (const dirent of dirents) {
     const path = directory === '' ? dirent.name : `${directory}/${dirent.name}`
-    if (dirent.isDirectory()) {
+    if (dirent.name.includes('\\')) {
+      // A version path is `/`-separated and cannot hold a backslash, so a file named with one is not content.
+      walk.skipped.push(path)
+    } else if (dirent.isDirectory()) {
       const nested = dependencies || (dirent.name === DEPENDENCY_DIRECTORY && directory !== '')
       if (dirent.name !== EXCLUDED_DIRECTORY) await walkDirectory(walk, root, join(absolute, dirent.name), path, nested)
     } else if (dirent.isFile()) {
       await addFile(walk, join(absolute, dirent.name), path)
     } else if (dirent.isSymbolicLink()) {
-      await addLink(walk, root, absolute, path, !dependencies)
+      await addLink(walk, root, absolute, path, walk.dependencies === 'include' || !dependencies)
     } else {
       walk.skipped.push(path)
     }
@@ -434,7 +597,8 @@ async function walkDirectory(walk: Walk, root: string, absolute: string, directo
  * @param folder - the folder; its real path is what links are judged against.
  * @param options - the scan cache and the clock.
  * @returns the entries, the files with where they were read, and the skipped paths, each sorted by path.
- * @throws {ChangesError} `CHANGED_WHILE_READING` when a file is replaced by a link or another kind while it is read.
+ * @throws {ChangesError} `CHANGED_WHILE_READING` when a file is replaced by a link or another kind while it is read;
+ *   `CONTENT_TOO_LARGE` when the version would pass {@link CONTENT_ENTRY_LIMIT} or {@link CONTENT_BYTE_LIMIT}.
  * @throws the filesystem error, such as `ENOENT`, when the folder cannot be read.
  */
 export async function scanFolder(folder: string, options: ScanOptions = {}): Promise<ScannedFolder> {
@@ -448,6 +612,10 @@ export async function scanFolder(folder: string, options: ScanOptions = {}): Pro
     files: [],
     skipped: [],
     included: new Map([[root, '']]),
+    dependencies: options.dependencies ?? 'include',
+    folder,
+    count: 0,
+    bytes: 0,
   }
   await walkDirectory(walk, root, root, '', false)
   if (options.cache !== undefined) {

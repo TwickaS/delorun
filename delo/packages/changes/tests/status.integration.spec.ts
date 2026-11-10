@@ -43,9 +43,20 @@ describe('changesStatus', () => {
       pending: [],
       unapproved: [],
       invariants: [],
+      unshownAtUpgrade: [],
       plugins: [{ plugin: 'plug', source, approved, active: { version: approved, kind: 'approved' }, lastApplied: { id: upgrade.id, summary: upgrade.summary, at: NOW.toISOString() } }],
     })
     expect(notApprovedCount(report)).toBe(0)
+  })
+
+  it('names the plugins approved at upgrade until a terminal showed them', async () => {
+    const { fx, source } = await migrated()
+    const log = await readChangeLog(fx.home, PROFILE)
+    const upgrade = log.entries[0]!
+    const { shownAt: _shownAt, ...unshown } = upgrade
+    const sourceless: ChangeEntry = { ...unshown, id: brandString<ChangeId>('c1111111111'), subject: { plugin: 'other' } }
+    await writeChangeLog(fx.home, PROFILE, { ...log, entries: [unshown, sourceless] })
+    expect((await status(fx)).unshownAtUpgrade).toEqual([{ plugin: 'plug', source }])
   })
 
   it('names a folder edited since the last start without an id, and writes nothing into the store', async () => {
@@ -94,7 +105,7 @@ describe('changesStatus', () => {
 
   it('reports the open work session', async () => {
     const { fx, source, approved } = await migrated()
-    const session = await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved }, terminal())
+    const session = await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
     expect((await status(fx)).workSession).toEqual({ plugin: 'plug', source, startedAt: session.startedAt })
   })
 
@@ -170,8 +181,8 @@ describe('workSessionFact', () => {
   it('gives the open session for the badge, with the last failed reload of its plugin', async () => {
     const { fx, source, approved } = await migrated()
     expect(await workSessionFact(fx.home, PROFILE)).toBeUndefined()
-    const session = await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved }, terminal())
-    expect(await workSessionFact(fx.home, PROFILE)).toEqual({ plugin: 'plug', source, startedAt: session.startedAt })
+    const session = await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
+    expect(await workSessionFact(fx.home, PROFILE)).toEqual({ plugin: 'plug', source, startedAt: session.startedAt, endsAt: session.endsAt })
     await writeWorkFailure(fx.home, PROFILE, { plugin: 'other', at: NOW.toISOString(), error: 'other threw' })
     expect((await workSessionFact(fx.home, PROFILE))?.lastError).toBeUndefined()
     await writeWorkFailure(fx.home, PROFILE, { plugin: 'plug', at: NOW.toISOString(), error: 'plug threw' })

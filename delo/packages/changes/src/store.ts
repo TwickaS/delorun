@@ -11,21 +11,48 @@ import { createHash, randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
 import { lstat, mkdir, open, rename, rm, rmdir, symlink, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { PRIVATE_DIR_MODE, PROTECTED_FILE_MODE } from '@delo/contract-home-layout'
 import { HomeLayoutError, readProtectedFile, writeProtectedFile } from '@delo/home'
 import { ChangesError } from './errors.ts'
-import { objectsDirectory, versionsDirectory } from './paths.ts'
-import { compareCodeUnits, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf } from './tree.ts'
+import { CHANGES_ENTRIES, changesDirectory, objectsDirectory, versionsDirectory } from './paths.ts'
+import { compareCodeUnits, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf, type DependencyMode, type ScanOptions } from './tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry, type VersionManifest } from './types.ts'
 
 /** The mode of an active file whose owner execute bit is set. */
 const EXECUTABLE_FILE_MODE = 0o700
 
+/**
+ * How an active directory is scanned: its links are recorded as Delo wrote them, so a version that keeps installed
+ * packages as outside links (one stored with `dependencies: 'link'`) reads back as itself.
+ */
+const ACTIVE_SCAN: ScanOptions = { dependencies: 'link' }
+
+/** How long storing a folder waits for the store's lock, which a collection or another store holds. */
+export const STORE_LOCK_WAIT_MS = 120_000
+
+/**
+ * Hold the store's lock, `changes/store.lock`, around one operation: storing a folder holds it from its first copied
+ * object to its version file, and collection ([collect](./collect.ts)) holds it while it removes files, so collection
+ * never removes an object a version being written names.
+ * @param home - the Delo home.
+ * @param operation - what runs under the lock.
+ * @param waitMs - how long to wait for it; {@link STORE_LOCK_WAIT_MS} by default.
+ * @returns what the operation returned.
+ * @throws the lock's timeout when another process holds it longer.
+ */
+export async function withStoreLock<T>(home: string, operation: () => Promise<T>, waitMs: number = STORE_LOCK_WAIT_MS): Promise<T> {
+  await mkdir(changesDirectory(home), { recursive: true, mode: PRIVATE_DIR_MODE })
+  return withFileLock(join(changesDirectory(home), CHANGES_ENTRIES.store), operation, { waitMs })
+}
+
 /** How {@link storeFolder} reads the folder. */
 export interface StoreOptions {
   /** The scan cache file, such as `changes/profiles/<profile>/scan-cache.json`; see the scan's `cache` option. */
   readonly scanCache?: string
+  /** How links to installed packages are recorded; see the scan's `dependencies` option. `include` by default. */
+  readonly dependencies?: DependencyMode
   /** Called after each file's bytes were copied into the store, with its relative path. A test hook. */
   readonly onCopied?: (path: string) => Promise<void> | void
 }
@@ -80,21 +107,36 @@ async function copyHashing(source: FileHandle, path: string, mode: number, expec
 }
 
 /**
- * Store a folder's current content: copy each file into `objects/` unless the store holds its digest, then write the
- * version file.
+ * Store a folder's current content under the store's lock: copy each file into `objects/` unless the store holds its
+ * digest, then write the version file.
  * @param home - the Delo home.
  * @param folder - the plugin folder.
  * @param options - the scan cache and the test hook.
  * @returns the version, its manifest and the skipped paths.
  * @throws {ChangesError} `CHANGED_WHILE_READING` when a file's bytes while copying differ from the scan, or the folder's
- * version after copying differs from before.
+ * version after copying differs from before; `CONTENT_TOO_LARGE` when the folder passes a content limit of the scan.
+ * @throws the store lock's timeout when another process holds it longer than {@link STORE_LOCK_WAIT_MS}.
  */
 export async function storeFolder(home: string, folder: string, options: StoreOptions = {}): Promise<StoredFolder> {
   const objects = objectsDirectory(home)
   const versions = versionsDirectory(home)
   await mkdir(objects, { recursive: true, mode: PRIVATE_DIR_MODE })
   await mkdir(versions, { recursive: true, mode: PRIVATE_DIR_MODE })
-  const scanOptions = options.scanCache === undefined ? {} : { cache: options.scanCache }
+  const scanOptions = { ...options.scanCache === undefined ? {} : { cache: options.scanCache }, ...options.dependencies === undefined ? {} : { dependencies: options.dependencies } }
+  return withStoreLock(home, () => storeScanned(home, folder, scanOptions, options.onCopied))
+}
+
+/**
+ * Copy a folder's files into the store and write its version file; the caller holds the store's lock.
+ * @param home - the Delo home.
+ * @param folder - the plugin folder.
+ * @param scanOptions - how the folder is scanned.
+ * @param onCopied - the test hook of {@link StoreOptions}.
+ * @returns the version, its manifest and the skipped paths.
+ */
+async function storeScanned(home: string, folder: string, scanOptions: ScanOptions, onCopied: StoreOptions['onCopied']): Promise<StoredFolder> {
+  const objects = objectsDirectory(home)
+  const versions = versionsDirectory(home)
   const scanned = await scanFolder(folder, scanOptions)
   for (const { entry, source } of scanned.files) {
     if (await objectExists(join(objects, entry.digest))) continue
@@ -106,7 +148,7 @@ export async function storeFolder(home: string, folder: string, options: StoreOp
       await handle.close()
     }
     if (!copied) throw new ChangesError('CHANGED_WHILE_READING', source, `${source} changed while it was copied into the store`)
-    await options.onCopied?.(entry.path)
+    await onCopied?.(entry.path)
   }
   const version = versionOf(scanned.entries)
   const again = await scanFolder(folder, scanOptions)
@@ -114,6 +156,19 @@ export async function storeFolder(home: string, folder: string, options: StoreOp
   const manifest = manifestOf(scanned.entries)
   await writeProtectedFile(join(versions, `${version}.json`), `${JSON.stringify(manifest, null, 2)}\n`)
   return { version, manifest, skipped: scanned.skipped }
+}
+
+/**
+ * Write the version file of empty content, which a change waiting for review names when its folder could not be read.
+ * @param home - the Delo home.
+ * @returns the empty version.
+ */
+export async function storeEmptyVersion(home: string): Promise<ContentVersion> {
+  const versions = versionsDirectory(home)
+  await mkdir(versions, { recursive: true, mode: PRIVATE_DIR_MODE })
+  const version = versionOf([])
+  await writeProtectedFile(join(versions, `${version}.json`), `${JSON.stringify(manifestOf([]), null, 2)}\n`)
+  return version
 }
 
 /**
@@ -334,7 +389,7 @@ export async function materialize(home: string, version: ContentVersion, target:
   let current: readonly VersionEntry[]
   let strays: readonly string[] = []
   if (previous === undefined) {
-    const scanned = await scanFolder(target)
+    const scanned = await scanFolder(target, ACTIVE_SCAN)
     current = scanned.entries
     strays = scanned.skipped
   } else {
@@ -363,7 +418,7 @@ export async function materialize(home: string, version: ContentVersion, target:
  */
 export async function holdsVersion(target: string, version: ContentVersion): Promise<boolean> {
   try {
-    return versionOf((await scanFolder(target)).entries) === version
+    return versionOf((await scanFolder(target, ACTIVE_SCAN)).entries) === version
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
     throw error

@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { changeId } from '../src/ids.ts'
@@ -59,5 +59,21 @@ describe('pluginChange', () => {
   it('refuses an approved version the store does not hold', async () => {
     const { home, folder } = setUp({ 'index.js': 'one\n' })
     await rejection(pluginChange(home, { plugin: 'plugin', source: folder, approved: '0'.repeat(64) as string as ContentVersion }), 'STORE_CORRUPT')
+  })
+})
+
+describe('content a diff does not show', () => {
+  it('a .js file with one invalid byte, a file above the limit and a dependency inside the folder each need the second confirmation', async () => {
+    const { home, folder } = setUp({ 'index.js': 'export default 1\n' })
+    const approved = (await storeFolder(home, folder)).version
+    writeFiles(folder, { 'index.js': 'export default 2\n', 'node_modules/dep/index.js': 'module.exports = 1\n' })
+    writeFileSync(join(folder, 'loader.js'), Buffer.concat([Buffer.from('require("node:child_process").exec("x") // '), Buffer.from([0xff]), Buffer.from('\n')]))
+    writeFileSync(join(folder, 'large.js'), `${'// filler\n'.repeat(120_000)}`)
+    const change = await pluginChange(home, { plugin: 'plugin', source: folder, approved })
+    expect(change!.diff.text).not.toContain('child_process')
+    expect(change!.risk.kinds).toContain('not-shown')
+    expect(change!.risk.kinds).not.toContain('commands')
+    expect(change!.risk.needsSecondConfirmation).toBe(true)
+    expect(change!.risk.findings.filter(finding => finding.kind === 'not-shown').map(finding => finding.file)).toEqual(['large.js', 'loader.js', 'node_modules/dep'])
   })
 })

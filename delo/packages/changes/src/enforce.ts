@@ -13,23 +13,27 @@
  * itself carries for the package name is left alone too, because a source checkout runs the whole harness, upstream
  * packages included, from the checkout, so copying Delo's bundles would not stop edits to the code the Host runs. A
  * link to anything but a directory, `file:` specs and registry plugins are left alone as well; every other folder is a
- * linked plugin. The first start under Changes (its change log has no `migratedAt`) approves every linked plugin as it is, so
+ * linked plugin. The first start under Changes of a profile the home held when Changes first ran (`migratesAtUpgrade`) approves every linked plugin as it is, so
  * nobody's working harness changes what it runs; a plugin linked from a folder at any later start waits for review. Every
  * profile write happens under upstream's profile write lock, and a start that changed the profile's files records one
  * profile history version.
  *
  * @module @delo/changes/enforce
  */
-import { mkdir, rm, stat } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { mkdir, readFile, rm, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { openHistory } from '@delo/profile-safety'
+import { collectStore } from './collect.ts'
+import { ChangesError, isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
+import { checkLoadedContent } from './invariants.ts'
 import { pointLinkAt, readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
-import { approvedOf, findEntry, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
-import { holdsVersion, materialize, storeFolder } from './store.ts'
+import { approvedOf, findEntry, migratesAtUpgrade, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
+import { holdsVersion, materialize, storeEmptyVersion, storeFolder } from './store.ts'
 import { versionOf } from './tree.ts'
 import { ACTIVE_RECORD_SCHEMA, type ActiveContent, type ApprovedRecord, type ChangeEntry, type ChangeId, type ChangeLog, type ContentVersion, type ProtectionLevel } from './types.ts'
 
@@ -76,7 +80,7 @@ export interface PendingAtStart {
 /** What a start tells the person about the plugins it loads from folders. */
 export interface StartChanges {
   readonly protection: ProtectionLevel
-  /** Plugins approved at the upgrade that no start has named yet; this start marks them as named. */
+  /** Plugins approved at the upgrade that no terminal has shown yet; `markShownAtUpgrade` records it once one did. */
   readonly approvedAtUpgrade: readonly ApprovedAtUpgrade[]
   /** Under `block`, the changes this start leaves out. */
   readonly pending: readonly PendingAtStart[]
@@ -86,6 +90,23 @@ export interface StartChanges {
   readonly workSession?: { readonly plugin: string }
   /** The profile history version this start recorded, when it changed the profile's files. */
   readonly historyVersion?: string
+  /**
+   * Plugins whose folder could not be read as one content version, or whose approved content the store no longer
+   * holds: each loads its approved content, or nothing.
+   */
+  readonly failed?: readonly PluginFailure[]
+  /**
+   * Under `warn`, plugins too large to copy with their installed packages, which load those packages from where they
+   * are installed; `underHome` when one of them is below the person's home folder, where a confined command can write.
+   */
+  readonly linkedDependencies?: readonly { readonly plugin: string, readonly underHome: boolean }[]
+}
+
+/** A plugin whose content a start or reload could not read, and why. */
+export interface PluginFailure {
+  readonly plugin: string
+  /** What the person reads. */
+  readonly detail: string
 }
 
 /** The content version of an empty directory: what the active directory of a plugin with nothing to load holds. */
@@ -99,134 +120,300 @@ interface ManagedPlugin {
 }
 
 /**
- * Bring the profile's linked plugins under Changes and make each active directory hold the content this start loads.
- * Takes the profile write lock itself.
+ * Bring the profile's linked plugins under Changes and make each active directory hold the content this start loads,
+ * then check that what the profile names is what Changes keeps ({@link checkLoadedContent}) and collect the store
+ * ([collect](./collect.ts)). Takes the profile write lock itself. A folder that cannot be read as one content version
+ * (it changes while it is read, it passes a content limit, or the filesystem refuses it) leaves the plugin's approved
+ * content loading, or nothing for a plugin with none, and is reported in {@link StartChanges.failed}; so does approved
+ * content the store no longer holds.
  * @param request - the home, the profile, its directory, the clock and the lock wait.
  * @returns what the start prints ({@link startNotice}).
- * @throws {ChangesError} when a record of Changes or the profile's manifest is not one Delo wrote, the store is
- *   corrupt, or a folder changed while it was read.
+ * @throws {ChangesError} when a record of Changes or the profile's manifest is not one Delo wrote, or `LOAD_REFUSED`
+ *   when what the profile names afterwards is not what Changes keeps.
  * @throws {HistoryUnavailableError} when the profile changed and its history cannot record the change, so the start
  *   must not go on.
  */
 export async function enforceApprovedContent(request: EnforceRequest): Promise<StartChanges> {
-  const { home, profile, profileDir } = request
+  const { home, profileDir } = request
   const at = (request.now ?? (() => new Date()))().toISOString()
   return withFileLock(join(profileDir, 'package.json'), async () => {
-    const protection = await readProtection(home)
-    const workSession = await readWorkSession(home, profile)
-    const scanCache = join(profileChangesDirectory(home, profile), CHANGES_ENTRIES.scanCache)
-    const firstLog = await readChangeLog(home, profile)
-    const migrating = firstLog.migratedAt === undefined
-    let log = firstLog
-    let approved = await readApproved(profileDir)
-    const managed: ManagedPlugin[] = []
-    const moved: { readonly plugin: string, readonly source: string }[] = []
-    const upgraded: string[] = []
-    const awaiting: string[] = []
-    for (const link of await readLinks(profileDir)) {
-      const active = activeDirectory(home, profile, link.name)
-      if (resolve(link.target) === resolve(active)) {
-        managed.push({ plugin: link.name, source: approvedOf(approved, link.name)?.source ?? pendingInstallSource(log, link.name) })
-        continue
-      }
-      if (isHarnessLink(request, link.name, link.target) || !await namesDirectory(link.target)) continue
-      const { version } = await storeFolder(home, link.target, { scanCache })
-      const subject = { plugin: link.name, source: link.target }
-      if (migrating) {
-        approved = withApproval(approved, link.name, { source: link.target, version, approvedAt: at, approvedAtUpgrade: true })
-        log = withNewEntry(log, {
-          id: changeId('plugin-install', subject, undefined, version),
-          kind: 'plugin-install',
-          state: 'applied',
-          subject,
-          to: version,
-          summary: `Approved at upgrade: ${link.name} from ${link.target}`,
-          createdAt: at,
-          decidedAt: at,
-          decidedFrom: 'upgrade',
-        })
-        upgraded.push(link.name)
-      } else if (approvedOf(approved, link.name)?.source !== link.target) {
-        // A link back to the approved plugin's own folder, as an undo past the upgrade brings back, is moved silently.
-        log = withNewEntry(log, {
-          id: changeId('plugin-install', subject, undefined, version),
-          kind: 'plugin-install',
-          state: 'pending',
-          subject,
-          to: version,
-          summary: `${link.name} from ${link.target} waits for your review`,
-          createdAt: at,
-        })
-        awaiting.push(link.name)
-      }
-      moved.push({ plugin: link.name, source: link.target })
-      managed.push({ plugin: link.name, source: link.target })
+    const changes = await bringUnderChanges(request, at, 'start')
+    await refuseUnkept(request)
+    try {
+      await collectStore({ home, profileDirectory: (name) => join(dirname(profileDir), name) })
+    } catch (error) {
+      // A filesystem error removing a store file: collection only frees space and changes nothing that loads, so the
+      // files stay for the next start.
+      void error
     }
+    return changes
+  }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
+}
 
-    // The log names every new source before the profile's specs stop naming it; `migratedAt` is set only at the end,
-    // so a start interrupted in between migrates the remaining links at the next start.
-    if (log !== firstLog) await writeChangeLog(home, profile, log)
-    if (upgraded.length > 0) await writeApproved(profileDir, approved)
-    for (const { plugin } of moved) await pointLinkAt(profileDir, plugin, activeDirectory(home, profile, plugin))
+/** How long the check before a reload waits for the profile write lock before it only verifies. */
+export const RELOAD_LOCK_WAIT_MS = 2_000
 
-    const pending: PendingAtStart[] = []
-    const unapproved: { readonly plugin: string }[] = []
-    const activeBefore = await readActiveRecord(home, profile)
-    const activePlugins: Record<string, ActiveContent> = {}
-    for (const { plugin, source } of managed) {
-      const approvedVersion = approvedOf(approved, plugin)?.version
-      // A folder that is gone leaves the approved content, and nothing to review.
-      const folder = source === undefined || !await namesDirectory(source) ? undefined : { source, version: (await storeFolder(home, source, { scanCache })).version }
-      let content: ActiveContent | undefined
-      if (workSession?.plugin === plugin && folder !== undefined) {
-        content = { version: folder.version, kind: 'work-session' }
-      } else if (protection === 'block' || folder === undefined) {
-        content = approvedVersion === undefined ? undefined : { version: approvedVersion, kind: 'approved' }
-        if (protection === 'block' && folder !== undefined && folder.version !== approvedVersion) {
-          const kind = approvedVersion === undefined ? 'plugin-install' : 'plugin-edit'
-          pending.push({ id: changeId(kind, { plugin, source: folder.source }, approvedVersion, folder.version), plugin, kind })
-        }
-      } else {
-        content = { version: folder.version, kind: folder.version === approvedVersion ? 'approved' : 'unapproved' }
-        if (content.kind === 'unapproved' && protection === 'warn') unapproved.push({ plugin })
+/**
+ * The check the running Host makes before every recomposition of the profile (upstream's hot reload calls it through
+ * `@delo/plugin-changes`): a `link:` dependency that names a folder, as upstream's restore, undo and
+ * `delorun plugin add link:<folder>` write, is moved to the plugin's active directory as a start moves it, without
+ * approving anything (a reload never migrates); the active directory of a plugin moved now is made to hold what a start
+ * would load. Then every link and active directory is checked against what Changes keeps ({@link checkLoadedContent}),
+ * and a mismatch refuses the reload. Active directories of plugins already under Changes are never rewritten here: one
+ * that differs refuses the reload.
+ *
+ * The profile write lock decides what may be written. When this process holds it, upstream's plugin management is
+ * changing the profile and called the reload inside its lock, so the check writes without taking it. When no process
+ * holds it, the check takes it for at most {@link RELOAD_LOCK_WAIT_MS}. When another process holds it, such as
+ * `delorun changes`, which waits for the reload's answer under it, or a `pnpm` run, the check writes nothing and only
+ * verifies, so a link to a folder refuses the reload until the holder is done.
+ * @param request - the home, the profile, its directory, the clock and the harness's own links.
+ * @returns what was moved, as a start reports it; no plugin is named as approved at upgrade.
+ * @throws {ChangesError} `LOAD_REFUSED` when a link or an active directory is not what Changes keeps, and the failures
+ *   of a start's writes.
+ */
+export async function prepareReload(request: EnforceRequest): Promise<StartChanges> {
+  const at = (request.now ?? (() => new Date()))().toISOString()
+  const pass = async (): Promise<StartChanges> => {
+    const changes = await bringUnderChanges(request, at, 'reload')
+    await refuseUnkept(request)
+    return changes
+  }
+  const holder = await profileLockHolder(request.profileDir)
+  if (holder === 'this-process') return pass()
+  if (holder === 'none') {
+    const signal = AbortSignal.timeout(request.lockWaitMs ?? RELOAD_LOCK_WAIT_MS)
+    let started = false
+    try {
+      return await withFileLock(join(request.profileDir, 'package.json'), () => {
+        started = true
+        return pass()
+      }, { signal, waitMs: Number.MAX_SAFE_INTEGER })
+    } catch (error) {
+      if (started || !signal.aborted) throw error
+      // Another process took the lock first and holds it: verify only, as below.
+    }
+  }
+  await refuseUnkept(request)
+  return { protection: await readProtection(request.home), approvedAtUpgrade: [], pending: [], unapproved: [] }
+}
+
+/**
+ * Who holds the profile write lock, from the process id upstream's lock file records.
+ * @param profileDir - the profile directory.
+ * @returns `none` without a lock file, `this-process` when it names this process, and `other` otherwise.
+ */
+async function profileLockHolder(profileDir: string): Promise<'none' | 'this-process' | 'other'> {
+  let text: string
+  try {
+    text = await readFile(join(profileDir, 'package.json.lock'), 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'none'
+    throw error
+  }
+  return text.trim() === String(process.pid) ? 'this-process' : 'other'
+}
+
+/**
+ * Refuse a profile whose links or active directories are not what Changes keeps.
+ * @param request - the home, the profile, its directory and the harness's own links.
+ * @throws {ChangesError} `LOAD_REFUSED` naming every one that is not.
+ */
+async function refuseUnkept(request: EnforceRequest): Promise<void> {
+  const broken = await checkLoadedContent(request)
+  if (broken.length === 0) return
+  throw new ChangesError('LOAD_REFUSED', request.profile, `Delo did not load the profile ${request.profile}, because what it would load is not what you approved: ${broken.join(' ')}`)
+}
+
+/**
+ * @param error - what storing a folder threw.
+ * @returns what the person reads about it.
+ */
+function failureDetail(error: unknown): string {
+  return isChangesError(error) ? error.detail : String(error)
+}
+
+/** A folder stored at this pass, or why it could not be. */
+type FolderContent =
+  | { readonly kind: 'stored', readonly version: ContentVersion, readonly linkedDependencies?: { readonly underHome: boolean } }
+  | { readonly kind: 'unreadable', readonly detail: string }
+
+/**
+ * Store a plugin folder's content, as the protection level allows it: under `warn` and `off` a folder too large to
+ * copy with its installed packages is stored with those packages kept as links to where they are installed.
+ * @param home - the Delo home.
+ * @param source - the folder.
+ * @param scanCache - the scan cache file.
+ * @param protection - the protection level.
+ * @returns the stored version, or why the folder could not be read: it changed while it was read, it passes a content
+ *   limit, or the filesystem or the store refused it. Such a folder never stops a start or a reload.
+ */
+async function storeContent(home: string, source: string, scanCache: string, protection: ProtectionLevel): Promise<FolderContent> {
+  try {
+    return { kind: 'stored', version: (await storeFolder(home, source, { scanCache })).version }
+  } catch (error) {
+    if (protection === 'block' || !isChangesError(error) || error.code !== 'CONTENT_TOO_LARGE') return { kind: 'unreadable', detail: failureDetail(error) }
+  }
+  try {
+    const { manifest, version } = await storeFolder(home, source, { scanCache, dependencies: 'link' })
+    const outside = manifest.entries.flatMap((entry) => entry.type === 'link' && entry.outside ? [entry.target] : [])
+    const osHome = homedir()
+    return { kind: 'stored', version, linkedDependencies: { underHome: outside.some((target) => isInside(osHome, target)) } }
+  } catch (error) {
+    return { kind: 'unreadable', detail: failureDetail(error) }
+  }
+}
+
+/**
+ * One pass over the profile's links under the profile write lock, which the caller holds. A start brings every linked
+ * plugin under Changes, decides each active directory's content and records a history version; a reload only moves
+ * links that name a folder, decides the content of the plugins it moved, and approves nothing.
+ * @param request - the home, the profile, its directory and the harness's own links.
+ * @param at - the time of the records, ISO 8601.
+ * @param pass - `start` or `reload`.
+ * @returns what the pass reports.
+ */
+async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'start' | 'reload'): Promise<StartChanges> {
+  const { home, profile, profileDir } = request
+  const protection = await readProtection(home)
+  const workSession = await readWorkSession(home, profile)
+  const scanCache = join(profileChangesDirectory(home, profile), CHANGES_ENTRIES.scanCache)
+  const firstLog = await readChangeLog(home, profile)
+  const migrating = pass === 'start' && await migratesAtUpgrade(home, profile, profileDir, firstLog, at)
+  let log = firstLog
+  let approved = await readApproved(profileDir)
+  const managed: ManagedPlugin[] = []
+  const moved: { readonly plugin: string, readonly source: string }[] = []
+  const upgraded: string[] = []
+  const awaiting: string[] = []
+  const failed: PluginFailure[] = []
+  const stored = new Map<string, FolderContent>()
+  for (const link of await readLinks(profileDir)) {
+    const active = activeDirectory(home, profile, link.name)
+    if (resolve(link.target) === resolve(active)) {
+      if (pass === 'start') managed.push({ plugin: link.name, source: approvedOf(approved, link.name)?.source ?? pendingInstallSource(log, link.name) })
+      continue
+    }
+    if (isHarnessLink(request, link.name, link.target) || !await namesDirectory(link.target)) continue
+    const content = await storeContent(home, link.target, scanCache, protection)
+    stored.set(link.name, content)
+    const subject = { plugin: link.name, source: link.target }
+    // A folder that cannot be read waits for review with no content, so the next start reads it again.
+    const version = content.kind === 'stored' ? content.version : EMPTY_CONTENT_VERSION
+    if (migrating && content.kind === 'stored') {
+      approved = withApproval(approved, link.name, { source: link.target, version, approvedAt: at, approvedAtUpgrade: true })
+      log = withNewEntry(log, {
+        id: changeId('plugin-install', subject, undefined, version),
+        kind: 'plugin-install',
+        state: 'applied',
+        subject,
+        to: version,
+        summary: `Approved at upgrade: ${link.name} from ${link.target}`,
+        createdAt: at,
+        decidedAt: at,
+        decidedFrom: 'upgrade',
+      })
+      upgraded.push(link.name)
+    } else if (approvedOf(approved, link.name)?.source !== link.target) {
+      // A link back to the approved plugin's own folder, as an undo past the upgrade brings back, is moved silently.
+      if (content.kind === 'unreadable') await storeEmptyVersion(home)
+      log = withNewEntry(log, {
+        id: changeId('plugin-install', subject, undefined, version),
+        kind: 'plugin-install',
+        state: 'pending',
+        subject,
+        to: version,
+        summary: `${link.name} from ${link.target} waits for your review`,
+        createdAt: at,
+      })
+      awaiting.push(link.name)
+    }
+    moved.push({ plugin: link.name, source: link.target })
+    managed.push({ plugin: link.name, source: link.target })
+  }
+
+  // The log names every new source before the profile's specs stop naming it; `migratedAt` is set only at the end,
+  // so a start interrupted in between migrates the remaining links at the next start.
+  if (log !== firstLog) await writeChangeLog(home, profile, log)
+  if (upgraded.length > 0) await writeApproved(profileDir, approved)
+  for (const { plugin } of moved) await pointLinkAt(profileDir, plugin, activeDirectory(home, profile, plugin))
+
+  const pending: PendingAtStart[] = []
+  const unapproved: { readonly plugin: string }[] = []
+  const linkedDependencies: { readonly plugin: string, readonly underHome: boolean }[] = []
+  const activeBefore = await readActiveRecord(home, profile)
+  // A reload decides only the plugins it moved; every other active directory keeps what the record says it holds.
+  const activePlugins: Record<string, ActiveContent> = pass === 'start' ? {} : { ...activeBefore.plugins }
+  for (const { plugin, source } of managed) {
+    const approvedVersion = approvedOf(approved, plugin)?.version
+    // A folder that is gone leaves the approved content, and nothing to review.
+    const content = source === undefined || !await namesDirectory(source) ? undefined : stored.get(plugin) ?? await storeContent(home, source, scanCache, protection)
+    if (content?.kind === 'unreadable') failed.push({ plugin, detail: content.detail })
+    const folder = content?.kind === 'stored' ? { source: source!, version: content.version } : undefined
+    let active: ActiveContent | undefined
+    if (workSession?.plugin === plugin && folder !== undefined) {
+      active = { version: folder.version, kind: 'work-session' }
+    } else if (protection === 'block' || folder === undefined) {
+      active = approvedVersion === undefined ? undefined : { version: approvedVersion, kind: 'approved' }
+      if (protection === 'block' && folder !== undefined && folder.version !== approvedVersion) {
+        const kind = approvedVersion === undefined ? 'plugin-install' : 'plugin-edit'
+        pending.push({ id: changeId(kind, { plugin, source: folder.source }, approvedVersion, folder.version), plugin, kind })
       }
-      await holdContent(home, activeDirectory(home, profile, plugin), content?.version)
-      if (content !== undefined) activePlugins[plugin] = content
+    } else {
+      active = { version: folder.version, kind: folder.version === approvedVersion ? 'approved' : 'unapproved' }
+      if (active.kind === 'unapproved' && protection === 'warn') unapproved.push({ plugin })
+      if (content?.kind === 'stored' && content.linkedDependencies !== undefined && protection === 'warn') linkedDependencies.push({ plugin, underHome: content.linkedDependencies.underHome })
     }
-    if (JSON.stringify(activePlugins) !== JSON.stringify(activeBefore.plugins)) {
-      await writeActiveRecord(home, profile, { schema: ACTIVE_RECORD_SCHEMA, plugins: activePlugins })
+    try {
+      await holdContent(home, activeDirectory(home, profile, plugin), active?.version)
+    } catch (error) {
+      if (!isChangesError(error) || error.code !== 'STORE_CORRUPT') throw error
+      // Content the store no longer holds, such as a version a restored history version names after collection
+      // removed it: the plugin loads nothing until the person applies a change again.
+      failed.push({ plugin, detail: error.detail })
+      await holdContent(home, activeDirectory(home, profile, plugin), undefined)
+      active = undefined
     }
+    if (active === undefined) delete activePlugins[plugin]
+    else activePlugins[plugin] = active
+  }
+  if (JSON.stringify(activePlugins) !== JSON.stringify(activeBefore.plugins)) {
+    await writeActiveRecord(home, profile, { schema: ACTIVE_RECORD_SCHEMA, plugins: activePlugins })
+  }
 
+  let historyVersion: string | undefined
+  if (pass === 'start') {
     // An approval at upgrade without a history version, which an earlier start could not record, is recorded now.
     const unrecorded = log.entries.flatMap(entry => entry.decidedFrom === 'upgrade' && entry.historyVersion === undefined && entry.subject.plugin !== undefined ? [entry.subject.plugin] : [])
     const summary = historySummary(unrecorded, awaiting, moved.map(({ plugin }) => plugin))
-    const historyVersion = summary === undefined ? undefined : await openHistory({ profileDir }).record(summary, { kind: 'person' })
+    historyVersion = summary === undefined ? undefined : await openHistory({ profileDir }).record(summary, { kind: 'person' })
+  }
 
-    const shown: ApprovedAtUpgrade[] = []
-    const entries = log.entries.map((entry): ChangeEntry => {
-      let next = entry
-      if (historyVersion !== undefined && entry.decidedFrom === 'upgrade' && entry.historyVersion === undefined) {
-        next = { ...next, historyVersion }
-      }
-      if (entry.decidedFrom === 'upgrade' && entry.state === 'applied' && entry.shownAt === undefined && entry.subject.plugin !== undefined && entry.subject.source !== undefined) {
-        shown.push({ plugin: entry.subject.plugin, source: entry.subject.source })
-        next = { ...next, shownAt: at }
-      }
-      return next
-    })
-    const finalLog: ChangeLog = { ...log, ...migrating ? { migratedAt: at } : {}, entries }
-    if (JSON.stringify(finalLog) !== JSON.stringify(firstLog)) await writeChangeLog(home, profile, finalLog)
-
-    const session = workSession !== undefined && managed.some(({ plugin }) => plugin === workSession.plugin) ? { plugin: workSession.plugin } : undefined
-    return {
-      protection,
-      approvedAtUpgrade: shown,
-      pending,
-      unapproved,
-      ...session === undefined ? {} : { workSession: session },
-      ...historyVersion === undefined ? {} : { historyVersion },
+  const shown: ApprovedAtUpgrade[] = []
+  const entries = log.entries.map((entry): ChangeEntry => {
+    let next = entry
+    if (historyVersion !== undefined && entry.decidedFrom === 'upgrade' && entry.historyVersion === undefined) {
+      next = { ...next, historyVersion }
     }
-  }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
+    if (pass === 'start' && entry.decidedFrom === 'upgrade' && entry.state === 'applied' && entry.shownAt === undefined && entry.subject.plugin !== undefined && entry.subject.source !== undefined) {
+      shown.push({ plugin: entry.subject.plugin, source: entry.subject.source })
+    }
+    return next
+  })
+  const finalLog: ChangeLog = { ...log, ...migrating ? { migratedAt: at } : {}, entries }
+  if (JSON.stringify(finalLog) !== JSON.stringify(firstLog)) await writeChangeLog(home, profile, finalLog)
+
+  const session = pass === 'start' && workSession !== undefined && managed.some(({ plugin }) => plugin === workSession.plugin) ? { plugin: workSession.plugin } : undefined
+  return {
+    protection,
+    approvedAtUpgrade: shown,
+    pending,
+    unapproved,
+    ...session === undefined ? {} : { workSession: session },
+    ...historyVersion === undefined ? {} : { historyVersion },
+    ...failed.length === 0 ? {} : { failed },
+    ...linkedDependencies.length === 0 ? {} : { linkedDependencies },
+  }
 }
 
 /**
@@ -249,6 +436,12 @@ export function startNotice(changes: StartChanges): string {
   }
   for (const { plugin } of changes.unapproved) {
     lines.push(`Warning: ${plugin} runs changes you have not reviewed (protection is set to warn).`)
+  }
+  for (const { plugin, underHome } of changes.linkedDependencies ?? []) {
+    lines.push(`Warning: ${plugin} is too large to copy with its installed packages, so it loads them from where they are installed${underHome ? ', inside your home folder, where commands the agent runs can change them' : ''}.`)
+  }
+  for (const { plugin, detail } of changes.failed ?? []) {
+    lines.push(`${plugin} runs the content you approved, or nothing if you approved none, because Delo could not read its folder: ${detail}`)
   }
   return lines.map(line => `${line}\n`).join('')
 }
@@ -306,7 +499,16 @@ export async function holdContent(home: string, directory: string, version: Cont
  * @returns whether it lies inside the runtime store, whose own start check covers it.
  */
 export function isInRuntimeStore(home: string, target: string): boolean {
-  const path = relative(join(home, DELO_HOME_ENTRIES.runtimes), target)
+  return isInside(join(home, DELO_HOME_ENTRIES.runtimes), target)
+}
+
+/**
+ * @param outer - a directory.
+ * @param inner - a path.
+ * @returns whether `inner` is below `outer`.
+ */
+function isInside(outer: string, inner: string): boolean {
+  const path = relative(outer, inner)
   return path !== '' && path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)
 }
 

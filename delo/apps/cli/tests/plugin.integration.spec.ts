@@ -50,7 +50,7 @@ describe('delorun plugin', () => {
     const runs: { argv: readonly string[], registered: string[] }[] = []
     const exits: (() => void)[] = []
     const upstream = (argv: readonly string[]): Promise<void> => { runs.push({ argv, registered: registrations() }); return Promise.resolve() }
-    expect(await plugin(['--profile', 'default', 'list'], context, upstream, (listener) => { exits.push(listener) })).toBeUndefined()
+    expect(await plugin(['--profile', 'default', 'list'], context, upstream, (listener) => { exits.push(listener) })).toBe(EXIT.ok)
     expect(runs).toEqual([{ argv: ['plugin', '--profile', 'default', 'list'], registered: [String(process.pid)] }])
     expect(exits).toHaveLength(1)
     expect(registrations()).toEqual([])

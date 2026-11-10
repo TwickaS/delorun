@@ -254,3 +254,32 @@ describe('dependency-or-build', () => {
     ])
   })
 })
+
+describe('not-shown', () => {
+  const hidden = (path: string, notShown: ReviewedFile['notShown'], status: ReviewedFile['status'] = 'added'): ReviewedFile => ({ path, status, dependency: notShown === 'dependency', ...notShown === undefined ? {} : { notShown } })
+
+  it('names every file the diff does not show and Node can load, once per package for a dependency inside the folder', () => {
+    const findings = run('not-shown', {
+      files: [
+        hidden('lib/index.js', 'binary'),
+        hidden('build/addon.node', 'binary', 'modified'),
+        hidden('logo.png', 'binary'),
+        hidden('big.ts', 'too-large'),
+        hidden('notes.md', 'cut-short'),
+        hidden('node_modules/left-pad/index.js', 'dependency'),
+        hidden('node_modules/left-pad/package.json', 'dependency'),
+        hidden('node_modules/gone/index.js', 'dependency', 'removed'),
+        hidden('old.js', 'binary', 'removed'),
+        source('src/shown.ts', 'const shown = 1'),
+      ],
+    })
+    expect(findings.map(finding => [finding.kind, finding.file, finding.excerpt])).toEqual([
+      ['not-shown', 'lib/index.js', 'lib/index.js: not text, and Node can load it'],
+      ['not-shown', 'build/addon.node', 'build/addon.node: not text, and Node can load it'],
+      ['not-shown', 'big.ts', 'big.ts: too large for the diff'],
+      ['not-shown', 'notes.md', 'notes.md: past where the diff was cut short'],
+      ['not-shown', 'node_modules/left-pad', 'node_modules/left-pad: 2 files inside the folder that the diff does not show'],
+    ])
+    expect(run('not-shown', { files: [hidden('node_modules/one/index.js', 'dependency')] })[0]?.excerpt).toBe('node_modules/one: 1 file inside the folder that the diff does not show')
+  })
+})

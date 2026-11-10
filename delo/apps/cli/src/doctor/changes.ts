@@ -5,8 +5,10 @@
  * changes a consent, a guard or the sandbox policy), the cause of a failed start or load named with the newest applied
  * change of the plugin, each pending change and each invariant that does not hold.
  *
- * A plugin that did not load, runs content the person did not approve or waits for review is `warn`; an invariant that
- * does not hold is `fail`. Nothing is written: the consent check reads the active content from the store.
+ * A plugin that did not load, runs content the person did not approve or waits for review is `warn`, and so is
+ * protection lowered to `warn` or `off`; an invariant that does not hold is `fail`. Nothing is written: the consent check
+ * reads the active content from the store. Every message is escaped for the terminal, and a failure message a plugin or
+ * a record carries is cut at a line's length ([terminal text](../terminal-text.ts)).
  *
  * @module @delo/cli/doctor/changes
  */
@@ -26,11 +28,12 @@ import {
   type ActiveContent,
   type ChangesStatus,
   type PluginStatus,
-  type ProtectionLevel,
 } from '@delo/changes'
 import { resolveDeloHome } from '@delo/home'
 import { isCarriedPackage } from '../changes/start.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
+import { clipped, printable } from '../terminal-text.ts'
+import { PROTECTION_WORDS } from '../verify/changes.ts'
 import type { CheckResult, CheckStatus } from './checks.ts'
 
 /** The built-in check whose findings `doctor` reports for each plugin's active content. */
@@ -38,13 +41,6 @@ export const CONSENT_CHECK_ID = 'built-in:consent-guard-sandbox'
 
 /** The version requirements `doctor` reads from a plugin's `engines`. */
 const ENGINES = ['dsh', 'delo'] as const
-
-/** What each protection setting means, as the line says it. */
-const PROTECTION_WORDS: Readonly<Record<ProtectionLevel, string>> = {
-  block: 'changes you have not approved do not run',
-  warn: 'changes you have not approved run, and every start says so',
-  off: 'changes you have not approved run without notice',
-}
 
 /** What each kind of active content means, as the line says it. */
 const CONTENT_WORDS: Readonly<Record<ActiveContent['kind'], string>> = {
@@ -54,20 +50,36 @@ const CONTENT_WORDS: Readonly<Record<ActiveContent['kind'], string>> = {
 }
 
 /**
+ * @param text - text of one or more lines.
+ * @returns it as one line.
+ */
+function oneLine(text: string): string {
+  return text.replace(/\s*\n\s*/gu, ' ')
+}
+
+/**
+ * @param text - a failure message a plugin or a record carries.
+ * @returns it as one line, escaped and cut at a line's length.
+ */
+function quotedFailure(text: string): string {
+  return clipped(oneLine(text))
+}
+
+/**
  * @param status - the verdict.
- * @param message - the text, made one line.
+ * @param message - the text, made one line with every character a terminal acts on escaped.
  * @returns the `changes` result.
  */
 function line(status: CheckStatus, message: string): CheckResult {
-  return { name: 'changes', status, message: message.replace(/\s*\n\s*/gu, ' ') }
+  return { name: 'changes', status, message: printable(oneLine(message)) }
 }
 
 /**
  * @param error - a thrown value.
- * @returns its words for the person: a Changes failure's detail, otherwise the error as text.
+ * @returns its words for the person: a Changes failure's detail, otherwise the error as text, cut at a line's length.
  */
 function reasonOf(error: unknown): string {
-  return isChangesError(error) ? error.detail : String(error)
+  return quotedFailure(isChangesError(error) ? error.detail : String(error))
 }
 
 /**
@@ -122,7 +134,7 @@ function loadState(status: ChangesStatus, plugin: PluginStatus): { readonly fail
   if (boot.failure !== undefined) return { failed: true, words: 'the last start failed' }
   const entry = boot.plugins.find(candidate => candidate.plugin === plugin.plugin)
   if (entry === undefined) return { failed: false, words: 'it was not under Changes at the last start' }
-  return entry.loaded ? { failed: false, words: 'it loaded at the last start' } : { failed: true, words: `it did not load at the last start (${String(entry.error)})` }
+  return entry.loaded ? { failed: false, words: 'it loaded at the last start' } : { failed: true, words: `it did not load at the last start (${quotedFailure(String(entry.error))})` }
 }
 
 /**
@@ -175,15 +187,15 @@ function causeLines(status: ChangesStatus): CheckResult[] {
   if (boot === undefined) return []
   const withChange = status.plugins.filter((plugin): plugin is PluginStatus & { lastApplied: NonNullable<PluginStatus['lastApplied']> } => plugin.lastApplied !== undefined)
   if (boot.failure !== undefined) {
-    const failure = boot.failure
-    const named = withChange.filter(plugin => failure.includes(plugin.plugin))
+    const named = withChange.filter(plugin => boot.failure!.includes(plugin.plugin))
+    const failure = quotedFailure(boot.failure)
     if (named.length > 0) return named.map(plugin => line('warn', `${plugin.plugin} did not load at the last start: ${failure}. ${changedIn(plugin)}`))
     const [newest] = [...withChange].sort((a, b) => compareCodeUnits(b.lastApplied.at, a.lastApplied.at))
     return [line('warn', `The last start failed: ${failure}.${newest === undefined ? '' : ` The newest change you applied is to ${newest.plugin}. ${changedIn(newest)}`}`)]
   }
   return withChange.flatMap(plugin => {
     const entry = boot.plugins.find(candidate => candidate.plugin === plugin.plugin)
-    return entry === undefined || entry.loaded ? [] : [line('warn', `${plugin.plugin} did not load at the last start: ${String(entry.error)}. ${changedIn(plugin)}`)]
+    return entry === undefined || entry.loaded ? [] : [line('warn', `${plugin.plugin} did not load at the last start: ${quotedFailure(String(entry.error))}. ${changedIn(plugin)}`)]
   })
 }
 
@@ -196,14 +208,16 @@ function causeLines(status: ChangesStatus): CheckResult[] {
  */
 export async function changesLines(home: string, profile: string, status: ChangesStatus): Promise<CheckResult[]> {
   // A protection record that cannot be read is named by its invariant line.
-  const results: CheckResult[] = status.protection === undefined ? [] : [line('pass', `protection is set to ${status.protection}: ${PROTECTION_WORDS[status.protection]}.`)]
+  const results: CheckResult[] = status.protection === undefined
+    ? []
+    : [line(status.protection === 'block' ? 'pass' : 'warn', `protection is set to ${status.protection}: ${PROTECTION_WORDS[status.protection]}.${status.protection === 'block' ? '' : ' Set it back with: delorun changes protection block'}`)]
   if (status.workSession !== undefined) {
     const { plugin, startedAt } = status.workSession
     results.push(line('pass', `you are working on ${plugin} since ${startedAt}: edits in its folder load live until delorun changes done ${plugin}.`))
   }
   if (status.workFailure !== undefined) {
     const { plugin, at, error } = status.workFailure
-    results.push(line('warn', `the last reload of ${plugin} in a work session failed at ${at}: ${error}. Delo went back to the version of it that last loaded.`))
+    results.push(line('warn', `the last reload of ${plugin} in a work session failed at ${at}: ${quotedFailure(error)}. Delo went back to the version of it that last loaded.`))
   }
   if (status.workFailureUnreadable !== undefined) results.push(line('warn', `the record of the last failed reload in a work session cannot be read: ${status.workFailureUnreadable}`))
   for (const plugin of status.plugins) results.push(await pluginLine(home, profile, status, plugin))

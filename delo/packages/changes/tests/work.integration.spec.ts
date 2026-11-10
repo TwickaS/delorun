@@ -1,7 +1,7 @@
 /**
- * Work sessions (contract C21, "Work sessions"): starting one loads the folder's content live, a failed load goes back
- * to the content that last loaded, ending one makes the folder's state the approved version as one history entry, and
- * only a person at their computer starts or ends one; Delo stopping ends it without a person.
+ * Work sessions (contract C21, "Work sessions"): starting one loads the folder's content live for at most its length, a
+ * failed load goes back to the content that last loaded, `done` approves exactly the version it showed as one history
+ * entry, ending one without the person approves nothing, and only a person at their computer starts or ends one.
  */
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -10,11 +10,11 @@ import { finishWork, listChanges, startWork, type ChangesContext, type ReloadHos
 import { changeId } from '../src/ids.ts'
 import * as barrel from '../src/index.ts'
 import { activeDirectory, changesDirectory, profileChangesDirectory, versionsDirectory } from '../src/paths.ts'
-import { attestStudio, readActiveRecord, readApproved, readChangeLog, readWorkSession, writeActiveRecord, type AtComputer } from '../src/records.ts'
+import { readActiveRecord, readApproved, readChangeLog, readWorkSession, writeActiveRecord, type AtComputer } from '../src/records.ts'
 import { finishWorkWithoutPerson } from '../src/stop.ts'
-import { holdsVersion, storeFolder } from '../src/store.ts'
+import { storeFolder } from '../src/store.ts'
 import type { ContentVersion } from '../src/types.ts'
-import { loadWorkSession, workFinishedLine, type WorkFinished } from '../src/work.ts'
+import { loadWorkSession, reviewWork, shortVersion, WORK_SESSION_MAX_MINUTES, workFinishedLine, workSessionExpired, type WorkFinished } from '../src/work.ts'
 import { readWorkFailure, workFailurePath, writeWorkFailure } from '../src/work-record.ts'
 import { folder, history, linkAs, migrated, NOW, PROFILE, start, terminal, type Fixture } from './profile-fixture.ts'
 import { rejection } from './support.ts'
@@ -23,6 +23,9 @@ import { rejection } from './support.ts'
 vi.setConfig({ testTimeout: 120_000 })
 
 const OK: ReloadOutcome = { ok: true }
+
+/** The length of the sessions these specs open, so that the fixed clock {@link NOW} stays inside each of them. */
+const MINUTES = WORK_SESSION_MAX_MINUTES
 
 /**
  * @param error - what the Host reports.
@@ -43,9 +46,9 @@ function contextOf(fx: Fixture): ChangesContext {
 /**
  * A reload that answers each call with the next outcome.
  * @param outcomes - the answers, in order; undefined means Delo is not running.
- * @returns the options of an action and the number of calls.
+ * @returns the reload, the number of calls, and the session length `startWork` takes.
  */
-function reloads(...outcomes: (ReloadOutcome | undefined)[]): { readonly reload: ReloadHost, readonly calls: () => number } {
+function reloads(...outcomes: (ReloadOutcome | undefined)[]): { readonly reload: ReloadHost, readonly calls: () => number, readonly minutes: number } {
   const answers = [...outcomes]
   let calls = 0
   return {
@@ -54,7 +57,28 @@ function reloads(...outcomes: (ReloadOutcome | undefined)[]): { readonly reload:
       return Promise.resolve(answers.shift())
     },
     calls: () => calls,
+    minutes: MINUTES,
   }
+}
+
+/**
+ * End the session on `plug` at the person's word, approving what the folder holds now, as `done` shows it.
+ * @param ctx - the profile.
+ * @param host - the Host's reload.
+ * @returns what `done` did.
+ */
+async function done(ctx: ChangesContext, host: { readonly reload: ReloadHost }): ReturnType<typeof finishWork> {
+  const { folder: shown } = await reviewWork(ctx, 'plug')
+  return finishWork(ctx, 'plug', terminal(), { reload: host.reload, approve: shown })
+}
+
+/**
+ * @param result - what `done` did.
+ * @returns it as an ended session.
+ */
+function ended(result: Awaited<ReturnType<typeof finishWork>>): WorkFinished {
+  if (result.kind !== 'ended') throw new Error(`the session did not end: ${result.load.failure}`)
+  return result
 }
 
 /**
@@ -93,42 +117,35 @@ function written(fx: Fixture): string {
 }
 
 describe('a remote session and the model cannot start or end a work session', () => {
-  it('refuses a missing, a forged and a look-alike studio proof before anything is read or written', async () => {
+  it('refuses a missing, a forged and a look-alike proof before anything is read or written', async () => {
     const { fx, source } = await migrated()
     const ctx = contextOf(fx)
     writeFileSync(join(source, 'index.js'), 'export default "two"\n')
     const host = reloads(OK)
     const before = written(fx)
     const stored = readdirSync(versionsDirectory(fx.home))
-    for (const proof of [undefined as never, { kind: 'terminal' } as AtComputer, Object.freeze({ kind: 'studio' }) as AtComputer]) {
+    for (const proof of [undefined as never, { kind: 'terminal' } as AtComputer, Object.freeze({ kind: 'terminal' }) as AtComputer]) {
       await rejection(startWork(ctx, 'plug', proof, host), 'NOT_AT_COMPUTER')
-      await rejection(finishWork(ctx, 'plug', proof, host), 'NOT_AT_COMPUTER')
+      await rejection(finishWork(ctx, 'plug', proof, { ...host, approve: undefined }), 'NOT_AT_COMPUTER')
     }
-    expect(() => attestStudio({ loopback: true, credential: true, remoteSession: true })).toThrow(expect.objectContaining({ code: 'NOT_AT_COMPUTER' }))
     expect(written(fx)).toBe(before)
     expect(readdirSync(versionsDirectory(fx.home))).toEqual(stored)
     expect(host.calls()).toBe(0)
   })
 
   it('refuses a forged proof for ending an open session, which stays open', async () => {
-    const { fx } = await migrated()
+    const { fx, approved } = await migrated()
     const ctx = contextOf(fx)
     await startWork(ctx, 'plug', terminal(), reloads(OK))
     const host = reloads(OK)
-    await rejection(finishWork(ctx, 'plug', { kind: 'studio' } as AtComputer, host), 'NOT_AT_COMPUTER')
+    await rejection(finishWork(ctx, 'plug', { kind: 'terminal' } as AtComputer, { ...host, approve: approved }), 'NOT_AT_COMPUTER')
     expect((await readWorkSession(fx.home, PROFILE))?.plugin).toBe('plug')
     expect(host.calls()).toBe(0)
   })
 
-  it('accepts the studio on this computer, and records where the session started', async () => {
-    const { fx } = await migrated()
-    const started = await startWork(contextOf(fx), 'plug', attestStudio({ loopback: true, credential: true, remoteSession: false }), reloads(OK))
-    expect(started.session.startedFrom).toBe('studio')
-  })
-
   it('exports the end without a person only from @delo/changes/stop', () => {
-    expect(Object.keys(barrel)).toEqual(expect.arrayContaining(['startWork', 'finishWork', 'loadWorkSession']))
-    for (const name of ['finishWorkWithoutPerson', 'beginWork', 'endWork']) expect(Object.keys(barrel)).not.toContain(name)
+    expect(Object.keys(barrel)).toEqual(expect.arrayContaining(['startWork', 'finishWork', 'reviewWork', 'loadWorkSession']))
+    for (const name of ['finishWorkWithoutPerson', 'beginWork', 'endWork', 'endWorkWithoutPerson']) expect(Object.keys(barrel)).not.toContain(name)
     const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { exports: Record<string, string> }
     expect(manifest.exports).toMatchObject({ '.': './src/index.ts', './stop': './src/stop.ts' })
   })
@@ -188,7 +205,7 @@ describe('starting a work session', () => {
     await rejection(startWork(ctx, 'left-pad', terminal(), reloads(OK)), 'NOT_LINKED')
     await startWork(ctx, 'plug', terminal(), reloads(OK))
     await rejection(startWork(ctx, 'plug', terminal(), reloads(OK)), 'WORK_SESSION_OPEN')
-    await finishWork(ctx, 'plug', terminal(), reloads(OK))
+    await done(ctx, reloads(OK))
     rmSync(source, { recursive: true })
     const gone = await rejection(startWork(ctx, 'plug', terminal(), reloads(OK)), 'NOT_LINKED')
     expect(gone.detail).toContain('is gone')
@@ -227,8 +244,8 @@ describe('loading the open session\'s folder', () => {
   })
 })
 
-describe('done makes the folder\'s state the approved version as one history entry', () => {
-  it('approves what the folder holds, records the whole difference since the session began once, and closes the session', async () => {
+describe('done approves exactly the version it showed', () => {
+  it('approves the version it showed, records the whole difference since the session began once, and closes the session', async () => {
     const { fx, source, approved } = await migrated()
     const ctx = contextOf(fx)
     const historyBefore = await history(fx)
@@ -237,15 +254,19 @@ describe('done makes the folder\'s state the approved version as one history ent
     await loadWorkSession(ctx, reloads(OK).reload)
     const three = await edit(fx, source, 'export default "three"\n')
     await loadWorkSession(ctx, reloads(OK).reload)
+    const review = await reviewWork(ctx, 'plug')
+    expect(review).toMatchObject({ session: { plugin: 'plug', from: approved }, folder: three, change: { kind: 'plugin-edit', from: approved, to: three, files: [{ path: 'index.js', status: 'modified' }] }, failedToLoad: false })
     const host = reloads(OK)
-    const finished = await finishWork(ctx, 'plug', terminal(), host)
+    const finished = ended(await finishWork(ctx, 'plug', terminal(), { reload: host.reload, approve: review.folder }))
     expect(host.calls()).toBe(0)
     const subject = { plugin: 'plug', source }
     const summary = `Work on plug: ${approved.slice(0, 7)} → ${three.slice(0, 7)}`
     expect(finished).toEqual({
+      kind: 'ended',
       plugin: 'plug',
       source,
       from: approved,
+      ended: 'done',
       approved: three,
       folder: three,
       entry: { id: changeId('plugin-edit', subject, approved, three), kind: 'plugin-edit', state: 'applied', subject, from: approved, to: three, summary, createdAt: started.session.startedAt, decidedAt: NOW.toISOString(), decidedFrom: 'terminal', historyVersion: expect.any(String) },
@@ -256,111 +277,179 @@ describe('done makes the folder\'s state the approved version as one history ent
     expect(await active(fx)).toEqual({ index: 'export default "three"\n', record: { version: three, kind: 'approved' } })
     expect(await readWorkSession(fx.home, PROFILE)).toBeUndefined()
     expect((await listChanges(ctx)).pending).toEqual([])
-    expect(workFinishedLine(finished)).toBe(`The folder's content is now the approved version of plug (${finished.entry!.id}).`)
+    expect(workFinishedLine(finished)).toBe(`Version ${shortVersion(three)} is now the approved version of plug (${finished.entry!.id}).`)
   })
 
-  it('loads content the Host has not loaded yet first', async () => {
+  it('refuses with CHANGED_SINCE_REVIEW when the folder changed after the display, approves nothing and keeps the session open', async () => {
+    const { fx, source, approved } = await migrated()
+    const ctx = contextOf(fx)
+    await startWork(ctx, 'plug', terminal(), reloads(OK))
+    const two = await edit(fx, source, 'export default "two"\n')
+    await loadWorkSession(ctx, reloads(OK).reload)
+    const historyBefore = await history(fx)
+    expect((await reviewWork(ctx, 'plug')).folder).toBe(two)
+    await edit(fx, source, 'export default "three"\n')
+    const host = reloads(OK)
+    await rejection(finishWork(ctx, 'plug', terminal(), { reload: host.reload, approve: two }), 'CHANGED_SINCE_REVIEW')
+    rmSync(source, { recursive: true })
+    await rejection(finishWork(ctx, 'plug', terminal(), { reload: host.reload, approve: two }), 'CHANGED_SINCE_REVIEW')
+    expect(host.calls()).toBe(0)
+    expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(approved)
+    expect(await history(fx)).toEqual(historyBefore)
+    expect((await readChangeLog(fx.home, PROFILE)).entries.filter(entry => entry.kind === 'plugin-edit')).toEqual([])
+    expect((await readWorkSession(fx.home, PROFILE))?.plugin).toBe('plug')
+    expect(await reviewWork(ctx, 'plug')).toEqual({ session: await readWorkSession(fx.home, PROFILE), failedToLoad: false })
+    await edit(fx, folder(fx, 'plug'), 'export default "four"\n')
+    await rejection(finishWork(ctx, 'plug', terminal(), { reload: host.reload, approve: undefined }), 'CHANGED_SINCE_REVIEW')
+    expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(approved)
+  })
+
+  it('loads the version it showed first when the Host does not run it yet', async () => {
     const { fx, source } = await migrated()
     const ctx = contextOf(fx)
     await startWork(ctx, 'plug', terminal(), reloads(OK))
     const two = await edit(fx, source, 'export default "two"\n')
     const host = reloads(OK)
-    const finished = await finishWork(ctx, 'plug', terminal(), host)
+    const finished = ended(await done(ctx, host))
     expect(finished.load).toEqual({ kind: 'loaded', plugin: 'plug', version: two })
     expect(finished.approved).toBe(two)
     expect(host.calls()).toBe(1)
   })
 
-  it('approves the content that last loaded when the folder\'s newest content failed to load, and says so', async () => {
-    const { fx, source } = await migrated()
+  it('approves nothing and keeps the session open when the version it showed fails to load, and approves it once it loads', async () => {
+    const { fx, source, approved } = await migrated()
     const ctx = contextOf(fx)
     await startWork(ctx, 'plug', terminal(), reloads(OK))
     const two = await edit(fx, source, 'export default "two"\n')
     await loadWorkSession(ctx, reloads(OK).reload)
     const broken = await edit(fx, source, 'throw new Error("broken")\n')
-    await loadWorkSession(ctx, reloads(failing('plug threw'), OK).reload)
-    const host = reloads(OK)
-    const finished = await finishWork(ctx, 'plug', terminal(), host)
-    expect(host.calls()).toBe(0)
-    expect(finished).toMatchObject({ approved: two, folder: broken, kept: 'failed-to-load' })
-    expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(two)
-    expect(await readWorkFailure(fx.home, PROFILE)).toMatchObject({ plugin: 'plug', error: 'plug threw' })
-    expect(workFinishedLine(finished)).toBe('The newest content of plug\'s folder failed to load, so the content that last loaded is now the approved version of plug.')
-  })
-
-  it('keeps the approved content when the last load before the end fails and nothing else loaded, recording no change', async () => {
-    const { fx, source, approved } = await migrated()
-    const ctx = contextOf(fx)
-    await startWork(ctx, 'plug', terminal(), reloads(OK))
     const historyBefore = await history(fx)
-    const broken = await edit(fx, source, 'throw new Error("broken")\n')
-    const finished = await finishWork(ctx, 'plug', terminal(), reloads(failing('plug threw'), OK))
-    expect(finished).toMatchObject({ approved, folder: broken, kept: 'failed-to-load', load: { kind: 'went-back' } })
-    expect(finished.entry).toBeUndefined()
+    const failed = await done(ctx, reloads(failing('plug threw'), OK))
+    expect(failed).toEqual({ kind: 'went-back', plugin: 'plug', load: { kind: 'went-back', plugin: 'plug', version: broken, back: two, failure: 'plug threw', again: OK } })
+    expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(approved)
     expect(await history(fx)).toEqual(historyBefore)
-    expect(await active(fx)).toEqual({ index: 'export default "one"\n', record: { version: approved, kind: 'approved' } })
+    expect(await active(fx)).toEqual({ index: 'export default "two"\n', record: { version: two, kind: 'work-session' } })
+    expect(await readWorkFailure(fx.home, PROFILE)).toMatchObject({ plugin: 'plug', error: 'plug threw' })
+    expect(await reviewWork(ctx, 'plug')).toMatchObject({ folder: broken, failedToLoad: true })
+    const finished = ended(await done(ctx, reloads(OK)))
+    expect(finished).toMatchObject({ approved: broken, load: { kind: 'loaded' } })
+    expect(existsSync(workFailurePath(fx.home, PROFILE))).toBe(false)
   })
 
-  it('keeps the approved content when the folder failed to load when the session started and nothing loaded since', async () => {
-    const { fx, source, approved } = await migrated()
-    const ctx = contextOf(fx)
-    const broken = await edit(fx, source, 'throw new Error("broken")\n')
-    await startWork(ctx, 'plug', terminal(), reloads(failing('plug threw'), OK))
-    const finished = await finishWork(ctx, 'plug', terminal(), reloads(OK))
-    expect(finished).toMatchObject({ approved, folder: broken, kept: 'failed-to-load' })
-    expect(finished.entry).toBeUndefined()
-  })
-
-  it('approves the content that last loaded when the folder is gone, and records nothing when nothing changed', async () => {
+  it('keeps the approved version when the folder holds it or is gone, putting it back when the Host ran another', async () => {
     const { fx, source, approved } = await migrated()
     const ctx = contextOf(fx)
     await startWork(ctx, 'plug', terminal(), reloads(OK))
-    const unchanged = await finishWork(ctx, 'plug', terminal(), reloads(OK))
-    expect(unchanged).toEqual({ plugin: 'plug', source, from: approved, approved, folder: approved })
-    expect(workFinishedLine(unchanged)).toBe('plug runs its approved version; its folder holds no change.')
+    expect(await reviewWork(ctx, 'plug')).toMatchObject({ folder: approved, failedToLoad: false })
+    expect((await reviewWork(ctx, 'plug')).change).toBeUndefined()
+    const unchanged = ended(await done(ctx, reloads(OK)))
+    expect(unchanged).toEqual({ kind: 'ended', plugin: 'plug', source, from: approved, ended: 'done', approved, folder: approved })
+    expect(workFinishedLine(unchanged)).toBe(`plug keeps its approved version (${shortVersion(approved)}); its folder holds no change.`)
     await startWork(ctx, 'plug', terminal(), reloads(OK))
-    const two = await edit(fx, source, 'export default "two"\n')
+    await edit(fx, source, 'export default "two"\n')
     await loadWorkSession(ctx, reloads(OK).reload)
     rmSync(source, { recursive: true })
-    const gone = await finishWork(ctx, 'plug', terminal(), reloads(OK))
-    expect(gone).toMatchObject({ approved: two, kept: 'folder-gone' })
+    const host = reloads(OK)
+    const gone = ended(await done(ctx, host))
+    expect(gone).toMatchObject({ approved, load: { kind: 'loaded', version: approved } })
     expect(gone.folder).toBeUndefined()
-    expect(workFinishedLine(gone)).toBe('The folder of plug is gone, so the content that last loaded is now the approved version of plug.')
+    expect(gone.entry).toBeUndefined()
+    expect(host.calls()).toBe(1)
+    expect(await active(fx)).toEqual({ index: 'export default "one"\n', record: { version: approved, kind: 'approved' } })
+    expect(workFinishedLine(gone)).toBe(`The folder of plug is gone; plug keeps its approved version (${shortVersion(approved)}).`)
   })
 
-  it('approves the folder\'s content when Delo is not running, and refuses a plugin without an open session', async () => {
+  it('approves the version it showed when Delo is not running, and refuses a plugin without an open session', async () => {
     const { fx, source } = await migrated()
     const ctx = contextOf(fx)
-    await rejection(finishWork(ctx, 'plug', terminal(), reloads(OK)), 'NO_WORK_SESSION')
+    await rejection(reviewWork(ctx, 'plug'), 'NO_WORK_SESSION')
+    await rejection(finishWork(ctx, 'plug', terminal(), { ...reloads(OK), approve: undefined }), 'NO_WORK_SESSION')
     await startWork(ctx, 'plug', terminal(), reloads(OK))
-    await rejection(finishWork(ctx, 'other', terminal(), reloads(OK)), 'NO_WORK_SESSION')
+    await rejection(finishWork(ctx, 'other', terminal(), { ...reloads(OK), approve: undefined }), 'NO_WORK_SESSION')
     const two = await edit(fx, source, 'export default "two"\n')
-    const finished = await finishWork(ctx, 'plug', terminal(), reloads(undefined))
-    expect(finished).toMatchObject({ approved: two, load: { kind: 'not-running' } })
+    expect(ended(await done(ctx, reloads(undefined)))).toMatchObject({ approved: two, load: { kind: 'not-running' } })
   })
 })
 
-describe('Delo stopping ends the work session', () => {
-  it('approves what the folder holds without a person, decided where the session started, and loads nothing', async () => {
-    const { fx, source } = await migrated()
+describe('ending a work session without the person approves nothing new', () => {
+  it('Delo stopping keeps the version the session started from, and the folder\'s state waits for review', async () => {
+    const { fx, source, approved } = await migrated()
     const ctx = contextOf(fx)
-    expect(await finishWorkWithoutPerson(ctx)).toBeUndefined()
-    await startWork(ctx, 'plug', attestStudio({ loopback: true, credential: true, remoteSession: false }), reloads(OK))
+    expect(await finishWorkWithoutPerson(ctx, 'stopped')).toBeUndefined()
+    await startWork(ctx, 'plug', terminal(), reloads(OK))
     const two = await edit(fx, source, 'export default "two"\n')
-    const finished: WorkFinished | undefined = await finishWorkWithoutPerson(ctx)
-    expect(finished).toMatchObject({ approved: two, entry: { kind: 'plugin-edit', state: 'applied', to: two, decidedFrom: 'studio' } })
-    expect(finished?.load).toBeUndefined()
+    await loadWorkSession(ctx, reloads(OK).reload)
+    const historyBefore = await history(fx)
+    const finished = await finishWorkWithoutPerson(ctx, 'stopped')
+    expect(finished).toEqual({ kind: 'ended', plugin: 'plug', source, from: approved, ended: 'stopped', approved })
+    expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(approved)
+    expect(await history(fx)).toEqual(historyBefore)
+    expect(await active(fx)).toEqual({ index: 'export default "one"\n', record: { version: approved, kind: 'approved' } })
+    expect((await listChanges(ctx)).pending).toMatchObject([{ kind: 'plugin-edit', from: approved, to: two }])
     expect(await readWorkSession(fx.home, PROFILE)).toBeUndefined()
-    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), two)).toBe(true)
+    expect(workFinishedLine(finished!)).toBe(`Nothing was approved: plug keeps the version it had when the session started (${shortVersion(approved)}), and what its folder holds waits for your review: delorun changes list`)
   })
 
-  it('approves the content that last loaded when the folder\'s newest content failed to load', async () => {
+  it('keeps the version the session started from when the folder\'s newest content failed to load, and forgets the failure', async () => {
     const { fx, source, approved } = await migrated()
     const ctx = contextOf(fx)
     await startWork(ctx, 'plug', terminal(), reloads(OK))
+    await edit(fx, source, 'export default "two"\n')
+    await loadWorkSession(ctx, reloads(OK).reload)
     await edit(fx, source, 'throw new Error("broken")\n')
     await loadWorkSession(ctx, reloads(failing('plug threw'), OK).reload)
-    expect(await finishWorkWithoutPerson(ctx)).toMatchObject({ approved, kept: 'failed-to-load' })
+    expect(await finishWorkWithoutPerson(ctx, 'stopped')).toMatchObject({ approved, ended: 'stopped' })
+    expect(existsSync(workFailurePath(fx.home, PROFILE))).toBe(false)
     expect(existsSync(changesDirectory(fx.home))).toBe(true)
+  })
+
+  it('a session past its end keeps the version it started from, and the running Host goes back to it', async () => {
+    const { fx, source, approved } = await migrated()
+    const ctx = contextOf(fx)
+    const { session } = await startWork(ctx, 'plug', terminal(), reloads(OK))
+    await edit(fx, source, 'export default "two"\n')
+    await loadWorkSession(ctx, reloads(OK).reload)
+    const notYet = reloads(OK)
+    expect(await finishWorkWithoutPerson({ ...ctx, now: () => new Date(Date.parse(session.endsAt) - 1) }, 'expired', notYet.reload)).toBeUndefined()
+    expect(notYet.calls()).toBe(0)
+    const host = reloads(OK)
+    const finished = await finishWorkWithoutPerson({ ...ctx, now: () => new Date(session.endsAt) }, 'expired', host.reload)
+    expect(finished).toEqual({ kind: 'ended', plugin: 'plug', source, from: approved, ended: 'expired', approved, reload: OK })
+    expect(host.calls()).toBe(1)
+    expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(approved)
+    expect(await active(fx)).toEqual({ index: 'export default "one"\n', record: { version: approved, kind: 'approved' } })
+    expect(await readWorkSession(fx.home, PROFILE)).toBeUndefined()
+    expect((await readChangeLog(fx.home, PROFILE)).entries.filter(entry => entry.kind === 'plugin-edit')).toEqual([])
+  })
+})
+
+describe('a work session ends at its bound', () => {
+  it('records its end and loads nothing once the end passed', async () => {
+    const { fx, source } = await migrated()
+    const ctx = contextOf(fx)
+    const { session } = await startWork(ctx, 'plug', terminal(), { ...reloads(OK), minutes: 30 })
+    expect(Date.parse(session.endsAt) - Date.parse(session.startedAt)).toBe(30 * 60_000)
+    expect(workSessionExpired({ now: () => new Date(session.startedAt) }, session)).toBe(false)
+    expect(workSessionExpired({}, { endsAt: new Date(Date.now() - 1).toISOString() })).toBe(true)
+    await edit(fx, source, 'export default "two"\n')
+    const late = { ...ctx, now: () => new Date(session.endsAt) }
+    const host = reloads(OK)
+    expect(await loadWorkSession(late, host.reload)).toEqual({ kind: 'expired', plugin: 'plug', endsAt: session.endsAt })
+    expect(host.calls()).toBe(0)
+    expect((await active(fx)).index).toBe('export default "one"\n')
+  })
+
+  it('refuses a length outside 1 to the maximum before anything is read or written', async () => {
+    const { fx } = await migrated()
+    const ctx = contextOf(fx)
+    const before = written(fx)
+    for (const minutes of [0, WORK_SESSION_MAX_MINUTES + 1, 1.5]) {
+      const host = { ...reloads(OK), minutes }
+      const error = await rejection(startWork(ctx, 'plug', terminal(), host), 'NOT_ALLOWED')
+      expect(error.detail).toBe(`A work session lasts from 1 to ${String(WORK_SESSION_MAX_MINUTES)} minutes, so ${String(minutes)} minutes is not allowed.`)
+      expect(host.calls()).toBe(0)
+    }
+    expect(written(fx)).toBe(before)
+    expect((await startWork(ctx, 'plug', terminal(), { ...reloads(OK), minutes: 1 })).session.plugin).toBe('plug')
   })
 })

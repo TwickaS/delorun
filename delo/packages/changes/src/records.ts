@@ -11,14 +11,14 @@
  * @module @delo/changes/records
  */
 import { randomBytes } from 'node:crypto'
-import { link, mkdir, readFile, unlink } from 'node:fs/promises'
-import { join } from 'node:path'
-import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { link, mkdir, readdir, readFile, stat, unlink } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { PRIVATE_DIR_MODE, PROTECTED_FILE_MODE } from '@delo/contract-home-layout'
 import { checkPrivateDirectory, readProtectedFile, writeProtectedFile } from '@delo/home'
 import { ChangesError } from './errors.ts'
 import { CHANGE_ID_PATTERN } from './ids.ts'
-import { CHANGES_ENTRIES, changesDirectory, profileChangesDirectory, protectionPath } from './paths.ts'
+import { CHANGES_ENTRIES, changesDirectory, migrationPath, PACKAGE_NAME_PATTERN, profileChangesDirectory, protectionPath } from './paths.ts'
 import {
   ACTIVE_RECORD_SCHEMA,
   APPROVED_RECORD_SCHEMA,
@@ -26,6 +26,7 @@ import {
   CHANGE_LOG_SCHEMA,
   CHANGE_STATES,
   DEFAULT_PROTECTION,
+  MIGRATION_RECORD_SCHEMA,
   PROTECTION_LEVELS,
   PROTECTION_RECORD_SCHEMA,
   WORK_SESSION_SCHEMA,
@@ -36,6 +37,7 @@ import {
   type ChangeId,
   type ChangeLog,
   type ContentVersion,
+  type MigrationRecord,
   type ProtectionLevel,
   type ProtectionRecord,
   type WorkSessionRecord,
@@ -44,35 +46,29 @@ import {
 /** What a {@link ContentVersion} is: a SHA-256 in lowercase hexadecimal. */
 export const CONTENT_VERSION_PATTERN = /^[0-9a-f]{64}$/
 
-/** What a package name under Changes is: npm's form, with an optional scope. */
-export const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/
+/** What a package name under Changes is; kept here for the modules that read it with the records. */
+export { PACKAGE_NAME_PATTERN }
 
 /** The brand of {@link AtComputer}; not exported, so no other module can write it. */
 const AT_COMPUTER: unique symbol = Symbol('AtComputer')
 
 /**
- * Proof that the caller acts for a person at their computer: issued only by {@link attestTerminal} and
- * {@link attestStudio}, and checked at run time against the values they issued, so an object that merely looks like one
- * is refused.
+ * Proof that the caller acts for a person at their computer: issued only by {@link attestTerminal}, and checked at run
+ * time against the values it issued, so an object that merely looks like one is refused.
+ *
+ * The proof says only that the command's standard input and output are terminals. A model's own terminal tool gives
+ * its commands a real pseudo-terminal, so the proof does not tell a person from a model: a confined command cannot use
+ * it, because the sandbox denies it every write under the Delo home, `changes/` included (C1), while a command the
+ * person runs with full access acts with the person's own authority.
  */
 export interface AtComputer {
   /** Where the person is. */
-  readonly kind: 'terminal' | 'studio'
+  readonly kind: 'terminal'
   readonly [AT_COMPUTER]: true
 }
 
-/** Every {@link AtComputer} the two attest functions issued. */
+/** Every {@link AtComputer} {@link attestTerminal} issued. */
 const issued = new WeakSet<AtComputer>()
-
-/**
- * @param kind - where the person is.
- * @returns a new, frozen proof.
- */
-function issue(kind: AtComputer['kind']): AtComputer {
-  const presence: AtComputer = Object.freeze({ kind, [AT_COMPUTER]: true as const })
-  issued.add(presence)
-  return presence
-}
 
 /**
  * Attest that a `delorun` command runs at a terminal the person types in.
@@ -84,32 +80,20 @@ export function attestTerminal(streams: { readonly stdin: { readonly isTTY?: boo
   if (streams.stdin.isTTY !== true || streams.stdout.isTTY !== true) {
     throw new ChangesError('NOT_AT_COMPUTER', 'terminal', 'This needs you at your computer: run the command in a terminal, not with its input or output redirected.')
   }
-  return issue('terminal')
+  const presence: AtComputer = Object.freeze({ kind: 'terminal' as const, [AT_COMPUTER]: true as const })
+  issued.add(presence)
+  return presence
 }
 
 /**
- * Attest that a studio request comes from the person at their computer.
- * @param facts - whether the request reached the studio's loopback address, carried the studio's credential, and came
- * through a remote session.
- * @returns the proof.
- * @throws {ChangesError} `NOT_AT_COMPUTER` unless the request is a loopback one with the credential and not remote.
- */
-export function attestStudio(facts: { readonly loopback: boolean, readonly credential: boolean, readonly remoteSession: boolean }): AtComputer {
-  if (!facts.loopback || !facts.credential || facts.remoteSession) {
-    throw new ChangesError('NOT_AT_COMPUTER', 'studio', 'This needs you at your computer: open the studio on this computer, not through a remote session.')
-  }
-  return issue('studio')
-}
-
-/**
- * Refuse a claimed proof of presence that {@link attestTerminal} or {@link attestStudio} did not issue. Every writer that
- * needs the person at their computer calls it before it reads or writes anything.
+ * Refuse a claimed proof of presence that {@link attestTerminal} did not issue. Every writer that needs the person at
+ * their computer calls it before it reads or writes anything.
  * @param presence - a claimed proof.
  * @param subject - what it is for, for the refusal.
- * @throws {ChangesError} `NOT_AT_COMPUTER` when the attest functions did not issue it.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` when {@link attestTerminal} did not issue it.
  */
 export function requirePresence(presence: AtComputer, subject: string): void {
-  if (!issued.has(presence)) throw new ChangesError('NOT_AT_COMPUTER', subject, 'This needs you at your computer, and the request did not come from a terminal or the studio on this computer.')
+  if (!issued.has(presence)) throw new ChangesError('NOT_AT_COMPUTER', subject, 'This needs you at your computer, and the request did not come from a terminal on this computer.')
 }
 
 /**
@@ -306,6 +290,7 @@ const WORK_SESSION_RULES: Readonly<Record<string, FieldRule>> = {
   from: required.version,
   startedAt: required.iso,
   startedFrom: { test: oneOf(['terminal', 'studio']), expected: 'terminal or studio' },
+  endsAt: required.iso,
   lastLoaded: optional.version,
   lastFailed: optional.version,
 }
@@ -417,17 +402,16 @@ export async function readProtection(home: string): Promise<ProtectionLevel> {
 }
 
 /**
- * Change the protection setting. Only the terminal command changes it: a studio proof is refused.
+ * Change the protection setting. Only the terminal command changes it.
  * @param home - the Delo home.
  * @param level - the new level.
  * @param presence - proof from {@link attestTerminal}.
  * @returns the record written.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue or one from the studio.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue.
  * @throws {HomeLayoutError} `HOME_MODE` when `changes/` is laxer than 0700.
  */
 export async function setProtection(home: string, level: ProtectionLevel, presence: AtComputer): Promise<ProtectionRecord> {
   requirePresence(presence, 'protection')
-  if (presence.kind !== 'terminal') throw new ChangesError('NOT_AT_COMPUTER', 'protection', 'The protection setting changes only with `delorun changes protection` in a terminal on this computer.')
   const record: ProtectionRecord = { schema: PROTECTION_RECORD_SCHEMA, level, setAt: new Date().toISOString() }
   await makeChangesDirectory(home, changesDirectory(home))
   await writeProtectedFile(protectionPath(home), jsonText(record))
@@ -458,23 +442,28 @@ export async function readWorkSession(home: string, profile: string): Promise<Wo
   return value
 }
 
-/** What the caller states when it opens a work session; the start time and place come from the call. */
-export type WorkSessionStart = Pick<WorkSessionRecord, 'plugin' | 'source' | 'from'>
+/**
+ * What the caller states when it opens a work session: the plugin, its folder, its approved content and how many minutes
+ * the session lasts, which the caller checked; the start time and place come from the call.
+ */
+export type WorkSessionStart = Pick<WorkSessionRecord, 'plugin' | 'source' | 'from'> & { readonly minutes: number }
 
 /**
  * Open a work session. The record is written completely to a temporary file and then linked to its name, which fails
  * when the name exists, so two openings never both succeed.
  * @param home - the Delo home.
  * @param profile - the profile's name.
- * @param start - the plugin, its folder and its approved content.
- * @param presence - proof from {@link attestTerminal} or {@link attestStudio}; its kind is recorded as `startedFrom`.
+ * @param start - the plugin, its folder, its approved content and the session's length in minutes.
+ * @param presence - proof from {@link attestTerminal}; its kind is recorded as `startedFrom`.
  * @returns the record written.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `WORK_SESSION_OPEN` when the
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue; `WORK_SESSION_OPEN` when the
  * profile has a work session already.
  */
 export async function openWorkSession(home: string, profile: string, start: WorkSessionStart, presence: AtComputer): Promise<WorkSessionRecord> {
   requirePresence(presence, start.plugin)
-  const record: WorkSessionRecord = { schema: WORK_SESSION_SCHEMA, plugin: start.plugin, source: start.source, from: start.from, startedAt: new Date().toISOString(), startedFrom: presence.kind }
+  const startedAt = new Date()
+  const endsAt = new Date(startedAt.getTime() + start.minutes * 60_000)
+  const record: WorkSessionRecord = { schema: WORK_SESSION_SCHEMA, plugin: start.plugin, source: start.source, from: start.from, startedAt: startedAt.toISOString(), startedFrom: presence.kind, endsAt: endsAt.toISOString() }
   const path = workSessionPath(home, profile)
   await makeChangesDirectory(home, profileChangesDirectory(home, profile))
   const temporary = `${path}.open-${randomBytes(8).toString('hex')}`
@@ -496,9 +485,9 @@ export async function openWorkSession(home: string, profile: string, start: Work
  * @param home - the Delo home.
  * @param profile - the profile's name.
  * @param plugin - the plugin's package name.
- * @param presence - proof from {@link attestTerminal} or {@link attestStudio}.
+ * @param presence - proof from {@link attestTerminal}.
  * @returns the closed record.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `NO_WORK_SESSION` when no
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue; `NO_WORK_SESSION` when no
  * work session is open or it is another plugin's; `RECORD_UNREADABLE` when the record is not one Delo wrote.
  */
 export async function closeWorkSession(home: string, profile: string, plugin: string, presence: AtComputer): Promise<WorkSessionRecord> {
@@ -614,6 +603,147 @@ export function withEntry(log: ChangeLog, entry: ChangeEntry): ChangeLog {
  */
 export function findEntry(log: ChangeLog, id: ChangeId): ChangeEntry | undefined {
   return log.entries.find(entry => entry.id === id)
+}
+
+/**
+ * @param entry - a logged change.
+ * @returns whether the first start under Changes approved it as it was and no terminal has shown that yet.
+ */
+export function unshownAtUpgrade(entry: ChangeEntry): boolean {
+  return entry.decidedFrom === 'upgrade' && entry.state === 'applied' && entry.shownAt === undefined
+}
+
+/** The profile whose log records what a terminal showed, and how long to wait for its write lock. */
+export interface ShownTarget {
+  /** The Delo home. */
+  readonly home: string
+  /** The profile's name. */
+  readonly profile: string
+  /** The profile's directory, whose `package.json` file lock is upstream's profile write lock. */
+  readonly profileDir: string
+  /** How long to wait for the lock, in milliseconds. */
+  readonly lockWaitMs: number
+}
+
+/**
+ * Record that a terminal showed the person the plugins the first start under Changes approved as they were. Until
+ * then every start that reaches a terminal, `delorun status` and `delorun changes list` name them. Runs under the
+ * profile's write lock.
+ * @param target - the profile and the lock wait.
+ * @param plugins - the plugins shown.
+ * @param at - when, ISO 8601.
+ * @returns whether the log changed.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the log is not one Delo wrote.
+ */
+export async function markShownAtUpgrade(target: ShownTarget, plugins: readonly string[], at: string): Promise<boolean> {
+  const { home, profile } = target
+  return withFileLock(join(target.profileDir, 'package.json'), async () => {
+    const log = await readChangeLog(home, profile)
+    let changed = false
+    const entries = log.entries.map((entry): ChangeEntry => {
+      if (!unshownAtUpgrade(entry) || entry.subject.plugin === undefined || !plugins.includes(entry.subject.plugin)) return entry
+      changed = true
+      return { ...entry, shownAt: at }
+    })
+    if (changed) await writeChangeLog(home, profile, { ...log, entries })
+    return changed
+  }, { waitMs: target.lockWaitMs })
+}
+
+const MIGRATION_RULES: Readonly<Record<string, FieldRule>> = {
+  schema: schemaRule(MIGRATION_RECORD_SCHEMA),
+  at: required.iso,
+  profiles: {
+    expected: 'a list of distinct profile names',
+    test: value => Array.isArray(value) && value.every(name => typeof name === 'string') && new Set(value).size === value.length,
+  },
+}
+
+/**
+ * Read the record of the profiles the first start under Changes found.
+ * @param home - the Delo home.
+ * @returns the record, or undefined when no start has brought a profile under Changes.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the record is not one Delo wrote.
+ */
+export async function readMigration(home: string): Promise<MigrationRecord | undefined> {
+  const path = migrationPath(home)
+  const value = await readRecordFile(path)
+  if (value === undefined) return undefined
+  checkFields(value, path, 'the record', MIGRATION_RULES)
+  return value as MigrationRecord
+}
+
+/**
+ * The profiles a profiles directory holds: each directory with a `package.json`.
+ * @param profilesDir - the directory holding the profiles.
+ * @returns their names, sorted.
+ */
+async function profilesIn(profilesDir: string): Promise<string[]> {
+  const names = await readdir(profilesDir, { withFileTypes: true })
+  const found: string[] = []
+  for (const entry of names) {
+    if (entry.isDirectory() && await isFile(join(profilesDir, entry.name, 'package.json'))) found.push(entry.name)
+  }
+  return found.sort()
+}
+
+/**
+ * @param path - a path.
+ * @returns whether a regular file is there.
+ */
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile()
+  } catch (_absent) {
+    // Missing or unreachable: no profile manifest there.
+    return false
+  }
+}
+
+/**
+ * Whether this start of a profile approves the profile's linked plugins as they are: the profile's log has no
+ * `migratedAt`, and the profile is one the home held when a start first brought a profile under Changes. The first
+ * such start writes that record, `changes/migration.json`, naming every profile in the profile's directory then, by an
+ * exclusive create, so two starts at once record one list. A profile created after it waits for review like any new
+ * plugin link, so a second profile's links are never approved silently. The caller holds the profile's lock.
+ * @param home - the Delo home.
+ * @param profile - the profile's name.
+ * @param profileDir - its directory; the directory holding it holds the home's profiles.
+ * @param log - its change log.
+ * @param at - the start's time, ISO 8601.
+ * @returns whether the start approves the linked plugins as they are.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the record is not one Delo wrote.
+ * @throws {HomeLayoutError} `HOME_MODE` when `changes/` is laxer than 0700.
+ */
+export async function migratesAtUpgrade(home: string, profile: string, profileDir: string, log: ChangeLog, at: string): Promise<boolean> {
+  if (log.migratedAt !== undefined) return false
+  const record = await readMigration(home) ?? await recordMigration(home, dirname(profileDir), at)
+  return record.profiles.includes(profile)
+}
+
+/**
+ * Write the record of the profiles the home holds now, unless another start wrote one first.
+ * @param home - the Delo home.
+ * @param profilesDir - the directory holding the profiles.
+ * @param at - when, ISO 8601.
+ * @returns the record that holds.
+ */
+async function recordMigration(home: string, profilesDir: string, at: string): Promise<MigrationRecord> {
+  const record: MigrationRecord = { schema: MIGRATION_RECORD_SCHEMA, at, profiles: await profilesIn(profilesDir) }
+  const path = migrationPath(home)
+  await makeChangesDirectory(home, changesDirectory(home))
+  const temporary = `${path}.new-${randomBytes(8).toString('hex')}`
+  await writeProtectedFile(temporary, jsonText(record))
+  try {
+    await link(temporary, path)
+  } catch (error) {
+    if (!hasCode(error, 'EEXIST')) throw error
+    // Another start recorded the profiles first; its list holds.
+    return (await readMigration(home))!
+  } finally {
+    await unlink(temporary)
+  }
+  return record
 }
 
 /**

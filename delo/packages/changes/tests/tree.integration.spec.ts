@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, statSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { writeProtectedFile } from '@delo/home'
-import { CACHE_SETTLE_MS, compareCodeUnits, isDigest, manifestOf, openRegularFile, readChunks, SCAN_CACHE_SCHEMA, scanFolder, versionOf } from '../src/tree.ts'
+import { CACHE_SETTLE_MS, compareCodeUnits, CONTENT_BYTE_LIMIT, CONTENT_ENTRY_LIMIT, isDigest, manifestOf, openRegularFile, readChunks, SCAN_CACHE_SCHEMA, scanFolder, versionOf } from '../src/tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ObjectDigest, type VersionEntry } from '../src/types.ts'
 import { lockOut, makeFifo, modeOf, rejection, temporaryDirectory, writeFiles } from './support.ts'
 
@@ -18,6 +18,9 @@ vi.setConfig({ testTimeout: 30_000 })
 function sha(text: string): ObjectDigest {
   return createHash('sha256').update(text).digest('hex') as ObjectDigest
 }
+
+/** The scan of an active directory, which keeps links to installed packages as outside links. */
+const LINKED = { dependencies: 'link' } as const
 
 /** A clock far enough ahead that every file in a test counts as settled for the cache. */
 const later = (): number => Date.now() + 10 * CACHE_SETTLE_MS
@@ -53,7 +56,7 @@ describe('scanFolder', () => {
     ])
   })
 
-  it('keeps a link into a node_modules directory as an outside link with its absolute target, and skips one that does not resolve', async () => {
+  it('with dependencies kept as links, keeps a link into a node_modules directory as an outside link with its absolute target, and skips one that does not resolve', async () => {
     const workspace = temporaryDirectory()
     const folder = join(workspace, 'plugin')
     const store = join(workspace, 'node_modules', '.pnpm', 'dep@1', 'node_modules', 'dep')
@@ -67,7 +70,7 @@ describe('scanFolder', () => {
     symlinkSync('../loop/cycle', join(folder, 'loop'))
     symlinkSync('.git/config', join(folder, 'git'))
     symlinkSync('../node_modules/absent', join(folder, 'absent'))
-    const { entries, files, skipped } = await scanFolder(folder)
+    const { entries, files, skipped } = await scanFolder(folder, LINKED)
     expect(entries).toEqual([
       { type: 'link', path: 'absent', target: join(workspace, 'node_modules', 'absent'), outside: true },
       { type: 'link', path: 'absolute.js', target: join(store, 'index.js'), outside: true },
@@ -77,7 +80,7 @@ describe('scanFolder', () => {
     expect(skipped).toEqual(['git', 'loop', 'missing', 'notdir'])
   })
 
-  it('dereferences a link to a sibling package, walking it by the same rules', async () => {
+  it('with dependencies kept as links, dereferences a link to a sibling package, walking it by the same rules', async () => {
     const workspace = temporaryDirectory()
     const folder = join(workspace, 'plugin')
     writeFiles(workspace, {
@@ -96,7 +99,7 @@ describe('scanFolder', () => {
     symlinkSync('../../../pkg', join(folder, 'node_modules', '@scope', 'pkg'))
     symlinkSync(join(workspace, 'shared.txt'), join(folder, 'shared.txt'))
     symlinkSync('../pipe', join(folder, 'pipe'))
-    const { entries, files, skipped } = await scanFolder(folder)
+    const { entries, files, skipped } = await scanFolder(folder, LINKED)
     expect(entries).toEqual([
       { type: 'file', path: 'index.js', digest: sha('p'), size: 1, executable: false },
       { type: 'link', path: 'node_modules/@scope/pkg/lib', target: 'src', outside: false },
@@ -114,7 +117,7 @@ describe('scanFolder', () => {
     expect(skipped).toEqual(['pipe'])
     const before = versionOf(entries)
     writeFiles(workspace, { 'pkg/index.js': 'edited' })
-    expect(versionOf((await scanFolder(folder)).entries)).not.toBe(before)
+    expect(versionOf((await scanFolder(folder, LINKED)).entries)).not.toBe(before)
   })
 
   it('includes each real directory once, linking every later path to it relatively, and skips a link to a containing directory', async () => {
@@ -166,7 +169,7 @@ describe('scanFolder', () => {
     ])
   })
 
-  it('links, and never copies, the dependencies of a dereferenced package', async () => {
+  it('with dependencies kept as links, links, and never copies, the dependencies of a dereferenced package', async () => {
     const workspace = temporaryDirectory()
     const folder = join(workspace, 'plugin')
     const store = join(workspace, 'node_modules', '.pnpm', 'x@1', 'node_modules', 'x')
@@ -187,7 +190,7 @@ describe('scanFolder', () => {
     symlinkSync('../../plugin', join(modules, 'plugin'))
     symlinkSync('../..', join(modules, 'root'))
     symlinkSync('../../node_modules/.pnpm/x@1/node_modules/x', join(modules, 'x'))
-    const { entries, skipped } = await scanFolder(folder)
+    const { entries, skipped } = await scanFolder(folder, LINKED)
     expect(entries).toEqual([
       { type: 'file', path: 'index.js', digest: sha('p'), size: 1, executable: false },
       { type: 'file', path: 'node_modules/pkg/index.js', digest: sha('sibling'), size: 7, executable: false },
@@ -212,8 +215,10 @@ describe('scanFolder', () => {
     ])
   })
 
-  it('finishes on this repository\'s bundle-local package and includes its workspace dependencies', async () => {
-    const { entries } = await scanFolder(join(import.meta.dirname, '..', '..', 'bundle-local'))
+  it('finishes on this repository\'s bundle-local package: too large to copy with its installed packages, and with them kept as links it includes its workspace dependencies', async () => {
+    const bundle = join(import.meta.dirname, '..', '..', 'bundle-local')
+    await rejection(scanFolder(bundle), 'CONTENT_TOO_LARGE')
+    const { entries } = await scanFolder(bundle, LINKED)
     expect(entries.some((entry) => entry.path.startsWith('node_modules/@delo/') && entry.type === 'file')).toBe(true)
     expect(entries.length).toBeLessThan(5000)
   }, 120_000)
@@ -245,6 +250,110 @@ describe('scanFolder', () => {
     const { entries, skipped } = await scanFolder(folder)
     expect(entries.map((entry) => entry.path)).toEqual(['a.js'])
     expect(skipped).toEqual(['pipes/p'])
+  })
+
+  it('includes an installed package\'s files and the dependencies pnpm installs beside it, and skips a dangling link into node_modules', async () => {
+    const workspace = temporaryDirectory()
+    const folder = join(workspace, 'plugin')
+    const pnpm = join(workspace, 'node_modules', '.pnpm')
+    writeFiles(pnpm, {
+      'dep@1/node_modules/dep/package.json': JSON.stringify({ name: 'dep', dependencies: { inner: '1', '@s/scoped': '1', dep: '1', missing: '1', '../escape': '1' }, optionalDependencies: { own: '1' }, peerDependencies: 'not an object' }),
+      'dep@1/node_modules/dep/node_modules/own/index.js': 'own',
+      'inner@1/node_modules/inner/package.json': '{"name":"inner","dependencies":{"dep":"1"}}',
+      '@s+scoped@1/node_modules/@s/scoped/package.json': '[1]',
+      'dep@1/node_modules/own/index.js': 'not used',
+    })
+    symlinkSync('../../inner@1/node_modules/inner', join(pnpm, 'dep@1', 'node_modules', 'inner'))
+    symlinkSync('../../dep@1/node_modules/dep', join(pnpm, 'inner@1', 'node_modules', 'dep'))
+    mkdirSync(join(pnpm, 'dep@1', 'node_modules', '@s'))
+    symlinkSync('../../../@s+scoped@1/node_modules/@s/scoped', join(pnpm, 'dep@1', 'node_modules', '@s', 'scoped'))
+    writeFiles(folder, { 'index.js': 'p' })
+    mkdirSync(join(folder, 'node_modules'))
+    symlinkSync('../../node_modules/.pnpm/dep@1/node_modules/dep', join(folder, 'node_modules', 'dep'))
+    symlinkSync('../../node_modules/absent', join(folder, 'node_modules', 'absent'))
+    const { entries, skipped } = await scanFolder(folder)
+    expect(entries.map((entry) => entry.type === 'link' ? `${entry.path} -> ${entry.target}` : entry.path)).toEqual([
+      'index.js',
+      'node_modules/dep/node_modules/@s/scoped/package.json',
+      'node_modules/dep/node_modules/inner/node_modules/dep -> ../../..',
+      'node_modules/dep/node_modules/inner/package.json',
+      'node_modules/dep/node_modules/own/index.js',
+      'node_modules/dep/package.json',
+    ])
+    expect(entries.every((entry) => entry.type === 'file' || !entry.outside)).toBe(true)
+    expect(skipped).toEqual(['node_modules/absent'])
+  })
+
+  it('reads no dependency names from a package.json that is too large, not JSON, null or without dependency objects', async () => {
+    const workspace = temporaryDirectory()
+    const folder = join(workspace, 'plugin')
+    const pnpm = join(workspace, 'node_modules', '.pnpm')
+    writeFiles(pnpm, {
+      'big@1/node_modules/big/index.js': 'b',
+      'bad@1/node_modules/bad/package.json': '{',
+      'big@1/node_modules/other/index.js': 'o',
+      'nul@1/node_modules/nul/package.json': 'null',
+      'nul@1/node_modules/other/index.js': 'o',
+      'none@1/node_modules/none/package.json': '{"dependencies":null}',
+      'none@1/node_modules/other/index.js': 'o',
+    })
+    writeFileSync(join(pnpm, 'big@1', 'node_modules', 'big', 'package.json'), JSON.stringify({ dependencies: { other: '1' }, padding: 'x'.repeat(1024 * 1024) }))
+    writeFiles(folder, { 'index.js': 'p' })
+    mkdirSync(join(folder, 'node_modules'))
+    symlinkSync('../../node_modules/.pnpm/big@1/node_modules/big', join(folder, 'node_modules', 'big'))
+    symlinkSync('../../node_modules/.pnpm/bad@1/node_modules/bad', join(folder, 'node_modules', 'bad'))
+    symlinkSync('../../node_modules/.pnpm/nul@1/node_modules/nul', join(folder, 'node_modules', 'nul'))
+    symlinkSync('../../node_modules/.pnpm/none@1/node_modules/none', join(folder, 'node_modules', 'none'))
+    const { entries } = await scanFolder(folder)
+    expect(entries.map((entry) => entry.path)).toEqual([
+      'index.js',
+      'node_modules/bad/package.json',
+      'node_modules/big/index.js',
+      'node_modules/big/package.json',
+      'node_modules/none/package.json',
+      'node_modules/nul/package.json',
+    ])
+  })
+
+  it('judges a relative link by where it resolves on disk, not by its spelling', async () => {
+    const workspace = temporaryDirectory()
+    const folder = join(workspace, 'plugin')
+    writeFiles(workspace, { 'plugin/index.js': 'p', 'outside/inner/a.js': 'a', 'outside/secret.js': 's' })
+    symlinkSync('../outside/inner', join(folder, 'evil'))
+    symlinkSync('evil/..', join(folder, 'up'))
+    symlinkSync('evil/../gone/x', join(folder, 'dangling'))
+    symlinkSync('missing/x', join(folder, 'inside'))
+    const { entries, skipped } = await scanFolder(folder)
+    expect(entries).toEqual([
+      { type: 'file', path: 'evil/a.js', digest: sha('a'), size: 1, executable: false },
+      { type: 'file', path: 'index.js', digest: sha('p'), size: 1, executable: false },
+      { type: 'link', path: 'inside', target: 'missing/x', outside: false },
+    ])
+    expect(skipped).toEqual(['dangling', 'up'])
+  })
+
+  it('skips a name holding a backslash, which no version path can hold', async () => {
+    const folder = temporaryDirectory()
+    writeFiles(folder, { 'a.js': 'a', 'sub\\b.js': 'b' })
+    const { entries, skipped } = await scanFolder(folder)
+    expect(entries.map((entry) => entry.path)).toEqual(['a.js'])
+    expect(skipped).toEqual(['sub\\b.js'])
+  })
+
+  it('refuses a folder with more files, links and directories than a version holds', async () => {
+    const folder = temporaryDirectory()
+    for (let index = 0; index < CONTENT_ENTRY_LIMIT; index++) mkdirSync(join(folder, `d${String(index)}`))
+    const error = await rejection(scanFolder(folder), 'CONTENT_TOO_LARGE')
+    expect(error.detail).toContain(`more than ${String(CONTENT_ENTRY_LIMIT)} files, links and directories`)
+  }, 120_000)
+
+  it('refuses a folder with more bytes than a version holds, before reading them', async () => {
+    const folder = temporaryDirectory()
+    writeFiles(folder, { 'a.js': 'a' })
+    writeFileSync(join(folder, 'big.bin'), '')
+    truncateSync(join(folder, 'big.bin'), CONTENT_BYTE_LIMIT)
+    const error = await rejection(scanFolder(folder), 'CONTENT_TOO_LARGE')
+    expect(error.detail).toContain('more than 512 MiB')
   })
 
   it('fails with the filesystem error for a missing folder', async () => {

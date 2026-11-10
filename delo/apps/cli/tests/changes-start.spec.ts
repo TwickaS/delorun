@@ -21,6 +21,19 @@ import { headless } from '../src/upstream.ts'
 import { runtimeOfFile } from '../src/update/runtime.ts'
 import { checkStoredRuntime, storeUpdateSupport } from '../src/update/store-support.ts'
 
+const hooks = vi.hoisted(() => ({ markError: undefined as Error | undefined }))
+
+vi.mock('@delo/changes', async importOriginal => {
+  const actual = await importOriginal<typeof import('@delo/changes')>()
+  return {
+    ...actual,
+    markShownAtUpgrade: async (...args: Parameters<typeof actual.markShownAtUpgrade>) => {
+      if (hooks.markError !== undefined) throw hooks.markError
+      return actual.markShownAtUpgrade(...args)
+    },
+  }
+})
+
 let base: string
 let home: string
 let context: CommandContext & { printed: string[], errors: string[] }
@@ -191,6 +204,44 @@ describe('startChanges', () => {
     const refusal = startChanges({ home, profile: 'default' }, () => {})
     await expect(refusal).rejects.toBeInstanceOf(CliError)
     await expect(refusal).rejects.toThrow(/^delorun: the profile default was not started, because the plugins it links from folders could not be prepared: .*log\.json/)
+  })
+
+  it('a start whose output reaches no terminal names the plugins approved at upgrade again at the next start', async () => {
+    await prepareHome(context, undefined)
+    const folder = profileLinkingPlug('default')
+    const notice = `Delo now runs the approved copy of plug, linked from ${folder}. Edits in that folder wait for your review: delorun changes list.\n`
+    // `delorun start` runs the home process with its output in the log only.
+    await startChanges({ home, profile: 'default', terminal: false }, context.stdout)
+    expect(context.printed).toEqual([notice])
+    expect((await readChangeLog(home, 'default')).entries[0]!.shownAt).toBeUndefined()
+    await startChanges({ home, profile: 'default', terminal: true }, context.stdout)
+    expect(context.printed).toEqual([notice, notice])
+    expect((await readChangeLog(home, 'default')).entries[0]!.shownAt).toEqual(expect.any(String))
+    await startChanges({ home, profile: 'default' }, context.stdout)
+    expect(context.printed).toEqual([notice, notice])
+  })
+
+  it('a start goes on when it cannot record that the notice was shown, and says so', async () => {
+    await prepareHome(context, undefined)
+    profileLinkingPlug('default')
+    hooks.markError = new Error('the log is busy\u001b[2J')
+    await startChanges({ home, profile: 'default', terminal: true }, context.stdout)
+    expect(context.printed.at(-1)).toBe('Delo could not record that you saw this, so the next start says it again: Error: the log is busy\\u001b[2J\n')
+    hooks.markError = undefined
+  })
+
+  it('a profile created after the first start under Changes does not approve its links at upgrade', async () => {
+    await prepareHome(context, undefined)
+    mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
+    writeFileSync(join(home, 'profiles', 'default', 'package.json'), '{"name":"dsh-profile-default","dependencies":{}}\n')
+    await startChanges({ home, profile: 'default', terminal: true }, context.stdout)
+    // A second profile, created after the upgrade, links a plugin from a folder.
+    profileLinkingPlug('second')
+    await startChanges({ home, profile: 'second', terminal: true }, context.stdout)
+    const [entry] = (await readChangeLog(home, 'second')).entries
+    expect(entry).toMatchObject({ kind: 'plugin-install', state: 'pending', subject: { plugin: 'plug' } })
+    expect(entry!.decidedFrom).toBeUndefined()
+    expect(context.printed.join('')).toMatch(/^plug is not loaded until you review it: delorun changes show c[0-9a-f]{10}\n$/u)
   })
 
   it('refuses the start when the profile history cannot record the change', async () => {

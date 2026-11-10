@@ -16,5 +16,6 @@
   "changes-work-session": 1,
   "changes-active": 1,
   "changes-boot": 1,
-  "changes-work": 1
+  "changes-work": 1,
+  "changes-migration": 1
 }

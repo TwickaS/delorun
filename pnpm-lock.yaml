@@ -2233,12 +2233,18 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-timer':
+        specifier: workspace:~
+        version: link:../../../vendor/timer
       '@deepseek-ai/dsh-agent':
         specifier: workspace:*
         version: link:../../../packages/core/agent
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-hmr':
+        specifier: workspace:*
+        version: link:../../../packages/boot/hmr
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../../packages/llm/llm
@@ -2269,6 +2275,9 @@ importers:
       '@deepseek-ai/dsh-user-approval':
         specifier: workspace:*
         version: link:../../../packages/interaction/user-approval
+      chokidar:
+        specifier: 5.0.0
+        version: 5.0.0
 
   delo/packages/plugin-chat-states:
     dependencies:

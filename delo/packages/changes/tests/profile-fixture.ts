@@ -10,7 +10,7 @@ import { parse, parseDocument } from 'yaml'
 import { openHistory } from '@delo/profile-safety'
 import { enforceApprovedContent, type StartChanges } from '../src/enforce.ts'
 import { activeDirectory } from '../src/paths.ts'
-import { attestTerminal, readApproved, type AtComputer } from '../src/records.ts'
+import { attestTerminal, markShownAtUpgrade, readApproved, type AtComputer } from '../src/records.ts'
 import type { ContentVersion } from '../src/types.ts'
 import { temporaryDirectory, writeFiles } from './support.ts'
 
@@ -85,12 +85,14 @@ export function linkAs(fx: Fixture, name: string, target: string): void {
 }
 
 /**
- * Run the start's enforcement.
+ * Run the start's enforcement as a start at a terminal does: what it names as approved at upgrade is recorded as shown.
  * @param fx - the fixture.
  * @returns what the start prints.
  */
-export function start(fx: Fixture): Promise<StartChanges> {
-  return enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW })
+export async function start(fx: Fixture): Promise<StartChanges> {
+  const changes = await enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW })
+  await markShownAtUpgrade({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, lockWaitMs: 1000 }, changes.approvedAtUpgrade.map(({ plugin }) => plugin), NOW.toISOString())
+  return changes
 }
 
 /**

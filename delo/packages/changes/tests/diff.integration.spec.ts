@@ -139,6 +139,14 @@ describe('boundedDiff', () => {
     expect(Buffer.byteLength(diff.text)).toBeLessThanOrEqual(200)
   })
 
+  it('quotes a binary file\'s name that holds a line break, a quote or a backslash, so it stays on its line', async () => {
+    const { home, before, after } = await versions({}, (folder) => {
+      writeFiles(folder, { 'x\n+forged.bin': BINARY, 'plain.bin': BINARY })
+    })
+    const diff = await boundedDiff(home, before, after, await compareVersions(home, before, after))
+    expect(diff.text).toBe('Binary file plain.bin added\nBinary file "x\\n+forged.bin" added\n')
+  })
+
   it('does not list a binary file that does not fit as omitted', async () => {
     const { home, before, after } = await versions({}, (folder) => {
       writeFiles(folder, { 'a.bin': BINARY, 'b.js': 'b\n' })
@@ -154,7 +162,7 @@ describe('boundedDiff', () => {
 })
 
 describe('reviewInputOf', () => {
-  it('gives each side\'s text for text files within the limit, none for dependency, binary or large files, and both manifests', async () => {
+  it('gives each side\'s text for text files within the limit, none for dependency, binary or large files, why the diff does not show a file, and both manifests', async () => {
     const { home, before, after } = await versions({
       'package.json': '{"name":"p","version":"1.0.0"}',
       'mod.js': 'old',
@@ -175,16 +183,16 @@ describe('reviewInputOf', () => {
       symlinkSync('mod.js', join(folder, 'link'))
     })
     const changes = await compareVersions(home, before, after)
-    const input = await reviewInputOf(home, before, after, changes, { file: 50 })
+    const input = await reviewInputOf(home, before, after, changes, { file: 50 }, ['big.js', 'mod.js'])
     expect(input).toEqual({
       files: [
         { path: 'add.js', status: 'added', dependency: false, after: 'a' },
-        { path: 'big.js', status: 'modified', dependency: false },
+        { path: 'big.js', status: 'modified', dependency: false, notShown: 'too-large' },
         { path: 'gone.js', status: 'removed', dependency: false, before: 'g' },
-        { path: 'image.png', status: 'modified', dependency: false },
+        { path: 'image.png', status: 'modified', dependency: false, notShown: 'binary' },
         { path: 'link', status: 'added', dependency: false, after: 'mod.js' },
-        { path: 'mod.js', status: 'modified', dependency: false, before: 'old', after: 'new' },
-        { path: 'node_modules/d/index.js', status: 'modified', dependency: true },
+        { path: 'mod.js', status: 'modified', dependency: false, before: 'old', after: 'new', notShown: 'cut-short' },
+        { path: 'node_modules/d/index.js', status: 'modified', dependency: true, notShown: 'dependency' },
         { path: 'package.json', status: 'modified', dependency: false, before: '{"name":"p","version":"1.0.0"}', after: '{"name":"p","version":"2.0.0"}' },
       ],
       manifestBefore: { name: 'p', version: '1.0.0' },

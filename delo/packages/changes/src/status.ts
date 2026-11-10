@@ -19,7 +19,7 @@ import { isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
 import { checkChangesInvariants, type InvariantRequest } from './invariants.ts'
 import { versionsDirectory } from './paths.ts'
-import { approvedOf, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession } from './records.ts'
+import { approvedOf, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, unshownAtUpgrade } from './records.ts'
 import { compareCodeUnits, scanFolder, versionOf } from './tree.ts'
 import { readWorkFailure, type WorkFailureRecord } from './work-record.ts'
 import {
@@ -95,6 +95,8 @@ export interface ChangesStatus {
   readonly workSession?: { readonly plugin: string, readonly source: string, readonly startedAt: string }
   /** One line per invariant that does not hold, and per record or folder that cannot be read. */
   readonly invariants: readonly string[]
+  /** The plugins the first start under Changes approved as they were and no terminal has shown yet, oldest first. */
+  readonly unshownAtUpgrade: readonly { readonly plugin: string, readonly source: string }[]
   /** Every plugin under Changes, by name. */
   readonly plugins: readonly PluginStatus[]
   /** The record of the last start, when one was written. */
@@ -107,7 +109,7 @@ export interface ChangesStatus {
   readonly workFailureUnreadable?: string
 }
 
-/** The open work session, as the studio's badge shows it. */
+/** The open work session, as `delorun status` and the studio's badge show it. */
 export interface WorkSessionFact {
   /** The plugin whose folder loads live. */
   readonly plugin: string
@@ -115,6 +117,8 @@ export interface WorkSessionFact {
   readonly source: string
   /** When the session started, ISO 8601. */
   readonly startedAt: string
+  /** When it ends without the person, ISO 8601. */
+  readonly endsAt: string
   /** The last reload of the folder's content that failed, while Delo runs the content that last loaded instead. */
   readonly lastError?: { readonly at: string, readonly error: string }
 }
@@ -220,6 +224,7 @@ export async function changesStatus(request: ChangesStatusRequest): Promise<Chan
     unapproved: plugins.filter(entry => entry.active?.kind === 'unapproved').map(({ plugin }) => ({ plugin })),
     ...workSession === undefined ? {} : { workSession: { plugin: workSession.plugin, source: workSession.source, startedAt: workSession.startedAt } },
     invariants,
+    unshownAtUpgrade: log.entries.flatMap(entry => unshownAtUpgrade(entry) && entry.subject.plugin !== undefined && entry.subject.source !== undefined ? [{ plugin: entry.subject.plugin, source: entry.subject.source }] : []),
     plugins,
     ...boot === undefined ? {} : { boot },
     ...bootUnreadable === undefined ? {} : { bootUnreadable },
@@ -229,7 +234,7 @@ export async function changesStatus(request: ChangesStatusRequest): Promise<Chan
 }
 
 /**
- * The open work session for the studio's badge, with the last failed reload of its plugin while one is recorded.
+ * The open work session for `delorun status` and the studio's badge, with its end time and the last failed reload of its plugin while one is recorded.
  * Nothing is written.
  * @param home - the Delo home.
  * @param profile - the profile's name.
@@ -241,8 +246,8 @@ export async function workSessionFact(home: string, profile: string): Promise<Wo
   const session = await readWorkSession(home, profile)
   if (session === undefined) return undefined
   const failure = await readWorkFailure(home, profile)
-  const { plugin, source, startedAt } = session
-  return { plugin, source, startedAt, ...failure?.plugin === plugin ? { lastError: { at: failure.at, error: failure.error } } : {} }
+  const { plugin, source, startedAt, endsAt } = session
+  return { plugin, source, startedAt, endsAt, ...failure?.plugin === plugin ? { lastError: { at: failure.at, error: failure.error } } : {} }
 }
 
 /**

@@ -9,13 +9,27 @@
  *
  * The watcher follows `changes/profiles/<profile>/work-session.json`, so a session opened or closed by
  * `delorun changes work` or `done` is noticed, and while one is open it watches the plugin's folder recursively, leaving
- * out `.git`. Events are debounced; loads run one at a time under the profile write lock.
+ * out `.git`. Events are debounced; loads run one at a time under the profile write lock. At the session's end time
+ * the watcher ends it without the person through the injected `expire`, which approves nothing and puts the version the
+ * session started from back, and logs why it ended.
  *
  * @module @delo/cli/changes/work-watch
  */
 import { mkdirSync, watch, type FSWatcher, type WatchListener } from 'node:fs'
 import { sep } from 'node:path'
-import { CHANGES_ENTRIES, EXCLUDED_DIRECTORY, isChangesError, loadWorkSession, profileChangesDirectory, readWorkSession, type ReloadHost, type WorkSync } from '@delo/changes'
+import {
+  CHANGES_ENTRIES,
+  EXCLUDED_DIRECTORY,
+  isChangesError,
+  loadWorkSession,
+  profileChangesDirectory,
+  readWorkSession,
+  WORK_SESSION_MAX_MINUTES,
+  workFinishedLine,
+  type ReloadHost,
+  type WorkFinished,
+  type WorkSync,
+} from '@delo/changes'
 import { PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import type { DeloLogger } from '@delo/logs'
 
@@ -34,8 +48,16 @@ export interface WorkWatchOptions {
   readonly reload: ReloadHost
   /** The home process's logger, which receives every load and failure. */
   readonly logger: DeloLogger
+  /**
+   * End the open session without the person once its end time passed; the start module passes the `@delo/changes/stop`
+   * entry's function with the reason `expired` and the Host's reload.
+   * @returns what ending it did; undefined when no session's end time passed.
+   */
+  readonly expire: () => Promise<WorkFinished | undefined>
   /** How long events settle before a load; {@link WORK_DEBOUNCE_MS} by default. */
   readonly debounceMs?: number
+  /** The clock that decides when a session's end time passed; `() => new Date()` by default. */
+  readonly now?: () => Date
 }
 
 /** A running watcher. */
@@ -61,10 +83,12 @@ function inGit(name: string | null): boolean {
  * @returns the watcher.
  */
 export function watchWork(options: WorkWatchOptions): WorkWatch {
-  const { home, profile, profileDir, reload, logger } = options
+  const { home, profile, profileDir, reload, logger, expire } = options
   const debounceMs = options.debounceMs ?? WORK_DEBOUNCE_MS
-  const ctx = { home, profile, profileDir }
+  const now = options.now ?? (() => new Date())
+  const ctx = { home, profile, profileDir, now }
   let timer: NodeJS.Timeout | undefined
+  let ending: NodeJS.Timeout | undefined
   let settling = Promise.resolve()
   let folder: { readonly source: string, readonly watcher: FSWatcher } | undefined
 
@@ -92,6 +116,19 @@ export function watchWork(options: WorkWatchOptions): WorkWatch {
       logger.warn(`Delo cannot watch ${source} for your work session: ${(error as Error).message}`)
     }
   }
+  const endAt = (endsAt: string | undefined): void => {
+    clearTimeout(ending)
+    if (endsAt === undefined) return
+    // A later look arms the timer again, so a far end time read from the record never overflows the timer's range.
+    const delay = Math.min(Math.max(Date.parse(endsAt) - now().getTime(), 0), WORK_SESSION_MAX_MINUTES * 60_000)
+    ending = setTimeout(schedule, delay)
+    ending.unref()
+  }
+  const ended = (finished: WorkFinished | undefined, endsAt: string): void => {
+    if (finished === undefined) return
+    logger.info(`Your work session on ${finished.plugin} ended at its time limit, ${endsAt}. ${workFinishedLine(finished)}`)
+    if (finished.reload?.ok === false) logger.error(`Loading the approved version of ${finished.plugin} after the session ended failed: ${finished.reload.error}. Restart Delo.`)
+  }
   const report = (sync: WorkSync): void => {
     if (sync.kind === 'loaded') {
       logger.info(`Loaded ${sync.plugin} from its folder in your work session.`)
@@ -104,8 +141,12 @@ export function watchWork(options: WorkWatchOptions): WorkWatch {
   }
   const settle = async (): Promise<void> => {
     try {
-      follow((await readWorkSession(home, profile))?.source)
-      report(await loadWorkSession(ctx, reload))
+      const session = await readWorkSession(home, profile)
+      follow(session?.source)
+      endAt(session?.endsAt)
+      const sync = await loadWorkSession(ctx, reload)
+      if (sync.kind === 'expired') ended(await expire(), sync.endsAt)
+      else report(sync)
     } catch (error) {
       logger.warn(`Delo could not load your work session's folder: ${isChangesError(error) ? error.detail : String(error)}`)
     }
@@ -118,11 +159,13 @@ export function watchWork(options: WorkWatchOptions): WorkWatch {
   return {
     close: async () => {
       clearTimeout(timer)
+      clearTimeout(ending)
       sessions.close()
       folder?.watcher.close()
       // A load already queued still runs, so the Host takes the last edit before the session ends; a folder it began
       // watching meanwhile is closed after it.
       await settling
+      clearTimeout(ending)
       folder?.watcher.close()
     },
   }

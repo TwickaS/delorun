@@ -7,19 +7,22 @@ import { isChangesError, type ChangesCode } from '../src/errors.ts'
 import { changesDirectory, profileChangesDirectory, protectionPath } from '../src/paths.ts'
 import {
   approvedOf,
-  attestStudio,
   attestTerminal,
   closeWorkSession,
   findEntry,
+  markShownAtUpgrade,
+  migratesAtUpgrade,
   noteFailed,
   noteLoaded,
   openWorkSession,
   readActiveRecord,
   readApproved,
   readChangeLog,
+  readMigration,
   readProtection,
   readWorkSession,
   setProtection,
+  unshownAtUpgrade,
   withEntry,
   writeActiveRecord,
   writeApproved,
@@ -31,7 +34,7 @@ import { CHANGE_LOG_SCHEMA, type ApprovedRecord, type ChangeEntry, type ChangeId
 // The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
 vi.setConfig({ testTimeout: 30_000 })
 
-const hooks = vi.hoisted(() => ({ linkError: undefined as Error | undefined }))
+const hooks = vi.hoisted(() => ({ linkError: undefined as Error | undefined, beforeLink: undefined as ((created: string) => Promise<void>) | undefined }))
 
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
@@ -39,6 +42,7 @@ vi.mock('node:fs/promises', async importOriginal => {
     ...actual,
     link: async (existing: string, created: string) => {
       if (hooks.linkError !== undefined) throw hooks.linkError
+      await hooks.beforeLink?.(created)
       await actual.link(existing, created)
     },
   }
@@ -59,11 +63,11 @@ beforeEach(async () => {
 
 afterEach(async () => {
   hooks.linkError = undefined
+  hooks.beforeLink = undefined
   await rm(home, { recursive: true, force: true })
 })
 
 const terminal = (): AtComputer => attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } })
-const studio = (): AtComputer => attestStudio({ loopback: true, credential: true, remoteSession: false })
 
 async function refusal(action: Promise<unknown> | (() => unknown)): Promise<ChangesCode | undefined> {
   try {
@@ -96,18 +100,6 @@ describe('attestTerminal', () => {
   })
 })
 
-describe('attestStudio', () => {
-  it('issues a studio proof for a loopback request with the credential', () => {
-    expect(studio().kind).toBe('studio')
-  })
-
-  it('refuses a remote session, a caller not on loopback and a missing credential', async () => {
-    expect(await refusal(() => attestStudio({ loopback: true, credential: true, remoteSession: true }))).toBe('NOT_AT_COMPUTER')
-    expect(await refusal(() => attestStudio({ loopback: false, credential: true, remoteSession: false }))).toBe('NOT_AT_COMPUTER')
-    expect(await refusal(() => attestStudio({ loopback: true, credential: false, remoteSession: false }))).toBe('NOT_AT_COMPUTER')
-  })
-})
-
 describe('protection', () => {
   it('is block when the home has no record', async () => {
     expect(await readProtection(home)).toBe('block')
@@ -121,11 +113,6 @@ describe('protection', () => {
       expect((await stat(protectionPath(home))).mode & 0o777).toBe(0o600)
       expect((await stat(changesDirectory(home))).mode & 0o777).toBe(0o700)
     }
-  })
-
-  it('refuses a studio proof', async () => {
-    expect(await refusal(setProtection(home, 'off', studio()))).toBe('NOT_AT_COMPUTER')
-    expect(await readProtection(home)).toBe('block')
   })
 
   it('refuses an object that only looks like a terminal proof', async () => {
@@ -169,24 +156,21 @@ describe('protection', () => {
 })
 
 describe('work session', () => {
-  const start = { plugin: '@scope/p', source: '/src/p', from: VERSION_A }
+  const start = { plugin: '@scope/p', source: '/src/p', from: VERSION_A, minutes: 60 }
 
   it('is absent until opened, and a second opening is refused', async () => {
     expect(await readWorkSession(home, PROFILE)).toBeUndefined()
     const record = await openWorkSession(home, PROFILE, start, terminal())
-    expect(record).toMatchObject({ schema: 'delo.changes-work-session/1', ...start, startedFrom: 'terminal' })
+    expect(record).toMatchObject({ schema: 'delo.changes-work-session/1', plugin: start.plugin, source: start.source, from: start.from, startedFrom: 'terminal' })
+    expect(Date.parse(record.endsAt) - Date.parse(record.startedAt)).toBe(60 * 60_000)
     expect(await readWorkSession(home, PROFILE)).toEqual(record)
-    expect(await refusal(openWorkSession(home, PROFILE, { ...start, plugin: 'other' }, studio()))).toBe('WORK_SESSION_OPEN')
+    expect(await refusal(openWorkSession(home, PROFILE, { ...start, plugin: 'other' }, terminal()))).toBe('WORK_SESSION_OPEN')
     expect(await readdir(profileChangesDirectory(home, PROFILE))).toEqual(['work-session.json'])
     if (POSIX) expect((await stat(join(profileChangesDirectory(home, PROFILE), 'work-session.json'))).mode & 0o777).toBe(0o600)
   })
 
-  it('records the studio as where it started', async () => {
-    expect((await openWorkSession(home, PROFILE, start, studio())).startedFrom).toBe('studio')
-  })
-
   it('refuses to open without a proof the attest functions issued', async () => {
-    expect(await refusal(openWorkSession(home, PROFILE, start, { kind: 'studio' } as AtComputer))).toBe('NOT_AT_COMPUTER')
+    expect(await refusal(openWorkSession(home, PROFILE, start, { kind: 'terminal' } as AtComputer))).toBe('NOT_AT_COMPUTER')
     expect(await readWorkSession(home, PROFILE)).toBeUndefined()
   })
 
@@ -201,7 +185,7 @@ describe('work session', () => {
     await openWorkSession(home, PROFILE, start, terminal())
     expect(await refusal(closeWorkSession(home, PROFILE, 'other', terminal()))).toBe('NO_WORK_SESSION')
     expect(await refusal(closeWorkSession(home, PROFILE, start.plugin, { kind: 'terminal' } as AtComputer))).toBe('NOT_AT_COMPUTER')
-    expect((await closeWorkSession(home, PROFILE, start.plugin, studio())).plugin).toBe(start.plugin)
+    expect((await closeWorkSession(home, PROFILE, start.plugin, terminal())).plugin).toBe(start.plugin)
     expect(await readWorkSession(home, PROFILE)).toBeUndefined()
   })
 
@@ -224,8 +208,9 @@ describe('work session', () => {
 
   it('refuses a malformed record', async () => {
     const path = join(profileChangesDirectory(home, PROFILE), 'work-session.json')
-    const valid = { schema: 'delo.changes-work-session/1', ...start, startedAt: '2026-11-10T10:00:00Z', startedFrom: 'terminal' }
-    for (const value of [{ ...valid, startedFrom: 'remote' }, { ...valid, plugin: 'Not A Name' }, { ...valid, lastLoaded: 'abc' }, { ...valid, lastFailed: 'abc' }, { ...valid, from: 7 }]) {
+    const valid = { schema: 'delo.changes-work-session/1', plugin: start.plugin, source: start.source, from: start.from, startedAt: '2026-11-10T10:00:00Z', startedFrom: 'terminal', endsAt: '2026-11-10T11:00:00Z' }
+    const { endsAt: _endsAt, ...withoutEnd } = valid
+    for (const value of [withoutEnd, { ...valid, endsAt: 'later' }, { ...valid, startedFrom: 'remote' }, { ...valid, plugin: 'Not A Name' }, { ...valid, lastLoaded: 'abc' }, { ...valid, lastFailed: 'abc' }, { ...valid, from: 7 }]) {
       await writeRecord(path, value)
       expect(await refusal(readWorkSession(home, PROFILE)), JSON.stringify(value)).toBe('RECORD_UNREADABLE')
     }
@@ -362,5 +347,79 @@ describe('approved record', () => {
     }
     const directory = await profileWith({ delo: 'text' })
     expect(await refusal(writeApproved(directory, approved))).toBe('RECORD_UNREADABLE')
+  })
+})
+
+describe('the plugins approved at upgrade that no terminal has shown', () => {
+  const upgrade = (fields: Partial<ChangeEntry> = {}): ChangeEntry => entry({ state: 'applied', decidedFrom: 'upgrade', decidedAt: '2026-11-10T10:00:00.000Z', ...fields })
+
+  it('are named until a terminal showed them, and only the plugins shown are marked', async () => {
+    expect(unshownAtUpgrade(upgrade())).toBe(true)
+    expect(unshownAtUpgrade(upgrade({ shownAt: '2026-11-10T11:00:00.000Z' }))).toBe(false)
+    expect(unshownAtUpgrade(upgrade({ decidedFrom: 'terminal' }))).toBe(false)
+    expect(unshownAtUpgrade(upgrade({ state: 'undone' }))).toBe(false)
+    const other = upgrade({ id: ID_2, subject: { plugin: 'q', source: '/src/q' } })
+    const unnamed = upgrade({ id: brandString<ChangeId>('c1111111111'), subject: { setting: 'protection' } })
+    await writeChangeLog(home, PROFILE, { schema: CHANGE_LOG_SCHEMA, entries: [upgrade(), other, unnamed] })
+    const profileDir = join(home, 'profiles', PROFILE)
+    await mkdir(profileDir, { recursive: true })
+    const target = { home, profile: PROFILE, profileDir, lockWaitMs: 1000 }
+    expect(await markShownAtUpgrade(target, ['p'], '2026-11-10T12:00:00.000Z')).toBe(true)
+    const log = await readChangeLog(home, PROFILE)
+    expect(log.entries.map(logged => logged.shownAt)).toEqual(['2026-11-10T12:00:00.000Z', undefined, undefined])
+    expect(await markShownAtUpgrade(target, ['p'], '2026-11-10T13:00:00.000Z')).toBe(false)
+    expect(await readChangeLog(home, PROFILE)).toEqual(log)
+  })
+})
+
+describe('the profiles the first start under Changes found', () => {
+  async function profiles(...names: string[]): Promise<string> {
+    const root = join(home, 'profiles')
+    for (const name of names) {
+      await mkdir(join(root, name), { recursive: true })
+      await writeFile(join(root, name, 'package.json'), '{}\n')
+    }
+    await mkdir(join(root, 'no-manifest'), { recursive: true })
+    await writeFile(join(root, 'stray-file'), '')
+    return root
+  }
+
+  it('a profile created after the first start does not approve its links at upgrade', async () => {
+    const root = await profiles('default', 'web')
+    const empty: ChangeLog = { schema: CHANGE_LOG_SCHEMA, entries: [] }
+    expect(await readMigration(home)).toBeUndefined()
+    expect(await migratesAtUpgrade(home, 'default', join(root, 'default'), empty, '2026-11-10T10:00:00.000Z')).toBe(true)
+    expect(await readMigration(home)).toEqual({ schema: 'delo.changes-migration/1', at: '2026-11-10T10:00:00.000Z', profiles: ['default', 'web'] })
+    if (POSIX) expect((await stat(join(changesDirectory(home), 'migration.json'))).mode & 0o777).toBe(0o600)
+    // A profile the home held then still migrates at its own first start; one created later does not.
+    await profiles('later')
+    expect(await migratesAtUpgrade(home, 'web', join(root, 'web'), empty, '2026-11-11T10:00:00.000Z')).toBe(true)
+    expect(await migratesAtUpgrade(home, 'later', join(root, 'later'), empty, '2026-11-11T10:00:00.000Z')).toBe(false)
+    expect(await migratesAtUpgrade(home, 'default', join(root, 'default'), { ...empty, migratedAt: '2026-11-10T10:00:00.000Z' }, '2026-11-11T10:00:00.000Z')).toBe(false)
+    expect((await readMigration(home))?.profiles).toEqual(['default', 'web'])
+  })
+
+  it('keeps the record another start wrote first, and passes on other failures to write it', async () => {
+    const root = await profiles('default')
+    const empty: ChangeLog = { schema: CHANGE_LOG_SCHEMA, entries: [] }
+    hooks.linkError = Object.assign(new Error('link failed'), { code: 'EPERM' })
+    await expect(migratesAtUpgrade(home, 'default', join(root, 'default'), empty, '2026-11-10T10:00:00.000Z')).rejects.toThrow('link failed')
+    expect(await readdir(changesDirectory(home))).toEqual([])
+    hooks.linkError = undefined
+    // Another start links its record between this start's read and its own link.
+    hooks.beforeLink = async created => {
+      await writeFile(created, JSON.stringify({ schema: 'delo.changes-migration/1', at: '2026-11-09T10:00:00.000Z', profiles: ['web'] }), { mode: 0o600 })
+    }
+    expect(await migratesAtUpgrade(home, 'default', join(root, 'default'), empty, '2026-11-10T10:00:00.000Z')).toBe(false)
+    expect((await readMigration(home))?.profiles).toEqual(['web'])
+    expect(await readdir(changesDirectory(home))).toEqual(['migration.json'])
+  })
+
+  it('refuses a malformed record', async () => {
+    const valid = { schema: 'delo.changes-migration/1', at: '2026-11-10T10:00:00.000Z', profiles: ['default'] }
+    for (const value of [{ ...valid, profiles: ['a', 'a'] }, { ...valid, profiles: [1] }, { ...valid, profiles: 'default' }, { ...valid, extra: 1 }, { ...valid, schema: 'delo.changes-migration/2' }]) {
+      await writeRecord(join(changesDirectory(home), 'migration.json'), value)
+      expect(await refusal(readMigration(home)), JSON.stringify(value)).toBe('RECORD_UNREADABLE')
+    }
   })
 })

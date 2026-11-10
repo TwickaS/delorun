@@ -6,15 +6,16 @@
  * | --- | --- |
  * | `list` (the default) `[--json]` | changes waiting for review, then the decided ones, the protection setting and any work session |
  * | `show <id> [--diff] [--json]` | one change: the plugin, its folder, the files, the risk summary and, with `--diff`, the diff |
- * | `apply <id>` | the plugin runs exactly the content the change showed; a change with a risk finding asks twice; an agent's plugin request runs upstream's plugin operation for its spec |
+ * | `apply <id>` | shows the diff a page at a time, then the plugin runs exactly the content the change showed; a change the checks flag asks twice; an agent's plugin request runs upstream's plugin operation for its spec |
  * | `discard <id>` | the change never runs; the folder is not touched |
  * | `undo <id>` | an applied change is taken back |
  * | `off <plugin>`, `on <plugin>` | one plugin stops running, or runs again |
  * | `protection [block \| warn \| off]` | prints the setting, or changes it |
- * | `work <plugin>`, `done <plugin>` | edits in the plugin's folder load live, until `done` makes them its approved version |
+ * | `work <plugin> [--for <minutes>]`, `done <plugin>` | edits in the plugin's folder load live for at most `--for` minutes; `done` shows the folder's version and approves exactly it ([work command](./work-command.ts)) |
  *
  * Every subcommand that changes something first needs the person at a terminal, standard input and output both, and
- * refuses otherwise before it reads or writes anything; then it asks for confirmation. While Delo runs for the profile,
+ * refuses otherwise before it reads or writes anything; then it asks for confirmation. Everything printed from a folder,
+ * a diff, a log entry or a failure goes through [terminal text](../terminal-text.ts). While Delo runs for the profile,
  * the change is written under the profile's write lock and the running Host reloads through the update channel's
  * `changes.reload`; while it does not, the command holds the profile's home lock, so no start runs meanwhile, and the
  * next start loads the change.
@@ -29,21 +30,22 @@ import {
   attestTerminal,
   changeProtection,
   discardChange,
-  finishWork,
   isChangesError,
   isPluginRequest,
   listChanges,
+  markShownAtUpgrade,
+  PACKAGE_NAME_PATTERN,
   parseChangeId,
+  PROFILE_LOCK_WAIT_MS,
   PROTECTION_LEVELS,
   readProtection,
   riskKindPhrase,
   riskLines,
   showChange,
-  startWork,
   turnOff,
   turnOn,
   undoChange,
-  workFinishedLine,
+  unshownAtUpgrade,
   type ActionResult,
   type AtComputer,
   type ChangeEntry,
@@ -55,7 +57,6 @@ import {
   type ProtectionLevel,
   type ReloadHost,
   type ReloadOutcome,
-  type WorkStarted,
 } from '@delo/changes'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import { acquireHomeLock, newStartId, runDirectory } from '@delo/home'
@@ -63,12 +64,15 @@ import { queryHomeStatus, sendHomeRequest, updateChannelProbe } from '@delo/home
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
+import { printable, printableJson, printableLines, printableText } from '../terminal-text.ts'
 import { askOnTerminal, isYes } from '../trash/terminal.ts'
 import { runtimeOfFile } from '../update/runtime.ts'
+import { upgradeLine } from '../verify/changes.ts'
 import { upstreamPluginOperation } from './plugin-operation.ts'
+import { isWorkSubcommand, runWorkCommand } from './work-command.ts'
 
 /** The usage line. */
-const USAGE = 'usage: delorun changes [list | show <id> [--diff] | apply <id> | discard <id> | undo <id> | off <plugin> | on <plugin> | protection [block|warn|off] | work <plugin> | done <plugin>] [--profile <name>] [--json]'
+const USAGE = 'usage: delorun changes [list | show <id> [--diff] | apply <id> | discard <id> | undo <id> | off <plugin> | on <plugin> | protection [block|warn|off] | work <plugin> [--for <minutes>] | done <plugin>] [--profile <name>] [--json]'
 
 /** The refusal when the command does not run at a terminal. */
 export const NOT_AT_TERMINAL = 'This needs you at your computer: run it in a terminal.'
@@ -100,6 +104,11 @@ export interface ChangesCommandDependencies {
    * @returns the operation.
    */
   readonly pluginOperation: (ctx: ChangesContext, context: CommandContext) => PluginOperation
+  /**
+   * How many lines of a diff `apply` prints before it waits for Enter; the terminal's height less two in a real run.
+   * Absent, the diff is printed without waiting.
+   */
+  readonly pageLines?: number
 }
 
 /** One subcommand and its argument. */
@@ -107,11 +116,11 @@ type Requested =
   | { readonly kind: 'list' }
   | { readonly kind: 'show', readonly id: ChangeId, readonly diff: boolean }
   | { readonly kind: 'apply' | 'discard' | 'undo', readonly id: ChangeId }
-  | { readonly kind: 'off' | 'on' | 'work' | 'done', readonly plugin: string }
+  | { readonly kind: 'off' | 'on', readonly plugin: string }
   | { readonly kind: 'protection', readonly level?: ProtectionLevel }
 
 /** The subcommands, in usage order, and whether each takes an argument. */
-const SUBCOMMANDS = { list: 'none', show: 'id', apply: 'id', discard: 'id', undo: 'id', off: 'plugin', on: 'plugin', protection: 'optional', work: 'plugin', done: 'plugin' } as const
+const SUBCOMMANDS = { list: 'none', show: 'id', apply: 'id', discard: 'id', undo: 'id', off: 'plugin', on: 'plugin', protection: 'optional' } as const
 
 /**
  * @param message - what is wrong.
@@ -167,8 +176,7 @@ function actionOf(name: keyof typeof SUBCOMMANDS, argument: string | undefined, 
     }
     case 'off':
     case 'on':
-    case 'work':
-    case 'done':
+      if (!PACKAGE_NAME_PATTERN.test(argument!)) throw usageError(`${JSON.stringify(argument)} is not a package name`)
       return { kind: name, plugin: argument! }
     case 'protection': {
       if (argument === undefined) return { kind: 'protection' }
@@ -239,7 +247,28 @@ export async function withProfileHost<T>(home: string, profile: string, run: (re
  * @returns them.
  */
 export function terminalDependencies(): ChangesCommandDependencies {
-  return { streams: { stdin: process.stdin, stdout: process.stdout }, ask: askOnTerminal, withHost: withProfileHost, pluginOperation: upstreamPluginOperation }
+  return { streams: { stdin: process.stdin, stdout: process.stdout }, ask: askOnTerminal, withHost: withProfileHost, pluginOperation: upstreamPluginOperation, pageLines: pageLinesOf(process.stdout.rows) }
+}
+
+/**
+ * How many diff lines `apply` shows before it waits for the person.
+ * @param rows - the terminal's height, when it reports one.
+ * @returns the diff lines `apply` prints per page: the height less the prompt line and one line of context, and at
+ *   least ten; 22 when the terminal reports no height.
+ */
+export function pageLinesOf(rows: number | undefined): number {
+  return Math.max(10, (rows ?? 24) - 2)
+}
+
+/**
+ * Print lines a command composed, each made safe for the terminal ({@link printableLines}): a line break, control or
+ * bidirectional character in a file name, folder, diff, summary or failure message is written as an escape, and a long
+ * line continues on the next.
+ * @param write - the stream.
+ * @param lines - the lines, without line endings.
+ */
+function print(write: (text: string) => void, lines: readonly string[]): void {
+  write(`${lines.flatMap(line => printableLines(line)).join('\n')}\n`)
 }
 
 /** What each protection level means, in the person's words. */
@@ -251,21 +280,31 @@ const PROTECTION_MEANING: Readonly<Record<ProtectionLevel, string>> = {
 
 /**
  * @param change - a change waiting for review.
- * @returns its line in the list.
+ * @returns its lines in the list.
  */
-function pendingLine(change: ListedChange): string {
+function pendingLines(change: ListedChange): string[] {
   const what = change.kind === 'plugin-install' ? 'new plugin' : `${String(change.files.length)} changed ${change.files.length === 1 ? 'file' : 'files'}`
-  const failed = change.lastFailure === undefined ? '' : `\n    It failed to load when applied: ${change.lastFailure.failure}`
-  return `  ${change.id}  ${change.plugin} from ${change.source} (${what})${failed}`
+  const failed = change.lastFailure === undefined ? [] : [`    It failed to load when applied: ${change.lastFailure.failure}`]
+  return [`  ${change.id}  ${change.plugin} from ${change.source} (${what})`, ...failed]
 }
 
 /**
  * @param entry - an agent's plugin request waiting for review.
- * @returns its line in the list.
+ * @returns its lines in the list.
  */
-function requestLine(entry: ChangeEntry): string {
-  const failed = entry.lastFailure === undefined ? '' : `\n    Applying it failed: ${entry.lastFailure.failure}`
-  return `  ${entry.id}  ${entry.summary} (asked in a chat)${failed}`
+function requestLines(entry: ChangeEntry): string[] {
+  const failed = entry.lastFailure === undefined ? [] : [`    Applying it failed: ${entry.lastFailure.failure}`]
+  return [`  ${entry.id}  ${entry.summary} (asked in a chat)`, ...failed]
+}
+
+/**
+ * Record that this terminal showed the plugins approved at upgrade, under the profile's write lock.
+ * @param ctx - the profile.
+ * @param approvals - the plugins shown.
+ */
+async function markShown(ctx: ChangesContext, approvals: readonly { readonly plugin: string }[]): Promise<void> {
+  const plugins = approvals.map(({ plugin }) => plugin)
+  await markShownAtUpgrade({ home: ctx.home, profile: ctx.profile, profileDir: ctx.profileDir, lockWaitMs: ctx.lockWaitMs ?? PROFILE_LOCK_WAIT_MS }, plugins, new Date().toISOString())
 }
 
 /**
@@ -278,27 +317,33 @@ function entryLine(entry: ChangeEntry): string {
 }
 
 /**
- * `list`.
+ * `list`. The plugins the first start under Changes approved as they were lead the list until a terminal showed them;
+ * a list printed to a terminal records that it did.
  * @param ctx - the profile.
  * @param json - whether to print JSON.
  * @param context - the output.
+ * @param dependencies - the streams, which say whether the list reaches a terminal.
  * @returns the exit code.
  */
-async function list(ctx: ChangesContext, json: boolean, context: CommandContext): Promise<CommandResult> {
+async function list(ctx: ChangesContext, json: boolean, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
   const listing = await listChanges(ctx)
   if (json) {
-    context.stdout(`${JSON.stringify(listing, undefined, 2)}\n`)
+    context.stdout(`${printableJson(listing)}\n`)
     return EXIT.ok
   }
-  const waiting = [...listing.pending.map(pendingLine), ...listing.requests.map(requestLine)]
-  const lines = waiting.length === 0
-    ? ['Nothing waits for your review.']
-    : ['Waiting for review:', ...waiting, 'See one with: delorun changes show <id>']
+  // The first start under Changes logs each approval with its plugin and folder.
+  const unshown = listing.entries.filter(unshownAtUpgrade).flatMap(({ subject: { plugin, source } }) => plugin === undefined || source === undefined ? [] : [{ plugin, source }])
+  const waiting = [...listing.pending.flatMap(pendingLines), ...listing.requests.flatMap(requestLines)]
+  const lines = [
+    ...unshown.length === 0 ? [] : [...unshown.map(upgradeLine), ''],
+    ...waiting.length === 0 ? ['Nothing waits for your review.'] : ['Waiting for review:', ...waiting, 'See one with: delorun changes show <id>'],
+  ]
   if (listing.entries.length > 0) lines.push('', 'Recent changes, newest first:', ...listing.entries.map(entryLine))
   for (const { plugin, source } of listing.missing) lines.push('', `The folder of ${plugin}, ${source}, is gone; its approved copy still runs.`)
   lines.push('', `Protection: ${listing.protection}: ${PROTECTION_MEANING[listing.protection]}.`)
-  if (listing.workSession !== undefined) lines.push(`Working on ${listing.workSession.plugin} since ${listing.workSession.startedAt}: edits in its folder load live.`)
-  context.stdout(`${lines.join('\n')}\n`)
+  if (listing.workSession !== undefined) lines.push(`Working on ${listing.workSession.plugin} since ${listing.workSession.startedAt}, until ${listing.workSession.endsAt} at the latest: edits in its folder load live.`)
+  print(context.stdout, lines)
+  if (unshown.length > 0 && dependencies.streams.stdout.isTTY === true) await markShown(ctx, unshown)
   return EXIT.ok
 }
 
@@ -322,11 +367,37 @@ function changeLines(change: ListedChange, diff: boolean): string[] {
   if (change.skipped.length > 0) lines.push(`Not included: ${change.skipped.join(', ')}`)
   if (change.lastFailure !== undefined) lines.push(`It failed to load when applied at ${change.lastFailure.at}: ${change.lastFailure.failure}`)
   lines.push('', ...riskLines(change.risk))
-  if (diff) {
-    lines.push('', change.diff.text.trimEnd())
-    if (change.diff.truncated) lines.push(`The diff was cut short at its size limit; left out: ${change.diff.omitted.join(', ')}`)
-  }
+  if (diff) lines.push('', ...diffLines(change))
   return lines
+}
+
+/**
+ * @param change - a change waiting for review.
+ * @returns its bounded diff as terminal lines ({@link printableText}), and what the bound left out.
+ */
+function diffLines(change: ListedChange): string[] {
+  const lines = change.diff.text === '' ? ['The diff shows no lines.'] : printableText(change.diff.text.trimEnd())
+  if (change.diff.truncated) lines.push(`The diff was cut short at its size limit; left out: ${change.diff.omitted.join(', ')}`)
+  return lines
+}
+
+/**
+ * Print a change's diff before `apply` asks, a page at a time when the dependencies give a page size: after each full
+ * page but the last the person presses Enter for the next page, or answers `a` for the rest without stopping.
+ * @param change - the change.
+ * @param dependencies - the terminal and the page size.
+ * @param context - the output.
+ */
+async function pagedDiff(change: ListedChange, dependencies: ChangesCommandDependencies, context: CommandContext): Promise<void> {
+  const lines = diffLines(change)
+  const size = Math.max(1, dependencies.pageLines ?? lines.length)
+  let at = 0
+  while (at + size < lines.length) {
+    print(context.stdout, lines.slice(at, at + size))
+    at += size
+    if ((await dependencies.ask('-- more: Enter shows the next page, a shows the rest --')).toLowerCase() === 'a') break
+  }
+  print(context.stdout, lines.slice(at))
 }
 
 /**
@@ -357,14 +428,14 @@ function entryLines(entry: ChangeEntry): string[] {
 async function show(ctx: ChangesContext, id: ChangeId, diff: boolean, json: boolean, context: CommandContext): Promise<CommandResult> {
   const shown = await showChange(ctx, id)
   if (json) {
-    context.stdout(`${JSON.stringify(shown, undefined, 2)}\n`)
+    context.stdout(`${printableJson(shown)}\n`)
     return EXIT.ok
   }
   const decide = `Apply it: delorun changes apply ${id}    Discard it: delorun changes discard ${id}`
   const lines = shown.kind === 'pending'
     ? [...changeLines(shown.change, diff), '', decide]
     : [...entryLines(shown.entry), ...isPluginRequest(shown.entry) && shown.entry.state === 'pending' ? ['', decide] : []]
-  context.stdout(`${lines.join('\n')}\n`)
+  print(context.stdout, lines)
   return EXIT.ok
 }
 
@@ -395,16 +466,16 @@ function reported(done: string, result: ActionResult, context: CommandContext): 
       return EXIT.ok
     case 'went-back': {
       const { failure, again } = result.reload
-      context.stderr(`delorun changes: ${done}, but Delo failed to load it: ${failure}\nDelo went back to what ran before, and the change waits for your review again.\n`)
-      if (again?.ok === false) context.stderr(`Loading what ran before also failed: ${again.error}. Restart Delo: delorun stop, then delorun start.\n`)
+      print(context.stderr, [`delorun changes: ${done}, but Delo failed to load it: ${failure}`, 'Delo went back to what ran before, and the change waits for your review again.'])
+      if (again?.ok === false) print(context.stderr, [`Loading what ran before also failed: ${again.error}. Restart Delo: delorun stop, then delorun start.`])
       return EXIT.failed
     }
   }
 }
 
 /**
- * `apply`: the summary and risk lines, a confirmation, a second one naming the risk kinds when a check found any, and
- * the change.
+ * `apply`: the summary and risk lines, the diff a page at a time, a confirmation, a second one naming the kinds the
+ * checks flagged and each file whose content the diff does not show, and the change.
  * @param ctx - the profile.
  * @param id - the change id.
  * @param presence - the terminal proof.
@@ -414,15 +485,23 @@ function reported(done: string, result: ActionResult, context: CommandContext): 
  */
 async function apply(ctx: ChangesContext, id: ChangeId, presence: AtComputer, dependencies: ChangesCommandDependencies, context: CommandContext): Promise<CommandResult> {
   const shown = await showChange(ctx, id)
-  context.stdout(`${(shown.kind === 'pending' ? changeLines(shown.change, false) : entryLines(shown.entry)).join('\n')}\n\n`)
+  if (shown.kind === 'pending') {
+    print(context.stdout, [...changeLines(shown.change, false), ''])
+    await pagedDiff(shown.change, dependencies, context)
+    context.stdout('\n')
+  } else {
+    print(context.stdout, [...entryLines(shown.entry), ''])
+  }
   if (!await confirmed(dependencies, `Apply ${id}?`)) return declined(context)
   if (shown.kind === 'logged' && isPluginRequest(shown.entry)) {
     const operation = dependencies.pluginOperation(ctx, context)
     return reportedInstall(id, await dependencies.withHost(ctx.home, ctx.profile, reload => applyInstallChange(ctx, id, presence, { reload, run: operation })), context)
   }
   if (shown.kind === 'pending' && shown.change.risk.needsSecondConfirmation) {
-    const kinds = shown.change.risk.kinds.map(kind => riskKindPhrase(kind).toLowerCase()).join('; ')
-    context.stdout(`This change ${kinds}. A plugin's code can do anything Delo can.\n`)
+    const { risk } = shown.change
+    const kinds = risk.kinds.map(kind => riskKindPhrase(kind).toLowerCase()).join('; ')
+    const hidden = risk.findings.filter(finding => finding.kind === 'not-shown').map(finding => `  Not shown: ${finding.excerpt}`)
+    print(context.stdout, [`This change ${kinds}. A plugin's code can do anything Delo can.`, ...hidden])
     if (!await confirmed(dependencies, `Apply it anyway?`)) return declined(context)
   }
   const result = await dependencies.withHost(ctx.home, ctx.profile, reload => applyChange(ctx, id, presence, { reload }))
@@ -446,7 +525,7 @@ function reportedInstall(id: ChangeId, result: InstallResult, context: CommandCo
       context.stdout(`Applied ${id}. Delo is not running; the next start runs it.${folder}\n`)
       return EXIT.ok
     case 'failed':
-      context.stderr(`delorun changes: Applied ${id}, but Delo failed to load it: ${result.reload.failure}\nThe profile keeps the change; restart Delo, or undo it with delorun recover.${folder}\n`)
+      print(context.stderr, [`delorun changes: Applied ${id}, but Delo failed to load it: ${result.reload.failure}`, `The profile keeps the change; restart Delo, or undo it with delorun recover.${folder}`])
       return EXIT.failed
   }
 }
@@ -485,22 +564,6 @@ async function protection(ctx: ChangesContext, level: ProtectionLevel | undefine
 }
 
 /**
- * Report how a work session started.
- * @param started - what starting it did.
- * @param context - the output.
- * @returns the exit code: failed when the folder's content failed to load.
- */
-function reportedWork(started: WorkStarted, context: CommandContext): CommandResult {
-  const { plugin, source } = started.session
-  context.stdout(`Working on ${plugin}: edits in ${source} load live until delorun changes done ${plugin}.\n`)
-  if (started.load.kind === 'loaded') return EXIT.ok
-  const { failure, again } = started.load
-  context.stderr(`delorun changes: ${plugin} failed to load from its folder: ${failure}\nDelo runs its approved version; your work session stays open, and the next edit in the folder loads again.\n`)
-  if (again?.ok === false) context.stderr(`Loading the approved version also failed: ${again.error}. Restart Delo: delorun stop, then delorun start.\n`)
-  return EXIT.failed
-}
-
-/**
  * @param dependencies - the streams.
  * @returns the terminal proof.
  * @throws {CliError} with {@link NOT_AT_TERMINAL} when standard input or output is not a terminal.
@@ -522,6 +585,7 @@ function attestAtTerminal(dependencies: ChangesCommandDependencies): AtComputer 
  * @returns the exit code.
  */
 export async function runChanges(args: readonly string[], context: CommandContext, dependencies: ChangesCommandDependencies = terminalDependencies()): Promise<CommandResult> {
+  if (isWorkSubcommand(args)) return runWorkCommand(args, context, dependencies, () => attestAtTerminal(dependencies))
   const { action, profile: profileFlag, json } = requested(args)
   // A change needs the person at the terminal before anything is read or written, the home's tree included.
   const reads = action.kind === 'list' || action.kind === 'show' || (action.kind === 'protection' && action.level === undefined)
@@ -532,7 +596,7 @@ export async function runChanges(args: readonly string[], context: CommandContex
   try {
     switch (action.kind) {
       case 'list':
-        return await list(ctx, json, context)
+        return await list(ctx, json, context, dependencies)
       case 'show':
         return await show(ctx, action.id, action.diff, json, context)
       case 'protection':
@@ -541,7 +605,7 @@ export async function runChanges(args: readonly string[], context: CommandContex
         return await apply(ctx, action.id, presence!, dependencies, context)
       case 'discard': {
         const shown = await showChange(ctx, action.id)
-        context.stdout(`${(shown.kind === 'pending' ? changeLines(shown.change, false) : entryLines(shown.entry)).join('\n')}\n\n`)
+        print(context.stdout, [...shown.kind === 'pending' ? changeLines(shown.change, false) : entryLines(shown.entry), ''])
         if (!await confirmed(dependencies, `Discard ${action.id}? It will not run, and your folder stays as it is.`)) return declined(context)
         await dependencies.withHost(home.path, profile, () => discardChange(ctx, action.id, presence!))
         context.stdout(`Discarded ${action.id}; it shows again when the folder changes.\n`)
@@ -549,7 +613,7 @@ export async function runChanges(args: readonly string[], context: CommandContex
       }
       case 'undo': {
         const shown = await showChange(ctx, action.id)
-        if (!await confirmed(dependencies, `Undo ${action.id}: ${shown.kind === 'pending' ? shown.change.plugin : shown.entry.summary}?`)) return declined(context)
+        if (!await confirmed(dependencies, `Undo ${action.id}: ${printable(shown.kind === 'pending' ? shown.change.plugin : shown.entry.summary)}?`)) return declined(context)
         return reported(`Undid ${action.id}`, await dependencies.withHost(home.path, profile, reload => undoChange(ctx, action.id, presence!, { reload })), context)
       }
       case 'off':
@@ -559,20 +623,10 @@ export async function runChanges(args: readonly string[], context: CommandContex
         const result = await dependencies.withHost(home.path, profile, reload => (action.kind === 'off' ? turnOff : turnOn)(ctx, action.plugin, presence!, { reload }))
         return reported(`Turned ${action.kind} ${action.plugin}`, result, context)
       }
-      case 'work': {
-        if (!await confirmed(dependencies, `Work on ${action.plugin}? Edits in its folder will load without your review until you run delorun changes done ${action.plugin}.`)) return declined(context)
-        return reportedWork(await dependencies.withHost(home.path, profile, reload => startWork(ctx, action.plugin, presence!, { reload })), context)
-      }
-      case 'done': {
-        if (!await confirmed(dependencies, `End your work session on ${action.plugin}? What its folder holds becomes the approved version.`)) return declined(context)
-        const finished = await dependencies.withHost(home.path, profile, reload => finishWork(ctx, action.plugin, presence!, { reload }))
-        context.stdout(`Your work session on ${action.plugin} ended. ${workFinishedLine(finished)}\n`)
-        return EXIT.ok
-      }
     }
   } catch (error) {
     if (!isChangesError(error)) throw error
-    context.stderr(`delorun changes: ${error.detail}\n`)
+    print(context.stderr, [`delorun changes: ${error.detail}`])
     return EXIT.failed
   }
 }

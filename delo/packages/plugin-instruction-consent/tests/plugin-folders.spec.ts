@@ -2,9 +2,10 @@
  * Specs of the approved-plugin write consent (C16 switch `approved_plugin_write_consent`) through upstream's real write
  * tool on the local filesystem: the agent's first write in a chat to an approved plugin's folders asks, naming the
  * plugin and carrying the diff, however the path is spelt; later writes in that chat pass and another chat asks again;
- * a refusal leaves the file unwritten; and with the switch at parity the write runs as upstream runs it.
+ * a write into the profile's active directories is refused; a refusal leaves the file unwritten; and with the switch at
+ * parity the write runs as upstream runs it.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -25,7 +26,27 @@ import type { ApprovalRequestEvent } from '@deepseek-ai/dsh-user-approval/types'
 import { activeDirectory, APPROVED_RECORD_SCHEMA, writeApproved } from '@delo/changes'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { apply } from '../src/index.ts'
-import { approvedPluginFolders, callDiff, pluginOfTarget, pluginWriteAsk } from '../src/plugin-folders.ts'
+import { approvedPluginFolders, callDiff, lands, pluginOfTarget, pluginWriteAsk } from '../src/plugin-folders.ts'
+
+/**
+ * A directory whose files `stat` finds whatever the case of the names below it, as on a volume that ignores case (the
+ * default on macOS and Windows), while `realpath` keeps the spelling it was given; unset, `stat` is the real one.
+ */
+const volume = vi.hoisted(() => ({ ignoringCaseBelow: undefined as string | undefined }))
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  /**
+   * @param path - a path `stat` is asked about.
+   * @returns the path as a volume that ignores case below {@link volume} finds it.
+   */
+  const found = (path: unknown): unknown => {
+    const below = volume.ignoringCaseBelow
+    if (below === undefined || typeof path !== 'string' || !path.toLowerCase().startsWith(below.toLowerCase())) return path
+    return below + path.slice(below.length).toLowerCase()
+  }
+  return { ...actual, stat: ((path: string, options?: object) => actual.stat(found(path) as string, options)) as typeof actual.stat }
+})
 
 // Each case boots the write tool on a real filesystem; a loaded host needs more than the default.
 vi.setConfig({ testTimeout: 60_000 })
@@ -34,6 +55,7 @@ const PROFILE = 'default'
 const roots: string[] = []
 
 afterEach(() => {
+  volume.ignoringCaseBelow = undefined
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
@@ -126,16 +148,49 @@ describe('the approved-plugin write consent', () => {
     expect(asks).toHaveLength(2)
   })
 
-  it('a symlinked or `..` spelling of the folder asks too, and so does the plugin\'s active directory', async () => {
-    const { home, workspace, source, asks, write } = await harness(true)
+  it('the agent\'s write through a symlink, a case variant or .. into an approved plugin\'s folder asks', async () => {
+    const { root, workspace, source, ctx, asks, write } = await harness(true)
+    // A link to a sibling of the folder, followed by `..`: the file lands in the folder, though the lexical spelling
+    // names a path under the workspace.
+    mkdirSync(join(root, 'beside'))
+    symlinkSync(join(root, 'beside'), join(workspace, 'hop'))
+    expect((await write(chat('link-then-dots'), `${workspace}/hop/../plug/hopped.js`)).isError).toBe(false)
     expect((await write(chat('via-link'), join(workspace, 'link', 'linked.js'))).isError).toBe(false)
     expect((await write(chat('via-dots'), `${workspace}/../plug/dotted.js`)).isError).toBe(false)
     expect((await write(chat('relative'), 'link/nested/relative.js')).isError).toBe(false)
+    expect([join(source, 'hopped.js'), join(source, 'linked.js'), join(source, 'dotted.js'), join(source, 'nested', 'relative.js')].every(path => existsSync(path))).toBe(true)
+    // On a volume that ignores case, a backend whose real path keeps the spelling it was given keys the write by it.
+    volume.ignoringCaseBelow = root
+    const variant = join(root, 'PLUG', 'variant.js')
+    const exec = { name: 'write', agent: chat('case-variant'), arguments: { file_path: variant, content: '' } }
+    await ctx.waterfall('fs/write-intent', { targetKey: variant as never, displayPath: variant }, exec, () => undefined)
+    expect(asks.map(ask => ask.reason?.split('.')[0])).toEqual(Array.from({ length: 5 }, () => 'The agent is changing what your harness runs: plug'))
+  })
+
+  it('the agent\'s write into a plugin\'s active directory is refused', async () => {
+    const { home, asks, write } = await harness(true)
     const active = activeDirectory(home, PROFILE, 'plug')
     mkdirSync(active, { recursive: true })
-    expect((await write(chat('active'), join(active, 'index.js'))).isError).toBe(false)
-    expect(asks.map(ask => ask.reason?.split('.')[0])).toEqual(Array.from({ length: 4 }, () => 'The agent is changing what your harness runs: plug'))
-    expect(existsSync(join(source, 'linked.js')) && existsSync(join(source, 'dotted.js')) && existsSync(join(source, 'nested', 'relative.js'))).toBe(true)
+    writeFileSync(join(active, 'index.js'), 'export default 1\n')
+    for (const path of [join(active, 'index.js'), join(activeDirectory(home, PROFILE, 'not-approved'), 'index.js')]) {
+      const result = await write(chat(`active-${path}`), path)
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain(`the write to "${path}" was not run: it is inside the directory Changes loads the harness's plugins from, which only Changes writes, so the write would never become the person's plugin; change the plugin's own folder instead`)
+      expect(result.error?.info).toEqual({ name: 'WriteConsentRefusedError', code: 'FS_CONSENT_DENIED' })
+    }
+    expect(readFileSync(join(active, 'index.js'), 'utf8')).toBe('export default 1\n')
+    expect(existsSync(activeDirectory(home, PROFILE, 'not-approved'))).toBe(false)
+    expect(asks).toEqual([])
+  })
+
+  it('a write through a dangling link into the folder asks nothing, and upstream refuses it as no regular file', async () => {
+    const { workspace, source, asks, write } = await harness(true)
+    symlinkSync(join(source, 'future.js'), join(workspace, 'dangling.js'))
+    const result = await write(chat('dangling'), join(workspace, 'dangling.js'))
+    expect(text(result)).toContain('not a regular file')
+    expect(lstatSync(join(workspace, 'dangling.js')).isSymbolicLink()).toBe(true)
+    expect(existsSync(join(source, 'future.js'))).toBe(false)
+    expect(asks).toEqual([])
   })
 
   it('a refused ask leaves the file unwritten, and the next write asks again', async () => {
@@ -223,25 +278,40 @@ describe('the consent\'s waterfall', () => {
 })
 
 describe('the folders and the target', () => {
-  it('reads every approved plugin\'s source and active directory, and none without a record', async () => {
+  it('reads every approved plugin\'s source folder, and none without a record', async () => {
     const fixture = await layout()
-    expect(await approvedPluginFolders(fixture.profile)).toEqual([{ plugin: 'plug', folders: [fixture.source, activeDirectory(fixture.home, PROFILE, 'plug')] }])
+    expect(await approvedPluginFolders(fixture.profile)).toEqual([{ plugin: 'plug', source: fixture.source }])
     writeFileSync(join(fixture.profileDir, 'package.json'), '{"name":"dsh-profile-default"}')
     expect(await approvedPluginFolders(fixture.profile)).toEqual([])
   })
 
-  it('follows a dangling link to where a write through it would land, and gives up on a loop', async () => {
+  it('compares the path the backend writes with the folder\'s real path, and ignores case only where the volume does', async () => {
     const fixture = await layout()
     const plugins = await approvedPluginFolders(fixture.profile)
-    symlinkSync(join(fixture.source, 'future.js'), join(fixture.workspace, 'dangling.js'))
-    expect(await pluginOfTarget(join(fixture.workspace, 'dangling.js'), plugins)).toBe('plug')
-    symlinkSync(join(fixture.workspace, 'loop-b'), join(fixture.workspace, 'loop-a'))
-    symlinkSync(join(fixture.workspace, 'loop-a'), join(fixture.workspace, 'loop-b'))
-    expect(await pluginOfTarget(join(fixture.workspace, 'loop-a', 'x.js'), plugins)).toBeUndefined()
-    expect(await pluginOfTarget(join(fixture.source), plugins)).toBe('plug')
-    expect(await pluginOfTarget(`${fixture.source}-sibling/x.js`, plugins)).toBeUndefined()
+    /**
+     * @param path - the real path a backend keys the write by.
+     * @param display - the path the call named.
+     * @returns the target.
+     */
+    const target = (path: string, display = path) => ({ targetKey: path as never, displayPath: display })
+    expect(await pluginOfTarget(target(fixture.source), plugins)).toBe('plug')
+    expect(await pluginOfTarget(target(join(fixture.source, 'x.js'), join(fixture.workspace, 'link', 'x.js')), plugins)).toBe('plug')
+    expect(await pluginOfTarget(target(`${fixture.source}-sibling/x.js`), plugins)).toBeUndefined()
+    expect(await pluginOfTarget(target(join(fixture.workspace, 'x.js')), plugins)).toBeUndefined()
+    // A key that is spelt through another name of the folder's directory still lands in it.
+    expect(await pluginOfTarget(target(join(fixture.workspace, 'link', 'x.js'), join(fixture.workspace, 'x.js')), plugins)).toBe('plug')
     // A folder named with a trailing separator compares the same.
-    expect(await pluginOfTarget(join(fixture.source, 'x.js'), [{ plugin: 'plug', folders: [`${fixture.source}/`] }])).toBe('plug')
+    expect(await pluginOfTarget(target(join(fixture.source, 'x.js')), [{ plugin: 'plug', source: `${fixture.source}/` }])).toBe('plug')
+    // A folder that does not exist yet compares by its deepest existing ancestor's real path, ignoring case where that
+    // ancestor's volume does; a path with no letters at all is taken to keep case.
+    const gone = join(fixture.root, 'gone')
+    const variant = target(join(fixture.root, 'GONE', 'x.js'))
+    expect(await lands(variant, gone)).toBe(false)
+    expect(await lands(target(join(fixture.root, 'PLUG', 'x.js')), fixture.source)).toBe(false)
+    volume.ignoringCaseBelow = fixture.root
+    expect(await lands(variant, gone)).toBe(true)
+    expect(await lands(target(join(fixture.root, 'PLUG', 'x.js')), fixture.source)).toBe(true)
+    expect(await lands(target('/0/x.js'), '/0/1')).toBe(false)
   })
 
   it('carries each writing tool\'s diff', () => {

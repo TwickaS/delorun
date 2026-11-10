@@ -37,7 +37,7 @@ export async function pluginChange(home: string, request: PluginChangeRequest): 
   const before = approved === undefined ? undefined : await readVersion(home, approved)
   const files = await compareVersions(home, before, stored.manifest)
   const diff = await boundedDiff(home, before, stored.manifest, files)
-  const risk = reviewChange(await reviewInputOf(home, before, stored.manifest, files))
+  const risk = reviewChange(await reviewInputOf(home, before, stored.manifest, files, {}, diff.omitted))
   const kind = approved === undefined ? 'plugin-install' : 'plugin-edit'
   return {
     id: changeId(kind, { plugin: request.plugin, source: request.source }, approved, stored.version),

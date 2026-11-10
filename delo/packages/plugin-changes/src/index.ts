@@ -1,24 +1,36 @@
 /**
- * @delo/plugin-changes: the agent's plugin installs, updates and removals wait for the person. With the C16 switch
- * `plugin_changes_pending` on, a `plugin_manager` call whose action is `install_bundle` or `remove_bundle` does not
- * run: a `tools/pre-execute` listener records it in the profile's change log as a pending change and denies the call
- * with a result the model reads, which names the change and says nothing was installed. The tool never reaches its own
- * full-access approval for these actions, and the person applies or discards the change at their computer with
- * `delorun changes`. The tool offers no update action: the agent asks for an update by installing a version of a
- * plugin the profile has, which records a `plugin-update`.
+ * @delo/plugin-changes: the agent's plugin changes wait for the person, and no recomposition of the profile loads
+ * content the person did not approve. With the C16 switch `plugin_changes_pending` on, a `plugin_manager` call whose
+ * action is `install_bundle` or `remove_bundle` does not run: a `tools/pre-execute` listener records it in the
+ * profile's change log as a pending change and denies the call with a result the model reads, which names the change
+ * and says nothing was installed. A call whose action changes which plugins run, their settings or the profile's
+ * history in another way (`set_bundle`, `set_plugin`, `configure`, `set_version_exemption`, `undo`, `restore`) does not
+ * run either and records nothing: the model reads that the person makes that change at their computer. The tool never
+ * reaches its own full-access approval for these actions, and the person applies or discards a recorded change at
+ * their computer with `delorun changes`. The tool offers no update action: the agent asks for an update by installing
+ * a version of a plugin the profile has, which records a `plugin-update`.
  *
  * A tool guard backs the listener: a `pre-execute` listener that allowed such a call without calling `next()` would
- * skip the recording, and the guard, which runs after every listener and cannot be overruled, denies every such call
- * the listener did not record.
+ * skip the listener, and the guard, which runs after every listener and cannot be overruled, denies every such call the
+ * listener did not handle.
  *
- * Off, the parity value and the default, the plugin registers nothing, and the tool runs and asks as upstream's does.
+ * Whatever the switch says, the plugin provides upstream hot reload's `profileReconcileCheck`, which runs before every
+ * recomposition of the profile, whether the person's studio, `delorun plugin`, `delorun changes`, a work session or the
+ * profile's own file watch caused it: `@delo/changes`' `prepareReload` moves a `link:` dependency that names a folder to
+ * the plugin's active directory and refuses the recomposition when a link or an active directory is not what Changes
+ * keeps. A link is the harness's own when it is into the runtime store, or names the directory the running Host already
+ * loads that package from: a start brought every other link under Changes.
+ *
+ * Off, the parity value and the default, the plugin registers no listener or guard, and the tool runs and asks as
+ * upstream's does.
  * @module @delo/plugin-changes
  */
+import { realpathSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-app-boot'
+import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
-import type { ChangeEntry } from '@delo/changes'
+import { prepareReload, startNotice, type ChangeEntry } from '@delo/changes'
 import { recordPluginRequest, type PluginRequest } from '@delo/changes/install'
 
 /** The plugin's name in the loader's diagnostics. */
@@ -48,6 +60,15 @@ export const PLUGIN_MANAGER = 'plugin_manager'
 /** The `plugin_manager` actions that change which plugins the profile has, and the request each records. */
 const HELD_ACTIONS: Readonly<Record<string, PluginRequest['action']>> = { install_bundle: 'install', remove_bundle: 'remove' }
 
+/**
+ * The other `plugin_manager` actions that change what the profile runs: which plugins are on, their settings, the
+ * versions allowed, or a version of the profile's history brought back. None records a change; the person makes it.
+ */
+export const AT_COMPUTER_ACTIONS: ReadonlySet<string> = new Set(['set_bundle', 'set_plugin', 'configure', 'set_version_exemption', 'undo', 'restore'])
+
+/** The stable code of the denial of an action the person makes at their computer. */
+export const PLUGIN_CHANGE_AT_COMPUTER = 'PLUGIN_CHANGE_AT_COMPUTER'
+
 /** The stable code of the denial that reports a recorded change. */
 export const PLUGIN_CHANGE_PENDING = 'PLUGIN_CHANGE_PENDING'
 
@@ -65,6 +86,30 @@ export function heldRequest(exec: Pick<ToolExecution, 'name' | 'arguments'>): { 
   const action = args?.action
   if (typeof action !== 'string' || !Object.hasOwn(HELD_ACTIONS, action)) return undefined
   return { action: HELD_ACTIONS[action]!, target: args?.target }
+}
+
+/**
+ * Whether a call is a `plugin_manager` action the person makes at their computer.
+ * @param exec - the pending call.
+ * @returns whether its action is one of {@link AT_COMPUTER_ACTIONS}.
+ */
+export function atComputerAction(exec: Pick<ToolExecution, 'name' | 'arguments'>): boolean {
+  if (exec.name !== PLUGIN_MANAGER) return false
+  const action = (exec.arguments as { action?: unknown } | undefined)?.action
+  return typeof action === 'string' && AT_COMPUTER_ACTIONS.has(action)
+}
+
+/**
+ * The result the model reads for an action the person makes at their computer.
+ * @param action - the action.
+ * @returns the denial.
+ */
+function atComputer(action: string): PreToolDecision {
+  return {
+    kind: 'deny',
+    reason: `${action} changes what the person's harness runs, so the person makes it at their computer, in the studio or with delorun plugin. Nothing was changed; tell the person what you would change and why.`,
+    info: { name: 'PluginChangeAtComputer', code: PLUGIN_CHANGE_AT_COMPUTER },
+  }
 }
 
 /** What the model reads for each kind of recorded change: what did not happen. */
@@ -101,16 +146,23 @@ function unrecorded(detail: string): PreToolDecision {
 }
 
 /**
- * Hold back the agent's plugin installs, updates and removals. On, every such `plugin_manager` call is recorded as a
- * pending change in the profile the Host runs and denied with the change's id; one that cannot be recorded is denied
- * too. Off, the plugin registers nothing.
+ * Provide the check before every recomposition of the profile, and, with the switch on, hold back the agent's plugin
+ * changes: every `plugin_manager` install, update or removal is recorded as a pending change in the profile the Host
+ * runs and denied with the change's id, one that cannot be recorded is denied too, and every other action that changes
+ * what the profile runs is denied as one the person makes at their computer. Off, only the check is provided.
  * @param ctx - the plugin context.
  * @param config - the switch, defaulted by the schema above.
  */
 export function apply(ctx: Context, config: Config): void {
+  // Upstream hot reload's `ProfileReconcileCheck`: it awaits `check` before every recomposition of the profile.
+  ctx.provide('profileReconcileCheck', { check: (profile: ProfileContext) => checkReload(ctx, profile) })
   if (!config.enabled) return
   const recorded = new WeakSet<object>()
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
+    if (atComputerAction(exec)) {
+      recorded.add(exec)
+      return atComputer((exec.arguments as { action: string }).action)
+    }
     const held = heldRequest(exec)
     if (held === undefined) return next()
     recorded.add(exec)
@@ -124,7 +176,49 @@ export function apply(ctx: Context, config: Config): void {
       return unrecorded(`${error instanceof Error ? error.message : String(error)}`)
     }
   }, { prepend: true })
-  ctx.tools.guard(exec => heldRequest(exec) !== undefined && !recorded.has(exec)
-    ? 'Plugin installs, updates and removals wait for the person\'s review at their computer; this call was not recorded as a change, so it does not run.'
+  ctx.tools.guard(exec => (heldRequest(exec) !== undefined || atComputerAction(exec)) && !recorded.has(exec)
+    ? 'Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.'
     : undefined)
+}
+
+/**
+ * The check before a recomposition of the profile: `@delo/changes`' `prepareReload`, with the links the running Host
+ * already loads as the harness's own; what it moved is logged.
+ * @param ctx - the plugin context.
+ * @param profile - the profile about to be recomposed.
+ * @throws {ChangesError} `LOAD_REFUSED` when a link or an active directory is not what Changes keeps, which refuses the
+ *   recomposition.
+ */
+async function checkReload(ctx: Context, profile: ProfileContext): Promise<void> {
+  const harnessLink = loadedLinks(ctx.get('pluginPackages')?.resolution?.linkedRoots ?? [])
+  const changes = await prepareReload({ home: profile.home, profile: profile.name, profileDir: profile.dir, harnessLink })
+  const notice = startNotice(changes)
+  if (notice !== '') ctx.logger.info(notice.trimEnd())
+}
+
+/**
+ * The harness's own links as the running Host knows them: a link whose target is the directory the Host already loads
+ * that package from, which a start left alone.
+ * @param linkedRoots - the profile's links to directories outside the profiles tree, from the runtime resolution the
+ *   Host last published.
+ * @returns whether a link names the package's loaded directory.
+ */
+export function loadedLinks(linkedRoots: readonly { readonly name: string, readonly realPath: string }[]): (name: string, target: string) => boolean {
+  return (name, target) => {
+    const real = realTarget(target)
+    return real !== undefined && linkedRoots.some(root => root.name === name && root.realPath === real)
+  }
+}
+
+/**
+ * @param path - a link's target.
+ * @returns its real path, or undefined when it does not resolve.
+ */
+function realTarget(path: string): string | undefined {
+  try {
+    return realpathSync(path)
+  } catch {
+    // ENOENT, ENOTDIR or ELOOP: a target that does not resolve is not where the Host loads a package from.
+    return undefined
+  }
 }

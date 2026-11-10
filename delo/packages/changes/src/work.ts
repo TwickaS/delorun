@@ -1,20 +1,25 @@
 /**
  * Work sessions (contract C21, "Work sessions"): while the person works on one approved plugin, its folder's content
- * loads live. Modules load from the plugin's active directory, never from its folder, so Delo watches the folder itself
- * and copies each settled change into the active directory before the running Host reloads, rather than turning on
- * upstream's source watching (`hmr.root`), which would watch files that are not loaded.
+ * loads live, for at most {@link WORK_SESSION_MAX_MINUTES} minutes. Modules load from the plugin's active directory,
+ * never from its folder, so Delo watches the folder itself and copies each settled change into the active directory
+ * before the running Host reloads, rather than turning on upstream's source watching (`hmr.root`), which would watch
+ * files that are not loaded.
  *
  * Every load stores the folder's content, makes the active directory hold it (replacing only the files that differ,
  * so hot reload replaces only the changed modules) and asks the running Host to reload. A load that fails goes back:
  * the active directory holds the content that last loaded, or the approved content when nothing loaded yet, the Host
  * reloads once more, the failed content is noted in the session record and `run/<profile>/changes-work.json` names the
- * error; the session stays open. Ending a session makes the folder's content the approved version, or the content that
- * last loaded when the folder's content failed to load or the folder is gone, and records the whole difference since
- * the session began as one applied `plugin-edit` change and one profile history version.
+ * error; the session stays open. Nothing loads once the session's end time has passed.
  *
- * Opening and ending a session from a request needs a proof of presence ([actions](./actions.ts)); Delo stopping ends
- * the session without one ([stop](./stop.ts)). Every load and every end of a session runs under upstream's profile
- * write lock.
+ * Only the person approves what the session loaded: `done` shows the folder's content as a version digest with its
+ * files and diff against the approved content, and approves exactly that digest, refusing with `CHANGED_SINCE_REVIEW`
+ * when the folder holds anything else by then. A session that ends without the person (Delo stopping, a start after a
+ * crash, or its end time) approves nothing: the approved content stays the version the session started from, the
+ * active directory holds it again, and the folder's content is the ordinary pending change against it.
+ *
+ * Opening and ending a session from a request needs a proof of presence ([actions](./actions.ts)); ending it without
+ * the person is the separate entry `@delo/changes/stop` ([stop](./stop.ts)). Every load and every end of a session runs
+ * under upstream's profile write lock.
  *
  * @module @delo/changes/work
  */
@@ -27,6 +32,7 @@ import { ChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
 import { readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
+import { pluginChange } from './pending.ts'
 import {
   approvedOf,
   noteFailed,
@@ -43,10 +49,16 @@ import {
   type AtComputer,
 } from './records.ts'
 import { storeFolder } from './store.ts'
-import type { ActiveContent, ChangeEntry, ContentVersion, DecidedFrom, WorkSessionRecord } from './types.ts'
+import type { ActiveContent, ChangeEntry, ContentVersion, DecidedFrom, PluginChange, WorkSessionRecord } from './types.ts'
 import { removeWorkFailure, writeWorkFailure } from './work-record.ts'
 
-/** How many hexadecimal digits of a content version a history subject shows. */
+/**
+ * The longest a work session lasts, in minutes: eight hours. Everything the folder holds loads without review while a
+ * session lasts, so no request opens a longer one.
+ */
+export const WORK_SESSION_MAX_MINUTES = 480
+
+/** How many hexadecimal digits of a content version the person reads. */
 const SHORT_VERSION_LENGTH = 7
 
 /** How one load of folder content in a work session went. */
@@ -69,6 +81,8 @@ export type WorkSync =
   | { readonly kind: 'unchanged', readonly plugin: string }
   /** The folder is gone; the active directory keeps what it holds. */
   | { readonly kind: 'folder-gone', readonly plugin: string }
+  /** The session's end time has passed, so nothing loads; the session waits to be ended without the person. */
+  | { readonly kind: 'expired', readonly plugin: string, readonly endsAt: string }
   | WorkLoad
 
 /** What starting a work session did. */
@@ -79,29 +93,78 @@ export interface WorkStarted {
   readonly load: Exclude<WorkLoad, { readonly kind: 'not-running' }>
 }
 
+/** How a work session ended: the person at `done`, Delo stopping or a start after a crash, or its end time. */
+export type WorkEnding = 'done' | 'stopped' | 'expired'
+
 /** What ending a work session did. */
 export interface WorkFinished {
+  readonly kind: 'ended'
   readonly plugin: string
   /** The plugin's folder. */
   readonly source: string
   /** The approved content when the session began. */
   readonly from: ContentVersion
-  /** The approved content now. */
+  /** How it ended. */
+  readonly ended: WorkEnding
+  /** The approved content now: the version `done` showed, or {@link WorkFinished.from} when it ended without the person. */
   readonly approved: ContentVersion
-  /** The folder's content when the session ended; absent when the folder is gone. */
+  /** The folder's content `done` showed; absent when the folder is gone and when the session ended without the person. */
   readonly folder?: ContentVersion
-  /** Why the approved content is the content that last loaded rather than the folder's. */
-  readonly kept?: 'failed-to-load' | 'folder-gone'
   /** The applied `plugin-edit` change; absent when the approved content did not change. */
   readonly entry?: ChangeEntry
-  /** The last load before the session ended, when the folder held content not loaded yet. */
+  /** The load of the version `done` approved, when the active directory did not hold it yet. */
   readonly load?: WorkLoad
+  /** The running Host's answer after the session ended at its end time and the active directory held `from` again. */
+  readonly reload?: ReloadOutcome
+}
+
+/** `done` approved nothing: the version it showed failed to load, so Delo went back and the session stays open. */
+export interface WorkNotApproved {
+  readonly kind: 'went-back'
+  readonly plugin: string
+  /** The failed load. */
+  readonly load: Extract<WorkLoad, { readonly kind: 'went-back' }>
+}
+
+/** What `done` did. */
+export type WorkDone = WorkFinished | WorkNotApproved
+
+/** What `done` shows before the person approves. */
+export interface WorkReview {
+  /** The open session. */
+  readonly session: WorkSessionRecord
+  /** The folder's content, stored; absent when the folder is gone. */
+  readonly folder?: ContentVersion
+  /** The folder's content against the approved content `from`; absent when they are the same or the folder is gone. */
+  readonly change?: PluginChange
+  /** Whether the folder's content is the content whose reload failed in the session. */
+  readonly failedToLoad: boolean
 }
 
 /** A load and the session record after it. */
 interface Loaded {
   readonly load: WorkLoad
   readonly session: WorkSessionRecord
+}
+
+/**
+ * The short form of a content version that `done`, the history subject and the session's end lines show.
+ * @param version - a content version.
+ * @returns its first 7 hexadecimal digits.
+ */
+export function shortVersion(version: ContentVersion): string {
+  return version.slice(0, SHORT_VERSION_LENGTH)
+}
+
+/**
+ * Whether a work session's end time has passed by the context's clock, after which nothing loads and the session ends
+ * without the person.
+ * @param ctx - the context's clock; the system clock when absent.
+ * @param session - an open session.
+ * @returns whether its end time has passed.
+ */
+export function workSessionExpired(ctx: Pick<ChangesContext, 'now'>, session: Pick<WorkSessionRecord, 'endsAt'>): boolean {
+  return Date.parse(session.endsAt) <= (ctx.now ?? (() => new Date()))().getTime()
 }
 
 /**
@@ -116,8 +179,8 @@ function sessionPath(ctx: ChangesContext): string {
  * @param ctx - the profile.
  * @returns the scan cache a store of a folder uses.
  */
-function scanCache(ctx: ChangesContext): { readonly scanCache: string } {
-  return { scanCache: join(profileChangesDirectory(ctx.home, ctx.profile), CHANGES_ENTRIES.scanCache) }
+function scanCache(ctx: ChangesContext): string {
+  return join(profileChangesDirectory(ctx.home, ctx.profile), CHANGES_ENTRIES.scanCache)
 }
 
 /**
@@ -130,6 +193,16 @@ async function hold(ctx: ChangesContext, plugin: string, content: ActiveContent)
   await holdContent(ctx.home, activeDirectory(ctx.home, ctx.profile, plugin), content.version)
   const record = await readActiveRecord(ctx.home, ctx.profile)
   await writeActiveRecord(ctx.home, ctx.profile, { ...record, plugins: { ...record.plugins, [plugin]: content } })
+}
+
+/**
+ * @param ctx - the profile.
+ * @param plugin - the package name.
+ * @returns the content `active.json` records for the plugin's active directory.
+ */
+async function activeVersion(ctx: ChangesContext, plugin: string): Promise<ContentVersion | undefined> {
+  const { plugins } = await readActiveRecord(ctx.home, ctx.profile)
+  return Object.hasOwn(plugins, plugin) ? plugins[plugin]!.version : undefined
 }
 
 /**
@@ -166,24 +239,14 @@ async function loadVersion(ctx: ChangesContext, session: WorkSessionRecord, vers
  */
 async function folderVersion(ctx: ChangesContext, session: WorkSessionRecord): Promise<ContentVersion | undefined> {
   if (!await namesDirectory(session.source)) return undefined
-  return (await storeFolder(ctx.home, session.source, scanCache(ctx))).version
+  return (await storeFolder(ctx.home, session.source, { scanCache: scanCache(ctx) })).version
 }
 
 /**
- * @param ctx - the profile.
- * @param session - the open session.
- * @param folder - the folder's content.
- * @returns whether it is new to the session: neither what the active directory holds nor content that failed to load.
- */
-async function isNew(ctx: ChangesContext, session: WorkSessionRecord, folder: ContentVersion): Promise<boolean> {
-  const { plugins } = await readActiveRecord(ctx.home, ctx.profile)
-  const content = Object.hasOwn(plugins, session.plugin) ? plugins[session.plugin] : undefined
-  return folder !== session.lastFailed && content?.version !== folder
-}
-
-/**
- * Load the open work session's folder when it holds content new to the session. The Host calls it for each settled
- * change of the folder or of the session record; it opens no session, so it needs no proof of presence.
+ * Load the open work session's folder when it holds content new to the session: neither what the active directory
+ * holds nor content that failed to load. The Host calls it for each settled change of the folder or of the session
+ * record; it opens no session, so it needs no proof of presence. Once the session's end time has passed it loads
+ * nothing.
  * @param ctx - the profile.
  * @param reload - reloads the running Host.
  * @returns what it did.
@@ -193,9 +256,10 @@ export async function loadWorkSession(ctx: ChangesContext, reload: ReloadHost): 
   return locked(ctx, async () => {
     const session = await readWorkSession(ctx.home, ctx.profile)
     if (session === undefined) return { kind: 'none' }
+    if (workSessionExpired(ctx, session)) return { kind: 'expired', plugin: session.plugin, endsAt: session.endsAt }
     const folder = await folderVersion(ctx, session)
     if (folder === undefined) return { kind: 'folder-gone', plugin: session.plugin }
-    if (!await isNew(ctx, session, folder)) return { kind: 'unchanged', plugin: session.plugin }
+    if (folder === session.lastFailed || folder === await activeVersion(ctx, session.plugin)) return { kind: 'unchanged', plugin: session.plugin }
     return (await loadVersion(ctx, session, folder, reload)).load
   })
 }
@@ -206,21 +270,25 @@ export async function loadWorkSession(ctx: ChangesContext, reload: ReloadHost): 
  * @param plugin - the package name.
  * @param presence - the proof, recorded as where the session started.
  * @param reload - reloads the running Host.
+ * @param minutes - how long the session lasts, from 1 to {@link WORK_SESSION_MAX_MINUTES}.
  * @returns the session and how its folder loaded.
- * @throws {ChangesError} `NOT_LINKED` for a plugin the profile does not load from its active directory with approved
- *   content, or whose folder is gone; `WORK_SESSION_OPEN`; `NOT_ALLOWED` when Delo is not running for the profile, after
- *   closing the session again.
+ * @throws {ChangesError} `NOT_ALLOWED` for a length outside that range, before anything is read; `NOT_LINKED` for a
+ *   plugin the profile does not load from its active directory with approved content, or whose folder is gone;
+ *   `WORK_SESSION_OPEN`; `NOT_ALLOWED` when Delo is not running for the profile, after closing the session again.
  */
-export async function beginWork(ctx: ChangesContext, plugin: string, presence: AtComputer, reload: ReloadHost): Promise<WorkStarted> {
+export async function beginWork(ctx: ChangesContext, plugin: string, presence: AtComputer, reload: ReloadHost, minutes: number): Promise<WorkStarted> {
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > WORK_SESSION_MAX_MINUTES) {
+    throw new ChangesError('NOT_ALLOWED', plugin, `A work session lasts from 1 to ${String(WORK_SESSION_MAX_MINUTES)} minutes, so ${String(minutes)} minutes is not allowed.`)
+  }
   return locked(ctx, async () => {
     const approval = approvedOf(await readApproved(ctx.profileDir), plugin)
     const directory = activeDirectory(ctx.home, ctx.profile, plugin)
     const linked = (await readLinks(ctx.profileDir)).some(link => link.name === plugin && resolve(link.target) === resolve(directory))
     if (approval === undefined || !linked) throw new ChangesError('NOT_LINKED', plugin, `${plugin} is not a plugin of the profile ${ctx.profile} that you approved from a folder. See them: delorun changes list`)
     if (!await namesDirectory(approval.source)) throw new ChangesError('NOT_LINKED', plugin, `The folder of ${plugin}, ${approval.source}, is gone, so there is nothing to work on.`)
-    const { version } = await storeFolder(ctx.home, approval.source, scanCache(ctx))
+    const { version } = await storeFolder(ctx.home, approval.source, { scanCache: scanCache(ctx) })
     const activeBefore = await readActiveRecord(ctx.home, ctx.profile)
-    const opened = await openWorkSession(ctx.home, ctx.profile, { plugin, source: approval.source, from: approval.version }, presence)
+    const opened = await openWorkSession(ctx.home, ctx.profile, { plugin, source: approval.source, from: approval.version, minutes }, presence)
     await removeWorkFailure(ctx.home, ctx.profile)
     const { load, session } = await loadVersion(ctx, opened, version, reload)
     if (load.kind !== 'not-running') return { session, load }
@@ -232,56 +300,121 @@ export async function beginWork(ctx: ChangesContext, plugin: string, presence: A
 }
 
 /**
- * @param version - a content version.
- * @returns its first digits, as a history subject shows it.
+ * @param ctx - the profile.
+ * @param plugin - the package name.
+ * @returns the open session on the plugin.
+ * @throws {ChangesError} `NO_WORK_SESSION` when no work session on the plugin is open.
  */
-function short(version: ContentVersion): string {
-  return version.slice(0, SHORT_VERSION_LENGTH)
+async function sessionOn(ctx: ChangesContext, plugin: string): Promise<WorkSessionRecord> {
+  const session = await readWorkSession(ctx.home, ctx.profile)
+  if (session?.plugin !== plugin) throw new ChangesError('NO_WORK_SESSION', plugin, `No work session on ${plugin} is open in the profile ${ctx.profile}.`)
+  return session
 }
 
 /**
- * End the open work session: load the folder's content once more when the Host runs and it is new, approve the
- * folder's content or, when it failed to load or the folder is gone, the content that last loaded, record the whole
- * difference since the session began as one applied change and one profile history version, and close the session.
- * The caller holds the profile's lock and checked the proof, or ends the session because Delo stops.
+ * What `done` shows: the folder's content, stored, and its difference from the approved content the session started
+ * from. Reading stores the folder's content; nothing the profile runs changes, so it needs no proof of presence.
+ * @param ctx - the profile.
+ * @param plugin - the package name.
+ * @returns the session, the folder's content and the change.
+ * @throws {ChangesError} `NO_WORK_SESSION` when no work session on the plugin is open; when a record of Changes is not
+ *   one Delo wrote or the folder changed while it was read.
+ */
+export async function reviewWork(ctx: ChangesContext, plugin: string): Promise<WorkReview> {
+  return locked(ctx, async () => {
+    const session = await sessionOn(ctx, plugin)
+    if (!await namesDirectory(session.source)) return { session, failedToLoad: false }
+    const change = await pluginChange(ctx.home, { plugin, source: session.source, approved: session.from, scanCache: scanCache(ctx) })
+    const folder = change?.to ?? session.from
+    return { session, folder, ...change === undefined ? {} : { change }, failedToLoad: folder === session.lastFailed }
+  })
+}
+
+/**
+ * Close the session with one approved version: the active directory holds it as approved, a version other than `from`
+ * is recorded as one applied `plugin-edit` change from `from` and one profile history version, and the session record
+ * and the record of its last failed reload are removed.
  * @param ctx - the profile.
  * @param session - the open session.
- * @param decidedFrom - where the change is recorded as decided.
- * @param reload - reloads the running Host; undefined when Delo stops, so nothing loads.
+ * @param decidedFrom - where the person approved it.
+ * @param approved - the version to approve.
+ * @param shown - what `done` showed and the load before approving.
  * @returns what was done.
  */
-export async function endWork(ctx: ChangesContext, session: WorkSessionRecord, decidedFrom: DecidedFrom, reload: ReloadHost | undefined): Promise<WorkFinished> {
+async function approveAndClose(ctx: ChangesContext, session: WorkSessionRecord, decidedFrom: DecidedFrom, approved: ContentVersion, shown: Pick<WorkFinished, 'folder' | 'load'>): Promise<WorkFinished> {
   const { plugin, source, from } = session
-  const folder = await folderVersion(ctx, session)
-  let current = session
-  let load: WorkLoad | undefined
-  if (reload !== undefined && folder !== undefined && await isNew(ctx, session, folder)) ({ load, session: current } = await loadVersion(ctx, session, folder, reload))
-  const approved = folder !== undefined && folder !== current.lastFailed ? folder : current.lastLoaded ?? from
-  const kept = approved === folder ? undefined : folder === undefined ? 'folder-gone' : 'failed-to-load'
   await hold(ctx, plugin, { version: approved, kind: 'approved' })
   let entry: ChangeEntry | undefined
   if (approved !== from) {
     const at = timeOf(ctx)
     const record = await readApproved(ctx.profileDir)
     await writeApproved(ctx.profileDir, { ...record, plugins: { ...record.plugins, [plugin]: { source, version: approved, approvedAt: at } } })
-    const summary = `Work on ${plugin}: ${short(from)} → ${short(approved)}`
+    const summary = `Work on ${plugin}: ${shortVersion(from)} → ${shortVersion(approved)}`
     const subject = { plugin, source }
     entry = { id: changeId('plugin-edit', subject, from, approved), kind: 'plugin-edit', state: 'applied', subject, from, to: approved, summary, createdAt: session.startedAt, decidedAt: at, decidedFrom, ...await recordVersion(ctx, summary) }
     await writeChangeLog(ctx.home, ctx.profile, withEntry(await readChangeLog(ctx.home, ctx.profile), entry))
   }
   await unlink(sessionPath(ctx))
-  if (kept !== 'failed-to-load') await removeWorkFailure(ctx.home, ctx.profile)
-  return { plugin, source, from, approved, ...folder === undefined ? {} : { folder }, ...kept === undefined ? {} : { kept }, ...entry === undefined ? {} : { entry }, ...load === undefined ? {} : { load } }
+  await removeWorkFailure(ctx.home, ctx.profile)
+  return { kind: 'ended', plugin, source, from, ended: 'done', approved, ...shown, ...entry === undefined ? {} : { entry } }
 }
 
 /**
- * The line that says how a work session ended, in the person's words.
+ * End the work session on a plugin at the person's word: approve exactly the folder's content `done` showed, or keep
+ * `from` when the folder was gone. When the active directory does not hold that version yet and Delo runs, it loads
+ * first; a failed load approves nothing and leaves the session open. The caller checked the proof.
+ * @param ctx - the profile.
+ * @param plugin - the package name.
+ * @param decidedFrom - where the person approved it.
+ * @param reload - reloads the running Host.
+ * @param approve - the folder's content `done` showed ({@link WorkReview.folder}); undefined when the folder was gone.
+ * @returns what was done.
+ * @throws {ChangesError} `NO_WORK_SESSION` when no work session on the plugin is open; `CHANGED_SINCE_REVIEW`, approving
+ *   nothing and leaving the session open, when the folder holds anything other than `approve`.
+ */
+export async function endWork(ctx: ChangesContext, plugin: string, decidedFrom: DecidedFrom, reload: ReloadHost, approve: ContentVersion | undefined): Promise<WorkDone> {
+  return locked(ctx, async () => {
+    const session = await sessionOn(ctx, plugin)
+    const folder = await folderVersion(ctx, session)
+    if (folder !== approve) {
+      throw new ChangesError('CHANGED_SINCE_REVIEW', plugin, `The folder of ${plugin} changed after it was shown, so nothing was approved and your work session stays open. Run delorun changes done ${plugin} again to see what it holds now.`)
+    }
+    const target = folder ?? session.from
+    if (target === await activeVersion(ctx, plugin)) return approveAndClose(ctx, session, decidedFrom, target, folder === undefined ? {} : { folder })
+    const { load } = await loadVersion(ctx, session, target, reload)
+    if (load.kind === 'went-back') return { kind: 'went-back', plugin, load }
+    return approveAndClose(ctx, session, decidedFrom, target, { ...folder === undefined ? {} : { folder }, load })
+  })
+}
+
+/**
+ * End the open work session without the person: the approved content stays the version the session started from, the
+ * active directory holds it again, and the folder's content waits for review as the ordinary pending change. Nothing
+ * is approved, so nothing is logged and no profile history version is recorded; the folder is not read. The caller
+ * holds the profile's lock.
+ * @param ctx - the profile.
+ * @param session - the open session.
+ * @param ended - why it ends.
+ * @param reload - reloads the running Host when the session ends while Delo runs; undefined when Delo stops or starts.
+ * @returns what was done.
+ */
+export async function endWorkWithoutPerson(ctx: ChangesContext, session: WorkSessionRecord, ended: Exclude<WorkEnding, 'done'>, reload: ReloadHost | undefined): Promise<WorkFinished> {
+  const { plugin, source, from } = session
+  await hold(ctx, plugin, { version: from, kind: 'approved' })
+  await unlink(sessionPath(ctx))
+  await removeWorkFailure(ctx.home, ctx.profile)
+  const outcome = reload === undefined ? undefined : await reload()
+  return { kind: 'ended', plugin, source, from, ended, approved: from, ...outcome === undefined ? {} : { reload: outcome } }
+}
+
+/**
+ * The line that says what ending a work session approved, in the person's words.
  * @param finished - what ending it did.
  * @returns the line, without a trailing newline.
  */
 export function workFinishedLine(finished: WorkFinished): string {
-  const { plugin } = finished
-  if (finished.kept === 'failed-to-load') return `The newest content of ${plugin}'s folder failed to load, so the content that last loaded is now the approved version of ${plugin}.`
-  if (finished.kept === 'folder-gone') return `The folder of ${plugin} is gone, so the content that last loaded is now the approved version of ${plugin}.`
-  return finished.entry === undefined ? `${plugin} runs its approved version; its folder holds no change.` : `The folder's content is now the approved version of ${plugin} (${finished.entry.id}).`
+  const { plugin, from } = finished
+  if (finished.ended !== 'done') return `Nothing was approved: ${plugin} keeps the version it had when the session started (${shortVersion(from)}), and what its folder holds waits for your review: delorun changes list`
+  if (finished.entry !== undefined) return `Version ${shortVersion(finished.approved)} is now the approved version of ${plugin} (${finished.entry.id}).`
+  return finished.folder === undefined ? `The folder of ${plugin} is gone; ${plugin} keeps its approved version (${shortVersion(from)}).` : `${plugin} keeps its approved version (${shortVersion(from)}); its folder holds no change.`
 }

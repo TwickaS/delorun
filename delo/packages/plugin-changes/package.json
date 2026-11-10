@@ -1,6 +1,6 @@
 {
   "name": "@delo/plugin-changes",
-  "description": "Delo's hold on the agent's plugin installs, updates and removals: a plugin_manager install_bundle or remove_bundle call records a change waiting for the person's review instead of running",
+  "description": "Delo's hold on the agent's plugin changes and the check before every reload of a running profile: a plugin_manager install_bundle or remove_bundle call records a change waiting for the person's review, other actions that change what runs are left to the person, and no recomposition loads content the person did not approve",
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
@@ -19,8 +19,10 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/cordis-plugin-timer": "workspace:~",
     "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-hmr": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "@deepseek-ai/dsh-sandbox-policy": "workspace:*",
@@ -31,7 +33,8 @@
     "@deepseek-ai/dsh-tool-testkit": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-user-approval": "workspace:*",
-    "@deepseek-ai/schemastery": "workspace:~"
+    "@deepseek-ai/schemastery": "workspace:~",
+    "chokidar": "5.0.0"
   },
   "delo": {
     "state": "shipped"

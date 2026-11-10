@@ -116,7 +116,7 @@ describe('checkChangesInvariants', () => {
     await setProtection(fx.home, 'block', terminal())
     const [line] = await check(fx)
     expect(line).toMatch(/^plug loads version [0-9a-f]{64} under block outside a work session, which is not its approved version\.$/)
-    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved }, terminal())
+    await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
     expect(await check(fx)).toEqual([])
   })
 
