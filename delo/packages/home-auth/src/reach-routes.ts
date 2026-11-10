@@ -31,7 +31,7 @@ import { DEVICE_APPROVAL_LIMITS, DEVICE_APPROVAL_VERSION, type Base64Url } from 
 import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError } from './errors.ts'
 import { claimLabelOf, deviceIdOf, devicePublicKeyOf } from './records.ts'
-import { arrivedOnLoopback, cameFromOwnOrigin, readMessage, sendError, sendJson, sendThrown, type RouteHandler } from './routes.ts'
+import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
 
 /** The pre-login routes this package answers on every reach listener it serves, which is each listener's allowlist. */
 export const REACH_PRE_LOGIN_ROUTES: readonly PreLoginRoute[] = [
@@ -276,12 +276,13 @@ export function sessionHandler(auth: HomeAuth): RouteHandler {
 /**
  * Build the route that opens the approval window: "Add a device" in the loopback studio.
  * @param auth - the home-auth instance.
+ * @param credential - the loopback credential check.
  * @returns the handler.
  */
-export function windowHandler(auth: HomeAuth): RouteHandler {
+export function windowHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
-    if (!arrivedOnLoopback(auth, request, response, 'Adding a device')) return
-    if (!method(request, response, 'POST') || !cameFromOwnOrigin(request, response)) return
+    if (!personAtComputer(auth, credential, request, response, 'Adding a device', request.method === 'POST')) return
+    if (!method(request, response, 'POST')) return
     try {
       sendJson(response, 200, { closesAt: await auth.openApprovalWindow() })
     } catch (error) {
@@ -293,11 +294,12 @@ export function windowHandler(auth: HomeAuth): RouteHandler {
 /**
  * Build the route the approval form reads: whether the window is open and the pending requests.
  * @param auth - the home-auth instance.
+ * @param credential - the loopback credential check.
  * @returns the handler.
  */
-export function pendingHandler(auth: HomeAuth): RouteHandler {
+export function pendingHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
-    if (!arrivedOnLoopback(auth, request, response, 'Approving a device')) return
+    if (!personAtComputer(auth, credential, request, response, 'Approving a device', false)) return
     if (!method(request, response, 'GET')) return
     sendJson(response, 200, { windowClosesAt: auth.approvals.windowOpenUntil() ?? null, pending: auth.pendingApprovals() })
   }
@@ -306,12 +308,13 @@ export function pendingHandler(auth: HomeAuth): RouteHandler {
 /**
  * Build the local approval route.
  * @param auth - the home-auth instance.
+ * @param credential - the loopback credential check.
  * @returns the handler.
  */
-export function approveHandler(auth: HomeAuth): RouteHandler {
+export function approveHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
-    if (!arrivedOnLoopback(auth, request, response, 'Approving a device')) return
-    if (!method(request, response, 'POST') || !cameFromOwnOrigin(request, response)) return
+    if (!personAtComputer(auth, credential, request, response, 'Approving a device', request.method === 'POST')) return
+    if (!method(request, response, 'POST')) return
     try {
       const message = await readMessage(request, response)
       if (message === undefined) return

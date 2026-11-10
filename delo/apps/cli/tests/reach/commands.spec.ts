@@ -1,11 +1,8 @@
 /**
- * `delorun reach` and `delorun devices` over a temporary home, with `tailscale`, the studio and the home socket faked:
+ * `delorun reach` and `delorun devices` over a temporary home, with `tailscale` and the home socket faked:
  * what each action checks, writes and prints, and what it refuses.
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { once } from 'node:events'
-import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,7 +21,6 @@ import { createReachCommand, homeRuns, type ReachDependencies } from '../../src/
 import { createDevicesCommand, type DevicesDependencies } from '../../src/devices/command.ts'
 import { localDeviceApproval } from '../../src/devices/host.ts'
 import { readReachRow, REACH_OFF } from '../../src/reach/row.ts'
-import { loopbackStudio, refusalOf, studioPort, type StudioReply } from '../../src/reach/studio.ts'
 import { reachSection } from '../../src/reach/setup-section.ts'
 import { TRUST_STATEMENT } from '../../src/reach/trust.ts'
 import { BACK } from '../../src/setup/steps.ts'
@@ -62,7 +58,7 @@ function tailscale(answers: Partial<Record<string, TailscaleResult>> = {}, calls
 }
 
 function reach(overrides: Partial<ReachDependencies> = {}): ReturnType<typeof createReachCommand> {
-  return createReachCommand({ tailscale: tailscale(), studio: () => Promise.reject(new Error('no studio')), running: () => false, ...overrides })
+  return createReachCommand({ tailscale: tailscale(), running: () => false, ...overrides })
 }
 
 function patchRows(): unknown {
@@ -116,17 +112,11 @@ describe('delorun reach', () => {
     expect(out.stdout).toContain('Tailscale private: off')
     expect(out.stdout).toContain('Delo is not running')
     await reach().run(['on', 'tailscale'], context)
-    const status = (reply: StudioReply | Error) => reach({ running: () => true, studio: () => (reply instanceof Error ? Promise.reject(reply) : Promise.resolve(reply)) })
     out.stdout = ''
-    await status({ status: 200, body: { available: true, options: [{ option: 'tailscale-private', state: 'blocked', detail: 'Turn on HTTPS' }, 'junk', { option: 'x', state: 'ready' }] } }).run(['status'], context)
+    // The live state answers only the studio's own page, so a running home is pointed to, never asked over HTTP.
+    await reach({ running: () => true }).run(['status'], context)
     expect(out.stdout).toContain(`Tailscale private: on, https://${HOST}`)
-    expect(out.stdout).toContain('Running: blocked — Turn on HTTPS')
-    expect(out.stdout).toContain('Running: ready')
-    for (const reply of [{ status: 404, body: undefined }, { status: 200, body: { options: 'none' } }, { status: 200, body: null }, new Error('refused')]) {
-      out.stdout = ''
-      await status(reply).run(['status'], context)
-      expect(out.stdout).toContain('reports no remote listener')
-    }
+    expect(out.stdout).toContain('Settings → Devices')
   })
 
   it('reads a home\'s lock to tell whether Delo runs', async () => {
@@ -147,7 +137,6 @@ function devices(overrides: Partial<DevicesDependencies> & { readonly lines?: Re
   const lines = [...(overrides.lines ?? [])]
   const answers = [...(overrides.answers ?? [])]
   const command = createDevicesCommand({
-    studio: () => Promise.reject(new Error('no studio')),
     running: () => true,
     send: async (_home, _profile, request) => {
       sent.push(request)
@@ -250,23 +239,25 @@ describe('delorun devices', () => {
     }
   })
 
-  it('removes a device through the running studio, or on the records when Delo is not running', async () => {
-    const seen: unknown[] = []
-    const studio = async (_port: number, method: string, path: string, body?: unknown): Promise<StudioReply> => {
-      seen.push({ method, path, body })
-      return Promise.resolve({ status: 200, body: { removed: true, sessions: 2, connections: 1 } })
-    }
-    await expect(devices({ studio }).command.run(['remove', 'dev-1', '--profile', 'default'], context)).resolves.toBe(EXIT.ok)
-    expect(seen).toEqual([{ method: 'POST', path: '/auth/devices/remove', body: { v: 1, deviceId: 'dev-1' } }])
+  it('removes a device through the home socket when Delo runs, or on the records when it does not', async () => {
+    const removed = devices({ lines: [[{ ok: true, removed: true, sessions: 2, connections: 1 }]] })
+    await expect(removed.command.run(['remove', 'dev-1', '--profile', 'default'], context)).resolves.toBe(EXIT.ok)
+    // Pins the channel: the removal goes over the home socket, which only the person's own command can use.
+    expect(removed.sent).toEqual([{ op: 'devices.remove', args: { deviceId: 'dev-1' } }])
     expect(out.stdout).toContain('2 session(s) ended')
-    await expect(devices({ studio: () => Promise.resolve({ status: 200, body: null }) }).command.run(['remove', 'dev-1'], context)).resolves.toBe(EXIT.ok)
-    await expect(devices({ studio: () => Promise.resolve({ status: 403, body: { error: 'NO_OWNER', message: 'No owner' } }) }).command.run(['remove', 'dev-1'], context)).resolves.toBe(EXIT.failed)
-    await expect(devices({ studio: () => Promise.resolve({ status: 500, body: { error: 'INTERNAL_ERROR' } }) }).command.run(['remove', 'dev-1'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('INTERNAL_ERROR')
+    await expect(devices({ lines: [[{ ok: false, error: 'REMOVAL_FAILED', detail: 'NO_OWNER: No owner' }]] }).command.run(['remove', 'dev-1'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('REMOVAL_FAILED (NO_OWNER: No owner)')
+    await expect(devices({ lines: [[{ ok: false, error: 'LOOPBACK_REQUIRED' }]] }).command.run(['remove', 'dev-1'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('LOOPBACK_REQUIRED')
     await expect(devices({ running: () => false }).command.run(['remove', 'dev-1'], context)).resolves.toBe(EXIT.failed)
     expect(out.stderr).toContain('no owner yet')
     await expect(devices().command.run(['remove'], context)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(devices().command.run(['remove', '--profile', 'default'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(devices().command.run(['remove', '--profile=default'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    // A device id may begin with `-`, as base64url text does.
+    const dashed = devices({ lines: [[{ ok: true, removed: true, sessions: 0, connections: 0 }]] })
+    await expect(dashed.command.run(['remove', '-y1', '--profile', 'default'], context)).resolves.toBe(EXIT.ok)
+    expect(dashed.sent).toEqual([{ op: 'devices.remove', args: { deviceId: '-y1' } }])
   })
 
   it('removes a device on the records of a home that is not running', async () => {
@@ -290,55 +281,15 @@ describe('delorun devices', () => {
 })
 
 describe('the pieces the commands share', () => {
-  it('reads the studio port from the profile\'s webserver row, or uses setup\'s default', () => {
-    const path = join(deloHome, 'profiles', 'default', 'cordis.patch.yml')
-    expect(studioPort(deloHome, 'default')).toBe(3080)
-    writeFileSync(path, '- id: webserver\n  config:\n    port: 4000\n')
-    expect(studioPort(deloHome, 'default')).toBe(4000)
-    writeFileSync(path, '- 1\n- id: webserver\n  config: 7\n- id: other\n')
-    expect(studioPort(deloHome, 'default')).toBe(3080)
-    writeFileSync(path, 'just: a map\n')
-    expect(studioPort(deloHome, 'default')).toBe(3080)
-    writeFileSync(path, '[unclosed\n')
-    expect(studioPort(deloHome, 'default')).toBe(3080)
-  })
-
   it('reads the reach row, or off', () => {
     const path = join(deloHome, 'profiles', 'default', 'cordis.patch.yml')
     expect(readReachRow(deloHome, 'default')).toEqual(REACH_OFF)
-    for (const text of ['just: a map\n', '- 1\n- id: delo-reach\n', '- id: delo-reach\n  config: {}\n', '- id: delo-reach\n  config:\n    tailscalePrivate: 1\n']) {
+    for (const text of ['just: a map\n', '- 1\n- ~\n- id: delo-reach\n', '- id: delo-reach\n  config: {}\n', '- id: delo-reach\n  config:\n    tailscalePrivate: 1\n']) {
       writeFileSync(path, text)
       expect(readReachRow(deloHome, 'default')).toEqual(REACH_OFF)
     }
     writeFileSync(path, '- id: delo-reach\n  config:\n    tailscalePrivate:\n      enabled: yes\n')
     expect(readReachRow(deloHome, 'default')).toEqual(REACH_OFF)
-  })
-
-  it('sends a request to the studio with its own Host and reads the refusal', async () => {
-    const seen: { host: string | undefined; origin: string | undefined; body: string }[] = []
-    const server = createServer((request: IncomingMessage, response: ServerResponse) => {
-      let body = ''
-      request.on('data', (chunk: Buffer) => { body += chunk.toString() })
-      request.on('end', () => {
-        seen.push({ host: request.headers.host, origin: request.headers.origin, body })
-        response.statusCode = request.url === '/text' ? 200 : 403
-        response.end(request.url === '/text' ? 'not json' : '{"error":"LOOPBACK_REQUIRED","message":"needs you"}')
-      })
-    })
-    server.listen(0, '127.0.0.1')
-    await once(server, 'listening')
-    const { port } = server.address() as AddressInfo
-    try {
-      const refused = await loopbackStudio(port, 'POST', '/auth/devices/window', { v: 1 })
-      expect(refusalOf(refused)).toEqual({ error: 'LOOPBACK_REQUIRED', message: 'needs you' })
-      expect(seen[0]).toEqual({ host: `127.0.0.1:${String(port)}`, origin: undefined, body: '{"v":1}' })
-      const text = await loopbackStudio(port, 'GET', '/text')
-      expect(text).toEqual({ status: 200, body: undefined })
-      expect(refusalOf(text)).toEqual({ error: 'HTTP_200', message: '' })
-    } finally {
-      server.close()
-    }
-    await expect(loopbackStudio(port, 'GET', '/')).rejects.toThrow()
   })
 
   it('gives the home process the Host\'s local approval, or nothing without home-auth', async () => {
@@ -349,13 +300,15 @@ describe('the pieces the commands share', () => {
       approvalWindowOpenUntil: () => 5,
       pendingApprovals: () => [],
       approveLocally: (id: string, code: string) => { calls.push(`${id} ${code}`); return Promise.resolve({ id: 'd', label: 'Phone', address: 'a', platform: '' }) },
+      revokeDevice: (id: string) => { calls.push(`remove ${id}`); return Promise.resolve({ removed: true, sessions: 2, connections: 1, extra: 'dropped' }) },
     }
     const approval = localDeviceApproval({ get: (name: string) => (name === 'homeAuth' ? homeAuth : undefined) } as never)
     await expect(approval?.openWindow()).resolves.toBe(5)
     expect(approval?.windowOpenUntil()).toBe(5)
     expect(approval?.pending()).toEqual([])
     await expect(approval?.approve('r', '1')).resolves.toEqual({ id: 'd', label: 'Phone', address: 'a' })
-    expect(calls).toEqual(['open', 'r 1'])
+    await expect(approval?.remove('d')).resolves.toEqual({ removed: true, sessions: 2, connections: 1 })
+    expect(calls).toEqual(['open', 'r 1', 'remove d'])
   })
 })
 

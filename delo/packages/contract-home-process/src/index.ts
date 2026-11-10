@@ -194,6 +194,21 @@ export interface DevicesApproveRequest extends RequestBase {
   }
 }
 
+/**
+ * The `devices.remove` request: removing a trusted device at the home's own computer, which ends its sessions and closes
+ * its reach connections at once. Accepted only with the token the person's own `delorun` reads from the token file, and
+ * refused with `LOOPBACK_REQUIRED` for the Host's channel token.
+ */
+export interface DevicesRemoveRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'devices.remove'
+  /** Arguments. */
+  readonly args: {
+    /** The device to remove, as `delorun devices list` names it. */
+    readonly deviceId: string
+  }
+}
+
 /** Every request the update channel accepts; no request carries a path, an archive, a URL or a command. */
 export type UpdateChannelRequest =
   | StatusRequest
@@ -204,6 +219,7 @@ export type UpdateChannelRequest =
   | StopRequest
   | StudioOpenTokenRequest
   | DevicesApproveRequest
+  | DevicesRemoveRequest
 
 /** Error codes of this contract. */
 export type HomeProcessErrorCode =
@@ -232,6 +248,7 @@ export type HomeProcessErrorCode =
   | 'LOOPBACK_REQUIRED'
   | 'APPROVAL_FAILED'
   | 'APPROVALS_UNAVAILABLE'
+  | 'REMOVAL_FAILED'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {

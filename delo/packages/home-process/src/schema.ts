@@ -31,6 +31,11 @@ const request = z.discriminatedUnion('op', [
     op: z.literal('devices.approve'),
     args: z.strictObject({ requestId: z.string().regex(/^[A-Za-z0-9_-]{22}$/).optional(), typedCode: z.string().regex(/^[0-9 -]{8,12}$/).optional() }),
   }),
+  z.strictObject({
+    ...base,
+    op: z.literal('devices.remove'),
+    args: z.strictObject({ deviceId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) }),
+  }),
 ])
 
 /**

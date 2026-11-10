@@ -51,6 +51,20 @@ const NO_AUTHORITY_SENTENCE = 'A claim names the loopback listener\'s own addres
 export type RouteHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
 
 /**
+ * The loopback credential check upstream's own routes use: `connection.requestRejection(request)`, which applies the
+ * Host and Origin fence and requires the browser's signed launch cookie or a live API credential.
+ * @param request - the request.
+ * @returns `401` or `403` to refuse it, or undefined when it carries the credential.
+ */
+export type LoopbackCredential = (request: IncomingMessage) => 401 | 403 | undefined
+
+/** The sentence a request without the loopback credential is answered with. */
+const NO_CREDENTIAL_SENTENCE = 'Open the studio on the home\'s own computer from the address delorun start printed; this route needs the studio\'s own sign-in'
+
+/** The sentence a state-changing request without the studio's own `Origin` is answered with. */
+const NO_ORIGIN_SENTENCE = 'Change devices from the studio open on the home itself, or with delorun devices; a request that names no studio origin cannot'
+
+/**
  * The refusal a reach listener answers `POST /auth/owner/claim` with, before it reads the body: C5 requires
  * `OWNER_CLAIM_LOOPBACK_ONLY` and a sentence naming the loopback listener and SSH port forwarding.
  * @returns the status and the body a dispatcher writes for a claim on a reach listener.
@@ -118,13 +132,15 @@ export function claimHandler(auth: HomeAuth): RouteHandler {
 /**
  * Build the device list route.
  * @param auth - the home-auth instance to list from.
+ * @param credential - the loopback credential check.
  * @returns the handler for {@link DEVICES_PATH}.
  */
-export function devicesHandler(auth: HomeAuth): RouteHandler {
+export function devicesHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
     // The listing names the owner and every device, so it answers on the loopback listener only, under a `Host` that
-    // names it: a rebinding name reaches this port while its `Host` still says whose page asked.
-    if (!arrivedOnLoopback(auth, request, response, 'The device list')) return
+    // names it, to the studio's own credential: a rebinding name reaches this port while its `Host` still says whose
+    // page asked, and any local process reaches the port at all.
+    if (!personAtComputer(auth, credential, request, response, 'The device list', false)) return
     if (request.method !== 'GET') {
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'Read the device list with a GET to /auth/devices'))
       return
@@ -140,18 +156,20 @@ export function devicesHandler(auth: HomeAuth): RouteHandler {
 /**
  * Build the route that revokes one device.
  * @param auth - the home-auth instance to revoke with.
+ * @param credential - the loopback credential check.
  * @returns the handler for {@link DEVICE_REMOVE_PATH}.
  */
-export function removeDeviceHandler(auth: HomeAuth): RouteHandler {
+export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
     // Removing a device ends its sessions, so the arrival is decided before anything is read: a foreign `Host` is a
-    // rebinding name, and a foreign `Origin` or a cross-site fetch is a page the person never asked to remove anything.
-    if (!arrivedOnLoopback(auth, request, response, 'Removing a device')) return
+    // rebinding name, a request without the studio's credential is a local program, and a foreign or absent `Origin` or
+    // a cross-site fetch is a page the person never asked to remove anything.
     if (request.method !== 'POST') {
+      if (!personAtComputer(auth, credential, request, response, 'Removing a device', false)) return
       sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'Remove a device with a POST to /auth/devices/remove'))
       return
     }
-    if (!cameFromOwnOrigin(request, response)) return
+    if (!personAtComputer(auth, credential, request, response, 'Removing a device', true)) return
     try {
       const message = await readMessage(request, response)
       if (message === undefined) return
@@ -189,6 +207,36 @@ export function arrivedOnLoopback(auth: HomeAuth, request: IncomingMessage, resp
   }
   if (listener !== 'loopback' || !isLoopbackHost(host) || loopbackAddressOf(host) === undefined) {
     sendError(response, new HomeAuthError('HOST_MISMATCH', DEVICE_ROUTE_SENTENCE))
+    return false
+  }
+  return true
+}
+
+/**
+ * Decide that a request comes from the person at the home's computer: it arrived on the loopback listener under a
+ * loopback `Host` ({@link arrivedOnLoopback}), it carries the studio's own credential as upstream's routes require it,
+ * and, when it changes state, it names the studio's own loopback origin in `Origin` and no foreign `Sec-Fetch-Site`. A
+ * local program without the launch cookie or an API credential is refused, and so is a state change whose `Origin` is
+ * absent, because a browser always sends `Origin` with a `POST`.
+ * @param auth - the home-auth instance, which decides the arrival.
+ * @param credential - the loopback credential check.
+ * @param request - the request.
+ * @param response - the response, answered with the refusal.
+ * @param action - the action's name as a refusal states it, in sentence case.
+ * @param changesState - whether the request changes state.
+ * @returns whether the route may answer the request.
+ */
+export function personAtComputer(auth: HomeAuth, credential: LoopbackCredential, request: IncomingMessage, response: ServerResponse, action: string, changesState: boolean): boolean {
+  if (!arrivedOnLoopback(auth, request, response, action)) return false
+  const rejection = credential(request)
+  if (rejection !== undefined) {
+    sendError(response, rejection === 401 ? new HomeAuthError('NOT_SIGNED_IN', NO_CREDENTIAL_SENTENCE) : new HomeAuthError('ORIGIN_MISMATCH', NO_CREDENTIAL_SENTENCE))
+    return false
+  }
+  if (!changesState) return true
+  if (!cameFromOwnOrigin(request, response)) return false
+  if (!isSameLoopbackOrigin(request.headers.origin, request.headers.host)) {
+    sendError(response, new HomeAuthError('ORIGIN_MISMATCH', NO_ORIGIN_SENTENCE))
     return false
   }
   return true

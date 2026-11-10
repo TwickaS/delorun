@@ -7,8 +7,8 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { newStartToken } from '@delo/home'
-import { approveDevices, ChannelTokenCheck, sendHomeRequest, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
-import type { DevicesApproveRequest } from '@delo/contract-home-process'
+import { approveDevices, ChannelTokenCheck, removeDevice, sendHomeRequest, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
+import type { DevicesApproveRequest, DevicesRemoveRequest } from '@delo/contract-home-process'
 import { installFixture, killLockHolder, PROFILE, startHome, tempHome, V1, type InProcessHome, type TempHome } from './support.ts'
 
 /** A fake of home-auth's half that records every call. */
@@ -36,6 +36,12 @@ class FakeDevices implements LocalDeviceApproval {
     this.calls.push(`approve ${requestId} ${typedCode}`)
     if (this.refusal !== undefined) throw this.refusal
     return Promise.resolve({ id: 'device', label: 'Phone', address: 'https://home.example.ts.net' })
+  }
+
+  async remove(deviceId: string): Promise<{ readonly removed: boolean; readonly sessions: number; readonly connections: number }> {
+    this.calls.push(`remove ${deviceId}`)
+    if (this.refusal !== undefined) throw this.refusal
+    return Promise.resolve({ removed: true, sessions: 2, connections: 1 })
   }
 }
 
@@ -104,6 +110,26 @@ describe('devices.approve', () => {
   })
 })
 
+function removal(deviceId = 'device'): DevicesRemoveRequest {
+  return { v: 1, token: newStartToken(), op: 'devices.remove', args: { deviceId } }
+}
+
+describe('devices.remove', () => {
+  it('removes for the person only, and names home-auth\'s refusal', async () => {
+    const devices = new FakeDevices()
+    // Pins the caller rule: without it the Host's token, which acts for reach sessions, removes the person's devices.
+    await expect(removeDevice(removal(), 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    expect(devices.calls).toEqual([])
+    await expect(removeDevice(removal(), 'person', undefined)).rejects.toMatchObject({ code: 'APPROVALS_UNAVAILABLE' })
+    await expect(removeDevice(removal(), 'person', devices)).resolves.toEqual({ removed: true, sessions: 2, connections: 1 })
+    devices.refusal = Object.assign(new Error('no owner'), { code: 'NO_OWNER', detail: 'This home has no owner yet' })
+    await expect(removeDevice(removal(), 'person', devices)).rejects.toMatchObject({ code: 'REMOVAL_FAILED', detail: 'NO_OWNER: This home has no owner yet' })
+    devices.refusal = new Error('disk')
+    await expect(removeDevice(removal(), 'person', devices)).rejects.toMatchObject({ code: 'REMOVAL_FAILED', detail: 'INTERNAL_ERROR: the removal failed' })
+    expect(devices.calls).toEqual(['remove device', 'remove device', 'remove device'])
+  })
+})
+
 describe('devices.approve on a running home process', () => {
   let temp: TempHome | undefined
   let running: InProcessHome | undefined
@@ -136,6 +162,9 @@ describe('devices.approve on a running home process', () => {
       .toMatchObject({ ok: true, device: { id: 'device' } })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.approve', args: { requestId: '../../etc/passwd', typedCode: '1234' } })))
       .toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
-    expect(devices.calls).toEqual(['open', `approve ${PENDING.requestId} 1234 5678`])
+    expect(final(await access.send({ op: 'devices.remove', args: { deviceId: 'device' } }))).toMatchObject({ ok: false, error: 'LOOPBACK_REQUIRED' })
+    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.remove', args: { deviceId: 'device' } }))).toMatchObject({ ok: true, removed: true, sessions: 2 })
+    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.remove', args: { deviceId: '../x' } }))).toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
+    expect(devices.calls).toEqual(['open', `approve ${PENDING.requestId} 1234 5678`, 'remove device'])
   })
 })

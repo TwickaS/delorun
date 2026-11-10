@@ -55,7 +55,7 @@ import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted
 import type { BootRow, ChatGate, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
 import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
-import { approveDevices } from './devices-approve.ts'
+import { approveDevices, removeDevice } from './devices-approve.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
 
 /** What a home process runs with; `delorun` supplies every value. */
@@ -561,6 +561,8 @@ export class HomeProcess implements HandshakeSubject {
         return this.handshake.rollback(request.args.wait, request.args.drainTimeoutS, request.args.profileOnly, progress)
       case 'devices.approve':
         return approveDevices(request, check.callerOf(request.token), this.host?.devices)
+      case 'devices.remove':
+        return removeDevice(request, check.callerOf(request.token), this.host?.devices)
       default: {
         const unknown: never = request
         throw new HomeProcessError('SCHEMA_VIOLATION', `unknown op ${String((unknown as { readonly op: unknown }).op)}`)

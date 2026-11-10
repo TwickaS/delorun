@@ -9,7 +9,7 @@
  */
 export { listenUpdateChannel, updateSocketPath, type UpdateChannelOptions, type UpdateRequestHandler } from './channel.ts'
 export { CountingChatGate } from './chat-gate.ts'
-export { approveDevices, PENDING_POLL_MS, type ChannelCaller, type LocalDeviceApproval, type PendingDevice } from './devices-approve.ts'
+export { approveDevices, PENDING_POLL_MS, removeDevice, type ChannelCaller, type LocalDeviceApproval, type PendingDevice } from './devices-approve.ts'
 export { ChannelTokenCheck } from './studio-link.ts'
 export { exchangeLines, queryHomeStatus, sendHomeRequest, updateChannelProbe, type ExchangeOptions, type ResponseLine, type UnsignedRequest } from './client.ts'
 export { HomeProcessError, type HomeProcessFailure } from './errors.ts'

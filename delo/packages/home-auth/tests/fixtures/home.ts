@@ -124,3 +124,19 @@ export function claimOf(ownerCode: string, overrides: Partial<ClaimRequest> = {}
     ...overrides,
   }
 }
+
+/** The cookie the test credential check reads as the studio's signed launch cookie. */
+export const STUDIO_COOKIE = 'studio=signed'
+
+/**
+ * A stand-in for `connection.requestRejection`: a request with {@link STUDIO_COOKIE} carries the credential, one with
+ * `studio=foreign` fails the Host/Origin fence, and any other is not signed in.
+ * @param request - the request.
+ * @param request.headers - its headers.
+ * @returns the rejection, or undefined.
+ */
+export function testCredential(request: { readonly headers: { readonly cookie?: string | undefined } }): 401 | 403 | undefined {
+  const cookie = request.headers.cookie ?? ''
+  if (cookie.includes(STUDIO_COOKIE)) return undefined
+  return cookie.includes('studio=foreign') ? 403 : 401
+}

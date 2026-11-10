@@ -114,9 +114,26 @@ class FakeReach extends ReachService {
   }
 }
 
-function loopback(method: string, path: string, body?: unknown): Promise<Reply> {
+/** The studio's launch cookie, as the browser the person opened from `dsh web`'s address holds it. */
+let studioCookie = ''
+
+/**
+ * Exchange the launch token for the studio's cookie, as the person's browser does on the address the studio prints.
+ * @returns the cookie's `name=value`.
+ */
+async function signInStudio(): Promise<string> {
   const port = studio.ctx.webServer.port ?? 0
-  return send(port, method, path, { host: `127.0.0.1:${String(port)}`, ...(method === 'POST' ? { origin: `http://127.0.0.1:${String(port)}` } : {}) }, body)
+  const url = new URL(studio.ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(port)}/`))
+  const exchanged = await send(port, 'GET', `${url.pathname}${url.search}`, { host: `127.0.0.1:${String(port)}` })
+  const cookie = exchanged.headers['set-cookie']?.[0]?.split(';')[0]
+  if (exchanged.status !== 303 || cookie === undefined) throw new Error(`the launch token was not exchanged: ${String(exchanged.status)}`)
+  return cookie
+}
+
+/** A request from the studio open on the home's computer: its cookie, and its own Origin on a state change. */
+function loopback(method: string, path: string, body?: unknown, credential = studioCookie): Promise<Reply> {
+  const port = studio.ctx.webServer.port ?? 0
+  return send(port, method, path, { host: `127.0.0.1:${String(port)}`, ...(credential === '' ? {} : { cookie: credential }), ...(method === 'POST' ? { origin: `http://127.0.0.1:${String(port)}` } : {}) }, body)
 }
 
 beforeAll(async () => {
@@ -128,6 +145,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => { studio.ctx.inject(['reach'], () => { resolve() }) })
   const served = calls.find(call => call[0] === 'serve')?.at(-1) ?? ''
   reachPort = Number(new URL(served).port)
+  studioCookie = await signInStudio()
 }, 120_000)
 
 afterAll(async () => {
@@ -186,6 +204,11 @@ describe('reach on the Tailscale private address', () => {
     const phone = new Phone(() => reachPort)
 
     it('is approved at the home\'s computer with the match code it shows, and signs in with tailnet-membership', async () => {
+      // A local program without the studio's cookie reaches the loopback port and nothing else: it cannot open the
+      // window, read the pending requests, approve, list or remove.
+      for (const [method, path] of [['POST', '/auth/devices/window'], ['GET', '/auth/devices/pending'], ['POST', '/auth/devices/approve'], ['GET', '/auth/devices'], ['POST', '/auth/devices/remove']] as const) {
+        expect({ path, error: json(await loopback(method, path, method === 'POST' ? {} : undefined, '')).error }).toEqual({ path, error: 'NOT_SIGNED_IN' })
+      }
       expect((await loopback('POST', '/auth/devices/window')).status).toBe(200)
       const deviceNonce = Buffer.alloc(16, 9).toString('base64url')
       const asked = await phone.send('POST', '/auth/device/request', { v: 1, devicePublicKey: phone.jwk, deviceNonce, label: 'Phone', platform: 'Test browser' })

@@ -6,8 +6,8 @@
  * - `approve` opens the approval window through the home socket's `devices.approve` (C19), which only the person's own
  *   command may call, waits for a new device's request, shows its name, platform and time, and asks for the 8-digit
  *   code the new device shows. A wrong code may be typed again; the third cancels the request.
- * - `remove` removes a device, ending its sessions at once: through the running studio, so its open connections end
- *   too, or on the records when Delo is not running.
+ * - `remove` removes a device, ending its sessions at once: through the home socket's `devices.remove` when Delo runs,
+ *   so its open connections end too, or on the records when it does not. No command reaches a device route over HTTP.
  * - `code` prints a new owner code, only to a terminal.
  *
  * @module @delo/cli/devices/command
@@ -23,12 +23,9 @@ import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseOptions, type CliCommand, type CommandContext } from '../command.ts'
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
-import { loopbackStudio, refusalOf, studioPort, type StudioClient } from '../reach/studio.ts'
 
 /** What the command runs against. */
 export interface DevicesDependencies {
-  /** Reaches the profile's studio on its loopback port. */
-  readonly studio: StudioClient
   /**
    * Whether the profile's home process runs.
    * @param home - the Delo home.
@@ -62,7 +59,7 @@ const CODE_ATTEMPTS = 3
 
 /**
  * Build the command over its dependencies.
- * @param dependencies - the studio client, the running check, the home socket, the prompt and the terminal check.
+ * @param dependencies - the running check, the home socket, the prompt and the terminal check.
  * @returns the command.
  */
 export function createDevicesCommand(dependencies: DevicesDependencies): CliCommand {
@@ -71,8 +68,9 @@ export function createDevicesCommand(dependencies: DevicesDependencies): CliComm
     summary: 'The devices this home trusts: list, approve, remove, code',
     async run(args, context) {
       const [action, ...rest] = args
-      // `remove` names its device first: `delorun devices remove <device id> [--profile <name>]`.
-      const positional = action === 'remove' && rest[0] !== undefined && !rest[0].startsWith('-') ? [rest[0]] : []
+      // `remove` names its device first: `delorun devices remove <device id> [--profile <name>]`. A device id is base64url
+      // text, which may begin with `-`, so only the profile option is read as an option there.
+      const positional = action === 'remove' && rest[0] !== undefined && rest[0] !== '--profile' && !rest[0].startsWith('--profile=') ? [rest[0]] : []
       const options = rest.slice(positional.length)
       const values = parseOptions(`devices ${String(action)}`, options, { profile: { type: 'string' } })
       const profile = selectProfile(values.profile, context.env)
@@ -99,11 +97,10 @@ export async function askInTerminal(message: string): Promise<string | undefined
   return clack.isCancel(answer) ? undefined : answer
 }
 
-/** `delorun devices`, over the loopback studio, the home socket and a terminal prompt. */
+/** `delorun devices`, over the home socket and a terminal prompt. */
 export const devicesCommand: CliCommand = createDevicesCommand({
-  studio: loopbackStudio,
   running: homeRuns,
-  send: (home, profile, request) => sendHomeRequest(home, profile, request),
+  send: sendHomeRequest,
   ask: askInTerminal,
   terminal: process.stdout.isTTY,
 })
@@ -201,11 +198,12 @@ async function remove(where: Where, positional: readonly string[]): Promise<Exit
   const [deviceId] = positional
   if (deviceId === undefined) throw new CliError(EXIT.usage, `delorun devices remove: name one device id from delorun devices list\n${USAGE}`)
   let sessions: number
+  // A running home removes the device itself, through the home socket only the person's own command can use, so its
+  // open connections close at once; a stopped home's records are changed directly.
   if (dependencies.running(home, profile)) {
-    const reply = await dependencies.studio(studioPort(home, profile), 'POST', '/auth/devices/remove', { v: 1, deviceId })
-    if (reply.status !== 200) return failed(context, refusalOf(reply).message || refusalOf(reply).error)
-    const ended: unknown = typeof reply.body === 'object' && reply.body !== null ? Reflect.get(reply.body, 'sessions') : 0
-    sessions = Number(ended)
+    const answer = final(await dependencies.send(home, profile, { op: 'devices.remove', args: { deviceId } }))
+    if (answer.ok !== true) return failed(context, `the home refused: ${String(answer.error)}${typeof answer.detail === 'string' ? ` (${answer.detail})` : ''}`)
+    sessions = Number(answer.sessions)
   } else {
     try {
       sessions = (await records(home).revokeDevice(brandString<DeviceId>(deviceId))).sessions

@@ -147,8 +147,12 @@ export class ReachService extends Service {
   }
 
   /**
-   * Answer `GET /delo/reach/status` with {@link ReachSummary}: on the loopback listener under a loopback `Host`, and to a
-   * session a reach listener admitted. Any other arrival is refused with `421 HOST_MISMATCH`.
+   * Answer `GET /delo/reach/status` with {@link ReachSummary}: on the loopback listener under a loopback `Host` to the
+   * studio's own credential, and to a session a reach listener admitted; both are what upstream's
+   * `connection.requestRejection` accepts. The summary names the tailnet address and each option's failure, so a local
+   * program without the credential, another arrival, and a phone that has not signed in are refused: `421 HOST_MISMATCH`
+   * for a foreign arrival, `401 NOT_SIGNED_IN` without the credential or session, `403 ORIGIN_MISMATCH` for a request
+   * the Host and Origin fence refuses.
    * @param request - the request.
    * @param response - the response.
    */
@@ -160,6 +164,14 @@ export class ReachService extends Service {
     if (!loopback && (arrival.listener === undefined || arrival.listener === 'loopback')) {
       response.statusCode = 421
       response.end(JSON.stringify({ error: 'HOST_MISMATCH', message: 'The reach status answers the studio only' }))
+      return
+    }
+    const rejection = this.ctx.connection.requestRejection(request)
+    if (rejection !== undefined) {
+      response.statusCode = rejection
+      response.end(JSON.stringify(rejection === 401
+        ? { error: 'NOT_SIGNED_IN', message: 'The reach status answers the studio open on this computer, or a signed-in device' }
+        : { error: 'ORIGIN_MISMATCH', message: 'The reach status answers the studio\'s own page only' }))
       return
     }
     if (request.method !== 'GET') {

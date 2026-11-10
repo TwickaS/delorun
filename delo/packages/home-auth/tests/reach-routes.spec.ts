@@ -17,7 +17,7 @@ import {
   signInPageHandler, windowHandler,
 } from '../src/reach-routes.ts'
 import type { RouteHandler } from '../src/routes.ts'
-import { homeFixture, keyOf, type Home } from './fixtures/home.ts'
+import { homeFixture, keyOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
 
@@ -40,9 +40,9 @@ beforeEach(async () => {
     [REACH_PATHS.request, approvalRequestHandler(home.auth)],
     [REACH_PATHS.challenge, challengeHandler(home.auth)],
     [REACH_PATHS.session, sessionHandler(home.auth)],
-    [REACH_PATHS.window, windowHandler(home.auth)],
-    [REACH_PATHS.pending, pendingHandler(home.auth)],
-    [REACH_PATHS.approve, approveHandler(home.auth)],
+    [REACH_PATHS.window, windowHandler(home.auth, testCredential)],
+    [REACH_PATHS.pending, pendingHandler(home.auth, testCredential)],
+    [REACH_PATHS.approve, approveHandler(home.auth, testCredential)],
   ]
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? '/', 'http://server.invalid')
@@ -72,7 +72,7 @@ function send(method: string, path: string, body?: unknown, headers: Record<stri
     const text = body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body)
     const request = httpRequest({
       host: '127.0.0.1', port, method, path, setHost: false, agent: false,
-      headers: { host: `127.0.0.1:${String(port)}`, ...headers, ...(text === undefined ? {} : { 'content-length': String(Buffer.byteLength(text)) }) },
+      headers: { host: `127.0.0.1:${String(port)}`, ...(path.includes('reach') ? {} : { cookie: STUDIO_COOKIE, origin: `http://127.0.0.1:${String(port)}` }), ...headers, ...(text === undefined ? {} : { 'content-length': String(Buffer.byteLength(text)) }) },
     }, (response) => {
       let received = ''
       response.setEncoding('utf8')

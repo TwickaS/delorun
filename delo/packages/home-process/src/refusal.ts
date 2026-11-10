@@ -70,6 +70,8 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo did not approve or cancel the device request.', remedies: [`Wait for the device's request again: delorun devices approve${profile}`] }
     case 'APPROVALS_UNAVAILABLE':
       return { lead: 'Delo did not change any device: the running profile does not load remote access.', remedies: [`Turn remote access on, then restart Delo: delorun reach on tailscale${profile}`] }
+    case 'REMOVAL_FAILED':
+      return { lead: 'Delo did not remove the device.', remedies: [`See the trusted devices: delorun devices list${profile}`] }
     case 'STUDIO_UNAVAILABLE':
       return { lead: 'Delo did not open the studio: the running home process could not make a sign-in link for this computer.', remedies: [`See whether Delo runs and where its studio listens: delorun status${profile}`] }
   }

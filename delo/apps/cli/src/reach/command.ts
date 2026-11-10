@@ -6,7 +6,7 @@
  *   runs and runs nothing through `sudo`. It then writes the profile's `delo-reach` row with this machine's `ts.net`
  *   address and prints the address and the trust statement. The running home applies it at its next start.
  * - `off` turns the option off in the row and removes the serve target at once.
- * - `status` prints the row, and the live state when the home runs.
+ * - `status` prints the row, and whether the home runs; the studio's Devices section shows the live state.
  *
  * Every `tailscale` call goes through the injected runner.
  *
@@ -19,15 +19,12 @@ import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext } from '../command.ts'
 import { hasCliProfile, selectProfile } from '../profile.ts'
 import { readReachRow, writeReachRow } from './row.ts'
-import { loopbackStudio, studioPort, type StudioClient } from './studio.ts'
 import { TRUST_STATEMENT } from './trust.ts'
 
 /** What the command runs against. */
 export interface ReachDependencies {
   /** Runs `tailscale`. */
   readonly tailscale: TailscaleRunner
-  /** Reaches the profile's studio on its loopback port. */
-  readonly studio: StudioClient
   /**
    * Whether the profile's home process runs.
    * @param home - the Delo home.
@@ -53,7 +50,7 @@ export function homeRuns(home: string, profile: string): boolean {
 
 /**
  * Build the command over its dependencies.
- * @param dependencies - the runner, the studio client and the running check.
+ * @param dependencies - the runner and the running check.
  * @returns the command.
  */
 export function createReachCommand(dependencies: ReachDependencies): CliCommand {
@@ -72,8 +69,8 @@ export function createReachCommand(dependencies: ReachDependencies): CliCommand 
   }
 }
 
-/** `delorun reach`, over the system's `tailscale` and the loopback studio. */
-export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), studio: loopbackStudio, running: homeRuns })
+/** `delorun reach`, over the system's `tailscale` and the home lock. */
+export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns })
 
 /**
  * The home and profile of a command that changes the profile, refusing a home without the CLI profile.
@@ -154,7 +151,7 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
  * `delorun reach status`.
  * @param args - the options.
  * @param context - the environment and output.
- * @param dependencies - the studio client and the running check.
+ * @param dependencies - the running check.
  * @returns the exit code.
  */
 async function status(args: readonly string[], context: CommandContext, dependencies: ReachDependencies): Promise<typeof EXIT.ok> {
@@ -166,16 +163,8 @@ async function status(args: readonly string[], context: CommandContext, dependen
   if (!dependencies.running(home, profile)) {
     lines.push('Delo is not running, so no remote listener is open.')
   } else {
-    const reply = await dependencies.studio(studioPort(home, profile), 'GET', '/delo/reach/status').catch(() => undefined)
-    const options: unknown = reply?.status === 200 && typeof reply.body === 'object' && reply.body !== null ? Reflect.get(reply.body, 'options') : undefined
-    const live: readonly unknown[] = Array.isArray(options) ? options : []
-    if (live.length === 0) lines.push('The running home reports no remote listener; it applies a change at its next start.')
-    for (const entry of live) {
-      if (typeof entry !== 'object' || entry === null) continue
-      const state: unknown = Reflect.get(entry, 'state')
-      const detail: unknown = Reflect.get(entry, 'detail')
-      lines.push(`Running: ${String(state)}${typeof detail === 'string' ? ` — ${detail}` : ''}`)
-    }
+    // The live state answers only the studio's own page, so the command points there instead of asking over HTTP.
+    lines.push('Delo is running. Settings → Devices in the studio on this computer shows whether the address is ready; a change applies at the next start.')
   }
   context.stdout(`${lines.join('\n')}\n`)
   return EXIT.ok

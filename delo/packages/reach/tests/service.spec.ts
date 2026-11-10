@@ -47,6 +47,8 @@ function world(options: { readonly open?: () => Promise<Partial<ReachListener>>;
     },
   } as never)
   ctx.provide('connection', {
+    // The studio's cookie stands for the loopback credential and a reach session alike; `foreign` fails the fence.
+    requestRejection: (request: { readonly headers: { readonly cookie?: string } }) => (request.headers.cookie === 'studio' ? undefined : request.headers.cookie === 'foreign' ? 403 : 401),
     openReachListener: async () => {
       events.push('open')
       const listener = await (options.open ?? (async () => ({ address: { port: 4321 } })))()
@@ -147,11 +149,11 @@ describe('the reach service', () => {
   it('answers the reach status to the studio on loopback and on the reach address, and to nothing else', async () => {
     const w = world()
     const fiber = await mount(w, ON)
-    const answer = (host: string, method = 'GET'): { status: number; body: unknown } => {
+    const answer = (host: string, method = 'GET', cookie: string | null = 'studio'): { status: number; body: unknown } => {
       const handler = routes.get('/delo/reach/status')
       if (handler === undefined) throw new Error('no status route')
       const reply: { status: number; body: unknown; headers: Map<string, string> } = { status: 0, body: undefined, headers: new Map() }
-      handler({ method, headers: { host } }, {
+      handler({ method, headers: { host, ...(cookie === null ? {} : { cookie }) } }, {
         setHeader: (name: string, value: string) => { reply.headers.set(name, value) },
         set statusCode(value: number) { reply.status = value },
         end: (text: string) => { reply.body = JSON.parse(text) },
@@ -163,6 +165,12 @@ describe('the reach service', () => {
     // Pins the arrival check: a rebinding name reaches the loopback port and reads nothing.
     expect(answer('rebind.example')).toMatchObject({ status: 421, body: { error: 'HOST_MISMATCH' } })
     expect(answer('127.0.0.1:3080', 'POST').status).toBe(405)
+    // Pins the credential: a local program without the studio's cookie, and a phone that has not signed in, read
+    // neither the tailnet address nor any option's state.
+    expect(answer('127.0.0.1:3080', 'GET', null)).toMatchObject({ status: 401, body: { error: 'NOT_SIGNED_IN' } })
+    expect(answer('home.example.ts.net', 'GET', null)).toMatchObject({ status: 401, body: { error: 'NOT_SIGNED_IN' } })
+    expect(answer('127.0.0.1:3080', 'GET', 'foreign')).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
+    for (const refused of [answer('127.0.0.1:3080', 'GET', null), answer('home.example.ts.net', 'GET', null)]) expect(JSON.stringify(refused.body)).not.toContain('example.ts.net')
     await fiber.dispose()
     expect(routes.size).toBe(0)
   })

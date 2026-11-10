@@ -20,7 +20,7 @@ import {
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
-import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler } from './routes.ts'
+import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
 import {
   approvalRequestHandler, approveHandler, assetHandler, challengeHandler, pendingHandler, REACH_PATHS, sessionHandler, signInPageHandler,
   windowHandler,
@@ -83,21 +83,22 @@ export class HomeAuthService extends Service {
     await core.start()
     this.core = core
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
+    const credential = loopbackCredentialOf(this.ctx)
     this.ctx.effect(() => {
       const server = this.ctx.webServer
       const registered = [
         server.register({ kind: 'exact', path: OWNER_CLAIM_PATH, handler: claimHandler(core) }),
-        server.register({ kind: 'exact', path: DEVICES_PATH, handler: devicesHandler(core) }),
-        server.register({ kind: 'exact', path: DEVICE_REMOVE_PATH, handler: removeDeviceHandler(core) }),
+        server.register({ kind: 'exact', path: DEVICES_PATH, handler: devicesHandler(core, credential) }),
+        server.register({ kind: 'exact', path: DEVICE_REMOVE_PATH, handler: removeDeviceHandler(core, credential) }),
         server.register({ kind: 'exact', path: REACH_PATHS.signIn, handler: signInPageHandler(core) }),
         server.register({ kind: 'prefix', path: REACH_PATHS.assets, handler: assetHandler(core) }),
         server.register({ kind: 'exact', path: REACH_PATHS.request, handler: approvalRequestHandler(core) }),
         server.register({ kind: 'prefix', path: REACH_PATHS.request, handler: approvalRequestHandler(core) }),
         server.register({ kind: 'exact', path: REACH_PATHS.challenge, handler: challengeHandler(core) }),
         server.register({ kind: 'exact', path: REACH_PATHS.session, handler: sessionHandler(core) }),
-        server.register({ kind: 'exact', path: REACH_PATHS.window, handler: windowHandler(core) }),
-        server.register({ kind: 'exact', path: REACH_PATHS.pending, handler: pendingHandler(core) }),
-        server.register({ kind: 'exact', path: REACH_PATHS.approve, handler: approveHandler(core) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.window, handler: windowHandler(core, credential) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.pending, handler: pendingHandler(core, credential) }),
+        server.register({ kind: 'exact', path: REACH_PATHS.approve, handler: approveHandler(core, credential) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -281,3 +282,16 @@ export class HomeAuthService extends Service {
 }
 
 export default HomeAuthService
+
+/**
+ * The studio's loopback credential check, as upstream's own loopback routes make it: `connection.requestRejection`,
+ * read per request. Without the connection service no request carries the credential, so every device route refuses.
+ * @param ctx - the plugin context.
+ * @returns the check the device routes take.
+ */
+export function loopbackCredentialOf(ctx: Context): LoopbackCredential {
+  return (request) => {
+    const connection = ctx.get('connection')
+    return connection === undefined ? 401 : connection.requestRejection(request)
+  }
+}

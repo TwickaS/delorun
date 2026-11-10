@@ -5,13 +5,15 @@
  * Each test's comment names the check whose removal makes that test fail, so the suite is also the mutation record.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
+import { IncomingMessage } from 'node:http'
+import { Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
-import { HomeAuthService } from '../src/service.ts'
+import { HomeAuthService, loopbackCredentialOf } from '../src/service.ts'
 import { DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH } from '../src/routes.ts'
 import { REACH_PATHS } from '../src/reach-routes.ts'
 
@@ -143,6 +145,18 @@ describe('the homeAuth service', () => {
       await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })
     }
+  })
+
+  it('reads the studio credential from upstream\'s connection service, and refuses every request without one', () => {
+    const ctx = new Context()
+    const request = new IncomingMessage(new Socket())
+    // Pins the fail-closed default: without the connection service a device route answers no request.
+    expect(loopbackCredentialOf(ctx)(request)).toBe(401)
+    const asked: unknown[] = []
+    ctx.provide('connection', { requestRejection: (seen: unknown) => { asked.push(seen); return asked.length === 1 ? undefined : 403 } } as never)
+    expect(loopbackCredentialOf(ctx)(request)).toBeUndefined()
+    expect(loopbackCredentialOf(ctx)(request)).toBe(403)
+    expect(asked).toEqual([request, request])
   })
 
   it('admits nothing before it started, and refuses every other call', () => {

@@ -17,7 +17,7 @@ import {
   claimHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, MAX_BODY_BYTES, OWNER_CLAIM_PATH, readMessage,
   removeDeviceHandler, sendError, sendJson, sendThrown,
 } from '../src/routes.ts'
-import { claimOf, homeFixture, keyOf, type Home } from './fixtures/home.ts'
+import { claimOf, homeFixture, keyOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 
 /** A running test server. */
 interface Server {
@@ -41,8 +41,8 @@ interface Reply {
 async function serve(home: Home): Promise<Server> {
   const handlers = {
     [OWNER_CLAIM_PATH]: claimHandler(home.auth),
-    [DEVICES_PATH]: devicesHandler(home.auth),
-    [DEVICE_REMOVE_PATH]: removeDeviceHandler(home.auth),
+    [DEVICES_PATH]: devicesHandler(home.auth, testCredential),
+    [DEVICE_REMOVE_PATH]: removeDeviceHandler(home.auth, testCredential),
   }
   const server = createServer((request, response) => {
     const handler = handlers[(request.url ?? '') as keyof typeof handlers] as typeof handlers[typeof OWNER_CLAIM_PATH] | undefined
@@ -69,7 +69,7 @@ async function serve(home: Home): Promise<Server> {
  * @returns the status and the body.
  */
 async function send(port: number, method: string, path: string, body?: string): Promise<Reply> {
-  const request = httpRequest({ host: '127.0.0.1', port, method, path, agent: false, headers: { connection: 'close' } })
+  const request = httpRequest({ host: '127.0.0.1', port, method, path, agent: false, headers: { connection: 'close', cookie: STUDIO_COOKIE, origin: `http://127.0.0.1:${String(port)}` } })
   const replied = once(request, 'response')
   request.end(body)
   const [response] = await replied as [IncomingMessage]

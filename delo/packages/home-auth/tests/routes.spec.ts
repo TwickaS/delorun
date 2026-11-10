@@ -24,7 +24,7 @@ import { deviceIdOf } from '../src/records.ts'
 import {
   claimHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, OWNER_CLAIM_PATH, reachClaimRefusal, removeDeviceHandler,
 } from '../src/routes.ts'
-import { claimOf, homeFixture, keyOf, type Home } from './fixtures/home.ts'
+import { claimOf, homeFixture, keyOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('http://127.0.0.1:3080')
 const HOUR = 60 * 60 * 1000
@@ -46,8 +46,8 @@ async function serve(home: Home): Promise<Server> {
   const auth = home.auth
   const handlers: Record<string, (request: IncomingMessage, response: ServerResponse) => Promise<void>> = {
     [OWNER_CLAIM_PATH]: claimHandler(auth),
-    [DEVICES_PATH]: devicesHandler(auth),
-    [DEVICE_REMOVE_PATH]: removeDeviceHandler(auth),
+    [DEVICES_PATH]: devicesHandler(auth, testCredential),
+    [DEVICE_REMOVE_PATH]: removeDeviceHandler(auth, testCredential),
   }
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://server.invalid')
@@ -128,6 +128,8 @@ function postJson(
     `Host: ${options.host ?? `127.0.0.1:${String(port)}`}`,
     'Content-Type: application/json',
     `Content-Length: ${String(Buffer.byteLength(body))}`,
+    `Cookie: ${STUDIO_COOKIE}`,
+    ...(options.headers?.some(line => line.startsWith('Origin:')) === true ? [] : [`Origin: http://127.0.0.1:${String(port)}`]),
     ...(options.headers ?? []),
     'Connection: close',
   ], body)
@@ -196,10 +198,10 @@ describe('the claim route', () => {
       expect(claim.status).toBe(403)
       expect(json(claim)).toMatchObject({ error: 'OWNER_CLAIM_LOOPBACK_ONLY' })
       await expect(home.auth.owner()).resolves.toBeUndefined()
-      const listing = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
+      const listing = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, `Cookie: ${STUDIO_COOKIE}`, 'Connection: close'])
       expect(listing.status).toBe(421)
       home.loopback.port = undefined
-      const unbound = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
+      const unbound = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, `Cookie: ${STUDIO_COOKIE}`, 'Connection: close'])
       expect(unbound.status).toBe(421)
     } finally {
       await server.close()
@@ -321,7 +323,7 @@ describe('the device routes', () => {
     const home = await homeFixture()
     const server = await serve(home)
     try {
-      const reply = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
+      const reply = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, `Cookie: ${STUDIO_COOKIE}`, 'Connection: close'])
       // Pins "refuses rather than failing open": a route that answered the store's empty list would send 200 here.
       expect(reply.status).toBe(403)
       expect(json(reply)).toMatchObject({ error: 'NO_OWNER' })
@@ -340,7 +342,7 @@ describe('the device routes', () => {
       await postJson(server.port, OWNER_CLAIM_PATH, { v: 1, ownerCode: issued.code, devicePublicKey: keyOf(1), label: 'This computer' })
       const deviceId = deviceIdOf(keyOf(1))
       const session = await home.auth.openSession({ deviceId, listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: HOUR })
-      const listing = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
+      const listing = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, `Cookie: ${STUDIO_COOKIE}`, 'Connection: close'])
       expect(listing.status).toBe(200)
       expect(json(listing)).toMatchObject({ owner: { firstDeviceId: deviceId }, devices: [{ id: deviceId, label: 'This computer' }] })
       const removed = await postJson(server.port, DEVICE_REMOVE_PATH, { v: 1, deviceId })
@@ -384,7 +386,7 @@ describe('the device routes', () => {
       expect(json(reply)).toMatchObject({ error: 'HOST_MISMATCH' })
       expect(reply.body).not.toContain(claimed.device.id)
       // The same request under the loopback Host is answered, so the refusal is the arrival and not the store.
-      const loopback = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, 'Connection: close'])
+      const loopback = await raw(server.port, [`GET ${DEVICES_PATH} HTTP/1.1`, `Host: 127.0.0.1:${String(server.port)}`, `Cookie: ${STUDIO_COOKIE}`, 'Connection: close'])
       expect(loopback.status).toBe(200)
       expect(json(loopback)).toMatchObject({ owner: { firstDeviceId: claimed.device.id }, devices: [{ id: claimed.device.id }] })
     } finally {

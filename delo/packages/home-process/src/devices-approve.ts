@@ -14,7 +14,7 @@
  *
  * @module @delo/home-process/devices-approve
  */
-import type { DevicesApproveRequest } from '@delo/contract-home-process'
+import type { DevicesApproveRequest, DevicesRemoveRequest } from '@delo/contract-home-process'
 import { HomeProcessError } from './errors.ts'
 
 /** A pending approval request as the person's command shows it. */
@@ -52,6 +52,13 @@ export interface LocalDeviceApproval {
    * @throws an error with a `code` property, such as `APPROVAL_CODE_MISMATCH`, for a refused approval.
    */
   approve(requestId: string, typedCode: string): Promise<{ readonly id: string; readonly label: string; readonly address: string }>
+  /**
+   * Remove one trusted device, ending its sessions and closing its reach connections.
+   * @param deviceId - the device.
+   * @returns whether it had a record, and how many sessions and connections ended.
+   * @throws an error with a `code` property, such as `NO_OWNER`, for a refused removal.
+   */
+  remove(deviceId: string): Promise<{ readonly removed: boolean; readonly sessions: number; readonly connections: number }>
 }
 
 /** Which credential a request carried. */
@@ -100,5 +107,28 @@ export async function approveDevices(
     const open = devices.windowOpenUntil()
     if (pending.length > 0 || open === undefined) return { closesAt: open ?? closesAt, pending }
     await wait(PENDING_POLL_MS)
+  }
+}
+
+/**
+ * Run `devices.remove`.
+ * @param request - the request.
+ * @param caller - the credential it carried.
+ * @param devices - the Host's local approval, or undefined when the profile does not load `@delo/home-auth`.
+ * @returns whether the device had a record, and how many sessions and reach connections ended.
+ * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `APPROVALS_UNAVAILABLE` without home-auth;
+ *   `REMOVAL_FAILED` naming home-auth's code for a refused removal.
+ */
+export async function removeDevice(request: DevicesRemoveRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined): Promise<Readonly<Record<string, unknown>>> {
+  if (caller !== 'person') {
+    throw new HomeProcessError('LOOPBACK_REQUIRED', 'removing a device needs you at your computer: run delorun devices remove there')
+  }
+  if (devices === undefined) throw new HomeProcessError('APPROVALS_UNAVAILABLE', 'this profile does not load @delo/home-auth')
+  try {
+    return await devices.remove(request.args.deviceId)
+  } catch (error) {
+    const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'INTERNAL_ERROR'
+    const detail = error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? error.detail : 'the removal failed'
+    throw new HomeProcessError('REMOVAL_FAILED', `${code}: ${detail}`)
   }
 }

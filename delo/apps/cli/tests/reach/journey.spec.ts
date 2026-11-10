@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { HomeAuthService } from '@delo/home-auth'
 import { newStartToken } from '@delo/home'
-import { approveDevices } from '@delo/home-process'
+import { approveDevices, removeDevice } from '@delo/home-process'
 import { ReachService, type TailscaleResult, type TailscaleRunner } from '@delo/reach'
 import { bootStudio, type Studio } from '../../../../packages/home-auth/tests/denial/admission/studio.ts'
 // @ts-expect-error -- the sign-in page's browser module is JavaScript without declarations.
@@ -25,7 +25,6 @@ import { createReachCommand } from '../../src/reach/command.ts'
 import { createDevicesCommand } from '../../src/devices/command.ts'
 import { localDeviceApproval } from '../../src/devices/host.ts'
 import { readReachRow } from '../../src/reach/row.ts'
-import { loopbackStudio } from '../../src/reach/studio.ts'
 
 const HOST = 'phone-home.example.ts.net'
 const ADDRESS = `https://${HOST}`
@@ -106,7 +105,7 @@ afterAll(async () => {
 describe('remote access from a second device', () => {
   it('runs from reach on to the removal that ends the device\'s session', async () => {
     // `delorun reach on tailscale` checks Tailscale and writes the row the profile loads.
-    await expect(createReachCommand({ tailscale, studio: loopbackStudio, running: () => false }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    await expect(createReachCommand({ tailscale, running: () => false }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
     const row = readReachRow(deloHome, 'default')
     expect(row).toEqual({ enabled: true, address: ADDRESS, servePort: 443 })
     expect(output.stdout).toContain('Only a device you approve at this computer')
@@ -164,13 +163,24 @@ describe('remote access from a second device', () => {
     expect(() => { studio.ctx.get('remoteAnswerGuard')?.check({ peer, event: 'approval/request', request: { toolName: 'bash', grants: 'full-access' }, value: 'allowed-once' }) })
       .toThrow(/needs you at your computer/)
     expect(json(await phone.send('POST', '/auth/devices/window')).error).toBe('LOOPBACK_REQUIRED')
+    expect(json(await phone.send('GET', '/delo/reach/status')).options).toEqual([{ option: 'tailscale-private', state: 'ready', address: ADDRESS }])
     expect(json(await phone.send('POST', '/auth/devices/remove', { v: 1, deviceId })).error).toBe('LOOPBACK_REQUIRED')
 
-    // `delorun devices remove` through the running studio ends the session at once.
-    const removed = createDevicesCommand({ studio: loopbackStudio, running: () => true, send: () => Promise.resolve([]), ask: () => Promise.resolve(undefined), terminal: false })
+    // `delorun devices remove` over the home socket ends the session at once; the Host's own channel token cannot.
+    await expect(removeDevice({ v: 1, token: newStartToken(), op: 'devices.remove', args: { deviceId } }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    const removed = createDevicesCommand({
+      running: () => true,
+      send: async (_home, _profile, request) => (request.op === 'devices.remove' ? [{ ok: true, ...await removeDevice({ v: 1, token: newStartToken(), ...request }, 'person', devices) }] : []),
+      ask: () => Promise.resolve(undefined),
+      terminal: false,
+    })
     await expect(removed.run(['remove', deviceId], context)).resolves.toBe(EXIT.ok)
     expect(output.stdout).toContain('1 session(s) ended')
     expect((await phone.send('POST', '/api/session/list', listChats)).status).toBe(401)
+    // The reach status answers a signed-in device only: the removed phone reads neither the address nor the state.
+    const status = await phone.send('GET', '/delo/reach/status')
+    expect(status.status).toBe(401)
+    expect(status.body).not.toContain('example.ts.net')
     expect(json(await phone.send('POST', '/auth/device/challenge', { deviceId })).error).toBe('DEVICE_NOT_TRUSTED')
   }, 60_000)
 })

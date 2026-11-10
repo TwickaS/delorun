@@ -38,6 +38,10 @@ A device is approved only at your computer.
 
 The phone then signs in by itself with a key that never leaves it. Outside an approval window, the home refuses every request to be approved. `delorun devices list` and the Devices section list every approved device.
 
+Only you at your computer can open the window, see the waiting device and approve it. The studio's Devices section answers only the studio you opened from the address `delorun start` printed, and the `delorun devices` commands talk to Delorun through a channel that only your own commands can open. Another program on your computer, a command a chat runs, or another user of the computer can reach the studio's port, but not these.
+
+The code proves that the device you approve is the device whose screen you read: the code is computed from that device's key and from the request it sent, the computer never shows or returns it, and a code read from another device does not match. The code does not prove who holds the device; anyone holding your unlocked phone when you approve it gets the approval.
+
 ## What an approved phone can and cannot do
 
 An approved phone can watch your chats, reply, start chats, approve ordinary prompts and stop a run.
