@@ -21,6 +21,7 @@ import {
   assertNoUpdateInProgress,
   assertSoleDataUser,
   DataInUseError,
+  finishInterruptedRestore,
   homeExclusion,
   otherDataUsers,
   registerDataUser,
@@ -320,6 +321,54 @@ describe('registerHomeProcess', () => {
     registerDataUser(root, 'shared', 'headless', pid)
     const processStart = readProcessStart(pid)
     expect(JSON.parse(readFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(pid)), 'utf8'))).toEqual({ mode: 'shared', command: 'headless', ...processStart === undefined ? {} : { processStart }, pidNamespace: readPidNamespace() })
+  })
+})
+
+describe('finishInterruptedRestore', () => {
+  /**
+   * A home whose restore of a session-data copy was interrupted, with a journal the restore cannot trust.
+   * @returns the home, with this process registered as the home process of `default`.
+   */
+  async function interrupted(): Promise<string> {
+    const root = newHome()
+    mkdirSync(join(root, 'data-copies'), { recursive: true })
+    writeFileSync(join(root, 'data-copies', 'restore.json'), '{}')
+    await registerHomeProcess(root, 'default')
+    return root
+  }
+
+  /**
+   * This process's registration.
+   * @param root - the home.
+   * @returns the parsed registration.
+   */
+  function ownRegistration(root: string): unknown {
+    return JSON.parse(readFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(process.pid)), 'utf8'))
+  }
+
+  it('refuses beside another profile\'s home process, leaves the restore unfinished and the registration shared', async () => {
+    const root = await interrupted()
+    const pid = liveProcess()
+    registerDataUser(root, 'shared', 'start', pid, 'work')
+    await expect(finishInterruptedRestore(root, 'default')).rejects.toThrow(new CliError(EXIT.failed, `delorun start: a restore of the chat data is unfinished and must complete before Delo starts, and the home process of the profile work (process ${String(pid)}) uses the chat data; wait for it to end, or stop it with delorun stop --profile work, then try again`))
+    expect(readFileSync(join(root, 'data-copies', 'restore.json'), 'utf8')).toBe('{}')
+    expect(ownRegistration(root)).toMatchObject({ mode: 'shared', command: 'start', profile: 'default' })
+  })
+
+  it('runs the restore as the only user, then registers as the shared home process again', async () => {
+    const root = await interrupted()
+    // The journal cannot be trusted, so the restore itself refuses once it runs.
+    await expect(finishInterruptedRestore(root, 'default')).rejects.toThrow(/DATA_RESTORE_INCONSISTENT|not a restore journal/u)
+    expect(ownRegistration(root)).toMatchObject({ mode: 'shared', command: 'start', profile: 'default' })
+  })
+
+  it('only clears an interrupted copy\'s leftovers when no restore is unfinished', async () => {
+    const root = newHome()
+    await registerHomeProcess(root, 'default')
+    const pid = liveProcess()
+    registerDataUser(root, 'shared', 'start', pid, 'work')
+    await expect(finishInterruptedRestore(root, 'default')).resolves.toBe(false)
+    expect(ownRegistration(root)).toMatchObject({ mode: 'shared', profile: 'default' })
   })
 })
 

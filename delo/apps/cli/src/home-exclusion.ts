@@ -9,7 +9,8 @@
  *   `run/` for their whole operation, as a home process does, so no home process can start while they run and a
  *   profile whose home process runs refuses them. They also register under `run/data-users/<pid>` as exclusive users.
  *   `delorun recover rollback` with no home process running registers as an exclusive user while it holds its own
- *   profile's home lock, unless it is profile-only ([recover](./recover.ts)).
+ *   profile's home lock, unless it is profile-only ([recover](./recover.ts)). A home process that completes an
+ *   interrupted restore of a session-data copy holds an exclusive registration while it does.
  * - **Shared use.** `delorun headless` writes chat data beside the home processes, and `delorun plugin` changes a
  *   profile that an update snapshots and a rollback restores, so each registers under `run/data-users/<pid>` as a
  *   shared user.
@@ -31,7 +32,7 @@ import { join } from 'node:path'
 import { DATA_USERS_DIRECTORY, DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { acquireHomeLock, currentHolder, ensureHomeTree, HomeLayoutError, holderAlive, holderIdentity, holderOf, newStartId, parseHolder, readHomeLock, runDirectory, type HolderProbe, type HomeLock, type ProcessHolder } from '@delo/home'
 import { journalPath, readJournal, updateChannelProbe } from '@delo/home-process'
-import { DATA_COPIES_DIRECTORY, RESTORE_JOURNAL_FILE } from '@delo/update'
+import { DATA_COPIES_DIRECTORY, recoverDataCopies, RESTORE_JOURNAL_FILE } from '@delo/update'
 import { CliError, EXIT } from './exit.ts'
 import { runningVersion } from './update/runtime.ts'
 
@@ -175,7 +176,7 @@ export function assertSoleDataUser(home: string): void {
  * is unfinished: the chat data may be mid-copy or mid-restore.
  * @param home - the resolved Delo home.
  * @param homeProcess - the profile of a home process that is starting: its own update record is left out, and so is an
- *   unfinished restore, both of which its start completes under its lock.
+ *   unfinished restore, both of which its start completes under its lock, the restore with an exclusive registration.
  * @throws {DataInUseError} naming what is in progress.
  */
 export async function assertNoUpdateInProgress(home: string, homeProcess?: string): Promise<void> {
@@ -243,6 +244,70 @@ async function registerShared(home: string, command: string, homeProcess: string
     if (error instanceof DataInUseError) throw new CliError(EXIT.failed, `delorun ${command}: ${error.detail}`)
     throw error
   }
+}
+
+/** The registration a starting process already holds: a home process's, or the shared one of a command. */
+export interface OwnRegistration {
+  /** The `delorun` command it runs: `start` for a home process. */
+  readonly command: string
+  /** The CLI profile of a home process; absent for every other command. */
+  readonly profile?: string
+}
+
+/**
+ * The registration a start already holds: `delorun start`'s home process with its profile, or `delorun headless`'s
+ * shared one.
+ * @param kind - which start.
+ * @param profile - the profile it boots.
+ * @returns the registration.
+ */
+export function startRegistration(kind: 'cli' | 'headless', profile: string): OwnRegistration {
+  return kind === 'cli' ? { command: HOME_PROCESS_COMMAND, profile } : { command: 'headless' }
+}
+
+/**
+ * Run one recovery that changes the whole home's shared stores while this process is their only user: its own
+ * registration turns exclusive, it refuses while any other process is registered, and every user that registers while
+ * it runs refuses. Afterwards the registration is the shared one it was again, so the release the process's own
+ * registration returned still removes it.
+ * @param home - the resolved Delo home.
+ * @param own - the registration this process already holds.
+ * @param waiting - what waits, for the refusal: `<what> waits to be ..., and <who uses the data>`.
+ * @param run - the recovery.
+ * @param checks - further refusals to run once registered, such as an update in progress.
+ * @returns what the recovery returned.
+ * @throws {CliError} while another process uses the shared stores or a check refuses; the recovery did not run.
+ */
+export async function asSoleUser<T>(home: string, own: OwnRegistration, waiting: string, run: () => Promise<T>, checks: () => Promise<void> = () => Promise.resolve()): Promise<T> {
+  registerDataUser(home, 'exclusive', own.command, process.pid, own.profile)
+  try {
+    try {
+      assertSoleDataUser(home)
+      await checks()
+    } catch (error) {
+      if (error instanceof DataInUseError) throw new CliError(EXIT.failed, `delorun ${own.command}: ${waiting}, and ${error.detail}`)
+      throw error
+    }
+    return await run()
+  } finally {
+    registerDataUser(home, 'shared', own.command, process.pid, own.profile)
+  }
+}
+
+/**
+ * Complete an interrupted restore of a session-data copy before a profile's home process boots its Host. The restore
+ * replaces the whole home's chat data, so it runs {@link asSoleUser}. Without an unfinished restore it only removes the
+ * leftovers of an interrupted copy.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile whose home process is starting, already registered by {@link registerHomeProcess}.
+ * @returns whether a restore was completed.
+ * @throws {CliError} while another process uses the shared stores; the restore journal stays for a later start.
+ *   DataSafetyError from {@link recoverDataCopies} when the journal cannot be trusted, which keeps the profile from
+ *   starting.
+ */
+export async function finishInterruptedRestore(home: string, profile: string): Promise<boolean> {
+  if (!existsSync(join(home, DATA_COPIES_DIRECTORY, RESTORE_JOURNAL_FILE))) return recoverDataCopies(home)
+  return asSoleUser(home, { command: HOME_PROCESS_COMMAND, profile }, 'a restore of the chat data is unfinished and must complete before Delo starts', () => recoverDataCopies(home))
 }
 
 /** What taking a home's locks needs. */

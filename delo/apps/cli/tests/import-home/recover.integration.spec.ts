@@ -8,7 +8,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, linkSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -69,20 +69,43 @@ function registrations(home: string): readonly string[] {
   return existsSync(directory) ? readdirSync(directory) : []
 }
 
+/** The home process of `default`, whose registration the start holds before its pre-start steps. */
+const START = { command: 'start', profile: 'default' } as const
+
+/**
+ * Register this process as the start does before the withdrawal runs.
+ * @param home - the Delo home.
+ * @param command - the start's command.
+ */
+function registerAs(home: string, command: 'start' | 'headless'): void {
+  registerDataUser(home, 'shared', command, process.pid, command === 'start' ? 'default' : undefined)
+}
+
+/**
+ * This process's registration after the withdrawal: the shared one it held before.
+ * @param home - the Delo home.
+ * @returns its mode, command and profile.
+ */
+function ownRegistration(home: string): unknown {
+  return JSON.parse(readFileSync(join(home, 'run', DATA_USERS_DIRECTORY, String(process.pid)), 'utf8'))
+}
+
 describe('the withdrawal before a profile starts', () => {
   it('registers nothing and returns nothing when no import was interrupted', async () => {
     const home = fresh('recover')
-    expect(await recoverInterruptedImport(home, 'start')).toBeUndefined()
+    expect(await recoverInterruptedImport(home, START)).toBeUndefined()
     expect(existsSync(join(home, 'run'))).toBe(false)
   })
 
-  it('withdraws an interrupted import as the one exclusive user, and leaves no registration behind', async () => {
+  it('withdraws an interrupted import as the one exclusive user, and leaves the start\'s registration shared again', async () => {
     const home = fresh('recover')
     interrupted(home)
-    expect(await recoverInterruptedImport(home, 'start')).toEqual({ withdrawn: ['AGENTS.md'], kept: [], removed: 0 })
+    registerAs(home, 'start')
+    expect(await recoverInterruptedImport(home, START)).toEqual({ withdrawn: ['AGENTS.md'], kept: [], removed: 0 })
     expect(existsSync(join(home, 'AGENTS.md'))).toBe(false)
     expect(existsSync(join(home, STOCK_IMPORT_DIRECTORY, STOCK_IMPORT_JOURNAL))).toBe(false)
-    expect(registrations(home)).toEqual([])
+    expect(registrations(home)).toEqual([String(process.pid)])
+    expect(ownRegistration(home)).toMatchObject({ mode: 'shared', command: 'start', profile: 'default' })
   })
 
   it('refuses while another process uses the stores, and keeps the journal for a later start', async () => {
@@ -90,33 +113,37 @@ describe('the withdrawal before a profile starts', () => {
     interrupted(home)
     const pid = liveProcess()
     registerDataUser(home, 'shared', 'headless', pid)
-    const refused = await recoverInterruptedImport(home, 'start').catch((error: unknown) => error)
+    registerAs(home, 'start')
+    const refused = await recoverInterruptedImport(home, START).catch((error: unknown) => error)
     expect(refused).toBeInstanceOf(CliError)
     expect((refused as CliError).message).toBe(`delorun start: an interrupted import of a DeepSeek Harness home waits to be withdrawn, and process ${String(pid)} (delorun headless) uses the chat data; wait for it to end, then try again`)
     expect(existsSync(join(home, STOCK_IMPORT_DIRECTORY, STOCK_IMPORT_JOURNAL))).toBe(true)
     expect(existsSync(join(home, 'AGENTS.md'))).toBe(true)
-    expect(registrations(home)).toEqual([String(pid)])
+    expect(registrations(home).toSorted()).toEqual([String(pid), String(process.pid)].toSorted())
+    expect(ownRegistration(home)).toMatchObject({ mode: 'shared', command: 'start', profile: 'default' })
   })
 
   it('refuses while an update of a profile is unfinished, and passes a failure that is not a refusal through', async () => {
     const home = fresh('recover')
     interrupted(home)
     await unfinishedUpdate(home)
-    const refused = await recoverInterruptedImport(home, 'headless').catch((error: unknown) => error)
+    registerAs(home, 'headless')
+    const refused = await recoverInterruptedImport(home, { command: 'headless' }).catch((error: unknown) => error)
     expect((refused as CliError).message).toContain('delorun headless: an interrupted import of a DeepSeek Harness home waits to be withdrawn, and an update of the profile default from Delo 1.0.0 to Delo 1.1.0 is snapshot')
     expect(existsSync(join(home, STOCK_IMPORT_DIRECTORY, STOCK_IMPORT_JOURNAL))).toBe(true)
     writeFileSync(journalPath(home, 'default'), 'not a record')
-    const failed = await recoverInterruptedImport(home, 'start').catch((error: unknown) => error)
+    const failed = await recoverInterruptedImport(home, { command: 'headless' }).catch((error: unknown) => error)
     expect(failed).toBeInstanceOf(Error)
     expect(failed).not.toBeInstanceOf(CliError)
-    expect(registrations(home)).toEqual([])
+    expect(ownRegistration(home)).toEqual(expect.objectContaining({ mode: 'shared', command: 'headless' }))
   })
 
   it('leaves a journal it cannot reach to the recovery, which refuses it', async () => {
     const home = fresh('recover')
     put(home, 'archive', 'a file where the import keeps its journal')
-    await expect(recoverInterruptedImport(home, 'start')).rejects.toMatchObject({ code: 'DSH_IMPORT_TARGET_REFUSED' })
-    expect(registrations(home)).toEqual([])
+    registerAs(home, 'start')
+    await expect(recoverInterruptedImport(home, START)).rejects.toMatchObject({ code: 'DSH_IMPORT_TARGET_REFUSED' })
+    expect(ownRegistration(home)).toMatchObject({ mode: 'shared', command: 'start', profile: 'default' })
   })
 })
 

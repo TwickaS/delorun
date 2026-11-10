@@ -9,9 +9,10 @@
  *
  * @module @delo/cli/pre-start
  */
-import { recoverDataCopies } from '@delo/update'
 import type { CommandOutput } from './command.ts'
 import type { ComposeKind } from './compose.ts'
+import { finishInterruptedRestore, startRegistration } from './home-exclusion.ts'
+import { recoverInterruptedImport } from './import-home/recover.ts'
 import { runProfileMigrations, type ProfileMigration } from './profile-migrations.ts'
 
 /** What a pre-start step is given. */
@@ -44,13 +45,20 @@ export interface PreStartStep {
 }
 
 /**
- * The slot for withdrawing an interrupted import of a stock DeepSeek Harness home, which `lane/dsh-import` fills with
- * `recoverStockImport` from `@delo/archive/dsh-import`: it withdraws the import and refuses the start when the import's
- * journal cannot be trusted. Until then it does nothing.
- * @param _context - the start.
- * @returns at once.
+ * Withdraw a stock DeepSeek Harness home import a crash interrupted, so a profile never runs over half of an import:
+ * the start's own registration is exclusive while it does ([import recovery](./import-home/recover.ts)). It reports
+ * the files it withdrew.
+ * @param context - the start.
+ * @returns when no import is left interrupted.
+ * @throws {CliError} while another process uses the shared stores or an update is unfinished; DshImportError when the
+ *   import's journal cannot be trusted.
  */
-export const recoverStockImportStep = (_context: PreStartContext): Promise<void> => Promise.resolve()
+export async function recoverStockImportStep(context: PreStartContext): Promise<void> {
+  const recovered = await recoverInterruptedImport(context.home, startRegistration(context.kind, context.profile))
+  if (recovered !== undefined && recovered.withdrawn.length > 0) {
+    context.output.stdout(`Withdrew an interrupted import of a DeepSeek Harness home: ${String(recovered.withdrawn.length)} ${recovered.withdrawn.length === 1 ? 'file' : 'files'} it had placed.\n`)
+  }
+}
 
 /**
  * The slot for the update notice's check, which `lane/update-notice` fills. Until then it does nothing.
@@ -70,7 +78,8 @@ export interface PreStartDependencies {
  *
  * 1. `stock-import-recovery`: both starts; {@link recoverStockImportStep}.
  * 2. `data-copy-recovery`: the CLI profile; an interrupted restore of a session-data copy finishes before any Host
- *    starts (contract C3, "Rollback"). `delorun headless` refuses while one is unfinished, when it registers.
+ *    starts (contract C3, "Rollback"), while the home process's registration is exclusive
+ *    ({@link finishInterruptedRestore}). `delorun headless` refuses while one is unfinished, when it registers.
  * 3. `profile-migrations`: the CLI profile on a fresh start; an update's successor never runs them, so its boot stays
  *    within the health check's time.
  * 4. `update-notice`: both starts; {@link updateNoticeStep}.
@@ -80,7 +89,7 @@ export interface PreStartDependencies {
 export function preStartSteps(dependencies: PreStartDependencies): readonly PreStartStep[] {
   return [
     { name: 'stock-import-recovery', kinds: ['cli', 'headless'], run: recoverStockImportStep },
-    { name: 'data-copy-recovery', kinds: ['cli'], run: async (context) => { await recoverDataCopies(context.home) } },
+    { name: 'data-copy-recovery', kinds: ['cli'], run: async (context) => { await finishInterruptedRestore(context.home, context.profile) } },
     {
       name: 'profile-migrations',
       kinds: ['cli'],

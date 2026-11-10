@@ -74,7 +74,7 @@ describe('the pre-start steps', () => {
     expect(ran).toEqual([])
   })
 
-  it('finish no restore on a home without one, and leave the slots doing nothing until their features fill them', async () => {
+  it('finish no restore and withdraw no import on a home without either, and leave the notice slot doing nothing until its feature fills it', async () => {
     const real = preStartSteps({ migrations: () => [] })
     await expect(real.find(step => step.name === 'data-copy-recovery')!.run(context('cli'))).resolves.toBeUndefined()
     await expect(recoverStockImportStep(context('cli'))).resolves.toBeUndefined()
