@@ -105,7 +105,19 @@ async function measure(line: CommandLine, facts: { readonly repository: string, 
       const work = newRoot()
       const channel: LocalChannel = await createChannel({ repository: facts.repository, directory: join(work.path, 'channel'), scope })
       const derivedCache = closureCache(cache, closure.key)
-      return { channel, closure: (version, variant) => derivedClosure(closure.base, derivedCache, version, variant) }
+      const templates = new Map<string, Promise<BenchRoot>>()
+      return {
+        channel,
+        closure: (version, variant) => derivedClosure(closure.base, derivedCache, version, variant),
+        template(key, make) {
+          const existing = templates.get(key)
+          if (existing !== undefined) return existing
+          const root = newRoot()
+          const made = make(root).then(() => root)
+          templates.set(key, made)
+          return made
+        },
+      }
     })()
     return shared
   }

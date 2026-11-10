@@ -299,6 +299,9 @@ export const PARITY_CONTROL_ID = 'parity-replay:control'
 /** The check that builds the host's native system addon, which upstream's suites load and git ignores. */
 export const NATIVE_CHECK_ID = 'generate:native'
 
+/** The wait-time benchmarks against their ceilings, run only on request. */
+export const BENCHMARK_CHECK_ID = 'benchmark:delo'
+
 /**
  * The runtime files a package's build writes, as its manifest declares them: the JavaScript files under `lib/` that its
  * `exports` and `files` name, without a pattern or a declaration file. A package with no `build` script declares none.
@@ -514,6 +517,8 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     },
     // No tier selects it: a lane that loads the addon declares it as a need, and `--only generate:native` builds it alone.
     { id: NATIVE_CHECK_ID, group: 'generate', title: 'The host\'s native system addon, which upstream\'s suites load (`pnpm run build:native-system`)', cwd: '', command: ['pnpm', 'run', '--silent', 'build:native-system'], needs: [], tiers: [], cpus: 2 },
+    // Timings are meaningless on a loaded machine and a full run takes most of an hour, so no tier selects it: `--only benchmark:delo`.
+    { id: BENCHMARK_CHECK_ID, group: 'benchmark', title: 'Delo\'s wait-time benchmarks against the ceilings in `delo/apps/benchmarks/budgets.json` (`pnpm run benchmark:delo -- --check-budgets`); needs `--prepare` first', cwd: '', command: ['pnpm', 'run', '--silent', 'benchmark:delo', '--', '--check-budgets'], needs: [], tiers: [], cpus: 4 },
     {
       id: FORK_UNIT_ID,
       group: 'tests',

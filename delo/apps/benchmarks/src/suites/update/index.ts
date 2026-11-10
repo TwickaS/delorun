@@ -13,9 +13,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readLines, resolveSurface } from '@delo/logs'
-import type { ClosureDirectory } from '../../fixtures/closure.ts'
-import { addChats, addPlugins, chatCorpus } from '../../fixtures/data.ts'
-import { copyHome, deloRequest, installHome, killLeftovers, PROFILE, startDriver, stopHome, type InstalledHome } from '../../fixtures/home.ts'
+import { addPlugins } from '../../fixtures/data.ts'
+import { copyHome, deloRequest, killLeftovers, PROFILE, startDriver, stopHome, type InstalledHome } from '../../fixtures/home.ts'
+import { INSTALLED_VERSION, installedChannel, templateHome } from '../../fixtures/releases.ts'
 import { expectSuccess, firstMatch, run, type Finished, type TimedLine } from '../../harness/processes.ts'
 import { Samples, type ScenarioResult, type Skipped, type SuiteResult } from '../../harness/result.ts'
 import type { BenchRoot } from '../../harness/roots.ts'
@@ -25,7 +25,7 @@ import type { Suite, SuiteContext } from '../../harness/suite.ts'
 const DRIVER = fileURLToPath(new URL('./home-driver.mjs', import.meta.url))
 
 /** The release a home starts on, and the two it updates to. */
-export const VERSIONS = { from: '0.1.0', same: '0.1.1', changed: '0.2.0' } as const
+export const VERSIONS = { from: INSTALLED_VERSION, same: '0.1.1', changed: '0.2.0' } as const
 
 /** How long a home process may take to boot before a repetition fails. */
 const BOOT_TIMEOUT_MS = 300_000
@@ -279,39 +279,23 @@ export const updateSuite: Suite = {
   async run(context: SuiteContext, selected: readonly string[]): Promise<SuiteResult> {
     const skipped: Skipped[] = []
     const fixtures = await context.fixtures()
-    const closures: Record<'from' | 'same' | 'changed', ClosureDirectory> = {
-      from: await fixtures.closure(VERSIONS.from, 'base'),
-      same: await fixtures.closure(VERSIONS.same, 'base'),
-      changed: await fixtures.closure(VERSIONS.changed, 'changed'),
-    }
+    const from = await installedChannel(fixtures)
     const channels = {
-      from: await fixtures.channel.publish('update-from', [closures.from]),
-      same: '', changed: '',
+      same: await fixtures.channel.publish('update-same', [await fixtures.closure(VERSIONS.same, 'base')], from),
+      changed: await fixtures.channel.publish('update-changed', [await fixtures.closure(VERSIONS.changed, 'changed')], from),
     }
-    channels.same = await fixtures.channel.publish('update-same', [closures.same], channels.from)
-    channels.changed = await fixtures.channel.publish('update-changed', [closures.changed], channels.from)
     if (!context.machine.clone) skipped.push({ item: 'file-system clone', reason: `the roots' file system (${context.machine.fileSystem}) does not clone files, so every copy is a full copy; rerun with --root-base on a file system that clones (Btrfs, XFS with reflink, APFS) to measure clones` })
-    const templates = new Map<string, BenchRoot>()
-    const template = async (scenario: UpdateScenario): Promise<BenchRoot> => {
-      const key = `${scenario.chats}-${scenario.plugins}`
-      const existing = templates.get(key)
-      if (existing !== undefined) return existing
-      context.log(`update: installing a template home with ${scenario.chats} chats and ${scenario.plugins === 'many' ? String(context.options.plugins) : 'no'} extra plugins`)
-      const root = context.newRoot()
-      fixtures.channel.serve(channels.from)
-      await installHome(root, fixtures.channel.launcher, VERSIONS.from)
-      addChats(await chatCorpus(context.cache, scenario.chats === 'small' ? context.options.chatsSmall : context.options.chatsLarge, context.log), root.deloHome)
+    const chats = (scenario: UpdateScenario): number => scenario.chats === 'small' ? context.options.chatsSmall : context.options.chatsLarge
+    const template = (scenario: UpdateScenario): Promise<BenchRoot> => templateHome(context, `chats-${String(chats(scenario))}-plugins-${scenario.plugins}`, chats(scenario), (root) => {
       if (scenario.plugins === 'many') addPlugins(root.deloHome, context.options.plugins)
-      templates.set(key, root)
-      return root
-    }
+    })
     const results: ScenarioResult[] = []
     for (const scenario of UPDATE_SCENARIOS.filter(candidate => selected.includes(candidate.id))) {
       const prepared: Prepared = {
         template: await template(scenario),
         target: scenario.format === 'same' ? channels.same : channels.changed,
         parameters: {
-          chats: scenario.chats === 'small' ? context.options.chatsSmall : context.options.chatsLarge,
+          chats: chats(scenario),
           plugins: scenario.plugins === 'many' ? context.options.plugins : 0,
           dataCopy: scenario.format === 'changed',
           store: scenario.store,

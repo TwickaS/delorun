@@ -136,6 +136,12 @@ describe('selection', () => {
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['generate:native'] }))).toEqual(['generate:native'])
   })
 
+  it('runs the wait-time benchmarks only when asked for, alone', () => {
+    expect(CHECKS.find(check => check.id === 'benchmark:delo')).toMatchObject({ tiers: [], exclusive: true, command: ['pnpm', 'run', '--silent', 'benchmark:delo', '--', '--check-budgets'] })
+    expect(ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'b', paths: ['delo/apps/benchmarks/src/run.ts'] } }))).not.toContain('benchmark:delo')
+    expect(ids(select(CHECKS, TREE, { ...NONE, only: ['benchmark:delo'] }))).toEqual(['benchmark:delo'])
+  })
+
   it('replays upstream\'s recorded sessions when an upstream-owned path changed, and not for a fork-only change', () => {
     const snapshots = (paths: string[]) => select(CHECKS, TREE, { ...NONE, changed: { base: 'b', paths } }).find(check => check.id === 'tests:snapshots')
     expect(snapshots(['packages/boot/plugin-manager/src/index.ts'])?.reason).toBe('upstream-owned code changed (packages/boot/plugin-manager/src/index.ts)')

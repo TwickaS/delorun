@@ -34,6 +34,13 @@ export interface SharedFixtures {
    * @returns the closure's files.
    */
   closure(version: string, variant: DataFormatVariant): Promise<ClosureDirectory>
+  /**
+   * A template root made once per key and run; suites copy it and never change it.
+   * @param key - the template's key.
+   * @param make - fills a new root the first time the key is asked for.
+   * @returns the template's root.
+   */
+  template(key: string, make: (root: BenchRoot) => Promise<void>): Promise<BenchRoot>
 }
 
 /** What the harness gives a suite. */

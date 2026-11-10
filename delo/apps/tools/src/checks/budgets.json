@@ -25,6 +25,7 @@
     "build:artifacts": { "memoryGiB": 4 },
     "build:delo": { "memoryGiB": 1.5 },
     "generate:native": { "memoryGiB": 1 },
+    "benchmark:delo": { "memoryGiB": 6, "exclusive": true },
     "docs-site": { "memoryGiB": 2, "seconds": 900 },
     "generated:notices": { "memoryGiB": 1, "seconds": 120 }
   }
