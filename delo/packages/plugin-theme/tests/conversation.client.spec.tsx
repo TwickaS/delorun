@@ -103,11 +103,9 @@ describe('the Conversation section', () => {
     expect(screen.queryByText(en.timing)).toBeNull()
   })
 
-  it('keeps Coming soon thinking unchosen and any other thinking choice already made unwritten', async () => {
+  it('offers no thinking display the studio does not ship, and leaves a choice already made unwritten', async () => {
     const { writes } = open({ transcriptView: 'standard' })
-    const word = screen.getByRole('radio', { name: /Word by word/ })
-    expect(word.hasAttribute('disabled')).toBe(true)
-    await click(word)
+    expect(screen.queryByRole('radio', { name: /Word by word/ })).toBeNull()
     await click(screen.getByRole('radio', { name: 'One-line preview' }))
     expect(writes).toEqual([])
   })

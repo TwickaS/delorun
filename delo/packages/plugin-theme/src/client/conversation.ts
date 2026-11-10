@@ -18,8 +18,8 @@ export type DisplayMode = typeof DISPLAY_MODES[number]
 /** A preset, as opposed to Custom. */
 export type Preset = Exclude<DisplayMode, 'custom'>
 
-/** The thinking displays offered, in order; `rsvp` shows as Coming soon. */
-export const THINKING_CHOICES: readonly ThinkingDisplay[] = ['title', 'preview', 'live', 'expanded', 'window', 'rsvp']
+/** The thinking displays offered, in order. Upstream's `rsvp` display needs a thinking view this studio does not ship, so it is not offered. */
+export const THINKING_CHOICES: readonly Exclude<ThinkingDisplay, 'rsvp'>[] = ['title', 'preview', 'live', 'expanded', 'window']
 
 /** The window heights offered for `window` thinking. */
 export const WINDOW_LINES = [3, 6, 10] as const

@@ -5,7 +5,7 @@
  * with that preset's parts. It writes upstream's `ui-chat` settings.
  */
 import { useCallback, useState, useSyncExternalStore } from 'react'
-import type { CustomDisplay, StepGrouping, ThinkingDisplay } from '@deepseek-ai/dsh-client-ui-chat'
+import type { CustomDisplay, StepGrouping } from '@deepseek-ai/dsh-client-ui-chat'
 import { SegmentedControl, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
@@ -103,16 +103,12 @@ export function ConversationSection({ t, settings }: ConversationSectionProps) {
       <section className={css.block} aria-labelledby="delo-conversation-thinking">
         <Heading id="delo-conversation-thinking" title={t('thinking')} lead={t('thinking.lead')} />
         <div className={css.chips} role="radiogroup" aria-labelledby="delo-conversation-thinking">
-          {THINKING_CHOICES.map((choice: ThinkingDisplay) => {
-            const soon = choice === 'rsvp'
-            return (
-              <button key={choice} type="button" role="radio" aria-checked={parts.thinking === choice} className={css.chip}
-                disabled={disabled || soon} onClick={() => { if (parts.thinking !== choice) setPart('thinking', choice) }}>
-                {t(`thinking.${choice}`)}
-                {soon && <span className={css.soon}>{t('thinking.soon')}</span>}
-              </button>
-            )
-          })}
+          {THINKING_CHOICES.map(choice => (
+            <button key={choice} type="button" role="radio" aria-checked={parts.thinking === choice} className={css.chip}
+              disabled={disabled} onClick={() => { if (parts.thinking !== choice) setPart('thinking', choice) }}>
+              {t(`thinking.${choice}`)}
+            </button>
+          ))}
         </div>
         {parts.thinking === 'window' && (
           <div className={css.row}>

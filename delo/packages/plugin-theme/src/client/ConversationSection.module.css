@@ -213,15 +213,6 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.soon {
-  padding: 0 6px;
-  border-radius: var(--dsw-radius-panel);
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 18px;
-}
-
 /* The preview: a sample chat inside a quiet frame. */
 .previewFrame {
   display: flex;
