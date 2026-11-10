@@ -6,6 +6,7 @@
  * bits and inode of every entry.
  */
 import { createHash } from 'node:crypto'
+// spec-lanes-allow: `mkfifo` makes one named pipe for a refusal fixture in milliseconds; Node has no call that makes one
 import { execFileSync } from 'node:child_process'
 import { linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -92,7 +93,7 @@ export function makeHomes(): Homes {
     },
     fifo(path) {
       mkdirSync(dirname(join(source, path)), { recursive: true })
-      execFileSync('mkfifo', [join(source, path)])
+      execFileSync('mkfifo', [join(source, path)], { timeout: 30_000 })
     },
     remove() {
       rmSync(root, { recursive: true, force: true })

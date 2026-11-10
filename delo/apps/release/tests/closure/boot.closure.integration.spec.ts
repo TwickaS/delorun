@@ -164,8 +164,8 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
     // The start prints the studio's address without a token; `delorun open --print` asks the home process for a link.
     expect(output).toMatch(/dsh web: http:\/\/127\.0\.0\.1:\d+\/?\n/u)
     expect(output).not.toContain('token=')
-    const printed = spawnSync(node, [entry, 'open', '--print'], { cwd: root, env, encoding: 'utf8' })
-    expect(printed.status).toBe(0)
+    const printed = spawnSync(node, [entry, 'open', '--print'], { cwd: root, env, encoding: 'utf8', timeout: 50_000 })
+    expect(printed.status, `signal ${String(printed.signal)}: ${printed.stderr}`).toBe(0)
     const url = printed.stdout.split('\n')[0]!
     expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]{43}$/u)
     // The one-time token is exchanged for a cookie by a redirect, once; a request without either is refused.
