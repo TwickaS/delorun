@@ -10,7 +10,7 @@ import * as JsonStorage from '@deepseek-ai/dsh-storage-json'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   apply, AUTO_SETTLE_DAYS, CHAT_STATE_PATHS, CHAT_STATES_ROW_ID, ChatStateRefusal, ChatStateRefusedError, ChatStateRequest, ChatStates, Config,
-  DEFAULT_CHAT_STATES_SETTINGS, inject, MAX_SNOOZE_MS, name, REFRESH_SECONDS, type ChatStateRefusalCode,
+  DEFAULT_CHAT_STATES_SETTINGS, inject, MAX_RECORDS, MAX_SNOOZE_MS, name, PRUNE_MINUTES, REFRESH_SECONDS, type ChatStateRefusalCode,
 } from '../src/index.ts'
 
 const sid = (id: string) => SessionId(id)
@@ -169,7 +169,14 @@ describe('the order of changes', () => {
 })
 
 /** The routes of the plugin over one table, reached as the studio reaches them. */
-async function mount(options: { readonly table?: KvTable<SessionId, unknown>; readonly storage?: boolean; readonly root?: string } = {}) {
+async function mount(options: {
+  readonly table?: KvTable<SessionId, unknown>
+  readonly storage?: boolean
+  readonly root?: string
+  /** The session list the harness holds; absent, the harness has no session query service. */
+  readonly sessions?: (signal: AbortSignal | undefined) => Promise<readonly { readonly header: { readonly id: string } }[]>
+  readonly config?: object
+} = {}) {
   const ctx = new Context()
   const routes = new Map<string, { readonly methods: readonly string[]; readonly fetch: (request: Request) => Promise<Response> }>()
   const close = vi.fn()
@@ -189,12 +196,14 @@ async function mount(options: { readonly table?: KvTable<SessionId, unknown>; re
   } else {
     ctx.provide('storageDomain', { open: async () => ({ table: () => options.table, close }) } as never)
   }
+  if (options.sessions !== undefined) ctx.provide('sessionQuery', { listSessions: options.sessions } as never)
   const unconfigure = vi.fn()
   const configure = vi.fn(() => unconfigure)
   ctx.provide('settings', { configure } as never)
   const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
   const error = vi.spyOn(ctx.logger, 'error').mockImplementation(() => {})
-  const fiber = ctx.plugin({ name, inject: [...inject], apply })
+  const info = vi.spyOn(ctx.logger, 'info').mockImplementation(() => {})
+  const fiber = ctx.plugin({ name, inject: [...inject], apply, Config }, options.config ?? {})
   await fiber.await()
   onTestFinished(async () => { await ctx.fiber.dispose() })
   const route = (path: string) => {
@@ -206,12 +215,210 @@ async function mount(options: { readonly table?: KvTable<SessionId, unknown>; re
   const post = (body: unknown) => route(CHAT_STATE_PATHS.set).fetch(new Request('http://harness.test/api', {
     method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body),
   }))
-  return { ctx, fiber, routes, route, list, post, close, warn, error, configure, unconfigure }
+  return { ctx, fiber, routes, route, list, post, close, warn, error, info, configure, unconfigure }
 }
 
 async function refusalOf(response: Response): Promise<{ status: number; code: string }> {
   return { status: response.status, code: ChatStateRefusal.parse(await response.json()).code }
 }
+
+/** A session list holding these chats. */
+const holding = (...ids: string[]) => () => Promise.resolve(ids.map(id => ({ header: { id } })))
+
+describe('forgetting the states of chats that no longer exist', () => {
+  const RETENTION = 1_000_000
+  const present = (...ids: string[]) => async () => ids.map(sid)
+
+  function seeded(start = 5_000) {
+    const clock = { now: start }
+    const made = statesOf(memoryTable(), () => clock.now)
+    for (const id of ['a', 'b', 'c']) made.rows.set(sid(id), { settledAt: 5 })
+    return { ...made, clock }
+  }
+
+  it('keeps the state of a chat the first time it is missing from the session list, marked with when it was first missing', async () => {
+    const { states, rows } = seeded()
+    expect(await states.forgetGone(present('a', 'c'), RETENTION)).toBe(0)
+    expect(rows.get(sid('b'))).toEqual({ settledAt: 5, missingSince: 5_000 })
+    expect(rows.get(sid('a'))).toEqual({ settledAt: 5 })
+  })
+
+  it('never shows the studio the mark', async () => {
+    const { states } = seeded()
+    await states.forgetGone(present('a', 'c'), RETENTION)
+    expect(await states.list()).toEqual({ chats: { a: { settledAt: 5 }, b: { settledAt: 5 }, c: { settledAt: 5 } } })
+  })
+
+  it('clears the mark when the chat reappears, and keeps the first time it was missing while it stays missing', async () => {
+    const { states, rows, clock } = seeded()
+    await states.forgetGone(present('a', 'c'), RETENTION)
+    clock.now = 6_000
+    await states.forgetGone(present('a', 'c'), RETENTION)
+    expect(rows.get(sid('b'))).toEqual({ settledAt: 5, missingSince: 5_000 })
+    clock.now = 7_000
+    await states.forgetGone(present('a', 'b', 'c'), RETENTION)
+    expect(rows.get(sid('b'))).toEqual({ settledAt: 5 })
+  })
+
+  it('forgets the state of a chat that has been missing for the retention, and keeps the others', async () => {
+    const { states, rows, clock } = seeded()
+    await states.forgetGone(present('a', 'c'), RETENTION)
+    clock.now = 5_000 + RETENTION - 1
+    expect(await states.forgetGone(present('a', 'c'), RETENTION)).toBe(0)
+    clock.now = 5_000 + RETENTION
+    expect(await states.forgetGone(present('a', 'c'), RETENTION)).toBe(1)
+    expect([...rows.keys()]).toEqual(['a', 'c'])
+  })
+
+  it('returns a chat restored within the retention with its state intact', async () => {
+    const { states, rows, clock } = seeded()
+    await states.forgetGone(present('a', 'c'), RETENTION)
+    clock.now = 5_000 + RETENTION - 1
+    await states.forgetGone(present('a', 'b', 'c'), RETENTION)
+    clock.now = 5_000 + 3 * RETENTION
+    await states.forgetGone(present('a', 'b', 'c'), RETENTION)
+    expect(rows.get(sid('b'))).toEqual({ settledAt: 5 })
+  })
+
+  it('leaves a record that is not valid to the limit', async () => {
+    const { states, rows, reports } = seeded()
+    rows.set(sid('broken'), { settledAt: 'yesterday' })
+    await states.forgetGone(present('a', 'b', 'c'), 0)
+    expect(rows.get(sid('broken'))).toEqual({ settledAt: 'yesterday' })
+    expect(reports).toHaveLength(1)
+  })
+
+  it('changes nothing when the list cannot be read in full, and tells why', async () => {
+    const { states, rows } = seeded()
+    await expect(states.forgetGone(() => Promise.reject(new Error('listing stopped halfway')), RETENTION)).rejects.toThrow('listing stopped halfway')
+    expect([...rows.values()]).toEqual([{ settledAt: 5 }, { settledAt: 5 }, { settledAt: 5 }])
+  })
+
+  it('changes nothing when the list is empty, since an empty list cannot be told from a corpus that has not loaded', async () => {
+    const { states, rows } = seeded()
+    expect(await states.forgetGone(present(), 0)).toBe(0)
+    expect([...rows.values()]).toEqual([{ settledAt: 5 }, { settledAt: 5 }, { settledAt: 5 }])
+  })
+
+  it('reads the list inside the queue of changes, so a change queued before it is not marked missing', async () => {
+    const { states, rows } = statesOf()
+    const settled = states.apply({ action: 'settle', session: sid('new') })
+    expect(await states.forgetGone(async () => [sid('other'), ...rows.keys()], RETENTION)).toBe(0)
+    await settled
+    expect(rows.get(sid('new'))).toEqual({ settledAt: 1_000 })
+  })
+})
+
+describe('bounding the stored states', () => {
+  it('forgets the states with the oldest changes beyond the limit, counting an invalid record as the oldest', async () => {
+    const { states, rows, reports } = statesOf()
+    rows.set(sid('newest'), { keptAt: 90 })
+    rows.set(sid('broken'), { settledAt: 'yesterday' })
+    rows.set(sid('old'), { settledAt: 10 })
+    rows.set(sid('middle'), { snoozedAt: 50, snoozedUntil: 5_000 })
+    rows.set(sid('woke'), { wokeAt: 70 })
+    expect(await states.enforceLimit(3)).toBe(2)
+    expect([...rows.keys()].sort()).toEqual(['newest', 'middle', 'woke'].sort())
+    expect(reports).toHaveLength(1)
+  })
+
+  it('keeps every state while they are within the limit', async () => {
+    const { states, rows } = statesOf()
+    rows.set(sid('a'), { settledAt: 1 })
+    expect(await states.enforceLimit(1)).toBe(0)
+    expect(rows.size).toBe(1)
+  })
+})
+
+describe('the harness sweeping its states', () => {
+  const seed = (rows: Map<SessionId, unknown>, count: number, prefix = 'chat') => {
+    for (let index = 0; index < count; index += 1) rows.set(sid(`${prefix}${String(index)}`), { settledAt: index + 1 })
+  }
+
+  it('marks the state of a chat missing from the session list, and forgets it once it has been missing for the trash retention, and logs it', async () => {
+    const made = memoryTable()
+    seed(made.rows, 4)
+    made.rows.set(sid('chat3'), { settledAt: 4, missingSince: 1 })
+    const { list, info } = await mount({ table: made.table, sessions: holding('chat0', 'chat2') })
+    await vi.waitFor(() => { expect(made.rows.has(sid('chat3'))).toBe(false) })
+    expect(made.rows.get(sid('chat1'))).toEqual({ settledAt: 2, missingSince: expect.any(Number) })
+    expect(made.rows.get(sid('chat0'))).toEqual({ settledAt: 1 })
+    expect(Object.keys(((await (await list()).json()) as { chats: object }).chats)).toEqual(['chat0', 'chat1', 'chat2'])
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('1 chats'))
+  })
+
+  it('holds the stored states to maxRecords, the oldest first, with or without a session list', async () => {
+    const made = memoryTable()
+    seed(made.rows, MAX_RECORDS.min + 5)
+    const { info } = await mount({ table: made.table, config: { maxRecords: MAX_RECORDS.min } })
+    await vi.waitFor(() => { expect(made.rows.size).toBe(MAX_RECORDS.min) })
+    expect(made.rows.has(sid('chat0'))).toBe(false)
+    expect(made.rows.has(sid(`chat${String(MAX_RECORDS.min + 4)}`))).toBe(true)
+    expect(info).toHaveBeenCalledWith(expect.stringContaining(`limit of ${String(MAX_RECORDS.min)}`))
+  })
+
+  it('forgets no chat\'s state when the session list fails, warns, and still holds the limit', async () => {
+    const made = memoryTable()
+    seed(made.rows, MAX_RECORDS.min + 2)
+    const { warn } = await mount({ table: made.table, sessions: () => Promise.reject(new Error('index offline')), config: { maxRecords: MAX_RECORDS.min } })
+    await vi.waitFor(() => { expect(warn).toHaveBeenCalledWith(expect.stringContaining('index offline')) })
+    await vi.waitFor(() => { expect(made.rows.size).toBe(MAX_RECORDS.min) })
+    expect(made.rows.has(sid(`chat${String(MAX_RECORDS.min + 1)}`))).toBe(true)
+  })
+
+  it('forgets nothing about deleted chats where the harness has no session list', async () => {
+    const made = memoryTable()
+    seed(made.rows, 3)
+    const { list } = await mount({ table: made.table })
+    await list()
+    await vi.waitFor(() => { expect(made.rows.size).toBe(3) })
+  })
+
+  it('schedules no sweep after the plugin is disposed while one is still reading the session list', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    onTestFinished(() => { vi.useRealTimers() })
+    let finish: (chats: readonly { readonly header: { readonly id: string } }[]) => void = () => {}
+    let sweeps = 0
+    const { fiber } = await mount({
+      table: memoryTable().table,
+      sessions: () => { sweeps += 1; return new Promise((resolve) => { finish = resolve }) },
+      config: { pruneMinutes: PRUNE_MINUTES.min },
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    await fiber.dispose()
+    finish([])
+    await vi.advanceTimersByTimeAsync(PRUNE_MINUTES.min * 60_000 * 2)
+    expect(sweeps).toBe(1)
+  })
+
+  it('logs a failure to forget instead of stopping, and sweeps again after the configured minutes until the plugin is disposed', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    onTestFinished(() => { vi.useRealTimers() })
+    const made = memoryTable()
+    seed(made.rows, 2)
+    let present = ['chat0', 'chat1']
+    let sweeps = 0
+    const { fiber, error } = await mount({
+      table: made.table,
+      sessions: () => { sweeps += 1; return Promise.resolve(present.map(id => ({ header: { id } }))) },
+      config: { pruneMinutes: PRUNE_MINUTES.min, maxRecords: MAX_RECORDS.min },
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sweeps).toBe(1)
+    present = ['chat1']
+    await vi.advanceTimersByTimeAsync(PRUNE_MINUTES.min * 60_000)
+    expect(sweeps).toBe(2)
+    expect(made.rows.get(sid('chat0'))).toEqual({ settledAt: 1, missingSince: expect.any(Number) })
+    const limitFailure = vi.spyOn(made.table, 'deleteMany').mockRejectedValue(new Error('disk full'))
+    seed(made.rows, MAX_RECORDS.min + 1, 'extra')
+    await vi.advanceTimersByTimeAsync(PRUNE_MINUTES.min * 60_000)
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('disk full'))
+    limitFailure.mockRestore()
+    await fiber.dispose()
+    await vi.advanceTimersByTimeAsync(PRUNE_MINUTES.min * 60_000 * 3)
+    expect(sweeps).toBe(3)
+  })
+})
 
 describe('the routes', () => {
   it('register an exact GET route to list and an exact POST route to change, both uncached', async () => {
@@ -339,10 +546,18 @@ describe('the settings', () => {
       { snoozePresets: [{ kind: 'at', day: 'someday', time: '09:00' }] }, { snoozePresets: [{ kind: 'at', day: 'today', time: '25:00' }] },
       { autoSettleDays: AUTO_SETTLE_DAYS.max + 1 }, { autoSettleDays: -1 },
       { refreshSeconds: REFRESH_SECONDS.min - 1 }, { refreshSeconds: REFRESH_SECONDS.max + 1 },
+      { maxRecords: MAX_RECORDS.min - 1 }, { maxRecords: MAX_RECORDS.max + 1 },
+      { pruneMinutes: PRUNE_MINUTES.min - 1 }, { pruneMinutes: PRUNE_MINUTES.max + 1 },
     ]) {
       expect(Config['~standard'].validate(wrong)).toHaveProperty('issues')
     }
     expect(Config({ snoozePresets: [{ kind: 'at', day: 'friday', time: '17:30' }], autoSettleDays: 3, refreshSeconds: 60 }).refreshSeconds.get()).toBe(60)
+  })
+
+  it('bound the stored states at 2,000 by default and sweep hourly', () => {
+    const config = Config({})
+    expect([config.maxRecords.get(), config.pruneMinutes.get()]).toEqual([2000, 60])
+    expect(Config({ maxRecords: 500, pruneMinutes: 5 }).maxRecords.get()).toBe(500)
   })
 
   it('name the row the studio half edits', () => {

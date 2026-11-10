@@ -1,8 +1,8 @@
 /**
  * The chat-states settings, shared by the host half that declares them and
  * the studio half that reads and edits them: the snooze menu's presets, how
- * many idle days settle a chat by themselves, and how often the studio reads
- * the states again.
+ * many idle days settle a chat by themselves, how often the studio reads
+ * the states again, and how the harness bounds the stored states.
  * @module @delo/plugin-chat-states/config
  */
 import type { Volatile } from '@deepseek-ai/cordis'
@@ -25,6 +25,12 @@ export const AUTO_SETTLE_DAYS = { min: 0, max: 90 } as const
 /** The seconds between the studio's reads of the states: often enough that another browser's change shows, rarely enough to cost the harness little. */
 export const REFRESH_SECONDS = { min: 5, max: 3600 } as const
 
+/** How many chats' states the harness keeps; the oldest are forgotten beyond it. */
+export const MAX_RECORDS = { min: 100, max: 100_000, default: 2000 } as const
+
+/** The minutes between the harness's sweeps that forget the states of chats that no longer exist. */
+export const PRUNE_MINUTES = { min: 1, max: 1440, default: 60 } as const
+
 /** The settings as the studio reads them. */
 export interface ChatStatesSettings {
   /** The snooze menu's presets, in the person's order; the menu lists them soonest first. */
@@ -43,6 +49,8 @@ export interface Config {
   snoozePresets: Volatile<SnoozePresetSetting[]>
   autoSettleDays: Volatile<number>
   refreshSeconds: Volatile<number>
+  maxRecords: Volatile<number>
+  pruneMinutes: Volatile<number>
 }
 
 const Preset: z<SnoozePresetSetting> = z.union([
@@ -55,4 +63,6 @@ export const Config = z.object({
   snoozePresets: z.array(Preset).min(1).max(SNOOZE_PRESET_LIMITS.count).description('The snooze menu\'s presets: a duration from now, or a time of day on a named day.').default([...DEFAULT_SNOOZE_PRESETS]).volatile(),
   autoSettleDays: z.natural().min(AUTO_SETTLE_DAYS.min).max(AUTO_SETTLE_DAYS.max).description('Idle days after which a chat counts as settled until it changes or is returned to the list; 0 turns it off.').default(DEFAULT_CHAT_STATES_SETTINGS.autoSettleDays).volatile(),
   refreshSeconds: z.natural().min(REFRESH_SECONDS.min).max(REFRESH_SECONDS.max).description('Seconds between the studio\'s reads of the chat states, so another browser\'s changes show.').default(DEFAULT_CHAT_STATES_SETTINGS.refreshSeconds).volatile(),
+  maxRecords: z.natural().min(MAX_RECORDS.min).max(MAX_RECORDS.max).description('How many chats\' states the harness keeps; beyond it the states with the oldest changes are forgotten.').default(MAX_RECORDS.default).volatile(),
+  pruneMinutes: z.natural().min(PRUNE_MINUTES.min).max(PRUNE_MINUTES.max).description('Minutes between the sweeps that forget the states of chats that no longer exist and enforce the limit.').default(PRUNE_MINUTES.default).volatile(),
 })

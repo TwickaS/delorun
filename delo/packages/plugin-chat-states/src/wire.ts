@@ -44,6 +44,18 @@ export const ChatState = z.strictObject({
 /** One chat's state. */
 export type ChatState = z.output<typeof ChatState>
 
+/**
+ * A chat's state as the harness stores it: the state plus when the chat was first seen missing from the session list,
+ * which is how a chat moved to the trash keeps its state until its retention ends. Never sent to the studio.
+ */
+export const StoredChatState = ChatState.extend({
+  /** When a sweep first found the chat missing from the session list; cleared when it reappears. */
+  missingSince: z.number().int().nonnegative().optional(),
+})
+
+/** A chat's state as the harness stores it. */
+export type StoredChatState = z.output<typeof StoredChatState>
+
 /** Every chat that is settled, snoozed or woke, by session id. */
 export const ChatStatesResponse = z.strictObject({ chats: z.record(storedSessionKey, ChatState) })
 

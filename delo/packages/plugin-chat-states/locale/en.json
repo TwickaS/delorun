@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Chat states",
-    "description": "Snooze and settle chats, kept by the harness outside the session log, with Snoozed and Settled shelves in the sidebar"
+    "description": "Snooze chats or mark them settled, with Snoozed and Settled shelves in the sidebar"
   }
 }

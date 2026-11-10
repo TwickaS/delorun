@@ -2009,6 +2009,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delo/contract-archive-and-trash':
+        specifier: workspace:*
+        version: link:../contract-archive-and-trash
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -2055,6 +2058,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-query':
+        specifier: workspace:*
+        version: link:../../../packages/session-query/session-query
       '@deepseek-ai/dsh-settings':
         specifier: workspace:*
         version: link:../../../packages/settings/settings
@@ -2297,6 +2303,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings':
         specifier: workspace:*
         version: link:../../../packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-settings-general':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-settings-general
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../../../packages/client/ui-slots
@@ -2324,6 +2333,9 @@ importers:
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
+      '@delo/plugin-sidebar':
+        specifier: workspace:*
+        version: link:../plugin-sidebar
       '@delo/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme

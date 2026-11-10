@@ -1,12 +1,13 @@
 /* The settle hover button, as the row's other hover buttons. */
 .iconButton {
+  --button-size: 24px;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin: -4px;
+  width: var(--button-size);
+  height: var(--button-size);
+  margin: calc(-1 * var(--delo-space-2));
   padding: 0;
   border: none;
   border-radius: var(--dsw-radius-xs);

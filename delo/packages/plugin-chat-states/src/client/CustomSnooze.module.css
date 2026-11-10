@@ -1,15 +1,18 @@
 /* The snooze dialog: quick picks, the mode switch, two fields, and when the chat comes back. */
 .form {
+  --form-min-width: 360px;
+  --quick-min-width: 150px;
+  --field-min-width: 140px;
   display: flex;
   flex-direction: column;
-  gap: calc(16px * var(--dsh-density, 1));
-  min-width: min(360px, 100%);
+  gap: var(--delo-space-6);
+  min-width: min(var(--form-min-width), 100%);
 }
 
 .group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--delo-space-4);
 }
 
 .heading,
@@ -21,17 +24,17 @@
 /* Two columns where they fit; a label that does not fit wraps instead of being cut. */
 .quick {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(var(--quick-min-width), 1fr));
+  gap: var(--delo-space-3);
 }
 
 .chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--delo-space-4);
   min-width: 0;
-  padding: 7px 10px;
+  padding: var(--delo-space-3) var(--delo-space-4);
   border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-1);
@@ -66,14 +69,14 @@
 
 .fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(var(--field-min-width), 1fr));
+  gap: var(--delo-space-5);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--delo-space-3);
   min-width: 0;
 }
 
@@ -88,7 +91,7 @@
 
 @media (pointer: coarse) {
   .field input {
-    font-size: 16px;
+    font-size: var(--dsw-font-base-16-font-size);
   }
 }
 

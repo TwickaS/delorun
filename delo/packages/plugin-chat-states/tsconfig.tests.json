@@ -31,6 +31,9 @@
       "path": "../../../packages/core/session"
     },
     {
+      "path": "../../../packages/session-query/session-query"
+    },
+    {
       "path": "../../../packages/storage/storage-domain"
     },
     {

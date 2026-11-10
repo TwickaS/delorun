@@ -1,8 +1,14 @@
 /* Snooze and settle in Settings: one settings card, each setting a block. */
 .section {
+  --heading-basis: 220px;
+  --chip-height: 32px;
+  --day-height: 28px;
+  --button-size: 32px;
+  --amount-width: 72px;
+  --time-width: 120px;
   display: flex;
   flex-direction: column;
-  padding: 0 20px;
+  padding: 0 var(--delo-space-7);
   border: 0.5px solid var(--dsw-alias-settings-card-stroke);
   border-radius: var(--dsw-radius-xl);
   background: var(--dsw-alias-settings-card-fill);
@@ -13,8 +19,8 @@
 .block {
   display: flex;
   flex-direction: column;
-  gap: calc(14px * var(--dsh-density, 1));
-  padding: calc(20px * var(--dsh-density, 1)) 0;
+  gap: var(--delo-space-5);
+  padding: var(--delo-space-7) 0;
 }
 
 .block + .block {
@@ -26,23 +32,24 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 24px;
+  gap: var(--delo-space-5) var(--delo-space-8);
 }
 
 .heading {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--delo-space-1);
   min-width: 0;
 }
 
 .row > .heading {
-  flex: 1 1 220px;
+  flex: 1 1 var(--heading-basis);
 }
 
 .title {
   margin: 0;
-  font: var(--dsw-font-s-strong-14);
+  font: var(--dsw-font-s-14);
+  font-weight: 500;
 }
 
 .lead {
@@ -53,7 +60,7 @@
 .meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--delo-space-4);
 }
 
 .count {
@@ -66,7 +73,7 @@
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--delo-space-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -75,9 +82,9 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px 0 10px;
+  gap: var(--delo-space-3);
+  height: var(--chip-height);
+  padding: 0 var(--delo-space-5) 0 var(--delo-space-4);
   border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: var(--dsw-radius-xl);
   background: var(--dsw-alias-bg-base);
@@ -129,8 +136,8 @@
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--delo-space-5);
+  padding: var(--delo-space-5);
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-base);
@@ -141,25 +148,25 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--delo-space-4);
 }
 
 .fields {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--delo-space-4) var(--delo-space-5);
 }
 
 .days {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--delo-space-3);
 }
 
 .day {
-  height: 28px;
-  padding: 0 10px;
+  height: var(--day-height);
+  padding: 0 var(--delo-space-4);
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-sm);
   background: none;
@@ -184,8 +191,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--button-size);
+  height: var(--button-size);
   border: 0;
   border-radius: var(--dsw-radius-md);
   background: none;
@@ -202,18 +209,18 @@
 
 /* The Input primitive's wrapper, sized to a number or a time. */
 .amount > span {
-  width: 72px;
+  width: var(--amount-width);
 }
 
 .time > span {
-  width: 120px;
+  width: var(--time-width);
 }
 
 .control,
 .settleDays {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--delo-space-4);
 }
 
 .settleDays {
@@ -223,6 +230,6 @@
 @media (pointer: coarse) {
   .amount input,
   .time input {
-    font-size: 16px;
+    font-size: var(--dsw-font-base-16-font-size);
   }
 }
