@@ -9,7 +9,8 @@
  * @module @delo/benchmarks/suites/cli
  */
 import { join } from 'node:path'
-import { copyHome, delorun, deloEnvironment, PROFILE, runtimeDirectory, stopHome, type InstalledHome } from '../../fixtures/home.ts'
+import { writePnpmShim } from '../plugins/index.ts'
+import { copyHome, delorun, deloEnvironment, deloRequest, PROFILE, runtimeDirectory, stopHome, type InstalledHome } from '../../fixtures/home.ts'
 import { INSTALLED_VERSION, installedChannel, templateHome } from '../../fixtures/releases.ts'
 import { expectSuccess, run, type Finished } from '../../harness/processes.ts'
 import { Samples, type ScenarioResult, type SuiteResult } from '../../harness/result.ts'
@@ -23,17 +24,21 @@ interface CliCommand {
   readonly args: readonly string[]
   /** Whether the home process runs while it is measured. */
   readonly running: boolean
+  /** The exit code it answers with; 0 unless stated, such as `status`'s 3 when Delo is not running (contract C19). */
+  readonly exit?: number
+  /** Whether it runs pnpm, which `delorun plugin` finds on `PATH`; the runtime's own pnpm is put there. */
+  readonly pnpm?: true
 }
 
 /** The commands, in the order each repetition runs them. */
 export const CLI_COMMANDS: readonly CliCommand[] = [
   { id: 'version', args: ['--version'], running: false },
-  { id: 'status-stopped', args: ['status'], running: false },
+  { id: 'status-stopped', args: ['status'], running: false, exit: 3 },
   { id: 'doctor', args: ['doctor'], running: false },
   { id: 'verify-offline', args: ['verify', '--offline'], running: false },
   { id: 'trash-list', args: ['trash', 'list'], running: false },
   { id: 'recover-status', args: ['recover', 'status'], running: false },
-  { id: 'plugin-list', args: ['plugin', 'list'], running: false },
+  { id: 'plugin-list', args: ['plugin', '--profile', 'default', 'list'], running: false, pnpm: true },
   { id: 'logs', args: ['logs'], running: false },
   { id: 'status-running', args: ['status'], running: true },
   { id: 'update-check-current', args: ['update', '--check'], running: true },
@@ -71,7 +76,11 @@ export function commandItems(id: string, finished: Finished): Record<string, num
  * @returns how it finished.
  */
 async function measured(home: InstalledHome, command: CliCommand): Promise<Finished> {
-  return expectSuccess(await delorun(home, command.args, 300_000), `\`delorun ${command.args.join(' ')}\``)
+  const request = deloRequest(home, command.args, 300_000)
+  const shim = command.pnpm === true ? writePnpmShim(runtimeDirectory(home.root, INSTALLED_VERSION), join(home.root.path, 'pnpm-shim')) : undefined
+  const finished = await run(shim === undefined ? request : { ...request, env: { ...request.env, PATH: `${shim}:${String(request.env.PATH)}` } })
+  if (command.exit !== undefined && finished.code === command.exit) return finished
+  return expectSuccess(finished, `\`delorun ${command.args.join(' ')}\``)
 }
 
 /** The suite. */
