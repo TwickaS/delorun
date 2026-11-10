@@ -46,6 +46,6 @@ A running board of friction met while working in this harness and this repositor
 
 **What it cost.** The check fails on a security fix that has no C16 switch to register, because the fix must hold in the parity composition too.
 
-**What to do instead.** The lead decides how the check records a reviewed, non-model-visible edit inside a contribution-holding statement, for example a ledger field the check reads. `tests:fork` fails on the same finding through `apps/tools/tests/parity/switches.spec.ts`, which asserts the real tree's scan has no error. Until then a push whose changed set holds such an edit may use `DELO_PUSH_SKIP=parity-switches,tests:fork` with this entry as the reason, after running `tests:fork` and confirming that spec is its only failure, and names the skip in the pull request.
+**What to do instead.** Review the hunk, then record it with `node_modules/.bin/tsx delo/apps/tools/src/ledger-record.ts --non-model-visible-hunk <path>:<line> --reason "<one line>"`, which adds its digest to the file's security entry under `nonModelVisibleHunks` and exits 3 for the lead's verdict; `parity-switches` then passes that exact hunk and fails again when it changes ([tools README](../../apps/tools/README.md)). A skip of `parity-switches` or of `tests:fork` needs the lead's authorisation for that push and is never available for the trunk.
 
-**Status:** `open`.
+**Status:** `fixed`: security entries record reviewed non-model-visible hunks, and the check reads them.
