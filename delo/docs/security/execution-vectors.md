@@ -37,7 +37,7 @@ The rows are the guarantees a person reasonably expects of a native workspace. "
 | A confined command cannot read the rest of your account (`~/.ssh`, `~/.aws`, `/etc`) | no | no, as stock | no |
 | A confined command cannot reach the network | no | no, as stock | no |
 | A confined command cannot connect to the Docker socket | no | yes on bwrap and Seatbelt for the active context's socket; no on Landlock and Windows | no |
-| A confined command cannot start a Windows program through WSL interop | no | yes under WSL on bwrap; on Landlock every confined command is refused while interop exists | no |
+| A confined command cannot start a Windows program through WSL's interop sockets | no | yes under WSL on bwrap; on Landlock every confined command is refused while interop exists | no |
 | A program a confined command names in a repository's git settings, attributes or hooks never runs outside the sandbox when the harness summarises the turn's changed files | no | yes | not applicable: the change summary is not mounted |
 | `web_fetch` refuses loopback, link-local and private-network targets | no | yes | no |
 | A model-authored write to instructions needs an approval that names the effect | no | through the file tools only; a shell command or PTC code writes without it | no |
