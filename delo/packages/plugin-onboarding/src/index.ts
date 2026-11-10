@@ -17,7 +17,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { readSetupRecord } from './answers.ts'
 import { ADD_WORKSPACE_PATH, SETUP_RECORD_PATH } from './wire.ts'
-import { addWorkspace } from './workspace-route.ts'
+import { addWorkspace, arrivedOnLoopback } from './workspace-route.ts'
 
 export { SETUP_ANSWERS_FILENAME, MAX_ANSWERS_BYTES, readSetupRecord } from './answers.ts'
 export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_LIMIT, type OnboardingSettings } from './config.ts'
@@ -41,6 +41,11 @@ export function apply(ctx: Context): void {
   ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
   // Without the registry the route is absent and the studio's request fails, which its folder choice reports.
   ctx.inject(['workspaceRegistry'], (child) => {
+    // Before the body is read: a reach or remote session never adds a workspace.
+    child.on('connection/request', async (request, response, next) => {
+      if (request.url?.split('?', 1)[0] === ADD_WORKSPACE_PATH && !arrivedOnLoopback(request, response)) return
+      await next()
+    })
     child.connection.fetch.register({
       path: ADD_WORKSPACE_PATH,
       methods: ['POST'],

@@ -5,7 +5,9 @@
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Context } from '@deepseek-ai/cordis'
+import { REQUEST_LISTENER } from '@delo/home-auth'
 import type { WorkspaceLocationProblem } from '@delo/home'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
 import {
@@ -60,7 +62,7 @@ async function mount(registry: ReturnType<typeof registryFake> | null = registry
     if (route === undefined) throw new Error('no route')
     return route.fetch(new Request('http://harness.test/api', { method: 'POST', body, headers: { 'content-type': 'application/json' } }))
   }
-  return { routes, registry: registry ?? registryFake(), warn, post, add: (path: string) => post(JSON.stringify({ path })) }
+  return { ctx, routes, registry: registry ?? registryFake(), warn, post, add: (path: string) => post(JSON.stringify({ path })) }
 }
 
 describe('the add-workspace route', () => {
@@ -154,5 +156,44 @@ describe('the add-workspace route', () => {
     expect(() => AddWorkspaceAnswer.parse({ result: 'refused', problem: 'elsewhere' })).toThrow()
     expect(() => AddWorkspaceAnswer.parse({ result: 'added' })).toThrow()
     expect(() => AddWorkspaceAnswer.parse({ result: 'failed', reason: 'x' })).toThrow()
+  })
+})
+
+describe('the add-workspace route on a remote session', () => {
+  /** A request as the Connection's `connection/request` waterfall receives it, and the response it is answered with. */
+  function arrival(url: string | undefined, host: string | undefined, listener?: string) {
+    const request = { url, headers: { host }, socket: {}, ...(listener === undefined ? {} : { [REQUEST_LISTENER]: listener }) } as unknown as IncomingMessage
+    const response = { writeHead: vi.fn(), end: vi.fn() }
+    return { request, response, served: response as unknown as ServerResponse }
+  }
+
+  it('refuses a request that a reach listener forwarded with 403 LOOPBACK_ONLY, and goes no further', async () => {
+    const { ctx } = await mount()
+    const { request, response, served } = arrival(ADD_WORKSPACE_PATH, '127.0.0.1:3080', 'tailnet')
+    const next = vi.fn(async () => {})
+    await ctx.waterfall('connection/request', request, served, next)
+    expect(next).not.toHaveBeenCalled()
+    expect(response.writeHead).toHaveBeenCalledWith(403, expect.objectContaining({ 'content-type': 'application/json' }))
+    expect(JSON.parse(response.end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_ONLY' })
+  })
+
+  it('refuses a request under a Host that is no loopback address, also when no listener stamped it', async () => {
+    const { ctx } = await mount()
+    for (const host of ['studio.example', undefined]) {
+      const { request, response, served } = arrival(`${ADD_WORKSPACE_PATH}?x=1`, host)
+      const next = vi.fn(async () => {})
+      await ctx.waterfall('connection/request', request, served, next)
+      expect([next.mock.calls.length, response.writeHead.mock.calls[0]?.[0]]).toEqual([0, 403])
+    }
+  })
+
+  it('lets the loopback listener through, and leaves every other path and a request without a path alone', async () => {
+    const { ctx } = await mount()
+    for (const [url, host, listener] of [[ADD_WORKSPACE_PATH, 'localhost:3080', undefined], ['/api/other', 'studio.example', 'tailnet'], [undefined, 'studio.example', 'tailnet']] as const) {
+      const { request, response, served } = arrival(url, host, listener)
+      const next = vi.fn(async () => {})
+      await ctx.waterfall('connection/request', request, served, next)
+      expect([next.mock.calls.length, response.writeHead.mock.calls.length]).toEqual([1, 0])
+    }
   })
 })

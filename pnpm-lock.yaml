@@ -2410,6 +2410,9 @@ importers:
       '@delo/home':
         specifier: workspace:*
         version: link:../home
+      '@delo/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       zod:
         specifier: 4.4.3
         version: 4.4.3

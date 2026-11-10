@@ -5,10 +5,33 @@
  * harness the same directory as `DSH_HOME` and `DELO_HOME`.
  * @module @delo/plugin-onboarding/workspace-route
  */
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { HomeAuth, isLoopbackHost } from '@delo/home-auth'
 import { resolveDeloHome, workspaceLocationHomes, workspaceLocationProblem, type WorkspaceLocationProblem } from '@delo/home'
 // Type-only: the ctx.workspaceRegistry merge.
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import { AddWorkspaceRequest, MAX_ADD_BODY_BYTES, type AddWorkspaceAnswer } from './wire.ts'
+
+/** The code of the refusal a request that did not arrive on the loopback listener is answered with. */
+export const LOOPBACK_ONLY_CODE = 'LOOPBACK_ONLY'
+
+/** The sentence that refusal carries. */
+const LOOPBACK_ONLY_SENTENCE = 'Add a workspace on the home\'s own computer, at the loopback listener, or through SSH port forwarding to it; this route answers no other address'
+
+/**
+ * Refuse a request to add a workspace that did not arrive on the loopback listener under a loopback `Host`, before its
+ * body is read: what a workspace holds is what the model may write, so only the person at the computer chooses it. A
+ * reach listener's dispatcher stamps the request it forwards, which `HomeAuth.arrivalOf` reads as the device routes do.
+ * @param request - the request the Connection received.
+ * @param response - the response, answered 403 with {@link LOOPBACK_ONLY_CODE} when the arrival is not loopback.
+ * @returns whether the request may go on to the route.
+ */
+export function arrivedOnLoopback(request: IncomingMessage, response: ServerResponse): boolean {
+  if (HomeAuth.arrivalOf(request).listener === 'loopback' && isLoopbackHost(request.headers.host)) return true
+  response.writeHead(403, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+  response.end(JSON.stringify({ error: LOOPBACK_ONLY_CODE, message: LOOPBACK_ONLY_SENTENCE }))
+  return false
+}
 
 /** What the route needs from the harness. */
 export interface AddWorkspaceDeps {

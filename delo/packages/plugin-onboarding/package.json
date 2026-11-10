@@ -43,6 +43,7 @@
   "dependencies": {
     "@delo/contract-setup-answers": "workspace:*",
     "@delo/home": "workspace:*",
+    "@delo/home-auth": "workspace:*",
     "zod": "4.4.3"
   },
   "peerDependencies": {

@@ -1,6 +1,6 @@
 /**
  * What both halves share: the exact Connection Fetch routes under `/api`, which the harness serves only to an
- * owner peer, and their JSON messages. Browser-safe, so the studio half imports it.
+ * owner peer, and their JSON messages. The add-workspace route also answers only a request that arrived on the loopback listener (403 `LOOPBACK_ONLY` otherwise). Browser-safe, so the studio half imports it.
  * @module @delo/plugin-onboarding/wire
  */
 import { z } from 'zod'
