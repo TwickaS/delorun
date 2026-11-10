@@ -41,6 +41,7 @@
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
   "dependencies": {
+    "@delo/contract-setup-answers": "workspace:*",
     "zod": "4.4.3"
   },
   "peerDependencies": {

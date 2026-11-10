@@ -10,7 +10,7 @@ import {
 } from '../src/index.ts'
 import { PENDING_STARTERS, THEME_ROW_ID } from '../src/config.ts'
 import { THEME_ROW_ID as THEME_ROW } from '../../plugin-theme/src/config.ts'
-import { REACH_OPTIONS } from '../../contract-setup-answers/src/index.ts'
+import { REACH_OPTIONS, SECTION_STATUSES } from '../../contract-setup-answers/src/index.ts'
 
 /** A marker no served field or log line may contain. */
 const SECRET = 'sk-test-secret-marker-7f3a'
@@ -23,7 +23,7 @@ async function profile(file?: string | { readonly raw: string }): Promise<string
   return directory
 }
 
-const answers = (extra: object = {}) => JSON.stringify({ version: 1, schemaVersion: 1, reach: { option: 'none', identityFactor: null }, ...extra })
+const answers = (extra: object = {}) => JSON.stringify({ schemaVersion: 2, reach: { option: 'none', identityFactor: null }, sections: [], ...extra })
 
 /** The configuration as plain values: each volatile field read. */
 function plain(value: object | undefined): OnboardingSettings {
@@ -75,9 +75,9 @@ describe('the setup record', () => {
   })
 
   it('says reach is not set up for the none option and set up for every other option setup offers', async () => {
-    expect(await readSetupRecord(await profile(answers()), vi.fn())).toEqual({ reachSetUp: false })
+    expect(await readSetupRecord(await profile(answers()), vi.fn())).toEqual({ sections: [], reachSetUp: false })
     for (const option of REACH_OPTIONS.filter(each => each !== 'none')) {
-      expect(await readSetupRecord(await profile(answers({ reach: { option, identityFactor: 'passkey' } })), vi.fn())).toEqual({ reachSetUp: true })
+      expect(await readSetupRecord(await profile(answers({ reach: { option, identityFactor: 'passkey' } })), vi.fn())).toEqual({ sections: [], reachSetUp: true })
     }
   })
 
@@ -86,23 +86,31 @@ describe('the setup record', () => {
     expect(source).toContain(`export const ANSWERS_FILENAME = '${SETUP_ANSWERS_FILENAME}'`)
   })
 
-  it('carries the sections the record lists', async () => {
-    expect(await readSetupRecord(await profile(answers({ sections: ['reach', 'key-and-model'] })), vi.fn())).toEqual({
-      sections: ['reach', 'key-and-model'], reachSetUp: false,
-    })
+  it('carries the sections the terminal showed or asked, and leaves out the ones it skipped', async () => {
+    const sections = [{ id: 'privacy', status: 'seen' }, { id: 'key', status: 'answered' }, { id: 'reach', status: 'skipped' }]
+    expect(await readSetupRecord(await profile(answers({ sections })), vi.fn())).toEqual({ sections: ['privacy', 'key'], reachSetUp: false })
   })
 
-  it('ignores a sections list it does not read, with a warning, and keeps the reach answer', async () => {
+  it('reads the section statuses setup writes', () => {
+    expect(SECTION_STATUSES).toEqual(['seen', 'answered', 'skipped'])
+  })
+
+  it('ignores a sections record it does not read, with a warning, and keeps the reach answer', async () => {
     const warn = vi.fn()
-    for (const sections of ['reach', [1], ['Has Capital'], ['a'.repeat(41)], Array.from({ length: 33 }, () => 'a')]) {
+    const row = (id: string, status = 'answered') => ({ id, status })
+    for (const sections of ['reach', ['reach'], [1], [row('Has Capital')], [row('a'.repeat(41))], [row('reach', 'maybe')], Array.from({ length: 33 }, () => row('a'))]) {
       expect(await readSetupRecord(await profile(answers({ sections })), warn)).toEqual({ reachSetUp: false })
     }
-    expect(warn).toHaveBeenCalledTimes(5)
+    expect(warn).toHaveBeenCalledTimes(7)
+  })
+
+  it('reads a record that carries no sections field as covering nothing by name', async () => {
+    expect(await readSetupRecord(await profile(JSON.stringify({ schemaVersion: 2, reach: { option: 'none', identityFactor: null } })), vi.fn())).toEqual({ reachSetUp: false })
   })
 
   it('tolerates fields it does not use and never serves them', async () => {
     const record = await readSetupRecord(await profile(answers({ modelProvider: { credential: { name: SECRET } }, extra: SECRET })), vi.fn())
-    expect(record).toEqual({ reachSetUp: false })
+    expect(record).toEqual({ sections: [], reachSetUp: false })
     expect(JSON.stringify(record)).not.toContain(SECRET)
   })
 
@@ -189,7 +197,7 @@ async function mount(directory: string | undefined) {
 
 describe('the route', () => {
   it('is one exact GET route that serves the record uncached', async () => {
-    const { routes, route, get } = await mount(await profile(answers({ reach: { option: 'tailscale-private' }, sections: ['reach'] })))
+    const { routes, route, get } = await mount(await profile(answers({ reach: { option: 'tailscale-private' }, sections: [{ id: 'reach', status: 'answered' }] })))
     expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH])
     expect(SETUP_RECORD_PATH).toBe('/api/deloOnboarding.setupRecord')
     expect([route.methods, route.requestBody]).toEqual([['GET'], 'buffered'])
@@ -205,7 +213,7 @@ describe('the route', () => {
   })
 
   it('never serves or logs a hostile file’s other fields, and still answers', async () => {
-    const hostile = JSON.stringify({ reach: { option: 'tailscale-funnel', note: SECRET }, sections: ['reach', { x: SECRET }], modelProvider: { credential: SECRET }, __proto__: { polluted: SECRET } })
+    const hostile = JSON.stringify({ reach: { option: 'tailscale-funnel', note: SECRET }, sections: [{ id: 'reach', status: 'answered' }, { id: SECRET, status: SECRET }], modelProvider: { credential: SECRET }, __proto__: { polluted: SECRET } })
     const { get, warn } = await mount(await profile(hostile))
     const response = await get()
     expect(response.status).toBe(200)
@@ -228,9 +236,9 @@ describe('the route', () => {
   it('reads the file on each request, so a record written after the studio opened shows at the next read', async () => {
     const directory = await profile(answers())
     const { get } = await mount(directory)
-    expect(await (await get()).json()).toEqual({ reachSetUp: false })
-    await writeFile(join(directory, SETUP_ANSWERS_FILENAME), answers({ reach: { option: 'self-hosted-relay', identityFactor: 'oidc' } }))
-    expect(await (await get()).json()).toEqual({ reachSetUp: true })
+    expect(await (await get()).json()).toEqual({ sections: [], reachSetUp: false })
+    await writeFile(join(directory, SETUP_ANSWERS_FILENAME), answers({ reach: { option: 'tailscale-private', identityFactor: 'tailnet' } }))
+    expect(await (await get()).json()).toEqual({ sections: [], reachSetUp: true })
   })
 
   it('asks the settings service for no generated form, and gives the request back with the plugin', async () => {

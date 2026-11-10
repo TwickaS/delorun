@@ -1,13 +1,15 @@
 /**
- * Reads the terminal setup's answers record for the studio. The file is data from the profile directory, so only the
- * fields onboarding uses are validated, the rest is never read into anything served, and a reason that is logged
+ * Reads the terminal setup's answers record for the studio: whether reach is set up, and which sections the terminal
+ * showed or asked (`sections`, schema version 2, rows of `{ id, status }`; a `skipped` row covers nothing). The file is
+ * data from the profile directory, so only the fields onboarding uses are validated, the rest is never read into anything served, and a reason that is logged
  * never quotes the file.
  * @module @delo/plugin-onboarding/answers
  */
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { NO_RECORD, SectionNames, type SetupRecord } from './wire.ts'
+import { SECTION_STATUSES, type SectionStatus } from '@delo/contract-setup-answers'
+import { MAX_SECTIONS, NO_RECORD, SECTION_NAME, type SetupRecord } from './wire.ts'
 
 /** The record's file name inside the CLI profile's directory, as `delorun setup` writes it. */
 export const SETUP_ANSWERS_FILENAME = 'setup-answers.json'
@@ -17,6 +19,12 @@ export const MAX_ANSWERS_BYTES = 64 * 1024
 
 /** The reach option that means reach is not set up. */
 const REACH_OFF = 'none'
+
+/** The statuses of a section the terminal put in front of the person: shown, or asked and answered. A `skipped` section took its default unseen. */
+const COVERED: readonly SectionStatus[] = ['seen', 'answered']
+
+/** The `sections` record of setup's answers document (schema version 2): one row per section the run showed, in order. */
+const SectionRecords = z.array(z.object({ id: z.string().regex(SECTION_NAME), status: z.enum(SECTION_STATUSES) })).max(MAX_SECTIONS)
 
 /** The fields used; other fields are tolerated and ignored. */
 const Used = z.object({
@@ -70,10 +78,10 @@ export async function readSetupRecord(directory: string | undefined, warn: (mess
   }
   const reachSetUp = used.data.reach.option !== REACH_OFF
   if (used.data.sections === undefined) return { reachSetUp }
-  const sections = SectionNames.safeParse(used.data.sections)
+  const sections = SectionRecords.safeParse(used.data.sections)
   if (!sections.success) {
     warn(`${SETUP_ANSWERS_FILENAME} lists sections in a form onboarding does not read; it ignores the list`)
     return { reachSetUp }
   }
-  return { sections: sections.data, reachSetUp }
+  return { sections: sections.data.filter(row => COVERED.includes(row.status)).map(row => row.id), reachSetUp }
 }

@@ -2254,6 +2254,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delo/contract-setup-answers':
+        specifier: workspace:*
+        version: link:../contract-setup-answers
       zod:
         specifier: 4.4.3
         version: 4.4.3

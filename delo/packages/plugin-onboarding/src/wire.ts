@@ -18,8 +18,8 @@ export const MAX_SECTIONS = 32
 export const SectionNames = z.array(z.string().regex(SECTION_NAME)).max(MAX_SECTIONS)
 
 /**
- * What the terminal setup recorded, reduced to what onboarding uses: the sections the person saw, answered or
- * skipped when the record lists them, and whether reach is set up.
+ * What the terminal setup recorded, reduced to what onboarding uses: the ids of the sections the terminal showed or
+ * asked when the record lists them, and whether reach is set up.
  */
 export const SetupRecord = z.strictObject({
   sections: SectionNames.optional(),
