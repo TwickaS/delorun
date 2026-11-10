@@ -197,6 +197,14 @@ describe('node:net address predicates', () => {
   })
 })
 
+describe('node:net BlockList', () => {
+  it('accepts rules while a module loads and refuses to answer a check', () => {
+    const list = new net.BlockList()
+    expect(() => { list.addSubnet(); list.addAddress() }).not.toThrow()
+    expect(() => list.check()).toThrow(/BlockList.check is not available/)
+  })
+})
+
 describe('node:os', () => {
   it('reports the virtual platform identity and the VFS directories', () => {
     expect([os.EOL, os.tmpdir(), os.homedir()]).toEqual(['\n', DSH_TMP, DSH_HOME])

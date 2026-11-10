@@ -1,7 +1,7 @@
 /**
  * `node:net` for the worker. Nothing accepts or dials a socket here: the fake
  * HTTP server never emits `upgrade`, so only the address predicates and a
- * constructible-but-loud Socket are reachable.
+ * constructible-but-loud Socket and BlockList are reachable.
  */
 
 const IPV4 = /^(\d{1,3}\.){3}\d{1,3}$/
@@ -28,6 +28,30 @@ export class Socket {
   /** Teardown is accepted so disposal paths stay quiet. */
   destroy(): void {
     // No resource was ever held.
+  }
+}
+
+/**
+ * Constructible placeholder: `client-connection` builds its loopback list while it loads, which the worker's
+ * preview does too, but nothing in the worker has a reach listener whose host it could check.
+ */
+export class BlockList {
+  /** Rules are accepted so a module that fills a list while it loads still loads. */
+  addAddress(): void {
+    // No rule is kept: `check` refuses.
+  }
+
+  /** Counterpart of {@link addAddress}. */
+  addSubnet(): void {
+    // No rule is kept: `check` refuses.
+  }
+
+  /**
+   * A list that kept no rules cannot answer.
+   * @returns Never — it throws naming the unavailable member.
+   */
+  check(): never {
+    throw new Error('web-preview: node:net BlockList.check is not available in the worker host')
   }
 }
 
@@ -84,7 +108,7 @@ export const __esModule = true
  * module's own class: Node declares it as a duplex stream, and a placeholder
  * that holds no connection has no stream state to expose.
  */
-type NodeFace = Partial<Omit<typeof import('node:net'), 'Socket'>> & Record<'Socket', unknown>
+type NodeFace = Partial<Omit<typeof import('node:net'), 'Socket' | 'BlockList'>> & Record<'Socket' | 'BlockList', unknown>
 
 /** CommonJS default export: the members `require()` hands a caller of this module. */
-export default { Socket, isIP, isIPv4, isIPv6, createServer, connect } satisfies NodeFace
+export default { Socket, BlockList, isIP, isIPv4, isIPv6, createServer, connect } satisfies NodeFace
