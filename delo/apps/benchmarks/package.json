@@ -14,8 +14,10 @@
     "@delo/logs": "workspace:*",
     "@delo/release": "workspace:*",
     "@delo/update": "workspace:*",
-    "playwright": "^1.49.0",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
   },
   "delo": {
     "state": "shipped"

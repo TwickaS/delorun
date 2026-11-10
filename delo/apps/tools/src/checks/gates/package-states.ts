@@ -28,8 +28,12 @@ export type PackageState = (typeof PACKAGE_STATES)[number]
 /** The workspace directories whose entries must record a state. */
 const WORKSPACE_DIRS = ['delo/packages', 'delo/apps'] as const
 
-/** The directories whose packages the user installs or the repository releases; reachability starts here. */
+/**
+ * The directories whose packages the user installs or the repository releases or runs as its own tooling, such as the
+ * check runner and the wait-time benchmarks; reachability starts here.
+ */
 export const ROOT_DIRS = [
+  'delo/apps/benchmarks',
   'delo/apps/cli',
   'delo/apps/npm-launcher',
   'delo/apps/install',
