@@ -22,6 +22,8 @@ export const BudgetFile = z.strictObject({
   schema: z.literal(BUDGETS_SCHEMA),
   /** How the ceilings were chosen, for a reader of the file. */
   rule: z.string().min(1),
+  /** Where and under what load the ceilings were measured, so a reader knows how far to trust them. */
+  measured: z.string().min(1).optional(),
   suites: z.record(z.string().min(1), z.record(z.string().min(1), ceilings)),
 })
 

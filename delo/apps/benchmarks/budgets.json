@@ -1,5 +1,44 @@
 {
   "schema": "delo.benchmark-budgets/1",
   "rule": "Each ceiling is four times the median measured on the recorded machine and load, at least one second, rounded up to two significant digits; see delo/docs/performance/README.md.",
-  "suites": {}
+  "measured": "Provisional, not yet measured on a quiet machine: the cli and start ceilings come from one run of 2026-11-10 at 13:34 UTC on a shared machine running about a dozen other lanes (load average about 20, storage pressure up to 58%). The other suites have no ceilings yet.",
+  "suites": {
+    "cli": {
+      "installed": {
+        "node-start": 1000,
+        "launcher-only": 1000,
+        "runtime-version-direct": 1600,
+        "version:first-output": 40000,
+        "version:exit": 40000,
+        "status-stopped:first-output": 67000,
+        "status-stopped:exit": 68000,
+        "doctor:first-output": 69000,
+        "doctor:exit": 69000,
+        "verify-offline:first-output": 120000,
+        "verify-offline:exit": 120000,
+        "trash-list:first-output": 46000,
+        "trash-list:exit": 46000,
+        "recover-status:first-output": 47000,
+        "recover-status:exit": 48000,
+        "plugin-list:exit": 57000,
+        "logs:first-output": 42000,
+        "logs:exit": 42000,
+        "status-running:first-output": 65000,
+        "status-running:exit": 65000,
+        "trash-list-running:first-output": 58000,
+        "trash-list-running:exit": 58000
+      }
+    },
+    "start": {
+      "installed": {
+        "start-cold": 74000,
+        "start-cold:studio": 74000,
+        "stop": 36000,
+        "start-warm": 41000,
+        "start-warm:studio": 41000,
+        "stop-now": 35000,
+        "restart": 120000
+      }
+    }
+  }
 }
