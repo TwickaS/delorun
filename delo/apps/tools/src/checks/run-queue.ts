@@ -40,16 +40,17 @@ export interface QueueHost {
   guard(release: () => void): void
 }
 
-/** The most memory a run of unexclusive, non-merge checks may plan and still take no slots. */
-export const LIGHT_MEMORY_BYTES = 2 * 1024 ** 3
+/** The most memory a run of light checks may plan and still take no slots. */
+export const LIGHT_MEMORY_BYTES = 4 * 1024 ** 3
 /**
- * Whether a plan is small enough to run without taking slots: no check runs alone or only at the merge, and the
- * checks' memory sums to at most 2 GiB. An empty plan is light.
+ * Whether a plan is small enough to run without taking slots: every check keeps one CPU busy and neither runs alone nor
+ * only at the merge, and the checks' memory sums to at most 4 GiB, as the repository gates, the boundary check and the JSDoc
+ * rules do. An empty plan is light.
  * @param plan - the checks the run will start.
  * @returns true when the run takes no slots.
  */
-export function isLightPlan(plan: readonly Pick<Check, 'exclusive' | 'mergeOnly' | 'memoryBytes'>[]): boolean {
-  return plan.every(check => check.exclusive !== true && check.mergeOnly !== true) && plan.reduce((sum, check) => sum + check.memoryBytes, 0) <= LIGHT_MEMORY_BYTES
+export function isLightPlan(plan: readonly Pick<Check, 'exclusive' | 'mergeOnly' | 'memoryBytes' | 'cpus'>[]): boolean {
+  return plan.every(check => check.cpus <= 1 && check.exclusive !== true && check.mergeOnly !== true) && plan.reduce((sum, check) => sum + check.memoryBytes, 0) <= LIGHT_MEMORY_BYTES
 }
 
 /**

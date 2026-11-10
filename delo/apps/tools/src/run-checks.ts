@@ -59,7 +59,7 @@ import { cacheUse, contentId, createPassCache, type PassCache, type SharedUse } 
 import { FUNDAMENTALS_INPUTS, GATES } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, removeScratch, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
-import { checksToRun, fitToGrant, runDemand } from './checks/demand.ts'
+import { checksToRun, fitToGrant, runDemand, withoutIdleNeeds } from './checks/demand.ts'
 import { isLightPlan, gatePriority } from './checks/run-queue.ts'
 import { machineBudget, nodeSlotHost, slotPaths } from './checks/slot-host.ts'
 import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, readSlots, takeSlots, type SlotGrant } from './checks/slots.ts'
@@ -634,6 +634,9 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
 
   // Heavy runs share the machine's slots, first come, first served (`checks/slots.ts`); a light plan, the pre-flight and a
   // plan whose every check a stored pass serves take none.
+  // A check planned only as a need of checks that stored passes serve does not run, and the run asks for slots only for
+  // what will really run.
+  plan = withoutIdleNeeds(plan, checksToRun(plan, cache))
   const running = checksToRun(plan, cache)
   const slotBudget = machineBudget(cpus, memory, env)
   const inherited = grantFromEnv(env[GRANT_ENV])

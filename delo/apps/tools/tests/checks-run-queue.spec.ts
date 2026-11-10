@@ -35,14 +35,15 @@ describe('processGuard', () => {
 })
 
 describe('isLightPlan', () => {
-  const check = (memoryGiB: number, flags: { exclusive?: boolean, mergeOnly?: true } = {}) => ({ memoryBytes: memoryGiB * GIB, ...flags })
+  const check = (memoryGiB: number, flags: { exclusive?: boolean, mergeOnly?: true, cpus?: number } = {}) => ({ memoryBytes: memoryGiB * GIB, cpus: 1, ...flags })
   it.each([
     ['gates:docs alone', [check(0.5)], true],
     ['boundary and a gate', [check(0.3), check(0.5)], true],
-    ['exactly 2 GiB', [check(2)], true],
-    ['over 2 GiB in sum', [check(1), check(1), check(0.1)], false],
-    ['tests:fork (workers times memory)', [check(8)], false],
-    ['build:artifacts', [check(4)], false],
+    ['the range gates, the JSDoc rules and the boundary check', [check(0.5), check(0.5), check(0.5), check(0.5), check(0.5), check(1.5)], true],
+    ['exactly 4 GiB', [check(4)], true],
+    ['over 4 GiB in sum', [check(2), check(2), check(0.1)], false],
+    ['tests:fork (workers times memory)', [check(8, { cpus: 20 })], false],
+    ['typecheck:upstream, which keeps two CPUs busy', [check(2.5, { cpus: 2 })], false],
     ['an exclusive check', [check(0.6, { exclusive: true })], false],
     ['parity-replay (merge only, exclusive)', [check(0.6, { exclusive: true, mergeOnly: true })], false],
     ['a small merge-only check', [check(0.1, { mergeOnly: true })], false],
@@ -52,6 +53,6 @@ describe('isLightPlan', () => {
   })
 
   it('has the limit it documents', () => {
-    expect(LIGHT_MEMORY_BYTES).toBe(2 * GIB)
+    expect(LIGHT_MEMORY_BYTES).toBe(4 * GIB)
   })
 })

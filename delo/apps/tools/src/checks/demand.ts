@@ -44,6 +44,28 @@ export function checksToRun<T extends WithUnits>(plan: readonly T[], cache: Pick
 }
 
 /**
+ * A plan without the checks that were planned only as another check's need when no check that would run needs them, such
+ * as the native addon's build beside a fork suite every package of which a stored pass serves: no result depends on them.
+ * @param plan - the plan.
+ * @param running - the checks of the plan that will run, from {@link checksToRun}.
+ * @returns the plan, in plan order.
+ */
+export function withoutIdleNeeds<T extends Check & { readonly reason: string }>(plan: readonly T[], running: readonly T[]): T[] {
+  const runningIds = new Set(running.map(check => check.id))
+  const byId = new Map(plan.map(check => [check.id, check]))
+  const needed = new Set<string>()
+  const visit = (check: T | undefined): void => {
+    for (const need of check?.needs ?? []) {
+      if (needed.has(need)) continue
+      needed.add(need)
+      visit(byId.get(need))
+    }
+  }
+  for (const check of running) if (!check.reason.startsWith('needed by ')) visit(check)
+  return plan.filter(check => !runningIds.has(check.id) || !check.reason.startsWith('needed by ') || needed.has(check.id))
+}
+
+/**
  * What a run asks for.
  * @param running - the checks that will run, from {@link checksToRun}; not empty.
  * @param slots - the machine's slots.

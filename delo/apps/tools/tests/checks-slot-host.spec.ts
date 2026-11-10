@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PassCache } from '../src/checks/cache.ts'
-import { checksToRun, diskHeavy, fitToGrant, MIN_RUN_SLOTS, runDemand } from '../src/checks/demand.ts'
+import { checksToRun, diskHeavy, fitToGrant, MIN_RUN_SLOTS, runDemand, withoutIdleNeeds } from '../src/checks/demand.ts'
 import { ioPressure } from '../src/checks/machine.ts'
 import type { Planned } from '../src/checks/plan.ts'
 import { machineBudget, nodeSlotHost, processAlive, slotPaths } from '../src/checks/slot-host.ts'
@@ -66,6 +66,24 @@ describe('the machine\'s budget', () => {
 })
 
 describe('what a run asks for', () => {
+  it('drops a check planned only as a need when no check that will run needs it, and keeps every other check', () => {
+    const native = check('generate:native', { reason: 'needed by tests:fork' })
+    const build = check('build:artifacts', { reason: 'needed by tests:fork', needs: [] })
+    const delo = check('build:delo', { reason: 'needed by tests:fork', needs: ['build:artifacts'] })
+    const fork = check('tests:fork', { needs: ['generate:native', 'build:delo'] })
+    const gate = check('gates:dco')
+    const plan = [native, build, delo, fork, gate]
+    // The suite is served from stored passes: its needs do not run.
+    expect(withoutIdleNeeds(plan, [native, build, delo, gate]).map(each => each.id)).toEqual(['tests:fork', 'gates:dco'])
+    // The suite runs: so do its needs, and their needs.
+    expect(withoutIdleNeeds(plan, plan).map(each => each.id)).toEqual(['generate:native', 'build:artifacts', 'build:delo', 'tests:fork', 'gates:dco'])
+    // Two checks that need one build, and a need outside the plan, are walked once each.
+    const snapshots = check('tests:snapshots', { needs: ['generate:native', 'build:delo', 'gone'] })
+    expect(withoutIdleNeeds([...plan, snapshots], [native, build, delo, fork, snapshots]).map(each => each.id)).toEqual(['generate:native', 'build:artifacts', 'build:delo', 'tests:fork', 'gates:dco', 'tests:snapshots'])
+    // A need that a stored pass serves is kept, to report it.
+    expect(withoutIdleNeeds(plan, [gate]).map(each => each.id)).toEqual(['generate:native', 'build:artifacts', 'build:delo', 'tests:fork', 'gates:dco'])
+  })
+
   it('names the disk-heavy checks', () => {
     expect(['build:artifacts', 'generate:native', 'docs-site', 'tests:fork', 'tests:fork:integration', 'jsdoc', 'tests:snapshots'].map(id => diskHeavy(check(id, { group: id === 'build:artifacts' ? 'generate' : id.split(':')[0] ?? id })))).toEqual([true, true, true, true, true, false, false])
   })
