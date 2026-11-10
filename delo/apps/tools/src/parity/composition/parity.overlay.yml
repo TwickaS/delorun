@@ -116,6 +116,7 @@
         logsHome: !!js dshHomePath()
       disabled: true
 
+- insert:
     - id: delo-home-auth
       name: '@delo/home-auth'
       config:

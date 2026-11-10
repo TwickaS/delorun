@@ -54,12 +54,14 @@
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-official-bundles": "workspace:*",
     "@delo/contract-setup-answers": "workspace:*",
+    "@delo/home-auth": "workspace:*",
     "@delo/plugin-fetch-guard": "workspace:*",
     "@delo/plugin-instruction-consent": "workspace:*",
     "@delo/plugin-mcp-consent": "workspace:*",
     "@delo/plugin-permission-defaults": "workspace:*",
     "@delo/plugin-schedule-consent": "workspace:*",
-    "@delo/plugin-trash": "workspace:*"
+    "@delo/plugin-trash": "workspace:*",
+    "@delo/reach": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

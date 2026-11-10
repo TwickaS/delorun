@@ -70,6 +70,8 @@ The browser half ([`src/client/index.ts`](src/client/index.ts)) also registers D
 
 Setup and other surfaces open the section with `ctx.settingsShell.openSection('delo-privacy')`. Upstream's own **Settings → General** switch for session-log upload edits the same row without the dialog; [`@delo/plugin-settings-layout`](../plugin-settings-layout/README.md) hides it in Delo's look, and the stock look shows it. The section's copy is in English and Chinese.
 
+The same row registers the **Devices** section (`delo-devices`, right after Privacy, [`src/client/DevicesSection.tsx`](src/client/DevicesSection.tsx)): the reach state, the approved devices with a confirmed Remove, and "Add a device", which opens the home's approval window and reads the pending requests every two seconds while it is open, all through same-origin requests ([`src/client/devices-api.ts`](src/client/devices-api.ts), whose `readReachStatus` onboarding imports). A profile without reach shows one line instead, and each `LOOPBACK_REQUIRED` refusal a remote studio receives shows in place as "This needs you at your computer" with the action. On a remote page, the row also wraps the `approval/request` answerers and shows a `shell.overlay` notice after the page answers `allowed-once` to a full-access prompt; it sees that answer only when it registered before upstream's approval answerer, because `ctx.remote.$on` keeps activation order and has no way to go first.
+
 ## Tests
 
 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/bundle-local` runs the package's specs, which import upstream's built packages and so need `pnpm run build:artifacts`; Delo's check runner starts it when the build is missing.

@@ -1,0 +1,555 @@
+// @vitest-environment jsdom
+/**
+ * The Devices section reads the reach state and the device list from the home, adds a device through the approval
+ * window, removes a device after confirmation, and says in place when the home needs the person at its own computer.
+ * On a remote studio page, a full-access grant answered there brings the notice that it must be answered at the home.
+ */
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { Context } from '@deepseek-ai/cordis'
+import { bindSnapshotSelector, makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
+import {
+  apply, applyRemoteNotice, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, inject, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER,
+  readReachStatus, REMOTE_NOTICE_ID,
+} from '../src/client/index.ts'
+import {
+  approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
+  readDevices, readPendingDevices, removeDevice, type ApprovalRequestId, type DeviceId, type HostFetch,
+} from '../src/client/devices-api.ts'
+import { en, zh } from '../src/client/devices-locales.ts'
+import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
+import { createRemoteNoticeSource, isLoopbackHostname, RemoteNotice, type RemoteNoticeProps } from '../src/client/RemoteNotice.tsx'
+
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
+
+/** One scripted Host answer: a JSON body, a raw text body, or a request that never completes. */
+type Answer = { status: number; body?: unknown; text?: string } | 'unreachable' | Promise<{ status: number; body: unknown }>
+
+/** A route key: the method and the path. */
+type RouteKey = `${'GET' | 'POST'} ${string}`
+
+/** One request the fake Host received. */
+interface Received {
+  readonly key: RouteKey
+  readonly init: RequestInit | undefined
+  readonly body: unknown
+}
+
+/**
+ * A fake home answering each route with the latest scripted answer; an unscripted route answers 404 as the Host's
+ * router does.
+ * @param script - the answers by route.
+ * @returns the fake `fetch`, the received requests and the script, which a test changes between steps.
+ */
+function fakeHost(script: Partial<Record<RouteKey, Answer>> = {}) {
+  const received: Received[] = []
+  const fetch: HostFetch = async (input, init) => {
+    const key: RouteKey = `${init?.method === 'POST' ? 'POST' : 'GET'} ${input}`
+    received.push({ key, init, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined })
+    const scripted = script[key] ?? { status: 404, body: { error: 'NOT_FOUND', message: 'No such route' } }
+    if (scripted === 'unreachable') throw new TypeError('Failed to fetch')
+    const answer = await scripted
+    return new Response('text' in answer && answer.text !== undefined ? answer.text : JSON.stringify(answer.body), { status: answer.status })
+  }
+  const count = (key: RouteKey): number => received.filter(request => request.key === key).length
+  return { fetch, received, script, count }
+}
+
+const NOW = Date.UTC(2026, 10, 10, 12, 0, 0)
+const DEVICE_A = {
+  id: 'a'.repeat(43), label: 'Pixel 9', platform: 'Android', address: 'https://home.example.ts.net',
+  approvedAt: NOW - 86_400_000, approvedBy: 'local', lastSignInAt: NOW - 3_600_000,
+}
+const DEVICE_B = {
+  id: 'b'.repeat(43), label: 'Work laptop', platform: 'macOS', address: 'https://home.example.ts.net',
+  approvedAt: NOW - 172_800_000, approvedBy: null, lastSignInAt: null,
+}
+const OWNER = { claimedAt: NOW - 259_200_000, firstDeviceId: DEVICE_A.id }
+const REQUEST = {
+  requestId: 'request-1', label: 'iPad', platform: 'iPadOS', address: 'https://home.example.ts.net', createdAt: NOW - 10_000, expiresAt: NOW + 290_000,
+}
+const READY = { status: 200, body: { available: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] } }
+const refusal = (status: number, error: string, message = `${error} sentence`) => ({ status, body: { error, message } })
+const loopbackRefusal = refusal(403, 'LOOPBACK_REQUIRED', 'Adding a device needs you at your computer: open the studio on the home\'s own computer')
+
+/**
+ * Render the section over a fake home.
+ * @param host - the fake home.
+ * @returns the render result.
+ */
+function renderSection(host: ReturnType<typeof fakeHost>) {
+  // The renderer's standard props are absent: the section reads none of them.
+  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch } as DevicesSectionProps
+  return render(<DevicesSection {...props} />)
+}
+
+/** Let timers up to `ms` from now run, and the answers they wait for settle, inside React's act. */
+const settle = (ms = 0): Promise<void> => act(async () => {
+  await vi.advanceTimersByTimeAsync(ms)
+  // A Response body is read over several turns of the event loop.
+  for (let turn = 0; turn < 10; turn++) await vi.advanceTimersByTimeAsync(0)
+})
+
+/** Use fake timers and a fixed clock, keeping the microtask queue real. */
+function fakeClock(): void {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: NOW })
+}
+
+/** The standard home: reach ready, one device of each kind. */
+function standardHost() {
+  return fakeHost({
+    [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
+    [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [DEVICE_A, DEVICE_B] } },
+    [`POST ${DEVICE_ROUTES.window}`]: { status: 200, body: { closesAt: NOW + 300_000 } },
+    [`GET ${DEVICE_ROUTES.pending}`]: { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [REQUEST] } },
+  })
+}
+
+describe('the Devices section', () => {
+  it('says only that remote access is not available in a profile without reach', async () => {
+    const host = fakeHost()
+    renderSection(host)
+    expect(await screen.findByText(en['reach.unavailable'])).toBeTruthy()
+    expect(screen.queryByText(en.intro)).toBeNull()
+    expect(screen.queryByRole('button', { name: en.add })).toBeNull()
+    expect(host.count(`GET ${DEVICE_ROUTES.devices}`)).toBe(0)
+  })
+
+  it('shows no devices yet, and no error, before the home has an owner', async () => {
+    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: READY, [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER') })
+    renderSection(host)
+    expect(await screen.findByText(en['devices.none'])).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows no devices yet for an owner whose list is empty', async () => {
+    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: READY, [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [] } } })
+    renderSection(host)
+    expect(await screen.findByText(en['devices.none'])).toBeTruthy()
+  })
+
+  it('lists each device with its platform, address, approval and last sign-in', async () => {
+    const host = standardHost()
+    renderSection(host)
+    expect(await screen.findByText('Pixel 9')).toBeTruthy()
+    expect(screen.getByText(`Remote access is on at ${READY.body.options[0]?.address ?? ''}`)).toBeTruthy()
+    const [first, second] = screen.getAllByRole('listitem')
+    if (first === undefined || second === undefined) throw new Error('two devices expected')
+    expect(first.textContent).toContain('Android · https://home.example.ts.net')
+    expect(first.textContent).toContain('Approved at this computer')
+    expect(first.textContent).toContain('Last signed in')
+    expect(second.textContent).toContain('Work laptop')
+    expect(second.textContent).not.toContain('at this computer')
+    expect(second.textContent).toContain(en['device.neverSignedIn'])
+  })
+
+  it.each([
+    { state: 'off', shown: en['reach.off'] },
+    { state: 'starting', shown: en['reach.starting'] },
+    { state: 'degraded', shown: en['reach.degraded'] },
+    { state: 'stopping', shown: en['reach.stopping'] },
+    { state: 'blocked', shown: en['reach.blocked'] },
+    { state: 'failed', shown: en['reach.failed'] },
+    { state: 'ready', shown: en['reach.readyNoAddress'] },
+  ])('states the reach state $state', async ({ state, shown }) => {
+    const host = fakeHost({
+      [`GET ${DEVICE_ROUTES.reachStatus}`]: { status: 200, body: { available: true, options: [{ option: 'tailscale-private', state }] } },
+      [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER'),
+    })
+    const { container } = renderSection(host)
+    expect(await screen.findByText(shown, { exact: false })).toBeTruthy()
+    expect(container.querySelector(`[data-reach-state="${state}"]`)).not.toBeNull()
+    if (state === 'off') expect(screen.getByText(REACH_ON_COMMAND).tagName).toBe('CODE')
+  })
+
+  it.each(['blocked', 'failed'])('states the Host\'s sentence for a %s option', async (state) => {
+    const detail = 'Tailscale is not signed in on this computer.'
+    const host = fakeHost({
+      [`GET ${DEVICE_ROUTES.reachStatus}`]: { status: 200, body: { available: true, options: [{ option: 'tailscale-private', state, cause: 'TAILSCALE_LOGGED_OUT', detail }] } },
+      [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER'),
+    })
+    renderSection(host)
+    expect(await screen.findByText(detail)).toBeTruthy()
+  })
+
+  it('adds a device: opens the window and reads the pending requests every two seconds while it is open', async () => {
+    fakeClock()
+    const host = standardHost()
+    renderSection(host)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    await settle()
+    expect(host.count(`POST ${DEVICE_ROUTES.window}`)).toBe(1)
+    expect(host.received.find(request => request.key === `POST ${DEVICE_ROUTES.window}`)?.body).toEqual({})
+    expect(screen.getByText(en.waiting)).toBeTruthy()
+    expect(screen.getByText('iPad')).toBeTruthy()
+    expect((screen.getByRole('button', { name: en.add }) as HTMLButtonElement).disabled).toBe(true)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(1)
+    await settle(PENDING_POLL_MS)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(2)
+    // The Host closes the window: the waiting statement goes and the reads stop.
+    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: null, pending: [] } }
+    await settle(PENDING_POLL_MS)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(3)
+    expect(screen.queryByText(en.waiting)).toBeNull()
+    await settle(PENDING_POLL_MS * 3)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(3)
+  })
+
+  it('stops reading the pending requests once the window\'s closing time passes', async () => {
+    fakeClock()
+    const host = standardHost()
+    host.script[`POST ${DEVICE_ROUTES.window}`] = { status: 200, body: { closesAt: NOW + PENDING_POLL_MS * 1.5 } }
+    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: NOW + PENDING_POLL_MS * 1.5, pending: [] } }
+    renderSection(host)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    await settle()
+    expect(screen.getByText(en.waiting)).toBeTruthy()
+    await settle(PENDING_POLL_MS)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(2)
+    expect(screen.getByText(en.waiting)).toBeTruthy()
+    // The next read would come after the closing time: there is none, and the waiting statement goes.
+    await settle(PENDING_POLL_MS * 4)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(2)
+    expect(screen.queryByText(en.waiting)).toBeNull()
+  })
+
+  it('approves a request with the typed code, stops reading pending requests and refreshes the list', async () => {
+    fakeClock()
+    const host = standardHost()
+    host.script[`POST ${DEVICE_ROUTES.approve}`] = { status: 200, body: { device: { id: 'c'.repeat(43), label: 'iPad', address: REQUEST.address } } }
+    renderSection(host)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    await settle()
+    const input = screen.getByRole('textbox', { name: 'Code shown on iPad' })
+    const approve = screen.getByRole('button', { name: en['pending.approve'] }) as HTMLButtonElement
+    fireEvent.change(input, { target: { value: '1234 567' } })
+    expect(approve.disabled).toBe(true)
+    fireEvent.change(input, { target: { value: '1234-5678' } })
+    expect(approve.disabled).toBe(false)
+    host.script[`GET ${DEVICE_ROUTES.devices}`] = { status: 200, body: { owner: OWNER, devices: [DEVICE_A, DEVICE_B, { ...DEVICE_A, id: 'c'.repeat(43), label: 'iPad' }] } }
+    fireEvent.click(approve)
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${DEVICE_ROUTES.approve}`)?.body).toEqual({ requestId: 'request-1', typedCode: '12345678' })
+    expect(screen.queryByText(en.waiting)).toBeNull()
+    expect(host.count(`GET ${DEVICE_ROUTES.devices}`)).toBe(2)
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    const reads = host.count(`GET ${DEVICE_ROUTES.pending}`)
+    await settle(PENDING_POLL_MS * 3)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(reads)
+  })
+
+  it('shows the Host\'s sentence in place for a wrong code, and keeps it once the request is cancelled', async () => {
+    fakeClock()
+    const host = standardHost()
+    const mismatch = 'The code does not match. Check the code on the device and type it again.'
+    host.script[`POST ${DEVICE_ROUTES.approve}`] = refusal(400, 'APPROVAL_CODE_MISMATCH', mismatch)
+    renderSection(host)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    await settle()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Code shown on iPad' }), { target: { value: '11112222' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Code shown on iPad' }).closest('form') ?? document.body)
+    await settle()
+    const row = screen.getByText('iPad').closest('[data-request-id]')
+    if (!(row instanceof HTMLElement)) throw new Error('no pending row')
+    expect(within(row).getByRole('alert').textContent).toBe(mismatch)
+    expect(screen.getByText(en.waiting)).toBeTruthy()
+    // A third wrong code cancels the request; the refusal stays in the waiting area.
+    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [] } }
+    await settle(PENDING_POLL_MS)
+    expect(screen.queryByText('iPad')).toBeNull()
+    expect(screen.getByRole('alert').textContent).toBe(mismatch)
+  })
+
+  it('removes a device only after confirmation and refreshes the list', async () => {
+    const host = standardHost()
+    host.script[`POST ${DEVICE_ROUTES.remove}`] = { status: 200, body: { removed: true, sessions: 1, connections: 2 } }
+    renderSection(host)
+    const row = (await screen.findByText('Work laptop')).closest('li')
+    if (row === null) throw new Error('no device row')
+    fireEvent.click(within(row).getByRole('button', { name: en['device.remove'] }))
+    let dialog = screen.getByRole('dialog', { name: 'Remove Work laptop?' })
+    expect(within(dialog).getByText(en['remove.body'])).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['remove.cancel'] }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(host.count(`POST ${DEVICE_ROUTES.remove}`)).toBe(0)
+    fireEvent.click(within(row).getByRole('button', { name: en['device.remove'] }))
+    dialog = screen.getByRole('dialog', { name: 'Remove Work laptop?' })
+    host.script[`GET ${DEVICE_ROUTES.devices}`] = { status: 200, body: { owner: OWNER, devices: [DEVICE_A] } }
+    fireEvent.click(within(dialog).getByRole('button', { name: en['remove.confirm'] }))
+    await vi.waitFor(() => { expect(screen.queryByText('Work laptop')).toBeNull() })
+    expect(host.received.find(request => request.key === `POST ${DEVICE_ROUTES.remove}`)?.body).toEqual({ v: 1, deviceId: DEVICE_B.id })
+    expect(host.count(`GET ${DEVICE_ROUTES.devices}`)).toBe(2)
+  })
+
+  it('closes the removal dialog from its close control without removing', async () => {
+    const host = standardHost()
+    renderSection(host)
+    fireEvent.click((await screen.findAllByRole('button', { name: en['device.remove'] }))[0] ?? document.body)
+    fireEvent.click(screen.getByRole('button', { name: en['remove.close'] }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(host.count(`POST ${DEVICE_ROUTES.remove}`)).toBe(0)
+  })
+
+  describe('at a remote studio, where the home refuses device management', () => {
+    const atYourComputer = (action: string): string => `This needs you at your computer: ${action}.`
+
+    it('says so for reading the remote access state and the device list', async () => {
+      const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: loopbackRefusal, [`GET ${DEVICE_ROUTES.devices}`]: loopbackRefusal })
+      renderSection(host)
+      expect(await screen.findByText(atYourComputer(en['action.status']))).toBeTruthy()
+      expect(await screen.findByText(atYourComputer(en['action.list']))).toBeTruthy()
+      expect(screen.queryByText(loopbackRefusal.body.message)).toBeNull()
+    })
+
+    it('says so for adding a device', async () => {
+      const host = standardHost()
+      host.script[`POST ${DEVICE_ROUTES.window}`] = loopbackRefusal
+      renderSection(host)
+      fireEvent.click(await screen.findByRole('button', { name: en.add }))
+      expect((await screen.findByRole('alert')).textContent).toBe(atYourComputer(en['action.add']))
+      expect(screen.queryByText(en.waiting)).toBeNull()
+    })
+
+    it('says so for approving a device', async () => {
+      const host = standardHost()
+      host.script[`POST ${DEVICE_ROUTES.approve}`] = loopbackRefusal
+      renderSection(host)
+      fireEvent.click(await screen.findByRole('button', { name: en.add }))
+      fireEvent.change(await screen.findByRole('textbox', { name: 'Code shown on iPad' }), { target: { value: '12345678' } })
+      fireEvent.click(screen.getByRole('button', { name: en['pending.approve'] }))
+      expect((await screen.findByRole('alert')).textContent).toBe(atYourComputer(en['action.approve']))
+    })
+
+    it('says so for reading the pending requests, and stops reading them', async () => {
+      const host = standardHost()
+      host.script[`GET ${DEVICE_ROUTES.pending}`] = loopbackRefusal
+      renderSection(host)
+      fireEvent.click(await screen.findByRole('button', { name: en.add }))
+      expect((await screen.findByRole('alert')).textContent).toBe(atYourComputer(en['action.approve']))
+      expect(screen.queryByText(en.waiting)).toBeNull()
+    })
+
+    it('says so for removing a device, and keeps the device', async () => {
+      const host = standardHost()
+      host.script[`POST ${DEVICE_ROUTES.remove}`] = loopbackRefusal
+      renderSection(host)
+      const row = (await screen.findByText('Pixel 9')).closest('li')
+      if (row === null) throw new Error('no device row')
+      fireEvent.click(within(row).getByRole('button', { name: en['device.remove'] }))
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['remove.confirm'] }))
+      expect((await within(row).findByRole('alert')).textContent).toBe(atYourComputer(en['action.remove']))
+      expect(screen.getByText('Pixel 9')).toBeTruthy()
+    })
+  })
+
+  it('stops reading the pending requests when it unmounts', async () => {
+    fakeClock()
+    const host = standardHost()
+    const { unmount } = renderSection(host)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    await settle()
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(1)
+    unmount()
+    await settle(PENDING_POLL_MS * 5)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(1)
+  })
+
+  it.each(['answers', 'fails'] as const)('ignores a pending read that %s after it unmounts', async (outcome) => {
+    fakeClock()
+    const host = standardHost()
+    const late = Promise.withResolvers<{ status: number; body: unknown }>()
+    host.script[`GET ${DEVICE_ROUTES.pending}`] = late.promise
+    const { unmount } = renderSection(host)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    await settle()
+    unmount()
+    late.resolve(outcome === 'answers' ? { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [REQUEST] } } : loopbackRefusal)
+    await settle(PENDING_POLL_MS * 3)
+    expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(1)
+  })
+
+  it.each(['answers', 'fails'] as const)('ignores a reach state that %s after it unmounts', async (outcome) => {
+    const late = Promise.withResolvers<{ status: number; body: unknown }>()
+    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: late.promise })
+    const { unmount } = renderSection(host)
+    unmount()
+    late.resolve(outcome === 'answers' ? READY : loopbackRefusal)
+    await act(async () => { await late.promise })
+    expect(host.count(`GET ${DEVICE_ROUTES.reachStatus}`)).toBe(1)
+    expect(host.count(`GET ${DEVICE_ROUTES.devices}`)).toBe(0)
+  })
+
+  it.each([
+    { name: 'an unreachable home', answer: 'unreachable' as const, shown: en['failed.unreachable'] },
+    { name: 'an answer that is not JSON', answer: { status: 200, text: '<html>' }, shown: en['failed.unreadable'] },
+    { name: 'an answer of the wrong form', answer: { status: 200, body: { available: true, options: [{ option: 'x', state: 'asleep' }] } }, shown: en['failed.unreadable'] },
+    { name: 'a refusal of the wrong form', answer: { status: 500, body: { problem: true } }, shown: en['failed.unreadable'] },
+    { name: 'another refusal', answer: refusal(500, 'INTERNAL', 'The home could not read its reach state.'), shown: 'The home could not read its reach state.' },
+  ])('says what failed for $name', async ({ answer, shown }) => {
+    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: answer, [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER') })
+    renderSection(host)
+    expect((await screen.findByRole('alert')).textContent).toBe(shown)
+  })
+
+  it('has a Chinese entry for every English key', () => {
+    expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort())
+  })
+})
+
+describe('the device requests', () => {
+  it('send same-origin requests, with JSON bodies on POST', async () => {
+    const host = fakeHost({
+      [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
+      [`POST ${DEVICE_ROUTES.window}`]: { status: 200, body: { closesAt: NOW } },
+      [`GET ${DEVICE_ROUTES.pending}`]: { status: 200, body: { windowClosesAt: null, pending: [] } },
+      [`POST ${DEVICE_ROUTES.approve}`]: { status: 200, body: { device: { id: DEVICE_A.id, label: 'x', address: 'y' } } },
+      [`POST ${DEVICE_ROUTES.remove}`]: { status: 200, body: { removed: false, sessions: 0, connections: 0 } },
+      [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER'),
+    })
+    expect(await readReachStatus(host.fetch)).toEqual(READY.body)
+    expect(await readDevices(host.fetch)).toBeUndefined()
+    expect(await openApprovalWindow(host.fetch)).toBe(NOW)
+    expect(await readPendingDevices(host.fetch)).toEqual({ windowClosesAt: null, pending: [] })
+    expect((await approveDevice(host.fetch, 'r' as ApprovalRequestId, '12345678')).device.id).toBe(DEVICE_A.id)
+    expect(await removeDevice(host.fetch, DEVICE_A.id as DeviceId)).toEqual({ removed: false, sessions: 0, connections: 0 })
+    for (const { init } of host.received) expect(init?.credentials).toBe('same-origin')
+    const posts = host.received.filter(request => request.key.startsWith('POST'))
+    expect(posts).toHaveLength(3)
+    for (const { init } of posts) expect(new Headers(init?.headers).get('content-type')).toBe('application/json')
+  })
+
+  it('read a 404 as a profile without reach, and throw other failures', async () => {
+    expect(await readReachStatus(fakeHost().fetch)).toBeUndefined()
+    await expect(readReachStatus(fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: 'unreachable' as const }).fetch)).rejects.toBeInstanceOf(HostRequestError)
+    await expect(readDevices(fakeHost({ [`GET ${DEVICE_ROUTES.devices}`]: loopbackRefusal }).fetch)).rejects.toThrow('LOOPBACK_REQUIRED')
+  })
+
+  it('name the failure of any caught error', () => {
+    const cause = new Error('bug')
+    expect(hostFailureOf(cause)).toEqual({ kind: 'unreachable', cause })
+    expect(isRefused(cause, 'NO_OWNER')).toBe(false)
+    expect(failureText(makeTranslate(en), cause, 'list')).toBe(en['failed.unreachable'])
+    expect(new HostRequestError('/x', { kind: 'unreachable', cause }).cause).toBe(cause)
+  })
+
+  it('read a typed code without its spaces and hyphens', () => {
+    expect(approvalCode(' 1234 - 5678 ')).toBe('12345678')
+  })
+})
+
+describe('the remote full-access notice', () => {
+  it.each(['localhost', 'studio.localhost', '127.0.0.1', '127.255.10.1', '[::1]'])('treats %s as the home\'s own computer', (hostname) => {
+    expect(isLoopbackHostname(hostname)).toBe(true)
+  })
+
+  it.each(['home.example.ts.net', '192.0.2.2', '127.0.0', '127.0.0.300', 'localhost.example.com'])('treats %s as a remote page', (hostname) => {
+    expect(isLoopbackHostname(hostname)).toBe(false)
+  })
+
+  /**
+   * Mount the plugin's remote notice on a page with one hostname.
+   * @param hostname - the page's hostname.
+   * @returns the approval listener, if one was registered, and the overlay entries.
+   */
+  async function mountNotice(hostname: string) {
+    const ctx = new Context()
+    await ctx.plugin(SlotRegistry).await()
+    const remote = new TestRemote(ctx)
+    const on = vi.spyOn(remote, '$on')
+    const slots = ctx.get('slots')
+    if (slots === undefined) throw new Error('no slot registry')
+    slots.register({ name: 'root', children: { 'shell.overlay': { kind: 'list', scope: 'root' } }, inject: () => ({}) },
+      ({ renderSlot }) => <>{renderSlot('shell.overlay', {})}</>)
+    await ctx.plugin({ inject: ['slots', 'remote'], apply: (scope: Context) => { applyRemoteNotice(scope, hostname) } }).await()
+    const listener = on.mock.calls.find(([event]) => event === 'approval/request')?.[1] as
+      ((request: { grants?: 'full-access' }, next: () => Promise<string>) => Promise<string>) | undefined
+    return { ctx, listener, overlays: slots.entries('shell.overlay') }
+  }
+
+  it('registers nothing on a loopback page', async () => {
+    const { ctx, listener, overlays } = await mountNotice('localhost')
+    expect(listener).toBeUndefined()
+    expect(overlays).toHaveLength(0)
+    await ctx.fiber.dispose()
+  })
+
+  it('shows only after this page grants full access, and returns the answer unchanged', async () => {
+    const { ctx, listener, overlays } = await mountNotice('home.example.ts.net')
+    try {
+      if (listener === undefined) throw new Error('no approval listener')
+      const [overlay] = overlays
+      expect(overlay?.options).toMatchObject({ id: REMOTE_NOTICE_ID })
+      const face = overlay?.inject?.() as Omit<RemoteNoticeProps, 't' | 'useNotice'> & { hooks: ReturnType<typeof createRemoteNoticeSource>['hooks'] }
+      render(<RemoteNotice t={makeTranslate(en)} useNotice={bindSnapshotSelector(face.hooks.notice)} dismiss={face.dismiss} />)
+      expect(await listener({ grants: 'full-access' }, () => Promise.resolve('rejected'))).toBe('rejected')
+      expect(await listener({}, () => Promise.resolve('allowed-once'))).toBe('allowed-once')
+      expect(screen.queryByRole('alert')).toBeNull()
+      await act(async () => { expect(await listener({ grants: 'full-access' }, () => Promise.resolve('allowed-once'))).toBe('allowed-once') })
+      expect(screen.getByRole('alert').textContent).toContain(en['remote.fullAccess'])
+      fireEvent.click(screen.getByRole('button', { name: en['remote.dismiss'] }))
+      expect(screen.queryByRole('alert')).toBeNull()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('goes away by itself after its hold', () => {
+    vi.useFakeTimers()
+    const source = createRemoteNoticeSource()
+    render(<RemoteNotice t={makeTranslate(en)} useNotice={bindSnapshotSelector(source.hooks.notice)} dismiss={source.dismiss} />)
+    act(() => { source.show() })
+    expect(screen.getByRole('alert')).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(60_000) })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('the plugin', () => {
+  it('registers the Devices section right after Privacy, with the browser\'s fetch, and no notice on a loopback page', async () => {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(SlotRegistry).await()
+      ctx.provide('locale', new LocaleRuntime(ctx))
+      const remote = new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
+      const on = vi.spyOn(remote, '$on')
+      await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
+      const slots = ctx.get('slots')
+      if (slots === undefined) throw new Error('no slot registry')
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
+        ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
+      await ctx.plugin({ inject, apply }).await()
+      const sections = slots.entries('settings.section').map(entry => entry.options)
+      expect(sections).toMatchObject([{ id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER }])
+      expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
+      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label)).toEqual(['Privacy', en.nav])
+      // The preview notice's copy lookup reads the Privacy dictionary.
+      const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
+      expect(notice.t('notice.continue')).toBe('Continue')
+      expect(slots.entries('shell.overlay')).toHaveLength(0)
+      expect(on.mock.calls.some(([event]) => event === 'approval/request')).toBe(false)
+      const browserFetch = vi.fn(async () => Response.json(READY.body))
+      vi.stubGlobal('fetch', browserFetch)
+      const devicesEntry = slots.entries('settings.section')[1]
+      const face = devicesEntry?.inject?.() as { fetch: HostFetch }
+      // A stable request function: the section's requests restart when it changes.
+      expect((devicesEntry?.inject?.() as { fetch: HostFetch }).fetch).toBe(face.fetch)
+      expect(await readReachStatus(face.fetch)).toEqual(READY.body)
+      expect(browserFetch).toHaveBeenCalledWith(DEVICE_ROUTES.reachStatus, expect.objectContaining({ credentials: 'same-origin' }))
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+})

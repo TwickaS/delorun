@@ -4,7 +4,11 @@
  * analytics (`product-analytics`). Each switch writes only its own row's `config.enabled` through upstream's
  * configuration form, into the active profile's `cordis.patch.yml`.
  *
- * Other surfaces open the section with `ctx.settingsShell.openSection(PRIVACY_SECTION_ID)`.
+ * It also registers the Devices section, which shows the reach state and manages the devices the home approved, and,
+ * on a remote studio page, the notice that a full-access grant must be answered at the home's own computer.
+ *
+ * Other surfaces open the sections with `ctx.settingsShell.openSection(PRIVACY_SECTION_ID)` or
+ * `ctx.settingsShell.openSection(DEVICES_SECTION_ID)`.
  * @module @delo/bundle-local/client
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -20,16 +24,26 @@ import { SETUP_OPT_IN_ROWS } from '@delo/contract-setup-answers'
 import { DeloBrandMark, DeloBrandName } from './brand.tsx'
 import { acknowledgeNotice, DeloNotice, noticeAcknowledged, type DeloNoticeInjected } from './DeloNotice.tsx'
 import { DeloVersionRow, type DeloVersionRowInjected } from './DeloVersionRow.tsx'
+import { en as devicesEn, zh as devicesZh, type DevicesLocaleKey } from './devices-locales.ts'
+import type { HostFetch } from './devices-api.ts'
+import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.tsx'
+import { createRemoteNoticeSource, isLoopbackHostname, RemoteNotice } from './RemoteNotice.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { OptIn, type OptInSettings } from './opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
 import { readVersions } from './versions.ts'
 
 export type { PrivacyLocaleKey } from './locales.ts'
+export type { DevicesLocaleKey } from './devices-locales.ts'
 export type { DeloVersionRowInjected, DeloVersionRowProps } from './DeloVersionRow.tsx'
 export { readVersions, VERSIONS_GLOBAL, type DeloVersions } from './versions.ts'
 export type { OptInMutation, OptInSettings } from './opt-in.ts'
 export type { OptInId, PrivacySectionInjected, PrivacySectionProps } from './PrivacySection.tsx'
+export type { DevicesSectionInjected, DevicesSectionProps } from './DevicesSection.tsx'
+export {
+  DEVICE_ROUTES, HostRequestError, readReachStatus, REACH_STATES,
+  type HostFailure, type HostFetch, type ReachOptionStatus, type ReachState, type ReachStatus,
+} from './devices-api.ts'
 
 /** What `ctx.deloNotice` shares: the acknowledgement of Delo's preview notice on this browser. */
 export interface DeloNoticeService {
@@ -53,11 +67,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The Privacy section's copy. */
     'deloPrivacy': PrivacyLocaleKey
+    /** The Devices section's copy and the remote studio's full-access notice. */
+    'deloDevices': DevicesLocaleKey
   }
 }
 
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'deloPrivacy'
+
+/** Dictionary namespace of the Devices section and the remote full-access notice. */
+export const DEVICES_NS = 'deloDevices'
 
 /** The `settings.section` id of the Privacy section, which setup and other surfaces open. */
 export const PRIVACY_SECTION_ID = 'delo-privacy'
@@ -77,13 +96,23 @@ export const OPT_IN_ROWS: Readonly<Record<OptInId, string>> = {
  */
 export const VERSION_ROW = { id: 'current-version', priority: -1 } as const
 
+/** The `settings.section` id of the Devices section, which onboarding and other surfaces open. */
+export const DEVICES_SECTION_ID = 'delo-devices'
+
+/** The Devices section's place in the Settings navigation: right after Privacy. */
+export const DEVICES_SECTION_ORDER = 21
+
+/** The `shell.overlay` id of the remote studio's full-access notice. */
+export const REMOTE_NOTICE_ID = 'delo-remote-full-access'
+
 /** Required services. */
 export const inject = ['slots', 'locale', 'configForms']
 
 /**
- * Register the Privacy section, the Delo sidebar brand, Delo's preview notice, `ctx.deloNotice` and, when the harness
- * printed both versions into the page, the version row that names Delo's version and the DeepSeek Harness version. All of them come from this bundle's `delo-privacy` row, which the parity composition leaves disabled,
- * so upstream's brand and notice stay in the parity composition.
+ * Register the Privacy and Devices sections, the Delo sidebar brand, Delo's preview notice, `ctx.deloNotice`, on a
+ * remote page the full-access notice, and, when the harness printed both versions into the page, the version row that
+ * names Delo's version and the DeepSeek Harness version. All of them come from this bundle's `delo-privacy` row, which
+ * the parity composition leaves disabled, so upstream's brand and notice stay in the parity composition.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
@@ -131,4 +160,44 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: face,
   }, PrivacySection))
+  ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delo-devices: section dictionaries')
+  const devicesT = ctx.locale.bind(DEVICES_NS)
+  // One function for the plugin's lifetime: the section's requests restart when its identity changes.
+  const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
+  const devicesFace = (): DevicesSectionInjected => ({ fetch: browserFetch })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: DEVICES_SECTION_ID,
+    order: DEVICES_SECTION_ORDER,
+    label: () => devicesT('nav'),
+    locale: DEVICES_NS,
+    inject: devicesFace,
+  }, DevicesSection))
+  applyRemoteNotice(ctx, globalThis.location.hostname)
+}
+
+/**
+ * On a remote studio page, show the full-access notice after this page answers `allowed-once` to a prompt whose
+ * answer grants full access, which the home refuses from a remote session. The listener wraps the answerers after it
+ * in the `approval/request` waterfall and returns their answer unchanged; it sees the answer only while it runs before
+ * the answerer that gives it. On a loopback page it registers nothing.
+ * @param ctx - the browser plugin context.
+ * @param hostname - the page's `location.hostname`.
+ */
+export function applyRemoteNotice(ctx: Context, hostname: string): void {
+  if (isLoopbackHostname(hostname)) return
+  const notice = createRemoteNoticeSource()
+  ctx.inject(['remote'], (scope) => {
+    scope.remote.$on('approval/request', async function (request, next) {
+      const answer = await next()
+      if (request.grants === 'full-access' && answer === 'allowed-once') notice.show()
+      return answer
+    })
+  })
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: REMOTE_NOTICE_ID,
+    locale: DEVICES_NS,
+    inject: () => ({ hooks: notice.hooks, dismiss: notice.dismiss }),
+  }, RemoteNotice))
 }

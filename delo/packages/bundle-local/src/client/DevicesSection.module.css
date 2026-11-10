@@ -1,0 +1,111 @@
+/* Devices section: the reach state, the approved devices, and the approval window. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  max-width: var(--dsh-settings-section-max-width, 760px);
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading {
+  margin: 0 0 12px;
+  font-size: var(--dsh-settings-section-title-size, 18px);
+  font-weight: var(--dsh-settings-section-title-weight, 600);
+  line-height: var(--dsh-settings-section-title-line-height, normal);
+  display: var(--dsh-settings-section-title-display, block);
+}
+
+.subheading {
+  margin: 20px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.intro,
+.line {
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.command {
+  font-family: var(--dsw-font-mono, monospace);
+  color: var(--dsw-alias-label-primary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.details {
+  min-width: 0;
+}
+
+.title {
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.description {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.failed {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.actions {
+  display: flex;
+  margin-top: 16px;
+}
+
+.window {
+  margin-top: 16px;
+}
+
+.approve {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.code {
+  width: 140px;
+}
+
+.consent {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+@media (max-width: 560px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+}

@@ -180,3 +180,24 @@
         storagesRoot: !!js dshHomePath('storages')
         attachmentsRoot: !!js dshHomePath('attachments', 'v1')
         logsHome: !!js dshHomePath()
+
+# Remote access over the person's own tailnet (C4, C5, C7, C14). home-auth
+# provides upstream's authenticator: on the loopback listener it keeps
+# upstream's admission, and it serves the device routes and the reach sign-in.
+# The reach service mounts behind the C16 switch `reach`; each option in it
+# stays off until the person runs `delorun reach on tailscale`, which writes
+# this row's `tailscalePrivate` in the profile's own patch.
+- insert:
+    - id: delo-home-auth
+      name: '@delo/home-auth'
+      config:
+        secretsDirectory: !!js dshHomePath('secrets', 'home-auth')
+
+    - id: delo-reach
+      name: '@delo/reach'
+      config:
+        enabled: true
+        tailscalePrivate:
+          enabled: false
+          address: ''
+          servePort: 443

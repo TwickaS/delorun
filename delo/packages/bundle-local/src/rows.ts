@@ -162,6 +162,18 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     reason: 'Contract C8\'s trash: deleting a chat or a workspace in the studio moves it to the trash, the Trash section in Settings restores it or deletes it forever, and each start deletes what is older than 30 days; upstream has no chat delete and its workspace Delete keeps every chat.',
     parity: { kind: 'disabled', reason: 'Recorded scenarios compare upstream\'s interface output, which has no trash action and no Trash section, and a disabled row mounts nothing.' },
   },
+  {
+    id: 'delo-home-auth',
+    kind: 'added',
+    reason: 'The home\'s sign-in for remote access: it provides upstream\'s authenticator, keeping upstream\'s admission on the loopback listener, and serves the device routes and the reach sign-in (C4, C5).',
+    parity: { kind: 'disabled', reason: 'The parity composition keeps upstream\'s own authenticator, and the reach service that needs this row is disabled there too.' },
+  },
+  {
+    id: 'delo-reach',
+    kind: 'added',
+    reason: 'The C16 switch `reach` on: the reach service mounts, with every option off until the person turns it on (C7).',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no reach listener and no status route exist.' },
+  },
 ]
 
 /** One patch of a Cordis patch file, as parsed. */

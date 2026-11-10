@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Delo 本地集成",
-    "description": "Delo 在原版 studio 之上的默认设置：DeepSeek 会话日志上传与桌面端分析保持关闭，直到你在“设置 > 隐私”中打开"
+    "description": "Delo 在原版 studio 之上的默认设置：DeepSeek 会话日志上传与桌面端分析保持关闭，直到你在“设置 > 隐私”中打开；“设置 > 设备”显示远程访问与你批准的设备"
   }
 }
