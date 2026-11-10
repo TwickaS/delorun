@@ -65,6 +65,8 @@ export interface RecordPlan {
   readonly unreadable: readonly string[]
   /** The non-model-visible hunk records added. */
   readonly recordedHunks: readonly RecordedHunk[]
+  /** The non-model-visible hunk records removed because no recordable hunk of their file has their digest any more. */
+  readonly droppedHunks: readonly { readonly path: string; readonly sha256: string }[]
   /** The ledger with every change applied. */
   readonly manifest: PatchManifest
 }
@@ -101,7 +103,7 @@ export function planRecord(manifest: PatchManifest, changed: readonly ChangedPat
     return { ...patch, sha256: actual }
   })
   const stubs = added.map((path): Patch => ({ path, class: 'delo-feature', feature: TODO_VALUE, reason: TODO_VALUE }))
-  return { added, removed, redigested, unreadable, recordedHunks: [], manifest: { ...manifest, patches: [...kept, ...stubs] } }
+  return { added, removed, redigested, unreadable, recordedHunks: [], droppedHunks: [], manifest: { ...manifest, patches: [...kept, ...stubs] } }
 }
 
 /** A request to record one diff hunk as not model-visible. */
@@ -156,12 +158,45 @@ export function planHunkRecord(plan: RecordPlan, request: HunkRequest, sources: 
 }
 
 /**
+ * Drop the non-model-visible hunk records that match no recordable hunk of their file any more, as `parity-switches`
+ * reports them stale. Dropping a record only narrows what the check passes; the hunk that replaced it needs its own
+ * review and record.
+ * @param plan - the planned run.
+ * @param sources - each file's text and its hunks.
+ * @returns the plan without the stale records.
+ */
+export function planDropStaleHunks(plan: RecordPlan, sources: HunkSources): RecordPlan {
+  const dropped: { path: string; sha256: string }[] = []
+  const patches = plan.manifest.patches.map((patch) => {
+    const records = patch.nonModelVisibleHunks
+    if (records === undefined) return patch
+    const edited = sources.edits(patch.path)
+    const recordable = edited === 'all' ? new Map<string, DiffHunk[]>() : recordableHunks(findContributions(patch.path, sources.read(patch.path), hunkLines(edited)), edited)
+    const left = new Map([...recordable].map(([digest, hunks]) => [digest, hunks.length]))
+    const kept = records.filter((record) => {
+      const count = left.get(record.sha256) ?? 0
+      if (count > 0) {
+        left.set(record.sha256, count - 1)
+        return true
+      }
+      dropped.push({ path: patch.path, sha256: record.sha256 })
+      return false
+    })
+    if (kept.length === records.length) return patch
+    const { nonModelVisibleHunks: _dropped, ...rest } = patch
+    return kept.length === 0 ? rest : { ...rest, nonModelVisibleHunks: kept }
+  })
+  return dropped.length === 0 ? plan : { ...plan, droppedHunks: [...plan.droppedHunks, ...dropped], manifest: { ...plan.manifest, patches } }
+}
+
+/**
  * Report whether a plan changes the ledger.
  * @param plan - the planned run.
  * @returns true when the plan adds, removes, re-records or records anything.
  */
 export function changesLedger(plan: RecordPlan): boolean {
   return plan.added.length > 0 || plan.removed.length > 0 || plan.redigested.length > 0 || plan.recordedHunks.length > 0
+    || plan.droppedHunks.length > 0
 }
 
 /**
@@ -179,6 +214,7 @@ export function formatPlan(plan: RecordPlan, check: boolean): string[] {
     ...plan.redigested.map(entry => `${entry.path}: security file changed; ${verb('re-recorded', 'would re-record')} sha256 ${entry.recorded ?? 'none'} → ${entry.actual}; the lead re-reviews it`),
     ...plan.unreadable.map(path => `${path}: security entry holds no file to digest; restore the file or remove the entry`),
     ...plan.recordedHunks.map(entry => `${entry.path}:${String(entry.line)}: recorded the non-model-visible hunk sha256 ${entry.sha256}; the lead re-reviews the entry`),
+    ...plan.droppedHunks.map(entry => `${entry.path}: ${verb('dropped', 'would drop')} the stale non-model-visible hunk record sha256 ${entry.sha256}; record the hunk that replaced it after review`),
   ]
   lines.push(changesLedger(plan) ? `${verb('updated', 'would update')} ${MANIFEST_PATH}` : `${MANIFEST_PATH} is in step with the tree`)
   return lines
@@ -246,10 +282,10 @@ export function main(argv: readonly string[], cwd: string): number {
   let plan: RecordPlan
   try {
     root = repositoryRoot(cwd)
-    plan = planRepository(root)
+    const sources: HunkSources = { read: path => readFileSync(join(root, path), 'utf8'), edits: gitChanges(root, readManifest(root).upstream.commit) }
+    plan = planDropStaleHunks(planRepository(root), sources)
     if (request !== undefined) {
-      const commit = plan.manifest.upstream.commit
-      const recorded = planHunkRecord(plan, request, { read: path => readFileSync(join(root, path), 'utf8'), edits: gitChanges(root, commit) })
+      const recorded = planHunkRecord(plan, request, sources)
       if ('refused' in recorded) {
         console.error(`ledger-record: ${recorded.refused}`)
         return 2
@@ -263,7 +299,7 @@ export function main(argv: readonly string[], cwd: string): number {
   for (const line of formatPlan(plan, check)) console.log(`ledger-record: ${line}`)
   if (check) return changesLedger(plan) || plan.unreadable.length > 0 ? 1 : 0
   if (changesLedger(plan)) writeFileSync(join(root, MANIFEST_PATH), `${JSON.stringify(plan.manifest, null, 2)}\n`)
-  if (plan.redigested.length > 0 || plan.recordedHunks.length > 0) return SECURITY_CHANGED_STATUS
+  if (plan.redigested.length > 0 || plan.recordedHunks.length > 0 || plan.droppedHunks.length > 0) return SECURITY_CHANGED_STATUS
   return plan.unreadable.length > 0 ? 1 : 0
 }
 

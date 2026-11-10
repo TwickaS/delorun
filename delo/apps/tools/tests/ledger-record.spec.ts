@@ -192,6 +192,26 @@ describe('recording a non-model-visible hunk', () => {
     expect(main(['--check'], repo.root)).toBe(0)
   })
 
+  it('drops a record whose hunk changed, keeps the records that still match, and asks for the lead\'s review', (test) => {
+    const stale = { sha256: 'f'.repeat(64), reason: 'an older hunk' }
+    const kept = { sha256: String(GIT_HUNK), reason: REASON }
+    const repo = gateRepo(test, { patches: [{ ...reviewed, nonModelVisibleHunks: [kept, stale] }] })
+    expect(main(['--check'], repo.root)).toBe(1)
+    expect(printed).toContain(`ledger-record: ${GATE}: would drop the stale non-model-visible hunk record sha256 ${stale.sha256}; record the hunk that replaced it after review`)
+    expect(main([], repo.root)).toBe(SECURITY_CHANGED_STATUS)
+    expect(ledgerOf(repo).patches).toEqual([{ ...reviewed, nonModelVisibleHunks: [kept] }])
+    const only = gateRepo(test, { patches: [{ ...reviewed, nonModelVisibleHunks: [stale] }] })
+    expect(main([], only.root)).toBe(SECURITY_CHANGED_STATUS)
+    expect(ledgerOf(only).patches).toEqual([reviewed])
+    const twice = gateRepo(test, { patches: [{ ...reviewed, nonModelVisibleHunks: [kept, kept] }] })
+    expect(main([], twice.root)).toBe(SECURITY_CHANGED_STATUS)
+    expect(ledgerOf(twice).patches).toEqual([{ ...reviewed, nonModelVisibleHunks: [kept] }])
+    const added = { path: NEW_GATE, class: 'security' as const, reason: 'a new gate', sha256: patchDigest(FORK_GATE), nonModelVisibleHunks: [kept] }
+    const fresh = gateRepo(test, { patches: [reviewed, added] }, { [NEW_GATE]: FORK_GATE })
+    expect(main([], fresh.root)).toBe(SECURITY_CHANGED_STATUS)
+    expect(ledgerOf(fresh).patches).toEqual([reviewed, { path: NEW_GATE, class: 'security', reason: 'a new gate', sha256: patchDigest(FORK_GATE) }])
+  })
+
   it('re-records a stale digest of the entry in the same write, so the lead\'s verdict covers the record', (test) => {
     const repo = gateRepo(test, { patches: [{ ...reviewed, sha256: patchDigest(UPSTREAM_GATE) }] })
     expect(record(repo, `${GATE}:2`)).toBe(SECURITY_CHANGED_STATUS)
