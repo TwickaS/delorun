@@ -82,6 +82,7 @@ function recording(seen: RunProfileOptions[], stops: string[], overrides: readon
         watchUpdates: () => Promise.resolve(),
         studio: () => undefined,
         studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
+        reload: () => Promise.resolve({ ok: true }),
       })
     },
   }

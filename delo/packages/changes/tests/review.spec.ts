@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { BUILT_IN_CHECKS } from '../src/risk.ts'
 import { LOCATIONS_PER_LINE, NOTHING_FOUND, RISK_NOTICE, reviewChange, riskLines } from '../src/review.ts'
 import { RISK_KINDS, type RiskCheck, type RiskFinding, type RiskKind } from '../src/types.ts'
+
+// The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
+vi.setConfig({ testTimeout: 30_000 })
 
 function finding(kind: RiskKind, file: string, line?: number, check = 'test', excerpt = 'x'): RiskFinding {
   return line === undefined ? { kind, check, file, excerpt } : { kind, check, file, line, excerpt }

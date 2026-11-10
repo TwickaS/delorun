@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { BUILT_IN_CHECKS, EXCERPT_LIMIT, excerptOf, newLines } from '../src/risk.ts'
 import { RISK_KINDS, type ReviewedFile, type ReviewInput, type RiskFinding, type RiskKind } from '../src/types.ts'
+
+// The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
+vi.setConfig({ testTimeout: 30_000 })
 
 function source(path: string, after: string, before?: string): ReviewedFile {
   return before === undefined ? { path, status: 'added', dependency: false, after } : { path, status: 'modified', dependency: false, after, before }

@@ -1,8 +1,11 @@
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ChangesError, isChangesError } from '../src/errors.ts'
 import { CHANGE_ID_PATTERN, changeId, parseChangeId } from '../src/ids.ts'
 import type { ContentVersion } from '../src/types.ts'
+
+// The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
+vi.setConfig({ testTimeout: 30_000 })
 
 describe('changeId', () => {
   it('derives the same id from the same change and another from different content', () => {
@@ -14,6 +17,14 @@ describe('changeId', () => {
     expect(changeId('plugin-edit', { ...subject }, from, to)).toBe(id)
     expect(changeId('plugin-edit', subject, from, from)).not.toBe(id)
     expect(changeId('guard-weakening', {}, undefined, undefined)).toMatch(CHANGE_ID_PATTERN)
+  })
+
+  it('gives a later request of the same change its own id, and the first one the id without a count', () => {
+    const subject = { plugin: 'p', spec: 'p@1' }
+    const first = changeId('plugin-install', subject, undefined, undefined)
+    expect(changeId('plugin-install', subject, undefined, undefined, 0)).toBe(first)
+    expect(changeId('plugin-install', subject, undefined, undefined, 1)).not.toBe(first)
+    expect(changeId('plugin-install', subject, undefined, undefined, 2)).not.toBe(changeId('plugin-install', subject, undefined, undefined, 1))
   })
 })
 

@@ -33,11 +33,12 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { assertDeloInvariants, composeDeloProfile, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
 import { HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
-import { START_WAIT_MS } from '@delo/contract-home-process'
+import { START_WAIT_MS, type ChangesReloadOutcome } from '@delo/contract-home-process'
 import { localDeviceApproval } from './devices/host.ts'
 import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalDeviceApproval, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
-import { changesApprovedContent } from './changes/start.ts'
+import { afterChangesBoot, changesApprovedContent, recordChangesBoot } from './changes/start.ts'
+import { reloadProfile } from './changes/reload.ts'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
@@ -220,6 +221,12 @@ export interface BootedProfile {
   readonly studioLink: (port: number | undefined) => StudioLinkResult
   /** The local device approval of `@delo/home-auth`, when the profile loads it. */
   readonly devices?: () => LocalDeviceApproval | undefined
+  /**
+   * Load what the profile's files now name through upstream's hot reload: C19's `changes.reload`
+   * ([reload](./changes/reload.ts)).
+   * @returns `ok`, or why the running Host does not run what the files name.
+   */
+  readonly reload: () => Promise<ChangesReloadOutcome>
 }
 
 /**
@@ -352,6 +359,7 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
       return server?.port === undefined ? undefined : { host: server.host, port: server.port }
     },
     studioLink: port => hostStudioLink(ctx, port),
+    reload: () => reloadProfile(ctx.get('hmr')),
   }
 }
 
@@ -516,7 +524,8 @@ export async function startForeground(request: StartRequest, dependencies: Start
 /**
  * Compose the CLI profile and boot it: the home process's Host. The composition is the one every Host over a Delo home
  * goes through ([compose](./compose.ts)), with C1's confinement on its sandbox row, whose overlay exists while the Host
- * runs; the booted Host is held to the composition's invariants before it serves.
+ * runs; the booted Host is held to the composition's invariants before it serves. Changes records which of its plugins
+ * loaded, or the boot's failure, and the Host follows work sessions until it stops ([changes](./changes/start.ts)).
  * @param request - the home, profile, studio choice and output.
  * @param dependencies - the profile preparation, runner and environment loader.
  * @param stored - the version this process runs from the store, whose files H1 checks; `undefined` outside the store.
@@ -556,9 +565,11 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       args: ['--no-open'],
     })
   } catch (error) {
+    await recordChangesBoot({ home: request.home, profile: request.profile, logger }, [], error)
     await removeSandboxOverlay(request.home, request.profile)
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} failed to start: ${error instanceof Error ? error.message : String(error)}`)
   }
+  await recordChangesBoot({ home: request.home, profile: request.profile, logger }, booted.rows())
   try {
     const inactive = inactiveDeloRows(booted.rows(), deloRowIds(composed.resolvedProfile.profile))
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)
@@ -577,7 +588,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   return runningHost(booted, request, async () => {
     if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root)
-  })
+  }, afterChangesBoot({ home: request.home, profile: request.profile, logger }, booted))
 }
 
 /**
@@ -589,9 +600,11 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
  * @param booted - the booted profile.
  * @param request - the home and profile.
  * @param verifyRuntime - C3's H1, the start check of the running version from the store.
+ * @param endChanges - what both ways to stop run first: Changes stops following work sessions and ends the open one
+ *   without the person ([changes](./changes/start.ts)).
  * @returns the Host.
  */
-export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, verifyRuntime: () => Promise<void>): RunningHost {
+export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, verifyRuntime: () => Promise<void>, endChanges: () => Promise<void>): RunningHost {
   const chats = new CountingChatGate()
   booted.watchChats(chats)
   const atBoot = booted.rows()
@@ -605,14 +618,17 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
       return address === undefined ? undefined : `http://${address.host.includes(':') ? `[${address.host}]` : address.host}:${String(address.port)}/`
     },
     studioLink: booted.studioLink,
+    reload: () => booted.reload(),
     failedRows: () => failed,
     rows: () => atBootRows,
     check: expect => checkHealth({ rows: booted.rows, studio: booted.studio, profileDir: join(request.home, 'profiles', request.profile), verifyRuntime }, expect),
     close: async () => {
+      await endChanges()
       await booted.shutdown(EXIT.ok)
       await removeSandboxOverlay(request.home, request.profile)
     },
     suspend: async () => {
+      await endChanges()
       await booted.dispose()
       await removeSandboxOverlay(request.home, request.profile)
     },

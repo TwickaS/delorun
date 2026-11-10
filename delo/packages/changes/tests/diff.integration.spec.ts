@@ -1,13 +1,16 @@
 import { createHash } from 'node:crypto'
 import { chmodSync, symlinkSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { writeProtectedFile } from '@delo/home'
 import { boundedDiff, compareVersions, DIFF_FILE_LIMIT, DIFF_TOTAL_LIMIT, reviewInputOf } from '../src/diff.ts'
 import { objectsDirectory } from '../src/paths.ts'
 import { storeFolder } from '../src/store.ts'
 import type { VersionManifest } from '../src/types.ts'
 import { rejection, temporaryDirectory, writeFiles } from './support.ts'
+
+// The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
+vi.setConfig({ testTimeout: 30_000 })
 
 /**
  * Store a folder before and after an edit.

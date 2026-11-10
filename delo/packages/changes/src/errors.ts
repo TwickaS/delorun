@@ -21,6 +21,8 @@
  * - `WORK_SESSION_OPEN`: a work session is already open.
  * - `NO_WORK_SESSION`: no work session is open for the plugin.
  * - `RUNTIME_CHANGED`: the runtime in use differs from its signed file list under Block.
+ * - `INVALID_REQUEST`: an agent's plugin request names no spec pnpm accepts, or no plugin of the profile to remove.
+ * - `OPERATION_FAILED`: upstream's plugin operation for an applied plugin request failed; nothing was applied.
  */
 export type ChangesCode =
   | 'RECORD_UNREADABLE'
@@ -34,6 +36,8 @@ export type ChangesCode =
   | 'WORK_SESSION_OPEN'
   | 'NO_WORK_SESSION'
   | 'RUNTIME_CHANGED'
+  | 'INVALID_REQUEST'
+  | 'OPERATION_FAILED'
 
 /** A refusal or failure of Changes. */
 export class ChangesError extends Error {

@@ -11,26 +11,37 @@ describe('the prompts answer as switch values', () => {
   it('sets each prompt switch to its Delo default for "Safer prompts" and to its parity value for "Same as stock"', () => {
     const safer = promptRows('safer')
     const stock = promptRows('stock')
-    expect(safer).toHaveLength(Object.keys(PROMPT_SWITCH_ROWS).length)
+    expect(safer.map(row => row.id)).toEqual([...new Set(Object.values(PROMPT_SWITCH_ROWS))])
     for (const [switchId, rowId] of Object.entries(PROMPT_SWITCH_ROWS)) {
       const entry = PARITY_SWITCHES.find(candidate => candidate.id === switchId)
       expect(entry?.state).toBe('built')
       if (entry?.state !== 'built') continue
-      expect(safer.find(row => row.id === rowId)?.config).toEqual({ [entry.field.key]: entry.defaultValue })
-      expect(stock.find(row => row.id === rowId)?.config).toEqual({ [entry.field.key]: entry.parityValue })
+      expect(safer.find(row => row.id === rowId)?.config[entry.field.key], switchId).toBe(entry.defaultValue)
+      expect(stock.find(row => row.id === rowId)?.config[entry.field.key], switchId).toBe(entry.parityValue)
       expect(entry.defaultValue).not.toBe(entry.parityValue)
     }
   })
 
-  it('names rows that @delo/bundle-local inserts, for the plugin and config key the registry gives each switch', () => {
+  it('writes the switches that share a row as one row that sets each switch\'s key', () => {
+    expect(promptRows('safer').filter(row => row.id === 'delo-instruction-consent')).toEqual([
+      { id: 'delo-instruction-consent', config: { enabled: true, approvedPluginWrites: true } },
+    ])
+    expect(promptRows('stock').filter(row => row.id === 'delo-instruction-consent')).toEqual([
+      { id: 'delo-instruction-consent', config: { enabled: false, approvedPluginWrites: false } },
+    ])
+  })
+
+  it('names rows that @delo/bundle-local inserts, for the plugin and config keys the registry gives the switches on each', () => {
+    const keysByRow = new Map<string, string[]>()
     for (const [switchId, rowId] of Object.entries(PROMPT_SWITCH_ROWS)) {
       const entry = PARITY_SWITCHES.find(candidate => candidate.id === switchId)
       const row = BUNDLE_ROWS.get(rowId)
       expect(row, rowId).toBeDefined()
       if (entry?.state !== 'built' || row === undefined) continue
       expect(row.name).toBe(entry.field.module)
-      expect(Object.keys(row.config ?? {})).toEqual([entry.field.key])
+      keysByRow.set(rowId, [...keysByRow.get(rowId) ?? [], entry.field.key])
     }
+    for (const [rowId, keys] of keysByRow) expect(Object.keys(BUNDLE_ROWS.get(rowId)?.config ?? {}).sort(), rowId).toEqual(keys.sort())
   })
 
   it('stops when a listed switch is not built in the registry', () => {

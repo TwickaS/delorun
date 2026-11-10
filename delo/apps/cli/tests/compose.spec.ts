@@ -19,6 +19,7 @@ import type { BootedRow } from '../src/delo-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import { isRecord } from '../src/patch-layers.ts'
+import { promptRows } from '../src/setup/prompt-switches.ts'
 import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts'
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 
@@ -153,7 +154,7 @@ describe('a set-up CLI profile', { timeout: 60_000 }, () => {
     const answers = join(deloHome, 'profiles', 'default', 'setup-answers.json')
     writeFileSync(answers, JSON.stringify({ ...JSON.parse(readFileSync(answers, 'utf8')) as object, prompts: 'stock' }))
     rmSync(join(deloHome, 'cordis.patch.yml'))
-    for (const id of ['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent']) appendToProfilePatch({ id, config: { enabled: false } })
+    for (const row of promptRows('stock')) appendToProfilePatch({ id: row.id, config: row.config })
     const composed = await compose()
     expect(composed.prompts).toBe('stock')
     expect(() => { assertDeloInvariants(composed, booted(composed)) }).not.toThrow()

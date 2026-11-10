@@ -5,7 +5,10 @@
  * [store](./store.ts)), diffs and pending changes ([diff](./diff.ts), [pending](./pending.ts)), the risk summary
  * ([risk](./risk.ts), [review](./review.ts)), the record files ([records](./records.ts)), the profile's `link:`
  * dependencies ([link](./link.ts)), what a start loads ([enforce](./enforce.ts)) and the invariants a booted profile keeps
- * ([invariants](./invariants.ts)).
+ * ([invariants](./invariants.ts)), what a person does with a change ([actions](./actions.ts)), and the Host's side of a work
+ * session ([work](./work.ts), [work record](./work-record.ts)), and the agent's plugin requests and applying them
+ * ([install actions](./install-actions.ts), also the entry `@delo/changes/install`). Ending a work session because Delo
+ * stops is the separate entry `@delo/changes/stop` ([stop](./stop.ts)).
  *
  * @module @delo/changes
  */
@@ -23,3 +26,9 @@ export * from './records.ts'
 export * from './link.ts'
 export * from './enforce.ts'
 export * from './invariants.ts'
+export * from './boot-record.ts'
+export * from './status.ts'
+export * from './actions.ts'
+export { loadWorkSession, workFinishedLine, type WorkFinished, type WorkLoad, type WorkStarted, type WorkSync } from './work.ts'
+export * from './work-record.ts'
+export * from './install-actions.ts'

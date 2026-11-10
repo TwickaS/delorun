@@ -8,9 +8,11 @@ import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
 import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { attestTerminal, readApproved, readChangeLog, readWorkSession, startWork } from '@delo/changes'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { HostNotStoppedError, sendHomeRequest, type LocalDeviceApproval } from '@delo/home-process'
 import { resolveSurface } from '@delo/logs'
+import { reloadThroughChannel } from '../src/changes/command.ts'
 import { parse, stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
@@ -251,7 +253,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
         const booted = (): BootedRow[] => composedBootRows(deloHome, options, rows)
-        return Promise.resolve({ rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => { events.push('dispose'); return Promise.resolve() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
+        return Promise.resolve({ rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => { events.push('dispose'); return Promise.resolve() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), reload: async () => Promise.resolve({ ok: true }) })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
       probe: () => () => Promise.resolve('answered'),
@@ -376,6 +378,8 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(process.env.DELO_PROFILE).toBe('default')
     const lock = JSON.parse(readFileSync(join(deloHome, 'run', 'default', 'home.lock'), 'utf8')) as { pid: number }
     expect(lock.pid).toBe(process.pid)
+    // C19's `changes.reload` reaches the booted profile's reload.
+    expect(await sendHomeRequest(deloHome, 'default', { op: 'changes.reload' })).toEqual([{ ok: true, reload: { ok: true } }])
     const printed: string[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: { ...context, stdout: text => void printed.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)
     expect(printed.join('')).toContain(`Delo is already running for the profile default (process ${String(process.pid)}`)
@@ -413,13 +417,35 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(atBoot).toEqual([atBoot[0], undefined])
   })
 
+  it('Delo stopping ends the work session: the Host closes it and its folder\'s content becomes the approved version', { timeout: 300_000 }, async () => {
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    const profileDir = join(deloHome, 'profiles', 'default')
+    const folder = join(osHome, 'plug')
+    mkdirSync(folder)
+    writeFileSync(join(folder, 'package.json'), '{"name":"plug","version":"1.0.0"}\n')
+    writeFileSync(join(folder, 'index.js'), 'export default 1\n')
+    const manifest = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> }
+    writeFileSync(join(profileDir, 'package.json'), JSON.stringify({ ...manifest, dependencies: { ...manifest.dependencies, plug: `link:${folder}` } }))
+    linkIntoProfile('plug', folder)
+    const shutdowns: number[] = []
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([], [], shutdowns))).toBeUndefined()
+    const ctx = { home: deloHome, profile: 'default', profileDir }
+    await startWork(ctx, 'plug', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }), { reload: () => reloadThroughChannel(deloHome, 'default') })
+    writeFileSync(join(folder, 'index.js'), 'export default 2\n')
+    await sendHomeRequest(deloHome, 'default', { op: 'stop', args: { mode: 'drain' } })
+    await vi.waitFor(async () => { expect(await readWorkSession(deloHome, 'default')).toBeUndefined() }, { timeout: 60_000, interval: 100 })
+    await vi.waitFor(() => { expect(shutdowns).toEqual([EXIT.ok]) }, { timeout: 60_000, interval: 100 })
+    const entry = (await readChangeLog(deloHome, 'default')).entries.at(-1)!
+    expect(entry).toMatchObject({ kind: 'plugin-edit', state: 'applied', decidedFrom: 'terminal', to: (await readApproved(profileDir)).plugins.plug?.version })
+  })
+
   it('releases the lock when the profile fails to boot, and refuses a home without the CLI profile', async () => {
     await prepareHome(context, undefined)
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([]))).rejects.toThrow('run: delorun setup')
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const failing: StartDependencies = { ...recording([]), runProfile: () => Promise.reject(new Error('boot failed')) }
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, failing)).rejects.toThrow('failed to start: boot failed')
-    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
+    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
   })
 
   it('refuses a Delo bundle that resolves but fails to load, and still starts over a skipped upstream bundle', async () => {
@@ -453,7 +479,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     // Upstream's shutdown may end the process before the failed start finishes; the refused Host's own teardown does not.
     expect(shutdowns).toEqual([])
     expect(events.filter(event => event === 'dispose')).toEqual(['dispose'])
-    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
+    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
     const upstreamOnly: BootedRow[] = [{ id: 'mcp', name: '@deepseek-ai/dsh-mcp-client', disabled: false, state: 'failed' }]
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([], upstreamOnly, shutdowns))).toBeUndefined()
     expect(shutdowns).toEqual([])
@@ -644,6 +670,6 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     expect(refused.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ state: 'not-imported', disabled: false })
     expect(refused.stderr).toContain('forced import failure')
     expect(refused.report.sessionLogEnabled).toBe(false)
-    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
+    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
   })
 })

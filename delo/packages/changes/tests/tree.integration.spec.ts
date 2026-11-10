@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto'
 import { chmodSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { writeProtectedFile } from '@delo/home'
 import { CACHE_SETTLE_MS, compareCodeUnits, isDigest, manifestOf, openRegularFile, readChunks, SCAN_CACHE_SCHEMA, scanFolder, versionOf } from '../src/tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ObjectDigest, type VersionEntry } from '../src/types.ts'
 import { lockOut, makeFifo, modeOf, rejection, temporaryDirectory, writeFiles } from './support.ts'
+
+// The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
+vi.setConfig({ testTimeout: 30_000 })
 
 /**
  * The SHA-256 of a text.

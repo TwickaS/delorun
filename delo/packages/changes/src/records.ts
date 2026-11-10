@@ -102,11 +102,13 @@ export function attestStudio(facts: { readonly loopback: boolean, readonly crede
 }
 
 /**
+ * Refuse a claimed proof of presence that {@link attestTerminal} or {@link attestStudio} did not issue. Every writer that
+ * needs the person at their computer calls it before it reads or writes anything.
  * @param presence - a claimed proof.
  * @param subject - what it is for, for the refusal.
  * @throws {ChangesError} `NOT_AT_COMPUTER` when the attest functions did not issue it.
  */
-function requirePresence(presence: AtComputer, subject: string): void {
+export function requirePresence(presence: AtComputer, subject: string): void {
   if (!issued.has(presence)) throw new ChangesError('NOT_AT_COMPUTER', subject, 'This needs you at your computer, and the request did not come from a terminal or the studio on this computer.')
 }
 
@@ -305,6 +307,7 @@ const WORK_SESSION_RULES: Readonly<Record<string, FieldRule>> = {
   startedAt: required.iso,
   startedFrom: { test: oneOf(['terminal', 'studio']), expected: 'terminal or studio' },
   lastLoaded: optional.version,
+  lastFailed: optional.version,
 }
 
 const ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
@@ -507,8 +510,9 @@ export async function closeWorkSession(home: string, profile: string, plugin: st
 }
 
 /**
- * Record the content that last loaded in the open work session, which a failed reload goes back to. The Host records
- * what it loaded, so no proof of presence is needed. The caller holds the profile's lock.
+ * Record the content that last loaded in the open work session, which a failed reload goes back to, and forget an
+ * earlier failure. The Host records what it loaded, so no proof of presence is needed. The caller holds the profile's
+ * lock.
  * @param home - the Delo home.
  * @param profile - the profile's name.
  * @param version - the content that loaded.
@@ -516,11 +520,45 @@ export async function closeWorkSession(home: string, profile: string, plugin: st
  * @throws {ChangesError} `NO_WORK_SESSION` when none is open; `RECORD_UNREADABLE` when the record is not one Delo wrote.
  */
 export async function noteLoaded(home: string, profile: string, version: ContentVersion): Promise<WorkSessionRecord> {
+  const { lastFailed: _lastFailed, ...record } = await openSession(home, profile)
+  return rewriteSession(home, profile, { ...record, lastLoaded: version })
+}
+
+/**
+ * Record folder content whose reload failed in the open work session, so ending the session approves the content that
+ * last loaded instead. The Host records what failed, so no proof of presence is needed. The caller holds the profile's
+ * lock.
+ * @param home - the Delo home.
+ * @param profile - the profile's name.
+ * @param version - the content that failed to load.
+ * @returns the updated record.
+ * @throws {ChangesError} `NO_WORK_SESSION` when none is open; `RECORD_UNREADABLE` when the record is not one Delo wrote.
+ */
+export async function noteFailed(home: string, profile: string, version: ContentVersion): Promise<WorkSessionRecord> {
+  return rewriteSession(home, profile, { ...await openSession(home, profile), lastFailed: version })
+}
+
+/**
+ * @param home - the Delo home.
+ * @param profile - the profile's name.
+ * @returns the open work session.
+ * @throws {ChangesError} `NO_WORK_SESSION` when none is open; `RECORD_UNREADABLE` when the record is not one Delo wrote.
+ */
+async function openSession(home: string, profile: string): Promise<WorkSessionRecord> {
   const record = await readWorkSession(home, profile)
   if (record === undefined) throw new ChangesError('NO_WORK_SESSION', profile, `No work session is open in profile ${profile}.`)
-  const updated: WorkSessionRecord = { ...record, lastLoaded: version }
-  await writeProtectedFile(workSessionPath(home, profile), jsonText(updated))
-  return updated
+  return record
+}
+
+/**
+ * @param home - the Delo home.
+ * @param profile - the profile's name.
+ * @param record - the open session's new record.
+ * @returns the record written.
+ */
+async function rewriteSession(home: string, profile: string, record: WorkSessionRecord): Promise<WorkSessionRecord> {
+  await writeProtectedFile(workSessionPath(home, profile), jsonText(record))
+  return record
 }
 
 /**

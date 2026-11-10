@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion, StartId } from '@delo/contract-home-layout'
-import type { UpdateJournal } from '@delo/contract-home-process'
+import type { ChangesReloadOutcome, UpdateJournal } from '@delo/contract-home-process'
 import { ensureHomeTree, newStartId, processExists, readHomeLock, runDirectory, writeProtectedFile } from '@delo/home'
 import { Redactor, type DeloLogger } from '@delo/logs'
 import {
@@ -359,6 +359,11 @@ export class FixtureCopies implements SessionDataCopies {
 export class FixtureHost implements RunningHost {
   readonly chats = new CountingChatGate()
   closed = false
+  /** What the next `reload` answers. */
+  reloadOutcome: ChangesReloadOutcome = { ok: true }
+  /** How often `reload` was called. */
+  reloads = 0
+
   /** How it was asked to stop, in order: `close` as the process stops, `suspend` through its own teardown. */
   readonly stops: ('close' | 'suspend')[] = []
 
@@ -407,6 +412,11 @@ export class FixtureHost implements RunningHost {
     const present = this.rows().map(row => row.id)
     const gone = expect.previousRows.filter(row => !present.includes(row.id) && !expect.namedRows.includes(row.id)).map(row => row.id)
     return Promise.resolve(gone.length === 0 ? { passed: true } : { passed: false, criterion: 'H3-rows-kept', detail: gone.join(',') })
+  }
+
+  async reload(): Promise<ChangesReloadOutcome> {
+    this.reloads += 1
+    return Promise.resolve(this.reloadOutcome)
   }
 
   async close(): Promise<void> {

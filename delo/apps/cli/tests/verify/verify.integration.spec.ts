@@ -55,7 +55,7 @@ interface Run {
 async function verify(fixture: InstalledHome, args: readonly string[] = [], environment: Partial<VerifyEnvironment> = {}, env: Record<string, string | undefined> = { DELO_LAUNCHER_ROOTS: fixture.launcherRoots }): Promise<Run> {
   let stdout = ''
   let stderr = ''
-  const command = createVerifyCommand({ fetch: fixture.tiles.fetch, now: () => NOW, platform: PLATFORM, running: () => RELEASE, ...environment })
+  const command = createVerifyCommand({ fetch: fixture.tiles.fetch, now: () => NOW, platform: PLATFORM, running: () => RELEASE, fromStore: () => true, ...environment })
   const exit = await command.run(args, { env: { DELO_HOME: fixture.home, ...env }, stdout: (text) => { stdout += text }, stderr: (text) => { stderr += text } })
   return { exit, stdout, stderr }
 }

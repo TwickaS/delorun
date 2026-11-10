@@ -124,7 +124,7 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | Answer | Write | Target |
 | --- | --- | --- |
 | `modelProvider` | A typed key goes to upstream's credential store, `.credentials.yaml` under the home, at mode 0600. A key read from the environment is stored nowhere. | The home. |
-| `prompts` | `config.enabled` of the rows `delo-permission-defaults`, `delo-instruction-consent`, `delo-mcp-consent` and `delo-schedule-consent`, set to each switch's Delo default (`safer`) or parity value (`stock`) in contract C16's registry. The fetch guard is a refusal, not a prompt, and no answer changes it. | The profile's `cordis.patch.yml`. |
+| `prompts` | `config.enabled` of the rows `delo-permission-defaults`, `delo-instruction-consent`, `delo-mcp-consent` and `delo-schedule-consent`, and `config.approvedPluginWrites` of `delo-instruction-consent`, set to each switch's Delo default (`safer`) or parity value (`stock`) in contract C16's registry; the two switches of `delo-instruction-consent` are written as one row. The fetch guard is a refusal and the plugin changes held for review are no prompt, so no answer changes either. | The profile's `cordis.patch.yml`. |
 | `background` | Recorded in the answers record `setup-answers.json`; the start commands read it. | The profile directory. |
 | `profile.name` | The CLI profile is created under this name. | The home. |
 | `profile.port` | The `webserver` row with the port, restating the Web bundle's other keys. Not written for the default port. | The profile's `cordis.patch.yml`. |

@@ -1,7 +1,8 @@
 /**
- * `delorun doctor [--port <n>]`: runs four checks in order, then reads the
- * running release's release-log check state and the profile's last update
- * check, and prints one line per check.
+ * `delorun doctor [--port <n>]`: runs four checks in order, then the `changes`
+ * lines of [changes](./changes.ts), then reads the running release's
+ * release-log check state and the profile's last update check, and prints one
+ * line per check.
  * `pass` lines go to standard output; `warn` and `fail` lines go to standard
  * error. The checks are described in [checks](./checks.ts) and the record
  * lines in [records](./records.ts). The stock-home import line is printed only
@@ -45,6 +46,7 @@ import { profileStudioPort } from '../setup/sections.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
 import { studioAddress } from '../status.ts'
 import { deloVersion } from '../version.ts'
+import { checkChanges } from './changes.ts'
 import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 import { checkUpdate } from './update.ts'
@@ -56,8 +58,11 @@ import { launcherAnchor } from '../update/trusted-root.ts'
 const DOCTOR_USAGE = [
   'Usage: delorun doctor [--port <n>]',
   '',
-  'Checks the Delo home (home), the Docker engine (docker), the DeepSeek API key\'s format (key) and the studio\'s port (port),',
-  'then reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused,',
+  'Checks the Delo home (home), the Docker engine (docker), the DeepSeek API key\'s format (key) and the studio\'s port (port).',
+  'Then it reports your changes (changes): the protection setting, any work session, and for each plugin you link from a',
+  'folder whether it loaded at the last start, whether it runs the content you approved, its version requirements and what it',
+  'registers that changes a consent, a guard or the sandbox policy, with the change to undo when it did not load.',
+  'Then it reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused,',
   'and the last check for a newer release (update), which sends no request.',
   'Prints one line per check: pass on standard output, warn or fail on standard error.',
   'Exit codes: 0 when no check fails, 1 when one fails, 2 for a wrong command line. Warnings do not change the exit code.',
@@ -160,8 +165,31 @@ async function guarded(name: CheckName, check: () => Promise<CheckResult>): Prom
   try {
     return await check()
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    return { name, status: 'fail', message: `the check could not complete: ${reason.replace(/\s*\n\s*/g, ' ')}` }
+    return failureLine(name, error)
+  }
+}
+
+/**
+ * @param name - the check's name.
+ * @param error - what the check threw.
+ * @returns the failure line that names the error.
+ */
+function failureLine(name: CheckName, error: unknown): CheckResult {
+  const reason = error instanceof Error ? error.message : String(error)
+  return { name, status: 'fail', message: `the check could not complete: ${reason.replace(/\s*\n\s*/g, ' ')}` }
+}
+
+/**
+ * Run a check that prints several lines. A failure inside it becomes one failure line.
+ * @param name - the check's name.
+ * @param check - the check.
+ * @returns its results, or one failure line that names the error.
+ */
+async function guardedLines(name: CheckName, check: () => Promise<readonly CheckResult[]>): Promise<readonly CheckResult[]> {
+  try {
+    return await check()
+  } catch (error) {
+    return [failureLine(name, error)]
   }
 }
 
@@ -241,7 +269,7 @@ export interface DoctorEnvironment {
 export function createDoctorCommand(environment: DoctorEnvironment): CliCommand {
   return {
     name: 'doctor',
-    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the release-log check and the last update check',
+    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the release-log check, the last update check and your changes',
     async run(args, context) {
       if (args.includes('--help') || args.includes('-h')) {
         context.stdout(DOCTOR_USAGE)
@@ -255,6 +283,7 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         await guarded('docker', () => checkDocker(() => runDockerVersion(dockerProbeEnvironment(context.env)))),
         await guarded('key', () => keyCheck(context, profile)),
         await guarded('port', () => portCheck(context, profile, option)),
+        ...await guardedLines('changes', () => checkChanges(context.env, profile)),
         await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
         await guarded('update', async () => updateCheck(context, profile)),
       ]

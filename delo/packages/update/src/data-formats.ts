@@ -43,6 +43,14 @@ import deloRecords from './data-records.json' with { type: 'json' }
  * - `storage:delo_chat_states`: the `delo_chat_states` storage domain under `storages/`, its `defineDomain` version
  *   (`@delo/plugin-chat-states`).
  * - `trash-item`: `trash/items/<id>/item.json`, a trash item's record, at `TRASH_ITEM_SCHEMA_VERSION` (`@delo/trash`).
+ * - `changes-protection`: `changes/protection.json`, the protection setting (C21).
+ * - `changes-version`: `changes/store/versions/<version>.json`, one approved content version (C21).
+ * - `changes-approved`: `delo.changes` in `profiles/<profile>/package.json`, the approved plugins (C21).
+ * - `changes-log`: `changes/profiles/<profile>/log.json`, the change log (C21).
+ * - `changes-work-session`: `changes/profiles/<profile>/work-session.json`, the work session (C21).
+ * - `changes-active`: `changes/profiles/<profile>/active.json`, what each active directory holds (C21).
+ * - `changes-boot`: `run/<profile>/changes-boot.json`, what loaded at the last start (C21).
+ * - `changes-work`: `run/<profile>/changes-work.json`, the last failed reload in a work session (C21).
  */
 export const DELO_RECORDS: Readonly<Record<string, number>> = Object.freeze({ ...deloRecords })
 

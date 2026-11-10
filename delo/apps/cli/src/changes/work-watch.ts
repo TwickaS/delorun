@@ -1,0 +1,129 @@
+/**
+ * The home process's side of a work session (contract C21, "Work sessions"): while a session is open, each settled
+ * change in the plugin's folder loads live in the running Host through [`loadWorkSession`](../../../../packages/changes/src/work.ts),
+ * which copies the folder's content into the plugin's active directory and reloads the Host as `changes.reload` does
+ * ([reload](./reload.ts)), going back to the content that last loaded when the reload fails.
+ *
+ * Delo watches the folder itself instead of setting upstream's `hmr.root`, because the Host loads the plugin from its
+ * active directory, so a source watch of the folder would watch files that are not loaded.
+ *
+ * The watcher follows `changes/profiles/<profile>/work-session.json`, so a session opened or closed by
+ * `delorun changes work` or `done` is noticed, and while one is open it watches the plugin's folder recursively, leaving
+ * out `.git`. Events are debounced; loads run one at a time under the profile write lock.
+ *
+ * @module @delo/cli/changes/work-watch
+ */
+import { mkdirSync, watch, type FSWatcher, type WatchListener } from 'node:fs'
+import { sep } from 'node:path'
+import { CHANGES_ENTRIES, EXCLUDED_DIRECTORY, isChangesError, loadWorkSession, profileChangesDirectory, readWorkSession, type ReloadHost, type WorkSync } from '@delo/changes'
+import { PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
+import type { DeloLogger } from '@delo/logs'
+
+/** How long, in milliseconds, the folder and the session record stay quiet before a change loads. */
+export const WORK_DEBOUNCE_MS = 300
+
+/** The profile whose work sessions the home process follows. */
+export interface WorkWatchOptions {
+  /** The Delo home. */
+  readonly home: string
+  /** The profile's name. */
+  readonly profile: string
+  /** The profile's directory. */
+  readonly profileDir: string
+  /** Reloads the running Host ([reload](./reload.ts)). */
+  readonly reload: ReloadHost
+  /** The home process's logger, which receives every load and failure. */
+  readonly logger: DeloLogger
+  /** How long events settle before a load; {@link WORK_DEBOUNCE_MS} by default. */
+  readonly debounceMs?: number
+}
+
+/** A running watcher. */
+export interface WorkWatch {
+  /**
+   * Stop watching and wait for a load in progress.
+   * @returns when nothing of the watcher runs.
+   */
+  close(): Promise<void>
+}
+
+/**
+ * @param name - a path relative to the watched folder, as a watch event names it.
+ * @returns whether it is inside a `.git` directory, which is not part of a plugin's content.
+ */
+function inGit(name: string | null): boolean {
+  return name !== null && name.split(sep).includes(EXCLUDED_DIRECTORY)
+}
+
+/**
+ * Follow the profile's work sessions and load each settled change of the open session's folder.
+ * @param options - the profile, the Host's reload, the logger and the debounce.
+ * @returns the watcher.
+ */
+export function watchWork(options: WorkWatchOptions): WorkWatch {
+  const { home, profile, profileDir, reload, logger } = options
+  const debounceMs = options.debounceMs ?? WORK_DEBOUNCE_MS
+  const ctx = { home, profile, profileDir }
+  let timer: NodeJS.Timeout | undefined
+  let settling = Promise.resolve()
+  let folder: { readonly source: string, readonly watcher: FSWatcher } | undefined
+
+  const open = (path: string, recursive: boolean, listener: WatchListener<string>): FSWatcher => {
+    const watcher = watch(path, { recursive, persistent: false }, listener)
+    watcher.on('error', (error) => { logger.warn(`Delo stopped watching ${path} for your work session: ${error.message}`) })
+    return watcher
+  }
+  const schedule = (): void => {
+    clearTimeout(timer)
+    timer = setTimeout(() => { settling = settling.then(settle) }, debounceMs)
+    timer.unref()
+  }
+  const follow = (source: string | undefined): void => {
+    if (folder?.source === source) return
+    if (folder !== undefined) {
+      folder.watcher.close()
+      logger.info(`Delo no longer watches ${folder.source}: the work session on it ended.`)
+    }
+    folder = undefined
+    if (source === undefined) return
+    try {
+      folder = { source, watcher: open(source, true, (_event, name) => { if (!inGit(name)) schedule() }) }
+    } catch (error) {
+      logger.warn(`Delo cannot watch ${source} for your work session: ${(error as Error).message}`)
+    }
+  }
+  const report = (sync: WorkSync): void => {
+    if (sync.kind === 'loaded') {
+      logger.info(`Loaded ${sync.plugin} from its folder in your work session.`)
+    } else if (sync.kind === 'went-back') {
+      logger.warn(`${sync.plugin} failed to load from its folder: ${sync.failure}. Delo went back to the version that last loaded.`)
+      if (sync.again !== undefined && !sync.again.ok) logger.error(`Loading the version of ${sync.plugin} that last loaded also failed: ${sync.again.error}. Restart Delo.`)
+    } else if (sync.kind === 'folder-gone') {
+      logger.warn(`The folder of ${sync.plugin} is gone; Delo keeps running the version that last loaded.`)
+    }
+  }
+  const settle = async (): Promise<void> => {
+    try {
+      follow((await readWorkSession(home, profile))?.source)
+      report(await loadWorkSession(ctx, reload))
+    } catch (error) {
+      logger.warn(`Delo could not load your work session's folder: ${isChangesError(error) ? error.detail : String(error)}`)
+    }
+  }
+
+  const directory = profileChangesDirectory(home, profile)
+  mkdirSync(directory, { recursive: true, mode: PRIVATE_DIR_MODE })
+  const sessions = open(directory, false, (_event, name) => { if (name === CHANGES_ENTRIES.workSession) schedule() })
+  schedule()
+  return {
+    close: async () => {
+      clearTimeout(timer)
+      sessions.close()
+      folder?.watcher.close()
+      // A load already queued still runs, so the Host takes the last edit before the session ends; a folder it began
+      // watching meanwhile is closed after it.
+      await settling
+      folder?.watcher.close()
+    },
+  }
+}

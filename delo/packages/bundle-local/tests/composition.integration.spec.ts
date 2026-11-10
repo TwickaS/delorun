@@ -35,6 +35,7 @@ const MOUNTED_PLUGINS = [
   { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults' },
   { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent' },
   { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard' },
+  { id: 'delo-plugin-changes', name: '@delo/plugin-changes' },
   { id: 'delo-reach', name: '@delo/reach' },
 ] as const
 

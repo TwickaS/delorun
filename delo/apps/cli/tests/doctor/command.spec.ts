@@ -96,7 +96,9 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('pass release-log: release 0.4.0 verified against the release log at 2026-11-10T10:00:00Z.\n')
-    expect(result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log', 'update'])
+    // The `changes` lines report the home's Changes; their own specs are in changes.spec.ts.
+    const checks = result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).filter(name => name !== 'changes').sort()
+    expect(checks).toEqual(['docker', 'home', 'key', 'port', 'release-log', 'update'])
     expect(result.lines.some(line => / import: /.test(line))).toBe(false)
   })
 

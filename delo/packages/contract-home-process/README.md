@@ -27,7 +27,7 @@ The package is a dependency of `delo/packages/home-process`, `delo/apps/cli` and
 
 ## Exports
 
-- **Protocol:** `UPDATE_PROTOCOL_VERSION`, the request types `StatusRequest`, `UpdatePrepareRequest`, `UpdateApplyRequest`, `UpdateCancelRequest`, `RollbackRequest`, `StopRequest`, `StudioOpenTokenRequest` and their union `UpdateChannelRequest`, with `DrainArgs`, `UpdateChannelResponse`, `HomeStatus` and `StudioLink`, the answer to `studio.open-token`.
+- **Protocol:** `UPDATE_PROTOCOL_VERSION`, the request types `StatusRequest`, `UpdatePrepareRequest`, `UpdateApplyRequest`, `UpdateCancelRequest`, `RollbackRequest`, `StopRequest`, `StudioOpenTokenRequest`, `ChangesReloadRequest` and their union `UpdateChannelRequest`, with `DrainArgs`, `UpdateChannelResponse`, `HomeStatus`, `StudioLink`, the answer to `studio.open-token`, and `ChangesReloadOutcome`, the answer to `changes.reload`.
 - **States and phases:** the `HomeProcessState`, `UpdatePhase`, `UpdateOutcome`, `DrainPolicy` and `StopMode` types.
 - **Records:** the `UpdateJournal` type of the update record `run/<profile>/update.json`, the `HandoverMessage` type, and `HANDOVER_FD`.
 - **Limits:** `HOME_PROCESSES_PER_PROFILE`, `START_WAIT_MS`, `STOP_NOW_ANSWER_MS`, `STOP_TERM_GRACE_MS`, `STOP_KILL_WAIT_MS`, `REQUEST_MAX_BYTES`, `REQUEST_DEADLINE_MS`, `MAX_CONNECTIONS`, `AUTH_FAILURE_LOG_LINES_PER_SECOND`, `REPORT_LIFETIME_MS`, `DRAIN_TIMEOUT_MIN_S`, `DRAIN_TIMEOUT_MAX_S`, `DRAIN_TIMEOUT_DEFAULT_S`, `HEALTH_CHECK_TIMEOUT_MS`, `LOGIN_RESTART_LIMIT`, `LOGIN_RESTART_WINDOW_MS` and `STATUS_EXIT_NOT_RUNNING`.

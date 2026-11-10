@@ -120,7 +120,8 @@ describe('the real tree', () => {
     // A row may be restated per profile; one switch is still one claim. The consent plugins and the update gate are
     // inserted rows, which carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
-      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'reach', 'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal',
+      'approved_plugin_write_consent', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults',
+      'plugin_changes_pending', 'reach', 'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
     expect(presenceErrors(registry, shipped, parity)).toEqual([])
@@ -471,7 +472,11 @@ describe('the parity overlay', () => {
     const rows = parseOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
-    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'default_workspace_directory', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'preset_inspect', 'reach', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal'])
+    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual([
+      'approved_plugin_write_consent', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'main_chat',
+      'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'plugin_changes_pending', 'preset_inspect', 'reach', 'sandbox_protected_reads',
+      'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal',
+    ])
   })
 
   it('fails a switch left on, a key that is no switch, and a row that sets more than config', () => {
@@ -492,14 +497,15 @@ describe('the parity overlay', () => {
 
 describe('the parity overlay\'s mount of @delo/bundle-local', () => {
   const bundle = readFileSync(join(ROOT, LOCAL_BUNDLE_PATCH_PATH), 'utf8')
-  /** The five consent and guard rows in the parity form the overlay's third patch restates them. */
+  /** The six consent and guard rows in the parity form the overlay's third patch restates them. */
   const CONSENT_INSERT = {
     insert: [
-      { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent', config: { enabled: true }, disabled: true },
+      { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent', config: { enabled: true, approvedPluginWrites: true }, disabled: true },
       { id: 'delo-mcp-consent', name: '@delo/plugin-mcp-consent', config: { enabled: true }, disabled: true },
       { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults', config: { enabled: true }, disabled: true },
       { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent', config: { enabled: true }, disabled: true },
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
+      { id: 'delo-plugin-changes', name: '@delo/plugin-changes', config: { enabled: true }, disabled: true },
     ],
   }
   /** The update gate row in the parity form the overlay's fourth patch restates it. */
@@ -537,11 +543,12 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       { insert: [{ id: 'delo-privacy', name: '@delo/bundle-local', disabled: true }] },
       {
         insert: [
-          { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent', config: { enabled: true }, disabled: true },
+          { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent', config: { enabled: true, approvedPluginWrites: true }, disabled: true },
           { id: 'delo-mcp-consent', name: '@delo/plugin-mcp-consent', config: { enabled: true }, disabled: true },
           { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults', config: { enabled: true }, disabled: true },
           { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent', config: { enabled: true }, disabled: true },
           { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
+          { id: 'delo-plugin-changes', name: '@delo/plugin-changes', config: { enabled: true }, disabled: true },
         ],
       },
       GATE_INSERT,

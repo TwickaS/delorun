@@ -17,3 +17,5 @@ The user guide is for people who use Delo. Start with [Delo and stock DeepSeek H
 [Reach the studio from your phone](reach.md) explains remote access over your own tailnet: turning it on, approving a device at your computer, what an approved phone can and cannot do, and removing a device.
 
 [Where Delo keeps its logs](logs.md) lists every operational log's location, what a log holds and never holds, how long logs are kept and how `delorun logs` shows and clears them.
+
+[Changing your harness](changing-your-harness.md) explains why a plugin you link from a folder runs the copy you approved, how `delorun changes` lists, shows, applies, discards and undoes changes, turning one plugin off, and the protection setting.

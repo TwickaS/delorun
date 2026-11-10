@@ -232,6 +232,8 @@ export interface WorkSessionRecord {
   readonly startedFrom: 'terminal' | 'studio'
   /** The last content that loaded, which a failed reload goes back to. */
   readonly lastLoaded?: ContentVersion
+  /** The folder content whose reload failed after {@link WorkSessionRecord.lastLoaded}; ending the session never approves it. */
+  readonly lastFailed?: ContentVersion
 }
 
 /** Schema tag of {@link WorkSessionRecord}. */

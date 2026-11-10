@@ -43,7 +43,7 @@ const MANIFEST = 'package.json'
 const LOCKFILE = 'pnpm-lock.yaml'
 
 /** A JSON object read from a file, whose members are checked where they are used. */
-type JsonObject = Record<string, unknown>
+export type JsonObject = Record<string, unknown>
 
 /**
  * The `link:` dependencies of the profile's manifest.
@@ -52,11 +52,11 @@ type JsonObject = Record<string, unknown>
  * @throws {ChangesError} `RECORD_UNREADABLE` when the manifest cannot be read or is not a JSON object.
  */
 export async function readLinks(profileDir: string): Promise<ProfileLink[]> {
-  const manifest = await readManifest(profileDir)
+  const manifest = await readProfileManifest(profileDir)
   const links = new Map<string, ProfileLink>()
   for (const section of LINK_SECTIONS) {
     const entries = manifest[section]
-    if (!isObject(entries)) continue
+    if (!isJsonObject(entries)) continue
     for (const [name, spec] of Object.entries(entries)) {
       if (links.has(name) || typeof spec !== 'string' || !spec.startsWith(LINK_PREFIX)) continue
       links.set(name, { name, section, spec, target: linkTarget(profileDir, spec.slice(LINK_PREFIX.length)) })
@@ -80,11 +80,11 @@ export async function readLinks(profileDir: string): Promise<ProfileLink[]> {
 export async function pointLinkAt(profileDir: string, name: string, target: string): Promise<void> {
   const spec = `${LINK_PREFIX}${target}`
   const manifestPath = join(profileDir, MANIFEST)
-  const manifest = await readManifest(profileDir)
+  const manifest = await readProfileManifest(profileDir)
   let linked = false
   for (const section of LINK_SECTIONS) {
     const entries = manifest[section]
-    if (!isObject(entries)) continue
+    if (!isJsonObject(entries)) continue
     const current = entries[name]
     if (typeof current !== 'string' || !current.startsWith(LINK_PREFIX)) continue
     entries[name] = spec
@@ -113,7 +113,7 @@ function linkTarget(profileDir: string, path: string): string {
  * @returns the manifest.
  * @throws {ChangesError} `RECORD_UNREADABLE` when it cannot be read or is not a JSON object.
  */
-async function readManifest(profileDir: string): Promise<JsonObject> {
+export async function readProfileManifest(profileDir: string): Promise<JsonObject> {
   const path = join(profileDir, MANIFEST)
   let parsed: unknown
   try {
@@ -121,7 +121,7 @@ async function readManifest(profileDir: string): Promise<JsonObject> {
   } catch (error) {
     throw new ChangesError('RECORD_UNREADABLE', path, `The profile's ${MANIFEST} could not be read: ${String(error)}`, { cause: error })
   }
-  if (!isObject(parsed)) throw new ChangesError('RECORD_UNREADABLE', path, `The profile's ${MANIFEST} is not a JSON object.`)
+  if (!isJsonObject(parsed)) throw new ChangesError('RECORD_UNREADABLE', path, `The profile's ${MANIFEST} is not a JSON object.`)
   return parsed
 }
 
@@ -190,6 +190,6 @@ async function modeOf(path: string): Promise<number> {
  * @param value - a parsed JSON value.
  * @returns whether it is a JSON object.
  */
-function isObject(value: unknown): value is JsonObject {
+export function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

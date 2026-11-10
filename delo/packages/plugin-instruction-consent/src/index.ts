@@ -19,6 +19,11 @@
  * Every registration sits behind the C16 switch `instruction_layer_consent`
  * ([`Config.enabled`]), off by default: off, or without a mounted provider, a
  * write commits exactly as upstream does.
+ *
+ * The plugin's second consent, behind the C16 switch
+ * `approved_plugin_write_consent` ([`Config.approvedPluginWrites`]), off by
+ * default, asks before the agent's first write in a chat to the folder of a
+ * plugin the person approved under Changes ([`./plugin-folders.ts`](./plugin-folders.ts)).
  * @module @delo/plugin-instruction-consent
  */
 import { join } from 'node:path'
@@ -29,11 +34,14 @@ import { resolveAgentsHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { WriteConsentRequest, WriteConsentReview, WriteConsentService } from '@deepseek-ai/dsh-tool-fs/src/consent.ts'
 import z from '@deepseek-ai/schemastery'
 import { type CaseProbe, classifyTarget, type CompositionFile, createCaseProbe, type Homes, reviewNote } from './classify.ts'
+import { askBeforePluginWrites } from './plugin-folders.ts'
 
 export {
   classifyTarget, createCaseProbe, INSTRUCTION_FILE_NAMES, probeCaseInsensitive, PROJECT_SKILLS_DIRS, reviewNote,
 } from './classify.ts'
 export type { CaseProbe, ClassifyOptions, CompositionFile, CompositionLayer, Homes, InstructionLayerTarget } from './classify.ts'
+export { approvedPluginFolders, callDiff, pluginOfTarget, pluginWriteAsk } from './plugin-folders.ts'
+export type { ConsentProfile, PluginFolders } from './plugin-folders.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'instruction-consent'
@@ -48,11 +56,20 @@ export interface Config {
    * does. Delo's composition turns it on.
    */
   readonly enabled: boolean
+  /**
+   * C16 switch `approved_plugin_write_consent`: whether the agent's first write
+   * in a chat to the folder of a plugin the person approved under Changes asks
+   * first, naming the plugin and carrying the diff. Off, the parity value and
+   * the default, the plugin registers nothing for it and such a write commits
+   * exactly as upstream does. Delo's composition turns it on.
+   */
+  readonly approvedPluginWrites: boolean
 }
 
-/** Validated configuration. The default is the parity value. */
+/** Validated configuration. The defaults are the parity values. */
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(false),
+  approvedPluginWrites: z.boolean().default(false),
 })
 
 /**
@@ -132,16 +149,18 @@ export class InstructionConsent extends Service implements WriteConsentService {
 }
 
 /**
- * Mount the plugin. On, it provides the `writeConsent` service the mutating
- * tools consult before a mutation commits. Off — the parity value — it
- * provides nothing, so `ctx.get('writeConsent')` answers `undefined` and every
- * write commits exactly as upstream does. The session-mode guard is not this
- * plugin's to provide: its one slot belongs to the full-access consent of
- * `@delo/plugin-permission-defaults` (A135).
+ * Mount the plugin. With `enabled` on, it provides the `writeConsent` service
+ * the mutating tools consult before a mutation commits; off — the parity
+ * value — it provides nothing, so `ctx.get('writeConsent')` answers
+ * `undefined`. With `approvedPluginWrites` on, it asks before the first write
+ * in a chat to an approved plugin's folders; off, it registers nothing for
+ * them. With both off every write commits exactly as upstream does. The
+ * session-mode guard is not this plugin's to provide: its one slot belongs to
+ * the full-access consent of `@delo/plugin-permission-defaults` (A135).
  * @param ctx - the plugin context.
- * @param config - the switch, defaulted by the schema above.
+ * @param config - the switches, defaulted by the schema above.
  */
 export function apply(ctx: Context, config: Config): void {
-  if (!config.enabled) return
-  new InstructionConsent(ctx)
+  if (config.enabled) new InstructionConsent(ctx)
+  if (config.approvedPluginWrites) askBeforePluginWrites(ctx)
 }

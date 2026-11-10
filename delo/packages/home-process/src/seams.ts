@@ -13,7 +13,7 @@
  * @module @delo/home-process/seams
  */
 import type { RuntimeVersion } from '@delo/contract-home-layout'
-import type { StudioLink, UpdateJournal } from '@delo/contract-home-process'
+import type { ChangesReloadOutcome, StudioLink, UpdateJournal } from '@delo/contract-home-process'
 import type { ExchangeOptions, ResponseLine, UnsignedRequest } from './client.ts'
 import type { LocalDeviceApproval } from './devices-approve.ts'
 
@@ -327,6 +327,12 @@ export interface RunningHost {
    * @returns the verdict.
    */
   check(expect: HealthExpectations | undefined): Promise<HealthVerdict>
+  /**
+   * Load what the profile's files now name, through upstream's hot reload: contract C19's `changes.reload`.
+   * @returns `ok`, or the error when hot reload is off, a plugin failed to load or start, or the change needs a
+   *   restart; never throws.
+   */
+  reload(): Promise<ChangesReloadOutcome>
   /**
    * Stop the Host as this process stops. Its teardown may end the process when it overruns the Host's own bound.
    * @returns when it has stopped.

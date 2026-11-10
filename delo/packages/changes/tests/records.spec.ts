@@ -11,6 +11,7 @@ import {
   attestTerminal,
   closeWorkSession,
   findEntry,
+  noteFailed,
   noteLoaded,
   openWorkSession,
   readActiveRecord,
@@ -26,6 +27,9 @@ import {
   type AtComputer,
 } from '../src/records.ts'
 import { CHANGE_LOG_SCHEMA, type ApprovedRecord, type ChangeEntry, type ChangeId, type ChangeLog, type ContentVersion } from '../src/types.ts'
+
+// The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
+vi.setConfig({ testTimeout: 30_000 })
 
 const hooks = vi.hoisted(() => ({ linkError: undefined as Error | undefined }))
 
@@ -208,10 +212,20 @@ describe('work session', () => {
     expect((await readWorkSession(home, PROFILE))?.lastLoaded).toBe(VERSION_B)
   })
 
+  it('notes content that failed to load, and forgets it when content loads', async () => {
+    expect(await refusal(noteFailed(home, PROFILE, VERSION_B))).toBe('NO_WORK_SESSION')
+    await openWorkSession(home, PROFILE, start, terminal())
+    expect((await noteFailed(home, PROFILE, VERSION_B)).lastFailed).toBe(VERSION_B)
+    expect((await readWorkSession(home, PROFILE))?.lastFailed).toBe(VERSION_B)
+    const loaded = await noteLoaded(home, PROFILE, VERSION_B)
+    expect(loaded.lastFailed).toBeUndefined()
+    expect(await readWorkSession(home, PROFILE)).toEqual(loaded)
+  })
+
   it('refuses a malformed record', async () => {
     const path = join(profileChangesDirectory(home, PROFILE), 'work-session.json')
     const valid = { schema: 'delo.changes-work-session/1', ...start, startedAt: '2026-11-10T10:00:00Z', startedFrom: 'terminal' }
-    for (const value of [{ ...valid, startedFrom: 'remote' }, { ...valid, plugin: 'Not A Name' }, { ...valid, lastLoaded: 'abc' }, { ...valid, from: 7 }]) {
+    for (const value of [{ ...valid, startedFrom: 'remote' }, { ...valid, plugin: 'Not A Name' }, { ...valid, lastLoaded: 'abc' }, { ...valid, lastFailed: 'abc' }, { ...valid, from: 7 }]) {
       await writeRecord(path, value)
       expect(await refusal(readWorkSession(home, PROFILE)), JSON.stringify(value)).toBe('RECORD_UNREADABLE')
     }

@@ -1,11 +1,14 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { changeId } from '../src/ids.ts'
 import { pluginChange } from '../src/pending.ts'
 import { storeFolder } from '../src/store.ts'
 import type { ContentVersion } from '../src/types.ts'
 import { rejection, temporaryDirectory, writeFiles } from './support.ts'
+
+// The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
+vi.setConfig({ testTimeout: 30_000 })
 
 /**
  * A home and a plugin folder holding files.

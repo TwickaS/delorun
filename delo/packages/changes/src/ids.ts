@@ -18,10 +18,12 @@ export const CHANGE_ID_PATTERN = /^c[0-9a-f]{10}$/
  * @param subject - what it is about.
  * @param from - the content before, when it had one.
  * @param to - the content after, when it has one.
+ * @param occurrence - which request of the same change this is, counted from 0: an agent's request for a plugin spec
+ *   that was already decided is a new change with a new id. The first occurrence's id is the id without the count.
  * @returns the id.
  */
-export function changeId(kind: ChangeKind, subject: ChangeSubject, from: ContentVersion | undefined, to: ContentVersion | undefined): ChangeId {
-  const parts = [kind, subject.plugin ?? '', subject.source ?? '', subject.file ?? '', subject.setting ?? '', subject.spec ?? '', from ?? '', to ?? '']
+export function changeId(kind: ChangeKind, subject: ChangeSubject, from: ContentVersion | undefined, to: ContentVersion | undefined, occurrence = 0): ChangeId {
+  const parts = [kind, subject.plugin ?? '', subject.source ?? '', subject.file ?? '', subject.setting ?? '', subject.spec ?? '', from ?? '', to ?? '', ...occurrence === 0 ? [] : [String(occurrence)]]
   return brandString<ChangeId>(`c${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 10)}`)
 }
 

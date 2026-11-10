@@ -290,7 +290,7 @@ function withApproval(record: ApprovedRecord, plugin: string, approval: Approved
  * @param directory - the active directory.
  * @param version - the version; undefined for an empty directory.
  */
-async function holdContent(home: string, directory: string, version: ContentVersion | undefined): Promise<void> {
+export async function holdContent(home: string, directory: string, version: ContentVersion | undefined): Promise<void> {
   if (await holdsVersion(directory, version ?? EMPTY_CONTENT_VERSION)) return
   if (version !== undefined) {
     await materialize(home, version, directory)

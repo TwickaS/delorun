@@ -72,6 +72,14 @@ export function reviewChange(input: ReviewInput, checks: readonly RiskCheck[] = 
 }
 
 /**
+ * @param kind - a risk kind.
+ * @returns what it means, as a printed line begins, such as `Runs commands or other programs`.
+ */
+export function riskKindPhrase(kind: RiskKind): string {
+  return KIND_PHRASES[kind]
+}
+
+/**
  * @param finding - a finding.
  * @returns where it is: `file:line`, or the file alone.
  */
@@ -91,6 +99,6 @@ export function riskLines(summary: RiskSummary): string[] {
     const locations = [...new Set(summary.findings.filter(finding => finding.kind === kind).map(locationOf))]
     const shown = locations.slice(0, LOCATIONS_PER_LINE).join(', ')
     const more = locations.length - LOCATIONS_PER_LINE
-    return `${KIND_PHRASES[kind]} (${shown}${more > 0 ? ` and ${String(more)} more` : ''})`
+    return `${riskKindPhrase(kind)} (${shown}${more > 0 ? ` and ${String(more)} more` : ''})`
   })]
 }

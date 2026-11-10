@@ -71,6 +71,16 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   'delo.update-report': 'update-report',
   'delo.session-data-copy': 'session-data-copy',
   'delo.data-restore': 'data-restore-journal',
+  'delo.changes-protection': 'changes-protection',
+  'delo.changes-version': 'changes-version',
+  'delo.changes-approved': 'changes-approved',
+  'delo.changes-log': 'changes-log',
+  'delo.changes-work-session': 'changes-work-session',
+  'delo.changes-active': 'changes-active',
+  'delo.changes-boot': 'changes-boot',
+  'delo.changes-work': 'changes-work',
+  // A cache of file digests that a start rebuilds when it cannot read it; never decides anything.
+  'delo.changes-scan-cache': null,
   // Documents a person exports, passes in or reads; no release reads them back from the home's data.
   ARCHIVE_CUSTOMISATION_SCHEMA_VERSION: null,
   SETUP_ANSWERS_SCHEMA_VERSION: null,
@@ -119,6 +129,14 @@ describe('c03-previous-release-reads-delorun-records', () => {
       'storage:delo_workspaces': 1,
       'storage:delo_chat_states': 1,
       'trash-item': 1,
+      'changes-protection': 1,
+      'changes-version': 1,
+      'changes-approved': 1,
+      'changes-log': 1,
+      'changes-work-session': 1,
+      'changes-active': 1,
+      'changes-boot': 1,
+      'changes-work': 1,
     }
     expect(DELO_RECORDS).toEqual(written)
   })

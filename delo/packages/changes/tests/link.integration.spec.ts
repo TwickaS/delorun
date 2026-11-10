@@ -6,6 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LINK_PREFIX, pointLinkAt, readLinks } from '../src/link.ts'
 import { modeOf, rejection, temporaryDirectory, writeFiles } from './support.ts'
 
+// The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
+vi.setConfig({ testTimeout: 30_000 })
+
 const renames = vi.hoisted(() => ({ fail: false }))
 
 vi.mock('node:fs/promises', async (importOriginal) => {

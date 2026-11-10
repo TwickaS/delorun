@@ -145,7 +145,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: TYPED_KEY } })
     expect(patchOf()).toEqual([
       { id: 'delo-permission-defaults', config: { enabled: true } },
-      { id: 'delo-instruction-consent', config: { enabled: true } },
+      { id: 'delo-instruction-consent', config: { enabled: true, approvedPluginWrites: true } },
       { id: 'delo-mcp-consent', config: { enabled: true } },
       { id: 'delo-schedule-consent', config: { enabled: true } },
     ])
@@ -173,12 +173,13 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
     }
     expect(Object.fromEntries(byId)).toEqual({
       'delo-permission-defaults': { enabled: parityOf('permission_defaults') },
-      'delo-instruction-consent': { enabled: parityOf('instruction_layer_consent') },
+      'delo-instruction-consent': { enabled: parityOf('instruction_layer_consent'), approvedPluginWrites: parityOf('approved_plugin_write_consent') },
       'delo-mcp-consent': { enabled: parityOf('mcp_add_consent') },
       'delo-schedule-consent': { enabled: parityOf('scheduled_task_consent') },
     })
-    expect([...byId.values()].every(config => config['enabled'] === false)).toBe(true)
+    expect([...byId.values()].every(config => Object.values(config).every(value => value === false))).toBe(true)
     expect(byId.has('delo-fetch-guard')).toBe(false)
+    expect(byId.has('delo-plugin-changes')).toBe(false)
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
   })
 

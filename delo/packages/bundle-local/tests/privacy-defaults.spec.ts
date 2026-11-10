@@ -168,6 +168,7 @@ describe('a Delo CLI profile', () => {
       '@delo/plugin-permission-defaults',
       '@delo/plugin-schedule-consent',
       '@delo/plugin-fetch-guard',
+      '@delo/plugin-changes',
       `${LOCAL_BUNDLE}/update-gate`,
       `${LOCAL_BUNDLE}/update-check`,
       '@delo/plugin-trash',

@@ -125,12 +125,14 @@ Every request has the fields `v` (the protocol version, 1), `token`, `op` and, w
 | `rollback` | `wait` and `drainTimeoutS` as for `update.apply`; `profileOnly`: a boolean | as `update.apply`, with the target the update record's `from`; the final `outcome` is `rolled-back`, `aborted` or `failed` |
 | `stop` | `mode`: `drain` or `cancel` | progress lines, then one final line with `status` when it can be read, before the process exits |
 | `studio.open-token` | `port`, optional: a loopback port from 1 to 65535 that forwards to the studio | one line: `url`, the studio's loopback address, with `port` in place of the studio's own port when given, and a launch token that the Host mints for this request, and `oneTime`, whether that token works once within 60 seconds ([C4](c04-admission.md#launch-tokens)); `STUDIO_UNAVAILABLE`, with the reason, when no Host runs, the Host serves no studio, its studio listens on an address other than loopback, or it publishes the studio at a public URL |
+| `changes.reload` | none | one line with `reload`: `{"ok":true}` once the Host runs what the profile's files name, or `{"ok":false,"error":"<why>"}` when hot reload is off, a plugin fails to load or start, or the change needs a restart; `UPDATE_IN_PROGRESS` while an update or rollback runs or the process is not `running` |
 | `devices.approve` | none; `requestId` and `typedCode` together; or `cancelRequestId` alone | without arguments: opens [C5](c05-device-approval.md#approval-window)'s approval window, claiming a home without an owner for the local person, and answers one line with `closesAt` and `pending` once a request is pending or the window closed; with `requestId` and `typedCode`: [C5](c05-device-approval.md#local-approval)'s local approval, answering one line with the approved `device`; with `cancelRequestId`: cancels that pending request, answering one line with `cancelled` |
 | `devices.remove` | `deviceId` | removes one trusted device ([C5](c05-device-approval.md)), ending its sessions and closing its reach connections at once, and answers one line with `removed`, `sessions` and `connections` |
 
 - **Response lines.** Each line has `ok` (a boolean); a failed line has `error`, a code from [errors](#errors), and a progress line has `phase`, or, while `update.prepare` installs the target, `line`: one line of the install's progress with its newline, the same text the launcher prints while it installs a release. A report expires 600 seconds after `update.prepare` returns it; `update.apply` with an expired or unknown `reportId` fails with `REPORT_EXPIRED`. A request that fails in a way the home process does not report on the channel ends without a final line, the failure recorded in the home process's log; the requester treats the request's outcome as unknown, and `delorun update` says so and names `delorun logs home`.
 - **`failed`.** An `update.apply` or `rollback` that ends `failed` leaves a rollback the home process may not finish itself; the home process stops once the final line is sent, and the update record stays for the next start ([interrupted updates](#interrupted-updates)).
 - **One at a time.** Only one update or rollback runs at a time; a second one fails with `UPDATE_IN_PROGRESS`.
+- **`changes.reload`.** It changes no file: the Host recomposes the profile from its files through upstream's hot reload. `delorun changes` sends it after it changed the profile's files under the profile's write lock ([C21](c21-changes.md#commands)).
 - **Detached requesters.** A requester that disconnects does not change a running update. `delorun status` shows the phase of the update in progress; `delorun status --follow` is not built.
 
 ## The update handshake
@@ -244,7 +246,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 ## Consumers
 
 - `delo/packages/home-process`: the home process, the update channel, the handshake, the journal and the login items.
-- `delo/apps/cli`: `delorun`, `delorun start`, `open`, `stop`, `status`, `update` and `recover`, and setup's ending, which opens the studio through `studio.open-token`.
+- `delo/apps/cli`: `delorun`, `delorun start`, `open`, `stop`, `status`, `update`, `recover` and `changes`, and setup's ending, which opens the studio through `studio.open-token`.
 - `delo/packages/runtime-store`: the pointer writes and installs the handshake calls ([C1](c01-home-layout.md)).
 - `delo/packages/logs`: the home process's operational log ([C20](c20-operational-logs.md)).
 - The Host's update plugin, "Update now" and the studio's rollback, which are not built; no shipped bundle mounts an update plugin.
@@ -286,6 +288,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 | `update-channel-token-required` | A request with no token, with a wrong token and with the previous start's token each receives `UNAUTHENTICATED` and no other field |
 | `update-channel-landlock` | Under Landlock, a confined workspace command's connect to the update channel succeeds, its request fails with `UNAUTHENTICATED` because it cannot read the token, and `delorun verify` reports that state |
 | `update-channel-not-enforced-reported` | On a fixture dialect that cannot enforce [C1](c01-home-layout.md)'s rules, `delorun verify` reports them as `not-enforced` |
+| `changes.reload carries no arguments` | A `changes.reload` request with `args` or any other field is refused with `SCHEMA_VIOLATION` |
 | `update-request-fields` | A request with a path, URL or command field, or an unknown `op`, is refused with `SCHEMA_VIOLATION` and changes nothing |
 | `studio-open-token-person-only` | `studio.open-token` returns a fresh link for the start token; the Host's channel token, which `status` accepts, and a missing or wrong token receive `UNAUTHENTICATED`; a request with an unknown argument or a port outside 1 to 65535 receives `SCHEMA_VIOLATION`; and neither the link nor its token reaches the home log |
 | `update-request-limits` | A request line above 16,384 bytes, a connection silent for 5 seconds and a ninth connection are each closed with their codes |

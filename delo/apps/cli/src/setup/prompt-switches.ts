@@ -15,28 +15,43 @@ import { setPatchRow } from './writes.ts'
 
 /**
  * The switches whose behaviour is a prompt or a permission default, with the row of `@delo/bundle-local` that
- * mounts each. `fetch_guard` is a refusal and stays on whichever answer the person gives.
+ * mounts each. Several switches can share one row, as `instruction_layer_consent` and `approved_plugin_write_consent`
+ * share `delo-instruction-consent`. `fetch_guard` is a refusal and `plugin_changes_pending` holds a plugin change for
+ * review instead of asking, so both stay on whichever answer the person gives.
  */
 export const PROMPT_SWITCH_ROWS = {
   permission_defaults: 'delo-permission-defaults',
   instruction_layer_consent: 'delo-instruction-consent',
+  approved_plugin_write_consent: 'delo-instruction-consent',
   mcp_add_consent: 'delo-mcp-consent',
   scheduled_task_consent: 'delo-schedule-consent',
 } as const
 
+/** One patch row the prompts answer writes. */
+export interface PromptRow {
+  readonly id: string
+  readonly config: Readonly<Record<string, boolean>>
+}
+
 /**
- * The patch rows an answer writes.
+ * The patch rows an answer writes. A patch row replaces the bundle row's whole `config`, so the switches that share a
+ * row are written as one row whose `config` sets each switch's key.
  * @param answer - the prompts answer.
  * @param registry - the switch registry; the parity registry by default.
- * @returns one row per prompt switch, naming the switch's config key and the value the answer gives it.
+ * @returns one row per row id of {@link PROMPT_SWITCH_ROWS}, in the order the ids first appear there, naming the
+ *   config key of each switch on that row and the value the answer gives it.
  * @throws Error when a listed switch is missing from the registry or has no Config field yet.
  */
-export function promptRows(answer: PromptsAnswer, registry: readonly ParitySwitchEntry[] = PARITY_SWITCHES): { readonly id: string, readonly config: Readonly<Record<string, boolean>> }[] {
-  return Object.entries(PROMPT_SWITCH_ROWS).map(([switchId, rowId]) => {
+export function promptRows(answer: PromptsAnswer, registry: readonly ParitySwitchEntry[] = PARITY_SWITCHES): PromptRow[] {
+  const rows = new Map<string, Record<string, boolean>>()
+  for (const [switchId, rowId] of Object.entries(PROMPT_SWITCH_ROWS)) {
     const entry = registry.find(candidate => candidate.id === switchId)
     if (entry?.state !== 'built') throw new Error(`delorun setup: parity switch ${switchId} is not built, so the prompts answer cannot set it`)
-    return { id: rowId, config: { [entry.field.key]: answer === 'safer' ? entry.defaultValue : entry.parityValue } }
-  })
+    const config = rows.get(rowId) ?? {}
+    config[entry.field.key] = answer === 'safer' ? entry.defaultValue : entry.parityValue
+    rows.set(rowId, config)
+  }
+  return [...rows].map(([id, config]) => ({ id, config }))
 }
 
 /**
