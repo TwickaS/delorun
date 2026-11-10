@@ -3,7 +3,7 @@
  * steps in their order, the refusals that change nothing, a copy the update did not take, and the completion of a
  * rollback a kill interrupted.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -21,6 +21,8 @@ beforeEach(async () => {
   steps = []
   mkdirSync(join(home, 'sessions/before'), { recursive: true })
   writeFileSync(join(home, 'sessions/before/log.jsonl'), 'before\n')
+  // A chat from before the update: its time is the copy's fixed time, not the clock's.
+  utimesSync(join(home, 'sessions/before/log.jsonl'), NOW, new Date(NOW.getTime() - 1000))
 })
 afterEach(async () => { await rm(home, { recursive: true, force: true }) })
 
