@@ -45,9 +45,9 @@
   display: none;
 }
 
-/* On the art the brand and the toggle read light, as on a photograph; art that marks itself `data-backdrop-plain`, such as a small badge, leaves them as they are. */
-.root:has(> .backdrop:not(:empty, :has(> [data-backdrop-plain]))) .logoRow,
-.root:has(> .backdrop:not(:empty, :has(> [data-backdrop-plain]))) .topStrip {
+/* On the art the brand and the toggle read light, as on a photograph; art that marks itself `data-backdrop-plain`, such as a small badge, leaves them as they are. `:has()` may not nest inside `:has()`, so the plain-art test sits beside the first `:has()`, not inside it. */
+.root:has(> .backdrop:not(:empty)):not(:has(> .backdrop > [data-backdrop-plain])) .logoRow,
+.root:has(> .backdrop:not(:empty)):not(:has(> .backdrop > [data-backdrop-plain])) .topStrip {
   color: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-secondary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 82%, transparent);
