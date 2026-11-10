@@ -44,7 +44,7 @@ describe('the host half', () => {
     expect(await printedStyles({})).toHaveLength(0)
   })
 
-  it('prints the boot page\'s wordmark as a global only while the studio additions are on', async () => {
+  it('prints the boot page\'s wordmark and the settings as globals only while the studio additions are on', async () => {
     const globals = async (config: object): Promise<IndexInjection[]> => {
       const ctx = new Context()
       const fiber = ctx.plugin(host, config)
@@ -55,7 +55,11 @@ describe('the host half', () => {
       return table.filter(row => row.kind === 'global')
     }
     expect(host.BOOT_WORDMARK_GLOBAL).toBe('dshBootWordmark')
-    expect(await globals({ studioAdditions: true })).toEqual([{ kind: 'global', name: 'dshBootWordmark', value: 'Delo' }])
+    expect(host.BOOT_SETTINGS_GLOBAL).toBe('deloThemeSettings')
+    expect(await globals({ studioAdditions: true, palette: 'iris' })).toEqual([
+      { kind: 'global', name: 'dshBootWordmark', value: 'Delo' },
+      { kind: 'global', name: 'deloThemeSettings', value: host.currentSettings(Config({ studioAdditions: true, palette: 'iris' })) },
+    ])
     expect(await globals({ studioAdditions: false })).toEqual([])
   })
 
@@ -73,7 +77,7 @@ describe('the host half', () => {
     on = true
     const during = page()
     on = false
-    expect([before, during, page()]).toEqual([0, 2, 0])
+    expect([before, during, page()]).toEqual([0, 3, 0])
     expect(host.currentSettings(config)).toMatchObject({ studioAdditions: false, palette: 'soft', contrast: 100, effort: 'label' })
   })
 

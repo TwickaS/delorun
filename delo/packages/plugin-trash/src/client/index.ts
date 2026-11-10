@@ -1,6 +1,7 @@
 /**
  * The trash plugin's studio half: a "Move to trash" action in each chat's and each workspace's menu, the chats in the
- * trash left out of the sidebar, and the Trash section in Settings, which restores an item or deletes it forever.
+ * trash left out of the sidebar, a new chat in the main pane when the chat it showed moved, and the Trash section in
+ * Settings, which restores an item or deletes it forever.
  * @module @delo/plugin-trash/client
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -19,6 +20,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { IconTrashOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { localDrafts, TrashController } from './controller.ts'
+import { TrashLeave } from './leave.ts'
 import { en, zh, type TrashLocaleKey } from './locales.ts'
 import { createTrashToastSource, TrashToast } from './TrashToast.tsx'
 import { TrashSection, type TrashSectionInjected } from './TrashSection.tsx'
@@ -53,11 +55,11 @@ export const WORKSPACE_MENU_ORDER = 310
 export const TRASH_ICON_KEY = 'delo-trash.trash'
 
 /** Required services. */
-export const inject = ['slots', 'locale', 'contextMenus', 'uiWorkspace']
+export const inject = ['slots', 'locale', 'contextMenus', 'uiWorkspace', 'sessions', 'workspaces']
 
 /**
- * Register the dictionaries, the two menu actions, the outcome toast and the Trash section, and keep the chats in the
- * trash out of the sidebar.
+ * Register the dictionaries, the two menu actions, the outcome toast and the Trash section, keep the chats in the
+ * trash out of the sidebar, and move the main pane on when the chat it shows moves to the trash.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
@@ -73,19 +75,40 @@ export function apply(ctx: Context): void {
     void trash.refresh()
     return () => { trash.dispose() }
   }, 'delo-trash: the chats in the trash leave the sidebar')
+  const leave = new TrashLeave({
+    openChat: () => {
+      const list = ctx.sessions.list.getSnapshot()
+      return list.ids.find(id => (list.byId[id]?.retainedBy.mainView ?? 0) > 0)
+    },
+    workspaceOf: sessionId => ctx.workspaces.list.getSnapshot().items.find(item => item.sessionIds.includes(sessionId))?.workspaceId,
+    listed: workspaceId => ctx.workspaces.list.getSnapshot().items.some(item => item.workspaceId === workspaceId),
+    startChat: (workspaceId) => { ctx.uiWorkspace.startSession(workspaceId) },
+    subscribe: (listener) => {
+      const offs = [ctx.sessions.list.subscribe(listener), ctx.workspaces.list.subscribe(listener)]
+      return () => { for (const off of offs) off() }
+    },
+    document,
+  })
+  ctx.effect(() => () => { leave.dispose() }, 'delo-trash: the main pane after a move')
   ctx.slots.inject('contextMenu.icon', () => ctx.slots.register({ name: 'contextMenu.icon', key: TRASH_ICON_KEY }, IconTrashOutlineRegular))
   ctx.effect(() => ctx.contextMenus.register({
     id: 'delo-trash.session', target: 'session', order: SESSION_MENU_ORDER, observe: () => [ctx.locale],
     resolve: ({ sessionId, displayTitle }) => [{
       id: 'trash', label: t('menu.trash'), icon: { key: TRASH_ICON_KEY }, danger: true, separatorBefore: true,
-      run: () => trash.trashChat(sessionId, displayTitle),
+      run: async () => {
+        const moveOn = leave.chat(sessionId)
+        if (await trash.trashChat(sessionId, displayTitle)) moveOn?.()
+      },
     }],
   }), 'delo-trash: the chat menu action')
   ctx.effect(() => ctx.contextMenus.register({
     id: 'delo-trash.workspace', target: 'workspace', order: WORKSPACE_MENU_ORDER, observe: () => [ctx.locale],
     resolve: ({ workspaceId }) => [{
       id: 'trash', label: t('menu.trash'), icon: { key: TRASH_ICON_KEY }, danger: true, separatorBefore: true,
-      run: () => trash.trashWorkspace(workspaceId),
+      run: async () => {
+        const moveOn = leave.workspace(workspaceId)
+        if (await trash.trashWorkspace(workspaceId)) moveOn?.()
+      },
     }],
   }), 'delo-trash: the workspace menu action')
   // Frame-wide, so an outcome outlives the menu or the Settings row that raised it.

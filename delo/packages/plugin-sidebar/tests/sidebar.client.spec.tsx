@@ -6,8 +6,10 @@ import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-sess
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { ContextMenuTarget } from '@deepseek-ai/dsh-client-ui-context-menu/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { useModalLayer } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useRef, useState, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RowStateActions } from '../src/client/ChatRow.tsx'
 import type { ChatStatusFacts } from '../src/client/sections.ts'
@@ -53,6 +55,19 @@ function actions(): RowStateActions {
   }
 }
 
+/** Upstream's phone-width drawer as far as Escape goes: a modal layer the opener shows, which Escape closes. */
+function Drawer({ children }: { readonly children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const panel = useRef<HTMLDivElement>(null)
+  useModalLayer(panel, open, () => { setOpen(false) })
+  return (
+    <>
+      <button type="button" onClick={() => { setOpen(true) }}>Open the list</button>
+      <div ref={panel} role="dialog" aria-label="Chats" aria-modal={open} hidden={!open}>{children}</div>
+    </>
+  )
+}
+
 /** The list with three chats in api (one pinned, one asking, one working), one in site, and one snoozed and one settled. */
 function show(fields: {
   settings?: Partial<SidebarSettings>
@@ -71,6 +86,8 @@ function show(fields: {
   pinned?: SessionId[]
   /** Whether the Workspace list has loaded; it has not unless a test says so. */
   workspacesLoaded?: boolean
+  /** Whether the list sits in the phone-width drawer. */
+  drawer?: boolean
 } = {}) {
   const stored = new Map(Object.entries(fields.stored ?? {}))
   const undoLine = createUndoLine()
@@ -127,7 +144,8 @@ function show(fields: {
     t: makeTranslate(en),
   } as SidebarProps
   // The foot's undo notice offers what the list remembers, as in the studio.
-  const view = render(<><Sidebar {...props} /><UndoNotice wide undoLine={undoLine} t={makeTranslate(en)} /></>)
+  const sidebar = <Sidebar {...props} />
+  const view = render(<>{fields.drawer === true ? <Drawer>{sidebar}</Drawer> : sidebar}<UndoNotice wide undoLine={undoLine} t={makeTranslate(en)} /></>)
   return { ...view, calls, stored, states, undoLine }
 }
 
@@ -607,6 +625,32 @@ describe('the search', () => {
     expect(screen.queryByText(en['search.failed'])).toBeNull()
     await act(async () => { settleLater[2]?.resolve({ items: [], hasMore: false }) })
     expect(await screen.findByText(en['search.empty'])).toBeTruthy()
+  })
+
+  it('clears a query on Escape and keeps the keyboard in the field, and leaves Escape to the page with nothing to clear', () => {
+    show()
+    const field = screen.getByRole('combobox', { name: en['search.aria'] })
+    field.focus()
+    fireEvent.change(field, { target: { value: 'chat' } })
+    expect(fireEvent.keyDown(field, { key: 'Escape' })).toBe(false)
+    expect([(field as HTMLInputElement).value, document.activeElement]).toEqual(['', field])
+    expect(fireEvent.keyDown(field, { key: 'Escape' })).toBe(true)
+    expect(document.activeElement).toBe(field)
+  })
+
+  it('lets Escape in the empty field close the phone-width drawer, which returns focus to the control that opened it', () => {
+    show({ drawer: true })
+    const opener = screen.getByRole('button', { name: 'Open the list' })
+    opener.focus()
+    fireEvent.click(opener)
+    const field = screen.getByRole('combobox', { name: en['search.aria'] })
+    field.focus()
+    fireEvent.change(field, { target: { value: 'chat' } })
+    fireEvent.keyDown(field, { key: 'Escape' })
+    expect(screen.getByRole('dialog', { name: 'Chats' }).hidden).toBe(false)
+    fireEvent.keyDown(field, { key: 'Escape' })
+    expect(screen.getByRole('dialog', { hidden: true }).hidden).toBe(true)
+    expect(document.activeElement).toBe(opener)
   })
 
   it('clears with its button, and takes focus when a search is requested', () => {

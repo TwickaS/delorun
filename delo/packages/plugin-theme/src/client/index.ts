@@ -22,6 +22,7 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 // Type-only: the 'conversation.hero.headline' and 'conversation.hero.brand.mark' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { readBootSettings } from '../boot-settings.ts'
 import { THEME_ROW_ID, type ThemeSettings } from '../config.ts'
 import { FIRST_PAINT_MARK, STOCK_ATTRIBUTE } from '../palette/layers.ts'
 import { AppearanceSection, type AppearanceInjected, type SchemePreference } from './AppearanceSection.tsx'
@@ -29,6 +30,8 @@ import { HeroHeadline, HeroWordmark } from './brand.tsx'
 import { en as brandEn, zh as brandZh, type BrandLocaleKey } from './brand-locales.ts'
 import { ThemeController } from './controller.ts'
 import { effortBarsCss } from './effort.ts'
+import { composerFocusCss } from './focus.ts'
+import { markMainLandmark } from './landmark.ts'
 import { COPY, COPY_ZH } from './copy.ts'
 import { VOCABULARY } from './vocabulary.ts'
 import fonts from './fonts.css?inline'
@@ -122,19 +125,26 @@ const NOTHING: Registration = { update: noop, dispose: noop }
 
 /**
  * Follow the stored `studioAdditions` setting: the studio additions while it
- * is on, the General row while it is off, and nothing until the Host has
- * answered. Every registration is released when the setting flips and when
- * the plugin is disposed, which restores upstream's look.
+ * is on, the General row while it is off. Until the settings form first
+ * answers, the plugin follows the settings the host half printed into the
+ * page, which it prints only while Delo's look is on, so the look and
+ * `ctx.deloStudio` are in place while the studio boots; without them it
+ * registers nothing until that answer. Every registration is released when
+ * the setting flips and when the plugin is disposed, which restores
+ * upstream's look.
  * @param ctx - the plugin's context.
  */
 export function apply(ctx: Context): void {
   const form = ctx.configForms.get<ThemeSettings>(THEME_ROW_ID)
+  const printed = readBootSettings()
   ctx.effect(() => {
     let mode: 'studio' | 'stock' | undefined
     let active = NOTHING
+    let answered = false
     const sync = (): void => {
       const snapshot = form.getSnapshot()
-      const stored = snapshot.status === 'ready' ? snapshot.value : undefined
+      if (snapshot.status !== 'loading') answered = true
+      const stored = snapshot.status === 'ready' ? snapshot.value : answered ? undefined : printed
       const wanted = stored === undefined ? undefined : stored.studioAdditions ? 'studio' : 'stock'
       if (wanted !== mode) {
         active.dispose()
@@ -201,7 +211,7 @@ function registerStockEntry(ctx: Context, form: ConfigForm<ThemeSettings>): Regi
  * @returns the registration set, which leaves upstream's look in place again once disposed.
  */
 function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: ThemeSettings): Registration {
-  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}`, document)
+  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
   const appearance: AppearanceInjected = {
@@ -233,6 +243,7 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     ...Object.entries(COPY).map(([ns, english]) => ctx.locale.override(ns, 'en', english)),
     ...Object.entries(COPY_ZH).map(([ns, chinese]) => ctx.locale.override(ns, 'zh', chinese)),
     ctx.provide('deloStudio', studio),
+    markMainLandmark(document),
   ]
   return {
     update: (stored) => { controller.update(stored) },

@@ -3,8 +3,9 @@
  * the sidebar's one-list view through upstream's `uiWorkspace.registerShelf`,
  * Snooze and Settle in each chat's menu through `ctx.contextMenus`, a settle
  * hover button, a notice when a change could not be saved, `ctx.deloChatStates`
- * for a sidebar that draws its own shelves, and Settings' Snooze and settle
- * section, which edits the snooze presets and auto-settle. The states come
+ * for a sidebar that draws its own shelves, Settings' Snooze and settle
+ * section, which edits the snooze presets and auto-settle, and a polite live
+ * region that announces when the studio loses and regains Delo. The states come
  * from the harness, so every studio shows the same ones.
  *
  * The plugin applies only while the Delo look is on (the `deloStudio`
@@ -13,6 +14,7 @@
  * @module @delo/plugin-chat-states/client
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: the ctx.workspaces merge, which names the archived chats.
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
 // Type-only: the ctx.locale Context merge.
@@ -36,6 +38,7 @@ import type { SnoozePresetSetting } from '../snooze.ts'
 import type { ChatState, ChatStateRequest } from '../wire.ts'
 import { chatStatesApi } from './api.ts'
 import { ChatStateFailure, SettleRowButton, type ChatStatesInjected } from './ChatStateActions.tsx'
+import { ConnectionStatus, type ConnectionStatusInjected } from './ConnectionStatus.tsx'
 import { CustomSnoozeDialog, type CustomSnoozeInjected } from './CustomSnooze.tsx'
 import { en, zh, type ChatStatesLocaleKey } from './locales.ts'
 import { snoozeLeftText, snoozeOptions, type SnoozeOption } from './snooze-text.ts'
@@ -45,6 +48,7 @@ import { ChatStateStore } from './store.ts'
 export type { ChatStatesApi } from './api.ts'
 export { ChatStatesRequestError } from './api.ts'
 export type { ChatStatesInjected } from './ChatStateActions.tsx'
+export type { ConnectionStatusInjected } from './ConnectionStatus.tsx'
 export type { CustomSnoozeInjected } from './CustomSnooze.tsx'
 export type { ChatStatesLocaleKey } from './locales.ts'
 export type { SnoozeOption } from './snooze-text.ts'
@@ -134,7 +138,7 @@ export const MENU_ICON_KEYS = {
  * Services every registration needs. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on,
  * is injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
  */
-export const inject = ['slots', 'locale', 'uiWorkspace', 'configForms', 'contextMenus', 'workspaces']
+export const inject = ['slots', 'locale', 'uiWorkspace', 'configForms', 'contextMenus', 'workspaces', 'connection']
 
 /**
  * While the Delo look provides `deloStudio`, read the states, register the shelves and the sidebar's actions.
@@ -204,6 +208,8 @@ export function applyStudio(ctx: Context): void {
     yield ctx.slots.register({ name: 'contextMenu.icon', key: MENU_ICON_KEYS.settled }, IconCheckCircleFillRegular)
   }), 'delo-chat-states: menu icons')
 
+  // Upstream's connection service is not a typed Context member; its consumers read it as the handle it is.
+  const connection: ConnectionStatusInjected = { hooks: { connectionState: (ctx.get('connection') as ConnectionHandle).state } }
   const row: ChatStatesInjected = { states: store.states, failed: store.failed, change, dismiss }
   const dialog: CustomSnoozeInjected = { custom, closeCustom: () => { custom.set(null) }, change, locale, now: Date.now, presets }
   ctx.effect(() => ctx.slots.inject('sidebar.workspaces.session.row.action', () => ctx.slots.register({
@@ -212,6 +218,7 @@ export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.slots.inject('shell.overlay', function* () {
     yield ctx.slots.register({ name: 'shell.overlay', id: 'delo-chat-states.failure', locale: NS, inject: () => row }, ChatStateFailure)
     yield ctx.slots.register({ name: 'shell.overlay', id: 'delo-chat-states.snooze', locale: NS, inject: () => dialog }, CustomSnoozeDialog)
+    yield ctx.slots.register({ name: 'shell.overlay', id: 'delo-chat-states.connection', locale: NS, inject: () => connection }, ConnectionStatus)
   }), 'delo-chat-states: overlay entries')
   ctx.provide('deloChatStates', {
     states: store.states,

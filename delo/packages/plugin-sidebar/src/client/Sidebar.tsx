@@ -335,9 +335,11 @@ export function Sidebar(props: SidebarProps) {
   const onSearchKey = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (event.nativeEvent.isComposing) return
     if (event.key === 'Escape') {
+      // Escape clears a query and keeps the keyboard in the field. With nothing to clear it is left to the page, so
+      // the phone-width drawer closes and returns focus to the control that opened it.
+      if (query === '') return
       event.preventDefault()
       clearSearch()
-      searchInput.current?.blur()
     } else if (event.key === 'ArrowDown' && results.length > 0) {
       event.preventDefault()
       setHighlight(index => Math.min(results.length - 1, index + 1))

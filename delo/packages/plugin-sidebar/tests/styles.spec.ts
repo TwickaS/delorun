@@ -160,6 +160,13 @@ describe('the search field', () => {
     expect(header.find(declaration => declaration.selector === '.searchInput' && declaration.property === 'min-width')?.value).toBe('var(--list-label-min)')
     expect(header.find(declaration => declaration.selector === '.search' && declaration.property === 'min-width')?.value).toContain('var(--list-label-min)')
   })
+
+  it('rings the field in the studio\'s focus ring, inside its corners, while it holds focus', () => {
+    const ring = header.filter(declaration => declaration.selector === '.search:focus-within')
+    expect(ring.find(declaration => declaration.property === 'outline')?.value)
+      .toBe('var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary))')
+    expect(ring.find(declaration => declaration.property === 'outline-offset')?.value).toBe('calc(-1 * var(--dsw-focus-ring-width))')
+  })
 })
 
 describe('the icon picker', () => {

@@ -143,20 +143,20 @@ export class TrashController {
    * Move a chat to the trash.
    * @param sessionId - the chat.
    * @param label - the chat's title as the sidebar shows it.
-   * @returns after the outcome is reported.
+   * @returns after the outcome is reported, whether the chat moved.
    */
-  async trashChat(sessionId: string, label: string): Promise<void> {
-    await this.act(() => post<TrashEntry>(TRASH_PATHS.deleteChat, { sessionId, label }),
+  async trashChat(sessionId: string, label: string): Promise<boolean> {
+    return await this.act(() => post<TrashEntry>(TRASH_PATHS.deleteChat, { sessionId, label }),
       'toast.chatTrashed', 'toast.trashFailed', (entry) => { this.track(entry) })
   }
 
   /**
    * Move a workspace and its chats to the trash.
    * @param workspaceId - the workspace.
-   * @returns after the outcome is reported.
+   * @returns after the outcome is reported, whether the workspace moved.
    */
-  async trashWorkspace(workspaceId: string): Promise<void> {
-    await this.act(() => post<TrashEntry>(TRASH_PATHS.deleteWorkspace, { workspaceId }),
+  async trashWorkspace(workspaceId: string): Promise<boolean> {
+    return await this.act(() => post<TrashEntry>(TRASH_PATHS.deleteWorkspace, { workspaceId }),
       'toast.workspaceTrashed', 'toast.trashFailed', (entry) => { this.track(entry) })
   }
 
@@ -203,7 +203,8 @@ export class TrashController {
     for (const id of [...this.hides.keys()]) this.release(id)
   }
 
-  private async act<T>(request: () => Promise<T>, done: TrashToastKey, failed: TrashToastKey, apply: (result: T) => TrashNotice | void): Promise<void> {
+  /** @returns after the outcome is reported and the listing read again, whether the request succeeded. */
+  private async act<T>(request: () => Promise<T>, done: TrashToastKey, failed: TrashToastKey, apply: (result: T) => TrashNotice | void): Promise<boolean> {
     let result: T
     try {
       result = await request()
@@ -211,10 +212,11 @@ export class TrashController {
       console.warn('delo-trash: the request failed:', error)
       this.deps.report({ ok: false, key: (error instanceof TrashRequestError ? SPECIFIC[error.code] : undefined) ?? failed })
       await this.refresh()
-      return
+      return false
     }
     this.deps.report(apply(result) ?? { ok: true, key: done })
     await this.refresh()
+    return true
   }
 
   private forget(entry: TrashEntry): void {

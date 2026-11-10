@@ -7,6 +7,7 @@
   },
   "include": [
     "src/client",
+    "src/boot-settings.ts",
     "src/config.ts",
     "src/palette",
     "src/css-modules.d.ts"

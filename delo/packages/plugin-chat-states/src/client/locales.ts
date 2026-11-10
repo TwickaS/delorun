@@ -1,4 +1,7 @@
-/** The chat states' copy: the shelves, the row menu, the hover button, the snooze words and dialog, and the failure notice. */
+/**
+ * The chat states' copy: the shelves, the row menu, the hover button, the snooze words and dialog, the failure notice,
+ * and the announcements of the connection to Delo.
+ */
 
 /** English dictionary. */
 export const en = {
@@ -39,6 +42,9 @@ export const en = {
   'settle': 'Settle',
   'settle.undo': 'Return to the list',
   'failed': 'Could not save that. Try again.',
+  'connection.reconnecting': 'Lost the connection to Delo. Reconnecting.',
+  'connection.offline': 'This device is offline. Delo reconnects when it is back online.',
+  'connection.back': 'Connected to Delo again.',
   'settings.nav': 'Snooze and settle',
   'settings.presets': 'Snooze options',
   'settings.presets.lead': 'The choices in the snooze menu. Pick one to change it.',
@@ -110,6 +116,9 @@ export const zh: Record<ChatStatesLocaleKey, string> = {
   'settle': '标为已处理',
   'settle.undo': '放回列表',
   'failed': '无法保存，请重试。',
+  'connection.reconnecting': '与 Delo 的连接已断开，正在重新连接',
+  'connection.offline': '此设备已离线，恢复联网后会重新连接 Delo',
+  'connection.back': '已重新连接到 Delo',
   'settings.nav': '已延后与已处理',
   'settings.presets': '延后选项',
   'settings.presets.lead': '延后菜单中的选项。选中一个即可修改。',

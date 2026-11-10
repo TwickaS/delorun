@@ -36,7 +36,9 @@ A failure the plugin cannot name answers `TRASH_FAILED` and is logged with its c
 
 ## The studio half
 
-[`src/client/`](src/client/index.ts) registers the menu actions, hides every chat in the trash from the sidebar through `uiWorkspace.hideSession`, reports each outcome in a frame-wide toast, and adds the Trash section (`settings.section`, after Privacy). Delete forever and Empty trash ask first, state that fragments may remain in the operational logs for up to 14 days, and offer to clear every operational log now. The section lists each damaged item directory with its reason. After a purge the page removes the item's draft entries from its own `localStorage` with `@delo/trash/drafts`.
+[`src/client/`](src/client/index.ts) registers the menu actions, hides every chat in the trash from the sidebar through `uiWorkspace.hideSession`, reports each outcome in a frame-wide toast, and adds the Trash section (`settings.section`, after Privacy). The studio half requires `slots`, `locale`, `contextMenus`, `uiWorkspace`, `sessions` and `workspaces`.
+
+Upstream clears the main pane when the chat it shows is archived, which would leave "Choose a workspace to start" on screen and the keyboard on the page. [`leave.ts`](src/client/leave.ts) moves on instead, and only after the move succeeded; a failed move leaves the chat open. After the open chat moved, it opens a new chat in the chat's workspace through `uiWorkspace.startSession`, upstream's New chat, which reuses the workspace's blank chat; a chat in no workspace gets a new chat in the current or latest workspace. After the workspace holding the open chat moved, it waits until the workspace list drops it and opens a new chat in the latest remaining workspace, or leaves the main pane empty when none remains. Once the main pane no longer shows the moved chat, a keyboard left on the page body moves to the composer card (`[data-composer-card]`) without a focus ring, which does not raise a phone's keyboard; on a desktop upstream's composer has already put the keyboard in the message box. Delete forever and Empty trash ask first, state that fragments may remain in the operational logs for up to 14 days, and offer to clear every operational log now. The section lists each damaged item directory with its reason. After a purge the page removes the item's draft entries from its own `localStorage` with `@delo/trash/drafts`.
 
 ## Configuration
 
@@ -50,4 +52,4 @@ A failure the plugin cannot name answers `TRASH_FAILED` and is logged with its c
 
 ## Tests
 
-From the repository root, `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-trash` runs the harness specs over a scratch home and the studio specs in jsdom.
+From the repository root, `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-trash` runs the harness specs over a scratch home and the studio specs in jsdom. [`leave.client.spec.tsx`](tests/leave.client.spec.tsx) checks where the main pane and the keyboard go after the open chat or its workspace moved to the trash.

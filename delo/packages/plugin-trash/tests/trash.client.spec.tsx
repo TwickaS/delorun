@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** The studio half: the menu actions, the hidden chats, the outcome toast and the Trash section against a stand-in harness. */
 import { Context } from '@deepseek-ai/cordis'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { FunctionComponent } from 'react'
@@ -68,8 +69,18 @@ type Contribution = {
   readonly resolve: (target: object, signal: AbortSignal) => Array<{ id: string; label: string; icon?: { key: string }; danger?: boolean; separatorBefore?: boolean; run: () => Promise<void> }>
 }
 
-/** The page as far as the plugin uses it: slots, the locale, the context menus and the workspace's hidden chats. */
-async function load() {
+/** A chat as the page's session list holds it; `open` marks the chat the main pane shows. */
+interface PageChat { readonly id: string; readonly open?: boolean }
+
+/** A workspace as the page's workspace list holds it. */
+interface PageWorkspace { readonly workspaceId: string; readonly sessionIds: readonly string[] }
+
+/**
+ * The page as far as the plugin uses it: slots, the locale, the context menus, the workspace's hidden chats and New
+ * chat, and the session and workspace lists.
+ * @param page - the chats and workspaces on the page; by default `chat-1`, open, in workspace `ws-1`.
+ */
+async function load(page: { readonly chats?: readonly PageChat[]; readonly workspaces?: readonly PageWorkspace[] } = {}) {
   const ctx = new Context()
   const dictionaries = new Map<string, unknown>()
   ctx.provide('locale', {
@@ -90,9 +101,19 @@ async function load() {
     register: (contribution: Contribution) => { contributions.add(contribution); return () => { contributions.delete(contribution) } },
   })
   const hidden = new Set<string>()
+  const sessionList = (chats: readonly PageChat[]) => ({
+    ids: chats.map(chat => chat.id),
+    byId: Object.fromEntries(chats.map(chat => [chat.id, { id: chat.id, retainedBy: chat.open === true ? { mainView: 1 } : {} }])),
+  })
+  const sessions = createSnapshotStore(sessionList(page.chats ?? [{ id: 'chat-1', open: true }]))
+  const workspaces = createSnapshotStore({ items: page.workspaces ?? [{ workspaceId: 'ws-1', sessionIds: ['chat-1'] }] })
+  const started: Array<string | undefined> = []
   ctx.provide('uiWorkspace', {
     hideSession: (id: string) => { hidden.add(id); return () => { hidden.delete(id) } },
+    startSession: (workspaceId?: string) => { started.push(workspaceId) },
   })
+  ctx.provide('sessions', { list: sessions })
+  ctx.provide('workspaces', { list: workspaces })
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   const entryOf = (name: string): Entry => [...entries].find(candidate => candidate.options.name === name) as Entry
@@ -107,7 +128,14 @@ async function load() {
     const Component = component
     return render(<Component {...props} />)
   }
-  return { ctx, fiber, dictionaries, entries, contributions, hidden, entryOf, menu, mount, dispose: () => fiber.dispose() }
+  return {
+    ctx, fiber, dictionaries, entries, contributions, hidden, entryOf, menu, mount, started,
+    /** Show another set of chats, as the session list does after a navigation. */
+    showChats: (chats: readonly PageChat[]) => { sessions.set(sessionList(chats)) },
+    /** Show another workspace list. */
+    showWorkspaces: (items: readonly PageWorkspace[]) => { workspaces.set({ items }) },
+    dispose: () => fiber.dispose(),
+  }
 }
 
 const SESSION = { sessionId: 'chat-1', displayTitle: 'Plan the move' }
@@ -188,6 +216,61 @@ describe('the plugin', () => {
     expect((await screen.findByRole('alert')).textContent).toBe(en['toast.workspaceTrashed'])
   })
 
+  it('opens a new chat in the workspace of the open chat it moved, and gives the composer the focus the row took away', async () => {
+    harness()
+    const page = await load()
+    const card = document.createElement('div')
+    card.tabIndex = -1
+    card.setAttribute('data-composer-card', '')
+    document.body.append(card)
+    const [action] = page.menu('session').resolve(SESSION, new AbortController().signal)
+    await action?.run()
+    expect(page.started).toEqual(['ws-1'])
+    expect(document.activeElement).toBe(document.body)
+    // Upstream's New chat lands: the main pane shows the workspace's blank chat.
+    act(() => { page.showChats([{ id: 'chat-1' }, { id: 'blank-1', open: true }]) })
+    await waitFor(() => { expect(document.activeElement).toBe(card) })
+    card.remove()
+  })
+
+  it('leaves the main pane alone when the chat it moved was not the open one', async () => {
+    harness()
+    const page = await load({ chats: [{ id: 'chat-1' }, { id: 'other', open: true }] })
+    const [action] = page.menu('session').resolve(SESSION, new AbortController().signal)
+    await action?.run()
+    expect(page.started).toEqual([])
+  })
+
+  it('opens a new chat in the latest workspace once the list drops the moved workspace that held the open chat', async () => {
+    harness()
+    const page = await load({ workspaces: [{ workspaceId: 'ws-1', sessionIds: ['chat-1'] }, { workspaceId: 'ws-2', sessionIds: [] }] })
+    const [action] = page.menu('workspace').resolve(WORKSPACE, new AbortController().signal)
+    await action?.run()
+    // The list still holds the workspace, so New chat would pick it again.
+    expect(page.started).toEqual([])
+    act(() => { page.showWorkspaces([{ workspaceId: 'ws-2', sessionIds: [] }]) })
+    expect(page.started).toEqual([undefined])
+  })
+
+  it('leaves the main pane alone when the workspace holding the open chat could not be moved', async () => {
+    const fake = harness()
+    fake.replace(TRASH_PATHS.deleteWorkspace, () => new Response(null, { status: 500 }))
+    const page = await load({ workspaces: [{ workspaceId: 'ws-1', sessionIds: ['chat-1'] }] })
+    const [action] = page.menu('workspace').resolve(WORKSPACE, new AbortController().signal)
+    await action?.run()
+    act(() => { page.showWorkspaces([]) })
+    expect(page.started).toEqual([])
+  })
+
+  it('leaves the main pane alone when the moved workspace does not hold the open chat', async () => {
+    harness()
+    const page = await load({ workspaces: [{ workspaceId: 'ws-1', sessionIds: [] }, { workspaceId: 'ws-2', sessionIds: ['chat-1'] }] })
+    const [action] = page.menu('workspace').resolve(WORKSPACE, new AbortController().signal)
+    await action?.run()
+    act(() => { page.showWorkspaces([{ workspaceId: 'ws-2', sessionIds: ['chat-1'] }]) })
+    expect(page.started).toEqual([])
+  })
+
   it.each([
     { name: 'a harness failure with a body', route: () => Response.json({ code: 'TRASH_FAILED', message: 'x' }, { status: 500 }), text: en['toast.trashFailed'] },
     { name: 'a failure without a JSON body', route: () => new Response('<html>', { status: 502 }), text: en['toast.trashFailed'] },
@@ -202,6 +285,8 @@ describe('the plugin', () => {
     await action?.run()
     expect((await screen.findByRole('alert')).textContent).toBe(text)
     expect(page.hidden.size).toBe(0)
+    // The chat stays open: the main pane does not move.
+    expect(page.started).toEqual([])
   })
 
   it('does not hide chats once the page has unloaded the plugin while a delete was in flight', async () => {

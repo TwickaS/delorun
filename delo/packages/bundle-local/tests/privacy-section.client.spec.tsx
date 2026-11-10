@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { Context } from '@deepseek-ai/cordis'
 import { bindSnapshotSelector, makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { COMMON_NS, LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject, type ConfigForm, type ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject, OPT_IN_ROWS, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, VERSION_ROW, VERSIONS_GLOBAL } from '../src/client/index.ts'
@@ -13,6 +13,7 @@ import { en, zh } from '../src/client/locales.ts'
 import { OptIn, type OptInSettings } from '../src/client/opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionProps } from '../src/client/PrivacySection.tsx'
 import { NOTICE_STORAGE_KEY, NOTICE_VERSION } from '../src/client/DeloNotice.tsx'
+import { TITLE_KEY } from '../src/client/title.ts'
 
 afterEach(cleanup)
 
@@ -113,9 +114,10 @@ describe('the plugin', () => {
   it('registers the section and writes each opt-in to its own upstream row', async () => {
     expect(OPT_IN_ROWS).toEqual({ sessionLog: 'session-log-deepseek', analytics: 'product-analytics' })
     const ctx = new Context()
+    const locale = new LocaleRuntime(ctx)
     try {
       await ctx.plugin(SlotRegistry).await()
-      ctx.provide('locale', new LocaleRuntime(ctx))
+      ctx.provide('locale', locale)
       const describeSettings = vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } }))
       new TestRemote(ctx, { settings: { describe: describeSettings } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
@@ -137,6 +139,8 @@ describe('the plugin', () => {
       expect(noticeFace.t('notice.title')).toBe(en['notice.title'])
       expect(slots.entries('sidebar.brand.name')).toHaveLength(1)
       expect(slots.entries('sidebar.brand.mark')).toHaveLength(1)
+      // The document title upstream's frame reads in a build without DSH_CLIENT_TITLE.
+      expect(locale.bind(COMMON_NS)(TITLE_KEY)).toBe('Delo')
       const sessionLog = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.sessionLog), 'set').mockResolvedValue(true)
       const analytics = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.analytics), 'set').mockResolvedValue(true)
       const face = section?.inject?.()
@@ -160,6 +164,7 @@ describe('the plugin', () => {
     } finally {
       await ctx.fiber.dispose()
     }
+    expect(locale.bind(COMMON_NS)(TITLE_KEY)).toBe(TITLE_KEY)
   })
 
   it('puts the version row in the stock version row\'s place when the page carries both versions', async () => {

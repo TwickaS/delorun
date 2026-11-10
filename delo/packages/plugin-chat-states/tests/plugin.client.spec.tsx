@@ -6,7 +6,8 @@ import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  apply, inject, MENU, MENU_ICON_KEYS, NS, ROW_ACTION, SECTION, SHELVES, type CustomSnoozeInjected, type DeloChatStates, type SnoozeSettingsInjected,
+  apply, inject, MENU, MENU_ICON_KEYS, NS, ROW_ACTION, SECTION, SHELVES, type ConnectionStatusInjected, type CustomSnoozeInjected, type DeloChatStates,
+  type SnoozeSettingsInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import type { ChatStatesInjected } from '../src/client/ChatStateActions.tsx'
@@ -97,10 +98,12 @@ function harness(options: { readonly studio?: boolean; readonly settings?: ChatS
   } as never)
   const workspaces = createSnapshotStore({ archivedSessionIds: [] as SessionId[] })
   ctx.provide('workspaces', { list: workspaces } as never)
+  const connection = createSnapshotStore<'connected' | 'connecting' | 'disconnected' | undefined>('connected')
+  ctx.provide('connection', { state: connection } as never)
   if (options.studio !== false) ctx.provide('deloStudio', {} as never)
   const fiber = ctx.plugin({ name: 'delo-chat-states', inject: [...inject], apply })
   return {
-    ctx, fiber, dictionaries, shelves, entries, menus, fetch, forms, workspaces, chats, locale,
+    ctx, fiber, dictionaries, shelves, entries, menus, fetch, forms, workspaces, chats, locale, connection,
     setSettings: (value: ChatStatesSettings) => { current = { ...current, value, status: 'ready' }; for (const listener of [...formListeners]) listener() },
     face: <T,>(key: string): T => {
       const entry = entries.get(key)
@@ -125,7 +128,7 @@ describe('the studio half', () => {
     ])
     expect([...h.entries.keys()].sort()).toEqual([
       `contextMenu.icon#${MENU_ICON_KEYS.settle}`, `contextMenu.icon#${MENU_ICON_KEYS.settled}`, `contextMenu.icon#${MENU_ICON_KEYS.snooze}`,
-      `settings.section#${SECTION.id}`, 'shell.overlay#delo-chat-states.failure', 'shell.overlay#delo-chat-states.snooze',
+      `settings.section#${SECTION.id}`, 'shell.overlay#delo-chat-states.connection', 'shell.overlay#delo-chat-states.failure', 'shell.overlay#delo-chat-states.snooze',
       `sidebar.workspaces.session.row.action#${ROW_ACTION.id}`,
     ].sort())
     expect(h.entries.get(`sidebar.workspaces.session.row.action#${ROW_ACTION.id}`)?.order).toBe(ROW_ACTION.order)
@@ -151,6 +154,13 @@ describe('the studio half', () => {
 
   it('stays an active entry under the stock look: the Delo look is injected inside apply, not required', () => {
     expect(inject).not.toContain('deloStudio')
+  })
+
+  it('gives the connection announcements the page\'s connection state', async () => {
+    const h = harness({ settings: SETTINGS })
+    await h.fiber.await()
+    const face = h.face<ConnectionStatusInjected>('shell.overlay#delo-chat-states.connection')
+    expect(face.hooks.connectionState).toBe(h.connection)
   })
 
   it('shows the Snooze and settle section only while the settings are served', async () => {

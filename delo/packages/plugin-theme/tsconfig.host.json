@@ -7,6 +7,7 @@
   },
   "files": [
     "src/index.ts",
+    "src/boot-settings.ts",
     "src/config.ts",
     "src/palette/color.ts",
     "src/palette/generate.ts",

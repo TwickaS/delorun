@@ -6,6 +6,7 @@ import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { BOOT_SETTINGS_GLOBAL } from '../src/boot-settings.ts'
 import { DEFAULT_SETTINGS, THEME_ROW_ID } from '../src/config.ts'
 import {
   apply, BRAND_NS, CONVERSATION, inject, LAYERS, LOOK_ROW, NS, PLUGIN_ID, SECTION_ID, STOCK_ATTRIBUTE,
@@ -142,6 +143,7 @@ describe('with the studio additions on', () => {
     // Vitest compiles stylesheets to empty text, so the spec checks the element, not its rules.
     expect(document.head.querySelector(`style[data-plugin-css="${PLUGIN_ID}/fonts.css"]`)).not.toBeNull()
     expect(faces()?.textContent).toContain("[data-effort-levels='3']")
+    expect(faces()?.textContent).toContain('[data-composer-card]:has([data-composer-input]:focus-visible)')
     expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', CONVERSATION.id, SECTION_ID].sort())
     expect(slots.get(SECTION_ID)?.options).toMatchObject({ name: 'settings.section', order: 1, locale: NS })
     expect(slots.get(CONVERSATION.id)?.options).toMatchObject({ order: 2, locale: CONVERSATION.ns })
@@ -348,6 +350,75 @@ describe('before the Host has answered', () => {
     const { ctx, fiber, layers, slots } = await mount(themeForm(undefined, 'unavailable'))
     expect(ctx.get('deloStudio')).toBeUndefined()
     expect(layers.size + slots.size).toBe(0)
+    await fiber.dispose()
+  })
+})
+
+describe('with the settings the host printed into the page', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, BOOT_SETTINGS_GLOBAL)
+    vi.restoreAllMocks()
+  })
+
+  it('applies the look and provides ctx.deloStudio while the form loads, so a dependent plugin is in place at boot', async () => {
+    Reflect.set(globalThis, BOOT_SETTINGS_GLOBAL, { ...STUDIO_ON, accent: 'cobalt' })
+    const form = themeForm(undefined)
+    const { ctx, fiber, layers, slots } = await mount(form)
+    expect(ctx.get('deloStudio')).toBeDefined()
+    expect(layers.get(LAYERS.accent)?.['--dsw-alias-brand-primary']?.light).toBe('rgb(58 94 232)')
+    expect(slots.has(SECTION_ID)).toBe(true)
+    const dependent = ctx.plugin({ inject: ['deloStudio'], apply: () => {} })
+    await dependent.await()
+    // The form answers with what the page was served with: the look stays, now following the form.
+    form.publish({ status: 'ready', value: STUDIO_ON })
+    expect(ctx.get('deloStudio')).toBeDefined()
+    expect(layers.get(LAYERS.accent)?.['--dsw-alias-brand-primary']?.light).toBe('rgb(229 115 74)')
+    await fiber.dispose()
+  })
+
+  it('turns to the stock look when the form answers that the look was turned off after the page was served', async () => {
+    Reflect.set(globalThis, BOOT_SETTINGS_GLOBAL, STUDIO_ON)
+    const form = themeForm(undefined)
+    const { ctx, fiber, layers, slots } = await mount(form)
+    expect(ctx.get('deloStudio')).toBeDefined()
+    form.publish({ status: 'ready', value: DEFAULT_SETTINGS })
+    expect(ctx.get('deloStudio')).toBeUndefined()
+    expect(layers.size).toBe(0)
+    expect([...slots.keys()]).toEqual([LOOK_ROW.id])
+    await fiber.dispose()
+  })
+
+  it('stops following the printed settings once the form has answered: a later reload of the form releases everything', async () => {
+    Reflect.set(globalThis, BOOT_SETTINGS_GLOBAL, STUDIO_ON)
+    const form = themeForm(undefined)
+    const { ctx, fiber, layers, slots } = await mount(form)
+    form.publish({ status: 'ready', value: STUDIO_ON })
+    form.publish({ status: 'loading', value: undefined })
+    expect(ctx.get('deloStudio')).toBeUndefined()
+    expect(layers.size + slots.size).toBe(0)
+    await fiber.dispose()
+  })
+
+  it('releases everything when the Host does not serve the theme row', async () => {
+    Reflect.set(globalThis, BOOT_SETTINGS_GLOBAL, STUDIO_ON)
+    const form = themeForm(undefined)
+    const { ctx, fiber, layers, slots } = await mount(form)
+    form.publish({ status: 'unavailable', value: undefined })
+    expect(ctx.get('deloStudio')).toBeUndefined()
+    expect(layers.size + slots.size).toBe(0)
+    await fiber.dispose()
+  })
+
+  it('warns about printed settings that do not validate and waits for the form', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    Reflect.set(globalThis, BOOT_SETTINGS_GLOBAL, { ...STUDIO_ON, palette: 'neon' })
+    const form = themeForm(undefined)
+    const { ctx, fiber, layers, slots } = await mount(form)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(BOOT_SETTINGS_GLOBAL))
+    expect(ctx.get('deloStudio')).toBeUndefined()
+    expect(layers.size + slots.size).toBe(0)
+    form.publish({ status: 'ready', value: STUDIO_ON })
+    expect(ctx.get('deloStudio')).toBeDefined()
     await fiber.dispose()
   })
 })

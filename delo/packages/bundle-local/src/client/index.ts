@@ -31,6 +31,7 @@ import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.ts
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { OptIn, type OptInSettings } from './opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
+import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
 
@@ -110,15 +111,17 @@ export const REMOTE_NOTICE_ID = 'delo-remote-full-access'
 export const inject = ['slots', 'locale', 'configForms']
 
 /**
- * Register the Privacy and Devices sections, the Delo sidebar brand, Delo's preview notice, `ctx.deloNotice`, the
- * refused-answer notice, and, when the harness printed both versions into the page, the version row that names Delo's
- * version and the DeepSeek Harness version. All of them come from this bundle's `delo-privacy` row, which the parity
- * composition leaves disabled, so upstream's brand and notice stay in the parity composition.
+ * Register the Privacy and Devices sections, the Delo sidebar brand, the product name as the document title, Delo's
+ * preview notice, `ctx.deloNotice`, the refused-answer notice, and, when the harness printed both versions into the
+ * page, the version row that names Delo's version and the DeepSeek Harness version. All of them come from this bundle's
+ * `delo-privacy` row, which the parity composition leaves disabled, so upstream's brand, title and notice stay in the
+ * parity composition.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
   const t = ctx.locale.bind(NS)
   ctx.provide('deloNotice', { acknowledged: () => noticeAcknowledged(), acknowledge: () => { acknowledgeNotice() } } satisfies DeloNoticeService)
+  ctx.effect(() => overrideTitle(ctx.locale), 'delo-privacy: the product name as the document title')
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
       yield ctx.slots.register({ name: 'sidebar.brand.mark' }, DeloBrandMark)
