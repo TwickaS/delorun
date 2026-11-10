@@ -30,7 +30,7 @@ import { REACH_SESSION_COOKIE, type DeviceId, type PreLoginRoute, type ReachList
 import { DEVICE_APPROVAL_LIMITS, DEVICE_APPROVAL_VERSION, type Base64Url } from '@delo/contract-device-approval'
 import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError } from './errors.ts'
-import { claimLabelOf, deviceIdOf, devicePublicKeyOf } from './records.ts'
+import { claimLabelOf, deviceIdOf, devicePublicKeyOf, platformOf } from './records.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
 
 /** The pre-login routes this package answers on every reach listener it serves, which is each listener's allowlist. */
@@ -200,13 +200,12 @@ export function approvalRequestHandler(auth: HomeAuth): RouteHandler {
         if (typeof deviceNonce !== 'string' || Buffer.from(deviceNonce, 'base64url').length !== DEVICE_APPROVAL_LIMITS.nonceBytes) {
           throw new HomeAuthError('BAD_REQUEST', 'a request carries a 16-byte device nonce')
         }
-        const platform = typeof message.platform === 'string' ? message.platform.slice(0, DEVICE_APPROVAL_LIMITS.platformMaxChars) : ''
         const accepted = await auth.requestApproval({
           devicePublicKey,
           deviceId: deviceIdOf(devicePublicKey),
           deviceNonce: brandString<Base64Url>(deviceNonce),
           label: claimLabelOf(message.label),
-          platform,
+          platform: platformOf(message.platform),
         }, { listener, source: auth.arrivalOf(request).source })
         sendJson(response, 201, accepted)
         return

@@ -5,8 +5,9 @@
  * Mounting the plugin creates `~/.delo/secrets/home-auth/` at mode 0700, opens the stores and registers the claim route,
  * the device list route and the removal route with the web server, all inside `ctx.effect()`, so disposing the plugin
  * unregisters them. The reach closer is read from `ctx.connection` when it exists: `closeReachConnections({ deviceId })`
- * is what ends the streams and upgraded sockets a revoked device's sessions admitted, streams that carry no Peer
- * included.
+ * ends the streams and upgraded sockets a revoked device's sessions admitted, and `closeReachConnections({ sessionId })`
+ * those of a session that was rotated or passed its idle limit, its absolute limit or a roll's grace, streams that carry
+ * no Peer included.
  *
  * @module @delo/home-auth/service
  */
@@ -192,6 +193,15 @@ export class HomeAuthService extends Service {
    */
   approveLocally(requestId: string, typedCode: string): Promise<DeviceRecord> {
     return this.state().approveLocally(requestId, typedCode)
+  }
+
+  /**
+   * Cancel a pending approval request at the home's own computer, which frees its place among the 5 pending.
+   * @param requestId - the request.
+   * @throws {HomeAuthError} `APPROVAL_EXPIRED` when the request is not pending.
+   */
+  cancelApproval(requestId: string): void {
+    this.state().approvals.cancel(requestId)
   }
 
   /**

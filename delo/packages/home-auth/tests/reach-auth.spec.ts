@@ -9,7 +9,7 @@ import { generateKeyPairSync, sign } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, SESSION_STORE_PERSIST_MS, type DeviceId, type StudioAddress } from '@delo/contract-admission'
 import { DEVICE_APPROVAL_LIMITS, type Base64Url, type DevicePublicKeyJwk } from '@delo/contract-device-approval'
@@ -520,6 +520,205 @@ describe('rolling a session', () => {
       expect(home.auth.admitToken(again.rolled.token, 'reach-tailscale-private').kind).toBe('admitted')
       // Stopping writes the last use, which reports the store it cannot write.
       await expect(home.auth.stop()).rejects.toMatchObject({ code: 'STORE_INVALID' })
+    } finally {
+      await home.dispose()
+    }
+  })
+})
+
+describe('a session\'s reach connections end when its token stops admitting', () => {
+  const HOUR = 60 * 60 * 1000
+  const LISTENER = 'reach-tailscale-private'
+
+  // The home reads the fake `Date`, so each timer fires with the home's clock at the timer's own time.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: Date.UTC(2026, 0, 1) }) })
+  afterEach(() => { vi.useRealTimers() })
+
+  /** A served home whose clock is the fake `Date`. */
+  async function timedHome(): Promise<Home> {
+    const home = await homeFixture({ now: () => Date.now() })
+    home.auth.serve(SERVED)
+    return home
+  }
+
+  /** Let time pass for a running home: its timers fire in order, each at its own time. */
+  async function pass(by: number): Promise<void> {
+    await vi.advanceTimersByTimeAsync(by)
+  }
+
+  /** How many times the closer was asked to close one session's connections. */
+  function closedFor(home: Home, sessionId: string): number {
+    return home.closed.filter(match => match.sessionId === sessionId).length
+  }
+
+  it('a rotation closes every session\'s connections at once', async () => {
+    const home = await timedHome()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const first = await signIn(home.auth, phone)
+      const second = await signIn(home.auth, phone)
+      expect(home.closed).toEqual([])
+      const other = device()
+      await approve(home.auth, other)
+      // Pins the close in the rotation: without it a rotated session's open streams outlive the device approval.
+      expect(home.closed).toHaveLength(2)
+      expect(home.closed).toEqual(expect.arrayContaining([{ sessionId: first.sessionId }, { sessionId: second.sessionId }]))
+      const kept = await signIn(home.auth, other)
+      await home.auth.revokeDevice(phone.id)
+      // A removal closes the removed device's connections by device and rotates every other session, closing its own.
+      expect(home.closed.slice(2)).toEqual([{ deviceId: phone.id }, { sessionId: kept.sessionId }])
+      // A rotated session has no expiry timer left: its limits pass with no second close.
+      await pass(SESSION_LIMITS.reach.idleMs)
+      expect(home.closed).toHaveLength(4)
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('the idle limit closes a session\'s connections with no request arriving, once', async () => {
+    const home = await timedHome()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const session = await signIn(home.auth, phone)
+      await pass(SESSION_LIMITS.reach.idleMs - 1)
+      expect(closedFor(home, session.sessionId)).toBe(0)
+      // Pins the expiry timer: without it a connection outlives its session until some request presents the token.
+      await pass(1)
+      expect(closedFor(home, session.sessionId)).toBe(1)
+      // A later sign-in reads the stores again, which still hold the expired record for admit's refusal.
+      const next = await signIn(home.auth, phone)
+      await pass(SESSION_LIMITS.reach.idleMs)
+      // Pins the deadline check when the stores are read: without it the expired session is armed and closed again.
+      expect(closedFor(home, session.sessionId)).toBe(1)
+      expect(closedFor(home, next.sessionId)).toBe(1)
+      expect(home.auth.admitToken(session.token, LISTENER)).toEqual({ kind: 'refused', code: 'SESSION_EXPIRED' })
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('the absolute limit closes the connections of a session in use', async () => {
+    const home = await timedHome()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const session = await signIn(home.auth, phone)
+      const step = 11 * HOUR
+      while (Date.now() + step < session.expiresAt) {
+        await pass(step)
+        expect(home.auth.admitToken(session.token, LISTENER).kind).toBe('admitted')
+      }
+      await pass(session.expiresAt - Date.now() - 1)
+      expect(closedFor(home, session.sessionId)).toBe(0)
+      // Pins the absolute limit in the deadline: without it the connections close only 12 hours after the last request.
+      await pass(1)
+      expect(closedFor(home, session.sessionId)).toBe(1)
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('an open stream that carries no request from the client does not extend the idle limit', async () => {
+    const home = await timedHome()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const session = await signIn(home.auth, phone)
+      await pass(HOUR)
+      // The upgrade that opens a WebSocket is the session's last use; the open socket's frames never reach admit.
+      expect(home.auth.admitToken(session.token, LISTENER, { roll: false }).kind).toBe('admitted')
+      // The last-use write, and the re-read of the stores a second sign-in makes, move nothing while the stream is open.
+      await pass(SESSION_STORE_PERSIST_MS)
+      await signIn(home.auth, phone)
+      await pass(SESSION_LIMITS.reach.idleMs - SESSION_STORE_PERSIST_MS - 1)
+      expect(closedFor(home, session.sessionId)).toBe(0)
+      // Pins the idle limit measured from the last admitted request: the stream closes 12 hours after its upgrade.
+      await pass(1)
+      expect(closedFor(home, session.sessionId)).toBe(1)
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('a request from the client extends the idle limit of the session\'s open connections', async () => {
+    const home = await timedHome()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const session = await signIn(home.auth, phone)
+      await pass(6 * HOUR)
+      expect(home.auth.admitToken(session.token, LISTENER).kind).toBe('admitted')
+      await pass(SESSION_LIMITS.reach.idleMs - 6 * HOUR)
+      // Pins the re-check when the timer fires: without it the timer armed at sign-in closes a session in use.
+      expect(closedFor(home, session.sessionId)).toBe(0)
+      await pass(6 * HOUR - 1)
+      expect(closedFor(home, session.sessionId)).toBe(0)
+      await pass(1)
+      expect(closedFor(home, session.sessionId)).toBe(1)
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('a roll closes the old token\'s connections when its grace ends, and arms the new token\'s limits', async () => {
+    const home = await timedHome()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const first = await signIn(home.auth, phone)
+      const step = 11 * HOUR
+      for (const by of [step, step, SESSION_LIMITS.reach.rollAfterMs - 2 * step]) {
+        await pass(by)
+        expect(home.auth.admitToken(first.token, LISTENER).kind).toBe('admitted')
+      }
+      const rolled = home.auth.admitToken(first.token, LISTENER, { roll: true })
+      if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
+      await pass(SESSION_LIMITS.reach.rollGraceMs - 1)
+      expect(closedFor(home, first.sessionId)).toBe(0)
+      // Pins the old token's timer moved to its grace: without it its connections stay until 12 hours after its last use.
+      await pass(1)
+      expect(closedFor(home, first.sessionId)).toBe(1)
+      expect(closedFor(home, rolled.sessionId)).toBe(0)
+      // Pins the new token's timer: no re-read of the stores follows a roll, so nothing else arms it.
+      await pass(SESSION_LIMITS.reach.idleMs - SESSION_LIMITS.reach.rollGraceMs)
+      expect(closedFor(home, rolled.sessionId)).toBe(1)
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('a session admit deleted before its timer ran still has its connections closed', async () => {
+    const home = await timedHome()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const session = await signIn(home.auth, phone)
+      // The clock passes the idle limit before the timer runs, and a request presents the token first.
+      vi.setSystemTime(Date.now() + SESSION_LIMITS.reach.idleMs)
+      expect(home.auth.admitToken(session.token, LISTENER)).toEqual({ kind: 'refused', code: 'SESSION_EXPIRED' })
+      expect(closedFor(home, session.sessionId)).toBe(0)
+      // Pins closing a session the in-memory copy no longer holds: without it these connections stay open for good.
+      await vi.runOnlyPendingTimersAsync()
+      expect(closedFor(home, session.sessionId)).toBe(1)
+    } finally {
+      await home.dispose()
+    }
+  })
+
+  it('stopping the home clears every expiry timer', async () => {
+    const home = await timedHome()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      await signIn(home.auth, phone)
+      expect(vi.getTimerCount()).toBe(1)
+      await home.auth.stop()
+      // Pins the clear in stop: without it a stopped home keeps a timer per session and still calls the closer.
+      expect(vi.getTimerCount()).toBe(0)
+      await pass(SESSION_LIMITS.reach.absoluteMs)
+      expect(home.closed).toEqual([])
     } finally {
       await home.dispose()
     }

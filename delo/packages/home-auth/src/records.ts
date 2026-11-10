@@ -18,6 +18,13 @@ import { hashSecret } from './secret.ts'
 /** A 32-byte value written as base64url without padding: 43 characters. */
 const BASE64URL_32 = /^[A-Za-z0-9_-]{43}$/
 
+/**
+ * The characters a terminal or a bidirectional layout acts on: C0 and C1 controls, DEL, the line and paragraph
+ * separators, and the bidirectional marks, embeddings, overrides and isolates. A device's label and platform carry none,
+ * so text a device chose cannot move the cursor or reorder what the person reads where the home shows it.
+ */
+const DISPLAY_CONTROLS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u
+
 /** The owner record: `~/.delo/secrets/home-auth/owner.json`, mode 0600. */
 export interface OwnerRecord {
   /** The format version, C5's `v`. */
@@ -164,10 +171,12 @@ function deviceRecordOf(value: unknown): DeviceRecord {
 }
 
 /**
- * Read a claim or approval request's label: 1 to 64 characters after trimming, which is C5's limit.
+ * Read a claim or approval request's label: 1 to 64 characters after trimming, which is C5's limit, none of them a
+ * control or bidirectional formatting character.
  * @param value - the label from the message.
  * @returns the label.
- * @throws {HomeAuthError} `BAD_REQUEST` when the label is missing, blank or longer than the limit.
+ * @throws {HomeAuthError} `BAD_REQUEST` when the label is missing, blank, longer than the limit or carries such a
+ *   character.
  */
 export function claimLabelOf(value: unknown): string {
   if (typeof value !== 'string') throw new HomeAuthError('BAD_REQUEST', 'a device carries its label')
@@ -175,5 +184,23 @@ export function claimLabelOf(value: unknown): string {
   if (label === '' || label.length > DEVICE_APPROVAL_LIMITS.labelMaxChars) {
     throw new HomeAuthError('BAD_REQUEST', `a device label is 1 to ${String(DEVICE_APPROVAL_LIMITS.labelMaxChars)} characters`)
   }
+  if (DISPLAY_CONTROLS.test(label)) {
+    throw new HomeAuthError('BAD_REQUEST', 'a device label carries no control or bidirectional formatting characters')
+  }
   return label
+}
+
+/**
+ * Read an approval request's platform: its first 64 characters, which is C5's limit, or empty when the message carries
+ * none.
+ * @param value - the platform from the message.
+ * @returns the platform.
+ * @throws {HomeAuthError} `BAD_REQUEST` when it carries a control or bidirectional formatting character.
+ */
+export function platformOf(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  if (DISPLAY_CONTROLS.test(value)) {
+    throw new HomeAuthError('BAD_REQUEST', 'a device platform carries no control or bidirectional formatting characters')
+  }
+  return value.slice(0, DEVICE_APPROVAL_LIMITS.platformMaxChars)
 }

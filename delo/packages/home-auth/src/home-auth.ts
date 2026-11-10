@@ -15,6 +15,9 @@
  *   is there, so a revoked device's token answers nothing even if its session record survives.
  * - Revoking a device removes its record, invalidates every live session of its tokens and closes the reach connections
  *   those sessions admitted, before the call returns.
+ * - A reach session's open connections end when its token stops admitting: every session's at once when a rotation
+ *   trigger fires, and one session's at its idle limit, its absolute limit or the end of a roll's grace, from a timer,
+ *   whether or not a request arrives (C4, "Sessions").
  *
  * @module @delo/home-auth
  */
@@ -43,6 +46,15 @@ import { Challenges, signInVerifies } from './sign-in.ts'
 
 /** The length of one claim attempt window: a minute, which is C5's owner claim limit. */
 const CLAIM_WINDOW_MS = 60 * 1000
+
+/** The longest delay `setTimeout` keeps; a longer one fires at once, so a deadline further out is checked again then. */
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1
+
+/** A session's armed expiry: the deadline its timer fires at. */
+interface ArmedExpiry {
+  readonly at: number
+  readonly timer: ReturnType<typeof setTimeout>
+}
 
 /** The device list a studio shows. */
 export interface DevicesListing {
@@ -209,6 +221,12 @@ export class HomeAuth {
   /** Last-use times `admit` saw that are not on file yet. */
   private readonly touched = new Map<string, number>()
   private persistTimer: ReturnType<typeof setTimeout> | undefined
+  /**
+   * The expiry timer of every session that may hold an admitted reach connection, keyed by session id. An entry lives
+   * until its timer fires, a rotation closes its connections or its device is removed, even after the session left the
+   * in-memory copy, so the connections of a session `admit` deleted still close.
+   */
+  private readonly expiries = new Map<string, ArmedExpiry>()
   private readonly removalListeners = new Set<(deviceId: DeviceId) => void>()
   /** The tail of the queue that serialises a claim and a revocation against each other. */
   private queue: Promise<unknown> = Promise.resolve()
@@ -246,12 +264,15 @@ export class HomeAuth {
   }
 
   /**
-   * Write the last-use times `admit` recorded, stop the timer that writes them and wait for the queued changes; the
-   * provider calls this when it stops, as C4 requires of the session store.
+   * Write the last-use times `admit` recorded, stop the timer that writes them and every session's expiry timer, and
+   * wait for the queued changes; the provider calls this when it stops, as C4 requires of the session store. The reach
+   * listeners stop with the provider, which closes their connections.
    */
   async stop(): Promise<void> {
     clearTimeout(this.persistTimer)
     this.persistTimer = undefined
+    for (const armed of this.expiries.values()) clearTimeout(armed.timer)
+    this.expiries.clear()
     await this.persistTouched()
     // Wait for the changes already queued, such as the removal of an expired session.
     await this.serial(() => Promise.resolve())
@@ -351,12 +372,11 @@ export class HomeAuth {
    * Revoke a device: remove its record, invalidate every live session of its tokens, and close the reach connections
    * those sessions admitted. A device that has no record changes nothing but still has its sessions ended.
    *
-   * The sessions of every other device are left live: C5's "Removal" also rotates them, and this home does not rotate a
-   * session yet (see the README's note on rotation), so a removal ends exactly the removed device's sessions and
-   * invalidates no other credential. Until rotation exists, a removal is the one operation whose blast radius is the
-   * device it names.
+   * A removal is also a rotation trigger (C4): every other session is marked rotated and its reach connections close,
+   * so a device that kept a copy of the removed one's cookie gains nothing. The removed device's own connections are
+   * closed by device before the rotation, so a rotation that cannot be written still leaves them closed.
    * @param deviceId - the device.
-   * @returns what was removed, invalidated and closed.
+   * @returns what was removed, invalidated and closed; `connections` counts the removed device's only.
    * @throws {HomeAuthError} `NO_OWNER` for an unclaimed home, which closes no connection and removes nothing.
    */
   async revokeDevice(deviceId: DeviceId): Promise<RevocationResult> {
@@ -364,11 +384,10 @@ export class HomeAuth {
       await this.assertOwner()
       const removed = await this.deviceStore.remove(deviceId)
       const sessions = await this.sessions.revokeDevice(deviceId)
-      // C4: a removal rotates every other session, so a device that kept a copy of the removed one's cookie gains nothing.
-      await this.sessions.rotateAll()
       this.forget(deviceId)
       for (const listener of this.removalListeners) listener(deviceId)
       const connections = this.closeReachConnections?.({ deviceId }) ?? 0
+      await this.rotateAll()
       return { removed, sessions, connections }
     })
   }
@@ -553,7 +572,7 @@ export class HomeAuth {
       await this.deviceStore.add(device)
       this.approvals.approved(request)
       // C4: a device approval rotates every session of the home.
-      await this.sessions.rotateAll()
+      await this.rotateAll()
       return device
     })
   }
@@ -640,6 +659,8 @@ export class HomeAuth {
       void this.serial(() => this.sessions.remove([sessionId])).catch(() => undefined)
       return { kind: 'refused', code: 'NOT_SIGNED_IN' }
     }
+    // A request admitted here is the session's use: the expiry timer reads this time when it fires and waits on. Bytes on
+    // a connection admitted earlier never reach this method, so an open stream or WebSocket alone keeps nothing alive.
     const used = { ...session, lastUsedAt: at }
     view.sessions.set(sessionId, used)
     if (options.roll && session.graceUntil === undefined && at - session.lastRolledAt >= SESSION_LIMITS.reach.rollAfterMs) {
@@ -663,8 +684,12 @@ export class HomeAuth {
     const newId = hashSecret(token)
     const graceUntil = at + SESSION_LIMITS.reach.rollGraceMs
     const record: SessionRecord = { ...used, lastRolledAt: at }
-    view.sessions.set(oldId, { ...used, graceUntil })
+    const graced: SessionRecord = { ...used, graceUntil }
+    view.sessions.set(oldId, graced)
     view.sessions.set(newId, record)
+    // The old token's connections close when its grace ends; the new token's at its own limits.
+    this.arm(oldId, deadlineOf(graced))
+    this.arm(newId, deadlineOf(record))
     void this.serial(() => this.sessions.roll(oldId, graceUntil, newId, record)).catch(() => undefined)
     return { kind: 'admitted', sessionId: brandString<SessionId>(newId), session: record, rolled: { token, expiresAt: record.expiresAt } }
   }
@@ -681,6 +706,71 @@ export class HomeAuth {
       void this.persistTouched().catch(() => undefined)
     }, SESSION_STORE_PERSIST_MS)
     this.persistTimer.unref()
+  }
+
+  /**
+   * Arm a session's expiry timer for a deadline, or move an armed one earlier. A later deadline, such as the one a use
+   * makes, leaves the armed timer alone: it reads the session again when it fires and waits on until the new deadline.
+   * @param sessionId - the session id.
+   * @param at - when its token stops admitting, in milliseconds since the epoch.
+   */
+  private arm(sessionId: string, at: number): void {
+    const armed = this.expiries.get(sessionId)
+    if (armed !== undefined && armed.at <= at) return
+    clearTimeout(armed?.timer)
+    const timer = setTimeout(() => { this.expire(sessionId) }, Math.min(at - this.now(), MAX_TIMER_DELAY_MS))
+    timer.unref()
+    this.expiries.set(sessionId, { at, timer })
+  }
+
+  /**
+   * Arm the expiry timer of every session in a fresh in-memory copy that may still admit a request. A rotated session's
+   * connections closed at its rotation, and a session past its deadline either had them closed by its timer or was never
+   * admitted while it could be, so neither is armed.
+   * @param view - the in-memory copy.
+   */
+  private schedule(view: AdmissionView): void {
+    const at = this.now()
+    for (const [sessionId, session] of view.sessions) {
+      const deadline = deadlineOf(session)
+      if (!session.rotated && deadline > at) this.arm(sessionId, deadline)
+    }
+  }
+
+  /**
+   * A session's expiry timer fired: wait on when a request used the session since it was armed, otherwise close the
+   * reach connections it admitted. A session the in-memory copy no longer holds, because `admit` deleted it past its
+   * limit, a sign-in replaced it or the stores could not be read, has its connections closed too. The record itself is
+   * left for `admit`, which refuses it with C4's code and deletes it.
+   * @param sessionId - the session id.
+   */
+  private expire(sessionId: string): void {
+    this.expiries.delete(sessionId)
+    const session = this.view?.sessions.get(sessionId)
+    if (session !== undefined && deadlineOf(session) > this.now()) {
+      this.arm(sessionId, deadlineOf(session))
+      return
+    }
+    this.closeReachConnections?.({ sessionId })
+  }
+
+  /**
+   * Rotate every session (C4, "Rotation and revocation"): mark each rotated in the in-memory copy, so `admit` refuses it
+   * from here on, close the reach connections of every session whose expiry timer is armed, which is every session that
+   * may hold one, and then write the marks. The connections close before the write, so a write that fails still leaves
+   * them closed.
+   */
+  private async rotateAll(): Promise<void> {
+    const view = this.view
+    if (view !== undefined) {
+      for (const [sessionId, session] of view.sessions) view.sessions.set(sessionId, { ...session, rotated: true })
+    }
+    for (const [sessionId, armed] of this.expiries) {
+      clearTimeout(armed.timer)
+      this.closeReachConnections?.({ sessionId })
+    }
+    this.expiries.clear()
+    await this.sessions.rotateAll()
   }
 
   /**
@@ -719,7 +809,8 @@ export class HomeAuth {
   }
 
   /**
-   * Drop a removed device's sessions from the in-memory copy at once, before the stores are read again.
+   * Drop a removed device's sessions from the in-memory copy at once, before the stores are read again, with their
+   * expiry timers: the removal closes their connections by device.
    * @param deviceId - the device.
    */
   private forget(deviceId: DeviceId): void {
@@ -727,7 +818,10 @@ export class HomeAuth {
     if (view === undefined) return
     view.devices.delete(deviceId)
     for (const [id, session] of view.sessions) {
-      if (session.deviceId === deviceId) view.sessions.delete(id)
+      if (session.deviceId !== deviceId) continue
+      view.sessions.delete(id)
+      clearTimeout(this.expiries.get(id)?.timer)
+      this.expiries.delete(id)
     }
   }
 
@@ -747,6 +841,7 @@ export class HomeAuth {
         if (session !== undefined && session.lastUsedAt < at) view.sessions.set(id, { ...session, lastUsedAt: at })
       }
       this.view = view
+      this.schedule(view)
     } catch (error) {
       this.view = undefined
       throw error
@@ -859,6 +954,16 @@ function summaryOf(record: DeviceRecord): DeviceSummary {
     approvedBy: record.approvedBy,
     lastSignInAt: record.lastSignInAt,
   }
+}
+
+/**
+ * When a reach session's token stops admitting: its idle limit after its last use, its absolute expiry, or the end of a
+ * roll's grace for a token a roll replaced, whichever comes first. `admit` refuses the token from this time on.
+ * @param session - the session record.
+ * @returns the time, in milliseconds since the epoch.
+ */
+function deadlineOf(session: SessionRecord): number {
+  return Math.min(session.lastUsedAt + SESSION_LIMITS.reach.idleMs, session.expiresAt, session.graceUntil ?? Infinity)
 }
 
 /**

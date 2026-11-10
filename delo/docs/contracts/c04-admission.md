@@ -137,7 +137,7 @@ A listener's policy lists only the routes of this table that the home builds; in
 | `loopback` | None | 30 days since minting | None: a loopback credential keeps its value until it expires. |
 | Every reach listener | 12 hours since last use | 14 days since creation | Every 24 hours of use, the next admitted request receives a new token in `setCookie`. The old token stays valid for 30 seconds for requests already in flight, then its record is deleted. |
 
-A session past its idle or absolute limit is refused with `401 SESSION_EXPIRED` and its record is deleted. Rolling never extends the absolute limit.
+A session past its idle or absolute limit is refused with `401 SESSION_EXPIRED` and its record is deleted. Rolling never extends the absolute limit. A reach session's use is an admitted HTTP request or upgrade carrying its token; traffic on a connection admitted earlier, frames a client sends on an open WebSocket included, is not use. When a reach session passes its idle or absolute limit, or a rolled token's 30-second grace ends, the provider closes every open reach connection that carried a request admitted for that token, at that time and whether or not a request arrives.
 
 <a id="launch-tokens"></a>
 ### Launch tokens
@@ -164,7 +164,7 @@ These events rotate every session of the home, on every listener:
 - a sign-in factor change: enrolling, replacing or removing a passkey, changing the OpenID Connect provider or client, and the completion of a recovery-kit restore;
 - a reach-provider change: turning a reach option on or off, or adding, removing or changing a studio address.
 
-A rotated reach session's next request is refused with `401 ROTATION_REQUIRED`. The studio then signs a fresh device-key challenge and calls `POST /auth/session` with the old token, which returns a new token with the same absolute expiry and deletes the old record; the identity factor is not asked again. Rotation does not reach loopback credentials, which have no record.
+A rotation closes every open reach connection that carried a request admitted for a rotated session before the trigger's operation returns. A rotated reach session's next request is refused with `401 ROTATION_REQUIRED`. The studio then signs a fresh device-key challenge and calls `POST /auth/session` with the old token, which returns a new token with the same absolute expiry and deletes the old record; the identity factor is not asked again. Rotation does not reach loopback credentials, which have no record.
 
 Revocation ends a session at once. Removing a device deletes its sessions and records and disposes its Peers before the removal returns. `delorun devices reset` ([C5](c05-device-approval.md#reset)), which is not built, deletes every session record and replaces the browser session secret ([reach design](../design/reach.md#loopback-credentials)).
 

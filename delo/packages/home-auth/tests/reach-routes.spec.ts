@@ -128,6 +128,26 @@ describe('the pre-login routes', () => {
     expect(error(await post(REACH_PATHS.session, '[]'))).toBe('BAD_REQUEST')
     expect(error(await send('POST', `${REACH_PATHS.session}?reach`, { deviceId: 'A'.repeat(43), challenge: 'c', signature: 's' }, { cookie: 'other=1; __Host-delo-session=old' }))).toBe('DEVICE_NOT_TRUSTED')
   })
+
+  it('refuse a label or platform carrying a control or bidirectional formatting character', async () => {
+    await home.auth.openApprovalWindow()
+    const ask = (fields: { label: string; platform?: string }): Promise<Reply> =>
+      send('POST', `${REACH_PATHS.request}?reach`, { v: 1, devicePublicKey: keyOf(1), deviceNonce: Buffer.alloc(16).toString('base64url'), ...fields })
+    // Pins the label check: without it each label reaches the terminal of `delorun devices approve` and the studio.
+    for (const label of ['Ph\u001b[2Jone', 'Phone\u0007', 'Ph\u007fone', 'Ph\u009bone', 'Ph‮enoh', 'Ph⁦one', 'Ph‏one', 'Ph؜one', 'Ph one']) {
+      const reply = await ask({ label })
+      expect({ label, status: reply.status, error: error(reply) }).toEqual({ label, status: 400, error: 'BAD_REQUEST' })
+    }
+    // Pins the platform check, which runs on the whole value before it is cut to 64 characters.
+    for (const platform of ['iOS\r\nSafari', 'iOS ‮', `${'x'.repeat(64)}\u001b[2J`]) {
+      const reply = await ask({ label: 'Phone', platform })
+      expect({ platform, status: reply.status, error: error(reply) }).toEqual({ platform, status: 400, error: 'BAD_REQUEST' })
+    }
+    expect(home.auth.pendingApprovals()).toEqual([])
+    // Text in other scripts, emoji with their joiners and surrounding whitespace are not formatting controls.
+    expect((await ask({ label: ' Телефон 👩‍💻\t', platform: 'iPhone; עברית' })).status).toBe(201)
+    expect(home.auth.pendingApprovals()).toEqual([expect.objectContaining({ label: 'Телефон 👩‍💻', platform: 'iPhone; עברית' })])
+  })
 })
 
 describe('the routes of the home\'s own computer', () => {

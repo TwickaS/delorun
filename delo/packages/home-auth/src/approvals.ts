@@ -9,8 +9,9 @@
  * - **The request.** Bound to the listener's studio address, it expires 5 minutes after it was created; a home holds at
  *   most 5 pending, and a source makes at most 10 a minute. Its state is read with its request secret at most once
  *   every 2 seconds.
- * - **The local approval.** The person types the match code the new device shows. A wrong code is refused with
- *   `APPROVAL_CODE_MISMATCH` and the third cancels the request.
+ * - **The local approval.** The person chooses one pending request and types the match code its device shows. A wrong
+ *   code is refused with `APPROVAL_CODE_MISMATCH` and the third cancels that request only. The person may also cancel
+ *   a pending request, which frees its place when 5 are pending: a request is never replaced without that choice.
  *
  * Everything here is in memory: a restart closes the window and drops pending requests, which the new device sees as
  * `APPROVAL_EXPIRED` and sends again.
@@ -146,7 +147,7 @@ export class Approvals {
     this.expire()
     const pending = [...this.requests.values()].filter(record => record.state === 'pending')
     if (pending.length >= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome) {
-      throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This home has 5 device requests waiting. Approve or let them expire first')
+      throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This home has 5 device requests waiting. At the home\'s computer, run delorun devices approve to approve one or cancel one, then try again')
     }
     const nonceBytes = DEVICE_APPROVAL_LIMITS.nonceBytes
     const id = brandString<ApprovalRequestId>(newSecret(nonceBytes, this.options.random))
@@ -235,6 +236,18 @@ export class Approvals {
         : 'That code is not the one the new device shows. Type the eight digits on its screen')
     }
     return record
+  }
+
+  /**
+   * Cancel a pending request at the person's choice; the new device reads its state as `cancelled`.
+   * @param id - the request id.
+   * @throws {HomeAuthError} `APPROVAL_EXPIRED` for an unknown, expired, cancelled or approved request.
+   */
+  cancel(id: string): void {
+    this.expire()
+    const record = this.requests.get(id)
+    if (record?.state !== 'pending') throw new HomeAuthError('APPROVAL_EXPIRED', 'This request is no longer waiting')
+    record.state = 'cancelled'
   }
 
   /**

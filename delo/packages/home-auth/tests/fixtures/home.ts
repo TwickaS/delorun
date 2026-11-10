@@ -58,7 +58,7 @@ export interface Home {
   /** The port the fixture names as the loopback listener's; a spec's server sets it once it is bound. */
   readonly loopback: { port: number | undefined }
   /** What a `closeReachConnections` stub recorded, in call order. */
-  readonly closed: { readonly deviceId?: string }[]
+  readonly closed: { readonly deviceId?: string; readonly sessionId?: string }[]
   /** Dispose the directory. */
   readonly dispose: () => Promise<void>
 }
@@ -68,10 +68,11 @@ const START = Date.UTC(2026, 0, 1)
 
 /**
  * Build a home fixture.
- * @param options - extra options, such as another random fill.
+ * @param options - extra options, such as another random fill, or a clock to read in place of the hand-moved one, such
+ *   as the fake `Date` of a spec whose timers must fire at the time the home reads.
  * @returns the fixture.
  */
-export async function homeFixture(options: { readonly fill?: number } = {}): Promise<Home> {
+export async function homeFixture(options: { readonly fill?: number; readonly now?: () => number } = {}): Promise<Home> {
   const directory = await mkdtemp(join(tmpdir(), 'delo-home-auth-'))
   const clock = {
     now: START,
@@ -84,12 +85,12 @@ export async function homeFixture(options: { readonly fill?: number } = {}): Pro
     draw += 1
     return new Uint8Array(size).fill(value)
   }
-  const closed: { readonly deviceId?: string }[] = []
+  const closed: { readonly deviceId?: string; readonly sessionId?: string }[] = []
   const loopback: { port: number | undefined } = { port: undefined }
   const auth = new HomeAuth({
     loopbackPort: () => loopback.port,
     directory,
-    now: clock.read,
+    now: options.now ?? clock.read,
     random,
     closeReachConnections: (match: { readonly deviceId?: string; readonly sessionId?: string }) => {
       closed.push(match)

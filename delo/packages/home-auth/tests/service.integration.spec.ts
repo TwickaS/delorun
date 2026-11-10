@@ -4,6 +4,7 @@
  *
  * Each test's comment names the check whose removal makes that test fail, so the suite is also the mutation record.
  */
+import { generateKeyPairSync } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { IncomingMessage } from 'node:http'
 import { Socket } from 'node:net'
@@ -13,6 +14,8 @@ import { describe, expect, it } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
+import type { Base64Url, DevicePublicKeyJwk } from '@delo/contract-device-approval'
+import type { HomeAuth } from '../src/home-auth.ts'
 import { HomeAuthService, loopbackCredentialOf } from '../src/service.ts'
 import { DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH } from '../src/routes.ts'
 import { REACH_PATHS } from '../src/reach-routes.ts'
@@ -168,6 +171,33 @@ describe('the homeAuth service', () => {
       .toEqual({ listener: undefined, host: '127.0.0.1:3080', source: 'unknown' })
     expect(service.servedListener('reach-tailscale-private')).toBeUndefined()
     expect(() => service.owner()).toThrow(/has not started/)
+    expect(() => service.cancelApproval('request')).toThrow(/has not started/)
+  })
+
+  it('cancels a pending approval request at the home\'s own computer', async () => {
+    const mounted = await mount()
+    try {
+      const service = mounted.ctx.homeAuth
+      const address = brandString<StudioAddress>('https://home.example.ts.net')
+      service.serve({ listener: 'reach-tailscale-private', address, factor: 'tailnet-membership' })
+      await service.openApprovalWindow()
+      const exported = generateKeyPairSync('ec', { namedCurve: 'P-256' }).publicKey.export({ format: 'jwk' })
+      const devicePublicKey: DevicePublicKeyJwk = { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>(exported.x ?? ''), y: brandString<Base64Url>(exported.y ?? '') }
+      // The service has no request method of its own: a request arrives through the reach route, which calls the core.
+      const core = Reflect.get(service, 'core') as HomeAuth
+      const accepted = await core.requestApproval(
+        { devicePublicKey, deviceId: deviceIdOf(devicePublicKey), deviceNonce: brandString<Base64Url>(Buffer.alloc(16, 3).toString('base64url')), label: 'Phone', platform: 'iOS' },
+        { listener: 'reach-tailscale-private', source: '127.0.0.1' },
+      )
+      expect(service.pendingApprovals()).toHaveLength(1)
+      service.cancelApproval(accepted.requestId)
+      // Pins the delegation to the approval window: without it the request stays pending and keeps its place.
+      expect(service.pendingApprovals()).toEqual([])
+      expect(() => { service.cancelApproval(accepted.requestId) }).toThrow(expect.objectContaining({ code: 'APPROVAL_EXPIRED' }))
+    } finally {
+      await mounted.fiber.dispose()
+      await rm(mounted.directory, { recursive: true, force: true })
+    }
   })
 
   it('answers the owner, the device list, the code and a session through the service', async () => {
