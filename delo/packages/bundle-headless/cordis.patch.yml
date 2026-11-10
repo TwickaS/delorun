@@ -1,0 +1,51 @@
+# The @delo/bundle-headless patch: Delo's guard rows in the home's `headless`
+# profile, after upstream's `@deepseek-ai/dsh-base` and
+# `@deepseek-ai/dsh-headless` bundles. `delorun headless` links this bundle
+# into the profile on its first run and refuses a headless profile that does
+# not load it, and holds every row here to Delo's Host invariants before and
+# after boot (C19).
+#
+# Each guard keeps its CLI-profile value whatever setup's prompts answer says,
+# because a headless profile has no setup answer. A guard that asks a person
+# refuses here: the headless profile composes no approval answerer, so an ask
+# resolves `unavailable` and the guard refuses the action with its reason.
+
+# C11's privacy defaults, as in Delo's CLI profiles: DeepSeek's session-log
+# upload is off until the person turns it on in this profile's own patch, and
+# the feedback telemetry exporter, which has no feedback surface here, is off.
+- id: session-log-deepseek
+  config:
+    enabled: false
+
+- id: session-telemetry-otel
+  disabled: true
+
+- insert:
+    # A model-authored write to an instruction layer asks for consent, which no
+    # one answers in a one-shot run, so the write is refused.
+    - id: delo-instruction-consent
+      name: '@delo/plugin-instruction-consent'
+      config:
+        enabled: true
+
+    # A full-access mode for a workspace whose full access the person has not
+    # granted in the studio is refused; a recorded grant stands.
+    - id: delo-permission-defaults
+      name: '@delo/plugin-permission-defaults'
+      config:
+        enabled: true
+
+    # A fetch of a private, loopback or link-local address is refused.
+    - id: delo-fetch-guard
+      name: '@delo/plugin-fetch-guard'
+      config:
+        enabled: true
+
+    # The first step of every turn waits until `delorun headless` has checked
+    # the booted Host's rows and services, so the task starts only after that
+    # check. No update or stop waits on a headless run's chats.
+    - id: delo-update-gate
+      name: '@delo/bundle-local/update-gate'
+      config:
+        enabled: true
+        holdUntilChecked: true

@@ -7,7 +7,8 @@
  *
  * The composition, in order:
  *
- * 1. upstream's profile preparation, and for the CLI profile the refusal of a profile that skipped a Delo bundle;
+ * 1. upstream's profile preparation, the refusal of a profile that skipped a Delo bundle, and for `delorun headless` the
+ *    refusal of a `headless` profile that does not load `@delo/bundle-headless`;
  * 2. safe mode's filtered layers and overlay, when its marker is set;
  * 3. the approved plugin content step ({@link ApprovedPluginContent}), whose overlays apply after safe mode's;
  * 4. C1's sandbox overlay, the last overlay, so it applies over every layer
@@ -16,7 +17,7 @@
  *
  * The invariants, checked on the composed rows before boot and on the Loader's rows after it:
  *
- * - each required row, the `sandbox` row and in the CLI profile every row a Delo bundle inserts, is inserted once, by
+ * - each required row, the `sandbox` row and every row a Delo bundle inserts, is inserted once, by
  *   the bundle that declares it (upstream's `@deepseek-ai/dsh-base` for `sandbox`, a Delo bundle for a Delo row), and
  *   runs the plugin that bundle names; no other bundle, the profile's patch, the home's patch or an overlay inserts the
  *   id again, which would replace the row;
@@ -26,7 +27,8 @@
  *   `runnerFailureSignatures`;
  * - in the CLI profile, each prompt row's switch has the value the recorded prompts answer gives it ("Safer prompts"
  *   Delo's default, "Same as stock" the parity value), and the guard rows `delo-fetch-guard` and `delo-update-gate`
- *   are on;
+ *   are on; in the `headless` profile, which has no setup answer, each row of `@delo/bundle-headless` has Delo's
+ *   default ({@link HEADLESS_ROW_VALUES});
  * - after boot, each service a required row provides ({@link ROW_SERVICES}) is provided by that row, by the fiber that
  *   registered it and not by its presence alone, and is present unless the row's switch is off: `sandbox`, `fetchGuard`,
  *   the consent services and `deloTurnGate`, through which an update's or a stop's wait refuses new turns.
@@ -41,16 +43,18 @@ import { join } from 'node:path'
 import type { ResolvedProfileRuntime } from '@deepseek-ai/dsh/profile-boot'
 import type { PromptsAnswer } from '@delo/contract-setup-answers'
 import type { CommandOutput } from './command.ts'
+import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 import { deloRowIds, isDeloPackage, refuseSkippedDeloBundles, type BootedRow } from './delo-bundles.ts'
 import { CliError, EXIT } from './exit.ts'
 import { composedRow, isRecord, patchLayers, rowInserts, sourcesSetting, type PatchLayer } from './patch-layers.ts'
 import { safeModeNotice, safeModeStart, type SafeModeStart } from './safe-mode.ts'
 import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
+import { migrationsPath } from './profile-migrations.ts'
 import { promptRows, readPromptsAnswer } from './setup/prompt-switches.ts'
 
 /**
- * Which Host a composition boots: the CLI profile, which carries Delo's bundles, or upstream's `headless` profile,
- * which carries none and so is held to the sandbox invariants alone.
+ * Which Host a composition boots: a CLI profile, which carries `@delo/bundle-local` and `@delo/bundle-studio`, or the
+ * home's `headless` profile, upstream's `headless` template with `@delo/bundle-headless` linked into it.
  */
 export type ComposeKind = 'cli' | 'headless'
 
@@ -138,6 +142,16 @@ const GUARD_ROWS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = 
   'delo-update-gate': { enabled: true, holdUntilChecked: true },
 }
 
+/**
+ * The values each row of `@delo/bundle-headless` must have in the `headless` profile: Delo's defaults, which no setup
+ * answer changes there.
+ */
+export const HEADLESS_ROW_VALUES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
+  'delo-instruction-consent': { enabled: true },
+  'delo-permission-defaults': { enabled: true },
+  ...GUARD_ROWS,
+}
+
 /** The service an update's or a stop's wait attaches its gate to. */
 export const TURN_GATE_SERVICE = 'deloTurnGate'
 
@@ -171,12 +185,13 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   let resolvedProfile: ResolvedProfileRuntime
   try {
     resolvedProfile = await dependencies.prepareProfile(request.profile)
-    if (request.kind === 'cli') refuseSkippedDeloBundles(resolvedProfile.profile)
+    refuseSkippedDeloBundles(resolvedProfile.profile)
   } catch (error) {
     if (error instanceof CliError) throw error
     throw new CliError(EXIT.failed, `delorun: the profile ${request.profile} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
   }
-  const deloRows = request.kind === 'cli' ? deloRowIds(resolvedProfile.profile) : new Set<string>()
+  if (request.kind === 'headless') refuseHeadlessWithoutBundle(request.home, resolvedProfile)
+  const deloRows = deloRowIds(resolvedProfile.profile)
   // Safe mode boots the same profile with its third-party layers and rows left out, and edits none of its files.
   const safe = safeModeStart({ home: request.home, profile: request.profile, resolvedProfile })
   if (safe !== undefined) {
@@ -190,10 +205,9 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   const overlay = await writeSandboxOverlay(request.home, request.profile, resolvedProfile.profile, others, protection)
   const patchFiles = [...others, overlay]
   const prompts = request.kind === 'cli' ? readPromptsAnswer(join(request.home, 'profiles', request.profile)) : undefined
-  const values = new Map<string, Readonly<Record<string, unknown>>>(prompts === undefined ? [] : [
-    ...promptRows(prompts).map(row => [row.id, row.config] as const),
-    ...Object.entries(GUARD_ROWS),
-  ])
+  const values = new Map<string, Readonly<Record<string, unknown>>>(prompts === undefined
+    ? Object.entries(HEADLESS_ROW_VALUES)
+    : [...promptRows(prompts).map(row => [row.id, row.config] as const), ...Object.entries(GUARD_ROWS)])
   const layers = patchLayers(request.home, resolvedProfile.profile, patchFiles)
   const composed: ComposedStart = {
     request,
@@ -208,6 +222,21 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   }
   assertComposedInvariants(composed)
   return composed
+}
+
+/**
+ * Refuse a `headless` profile that does not load `@delo/bundle-headless`: its task would run without Delo's guards.
+ * @param home - the Delo home.
+ * @param resolvedProfile - the prepared profile.
+ * @throws {CliError} naming the bundle and the remedy.
+ */
+function refuseHeadlessWithoutBundle(home: string, resolvedProfile: ResolvedProfileRuntime): void {
+  if (resolvedProfile.profile.layers.some(layer => layer.packageName === HEADLESS_BUNDLE)) return
+  const record = migrationsPath(home, resolvedProfile.profile.name)
+  throw new CliError(EXIT.failed, [
+    `delorun headless: the ${resolvedProfile.profile.name} profile does not load Delo's headless bundle ${HEADLESS_BUNDLE}, which holds the guards a headless task runs under, so Delo did not start the task.`,
+    `To fix it, remove ${record} so that the next delorun headless adds the bundle again, or remove the folder ${resolvedProfile.profile.dir} so that Delo creates the profile again with it.`,
+  ].join('\n'))
 }
 
 /**
@@ -318,7 +347,9 @@ function violationsOf(composed: ComposedStart, rows: readonly BootedRow[]): Viol
     for (const [key, value] of Object.entries(expected)) {
       const actual = isRecord(row.config) ? row.config[key] : undefined
       if (actual === value) continue
-      const because = id in GUARD_ROWS ? 'which stays on whatever the prompts answer' : `which the recorded prompts answer "${composed.prompts === 'stock' ? 'Same as stock' : 'Safer prompts'}" sets`
+      const because = composed.request.kind === 'headless'
+        ? 'which a delorun headless run always has'
+        : id in GUARD_ROWS ? 'which stays on whatever the prompts answer' : `which the recorded prompts answer "${composed.prompts === 'stock' ? 'Same as stock' : 'Safer prompts'}" sets`
       violations.push({ subject: id, problem: `has ${key} ${JSON.stringify(actual)}, not ${JSON.stringify(value)}, ${because}`, sources: sourcesSetting(composed.layers, id, patch => isRecord(patch.config) && key in patch.config && patch.config[key] !== value) })
     }
   }

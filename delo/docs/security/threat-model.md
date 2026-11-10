@@ -48,7 +48,8 @@ The parity registry also declares switches for a container denial marker, `plugi
 ## Where Delo's protections apply
 
 - **The CLI profile.** The profile `delorun setup` creates and `delorun` or `delorun start` boots: upstream's web template with `@delo/bundle-local` and `@delo/bundle-studio`. Every protection this page names as built applies here.
-- **`delorun headless` and `delorun plugin`.** They run upstream's own profiles with none of Delo's rows: no protected home, no denied sockets, no consents, no fetch guard and no privacy defaults. DeepSeek's session-log upload is on under `delorun headless`, as in stock. Making every command that boots a Host apply Delo's layer is in the [native confinement design](../design/native-confinement.md#every-way-a-host-boots).
+- **`delorun headless`.** It boots the home's `headless` profile: upstream's `headless` template with `@delo/bundle-headless`, under C1's sandbox overlay. The fetch guard, the instruction write consent, the full-access consent and the turn gate apply, and DeepSeek's session-log upload is off, as in the CLI profile. A guard that asks a person refuses, because the profile composes no approval answerer. Full access, by `--permission-mode danger-full-access` or `DSH_PERMISSION_MODE=danger-full-access`, is refused before boot for a working directory without a full-access grant recorded in the studio. The composition refuses a `headless` profile without the bundle, and the task starts only after Delo checked the bundle's rows and services. The profile mounts no MCP client and no schedule runtime, so those consents have nothing to guard.
+- **`delorun plugin`.** It runs upstream's pnpm operation with none of Delo's rows: no protected home, no denied sockets, no consents, no fetch guard and no privacy defaults. Making every command that boots a Host apply Delo's layer is in the [native confinement design](../design/native-confinement.md#every-way-a-host-boots).
 - **The desktop app.** It is upstream's, unchanged, and none of Delo's rows apply to it.
 - **Windows.** The sandbox confines writes only. Confined commands can read the whole home, Delo's secrets, upstream's credential files and the start token included, and no mode or access-list check of the home runs.
 
@@ -208,7 +209,7 @@ In the CLI profile the fetch guard makes `web_fetch` and the HTTP fetch provider
 
 ### Data sharing
 
-Delo has no telemetry of its own. In the CLI profile, DeepSeek's session-log upload is off until the person turns it on in the Privacy section of Settings, and DeepSeek's feedback send is removed; setup cannot turn upload on ([C11](../contracts/c11-setup-answers.md)). Under `delorun headless` session-log upload is on, as in stock, and the desktop app keeps upstream's analytics. The release checks run whenever a release is installed, updated or started; their requests reveal the machine's IP address and version to their hosts, as [the network](#the-network) states. A new default-on request to a Delo host needs the lead's approval and an entry in the network test's allowlist. `delorun verify` reports the `data-sharing` check as not run.
+Delo has no telemetry of its own. In the CLI profile, DeepSeek's session-log upload is off until the person turns it on in the Privacy section of Settings, and DeepSeek's feedback send is removed; setup cannot turn upload on ([C11](../contracts/c11-setup-answers.md)). Under `delorun headless` session-log upload is off by default as well, and the desktop app keeps upstream's analytics. The release checks run whenever a release is installed, updated or started; their requests reveal the machine's IP address and version to their hosts, as [the network](#the-network) states. A new default-on request to a Delo host needs the lead's approval and an entry in the network test's allowlist. `delorun verify` reports the `data-sharing` check as not run.
 
 ## What Delo does not protect against
 
@@ -216,7 +217,7 @@ Each limit below is stated in the contract that owns it. `delorun verify` report
 
 | Limit | What remains possible |
 | --- | --- |
-| Commands outside the CLI profile | Under `delorun headless` and `delorun plugin`, a confined command can read the whole home, the start token and upstream's credential files included, and connect to the update channel; no consent, fetch guard or privacy default applies |
+| Commands outside the CLI profile | Under `delorun plugin`, a command can read the whole home, the start token and upstream's credential files included, and connect to the update channel; no consent, fetch guard or privacy default applies. Under `delorun headless`, a confined command gets the sandbox overlay's rules, and a command run with full access, which needs a grant recorded in the studio for the working directory, is unconfined |
 | Windows does not confine reads | Confined commands can read the home's secrets, upstream's credential files and the start token, so the token does not keep them from the update channel; the home's modes and access lists are not checked |
 | Landlock cannot deny a connect to a pathname socket | On a Landlock-only system a confined command can connect to the update channel, which refuses it because it cannot read the start token, and to a rootful Docker socket, which is equivalent to root |
 | Docker over TCP or SSH | Any command with network access can reach the engine |

@@ -22,7 +22,7 @@ Delo's guards reach upstream through optional service lookups: upstream asks for
 
 - Upstream reads each guard with an optional lookup, and an absent guard allows the action: `fetchGuard` in `packages/web/web-fetch-http/src/index.ts`, `writeConsent` in `packages/fs/tool-fs/src/consent.ts`, `mcpAddConsent` in `packages/mcp/mcp-client/src/index.ts`, `scheduleConsent` in `packages/schedule/schedule/src/runtime.ts` and `packages/schedule/tool-schedule/src/index.ts`, and `sandboxModeGuard` in `packages/interaction/permission-presets/src/index.ts`.
 - Delo provides each guard from its own plugin in `@delo/bundle-local`'s rows. [C19](../contracts/c19-home-process.md)'s Host invariants check, before boot and once after it, that every row a Delo bundle inserts is active in the CLI profile. Nothing checks again after boot, so a row that a reload stops, or that fails as it restarts, leaves its guard absent while the Host runs.
-- `delorun headless` boots upstream's `headless` profile, which carries no Delo bundle. It has C1's sandbox overlay and safe mode, and none of Delo's guard rows. Of the guarded consumers it mounts `web-fetch-http`, `tool-fs` and `permission-presets`; it mounts no MCP client and no schedule runtime. Its approval service has no answerer, so an ask resolves `unavailable` and the asking guard refuses.
+- `delorun headless` boots the home's `headless` profile, upstream's `headless` template with `@delo/bundle-headless` linked into it. It has C1's sandbox overlay, safe mode and the bundle's guard rows, which C19's Host invariants hold before and after boot. Of the guarded consumers it mounts `web-fetch-http`, `tool-fs` and `permission-presets`; it mounts no MCP client and no schedule runtime. Its approval service has no answerer, so an ask resolves `unavailable` and the asking guard refuses.
 
 ## The rules
 
@@ -37,7 +37,7 @@ Delo's guards reach upstream through optional service lookups: upstream asks for
 
 5. `delorun headless` adds a Delo overlay, before the sandbox overlay, that mounts the fetch guard, the instruction write consent and the permission defaults, with the same switches as the CLI profile, and sets the `requiredGuards` of the consumers the profile mounts. The headless invariants require those rows active.
 6. Under headless, a guard that asks a person refuses, because no answerer is composed: a model write to an instruction file, and a full-access selection for a workspace without a recorded grant, are refused with the guard's reason. A workspace whose full access the person granted in the studio keeps it, because the grant is recorded in the home.
-7. The update gate is not mounted in headless: a headless run is not a home process, and an update or a rollback refuses while it is listed as a data user ([C1](../contracts/c01-home-layout.md)).
+7. The update gate is mounted in headless only to hold the task's first step until the post-boot check passes (`holdUntilChecked`): a headless run is not a home process, no update or stop waits on its chats, and an update or a rollback refuses while it is listed as a data user ([C1](../contracts/c01-home-layout.md)).
 
 ### Files the change touches
 
@@ -64,4 +64,4 @@ Delo's guards reach upstream through optional service lookups: upstream asks for
 
 ## What is built so far
 
-Nothing of this design is built.
+The headless rules 5 to 7 are built as `@delo/bundle-headless`, a bundle linked into the `headless` profile, not as an overlay; the `requiredGuards` marker and the rules before them are not built.

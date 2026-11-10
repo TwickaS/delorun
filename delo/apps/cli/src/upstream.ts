@@ -79,7 +79,7 @@ export const pluginCommand: CliCommand = {
 export function headlessDependencies(): HeadlessDependencies {
   const upstream = upstreamDependencies()
   // No home process runs beside a headless task, so upstream's runner keeps its own signal handlers.
-  return { prepareProfile: upstream.prepareProfile, approvedPluginContent: upstream.approvedPluginContent, preStartSteps: upstream.preStartSteps, runProfile: options => runUpstreamProfile(options, true), loadEnvironment: upstream.loadEnvironment }
+  return { prepareProfile: upstream.prepareProfile, approvedPluginContent: upstream.approvedPluginContent, preStartSteps: upstream.preStartSteps, cwd: () => process.cwd(), runProfile: options => runUpstreamProfile(options, true), loadEnvironment: upstream.loadEnvironment }
 }
 
 /**

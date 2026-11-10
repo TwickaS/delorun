@@ -78,6 +78,9 @@ export { NO_WORKSPACE, workspaceKey } from './workspace.ts'
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'permission-defaults'
 
+/** The services {@link PermissionDefaults} needs, so this row starts only once they exist. */
+export const inject = ['permissionPresets', 'sandboxPolicy']
+
 /** The plugin's configuration. */
 export interface Config {
   /**
@@ -412,7 +415,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (ctx.get('sandboxModeGuard') !== undefined) {
     throw new Error('permission-defaults: another plugin already provides the sandbox-mode guard; the seam has one provider, so a composition turns on this full-access consent or the other guard, not both')
   }
-  await ctx.plugin(PermissionDefaults)
+  // Awaited, with the service's own injections declared on the plugin, so the store is read and the guard provided
+  // before the Loader counts this row as started.
+  await ctx.plugin(PermissionDefaults).await()
 }
 
 /**

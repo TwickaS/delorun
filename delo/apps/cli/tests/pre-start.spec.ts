@@ -49,13 +49,23 @@ describe('the pre-start steps', () => {
     expect(preStartSteps({ migrations: () => [] }).map(step => step.name)).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'update-notice'])
   })
 
-  it('run every step for the CLI profile, and only the import recovery and the update notice for delorun headless', async () => {
+  it('run every step for the CLI profile, and all but the restore recovery for delorun headless', async () => {
     const cli: string[] = []
     await runPreStartSteps(recorded(cli, []), context('cli'))
     expect(cli).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'update-notice'])
     const headless: string[] = []
     await runPreStartSteps(recorded(headless, []), context('headless'))
-    expect(headless).toEqual(['stock-import-recovery', 'update-notice'])
+    expect(headless).toEqual(['stock-import-recovery', 'profile-migrations', 'update-notice'])
+  })
+
+  it('ask for the migrations of the headless profile on every delorun headless run, and none for a successor', async () => {
+    const migrated: PreStartContext[] = []
+    await runPreStartSteps(recorded([], migrated), context('headless'))
+    await runPreStartSteps(recorded([], migrated), context('headless'))
+    expect(migrated.map(start => `${start.kind}:${start.profile}`)).toEqual(['headless:headless', 'headless:headless'])
+    const successors: PreStartContext[] = []
+    await runPreStartSteps(recorded([], successors), context('headless', true))
+    expect(successors).toEqual([])
   })
 
   it('make the profile\'s one-time changes on a fresh start and none for an update\'s successor', async () => {

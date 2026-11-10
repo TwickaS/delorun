@@ -1,8 +1,13 @@
 /**
- * `delorun headless <task>`: upstream's one-task `headless` profile, booted through Delo's one composition
- * ([compose](./compose.ts)) instead of upstream's command line, so its commands run under C1's sandbox overlay, a
- * safe-mode marker for the `headless` profile applies, and the booted rows are held to the sandbox invariants. The
- * profile carries no Delo bundle, so no Delo row is required of it.
+ * `delorun headless <task>`: the home's `headless` profile, upstream's one-task `headless` template with Delo's
+ * `@delo/bundle-headless` linked into it ([headless bundle](./headless-bundle.ts)), booted through Delo's one
+ * composition ([compose](./compose.ts)) instead of upstream's command line: its commands run under C1's sandbox
+ * overlay, a safe-mode marker for the `headless` profile applies, and the booted Host is held to the invariants of the
+ * sandbox row and of every row of the bundle, the fetch guard, the instruction write consent, the full-access consent
+ * and the turn gate, which holds the task's first step until that check passes. A guard that asks a person refuses
+ * here, because the profile composes no answerer. Full access, by `--permission-mode` or `DSH_PERMISSION_MODE`, is
+ * refused before boot for a working directory whose full access the person has not granted in the studio
+ * ({@link refuseUngrantedFullAccess}).
  *
  * The profile and its layers are Delo's: the launcher options of upstream's `dsh` (`--profile`, `--patch`,
  * `--from-default-profile` and the configuration dumps) are refused, because each would boot another profile or add a
@@ -17,6 +22,8 @@ import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { HEADLESS_PROFILE, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { runDirectory } from '@delo/home'
 import { HostNotStoppedError, refuseBootedHost } from '@delo/home-process'
+import { FULL_ACCESS_PRESET, fullAccessGranted, permissionStorePath, readPermissionStore } from '@delo/plugin-permission-defaults/store'
+import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import type { CommandOutput, CommandResult } from './command.ts'
 import { assertDeloInvariants, composeDeloProfile, type ComposeDependencies } from './compose.ts'
 import { CliError, EXIT } from './exit.ts'
@@ -37,6 +44,11 @@ export interface HeadlessDependencies extends ComposeDependencies {
   readonly runProfile: (options: RunProfileOptions) => Promise<BootedProfile>
   /** The ordered steps before any Host boots ([pre-start](./pre-start.ts)); the real start's in a real run. */
   readonly preStartSteps: readonly PreStartStep[]
+  /**
+   * The working directory, which upstream's headless profile takes as the task's workspace.
+   * @returns the directory; `process.cwd()` in a real run.
+   */
+  readonly cwd: () => string
 }
 
 /** What one headless run is given. */
@@ -49,6 +61,57 @@ export interface HeadlessRequest {
   readonly output: CommandOutput
   /** The launch environment. */
   readonly env: Readonly<Record<string, string | undefined>>
+}
+
+/** Upstream's variable that sets the headless profile's sandbox mode, which only the launching environment may set. */
+export const PERMISSION_MODE_ENV = 'DSH_PERMISSION_MODE'
+
+/**
+ * The full-access sources among a headless run's arguments and environment.
+ * @param args - the arguments after `headless`.
+ * @param env - the launch environment.
+ * @returns how the run asks for full access: the option, the variable, both, or none.
+ */
+export function fullAccessRequests(args: readonly string[], env: Readonly<Record<string, string | undefined>>): readonly string[] {
+  const requests: string[] = []
+  for (let at = 0; at < args.length; at++) {
+    const argument = args[at]!
+    if (argument === '--') break
+    const value = argument === '--permission-mode' ? args[at + 1] : argument.startsWith('--permission-mode=') ? argument.slice('--permission-mode='.length) : undefined
+    if (value === FULL_ACCESS_PRESET) requests.push(`--permission-mode ${FULL_ACCESS_PRESET}`)
+  }
+  if (env[PERMISSION_MODE_ENV] === FULL_ACCESS_PRESET) requests.push(`${PERMISSION_MODE_ENV}=${FULL_ACCESS_PRESET}`)
+  return requests
+}
+
+/**
+ * Refuse full access for a working directory whose full access the person has not granted. The guard of
+ * `@delo/plugin-permission-defaults` refuses the same switch inside the Host; this check runs before boot, so the run
+ * stops with the workspace named and no task starts.
+ * @param home - the Delo home.
+ * @param args - the arguments after `headless`.
+ * @param env - the launch environment.
+ * @param cwd - the working directory, the task's workspace.
+ * @throws {CliError} naming the request, the workspace and how to grant full access, when the store holds no grant for
+ *   it or cannot be read.
+ */
+export async function refuseUngrantedFullAccess(home: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, cwd: string): Promise<void> {
+  const requests = fullAccessRequests(args, env)
+  if (requests.length === 0) return
+  const workspace = workspaceKey(cwd)
+  const read = await readPermissionStore(permissionStorePath(home))
+  switch (read.kind) {
+    case 'readable':
+      if (fullAccessGranted(read.entries, workspace)) return
+      break
+    case 'absent':
+      break
+    case 'refused':
+      throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, and Delo's record of full-access grants, ${permissionStorePath(home)}, cannot be read (${read.problem}), so no grant counts and Delo did not start the task. Repair or remove that file, then grant full access for this folder in the studio again.`)
+    default:
+      read satisfies never
+  }
+  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delo did not start the task. Full access lets the task's commands read Delo's home and reach its channels. To grant it, open this folder as a workspace in the studio and choose Full access once; delorun headless in this folder then keeps that grant. Or run without full access.`)
 }
 
 /**
@@ -79,6 +142,7 @@ export async function runHeadless(request: HeadlessRequest, dependencies: Headle
   mkdirSync(runDirectory(request.home, HEADLESS_PROFILE), { recursive: true, mode: PRIVATE_DIR_MODE })
   await runPreStartSteps(dependencies.preStartSteps, { home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', successor: false, output: request.output })
   const composed = await composeDeloProfile({ home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', output: request.output, env: request.env }, dependencies)
+  await refuseUngrantedFullAccess(request.home, request.args, request.env, dependencies.cwd())
   let booted: BootedProfile
   try {
     booted = await dependencies.runProfile({

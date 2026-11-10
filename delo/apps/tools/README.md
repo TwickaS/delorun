@@ -407,7 +407,7 @@ The overlay also mounts [`@delo/bundle-local`](../../packages/bundle-local/READM
 | `update_turn_refusal` | built | `@delo/bundle-local/update-gate` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
 | `one_time_launch_tokens` | built | `@deepseek-ai/dsh-client-connection` `oneTimeLaunchTokens` | on | on, through `@delo/bundle-local`'s `connection` row | off | no |
 
-The registry default is the value the registry states for Delo's default composition; the CLI profile column is what the profile that `delorun` starts composes today, which differs from it for `main_chat`, `preset_inspect`, `plugin_manager_read_exemption`, `profile_history` and `container_denial_marker`. `delorun headless` runs upstream's `headless` template, in which every switch is at its parity value. Each built field's schema default is the parity value.
+The registry default is the value the registry states for Delo's default composition; the CLI profile column is what the profile that `delorun` starts composes today, which differs from it for `main_chat`, `preset_inspect`, `plugin_manager_read_exemption`, `profile_history` and `container_denial_marker`. `delorun headless` runs upstream's `headless` template with `@delo/bundle-headless`, which turns `permission_defaults`, `fetch_guard`, `instruction_layer_consent` and `update_turn_refusal` on, as in the CLI profile; the parity composition does not mount that bundle, so the check holds no row of it to the registry. Each built field's schema default is the parity value.
 
 ### What `parity-switches` detects
 

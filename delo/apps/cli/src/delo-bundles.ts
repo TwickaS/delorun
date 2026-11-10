@@ -128,9 +128,9 @@ export function refuseSkippedDeloBundles(profile: Pick<Profile, 'name' | 'skippe
   const skipped = profile.skippedBundles.filter(bundle => isDeloPackage(bundle.packageName))
   if (skipped.length === 0) return
   throw new CliError(EXIT.failed, [
-    `delorun: the CLI profile ${profile.name} could not load Delo's ${skipped.length === 1 ? 'bundle' : 'bundles'}, so Delo did not start:`,
+    `delorun: the profile ${profile.name} could not load Delo's ${skipped.length === 1 ? 'bundle' : 'bundles'}, so Delo did not start:`,
     ...skipped.map(({ packageName, reason }) => `  ${packageName}: ${reason}\n  To fix it, ${packageFix(profile.name, packageName)}`),
-    'Without them the profile would start with DeepSeek Harness\'s own defaults, which upload session logs to DeepSeek.',
+    'Without them the profile would start with DeepSeek Harness\'s own defaults: no Delo guard, and session logs uploaded to DeepSeek.',
   ].join('\n'))
 }
 

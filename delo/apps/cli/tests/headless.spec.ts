@@ -4,31 +4,37 @@
  * and the run registered as a shared user of the chat data. Upstream's runner is replaced by one that mounts what
  * the composition composed.
  */
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { HostNotStoppedError } from '@delo/home-process'
+import { permissionStorePath, writePermissionStore, type WorkspacePermission } from '@delo/plugin-permission-defaults/store'
+import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import { stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { cliRefusal } from '../src/refusals.ts'
-import { HEADLESS_PROFILE, refuseLauncherOptions, type HeadlessDependencies } from '../src/headless.ts'
+import { fullAccessRequests, HEADLESS_PROFILE, refuseLauncherOptions, type HeadlessDependencies } from '../src/headless.ts'
 import { headless, headlessCommand, headlessDependencies } from '../src/upstream.ts'
-import { upstreamDependencies } from '../src/start.ts'
+import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts'
 import { composedBootRows, composedProviders } from './fixtures/composed-rows.ts'
 
 let osHome: string
 let deloHome: string
+let workspace: string
 let context: CommandContext
 
 beforeEach(async () => {
   osHome = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-headless-')))
   deloHome = join(osHome, '.delo')
+  workspace = join(osHome, 'work')
+  mkdirSync(workspace)
   vi.stubEnv('HOME', osHome)
   vi.stubEnv('USERPROFILE', osHome)
   vi.stubEnv('DSH_HOME', join(osHome, '.dsh'))
@@ -36,7 +42,8 @@ beforeEach(async () => {
   vi.stubEnv('DELO_PROFILE', undefined)
   context = { env: { HOME: osHome, DSH_HOME: join(osHome, '.dsh') }, stdout: () => undefined, stderr: () => undefined }
   await prepareHome(context, undefined)
-})
+  await upstreamAddHeadlessBundle(deloHome, context)
+}, 120_000)
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -56,6 +63,7 @@ function recording(seen: RunProfileOptions[], stops: string[], overrides: readon
     prepareProfile: upstreamDependencies().prepareProfile,
     approvedPluginContent: NO_APPROVED_CONTENT,
     preStartSteps: upstreamDependencies().preStartSteps,
+    cwd: () => workspace,
     loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
     runProfile: (options) => {
       seen.push(options)
@@ -128,7 +136,7 @@ describe('delorun headless', { timeout: 60_000 }, () => {
     const steps = upstreamDependencies().preStartSteps.map(step => ({ ...step, run: () => { ran.push(step.name); return Promise.resolve() } }))
     const seen: RunProfileOptions[] = []
     expect(await headless(['task'], context, { ...recording(seen, []), preStartSteps: steps }, () => undefined)).toBeUndefined()
-    expect(ran).toEqual(['stock-import-recovery', 'update-notice'])
+    expect(ran).toEqual(['stock-import-recovery', 'profile-migrations', 'update-notice'])
     const refusal = new CliError(EXIT.failed, 'delorun: an import was interrupted')
     const refusing = steps.map(step => step.name === 'stock-import-recovery' ? { ...step, run: () => Promise.reject(refusal) } : step)
     await expect(headless(['task'], context, { ...recording(seen, []), preStartSteps: refusing }, () => undefined)).rejects.toBe(refusal)
@@ -155,6 +163,94 @@ describe('delorun headless', { timeout: 60_000 }, () => {
 
   it('is the command delorun runs, over upstream\'s runner', () => {
     expect(headlessCommand.name).toBe('headless')
-    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'loadEnvironment', 'preStartSteps', 'prepareProfile', 'runProfile'])
+    expect(headlessDependencies().cwd()).toBe(process.cwd())
+    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'loadEnvironment', 'preStartSteps', 'prepareProfile', 'runProfile'])
+  })
+})
+
+/**
+ * Record entries in the home's permission store, as the studio does.
+ * @param entries - the workspace keys and their recorded permissions.
+ */
+async function writeStore(entries: readonly (readonly [string, WorkspacePermission])[]): Promise<void> {
+  const path = permissionStorePath(deloHome)
+  mkdirSync(dirname(dirname(path)), { recursive: true, mode: 0o700 })
+  await writePermissionStore(path, new Map(entries))
+}
+
+describe('delorun headless asking for full access', { timeout: 60_000 }, () => {
+  const FULL = 'danger-full-access'
+  const grant: WorkspacePermission = { preset: FULL, fullAccessGrantedAt: 1_700_000_000_000 }
+
+  /**
+   * Run the task with the given arguments and environment variable.
+   * @param args - the arguments after `headless`.
+   * @param env - extra launch variables.
+   * @param seen - collects the runner's options.
+   * @returns the run's outcome: the error it rejected with, if any.
+   */
+  async function attempt(args: readonly string[], env: Record<string, string>, seen: RunProfileOptions[]): Promise<unknown> {
+    return headless(args, { ...context, env: { ...context.env, ...env } }, recording(seen, []), () => undefined).then(() => undefined, (failure: unknown) => failure)
+  }
+
+  it.each([
+    ['--permission-mode danger-full-access', ['--permission-mode', FULL, 'task'], {}],
+    ['--permission-mode=danger-full-access', [`--permission-mode=${FULL}`, 'task'], {}],
+    ['DSH_PERMISSION_MODE=danger-full-access in the environment', ['task'], { DSH_PERMISSION_MODE: FULL }],
+  ] as const)('refuses %s in a workspace without a grant, before the profile boots, naming the workspace and how to grant it', async (_name, args, env) => {
+    const seen: RunProfileOptions[] = []
+    const error = await attempt(args, env, seen)
+    expect(error).toBeInstanceOf(CliError)
+    expect((error as CliError).exit).toBe(EXIT.failed)
+    expect((error as CliError).message).toContain(JSON.stringify(workspaceKey(workspace)))
+    expect((error as CliError).message).toContain('open this folder as a workspace in the studio and choose Full access')
+    expect(seen).toEqual([])
+  })
+
+  it('refuses it when the store grants only another workspace or records the preset without a grant', async () => {
+    await writeStore([[join(osHome, 'elsewhere'), grant], [workspaceKey(workspace), { preset: FULL, fullAccessGrantedAt: null }]])
+    const seen: RunProfileOptions[] = []
+    expect(await attempt(['--permission-mode', FULL], {}, seen)).toBeInstanceOf(CliError)
+    expect(seen).toEqual([])
+  })
+
+  it('allows it when the store holds a grant for the workspace', async () => {
+    await writeStore([[workspaceKey(workspace), grant]])
+    const seen: RunProfileOptions[] = []
+    expect(await attempt(['--permission-mode', FULL, 'task'], { DSH_PERMISSION_MODE: FULL }, seen)).toBeUndefined()
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.args).toEqual(['--permission-mode', FULL, 'task'])
+  })
+
+  it('refuses it naming the store when the store cannot be read, even though a grant may be in it', async () => {
+    const path = permissionStorePath(deloHome)
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+    writeFileSync(path, 'not a permission store', { mode: 0o600 })
+    const seen: RunProfileOptions[] = []
+    const error = await attempt(['--permission-mode', FULL], {}, seen)
+    expect(error).toBeInstanceOf(CliError)
+    expect((error as CliError).message).toContain(path)
+    expect((error as CliError).message).toContain('cannot be read')
+    expect(seen).toEqual([])
+  })
+
+  it('does not ask for the store when the run asks for no full access', async () => {
+    const path = permissionStorePath(deloHome)
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+    writeFileSync(path, 'not a permission store', { mode: 0o600 })
+    const seen: RunProfileOptions[] = []
+    expect(await attempt(['--permission-mode', 'workspace-write', 'task'], {}, seen)).toBeUndefined()
+    expect(seen).toHaveLength(1)
+  })
+
+  it('lists the requests: the option, the variable, both, and neither for a safer mode or an argument after "--"', () => {
+    expect(fullAccessRequests(['--permission-mode', FULL], {})).toEqual([`--permission-mode ${FULL}`])
+    expect(fullAccessRequests([`--permission-mode=${FULL}`], {})).toEqual([`--permission-mode ${FULL}`])
+    expect(fullAccessRequests(['task'], { DSH_PERMISSION_MODE: FULL })).toEqual([`DSH_PERMISSION_MODE=${FULL}`])
+    expect(fullAccessRequests(['--permission-mode', FULL], { DSH_PERMISSION_MODE: FULL })).toEqual([`--permission-mode ${FULL}`, `DSH_PERMISSION_MODE=${FULL}`])
+    expect(fullAccessRequests(['--permission-mode', 'workspace-write', 'task'], {})).toEqual([])
+    expect(fullAccessRequests(['--permission-mode=workspace-write'], { DSH_PERMISSION_MODE: 'workspace-write' })).toEqual([])
+    expect(fullAccessRequests(['--', '--permission-mode', FULL], {})).toEqual([])
+    expect(fullAccessRequests(['task', '--', `--permission-mode=${FULL}`], {})).toEqual([])
   })
 })

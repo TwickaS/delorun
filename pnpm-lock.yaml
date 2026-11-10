@@ -1284,6 +1284,9 @@ importers:
       '@delo/archive':
         specifier: workspace:*
         version: link:../../packages/archive
+      '@delo/bundle-headless':
+        specifier: workspace:*
+        version: link:../../packages/bundle-headless
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../../packages/bundle-local
@@ -1335,6 +1338,9 @@ importers:
       '@delo/npm-launcher':
         specifier: workspace:*
         version: link:../npm-launcher
+      '@delo/plugin-permission-defaults':
+        specifier: workspace:*
+        version: link:../../packages/plugin-permission-defaults
       '@delo/profile-safety':
         specifier: workspace:*
         version: link:../../packages/profile-safety
@@ -1676,6 +1682,21 @@ importers:
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
+
+  delo/packages/bundle-headless:
+    dependencies:
+      '@delo/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
+      '@delo/plugin-fetch-guard':
+        specifier: workspace:*
+        version: link:../plugin-fetch-guard
+      '@delo/plugin-instruction-consent':
+        specifier: workspace:*
+        version: link:../plugin-instruction-consent
+      '@delo/plugin-permission-defaults':
+        specifier: workspace:*
+        version: link:../plugin-permission-defaults
 
   delo/packages/bundle-local:
     dependencies:

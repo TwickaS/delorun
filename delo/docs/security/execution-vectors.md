@@ -14,7 +14,7 @@ The [threat model](threat-model.md) gives the parties, the assets and each defen
 
 Three things decide the posture: **which command boots the Host**, **where the model's commands run** (the execution vector) and **who can reach the studio** (the reach vector).
 
-Delo's protections are in the CLI profile, which `delorun setup` creates and `delorun` or `delorun start` boots: upstream's web template with `@delo/bundle-local` and `@delo/bundle-studio`. `delorun headless` and `delorun plugin` run upstream's own profiles with none of Delo's rows, so a task run with `delorun headless` has stock DSH's protections and stock DSH's defaults, DeepSeek's session-log upload included. The desktop app is upstream's, unchanged.
+Delo's protections are in the CLI profile, which `delorun setup` creates and `delorun` or `delorun start` boots: upstream's web template with `@delo/bundle-local` and `@delo/bundle-studio`. `delorun headless` boots the home's `headless` profile, upstream's `headless` template with `@delo/bundle-headless`: the sandbox overlay, the fetch guard, the instruction write consent, the full-access consent and the turn gate, with session-log upload off. A guard that asks a person refuses there, and full access is refused for a working directory without a grant recorded in the studio. `delorun plugin` runs upstream's own pnpm operation with none of Delo's rows. The desktop app is upstream's, unchanged.
 
 | Execution vector | What runs there | Enforced by | Built |
 | --- | --- | --- | --- |
@@ -32,29 +32,29 @@ The rows are the guarantees a person reasonably expects of a native workspace. "
 | Guarantee | Stock | Delo, CLI profile | `delorun headless` |
 | --- | --- | --- | --- |
 | A confined command cannot write outside its writable roots | yes | yes | yes |
-| A confined command cannot write under Delo's home | no | yes | no |
-| A confined command cannot read Delo's home (keys, tokens, credentials) | no | yes on Linux and macOS; no on Windows | no |
+| A confined command cannot write under Delo's home | no | yes | yes |
+| A confined command cannot read Delo's home (keys, tokens, credentials) | no | yes on Linux and macOS; no on Windows | as the CLI profile |
 | A confined command cannot read the rest of your account (`~/.ssh`, `~/.aws`, `/etc`) | no | no, as stock | no |
 | A confined command cannot reach the network | no | no, as stock | no |
-| A confined command cannot connect to the Docker socket | no | yes on bwrap and Seatbelt for the active context's socket; no on Landlock and Windows | no |
-| A confined command cannot start a Windows program through WSL's interop sockets | no | yes under WSL on bwrap; on Landlock every confined command is refused while interop exists | no |
+| A confined command cannot connect to the Docker socket | no | yes on bwrap and Seatbelt for the active context's socket; no on Landlock and Windows | as the CLI profile |
+| A confined command cannot start a Windows program through WSL's interop sockets | no | yes under WSL on bwrap; on Landlock every confined command is refused while interop exists | as the CLI profile |
 | A program a confined command names in a repository's git settings, attributes or hooks never runs outside the sandbox when the harness summarises the turn's changed files | no | yes | not applicable: the change summary is not mounted |
-| `web_fetch` refuses loopback, link-local and private-network targets | no | yes | no |
-| A model-authored write to instructions needs an approval that names the effect | no | through the file tools only; a shell command or PTC code writes without it | no |
+| `web_fetch` refuses loopback, link-local and private-network targets | no | yes | yes |
+| A model-authored write to instructions needs an approval that names the effect | no | through the file tools only; a shell command or PTC code writes without it | through the file tools only, and the write is refused because no one can answer |
 | A chat cannot switch off, reconfigure or remove Delo's guards through `plugin_manager` | no | yes, judged on the profile's composed rows; a full-access command can still edit the profile's files | no |
 | A new stdio MCP server needs the person's consent | no | a new stdio server is refused with its command named, and no surface asks for or records a consent, so it stays refused | no |
 | A scheduled delivery is refused when the target chat's permission preset changed | no | yes | no |
-| A switch of a workspace to full access needs the person's consent | no | the switch is refused, because no surface asks the consent; a per-call escalation still goes through upstream's approval | no |
+| A switch of a workspace to full access needs the person's consent | no | the switch is refused, because no surface asks the consent; a per-call escalation still goes through upstream's approval | full access by option or variable is refused before boot for a working directory without a grant recorded in the studio |
 | The release is signature-checked before it runs | no | yes, when the npm launcher starts it: every installed file is checked at each start | yes, as for the CLI profile |
 | An update reports, snapshots and rolls back | no: incompatible plugins are disabled silently | yes, for the CLI home through `delorun update` | not applicable |
 | Archives are a closed data schema and never evaluate code | no: `!!js` is evaluated with `new Function` | yes | yes: `delorun import` is the same command |
-| A default install sends nothing about you | no: session-log upload and product analytics on by default | yes | no: session-log upload is on |
+| A default install sends nothing about you | no: session-log upload and product analytics on by default | yes | yes: session-log upload is off |
 | Plugins are pinned, integrity-checked and revocable by Delo | no | no: the catalogue and revocation list are not built | no |
 
 ## Combinations
 
 - **Native, CLI profile.** The OS sandbox is the boundary. On Linux and macOS your home is hidden from commands; the rest of your account and the network are not, exactly as in stock. On Windows commands can read the home.
-- **Native, `delorun headless`.** Stock DSH's posture: commands can read the whole home, and none of Delo's consents, guards or privacy defaults apply.
+- **Native, `delorun headless`.** The CLI profile's sandbox overlay, the fetch guard, the instruction write consent, the full-access consent and the privacy defaults apply; the MCP and schedule consents have nothing to guard, because the profile mounts no MCP client and no schedule runtime.
 - **Docker workspaces and reach.** Not built. Their rules are in [C9](../contracts/c09-runtime-supervisor.md), the [reach design](../design/reach.md) and the contracts it names, each with a status of what exists.
 - **Self-hosted home, local only.** No listener opens beyond the loopback studio, and nothing leaves the machine except what you ask for: model requests, the tools you enable and the release checks.
 
@@ -79,7 +79,7 @@ Delo is stock DSH with a Delo layer. On confinement the two are the same mechani
 | Releases | no verification | signature, freshness, release-log check and file list before running | [C2](../contracts/c02-release-manifest.md), [C18](../contracts/c18-release-log.md) |
 | Updates | silent disable and rewrite | report, snapshot, restore and rollback for the CLI home | [C3](../contracts/c03-update-report.md) |
 | Archives | `!!js` evaluated during load | a closed data schema, no evaluation | [C8](../contracts/c08-archive-and-trash.md) |
-| Privacy default | session-log upload and product analytics on | both off in the CLI profile; session-log upload on under `delorun headless` | [C11](../contracts/c11-setup-answers.md) |
+| Privacy default | session-log upload and product analytics on | both off in the CLI profile; session-log upload off under `delorun headless` | [C11](../contracts/c11-setup-answers.md) |
 | Plugins | unpinned, unsandboxed | the same: Delo pins nothing beyond upstream's lockfile, and the revocation list is not built | [C13](../contracts/c13-catalogue-revocation.md) |
 
 ## What no vector protects against

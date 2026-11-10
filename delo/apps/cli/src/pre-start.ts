@@ -69,7 +69,7 @@ export const updateNoticeStep = (_context: PreStartContext): Promise<void> => Pr
 
 /** What the real list's steps call outside this module. */
 export interface PreStartDependencies {
-  /** The profile's one-time changes, run on a fresh start of the CLI profile. */
+  /** The profile's one-time changes, run on a fresh start of the CLI profile and on every `delorun headless` run. */
   readonly migrations: (context: PreStartContext) => readonly ProfileMigration[]
 }
 
@@ -80,8 +80,9 @@ export interface PreStartDependencies {
  * 2. `data-copy-recovery`: the CLI profile; an interrupted restore of a session-data copy finishes before any Host
  *    starts (contract C3, "Rollback"), while the home process's registration is exclusive
  *    ({@link finishInterruptedRestore}). `delorun headless` refuses while one is unfinished, when it registers.
- * 3. `profile-migrations`: the CLI profile on a fresh start; an update's successor never runs them, so its boot stays
- *    within the health check's time.
+ * 3. `profile-migrations`: the CLI profile on a fresh start, where an update's successor never runs them, so its boot
+ *    stays within the health check's time; and the `headless` profile on every `delorun headless` run, whose one-time
+ *    change links Delo's headless bundle and so creates the profile on the first run.
  * 4. `update-notice`: both starts; {@link updateNoticeStep}.
  * @param dependencies - the migrations.
  * @returns the steps, in the order they run.
@@ -92,7 +93,7 @@ export function preStartSteps(dependencies: PreStartDependencies): readonly PreS
     { name: 'data-copy-recovery', kinds: ['cli'], run: async (context) => { await finishInterruptedRestore(context.home, context.profile) } },
     {
       name: 'profile-migrations',
-      kinds: ['cli'],
+      kinds: ['cli', 'headless'],
       run: async (context) => {
         if (!context.successor) await runProfileMigrations(context.home, context.profile, dependencies.migrations(context), context.output)
       },

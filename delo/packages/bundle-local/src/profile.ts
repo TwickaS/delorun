@@ -14,6 +14,12 @@ export const LOCAL_BUNDLE = '@delo/bundle-local'
 /** Delo's studio bundle, which mounts the studio additions after this bundle. */
 export const STUDIO_BUNDLE = '@delo/bundle-studio'
 
+/**
+ * Delo's headless bundle, which `delorun headless` links into the home's `headless` profile after upstream's
+ * `headless` template: the guard rows a one-shot task runs under.
+ */
+export const HEADLESS_BUNDLE = '@delo/bundle-headless'
+
 /** Upstream's shipped profile template that Delo's CLI profiles extend. */
 export const UPSTREAM_TEMPLATE = 'web'
 

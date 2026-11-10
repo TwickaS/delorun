@@ -19,7 +19,19 @@ import type { BootedRow } from '../src/delo-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import { isRecord } from '../src/patch-layers.ts'
-import { upstreamDependencies } from '../src/start.ts'
+import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts'
+import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
+
+/** The rows of `@delo/bundle-headless`. */
+const HEADLESS_ROWS = ['delo-instruction-consent', 'delo-permission-defaults', 'delo-fetch-guard', 'delo-update-gate'] as const
+
+/** The services the headless bundle's rows provide and the row each comes from. */
+const HEADLESS_SERVICES = [
+  ['fetchGuard', 'delo-fetch-guard'],
+  ['writeConsent', 'delo-instruction-consent'],
+  ['sandboxModeGuard', 'delo-permission-defaults'],
+  [TURN_GATE_SERVICE, 'delo-update-gate'],
+] as const
 
 let osHome: string
 let deloHome: string
@@ -317,12 +329,76 @@ describe('the approved plugin content slot', { timeout: 60_000 }, () => {
 })
 
 describe('the headless profile', { timeout: 60_000 }, () => {
-  it('requires the sandbox row alone and no turn gate, and a profile that cannot be loaded refuses', async () => {
+  beforeEach(async () => {
+    await upstreamAddHeadlessBundle(deloHome, context)
     mkdirSync(join(deloHome, 'run', 'headless'), { recursive: true, mode: 0o700 })
+  }, 60_000)
+
+  it('requires the sandbox row and every row of the headless bundle with its plugin, and no prompts answer', async () => {
     const composed = await compose('headless', 'headless')
-    expect(composed.required).toEqual([{ id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local' }])
+    expect(composed.required).toEqual([
+      { id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local' },
+      { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent' },
+      { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults' },
+      { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard' },
+      { id: 'delo-update-gate', name: '@delo/bundle-local/update-gate' },
+    ])
     expect(composed.prompts).toBeUndefined()
-    expect(() => { assertDeloInvariants(composed, booted(composed, [], { [TURN_GATE_SERVICE]: undefined })) }).not.toThrow()
+    expect(() => { assertDeloInvariants(composed, booted(composed)) }).not.toThrow()
+  })
+
+  it('holds the update gate to its start hold, which keeps the first step of a turn until the Host passed its check', async () => {
+    const composed = await compose('headless', 'headless')
+    const gate = composedRows(composed).find(row => row.id === 'delo-update-gate')!
+    expect(gate.config).toMatchObject({ enabled: true, holdUntilChecked: true })
+    const released = booted(composed, [{ ...gate, config: { enabled: true, holdUntilChecked: false } }])
+    expect(await refused(() => { assertDeloInvariants(composed, released) })).toContain('delo-update-gate has holdUntilChecked false, not true')
+  })
+
+  it('refuses a profile that cannot be loaded', async () => {
     expect(await refused(() => compose('cli', 'no-such-profile'))).toContain('the profile no-such-profile could not be loaded')
+  })
+
+  it('refuses a profile whose bundle list lacks the headless bundle before boot, naming the bundle and both remedies', async () => {
+    const manifestPath = join(deloHome, 'profiles', 'headless', 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => name !== HEADLESS_BUNDLE)
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    const message = await refused(() => compose('headless', 'headless'))
+    expect(message).toContain(`does not load Delo's headless bundle ${HEADLESS_BUNDLE}`)
+    expect(message).toContain(`remove ${join(deloHome, 'profiles', 'headless', 'delo-migrations.json')}`)
+    expect(message).toContain(`remove the folder ${join(deloHome, 'profiles', 'headless')}`)
+  })
+
+  it.each(HEADLESS_ROWS)('refuses a home patch that disables %s before boot, naming the file', async (id) => {
+    writePatch(join(deloHome, 'cordis.patch.yml'), [{ id, disabled: true }])
+    expect(await refused(() => compose('headless', 'headless'))).toContain(`${id} is disabled (set in ${join(deloHome, 'cordis.patch.yml')})`)
+  })
+
+  it.each(HEADLESS_ROWS)('refuses a profile patch that disables %s before boot, naming the file', async (id) => {
+    const path = join(deloHome, 'profiles', 'headless', 'cordis.patch.yml')
+    writePatch(path, [{ id, disabled: true }])
+    expect(await refused(() => compose('headless', 'headless'))).toContain(`${id} is disabled (set in ${path})`)
+  })
+
+  it.each(HEADLESS_ROWS)('refuses a patch that turns %s to enabled false, naming the file', async (id) => {
+    const path = join(deloHome, 'cordis.patch.yml')
+    writePatch(path, [{ id, config: { enabled: false } }])
+    const message = await refused(() => compose('headless', 'headless'))
+    expect(message).toContain(`${id} has enabled false, not true, which a delorun headless run always has`)
+    expect(message).toContain(`(set in ${path})`)
+  })
+
+  it.each(HEADLESS_SERVICES)('refuses a booted Host whose %s comes from another row', async (service, row) => {
+    const composed = await compose('headless', 'headless')
+    const message = await refused(() => { assertDeloInvariants(composed, booted(composed, [], { [service]: { row: 'allow-all' } })) })
+    expect(message).toContain(`${service} is provided by the row allow-all, not by ${row}`)
+  })
+
+  it.each(HEADLESS_SERVICES)('refuses a booted Host in which no row provides %s', async (service, row) => {
+    const composed = await compose('headless', 'headless')
+    const message = await refused(() => { assertDeloInvariants(composed, booted(composed, [], { [service]: undefined })) })
+    expect(message).toContain(`${service} is not provided`)
+    expect(message).toContain(service === TURN_GATE_SERVICE ? 'an update or a stop could not refuse new turns' : `by ${row}`)
   })
 })

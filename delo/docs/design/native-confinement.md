@@ -21,7 +21,7 @@ English
 ## What exists today
 
 - Only the CLI profile, which `delorun setup` creates and `delorun` or `delorun start` boots, carries Delo's protections: the protected home on upstream's sandbox row, the denied sockets that `delorun start` writes to `run/<profile>/sandbox.patch.yml`, the consents, the fetch guard and the privacy defaults ([bundle-local](../../packages/bundle-local/README.md)).
-- `delorun headless` and `delorun plugin` run upstream's own profiles. Under `delorun headless`, confined commands can read the whole home, the start token and upstream's credential files included, and connect to the update channel's socket; no consent and no fetch guard is mounted; and DeepSeek's session-log upload is on, as in stock.
+- `delorun plugin` runs upstream's own pnpm operation. `delorun headless` boots the home's `headless` profile under the sandbox overlay with `@delo/bundle-headless`, so its confined commands get the CLI profile's rules, the fetch guard, the instruction write consent, the full-access consent and the privacy defaults apply, and the composition refuses a `headless` profile without the bundle.
 - bwrap, Landlock and Seatbelt deny confined commands writes under the home and reads under it except `runtimes/`, `skills/` and `dsh-runtimes/`. bwrap and Seatbelt deny connections to the update channel's socket and to the Docker context's socket at its path and its real path; Landlock cannot express a socket rule.
 - windows-acl confines writes only. It does not confine reads, adds no socket or pipe rule, and the home's mode checks are skipped on Windows. The update channel is a filesystem socket on every platform; no named pipe exists.
 - `delorun start` runs no confinement probe. `delorun verify` reports the `confinement-rule` and `home-modes` checks as not run.
@@ -72,7 +72,7 @@ English
 
 | Test | Proves |
 | --- | --- |
-| `headless boots with Delo's layer or not at all` | `delorun headless` with the local bundle missing refuses to start; with it, a confined command cannot read a fixture secret under the home and a stdio MCP server is refused. |
+| `headless boots with Delo's layer or not at all` | `delorun headless` with `@delo/bundle-headless` missing refuses to start; with it, a confined command cannot read a fixture secret under the home and a stdio MCP server is refused. |
 | `landlock-token-unreadable` | Under Landlock, a confined command connects to the update channel, fails to read the start token, receives `UNAUTHENTICATED`, and `delorun verify` reports `home-connect` as `not-enforced` and `token-read` as `enforced`. |
 | `not-enforced-reported` | On a fixture dialect that cannot express `docker-connect`, `delorun verify` reports the rule as `not-enforced` and setup's Docker option carries the label. |
 | `home-mode-reported` | With a protected file at mode 0640, `delorun verify` fails `home-modes` with the fix `chmod 600 <path>`. |

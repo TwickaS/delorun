@@ -28,7 +28,7 @@ import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { assertDeloInvariants, composeDeloProfile, NO_APPROVED_CONTENT, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
-import { HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
+import { HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import { START_WAIT_MS } from '@delo/contract-home-process'
 import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
@@ -46,6 +46,7 @@ import { readBackgroundAnswer } from './setup/background.ts'
 import { upstreamLinking } from './setup/index.ts'
 import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
+import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
 import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.ts'
 import { bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
@@ -124,12 +125,26 @@ export interface StartDependencies {
 }
 
 /**
- * The real start's pre-start steps, whose migration adds Delo's studio bundle to a profile set up before it shipped.
- * @param add - links the studio bundle into a profile; upstream's resolution and `dsh plugin add` in a real start.
+ * Links Delo's headless bundle into the home's `headless` profile ({@link addHeadlessBundle}).
+ * @param home - the Delo home.
+ * @param output - where pnpm's output goes.
+ * @returns whether the profile's bundle list did not name the bundle before.
+ */
+export type AddHeadlessBundle = (home: string, output: CommandOutput) => Promise<boolean>
+
+/**
+ * The real pre-start steps: the CLI profile's migration adds Delo's studio bundle to a profile set up before it
+ * shipped, and the `headless` profile's links Delo's headless bundle.
+ * @param add - links the studio bundle into a CLI profile; upstream's resolution and `dsh plugin add` in a real start.
+ * @param addHeadless - links the headless bundle into the `headless` profile, the same way in a real run.
  * @returns the steps.
  */
-export function realPreStartSteps(add: AddStudioBundle): readonly PreStartStep[] {
-  return preStartSteps({ migrations: context => [studioBundleMigration(() => add(context.home, context.profile, context.output), context.output, context.profile)] })
+export function realPreStartSteps(add: AddStudioBundle, addHeadless: AddHeadlessBundle): readonly PreStartStep[] {
+  return preStartSteps({
+    migrations: context => context.kind === 'headless'
+      ? [headlessBundleMigration(() => addHeadless(context.home, context.output), context.output)]
+      : [studioBundleMigration(() => add(context.home, context.profile, context.output), context.output, context.profile)],
+  })
 }
 
 
@@ -310,6 +325,16 @@ export function upstreamAddStudioBundle(home: string, profile: string, output: C
 }
 
 /**
+ * Link the headless bundle through upstream's resolution and `dsh plugin add`.
+ * @param home - the Delo home.
+ * @param output - where pnpm's output goes, on stderr.
+ * @returns whether the profile's bundle list did not name the bundle before.
+ */
+export function upstreamAddHeadlessBundle(home: string, output: CommandOutput): Promise<boolean> {
+  return addHeadlessBundle(home, () => upstreamLinking(home, HEADLESS_PROFILE), (text) => { output.stderr(text) })
+}
+
+/**
  * The dependencies of a real start.
  * @returns no approved plugin content, the real pre-start steps, upstream's profile preparation, profile runner,
  *   `.env` loader, the last-resort handler's teardown, the update channel's probe, the process's exit event and exit,
@@ -318,7 +343,7 @@ export function upstreamAddStudioBundle(home: string, profile: string, output: C
 export function upstreamDependencies(): StartDependencies {
   return {
     approvedPluginContent: NO_APPROVED_CONTENT,
-    preStartSteps: realPreStartSteps(upstreamAddStudioBundle),
+    preStartSteps: realPreStartSteps(upstreamAddStudioBundle, upstreamAddHeadlessBundle),
     async prepareProfile(profile) {
       // Loaded after the launch variables are set, so upstream resolves the Delo home.
       const { INSTALL_ANCHOR, prepareProfile } = await import('@deepseek-ai/dsh/profile-boot')

@@ -1,0 +1,31 @@
+{
+  "name": "@delo/bundle-headless",
+  "description": "Delo's headless bundle: the guard rows delorun headless mounts over upstream's headless profile, the fetch guard, the instruction write consent, the full-access consent and the turn gate",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@delo/bundle-local": "workspace:*",
+    "@delo/plugin-fetch-guard": "workspace:*",
+    "@delo/plugin-instruction-consent": "workspace:*",
+    "@delo/plugin-permission-defaults": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
+  }
+}
