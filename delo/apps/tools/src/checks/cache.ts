@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { git } from '../git.ts'
-import type { Check } from './plan.ts'
+import type { Check, GateTier } from './plan.ts'
 import type { SharedStore } from './shared-cache.ts'
 import type { SharingPolicy } from './sharing.ts'
 
@@ -146,7 +146,7 @@ export interface CacheUse {
  * @param env - the environment the run starts with.
  * @returns the use.
  */
-export function cacheUse(run: { readonly preCommit: boolean, readonly tier: 'agent' | 'merge' | undefined, readonly only: readonly string[], readonly noCache: boolean, readonly noSharedCache: boolean, readonly fullGate: boolean }, env: NodeJS.ProcessEnv): CacheUse {
+export function cacheUse(run: { readonly preCommit: boolean, readonly tier: GateTier | undefined, readonly only: readonly string[], readonly noCache: boolean, readonly noSharedCache: boolean, readonly fullGate: boolean }, env: NodeJS.ProcessEnv): CacheUse {
   const on = passCacheEnabled({ noCache: run.noCache, fullGate: run.fullGate }, env)
   const strict = run.tier === 'merge' || env['DELO_GATE_PRIORITY'] === 'trunk' || (run.tier === undefined && !run.preCommit && run.only.length === 0)
   const noReads = run.preCommit ? 'the pre-commit tier reads no shared pass' : strict ? 'the merge tier and the full gate read no shared pass' : undefined

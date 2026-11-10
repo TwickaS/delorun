@@ -139,6 +139,12 @@ export const GATES: readonly GateCheck[] = [
     inputs: ['delo/apps/*/tests/**', 'delo/packages/*/tests/**', `${GATE_DIR}/spec-lanes.ts`],
   },
   {
+    id: 'gates:whitespace',
+    title: 'No whitespace error, and exactly one final newline, in the files that differ from the merge base with origin/v5',
+    command: [TSX, `${GATE_DIR}/whitespace.ts`, '--base', RANGE_BASE],
+    history: true,
+  },
+  {
     id: 'gates:docs',
     title: 'Upstream documentation checks over delo/docs',
     command: [TSX, `${GATE_DIR}/docs.ts`],

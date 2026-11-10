@@ -148,12 +148,23 @@ describe('the tree pass record', () => {
     const agentRoot = makeRepo()
     await runAndRecord(agentRoot, plan, factsFor(agentRoot))
     expect(lookup(agentRoot, plan, factsFor(agentRoot))).toMatchObject({ hit: true })
-    expect(lookup(agentRoot, plan, factsFor(agentRoot, { tier: 'merge' }))).toEqual({ hit: false, reason: 'the record is an agent-tier pass and this run needs the merge tier' })
+    expect(lookup(agentRoot, plan, factsFor(agentRoot, { tier: 'merge' }))).toEqual({ hit: false, reason: 'the record passed the agent tier and this run needs the merge tier' })
+    expect(lookup(agentRoot, plan, factsFor(agentRoot, { tier: 'lane' }))).toMatchObject({ hit: true })
     const mergeRoot = makeRepo()
     await runAndRecord(mergeRoot, plan, factsFor(mergeRoot, { tier: 'merge' }))
     expect(readTreePass(treesOf(mergeRoot), treeOf(mergeRoot), 'v24.9.0')?.tier).toBe('merge')
     expect(lookup(mergeRoot, plan, factsFor(mergeRoot, { tier: 'merge' }))).toMatchObject({ hit: true })
     expect(lookup(mergeRoot, plan, factsFor(mergeRoot))).toMatchObject({ hit: true })
+  })
+
+  it('serves neither the agent nor the merge tier from a lane-tier pass, so a lane push never lets a commit reach the trunk', async () => {
+    const plan = [check('a', PASS)]
+    const root = makeRepo()
+    await runAndRecord(root, plan, factsFor(root, { tier: 'lane' }))
+    expect(readTreePass(treesOf(root), treeOf(root), 'v24.9.0')?.tier).toBe('lane')
+    expect(lookup(root, plan, factsFor(root, { tier: 'lane' }))).toMatchObject({ hit: true })
+    expect(lookup(root, plan, factsFor(root))).toEqual({ hit: false, reason: 'the record passed the lane tier and this run needs the agent tier' })
+    expect(lookup(root, plan, factsFor(root, { tier: 'merge' }))).toEqual({ hit: false, reason: 'the record passed the lane tier and this run needs the merge tier' })
   })
 
   it('reads a record written without a tier as an agent-tier pass', async () => {

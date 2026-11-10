@@ -17,11 +17,33 @@ import type { GateCheck } from './types.ts'
 export type Tier = 'pre-commit' | 'changed' | 'full'
 
 /**
- * How much of a change's checks a run pays for. The `agent` tier is what a lane's agent runs while it works and what a push
- * of a non-trunk branch runs: every selected check except the merge-only ones. The `merge` tier adds the merge-only checks,
- * and only its pass lets a commit reach the trunk.
+ * How much of a change's checks a run pays for. The `lane` tier is what a push of a non-trunk branch runs by default: the
+ * mechanical rules ({@link laneKeeps}), the typecheck of the changed packages and their own specs. The `agent` tier is what
+ * a lane's agent runs while it works, and a push with `DELO_TIER=agent`: every selected check except the merge-only ones.
+ * The `merge` tier adds the merge-only checks, and only its pass lets a commit reach the trunk.
  */
-export type GateTier = 'agent' | 'merge'
+export type GateTier = 'lane' | 'agent' | 'merge'
+
+/** The repository gates the lane tier leaves to the agent and merge tiers, because they take minutes rather than seconds. */
+export const LANE_LEFT_OUT: readonly string[] = ['gates:docs']
+
+/**
+ * Whether the lane tier keeps a check: the boundary check, every repository gate but {@link LANE_LEFT_OUT}, the typecheck of
+ * a Delo program in a changed package, and the fork suite when a package changed. Every other check is left to the agent
+ * and merge tiers; a kept check's needs are still planned.
+ * @param check - the check.
+ * @param touchedDirs - the fork package directories a path of the change lies in.
+ * @returns true when the lane tier runs it.
+ */
+export function laneKeeps(check: Check, touchedDirs: ReadonlySet<string>): boolean {
+  if (check.id === 'boundary') return true
+  if (check.group === 'gates') return !LANE_LEFT_OUT.includes(check.id)
+  if (check.group === 'typecheck') {
+    const dir = packageDirOf(String(check.command[check.command.indexOf('-p') + 1]))
+    return dir !== undefined && touchedDirs.has(dir)
+  }
+  return (check.id === 'tests:fork' || check.id.startsWith('tests:fork:')) && touchedDirs.size > 0
+}
 
 /** One check's budget from `budgets.json`. */
 export interface BudgetEntry {
@@ -181,7 +203,7 @@ export interface Selection {
   readonly targets: readonly string[]
   /** Paths changed since `base`; set, it selects by change and the fork suite runs the packages a change reaches. */
   readonly changed?: { readonly base: string; readonly paths: readonly string[] }
-  /** The tier of a change run. Absent or `merge` selects every merge-only check a change reaches; `agent` leaves them out unless `only` names them. The full gate ignores it. */
+  /** The tier of a change run. Absent or `merge` selects every merge-only check a change reaches; `agent` leaves them out unless `only` names them; `lane` keeps only what {@link laneKeeps} keeps, over the changed packages without their dependents. The full gate ignores it. */
   readonly tier?: GateTier
   /** Check ids or groups to keep; empty keeps all. */
   readonly only: readonly string[]
@@ -809,7 +831,8 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
       continue
     }
     if (!check.tiers.includes('changed')) continue
-    if (check.mergeOnly === true && selection.tier === 'agent') continue
+    if (check.mergeOnly === true && (selection.tier === 'agent' || selection.tier === 'lane')) continue
+    if (selection.tier === 'lane' && !laneKeeps(check, touchedDirs)) continue
     if (check.id === 'boundary') pick(check, 'always: it reads everything that differs from upstream in seconds')
     else if (check.group === 'gates') pick(check, 'always: a repository gate reads the change in seconds')
     else if (check.id === 'jsdoc' && (touchedDirs.size > 0 || forkWide.length > 0)) pick(check, 'a fork package\'s sources may have changed')
@@ -859,7 +882,8 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
     if (plan.has(check.id)) return
     const required = check.needs.flatMap(need => checks.filter(candidate => candidate.id === need && !matches(candidate, selection.skip)))
     for (const need of required) add(need, `needed by ${check.id}`)
-    plan.set(check.id, { ...narrowed(check, selection, paths, forkWide.length > 0 ? undefined : [...reachedDirs].map(dir => `${dir}/`), tree.upstream, web), needs: required.map(need => need.id), reason })
+    const suiteDirs = selection.tier === 'lane' ? [...touchedDirs] : forkWide.length > 0 ? undefined : [...reachedDirs]
+    plan.set(check.id, { ...narrowed(check, selection, paths, suiteDirs?.map(dir => `${dir}/`), tree.upstream, web), needs: required.map(need => need.id), reason })
   }
   for (const check of checks) {
     if (kept(check)) add(check, picked.get(check.id) ?? '')
@@ -871,16 +895,17 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
 }
 
 /**
- * The merge-only checks a change reaches that the agent tier leaves out, for the plan to name.
+ * The checks a change reaches in the merge tier that a lighter tier leaves out, for the plan to name: the merge-only ones
+ * for the agent tier, and every one the lane tier does not keep.
  * @param checks - the catalog.
  * @param tree - the fork's packages.
- * @param selection - the selection; only an `agent` tier leaves anything out.
+ * @param selection - the selection; only the `agent` and `lane` tiers leave anything out.
  * @returns the ids, in catalog order.
  */
 export function leftForMerge(checks: readonly Check[], tree: ForkTree, selection: Selection): string[] {
-  if (selection.tier !== 'agent') return []
+  if (selection.tier !== 'agent' && selection.tier !== 'lane') return []
   const kept = new Set(select(checks, tree, selection).map(check => check.id))
-  return select(checks, tree, { ...selection, tier: 'merge' }).filter(check => check.mergeOnly === true && !kept.has(check.id)).map(check => check.id)
+  return select(checks, tree, { ...selection, tier: 'merge' }).filter(check => (selection.tier === 'lane' || check.mergeOnly === true) && !kept.has(check.id)).map(check => check.id)
 }
 
 /**

@@ -19,6 +19,7 @@ Choose the evidence with `dsh-pre-push-checks`, then run it through Delo's check
 
 | Situation | Command |
 | --- | --- |
+| Before a commit or push, in seconds | `node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --preflight`: the commit standard, the changelog fragment, whitespace (`gates/whitespace.ts --base origin/v5 --fix` repairs it), secrets and identifiers, and the changed packages' typecheck |
 | While working | `pnpm check`: the agent tier, which leaves out the replays, the web lane and the Docker lane |
 | The selection and its reasons, without running it | `pnpm check -- --plan` |
 | One package or file | `node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts <path>…` |
@@ -26,7 +27,7 @@ Choose the evidence with `dsh-pre-push-checks`, then run it through Delo's check
 | Before the lead fast-forwards the trunk | `pnpm check:merge`: the merge tier, with the merge-only checks; a lane's agent never needs it, and a push of the trunk runs it |
 | Before asking for the base to be called green | `pnpm check:full`, or `DELO_FULL_GATE=1 git push` |
 
-The `pre-commit` hook runs `node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --pre-commit`; the `pre-push` hook runs the changed checks. The [tools README](../../../delo/apps/tools/README.md#local-checks) gives each check's budget and tier.
+The `pre-commit` hook runs `node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --pre-commit`; the `pre-push` hook of a lane branch runs the lane tier (the pre-flight plus the changed packages' own specs), `DELO_TIER=agent git push` the agent tier, and a push of the trunk the merge tier. The [tools README](../../../delo/apps/tools/README.md#local-checks) gives each check's budget and tier.
 
 The test lanes, by what they need:
 

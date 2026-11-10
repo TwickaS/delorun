@@ -15,7 +15,7 @@ import type { Planned } from '../src/checks/plan.ts'
 import { openSharedStore } from '../src/checks/shared-cache.ts'
 import { sharingPolicy } from '../src/checks/sharing.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
-import { cacheCounts, main, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
+import { cacheCounts, changeTier, main, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
 
 const ZERO = '0'.repeat(40)
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -308,12 +308,25 @@ describe('the gate tier of a run', () => {
   const zero = '0'.repeat(40)
   const push = (remoteRef: string, local = sha): string => `refs/heads/x ${local} ${remoteRef} ${zero}\n`
 
-  it('is the merge tier for a push of the trunk, alone or with another ref, and the agent tier for any other branch', () => {
+  it('is the merge tier for a push of the trunk, alone or with another ref, and the lane tier for any other branch', () => {
     expect(TRUNK_REF).toBe('refs/heads/v5')
-    expect(pushTier(push('refs/heads/lane'), {})).toBe('agent')
+    expect(pushTier(push('refs/heads/lane'), {})).toBe('lane')
     expect(pushTier(push(TRUNK_REF), {})).toBe('merge')
     expect(pushTier(push('refs/heads/lane') + push(TRUNK_REF), {})).toBe('merge')
-    expect(pushTier('', {})).toBe('agent')
+    expect(pushTier('', {})).toBe('lane')
+  })
+
+  it('is the lane tier for any other push unless DELO_TIER asks for the agent tier, and never lighter than merge for the trunk', () => {
+    expect(pushTier(push('refs/heads/lane'), {})).toBe('lane')
+    expect(pushTier(push('refs/heads/lane'), { DELO_TIER: 'agent' })).toBe('agent')
+    expect(pushTier(push(TRUNK_REF), { DELO_TIER: 'agent' })).toBe('merge')
+    expect(pushTier(push(TRUNK_REF), { DELO_TIER: 'lane' })).toBe('merge')
+    expect(changeTier('lane', push(TRUNK_REF), {})).toBe('merge')
+    expect(changeTier('agent', push(TRUNK_REF), { DELO_TIER: 'agent' })).toBe('merge')
+    expect(changeTier('lane', push('refs/heads/lane'), {})).toBe('lane')
+    expect(changeTier(undefined, push('refs/heads/lane'), {})).toBe('lane')
+    expect(changeTier(undefined, undefined, { DELO_TIER: 'lane' })).toBe('agent')
+    expect(changeTier('merge', undefined, {})).toBe('merge')
   })
 
   it('names a push of the trunk for the queue priority, but not DELO_TIER=merge or a deletion', () => {
@@ -323,13 +336,14 @@ describe('the gate tier of a run', () => {
   })
 
   it('does not count the deletion of the trunk, and takes the merge tier from DELO_TIER=merge', () => {
-    expect(pushTier(push(TRUNK_REF, zero), {})).toBe('agent')
+    expect(pushTier(push(TRUNK_REF, zero), {})).toBe('lane')
     expect(pushTier(push('refs/heads/lane'), { DELO_TIER: 'merge' })).toBe('merge')
     expect(pushTier(push('refs/heads/lane'), { DELO_TIER: 'agent' })).toBe('agent')
   })
 
   it('is a usage error when --tier has another value, or comes with --pre-commit or the full gate', async () => {
-    await expect(main(['--changed', '--tier', 'full'])).rejects.toThrow('--tier takes agent or merge, got full')
+    await expect(main(['--changed', '--tier', 'full'])).rejects.toThrow('--tier takes lane, agent or merge, got full')
+    await expect(main(['--preflight', '--changed'])).rejects.toThrow('--preflight is a change run of its own')
     await expect(main(['--pre-commit', '--tier', 'merge'])).rejects.toThrow('does not apply to --pre-commit or the full gate')
     await expect(main(['--tier', 'merge'])).rejects.toThrow('does not apply to --pre-commit or the full gate')
   })

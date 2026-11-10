@@ -34,7 +34,7 @@ export function failing(outcome: Outcome): boolean {
  * @returns true when the run fails.
  */
 export function gateFailure(result: Result, tier: GateTier | undefined): boolean {
-  return failing(result.outcome) || (result.unrun === true && tier !== 'agent')
+  return failing(result.outcome) || (result.unrun === true && (tier === undefined || tier === 'merge'))
 }
 
 /** The command that asks Docker whether an engine answers, and how long it may take. */

@@ -251,13 +251,29 @@ export function prePushBase(root: string, input: string, base: string, fullGate:
 }
 
 /**
- * The tier a push needs: the merge tier when any pushed ref is the trunk or `DELO_TIER=merge` is set, otherwise the agent tier.
+ * The tier a push needs: the merge tier when any pushed ref is the trunk or `DELO_TIER=merge` is set, whatever else is set;
+ * the agent tier when `DELO_TIER=agent` is set; otherwise the lane tier.
  * @param input - the hook's standard input, `<local ref> <local sha> <remote ref> <remote sha>` per line.
  * @param env - the environment the run starts with.
  * @returns the tier.
  */
 export function pushTier(input: string, env: NodeJS.ProcessEnv): GateTier {
-  return env['DELO_TIER'] === 'merge' || pushesTrunk(input) ? 'merge' : 'agent'
+  if (env['DELO_TIER'] === 'merge' || pushesTrunk(input)) return 'merge'
+  return env['DELO_TIER'] === 'agent' ? 'agent' : 'lane'
+}
+
+/**
+ * The gate tier of a change run: the merge tier for a push of the trunk whatever `--tier` or `DELO_TIER` says, then the
+ * `--tier` option, then the push's tier ({@link pushTier}), and the agent tier for a run that is not a push.
+ * @param option - the `--tier` value, already validated.
+ * @param pushInput - the pre-push hook's standard input, or undefined when the run is not a push.
+ * @param env - the environment the run starts with.
+ * @returns the tier.
+ */
+export function changeTier(option: string | undefined, pushInput: string | undefined, env: NodeJS.ProcessEnv): GateTier {
+  if (pushInput !== undefined && pushesTrunk(pushInput)) return 'merge'
+  if (option === 'lane' || option === 'agent' || option === 'merge') return option
+  return pushInput === undefined ? 'agent' : pushTier(pushInput, env)
 }
 
 /**
@@ -517,11 +533,20 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
       'no-cache': { type: 'boolean', default: false },
       'no-shared-cache': { type: 'boolean', default: false },
       'tier': { type: 'string' },
+      'preflight': { type: 'boolean', default: false },
     },
   })
+  // The pre-flight is the lane tier of a change run without its test lanes, and it waits in no queue.
+  const preflight = values.preflight
+  if (preflight && (values['pre-commit'] || values['pre-push'] || values.changed || values.tier !== undefined)) throw new Error('--preflight is a change run of its own; give it without --pre-commit, --pre-push, --changed or --tier')
+  if (preflight) {
+    values.changed = true
+    values.tier = 'lane'
+    values.skip = [...values.skip ?? [], 'tests']
+  }
   const tiers = [values['pre-commit'], values['pre-push'], values.changed].filter(flag => flag).length
   if (tiers > 1) throw new Error('--pre-commit, --pre-push and --changed each select a tier; give one of them')
-  if (values.tier !== undefined && values.tier !== 'agent' && values.tier !== 'merge') throw new Error(`--tier takes agent or merge, got ${values.tier}`)
+  if (values.tier !== undefined && values.tier !== 'lane' && values.tier !== 'agent' && values.tier !== 'merge') throw new Error(`--tier takes lane, agent or merge, got ${values.tier}`)
   if (values.tier !== undefined && (values['pre-commit'] || !(values['pre-push'] || values.changed || values.base !== undefined || positionals.length > 0))) {
     throw new Error('--tier applies to --changed, --base, explicit paths and --pre-push; it does not apply to --pre-commit or the full gate')
   }
@@ -584,7 +609,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     // Under `pnpm --filter`, a script runs in its package; `INIT_CWD` is where it was invoked.
     const targets = positionals.map(path => relative(root, resolve(process.env['INIT_CWD'] ?? process.cwd(), path)))
     const fullRun = changed === undefined && targets.length === 0
-    gateTier = fullRun || fullGate ? undefined : values.tier ?? (pushInput === undefined ? 'agent' : pushTier(pushInput, env))
+    gateTier = fullRun || fullGate ? undefined : changeTier(values.tier, pushInput, env)
     const selection = { targets, ...changed === undefined ? {} : { changed }, ...gateTier === undefined ? {} : { tier: gateTier }, only: list(values.only), skip: list(values.skip) }
     plan = declineUnansweredDocker(select(checks, tree, selection), () => probeDocker((command, args, timeout) => spawnSync(command, [...args], { encoding: 'utf8', timeout })))
     left = [...leftForMerge(checks, tree, selection), ...dependentsLeftForMerge(tree, selection)]
@@ -639,8 +664,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   if (covered(treeRecordsOn ? treeState(root) : undefined, false)) return 0
 
   // One heavy run at a time on this machine, in arrival order; a light plan takes no ticket.
-  if (!light && env[IN_SCOPE] === undefined && !isLightPlan(plan)) await holdRunLock(gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)))
-  if (!light && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
+  if (!light && !preflight && env[IN_SCOPE] === undefined && !isLightPlan(plan)) await holdRunLock(gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)))
+  if (!light && !preflight && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
     const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)
     const child = spawnSync(command, args, { stdio: [pushInput === undefined ? 'inherit' : 'pipe', 'inherit', 'inherit'], env: { ...env, [IN_SCOPE]: '1' }, ...pushInput === undefined ? {} : { input: pushInput } })
     return child.status ?? 1

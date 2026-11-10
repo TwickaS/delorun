@@ -42,6 +42,7 @@ export const SHARE_RULES: Readonly<Record<string, ShareRule>> = {
   'gates:commits': { share: false, reason: 'reads the range\'s commit messages' },
   'gates:changelog': { share: false, reason: 'reads the range\'s commits and trailers' },
   'gates:doc-times': { share: false, reason: 'reads the lines the range adds' },
+  'gates:whitespace': { share: false, reason: 'reads the files that differ from the merge base with origin/v5, which history decides' },
   'gates:docs': { share: false, reason: 'compiles referenced projects under apps/, vendor/ and native/ that are not its inputs, reads and writes emitted declarations, and tests link targets anywhere in the tree' },
   'gates:fundamentals': { share: false, security: true, reason: 'security class: it keeps each enforced security fundamental traceable to its code and test' },
   'jsdoc': { share: false, reason: 'resolves the built Delo packages\' git-ignored declarations and reads git-ignored sources under src/' },

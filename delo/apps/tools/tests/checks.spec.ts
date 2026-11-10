@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
-import { affectsParity, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
+import { affectsParity, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
 import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
@@ -113,7 +113,7 @@ describe('the catalog', () => {
 
   it('marks the checks whose verdict reads commits beyond the tree: the boundary check and the range gates, and no other check', () => {
     const history = catalog(TREE, { ...HOST, gates: GATES }).filter(check => check.history === true).map(check => check.id)
-    expect(history).toEqual(['boundary', 'gates:personal-data', 'gates:dco', 'gates:commits', 'gates:changelog', 'gates:doc-times'])
+    expect(history).toEqual(['boundary', 'gates:personal-data', 'gates:dco', 'gates:commits', 'gates:changelog', 'gates:doc-times', 'gates:whitespace'])
     expect(CHECKS.find(check => check.id === 'tests:fork')?.scope).toBeUndefined()
   })
 
@@ -266,6 +266,20 @@ describe('the gate tiers', () => {
     for (const tier of ['agent', 'merge'] as const) {
       expect(ids(select(CHECKS, TREE, { ...NONE, changed: upstreamChange, only: ['parity-replay'], tier }))).toContain('parity-replay')
     }
+  })
+
+  it('keeps the mechanical rules, the changed packages\' typecheck and their own specs in the lane tier, and names the rest', () => {
+    const checks = catalog(dockerTree, { ...HOST, gates: [gate('gates:commits', { history: true }), gate('gates:docs')] })
+    const changed = { base: 'v5', paths: ['delo/packages/providers/src/index.ts', 'packages/core/session/src/index.ts'] }
+    const lane = select(checks, dockerTree, { ...NONE, changed, tier: 'lane' })
+    expect(ids(lane)).toEqual(['boundary', 'gates:commits', 'typecheck:upstream', 'typecheck:delo:providers', 'generate:native', 'tests:fork'])
+    expect(lane.find(check => check.id === 'tests:fork')?.scope).toEqual(['delo/packages/providers/'])
+    expect(lane.find(check => check.id === 'typecheck:upstream')?.reason).toBe('needed by typecheck:delo:providers')
+    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'lane' })).toEqual(['gates:docs', 'jsdoc', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'tests:docker', 'tests:upstream-changed', 'tests:snapshots', 'parity-switches', 'parity-replay'])
+    // Without a changed package the lane tier runs no typecheck of Delo's programs and no specs.
+    expect(ids(select(checks, dockerTree, { ...NONE, changed: { base: 'v5', paths: ['README.md'] }, tier: 'lane' }))).toEqual(['boundary', 'gates:commits'])
+    const program = CHECKS.find(check => check.id === 'typecheck:delo:control')
+    expect(program === undefined ? undefined : laneKeeps({ ...program, command: ['tsc'] }, new Set(['delo/apps/control']))).toBe(false)
   })
 
   it('runs the full gate in whole whatever the tier says', () => {
