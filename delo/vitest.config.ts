@@ -9,11 +9,11 @@ import { defineConfig } from 'vitest/config'
  *   is hung, not slow, and fails while the run is still short.
  * - `fork-integration`: `*.integration.spec.ts`, the specs that run git, Node or `tsx` children, compose real
  *   profiles, build real release trees, or make many durable writes to real file trees (installs, the trash, update
- *   copies, release records), whose fsync latency follows the disk's load. Their tests take the {@link INTEGRATION_TIMEOUT_MS} budget and their hooks
- *   {@link INTEGRATION_HOOK_TIMEOUT_MS}, which a contended machine needs for process start-up. The check runner runs
+ *   copies, release records), whose fsync latency follows the disk's load. Their tests take the
+ *   {@link INTEGRATION_TIMEOUT_MS} budget and their hooks {@link INTEGRATION_HOOK_TIMEOUT_MS}, which a contended machine needs for process start-up. The check runner runs
  *   this project in its own phase with a bounded worker count (`--maxWorkers`), so the children of many workers do not
  *   compete for the CPUs at once.
- * - `fork-client`: the client component specs, `*.spec.tsx`, at the unit timeout. They resolve upstream packages to
+ * - `fork-client`: the client component specs, `*.spec.tsx`, at {@link CLIENT_TIMEOUT_MS}. They resolve upstream packages to
  *   their sources through `tsconfig.base.json`'s paths, as upstream's own client specs do, because the built client
  *   modules load React's CommonJS shims that the jsdom lane cannot import.
  *
@@ -26,12 +26,18 @@ import { defineConfig } from 'vitest/config'
  */
 
 /**
- * The unit projects' test budget. Twice Vitest's default of 5 s, which unit tests that read and write a few temporary
+ * The unit project's test budget. Twice Vitest's default of 5 s, which unit tests that read and write a few temporary
  * files exceeded on a busy machine; a hung test still fails ten seconds in instead of a minute in.
  */
 const UNIT_TIMEOUT_MS = 10_000
-/** The unit projects' hook budget: twice the test budget, since setup and teardown pay the same contention. */
+/** The unit project's hook budget: twice the test budget, since setup and teardown pay the same contention. */
 const UNIT_HOOK_TIMEOUT_MS = 20_000
+/**
+ * The client component project's test budget. Rendering in jsdom and querying by role is CPU work: a test that took
+ * under a second alone took over 10 s with every CPU busy. Testing Library's waits stop at 5 s
+ * (`vitest.dom-setup.ts`), so a missing element still fails on its own message long before this.
+ */
+const CLIENT_TIMEOUT_MS = 30_000
 /** The integration project's test budget: a test that starts several `tsx` children under full CPU contention. */
 const INTEGRATION_TIMEOUT_MS = 60_000
 /** The integration project's hook budget: a hook that builds a fixture repository or tree before its tests. */
@@ -57,8 +63,8 @@ export const forkClientProject = {
     name: 'fork-client',
     include: SPEC_DIRS.map(dir => `${dir}/*.spec.tsx`),
     setupFiles: [fileURLToPath(new URL('../scripts/test-dom-environment.ts', import.meta.url)), fileURLToPath(new URL('./vitest.dom-setup.ts', import.meta.url))],
-    testTimeout: UNIT_TIMEOUT_MS,
-    hookTimeout: UNIT_HOOK_TIMEOUT_MS,
+    testTimeout: CLIENT_TIMEOUT_MS,
+    hookTimeout: CLIENT_TIMEOUT_MS,
   },
 }
 

@@ -32,7 +32,7 @@ The test lanes, by what they need:
 
 | Lane | Runs | Picked when |
 | --- | --- | --- |
-| `tests:fork` | Delo's unit and client component specs, 10 s per test | its packages or their dependencies change |
+| `tests:fork` | Delo's unit specs (10 s per test) and client component specs (30 s) | its packages or their dependencies change |
 | `tests:fork:integration` | Delo's `*.integration.spec.ts` specs, which start processes or write real file trees, after `tests:fork`, 60 s per test on at most 4 workers | its packages or their dependencies change |
 | `tests:snapshots` | upstream's recorded-session replay | upstream-owned code changes |
 | `tests:upstream-changed` | the specs of changed upstream packages and their direct dependents | an upstream package changes |
