@@ -6,7 +6,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./archive/*": "./src/archive/*.ts",
     "./log/*": "./src/log/*.ts",
     "./sign/*": "./src/sign/*.ts"
   },
