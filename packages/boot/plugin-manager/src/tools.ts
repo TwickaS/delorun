@@ -43,6 +43,16 @@ const ERROR_STEPS: Record<ManagementError['code'], string> = {
   'operation-error': 'Report the diagnostic to the user; retry only after its cause is addressed.',
 }
 
+/**
+ * What the model does next for a `management-required` refusal whose diagnostic names modules the profile protects
+ * through the manager's `protectedPlugins`, rather than modules plugin management itself needs. Only a profile that
+ * configures `protectedPlugins` produces it, so a composition without that setting reads {@link ERROR_STEPS} alone.
+ */
+const PROFILE_PROTECTED_STEP = 'This change would disable, reconfigure, replace or remove a guard the profile protects (named in error.diagnostic), so plugin management refuses it; tell the user, who alone can change it, by editing the profile outside plugin management.'
+
+/** Why `configure` refuses a `management-required` entry, which is either a management component or a protected guard. */
+const CONFIGURE_PROTECTED_STEP = 'plugin management protects this entry, as one of its own components or as a guard the profile protects; only the user can change its settings, outside this tool.'
+
 /** What the model does next for each package-manager failure. */
 const FAILURE_STEPS: Partial<Record<PluginInstallFailureKind, string>> = {
   'pnpm-missing': 'pnpm is not available to DSH; tell the user to install pnpm.',
@@ -85,7 +95,8 @@ function withNextStep(result: ChangeResult): ChangeResult & { nextStep?: string 
       const code = result.error?.code ?? 'operation-error'
       // A refusal code is more specific than the package manager's failure kind.
       const kind = code === 'operation-error' ? result.packageResult?.kind : undefined
-      return { ...result, nextStep: (kind === undefined ? undefined : FAILURE_STEPS[kind]) ?? ERROR_STEPS[code] }
+      const refusal = code === 'management-required' && result.error?.diagnostic !== undefined ? PROFILE_PROTECTED_STEP : ERROR_STEPS[code]
+      return { ...result, nextStep: (kind === undefined ? undefined : FAILURE_STEPS[kind]) ?? refusal }
     }
     /* v8 ignore next -- ChangeResult.application is a closed union */
     default: return assertNever(result.application)
@@ -394,7 +405,7 @@ async function readConfig(ctx: Context, patchId: string): Promise<JsonValue> {
 /**
  * Change a plugin entry's settings through the configuration editor, which validates the result against the plugin's
  * schema before saving and applies it; the plugin manager records the edit as a version. An entry the manager lists
- * as `management-required`, or does not list, is refused before anything is saved.
+ * with a read-only reason, or does not list, is refused before anything is saved, with that reason's code.
  * @param ctx The tool's context, whose configuration editor edits the entry.
  * @param patchId The entry's profile patch id.
  * @param fields Top-level fields to set, each replacing that field's value.
@@ -405,12 +416,13 @@ async function readConfig(ctx: Context, patchId: string): Promise<JsonValue> {
 async function configure(ctx: Context, patchId: string, fields: Record<string, unknown>, reset: readonly string[]): Promise<JsonValue> {
   if (Object.keys(fields).length === 0 && reset.length === 0) throw new Error('configure needs config fields to set or reset fields to put back')
   const { editor, row } = configRow(ctx, patchId)
-  // The protection that refuses disabling an entry refuses changing its settings; an entry the inventory does not
-  // list, such as a group of rows, has no plugin settings of its own to change.
+  // The read-only reason that refuses set_plugin for an entry refuses changing its settings; an entry the inventory
+  // does not list, such as a group of rows, has no plugin settings of its own to change.
   const listed = (await ctx.pluginManager.listPlugins()).find(plugin => plugin.entryId === row.entry.id)
   if (listed === undefined) throw new Error(`The entry ${JSON.stringify(patchId)} is not a plugin that list_plugins lists, so its settings cannot be changed here`)
-  if (listed.readOnlyReason === 'management-required') {
-    throw new Error(`Plugin management protects the entry ${JSON.stringify(patchId)}, so its settings cannot be changed here; only the user can change them, outside this tool`)
+  if (listed.readOnlyReason !== undefined) {
+    const step = listed.readOnlyReason === 'management-required' ? CONFIGURE_PROTECTED_STEP : ERROR_STEPS[listed.readOnlyReason]
+    throw new Error(`The settings of the entry ${JSON.stringify(patchId)} cannot be changed (${listed.readOnlyReason}): ${step}`)
   }
   const native: unknown = row.entry.fiber?.runtime?.Config
   const previous: Record<string, unknown> = { ...row.entry.options.config as Record<string, unknown> | undefined }

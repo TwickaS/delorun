@@ -296,10 +296,12 @@ it.each(['github:acme/connected', 'https://github.com/acme/connected.git', 'git+
   'installs %s through real Git and pnpm with private repository SSH fallback', async (spec) => {
     const pnpm = fileURLToPath(new URL('../../../../apps/desktop/node_modules/pnpm/bin/pnpm.mjs', import.meta.url))
     const env = { GIT_CONFIG_GLOBAL: '', GIT_CONFIG_NOSYSTEM: '1' }
-    const { manager, dir, connection } = await fixture('startup', false, undefined, {}, {
+    const { manager, dir, connection, bundle, profile } = await fixture('startup', false, undefined, {}, {
       command: process.execPath, args: ['--expose-internals', pnpm], env,
     })
     connection.mockRestore()
+    // pnpm prunes the fixture's undeclared profile bundles; the installation carries the management bundle, as it does in use.
+    bundle('core', [{ id: 'manager', name: 'cordis:manager', config: {} }], profile.home)
     const repository = join(dir, 'repository')
     mkdirSync(repository)
     env.GIT_CONFIG_GLOBAL = join(dir, 'git.config')
@@ -1497,9 +1499,11 @@ it('applies watched configuration while pnpm installation is still running', asy
 
 it('installs and removes with the bundled pnpm when PATH contains no pnpm', async () => {
   const pnpm = fileURLToPath(new URL('../../../../apps/desktop/node_modules/pnpm/bin/pnpm.mjs', import.meta.url))
-  const { manager, dir } = await fixture('startup', false, undefined, { pnpmCommand: 'must-not-be-used' }, {
+  const { manager, dir, bundle, profile } = await fixture('startup', false, undefined, { pnpmCommand: 'must-not-be-used' }, {
     command: process.execPath, args: ['--expose-internals', pnpm], env: { PATH: '', ELECTRON_RUN_AS_NODE: '1' },
   })
+  // pnpm prunes the fixture's undeclared profile bundles; the installation carries the management bundle, as it does in use.
+  bundle('core', [{ id: 'manager', name: 'cordis:manager', config: { pnpmCommand: 'must-not-be-used' } }], profile.home)
   const target = join(dir, 'local-bundle')
   mkdirSync(target)
   writeFileSync(join(target, 'package.json'), JSON.stringify({ name: '@test/desktop-manager', version: '1.0.0',

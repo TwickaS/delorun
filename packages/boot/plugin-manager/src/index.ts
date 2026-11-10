@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { pathToFileURL } from 'node:url'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { Context } from '@deepseek-ai/cordis'
@@ -19,7 +20,7 @@ import { readBundleDocument, readBundleImage, type BundleDetailOptions } from '.
 import { pluginEntryId, readPluginInventory } from '@deepseek-ai/dsh-host-plugin-inventory'
 import {
   readPluginMeta, readProfileManifest, resolveBundleDir, loadOverlayPatches, composeEntries,
-  readProfilePatches, bundlePatchPaths,
+  readProfilePatches, bundlePatchPaths, loadProfileDirectory,
   evaluatePluginCompatibility, readProfileCompatibility, readProfileVersionExemptions,
   setProfileVersionExemption, validatePluginVersionExemption,
   getDshRuntimeVersion, ResolutionRestartRequired,
@@ -28,7 +29,7 @@ import {
 import { OPTIONAL_BUNDLES, OFFICIAL_ON_DEMAND_CATALOG, PROTECTED_PLUGINS } from '@deepseek-ai/dsh-official-bundles'
 import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-config-editor'
-import type { ProfileContext, ProfileManifest } from '@deepseek-ai/dsh-app-boot'
+import type { ProfileContext, ProfileLayer, ProfileManifest } from '@deepseek-ai/dsh-app-boot'
 import { bundleManifest, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage } from './operations.ts'
 import { classifyInstallFailure } from './install-failure.ts'
 import { officialBundleInstallTarget } from './official-install-target.ts'
@@ -97,9 +98,12 @@ export interface Config {
   /** npm file CDNs that offered bundles are read from, in order; a read's `npmFileSources` moves the CDNs it names first. */
   detailNpmFileSources?: NpmFileSource[]
   /**
-   * Plugin module names the manager refuses to disable or remove, as it refuses `PROTECTED_PLUGINS`, with the
-   * `management-required` reason; a bundle with a row of one of them can be neither deselected nor removed. These
-   * names add to `PROTECTED_PLUGINS` and cannot take any away.
+   * Plugin module names the manager protects as it protects `PROTECTED_PLUGINS`, refusing with `management-required`
+   * any change that would disable, reconfigure, replace or drop a row of one of them, or add one, in the composed
+   * profile: a plugin toggle, a bundle selection or installation, an undo or a restore. A bundle with a row of one, or
+   * a package that provides one, can be neither deselected nor removed, and no package that provides one is installed
+   * or changed. These names add to `PROTECTED_PLUGINS` and cannot take any away; a refusal that names one of them
+   * carries a `diagnostic` listing those names.
    */
   protectedPlugins?: string[]
 }
@@ -289,6 +293,16 @@ function packageName(dir: string): string | undefined {
     // pnpm reports the unreadable directory itself.
     return undefined
   }
+}
+
+/**
+ * The package a plugin module name is loaded from: its scope and name, without a subpath.
+ * @param moduleName - a row's module name, such as `@delo/bundle-local/update-gate`.
+ * @returns the package name, such as `@delo/bundle-local`.
+ */
+function packageOf(moduleName: string): string {
+  const parts = moduleName.split('/')
+  return parts.slice(0, moduleName.startsWith('@') ? 2 : 1).join('/')
 }
 
 /** The spec's form, for deciding whether a failed attempt was the registry's; a form the parser refuses has no host of its own. */
@@ -674,10 +688,20 @@ export class PluginManager extends TypertRemoteService {
     const files = await this.readHistory(() => this.versions.filesAt(version))
     const changes = profileVersionChanges(current, files)
     result.changes = changes
+    const provided = changes.plugins.flatMap(plugin => this.providedProtected(plugin.name))
+    if (provided.length > 0) throw this.protectionFailure(provided)
+    const rows = this.currentRows()
     const audited = broughtBack(changes)
     if (files.get(LOCKFILE) === current.get(LOCKFILE)) {
       await this.auditRestored(audited)
       await writeProfileVersion(this.profile.dir, files)
+      try {
+        this.assertProtectedRowsKept(rows, this.composedRows())
+      } catch (error) {
+        // The version's files go back as they were; its dependency set is the current one, so nothing is reinstalled.
+        await writeProfileVersion(this.profile.dir, current)
+        throw error
+      }
       Object.assign(result, await this.publishAndReload())
       return
     }
@@ -695,6 +719,7 @@ export class PluginManager extends TypertRemoteService {
     if (!succeeded(result.packageResult)) throw new Error(result.packageResult.output)
     try {
       await this.auditRestored(audited)
+      this.assertProtectedRowsKept(rows, this.composedRows())
     } catch (error) {
       // No package the audit refused stays: the files go back as they were, and their installed set with them.
       await writeProfileVersion(this.profile.dir, current)
@@ -1100,6 +1125,7 @@ export class PluginManager extends TypertRemoteService {
     return this.change(result => this.configure(async () => {
       const row = (await this.listPlugins()).find(item => item.entryId === id)
       if (row === undefined) throw new ManagementFailure('unknown-plugin')
+      if (row.readOnlyReason === 'management-required') throw this.protectionFailure([row.moduleName])
       if (row.readOnlyReason !== undefined) throw new ManagementFailure(row.readOnlyReason)
       await writePluginEnabled(this.profile, row.patchId, row.moduleName, enabled)
       Object.assign(result, await this.reload(enabled ? [row.patchId] : []))
@@ -1150,9 +1176,12 @@ export class PluginManager extends TypertRemoteService {
       const before = readProfileManifest('dsh', this.profile.dir).dependencies ?? {}
       // With HMR, an installed package is removed before another version is installed, so its plugins stop first.
       const known = specPackageName(spec, before, this.profile.dir)
+      const provided = known === undefined ? [] : this.providedProtected(known)
+      if (provided.length > 0) throw this.protectionFailure(provided)
       if (this.ownerContext.get('hmr') !== undefined && known !== undefined && Object.hasOwn(before, known)) {
         throw new ManagementFailure('already-installed')
       }
+      const rows = this.currentRows()
       if (options?.approvedBuilds !== undefined) {
         await approveBuilds(this.profile.dir, options.approvedBuilds)
         result.approvedBuilds = options.approvedBuilds
@@ -1245,6 +1274,8 @@ export class PluginManager extends TypertRemoteService {
         const target = installed[0]
         if (installed.length !== 1 || target === undefined) throw new ManagementFailure('ambiguous-install')
         name = target
+        const providedByTarget = this.providedProtected(name)
+        if (providedByTarget.length > 0) throw this.protectionFailure(providedByTarget)
         const dir = resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir)
         const manifest = bundleManifest(name, this.profile.dir, this.profile.installAnchor)
         if (manifest?.dsh?.bundle === undefined) throw new ManagementFailure('not-bundle')
@@ -1255,6 +1286,8 @@ export class PluginManager extends TypertRemoteService {
         if (audit !== undefined && audit.findings.length > 0) result.audit = audit
         if (audit?.decision === 'accepted' && options?.acceptedAudit === audit.digest) await acceptAudit(this.profile.dir, name, audit.digest)
         for (const file of bundlePatchPaths(dir, manifest.dsh.bundle)) loadOverlayPatches('dsh', file)
+        // The bundle's patch, and a replaced package's, must leave every protected row as it was.
+        this.assertProtectedRowsKept(rows, this.composedRows(options?.enabled === false ? undefined : name))
         version = manifest.version
         this.installedFrom.set(name, used)
       } catch (error) {
@@ -1471,11 +1504,11 @@ export class PluginManager extends TypertRemoteService {
         const compatibility = evaluatePluginCompatibility(metadata, readProfileVersionExemptions(this.profile.dir))
         if (compatibility !== undefined && !compatibility.exempted) throw new ManagementFailure('incompatible-version', [incompatiblePlugin(compatibility)])
         await this.auditBundle(name, resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir), metadata.version)
-        this.bundleRows(name)
+        if (!previous.includes(name)) this.assertProtectedRowsKept(this.currentRows(), this.composedRows(name))
       }
     }
     if (!enabled && previous.includes(name)) {
-      if (this.protectsManager(name)) throw new ManagementFailure('management-required')
+      if (this.protectsManager(name)) throw this.bundleRefusal(name)
     }
     const bundles = enabled ? [...previous, ...previous.includes(name) ? [] : [name]] : previous.filter(item => item !== name)
     if (JSON.stringify(previous) === JSON.stringify(bundles)) return
@@ -1485,20 +1518,97 @@ export class PluginManager extends TypertRemoteService {
   }
 
   private bundleRows(name: string): EntryOptions[] {
+    return flatten(composeEntries([this.bundleLayer(name)?.patches ?? []]))
+  }
+
+  /** A bundle's patch layer, as the profile loader reads it; `undefined` for a package that declares no bundle. */
+  private bundleLayer(name: string): ProfileLayer | undefined {
     const info = bundleManifest(name, this.profile.dir, this.profile.installAnchor)
-    if (info?.dsh?.bundle === undefined) return []
-    const dir = resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir)
-    return flatten(composeEntries([bundlePatchPaths(dir, info.dsh.bundle).flatMap(file => loadOverlayPatches('dsh', file))]))
+    if (info?.dsh?.bundle === undefined) return undefined
+    const packageDir = resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir)
+    const patchPaths = bundlePatchPaths(packageDir, info.dsh.bundle)
+    return { packageName: name, packageDir, patchPaths, patches: patchPaths.flatMap(file => loadOverlayPatches('dsh', file)) }
+  }
+
+  /**
+   * The profile's composed rows as its files give them now, the profile patch, home patch and overlays included.
+   * @param selecting - a bundle to compose as if it were selected after the others.
+   */
+  private composedRows(selecting?: string): EntryOptions[] {
+    const loaded = loadProfileDirectory('dsh', this.profile.dir, this.profile.installAnchor)
+    const selected = selecting === undefined || loaded.layers.some(layer => layer.packageName === selecting)
+      ? []
+      : [this.bundleLayer(selecting)]
+    const layers = [...loaded.layers, ...selected.filter((layer): layer is ProfileLayer => layer !== undefined)]
+    return flatten(composeEntries([readProfilePatches('dsh', this.profile, { ...loaded, layers })]))
+  }
+
+  /**
+   * The composed rows a change is compared with: the profile files' composition, or, while those files do not compose,
+   * the rows the root Include runs, which are the last composition the profile applied.
+   */
+  private currentRows(): EntryOptions[] {
+    try { return this.composedRows() } catch (_error) {
+      // A profile that does not compose runs its last applied composition; an undo or a restore may repair the files.
+    }
+    const root = [...this.ctx.loader.entries()].find(entry => entry.id === 'include')
+    /* v8 ignore next -- the root Include runs while the manager does; without its patches no row is current,
+       so every protected row of the change is refused */
+    return flatten(composeEntries([(root?.options.config as { patches?: PatchOptions[] } | undefined)?.patches ?? []]))
+  }
+
+  /** Whether the manager protects a composed row: by its module, or as the manager's own entry. */
+  private protectsRow(row: EntryOptions): boolean {
+    return this.protectedPlugins.has(row.name) || `include:${row.id}` === this.ownerEntryId
+  }
+
+  /** The protected module names a package provides. */
+  private providedProtected(packageName: string): string[] {
+    return [...this.protectedPlugins].filter(name => packageOf(name) === packageName)
+  }
+
+  /**
+   * Refuse a change whose composed rows differ from the current ones under the id of a protected row: a protected row
+   * dropped, replaced, reconfigured, disabled or enabled, a row of a protected module added, or another row given the
+   * id of one, which the Loader would mount beside or instead of it.
+   * @param before - the composed rows before the change.
+   * @param after - the composed rows the change would give.
+   * @throws ManagementFailure `management-required` naming the modules of the rows it changes.
+   */
+  private assertProtectedRowsKept(before: readonly EntryOptions[], after: readonly EntryOptions[]): void {
+    const ids = new Set([...before, ...after].filter(row => this.protectsRow(row)).map(row => row.id))
+    const changed = [...ids].flatMap((id) => {
+      const [was, now] = [before.filter(row => row.id === id), after.filter(row => row.id === id)]
+      return isDeepStrictEqual(was, now) ? [] : [...was, ...now].map(row => row.name)
+    })
+    if (changed.length > 0) throw this.protectionFailure(changed)
+  }
+
+  /**
+   * The `management-required` refusal for changing protected modules. When some of them only `protectedPlugins` lists,
+   * its diagnostic names those, so a caller can say the profile protects them rather than plugin management needing them.
+   */
+  private protectionFailure(moduleNames: readonly string[]): ManagementFailure {
+    const configured = [...new Set(moduleNames.filter(name => !PROTECTED_PLUGINS.has(name) && this.protectedPlugins.has(name)))]
+    return new ManagementFailure('management-required', undefined, configured.length === 0 ? undefined : `protected by this profile: ${configured.join(', ')}`)
+  }
+
+  /** The refusal for deselecting or removing a management bundle, naming the protected modules it carries or provides. */
+  private bundleRefusal(name: string): ManagementFailure {
+    let rows: EntryOptions[] = []
+    try { rows = this.bundleRows(name) } catch (_error) {
+      // An unreadable management bundle names no rows; its refusal names what the package provides.
+    }
+    return this.protectionFailure([...rows.filter(row => this.protectsRow(row)).map(row => row.name), ...this.providedProtected(name)])
   }
 
   private protectsManager(name: string): boolean {
     if (this.managementBundles.has(name)) return true
-    let rows: EntryOptions[]
+    let rows: EntryOptions[] = []
     try { rows = this.bundleRows(name) } catch (_error) {
       // Unreadable bundles contribute no new rows; listBundles reports their diagnostics.
-      return false
     }
-    const protectedBundle = rows.some(row => this.protectedPlugins.has(row.name) || `include:${row.id}` === this.ownerEntryId)
+    const protectedBundle = this.providedProtected(name).length > 0 || rows.some(row => this.protectsRow(row))
     if (protectedBundle) this.managementBundles.add(name)
     return protectedBundle
   }

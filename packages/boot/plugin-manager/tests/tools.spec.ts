@@ -325,6 +325,11 @@ it('tells the agent the next step for each change outcome it can act on', async 
   expect(await outcome({ changed: false, application: 'failed' })).toContain('Report the diagnostic')
   expect(await outcome({ changed: false, application: 'failed', error: { code: 'unsupported-platform' } }))
     .toBe('This bundle cannot run on the current Host platform; ask the user to use a supported Host.')
+  // Only a refusal for a module the profile protects carries a diagnostic; upstream's refusal keeps upstream's step.
+  expect(await outcome({ changed: false, application: 'failed', error: { code: 'management-required' } }))
+    .toBe('This entry belongs to plugin management itself and cannot be changed.')
+  expect(await outcome({ changed: false, application: 'failed', error: { code: 'management-required', diagnostic: 'protected by this profile: guard' } }))
+    .toContain('a guard the profile protects')
 })
 
 const STOCK_DESCRIPTION = 'List plugins or bundles in the current profile, enable or disable them, install a bundle, or remove an installed bundle. Every action requires danger-full-access permission or approval for this call. Approval does not change the session permission mode. Changes affect every session in this profile. List first to obtain exact identifiers. Package installation can execute allowed build scripts. Live profiles apply changes immediately, including upgrades of installed packages; a change result that is not applied carries nextStep, which says what to do or tell the user. Unmet DSH version requirements (engines.dsh, else DSH peer dependencies) block installation and activation. Version exemptions risk crashes and data loss: warn the user and obtain explicit permission for the exact plugin and runtime versions before granting one.'
@@ -591,7 +596,17 @@ describe('with the profile_history and plugin_manager_read_exemption switches on
     manager.listPlugins.mockResolvedValue([{ entryId: 'include:1', enabled: true, readOnlyReason: 'management-required' }] as never)
     const result = await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false } })
     expect(result.isError).toBe(true)
-    expect(JSON.stringify(result.content)).toContain('Plugin management protects the entry \\"delo-agent-context\\"')
+    expect(JSON.stringify(result.content)).toContain('The settings of the entry \\"delo-agent-context\\" cannot be changed (management-required): plugin management protects this entry')
+    expect(settings.edit).not.toHaveBeenCalled()
+  })
+
+  it('refuses to change the settings of an entry set_plugin refuses as unaddressable, with set_plugin\'s next step', async () => {
+    const { ctx, call, manager } = await fixture('danger-full-access', undefined, SWITCHED_ON)
+    const settings = editor({ enabled: true }, {}, {})
+    ctx.provide('configEditor', settings as never)
+    manager.listPlugins.mockResolvedValue([{ entryId: 'include:1', enabled: true, readOnlyReason: 'unaddressable' }] as never)
+    expect(JSON.stringify((await call({ action: 'configure', target: 'delo-agent-context', config: { enabled: false } })).content))
+      .toContain('cannot be changed (unaddressable): This entry has no unique profile patch target')
     expect(settings.edit).not.toHaveBeenCalled()
   })
 
