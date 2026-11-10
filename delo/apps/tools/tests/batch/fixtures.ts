@@ -49,7 +49,7 @@ export function gitEnv(): NodeJS.ProcessEnv {
  * @returns standard output.
  */
 export function git(cwd: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): string {
-  return execFileSync('git', [...args], { cwd, env: { ...gitEnv(), ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  return execFileSync('git', [...args], { cwd, env: { ...gitEnv(), ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 })
 }
 
 /** One commit of a lane. */

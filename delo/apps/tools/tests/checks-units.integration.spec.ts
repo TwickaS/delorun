@@ -107,7 +107,7 @@ process.exit(failing.length > 0 || process.env.FAKE_EXIT === '1' ? 1 : 0)
  * @returns git's output.
  */
 function git(cwd: string, args: readonly string[]): string {
-  return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', env: Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))) })
+  return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', env: Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))), timeout: 30_000 })
 }
 
 describe('a run of a unitised suite', { timeout: 30_000 }, () => {
