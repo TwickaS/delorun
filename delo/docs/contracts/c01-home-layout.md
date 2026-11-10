@@ -267,7 +267,7 @@ Upstream's sandbox dialects confine file writes only. In the CLI profile, which 
 - `delo/packages/runtime-store`: the store, the pointer files, install, switch and retention.
 - `delo/packages/home-process`: holding the lock through `delo/packages/home`, the start token and the update channel's socket ([C19](c19-home-process.md)).
 - `delo/packages/supervisor`: the supervisor's socket and its token check ([C9](c09-runtime-supervisor.md)); no command launches it.
-- `delo/packages/home-auth`: the secret files under `secrets/home-auth/`, read and written through `delo/packages/home`; no shipped profile mounts it. `delorun export` writes the home key there.
+- `delo/packages/home-auth`: the secret files under `secrets/home-auth/`, read and written through `delo/packages/home`; every CLI profile loads it. `delorun export` writes the home key there.
 
 ## Compatibility
 

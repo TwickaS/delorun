@@ -14,10 +14,10 @@ A reach provider turns one reach option on or off: it connects a reach listener 
 <a id="status"></a>
 ## Status
 
-No reach provider is built.
+The Tailscale private provider is built; the Funnel and own-domain providers are not.
 
-- **Built and reached:** setup records reach as off: `--yes` leaves it off, and a `--config` document that names a reach option other than `none` is refused.
-- **Not built:** the provider Service Definition and every provider, the visibility notes, the Tailscale serve and Funnel targets, the own-domain checks of the CAA record and the ACME challenge rule, and the `reach-binding` and `own-domain-caa` checks, which `delorun verify` reports as not run. The rules for reach on the person's own tailnet are in the [reach design](../design/reach.md).
+- **Built and reached:** setup records reach as off: `--yes` leaves it off, and a `--config` document that names a reach option other than `none` is refused. `@delo/reach` provides the `reach` service and the Tailscale private provider: `delorun reach on tailscale` or the yes answer in setup's Full mode turns the option on, and the home then binds the fixed listener port, opens the reach listener, and configures `tailscale serve` to the port. The provider refuses Funnel, removes serve rules on its port that it does not own, and rechecks Tailscale every minute by default; `delorun reach off` removes the rule.
+- **Not built:** the Funnel and own-domain providers, the visibility notes of the other options, the Funnel target, the socket variant, the own-domain checks of the CAA record and the ACME challenge rule, and the `reach-binding` and `own-domain-caa` checks, which `delorun verify` reports as not run. No real tailnet or phone has exercised the Tailscale private provider; the [reach design](../design/reach.md#never-run-on-a-real-tailnet-or-phone) lists what stays untried. The rules for reach on the person's own tailnet are in the [reach design](../design/reach.md).
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
 

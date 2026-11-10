@@ -20,7 +20,7 @@ Delo's protections are in the CLI profile, which `delorun setup` creates and `de
 | --- | --- | --- | --- |
 | Native workspace | commands run directly in your account, confined by the OS | bwrap or Landlock on Linux, Seatbelt on macOS: the kernel denies, not the tool. On Windows the ACL runner confines writes only | yes |
 | Docker workspace (S2) | commands run in a container per workspace | the supervisor of [C9](../contracts/c09-runtime-supervisor.md) | no: the supervisor is built and no command launches it |
-| Reach listener, your own tailnet | the same routes on your Tailscale address | Tailscale's device identity plus the admission of [C4](../contracts/c04-admission.md) and the [reach design](../design/reach.md) | no |
+| Reach listener, your own tailnet | the routes a device session is allowed on your Tailscale address | an approved device's key plus the admission of [C4](../contracts/c04-admission.md) and the [reach design](../design/reach.md) | yes, off until you turn it on |
 | Reach listener, a self-hosted relay | the same routes on your own domain | the relay of [C6](../contracts/c06-relay-protocol.md) and the admission of C4 | no: the relay's server is built and no home connects to it |
 
 A **self-hosted home** is not a separate vector: it is the same home directory on a machine you own.
@@ -55,7 +55,7 @@ The rows are the guarantees a person reasonably expects of a native workspace. "
 
 - **Native, CLI profile.** The OS sandbox is the boundary. On Linux and macOS your home is hidden from commands; the rest of your account and the network are not, exactly as in stock. On Windows commands can read the home.
 - **Native, `delorun headless`.** The CLI profile's sandbox overlay, the fetch guard, the instruction write consent, the full-access consent and the privacy defaults apply; the MCP and schedule consents have nothing to guard, because the profile mounts no MCP client and no schedule runtime.
-- **Docker workspaces and reach.** Not built. Their rules are in [C9](../contracts/c09-runtime-supervisor.md), the [reach design](../design/reach.md) and the contracts it names, each with a status of what exists.
+- **Docker workspaces and reach.** Docker workspaces are not built, and reach is built for the Tailscale private route only. Their rules are in [C9](../contracts/c09-runtime-supervisor.md), the [reach design](../design/reach.md) and the contracts it names, each with a status of what exists.
 - **Self-hosted home, local only.** No listener opens beyond the loopback studio, and nothing leaves the machine except what you ask for: model requests, the tools you enable and the release checks.
 
 ## Self-hosting
@@ -74,7 +74,7 @@ Delo is stock DSH with a Delo layer. On confinement the two are the same mechani
 | | Stock | Delo | Where |
 | --- | --- | --- | --- |
 | Home protection | nothing hides the home from a confined command | in the CLI profile the home is a protected read for the in-process tools, and for confined commands on Linux and macOS | [C1](../contracts/c01-home-layout.md) |
-| Reach | none | not built | [reach design](../design/reach.md) |
+| Reach | none | Tailscale private only, off until the person turns it on; no Funnel, relay or passkey | [reach design](../design/reach.md) |
 | Permission consent | none | in the CLI profile: a refusal of full-access switches, the instruction-layer consent for file-tool writes, the refusal of new stdio MCP servers, the schedule consent and the fetch guard; off in the parity composition | [C16](../contracts/c16-parity-composition.md) |
 | Releases | no verification | signature, freshness, release-log check and file list before running | [C2](../contracts/c02-release-manifest.md), [C18](../contracts/c18-release-log.md) |
 | Updates | silent disable and rewrite | report, snapshot, restore and rollback for the CLI home | [C3](../contracts/c03-update-report.md) |

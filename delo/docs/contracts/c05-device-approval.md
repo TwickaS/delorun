@@ -14,10 +14,10 @@ A home admits a browser or desktop app only as a trusted device: a device whose 
 <a id="status"></a>
 ## Status
 
-Device approval is not built, and the part of it that exists is reached by nothing.
+Device approval is built for the Tailscale private route only, and reached while the person has turned reach on.
 
-- **Built, reached by nothing:** `@delo/home-auth` holds the single-use owner code, the owner claim answered only on the loopback listener, the device list and device removal; no shipped profile mounts the package and no `delorun` command calls it, so a home has no owner and no device records. The home key that `delorun export` creates at `secrets/home-auth/home-key.pem` signs archives only ([C8](c08-archive-and-trash.md)).
-- **Not built:** device keys, approval requests and the match code, sign-in with a device key, the approval prompt, removal from another device, `delorun devices` in every form, reset, the recovery kit, the desktop app's connection to another home and its TLS pin, and alerts. The rules for the private tailnet route are in the [reach design](../design/reach.md).
+- **Built and reached:** `@delo/home-auth`, which every CLI profile loads, holds the single-use owner code, the owner claim answered only on the loopback listener, the approval window, the pending requests, the match code, local approval (the loopback studio's form and `delorun devices approve`), sign-in with the device key on the Tailscale private listener, the device list and device removal (`delorun devices list | approve | remove | code`). The home key that `delorun export` creates at `secrets/home-auth/home-key.pem` signs archives only ([C8](c08-archive-and-trash.md)).
+- **Not built:** approval from a trusted device in a live session and its approval prompt, removal from another device, `delorun devices reset`, the recovery kit, passkeys and OpenID Connect sign-in, the desktop app's connection to another home and its TLS pin, and alerts. The rules for the private tailnet route are in the [reach design](../design/reach.md).
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
 
@@ -113,7 +113,7 @@ The new device reads its request's state with `GET /auth/device/request/<request
 <a id="approval-window"></a>
 ### Approval window
 
-On a listener whose identity factor is `tailnet-membership` ([C14](c14-oidc-passkeys.md#tailnet-membership)), the home accepts approval requests only while an approval window is open, which replaces the standing queue there: every request on that route has the source `127.0.0.1`, so any device on the tailnet could otherwise keep the 5 pending slots full. The person opens a window at the home's own computer only, with the loopback studio's "Add a device" (`POST /auth/devices/window` on the loopback listener, from the studio's own origin) or with `delorun devices approve`. A window lasts 5 minutes and closes at the first approval. Outside a window `POST /auth/device/request` answers `403 APPROVALS_CLOSED` without reading the body. A request accepted in a window keeps its own 5-minute expiry.
+On a listener whose identity factor is `tailnet-membership` ([C14](c14-oidc-passkeys.md#tailnet-membership)), the home accepts approval requests only while an approval window is open, which replaces the standing queue there: every request on that route has the source `127.0.0.1`, so any device on the tailnet could otherwise keep the 5 pending slots full. The person opens a window at the home's own computer only, with the loopback studio's "Add a device" (`POST /auth/devices/window` on the loopback listener, from the studio's own origin) or with `delorun devices approve`. A window lasts 5 minutes and closes at the first approval. Outside a window `POST /auth/device/request` answers `403 APPROVALS_CLOSED` without reading the body. A request accepted in a window keeps its own 5-minute expiry. The home cannot verify where a request comes from: any device on the tailnet can ask while a window is open, and the match code is what binds an approval to the device whose screen the person reads.
 
 <a id="match-code"></a>
 ### Match code

@@ -40,9 +40,9 @@ At most 5 requests wait at a time. When a phone is told that 5 requests are wait
 
 The phone then signs in by itself with a key that never leaves it. Outside an approval window, the home refuses every request to be approved. `delorun devices list` and the Devices section list every approved device.
 
-Only you at your computer can open the window, see the waiting device and approve it. The studio's Devices section answers only the studio you opened from the address `delorun start` printed, and the `delorun devices` commands talk to Delorun through a channel that only your own commands can open. Another program on your computer, a command a chat runs, or another user of the computer can reach the studio's port, but not these.
+Approval is meant for you at your computer. The studio's Devices section answers only a browser that holds the studio's own sign-in, and the `delorun devices` commands talk to Delorun through a channel that needs a token from a file in your Delorun home. Another program or another user of the computer can reach the studio's port, but needs that sign-in to use the section. A command a chat runs in the sandbox cannot read the secret behind the sign-in or the token file, and cannot reach the channel. A program running as your own user outside the sandbox can read both, so it can open the window and approve a device that asks, with you not there; a command you let run with full access is such a program.
 
-The code proves that the device you approve is the device whose screen you read: the code is computed from that device's key and from the request it sent, the computer never shows or returns it, and a code read from another device does not match. The code does not prove who holds the device; anyone holding your unlocked phone when you approve it gets the approval.
+Delorun cannot verify where a request comes from: any device on your tailnet can ask while the window is open. The code is what ties an approval to the device you are looking at. The code proves that the device you approve is the device whose screen you read: the code is computed from that device's key and from the request it sent, the computer never shows or returns it, and a code read from another device does not match. The code does not prove who holds the device; anyone holding your unlocked phone when you approve it gets the approval.
 
 ## What an approved phone can and cannot do
 
@@ -67,7 +67,7 @@ Other refused actions show the studio's error message. Images that a reply shows
 
 The limit is partial. A workspace that you already put on full access at your computer can still be driven from the phone, and a command there can do anything your user can do. What protects you is the phone's own lock and removing the device when you lose it. A phone's session ends after 12 hours in which the phone sent nothing, and 14 days after sign-in; its open connections close at that moment. Approving or removing a device closes every phone's open connections; each phone then signs in again from the sign-in page, with its own key.
 
-No outside security review of remote access has happened yet.
+No outside security review of remote access has happened. Its tests fake `tailscale`, and no real tailnet or phone has exercised it; the [reach design](../design/reach.md#never-run-on-a-real-tailnet-or-phone) lists what stays untried.
 
 ## Remove a device
 

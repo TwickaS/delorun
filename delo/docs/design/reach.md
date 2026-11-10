@@ -16,14 +16,19 @@ Reach lets a person open their studio from their own phone or laptop over their 
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
+- [Never run on a real tailnet or phone](#never-run-on-a-real-tailnet-or-phone)
 - [What is built so far](#what-is-built-so-far)
 
 ## What exists today
 
-- No shipped profile mounts `@delo/home-auth`, and no `delorun` command uses it, so none of its routes is served. The package serves three routes, each answered only on the loopback studio: the owner claim with a single-use owner code, the device list, and device removal, which ends the device's sessions and closes its reach connections. A claim that arrives on a reach listener, or whose `Host` names a reach address, is refused with `OWNER_CLAIM_LOOPBACK_ONLY` and claims nothing. The device list and removal refuse a `Host` that names a reach address, and removal refuses a request from another origin. A request that no listener stamped is read as a loopback arrival; the routes above also require a loopback `Host`, so such a request that names a reach address is still refused.
-- Upstream's connection carries Delo's reach listener with the dispatch order, Content Security Policy and Trusted Types of [C4](../contracts/c04-admission.md), and the `authenticator` Service Definition. Nothing outside tests opens a reach listener, and no package provides `authenticator`, so upstream's own admission runs.
+- **Tailnet-private reach is built and off until the person turns it on** with `delorun reach on tailscale` or the yes answer in setup's Full mode. `@delo/reach` binds a fixed port on `127.0.0.1`, chosen once from 20000 to 32767, relays it to a reach listener and configures `tailscale serve` to that port, never through `sudo`. It refuses Funnel for the address and rechecks Tailscale every minute by default. Before it writes its own serve rule it removes any other rule on the serve port, and `delorun reach on` and `off` do the same, so a rule that an earlier run left in `tailscaled` is swept at the next start. Setup's `--yes` leaves reach off, and a `--config` document that names any reach option other than `none` is refused.
+- **A device is approved at the computer, with a match code.** The person opens a 5-minute approval window in the loopback studio or with `delorun devices approve`; the phone's sign-in page asks for approval and shows an 8-digit code; the person picks the waiting request and types the code. The loopback form needs the studio's own credential and origin. `delorun devices approve` reaches the home process through the update channel with the start token, which the Host's own channel token cannot replace. A window refuses requests outside it before reading the body, at most 5 requests wait, and three wrong codes cancel that request.
+- **A device signs in with its key.** An approved phone signs a fresh challenge with a key that never leaves it, and the home creates a session with the identity factor `tailnet-membership`: 12 hours idle, 14 days absolute, rolled after 24 hours of use and rotated by any approval or removal. Removing a device ends its sessions and closes its connections before the removal returns.
+- **A device session is allowed a fixed list.** The session speaks for a `reach-device` principal, and Gateway calls and events pass a policy that refuses by default. After sign-in, a device reaches only a fixed list of paths (the studio page and its assets, `/api`, `/plugins`, `/auth` and `/delo/reach/status`); every other web route, upgrade and fallback answers `403 LOOPBACK_REQUIRED`, whether or not the route checks anything itself. Under `/api`, an exact route answers a device only when the route admits non-owner callers, and the image upload route is the only one that does, for a chat the policy allows. A full-access approval answered from a device is refused and the prompt stays open for the computer. The phone shows "This needs you at your computer" with the action's name.
+- **The loopback routes** for the owner claim, the device list, the approval window, pending requests, approval and removal answer only on the loopback studio, behind the studio's credential, and refuse a `Host` that names a reach address.
+- The studio's Devices section lists devices, opens the window and shows the address's state from `GET /delo/reach/status`.
+- **Not built:** the Funnel and relay providers, passkeys, OpenID Connect, the recovery kit, `delorun devices reset`, alerts, and the records of loopback credentials with their idle limit.
 - The loopback studio admits upstream's launch token and its stateless `dsh-auth-*` cookies, which expire 30 days after they are minted, have no idle limit and no server-side record, and stay valid until the browser session secret in `.credentials.yaml` changes; Delo never changes it. Every browser holding such a cookie acts as the one owner. The loopback studio sends no Content Security Policy.
-- There is no sign-in route, no device approval, no reach provider, and no `delorun reach` or `delorun devices` command. Setup records reach as off: `--yes` leaves it off, and a `--config` document that names any reach option other than `none` is refused.
 
 ## The rules
 
@@ -47,6 +52,8 @@ Reach lets a person open their studio from their own phone or laptop over their 
 
 ### Loopback credentials
 
+Rules 10 to 12 are not built: upstream's connection emits `authenticator/minted` and no provider listens to it, so no record, idle limit or reset exists.
+
 10. `@delo/home-auth` records every loopback credential when upstream's connection mints it (the `authenticator/minted` event, which carries the SHA-256 hash of the credential and never its value), and refuses a loopback credential that verifies but has no record with `401 SESSION_EXPIRED`.
 11. A loopback credential expires 7 days after its last use or 30 days after it was minted, whichever comes first, and the rotation events of [C4](../contracts/c04-admission.md#rotation-and-revocation) replace it.
 12. `delorun devices reset` replaces the browser session secret in upstream's `.credentials.yaml`, so every loopback cookie minted before it stops working.
@@ -60,6 +67,9 @@ Reach lets a person open their studio from their own phone or laptop over their 
 - **An approved, unlocked phone.** Its holder has the chats and can drive the agent within what was already granted at the computer. The limit is partial: a workspace that the person put on full access at the computer can still be driven from the phone, and a command run there can do anything the person's user can, including writing the device records. The protections are the phone's own lock, removing the device at the computer, and the remote session's idle timeout.
 - **Script in the loopback studio.** Script injected into the loopback studio can open a window and approve a device, which on this route then needs no second factor. Delo sets no content security policy of its own on the loopback studio.
 - **Tailscale.** Tailscale can add a device to the tailnet unless Tailnet Lock is on, and it holds the `ts.net` certificate's key. An added device still needs an approval at the home's computer.
+- **Where a request comes from.** Every request on the route has the source `127.0.0.1`, so the home cannot verify the origin of an approval request. Any tailnet device can ask while a window is open; the match code binds an approval to the device whose screen the person reads, and nothing shows who holds that device.
+- **The start token.** Approval at the computer rests on the agent being unable to read the start token (C1's confinement of its commands). A process of the person's user outside the sandbox can read the token and, over the update channel, open the approval window and approve a pending request with its match code, cancel requests, remove devices and obtain a fresh studio sign-in link. When it also controls a device that asks, it approves that device with nobody present.
+- **A home process that stops without cleaning up.** `tailscaled` keeps forwarding the address to the fixed port until the next start or `delorun reach off`. Another local user who binds that port in that time is served to the phone's origin ([C7](../contracts/c07-reach-providers.md#what-this-does-not-prove)).
 - **No outside review.** No outside security review of this design or of reach has happened.
 
 ## Denial tests
@@ -75,10 +85,26 @@ Reach lets a person open their studio from their own phone or laptop over their 
 - `a foreign Host on the serve target is refused`
 - `owner claim on the tailnet route is refused`
 - `tailnet-membership is refused on a Funnel or own-domain address`
-- `idle and absolute limits refuse a loopback credential`
-- `a loopback credential without a record is refused`
-- `a loopback cookie minted before devices reset is refused after it`
+- `idle and absolute limits refuse a loopback credential` (not built)
+- `a loopback credential without a record is refused` (not built)
+- `a loopback cookie minted before devices reset is refused after it` (not built)
+
+## Never run on a real tailnet or phone
+
+The specs fake `tailscale` and drive the fixed port over loopback. These have never run against a real tailnet or phone:
+
+- the real output of `tailscale serve status --json`, as `readServeRules` reads it;
+- the Funnel fields of that output, for Funnel detection and refusal;
+- `--https=<port> off` on older Tailscale clients, which may take another form;
+- foreground `tailscale serve` sessions, which `readServeRules` reads and does not create;
+- the sign-in page in a real phone browser: the IndexedDB device key, WebCrypto signing and the Content Security Policy;
+- the studio on a phone under the allowlist;
+- the refused-answer notice for a full-access prompt;
+- image upload from a phone;
+- the 24-hour token roll on a phone;
+- the Devices section with a real launch cookie;
+- the cost of a 1,000-chat list on a real phone page.
 
 ## What is built so far
 
-The loopback-only owner claim, device list and device removal are built in `@delo/home-auth`, and the reach listener's dispatcher in upstream's connection, but no shipped profile mounts either, so they protect no one; fundamental F11 names them ([fundamentals](../security/fundamentals.md)). Sign-in, the approval window, local approval, the `tailnet-membership` factor, fail-closed arrival, the refusals of a remote session, the loopback credential records and limits, the provider and the commands are not built; fundamentals F12 and F13 record them as designed.
+Fundamentals F11, F12 and F13 name the built refusals ([fundamentals](../security/fundamentals.md)). Passkeys, OpenID Connect, the recovery kit, reset, alerts, the Funnel and relay providers and the loopback credential records are not built.

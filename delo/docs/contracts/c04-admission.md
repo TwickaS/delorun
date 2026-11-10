@@ -14,11 +14,12 @@ Admission decides, for every HTTP request and every upgrade that reaches a home'
 <a id="status"></a>
 ## Status
 
-Only the loopback listener runs, with upstream's admission; the reach listener is built and opened by nothing, and Delo's provider is not built.
+The loopback listener runs with upstream's admission. The Tailscale private reach listener runs only while the person has turned reach on, admitted by `@delo/home-auth`; no other reach listener is opened.
 
 - **Built and reached:** the loopback listener at `127.0.0.1:3080` in the CLI profile, which admits a [one-time launch token](#launch-tokens) that `delorun open` and the start obtain from the home process, `/connect` and upstream's stateless `dsh-auth-*` cookies, as [sessions](#sessions) states, with upstream's `Host` and `Origin` checks on `/api` and `/connect`. Upstream's connection announces each loopback mint with `authenticator/minted`, and nothing listens to it.
-- **Built, reached by nothing:** the `authenticator` Service Definition, which no package provides, so upstream's connection admits with its own launch-token and cookie admission; the reach listener with the dispatch order, the refusal of upstream credentials, the response headers, the Content Security Policy, the Trusted Types header and the remote-image placeholder, which only tests open; and `@delo/home-auth`, which no shipped profile mounts and which does not provide `authenticator`.
-- **Not built:** an `authenticator` provider; the sign-in, device-challenge, passkey, OpenID Connect and recovery routes of the pre-login allowlist; reach session creation, rolling and rotation; the loopback credential records, the 7-day idle limit and the rotation of loopback credentials, and `delorun devices reset`, which are in the [reach design](../design/reach.md#loopback-credentials); and a Content Security Policy on the loopback studio.
+- **Built and reached while reach is on:** the `authenticator` Service Definition, which `@delo/home-auth` provides in every CLI profile and which keeps upstream's admission on the loopback listener; the Tailscale private reach listener with the dispatch order, the refusal of upstream credentials, the response headers, the Content Security Policy, the Trusted Types header and the remote-image placeholder; the pre-login routes except the passkey, OpenID Connect and recovery routes; and reach sessions with creation, rolling, rotation and the idle and absolute limits.
+- **Built, reached by nothing:** the Funnel and relay reach listeners, which only tests open.
+- **Not built:** the passkey, OpenID Connect and recovery routes of the pre-login allowlist; the loopback credential records, the 7-day idle limit and the rotation of loopback credentials, and `delorun devices reset`, which are in the [reach design](../design/reach.md#loopback-credentials); and a Content Security Policy on the loopback studio. Loopback credentials are upstream's launch cookie and API credential, admitted by upstream's built-in admission; no per-credential record exists, so no request is refused for lacking one.
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
 
@@ -117,7 +118,7 @@ Before sign-in, a reach listener serves only these exact method and path pairs. 
 | `POST /auth/recovery` | `@delo/home-auth` | Use of the recovery kit ([C5](c05-device-approval.md#recovery-kit)). |
 | `POST /auth/owner/claim` | `@delo/home-auth` | Answers `403 OWNER_CLAIM_LOOPBACK_ONLY` on every reach listener without reading the body, except where [C5](c05-device-approval.md#owner-claim) allows a claim on the Tailscale private target. |
 
-A listener's policy lists only the routes of this table that the home builds; in `0.1.0` that is every row except the passkey, OpenID Connect and recovery routes. A plugin route joins a reach listener's pre-login allowlist only when the profile's `home-auth` configuration lists its exact method and path in `preLoginRoutes`. A plugin's own declaration adds nothing. After sign-in, every route registered with upstream's web server is served on the reach listener.
+A listener's policy lists only the routes of this table that the home builds; in `0.1.0` that is every row except the passkey, OpenID Connect and recovery routes. A plugin route joins a reach listener's pre-login allowlist only when the profile's `home-auth` configuration lists its exact method and path in `preLoginRoutes`. A plugin's own declaration adds nothing. After sign-in, `admit` passes a reach request only when its target is a plain path, matched without its query, on `@delo/home-auth`'s `REACH_DEVICE_PATHS` (the studio page and its assets, `/api` and its upgrade, `/plugins`, `/auth` and `/delo/reach/status`), and refuses every other route, upgrade and the fallback with `403 LOOPBACK_REQUIRED`.
 
 <a id="sessions"></a>
 ### Sessions
@@ -209,7 +210,7 @@ Trusted Types are enforced on reach listeners by the `require-trusted-types-for 
 | `CONNECT_REFUSED` | 401 | `/connect` on a reach listener. |
 | `UPSTREAM_COOKIE_REFUSED` | 401 | A `dsh-auth-*` cookie on a reach listener. |
 | `NOT_SIGNED_IN` | 401 | No admitted session and no allowlisted route. |
-| `SESSION_EXPIRED` | 401 | An idle or absolute limit passed, or a loopback credential without a record. |
+| `SESSION_EXPIRED` | 401 | A reach session's idle or absolute limit passed. |
 | `ROTATION_REQUIRED` | 401 | A rotated reach session's next request. |
 | `OWNER_CLAIM_LOOPBACK_ONLY` | 403 | `POST /auth/owner/claim` on a reach listener where no claim is allowed. |
 | `REACH_LISTENER_HOST_OVERRIDE` | Load failure | A profile row sets a reach listener's `host` or `port`. |
@@ -220,15 +221,15 @@ Trusted Types are enforced on reach listeners by the `require-trusted-types-for 
 - Upstream's `packages/client/connection`: the `Authenticator` Service Definition, its default provider, the per-listener `admit` calls, and each reach listener's dispatcher, which applies the dispatch order.
 - Upstream's `packages/host/webserver`: the reach listeners' sockets and streams, the gate that calls the dispatcher before any route, upgrade handler or the fallback, the response headers and the nonce on inline elements.
 - Upstream's `packages/client/modules/src/client/system.ts` and the upstream components that assign `innerHTML`: the Trusted Types policies.
-- `delo/packages/home-auth/`: the loopback-only owner claim, device list and removal, and a session store; no shipped profile mounts it, and it does not provide `authenticator`, the pre-login routes or rotation.
-- The reach providers of [C7](c07-reach-providers.md), which are not built: the reach listeners' targets and the relay client's handoff to `reach-self-hosted-relay`.
+- `delo/packages/home-auth/`: the `authenticator` provider with the pre-login routes, the session store and rotation, the loopback-only owner claim, device list, approval window and removal; every CLI profile loads it. It records no loopback credential.
+- The reach providers of [C7](c07-reach-providers.md): the Tailscale private provider is built and supplies that listener's target; the Funnel provider and the relay client's handoff to `reach-self-hosted-relay` are not built.
 - `delo/packages/contract-admission/`: listener ids, refusal codes, the cookie name and the limits.
 - [C10](c10-host-qualified-keys.md): the cookie names it leaves outside its inventory. [C15](c15-verification-checks.md): the `reach-binding` check reads the listener table.
 
 <a id="compatibility"></a>
 ## Compatibility
 
-Without an `authenticator` provider upstream's admission runs unchanged, so the CLI profile admits loopback requests as stock DSH does, except that `@delo/bundle-local` turns on upstream's one-time launch tokens there; upstream's profiles, the desktop app and the parity composition keep the reusable launch token. Reach is off in the parity composition ([C16](c16-parity-composition.md)), so no reach listener runs there. Admission adds no model-visible input and no session event.
+Without an `authenticator` provider upstream's admission runs unchanged; with `@delo/home-auth`, which keeps upstream's admission on the loopback listener, the CLI profile still admits loopback requests as stock DSH does, except that `@delo/bundle-local` turns on upstream's one-time launch tokens there; upstream's profiles, the desktop app and the parity composition keep the reusable launch token. Reach is off in the parity composition ([C16](c16-parity-composition.md)), so no reach listener runs there. Admission adds no model-visible input and no session event.
 
 The cookie name `__Host-delo-session`, the listener ids, the refusal codes and the session store's format, version 1, are fixed. Changing a lifetime, a header value or the pre-login allowlist is a change to this contract. A newer session store format is a new file with a new version; a provider that reads a store of an unknown version starts with no reach sessions and keeps the file.
 

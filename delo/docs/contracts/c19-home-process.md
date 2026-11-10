@@ -300,7 +300,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 - **Landlock.** A confined command connects to the update channel; the refusal rests only on the token being unreadable. Such a command can also hold connections up to the channel's limits, which affects availability.
 - **Full access.** A command approved for `danger-full-access` can read the token and send any request a `delorun` command can send, within the closed request set.
 - **Process memory.** On macOS and Windows the protection of the home process's memory rests on the operating system's own rules for reading another process's memory, which no Delo test proves.
-- **The person's own processes.** A process of the person's user outside the sandbox can read the token and run `delorun update` itself.
+- **The person's own processes.** A process of the person's user outside the sandbox can read the token and run `delorun update` itself. With the token it can also run `devices.approve`, which opens the approval window and approves a pending request given its match code, `devices.remove`, and `studio.open-token`, which returns a fresh studio sign-in link. A holder that also controls a device that asks to be approved approves it with nobody present. The protection against the agent doing the same rests only on its commands being unable to read the token file or connect to the socket.
 - **Code in the Host.** The Host's channel token stops a request the Host sends over the channel, such as one it forwards for a studio session, from obtaining a studio link. It does not confine Host code: a Host plugin runs unconfined in the home process and can call upstream's `authenticatedUrl` itself or read the token file.
 
 ## Enforcement per platform and dialect
