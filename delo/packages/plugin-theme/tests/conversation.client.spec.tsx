@@ -79,12 +79,12 @@ describe('the Conversation section', () => {
   it('changes a part of Custom in place, with every part reachable: thinking, window height, grouping, live detail, terminals, folding and its timing', async () => {
     const stored: CustomDisplay = { ...PARTS, thinking: 'window', thinkingWindowLines: 6 }
     const { writes } = open({ transcriptView: 'custom', customDisplay: stored, collapseTiming: 'completion', foldedReplies: 'all' })
-    await click(screen.getByRole('tab', { name: '10 lines' }))
-    await click(screen.getByRole('tab', { name: en['grouping.none'] }))
+    await click(screen.getByRole('radio', { name: '10 lines' }))
+    await click(screen.getByRole('radio', { name: en['grouping.none'] }))
     await click(screen.getByRole('switch', { name: en.liveDetail }))
-    await click(screen.getByRole('tab', { name: en['terminals.open'] }))
-    await click(screen.getByRole('tab', { name: en['timing.next-input'] }))
-    await click(screen.getByRole('tab', { name: en['replies.final'] }))
+    await click(screen.getByRole('radio', { name: en['terminals.open'] }))
+    await click(screen.getByRole('radio', { name: en['timing.next-input'] }))
+    await click(screen.getByRole('radio', { name: en['replies.final'] }))
     await click(screen.getByRole('switch', { name: en.fold }))
     expect(writes).toEqual([
       ['customDisplay', { ...stored, thinkingWindowLines: 10 }],
@@ -114,7 +114,7 @@ describe('the Conversation section', () => {
     open({ transcriptView: 'detailed' })
     expect(document.querySelector('[class*="pvWorking"]')).toBeNull()
     expect(screen.getByText(en['preview.answer'])).toBeTruthy()
-    await click(within(screen.getByRole('tablist', { name: en.preview })).getByRole('tab', { name: en['preview.running'] }))
+    await click(within(screen.getByRole('radiogroup', { name: en.preview })).getByRole('radio', { name: en['preview.running'] }))
     expect(document.querySelector('[class*="pvWorking"]')?.textContent).toBe(en['preview.running'])
     expect(screen.queryByText(en['preview.answer'])).toBeNull()
   })

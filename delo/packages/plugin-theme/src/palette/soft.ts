@@ -13,13 +13,19 @@ import type { Rgb } from './color.ts'
 import { STOCK_FONT_STACKS, STOCK_TOKENS } from './stock.ts'
 import type { StockTokens } from './stock-css.ts'
 
-/** A text role kept at a minimum contrast on a surface in both schemes. */
+/** A text role kept at a minimum contrast on every surface it sits on, in both schemes. */
 export interface QuietText {
-  /** The surface the text sits on. */
-  readonly surface: string
-  /** The WCAG ratio the text reaches there. */
+  /** The surfaces the text sits on. */
+  readonly surfaces: readonly string[]
+  /** The WCAG ratio the text reaches on each. */
   readonly contrast: number
 }
+
+/** The opaque background roles quiet text sits on. */
+export const TEXT_SURFACES = [
+  '--dsw-alias-bg-base', '--dsw-alias-bg-layer-1', '--dsw-alias-bg-layer-2', '--dsw-alias-bg-layer-3',
+  '--dsw-specific-sidebar-fill', '--dsw-alias-bg-module-platform',
+] as const
 
 /** A palette: the neutral seed, the surfaces it sets apart from upstream's steps, its quiet-text floors and its state roles. */
 export interface PaletteSpec {
@@ -33,7 +39,7 @@ export interface PaletteSpec {
   readonly states: TokenLayer
 }
 
-/** Soft: warm stone greys, an off-white page and a sidebar one step below it, captions at 3:1, and running work in its own blue. */
+/** Soft: warm stone greys, an off-white page and a sidebar one step below it, secondary and tertiary text at 4.5:1, captions at 3:1, and running work in its own blue. */
 export const SOFT: PaletteSpec = {
   neutral: { hue: 85, chroma: 0.008 },
   lightSurfaces: {
@@ -41,7 +47,9 @@ export const SOFT: PaletteSpec = {
     '--dsw-specific-sidebar-fill': 0.968,
   },
   quietText: {
-    '--dsw-alias-label-caption': { surface: '--dsw-alias-bg-base', contrast: 3 },
+    '--dsw-alias-label-secondary': { surfaces: TEXT_SURFACES, contrast: 4.5 },
+    '--dsw-alias-label-tertiary': { surfaces: TEXT_SURFACES, contrast: 4.5 },
+    '--dsw-alias-label-caption': { surfaces: ['--dsw-alias-bg-base'], contrast: 3 },
   },
   states: {
     '--dsw-alias-label-deep-diving': {
@@ -150,9 +158,13 @@ export function paletteLayer(spec: PaletteSpec, stock: StockTokens = STOCK_TOKEN
 
 function floored(values: SchemeValues, role: string, floor: QuietText): string {
   const text = resolveColor(values, role)
-  const surface = resolveColor(values, floor.surface)
-  if (text === undefined || surface === undefined) throw new Error(`quiet text role ${role} or its surface ${floor.surface} does not resolve to a colour`)
-  return textSafe(text, surface, floor.contrast)
+  if (text === undefined) throw new Error(`quiet text role ${role} does not resolve to a colour`)
+  // Text moves away from the surfaces one after another; a move away from one never reduces contrast on the others of the same side.
+  return formatRgb(floor.surfaces.reduce((color, name) => {
+    const surface = resolveColor(values, name)
+    if (surface === undefined) throw new Error(`quiet text role ${role} or its surface ${name} does not resolve to a colour`)
+    return textSafeColor(color, surface, floor.contrast)
+  }, text))
 }
 
 /** Text and marks on the accent fill: the palette's near-black or white, whichever reads better on it, so the fill can be the exact accent. */

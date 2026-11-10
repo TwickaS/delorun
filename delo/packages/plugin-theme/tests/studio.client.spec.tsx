@@ -11,7 +11,8 @@ import {
   apply, BRAND_NS, CONVERSATION, inject, LAYERS, LOOK_ROW, NS, PLUGIN_ID, SECTION_ID, STOCK_ATTRIBUTE,
 } from '../src/client/index.ts'
 import { en as brandEn, zh as brandZh } from '../src/client/brand-locales.ts'
-import { COPY } from '../src/client/copy.ts'
+import { bootStyle } from '../src/palette/layers.ts'
+import { COPY, COPY_ZH } from '../src/client/copy.ts'
 import { VOCABULARY } from '../src/client/vocabulary.ts'
 import type { AppearanceInjected } from '../src/client/AppearanceSection.tsx'
 import type { LookRowInjected } from '../src/client/LookRow.tsx'
@@ -136,12 +137,12 @@ describe('with the studio additions on', () => {
     const { ctx, fiber, layers, slots, dictionaries, overrides, faces } = await mount(form)
     expect(ctx.get('deloStudio')).toBeDefined()
     expect([...layers.keys()]).toEqual([LAYERS.palette, LAYERS.accent, LAYERS.type, LAYERS.density])
-    expect(layers.get(LAYERS.density)).toEqual({ '--dsh-density': { light: '1', dark: '1' } })
+    expect(layers.get(LAYERS.density)).toMatchObject({ '--dsh-density': { light: '1', dark: '1' }, '--delo-space-5': { light: 'calc(12px * var(--dsh-density, 1))' } })
     expect(layers.get(LAYERS.accent)?.['--dsw-alias-brand-primary']?.light).toBe('rgb(229 115 74)')
     // Vitest compiles stylesheets to empty text, so the spec checks the element, not its rules.
     expect(document.head.querySelector(`style[data-plugin-css="${PLUGIN_ID}/fonts.css"]`)).not.toBeNull()
     expect(faces()?.textContent).toContain("[data-effort-levels='3']")
-    expect([...slots.keys()].sort()).toEqual(['conversation.hero.headline', CONVERSATION.id, SECTION_ID].sort())
+    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', CONVERSATION.id, SECTION_ID].sort())
     expect(slots.get(SECTION_ID)?.options).toMatchObject({ name: 'settings.section', order: 1, locale: NS })
     expect(slots.get(CONVERSATION.id)?.options).toMatchObject({ order: 2, locale: CONVERSATION.ns })
     expect(slots.get(SECTION_ID)?.options.label?.()).toBe(en.nav)
@@ -151,7 +152,7 @@ describe('with the studio additions on', () => {
     expect(dictionaries.get(CONVERSATION.ns)).toEqual({ en: conversationEn, zh: conversationZh })
     expect(dictionaries.get(BRAND_NS)).toEqual({ en: brandEn, zh: brandZh })
     expect(dictionaries.has(LOOK_ROW.ns)).toBe(false)
-    const vocabulary = [...new Set([...Object.keys(VOCABULARY).flatMap(ns => [`${ns}/en`, `${ns}/zh`]), ...Object.keys(COPY).map(ns => `${ns}/en`)])]
+    const vocabulary = [...new Set([...Object.keys(VOCABULARY).flatMap(ns => [`${ns}/en`, `${ns}/zh`]), ...Object.keys(COPY).map(ns => `${ns}/en`), ...Object.keys(COPY_ZH).map(ns => `${ns}/zh`)])]
     expect([...overrides].sort()).toEqual([...vocabulary].sort())
     expect(document.documentElement.hasAttribute(STOCK_ATTRIBUTE)).toBe(false)
     await fiber.dispose()
@@ -163,8 +164,25 @@ describe('with the studio additions on', () => {
 
   it('leaves the Conversation section out while the Host does not serve upstream\'s chat settings', async () => {
     const { slots, fiber } = await mount(themeForm(STUDIO_ON), [])
-    expect([...slots.keys()].sort()).toEqual(['conversation.hero.headline', SECTION_ID].sort())
+    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', SECTION_ID].sort())
     await fiber.dispose()
+  })
+
+  it('puts the text wordmark in the hero\'s brand-mark seat, sized to upstream\'s mark, and takes it out with the look', async () => {
+    const { slots, fiber } = await mount(themeForm(STUDIO_ON))
+    const Mark = slots.get('conversation.hero.brand.mark')?.component
+    if (Mark === undefined) throw new Error('no brand mark')
+    render(<Mark t={makeTranslate(brandEn)} size={34} className="fish" />)
+    const mark = screen.getByText(brandEn['hero.mark'])
+    expect(mark.textContent).toBe('Delo')
+    expect(mark.className).toContain('fish')
+    expect(mark.style.minWidth).toBe('34px')
+    expect(mark.style.height).toBe('25px')
+    cleanup()
+    render(<Mark t={makeTranslate(brandEn)} size={34} />)
+    expect(screen.getByText('Delo').className).not.toContain('undefined')
+    await fiber.dispose()
+    expect(slots.has('conversation.hero.brand.mark')).toBe(false)
   })
 
   it('shows the headline, which says what the chat is for', async () => {
@@ -264,10 +282,44 @@ describe('turning the studio additions off', () => {
     if (section === undefined) throw new Error('no Appearance section')
     const Section = section.component
     render(<Section t={makeTranslate(en)} {...section.options.inject?.() as AppearanceInjected} />)
-    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: en['look.stock'] })) })
+    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: en['look.stock'] })) })
     expect(form.writes).toEqual([['studioAdditions', false]])
     expect(ctx.get('deloStudio')).toBeUndefined()
     await fiber.dispose()
+  })
+})
+
+describe('the first-paint style the host printed', () => {
+  /** Print the style as the host does, next to a style that is not Delo's. */
+  function printFirstPaint() {
+    const printed = document.createElement('style')
+    printed.textContent = bootStyle(STUDIO_ON)
+    const other = document.createElement('style')
+    other.textContent = 'body{margin:0}'
+    document.head.append(printed, other)
+    return { printed, other }
+  }
+
+  it('is gone when the plugin is disposed while the look is on, so upstream\'s colours return without a reload', async () => {
+    const { printed, other } = printFirstPaint()
+    expect(printed.textContent).toContain('--dsw-alias-brand-primary')
+    const { fiber } = await mount(themeForm(STUDIO_ON))
+    expect(printed.isConnected).toBe(true)
+    await fiber.dispose()
+    expect(printed.isConnected).toBe(false)
+    expect(other.isConnected).toBe(true)
+    other.remove()
+  })
+
+  it('is gone when the look leaves, while the plugin keeps running', async () => {
+    const { printed, other } = printFirstPaint()
+    const form = themeForm(STUDIO_ON)
+    const { fiber } = await mount(form)
+    await form.scope.set('studioAdditions', false)
+    expect(printed.isConnected).toBe(false)
+    expect(other.isConnected).toBe(true)
+    await fiber.dispose()
+    other.remove()
   })
 })
 

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { COPY } from '../src/client/copy.ts'
+import { COPY, COPY_ZH } from '../src/client/copy.ts'
 import { chatChinese, chatEnglish, generate, OUT, render, SOURCES, vocabularyOf } from '../scripts/gen-vocabulary.ts'
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -51,6 +51,22 @@ describe('the studio vocabulary', () => {
       const { en } = await import(`${ROOT}${source.module}`) as { en: Record<string, string> }
       expect(Object.keys(texts).filter(key => !(key in en))).toEqual([])
     }
+  })
+})
+
+describe('the hand-written Chinese copy', () => {
+  it('names only keys upstream\'s Chinese dictionaries have', async () => {
+    for (const [ns, texts] of Object.entries(COPY_ZH)) {
+      const source = SOURCES.find(entry => entry.ns === ns)
+      if (source === undefined) throw new Error(`no source for ${ns}`)
+      const { zh } = await import(`${ROOT}${source.module}`) as { zh: Record<string, string> }
+      expect(Object.keys(texts).filter(key => !(key in zh))).toEqual([])
+    }
+  })
+
+  it('renames the row menu\'s session ID and the trace ancestors', () => {
+    expect(COPY_ZH.workspace?.['menu.sessionId']).toBe('复制对话 ID')
+    expect(COPY_ZH.conversation?.['detail.trace.ancestors']).toBe('上级对话')
   })
 })
 

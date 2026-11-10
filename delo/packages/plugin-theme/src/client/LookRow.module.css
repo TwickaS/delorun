@@ -1,10 +1,14 @@
-/* The General row's layout follows upstream's preference rows: a text column, then the control. */
+/* The General row's layout follows upstream's preference rows: a text column, then the control.
+   The row shows while Delo's look is off, when `--delo-space-*` does not exist, so its spacing is declared here. */
 .row {
+  --look-row-gap: 8px;
+  --look-row-padding: 16px;
+  --look-row-text-gap: 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: calc(8px * var(--dsh-density, 1));
-  padding: calc(16px * var(--dsh-density, 1)) 0;
+  gap: var(--look-row-gap);
+  padding: var(--look-row-padding) 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -12,24 +16,24 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--look-row-text-gap);
   min-width: 0;
 }
 
 .title {
-  font-size: 14px;
-  line-height: 22px;
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
   color: var(--dsw-alias-label-primary);
 }
 
 .description {
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-secondary);
 }
 
 .failure {
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-state-error-primary);
 }

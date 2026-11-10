@@ -6,7 +6,7 @@
  */
 import { useCallback, useState, useSyncExternalStore } from 'react'
 import type { CustomDisplay, StepGrouping } from '@deepseek-ai/dsh-client-ui-chat'
-import { SegmentedControl, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
@@ -14,6 +14,7 @@ import {
   type ChatDisplaySettings, type DisplayMode,
 } from './conversation.ts'
 import { ConversationPreview } from './ConversationPreview.tsx'
+import { ChoiceGroup } from './ChoiceGroup.tsx'
 import css from './ConversationSection.module.css'
 
 /** What the section reads and writes. */
@@ -87,11 +88,10 @@ export function ConversationSection({ t, settings }: ConversationSectionProps) {
         <div className={css.previewFrame}>
           <div className={css.previewBar}>
             <span className={css.previewLabel}>{t('preview')}</span>
-            <SegmentedControl<'finished' | 'running'>
-              id="delo-conversation-preview-state"
-              className={css.segmented}
+            <ChoiceGroup<'finished' | 'running'>
               label={t('preview')}
               value={running ? 'running' : 'finished'}
+              disabled={false}
               options={[{ value: 'finished', label: t('preview.finished') }, { value: 'running', label: t('preview.running') }]}
               onChange={(next) => { setRunning(next === 'running') }}
             />
@@ -113,9 +113,7 @@ export function ConversationSection({ t, settings }: ConversationSectionProps) {
         {parts.thinking === 'window' && (
           <div className={css.row}>
             <Heading title={t('window')} />
-            <SegmentedControl<string>
-              id="delo-conversation-window"
-              className={css.segmented}
+            <ChoiceGroup<string>
               label={t('window')}
               value={String(parts.thinkingWindowLines)}
               disabled={disabled}
@@ -128,9 +126,7 @@ export function ConversationSection({ t, settings }: ConversationSectionProps) {
 
       <section className={`${css.block} ${css.row}`} aria-labelledby="delo-conversation-grouping">
         <Heading id="delo-conversation-grouping" title={t('grouping')} lead={t('grouping.lead')} />
-        <SegmentedControl<StepGrouping>
-          id="delo-conversation-grouping-control"
-          className={css.segmented}
+        <ChoiceGroup<StepGrouping>
           label={t('grouping')}
           value={parts.stepGrouping}
           disabled={disabled}
@@ -146,9 +142,7 @@ export function ConversationSection({ t, settings }: ConversationSectionProps) {
 
       <section className={`${css.block} ${css.row}`} aria-labelledby="delo-conversation-terminals">
         <Heading id="delo-conversation-terminals" title={t('terminals')} lead={t('terminals.lead')} />
-        <SegmentedControl<'closed' | 'open'>
-          id="delo-conversation-terminals-control"
-          className={css.segmented}
+        <ChoiceGroup<'closed' | 'open'>
           label={t('terminals')}
           value={parts.openTerminalCards ? 'open' : 'closed'}
           disabled={disabled}
@@ -166,9 +160,7 @@ export function ConversationSection({ t, settings }: ConversationSectionProps) {
           <>
             <div className={css.row}>
               <Heading title={t('timing')} />
-              <SegmentedControl<'completion' | 'next-input'>
-                id="delo-conversation-timing"
-                className={css.segmented}
+              <ChoiceGroup<'completion' | 'next-input'>
                 label={t('timing')}
                 value={timing}
                 disabled={disabled}
@@ -178,9 +170,7 @@ export function ConversationSection({ t, settings }: ConversationSectionProps) {
             </div>
             <div className={css.row}>
               <Heading title={t('replies')} />
-              <SegmentedControl<'all' | 'final'>
-                id="delo-conversation-replies"
-                className={css.segmented}
+              <ChoiceGroup<'all' | 'final'>
                 label={t('replies')}
                 value={replies}
                 disabled={disabled}

@@ -20,16 +20,16 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the ctx.theme Context merge.
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
-// Type-only: the 'conversation.hero.headline' SlotMap entry.
+// Type-only: the 'conversation.hero.headline' and 'conversation.hero.brand.mark' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { THEME_ROW_ID, type ThemeSettings } from '../config.ts'
-import { STOCK_ATTRIBUTE } from '../palette/layers.ts'
+import { FIRST_PAINT_MARK, STOCK_ATTRIBUTE } from '../palette/layers.ts'
 import { AppearanceSection, type AppearanceInjected, type SchemePreference } from './AppearanceSection.tsx'
-import { HeroHeadline } from './brand.tsx'
+import { HeroHeadline, HeroWordmark } from './brand.tsx'
 import { en as brandEn, zh as brandZh, type BrandLocaleKey } from './brand-locales.ts'
 import { ThemeController } from './controller.ts'
 import { effortBarsCss } from './effort.ts'
-import { COPY } from './copy.ts'
+import { COPY, COPY_ZH } from './copy.ts'
 import { VOCABULARY } from './vocabulary.ts'
 import fonts from './fonts.css?inline'
 import { CHAT_NAMESPACE, type ChatDisplaySettings } from './conversation.ts'
@@ -148,13 +148,25 @@ export function apply(ctx: Context): void {
     return () => {
       unsubscribe()
       active.dispose()
+      retireFirstPaint(document)
     }
   }, 'delo-theme: studio additions switch')
 }
 
 /**
+ * Remove the first-paint style element the host printed into the page, so
+ * upstream's colours return at once instead of at the next reload.
+ * @param doc - the studio's document.
+ */
+function retireFirstPaint(doc: Document): void {
+  for (const element of doc.querySelectorAll('style')) {
+    if (String(element.textContent).startsWith(FIRST_PAINT_MARK)) element.remove()
+  }
+}
+
+/**
  * The stock look's one registration: the General row that turns the studio
- * additions on, and the mark that retires a first-paint style the page holds.
+ * additions on, and the removal of a first-paint style the page holds.
  * @param ctx - the plugin's context.
  * @param form - the theme row's settings form.
  * @returns the registration set.
@@ -162,6 +174,7 @@ export function apply(ctx: Context): void {
 function registerStockEntry(ctx: Context, form: ConfigForm<ThemeSettings>): Registration {
   const root = document.documentElement
   root.setAttribute(STOCK_ATTRIBUTE, '')
+  retireFirstPaint(document)
   const disposers = [
     ctx.locale.register(LOOK_ROW.ns, { en: lookEn, zh: lookZh }),
     ctx.slots.inject('settings.general.item', () => ctx.slots.register({
@@ -213,10 +226,12 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     ctx.configForms.whileServed([CHAT_NAMESPACE], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
       name: 'settings.section', id: CONVERSATION.id, order: CONVERSATION.order, label: () => conversationT('title'), locale: CONVERSATION.ns, inject: () => chat,
     }, ConversationSection))),
+    ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark', locale: BRAND_NS }, HeroWordmark)),
     ctx.slots.inject('conversation.hero.headline', () => ctx.slots.register({ name: 'conversation.hero.headline', locale: BRAND_NS }, HeroHeadline)),
     ...Object.entries(VOCABULARY).flatMap(([ns, { en: english, zh: chinese }]) => [ctx.locale.override(ns, 'en', english), ctx.locale.override(ns, 'zh', chinese)]),
     // After the vocabulary, so a hand-written text wins over a generated one.
     ...Object.entries(COPY).map(([ns, english]) => ctx.locale.override(ns, 'en', english)),
+    ...Object.entries(COPY_ZH).map(([ns, chinese]) => ctx.locale.override(ns, 'zh', chinese)),
     ctx.provide('deloStudio', studio),
   ]
   return {

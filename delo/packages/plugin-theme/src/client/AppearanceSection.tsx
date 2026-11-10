@@ -5,7 +5,6 @@
  * density, contrast on a slider, and effort as a name or bars.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
-import { SegmentedControl } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
@@ -16,6 +15,7 @@ import { previewColors, type SchemePreview } from '../palette/layers.ts'
 import { ACCENTS, FONT_FAMILIES, parseHex } from '../palette/soft.ts'
 import { STOCK_FONT_STACKS } from '../palette/stock.ts'
 import css from './AppearanceSection.module.css'
+import { ChoiceGroup } from './ChoiceGroup.tsx'
 
 /** The colour-scheme preference, as upstream's theme service keeps it. */
 export type SchemePreference = 'light' | 'dark' | 'system'
@@ -184,7 +184,7 @@ export function AppearanceSection({ t, settings, scheme, useStockLook }: Appeara
     <div className={css.section}>
       <section className={`${css.block} ${css.row}`} aria-labelledby="delo-appearance-look">
         <Heading id="delo-appearance-look" title={t('look')} lead={t('look.lead')} />
-        <SegmentedControl<(typeof LOOKS)[number]> id="delo-appearance-look-control" label={t('look')} value="delo" disabled={disabled}
+        <ChoiceGroup<(typeof LOOKS)[number]> label={t('look')} value="delo" disabled={disabled}
           options={LOOKS.map(look => ({ value: look, label: t(`look.${look}`) }))}
           onChange={() => { track(useStockLook()) }} />
       </section>
@@ -333,7 +333,7 @@ export function AppearanceSection({ t, settings, scheme, useStockLook }: Appeara
 
       <section className={`${css.block} ${css.row}`} aria-labelledby="delo-appearance-effort">
         <Heading id="delo-appearance-effort" title={t('effort')} lead={t('effort.lead')} />
-        <SegmentedControl id="delo-appearance-effort-control" label={t('effort')} value={current.effort} disabled={disabled}
+        <ChoiceGroup label={t('effort')} value={current.effort} disabled={disabled}
           options={EFFORT_DISPLAYS.map(display => ({ value: display, label: t(`effort.${display}`) }))}
           onChange={(display) => { save('effort', display) }} />
       </section>

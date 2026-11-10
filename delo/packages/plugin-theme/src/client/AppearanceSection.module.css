@@ -1,22 +1,46 @@
 /* One card: each setting a block separated by a hairline. Tiles span the
    card's width; a single control sits at the right edge of its row. */
 .section {
+  /* Geometry that is neither spacing nor type, declared once. */
+  --heading-basis: 220px;
+  --palette-tile-min: 132px;
+  --slider-width: 280px;
+  --slider-value-width: 44px;
+  --notch-offset: 22px;
+  --notch-tick-offset: -6px;
+  --notch-tick-height: 5px;
+  --radio-size: 16px;
+  --radio-checked-width: 5px;
+  --mock-min-line: 4px;
+  --swatch-target: 44px;
+  --swatch-dot: 32px;
+  --swatch-custom-core: 9px;
+  --picker-size: 40px;
+  --hex-width: 120px;
+  --specimen-size: 30px;
+  --specimen-line: 36px;
+  --density-tile-height: 64px;
+  --density-tile-height-narrow: 48px;
+  --density-line-height: 4px;
+  --density-gap-compact: 5px;
+  --density-gap-comfortable: 8px;
+  --density-gap-spacious: 11px;
   display: flex;
   flex-direction: column;
-  padding: 0 20px;
+  padding: 0 var(--delo-space-7);
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-primary);
 }
 
 .block {
   display: flex;
   flex-direction: column;
-  gap: calc(14px * var(--dsh-density, 1));
-  padding: calc(20px * var(--dsh-density, 1)) 0;
+  gap: var(--delo-space-5);
+  padding: var(--delo-space-7) 0;
 }
 
 .block + .block {
@@ -28,7 +52,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 24px;
+  gap: var(--delo-space-5) var(--delo-space-8);
 }
 
 .block.row {
@@ -38,19 +62,19 @@
 .heading {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--delo-space-1);
   min-width: 0;
 }
 
 .row > .heading {
-  flex: 1 1 220px;
+  flex: 1 1 var(--heading-basis);
 }
 
 .title {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--dsw-font-s-14-font-size);
   font-weight: 500;
-  line-height: 22px;
+  line-height: var(--dsw-font-s-14-line-height);
 }
 
 .lead {
@@ -62,13 +86,13 @@
 .schemeTiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--delo-space-5);
 }
 
 .paletteTiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--palette-tile-min), 1fr));
+  gap: var(--delo-space-5);
 }
 
 .block[data-muted='true'] {
@@ -78,13 +102,13 @@
 .slider {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: min(100%, 280px);
+  gap: var(--delo-space-5);
+  width: min(100%, var(--slider-width));
 }
 
 .sliderValue {
-  min-width: 44px;
-  font-size: 13px;
+  min-width: var(--slider-value-width);
+  font-size: var(--dsw-font-xs-13-font-size);
   font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-secondary);
   text-align: right;
@@ -94,7 +118,7 @@
 .sliderTrack {
   position: relative;
   flex: 1;
-  padding-bottom: 22px;
+  padding-bottom: var(--notch-offset);
 }
 
 .sliderTrack input {
@@ -105,14 +129,14 @@
 
 .notch {
   position: absolute;
-  top: 22px;
+  top: var(--notch-offset);
   translate: -50% 0;
-  padding: 0 4px;
+  padding: 0 var(--delo-space-2);
   border: 0;
   border-radius: var(--dsw-radius-xs);
   background: none;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: var(--dsw-font-xxxs-11-font-size);
+  line-height: var(--dsw-font-xxs-12-line-height);
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
@@ -120,10 +144,10 @@
 .notch::before {
   content: '';
   position: absolute;
-  top: -6px;
+  top: var(--notch-tick-offset);
   left: 50%;
   width: 1px;
-  height: 5px;
+  height: var(--notch-tick-height);
   background: currentColor;
 }
 
@@ -138,15 +162,15 @@
 .typeTiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--delo-space-5);
 }
 
 .tile {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--delo-space-4);
   min-width: 0;
-  padding: 8px 8px 10px;
+  padding: var(--delo-space-4) var(--delo-space-4) var(--delo-space-4);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-2);
@@ -154,7 +178,12 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tile {
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
 }
 
 @media (hover: hover) {
@@ -183,12 +212,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 0 4px;
+  gap: var(--delo-space-4);
+  padding: 0 var(--delo-space-2);
 }
 
 .tileLabel {
-  font-size: 13px;
+  font-size: var(--dsw-font-xs-13-font-size);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -198,15 +227,15 @@
 /* A radio mark: a ring, filled with the accent when chosen. */
 .radio {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: var(--radio-size);
+  height: var(--radio-size);
   box-sizing: border-box;
   border: 1.5px solid var(--dsw-alias-label-tertiary);
   border-radius: 50%;
 }
 
 .tile[aria-checked='true'] .radio {
-  border: 5px solid var(--dsw-alias-brand-primary);
+  border: var(--radio-checked-width) solid var(--dsw-alias-brand-primary);
 }
 
 /* The miniature studio, drawn from the scheme's own colours. */
@@ -233,7 +262,7 @@
 .mockRow,
 .mockRowActive {
   height: 8%;
-  min-height: 4px;
+  min-height: var(--mock-min-line);
   border-radius: var(--dsw-radius-panel);
   background: color-mix(in srgb, var(--mock-quiet) 45%, transparent);
 }
@@ -259,7 +288,7 @@
 .mockLine,
 .mockLineShort {
   height: 7%;
-  min-height: 4px;
+  min-height: var(--mock-min-line);
   border-radius: var(--dsw-radius-panel);
   background: color-mix(in srgb, var(--mock-text) 55%, transparent);
 }
@@ -300,11 +329,11 @@
   clip-path: inset(0 0 0 50%);
 }
 
-/* The accent: one row of round swatches, each a 44px target. */
+/* The accent: one row of round swatches, each a target of `--swatch-target`. */
 .accentPicker {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--delo-space-5);
 }
 
 .accentName {
@@ -314,15 +343,15 @@
 
 .swatches {
   display: flex;
-  gap: 4px;
+  gap: var(--delo-space-2);
 }
 
 .swatch {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: var(--swatch-target);
+  height: var(--swatch-target);
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -336,12 +365,17 @@
 }
 
 .dot {
-  width: 32px;
-  height: 32px;
+  width: var(--swatch-dot);
+  height: var(--swatch-dot);
   border-radius: 50%;
   background-color: var(--chip-light);
   box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dot {
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
 }
 
 :global(body[data-ds-dark-theme]) .dot {
@@ -360,11 +394,11 @@
 
 /* Custom: the chosen colour inside a colour-wheel ring. */
 .dot.customDot {
-  background: radial-gradient(circle, var(--custom) 0 9px, transparent 9.5px), conic-gradient(from 0deg, var(--dsw-static-red-500), var(--dsw-static-amber-500), var(--dsw-static-green-500), var(--dsw-static-blue-500), var(--dsw-static-violet-600), var(--dsw-static-red-500));
+  background: radial-gradient(circle, var(--custom) 0 var(--swatch-custom-core), transparent calc(var(--swatch-custom-core) + 0.5px)), conic-gradient(from 0deg, var(--dsw-static-red-500), var(--dsw-static-amber-500), var(--dsw-static-green-500), var(--dsw-static-blue-500), var(--dsw-static-violet-600), var(--dsw-static-red-500));
 }
 
 :global(body[data-ds-dark-theme]) .dot.customDot {
-  background: radial-gradient(circle, var(--custom) 0 9px, transparent 9.5px), conic-gradient(from 0deg, var(--dsw-static-red-500), var(--dsw-static-amber-500), var(--dsw-static-green-500), var(--dsw-static-blue-500), var(--dsw-static-violet-600), var(--dsw-static-red-500));
+  background: radial-gradient(circle, var(--custom) 0 var(--swatch-custom-core), transparent calc(var(--swatch-custom-core) + 0.5px)), conic-gradient(from 0deg, var(--dsw-static-red-500), var(--dsw-static-amber-500), var(--dsw-static-green-500), var(--dsw-static-blue-500), var(--dsw-static-violet-600), var(--dsw-static-red-500));
 }
 
 .customRow {
@@ -372,13 +406,13 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--delo-space-4);
 }
 
 .picker {
-  width: 40px;
-  height: 40px;
-  padding: 3px;
+  width: var(--picker-size);
+  height: var(--picker-size);
+  padding: var(--delo-space-2);
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-layer-2);
@@ -386,16 +420,16 @@
 }
 
 .hex {
-  width: 120px;
-  height: 40px;
-  padding: 0 12px;
+  width: var(--hex-width);
+  height: var(--picker-size);
+  padding: 0 var(--delo-space-5);
   box-sizing: border-box;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 13px;
+  font-size: var(--dsw-font-xs-13-font-size);
 }
 
 .hex[aria-invalid='true'] {
@@ -410,9 +444,9 @@
 .specimen {
   display: flex;
   align-items: baseline;
-  gap: 14px;
+  gap: var(--delo-space-5);
   min-width: 0;
-  padding: 14px 12px;
+  padding: var(--delo-space-5) var(--delo-space-5);
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
@@ -420,23 +454,23 @@
 
 .specimenGlyphs {
   flex: none;
-  font-size: 30px;
+  font-size: var(--specimen-size);
   font-weight: 500;
-  line-height: 36px;
+  line-height: var(--specimen-line);
 }
 
 .specimenLine {
   min-width: 0;
   overflow: hidden;
   color: var(--dsw-alias-label-secondary);
-  font-size: 14px;
+  font-size: var(--dsw-font-s-14-font-size);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .failure {
   margin: 0;
-  padding: 0 0 16px;
+  padding: 0 0 var(--delo-space-6);
   color: var(--dsw-alias-state-error-primary);
 }
 
@@ -444,22 +478,22 @@
 .densityTiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--delo-space-5);
 }
 
 .densityMock {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  height: 64px;
-  padding: 0 12px;
+  height: var(--density-tile-height);
+  padding: 0 var(--delo-space-5);
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l1);
 }
 
 .densityMock span {
-  height: 4px;
+  height: var(--density-line-height);
   border-radius: var(--dsw-radius-panel);
   background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 55%, transparent);
 }
@@ -468,9 +502,9 @@
   width: 70%;
 }
 
-[data-density='compact'] .densityMock { gap: 5px; }
-[data-density='comfortable'] .densityMock { gap: 8px; }
-[data-density='spacious'] .densityMock { gap: 11px; }
+[data-density='compact'] .densityMock { gap: var(--density-gap-compact); }
+[data-density='comfortable'] .densityMock { gap: var(--density-gap-comfortable); }
+[data-density='spacious'] .densityMock { gap: var(--density-gap-spacious); }
 
 /* A phone keeps each row of tiles side by side, smaller: the previews stay
    recognisable at a third of the width, and the page stays one screen of choices. */
@@ -478,12 +512,12 @@
   .schemeTiles,
   .typeTiles,
   .densityTiles {
-    gap: 8px;
+    gap: var(--delo-space-4);
   }
 
   .tile {
-    gap: 6px;
-    padding: 6px 6px 8px;
+    gap: var(--delo-space-3);
+    padding: var(--delo-space-3) var(--delo-space-3) var(--delo-space-4);
   }
 
   .mock {
@@ -491,7 +525,7 @@
   }
 
   .densityMock {
-    height: 48px;
-    padding: 0 8px;
+    height: var(--density-tile-height-narrow);
+    padding: 0 var(--delo-space-4);
   }
 }

@@ -72,7 +72,7 @@ describe('the Appearance section', () => {
     await click(within(group(en.density)).getByRole('radio', { name: /Compact/ }))
     await click(within(group(en.palette)).getByRole('radio', { name: /Grove/ }))
     await click(within(group(en.palette)).getByRole('radio', { name: /Grove/ }))
-    await click(screen.getByRole('tab', { name: en['effort.bars'] }))
+    await click(screen.getByRole('radio', { name: en['effort.bars'] }))
     expect(form.writes).toEqual([['typeface', 'system'], ['typeface', 'delo'], ['density', 'compact'], ['palette', 'grove'], ['effort', 'bars']])
     expect(screen.getByText(en['accent.byTheme'])).toBeTruthy()
   })
@@ -109,10 +109,13 @@ describe('the Appearance section', () => {
   it('offers the look choice first, with Delo chosen, and calls the way back to the stock look from Stock', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
     open(themeForm(STUDIO_ON), useStockLook)
-    const tabs = screen.getAllByRole('tab')
-    expect(tabs[0]?.textContent).toBe(en['look.delo'])
-    expect(tabs[0]?.getAttribute('aria-selected')).toBe('true')
-    await click(screen.getByRole('tab', { name: en['look.stock'] }))
+    const look = within(screen.getByRole('radiogroup', { name: en.look }))
+    const radios = look.getAllByRole('radio')
+    expect(radios[0]?.textContent).toBe(en['look.delo'])
+    expect(radios[0]?.getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryAllByRole('tab')).toHaveLength(0)
+    expect(document.querySelector('[aria-controls]')).toBeNull()
+    await click(screen.getByRole('radio', { name: en['look.stock'] }))
     expect(useStockLook).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -133,7 +136,7 @@ describe('the Appearance section', () => {
 
   it('reports a refused way back to the stock look', async () => {
     open(themeForm(STUDIO_ON), () => Promise.resolve(false))
-    await click(screen.getByRole('tab', { name: en['look.stock'] }))
+    await click(screen.getByRole('radio', { name: en['look.stock'] }))
     expect(screen.getByRole('alert')).toBeTruthy()
   })
 

@@ -2,3 +2,14 @@
   text-wrap: balance;
   text-align: center;
 }
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--dsw-font-family-brand);
+  font-size: var(--dsw-font-l-20-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-l-20-line-height);
+  white-space: nowrap;
+}

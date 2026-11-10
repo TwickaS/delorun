@@ -92,24 +92,37 @@ export function contrastLayer(colour: readonly TokenLayer[], contrast: number): 
   return layer
 }
 
+/** The pixel sizes of `--delo-space-1` to `--delo-space-9`, before the density scale. */
+export const SPACE_STEPS = [2, 4, 6, 8, 12, 16, 20, 24, 32] as const
+
 /**
- * The density layer: `--dsh-density`, the scale spacing rules multiply by.
+ * The density layer: `--dsh-density`, the scale spacing rules multiply by, and
+ * `--delo-space-1` to `--delo-space-9`, the spacing steps of {@link SPACE_STEPS} already multiplied by it.
  * @param density - the density choice.
  * @returns the layer, the same in both schemes.
  */
 export function densityLayer(density: Density): TokenLayer {
   const scale = String(DENSITY_SCALE[density])
-  return { '--dsh-density': { light: scale, dark: scale } }
+  const layer: Record<string, { light: string; dark: string }> = { '--dsh-density': { light: scale, dark: scale } }
+  SPACE_STEPS.forEach((step, index) => {
+    const value = `calc(${step}px * var(--dsh-density, 1))`
+    layer[`--delo-space-${index + 1}`] = { light: value, dark: value }
+  })
+  return layer
 }
 
 /** The attribute the studio half sets on `<html>` while the studio additions are off, which switches a first-paint style the page already holds off. */
 export const STOCK_ATTRIBUTE = 'data-delo-stock'
 
+/** Starts the first-paint style's text, so the studio half can find the element the host printed and remove it. */
+export const FIRST_PAINT_MARK = '/*delo-first-paint*/'
+
 /**
  * The first-paint style: the palette and accent layers as CSS on `body`, for
  * each scheme, until the studio half lays them on as inline values. The
  * selectors outrank upstream's token sheet, which loads later, and stop
- * applying once the studio half marks the stock look.
+ * applying once the studio half marks the stock look. The text starts with
+ * {@link FIRST_PAINT_MARK}.
  * @param settings - the theme settings.
  * @returns the CSS text, or `''` while the studio additions are off.
  */
@@ -119,7 +132,7 @@ export function bootStyle(settings: ThemeSettings): string {
   if (colour.length === 0) return ''
   const block = (scheme: 'light' | 'dark'): string => colour.flatMap(layer => Object.entries(layer).map(([name, modes]) => `${name}:${modes[scheme]}`)).join(';')
   const root = `html:not([${STOCK_ATTRIBUTE}]) body`
-  return `${root}{${block('light')}}${root}[data-ds-dark-theme]{${block('dark')}}`
+  return `${FIRST_PAINT_MARK}${root}{${block('light')}}${root}[data-ds-dark-theme]{${block('dark')}}`
 }
 
 /** The colours a preview tile draws one scheme with. */

@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { contrast, formatRgb, fromOklch, parseRgb, toOklch } from '../src/palette/color.ts'
 import { applyLayers, brandLiterals, chromaticRamp, neutralLiterals, neutralRamp, requireResolved, resolveColor, textSafe } from '../src/palette/generate.ts'
 import type { TokenLayer } from '../src/palette/generate.ts'
-import { accentFromColor, accentLayer, ACCENT_IDS, ACCENTS, BRAND_RAMP, fontLayer, GREY_RAMPS, paletteLayer, parseHex, presetFromHex, SOFT } from '../src/palette/soft.ts'
-import type { AccentSpec } from '../src/palette/soft.ts'
+import { accentFromColor, accentLayer, ACCENT_IDS, ACCENTS, BRAND_RAMP, fontLayer, GREY_RAMPS, paletteLayer, parseHex, presetFromHex, SOFT, TEXT_SURFACES } from '../src/palette/soft.ts'
+import type { AccentSpec, PaletteSpec } from '../src/palette/soft.ts'
 import { bootStyle, chosenAccent, CONTRAST_ROLES, contrastLayer, densityLayer, previewColors, STOCK_ATTRIBUTE, themeLayers } from '../src/palette/layers.ts'
 import { t3Palette, T3_THEME_IDS } from '../src/palette/t3.ts'
 import { DEFAULT_SETTINGS as STORED_DEFAULTS, PALETTES } from '../src/config.ts'
@@ -161,6 +161,33 @@ describe('T3 Code\'s themes', () => {
   })
 })
 
+/** The opaque background roles quiet text sits on, listed here apart from the palette's own list so a role dropped from that one is noticed. */
+const BACKGROUND_ROLES = [
+  '--dsw-alias-bg-base', '--dsw-alias-bg-layer-1', '--dsw-alias-bg-layer-2', '--dsw-alias-bg-layer-3',
+  '--dsw-specific-sidebar-fill', '--dsw-alias-bg-module-platform',
+] as const
+
+/** The label roles hint and description text use: 4.5:1, WCAG AA, on every background role. */
+const HINT_ROLES = ['--dsw-alias-label-secondary', '--dsw-alias-label-tertiary'] as const
+
+describe('hint text with the default accent and contrast', () => {
+  it('is floored on the background roles listed here', () => {
+    expect([...TEXT_SURFACES]).toEqual([...BACKGROUND_ROLES])
+    for (const role of HINT_ROLES) expect(SOFT.quietText[role]).toEqual({ surfaces: TEXT_SURFACES, contrast: 4.5 })
+  })
+
+  const palettes: ReadonlyArray<readonly [string, PaletteSpec, AccentSpec]> = [
+    ['soft', SOFT, ACCENTS.peach],
+    ...T3_THEME_IDS.map(id => [id, t3Palette(id).palette, t3Palette(id).accent] as const),
+  ]
+  for (const [id, palette, accent] of palettes) for (const scheme of SCHEMES) {
+    const resolve = resolver([paletteLayer(palette), accentLayer(accent, palette), fontLayer()], scheme)
+    for (const role of HINT_ROLES) it.each(BACKGROUND_ROLES)(`${id}, ${scheme}: ${role} on %s reaches 4.5:1`, (surface) => {
+      expect(contrast(rgbOf(resolve, role), rgbOf(resolve, surface))).toBeGreaterThanOrEqual(4.5)
+    })
+  }
+})
+
 describe('the contrast setting', () => {
   const quiet = (value: number, scheme: 'light' | 'dark') => {
     const layers = themeLayers({ ...DEFAULT_SETTINGS, contrast: value })
@@ -269,7 +296,7 @@ describe('the layers a setting set applies', () => {
   it('are the palette, accent, type and density, plus contrast away from 100, and no type layer with the system typeface', () => {
     expect(Object.keys(themeLayers(DEFAULT_SETTINGS)).sort()).toEqual(['accent', 'density', 'palette', 'type'])
     expect(Object.keys(themeLayers({ ...DEFAULT_SETTINGS, contrast: 150, typeface: 'system' })).sort()).toEqual(['accent', 'contrast', 'density', 'palette'])
-    expect(densityLayer('spacious')).toEqual({ '--dsh-density': { light: '1.2', dark: '1.2' } })
+    expect(densityLayer('spacious')['--dsh-density']).toEqual({ light: '1.2', dark: '1.2' })
   })
 
   it('choose the accent from a preset, a valid custom colour, a T3 Code theme, or Peach for a custom colour that does not parse', () => {
@@ -289,6 +316,23 @@ describe('the layers a setting set applies', () => {
     const style = bootStyle({ ...DEFAULT_SETTINGS, contrast: 160 })
     expect(style).toContain('--dsw-alias-label-tertiary')
     expect(style).toContain('--dsh-density:1')
+  })
+})
+
+describe('the spacing tokens', () => {
+  it('define --delo-space-1 to --delo-space-9 as 2, 4, 6, 8, 12, 16, 20, 24 and 32px times the density, in both schemes', () => {
+    const layer = densityLayer('comfortable')
+    const sizes = [2, 4, 6, 8, 12, 16, 20, 24, 32]
+    sizes.forEach((size, index) => {
+      expect(layer[`--delo-space-${index + 1}`]).toEqual({ light: `calc(${size}px * var(--dsh-density, 1))`, dark: `calc(${size}px * var(--dsh-density, 1))` })
+    })
+    expect(Object.keys(layer)).toHaveLength(10)
+  })
+
+  it('are in the layers and the first-paint style while the look is on, and in neither with it off', () => {
+    expect(themeLayers(DEFAULT_SETTINGS).density).toHaveProperty('--delo-space-9')
+    expect(bootStyle(DEFAULT_SETTINGS)).toContain('--delo-space-5:calc(12px * var(--dsh-density, 1))')
+    expect(themeLayers({ ...DEFAULT_SETTINGS, studioAdditions: false }).density).toBeUndefined()
   })
 })
 
@@ -314,9 +358,11 @@ describe('the generators on a sheet that breaks their assumptions', () => {
   })
 
   it('refuse a palette surface that upstream does not define and a quiet-text role that does not resolve', () => {
-    const base = { light: { '--dsw-alias-label-caption': 'rgb(100 100 100)' }, dark: { '--dsw-alias-label-caption': 'rgb(100 100 100)' } }
+    const quiet = Object.fromEntries(Object.keys(SOFT.quietText).map(role => [role, 'rgb(100 100 100)']))
+    const base = { light: quiet, dark: quiet }
     expect(() => paletteLayer({ ...SOFT, lightSurfaces: { '--dsw-missing': 0.9 } }, base)).toThrow('palette surface --dsw-missing is not an upstream token')
-    expect(() => paletteLayer({ ...SOFT, lightSurfaces: {} }, base)).toThrow('quiet text role --dsw-alias-label-caption or its surface --dsw-alias-bg-base does not resolve to a colour')
+    expect(() => paletteLayer({ ...SOFT, lightSurfaces: {} }, base)).toThrow('quiet text role --dsw-alias-label-secondary or its surface --dsw-alias-bg-base does not resolve to a colour')
+    expect(() => paletteLayer({ ...SOFT, lightSurfaces: {} }, { light: {}, dark: {} })).toThrow('quiet text role --dsw-alias-label-secondary does not resolve to a colour')
   })
 
   it('refuse a foreground token or an accent text role that does not resolve', () => {

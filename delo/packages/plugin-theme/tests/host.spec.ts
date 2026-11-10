@@ -44,6 +44,21 @@ describe('the host half', () => {
     expect(await printedStyles({})).toHaveLength(0)
   })
 
+  it('prints the boot page\'s wordmark as a global only while the studio additions are on', async () => {
+    const globals = async (config: object): Promise<IndexInjection[]> => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(host, config)
+      await fiber.await()
+      const table: IndexInjection[] = []
+      ctx.emit('webserver/index-inject', table, PAGE_PEER)
+      await fiber.dispose()
+      return table.filter(row => row.kind === 'global')
+    }
+    expect(host.BOOT_WORDMARK_GLOBAL).toBe('dshBootWordmark')
+    expect(await globals({ studioAdditions: true })).toEqual([{ kind: 'global', name: 'dshBootWordmark', value: 'Delo' }])
+    expect(await globals({ studioAdditions: false })).toEqual([])
+  })
+
   it('reads the switch live: a page requested after it flips prints the style, and one requested before does not', () => {
     let on = false
     const config = { ...Config({}), studioAdditions: { get: () => on } }
@@ -58,7 +73,7 @@ describe('the host half', () => {
     on = true
     const during = page()
     on = false
-    expect([before, during, page()]).toEqual([0, 1, 0])
+    expect([before, during, page()]).toEqual([0, 2, 0])
     expect(host.currentSettings(config)).toMatchObject({ studioAdditions: false, palette: 'soft', contrast: 100, effort: 'label' })
   })
 
