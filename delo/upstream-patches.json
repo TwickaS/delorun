@@ -1883,8 +1883,8 @@
     {
       "path": "scripts/install-lefthook.mjs",
       "class": "security",
-      "reason": "Trunk gate: the installed commit-msg, pre-commit and pre-push hooks exit 1 and name the install command when they cannot find Lefthook, where Lefthook's own template exits 0 and passes a gate that never ran; the installer refuses a template that lacks that branch. Denial tests in scripts/install-lefthook.spec.ts fail without the change and pass with it, against the installed Lefthook's template too. Lead verdict: approved, security class (2026-11-10).",
-      "sha256": "0d73ee4d3077db420bf10eada129c8de26228a86428356abe414ec14758e36c4"
+      "reason": "Trunk gate: the installed commit-msg, pre-commit and pre-push hooks exit 1 and name the install command when they cannot find Lefthook, where Lefthook's own template exits 0 and passes a gate that never ran; the installer refuses a template that lacks that branch. In a tree with delo/lefthook.yml, the pre-push hook also exits 1 and names setup-worktree.ts while lefthook-local.yml does not extend delo/lefthook.yml, since such a push runs upstream's hooks alone. Denial tests in scripts/install-lefthook.spec.ts fail without each change and pass with it, against the installed Lefthook's template too. Lead verdict: approved, security class (2026-11-10), for the Lefthook refusal; the lefthook-local.yml refusal is authorised by the coordinator (2026-11-10) and awaits the lead's review.",
+      "sha256": "c498e8b69270ef080602c2003c3da87f119387d5113fac3770fe611c6465cedd"
     },
     {
       "path": "apps/cli/src/profile-boot.ts",

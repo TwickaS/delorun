@@ -33,6 +33,16 @@ const REPOSITORY_EXTENSION_PATTERN = '^extensions\\.'
 const LEFTHOOK_NOT_FOUND = 'echo "Can\'t find lefthook in PATH"'
 const GATING_HOOKS = ['commit-msg', 'pre-commit', 'pre-push']
 const REQUIRED_GATING_HOOKS = ['pre-commit', 'pre-push']
+// Delorun's checks live in delo/lefthook.yml, which only the git-ignored lefthook-local.yml extends; without it a push
+// runs upstream's hooks alone. In a tree that has delo/lefthook.yml, the pre-push hook refuses until that file extends it.
+const DELO_HOOKS_CONFIG = 'delo/lefthook.yml'
+const DELO_HOOKS_GUARD = [
+  'dsh_root="$(git rev-parse --show-toplevel)"',
+  `if [ -f "$dsh_root/${DELO_HOOKS_CONFIG}" ] && ! grep -Eqs '^[^#]*delo/lefthook[.]yml' "$dsh_root/lefthook-local.yml"; then`,
+  `  echo "lefthook-local.yml does not extend ${DELO_HOOKS_CONFIG}, so Delorun's pre-push checks cannot run; run node delo/apps/tools/src/setup-worktree.ts, or write lefthook-local.yml with extends: [${DELO_HOOKS_CONFIG}], and retry" >&2`,
+  '  exit 1',
+  'fi',
+]
 function errorCode(error) {
   return typeof error === 'object' && error !== null && 'code' in error
     ? error.code
@@ -604,6 +614,15 @@ function failGatingHooksWithoutLefthook(hooksPath) {
   }
 }
 
+/** Make the pre-push hook refuse a Delorun tree whose lefthook-local.yml does not extend delo/lefthook.yml. */
+function requireDeloHooksConfig(hooksPath) {
+  const hookPath = join(hooksPath, 'pre-push')
+  const lines = readFileSync(hookPath, 'utf8').split('\n')
+  if (!lines[0].startsWith('#!')) throw new Error(`${hookPath} does not start with a #! line, so the Delorun hooks check has no place; update install-lefthook.mjs for this Lefthook version`)
+  lines.splice(1, 0, ...DELO_HOOKS_GUARD)
+  writeFileSync(hookPath, lines.join('\n'), { mode: 0o755 })
+}
+
 function configSource(entry) {
   return `${entry.origin}: ${JSON.stringify(entry.value)}`
 }
@@ -751,6 +770,7 @@ async function main() {
       }
       runLefthook(root, lefthook)
       failGatingHooksWithoutLefthook(hooksPath)
+      requireDeloHooksConfig(hooksPath)
       updateOwnershipMarker(ownedHooksDirectory.markerPath, hooksPath)
     } catch (error) {
       const rollbackErrors = []

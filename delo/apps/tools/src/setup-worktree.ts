@@ -59,14 +59,31 @@ function step(root: string, command: string, args: readonly string[]): void {
 }
 
 /**
+ * Write {@link LEFTHOOK_LOCAL} when it does not exist; an existing file is kept, since it may hold the person's own hooks.
+ * @param root - the worktree's root.
+ * @returns whether the file was written.
+ * @throws Error when an existing file does not extend `delo/lefthook.yml`, so the installed pre-push hook would refuse.
+ */
+export function writeHooksFile(root: string): boolean {
+  const hooksFile = join(root, LEFTHOOK_LOCAL)
+  if (!existsSync(hooksFile)) {
+    writeFileSync(hooksFile, LEFTHOOK_LOCAL_CONTENT)
+    return true
+  }
+  if (!/^[^#\n]*delo\/lefthook\.yml/m.test(readFileSync(hooksFile, 'utf8'))) {
+    throw new Error(`setup-worktree: ${hooksFile} does not extend delo/lefthook.yml, so Delorun's hooks would not run and the pre-push hook refuses; add \`- delo/lefthook.yml\` under its \`extends:\` and run the setup again`)
+  }
+  return false
+}
+
+/**
  * Set up the worktree at `root`.
  * @param root - the worktree's root.
  */
 export function setupWorktree(root: string): void {
   const warning = nodeWarning(process.version, pinnedNodeMajor(root))
   if (warning !== undefined) console.warn(warning)
-  const hooksFile = join(root, LEFTHOOK_LOCAL)
-  if (!existsSync(hooksFile)) writeFileSync(hooksFile, LEFTHOOK_LOCAL_CONTENT)
+  writeHooksFile(root)
   step(root, 'pnpm', ['install', '--frozen-lockfile'])
   // The documentation site is a workspace of its own with its own lockfile; the `docs-site` check refuses to run without it.
   step(join(root, 'delo', 'apps'), 'pnpm', ['--dir', 'docs', 'install', '--frozen-lockfile'])

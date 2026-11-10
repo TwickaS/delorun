@@ -447,6 +447,29 @@ syncBuiltinESMExports()
     expect(readFileSync(join(hooks, 'pre-merge-commit'), 'utf8')).toContain('  echo "Can\'t find lefthook in PATH"\nfi\n')
   })
 
+  it.skipIf(process.platform === 'win32')('makes the pre-push hook of a Delorun tree refuse until lefthook-local.yml extends delo/lefthook.yml', async () => {
+    const fixture = createFixture()
+    const result = await runInstaller(fixture, fixture.main)
+    expect(result.status, result.stderr).toBe(0)
+    const hooks = hooksPath(fixture, fixture.main)
+    const run = (name: string) => spawnSync('sh', [join(hooks, name)], { cwd: fixture.main, encoding: 'utf8', env: fixture.env, timeout: 30_000 })
+    // An upstream tree has no delo/lefthook.yml, so the hook runs as before.
+    expect(run('pre-push').status).toBe(0)
+    write(join(fixture.main, 'delo/lefthook.yml'), 'pre-push:\n  jobs: []\n')
+    const local = join(fixture.main, 'lefthook-local.yml')
+    for (const text of [undefined, 'extends:\n  - other.yml\n', '# extends: [delo/lefthook.yml]\n']) {
+      if (text === undefined) rmSync(local, { force: true })
+      else write(local, text)
+      const refused = run('pre-push')
+      expect(refused.status, String(text)).toBe(1)
+      expect(refused.stderr).toContain("lefthook-local.yml does not extend delo/lefthook.yml, so Delorun's pre-push checks cannot run; run node delo/apps/tools/src/setup-worktree.ts")
+    }
+    write(local, 'extends:\n  - delo/lefthook.yml\n')
+    expect(run('pre-push').status).toBe(0)
+    rmSync(local)
+    expect(run('pre-commit').status).toBe(0)
+  })
+
   it('refuses a Lefthook template whose gating hooks lack the not-found branch, and restores the hook path', async () => {
     const fixture = createFixture()
     const result = await runInstaller(fixture, fixture.main, { DSH_TEST_LEFTHOOK_BARE_TEMPLATE: '1' })
