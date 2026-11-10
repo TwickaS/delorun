@@ -108,6 +108,7 @@ function stoppingAtPrepare(seen: (string | undefined)[], overrides: Partial<Star
     checkRuntime: () => Promise.reject(new Error('a start outside the store checks no stored runtime')),
     handover: () => Promise.resolve(undefined),
     opener: { canOpen: () => false, link: () => Promise.reject(new Error('not reached')), open: () => Promise.reject(new Error('not reached')) },
+    relaunch: () => Promise.reject(new Error('no second start here')),
     ...overrides,
   }
 }

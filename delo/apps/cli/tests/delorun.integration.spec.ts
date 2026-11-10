@@ -270,6 +270,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       checkRuntime: () => Promise.reject(new Error('a start outside the store checks no stored runtime')),
       handover: async () => Promise.resolve(undefined),
       opener: { canOpen: () => true, link: requestStudioLink, open: () => Promise.reject(new Error('no link reaches the browser here')) },
+      relaunch: () => Promise.reject(new Error('no second start here')),
     }
   }
 

@@ -2101,6 +2101,9 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../../packages/util/home-paths
+      '@delo/contract-admission':
+        specifier: workspace:*
+        version: link:../contract-admission
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
@@ -2229,6 +2232,12 @@ importers:
       '@delo/changes':
         specifier: workspace:*
         version: link:../changes
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delo/profile-safety':
+        specifier: workspace:*
+        version: link:../profile-safety
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -2242,9 +2251,15 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-hmr':
         specifier: workspace:*
         version: link:../../../packages/boot/hmr
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../../packages/llm/llm

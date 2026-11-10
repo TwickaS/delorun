@@ -19,7 +19,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ListenerId, StudioAddress } from '@delo/contract-admission'
-import { REQUEST_LISTENER } from '../src/arrival.ts'
+import { REQUEST_LISTENER } from '@delo/home'
 import { deviceIdOf } from '../src/records.ts'
 import {
   claimHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, OWNER_CLAIM_PATH, reachClaimRefusal, removeDeviceHandler,

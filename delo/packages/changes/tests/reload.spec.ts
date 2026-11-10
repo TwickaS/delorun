@@ -3,7 +3,7 @@
  * clean recomposition is reported as the reason the Host does not run what the files name.
  */
 import { describe, expect, it } from 'vitest'
-import { reloadProfile, type HotReload } from '../src/changes/reload.ts'
+import { reloadProfile, type HotReload } from '../src/reload.ts'
 
 /**
  * @param reconcile - what the recomposition does.

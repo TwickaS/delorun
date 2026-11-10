@@ -4,9 +4,11 @@
  * holds exactly one content version:
  *
  * 1. during a work session for the plugin, the folder's current content;
- * 2. otherwise, under protection `block`, the approved version, or nothing at all for a plugin with no approved version
+ * 2. otherwise, while a change a failed start left out stays out, the content from before that change, or nothing for an
+ *    install or a plugin turned on, in every protection setting ([left out](./left-out.ts));
+ * 3. otherwise, under protection `block`, the approved version, or nothing at all for a plugin with no approved version
  *    (upstream then skips its bundle as unresolvable, so nothing from the folder loads);
- * 3. under `warn` or `off`, the folder's current content.
+ * 4. under `warn` or `off`, the folder's current content.
  *
  * A link into the runtime store `runtimes/`, as Delo's own bundles carried by an installed release are linked, is left
  * alone: the store's start check covers it, and an update replaces it. A link to the directory the running installation
@@ -30,6 +32,7 @@ import { collectStore } from './collect.ts'
 import { ChangesError, isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
 import { checkLoadedContent } from './invariants.ts'
+import { leftOutContent, leftOutFact, leftOutWords, leftOutOf, type LeftOutFact } from './left-out.ts'
 import { pointLinkAt, readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
 import { approvedOf, findEntry, migratesAtUpgrade, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
@@ -90,6 +93,8 @@ export interface StartChanges {
   readonly workSession?: { readonly plugin: string }
   /** The profile history version this start recorded, when it changed the profile's files. */
   readonly historyVersion?: string
+  /** The changes a failed start left out whose content stays out ([left out](./left-out.ts)). */
+  readonly leftOut?: readonly LeftOutFact[]
   /**
    * Plugins whose folder could not be read as one content version, or whose approved content the store no longer
    * holds: each loads its approved content, or nothing.
@@ -341,6 +346,7 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
   const pending: PendingAtStart[] = []
   const unapproved: { readonly plugin: string }[] = []
   const linkedDependencies: { readonly plugin: string, readonly underHome: boolean }[] = []
+  const leftOut: LeftOutFact[] = []
   const activeBefore = await readActiveRecord(home, profile)
   // A reload decides only the plugins it moved; every other active directory keeps what the record says it holds.
   const activePlugins: Record<string, ActiveContent> = pass === 'start' ? {} : { ...activeBefore.plugins }
@@ -351,8 +357,12 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
     if (content?.kind === 'unreadable') failed.push({ plugin, detail: content.detail })
     const folder = content?.kind === 'stored' ? { source: source!, version: content.version } : undefined
     let active: ActiveContent | undefined
+    const left = leftOutOf(log, approved, plugin)
     if (workSession?.plugin === plugin && folder !== undefined) {
       active = { version: folder.version, kind: 'work-session' }
+    } else if (left !== undefined) {
+      active = leftOutContent(left)
+      leftOut.push(leftOutFact(left))
     } else if (protection === 'block' || folder === undefined) {
       active = approvedVersion === undefined ? undefined : { version: approvedVersion, kind: 'approved' }
       if (protection === 'block' && folder !== undefined && folder.version !== approvedVersion) {
@@ -413,6 +423,7 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
     ...historyVersion === undefined ? {} : { historyVersion },
     ...failed.length === 0 ? {} : { failed },
     ...linkedDependencies.length === 0 ? {} : { linkedDependencies },
+    ...leftOut.length === 0 ? {} : { leftOut },
   }
 }
 
@@ -423,6 +434,7 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
  */
 export function startNotice(changes: StartChanges): string {
   const lines: string[] = []
+  for (const fact of changes.leftOut ?? []) lines.push(leftOutWords(fact))
   for (const { plugin, source } of changes.approvedAtUpgrade) {
     lines.push(`Delo now runs the approved copy of ${plugin}, linked from ${source}. Edits in that folder wait for your review: delorun changes list.`)
   }

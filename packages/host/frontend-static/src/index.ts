@@ -1,8 +1,9 @@
 /**
  * @deepseek-ai/dsh-host-frontend-static — SPA dist server over the webserver
  * fallback seat: a webserver resource serving the built frontend directory
- * with explicit index entry points. A readable index renders at the dist root
- * and configured index path; missing paths return 404, traversal outside the
+ * with explicit index entry points. A readable index renders at the dist root,
+ * the configured index path and `/recovery`, where the boot page shows a
+ * distribution's recovery screen; missing paths return 404, traversal outside the
  * dist root is 403, unknown extensions ship as octet-stream, and non-GET/HEAD
  * is 405. An HTTP index request first passes Connection's browser
  * authentication and renders for the browser Peer; an in-process read renders
@@ -63,6 +64,9 @@ const MIME: Record<string, string> = {
   // leave it inflating an already-decoded archive.
   '.gz': 'application/gzip',
 }
+
+/** Page paths besides the dist root that render the index: the boot page's recovery screen. */
+const INDEX_ALIASES: readonly string[] = ['/recovery']
 
 const STATIC_MISS_CODES: ReadonlySet<string | undefined> = new Set([
   'ENOENT',
@@ -189,7 +193,7 @@ async function serveStatic(
   let body: string | Uint8Array<ArrayBuffer>
   let headers: Record<string, string>
   try {
-    if (target === distRoot || target === distIndex) {
+    if (target === distRoot || target === distIndex || INDEX_ALIASES.some(alias => target === join(distRoot, alias))) {
       const refusal = fences.index()
       if (refusal !== undefined) return refusal
       body = renderIndex(await readFile(distIndex, 'utf8'))

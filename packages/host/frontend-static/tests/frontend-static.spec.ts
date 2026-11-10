@@ -204,7 +204,9 @@ describe('real Loader composition', () => {
       renderedFor.push(peer)
       rows.push({ kind: 'script-preload', src: 'plugins/boot.js' })
     })
-    for (const path of ['/', '/index.html', '/?view=test']) {
+    // `/recovery` renders the index too, where the boot page shows a distribution's recovery screen, behind the same fence.
+    expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
+    for (const path of ['/', '/index.html', '/?view=test', '/recovery']) {
       const got = await request(port, path, authenticated())
       expect(got.status).toBe(200)
       expect(got.type).toBe('text/html; charset=utf-8')
@@ -219,7 +221,7 @@ describe('real Loader composition', () => {
       expect(base).toBeLessThan(got.body.indexOf('<script>window.__T__=1</script>'))
     }
     // An authenticated browser renders for the owner's shared browser Peer.
-    expect(renderedFor).toEqual([loaded.connection.browserPeer, loaded.connection.browserPeer, loaded.connection.browserPeer])
+    expect(renderedFor).toEqual(Array.from({ length: 4 }, () => loaded.connection.browserPeer))
     offRows()
     expect(await request(port, '/', authenticated({ method: 'HEAD' }))).toEqual({
       status: 200,

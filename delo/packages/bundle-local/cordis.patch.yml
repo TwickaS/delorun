@@ -156,6 +156,13 @@
       name: '@delo/plugin-changes'
       config:
         enabled: true
+        # Safe mode from the studio's recovery screen keeps these bundles, Delo's profile bundle list
+        # (DELO_PROFILE_BUNDLES in src/profile.ts; tests/plugin-changes-row.spec.ts holds the two equal).
+        installationBundles:
+          - '@deepseek-ai/dsh-base'
+          - '@deepseek-ai/dsh-web-app'
+          - '@delo/bundle-local'
+          - '@delo/bundle-studio'
 
 # The update gate (C16 switch `update_turn_refusal`): while `delorun update` or
 # a stop waits for running chats (C19's `waiting` phase), the first step of

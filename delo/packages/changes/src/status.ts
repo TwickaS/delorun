@@ -18,6 +18,7 @@ import { namesDirectory } from './enforce.ts'
 import { isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
 import { checkChangesInvariants, type InvariantRequest } from './invariants.ts'
+import { leftOutNow, type LeftOutFact } from './left-out.ts'
 import { versionsDirectory } from './paths.ts'
 import { approvedOf, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, unshownAtUpgrade } from './records.ts'
 import { compareCodeUnits, scanFolder, versionOf } from './tree.ts'
@@ -99,6 +100,8 @@ export interface ChangesStatus {
   readonly unshownAtUpgrade: readonly { readonly plugin: string, readonly source: string }[]
   /** Every plugin under Changes, by name. */
   readonly plugins: readonly PluginStatus[]
+  /** The changes a failed start left out whose content stays out ({@link leftOutFacts}). */
+  readonly leftOut: readonly LeftOutFact[]
   /** The record of the last start, when one was written. */
   readonly boot?: BootRecord
   /** Why the record of the last start cannot be read, when it cannot. */
@@ -188,7 +191,8 @@ export async function changesStatus(request: ChangesStatusRequest): Promise<Chan
   const approved = await orElse(() => readApproved(profileDir), { schema: APPROVED_RECORD_SCHEMA, plugins: {} })
   const active = await orElse(() => readActiveRecord(home, profile), { schema: ACTIVE_RECORD_SCHEMA, plugins: {} })
   const workSession = await orElse(() => readWorkSession(home, profile), undefined)
-  const log = await orElse(() => readChangeLog(home, profile), { schema: CHANGE_LOG_SCHEMA, entries: [] }, detail => invariants.push(`The change log cannot be read: ${detail}`))
+  // The invariants name a change log that cannot be read.
+  const log = await orElse(() => readChangeLog(home, profile), { schema: CHANGE_LOG_SCHEMA, entries: [] })
   let bootUnreadable: string | undefined
   const boot = await orElse(() => readBootRecord(home, profile), undefined, detail => { bootUnreadable = detail })
   let workFailureUnreadable: string | undefined
@@ -226,6 +230,7 @@ export async function changesStatus(request: ChangesStatusRequest): Promise<Chan
     invariants,
     unshownAtUpgrade: log.entries.flatMap(entry => unshownAtUpgrade(entry) && entry.subject.plugin !== undefined && entry.subject.source !== undefined ? [{ plugin: entry.subject.plugin, source: entry.subject.source }] : []),
     plugins,
+    leftOut: leftOutNow(log, active),
     ...boot === undefined ? {} : { boot },
     ...bootUnreadable === undefined ? {} : { bootUnreadable },
     ...workFailure === undefined ? {} : { workFailure },
@@ -248,6 +253,19 @@ export async function workSessionFact(home: string, profile: string): Promise<Wo
   const failure = await readWorkFailure(home, profile)
   const { plugin, source, startedAt, endsAt } = session
   return { plugin, source, startedAt, endsAt, ...failure?.plugin === plugin ? { lastError: { at: failure.at, error: failure.error } } : {} }
+}
+
+/**
+ * The changes a failed start left out whose content stays out, for the studio and `delorun status`: for each plugin
+ * whose active directory holds `left-out` content, the change that left it out ([left out](./left-out.ts)). Nothing is
+ * written.
+ * @param home - the Delo home.
+ * @param profile - the profile's name.
+ * @returns the facts; empty when nothing is left out.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the change log or the active record is not one Delo wrote.
+ */
+export async function leftOutFacts(home: string, profile: string): Promise<LeftOutFact[]> {
+  return leftOutNow(await readChangeLog(home, profile), await readActiveRecord(home, profile))
 }
 
 /**

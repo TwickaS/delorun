@@ -15,6 +15,11 @@ export const EXIT = {
   usage: 2,
   /** The command needs a running home process, and none runs for the profile. */
   notRunning: 3,
+  /**
+   * A home process `delorun start` started detached did not start and left the newest change out; its starter starts
+   * it once more without that change ([retry](./changes/retry.ts)).
+   */
+  changeLeftOut: 4,
 } as const
 
 /** One of {@link EXIT}'s codes. */

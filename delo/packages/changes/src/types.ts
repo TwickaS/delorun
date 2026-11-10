@@ -158,11 +158,11 @@ export interface ChangeSubject {
   readonly spec?: string
 }
 
-/** The failure a start reported when it left a change out. */
+/** The failure a start reported when it left a change out, or a reload reported when applying failed to load. */
 export interface LeftOut {
   /** When, ISO 8601. */
   readonly at: string
-  /** What failed, as the start reported it. */
+  /** What failed: the error's message, without a stack, at most `FAILURE_LIMIT_BYTES` of UTF-8 for a start. */
   readonly failure: string
 }
 
@@ -257,12 +257,18 @@ export interface WorkSessionRecord {
 /** Schema tag of {@link WorkSessionRecord}. */
 export const WORK_SESSION_SCHEMA = 'delo.changes-work-session/1'
 
-/** What the profile's active directory for one plugin holds, in `changes/<profile>/active.json`. */
-export interface ActiveContent {
-  readonly version: ContentVersion
-  /** `approved` outside a work session under Block; `work-session` during one; `unapproved` under Warn or Off. */
-  readonly kind: 'approved' | 'work-session' | 'unapproved'
-}
+/**
+ * What the profile's active directory for one plugin holds, in `changes/<profile>/active.json`: `approved` outside a
+ * work session under Block; `work-session` during one; `unapproved` under Warn or Off; `left-out` while a change a
+ * failed start left out stays out ([left out](./left-out.ts)), holding the content from before that change, or nothing
+ * when the change installed the plugin or turned it on.
+ */
+export type ActiveContent =
+  | { readonly version: ContentVersion, readonly kind: 'approved' | 'work-session' | 'unapproved' }
+  | { readonly version?: ContentVersion, readonly kind: 'left-out' }
+
+/** Every kind of {@link ActiveContent}. */
+export const ACTIVE_KINDS: readonly ActiveContent['kind'][] = ['approved', 'work-session', 'unapproved', 'left-out']
 
 /** The file `changes/<profile>/active.json`, by package name. */
 export interface ActiveRecord {

@@ -5,9 +5,10 @@
  * [store](./store.ts)), diffs and pending changes ([diff](./diff.ts), [pending](./pending.ts)), the risk summary
  * ([risk](./risk.ts), [review](./review.ts)), the record files ([records](./records.ts)), the profile's `link:`
  * dependencies ([link](./link.ts)), what a start loads ([enforce](./enforce.ts)) and the invariants a booted profile keeps
- * ([invariants](./invariants.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)), and the Host's side of a work
+ * ([invariants](./invariants.ts)), leaving a change out after a failed start ([left out](./left-out.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)), and the Host's side of a work
  * session ([work](./work.ts), [work record](./work-record.ts)), and the agent's plugin requests and applying them
- * ([install actions](./install-actions.ts), also the entry `@delo/changes/install`). Ending a work session because Delo
+ * ([install actions](./install-actions.ts), also the entry `@delo/changes/install`), and reloading the running Host
+ * ([reload](./reload.ts)). Ending a work session because Delo
  * stops is the separate entry `@delo/changes/stop` ([stop](./stop.ts)).
  *
  * @module @delo/changes
@@ -26,6 +27,7 @@ export * from './records.ts'
 export * from './link.ts'
 export * from './enforce.ts'
 export * from './invariants.ts'
+export * from './left-out.ts'
 export * from './collect.ts'
 export * from './boot-record.ts'
 export * from './status.ts'
@@ -34,6 +36,7 @@ export {
   loadWorkSession,
   reviewWork,
   shortVersion,
+  WORK_SESSION_DEFAULT_MINUTES,
   WORK_SESSION_MAX_MINUTES,
   workFinishedLine,
   workSessionExpired,
@@ -48,3 +51,4 @@ export {
 } from './work.ts'
 export * from './work-record.ts'
 export * from './install-actions.ts'
+export * from './reload.ts'

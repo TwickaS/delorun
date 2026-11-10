@@ -63,6 +63,7 @@ import {
   type WorkSessionRecord,
 } from './types.ts'
 import { isPluginRequest } from './install-actions.ts'
+import { leftOutOf } from './left-out.ts'
 import { beginWork, endWork, type WorkDone, type WorkStarted } from './work.ts'
 
 /** The profile an action works on. */
@@ -135,6 +136,8 @@ export interface ChangesListing {
   readonly pending: readonly ListedChange[]
   /** The agent's plugin installs, updates and removals waiting for review, oldest first ([install actions](./install-actions.ts)). */
   readonly requests: readonly ChangeEntry[]
+  /** The changes a failed start left out that stay out, at most one per plugin, newest in the log first ([left out](./left-out.ts)). */
+  readonly leftOut: readonly ChangeEntry[]
   /** Every other logged change, newest first: decided ones, and a plugin turned off or on that failed to load. */
   readonly entries: readonly ChangeEntry[]
   /** Plugins whose folder no longer exists. */
@@ -426,9 +429,10 @@ export async function listChanges(ctx: ChangesContext): Promise<ChangesListing> 
       return failure === undefined ? change : { ...change, lastFailure: failure }
     })
   const requests = state.log.entries.filter(entry => entry.state === 'pending' && isPluginRequest(entry))
+  const leftOut = state.log.entries.filter(entry => entry.state === 'left-out-at-start' && leftOutOf(state.log, state.approved, entry.subject.plugin!) === entry).reverse()
   const entries = state.log.entries
     .map((entry, index) => ({ entry, index, at: Date.parse(entry.decidedAt ?? entry.createdAt) }))
-    .filter(({ entry }) => !isFolderPending(entry) && !requests.includes(entry))
+    .filter(({ entry }) => !isFolderPending(entry) && !requests.includes(entry) && !leftOut.includes(entry))
     .sort((left, right) => right.at - left.at || right.index - left.index)
     .map(({ entry }) => entry)
   const session = state.workSession
@@ -436,6 +440,7 @@ export async function listChanges(ctx: ChangesContext): Promise<ChangesListing> 
     protection,
     pending,
     requests,
+    leftOut,
     entries,
     missing: state.missing,
     ...session === undefined ? {} : { workSession: { plugin: session.plugin, startedAt: session.startedAt, endsAt: session.endsAt } },
@@ -462,7 +467,7 @@ export async function showChange(ctx: ChangesContext, id: ChangeId): Promise<Sho
 /**
  * Apply a change: the plugin's approved content becomes exactly what the change showed, its active directory holds it,
  * one history version records it, and the running Host reloads; a failed reload goes back. A plugin turned off or on
- * that failed to load is turned off or on again.
+ * that failed to load is turned off or on again, and a change a failed start left out loads again.
  * @param ctx - the profile.
  * @param id - the change id the person reviewed.
  * @param presence - proof that the person is at their computer.
@@ -481,6 +486,7 @@ export async function applyChange(ctx: ChangesContext, id: ChangeId, presence: A
       const { entry } = located
       if (isPluginRequest(entry)) throw new ChangesError('NOT_ALLOWED', id, `Change ${id} installs, updates or removes a plugin the agent asked for; applyInstallChange applies it.`)
       if (entry.state === 'pending') return switchBundle(ctx, state, entry.subject.plugin!, entry.kind === 'plugin-on', presence, options.reload)
+      if (entry.state === 'left-out-at-start') return applyLeftOut(ctx, state, entry, presence, options.reload)
       throw new ChangesError('NOT_ALLOWED', id, `Change ${id} is ${entry.state}, so it cannot be applied.`)
     }
     const { change } = located
@@ -551,16 +557,17 @@ export async function discardChange(ctx: ChangesContext, id: ChangeId, presence:
 }
 
 /**
- * Undo an applied change: a plugin's approved content goes back to what it was before the change, or the plugin has
- * none after undoing its install, and a plugin turned off is turned on again and the other way round. One history
- * version records it and the running Host reloads; a failed reload goes back and the change stays applied.
+ * Undo an applied change, or one a failed start left out: a plugin's approved content goes back to what it was before
+ * the change, or the plugin has none after undoing its install, and a plugin turned off is turned on again and the
+ * other way round. One history version records it and the running Host reloads; a failed reload goes back and the
+ * change stays as it was.
  * @param ctx - the profile.
  * @param id - the change id.
  * @param presence - proof that the person is at their computer.
  * @param options - the Host's reload.
  * @returns what was done.
  * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `UNKNOWN_CHANGE` when the
- *   log has no change with the id; `NOT_ALLOWED` for a change that is not applied, a later change of the same plugin, a
+ *   log has no change with the id; `NOT_ALLOWED` for a change that is neither applied nor left out, a later change of the same plugin, a
  *   kind undone another way, or a plugin in a work session.
  */
 export async function undoChange(ctx: ChangesContext, id: ChangeId, presence: AtComputer, options: ReloadOptions): Promise<ActionResult> {
@@ -569,7 +576,7 @@ export async function undoChange(ctx: ChangesContext, id: ChangeId, presence: At
     const state = await readState(ctx)
     const entry = findEntry(state.log, id)
     if (entry === undefined) throw new ChangesError('UNKNOWN_CHANGE', id, `No applied change has the id ${id}. See the changes: delorun changes list`)
-    if (entry.state !== 'applied') throw new ChangesError('NOT_ALLOWED', id, `Change ${id} is ${entry.state}, so there is nothing to undo.`)
+    if (entry.state !== 'applied' && entry.state !== 'left-out-at-start') throw new ChangesError('NOT_ALLOWED', id, `Change ${id} is ${entry.state}, so there is nothing to undo.`)
     switch (entry.kind) {
       case 'plugin-off':
       case 'plugin-on':
@@ -584,6 +591,39 @@ export async function undoChange(ctx: ChangesContext, id: ChangeId, presence: At
       case 'guard-weakening':
         throw new ChangesError('NOT_ALLOWED', id, `Change ${id} cannot be undone here: ${entry.summary}.`)
     }
+  })
+}
+
+/**
+ * Apply a change a failed start left out again ([left out](./left-out.ts)): the plugin's active directory holds its
+ * approved content again, which for a change of content is the change's `to`, the change is applied, and the running
+ * Host reloads; a failed reload goes back and the change stays left out with the failure.
+ * @param ctx - the profile.
+ * @param state - the records.
+ * @param entry - the left-out entry.
+ * @param presence - the proof.
+ * @param reload - reloads the running Host.
+ * @returns what was done.
+ * @throws {ChangesError} `NOT_ALLOWED` when the plugin's approved content is no longer what the change applied, or a
+ *   work session is open on it.
+ */
+async function applyLeftOut(ctx: ChangesContext, state: State, entry: ChangeEntry, presence: AtComputer, reload: ReloadHost): Promise<ActionResult> {
+  const plugin = entry.subject.plugin!
+  refuseInWorkSession(state, plugin)
+  const approval = approvedOf(state.approved, plugin)
+  if (entry.kind !== 'plugin-on' && approval?.version !== entry.to) {
+    throw new ChangesError('NOT_ALLOWED', entry.id, `${plugin} no longer has what change ${entry.id} applied, so there is nothing to apply again. See the changes: delorun changes list`)
+  }
+  const at = timeOf(ctx)
+  const steps = await contentSteps(ctx, state, plugin, approval)
+  const { leftOut: _leftOut, lastFailure: _lastFailure, ...applied } = entry
+  return carryOut(ctx, state.log, reload, {
+    id: entry.id,
+    summary: `Applied ${entry.id} again: ${entry.summary}`,
+    wentBack: `Went back: ${entry.id} failed to load again`,
+    ...steps,
+    done: recorded => ({ ...applied, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }),
+    failed: lastFailure => ({ ...entry, lastFailure }),
   })
 }
 

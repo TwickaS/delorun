@@ -15,7 +15,8 @@
  *
  * A second start for a profile whose home process answers prints that process and exits 0. A profile that skipped a
  * Delo bundle is refused before it boots, and one in which a row of a Delo bundle did not activate is shut down and
- * refused after it boots ([delo-bundles](./delo-bundles.ts)).
+ * refused after it boots ([delo-bundles](./delo-bundles.ts)). A fresh start that fails right after a change starts once
+ * more, in a new process, without that change ([retry](./changes/retry.ts)).
  *
  * Run from `runtimes/<version>/` of C1's store, the home process gets the update support of [update](./update/support.ts);
  * its Host counts running chats and runs C3's health check ([host](./update/host.ts)). A process whose descriptor 3
@@ -39,6 +40,7 @@ import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignal
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { afterChangesBoot, changesApprovedContent, recordChangesBoot } from './changes/start.ts'
 import { reloadProfile } from './changes/reload.ts'
+import { relaunchForeground, retryDetached, retryForeground, startRetry, type DetachedOutcome, type ForegroundRelaunch, type StartRetry } from './changes/retry.ts'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
@@ -142,6 +144,8 @@ export interface StartDependencies {
   readonly approvedPluginContent: ApprovedPluginContent
   /** The ordered steps before any Host boots ([pre-start](./pre-start.ts)); {@link realPreStartSteps} in a real start. */
   readonly preStartSteps: readonly PreStartStep[]
+  /** The second start after a start left a change out ([retry](./changes/retry.ts)); {@link relaunchForeground} in a real start. */
+  readonly relaunch: ForegroundRelaunch
 }
 
 /**
@@ -426,6 +430,7 @@ export function upstreamDependencies(): StartDependencies {
     checkRuntime: checkStoredRuntime,
     handover: () => inheritedHandover(),
     opener: computerOpener(process.env),
+    relaunch: request => relaunchForeground(request),
   }
 }
 
@@ -435,19 +440,30 @@ export function upstreamDependencies(): StartDependencies {
  * before it boots; one in which a row of a Delo bundle did not activate is shut down after its startup settles and
  * refused, which can come after the studio has opened in the browser. On success the profile's plugins keep the
  * process alive, and the lock, the token and the socket go when it exits; a refusal or a failed boot removes them
- * at once.
+ * at once. A fresh start that failed right after a change starts once more without it ([retry](./changes/retry.ts)).
  * @param request - the home, profile, studio choice and output.
- * @param dependencies - the profile preparation and runner, environment loader, holder probe, exit hooks and output
- *   capture.
+ * @param dependencies - the profile preparation and runner, environment loader, holder probe, exit hooks, output
+ *   capture and second start.
  * @returns `undefined` once the profile has booted: upstream's profile runner sets the exit code when the process ends;
- *   {@link EXIT.ok} when a home process for the profile already runs.
+ *   {@link EXIT.ok} when a home process for the profile already runs; the second start's result when a change was
+ *   left out.
  * @throws {CliError} when the home has no CLI profile, the profile skipped a Delo bundle, a row of a Delo bundle did not
  *   activate, or the profile fails to boot.
  * @throws {HomeLayoutError} `HOME_UNRESPONSIVE` when the lock's holder lives but does not answer.
  * @throws {HostNotStoppedError} when a refused or failed start's Host did not stop; the process then ends with
  *   {@link EXIT.failed} in the next turn of the event loop, once the refusal has been reported.
  */
-export async function startForeground(request: StartRequest, dependencies: StartDependencies = upstreamDependencies()): Promise<CommandResult> {
+export function startForeground(request: StartRequest, dependencies: StartDependencies = upstreamDependencies()): Promise<CommandResult> {
+  return retryForeground(request, () => startHomeProcess(request, dependencies), dependencies.relaunch)
+}
+
+/**
+ * {@link startForeground}'s one start in this process.
+ * @param request - the home, profile, studio choice and output.
+ * @param dependencies - the start's dependencies.
+ * @returns as {@link startForeground}, without the second start.
+ */
+async function startHomeProcess(request: StartRequest, dependencies: StartDependencies): Promise<CommandResult> {
   if (!hasCliProfile(request.home, request.profile)) {
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} is not set up in ${request.home}; run: delorun setup`)
   }
@@ -468,6 +484,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
   let current: BootedProfile | undefined
   const unregisterRelease = dependencies.fatalRelease(async () => { await current?.dispose() })
   const tracked: StartDependencies = { ...dependencies, runProfile: async options => (current = await dependencies.runProfile(options)) }
+  const retry = startRetry({ home: request.home, profile: request.profile, env: request.env, successor: handover !== undefined, output: request.output, logger: homeLog.logger })
   try {
     const running = handover?.handover.to ?? runtime.version
     const options: HomeProcessOptions = {
@@ -476,7 +493,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
       running,
       startId,
       host: {
-        boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, tracked, runtime.store ? running : undefined, homeLog.logger),
+        boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, tracked, runtime.store ? running : undefined, homeLog.logger, retry),
       },
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
         home: request.home,
@@ -507,7 +524,10 @@ export async function startForeground(request: StartRequest, dependencies: Start
       setImmediate(() => { dependencies.exit(EXIT.failed) })
       throw error
     }
-    if (!(error instanceof HomeLayoutError) || error.code !== 'HOME_RUNNING') throw error
+    if (!(error instanceof HomeLayoutError) || error.code !== 'HOME_RUNNING') {
+      retry.stopped()
+      throw error
+    }
     const holder = readHomeLock(runDirectory(request.home, request.profile))
     request.output.stdout(`Delo is already running for the profile ${request.profile}${holder === undefined ? '' : ` (process ${String(holder.pid)}, started ${holder.startedAt})`}.\n`)
     await announceStudio(request.home, request.profile, request.open, request.output, dependencies.opener)
@@ -530,6 +550,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * @param dependencies - the profile preparation, runner and environment loader.
  * @param stored - the version this process runs from the store, whose files H1 checks; `undefined` outside the store.
  * @param logger - the home process's logger.
+ * @param retry - what leaves the newest change out when the boot fails or the booted Host is refused.
  * @returns the running Host, whose running chats feed the home process's gate and whose health check is C3's.
  * Before the boot it sets {@link DEFAULT_WORKSPACE_ENV} to the studio's first-use workspace folder
  * ([default workspace](./default-workspace.ts)).
@@ -538,7 +559,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
  *   Host is first torn down within the home process's bound, without ending the process.
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
-async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
+async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger, retry: StartRetry): Promise<RunningHost> {
   const composed = await composeDeloProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env }, {
     prepareProfile: dependencies.prepareProfile,
     approvedPluginContent: dependencies.approvedPluginContent,
@@ -567,6 +588,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   } catch (error) {
     await recordChangesBoot({ home: request.home, profile: request.profile, logger }, [], error)
     await removeSandboxOverlay(request.home, request.profile)
+    await retry.afterFailure(error)
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} failed to start: ${error instanceof Error ? error.message : String(error)}`)
   }
   await recordChangesBoot({ home: request.home, profile: request.profile, logger }, booted.rows())
@@ -574,11 +596,14 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     const inactive = inactiveDeloRows(booted.rows(), deloRowIds(composed.resolvedProfile.profile))
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)
     assertDeloInvariants(composed, booted)
+    await retry.checkRows(booted.rows())
   } catch (error) {
     // The refused Host stops through its own teardown, which ends no process, so the home process's failed start runs.
     await refuseBootedHost(() => booted.dispose(), error).catch(async (failure: unknown) => {
       // The overlay stays while the refused Host may still run.
-      if (!(failure instanceof HostNotStoppedError)) await removeSandboxOverlay(request.home, request.profile)
+      if (failure instanceof HostNotStoppedError) throw failure
+      await removeSandboxOverlay(request.home, request.profile)
+      await retry.afterFailure(failure)
       throw failure
     })
   }
@@ -647,7 +672,9 @@ function withDevices(booted: BootedProfile): { readonly devices?: LocalDeviceApp
 
 /**
  * `delorun start` without `--foreground`: start the home process detached from the terminal and wait for it to report
- * `running`, then say that it keeps running, where the studio is and how to watch and stop it.
+ * `running`, then say that it keeps running, where the studio is and how to watch and stop it. When the home process
+ * left a change out because it did not start with it, the words name the change and the home process starts once more
+ * without it ([retry](./changes/retry.ts)).
  * @param home - the prepared Delo home.
  * @param profile - the CLI profile.
  * @param output - where the command writes.
@@ -667,7 +694,25 @@ export async function startDetached(home: string, profile: string, output: Comma
   }
   const entry = process.argv[1]
   if (entry === undefined) throw new CliError(EXIT.failed, 'delorun: the command\'s own entry point is unknown, so the home process cannot be started')
-  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile], { detached: true, stdio: 'ignore', env: process.env })
+  return retryDetached({ home, profile, output }, async (variables) => {
+    const outcome = await launchDetached(home, profile, output, entry, variables)
+    if (outcome.kind === 'running') await announceStudio(home, profile, open, output, opener)
+    return outcome
+  })
+}
+
+/**
+ * Start `delorun start --foreground` detached and wait for it to report `running`, saying how it went; a home process
+ * that exited with {@link EXIT.changeLeftOut} is left to its starter's words.
+ * @param home - the prepared Delo home.
+ * @param profile - the CLI profile.
+ * @param output - where the command writes.
+ * @param entry - the command's entry point.
+ * @param variables - variables added to this process's environment for the home process.
+ * @returns how the start ended.
+ */
+async function launchDetached(home: string, profile: string, output: CommandOutput, entry: string, variables: Readonly<Record<string, string>>): Promise<DetachedOutcome> {
+  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile], { detached: true, stdio: 'ignore', env: { ...process.env, ...variables } })
   let exitCode: number | null | undefined
   child.once('exit', (code) => { exitCode = code })
   child.unref()
@@ -683,17 +728,16 @@ export async function startDetached(home: string, profile: string, output: Comma
         ...notice === undefined ? [] : [notice],
         '',
       ].join('\n'))
-      await announceStudio(home, profile, open, output, opener)
-      return EXIT.ok
+      return { kind: 'running' }
     }
     if (exitCode !== undefined) {
-      output.stderr(`delorun start: the home process exited with code ${String(exitCode)} before it was running; see its log: ${log}\n`)
-      return EXIT.failed
+      if (exitCode !== EXIT.changeLeftOut) output.stderr(`delorun start: the home process exited with code ${String(exitCode)} before it was running; see its log: ${log}\n`)
+      return { kind: 'exited', code: exitCode }
     }
     await sleep(100)
   }
   output.stderr(`delorun start: the home process did not report running within ${String(START_WAIT_MS / 1000)} seconds; see its log: ${log}\n`)
-  return EXIT.failed
+  return { kind: 'timeout' }
 }
 
 /**

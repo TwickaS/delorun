@@ -47,6 +47,7 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 
 | Feature | What the edits do | Serves |
 | --- | --- | --- |
+| `changes` | The boot page's recovery screen and the `/recovery` index path (C21) | shipped `plugin-changes` |
 | `code-refusal-switch` | The loader's `refuseCode` option and the boot's forwarding of it | a switch, off; no Delo composition turns it on |
 | `container-denial-marker` | The sandbox, shell and PTC fields that mark a denial by the environment | shipped confinement, behind a C16 switch |
 | `custom-chat-display` | The Custom work-details mode and the presentation policy the chat renderers read | the studio lane |

@@ -1,6 +1,6 @@
 {
   "name": "@delo/plugin-changes",
-  "description": "Delo's hold on the agent's plugin changes and the check before every reload of a running profile: a plugin_manager install_bundle or remove_bundle call records a change waiting for the person's review, other actions that change what runs are left to the person, and no recomposition loads content the person did not approve",
+  "description": "Delo's hold on the agent's plugin changes, the check before every reload of a running profile, and the studio's Changes routes: a plugin_manager install_bundle or remove_bundle call records a change waiting for the person's review, other actions that change what runs are left to the person, no recomposition loads content the person did not approve, and the recovery screen reads and acts through routes that need the person at their computer",
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
@@ -9,7 +9,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@delo/changes": "workspace:*"
+    "@delo/changes": "workspace:*",
+    "@delo/home": "workspace:*",
+    "@delo/profile-safety": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
@@ -22,7 +24,9 @@
     "@deepseek-ai/cordis-plugin-timer": "workspace:~",
     "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-hmr": "workspace:*",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "@deepseek-ai/dsh-sandbox-policy": "workspace:*",

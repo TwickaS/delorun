@@ -108,7 +108,7 @@ async function harness(enabled: boolean, withProfile = true, profileHistory = fa
   await ctx.plugin(SandboxPolicy, { mode: 'workspace-write' })
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(tool, { profileHistory })
-  await ctx.plugin(plugin, { enabled })
+  await ctx.plugin(plugin, { enabled, installationBundles: [] })
   const approval = vi.fn(async () => 'allowed-once' as const)
   ctx.on('approval/request', approval)
   const agent = activeAgent()
@@ -259,7 +259,8 @@ describe('the model\'s plugin_manager changes wait for the person', () => {
 
 describe('the plugin_changes_pending switch', () => {
   it('defaults to off, the parity value', () => {
-    expect(plugin.Config()).toEqual({ enabled: false })
+    expect(plugin.Config()).toEqual({ enabled: false, installationBundles: [] })
+    expect(() => plugin.Config({ enabled: true, installationBundles: ['../escape'] })).toThrow()
   })
 
   it('with the switch at parity the plugin_manager action asks stock\'s approval', async () => {

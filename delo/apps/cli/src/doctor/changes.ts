@@ -3,11 +3,12 @@
  * work session and the last failed reload in one (`run/<profile>/changes-work.json`), one line per plugin under Changes (whether it loaded at the last start, whether its active content is
  * the approved one, the `engines.dsh` and `engines.delo` its active `package.json` declares, and what it registers that
  * changes a consent, a guard or the sandbox policy), the cause of a failed start or load named with the newest applied
- * change of the plugin, each pending change and each invariant that does not hold.
+ * change of the plugin, each change a failed start left out with its plugin and failure, each pending change and each
+ * invariant that does not hold.
  *
- * A plugin that did not load, runs content the person did not approve or waits for review is `warn`, and so is
- * protection lowered to `warn` or `off`; an invariant that does not hold is `fail`. Nothing is written: the consent check
- * reads the active content from the store. Every message is escaped for the terminal, and a failure message a plugin or
+ * A plugin that did not load, runs content the person did not approve or waits for review is `warn`, and so are a change
+ * left out at start and protection lowered to `warn` or `off`; an invariant that does not hold is `fail`. Nothing is
+ * written: the consent check reads the active content from the store. Every message is escaped for the terminal, and a failure message a plugin or
  * a record carries is cut at a line's length ([terminal text](../terminal-text.ts)).
  *
  * @module @delo/cli/doctor/changes
@@ -27,6 +28,7 @@ import {
   compareCodeUnits,
   type ActiveContent,
   type ChangesStatus,
+  type ContentVersion,
   type PluginStatus,
 } from '@delo/changes'
 import { resolveDeloHome } from '@delo/home'
@@ -47,6 +49,7 @@ const CONTENT_WORDS: Readonly<Record<ActiveContent['kind'], string>> = {
   'approved': 'it runs the content you approved',
   'work-session': 'it runs its folder in your work session',
   'unapproved': 'it runs content you have not approved',
+  'left-out': 'it runs the content from before a change a failed start left out',
 }
 
 /**
@@ -106,13 +109,13 @@ async function requirements(directory: string): Promise<string> {
  * What a plugin's active content registers that changes a consent, a guard or the sandbox policy: the built-in check
  * run over every file of the content as added.
  * @param home - the Delo home.
- * @param plugin - the plugin, with its active content.
+ * @param version - the plugin's active content.
  * @returns the clause.
  */
-async function registrations(home: string, plugin: PluginStatus & { readonly active: NonNullable<PluginStatus['active']> }): Promise<string> {
+async function registrations(home: string, version: ContentVersion): Promise<string> {
   const checks = BUILT_IN_CHECKS.filter(candidate => candidate.id === CONSENT_CHECK_ID)
   try {
-    const manifest = await readVersion(home, plugin.active.version)
+    const manifest = await readVersion(home, version)
     const input = await reviewInputOf(home, undefined, manifest, await compareVersions(home, undefined, manifest))
     const summary = reviewChange(input, checks)
     if (summary.kinds.length === 0) return 'it registers nothing that changes a consent, a guard or the sandbox policy'
@@ -142,6 +145,7 @@ function loadState(status: ChangesStatus, plugin: PluginStatus): { readonly fail
  * @returns the clause on what its active directory holds.
  */
 function contentWords(plugin: PluginStatus): string {
+  if (plugin.active?.kind === 'left-out' && plugin.active.version === undefined) return 'nothing of it runs, because a failed start left out the change that added it or turned it on'
   if (plugin.active !== undefined) return CONTENT_WORDS[plugin.active.kind]
   return plugin.approved === undefined ? 'nothing of it runs until you review it' : 'no content of it is recorded as running'
 }
@@ -157,9 +161,10 @@ function contentWords(plugin: PluginStatus): string {
 async function pluginLine(home: string, profile: string, status: ChangesStatus, plugin: PluginStatus): Promise<CheckResult> {
   const load = loadState(status, plugin)
   const parts = [load.words, contentWords(plugin)]
-  if (plugin.active !== undefined) {
+  const version = plugin.active?.version
+  if (version !== undefined) {
     parts.push(await requirements(activeDirectory(home, profile, plugin.plugin)))
-    parts.push(await registrations(home, { ...plugin, active: plugin.active }))
+    parts.push(await registrations(home, version))
   }
   // A plugin waiting for review as an install loads nothing by design; its pending line says so.
   const expectedOut = plugin.approved === undefined && plugin.active === undefined
@@ -222,6 +227,9 @@ export async function changesLines(home: string, profile: string, status: Change
   if (status.workFailureUnreadable !== undefined) results.push(line('warn', `the record of the last failed reload in a work session cannot be read: ${status.workFailureUnreadable}`))
   for (const plugin of status.plugins) results.push(await pluginLine(home, profile, status, plugin))
   results.push(...causeLines(status))
+  for (const { id, plugin, at, failure } of status.leftOut) {
+    results.push(line('warn', `${plugin} runs without change ${id}, which a start at ${at} left out because it failed: ${quotedFailure(failure)}. To try it again: delorun changes apply ${id}. To undo it: delorun changes undo ${id}`))
+  }
   if (status.bootUnreadable !== undefined) results.push(line('warn', `the record of the last start cannot be read: ${status.bootUnreadable}`))
   for (const change of status.pending) {
     const next = change.id === undefined ? 'run delorun changes list' : `delorun changes show ${change.id}`

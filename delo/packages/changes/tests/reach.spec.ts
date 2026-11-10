@@ -1,7 +1,8 @@
 /**
- * Who can reach the actions of Changes: only `delorun changes` and this package. A model tool, a Host route or a plugin
- * that imported an action or an attest function could decide a change without the person at their computer, so every
- * other module of Delo's workspaces, and every upstream module, is scanned for such an import.
+ * Who can reach the actions of Changes: only `delorun changes`, this package and the studio's Changes routes
+ * (`delo/packages/plugin-changes/src/routes.ts`), which attest a studio request at the computer. A model tool, another
+ * Host route or a plugin that imported an action or an attest function could decide a change without the person at
+ * their computer, so every other module of Delo's workspaces, and every upstream module, is scanned for such an import.
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -15,7 +16,13 @@ vi.setConfig({ testTimeout: 60_000 })
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
 
 /** The functions that decide a change or prove presence. */
-const GUARDED = ['applyChange', 'applyInstallChange', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal']
+const GUARDED = ['applyChange', 'applyInstallChange', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal', 'attestStudio', 'leaveOutNewestChange']
+
+/** The function that leaves a change out without a proof of presence, because a start failed. */
+const START_ONLY = 'leaveOutNewestChange'
+
+/** The one module outside `delo/packages/changes/src/` that may name it: the start's retry. */
+const START_IMPORTER = join('delo', 'apps', 'cli', 'src', 'changes', 'retry.ts')
 
 /** The function that ends a work session without a proof of presence, because Delo stops. */
 const STOP_ONLY = 'finishWorkWithoutPerson'
@@ -26,8 +33,11 @@ const STOP_IMPORTER = join('delo', 'apps', 'cli', 'src', 'changes', 'start.ts')
 /** An import of the entry that exports it. */
 const IMPORTS_STOP = /['"]@delo\/changes\/stop['"]|['"][^'"]*\/changes\/src\/stop(?:\.ts)?['"]/
 
-/** Modules outside `delo/apps/cli/src/changes/` and `delo/packages/changes/src/` that may import them; none yet. */
-const ALLOWED: readonly string[] = []
+/** The studio's Changes routes, the one module of a plugin that may import them. */
+const ROUTES = join('delo', 'packages', 'plugin-changes', 'src', 'routes.ts')
+
+/** Modules outside `delo/apps/cli/src/changes/` and `delo/packages/changes/src/` that may import them. */
+const ALLOWED: readonly string[] = [ROUTES]
 
 /** The directories whose modules may import them. */
 const OWNERS = [join('delo', 'apps', 'cli', 'src', 'changes') + sep, join('delo', 'packages', 'changes', 'src') + sep]
@@ -100,17 +110,39 @@ describe('no model tool or route reaches a changes action', () => {
   })
 
   it('no tool can apply a change, start or end a work session, or change the protection setting', () => {
-    // The two plugins that act for the agent read and record Changes; neither imports a function that decides one.
+    // The two plugins that act for the agent read and record Changes; neither imports a function that decides one,
+    // apart from the studio's routes, which no tool reaches.
     for (const plugin of ['plugin-changes', 'plugin-instruction-consent']) {
       const files = sources(join(ROOT, 'delo', 'packages', plugin, 'src'))
       expect(files.some(file => IMPORTS_CHANGES.test(readFileSync(file, 'utf8'))), plugin).toBe(true)
       for (const file of files) {
         const text = readFileSync(file, 'utf8')
+        if (relative(ROOT, file) === ROUTES) continue
         expect(guardedNames(text), relative(ROOT, file)).toEqual([])
         expect(new RegExp(`\\b${STOP_ONLY}\\b`).test(text) || IMPORTS_STOP.test(text), relative(ROOT, file)).toBe(false)
       }
     }
     expect(guardedNames("import { applyInstallChange } from '@delo/changes/install'")).toEqual(['applyInstallChange'])
+  })
+
+  it('the studio routes are the only module that attests a studio request, and they do', () => {
+    const routes = readFileSync(join(ROOT, ROUTES), 'utf8')
+    expect(IMPORTS_CHANGES.test(routes)).toBe(true)
+    expect(guardedNames(routes)).toContain('attestStudio')
+    // The routes never reach the protection setting, the terminal proof or the agent's plugin operation.
+    for (const name of ['changeProtection', 'setProtection', 'attestTerminal', 'applyInstallChange']) expect(guardedNames(routes), name).not.toContain(name)
+    expect(guardedNames(routes)).not.toContain('*')
+  })
+
+  it('only the start\'s retry leaves a change out, and no route, tool or plugin names it', () => {
+    const naming: string[] = []
+    for (const directory of [...sourceDirectories('delo/packages'), ...sourceDirectories('delo/apps')]) {
+      for (const file of sources(directory)) {
+        const path = relative(ROOT, file)
+        if (!path.startsWith(OWNERS[1]!) && new RegExp(`\\b${START_ONLY}\\b`).test(readFileSync(file, 'utf8'))) naming.push(path)
+      }
+    }
+    expect(naming).toEqual([START_IMPORTER])
   })
 
   it('recognizes an import of a guarded function, a namespace import and a relative import into the sources', () => {

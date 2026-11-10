@@ -109,6 +109,11 @@
       name: '@delo/plugin-changes'
       config:
         enabled: true
+        installationBundles:
+          - '@deepseek-ai/dsh-base'
+          - '@deepseek-ai/dsh-web-app'
+          - '@delo/bundle-local'
+          - '@delo/bundle-studio'
       disabled: true
 
 - insert:

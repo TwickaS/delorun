@@ -23,15 +23,29 @@
  *
  * Off, the parity value and the default, the plugin registers no listener or guard, and the tool runs and asks as
  * upstream's does.
+ *
+ * Whatever the switch says, once the web server and Connection are present the plugin registers the studio's Changes
+ * routes ([routes](./routes.ts)) under `/delo/changes/`, which the recovery screen and the studio read and act through;
+ * an action needs the person at their computer, and safe mode keeps the bundles `installationBundles` names.
  * @module @delo/plugin-changes
  */
 import { realpathSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
+import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-hmr'
+import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
-import { prepareReload, startNotice, type ChangeEntry } from '@delo/changes'
+import { PACKAGE_NAME_PATTERN, prepareReload, reloadProfile, startNotice, type ChangeEntry } from '@delo/changes'
 import { recordPluginRequest, type PluginRequest } from '@delo/changes/install'
+import { CHANGES_ROUTE_PREFIX, changesRoutes } from './routes.ts'
+
+/**
+ * The page global upstream's boot page reads the Changes routes' prefix from (`dshRecoveryRoutes` in
+ * `@deepseek-ai/dsh-client-web`'s boot page); without it the boot page shows no recovery screen.
+ */
+export const RECOVERY_ROUTES_GLOBAL = 'dshRecoveryRoutes'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'plugin-changes'
@@ -44,11 +58,18 @@ export interface Config {
    * tool runs and asks as upstream's does. Delo's composition turns it on.
    */
   readonly enabled: boolean
+  /**
+   * The bundles the installation itself ships, which safe mode from the studio keeps loading: Delo's profile bundle
+   * list, which `@delo/bundle-local` restates in its row. Empty, the studio's safe-mode route refuses and points to
+   * `delorun recover safe-mode`.
+   */
+  readonly installationBundles: string[]
 }
 
 /** Validated configuration. The default is the parity value. */
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(false),
+  installationBundles: z.array(z.string().pattern(PACKAGE_NAME_PATTERN)).default([]),
 })
 
 /** The tool registry, whose `tools/pre-execute` event and guards the plugin uses. */
@@ -156,6 +177,27 @@ function unrecorded(detail: string): PreToolDecision {
 export function apply(ctx: Context, config: Config): void {
   // Upstream hot reload's `ProfileReconcileCheck`: it awaits `check` before every recomposition of the profile.
   ctx.provide('profileReconcileCheck', { check: (profile: ProfileContext) => checkReload(ctx, profile) })
+  ctx.inject(['webServer', 'connection'], (scope) => {
+    const routes = changesRoutes({
+      connection: scope.connection,
+      profile: () => {
+        const profile = scope.get('profileContext')
+        return profile === undefined ? undefined : { home: profile.home, profile: profile.name, profileDir: profile.dir }
+      },
+      reload: () => reloadProfile(scope.get('hmr')),
+      installationBundles: config.installationBundles,
+      logger: scope.logger,
+    })
+    scope.effect(() => {
+      const registered = routes.map(route => scope.webServer.register(route))
+      return () => {
+        for (const off of registered) off()
+      }
+    }, 'plugin-changes: studio routes')
+    // Upstream's boot page offers its recovery screen only on a page that names the routes, which the index carries
+    // whatever any plugin's client code does.
+    scope.on('webserver/index-inject', (table) => { table.push({ kind: 'global', name: RECOVERY_ROUTES_GLOBAL, value: CHANGES_ROUTE_PREFIX }) })
+  })
   if (!config.enabled) return
   const recorded = new WeakSet<object>()
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {

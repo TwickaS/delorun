@@ -497,6 +497,8 @@ describe('the parity overlay', () => {
 
 describe('the parity overlay\'s mount of @delo/bundle-local', () => {
   const bundle = readFileSync(join(ROOT, LOCAL_BUNDLE_PATCH_PATH), 'utf8')
+  /** The bundles the plugin-changes row names for safe mode from the studio. */
+  const CHANGES_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@delo/bundle-local', '@delo/bundle-studio']
   /** The six consent and guard rows in the parity form the overlay's third patch restates them. */
   const CONSENT_INSERT = {
     insert: [
@@ -505,7 +507,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults', config: { enabled: true }, disabled: true },
       { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent', config: { enabled: true }, disabled: true },
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
-      { id: 'delo-plugin-changes', name: '@delo/plugin-changes', config: { enabled: true }, disabled: true },
+      { id: 'delo-plugin-changes', name: '@delo/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
     ],
   }
   /** The update gate row in the parity form the overlay's fourth patch restates it. */
@@ -548,7 +550,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
           { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults', config: { enabled: true }, disabled: true },
           { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent', config: { enabled: true }, disabled: true },
           { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
-          { id: 'delo-plugin-changes', name: '@delo/plugin-changes', config: { enabled: true }, disabled: true },
+          { id: 'delo-plugin-changes', name: '@delo/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
         ],
       },
       GATE_INSERT,

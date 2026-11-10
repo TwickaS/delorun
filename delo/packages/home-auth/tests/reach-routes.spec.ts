@@ -11,7 +11,7 @@ import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
-import { stampListener } from '../src/arrival.ts'
+import { stampListener } from '@delo/home'
 import {
   approvalRequestHandler, approveHandler, assetHandler, challengeHandler, pathnameOf, pendingHandler, REACH_PATHS, SIGN_IN_ASSETS, sessionHandler,
   signInPageHandler, windowHandler,

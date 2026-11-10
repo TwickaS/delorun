@@ -115,13 +115,23 @@ export interface BootRecordRequest {
 }
 
 /**
+ * A plugin's rows: those whose module is the package or a path inside it.
+ * @param plugin - a package name.
+ * @param rows - the Loader's rows.
+ * @returns the plugin's rows, in the Loader's order.
+ */
+export function pluginRows<Row extends Pick<BootRow, 'name'>>(plugin: string, rows: readonly Row[]): Row[] {
+  return rows.filter(row => row.name === plugin || row.name.startsWith(`${plugin}/`))
+}
+
+/**
  * @param plugin - a package name.
  * @param rows - the Loader's rows.
  * @param failed - whether the profile did not boot.
  * @returns the plugin's entry of the record.
  */
 function bootPlugin(plugin: string, rows: readonly BootRow[], failed: boolean): BootPlugin {
-  const own = rows.filter(row => row.name === plugin || row.name.startsWith(`${plugin}/`))
+  const own = pluginRows(plugin, rows)
   const listed = own.map(({ id, state }) => ({ id, state }))
   if (failed) return { plugin, rows: listed, loaded: false }
   const enabled = own.filter(row => !row.disabled)

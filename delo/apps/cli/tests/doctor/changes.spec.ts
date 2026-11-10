@@ -180,6 +180,31 @@ describe('the changes lines of delorun doctor', () => {
     expect((await lines())[0]).toEqual({ name: 'changes', status: 'warn', message: 'protection is set to off: changes you have not approved run without notice. Set it back with: delorun changes protection block' })
   })
 
+  it('doctor names the plugin and the change a failed start left out, and what its plugin runs instead', async () => {
+    const { applyChange, leaveOutNewestChange, listChanges } = await import('@delo/changes')
+    const plug = linkPlugin('plug')
+    await start()
+    const at = (offset: number): (() => Date) => () => new Date(Date.now() + offset)
+    writeFileSync(join(plug, 'index.js'), 'export default 2\n')
+    const [edit] = (await listChanges({ home, profile: PROFILE, profileDir })).pending
+    await applyChange({ home, profile: PROFILE, profileDir, now: at(60_000) }, edit!.id, attestTerminal(TERMINAL), { reload: () => Promise.resolve(undefined) })
+    const left = (await leaveOutNewestChange({ home, profile: PROFILE, profileDir, now: at(120_000) }, 'Error: plug threw\n    at load'))!
+    await start()
+    await booted([{ id: 'plug', name: 'plug', disabled: false, state: 'active' }])
+    const results = await lines()
+    expect(results).toContainEqual({ name: 'changes', status: 'pass', message: `plug from ${plug}: it loaded at the last start; it runs the content from before a change a failed start left out; it declares no dsh or delo version requirement; ${NONE_REGISTERED}.` })
+    expect(results).toContainEqual({ name: 'changes', status: 'warn', message: `plug runs without change ${left.id}, which a start at ${left.leftOut!.at} left out because it failed: Error: plug threw at load. To try it again: delorun changes apply ${left.id}. To undo it: delorun changes undo ${left.id}` })
+
+    // A plugin whose install was left out runs nothing.
+    const late = linkPlugin('late')
+    await start()
+    const install = (await listChanges({ home, profile: PROFILE, profileDir })).pending.find(change => change.plugin === 'late')!
+    await applyChange({ home, profile: PROFILE, profileDir, now: at(180_000) }, install.id, attestTerminal(TERMINAL), { reload: () => Promise.resolve(undefined) })
+    await leaveOutNewestChange({ home, profile: PROFILE, profileDir, now: at(240_000) }, 'boom')
+    await start()
+    expect(await lines()).toContainEqual({ name: 'changes', status: 'pass', message: `late from ${late}: it was not under Changes at the last start; nothing of it runs, because a failed start left out the change that added it or turned it on.` })
+  })
+
   it('doctor never passes lowered protection', async () => {
     linkPlugin('plug')
     await start()

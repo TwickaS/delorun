@@ -58,6 +58,9 @@ import { removeWorkFailure, writeWorkFailure } from './work-record.ts'
  */
 export const WORK_SESSION_MAX_MINUTES = 480
 
+/** How many minutes a work session lasts when the person names no length: `delorun changes work` without `--for`, or the studio's route without `minutes`. */
+export const WORK_SESSION_DEFAULT_MINUTES = 120
+
 /** How many hexadecimal digits of a content version the person reads. */
 const SHORT_VERSION_LENGTH = 7
 

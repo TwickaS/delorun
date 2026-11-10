@@ -6,7 +6,8 @@
  *    running installation carries for the name) names a folder other than its plugin's active directory, and the
  *    profile's `node_modules/<name>` for a plugin under Changes resolves to that active directory when it exists;
  * 3. each active directory holds what `active.json` records for it, or nothing when it records none, and outside a work
- *    session for the plugin under `block` that is the approved version;
+ *    session for the plugin under `block` that is the approved version, or, for `left-out` content, nothing or the
+ *    content from before the plugin's change left out at start that stays out ([left out](./left-out.ts));
  * 4. every approved version's manifest and objects read back intact from the store.
  *
  * {@link checkLoadedContent} checks 1 to 3, what a profile loads: a start checks them after it prepared the profile and
@@ -22,9 +23,10 @@ import { EMPTY_CONTENT_VERSION, isHarnessLink, namesDirectory, type EnforceReque
 import { isChangesError } from './errors.ts'
 import { readLinks, type ProfileLink } from './link.ts'
 import { activeDirectory } from './paths.ts'
-import { approvedOf, readActiveRecord, readApproved, readProtection, readWorkSession } from './records.ts'
+import { leftOutContent, leftOutOf } from './left-out.ts'
+import { approvedOf, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession } from './records.ts'
 import { holdsVersion, readObject, readVersion } from './store.ts'
-import { ACTIVE_RECORD_SCHEMA, APPROVED_RECORD_SCHEMA, type ActiveRecord, type ApprovedRecord } from './types.ts'
+import { ACTIVE_RECORD_SCHEMA, APPROVED_RECORD_SCHEMA, CHANGE_LOG_SCHEMA, type ActiveRecord, type ApprovedRecord, type ChangeLog } from './types.ts'
 
 /** The profile whose invariants are checked, and the harness's own links ({@link EnforceRequest.harnessLink}). */
 export interface InvariantRequest extends Pick<EnforceRequest, 'harnessLink'> {
@@ -77,6 +79,7 @@ async function checkLoaded(request: InvariantRequest): Promise<{ readonly broken
   const approved: ApprovedRecord = await attempt(broken, 'The approved plugins cannot be read', () => readApproved(profileDir)) ?? { schema: APPROVED_RECORD_SCHEMA, plugins: {} }
   const active: ActiveRecord = await attempt(broken, 'The record of active directories cannot be read', () => readActiveRecord(home, profile)) ?? { schema: ACTIVE_RECORD_SCHEMA, plugins: {} }
   const workSession = await attempt(broken, 'The work session cannot be read', () => readWorkSession(home, profile))
+  const log: ChangeLog = await attempt(broken, 'The change log cannot be read', () => readChangeLog(home, profile)) ?? { schema: CHANGE_LOG_SCHEMA, entries: [] }
   for (const link of links) {
     const directory = activeDirectory(home, profile, link.name)
     if (resolve(link.target) !== resolve(directory)) {
@@ -97,8 +100,14 @@ async function checkLoaded(request: InvariantRequest): Promise<{ readonly broken
         ? `The active directory of ${link.name} holds content, and active.json records none: ${directory}.`
         : `The active directory of ${link.name} does not hold version ${content.version}, which active.json records: ${directory}.`)
     }
-    const approvedVersion = approvedOf(approved, link.name)?.version
-    if (content !== undefined && protection === 'block' && workSession?.plugin !== link.name && (content.kind !== 'approved' || content.version !== approvedVersion)) {
+    if (content === undefined || protection !== 'block' || workSession?.plugin === link.name) continue
+    if (content.kind === 'left-out') {
+      // Holding nothing loads nothing; held content must be what a change left out at start stays out to.
+      const left = leftOutOf(log, approved, link.name)
+      if (content.version !== undefined && (left === undefined || leftOutContent(left).version !== content.version)) {
+        broken.push(`${link.name} holds version ${content.version} as left out of a failed start, and no change left out of it that stays out holds that version.`)
+      }
+    } else if (content.kind !== 'approved' || content.version !== approvedOf(approved, link.name)?.version) {
       broken.push(`${link.name} loads version ${content.version} under block outside a work session, which is not its approved version.`)
     }
   }

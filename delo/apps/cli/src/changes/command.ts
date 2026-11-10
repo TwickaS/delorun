@@ -32,6 +32,8 @@ import {
   discardChange,
   isChangesError,
   isPluginRequest,
+  leftOutFact,
+  leftOutWords,
   listChanges,
   markShownAtUpgrade,
   PACKAGE_NAME_PATTERN,
@@ -338,6 +340,7 @@ async function list(ctx: ChangesContext, json: boolean, context: CommandContext,
     ...unshown.length === 0 ? [] : [...unshown.map(upgradeLine), ''],
     ...waiting.length === 0 ? ['Nothing waits for your review.'] : ['Waiting for review:', ...waiting, 'See one with: delorun changes show <id>'],
   ]
+  if (listing.leftOut.length > 0) lines.push('', 'Left out because Delo did not start with them:', ...listing.leftOut.flatMap(entry => leftOutWords(leftOutFact(entry)).split('\n').map(line => `  ${line}`)))
   if (listing.entries.length > 0) lines.push('', 'Recent changes, newest first:', ...listing.entries.map(entryLine))
   for (const { plugin, source } of listing.missing) lines.push('', `The folder of ${plugin}, ${source}, is gone; its approved copy still runs.`)
   lines.push('', `Protection: ${listing.protection}: ${PROTECTION_MEANING[listing.protection]}.`)
@@ -412,6 +415,7 @@ function entryLines(entry: ChangeEntry): string[] {
       ? `Asked for in a chat. Applying it removes ${spec} from the profile, as delorun plugin remove does.`
       : `Asked for in a chat. Applying it adds ${spec} to the profile, as delorun plugin add does; a folder is added with nothing loaded, and its content waits for your review.`)
   }
+  if (entry.leftOut !== undefined) lines.push(`A start left it out at ${entry.leftOut.at} because it failed: ${entry.leftOut.failure}`)
   if (entry.lastFailure !== undefined) lines.push(`It failed to load at ${entry.lastFailure.at}: ${entry.lastFailure.failure}`)
   return lines
 }

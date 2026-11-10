@@ -189,5 +189,5 @@ export async function mountTools(ctx: Context): Promise<void> {
  */
 export async function mountChanges(ctx: Context): Promise<void> {
   await mountTools(ctx)
-  await ctx.plugin(plugin, { enabled: true })
+  await ctx.plugin(plugin, { enabled: true, installationBundles: [] })
 }

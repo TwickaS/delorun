@@ -31,7 +31,7 @@ import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/type
 import { RemoteError, type PeerId, type PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { REACH_SESSION_COOKIE, type ReachListenerId } from '@delo/contract-admission'
 import type { IdentityFactor, LoopbackRequiredAction } from '@delo/contract-oidc-passkeys'
-import { stampListener } from './arrival.ts'
+import { stampListener } from '@delo/home'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie } from './reach-routes.ts'
 import { createReachAccessPolicy, REACH_DEVICE, reachDevicePrincipal, type ReachDevicePrincipal } from './reach-access.ts'

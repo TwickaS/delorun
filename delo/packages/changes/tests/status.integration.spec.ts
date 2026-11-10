@@ -45,6 +45,7 @@ describe('changesStatus', () => {
       invariants: [],
       unshownAtUpgrade: [],
       plugins: [{ plugin: 'plug', source, approved, active: { version: approved, kind: 'approved' }, lastApplied: { id: upgrade.id, summary: upgrade.summary, at: NOW.toISOString() } }],
+      leftOut: [],
     })
     expect(notApprovedCount(report)).toBe(0)
   })

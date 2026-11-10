@@ -314,6 +314,28 @@ describe('delorun changes apply', () => {
     expect(err()).not.toContain('also failed')
   })
 
+  it('lists a change a failed start left out with the words that name it, shows it with its failure, and applies it again', async () => {
+    const { leaveOutNewestChange } = await import('@delo/changes')
+    edit('export default "two"\n')
+    const id = await pendingId()
+    await runChanges(['apply', id], { ...context, stdout: () => {} }, driven(['y'], [undefined]))
+    const left = (await leaveOutNewestChange({ ...ctx(), now: () => new Date(Date.now() + 60_000) }, 'Error: \u001b[2Jboom'))!
+    await enforceApprovedContent({ home, profile: PROFILE, profileDir })
+    context.printed.length = 0
+    await runChanges(['list'], context, driven([]))
+    expect(out()).toContain([
+      'Left out because Delo did not start with them:',
+      `  Delo did not start with your latest change to plug (${id}): Error: \\u001b[2Jboom.`,
+      '  It starts without it now; your files are unchanged.',
+      `  To try it again: delorun changes apply ${id}. To undo it: delorun changes undo ${id}.`,
+    ].join('\n'))
+    expect(out()).not.toContain(`  ${id}  left-out`)
+    context.printed.length = 0
+    expect(await runChanges(['apply', id], context, driven(['y']))).toBe(EXIT.ok)
+    expect(out()).toContain(`State: left-out-at-start since ${left.decidedAt!}\nA start left it out at ${left.leftOut!.at} because it failed: Error: \\u001b[2Jboom\n`)
+    expect((await readChangeLog(home, PROFILE)).entries.find(entry => entry.id === id)?.state).toBe('applied')
+  })
+
   it('applies a plugin turned off that failed to load, showing its entry', async () => {
     await runChanges(['off', 'plug'], context, driven(['y'], [{ ok: false, error: 'boom' }, OK]))
     const entry = (await readChangeLog(home, PROFILE)).entries.find(candidate => candidate.kind === 'plugin-off')!

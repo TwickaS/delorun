@@ -7,6 +7,7 @@ import { isChangesError, type ChangesCode } from '../src/errors.ts'
 import { changesDirectory, profileChangesDirectory, protectionPath } from '../src/paths.ts'
 import {
   approvedOf,
+  attestStudio,
   attestTerminal,
   closeWorkSession,
   findEntry,
@@ -97,6 +98,30 @@ describe('attestTerminal', () => {
   it('refuses when standard input or output is not a terminal', async () => {
     expect(await refusal(() => attestTerminal({ stdin: {}, stdout: { isTTY: true } }))).toBe('NOT_AT_COMPUTER')
     expect(await refusal(() => attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: false } }))).toBe('NOT_AT_COMPUTER')
+  })
+})
+
+describe('attestStudio', () => {
+  const atComputer = { loopback: true, credential: true, remoteSession: false }
+
+  it('issues a studio proof for a loopback request with the credential that no remote session made', async () => {
+    const proof = attestStudio(atComputer)
+    expect(proof.kind).toBe('studio')
+    const opened = await openWorkSession(home, PROFILE, { plugin: 'p', source: '/src/p', from: VERSION_A, minutes: 5 }, proof)
+    expect(opened.startedFrom).toBe('studio')
+    expect((await closeWorkSession(home, PROFILE, 'p', proof)).plugin).toBe('p')
+  })
+
+  it('refuses a request that is not at the computer', async () => {
+    // Each fact alone refuses: without the check, a remote session or a request without the credential would act.
+    for (const facts of [{ ...atComputer, loopback: false }, { ...atComputer, credential: false }, { ...atComputer, remoteSession: true }]) {
+      expect(await refusal(() => attestStudio(facts)), JSON.stringify(facts)).toBe('NOT_AT_COMPUTER')
+    }
+  })
+
+  it('refuses a studio proof for the protection setting', async () => {
+    expect(await refusal(setProtection(home, 'off', attestStudio(atComputer)))).toBe('NOT_AT_COMPUTER')
+    expect(await readProtection(home)).toBe('block')
   })
 })
 

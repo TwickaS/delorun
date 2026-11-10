@@ -20,6 +20,7 @@ import {
   riskLines,
   shortVersion,
   startWork,
+  WORK_SESSION_DEFAULT_MINUTES,
   WORK_SESSION_MAX_MINUTES,
   workFinishedLine,
   type AtComputer,
@@ -35,8 +36,8 @@ import { printable } from '../terminal-text.ts'
 import { isYes } from '../trash/terminal.ts'
 import type { ChangesCommandDependencies } from './command.ts'
 
-/** How many minutes a work session lasts when `--for` is not given. */
-export const WORK_SESSION_DEFAULT_MINUTES = 120
+/** How many minutes a work session lasts when `--for` is not given; `@delo/changes` owns it. */
+export { WORK_SESSION_DEFAULT_MINUTES }
 
 /** The usage line of the two subcommands. */
 const USAGE = 'usage: delorun changes work <plugin> [--for <minutes>] [--profile <name>] | delorun changes done <plugin> [--profile <name>]'

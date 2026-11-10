@@ -1733,14 +1733,14 @@
     {
       "path": "packages/host/frontend-static/src/index.ts",
       "class": "security",
-      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check.",
-      "sha256": "00be066fd596b6506b22d2e7f3e2e1b2b5dacf1ed93349670cb02028a3a706ed"
+      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. `/recovery` also renders the index, behind the same fence, so the boot page can show C21's recovery screen there; it moves no refusal. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check. Lead verdict on the `/recovery` route: pending; no lead review of this change is recorded yet.",
+      "sha256": "80ab823efce2496b29cf5eb1acb15c2b4d3c7e00ef463b13dbfe4da66d051df5"
     },
     {
       "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
       "class": "security",
-      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. Lead verdict (2026-11-11): kept; drives the real fence: unauthenticated or rebound requests for non-public dist files are refused, and only the named install files are public.",
-      "sha256": "fb2821159d2ed698e9eab344fd569e43fb88b00b60d9426b88c2ee39cfdca8ab"
+      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. `/recovery` renders the index for a signed-in browser and is refused without the credential. Lead verdict (2026-11-11): kept; drives the real fence: unauthenticated or rebound requests for non-public dist files are refused, and only the named install files are public. Lead verdict on the `/recovery` specs: pending; no lead review of this change is recorded yet.",
+      "sha256": "d863e02dd303c7d59800d6fae954eb744c6061c61eaa0e9c94c0fc336b1c0ee9"
     },
     {
       "path": "packages/web/web-fetch-http/package.json",
@@ -1805,8 +1805,8 @@
     {
       "path": "packages/client/web/src/boot-page.ts",
       "class": "delo-feature",
-      "feature": "studio-seams",
-      "reason": "Reads the boot page wordmark from the page global dshBootWordmark that a host plugin sets; without it the page shows HARNESS as in stock."
+      "feature": "changes",
+      "reason": "Reads the boot page wordmark from the page global dshBootWordmark that a host plugin sets; without it the page shows HARNESS as in stock. Adds C21's recovery screen, built from DOM text alone, which a page shows only when its index names the global dshRecoveryRoutes: below the failure report, at /recovery, and when the studio has not mounted after 30 seconds; it reads the state route and posts Turn off, Undo and safe mode to the routes, which decide every refusal, and its words are English or Chinese."
     },
     {
       "path": "packages/bundle/web-app/src/index.ts",
@@ -2041,6 +2041,18 @@
       "class": "security",
       "reason": "Changes (C21): the optional `profileReconcileCheck` service, which `reconcileProfile` awaits inside `runExclusive` before any plugin stops or module is evicted, so every recomposition (Plugin Manager's restore, undo and settings changes, the profile's own file watch, `changes.reload`) can be refused; `@delo/plugin-changes` provides it to move folder links to their active directories and refuse content the person did not approve. Without the service HMR behaves as stock. It decides what code loads.",
       "sha256": "14650214b5b7ff16b4fdbd9508de2c7a200ab5d94cdab2336442d4bd95ad5aad"
+    },
+    {
+      "path": "packages/client/web/src/boot-page.module.css",
+      "class": "delo-feature",
+      "feature": "changes",
+      "reason": "Styles of C21's recovery screen on the boot page: its region, title, notice, status, rows and buttons, with the boot page's own fallback colours."
+    },
+    {
+      "path": "packages/client/web/src/boot.ts",
+      "class": "delo-feature",
+      "feature": "changes",
+      "reason": "On a page that names recovery routes, the boot shows C21's recovery screen at /recovery without loading any client plugin, and offers it when the studio has not mounted 30 seconds after the boot began; without the global the boot runs as in stock."
     }
   ],
   "retired": []

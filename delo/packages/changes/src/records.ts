@@ -20,6 +20,7 @@ import { ChangesError } from './errors.ts'
 import { CHANGE_ID_PATTERN } from './ids.ts'
 import { CHANGES_ENTRIES, changesDirectory, migrationPath, PACKAGE_NAME_PATTERN, profileChangesDirectory, protectionPath } from './paths.ts'
 import {
+  ACTIVE_KINDS,
   ACTIVE_RECORD_SCHEMA,
   APPROVED_RECORD_SCHEMA,
   CHANGE_KINDS,
@@ -53,22 +54,58 @@ export { PACKAGE_NAME_PATTERN }
 const AT_COMPUTER: unique symbol = Symbol('AtComputer')
 
 /**
- * Proof that the caller acts for a person at their computer: issued only by {@link attestTerminal}, and checked at run
- * time against the values it issued, so an object that merely looks like one is refused.
+ * Proof that the caller acts for a person at their computer: issued only by {@link attestTerminal} and
+ * {@link attestStudio}, and checked at run time against the values they issued, so an object that merely looks like one
+ * is refused.
  *
- * The proof says only that the command's standard input and output are terminals. A model's own terminal tool gives
- * its commands a real pseudo-terminal, so the proof does not tell a person from a model: a confined command cannot use
- * it, because the sandbox denies it every write under the Delo home, `changes/` included (C1), while a command the
- * person runs with full access acts with the person's own authority.
+ * A terminal proof says only that the command's standard input and output are terminals. A model's own terminal tool
+ * gives its commands a real pseudo-terminal, so the proof does not tell a person from a model: a confined command cannot
+ * use it, because the sandbox denies it every write under the Delo home, `changes/` included (C1), while a command the
+ * person runs with full access acts with the person's own authority. A studio proof says that a request reached the
+ * loopback listener under a loopback `Host`, carried the studio's credential and was not admitted for a remote session.
  */
 export interface AtComputer {
   /** Where the person is. */
-  readonly kind: 'terminal'
+  readonly kind: 'terminal' | 'studio'
   readonly [AT_COMPUTER]: true
 }
 
-/** Every {@link AtComputer} {@link attestTerminal} issued. */
+/** Every {@link AtComputer} the two attest functions issued. */
 const issued = new WeakSet<AtComputer>()
+
+/**
+ * @param kind - where the person is.
+ * @returns a new, frozen proof, recorded as issued.
+ */
+function issue(kind: AtComputer['kind']): AtComputer {
+  const presence: AtComputer = Object.freeze({ kind, [AT_COMPUTER]: true as const })
+  issued.add(presence)
+  return presence
+}
+
+/** What the studio's route knows about where a request came from, decided before its body is read. */
+export interface StudioArrival {
+  /** The request reached the loopback listener and its `Host` names a loopback authority. */
+  readonly loopback: boolean
+  /** Connection admitted the request with the studio's credential. */
+  readonly credential: boolean
+  /** A reach listener admitted the request for a remote session. */
+  readonly remoteSession: boolean
+}
+
+/**
+ * Attest that a studio request comes from the person at their computer. Only the studio's Changes routes
+ * (`@delo/plugin-changes`) call it.
+ * @param facts - where the request arrived and what admitted it.
+ * @returns the proof.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` unless the request is a loopback one with the credential and not remote.
+ */
+export function attestStudio(facts: StudioArrival): AtComputer {
+  if (!facts.loopback || !facts.credential || facts.remoteSession) {
+    throw new ChangesError('NOT_AT_COMPUTER', 'studio', 'This needs you at your computer: open the studio on this computer, not through a remote session.')
+  }
+  return issue('studio')
+}
 
 /**
  * Attest that a `delorun` command runs at a terminal the person types in.
@@ -80,20 +117,18 @@ export function attestTerminal(streams: { readonly stdin: { readonly isTTY?: boo
   if (streams.stdin.isTTY !== true || streams.stdout.isTTY !== true) {
     throw new ChangesError('NOT_AT_COMPUTER', 'terminal', 'This needs you at your computer: run the command in a terminal, not with its input or output redirected.')
   }
-  const presence: AtComputer = Object.freeze({ kind: 'terminal' as const, [AT_COMPUTER]: true as const })
-  issued.add(presence)
-  return presence
+  return issue('terminal')
 }
 
 /**
- * Refuse a claimed proof of presence that {@link attestTerminal} did not issue. Every writer that needs the person at
- * their computer calls it before it reads or writes anything.
+ * Refuse a claimed proof of presence that {@link attestTerminal} or {@link attestStudio} did not issue. Every writer
+ * that needs the person at their computer calls it before it reads or writes anything.
  * @param presence - a claimed proof.
  * @param subject - what it is for, for the refusal.
- * @throws {ChangesError} `NOT_AT_COMPUTER` when {@link attestTerminal} did not issue it.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` when the attest functions did not issue it.
  */
 export function requirePresence(presence: AtComputer, subject: string): void {
-  if (!issued.has(presence)) throw new ChangesError('NOT_AT_COMPUTER', subject, 'This needs you at your computer, and the request did not come from a terminal on this computer.')
+  if (!issued.has(presence)) throw new ChangesError('NOT_AT_COMPUTER', subject, 'This needs you at your computer, and the request did not come from a terminal or the studio on this computer.')
 }
 
 /**
@@ -244,13 +279,13 @@ function nested(rules: Readonly<Record<string, FieldRule>>, expected: string): F
  * @param rules - the fields of each value.
  * @returns the rule for an object of such values by package name.
  */
-function byPackageName(rules: Readonly<Record<string, FieldRule>>): FieldRule {
+function byPackageName(rules: Readonly<Record<string, FieldRule>> | ((entry: unknown) => Readonly<Record<string, FieldRule>>)): FieldRule {
   return {
     expected: 'an object by package name',
     test: (value, path, where) => {
       for (const [name, entry] of Object.entries(objectAt(value, path, where))) {
         if (!PACKAGE_NAME_PATTERN.test(name)) throw unreadable(path, `${where} names ${JSON.stringify(name)}, which is not a package name`)
-        checkFields(entry, path, `${where}[${JSON.stringify(name)}]`, rules)
+        checkFields(entry, path, `${where}[${JSON.stringify(name)}]`, typeof rules === 'function' ? rules(entry) : rules)
       }
       return true
     },
@@ -332,7 +367,11 @@ const LOG_RULES: Readonly<Record<string, FieldRule>> = {
 
 const ACTIVE_RULES: Readonly<Record<string, FieldRule>> = {
   schema: schemaRule(ACTIVE_RECORD_SCHEMA),
-  plugins: byPackageName({ version: required.version, kind: { test: oneOf(['approved', 'work-session', 'unapproved']), expected: 'approved, work-session or unapproved' } }),
+  // Only content a failed start left out may hold nothing: the plugin's install, or turning it on, was left out.
+  plugins: byPackageName(entry => ({
+    version: typeof entry === 'object' && entry !== null && (entry as Readonly<Record<string, unknown>>).kind === 'left-out' ? optional.version : required.version,
+    kind: { test: oneOf(ACTIVE_KINDS), expected: ACTIVE_KINDS.join(', ') },
+  })),
 }
 
 const APPROVED_RULES: Readonly<Record<string, FieldRule>> = {
@@ -402,16 +441,17 @@ export async function readProtection(home: string): Promise<ProtectionLevel> {
 }
 
 /**
- * Change the protection setting. Only the terminal command changes it.
+ * Change the protection setting. Only the terminal command changes it: a studio proof is refused.
  * @param home - the Delo home.
  * @param level - the new level.
  * @param presence - proof from {@link attestTerminal}.
  * @returns the record written.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue, a studio proof included.
  * @throws {HomeLayoutError} `HOME_MODE` when `changes/` is laxer than 0700.
  */
 export async function setProtection(home: string, level: ProtectionLevel, presence: AtComputer): Promise<ProtectionRecord> {
   requirePresence(presence, 'protection')
+  if (presence.kind !== 'terminal') throw new ChangesError('NOT_AT_COMPUTER', 'protection', 'The protection setting changes only in a terminal: delorun changes protection.')
   const record: ProtectionRecord = { schema: PROTECTION_RECORD_SCHEMA, level, setAt: new Date().toISOString() }
   await makeChangesDirectory(home, changesDirectory(home))
   await writeProtectedFile(protectionPath(home), jsonText(record))
@@ -454,9 +494,9 @@ export type WorkSessionStart = Pick<WorkSessionRecord, 'plugin' | 'source' | 'fr
  * @param home - the Delo home.
  * @param profile - the profile's name.
  * @param start - the plugin, its folder, its approved content and the session's length in minutes.
- * @param presence - proof from {@link attestTerminal}; its kind is recorded as `startedFrom`.
+ * @param presence - proof from {@link attestTerminal} or {@link attestStudio}; its kind is recorded as `startedFrom`.
  * @returns the record written.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue; `WORK_SESSION_OPEN` when the
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `WORK_SESSION_OPEN` when the
  * profile has a work session already.
  */
 export async function openWorkSession(home: string, profile: string, start: WorkSessionStart, presence: AtComputer): Promise<WorkSessionRecord> {
@@ -485,9 +525,9 @@ export async function openWorkSession(home: string, profile: string, start: Work
  * @param home - the Delo home.
  * @param profile - the profile's name.
  * @param plugin - the plugin's package name.
- * @param presence - proof from {@link attestTerminal}.
+ * @param presence - proof from {@link attestTerminal} or {@link attestStudio}.
  * @returns the closed record.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue; `NO_WORK_SESSION` when no
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `NO_WORK_SESSION` when no
  * work session is open or it is another plugin's; `RECORD_UNREADABLE` when the record is not one Delo wrote.
  */
 export async function closeWorkSession(home: string, profile: string, plugin: string, presence: AtComputer): Promise<WorkSessionRecord> {
