@@ -1254,7 +1254,7 @@
       "path": "packages/sandbox/sandbox-local/src/index.ts",
       "class": "security",
       "reason": "Protected home and denied sockets (C1's confinement rules): the validated Config fields `protectedHome` (canonicalised at load, refused when missing, not a directory or `/`), `protectedHomeReadable` (relative entries inside the home, refused without `protectedHome`) and `deniedSockets` (absolute paths); each wrap resolves the protection, refuses a `workspace-write` root that overlaps the home with `HOME_IN_WRITABLE_ROOT` and passes the protection to the selected runner's profile, the `runnerCommand` override included. Re-exports `RUNNER_PROTECTION` and its types. All fields default to none, so the parity composition is unchanged. Lead verdict pending review: stricter only. Overrides `protectedHome` with the canonical configured home. Review of #66: refuses at load a denied socket inside a readable entry, and refuses a writable root that overlaps any alias of the home. Adds `aliasCoverage()` on the provider and the exported `pathAliasCoverage(path)` and `ALIAS_UNRELIABLE_FILESYSTEMS`, so setup and verification report alias-dependent rules as unknown rather than enforced. Overrides `protectedReads` with the home, its aliases and the readable entries under each. Adds and validates the `deniedSocketDirectories` Config field (absolute, not the filesystem root).",
-      "sha256": "49881bf8f458494d81c5f4137e8b4ebf3cfec9bfa6f5a8d44967c0b5c1162641"
+      "sha256": "b40696b7255caf0f03d42b2f37b0d540284728a3f0f475a37183c7c089e82d78"
     },
     {
       "path": "packages/sandbox/sandbox-local/src/mounts.ts",

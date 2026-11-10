@@ -21,10 +21,12 @@ export const PARITY_OVERLAY_PATH = 'delo/apps/tools/src/parity/composition/parit
 export const PARITY_OVERLAY_ENV = 'DSH_SNAPSHOT_PATCH' as const
 
 /**
- * The validated Config field that holds a built switch. Its JSDoc names the switch as `C16 switch \`<id>\``, and its
- * schema default is the switch's parity value.
+ * The validated boolean Config field that holds a built switch. Its JSDoc names the switch as `C16 switch \`<id>\``,
+ * and its schema default is the switch's parity value.
  */
-export interface ParitySwitchField {
+export interface ParityBooleanField {
+  /** Absent or `boolean`: the switch is the field's boolean value. */
+  readonly kind?: 'boolean'
   /** The module a `cordis.yml` row names to mount the plugin, such as `@deepseek-ai/dsh-plugin-manager/tools`. */
   readonly module: string
   /** Repository path of that module's source, which declares the `Config` interface and schema. */
@@ -32,6 +34,25 @@ export interface ParitySwitchField {
   /** The Config key. */
   readonly key: string
 }
+
+/**
+ * A Config key whose presence on the module's row is the switch: Delo's default composition sets the key on that row,
+ * to any value, and the parity composition does not set it. The key's JSDoc in the `Config` interface names the switch
+ * as `C16 switch \`<id>\``, and its schema declares no boolean default. The entry's `defaultValue` is `true` and its
+ * `parityValue` is `false`.
+ */
+export interface ParityPresenceField {
+  readonly kind: 'presence'
+  /** The module a `cordis.yml` row names to mount the plugin, such as `@deepseek-ai/dsh-sandbox-local`. */
+  readonly module: string
+  /** Repository path of that module's source, which declares the `Config` interface. */
+  readonly source: string
+  /** The Config key. */
+  readonly key: string
+}
+
+/** The Config field that holds a built switch: a boolean field, or the presence of a key on the module's row. */
+export type ParitySwitchField = ParityBooleanField | ParityPresenceField
 
 /**
  * The state of a model-visible switch's switch-on scenario.
@@ -313,16 +334,19 @@ export const PARITY_SWITCHES = [
   {
     id: 'sandbox_protected_reads',
     state: 'built',
-    registeredBy: 'Delo edit of upstream fs search tools, the protected-read fence',
+    registeredBy: 'Delo edit of upstream fs search and present tools, the protected-read fence',
     defaultValue: true,
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delo-sandbox-protected-reads',
     scenarioState: 'pending recording',
+    // The sandbox row's protected home decides the refusal: Delo's composition sets it, and the parity composition
+    // leaves the row to upstream, which sets none.
     field: {
-      module: '@deepseek-ai/dsh-tool-fs-search',
-      source: 'packages/fs/tool-fs-search/src/index.ts',
-      key: 'protectedReads',
+      kind: 'presence',
+      module: '@deepseek-ai/dsh-sandbox-local',
+      source: 'packages/sandbox/sandbox-local/src/index.ts',
+      key: 'protectedHome',
     },
     // The refusal reaches the model through each tool's typed error and filtered result, decided by the sandbox
     // provider's protected home; these are the files whose behaviour that home changes.

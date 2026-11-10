@@ -1,9 +1,11 @@
 /**
  * The C16 switch registry held against the tree. A switch's Config field is a
  * property of an interface named `Config` whose JSDoc names it as
- * `C16 switch \`<id>\``, and whose schema in the same file declares
- * `<key>: z.boolean().default(<value>)`. The checks compare those fields with
- * `PARITY_SWITCHES` in both directions.
+ * `C16 switch \`<id>\``. A boolean field's schema in the same file declares
+ * `<key>: z.boolean().default(<value>)`; a presence field's declares no boolean
+ * default, and {@link presenceErrors} holds its key against the rows each
+ * composition sets. The checks compare those fields with `PARITY_SWITCHES` in
+ * both directions.
  *
  * @module @delo/tools/parity/composition/switches
  */
@@ -138,10 +140,15 @@ export function registryErrors(registry: readonly ParitySwitchEntry[], markers: 
     const marker = at.find(found => found.id === entry.id)
     if (marker === undefined) {
       errors.push(`${entry.id}: ${field.source} has no Config field ${field.key} whose JSDoc names C16 switch \`${entry.id}\``)
+    } else if (field.kind === 'presence') {
+      if (marker.defaultValue !== undefined) errors.push(`${entry.id}: ${field.source} declares a boolean schema default for ${field.key}, which a presence switch leaves unset`)
     } else if (marker.defaultValue === undefined) {
       errors.push(`${entry.id}: ${field.source} declares no boolean schema default for ${field.key}`)
     } else if (marker.defaultValue !== entry.parityValue) {
       errors.push(`${entry.id}: the Config default of ${field.key} is ${String(marker.defaultValue)}, not the parity value ${String(entry.parityValue)}`)
+    }
+    if (field.kind === 'presence' && (!entry.defaultValue || entry.parityValue)) {
+      errors.push(`${entry.id}: a presence switch is on where its key is set, so its default value is true and its parity value false`)
     }
     for (const path of entry.sources) {
       if (!exists(path)) errors.push(`${entry.id}: its source ${path} does not exist`)
@@ -158,4 +165,35 @@ export function registryErrors(registry: readonly ParitySwitchEntry[], markers: 
     }
   }
   return errors
+}
+
+/** One key a composition's row sets, with the module the row mounts. */
+export interface RowSetting {
+  /** The module the row names. */
+  readonly module: string
+  /** The Config key. */
+  readonly key: string
+  /** The value the row gives it. */
+  readonly value: unknown
+}
+
+/**
+ * Every presence switch whose key the default composition does not set, or the parity composition sets, on its
+ * module's row. A key set to `null` counts as unset.
+ * @param registry - the switch registry.
+ * @param shipped - the keys the rows of Delo's default composition set.
+ * @param parity - the keys the rows of the parity composition set.
+ * @returns one message per disagreement; empty when every presence switch is set by the first and not by the second.
+ */
+export function presenceErrors(registry: readonly ParitySwitchEntry[], shipped: readonly RowSetting[], parity: readonly RowSetting[]): string[] {
+  const sets = (rows: readonly RowSetting[], module: string, key: string): boolean =>
+    rows.some(row => row.module === module && row.key === key && row.value !== undefined && row.value !== null)
+  return registry.flatMap((entry) => {
+    if (entry.state !== 'built' || entry.field.kind !== 'presence') return []
+    const { module, key } = entry.field
+    return [
+      ...sets(shipped, module, key) ? [] : [`${entry.id}: Delo's default composition sets no ${key} on a ${module} row, so the switch is off where it is declared on`],
+      ...sets(parity, module, key) ? [`${entry.id}: the parity composition sets ${key} on a ${module} row, so the switch is on where its parity value is off`] : [],
+    ]
+  })
 }

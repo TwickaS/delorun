@@ -12,7 +12,7 @@ import { PARITY_OVERLAY_PATH, PARITY_SWITCHES, type BuiltParitySwitch, type Pari
 import { report, scanParity } from '../../src/parity/composition/check-parity-switches.ts'
 import { changedLines, contributionErrors, findContributions } from '../../src/parity/composition/contributions.ts'
 import { DEFAULT_PARITY, LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parseOverlay, parsePatchFile, readOverlay } from '../../src/parity/composition/overlay.ts'
-import { registryErrors, scenarioName, switchMarkers } from '../../src/parity/composition/switches.ts'
+import { presenceErrors, registryErrors, scenarioName, switchMarkers, type RowSetting } from '../../src/parity/composition/switches.ts'
 import { STAGED_ROOT, sweep, sweepLine } from '../../src/parity/composition/sweep.ts'
 
 const ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
@@ -80,7 +80,11 @@ describe('the real tree', () => {
     expect(lines.at(-1)).toBe('parity-switches: ok')
     const built = PARITY_SWITCHES.filter((entry): entry is Extract<typeof entry, { state: 'built' }> => entry.state === 'built')
     expect(scan.markers.map(marker => marker.id).sort()).toEqual(built.map(entry => entry.id).sort())
-    for (const entry of built) expect(scan.markers.find(marker => marker.id === entry.id)).toMatchObject({ path: entry.field.source, key: entry.field.key, defaultValue: entry.parityValue })
+    for (const entry of built as readonly BuiltParitySwitch[]) {
+      // A presence switch's key declares no boolean default; a boolean switch's default is its parity value.
+      const defaultValue = entry.field.kind === 'presence' ? undefined : entry.parityValue
+      expect(scan.markers.find(marker => marker.id === entry.id)).toMatchObject({ path: entry.field.source, key: entry.field.key, defaultValue })
+    }
     // Every model-visible contribution must sit in a built switch's sources. A
     // switch may also name a file whose runtime behaviour it gates when the
     // visible effect is a tool result text rather than a registration (the
@@ -106,28 +110,37 @@ describe('the real tree', () => {
     // the two together: this switch's entry claimed the change was on while no shipped row set it, so the search tools
     // kept their stock behaviour in the composition Delo ships. The shipped rows are where the claim is made, and the
     // base bundle is where a row id's module is written.
-    const rowsOf = (path: string): Record<string, unknown>[] => parsePatchFile(readFileSync(join(ROOT, path), 'utf8'), path)
+    const rowsOf = (patches: readonly Record<string, unknown>[]): Record<string, unknown>[] => patches
       .flatMap(row => Array.isArray(row['insert']) ? row['insert'].filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null) : [row])
-    const moduleOf = new Map([...rowsOf(BASE_PATCH_PATH), ...rowsOf(LOCAL_BUNDLE_PATCH_PATH)]
+    const fileRows = (path: string): Record<string, unknown>[] => rowsOf(parsePatchFile(readFileSync(join(ROOT, path), 'utf8'), path))
+    const moduleOf = new Map([...fileRows(BASE_PATCH_PATH), ...fileRows(LOCAL_BUNDLE_PATCH_PATH)]
       .flatMap(row => typeof row['id'] === 'string' && typeof row['name'] === 'string' ? [[row['id'], row['name']] as const] : []))
-    const shipped = rowsOf(LOCAL_BUNDLE_PATCH_PATH)
-      .flatMap((row) => {
-        const name = typeof row['id'] === 'string' ? moduleOf.get(row['id']) : undefined
-        if (name === undefined) return []
-        return Object.entries((row['config'] ?? {}) as Record<string, unknown>).map(([key, value]) => ({ name, key, value }))
-      })
-    const covered = PARITY_SWITCHES.filter(entry => entry.state === 'built').flatMap(entry => shipped
-      .filter(row => row.name === entry.field.module && row.key === entry.field.key)
+    const settings = (rows: readonly Record<string, unknown>[]): RowSetting[] => rows.flatMap((row) => {
+      const module = typeof row['name'] === 'string' ? row['name'] : typeof row['id'] === 'string' ? moduleOf.get(row['id']) : undefined
+      if (module === undefined) return []
+      return Object.entries((row['config'] ?? {}) as Record<string, unknown>).map(([key, value]) => ({ module, key, value }))
+    })
+    const shipped = settings(fileRows(LOCAL_BUNDLE_PATCH_PATH))
+    // The parity composition's Delo rows: the bundle in the parity form the overlay restates, and the overlay's own rows.
+    const overlay = readOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
+    const parity = settings([...rowsOf(overlay.localBundle), ...overlay.switches.map(row => ({ ...row }))])
+    const registry = PARITY_SWITCHES as readonly ParitySwitchEntry[]
+    const covered = registry.filter((entry): entry is BuiltParitySwitch => entry.state === 'built' && entry.field.kind !== 'presence').flatMap(entry => shipped
+      .filter(row => row.module === entry.field.module && row.key === entry.field.key)
       .map(row => ({ id: entry.id, value: row.value, declared: entry.defaultValue })))
     // A row may be restated per profile; one switch is still one claim. The consent plugins are inserted rows, so the
     // map above reads their id and name from the local patch too.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
-      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'sandbox_protected_reads',
-      'scheduled_task_consent',
+      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'scheduled_task_consent',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
-    // The switch itself, spelled out: the fence is off in the parity composition and on in the one Delo ships.
-    expect(PARITY_SWITCHES.find(entry => entry.id === 'sandbox_protected_reads')).toMatchObject({ state: 'built', defaultValue: true, parityValue: false })
+    expect(presenceErrors(registry, shipped, parity)).toEqual([])
+    // The fence, spelled out: the sandbox row's protected home is set in the composition Delo ships and not in the
+    // parity composition.
+    expect(registry.find(entry => entry.id === 'sandbox_protected_reads')).toMatchObject({
+      state: 'built', defaultValue: true, parityValue: false,
+      field: { kind: 'presence', module: '@deepseek-ai/dsh-sandbox-local', key: 'protectedHome' },
+    })
   })
 })
 
@@ -161,6 +174,78 @@ describe('the switch fields', () => {
     expect(registryErrors([planned], markers, () => true)).toEqual([
       'delo/packages/plugin-fixture/src/config.ts:4: Config field fixtureContext names C16 switch fixture_context, whose registry entry is still planned; make it built with this field',
     ])
+  })
+})
+
+const PRESENCE_SOURCE = 'packages/sandbox/fixture/src/index.ts'
+
+/** A provider Config whose `home` key is a presence switch: the JSDoc names it, and the schema declares no default. */
+const PRESENCE_CONFIG = `/** The fixture provider's settings. */
+export interface Config {
+  /** The protected directory. Its presence is Delo's C16 switch \`fixture_home\`. */
+  home?: string
+}
+
+export const Config = z.object({
+  home: z.string(),
+})
+`
+
+/**
+ * A registry with one built presence switch on the fixture provider's \`home\` key.
+ * @param values - the default and parity values, `true` and `false` unless given.
+ * @returns the registry.
+ */
+function presenceRegistry(values: { defaultValue?: boolean; parityValue?: boolean } = {}): ParitySwitchEntry[] {
+  return [{
+    id: 'fixture_home', state: 'built', registeredBy: 'fixture', defaultValue: values.defaultValue ?? true, parityValue: values.parityValue ?? false,
+    modelVisible: true, scenario: 'session/delo-fixture-home', field: { kind: 'presence', module: '@fixture/provider', source: PRESENCE_SOURCE, key: 'home' }, sources: [PRESENCE_SOURCE],
+  }]
+}
+
+describe('a presence switch', () => {
+  const markers = switchMarkers(PRESENCE_SOURCE, PRESENCE_CONFIG)
+  const shipped = [{ module: '@fixture/provider', key: 'home', value: { __jsExpr: 'dshHomePath()' } }]
+
+  it('is accepted when the JSDoc names it, the default composition sets the key and the parity composition does not', () => {
+    expect(markers).toEqual([{ path: PRESENCE_SOURCE, line: 4, id: 'fixture_home', key: 'home', defaultValue: undefined }])
+    expect(registryErrors(presenceRegistry(), markers, () => true)).toEqual([])
+    expect(presenceErrors(presenceRegistry(), shipped, [{ module: '@fixture/provider', key: 'other', value: 1 }])).toEqual([])
+  })
+
+  it('is refused when the default composition does not set the key, or leaves it null or undefined', () => {
+    const refusal = 'fixture_home: Delo\'s default composition sets no home on a @fixture/provider row, so the switch is off where it is declared on'
+    expect(presenceErrors(presenceRegistry(), [], [])).toEqual([refusal])
+    expect(presenceErrors(presenceRegistry(), [{ module: '@fixture/provider', key: 'home', value: null }], [])).toEqual([refusal])
+    expect(presenceErrors(presenceRegistry(), [{ module: '@fixture/provider', key: 'home', value: undefined }], [])).toEqual([refusal])
+    expect(presenceErrors(presenceRegistry(), [{ module: '@fixture/other', key: 'home', value: '/h' }], [])).toEqual([refusal])
+  })
+
+  it('is refused when the parity composition sets the key', () => {
+    expect(presenceErrors(presenceRegistry(), shipped, shipped)).toEqual([
+      'fixture_home: the parity composition sets home on a @fixture/provider row, so the switch is on where its parity value is off',
+    ])
+  })
+
+  it('is refused when the JSDoc marker is missing, or the key declares a boolean default', () => {
+    expect(registryErrors(presenceRegistry(), switchMarkers(PRESENCE_SOURCE, PRESENCE_CONFIG.replace(' Its presence is Delo\'s C16 switch `fixture_home`.', '')), () => true)).toEqual([
+      `fixture_home: ${PRESENCE_SOURCE} has no Config field home whose JSDoc names C16 switch \`fixture_home\``,
+    ])
+    expect(registryErrors(presenceRegistry(), switchMarkers(PRESENCE_SOURCE, PRESENCE_CONFIG.replace('z.string()', 'z.boolean().default(false)')), () => true)).toEqual([
+      `fixture_home: ${PRESENCE_SOURCE} declares a boolean schema default for home, which a presence switch leaves unset`,
+    ])
+  })
+
+  it('is refused unless it is on by default and off at parity', () => {
+    const refusal = 'fixture_home: a presence switch is on where its key is set, so its default value is true and its parity value false'
+    expect(registryErrors(presenceRegistry({ defaultValue: false, parityValue: true }), markers, () => true)).toEqual([refusal])
+    expect(registryErrors(presenceRegistry({ parityValue: true }), markers, () => true)).toContain(refusal)
+  })
+
+  it('leaves the boolean switches to their own checks', () => {
+    expect(presenceErrors(registryOver([]), [], [])).toEqual([])
+    const planned: ParitySwitchEntry = { id: 'fixture_context', state: 'planned', plannedBy: 'WP0', registeredBy: 'fixture', defaultValue: true, parityValue: false, modelVisible: true, scenario: 'session/delo-fixture-context' }
+    expect(presenceErrors([planned], [], [])).toEqual([])
   })
 })
 

@@ -95,6 +95,7 @@ export interface Config {
    * read, as far as the selected runner expresses each rule ({@link RUNNER_PROTECTION}). A `workspace-write` call
    * whose workspace root or extra root equals, lies inside or contains it is refused with `HOME_IN_WRITABLE_ROOT`.
    * Absent: no directory is protected.
+   * Its presence is Delo's C16 switch `sandbox_protected_reads`, set in Delo's composition and absent in the parity one.
    */
   protectedHome?: string
   /**
