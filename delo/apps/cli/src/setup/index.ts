@@ -3,7 +3,8 @@
  * sections of Quick or Full setup ([sections](./sections.ts)), or it reads `--yes` or `--config`; then it runs its
  * steps: create the CLI profile and make Delo's bundles importable in it ({@link linkDeloBundles}), with the plugin
  * operation's output in the profile's `home-<profile>` operational log and one progress line on the terminal, then each
- * section's writes in order (the model key, the prompts rows, the studio port), and record the run. The three forms
+ * section's writes in order (the release-check row, the model key, the prompts rows, the studio port), and record the
+ * run. Every write lands before Delorun first starts, so a release check turned off here never runs. The three forms
  * produce the same answers and so the same writes. An interrupted run resumes at the first step that did not finish.
  * Setup never replaces an existing profile. A terminal run then offers to install the command, starts Delorun and
  * opens the studio ([ending](./ending.ts)). `delorun setup <section>` runs one section again; `--list` lists them.
@@ -23,7 +24,7 @@ import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delo/home'
 import { Redactor, resolveSurface, SurfaceLog } from '@delo/logs'
 import { SETUP_DEFAULTS, type SetupAnswers } from '@delo/contract-setup-answers'
-import { answersSchema, readAnswersDocument, yesAnswers } from './answers.ts'
+import { parseAnswers, readAnswersDocument, yesAnswers } from './answers.ts'
 import { computerEnding, finishSetup, type Ending } from './ending.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
@@ -71,6 +72,8 @@ export interface SetupRequest {
   readonly keyCheck?: KeyCheck
   /** Whether a key read from the environment is checked too (`--check-key`). */
   readonly checkEnvironmentKey?: boolean
+  /** Whether the release check is turned off whatever the form says (`--no-update-check`); Full asks with No preselected. */
+  readonly noUpdateCheck?: boolean
   /** Whether a local port is free; a listen on the loopback address by default. */
   readonly portIsFree?: (port: number) => Promise<boolean>
   /** What the end of a terminal run does on the computer; install, start and open on this computer by default. */
@@ -163,8 +166,9 @@ async function checkUnattendedKey(request: SetupRequest, answers: SetupAnswers):
  */
 async function collectAnswers(request: SetupRequest, registry: SectionRegistry): Promise<{ answers: SetupAnswers, secret: string | undefined }> {
   const { form, env } = request
+  const flags: Partial<SetupAnswers> = request.noUpdateCheck === true ? { updateCheck: false } : {}
   if (form.kind === 'yes') {
-    const answers = { ...yesAnswers(env), sections: unattendedRecord(registry.all()) }
+    const answers = { ...yesAnswers(env), ...flags, sections: unattendedRecord(registry.all()) }
     await checkUnattendedKey(request, answers)
     return { answers, secret: undefined }
   }
@@ -174,11 +178,11 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry):
     if (credential.source === 'environment' && (env[credential.name] ?? '') === '') {
       throw new CliError(EXIT.failed, `delorun setup: ${credential.name} is not set; set it to the model key`)
     }
-    const answers = { ...document, sections: unattendedRecord(registry.all()) }
+    const answers = { ...document, ...flags, sections: unattendedRecord(registry.all()) }
     await checkUnattendedKey(request, answers)
     return { answers, secret: undefined }
   }
-  return askAnswers(prompterFor(form), registry, sectionEnvironment(request, false))
+  return askAnswers(prompterFor(form), registry, sectionEnvironment(request, false), { ...SETUP_DEFAULTS, ...flags })
 }
 
 /** The most detailed level setup writes to the operational log; the home process's log uses the same. */
@@ -308,7 +312,7 @@ function recordedAnswers(directory: string): SetupAnswers {
   if (!existsSync(path)) return SETUP_DEFAULTS
   try {
     const { version: _version, ...answers } = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
-    const checked = answersSchema.safeParse(answers)
+    const checked = parseAnswers(answers)
     return checked.success ? checked.data : SETUP_DEFAULTS
   } catch {
     // An unreadable record is rewritten by the section that runs now; the defaults stand in for it.
@@ -360,14 +364,14 @@ export function sectionList(registry: SectionRegistry): string {
   ].join('\n')}\n`
 }
 
-/** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--check-key] [--list]`. */
+/** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--check-key] [--no-update-check] [--list]`. */
 export const setupCommand: CliCommand = {
   name: 'setup',
   summary: 'Set up Delorun (Quick or Full), or run one section again: delorun setup <section>; --list lists them',
   async run(args, context) {
     const { values, positionals } = (() => {
       try {
-        return parseArgs({ args: [...args], options: { profile: { type: 'string' }, yes: { type: 'boolean', default: false }, config: { type: 'string' }, 'check-key': { type: 'boolean', default: false }, list: { type: 'boolean', default: false } }, strict: true, allowPositionals: true })
+        return parseArgs({ args: [...args], options: { profile: { type: 'string' }, yes: { type: 'boolean', default: false }, config: { type: 'string' }, 'check-key': { type: 'boolean', default: false }, 'no-update-check': { type: 'boolean', default: false }, list: { type: 'boolean', default: false } }, strict: true, allowPositionals: true })
       } catch (error) {
         // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
         throw new CliError(EXIT.usage, `delorun setup: ${String(Reflect.get(Object(error), 'message'))}`)
@@ -380,9 +384,10 @@ export const setupCommand: CliCommand = {
     }
     if (positionals.length > 1) throw new CliError(EXIT.usage, 'delorun setup: give one section, or none')
     if (values.yes && values.config !== undefined) throw new CliError(EXIT.usage, 'delorun setup: --yes and --config are two forms of the same answers; give one')
+    if (values['no-update-check'] && positionals.length > 0) throw new CliError(EXIT.usage, 'delorun setup: --no-update-check applies to a whole setup; delorun setup privacy asks about the release check')
     const { home, profile } = await prepareHome(context, values.profile)
     const form = formFromFlags(values.yes, values.config)
-    const request: SetupRequest = { home: home.path, profile, output: context, env: context.env, form, registry, checkEnvironmentKey: values['check-key'] }
+    const request: SetupRequest = { home: home.path, profile, output: context, env: context.env, form, registry, checkEnvironmentKey: values['check-key'], noUpdateCheck: values['no-update-check'] }
     const [section] = positionals
     return section === undefined ? runSetup(request) : runSection(request, section)
   },

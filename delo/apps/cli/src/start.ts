@@ -549,7 +549,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   booted.releaseTurns()
   if (stored !== undefined) {
-    await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) } })
+    await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) }, log: (text) => { logger.warn(text) } })
   }
   return runningHost(booted, request, async () => {
     if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root)

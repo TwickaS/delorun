@@ -7,6 +7,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { RELEASE_FILE_SIZE_LIMITS } from '@delo/contract-release-manifest'
 import { Downloader } from '../src/download.ts'
 import { isInstallError } from '../src/errors.ts'
 import { LauncherChannel, type LauncherChannelOptions } from '../src/channel.ts'
@@ -75,11 +76,13 @@ async function codeOf(step: Promise<unknown>): Promise<string | undefined> {
   return isInstallError(error) ? error.code : undefined
 }
 
-describe('the channel\'s newest release', () => {
+// Each test signs a fresh fixture release, which takes seconds on a loaded machine.
+describe('the channel\'s newest release', { timeout: 30_000 }, () => {
   it('update-notice-writes-no-trust-state: returns the verified manifest, fetching only the timestamp, the manifest and its bundle', async () => {
     const fixture = await fixtureRelease({ notice: { security: true, summary: 'Fixes the reach listener\'s origin check.' } })
     const { channel, home, server, logCalls } = await harness(fixture)
-    const manifest = await channel.newest()
+    const { manifest, timestamp } = await channel.newest()
+    expect(timestamp).toBe(1)
     expect(String(manifest.version)).toBe(VERSION)
     expect(manifest.security).toBe(true)
     expect(manifest.summary).toBe('Fixes the reach listener\'s origin check.')
@@ -140,10 +143,20 @@ describe('the channel\'s newest release', () => {
     expect(await codeOf(channel.newest())).toBe('RELEASE_LOG_FAILED')
   })
 
+  it('update-notice-manifest-length-capped: refuses a timestamp that states a manifest above its size limit, before fetching it', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, server } = await harness(fixture)
+    const pointer = { ...fixture.timestamp.channels.stable, manifest: { ...fixture.timestamp.channels.stable.manifest, length: RELEASE_FILE_SIZE_LIMITS.manifest + 1 } }
+    server.files.set('/timestamp.json', envelope({ ...fixture.timestamp, channels: { stable: pointer, beta: pointer } }, [fixture.keys.timestamp]))
+    expect(await codeOf(channel.newest())).toBe('INSTALL_VERIFY_FAILED')
+    expect(await codeOf(channel.resolve())).toBe('INSTALL_VERIFY_FAILED')
+    expect(server.requests.filter(path => path.endsWith('.manifest.json'))).toEqual([])
+  })
+
   it('reads a manifest signed before the security mark and the summary existed', async () => {
     const fixture = await fixtureRelease()
     const { channel } = await harness(fixture)
-    const manifest = await channel.newest()
+    const { manifest } = await channel.newest()
     expect(manifest.security).toBeUndefined()
     expect(manifest.summary).toBeUndefined()
   })

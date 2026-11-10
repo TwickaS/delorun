@@ -7,7 +7,7 @@
  */
 import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import { UPDATE_COMMAND } from '@delo/contract-update-report'
-import { noticeLine, noticeOf, profileReader, readUpdateCheck, runningRelease } from '../update/notice.ts'
+import { failureText, noticeLine, noticeOf, profileReader, readUpdateCheck, runningRelease } from '../update/notice.ts'
 import type { RunningRuntime } from '../update/runtime.ts'
 import type { TrustedRootSource } from '@delo/runtime-store'
 import type { CheckResult } from './checks.ts'
@@ -28,7 +28,7 @@ export async function checkUpdate(home: string, profile: string, runtime: Runnin
   const record = await readUpdateCheck(home, profile)
   if (record === undefined) return { name: 'update', status: 'pass', message: `no update check is recorded for this profile; it runs while Delo runs unless Settings → Privacy turns it off, and ${UPDATE_COMMAND} --check runs one now.` }
   if (record.failure !== undefined) {
-    return { name: 'update', status: 'warn', message: `the last update check, at ${record.checked}, failed, so the studio shows no notice: ${record.failure}. Run ${UPDATE_COMMAND} --check to try again.` }
+    return { name: 'update', status: 'warn', message: `the last update check, at ${record.checked}, failed, so the studio shows no notice: ${failureText(record.failure)}. Run ${UPDATE_COMMAND} --check to try again.` }
   }
   const running = await runningRelease(home, platform(), runtime.version, await root())
   const notice = await noticeOf(record, running, profileReader(home, profile))

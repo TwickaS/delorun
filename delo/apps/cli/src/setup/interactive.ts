@@ -45,7 +45,7 @@ function isAsked(section: SetupSection, draft: Draft, environment: SectionEnviro
  */
 function askStep(section: SetupSection, environment: SectionEnvironment): RunStep<Draft> {
   return {
-    asks: draft => section.asks && isAsked(section, draft, environment),
+    asks: draft => section.asks(draft.mode) && isAsked(section, draft, environment),
     async run(io, draft) {
       if (!isAsked(section, draft, environment)) {
         return { ...draft, answers: { ...draft.answers, sections: withRecord(draft.answers.sections, section.id, 'skipped') } }
@@ -82,17 +82,18 @@ export function review(draft: Draft, sections: readonly SetupSection[]): string 
  * @param prompter - the prompter.
  * @param registry - the sections.
  * @param environment - what the sections may look at.
+ * @param defaults - the answers each question starts from; setup's defaults unless a command-line flag changed one.
  * @returns the answers and the typed key.
  * @throws {SetupCancelled} when the person cancels a question or declines the review.
  */
-export async function askAnswers(prompter: Prompter, registry: SectionRegistry, environment: SectionEnvironment): Promise<InteractiveAnswers> {
+export async function askAnswers(prompter: Prompter, registry: SectionRegistry, environment: SectionEnvironment, defaults: SetupAnswers = SETUP_DEFAULTS): Promise<InteractiveAnswers> {
   const sections = registry.all()
   const modeStep: RunStep<Draft> = {
     asks: alwaysAsks,
     async run(io, draft) {
       const mode = await io.select<SetupMode>('How do you want to set up Delorun?', [
         { value: 'quick', label: MODE_LABELS.quick, hint: 'the model key and how careful prompts are' },
-        { value: 'full', label: MODE_LABELS.full, hint: 'also background running, the profile name and the port' },
+        { value: 'full', label: MODE_LABELS.full, hint: 'also the release check, background running, the profile name and the port' },
       ], draft.mode)
       // The mode question is the first step, so it offers no back choice.
       return { ...draft, mode: mode as SetupMode }
@@ -111,7 +112,7 @@ export async function askAnswers(prompter: Prompter, registry: SectionRegistry, 
       return draft
     },
   }
-  const initial: Draft = { mode: 'quick', answers: SETUP_DEFAULTS, secret: undefined, keyCheckFailure: undefined }
+  const initial: Draft = { mode: 'quick', answers: defaults, secret: undefined, keyCheckFailure: undefined }
   const done = await runSteps([modeStep, ...sections.map(section => askStep(section, environment)), reviewStep], initial, prompter)
   return { answers: done.answers, secret: done.secret }
 }

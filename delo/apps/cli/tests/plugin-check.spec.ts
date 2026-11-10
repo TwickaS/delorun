@@ -2,7 +2,8 @@
  * `delorun plugin check <directory>` (`delo/apps/cli/src/plugin-check.ts`): what a plugin's declared ranges admit
  * against a release, by the installer's own evaluation, read from its `package.json` alone.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -119,9 +120,32 @@ describe('delorun plugin check', () => {
     const empty = mkdtempSync(join(tmpdir(), 'dpc-'))
     directories.push(empty)
     await expect(check(empty)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('cannot be read') })
-    await expect(check(plugin(' '.repeat(PLUGIN_MANIFEST_LIMIT + 1)))).rejects.toMatchObject({ message: expect.stringContaining('above the limit') })
+    await expect(check(plugin(' '.repeat(PLUGIN_MANIFEST_LIMIT + 1)))).rejects.toMatchObject({ message: expect.stringContaining(`more than ${String(PLUGIN_MANIFEST_LIMIT)} bytes, the limit`) })
     await expect(check(plugin('{'))).rejects.toMatchObject({ message: expect.stringContaining('is not JSON') })
     await expect(check(plugin('[]'))).rejects.toMatchObject({ message: expect.stringContaining('is not a package manifest object') })
+    const folder = mkdtempSync(join(tmpdir(), 'dpc-'))
+    directories.push(folder)
+    mkdirSync(join(folder, 'package.json'))
+    await expect(check(folder)).rejects.toMatchObject({ message: expect.stringContaining('it is not a regular file') })
+  })
+
+  it.skipIf(process.platform === 'win32')('plugin-check-refuses-special-files: refuses a manifest that is a FIFO or a symbolic link, without waiting or following it', async () => {
+    const fifo = mkdtempSync(join(tmpdir(), 'dpc-'))
+    directories.push(fifo)
+    execFileSync('mkfifo', [join(fifo, 'package.json')])
+    await expect(check(fifo)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('it is not a regular file') })
+    const target = plugin({ name: 'linked', version: '1.0.0' })
+    const linked = mkdtempSync(join(tmpdir(), 'dpc-'))
+    directories.push(linked)
+    symlinkSync(join(target, 'package.json'), join(linked, 'package.json'))
+    await expect(check(linked)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('cannot be read') })
+  })
+
+  it('plugin-check-escapes-manifest-text: prints the manifest\'s name and ranges with terminal control characters escaped', async () => {
+    const hostile = '\u001b]0;owned\u0007\u001b[2J'
+    const { out } = await check(plugin({ name: `evil${hostile}`, version: '1.0.0', engines: { dsh: `>=0.2.0${hostile}`, delo: `^0.1.0${hostile}` }, peerDependencies: { '@deepseek-ai/dsh-agent': `^0.2.0${hostile}` } }))
+    expect(out).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f]/u)
+    expect(out).toContain('evil')
   })
 
   it('takes exactly one directory, through delorun plugin check', async () => {

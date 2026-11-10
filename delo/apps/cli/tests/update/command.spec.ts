@@ -247,6 +247,26 @@ describe('runUpdate', () => {
     expect(sent('update.apply')).toHaveLength(0)
   })
 
+  it('update-report-applies-nothing: --report prints the report and applies nothing, without asking', async () => {
+    await homeAnswering({ prepare: prepared(report({ items: [DISABLED_PLUGIN] })) })
+
+    expect(await update(['--report'], { confirm: async () => Promise.reject(new Error('asked')) })).toBe(EXIT.ok)
+
+    expect(output.stdout).toContain('Update from Delo 1.0.0 (DSH 0.2.2) to Delo 1.1.0 (DSH 0.2.2) on the stable channel.\n')
+    expect(output.stdout.endsWith('Nothing changed. Run delorun update to apply it.\n')).toBe(true)
+    expect(sent('update.apply')).toHaveLength(0)
+  })
+
+  it('refuses --report with --check, --yes or a copy option as a usage error', async () => {
+    await homeAnswering({ prepare: prepared(report()) })
+
+    await expect(update(['--report', '--check'])).rejects.toMatchObject({ exit: EXIT.usage, message: 'delorun update: choose --check or --report, not both' })
+    for (const option of ['--yes', '--data-copy', '--no-data-copy']) {
+      await expect(update(['--report', option])).rejects.toMatchObject({ exit: EXIT.usage, message: 'delorun update: --report applies nothing, so it takes no --yes, --data-copy or --no-data-copy' })
+    }
+    expect(sent('update.prepare')).toHaveLength(0)
+  })
+
   it('refuses --data-copy together with --no-data-copy as a usage error, before applying anything', async () => {
     await homeAnswering({ prepare: prepared(report()) })
 

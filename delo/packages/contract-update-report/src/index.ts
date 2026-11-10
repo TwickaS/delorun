@@ -321,6 +321,30 @@ export interface CheckedRelease {
   readonly summary?: string
 }
 
+/** Why the last update check failed, as a closed list: the record stores the code, never a message the check received. */
+export type UpdateCheckFailure =
+  /** The running release's stored, signed files did not read or verify, so the channel to ask is unknown. */
+  | 'running-release-unreadable'
+  /** The home stores no usable trusted root or timestamp, so nothing could be verified. */
+  | 'trust-state-invalid'
+  /** A request did not answer, failed or passed its size limit. */
+  | 'unreachable'
+  /** A request named a host or a redirect the download rule refuses. */
+  | 'download-refused'
+  /** The check's deadline passed. */
+  | 'deadline'
+  /** The timestamp, a root or the manifest did not verify. */
+  | 'unverified'
+  /** The release's log bundle did not verify. */
+  | 'log-bundle-invalid'
+  /** The verified timestamp is older than the one an earlier check verified, or names an older release. */
+  | 'regressed'
+  /** The record could not be written, or the check failed in a way this list does not name. */
+  | 'internal'
+
+/** Every {@link UpdateCheckFailure}, for readers that validate a record. */
+export const UPDATE_CHECK_FAILURES: readonly UpdateCheckFailure[] = ['running-release-unreadable', 'trust-state-invalid', 'unreachable', 'download-refused', 'deadline', 'unverified', 'log-bundle-invalid', 'regressed', 'internal']
+
 /** The update check's record of one CLI profile: when it last ran and what it last verified. */
 export interface UpdateCheckRecord {
   /** Always {@link UPDATE_CHECK_SCHEMA}. */
@@ -331,8 +355,10 @@ export interface UpdateCheckRecord {
   readonly newest?: CheckedRelease
   /** When {@link UpdateCheckRecord.newest} was verified. */
   readonly verified?: UtcTimestamp
+  /** The `version` of the timestamp that named {@link UpdateCheckRecord.newest}; a later check refuses an older one. */
+  readonly timestamp?: number
   /** Why the last check failed; absent when it succeeded. */
-  readonly failure?: string
+  readonly failure?: UpdateCheckFailure
 }
 
 /** How far a newer release moves from the running one, by its semantic version. */

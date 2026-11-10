@@ -28,7 +28,7 @@ export function reachSection(tailscale: TailscaleRunner): SetupSection {
     id: 'reach',
     title: 'Remote access',
     mode: 'full',
-    asks: true,
+    asks: () => true,
     appliesTo: () => true,
     async ask(io, draft) {
       const on = await io.confirm('Reach this studio from your phone over your own tailnet (Tailscale)?', draft.answers.reach.option === 'tailscale-private')

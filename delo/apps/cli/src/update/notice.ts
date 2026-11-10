@@ -15,9 +15,10 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { RUN_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { ReleaseChannel, ReleaseManifest, RootMetadata, RuntimePlatform, SemanticVersion, UtcTimestamp } from '@delo/contract-release-manifest'
 import { isValidSummary } from '@delo/contract-release-manifest'
-import { UPDATE_CHECK_SCHEMA, UPDATE_COMMAND, type CheckedRelease, type UpdateCheckRecord, type UpdateKind, type UpdateNotice } from '@delo/contract-update-report'
+import { UPDATE_CHECK_FAILURES, UPDATE_CHECK_SCHEMA, UPDATE_COMMAND, type CheckedRelease, type UpdateCheckFailure, type UpdateCheckRecord, type UpdateKind, type UpdateNotice } from '@delo/contract-update-report'
 import { readProtectedFile, runDirectory, writeProtectedFile } from '@delo/home'
-import { messageOf } from '@delo/install'
+import { isInstallError, messageOf } from '@delo/install'
+import { printable } from '../terminal-text.ts'
 import { readStoredRelease, StorePaths } from '@delo/runtime-store'
 import { pluginItems, type ProfileFacts } from '@delo/update'
 import semver from 'semver'
@@ -59,7 +60,8 @@ const recordSchema = z.strictObject({
     summary: z.string().refine(isValidSummary, 'one line of at most 200 characters with no control character').exactOptional(),
   }).exactOptional(),
   verified: timestamp.exactOptional(),
-  failure: z.string().exactOptional(),
+  timestamp: z.number().int().min(1).exactOptional(),
+  failure: z.enum(UPDATE_CHECK_FAILURES).exactOptional(),
 })
 
 /**
@@ -199,7 +201,59 @@ export function noticeLine(notice: UpdateNotice): string {
  * @returns the lines, without newlines.
  */
 export function noticeLines(notice: UpdateNotice): readonly string[] {
-  return notice.release.summary === undefined ? [noticeLine(notice)] : [noticeLine(notice), `  ${notice.release.summary}`]
+  // The summary is the release's signed text, not Delorun's instruction: it is labelled, and printed escaped.
+  return notice.release.summary === undefined ? [noticeLine(notice)] : [noticeLine(notice), `  Release note: ${printable(notice.release.summary)}`]
+}
+
+/** What each failure means, in Delo's own words. */
+const FAILURE_TEXT: Readonly<Record<UpdateCheckFailure, string>> = {
+  'running-release-unreadable': 'the running release\'s signed files, or the launcher\'s roots that anchor them, did not read or verify, so the channel to ask is unknown; run delorun verify',
+  'trust-state-invalid': 'the home\'s trusted release root or timestamp could not be used; run delorun verify',
+  'unreachable': 'the release host did not answer, answered with an error, or sent a file larger than its limit',
+  'download-refused': 'a request named a host or a redirect the download rule refuses',
+  'deadline': 'the check took longer than its deadline',
+  'unverified': 'the channel\'s timestamp, a root or the manifest did not verify',
+  'log-bundle-invalid': 'the release\'s log bundle did not verify',
+  'regressed': 'the channel answered with an older timestamp or an older release than an earlier check verified',
+  'internal': 'the check failed in Delo itself, or its record could not be written; see the home log',
+}
+
+/**
+ * What a failure means.
+ * @param failure - the record's failure code.
+ * @returns Delo's sentence for it.
+ */
+export function failureText(failure: UpdateCheckFailure): string {
+  return FAILURE_TEXT[failure]
+}
+
+/**
+ * The failure code for what a check threw: the record keeps the code alone, never the message, which may carry text
+ * whoever serves the channel's files chose.
+ * @param error - what the check threw.
+ * @param deadline - whether the check's deadline had passed.
+ * @returns the code.
+ */
+export function failureOf(error: unknown, deadline: boolean): UpdateCheckFailure {
+  if (deadline) return 'deadline'
+  if (error instanceof RunningReleaseError) return 'running-release-unreadable'
+  if (error instanceof RegressionError) return 'regressed'
+  if (isInstallError(error, 'DOWNLOAD_FAILED')) return 'unreachable'
+  if (isInstallError(error, 'DOWNLOAD_REFUSED')) return 'download-refused'
+  if (isInstallError(error, 'INSTALL_VERIFY_FAILED', 'RELEASE_METADATA_INVALID')) return 'unverified'
+  if (isInstallError(error, 'RELEASE_LOG_FAILED')) return 'log-bundle-invalid'
+  if (isInstallError(error, 'TRUST_STATE_INVALID', 'NO_TRUSTED_ROOT')) return 'trust-state-invalid'
+  return 'internal'
+}
+
+/** The running release's signed files did not read or verify. */
+class RunningReleaseError extends Error {
+  override readonly name = 'RunningReleaseError'
+}
+
+/** The channel answered with an older timestamp or release than the record holds. */
+class RegressionError extends Error {
+  override readonly name = 'RegressionError'
 }
 
 /** What one check needs. */
@@ -222,6 +276,11 @@ export interface CheckOptions {
   readonly fetch?: typeof globalThis.fetch
   /** Where the files are published, and their hosts; the installation's recorded channel by default. */
   readonly publication?: Publication
+  /**
+   * Writes a failed check's own message to the home log, escaped; nowhere by default. The record keeps only its code.
+   * @param text - the message.
+   */
+  readonly log?: (text: string) => void
 }
 
 /**
@@ -257,13 +316,27 @@ export async function checkForUpdate(options: CheckOptions): Promise<UpdateCheck
   const fetch = withDeadline(options.fetch ?? globalThis.fetch.bind(globalThis), deadline.signal)
   let record: UpdateCheckRecord
   try {
-    const running = await runningRelease(options.home, options.platform, options.running, await options.anchor.root())
-    const channel = await homeCheckChannel(options.home, { platform: options.platform, channel: running.channel, shipped: await options.anchor.shipped(), fetch, timeoutMs: options.timeoutMs, now: () => now().getTime(), ...options.publication === undefined ? {} : { publication: options.publication } })
+    const [running, shipped] = await Promise.all([
+      options.anchor.root().then(async root => runningRelease(options.home, options.platform, options.running, root)),
+      options.anchor.shipped(),
+    ]).catch((error: unknown) => {
+      throw new RunningReleaseError(messageOf(error), { cause: error })
+    })
+    const channel = await homeCheckChannel(options.home, { platform: options.platform, channel: running.channel, shipped, fetch, timeoutMs: options.timeoutMs, now: () => now().getTime(), ...options.publication === undefined ? {} : { publication: options.publication } })
+    const newest = await channel.newest()
+    const release = checkedReleaseOf(newest.manifest)
+    if (previous?.timestamp !== undefined && newest.timestamp < previous.timestamp) throw new RegressionError(`timestamp ${String(newest.timestamp)} is older than ${String(previous.timestamp)}`)
+    if (previous?.newest !== undefined && previous.newest.channel === release.channel && semver.lt(release.delo, previous.newest.delo)) {
+      throw new RegressionError(`the channel names ${release.delo}, older than ${previous.newest.delo}`)
+    }
     const checked = utc(now())
-    record = { schema: UPDATE_CHECK_SCHEMA, checked, newest: checkedReleaseOf(await channel.newest()), verified: checked }
+    record = { schema: UPDATE_CHECK_SCHEMA, checked, newest: release, verified: checked, timestamp: newest.timestamp }
   } catch (error) {
-    const kept = previous?.newest === undefined || previous.verified === undefined ? {} : { newest: previous.newest, verified: previous.verified }
-    record = { schema: UPDATE_CHECK_SCHEMA, checked: utc(now()), ...kept, failure: messageOf(error).replace(/\s+/gu, ' ') }
+    options.log?.(`delo-update-check: the update check failed: ${printable(messageOf(error))}`)
+    const kept = previous?.newest === undefined || previous.verified === undefined
+      ? {}
+      : { newest: previous.newest, verified: previous.verified, ...previous.timestamp === undefined ? {} : { timestamp: previous.timestamp } }
+    record = { schema: UPDATE_CHECK_SCHEMA, checked: utc(now()), ...kept, failure: failureOf(error, deadline.signal.aborted) }
   } finally {
     clearTimeout(timer)
   }

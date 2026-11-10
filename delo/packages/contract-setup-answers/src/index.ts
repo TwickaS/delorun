@@ -6,8 +6,14 @@
  * @module @delo/contract-setup-answers
  */
 
-/** Schema version of the answers document. Setup refuses any other value. */
-export const SETUP_ANSWERS_SCHEMA_VERSION = 2 as const
+/** Schema version of the answers document that setup writes. */
+export const SETUP_ANSWERS_SCHEMA_VERSION = 3 as const
+
+/**
+ * Earlier schema versions setup still reads. A version-2 document has no `updateCheck` and reads as the check on;
+ * setup refuses every version not listed here or in {@link SETUP_ANSWERS_SCHEMA_VERSION}.
+ */
+export const SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS = [2] as const
 
 /** Provider id applied when the person accepts the provider question's default. */
 export const SETUP_DEFAULT_PROVIDER_ID = 'deepseek-official' as const
@@ -75,19 +81,22 @@ export interface SetupAnswers {
   readonly reach: ReachAnswer
   /** Whether setup imports the stock DeepSeek Harness home after showing its preview; never true in a `--config` document. */
   readonly importStockHome: boolean
+  /** Whether Delo checks the release channel for a newer release; a document may leave it out, which means `true`. */
+  readonly updateCheck: boolean
   /** The sections this run showed, in order; the studio's onboarding leaves out what the terminal covered. */
   readonly sections: readonly SectionRecord[]
 }
 
 /** The value setup applies to each question the person does not answer. */
 export const SETUP_DEFAULTS = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   modelProvider: { id: 'deepseek-official', credential: { source: 'prompt' } },
   prompts: 'safer',
   background: true,
   profile: { name: null, port: null },
   reach: { option: 'none', identityFactor: null },
   importStockHome: false,
+  updateCheck: true,
   sections: [],
 } as const satisfies SetupAnswers
 
@@ -99,3 +108,6 @@ export const SETUP_OPT_IN_ROWS = {
   sessionLogUpload: 'session-log-deepseek',
   desktopAnalytics: 'product-analytics',
 } as const
+
+/** The `@delo/bundle-local` row whose `config.enabled` the `updateCheck` answer and the Privacy section's release-check switch write. */
+export const SETUP_UPDATE_CHECK_ROW = 'delo-update-check' as const

@@ -1,5 +1,5 @@
 import { createServer } from 'node:net'
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -48,6 +48,7 @@ describe('delorun setup', { timeout: 60_000 }, () => {
     expect((await refusal(['--nope'])).exit).toBe(EXIT.usage)
     expect((await refusal(['key', 'prompts'])).message).toContain('give one section, or none')
     expect((await refusal(['--yes', '--config', 'x.json'])).message).toContain('two forms of the same answers')
+    expect((await refusal(['privacy', '--no-update-check'])).message).toBe('delorun setup: --no-update-check applies to a whole setup; delorun setup privacy asks about the release check')
   })
 
   it('refuses a section that does not exist, and a section on a profile that is not set up', async () => {
@@ -69,6 +70,11 @@ describe('delorun setup', { timeout: 60_000 }, () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(lines.join('')).not.toContain('command-spec-key')
     expect(error.message).not.toContain('command-spec-key')
+  })
+
+  it('--no-update-check with --yes writes the release-check row off', async () => {
+    expect(await setupCommand.run(['--yes', '--no-update-check'], context)).toBe(EXIT.ok)
+    expect(readFileSync(join(osHome, '.delo', 'profiles', 'default', 'cordis.patch.yml'), 'utf8')).toContain('- id: delo-update-check\n  name: "@delo/bundle-local/update-check"\n  config:\n    intervalHours: 24\n    timeoutSeconds: 15\n    enabled: false\n')
   })
 
   it('a bare terminal-less run is refused with the usage code, as before', async () => {

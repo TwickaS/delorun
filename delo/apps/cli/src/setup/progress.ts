@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import type { SetupAnswers } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
-import { answersSchema } from './answers.ts'
+import { parseAnswers } from './answers.ts'
 
 /** The step that creates the CLI profile; it runs before every section's writes. */
 export const PROFILE_STEP = 'profile'
@@ -38,7 +38,12 @@ export interface SetupProgress {
 
 const progressSchema = z.strictObject({
   version: z.literal(1),
-  answers: answersSchema,
+  answers: z.unknown().transform((answers, context) => {
+    const checked = parseAnswers(answers)
+    if (checked.success) return checked.data
+    context.addIssue({ code: 'custom', message: 'not setup answers' })
+    return z.NEVER
+  }),
   completed: z.array(z.string()),
 })
 

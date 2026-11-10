@@ -26,7 +26,7 @@ import { UPDATE_CHECK_DEFAULTS } from '@delo/bundle-local/update-check'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
 import { runtimePlatformOf } from './channel.ts'
-import { checkForUpdate, noticeLines, noticeOf, profileReader, runningRelease, type CheckOptions } from './notice.ts'
+import { checkForUpdate, failureText, noticeLines, noticeOf, profileReader, runningRelease, type CheckOptions } from './notice.ts'
 import { runtimeOfFile, type RunningRuntime } from './runtime.ts'
 import { launcherAnchor } from './trusted-root.ts'
 
@@ -95,7 +95,7 @@ async function runCheck(home: string, profile: string, context: CommandContext, 
   const anchor = launcherAnchor(home, context.env)
   const record = await checkForUpdate({ home, profile, platform, running: runtime.version, anchor, timeoutMs: UPDATE_CHECK_DEFAULTS.timeoutSeconds * 1000, ...dependencies.check })
   if (record.failure !== undefined) {
-    context.stderr(`delorun update --check: the check failed, so nothing is known about a newer release: ${record.failure}\n`)
+    context.stderr(`delorun update --check: the check failed, so nothing is known about a newer release: ${failureText(record.failure)}\n`)
     return EXIT.failed
   }
   const running = await runningRelease(home, platform, runtime.version, await anchor.root())
@@ -113,6 +113,7 @@ const UPDATE_OPTIONS = {
   profile: { type: 'string' },
   yes: { type: 'boolean', default: false },
   check: { type: 'boolean', default: false },
+  report: { type: 'boolean', default: false },
   'data-copy': { type: 'boolean' },
   'no-data-copy': { type: 'boolean' },
 } as const
@@ -244,8 +245,8 @@ async function decide(report: UpdateReport, values: { readonly yes?: boolean, re
  * @param context - the environment and output.
  * @param prompts - the questions; the terminal's by default.
  * @param checks - what `--check` reads; the real runtime and contract C2's publication by default.
- * @returns 0 when the update committed, nothing needed updating, `--check` verified the channel or the person
- *   declined; 1 when it was refused, rolled back or failed, or `--check` failed; 2 for a wrong command line; 3 when no
+ * @returns 0 when the update committed, nothing needed updating, `--check` verified the channel, `--report` printed the
+ *   report or the person declined; 1 when it was refused, rolled back or failed, or `--check` failed; 2 for a wrong command line; 3 when no
  *   home process runs.
  */
 export async function runUpdate(args: readonly string[], context: CommandContext, prompts: UpdatePrompts = TERMINAL_PROMPTS, checks: UpdateCheckDependencies = CHECK_DEPENDENCIES): Promise<CommandResult> {
@@ -253,7 +254,11 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   const { home, profile } = await prepareHome(context, values.profile)
   if (values.check === true) {
     if (values.yes === true || values['data-copy'] !== undefined || values['no-data-copy'] !== undefined) throw new CliError(EXIT.usage, 'delorun update: --check applies nothing, so it takes no --yes, --data-copy or --no-data-copy')
+    if (values.report === true) throw new CliError(EXIT.usage, 'delorun update: choose --check or --report, not both')
     return runCheck(home.path, profile, context, checks)
+  }
+  if (values.report === true && (values.yes === true || values['data-copy'] !== undefined || values['no-data-copy'] !== undefined)) {
+    throw new CliError(EXIT.usage, 'delorun update: --report applies nothing, so it takes no --yes, --data-copy or --no-data-copy')
   }
   try {
     await queryHomeStatus(home.path, profile, HOME_STATUS_TIMEOUT_MS)
@@ -274,6 +279,10 @@ export async function runUpdate(args: readonly string[], context: CommandContext
     return EXIT.ok
   }
   for (const line of reportLines(report)) context.stdout(`${line}\n`)
+  if (values.report === true) {
+    context.stdout('Nothing changed. Run delorun update to apply it.\n')
+    return EXIT.ok
+  }
   const decision = await decide(report, values, prompts, context)
   if (!decision.apply) {
     context.stdout('Nothing changed.\n')
@@ -296,9 +305,9 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   }
 }
 
-/** `delorun update [--check | --yes] [--data-copy | --no-data-copy] [--profile <name>]`. */
+/** `delorun update [--check | --report | --yes] [--data-copy | --no-data-copy] [--profile <name>]`. */
 export const updateCommand: CliCommand = {
   name: 'update',
-  summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --yes, --data-copy, --no-data-copy',
+  summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --yes, --data-copy, --no-data-copy',
   run: async (args, context) => runUpdate(args, context),
 }

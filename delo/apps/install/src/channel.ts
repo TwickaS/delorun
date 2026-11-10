@@ -24,6 +24,7 @@ import {
   type RootMetadata,
   type RuntimePlatform,
   type SemanticVersion,
+  type TimestampMetadata,
 } from '@delo/contract-release-manifest'
 import type { FilledRelease } from '@delo/runtime-store'
 import type { RuntimeChannel, ChannelRelease } from '@delo/runtime-store'
@@ -103,9 +104,18 @@ interface Resolved {
   readonly checkedAt: number
 }
 
+/** The channel's current release as the update check reads it. */
+export interface NewestRelease {
+  /** The verified manifest. */
+  readonly manifest: ReleaseManifest
+  /** The `version` of the verified timestamp that names it. */
+  readonly timestamp: number
+}
+
 /** The channel's current release as {@link LauncherChannel} verified it, before any log check. */
 interface Current {
   readonly root: TrustedRoot
+  readonly timestamp: TimestampMetadata
   readonly pointer: ChannelPointer
   readonly verified: VerifiedChannelRelease
   readonly manifestBytes: Buffer
@@ -181,13 +191,13 @@ export class LauncherChannel implements RuntimeChannel {
    * timestamp, manifest and release-log bundle checks as {@link LauncherChannel.resolve}, with the timestamp held to the
    * stored one, and no online log check. Nothing under `trust/` changes, so a check running beside an install or an
    * update never moves what they rely on.
-   * @returns the verified manifest of the channel's current release.
+   * @returns the verified manifest of the channel's current release, and the version of the timestamp that names it.
    * @throws {InstallError} `DOWNLOAD_REFUSED`, `DOWNLOAD_FAILED`, `INSTALL_VERIFY_FAILED`, `RELEASE_METADATA_INVALID`,
    *   `RELEASE_LOG_FAILED` or `TRUST_STATE_INVALID`, as {@link LauncherChannel.resolve} does before its log check.
    */
-  async newest(): Promise<ReleaseManifest> {
+  async newest(): Promise<NewestRelease> {
     const current = await this.current(Math.floor(this.now() / 1000), undefined, 'read-only')
-    return current.verified.manifest
+    return { manifest: current.verified.manifest, timestamp: current.timestamp.version }
   }
 
   /**
@@ -210,6 +220,9 @@ export class LauncherChannel implements RuntimeChannel {
       await writeStoredTimestamp(this.options.home, stamp.bytes)
     }
     const pointer = timestamp.channels[this.options.channel]
+    if (pointer.manifest.length > RELEASE_FILE_SIZE_LIMITS.manifest) {
+      throw new InstallError('INSTALL_VERIFY_FAILED', 'timestamp.json', `the timestamp names a ${this.options.channel} manifest of ${String(pointer.manifest.length)} bytes, above the limit of ${String(RELEASE_FILE_SIZE_LIMITS.manifest)}; it was not fetched`)
+    }
     if (record) {
       // An install refuses a version the store cannot name before it downloads anything more.
       asVersion(pointer.release)
@@ -226,7 +239,7 @@ export class LauncherChannel implements RuntimeChannel {
       ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
     })
     if (record) this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
-    return { root, pointer, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
+    return { root, timestamp, pointer, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
   }
 
   /**

@@ -9,14 +9,14 @@ English | [中文](c11-setup-answers.zh.md)
 <a id="summary"></a>
 ## Summary
 
-Setup answers are what `delorun setup` asks, the schema that stores each answer, the profile writes each answer produces, and the `--yes` and `--config` forms that give the same answers without a terminal. Setup opens with Quick or Full. Quick asks the privacy note, the stock-home import when a stock home exists, the model key and the prompts question; Full adds the sections that change the computer. Every question takes effect or is not asked. Delo has no telemetry of its own, and the privacy note says that upstream's two opt-ins are off and are changed in Settings → Privacy, where the studio's consent screen owns them.
+Setup answers are what `delorun setup` asks, the schema that stores each answer, the profile writes each answer produces, and the `--yes` and `--config` forms that give the same answers without a terminal. Setup opens with Quick or Full. Quick asks the privacy note, the stock-home import when a stock home exists, the model key and the prompts question; Full also asks whether to check for new releases and adds the sections that change the computer. Every question takes effect or is not asked. Delo has no telemetry of its own, and the privacy note says that upstream's two opt-ins are off and are changed in Settings → Privacy, where the studio's consent screen owns them, and what the release check requests. A release check turned off in setup is off before Delorun first starts, so it makes no request.
 
 <a id="status"></a>
 ## Status
 
 `delorun setup` with its Quick and Full flows, the `--yes` and `--config` forms and the profile writes below are built; the stock-home `import` section is built too; the reach, identity-factor and runtime sections are not, and the opt-ins stay off only in the CLI profile.
 
-- **Built and reached:** the sections `privacy`, `import`, `key`, `prompts`, `background` and `profile`; the schema with its refusals of removed keys, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile.
+- **Built and reached:** the sections `privacy`, `import`, `key`, `prompts`, `background` and `profile`; the schema with its refusals of removed keys, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile; the `updateCheck` answer, which Full setup asks and `delorun setup privacy` changes, written as the `delo-update-check` row's switch before the first start.
 - **Not built:** the reach and identity-factor sections and the enrolment request; the runtime section; the check that `modelProvider.id` is a provider upstream ships, which accepts any non-empty id; the feedback dialog and its send, because the CLI profile disables upstream's feedback rows, while setup's privacy note still prints the feedback statement; the rule that a failed key check's reason is not printed, because setup prints it (the reason names the origin and the HTTP status and holds no part of the key).
 - **Not reached by Delo's writes:** `delorun headless` runs upstream's headless profile, which carries none of these writes, so DeepSeek's session-log upload is on there by upstream's default and the requirement that the opt-ins are off does not hold for it.
 
@@ -49,7 +49,7 @@ The first screen asks for **Quick** (preselected) or **Full**. Each topic is a r
 
 | Section | Mode | What it does |
 | --- | --- | --- |
-| `privacy` | Quick | Shows the privacy note. It asks nothing. |
+| `privacy` | Quick | Shows the privacy note. In Full and in `delorun setup privacy` it asks whether to check for new releases; in Quick it asks nothing and says how to reach that question before Delorun first starts. |
 | `import` | Quick | Shown only when `~/.dsh` is a directory, not a link, and the Delo home holds no chat: shows the data part of the stock-home import's preview, then asks "Copy your DeepSeek Harness chats, attachments and workspace list?". |
 | `key` | Quick | Asks where the model key comes from. A typed key is checked with one live request before it is stored. |
 | `prompts` | Quick | Safer prompts or Same as stock. |
@@ -67,6 +67,7 @@ Setup asks these questions, in this order. The default applies when the person a
 
 | Question | Section | Answer | Default |
 | --- | --- | --- | --- |
+| Check for new releases | `privacy` | Yes or no. Asked in Full, with the note's facts as the hint. | Yes |
 | Copy your DeepSeek Harness chats, attachments and workspace list? | `import` | Yes or no, after the preview. | No. |
 | Model key | `key` | Typed at the prompt, or read from `DEEPSEEK_API_KEY` at each start. | Typed at the prompt. |
 | Prompts | `prompts` | Safer prompts, or Same as stock. | Safer prompts |
@@ -84,20 +85,21 @@ An answers document is a JSON object with the fields below. The same schema is u
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "modelProvider": { "id": "deepseek-official", "credential": { "source": "environment", "name": "DEEPSEEK_API_KEY" } },
   "prompts": "safer",
   "background": true,
   "profile": { "name": null, "port": null },
   "reach": { "option": "none", "identityFactor": null },
   "importStockHome": false,
+  "updateCheck": true,
   "sections": [{ "id": "privacy", "status": "seen" }, { "id": "key", "status": "answered" }]
 }
 ```
 
 | Field | Type and values | Default | Rule |
 | --- | --- | --- | --- |
-| `schemaVersion` | Integer `2`. | `2` | Setup refuses any other value. |
+| `schemaVersion` | Integer `3`, or `2` for a document written before the release-check question. | `3` | Setup refuses any other value. A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. |
 | `modelProvider.id` | A provider id. | `deepseek-official` | Any non-empty string is accepted; no check against the providers upstream ships runs. |
 | `modelProvider.credential` | `{ "source": "prompt" }` or `{ "source": "environment", "name": "<variable>" }`. | `{ "source": "prompt" }` | `prompt` is accepted only in the interactive form. |
 | `prompts` | `safer` or `stock`. | `safer` | Sets the prompt switches of the parity registry. |
@@ -107,6 +109,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 | `reach.option` | `none`, `tailscale-private`, `tailscale-funnel` or `self-hosted-relay`. | `none` | Any value other than `none` is accepted only in the interactive form. |
 | `reach.identityFactor` | `passkey`, `oidc`, `tailnet` or `null`. | `null` | `null` when the option is `none`. `passkey` or `oidc` for `tailscale-funnel` and `self-hosted-relay`. `passkey`, `oidc` or `tailnet` for `tailscale-private`. `tailnet` is available only under C7's socket variant ([C7](c07-reach-providers.md#tailscale-serve-target)); otherwise setup refuses it with `TAILNET_IDENTITY_UNAVAILABLE`. `passkey` on a `ts.net` address is available only where C14 makes passkeys available there ([C14](c14-oidc-passkeys.md#relying-party-ids)); otherwise setup refuses it with `PASSKEY_UNAVAILABLE`. |
 | `importStockHome` | Boolean. | `false` | Set by the import section. `--config` refuses `true`, because the import shows its preview before it asks. |
+| `updateCheck` | Boolean; optional. | `true` | Whether Delo checks the release channel for a newer release. `--no-update-check` sets it to `false` in every form. |
 | `sections` | A list of `{ "id", "status" }`, in flow order. | `[]` | Written by setup, never by a document. `seen` is a note shown, `answered` a question answered, `skipped` a section that took its default without being asked. The studio's onboarding leaves out what the terminal covered. |
 
 Earlier versions asked for the runtime, the studio additions, help with other models, desktop analytics and DeepSeek's session-log upload. Setup recorded those answers and applied none of them, so it no longer asks them. An answers document that carries `studioAdditions`, `runtime`, `helpSetUpModels`, `sessionLogUpload` or `desktopAnalytics` is refused with a message that names the removed keys. The two opt-ins stay off, and the studio's Settings → Privacy section changes them.
@@ -128,6 +131,7 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | `reach.option` | The reach rows of the reach contracts. `none` writes none. | The profile. Written only in the interactive form. |
 | `reach.identityFactor` | An enrolment request for the reach address. No config row. | Home-auth state, under the identity contracts. |
 | `importStockHome` | The data of the stock-home import of [C8](c08-archive-and-trash.md#the-stock-home-import): exactly the plan the section's preview showed, under the home lock of every profile. A stock file that changed since, a Delo home that gained a chat since, or a run that did not show the preview refuses it. | The home. |
+| `updateCheck` | `false` writes the `delo-update-check` row as Settings → Privacy saves it: its id, its plugin name and the bundle's config with `enabled: false`. `true` leaves no config on that row, so the bundle's `enabled: true` applies. | The profile's `cordis.patch.yml`, before Delorun first starts. |
 | `sections` | Recorded in `setup-answers.json`. | The profile directory. |
 
 Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In upstream's profiles it sends a session-log prefix only after the person submits feedback. The CLI profile disables it together with upstream's feedback command and message feedback rows, so nothing sends feedback there.
@@ -135,9 +139,9 @@ Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In u
 <a id="yes-and-config-forms"></a>
 ### The --yes and --config forms
 
-`--yes` accepts every default. It applies no answer other than the defaults, and it reads the model credential from the environment variable that `credential.name` names, which defaults to `DEEPSEEK_API_KEY`. When that variable is unset, setup stops with a typed error that names the variable.
+`--yes` accepts every default. It applies no answer other than the defaults and `--no-update-check`, and it reads the model credential from the environment variable that `credential.name` names, which defaults to `DEEPSEEK_API_KEY`. When that variable is unset, setup stops with a typed error that names the variable.
 
-`--config <file>` reads an answers document with the schema above, and applies its answers under the same rules as `--yes`. A document whose `reach.option` is not `none` is refused with a typed error that names the field, and so is a document whose `importStockHome` is `true`. A document that carries a removed key is refused with a message that names the removed keys. A document that carries a credential value, in any field, is refused without echoing that value.
+`--config <file>` reads an answers document with the schema above, and applies its answers under the same rules as `--yes`; `--no-update-check` turns the release check off whatever the document says. A document whose `reach.option` is not `none` is refused with a typed error that names the field, and so is a document whose `importStockHome` is `true`. A document that carries a removed key is refused with a message that names the removed keys. A document that carries a credential value, in any field, is refused without echoing that value.
 
 For identical answers, the interactive form and the `--yes` or `--config` form write identical profile files.
 
@@ -151,6 +155,7 @@ Setup shows the privacy note at the start of every terminal run, and prints it b
 - Delo has no telemetry of its own.
 - Upstream's desktop analytics and DeepSeek's session-log upload are off unless you turn them on, and Settings → Privacy changes them.
 - Upstream's feedback send includes a session-log prefix, and it happens only when you send feedback. The CLI profile has no feedback send, so this statement describes upstream's profiles only.
+- Delo checks once a day whether a newer release exists, which hosts it fetches from, that it sends nothing about the installation and its plugins, that those hosts see the computer's address, and that Settings → Privacy turns it off.
 
 The statements about recovery and Docker belong to the sections that add those topics.
 
@@ -165,7 +170,7 @@ The statements about recovery and Docker belong to the sections that add those t
 <a id="compatibility"></a>
 ## Compatibility
 
-The answers schema is versioned by `schemaVersion`, which is `2`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Setup refuses an answers document whose version it does not know.
+The answers schema is versioned by `schemaVersion`, which is `3`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Setup reads a version-2 document as version 3 with `updateCheck: true` and records it as version 3. Setup refuses an answers document whose version it does not know.
 
 A new upstream opt-in is added as a question with a default of off, in the same change that adds its profile row to the mapping.
 
@@ -194,6 +199,7 @@ Denial tests:
 | `typed key is never printed` | The recorded screen of a run holds no part of the typed key. |
 | `default-profile run sends no analytics or upload` | A network fixture records no request to an analytics destination and no session-log upload in a default profile. |
 | `default-profile model request carries no dsh_session_log` | A model request from a default profile has no `dsh_session_log` field. |
+| `update-notice-off-at-first-start` | After a Full setup that answers No, and after `--yes --no-update-check`, the profile the first start composes has the `delo-update-check` row with `enabled: false`, and the row mounts no check service. |
 
 Acceptance tests:
 
@@ -205,12 +211,13 @@ Acceptance tests:
 - `consent screen turns each upstream opt-in on alone and off again from the same screen`.
 - `a way back returns to the previous question with the earlier answers kept`.
 - `sits between the privacy note and the key in a Quick setup, and copies the chats before the key is asked for`.
+- `delorun setup privacy shows the note, turns the check off, and turns it on again by removing the row`.
 
 <a id="decided-values"></a>
 ## Decided values
 
-- The answers schema version is `2`.
-- The defaults are `deepseek-official` for the provider, safer prompts, background running on, port 3080, `none` for reach, and off for the stock-home import, which the import section also preselects as no when it is shown.
+- The answers schema version is `3`; setup also reads version 2.
+- The defaults are `deepseek-official` for the provider, safer prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
 - The default credential variable is `DEEPSEEK_API_KEY`.
 - The reach options of setup are `none`, `tailscale-private`, `tailscale-funnel` and `self-hosted-relay`.
 - The feedback send is not an answer, and setup states it.
