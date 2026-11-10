@@ -39,3 +39,13 @@ A running board of friction met while working in this harness and this repositor
 **What to do instead.** `pnpm run build:native-system` builds the host's addon in about a second. The lanes that load it now declare `generate:native` in their needs ([`plan.ts`](../../apps/tools/src/checks/plan.ts)), so `pnpm check` builds it before the first lane that loads it, with no manual step, and a tree that loses the addon is rebuilt on the next run because the check declares no inputs.
 
 **Status:** `fixed`: every lane that loads the addon carries the build as a need, and [`checks-native-system.spec.ts`](../../apps/tools/tests/checks-native-system.spec.ts) asserts it.
+
+### 2026-11-10 · #4 parity-switches flags a non-model-visible edit inside an upstream plugin's `apply`
+
+**What happened.** `parity-switches` counts a changed line of a ledgered upstream file as a model-visible contribution when it lies anywhere in a top-level statement that holds a registration call. The `lane/sandbox-escapes` security fix binds each Session's git runner to its sandbox with one changed line inside `packages/deliverables/workspace-changes/src/index.ts`'s `apply`, which also holds upstream's unchanged `ctx.on('tools/pre-execute')` listener, so the check reports `index.ts:148` although nothing the model sees changes and `parity-replay` shows no difference. No restructuring avoids it: any edit inside `apply` lands in the same statement.
+
+**What it cost.** The check fails on a security fix that has no C16 switch to register, because the fix must hold in the parity composition too.
+
+**What to do instead.** The lead decides how the check records a reviewed, non-model-visible edit inside a contribution-holding statement, for example a ledger field the check reads. `tests:fork` fails on the same finding through `apps/tools/tests/parity/switches.spec.ts`, which asserts the real tree's scan has no error. Until then a push whose changed set holds such an edit may use `DELO_PUSH_SKIP=parity-switches,tests:fork` with this entry as the reason, after running `tests:fork` and confirming that spec is its only failure, and names the skip in the pull request.
+
+**Status:** `open`.
