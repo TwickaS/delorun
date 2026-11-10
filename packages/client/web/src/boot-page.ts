@@ -14,6 +14,25 @@ function div(className: string | undefined, text?: string): HTMLDivElement {
   return el
 }
 
+/**
+ * The `globalThis` property through which a distribution names its product on the boot page, set by a `global` index
+ * injection row before the page loads.
+ */
+export const BOOT_WORDMARK_GLOBAL = 'dshBootWordmark'
+
+/** Longest product name the boot page shows; a longer value keeps the default wordmark. */
+const WORDMARK_MAX_LENGTH = 40
+
+/**
+ * The wordmark the boot page shows.
+ * @param scope - the object holding the page global; `globalThis` by default.
+ * @returns the distribution's product name when one is set and fits, otherwise `HARNESS`.
+ */
+export function bootWordmark(scope: object = globalThis): string {
+  const value: unknown = Reflect.get(scope, BOOT_WORDMARK_GLOBAL)
+  return typeof value === 'string' && value.trim() !== '' && value.length <= WORDMARK_MAX_LENGTH ? value : 'HARNESS'
+}
+
 /** Kernel-owned page mounted below the application's root element. */
 export class BootPage {
   private readonly root: HTMLDivElement
@@ -34,7 +53,7 @@ export class BootPage {
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
     this.card = div(css.card)
-    this.wordmark = div(css.wordmark, 'HARNESS')
+    this.wordmark = div(css.wordmark, bootWordmark())
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
     this.hint = div(css.hint, 'Loading plugins…')

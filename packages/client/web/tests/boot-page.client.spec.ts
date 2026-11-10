@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { BootPage } from '../src/boot-page.ts'
+import { BOOT_WORDMARK_GLOBAL, BootPage, bootWordmark } from '../src/boot-page.ts'
 
 afterEach(() => { document.body.innerHTML = '' })
 
@@ -9,6 +9,21 @@ function mount() {
   document.body.append(el)
   return { el, page: new BootPage(el) }
 }
+
+describe('the boot wordmark', () => {
+  it('shows the product a distribution names through the page global, and HARNESS otherwise', () => {
+    expect(bootWordmark({ [BOOT_WORDMARK_GLOBAL]: 'Delo' })).toBe('Delo')
+    for (const value of [undefined, '', '  ', 42, 'x'.repeat(41)]) expect(bootWordmark({ [BOOT_WORDMARK_GLOBAL]: value })).toBe('HARNESS')
+    Reflect.set(globalThis, BOOT_WORDMARK_GLOBAL, 'Delo')
+    try {
+      const { el } = mount()
+      expect(el.textContent).toContain('Delo')
+      expect(el.textContent).not.toContain('HARNESS')
+    } finally {
+      Reflect.deleteProperty(globalThis, BOOT_WORDMARK_GLOBAL)
+    }
+  })
+})
 
 describe('BootPage', () => {
   it('draws the loading skeleton before any plugin state arrives', () => {
