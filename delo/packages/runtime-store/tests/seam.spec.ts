@@ -81,7 +81,7 @@ class FixtureReporter {
 
   async build(version: RuntimeVersion) {
     this.reported.push(version)
-    return { report: { for: version }, disabledPlugins: [] }
+    return { report: { for: version }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false }
   }
 }
 
@@ -127,7 +127,7 @@ describe('prepare', () => {
     const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel, report: new FixtureReporter() })
     const prepared = await store.prepare(undefined, phase => { phases.push(phase) })
     expect(phases).toEqual(['checking', 'installing', 'reporting'])
-    expect(prepared).toEqual({ version: V2, report: { for: V2 }, disabledPlugins: [] })
+    expect(prepared).toEqual({ version: V2, report: { for: V2 }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false })
     expect(await fixture.store.pointers()).toEqual({ current: V1 })
     expect(await fixture.store.checkRuntime(V2, fixture.root)).toMatchObject({ version: V2 })
   })
@@ -199,9 +199,9 @@ describe('prepare', () => {
       store: fixture.store,
       profile: 'default',
       channel: new FixtureChannel(),
-      report: { build: () => Promise.resolve({ report: { disabled: ['notes'] }, disabledPlugins: ['notes'] }) },
+      report: { build: () => Promise.resolve({ report: { disabled: ['notes'] }, health: { disabledPlugins: ['notes'], namedRows: [] }, dataDiffers: true }) },
     })
-    await expect(store.prepare(V1, () => {})).resolves.toEqual({ version: V1, report: { disabled: ['notes'] }, disabledPlugins: ['notes'] })
+    await expect(store.prepare(V1, () => {})).resolves.toEqual({ version: V1, report: { disabled: ['notes'] }, health: { disabledPlugins: ['notes'], namedRows: [] }, dataDiffers: true })
   })
 })
 
@@ -219,7 +219,7 @@ describe('reportRollback', () => {
 
   it('reports the previous version after its start check passes', async () => {
     const store = await twoVersions()
-    await expect(store.reportRollback(V1)).resolves.toEqual({ version: V1, report: { for: V1 }, disabledPlugins: [] })
+    await expect(store.reportRollback(V1)).resolves.toEqual({ version: V1, report: { for: V1 }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false })
   })
 
   it('refuses a target that fails the start check', async () => {

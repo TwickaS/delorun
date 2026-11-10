@@ -46,7 +46,7 @@ const plan = await store.prepareLaunch({ launcher: SUPPORTED, root: await readSt
 
 ## Rollback
 
-`rollback()` swaps `current` and `previous` under `store.lock`, `previous` first, for `delorun recover --runtime previous` with no home process running; the caller holds the profile's home lock. Without an installed `previous` it fails with `NO_PREVIOUS`. A rollback, like every pointer write, changes no file outside `runtimes/`.
+The store has no rollback of its own: every way back reads the update record and applies [contract C3](../../docs/contracts/c03-update-report.md#rollback)'s rollback table through `@delo/update`'s one rollback function, which switches the pointers through `switchTo` or `restore` as its caller's path does. A pointer write, a rollback's included, changes no file outside `runtimes/`. The `NO_PREVIOUS` code stays for the launcher's refusal table and no store operation raises it.
 
 ## Installing
 

@@ -5,6 +5,7 @@
  * - {@link RuntimeStore}: `delo/packages/runtime-store` (C1's runtime store, with C2's and C18's checks). Until it
  *   lands, a home process has no store and refuses updates; specs use a fixture store.
  * - {@link ProfileSnapshots}: C3's profile history, with the store.
+ * - {@link SessionDataCopies}: C3's session-data copy and the one rollback function, `delo/packages/update`.
  * - {@link HostRunner} and {@link ChatGate}: the profile's Host, booted through upstream's profile runner by
  *   `delorun`, and the Host's update plugin, which counts running chats, refuses new turns and cancels turns
  *   through upstream's cancellation.
@@ -12,6 +13,7 @@
  * @module @delo/home-process/seams
  */
 import type { RuntimeVersion } from '@delo/contract-home-layout'
+import type { UpdateJournal } from '@delo/contract-home-process'
 import type { ExchangeOptions, ResponseLine, UnsignedRequest } from './client.ts'
 
 /** C1's two pointers. */
@@ -22,14 +24,33 @@ export interface RuntimePointers {
   readonly previous?: RuntimeVersion
 }
 
+/** What C3's health check holds a target to, from the update report. */
+export interface HealthExpectations {
+  /** H3: the plugins the report names as disabled at boot. */
+  readonly disabledPlugins: readonly string[]
+  /** H3, H4: the rows the report names, by id or name. */
+  readonly namedRows: readonly string[]
+  /** H5: the bundle list the report predicts, or `undefined` when the report predicts none. */
+  readonly bundles?: readonly string[]
+  /** H4: the rows that did not load on the previous release, by id or name. */
+  readonly previousFailures: readonly string[]
+}
+
+/** The health check's answer: passed, or the first criterion that failed. */
+export type HealthVerdict =
+  | { readonly passed: true }
+  | { readonly passed: false, readonly criterion: string, readonly detail: string }
+
 /** A version ready to switch to, with C3's update report against it. */
 export interface PreparedRuntime {
   /** The target version, installed and verified. */
   readonly version: RuntimeVersion
   /** C3's update report, returned to the caller as it is. */
   readonly report: unknown
-  /** The plugin ids the report names as disabled at boot; the health check refuses any other. */
-  readonly disabledPlugins: readonly string[]
+  /** What the health check holds the target to, apart from the previous release's failures. */
+  readonly health: Omit<HealthExpectations, 'previousFailures'>
+  /** Whether the report names a data change (C3, "Data formats"). */
+  readonly dataDiffers: boolean
 }
 
 /**
@@ -99,17 +120,55 @@ export interface RuntimeStore {
 /** The profile history versions an update saves and restores (contract C3). */
 export interface ProfileSnapshots {
   /**
-   * The `snapshot` phase: save a profile history version named for the update, with the home patch.
+   * The `snapshot` phase: save a profile history version named for the update, with the home patch and the report.
+   * @param from - the running version.
+   * @param to - the target version.
+   * @param report - C3's report the person confirmed.
+   */
+  save(from: RuntimeVersion, to: RuntimeVersion, report: unknown): Promise<void>
+}
+
+/** The steps of a rollback its caller owns. */
+export interface RollbackSteps {
+  /** Restore only the profile snapshot and keep the running runtime. */
+  readonly profileOnly: boolean
+  /**
+   * Switch the runtime pointers back, in the way the caller's path does it.
+   * @returns when the pointers name the version rolled back to.
+   */
+  readonly switchRuntime: () => Promise<void>
+}
+
+/**
+ * The session-data copies and the one rollback function of contract C3: every way back reads the update record and
+ * applies C3's rollback table through {@link SessionDataCopies.rollback}; none swaps the pointers on its own.
+ */
+export interface SessionDataCopies {
+  /**
+   * Complete an interrupted restore and remove an unfinished copy; runs before any Host starts, with the home lock
+   * held.
+   */
+  recover(): Promise<void>
+  /**
+   * Check that a copy of the home's chat data fits now.
+   * @throws {HomeProcessError} `DATA_COPY_NO_SPACE` when it does not.
+   */
+  plan(): Promise<void>
+  /**
+   * Write the session-data copy for an update, after the Host has stopped and before the switch.
    * @param from - the running version.
    * @param to - the target version.
    */
   save(from: RuntimeVersion, to: RuntimeVersion): Promise<void>
   /**
-   * C3's rollback steps after a failed health check: restore the snapshot the update saved.
-   * @param from - the version the update started from.
-   * @param to - the version it failed to reach.
+   * Apply C3's rollback table for the update a record names: the data, the profile snapshot and, through the caller's
+   * step, the runtime.
+   * @param record - the update record.
+   * @param steps - whether only the profile goes back, and the caller's runtime switch.
+   * @throws {HomeProcessError} `ROLLBACK_NEEDS_DATA_COPY` when the data differs, the target started and no copy
+   *   exists; nothing has changed then.
    */
-  restore(from: RuntimeVersion, to: RuntimeVersion): Promise<void>
+  rollback(record: UpdateJournal, steps: RollbackSteps): Promise<void>
 }
 
 /** The running chats of one Host: sessions with an active turn or a running background job. */
@@ -169,15 +228,16 @@ export interface RunningHost {
   /** Its running chats. */
   readonly chats: ChatGate
   /**
-   * The plugins it disabled at boot.
-   * @returns their ids.
+   * The rows that did not load at boot, which a successor's H4 allows.
+   * @returns their ids or names.
    */
-  disabledPlugins(): readonly string[]
+  failedRows(): readonly string[]
   /**
-   * Whether the studio listener answers its health request.
-   * @returns true when it answers.
+   * Contract C3's health check: H1 to H5 against the report's expectations, or H1 and H2 alone without them.
+   * @param expect - what the report predicted, or `undefined` for a start that finishes an interrupted update.
+   * @returns the verdict.
    */
-  healthy(): Promise<boolean>
+  check(expect: HealthExpectations | undefined): Promise<HealthVerdict>
   /**
    * Stop the Host.
    * @returns when it has stopped.

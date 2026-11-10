@@ -1,6 +1,6 @@
 /**
  * Contract C1's runtime store under `~/.delo/runtimes/`: reading `current` and `previous`, switching and restoring
- * them by atomic rename under `store.lock`, rollback without a home process, installing a verified closure from a
+ * them by atomic rename under `store.lock`, installing a verified closure from a
  * staging directory, retention, and the start check of contract C2 that every launch of the CLI runtime runs.
  *
  * @module @delo/runtime-store/store
@@ -134,23 +134,6 @@ export class RuntimeStore {
       await this.requireInstalled(before.current)
       if (before.previous !== undefined) await this.requireInstalled(before.previous)
       await writePointers(this.paths, before)
-    })
-  }
-
-  /**
-   * Roll back with no home process running (`delorun recover --runtime previous`, C19): swap `current` and
-   * `previous` under `store.lock`, `previous` first. The caller holds the profile's home lock.
-   * @returns the pointers after the swap.
-   * @throws {RuntimeStoreError} `NO_PREVIOUS` when no installed `previous` exists; `NO_ACTIVE_RUNTIME`, `STORE_BUSY` or
-   *   `POINTER_REPLACE_FAILED`.
-   */
-  async rollback(): Promise<RuntimePointers> {
-    return this.locked(async () => {
-      const { current, previous } = await readPointers(this.paths)
-      if (previous === undefined) throw new RuntimeStoreError('NO_PREVIOUS', this.paths.pointer(STORE_ENTRIES.previous), `no installed version is kept for rollback; current names ${current}`)
-      const after = { current: previous, previous: current }
-      await writePointers(this.paths, after)
-      return after
     })
   }
 

@@ -6,7 +6,6 @@ import { lstatSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { fixtureHome, snapshotTree, version, type FixtureHome } from './support.ts'
-import { RuntimeStoreError } from '../src/index.ts'
 
 const V1 = version('0.1.0')
 const V2 = version('0.2.0')
@@ -44,7 +43,7 @@ describe('probe: store containment', () => {
     await fixture.store.switchTo(V1, V2)
     expect(outsideRuntimes()).toEqual(before)
     const switched = await fixture.store.pointers()
-    await fixture.store.rollback()
+    await fixture.store.switchTo(V2, V1)
     expect(outsideRuntimes()).toEqual(before)
     await fixture.store.restore(switched)
     expect(outsideRuntimes()).toEqual(before)
@@ -67,13 +66,6 @@ describe('probe: pointer refusal shapes', () => {
     expect(await fixture.store.pointers()).toEqual({ current: V2 })
     writeFileSync(join(runtimes(), 'previous'), '0.9.9\n')
     expect(await fixture.store.pointers()).toEqual({ current: V2 })
-    try {
-      await fixture.store.rollback()
-      throw new Error('rollback should have failed')
-    } catch (error) {
-      expect(error).toBeInstanceOf(RuntimeStoreError)
-      expect((error as RuntimeStoreError).code).toBe('NO_PREVIOUS')
-    }
   })
 
   it('restore refuses when a named version is no longer installed, and leaves the pointers switched', async () => {

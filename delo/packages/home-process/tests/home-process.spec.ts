@@ -15,7 +15,7 @@ import { newStartId, processExists, readHomeLock, readStartTokenFile, runDirecto
 import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it } from 'vitest'
 import { exchangeLines, journalPath, openHomeLog, queryHomeStatus, sendHomeRequest, updateSocketPath, writeJournal, type ResponseLine } from '../src/index.ts'
-import { FixtureStore, installFixture, killLockHolder, PROFILE, readPointer, startHome, tempHome, until, V0, V1, V2, type InProcessHome, type TempHome } from './support.ts'
+import { FixtureStore, installFixture, killLockHolder, PROFILE, readPointer, startHome, tempHome, text, until, V0, V1, V2, type InProcessHome, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
 const homes: InProcessHome[] = []
@@ -178,7 +178,7 @@ describe('update-request-fields', TIMEOUT, () => {
       { v: 1, token, op: 'update.prepare', args: {}, command: 'sh' },
       { v: 1, token, op: 'exec', args: { command: 'sh' } },
       { v: 2, token, op: 'status' },
-      { v: 1, token, op: 'update.apply', args: { reportId: 'a'.repeat(32), wait: 'drain', drainTimeoutS: 1 } },
+      { v: 1, token, op: 'update.apply', args: { reportId: 'a'.repeat(32), wait: 'drain', drainTimeoutS: 1, dataCopy: false } },
     ]
     for (const request of refused) expect(final(await exchangeLines(socket, JSON.stringify(request)))).toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
     expect(running.store?.switches).toEqual([])
@@ -221,7 +221,7 @@ describe('update-waits-for-chat', TIMEOUT, () => {
     const host = running.hosts.latest
     const end = host.chats.begin(() => {})
     const reportId = await prepare(home)
-    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId, wait: 'drain' } })
+    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId, wait: 'drain', dataCopy: false } })
     await until(async () => (await status(home)).update?.phase === 'waiting', 10_000, 'waiting')
     await new Promise(resolve => setTimeout(resolve, 300))
     expect(await status(home)).toMatchObject({ state: 'waiting', chats: 1, runtime: { current: V1, running: V1 }, update: { phase: 'waiting', target: V2 } })
@@ -243,7 +243,8 @@ describe('update-waits-for-chat', TIMEOUT, () => {
     expect(after).toMatchObject({ state: 'running', runtime: { current: V2, previous: V1, running: V2 } })
     expect(after.pid).not.toBe(process.pid)
     expect(readHomeLock(runDirectory(home, PROFILE))).toMatchObject({ pid: after.pid, startId: after.startId, runtime: V2 })
-    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+    // The update record stays, marked committed by the successor, for a later rollback.
+    await until(async () => JSON.parse(await text(journalPath(home, PROFILE))).phase === 'committed', 30_000, 'the committed record')
   })
 
   it('with abort-if-busy ends aborted with CHATS_RUNNING and with update.cancel ends aborted, both leaving current unchanged', async () => {
@@ -251,8 +252,8 @@ describe('update-waits-for-chat', TIMEOUT, () => {
     const running = await start(home)
     const host = running.hosts.latest
     const end = host.chats.begin(() => {})
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'abort-if-busy' } }))).toEqual({ ok: true, outcome: 'aborted', reason: 'CHATS_RUNNING' })
-    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'abort-if-busy', dataCopy: false } }))).toEqual({ ok: true, outcome: 'aborted', reason: 'CHATS_RUNNING' })
+    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
     await until(async () => (await status(home)).update?.phase === 'waiting', 10_000, 'waiting')
     expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.cancel' }))).toMatchObject({ ok: true, status: { state: 'running' } })
     expect(final(await applying)).toEqual({ ok: true, outcome: 'aborted' })
@@ -269,7 +270,7 @@ describe('update-waits-for-chat', TIMEOUT, () => {
     const running = await start(home)
     let end: (() => void) | undefined
     end = running.hosts.latest.chats.begin(() => { setTimeout(() => { end?.() }, 50) })
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'cancel' } }))).toEqual({ ok: true, outcome: 'committed' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'cancel', dataCopy: false } }))).toEqual({ ok: true, outcome: 'committed' })
     expect(readPointer(home, 'current')).toBe(V2)
   })
 
@@ -277,14 +278,14 @@ describe('update-waits-for-chat', TIMEOUT, () => {
     const home = await setUp()
     const running = await start(home)
     const end = running.hosts.latest.chats.begin(() => {})
-    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } })
+    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
     await until(async () => (await status(home)).update?.phase === 'waiting', 10_000, 'waiting')
     expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.prepare', args: { target: V2 } }))).toMatchObject({ ok: false, error: 'UPDATE_IN_PROGRESS' })
     expect(final(await sendHomeRequest(home, PROFILE, { op: 'stop', args: { mode: 'drain' } }))).toMatchObject({ ok: false, error: 'UPDATE_IN_PROGRESS' })
     await sendHomeRequest(home, PROFILE, { op: 'update.cancel' })
     await applying
     end()
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: 'f'.repeat(32), wait: 'drain' } }))).toMatchObject({ ok: false, error: 'REPORT_EXPIRED' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: 'f'.repeat(32), wait: 'drain', dataCopy: false } }))).toMatchObject({ ok: false, error: 'REPORT_EXPIRED' })
   })
 })
 
@@ -293,7 +294,7 @@ describe('requester-killed', TIMEOUT, () => {
     const home = await setUp()
     const running = await start(home)
     const end = running.hosts.latest.chats.begin(() => {})
-    const child = requester(home, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } })
+    const child = requester(home, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
     await until(async () => (await status(home)).update?.phase === 'waiting', 10_000, 'waiting')
     child.kill('SIGKILL')
     await new Promise(resolve => child.once('exit', resolve))
@@ -307,7 +308,7 @@ describe('requester-killed', TIMEOUT, () => {
   it('killing the requester in health-check leaves the update to finish and one whole version current', async () => {
     const home = await setUp({ bootMs: 1_500 })
     await start(home)
-    const child = requester(home, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } })
+    const child = requester(home, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
     await until(async () => (await status(home).catch(() => undefined))?.update?.phase === 'health-check', 20_000, 'health-check')
     child.kill('SIGKILL')
     expect([V1, V2]).toContain(readPointer(home, 'current'))
@@ -320,11 +321,12 @@ describe('health-check-rollback', TIMEOUT, () => {
   it('a successor that disables a plugin the report did not name is rolled back, and the Host runs again on the previous version', async () => {
     const home = await setUp({ disabled: ['@scope/plugin'] })
     const running = await start(home)
-    const lines = await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } })
+    const lines = await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
     expect(final(lines)).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V1)
     expect(running.store?.switches).toEqual([`${V1}>${V2}`, `restore:${V1}`])
     expect(running.snapshots.calls).toEqual([`save:${V1}>${V2}`, `restore:${V1}>${V2}`])
+    expect(running.copies.calls).toEqual(['recover', `rollback:${V1}>${V2}`])
     expect(running.hosts.booted).toHaveLength(2)
     expect(running.hosts.latest.closed).toBe(false)
     expect(await status(home)).toMatchObject({ state: 'running', pid: process.pid, runtime: { current: V1, running: V1 } })
@@ -334,20 +336,23 @@ describe('health-check-rollback', TIMEOUT, () => {
   it('a successor whose studio listener does not answer is rolled back', async () => {
     const home = await setUp({ healthy: false })
     await start(home)
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } }))).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V1)
   })
 })
 
 describe('rollback', TIMEOUT, () => {
-  it('without a previous runtime is refused with NO_PREVIOUS; after an update it moves current back and installs nothing', async () => {
+  it('without an update record is refused with NO_UPDATE_RECORD; after an update it moves current back and installs nothing', async () => {
     const home = await setUp()
     await start(home)
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain' } }))).toMatchObject({ ok: false, error: 'NO_PREVIOUS' })
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } }))).toEqual({ ok: true, outcome: 'committed' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toMatchObject({ ok: false, error: 'NO_UPDATE_RECORD' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'committed' })
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V2, 30_000, 'the successor')
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain' } }))).toEqual({ ok: true, outcome: 'committed' })
+    await until(async () => JSON.parse(await text(journalPath(home, PROFILE))).phase === 'committed', 30_000, 'the committed record')
+    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ from: V1, to: V2, phase: 'committed', targetStarted: true })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toEqual({ ok: true, outcome: 'rolled-back' })
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the rolled-back successor')
+    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V2)
   })
@@ -361,7 +366,7 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     // What a home process killed in health-check leaves: the switch written and the journal, with the old `previous`.
     await new FixtureStore(home, PROFILE).switchTo(V1, V2)
     expect(readPointer(home, 'previous')).toBe(V1)
-    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString() }, 'health-check')
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: true }, 'health-check')
     expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ from: V1, to: V2, previous: V0 })
     await expect(startHome(home, { running: V2 })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V1)
@@ -373,7 +378,7 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
   it('without a previous runtime before the update, the recovery removes previous', async () => {
     const home = await setUp({ healthy: false })
     await new FixtureStore(home, PROFILE).switchTo(V1, V2)
-    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString() }, 'switching')
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: false }, 'switching')
     expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).not.toHaveProperty('previous')
     await expect(startHome(home, { running: V2 })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V1)
@@ -389,7 +394,7 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     // records the true previous V0.
     await new FixtureStore(home, PROFILE).switchTo(V1, V2)
     await writeProtectedFile(join(home, 'runtimes', 'current'), `${V1}\n`)
-    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString() }, 'switching')
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: V0, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: false }, 'switching')
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V1)
     await start(home)
@@ -405,7 +410,7 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     // journal records no previous, so the recovery removes the pointer the switch left behind.
     await new FixtureStore(home, PROFILE).switchTo(V1, V2)
     await writeProtectedFile(join(home, 'runtimes', 'current'), `${V1}\n`)
-    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString() }, 'switching')
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: false }, 'switching')
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V1)
     await start(home)
@@ -420,7 +425,7 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     installFixture(home, V0)
     await FixtureStore.seed(home, V1, V0)
     await start(home)
-    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } })
+    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
     void applying.catch(() => {}) // an aborted assertion must not leave this rejection unhandled
     try {
       await until(async () => (await status(home).catch(() => undefined))?.update?.phase === 'health-check', 20_000, 'health-check')
@@ -435,9 +440,38 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     }
   })
 
+  it('a start keeps a committed record while current names its target, and removes it once a rollback moved current back', async () => {
+    const home = await setUp()
+    await writeJournal(journalPath(home, PROFILE), { from: V0, to: V1, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: true, copy: true, targetStarted: true }, 'committed')
+    const running = await start(home)
+    expect(existsSync(journalPath(home, PROFILE))).toBe(true)
+    await running.process.shutdown(0)
+    running.exit()
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: true, copy: true, targetStarted: true }, 'committed')
+    await start(home)
+    expect(existsSync(journalPath(home, PROFILE))).toBe(false)
+  })
+
+  it('a start that finishes an interrupted update records targetStarted before its Host boots, and marks the update committed', async () => {
+    const home = await setUp()
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: true, copy: true, targetStarted: false }, 'switching')
+    await startHome(home, { running: V2 })
+    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ phase: 'committed', targetStarted: true })
+  })
+
+  it('a start that cannot roll an interrupted update back leaves the record for delorun recover', async () => {
+    const home = await setUp({ healthy: false })
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: true, copy: false, targetStarted: true }, 'health-check')
+    await expect(startHome(home, { running: V2 })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    expect(readPointer(home, 'current')).toBe(V2)
+    expect(JSON.parse(readFileSync(journalPath(home, PROFILE), 'utf8'))).toMatchObject({ phase: 'health-check', targetStarted: true })
+  })
+
   it('a start after a home process killed in switching before current was written runs the previous version and removes the journal', async () => {
     const home = await setUp()
-    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString() }, 'switching')
+    await writeJournal(journalPath(home, PROFILE), { from: V1, to: V2, previous: undefined, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: false }, 'switching')
     await start(home)
     expect(existsSync(journalPath(home, PROFILE))).toBe(false)
     expect(await status(home)).toMatchObject({ state: 'running', runtime: { current: V1, running: V1 } })
@@ -471,7 +505,7 @@ describe('desktop-independent', TIMEOUT, () => {
     await until(() => existsSync(join(desktop, 'lock')), 10_000, 'the desktop lock')
     const before = treeDigest(desktop)
     await start(home)
-    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain' } }))).toEqual({ ok: true, outcome: 'committed' })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'committed' })
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V2, 30_000, 'the successor')
     expect(host.pid !== undefined && processExists(host.pid)).toBe(true)
     expect(treeDigest(desktop)).toEqual(before)
@@ -498,7 +532,7 @@ describe('a build without the runtime store', TIMEOUT, () => {
     installFixture(temp.home, V1)
     await start(temp.home, { updates: false })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'update.prepare', args: {} }))).toMatchObject({ ok: false, error: 'VERIFY_FAILED' })
-    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'rollback', args: { wait: 'drain' } }))).toMatchObject({ ok: false, error: 'NO_PREVIOUS' })
+    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toMatchObject({ ok: false, error: 'NO_UPDATE_RECORD' })
     expect(await status(temp.home)).toMatchObject({ state: 'running', runtime: { current: V1, running: V1 } })
   })
 })

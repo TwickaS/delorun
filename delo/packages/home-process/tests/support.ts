@@ -15,21 +15,26 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion, StartId } from '@delo/contract-home-layout'
+import type { UpdateJournal } from '@delo/contract-home-process'
 import { ensureHomeTree, newStartId, processExists, readHomeLock, runDirectory, writeProtectedFile } from '@delo/home'
 import { Redactor, type DeloLogger } from '@delo/logs'
 import {
   CountingChatGate,
   HomeProcess,
   HomeProcessError,
+  type HealthExpectations,
+  type HealthVerdict,
   type HomeCommand,
   type HomeCommandMode,
   type HomeProcessOptions,
   type HostRunner,
   type PreparedRuntime,
   type ProfileSnapshots,
+  type RollbackSteps,
   type RunningHost,
   type RuntimePointers,
   type RuntimeStore,
+  type SessionDataCopies,
   type SupervisorSetup,
   type UpdateChannelAccess,
   updateChannelProbe,
@@ -61,6 +66,8 @@ export interface FixtureBehaviour {
   readonly reportDisabled: readonly string[]
   /** How long its boot takes, in milliseconds. */
   readonly bootMs: number
+  /** Whether the update report to this version names a data change. */
+  readonly dataDiffers?: boolean
 }
 
 /** A temporary Delo home with C1's tree. */
@@ -167,11 +174,11 @@ export class FixtureStore implements RuntimeStore {
     if (target === undefined || !existsSync(join(this.home, 'runtimes', target, 'fixture.json'))) throw new HomeProcessError('VERIFY_FAILED', `no fixture release ${String(target)}`)
     phase('installing')
     phase('reporting')
-    return Promise.resolve({ version: target, report: { fixture: true, to: target }, disabledPlugins: behaviourOf(this.home, target).reportDisabled })
+    return Promise.resolve(preparedFor(this.home, target))
   }
 
   async reportRollback(target: RuntimeVersion): Promise<PreparedRuntime> {
-    return Promise.resolve({ version: target, report: { fixture: true, to: target }, disabledPlugins: behaviourOf(this.home, target).reportDisabled })
+    return Promise.resolve(preparedFor(this.home, target))
   }
 
   async switchTo(from: RuntimeVersion, to: RuntimeVersion): Promise<void> {
@@ -192,6 +199,17 @@ export class FixtureStore implements RuntimeStore {
   }
 }
 
+/**
+ * A fixture version's prepared runtime.
+ * @param home - the Delo home.
+ * @param target - the version.
+ * @returns what the store's prepare returns for it.
+ */
+function preparedFor(home: string, target: RuntimeVersion): PreparedRuntime {
+  const behaviour = behaviourOf(home, target)
+  return { version: target, report: { fixture: true, to: target }, health: { disabledPlugins: behaviour.reportDisabled, namedRows: [] }, dataDiffers: behaviour.dataDiffers ?? false }
+}
+
 /** A profile history that records its calls. */
 export class FixtureSnapshots implements ProfileSnapshots {
   /** Every call, as `save:<from>>to` or `restore:<from>>to`. */
@@ -201,10 +219,45 @@ export class FixtureSnapshots implements ProfileSnapshots {
     this.calls.push(`save:${from}>${to}`)
     return Promise.resolve()
   }
+}
 
-  async restore(from: RuntimeVersion, to: RuntimeVersion): Promise<void> {
-    this.calls.push(`restore:${from}>${to}`)
+/**
+ * Session-data copies that record their calls and apply C3's rollback table to the copies they took: a copy exists
+ * for a target once {@link FixtureCopies.save} ran for it.
+ */
+export class FixtureCopies implements SessionDataCopies {
+  /** Every call, as `recover`, `plan`, `save:<from>>to` or `rollback:<from>>to`. */
+  readonly calls: string[] = []
+  /** The targets a copy was taken for. */
+  readonly copies = new Set<string>()
+  /** Whether {@link FixtureCopies.plan} refuses for want of space. */
+  noSpace = false
+
+  /** @param snapshots - the profile history the rollback restores through. */
+  constructor(private readonly snapshots: FixtureSnapshots) {}
+
+  async recover(): Promise<void> {
+    this.calls.push('recover')
     return Promise.resolve()
+  }
+
+  async plan(): Promise<void> {
+    this.calls.push('plan')
+    if (this.noSpace) throw new HomeProcessError('DATA_COPY_NO_SPACE', 'the fixture has no room')
+    return Promise.resolve()
+  }
+
+  async save(from: RuntimeVersion, to: RuntimeVersion): Promise<void> {
+    this.calls.push(`save:${from}>${to}`)
+    this.copies.add(to)
+    return Promise.resolve()
+  }
+
+  async rollback(record: UpdateJournal, steps: RollbackSteps): Promise<void> {
+    this.calls.push(`rollback:${record.from}>${record.to}${steps.profileOnly ? ':profile-only' : ''}`)
+    if (!steps.profileOnly && record.dataDiffers && record.targetStarted && !this.copies.has(record.to)) throw new HomeProcessError('ROLLBACK_NEEDS_DATA_COPY', 'no copy')
+    this.snapshots.calls.push(`restore:${record.from}>${record.to}`)
+    if (!steps.profileOnly) await steps.switchRuntime()
   }
 }
 
@@ -219,12 +272,15 @@ export class FixtureHost implements RunningHost {
    */
   constructor(private readonly behaviour: FixtureBehaviour, readonly access: UpdateChannelAccess) {}
 
-  disabledPlugins(): readonly string[] {
+  failedRows(): readonly string[] {
     return this.behaviour.disabled
   }
 
-  async healthy(): Promise<boolean> {
-    return Promise.resolve(this.behaviour.healthy)
+  async check(expect: HealthExpectations | undefined): Promise<HealthVerdict> {
+    if (!this.behaviour.healthy) return Promise.resolve({ passed: false, criterion: 'H2-host-ready', detail: 'the fixture is unhealthy' })
+    const allowed = new Set([...expect?.disabledPlugins ?? [], ...expect?.previousFailures ?? []])
+    const unexpected = expect === undefined ? [] : this.behaviour.disabled.filter(plugin => !allowed.has(plugin))
+    return Promise.resolve(unexpected.length === 0 ? { passed: true } : { passed: false, criterion: 'H3-only-named-disabled', detail: unexpected.join(',') })
   }
 
   async close(): Promise<void> {
@@ -272,6 +328,7 @@ export interface InProcessHome {
   readonly hosts: FixtureHostRunner
   readonly store: FixtureStore | undefined
   readonly snapshots: FixtureSnapshots
+  readonly copies: FixtureCopies
   readonly logger: MemoryLogger
   /** The exit codes the process asked for. */
   readonly exits: number[]
@@ -304,18 +361,19 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
   const updates = options.updates ?? true
   const store = updates ? new FixtureStore(home, PROFILE) : undefined
   const snapshots = new FixtureSnapshots()
+  const copies = new FixtureCopies(snapshots)
   const hosts = new FixtureHostRunner(() => behaviourOf(home, running))
   const logger = new MemoryLogger()
   const exits: number[] = []
   const listeners: (() => void)[] = []
   const homeOptions: HomeProcessOptions = {
     home, profile: PROFILE, running, startId: options.log?.startId ?? newStartId(), host: hosts, probe: updateChannelProbe(home, PROFILE), logger: options.logger ?? logger, redactor: options.log?.redactor ?? new Redactor(),
-    updates: store === undefined ? undefined : { store, snapshots }, supervisor: options.supervisor,
+    updates: store === undefined ? undefined : { store, snapshots, copies }, supervisor: options.supervisor,
     onExit: (listener) => { listeners.push(listener) },
     exit: (code) => { exits.push(code) },
   }
   const started = await HomeProcess.start(homeOptions)
-  return { process: started, hosts, store, snapshots, logger, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
+  return { process: started, hosts, store, snapshots, copies, logger, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
 }
 
 /**

@@ -1,7 +1,9 @@
 /**
- * The update journal `run/<profile>/update.json` (contract C19, "Interrupted updates"): written at mode 0600 at the
- * start of each phase from `snapshot` on, read at the next start to finish an interrupted update, and removed when
- * the update ends.
+ * The update record `run/<profile>/update.json` (contract C19, "Interrupted updates"; contract C3, "Rollback"):
+ * written at mode 0600 and synced at the start of each phase from `snapshot` on, and again with `targetStarted`
+ * before the target's process is spawned. It is read at the next start to finish an interrupted update, kept with
+ * phase `committed` after the update commits so a later rollback reads it, and removed when a rollback completes or
+ * an update ends before the switch.
  *
  * @module @delo/home-process/journal
  */
@@ -20,6 +22,9 @@ const journalSchema = z.strictObject({
   previous: version.optional(),
   phase: z.enum(['checking', 'installing', 'reporting', 'snapshot', 'waiting', 'switching', 'health-check', 'committed']),
   startedAt: z.string().datetime(),
+  dataDiffers: z.boolean(),
+  copy: z.boolean(),
+  targetStarted: z.boolean(),
 })
 
 /**
@@ -42,6 +47,25 @@ export interface JournalledUpdate {
   readonly previous: RuntimeVersion | undefined
   /** RFC 3339 UTC time the update started. */
   readonly startedAt: string
+  /** Whether the two releases' chat data differs. */
+  readonly dataDiffers: boolean
+  /** Whether the update takes a session-data copy. */
+  readonly copy: boolean
+  /** Whether the target's process was spawned. */
+  readonly targetStarted: boolean
+}
+
+/**
+ * The record an update writes in a phase.
+ * @param update - the update's versions, the pointer `previous` held before it, its start time and its data facts.
+ * @param phase - the phase.
+ * @returns the record.
+ */
+export function journalRecord(update: JournalledUpdate, phase: UpdatePhase): UpdateJournal {
+  return {
+    v: 1, from: update.from, to: update.to, ...update.previous === undefined ? {} : { previous: update.previous }, phase, startedAt: update.startedAt,
+    dataDiffers: update.dataDiffers, copy: update.copy, targetStarted: update.targetStarted,
+  }
 }
 
 /**
@@ -51,8 +75,7 @@ export interface JournalledUpdate {
  * @param phase - the phase that starts now.
  */
 export async function writeJournal(path: string, update: JournalledUpdate, phase: UpdatePhase): Promise<void> {
-  const record: UpdateJournal = { v: 1, from: update.from, to: update.to, ...update.previous === undefined ? {} : { previous: update.previous }, phase, startedAt: update.startedAt }
-  await writeProtectedFile(path, `${JSON.stringify(record)}\n`)
+  await writeProtectedFile(path, `${JSON.stringify(journalRecord(update, phase))}\n`)
 }
 
 /**
@@ -80,6 +103,17 @@ export async function readJournal(path: string): Promise<UpdateJournal | undefin
   if (!parsed.success) throw new Error(`${path} is not an update journal; remove it once no delorun process runs for this profile`)
   // The schema checked the versions' form; the brands are the contract's own types.
   return parsed.data as UpdateJournal
+}
+
+/**
+ * Mark the update a record names as committed, keeping every other field: the successor does this once it runs.
+ * @param path - the journal path.
+ * @returns when the record says `committed`, or at once when no record exists.
+ */
+export async function markCommitted(path: string): Promise<void> {
+  const record = await readJournal(path)
+  if (record === undefined) return
+  await writeJournal(path, { ...record, previous: record.previous }, 'committed')
 }
 
 /**

@@ -65,7 +65,7 @@ export type HomeProcessState = 'starting' | 'running' | 'waiting' | 'switching' 
 export type UpdatePhase = 'checking' | 'installing' | 'reporting' | 'snapshot' | 'waiting' | 'switching' | 'health-check' | 'committed'
 
 /** The final outcome of an update or rollback. */
-export type UpdateOutcome = 'committed' | 'rolled-back' | 'aborted'
+export type UpdateOutcome = 'committed' | 'rolled-back' | 'aborted' | 'failed'
 
 /** How the waiting phase treats running chats. */
 export type DrainPolicy = 'drain' | 'abort-if-busy' | 'cancel'
@@ -114,6 +114,8 @@ export interface UpdateApplyRequest extends RequestBase {
   readonly args: DrainArgs & {
     /** The report `update.prepare` returned. */
     readonly reportId: string
+    /** Whether a session-data copy is taken before the switch (C3, "Data formats"): the person's choice. */
+    readonly dataCopy: boolean
   }
 }
 
@@ -123,12 +125,15 @@ export interface UpdateCancelRequest extends RequestBase {
   readonly op: 'update.cancel'
 }
 
-/** The `rollback` request, whose target is `previous`. */
+/** The `rollback` request: back from the update the update record names, through C3's rollback table. */
 export interface RollbackRequest extends RequestBase {
   /** The operation. */
   readonly op: 'rollback'
   /** Arguments. */
-  readonly args: DrainArgs
+  readonly args: DrainArgs & {
+    /** Restore only the profile snapshot and keep the running runtime (C3's `--profile-only`). */
+    readonly profileOnly: boolean
+  }
 }
 
 /** The `stop` request. */
@@ -166,6 +171,9 @@ export type HomeProcessErrorCode =
   | 'HEALTH_CHECK_FAILED'
   | 'VERIFY_FAILED'
   | 'NO_PREVIOUS'
+  | 'NO_UPDATE_RECORD'
+  | 'DATA_COPY_NO_SPACE'
+  | 'ROLLBACK_NEEDS_DATA_COPY'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {
@@ -203,7 +211,11 @@ export type UpdateChannelResponse =
   | { readonly ok: true, readonly outcome: UpdateOutcome, readonly reason?: HomeProcessErrorCode }
   | { readonly ok: false, readonly error: HomeProcessErrorCode }
 
-/** Contents of `run/<profile>/update.json`, written at each phase from `snapshot` on. */
+/**
+ * Contents of `run/<profile>/update.json`, the update record: written at each phase from `snapshot` on, kept with
+ * phase `committed` after the update commits so a later rollback reads it, and removed when a rollback completes or
+ * an update ends before switching.
+ */
 export interface UpdateJournal {
   /** Record version. */
   readonly v: 1
@@ -217,6 +229,12 @@ export interface UpdateJournal {
   readonly phase: UpdatePhase
   /** RFC 3339 UTC time the update started. */
   readonly startedAt: string
+  /** Whether the two releases' chat data differs (C3, "Data formats"). */
+  readonly dataDiffers: boolean
+  /** Whether the update takes a session-data copy. */
+  readonly copy: boolean
+  /** Whether the target's process was spawned; written and synced before the spawn. */
+  readonly targetStarted: boolean
 }
 
 /** A message on the handover pipe from successor to predecessor. */

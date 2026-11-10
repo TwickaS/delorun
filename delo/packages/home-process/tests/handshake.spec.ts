@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CountingChatGate, HomeProcessError, UpdateHandshake, type HandshakeSubject, type Successor } from '../src/index.ts'
-import { FixtureSnapshots, FixtureStore, installFixture, MemoryLogger, PROFILE, readPointer, tempHome, V1, V2, type TempHome } from './support.ts'
+import { FixtureCopies, FixtureSnapshots, FixtureStore, installFixture, MemoryLogger, PROFILE, readPointer, tempHome, V1, V2, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
 afterEach(() => {
@@ -24,6 +24,7 @@ function subject(home: string, gate: CountingChatGate, events: string[]): Handsh
     resume: async () => { events.push('resume') },
     startSuccessor: (): Successor => { throw new Error('the switch ran') },
     handOver: () => { events.push('handOver') },
+    failedRows: () => [],
   }
 }
 
@@ -35,12 +36,13 @@ describe('the waiting phase', () => {
     const gate = new CountingChatGate()
     const events: string[] = []
     const store = new FixtureStore(temp.home, PROFILE)
-    const handshake = new UpdateHandshake(subject(temp.home, gate, events), { store, snapshots: new FixtureSnapshots() })
+    const snapshots = new FixtureSnapshots()
+    const handshake = new UpdateHandshake(subject(temp.home, gate, events), { store, snapshots, copies: new FixtureCopies(snapshots) })
     const end = gate.begin(() => {})
     const { reportId } = await handshake.prepare(V2, () => {}) as { readonly reportId: string }
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const phases: unknown[] = []
-    const applying = handshake.apply(reportId, 'drain', 60, (fields) => { phases.push(fields.phase) })
+    const applying = handshake.apply(reportId, 'drain', 60, false, (fields) => { phases.push(fields.phase) })
     // The journal is written with real file I/O; the drain's timer starts once `waiting` is announced.
     while (!phases.includes('waiting')) await new Promise(resolve => setImmediate(resolve))
     await new Promise(resolve => setImmediate(resolve))
@@ -67,5 +69,17 @@ describe('the waiting phase', () => {
     end()
     end()
     expect(gate.running()).toBe(0)
+  })
+
+  it('counts a chat the Host reports as already running even while held, and says whether it is held', () => {
+    const gate = new CountingChatGate()
+    expect(gate.held).toBe(false)
+    const release = gate.hold()
+    expect(gate.held).toBe(true)
+    const end = gate.track(() => {})
+    expect(gate.running()).toBe(1)
+    end()
+    release()
+    expect(gate.held).toBe(false)
   })
 })

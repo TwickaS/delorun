@@ -19,6 +19,7 @@ export {
   type HomeRuntimeStoreOptions,
   type PreparePhase,
   type PreparedRuntime,
+  type ReportedHealth,
   type RuntimeChannel,
   type UpdateReport,
   type UpdateReporter,

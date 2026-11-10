@@ -8,7 +8,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { newStartId } from '@delo/home'
 import { HomeProcess, openHandoverPipe, openHomeLog, updateChannelProbe, type HomeProcessOptions } from '../../src/index.ts'
-import { behaviourOf, FixtureHostRunner, FixtureSnapshots, FixtureStore } from '../support.ts'
+import { behaviourOf, FixtureCopies, FixtureHostRunner, FixtureSnapshots, FixtureStore } from '../support.ts'
 
 const [mode, home = '', profile = '', versionText = ''] = process.argv.slice(2)
 const version = brandString<RuntimeVersion>(versionText)
@@ -21,10 +21,11 @@ const version = brandString<RuntimeVersion>(versionText)
  */
 function optionsOf(startId: HomeProcessOptions['startId'], running: RuntimeVersion): HomeProcessOptions {
   const { log, redactor, logger } = openHomeLog({ home, profile, startId, level: 'debug', onFailure: () => {} })
+  const snapshots = new FixtureSnapshots()
   process.on('exit', () => { log.close() })
   return {
     home, profile, running, startId, host: new FixtureHostRunner(() => behaviourOf(home, running)), probe: updateChannelProbe(home, profile), logger, redactor,
-    updates: { store: new FixtureStore(home, profile), snapshots: new FixtureSnapshots() }, supervisor: undefined,
+    updates: { store: new FixtureStore(home, profile), snapshots, copies: new FixtureCopies(snapshots) }, supervisor: undefined,
     onExit: (listener) => { process.on('exit', listener) },
     exit: (code) => { process.exit(code) },
   }

@@ -8,7 +8,7 @@ import { ensureHomeTree, newStartId } from '@delo/home'
 import type { LogsFailure } from '@delo/logs'
 import type { SurfaceDriver } from '../../logs/tests/denial/surfaces.ts'
 import { captureHomeOutput, HomeProcess, openHomeLog, updateChannelProbe } from '../src/index.ts'
-import { behaviourOf, FixtureHostRunner, FixtureSnapshots, FixtureStore, installFixture, PROFILE, V1 } from './support.ts'
+import { behaviourOf, FixtureHostRunner, FixtureCopies, FixtureSnapshots, FixtureStore, installFixture, PROFILE, V1 } from './support.ts'
 
 /** Starts the home surface in a Delo home. */
 export const HOME_DRIVER: SurfaceDriver = {
@@ -20,9 +20,10 @@ export const HOME_DRIVER: SurfaceDriver = {
     const startId = newStartId()
     const opened = openHomeLog({ home, profile: PROFILE, startId, level: 'debug', onFailure: (error) => { failures.push(error) } })
     const exits: (() => void)[] = []
+    const snapshots = new FixtureSnapshots()
     const running = await HomeProcess.start({
       home, profile: PROFILE, running: V1, startId, host: new FixtureHostRunner(() => behaviourOf(home, V1)), probe: updateChannelProbe(home, PROFILE), logger: opened.logger, redactor: opened.redactor,
-      updates: { store: new FixtureStore(home, PROFILE), snapshots: new FixtureSnapshots() }, supervisor: undefined,
+      updates: { store: new FixtureStore(home, PROFILE), snapshots, copies: new FixtureCopies(snapshots) }, supervisor: undefined,
       onExit: (listener) => { exits.push(listener) },
       exit: () => {},
     })

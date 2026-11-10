@@ -44,7 +44,7 @@ import { exchangeLines } from './client.ts'
 import { HomeProcessError } from './errors.ts'
 import { startSuccessor, type HandoverPipe, type Successor } from './handover.ts'
 import { UpdateHandshake, type HandshakeSubject, type UpdateSupport } from './handshake.ts'
-import { journalPath, readJournal, removeJournal } from './journal.ts'
+import { journalPath, markCommitted, readJournal, removeJournal, writeJournal } from './journal.ts'
 import type { ChatGate, HostRunner, RunningHost, UpdateChannelAccess } from './seams.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
 
@@ -153,6 +153,8 @@ export class HomeProcess implements HandshakeSubject {
       await home.checkDirectories()
       home.lock = await acquireHomeLock({ runDirectory: runDirectory(options.home, options.profile), runtime: options.running, probe: options.probe, startId: options.startId })
       options.onExit(() => { home.cleanUpSync() })
+      // An interrupted restore of a session-data copy finishes before any Host starts (C3, "Rollback").
+      await options.updates?.copies.recover()
       await home.finishInterruptedUpdate()
       await home.listen()
       home.startSupervisor()
@@ -185,10 +187,9 @@ export class HomeProcess implements HandshakeSubject {
       let healthy = false
       try {
         home.host = await options.host.boot(home.access)
-        const allowed = new Set(handover.disabledPlugins)
-        const unexpected = home.host.disabledPlugins().filter(id => !allowed.has(id))
-        if (unexpected.length > 0) options.logger.warn('the Host disabled plugins the update report did not name', { data: { plugins: unexpected.join(',') } })
-        healthy = unexpected.length === 0 && await home.host.healthy()
+        const verdict = await home.host.check(handover.health)
+        if (!verdict.passed) options.logger.warn('the Host failed its health check on the new runtime', { data: { criterion: verdict.criterion, detail: verdict.detail } })
+        healthy = verdict.passed
       } catch (error) {
         options.logger.error('the Host did not boot on the new runtime', { err: error })
       }
@@ -205,7 +206,8 @@ export class HomeProcess implements HandshakeSubject {
       await home.listen()
       home.startSupervisor()
       home.enterRunning()
-      await removeJournal(home.journal)
+      // The update record stays, marked committed, so a later rollback reads it (C3, "Rollback").
+      await markCommitted(home.journal)
       options.logger.info('took over from the previous runtime', { data: { from: handover.from, to: handover.to } })
       return home
     } catch (error) {
@@ -295,6 +297,11 @@ export class HomeProcess implements HandshakeSubject {
   }
 
   /** @inheritdoc */
+  failedRows(): readonly string[] {
+    return this.host?.failedRows() ?? []
+  }
+
+  /** @inheritdoc */
   setState(state: HomeProcessState): void {
     this.state = state
   }
@@ -360,14 +367,14 @@ export class HomeProcess implements HandshakeSubject {
       case 'update.apply':
         this.refuseOutsideRunning()
         if (this.handshake === undefined) throw new HomeProcessError('REPORT_EXPIRED', 'no update was prepared')
-        return this.handshake.apply(request.args.reportId, request.args.wait, request.args.drainTimeoutS, progress)
+        return this.handshake.apply(request.args.reportId, request.args.wait, request.args.drainTimeoutS, request.args.dataCopy, progress)
       case 'update.cancel':
         await this.handshake?.cancel()
         return { status: await this.status() }
       case 'rollback':
         this.refuseOutsideRunning()
-        if (this.handshake === undefined) throw new HomeProcessError('NO_PREVIOUS', 'this build has no runtime store')
-        return this.handshake.rollback(request.args.wait, request.args.drainTimeoutS, progress)
+        if (this.handshake === undefined) throw new HomeProcessError('NO_UPDATE_RECORD', 'this build has no runtime store')
+        return this.handshake.rollback(request.args.wait, request.args.drainTimeoutS, request.args.profileOnly, progress)
       default: {
         const unknown: never = request
         throw new HomeProcessError('SCHEMA_VIOLATION', `unknown op ${String((unknown as { readonly op: unknown }).op)}`)
@@ -387,6 +394,11 @@ export class HomeProcess implements HandshakeSubject {
   private answered(request: UpdateChannelRequest): void {
     if (request.op === 'stop' && this.stopRequested) {
       void this.shutdown(0)
+      return
+    }
+    if (request.op === 'update.apply' && this.handshake?.failed === true) {
+      // C3's table refused the automatic rollback: neither runtime may run on this data until the person chooses.
+      void this.shutdown(1)
       return
     }
     const successor = this.handshake?.committed
@@ -413,9 +425,10 @@ export class HomeProcess implements HandshakeSubject {
   }
 
   /**
-   * Step 3: read the journal a killed home process left. A journal before `switching` is removed; one in `switching`
-   * or `health-check` with `current` naming `from` is removed; one with `current` naming `to` makes this start's Host
-   * boot the health check of `to`.
+   * Step 3: read the update record a killed home process left. A committed record stays while `current` names its
+   * target and is removed once `current` names its source, because a rollback completed; a record before
+   * `switching` is removed; one in `switching` or `health-check` with `current` naming `from` is removed; one with
+   * `current` naming `to` makes this start's Host boot the health check of `to`, and records `targetStarted` first.
    */
   private async finishInterruptedUpdate(): Promise<void> {
     const journal = await readJournal(this.journal)
@@ -425,6 +438,13 @@ export class HomeProcess implements HandshakeSubject {
       return
     }
     const { current } = await this.options.updates.store.pointers()
+    if (journal.phase === 'committed') {
+      if (current === journal.from) {
+        this.logger.info('a rollback of the recorded update completed; its record goes', { data: { from: journal.from, to: journal.to } })
+        await removeJournal(this.journal)
+      }
+      return
+    }
     if (!SWITCH_PHASES.has(journal.phase) || current === journal.from) {
       this.logger.info('an interrupted update had not switched the runtime; nothing changed', { data: { from: journal.from, to: journal.to, phase: journal.phase } })
       // A kill between the store's two pointer writes leaves `previous` holding `from` on disk while the journal
@@ -436,20 +456,29 @@ export class HomeProcess implements HandshakeSubject {
     }
     if (current !== journal.to || this.running !== journal.to) throw new Error(`the update journal names ${journal.from} to ${journal.to}, current names ${current} and this process runs ${this.running}; start Delo through its launcher`)
     this.logger.info('finishing an interrupted update: checking the health of the new runtime', { data: { from: journal.from, to: journal.to } })
-    this.recovering = journal
+    // This start's Host opens the data as `to`: a rollback from here on treats the target as started.
+    const started = { ...journal, previous: journal.previous, targetStarted: true }
+    await writeJournal(this.journal, started, journal.phase)
+    this.recovering = { ...journal, targetStarted: true }
   }
 
   /**
-   * After a failed start that was finishing an interrupted update: restore both pointers to their values before the
-   * update from the journal, restore the profile snapshot, and start a home process on `from`.
+   * After a failed start that was finishing an interrupted update: apply C3's rollback table with both pointers
+   * restored to their values before the update from the record, and start a home process on `from`. When the table
+   * refuses, nothing is restored and the record stays for `delorun recover`.
    */
   private async restartFromInterruptedUpdate(): Promise<void> {
     const journal = this.recovering
     const updates = this.options.updates
     if (journal === undefined || updates === undefined) return
     this.recovering = undefined
-    await updates.store.restore(journal.previous === undefined ? { current: journal.from } : { current: journal.from, previous: journal.previous })
-    await updates.snapshots.restore(journal.from, journal.to)
+    const before = journal.previous === undefined ? { current: journal.from } : { current: journal.from, previous: journal.previous }
+    try {
+      await updates.copies.rollback(journal, { profileOnly: false, switchRuntime: () => updates.store.restore(before) })
+    } catch (error) {
+      this.logger.error('the interrupted update failed its health check and could not be rolled back; run delorun recover', { err: error, data: { from: journal.from, to: journal.to } })
+      return
+    }
     await removeJournal(this.journal)
     const command = updates.store.homeCommand(journal.from, 'start')
     spawn(command.command, [...command.args], { cwd: command.cwd, stdio: 'ignore', detached: true }).unref()
@@ -467,8 +496,9 @@ export class HomeProcess implements HandshakeSubject {
   private async bootHost(): Promise<void> {
     this.host = await this.options.host.boot(this.access)
     if (this.recovering !== undefined) {
-      if (!await this.host.healthy()) throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${this.recovering.to} failed its health check after an interrupted update`)
-      await removeJournal(this.journal)
+      const verdict = await this.host.check(undefined)
+      if (!verdict.passed) throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${this.recovering.to} failed ${verdict.criterion} after an interrupted update: ${verdict.detail}`)
+      await markCommitted(this.journal)
       this.logger.info('finished an interrupted update', { data: { from: this.recovering.from, to: this.recovering.to } })
       this.recovering = undefined
     }

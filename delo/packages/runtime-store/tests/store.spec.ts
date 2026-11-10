@@ -212,13 +212,13 @@ describe('rollback', () => {
     return Object.fromEntries(Object.entries(snapshotTree(fixture.home)).filter(([path]) => path !== 'runtimes' && !path.startsWith('runtimes/')))
   }
 
-  it('swaps current and previous and changes no file outside runtimes/', async () => {
+  it('switches back to the previous version and changes no file outside runtimes/', async () => {
     await twoVersions()
     mkdirSync(join(fixture.home, 'profiles/default'), { recursive: true })
     writeFileSync(join(fixture.home, 'profiles/default/cordis.patch.yml'), 'plugins: {}\n')
     writeFileSync(join(fixture.home, 'trust/root.json'), rootFile(fixture.keys).bytes, { mode: 0o600 })
     const before = outsideRuntimes()
-    expect(await fixture.store.rollback()).toEqual({ current: V1, previous: V2 })
+    await fixture.store.switchTo(V2, V1)
     expect(await fixture.store.pointers()).toEqual({ current: V1, previous: V2 })
     await fixture.store.retain()
     expect(outsideRuntimes()).toEqual(before)
@@ -237,11 +237,6 @@ describe('rollback', () => {
     expect(outsideRuntimes()).toEqual(outside)
   })
 
-  it('refuses a rollback without an installed previous', async () => {
-    await fixture.install(V1)
-    await refusal(fixture.store.rollback(), 'NO_PREVIOUS')
-    expect(await fixture.store.pointers()).toEqual({ current: V1 })
-  })
 })
 
 describe('the start check', () => {

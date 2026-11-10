@@ -21,9 +21,9 @@ const drain = { wait: z.enum(['drain', 'abort-if-busy', 'cancel']), drainTimeout
 const request = z.discriminatedUnion('op', [
   z.strictObject({ ...base, op: z.literal('status') }),
   z.strictObject({ ...base, op: z.literal('update.prepare'), args: z.strictObject({ target: version.optional() }) }),
-  z.strictObject({ ...base, op: z.literal('update.apply'), args: z.strictObject({ ...drain, reportId: z.string().regex(REPORT_ID_PATTERN) }) }),
+  z.strictObject({ ...base, op: z.literal('update.apply'), args: z.strictObject({ ...drain, reportId: z.string().regex(REPORT_ID_PATTERN), dataCopy: z.boolean() }) }),
   z.strictObject({ ...base, op: z.literal('update.cancel') }),
-  z.strictObject({ ...base, op: z.literal('rollback'), args: z.strictObject(drain) }),
+  z.strictObject({ ...base, op: z.literal('rollback'), args: z.strictObject({ ...drain, profileOnly: z.boolean() }) }),
   z.strictObject({ ...base, op: z.literal('stop'), args: z.strictObject({ mode: z.enum(['drain', 'cancel']) }) }),
 ])
 

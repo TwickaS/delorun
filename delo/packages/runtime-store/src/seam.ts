@@ -58,12 +58,24 @@ export interface RuntimeChannel {
   fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes>
 }
 
-/** C3's update report, with the plugin ids the health check holds the target to. */
+/** What C3's health check holds a target to, as the report predicts it. */
+export interface ReportedHealth {
+  /** H3: the plugins the report names as disabled at boot. */
+  readonly disabledPlugins: readonly string[]
+  /** H3, H4: the rows the report names, by id or name. */
+  readonly namedRows: readonly string[]
+  /** H5: the bundle list the report predicts. */
+  readonly bundles?: readonly string[]
+}
+
+/** C3's update report, with what the health check holds the target to and whether the data differs. */
 export interface UpdateReport {
   /** The report, returned to the caller as it is. */
   readonly report: unknown
-  /** The plugin ids the report names as disabled at boot; the health check refuses any other. */
-  readonly disabledPlugins: readonly string[]
+  /** What the health check holds the target to. */
+  readonly health: ReportedHealth
+  /** Whether the report names a data change (C3, "Data formats"). */
+  readonly dataDiffers: boolean
 }
 
 /**
@@ -97,8 +109,10 @@ export interface PreparedRuntime {
   readonly version: RuntimeVersion
   /** C3's update report, returned to the caller as it is. */
   readonly report: unknown
-  /** The plugin ids the report names as disabled at boot. */
-  readonly disabledPlugins: readonly string[]
+  /** What the health check holds the target to. */
+  readonly health: ReportedHealth
+  /** Whether the report names a data change. */
+  readonly dataDiffers: boolean
 }
 
 /** The command that starts a home process from a version's runtime. */
@@ -194,7 +208,7 @@ export class HomeRuntimeStore {
     }
     phase('reporting')
     const report = await this.options.report.build(version)
-    return { version, report: report.report, disabledPlugins: report.disabledPlugins }
+    return { version, report: report.report, health: report.health, dataDiffers: report.dataDiffers }
   }
 
   /**
@@ -211,7 +225,7 @@ export class HomeRuntimeStore {
     }
     await this.options.store.checkRuntime(target, await readStoredRoot(this.options.store.paths.home))
     const report = await this.options.report.build(target)
-    return { version: target, report: report.report, disabledPlugins: report.disabledPlugins }
+    return { version: target, report: report.report, health: report.health, dataDiffers: report.dataDiffers }
   }
 
   /**

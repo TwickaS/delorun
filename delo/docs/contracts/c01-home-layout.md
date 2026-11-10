@@ -60,7 +60,9 @@ Delo adds the entries marked Delo at the top of the home. Every other entry is u
   status/                        0700  Delo: each installation's update status record (C3)
   catalogue/                     0700  Delo: the verified catalogue index and revocation list (C13)
   secrets/                       0700  Delo: secret files, 0600 each
-  run/<profile>/                 0700  Delo: home lock, start token, sockets, update journal
+  run/<profile>/                 0700  Delo: home lock, start token, sockets, update record
+  data-copies/                   0700  Delo: the session-data copy an update took, and a restore's journal (C3)
+  data-set-aside/                0700  Delo: chat data a rollback set aside (C3)
   supervisor/                    0700  Delo: the Docker supervisor's roots file (C9)
   bin/                           0700  Delo: the launcher copy used by the install script and login items
   alerts/                        0700  Delo: signed certificate-alert files (C5)
@@ -70,6 +72,9 @@ The operational logs that [C20](c20-operational-logs.md) defines live in per-sur
 
 - **`trust/`.** `root.json` is the newest root that verified, `timestamp.json` the newest timestamp that verified, whose `version` is the highest one stored ([C2](c02-release-manifest.md)), `checkpoint.json` the latest log checkpoint that verified ([C18](c18-release-log.md)), and `release-log.json` the release-log check state of each installed release, `verified` or `unchecked` with the reason, which an install writes once the runtime store has installed the release and the start check updates ([C18](c18-release-log.md#check-states)). Each is replaced atomically and never with an older version; the CLI launcher and the desktop updater share them. `roots/<n>.root.json` holds one file per root version an install walked, oldest first, which is the proof a start holds a stored root newer than every root the launcher ships to ([C2](c02-release-manifest.md#key-rotation)).
 - **`status/`.** `cli-home.json` and `desktop-host.json` are the status records of [C3](c03-update-report.md); each installation writes only its own record and reads the other.
+- **`run/<profile>/update.json`.** The update record of [C19](c19-home-process.md#interrupted-updates) and [C3](c03-update-report.md#rollback): the two versions, whether the chat data differs, whether a copy was taken and `targetStarted`, written at mode 0600 and synced before the target's process is spawned. It stays with phase `committed` after an update commits, so a later rollback reads it, and goes when a rollback completes.
+- **`data-copies/`.** `<version>/` holds the session-data copy the update to that version took: real copies of `sessions/` and `storages/` beside `copy.json`. One copy is kept. `restore.json` is the journal of a restore in progress, completed before any Host starts.
+- **`data-set-aside/`.** `<version>-<time>/` holds the `sessions/` and `storages/` a rollback replaced with a copy. Nothing removes it but the person, through `delorun recover discard`.
 - **`catalogue/`.** `index.json` and `revocations.json` are the newest catalogue index and revocation list that verified, and `state.json` holds each one's `sequence` and fetch time ([C13](c13-catalogue-revocation.md)).
 
 ## Modes and the refusal rule
@@ -141,7 +146,7 @@ runtimes/
 - **Installing.** An install takes `store.lock`, waiting at most 30 seconds before it stops with `STORE_BUSY`. It downloads into `~/.delo/staging/<16 hex>/`, which lies outside `runtimes/` on the same filesystem, and runs the client verification of [C2](c02-release-manifest.md): the root and timestamp walk, the manifest's signature and freshness, the release-log bundle and online check ([C18](c18-release-log.md)), and the archive's and file list's digests. It extracts with path checks (no absolute path, no `..` segment, no link, no device file and no entry outside the file list), checks every file against the file list, then renames the staging directory to `runtimes/<version>/` and places the manifest, file list and bundle beside it. Nothing appears under `runtimes/` before every check passes, and a failed install removes its staging directory and changes nothing else.
 - **Installed files.** After the rename, directories under `<version>/` have mode 0555 and files 0444, or 0555 for executables; on Windows they carry the read-only attribute. The launcher's hash check at every start ([C2](c02-release-manifest.md)) is the integrity control; the modes stop accidental writes only.
 - **Retention.** After a switch commits, the store keeps the versions that `current` and `previous` name, with their release files, and removes every other `<version>/` with its release files, and every directory under `staging/` that no install holds. A removal that fails, such as a Windows directory still in use, is retried at the next start. At most two versions and one staging directory exist at once.
-- **Rollback scope.** A runtime rollback changes no file outside `runtimes/`. Restoring the profile from its history is [C3](c03-update-report.md)'s step.
+- **Rollback scope.** A runtime rollback changes no file outside `runtimes/`. Restoring the profile from its history, and the chat data from a copy the person took, are [C3](c03-update-report.md#rollback)'s steps, and every rollback goes through C3's table.
 
 ## Launcher and store compatibility
 

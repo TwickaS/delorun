@@ -85,9 +85,9 @@ Every request has the fields `v` (the protocol version, 1), `token`, `op` and, w
 | --- | --- | --- |
 | `status` | none | one line: `state`, `pid`, `startId`, `runtime` (`current`, `previous`, `running`), `chats` (the number running), `update` (the phase and target, when an update runs) |
 | `update.prepare` | `target`: a version, or omitted for the newest release on the person's channel | progress lines while the version is fetched and verified, then one line with `reportId` and the update report ([C3](c03-update-report.md)) |
-| `update.apply` | `reportId`; `wait`: `drain`, `abort-if-busy` or `cancel`; `drainTimeoutS`: 60 to 86,400, default 1,800 | progress lines for each phase, then one final line with `outcome`: `committed`, `rolled-back` or `aborted`, and a reason code |
+| `update.apply` | `reportId`; `wait`: `drain`, `abort-if-busy` or `cancel`; `drainTimeoutS`: 60 to 86,400, default 1,800; `dataCopy`: a boolean, the person's choice about the session-data copy | progress lines for each phase, then one final line with `outcome`: `committed`, `rolled-back`, `aborted` or `failed`, and a reason code |
 | `update.cancel` | none | one line; an update still in `waiting` returns to `running` with the runtime unchanged |
-| `rollback` | `wait` and `drainTimeoutS` as for `update.apply` | as `update.apply`, with the target `previous` |
+| `rollback` | `wait` and `drainTimeoutS` as for `update.apply`; `profileOnly`: a boolean | as `update.apply`, with the target the update record's `from` |
 | `stop` | `mode`: `drain` or `cancel` | progress lines, then one final line before the process exits |
 
 - **Response lines.** Each line has `ok` (a boolean); a failed line has `error`, a code from [errors](#errors), and a progress line has `phase`. A report expires 600 seconds after `update.prepare` returns it; `update.apply` with an expired or unknown `reportId` fails with `REPORT_EXPIRED`.
@@ -107,25 +107,28 @@ An update moves a profile from the running version, `from`, to the target versio
 7. **`health-check`.** The successor boots its Host. It passes when the Host's boot completes within 120 seconds, the plugins it disables at boot are a subset of those the report named, and the studio listener answers its health request.
 8. **`committed`.** The successor reports `ready` over the pipe. The predecessor rewrites the lock atomically with the successor's process id and `startId`, then closes its update channel. The successor writes a new start token, listens on the update channel, starts the supervisor, enters `running` and removes the journal. The predecessor exits.
 
-**Failure in `switching` or `health-check`.** When the successor exits, sends `failed` or does not report `ready` within 120 seconds, the predecessor stops it, restores both pointers to their values before the update, boots its own Host on `from` again and returns to `running`. The update ends `rolled-back` with the reason, and [C3](c03-update-report.md)'s rollback steps restore the profile snapshot.
+**The session-data copy.** When the person chose the copy ([C3](c03-update-report.md#data-formats)), `update.apply` checks before `snapshot` that it fits (`DATA_COPY_NO_SPACE` otherwise, with nothing changed) and writes it in `switching` after the Host has stopped and before the pointers change. The update record's `targetStarted` is written and synced before the successor is spawned.
+
+**Failure in `switching` or `health-check`.** When the successor exits, sends `failed` or does not report `ready` within 120 seconds, the predecessor stops it and applies [C3](c03-update-report.md#rollback)'s rollback table with both pointers restored to their values before the update: the profile snapshot, and the copy when the data differs and the target started. It then boots its own Host on `from` again and returns to `running`, and the update ends `rolled-back` with the reason. When the table refuses because the data differs, the target started and no copy exists, nothing is restored: the update ends `failed` with `ROLLBACK_NEEDS_DATA_COPY`, the record stays, `current` names `to`, and the predecessor stops.
 
 **The rule this enforces.** `current` switches only after the waiting phase has seen zero running chats with new turns refused, so the runtime never switches under a running chat. The studio is unavailable from the start of `switching` until the successor's listener or the restored Host answers.
 
 ## Interrupted updates
 
-The home process writes the journal `run/<profile>/update.json`, mode 0600, at the start of each phase from `snapshot` on: `{"v":1,"from":"<version>","to":"<version>","previous":"<version>","phase":"<phase>","startedAt":"<RFC 3339 UTC time>"}`. `previous` is the version [C1](c01-home-layout.md)'s `previous` pointer named before the update, and the field is absent when no `previous` pointer existed.
+The home process writes the update record `run/<profile>/update.json`, mode 0600, at the start of each phase from `snapshot` on: `{"v":1,"from":"<version>","to":"<version>","previous":"<version>","phase":"<phase>","startedAt":"<RFC 3339 UTC time>","dataDiffers":<boolean>,"copy":<boolean>,"targetStarted":<boolean>}`. `previous` is the version [C1](c01-home-layout.md)'s `previous` pointer named before the update, and the field is absent when no `previous` pointer existed. The successor rewrites the record with phase `committed` once it runs, and the record stays until a rollback completes.
 
 - **A killed requester.** Killing the terminal or process that sent the request does not stop the update; the home process keeps running and finishes the update or rolls it back.
 - **A killed home process.** Every pointer write is [C1](c01-home-layout.md)'s atomic rename, so `current` always names a whole, installed version. At the next start, step 3 of the start sequence reads the journal:
   - with a phase before `switching`, it removes the journal, and nothing has changed;
-  - with `switching` or `health-check` and `current` naming `to`, the start runs the health check on `to`; when it fails, it restores both pointers to their values before the update (`current` to `from`, and `previous` to the journal's `previous`, or removes `previous` when the journal has none), starts again from `from` and logs the rollback;
+  - with `committed`, the record stays while `current` names `to`, and is removed when `current` names `from`, because a rollback completed;
+  - with `switching` or `health-check` and `current` naming `to`, the start records `targetStarted` and runs the health check on `to`; when it fails, it applies [C3](c03-update-report.md#rollback)'s rollback table with both pointers restored to their values before the update (`current` to `from`, and `previous` to the journal's `previous`, or removes `previous` when the journal has none), starts again from `from` and logs the rollback; when the table refuses, the record stays for `delorun recover`;
   - with `current` naming `from`, the start restores `previous` to the journal's `previous` (or removes `previous` when the journal has none — the kill between the two pointer writes left it holding `from`), runs `from` and removes the journal.
 - **Installed versions.** A version installed by an interrupted update stays in the store as a non-current version until [C1](c01-home-layout.md)'s retention removes it.
 
 ## Rollback
 
-- **CLI runtime.** `delorun recover --runtime previous`, or the studio's rollback, sends `rollback`. It runs the handshake's `reporting`, `snapshot`, `waiting`, `switching` and `health-check` phases with the target `previous` and installs nothing. After it commits, `current` names the version rolled back to and `previous` names the version rolled back from. With no home process running, `delorun recover --runtime previous` takes the home lock and `store.lock` and swaps the two pointers directly.
-- **Automatic rollback.** A failed health check during an update, or at the start after an interrupted update, restores the pointers as the handshake states.
+- **CLI runtime.** `delorun recover rollback [--profile-only]`, or the studio's rollback, sends `rollback` with `profileOnly`. It reads the update record and needs a `committed` update to the running version (`NO_UPDATE_RECORD` otherwise), runs the `reporting`, `waiting`, `switching` and `health-check` phases with the record's `from` as the target, installs nothing, and in `switching` applies [C3](c03-update-report.md#rollback)'s rollback table after the Host has stopped; a refusal leaves everything as it was and the Host runs again. With `profileOnly` only the profile snapshot is restored and this Host runs again. After it commits, `current` names the version rolled back to, `previous` names the version rolled back from, and the record is removed. With no home process running, `delorun recover rollback` takes the home lock, completes an interrupted restore of a copy, and applies the same table with the pointers switched from the record's `to` to its `from`.
+- **Automatic rollback.** A failed health check during an update, or at the start after an interrupted update, applies the same table and restores the pointers as the handshake states.
 - **Profile.** [C3](c03-update-report.md) owns the rollback triggers and the restore of the profile snapshot; this contract owns the runtime switch.
 - **Desktop app.** The desktop app's rollback does not use the runtime store. The app keeps the previous signed release in its update cache; its feed refuses an automatic downgrade and accepts a rollback the person requests to a signed, logged earlier release ([C2](c02-release-manifest.md)). A rollback reinstalls that release from the cache and restores the desktop profile from its history.
 
@@ -171,6 +174,9 @@ The home process writes the journal `run/<profile>/update.json`, mode 0600, at t
 | `HEALTH_CHECK_FAILED` | The successor failed its health check or did not report `ready` within 120 seconds |
 | `VERIFY_FAILED` | The target's metadata, log entry or files failed [C1](c01-home-layout.md)'s, [C2](c02-release-manifest.md)'s or [C18](c18-release-log.md)'s checks |
 | `NO_PREVIOUS` | A rollback was requested and no `previous` pointer exists |
+| `NO_UPDATE_RECORD` | A rollback was requested and no committed update to the running version is recorded |
+| `DATA_COPY_NO_SPACE` | The session-data copy the person chose does not fit on the home's filesystem ([C3](c03-update-report.md#data-formats)) |
+| `ROLLBACK_NEEDS_DATA_COPY` | The data differs, the target started and no copy exists, so [C3](c03-update-report.md#rollback)'s table refuses the rollback |
 
 ## Consumers
 

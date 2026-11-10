@@ -37,7 +37,7 @@ function channelOf(offers: Array<{ readonly release: string, readonly files?: Re
   }
 }
 
-const reporter = { build: async (version: unknown) => ({ report: { for: version }, disabledPlugins: [] }) }
+const reporter = { build: async (version: unknown) => ({ report: { for: version }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false }) }
 
 function seam(channel: ReturnType<typeof channelOf>): HomeRuntimeStore {
   return new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel, report: reporter })

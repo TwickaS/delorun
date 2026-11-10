@@ -22,12 +22,27 @@ export class CountingChatGate implements ChatGate {
    */
   begin(cancel: () => void): () => void {
     if (this.holds > 0) throw new HomeProcessError('UPDATE_PENDING', 'an update is waiting for running chats to end')
+    return this.track(cancel)
+  }
+
+  /**
+   * Count a chat that is already running, whether or not the gate is held: the Host reports an agent's work once it
+   * has begun, and refuses the new turn itself while {@link held}.
+   * @param cancel - cancels it through upstream's cancellation.
+   * @returns the function the chat calls when it ends; a second call does nothing.
+   */
+  track(cancel: () => void): () => void {
     const entry = (): void => { cancel() }
     this.chats.add(entry)
     return () => {
       if (!this.chats.delete(entry)) return
       if (this.chats.size === 0) for (const wake of [...this.waiters]) wake()
     }
+  }
+
+  /** Whether new turns are refused: an update or a stop waits for running chats. */
+  get held(): boolean {
+    return this.holds > 0
   }
 
   /** @inheritdoc */

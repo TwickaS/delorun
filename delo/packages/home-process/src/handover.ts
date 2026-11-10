@@ -15,7 +15,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { RUNTIME_VERSION_PATTERN, type RuntimeVersion, type StartId } from '@delo/contract-home-layout'
 import { HANDOVER_FD, type HandoverMessage } from '@delo/contract-home-process'
 import { z } from 'zod'
-import type { HomeCommand } from './seams.ts'
+import type { HealthExpectations, HomeCommand } from './seams.ts'
 
 /** What the predecessor tells its successor, in the first line on the pipe. */
 export interface HandoverLine {
@@ -33,8 +33,8 @@ export interface HandoverLine {
   readonly to: RuntimeVersion
   /** The start id the predecessor assigned to the successor, which the lock carries after the handover. */
   readonly startId: StartId
-  /** The plugin ids the update report named as disabled at boot. */
-  readonly disabledPlugins: readonly string[]
+  /** What C3's health check holds the successor to. */
+  readonly health: HealthExpectations
   /** RFC 3339 UTC time the update started, for the journal. */
   readonly startedAt: string
 }
@@ -51,7 +51,12 @@ const handoverSchema = z.strictObject({
   from: version,
   to: version,
   startId: z.string().regex(/^[0-9a-f]{32}$/),
-  disabledPlugins: z.array(z.string()),
+  health: z.strictObject({
+    disabledPlugins: z.array(z.string()),
+    namedRows: z.array(z.string()),
+    bundles: z.array(z.string()).optional(),
+    previousFailures: z.array(z.string()),
+  }),
   startedAt: z.string().datetime(),
 })
 const messageSchema = z.discriminatedUnion('type', [
@@ -213,8 +218,12 @@ export function openHandoverPipe(fd: number = HANDOVER_FD): Promise<HandoverPipe
         }
         // The schema checked the versions' and start id's form; the brands are the contracts' own types.
         const data = parsed.data
-        handover = { ...data, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), startId: brandString<StartId>(data.startId) }
-        const line = handover
+        const { bundles, ...health } = data.health
+        const line: HandoverLine = {
+          ...data, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), startId: brandString<StartId>(data.startId),
+          health: { ...health, ...bundles === undefined ? {} : { bundles } },
+        }
+        handover = line
         resolve({
           handover: line,
           send: (message) => { pipe.write(`${JSON.stringify(message)}\n`) },
