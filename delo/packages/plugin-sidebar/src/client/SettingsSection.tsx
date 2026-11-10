@@ -2,7 +2,7 @@
  * Settings → Sidebar: the header art as preview tiles drawn in the chosen
  * palette, the palette swatches, the art's strength and style, the chat
  * list's view, sort order and Working shelf, Ask before unpinning, the
- * sidebar's width on a notched slider, and a way back to the stock look.
+ * sidebar's width on a notched slider.
  * @module @delo/plugin-sidebar/client/SettingsSection
  */
 import { Button, SegmentedControl, Switch, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -13,7 +13,7 @@ import {
   ART_PALETTES, ART_STRENGTHS, ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, SIDEBAR_WIDTH, SORT_ORDERS,
   type ArtPalette, type SidebarSettings,
 } from '../config.ts'
-import { StageBackdrop } from './StageArt.tsx'
+import { StageBackdrop, TITLE_SCRIM_STYLE } from './StageArt.tsx'
 import { GENERATIVE_SCENES } from './GenerativeArt.tsx'
 import css from './SettingsSection.module.css'
 
@@ -24,11 +24,6 @@ const GENERATIVE: ReadonlySet<string> = new Set(GENERATIVE_SCENES)
 export interface SidebarSettingsInjected {
   /** The sidebar's settings, stored by the host half. */
   readonly settings: ConfigForm<SidebarSettings>
-  /**
-   * Turn the Delo look off, which unloads this section with the rest of Delo's frame.
-   * @returns whether the look was turned off; false means the write was refused.
-   */
-  readonly useStockLook: () => Promise<boolean>
 }
 
 /** The section's props. */
@@ -46,10 +41,10 @@ function swatch(palette: ArtPalette) {
 /**
  * A row of choices that scrolls sideways, as on a phone, with a bar under it that shows how much of the row is in
  * view and where: drag its thumb, or press the bar, to move along. The row's edges fade where more choices wait.
- * @param props - the id of the heading that names the choices, and the choices.
+ * @param props - the group's accessible name, and the choices.
  * @returns the strip.
  */
-function SwipeStrip({ labelledBy, children }: { readonly labelledBy: string; readonly children: ReactNode }) {
+function SwipeStrip({ label, children }: { readonly label: string; readonly children: ReactNode }) {
   const [row, setRow] = useState<HTMLDivElement | null>(null)
   const [view, setView] = useState({ start: 0, size: 1 })
   const measure = useCallback(() => {
@@ -87,7 +82,7 @@ function SwipeStrip({ labelledBy, children }: { readonly labelledBy: string; rea
   const scrolls = view.size < 0.999
   return (
     <div className={css.strip}>
-      <div ref={setRow} className={css.stripRow} role="radiogroup" aria-labelledby={labelledBy} onScroll={measure}
+      <div ref={setRow} className={css.stripRow} role="radiogroup" aria-label={label} onScroll={measure}
         data-more-before={scrolls && view.start > 0.001} data-more-after={scrolls && view.start + view.size < 0.999}>
         {children}
       </div>
@@ -168,10 +163,10 @@ function WidthSlider({ value, disabled, label, format, notchLabel, onCommit }: {
 
 /**
  * Render the section.
- * @param props - the dictionary, the settings and the way back to the stock look.
+ * @param props - the dictionary and the settings.
  * @returns the section.
  */
-export function SidebarSettingsSection({ settings, useStockLook, t }: SidebarSettingsProps) {
+export function SidebarSettingsSection({ settings, t }: SidebarSettingsProps) {
   const snapshot = useSyncExternalStore(listener => settings.subscribe(listener), () => settings.getSnapshot())
   const current = snapshot.value ?? DEFAULT_SIDEBAR_SETTINGS
   const disabled = !snapshot.writable
@@ -198,14 +193,14 @@ export function SidebarSettingsSection({ settings, useStockLook, t }: SidebarSet
             {t('settings.art.shuffle')}
           </Button>
         </div>
-        <SwipeStrip labelledBy="delo-sidebar-art">
+        <SwipeStrip label={t('settings.art')}>
           {HEADER_ARTS.map(art => (
             <button key={art} type="button" role="radio" aria-checked={current.headerArt === art} aria-label={t(`settings.art.${art}`)}
               className={css.tile} disabled={disabled}
               onClick={() => { if (current.headerArt !== art) save('headerArt', art) }}>
               <span className={css.preview}>
                 {art !== 'none' && <StageBackdrop scene={art} palette={current.artPalette} seed={current.artSeed} compact />}
-                <span className={css.previewBrand}>{t('settings.preview.brand')}</span>
+                <span className={css.previewBrand} style={art === 'none' ? undefined : TITLE_SCRIM_STYLE}>{t('settings.preview.brand')}</span>
                 <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
               </span>
               <span className={css.tileFoot}>
@@ -225,7 +220,7 @@ export function SidebarSettingsSection({ settings, useStockLook, t }: SidebarSet
           </div>
           <div className={css.picker}>
             <span className={css.pickerName} aria-hidden="true">{t(`settings.palette.${current.artPalette}`)}</span>
-            <div className={css.swatches} role="radiogroup" aria-labelledby="delo-sidebar-palette">
+            <div className={css.swatches} role="radiogroup" aria-label={t('settings.palette')}>
               {ART_PALETTES.map(palette => (
                 <button key={palette} type="button" role="radio" aria-checked={current.artPalette === palette}
                   aria-label={t(`settings.palette.${palette}`)} title={t(`settings.palette.${palette}`)} className={css.swatch} disabled={disabled}
@@ -276,12 +271,6 @@ export function SidebarSettingsSection({ settings, useStockLook, t }: SidebarSet
         <WidthSlider value={current.width} disabled={disabled} label={t('settings.width')}
           format={px => t('settings.width.value', { px: String(px) })} notchLabel={px => String(px)}
           onCommit={(px) => { save('width', px) }} />
-      </SettingRow>
-
-      <SettingRow id="delo-sidebar-stock" title={t('settings.stock')} lead={t('settings.stock.lead')}>
-        <Button variant="outline" onClick={() => { attempt(useStockLook) }}>
-          {t('settings.stock.action')}
-        </Button>
       </SettingRow>
 
       <p className={css.credit}>{t('settings.credit')}</p>

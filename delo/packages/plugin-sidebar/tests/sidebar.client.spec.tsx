@@ -13,6 +13,7 @@ import type { RowStateActions } from '../src/client/ChatRow.tsx'
 import type { ChatStatusFacts } from '../src/client/sections.ts'
 import { en } from '../src/client/locales.ts'
 import { Sidebar, type SidebarProps } from '../src/client/Sidebar.tsx'
+import { TOUCH_QUERY } from '../src/client/pointer.ts'
 import { createUndoLine } from '../src/client/undo.ts'
 import { UndoNotice } from '../src/client/UndoNotice.tsx'
 import { DEFAULT_SIDEBAR_SETTINGS, type SidebarSettings } from '../src/config.ts'
@@ -68,6 +69,8 @@ function show(fields: {
   searchRequest?: number
   searchShortcut?: SidebarProps['searchShortcut']
   pinned?: SessionId[]
+  /** Whether the Workspace list has loaded; it has not unless a test says so. */
+  workspacesLoaded?: boolean
 } = {}) {
   const stored = new Map(Object.entries(fields.stored ?? {}))
   const undoLine = createUndoLine()
@@ -76,7 +79,7 @@ function show(fields: {
   const shelved = (entries: [SessionId, number][]) => new Map(states === null ? [] : entries)
   const calls = {
     open: vi.fn(), startSession: vi.fn(), pin: vi.fn(), unpin: vi.fn(), renameSession: vi.fn(), renameWorkspace: vi.fn(), deleteWorkspace: vi.fn(),
-    addWorkspace: vi.fn(), openSessionMenu: vi.fn(), setWorkspaceIcon: vi.fn(),
+    addWorkspace: vi.fn(), openSessionMenu: vi.fn(), setWorkspaceIcon: vi.fn(), pruneIcons: vi.fn(), detach: vi.fn(), attach: vi.fn(),
     searchSessions: vi.fn<SidebarProps['searchSessions']>(() => Promise.resolve({ items: [], hasMore: false })),
   }
   const list = fields.list ?? listOf(
@@ -103,7 +106,7 @@ function show(fields: {
     searchShortcut: fields.searchShortcut,
     openSessionMenu: calls.openSessionMenu,
     useSessionStatus: source(fields.statuses ?? new Map([[sid('b'), facts({ pendingInteraction: { kind: 'approval' } })]])),
-    useWorkspaces: source({ pinnedSessionIds: fields.pinned ?? [sid('a')], archivedSessionIds: [] }),
+    useWorkspaces: source({ pinnedSessionIds: fields.pinned ?? [sid('a')], archivedSessionIds: [], phase: fields.workspacesLoaded === true ? 'ready' : 'pending' }),
     useSnoozed: source(shelved([[sid('z'), NOW - 5_000]])),
     useSettled: source(shelved([[sid('d'), NOW - 5_000]])),
     useWoke: source(shelved(fields.woke ?? [])),
@@ -117,6 +120,8 @@ function show(fields: {
     pin: calls.pin,
     unpin: calls.unpin,
     setWorkspaceIcon: calls.setWorkspaceIcon,
+    pruneIcons: calls.pruneIcons,
+    attach: (owner: { current: unknown }) => { calls.attach(owner.current); return calls.detach },
     preference: { read: (key: string) => stored.get(key) ?? null, write: (key: string, value: string) => { stored.set(key, value) } },
     undoLine,
     t: makeTranslate(en),
@@ -860,7 +865,7 @@ describe('the model and details of a chat', () => {
   })
 
   /** Hovering needs a screen that can hover, which jsdom does not model. */
-  const hoverable = () => { vi.stubGlobal('matchMedia', () => ({ matches: true })) }
+  const hoverable = () => { vi.stubGlobal('matchMedia', (query: string) => ({ matches: query !== TOUCH_QUERY, addEventListener: () => {}, removeEventListener: () => {} })) }
 
   it('opens a card of details on a hover: the workspace and its folder, the model and the mode', () => {
     hoverable()
@@ -898,5 +903,82 @@ describe('closing the list\'s menus', () => {
     expect(screen.getByRole('menuitem', { name: en['action.custom'] })).toBeTruthy()
     fireEvent.keyDown(screen.getByRole('menuitem', { name: en['action.custom'] }), { key: 'Escape' })
     await waitFor(() => { expect(screen.queryByRole('menuitem', { name: en['action.custom'] })).toBeNull() })
+  })
+})
+
+describe('a touch screen', () => {
+  /** A screen whose pointer is coarse and cannot hover, with the listeners the page registered for changes. */
+  function touchScreen(matches: boolean) {
+    const listeners = new Set<() => void>()
+    let current = matches
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      get matches() { return query === TOUCH_QUERY && current },
+      addEventListener: (_: string, listener: () => void) => { listeners.add(listener) },
+      removeEventListener: (_: string, listener: () => void) => { listeners.delete(listener) },
+    }))
+    return { change: (next: boolean) => { current = next; act(() => { for (const listener of [...listeners]) listener() }) }, listeners }
+  }
+
+  it('leaves Snooze and Settle to the chat\'s menu and keeps the "..." button, on cards and on shelves', () => {
+    touchScreen(true)
+    const { container } = show({ settings: { workingShelf: true } })
+    for (const id of ['a', 'b', 's']) {
+      expect(within(row(container, id)).queryByRole('button', { name: en['action.snooze'] })).toBeNull()
+      expect(within(row(container, id)).queryByRole('button', { name: en['action.settleChat'] })).toBeNull()
+    }
+    expect(within(row(container, 'b')).getByRole('button', { name: en['action.more'].replace('{name}', 'Needs approval') })).toBeTruthy()
+    fireEvent.click(shelf(en['shelf.snoozed']))
+    fireEvent.click(shelf(en['shelf.settled']))
+    expect(within(row(container, 'z')).queryByRole('button', { name: en['action.wake'] })).toBeNull()
+    expect(within(row(container, 'd')).queryByRole('button', { name: en['action.unsettle'] })).toBeNull()
+    expect(within(row(container, 'z')).getByRole('button', { name: en['action.more'].replace('{name}', 'Snoozed chat') })).toBeTruthy()
+  })
+
+  it('shows the buttons again when the screen turns hover-capable, and stops following the query on unmount', () => {
+    const screenQuery = touchScreen(true)
+    const { container, unmount } = show()
+    expect(within(row(container, 'b')).queryByRole('button', { name: en['action.settleChat'] })).toBeNull()
+    expect(screenQuery.listeners.size).toBeGreaterThan(0)
+    screenQuery.change(false)
+    expect(within(row(container, 'b')).getByRole('button', { name: en['action.settleChat'] })).toBeTruthy()
+    unmount()
+    expect(screenQuery.listeners.size).toBe(0)
+  })
+
+  it('shows the buttons where the browser has no media queries', () => {
+    vi.stubGlobal('matchMedia', undefined)
+    const { container } = show()
+    expect(within(row(container, 'b')).getByRole('button', { name: en['action.settleChat'] })).toBeTruthy()
+  })
+})
+
+describe('the icons of removed workspaces', () => {
+  const stored = { 'w-api': { kind: 'letters', letters: 'ap' }, 'w-gone': { kind: 'letters', letters: 'gn' } }
+
+  it('are dropped once the workspace list has loaded, with the workspaces that exist as the live set', () => {
+    const { calls } = show({ settings: { workspaceIcons: stored }, workspacesLoaded: true })
+    expect(calls.pruneIcons).toHaveBeenCalledOnce()
+    expect(calls.pruneIcons).toHaveBeenCalledWith(new Set(['w-api', 'w-site']))
+  })
+
+  it('are kept while the workspace list is still loading, which would otherwise drop every icon', () => {
+    const { calls } = show({ settings: { workspaceIcons: stored }, workspaces: [], workspacesLoaded: false })
+    expect(calls.pruneIcons).not.toHaveBeenCalled()
+  })
+
+  it('are left alone when every stored icon belongs to a workspace that exists', () => {
+    const { calls } = show({ settings: { workspaceIcons: { 'w-api': stored['w-api'] } }, workspacesLoaded: true })
+    expect(calls.pruneIcons).not.toHaveBeenCalled()
+  })
+})
+
+describe('the add-workspace offer', () => {
+  it('is made while the list is mounted with the owner\'s latest props, and withdrawn on unmount', () => {
+    const { calls, unmount } = show({ canAddWorkspace: false })
+    expect(calls.attach).toHaveBeenCalledOnce()
+    expect(calls.attach.mock.calls[0]?.[0]).toMatchObject({ canAddWorkspace: false, addWorkspace: calls.addWorkspace })
+    expect(calls.detach).not.toHaveBeenCalled()
+    unmount()
+    expect(calls.detach).toHaveBeenCalledOnce()
   })
 })

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ICON_EMOJIS, IconPicker, type IconPickerTarget } from '../src/client/IconPicker.tsx'
 import { en } from '../src/client/locales.ts'
 import { GLYPHS, WorkspaceBadge, WorkspaceIconsContext } from '../src/client/WorkspaceBadge.tsx'
-import { DEFAULT_WORKSPACE_ICON, ICON_GLYPHS, MAX_ICON_SEED, patternCells, type WorkspaceIcon } from '../src/workspace-icon.ts'
+import { DEFAULT_WORKSPACE_ICON, ICON_GLYPHS, ICON_SHAPES, ICON_STYLES, MAX_ICON_SEED, patternCells, type WorkspaceIcon } from '../src/workspace-icon.ts'
 
 afterEach(() => {
   cleanup()
@@ -151,6 +151,22 @@ describe('the icon picker', () => {
     expect(group(en['icon.kind.emoji']).getAllByRole('radio')).toHaveLength(ICON_EMOJIS.length)
     fireEvent.click(screen.getByRole('tab', { name: en['icon.kind.pattern'] }))
     expect(group(en['icon.kind.pattern']).getAllByRole('radio')).toHaveLength(12)
+  })
+
+  it('names the letters and emoji fields and every shape and style option by what they are, not by the preview inside them', () => {
+    open()
+    expect(screen.getByRole('textbox', { name: en['icon.letters'] })).toBeTruthy()
+    for (const shape of ICON_SHAPES) {
+      const option = group(en['icon.shape']).getByRole('radio', { name: en[`icon.shape.${shape}`] })
+      expect(option.getAttribute('aria-label')).toBe(en[`icon.shape.${shape}`])
+      expect(option.textContent).toContain('AP')
+    }
+    for (const style of ICON_STYLES) {
+      expect(group(en['icon.style']).getByRole('radio', { name: en[`icon.style.${style}`] }).textContent).toContain('AP')
+    }
+    expect(group(en['icon.shape']).getAllByRole('radio').map(option => option.getAttribute('aria-label'))).toEqual(ICON_SHAPES.map(shape => en[`icon.shape.${shape}`]))
+    fireEvent.click(screen.getByRole('tab', { name: en['icon.kind.emoji'] }))
+    expect(screen.getByRole('textbox', { name: en['icon.emoji.other'] })).toBeTruthy()
   })
 
   it('keeps at most three letters', () => {

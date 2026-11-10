@@ -5,7 +5,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
 import { SidebarSettingsSection } from '../src/client/SettingsSection.tsx'
-import { DEFAULT_SIDEBAR_SETTINGS, MAX_ART_SEED, type SidebarSettings } from '../src/config.ts'
+import { TITLE_SCRIM_TOKEN } from '../src/client/StageArt.tsx'
+import { ART_PALETTES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, MAX_ART_SEED, type SidebarSettings } from '../src/config.ts'
 
 afterEach(() => {
   cleanup()
@@ -26,9 +27,9 @@ function formOf(value: SidebarSettings | undefined, set: Set = () => Promise.res
   return { getSnapshot: () => snapshot, subscribe: () => () => {}, set, unset: () => Promise.resolve(true), mutate: () => Promise.resolve(true) }
 }
 
-/** Renders the section over `settings`; `useStockLook` is the injected way back to the stock look. */
-function renderSection(settings: ConfigForm<SidebarSettings>, useStockLook: () => Promise<boolean> = () => Promise.resolve(true)) {
-  return render(<SidebarSettingsSection t={t} settings={settings} useStockLook={useStockLook} />)
+/** Renders the section over `settings`. */
+function renderSection(settings: ConfigForm<SidebarSettings>) {
+  return render(<SidebarSettingsSection t={t} settings={settings} />)
 }
 
 /** A set that records its calls and succeeds. */
@@ -105,7 +106,7 @@ describe('Settings → Sidebar shuffle', () => {
     const { rerender } = renderSection(formOf({ ...DEFAULT_SIDEBAR_SETTINGS, headerArt: 'waves' }))
     expect(shuffle().disabled).toBe(false)
     for (const headerArt of ['none', 'night', 'blueprint'] as const) {
-      rerender(<SidebarSettingsSection t={t} settings={formOf({ ...DEFAULT_SIDEBAR_SETTINGS, headerArt })} useStockLook={() => Promise.resolve(true)} />)
+      rerender(<SidebarSettingsSection t={t} settings={formOf({ ...DEFAULT_SIDEBAR_SETTINGS, headerArt })} />)
       expect(shuffle().disabled).toBe(true)
     }
   })
@@ -198,29 +199,33 @@ describe('Settings → Sidebar failures', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
     expect(notice()).toBeNull()
   })
+})
 
-  it('asks for the stock look, and shows the notice when it is refused or fails', async () => {
-    const useStockLook = vi.fn<() => Promise<boolean>>().mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockRejectedValueOnce(new Error('down'))
-    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS), useStockLook)
-    const press = () => act(async () => { fireEvent.click(screen.getByRole('button', { name: en['settings.stock.action'] })) })
-    expect(screen.getByText(en['settings.stock.lead'])).toBeTruthy()
-    await press()
-    expect(notice()).toBeNull()
-    await press()
-    expect(notice()).not.toBeNull()
-    await press()
-    expect(notice()).not.toBeNull()
-    expect(useStockLook).toHaveBeenCalledTimes(3)
+describe('Settings → Sidebar names and parts', () => {
+  it('names both header-art radio groups from the dictionary, not from a heading elsewhere on the page', () => {
+    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
+    for (const [name, size] of [[en['settings.art'], HEADER_ARTS.length], [en['settings.palette'], ART_PALETTES.length]] as const) {
+      const group = screen.getByRole('radiogroup', { name })
+      expect(group.getAttribute('aria-label')).toBe(name)
+      expect(group.hasAttribute('aria-labelledby')).toBe(false)
+      expect(within(group).getAllByRole('radio')).toHaveLength(size)
+    }
   })
 
-  it('clears the stock look notice when the stock look is asked for again and succeeds', async () => {
-    const useStockLook = vi.fn<() => Promise<boolean>>().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
-    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS), useStockLook)
-    const press = () => act(async () => { fireEvent.click(screen.getByRole('button', { name: en['settings.stock.action'] })) })
-    await press()
-    expect(notice()).not.toBeNull()
-    await press()
-    expect(notice()).toBeNull()
+  it('offers the way back to the stock look nowhere in the section, since Appearance is its one place', () => {
+    const { container } = renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
+    expect(container.textContent?.toLowerCase()).not.toContain('stock look')
+    expect(screen.queryByRole('button', { name: /look/i })).toBeNull()
+    expect(container.querySelector('#delo-sidebar-stock')).toBeNull()
+  })
+
+  it('previews the brand on the title plate over art, and plain when the art is none', () => {
+    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
+    const brands = screen.getAllByText(en['settings.preview.brand'])
+    expect(brands).toHaveLength(HEADER_ARTS.length)
+    const backgrounds = brands.map(brand => brand.style.background)
+    expect(backgrounds.filter(background => background === `var(${TITLE_SCRIM_TOKEN})`)).toHaveLength(HEADER_ARTS.length - 1)
+    expect(backgrounds[HEADER_ARTS.indexOf('none')]).toBe('')
   })
 })
 

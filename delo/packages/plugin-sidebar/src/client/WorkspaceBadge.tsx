@@ -19,6 +19,7 @@ import {
 import { createContext, useContext, type CSSProperties } from 'react'
 import { isCustomColor, patternCells, type IconGlyph, type WorkspaceIcon } from '../workspace-icon.ts'
 import { workspaceInitials, type BadgeColor } from './sections.ts'
+import './badge-colors.css'
 import css from './WorkspaceBadge.module.css'
 
 /** The chosen, already validated icons by Workspace id, which the list provides to every badge inside it. */

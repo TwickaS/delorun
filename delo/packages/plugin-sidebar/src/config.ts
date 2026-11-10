@@ -54,6 +54,9 @@ export type SortOrder = typeof SORT_ORDERS[number]
 /** The sidebar width slider's range and step, in pixels, and its notches: T3 Code's 256 and upstream's 280. */
 export const SIDEBAR_WIDTH = { min: 240, max: 420, step: 4, notches: [256, 280] } as const
 
+/** The most Workspace icons the setting holds; the studio drops the oldest beyond it, and a stored value above it is refused. */
+export const MAX_WORKSPACE_ICONS = 200
+
 /** The settings as the studio reads them. */
 export interface SidebarSettings {
   headerArt: HeaderArt
@@ -74,8 +77,9 @@ export interface SidebarSettings {
   /** The sidebar's width in pixels, within `SIDEBAR_WIDTH`. */
   width: number
   /**
-   * Each Workspace's chosen icon, by Workspace id, as stored. The harness accepts any value so one bad icon cannot
-   * keep the row from loading; read it through `readWorkspaceIcons`. A Workspace without a valid icon shows its monogram.
+   * Each Workspace's chosen icon, by Workspace id, as stored, oldest choice first and at most `MAX_WORKSPACE_ICONS`.
+   * The harness accepts any value for an icon so one bad icon cannot keep the row from loading; read it through
+   * `readWorkspaceIcons`. A Workspace without a valid icon shows its monogram.
    */
   workspaceIcons: Record<string, unknown>
 }
@@ -112,6 +116,9 @@ export const Config = z.object({
   artStyle: z.union([...ART_STYLES]).default(DEFAULT_SIDEBAR_SETTINGS.artStyle).volatile(),
   sort: z.union([...SORT_ORDERS]).default(DEFAULT_SIDEBAR_SETTINGS.sort).volatile(),
   confirmUnpin: z.boolean().default(DEFAULT_SIDEBAR_SETTINGS.confirmUnpin).volatile(),
-  workspaceIcons: z.dict(z.any()).default({}).volatile(),
+  workspaceIcons: z.transform(z.dict(z.any()), (icons: Record<string, unknown>) => {
+    if (Object.keys(icons).length > MAX_WORKSPACE_ICONS) throw new z.ValidationError(`holds more than ${String(MAX_WORKSPACE_ICONS)} Workspace icons`, { path: ['workspaceIcons'] })
+    return icons
+  }, true).default({}).volatile(),
   width: z.number().min(SIDEBAR_WIDTH.min).max(SIDEBAR_WIDTH.max).step(SIDEBAR_WIDTH.step).default(DEFAULT_SIDEBAR_SETTINGS.width).volatile(),
 })

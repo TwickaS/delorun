@@ -1,7 +1,30 @@
 /*
  * The chat list, after T3 Code's sidebar (MIT, © 2026 T3 Tools Inc.): a search row with icon buttons, then a scrolling
- * list whose shelves the free space pushes to the bottom. Lengths are T3 Code's own; corners are the studio's radius tokens.
+ * list whose shelves the free space pushes to the bottom. Spacing, type sizes and corners are the studio's tokens; the
+ * lengths below are the list's own geometry, T3 Code's.
  */
+.root,
+.menuIcon {
+  --list-control: 32px;
+  --list-icon-button: 28px;
+  --list-icon: 16px;
+  --list-icon-small: 12px;
+  --list-icon-menu: 14px;
+  --list-clear: 20px;
+  --list-line-s: 20px;
+  --list-line-xs: 16px;
+  --list-row-height: 36px;
+  --list-folder-height: 30px;
+  --list-folder-new: 24px;
+  --list-folder-reserve: 34px;
+  --list-fade: 12px;
+  --list-badge: 14px;
+  /* The least width the search label keeps: "Search" in English and its Chinese word fit. */
+  --list-label-min: 7ch;
+  /* T3 Code's 10px sides, between the spacing steps. */
+  --list-side: calc(var(--delo-space-4) + var(--delo-space-1));
+}
+
 .root {
   /* T3 Code's sidebar icon colour: the muted label at 85% over the sidebar. */
   --sidebar-icon: color-mix(in srgb, var(--dsw-alias-label-tertiary) 85%, var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base)));
@@ -12,23 +35,25 @@
   min-height: 0;
 }
 
+/* The header answers to its own width: the shortcut hint goes first, then the search field's gaps. */
 .header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px;
+  gap: var(--delo-space-2);
+  padding: var(--delo-space-4);
+  container-type: inline-size;
 }
 
 .search {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-  height: 32px;
-  padding: 0 8px;
+  gap: var(--delo-space-4);
+  min-width: calc(var(--delo-space-4) * 3 + var(--list-icon) + var(--list-label-min));
+  height: var(--list-control);
+  padding: 0 var(--delo-space-4);
   border-radius: var(--dsw-radius-sm);
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   cursor: text;
 }
 
@@ -47,28 +72,29 @@
 
 .searchIcon {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: var(--list-icon);
+  height: var(--list-icon);
   color: var(--sidebar-icon);
 }
 
 .searchInput {
   flex: 1;
-  min-width: 0;
+  min-width: var(--list-label-min);
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--dsw-font-s-14-font-size);
   font-weight: 500;
-  line-height: 20px;
+  line-height: var(--list-line-s);
+  text-overflow: ellipsis;
   outline: none;
   appearance: none;
 }
 
 .searchInput::placeholder {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .searchInput::-webkit-search-cancel-button {
@@ -77,7 +103,27 @@
 
 .searchHint {
   flex: none;
-  opacity: 0.7;
+  opacity: 0.85;
+}
+
+/* The search label is the last thing to shrink: the hint goes first, then the field's gaps tighten. */
+@container (max-width: 20rem) {
+  .searchHint {
+    display: none;
+  }
+}
+
+@container (max-width: 15rem) {
+  .search {
+    gap: var(--delo-space-3);
+    padding-inline: var(--delo-space-3);
+  }
+}
+
+@media (pointer: coarse) {
+  .searchHint {
+    display: none;
+  }
 }
 
 .search:focus-within .searchHint {
@@ -89,13 +135,13 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--list-clear);
+  height: var(--list-clear);
   padding: 0;
   border: 0;
   border-radius: var(--dsw-radius-xs);
   background: transparent;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   cursor: pointer;
 }
 
@@ -106,8 +152,8 @@
 }
 
 .clearIcon {
-  width: 12px;
-  height: 12px;
+  width: var(--list-icon-small);
+  height: var(--list-icon-small);
 }
 
 .headerActions {
@@ -121,8 +167,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--list-icon-button);
+  height: var(--list-icon-button);
   padding: 0;
   border: 0;
   border-radius: var(--dsw-radius-sm);
@@ -139,8 +185,8 @@
 }
 
 .iconButton:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
-  outline-offset: -2px;
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-alias-brand-primary);
+  outline-offset: calc(-1 * var(--dsw-focus-ring-width));
 }
 
 .iconButton[aria-expanded='true'],
@@ -149,13 +195,13 @@
 }
 
 .icon {
-  width: 16px;
-  height: 16px;
+  width: var(--list-icon);
+  height: var(--list-icon);
 }
 
 .menuIcon {
-  width: 14px;
-  height: 14px;
+  width: var(--list-icon-menu);
+  height: var(--list-icon-menu);
 }
 
 .scopeBadges {
@@ -163,30 +209,29 @@
 }
 
 .scopeBadges > * {
-  width: 14px;
-  height: 14px;
+  width: var(--list-badge);
+  height: var(--list-badge);
 }
 
 .scopeBadges > * + * {
-  margin-left: -6px;
+  margin-left: calc(-1 * var(--delo-space-3));
   box-shadow: 0 0 0 1.5px var(--dsw-alias-bg-base);
 }
-
 
 .scroll {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 0 8px 8px;
+  padding: 0 var(--delo-space-4) var(--delo-space-4);
   overflow-y: auto;
   scrollbar-width: none;
   /* T3 Code's scroll fade: each end fades over up to 12px, as far as the list is scrolled past it. Only the mask's alpha counts. */
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    var(--dsw-alias-label-primary) min(12px, var(--overflow-start, 0px)),
-    var(--dsw-alias-label-primary) calc(100% - min(12px, var(--overflow-end, 0px))),
+    var(--dsw-alias-label-primary) min(var(--list-fade), var(--overflow-start, 0px)),
+    var(--dsw-alias-label-primary) calc(100% - min(var(--list-fade), var(--overflow-end, 0px))),
     transparent 100%
   );
 }
@@ -213,26 +258,23 @@
 .divider {
   position: relative;
   height: 0;
-  margin: 0 2px -1px;
+  margin: 0 var(--delo-space-1) -1px;
   list-style: none;
   pointer-events: none;
 }
 
 .empty {
-  padding: 24px 8px;
-  color: color-mix(in srgb, var(--dsw-alias-label-tertiary) 80%, transparent);
-  font-size: 12px;
+  padding: var(--delo-space-8) var(--delo-space-4);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xxs-12-font-size);
   text-align: center;
   list-style: none;
 }
 
 /* The first shelf takes the free space above it, so the shelves sit at the bottom of a short list. */
 .shelfItem {
+  margin: 0 var(--delo-space-1);
   list-style: none;
-}
-
-.shelfItem {
-  margin: 0 2px;
 }
 
 .firstShelf {
@@ -243,25 +285,25 @@
 .shelfHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--delo-space-4);
   width: 100%;
-  height: 32px;
-  padding: 0 8px;
+  height: var(--list-control);
+  padding: 0 var(--delo-space-4);
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dsw-font-xxs-12-font-size);
   font-weight: 500;
-  line-height: 16px;
+  line-height: var(--list-line-xs);
   text-align: left;
   cursor: pointer;
   outline: none;
 }
 
 .shelfHeader:focus-visible {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 70%, transparent);
+  box-shadow: inset 0 0 0 var(--dsw-focus-ring-width) color-mix(in srgb, var(--dsw-alias-brand-primary) 70%, transparent);
 }
 
 .shelfLabel {
@@ -270,7 +312,7 @@
 
 .shelfRule {
   flex: 1;
-  min-width: 8px;
+  min-width: var(--delo-space-4);
   height: 1px;
   visibility: hidden;
 }
@@ -282,9 +324,14 @@
 
 .chevron {
   flex: none;
-  width: 12px;
-  height: 12px;
-  transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  width: var(--list-icon-small);
+  height: var(--list-icon-small);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chevron {
+    transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }
 
 .chevronFolded {
@@ -294,17 +341,17 @@
 .more {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--list-side);
   width: 100%;
-  height: 36px;
-  padding: 0 10px;
+  height: var(--list-row-height);
+  padding: 0 var(--list-side);
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--list-line-s);
   text-align: left;
   cursor: pointer;
 }
@@ -329,10 +376,10 @@
 .result {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--list-side);
   width: 100%;
-  min-height: 36px;
-  padding: 4px 10px;
+  min-height: var(--list-row-height);
+  padding: var(--delo-space-2) var(--list-side);
   border: 0;
   border-radius: var(--dsw-radius-md);
   background: transparent;
@@ -363,29 +410,23 @@
 }
 
 .resultTitle {
-  font-size: 14px;
+  font-size: var(--dsw-font-s-14-font-size);
   font-weight: 500;
-  line-height: 20px;
+  line-height: var(--list-line-s);
 }
 
 .resultSnippet {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xxs-12-font-size);
+  line-height: var(--list-line-xs);
 }
 
 .searchEmpty {
   margin: 0;
-  padding: 24px 8px;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  padding: var(--delo-space-8) var(--delo-space-4);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xxs-12-font-size);
   text-align: center;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chevron {
-    transition: none;
-  }
 }
 
 /* The hover-card group fills the scroll area so the shelves still sit at its bottom. */
@@ -401,7 +442,7 @@
 }
 
 .folderItem:not(:first-child) {
-  margin-top: 4px;
+  margin-top: var(--delo-space-2);
 }
 
 .folder {
@@ -414,16 +455,16 @@
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 8px;
+  gap: var(--delo-space-4);
   min-width: 0;
-  height: 30px;
-  padding: 0 34px 0 6px;
+  height: var(--list-folder-height);
+  padding: 0 var(--list-folder-reserve) 0 var(--delo-space-3);
   border: 0;
   border-radius: var(--dsw-radius-md);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--dsw-font-xs-13-font-size);
   font-weight: 500;
   text-align: left;
   cursor: pointer;
@@ -438,16 +479,21 @@
 
 .folderHeader:focus-visible,
 .folderNew:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
-  outline-offset: -2px;
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-alias-brand-primary);
+  outline-offset: calc(-1 * var(--dsw-focus-ring-width));
 }
 
 .folderChevron {
   flex: none;
-  width: 14px;
-  height: 14px;
-  color: var(--dsw-alias-label-tertiary);
-  transition: transform 150ms ease;
+  width: var(--list-icon-menu);
+  height: var(--list-icon-menu);
+  color: var(--dsw-alias-label-secondary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .folderChevron {
+    transition: transform 150ms ease;
+  }
 }
 
 .folderChevronOpen {
@@ -463,15 +509,15 @@
 }
 
 .folderCount {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
 .folderDot {
   flex: none;
-  width: 6px;
-  height: 6px;
+  width: var(--delo-space-3);
+  height: var(--delo-space-3);
   border-radius: 50%;
   background: var(--dsw-alias-state-success-primary);
 }
@@ -486,17 +532,17 @@
 
 .folderNew {
   position: absolute;
-  right: 4px;
+  right: var(--delo-space-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: var(--list-folder-new);
+  height: var(--list-folder-new);
   padding: 0;
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   opacity: 0;
 }
@@ -524,34 +570,28 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .folderChevron {
-    transition: none;
-  }
-}
-
 /* An undrawn divider keeps its place in the drag order without taking space. */
 /* While a chat is dragged, the marker opens to label Pinned above a rule, T3 Code's drag boundary. */
 .divider[data-dragging='true'] {
-  height: 24px;
+  height: var(--delo-space-8);
 }
 
 .boundary {
   position: absolute;
-  inset-inline: 8px;
-  top: 4px;
+  inset-inline: var(--delo-space-4);
+  top: var(--delo-space-2);
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 16px;
+  gap: var(--delo-space-4);
+  height: var(--list-line-xs);
 }
 
 .boundaryLabel {
   flex: none;
   color: color-mix(in srgb, var(--dsw-alias-label-primary) 80%, transparent);
-  font-size: 12px;
+  font-size: var(--dsw-font-xxs-12-font-size);
   font-weight: 500;
-  line-height: 16px;
+  line-height: var(--list-line-xs);
 }
 
 .boundaryRule {
@@ -582,12 +622,17 @@
 
 @media (pointer: coarse) {
   .iconButton {
-    width: 32px;
-    height: 32px;
+    width: var(--list-control);
+    height: var(--list-control);
   }
 
   .shelfHeader {
-    height: 36px;
+    height: var(--list-row-height);
+  }
+
+  .folderNew {
+    width: var(--list-control);
+    height: var(--list-control);
   }
 }
 

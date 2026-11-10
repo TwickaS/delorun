@@ -14,11 +14,11 @@ import { FootLauncher } from '../src/client/FootLauncher.tsx'
 import { HeaderArt } from '../src/client/HeaderArt.tsx'
 import {
   apply, createUndoLine, inject, LAUNCHER_PRIORITY, NS, optionalSource, preference, SECTION, snoozeEnds, stateActions, UNDO_NOTICE,
-  type HeaderArtInjected, type SidebarInjected, type UndoNoticeInjected,
+  type DeloSidebar, type HeaderArtInjected, type SidebarInjected, type UndoNoticeInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { UndoNotice } from '../src/client/UndoNotice.tsx'
-import { DEFAULT_SIDEBAR_SETTINGS, SIDEBAR_ROW_ID, type SidebarSettings } from '../src/config.ts'
+import { DEFAULT_SIDEBAR_SETTINGS, MAX_WORKSPACE_ICONS, SIDEBAR_ROW_ID, type SidebarSettings } from '../src/config.ts'
 import { DEFAULT_WORKSPACE_ICON } from '../src/workspace-icon.ts'
 
 afterEach(() => {
@@ -80,12 +80,11 @@ function harness(options: { readonly studio?: boolean; readonly settings?: Sideb
   ctx.provide('layout', {
     setSidebarWidths: (value: unknown) => { widths.push(value); return () => { widths.push('restored') } },
   } as never)
-  const useStockLook = vi.fn(() => Promise.resolve(true))
-  const studio = options.studio === false ? undefined : ctx.provide('deloStudio', { useStockLook } as never)
+  const studio = options.studio === false ? undefined : ctx.provide('deloStudio', {} as never)
   void studio
   const fiber = ctx.plugin({ name: 'delo-sidebar', inject, apply })
   return {
-    ctx, fiber, dictionaries, entries, forms, shown, rows, widths, useStockLook, uiWorkspace, setCalls: defaultSet.mock.calls,
+    ctx, fiber, dictionaries, entries, forms, shown, rows, widths, uiWorkspace, setCalls: defaultSet.mock.calls,
     change: (value: SidebarSettings | undefined) => { snapshot = { ...snapshot, value, status: 'ready' }; for (const listener of [...listeners]) listener() },
     face: <T,>(key: string): T => {
       const entry = entries.get(key)
@@ -123,7 +122,7 @@ describe('the studio half', () => {
     const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS, studio: false })
     await Promise.resolve()
     expect([h.dictionaries.size, h.entries.size, h.forms.length, h.shown.length, h.rows.length, h.widths.length]).toEqual([0, 0, 0, 0, 0, 0])
-    h.ctx.provide('deloStudio', { useStockLook: h.useStockLook } as never)
+    h.ctx.provide('deloStudio', {} as never)
     await vi.waitFor(() => { expect(h.entries.size).toBe(5) })
     expect([h.shown, h.rows]).toEqual([[false], [true]])
   })
@@ -132,7 +131,7 @@ describe('the studio half', () => {
     const ctx = new Context()
     const h = harness({ studio: false, settings: DEFAULT_SIDEBAR_SETTINGS })
     void ctx
-    const look = h.ctx.plugin({ name: 'look', apply: (child: Context) => { child.provide('deloStudio', { useStockLook: h.useStockLook } as never) } })
+    const look = h.ctx.plugin({ name: 'look', apply: (child: Context) => { child.provide('deloStudio', {} as never) } })
     await look.await()
     await vi.waitFor(() => { expect(h.entries.size).toBe(5) })
     await look.dispose()
@@ -144,15 +143,13 @@ describe('the studio half', () => {
     expect(inject).not.toContain('deloStudio')
   })
 
-  it('shows the Sidebar section only while the settings are served, and its Stock look row turns the Delo look off', async () => {
+  it('shows the Sidebar section only while the settings are served, with the settings as its only injection', async () => {
     const h = harness({ served: false })
     await h.fiber.await()
     expect(h.entries.has(`settings.section#${SECTION.id}`)).toBe(false)
     const served = harness({ settings: DEFAULT_SIDEBAR_SETTINGS })
     await served.fiber.await()
-    const face = served.face<{ useStockLook: () => Promise<boolean> }>(`settings.section#${SECTION.id}`)
-    await expect(face.useStockLook()).resolves.toBe(true)
-    expect(served.useStockLook).toHaveBeenCalledOnce()
+    expect(Object.keys(served.face<object>(`settings.section#${SECTION.id}`))).toEqual(['settings'])
   })
 
   it('follows the stored width, and keeps the layout call when another setting changes', async () => {
@@ -199,6 +196,58 @@ describe('the studio half', () => {
     await vi.waitFor(() => { expect(warn).toHaveBeenCalledWith('delo sidebar: the chat was not unpinned', expect.any(Error)) })
     expect(h.face<HeaderArtInjected>('sidebar.backdrop#').hooks.settings).toBe(list.hooks.settings)
     expect(h.uiWorkspace.pinSession).toHaveBeenCalledWith('a')
+  })
+
+  it('keeps the saved icons within the bound, dropping the oldest, and prunes the icons of removed workspaces only when some are stale', async () => {
+    const icons = Object.fromEntries(Array.from({ length: MAX_WORKSPACE_ICONS }, (_, index) => [`w${String(index)}`, 'x']))
+    const h = harness({ settings: { ...DEFAULT_SIDEBAR_SETTINGS, workspaceIcons: icons } })
+    await h.fiber.await()
+    const list = h.face<SidebarInjected>('sidebar.workspaces.list#')
+    list.setWorkspaceIcon('fresh', DEFAULT_WORKSPACE_ICON)
+    const saved = h.setCalls[0]?.[1] as Record<string, unknown>
+    expect(Object.keys(saved)).toHaveLength(MAX_WORKSPACE_ICONS)
+    expect([Object.keys(saved)[0], Object.keys(saved).at(-1)]).toEqual(['w1', 'fresh'])
+    list.pruneIcons(new Set(['w0', 'w1', 'w2']))
+    expect(h.setCalls[1]).toEqual(['workspaceIcons', { w0: 'x', w1: 'x', w2: 'x' }])
+    list.pruneIcons(new Set(Object.keys(icons)))
+    expect(h.setCalls).toHaveLength(2)
+  })
+
+  it('provides ctx.deloSidebar while the list is mounted, following the owner\'s latest props, and withdraws it', async () => {
+    const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS })
+    await h.fiber.await()
+    const list = h.face<SidebarInjected>('sidebar.workspaces.list#')
+    expect(h.ctx.get('deloSidebar')).toBeUndefined()
+    const first = vi.fn()
+    const owner = { current: { canAddWorkspace: true, addWorkspace: first } }
+    const detach = list.attach(owner)
+    const service = h.ctx.get('deloSidebar') as DeloSidebar
+    expect(service.canAddWorkspace()).toBe(true)
+    service.addWorkspace()
+    const second = vi.fn()
+    owner.current = { canAddWorkspace: false, addWorkspace: second }
+    expect(service.canAddWorkspace()).toBe(false)
+    service.addWorkspace()
+    expect([first.mock.calls.length, second.mock.calls.length]).toEqual([1, 1])
+    detach()
+    expect(h.ctx.get('deloSidebar')).toBeUndefined()
+    list.attach(owner)
+    expect(h.ctx.get('deloSidebar')).toBeDefined()
+    await h.fiber.dispose()
+    expect(h.ctx.get('deloSidebar')).toBeUndefined()
+  })
+
+  it('reports the pruning of icons that the harness did not accept, or could not be reached', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const settings = { ...DEFAULT_SIDEBAR_SETTINGS, workspaceIcons: { gone: 'x' } }
+    const refused = harness({ settings, set: vi.fn(() => Promise.resolve(false)) })
+    await refused.fiber.await()
+    refused.face<SidebarInjected>('sidebar.workspaces.list#').pruneIcons(new Set())
+    await vi.waitFor(() => { expect(warn).toHaveBeenCalledWith('delo sidebar: the icons of removed workspaces were not dropped') })
+    const failed = harness({ settings, set: vi.fn(() => Promise.reject(new Error('down'))) })
+    await failed.fiber.await()
+    failed.face<SidebarInjected>('sidebar.workspaces.list#').pruneIcons(new Set())
+    await vi.waitFor(() => { expect(warn).toHaveBeenCalledWith('delo sidebar: the icons of removed workspaces were not dropped', expect.any(Error)) })
   })
 
   it('reports a workspace icon the harness did not accept, or could not be reached', async () => {
@@ -362,5 +411,25 @@ describe('the copy', () => {
   it('keeps the same placeholders in both languages', () => {
     const holes = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort()
     for (const key of Object.keys(en) as (keyof typeof en)[]) expect(holes(zh[key]), key).toEqual(holes(en[key]))
+  })
+
+  it('names no internal product in English except in the credit, and uses plain sentence-case words', () => {
+    for (const [key, text] of Object.entries(en)) {
+      if (key === 'settings.credit') continue
+      expect(text, key).not.toMatch(/upstream|T3 Code|Session\b/i)
+    }
+    expect(en['action.dismissWoke']).toBe('Mark as seen')
+    expect(Object.keys(en).filter(key => key.startsWith('settings.stock'))).toEqual([])
+  })
+
+  it('uses the glossary in Chinese: processed, postponed, wake now, ages with 前, the original width', () => {
+    const all = Object.values(zh).join('\n')
+    expect(all).not.toMatch(/了结|稍后|上游|现在恢复/)
+    expect([zh['action.settle'], zh['shelf.settled'], zh['shelf.snoozed'], zh['action.wake']]).toEqual(['标为已处理', '已处理', '已延后', '立即唤醒'])
+    for (const key of ['time.minutes', 'time.hours', 'time.days', 'time.months', 'time.years'] as const) expect(zh[key], key).toMatch(/前$/)
+    expect(zh['settings.width.lead']).toContain('原版的 280 px')
+    expect(zh['settings.art.lead']).toContain('点“随机生成”可重新绘制场景')
+    expect([zh['settings.palette.grove'], zh['settings.palette.ocean'], zh['settings.palette.ember'], zh['settings.palette.iris'], zh['icon.style.soft']])
+      .toEqual(['林地', '海洋', '余烬', '鸢尾', '柔和'])
   })
 })

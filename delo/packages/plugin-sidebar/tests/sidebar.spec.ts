@@ -1,6 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { apply, Config, DEFAULT_SIDEBAR_SETTINGS } from '../src/index.ts'
+import { apply, Config, DEFAULT_SIDEBAR_SETTINGS, MAX_WORKSPACE_ICONS } from '../src/index.ts'
 
 describe('the host half', () => {
   it('defaults every setting, keeps each live-editable, and refuses an unknown choice or a width off the slider', () => {
@@ -20,6 +20,12 @@ describe('the host half', () => {
   it('stores a malformed icon as it is, so one bad icon never keeps the row from loading', () => {
     const stored = { 'workspace-1': { kind: 'glyph', glyph: 'rocket' }, 'workspace-2': 'folder' }
     expect(Config({ workspaceIcons: stored }).workspaceIcons.get()).toEqual(stored)
+  })
+
+  it('holds at most the bound of Workspace icons and refuses a stored value above it', () => {
+    const icons = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`workspace-${String(index)}`, 'x']))
+    expect(Object.keys(Config({ workspaceIcons: icons(MAX_WORKSPACE_ICONS) }).workspaceIcons.get())).toHaveLength(MAX_WORKSPACE_ICONS)
+    expect(() => Config({ workspaceIcons: icons(MAX_WORKSPACE_ICONS + 1) })).toThrow('$.workspaceIcons holds more than 200 Workspace icons')
   })
 
   it('keeps its settings without a generated form while the settings service is present', async () => {

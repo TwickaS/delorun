@@ -1,7 +1,7 @@
 /*
- * The header art's box and palettes. The fade into the sidebar and every palette's colours are T3 Code's
- * (`apps/web/src/index.css`, MIT, © 2026 T3 Tools Inc.): Blueprint, its default, and its theme palettes Rose, Grove,
- * Ocean, Ember and Iris, each with its light and dark values; Accent mixes the studio's accent into Blueprint's.
+ * The header art's box and palettes. The fade into the sidebar is T3 Code's (`apps/web/src/index.css`, MIT, © 2026 T3
+ * Tools Inc.). Each palette's colours are named in `art-palettes.css`; here a palette's names become the `--stage-*`
+ * colours the scenes draw with, and Accent mixes the studio's accent into Blueprint's.
  */
 .backdrop {
   --stage-fade: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base));
@@ -46,94 +46,94 @@
 }
 
 .backdrop {
-  --stage-art-top: light-dark(oklch(0.782169 0.123386 240.226), oklch(0.581473 0.149124 256.9));
-  --stage-art-mid: light-dark(oklch(0.616111 0.195824 259.735), oklch(0.456509 0.159377 261.945));
-  --stage-art-bottom: light-dark(oklch(0.441553 0.232394 265.474), oklch(0.291327 0.136578 267.649));
-  --stage-art-highlight: oklch(0.951597 0.037289 215.482);
-  --stage-art-secondary: oklch(0.794668 0.12136 235.46);
-  --stage-art-tertiary: oklch(0.678991 0.170261 275.365);
-  --stage-art-line: oklch(0.959666 0.029238 218.179);
-  --stage-art-celeste-highlight: oklch(0.968763 0.045822 196.42);
-  --stage-art-celeste-secondary: oklch(0.827395 0.126071 211.26);
-  --stage-art-violet-highlight: oklch(0.895381 0.053248 286.447);
-  --stage-art-grid-line: oklch(0.966822 0.01757 239.99);
-  --stage-night-base-top: oklch(0.283792 0.117327 297.201);
-  --stage-night-base-mid: oklch(0.227147 0.086086 277.99);
-  --stage-night-base-bottom: oklch(0.200528 0.055699 261.216);
+  --stage-art-top: var(--delo-art-blueprint-top);
+  --stage-art-mid: var(--delo-art-blueprint-mid);
+  --stage-art-bottom: var(--delo-art-blueprint-bottom);
+  --stage-art-highlight: var(--delo-art-blueprint-highlight);
+  --stage-art-secondary: var(--delo-art-blueprint-secondary);
+  --stage-art-tertiary: var(--delo-art-blueprint-tertiary);
+  --stage-art-line: var(--delo-art-blueprint-line);
+  --stage-art-celeste-highlight: var(--delo-art-blueprint-celeste-highlight);
+  --stage-art-celeste-secondary: var(--delo-art-blueprint-celeste-secondary);
+  --stage-art-violet-highlight: var(--delo-art-blueprint-violet-highlight);
+  --stage-art-grid-line: var(--delo-art-blueprint-grid-line);
+  --stage-night-base-top: var(--delo-art-blueprint-night-base-top);
+  --stage-night-base-mid: var(--delo-art-blueprint-night-base-mid);
+  --stage-night-base-bottom: var(--delo-art-blueprint-night-base-bottom);
   --stage-night-top: var(--stage-night-base-top);
   --stage-night-mid: var(--stage-night-base-mid);
   --stage-night-bottom: var(--stage-night-base-bottom);
-  --stage-night-highlight: oklch(0.707246 0.157418 252.091);
-  --stage-night-secondary: oklch(0.600473 0.182225 277.296);
-  --stage-night-tertiary: oklch(0.62583 0.210886 305.994);
-  --stage-night-line: oklch(0.938794 0.029114 273.103);
-  --stage-night-glow-highlight: oklch(0.553749 0.176543 271.958);
-  --stage-night-glow-secondary: oklch(0.345571 0.117466 273.568);
-  --stage-night-sparkle: oklch(0.880867 0.057747 269.011);
+  --stage-night-highlight: var(--delo-art-blueprint-night-highlight);
+  --stage-night-secondary: var(--delo-art-blueprint-night-secondary);
+  --stage-night-tertiary: var(--delo-art-blueprint-night-tertiary);
+  --stage-night-line: var(--delo-art-blueprint-night-line);
+  --stage-night-glow-highlight: var(--delo-art-blueprint-night-glow-highlight);
+  --stage-night-glow-secondary: var(--delo-art-blueprint-night-glow-secondary);
+  --stage-night-sparkle: var(--delo-art-blueprint-night-sparkle);
 }
 
 .backdrop[data-palette='rose'] {
-  --stage-art-top: light-dark(oklch(0.760675 0.141361 348.019), oklch(0.540689 0.143665 347.587));
-  --stage-art-mid: light-dark(oklch(0.588093 0.188832 353.138), oklch(0.396586 0.126592 347.6));
-  --stage-art-bottom: light-dark(oklch(0.383959 0.135096 348.656), oklch(0.249959 0.079694 340.523));
-  --stage-art-highlight: light-dark(oklch(0.949689 0.034241 339.171), oklch(0.921297 0.051708 343.229));
-  --stage-art-secondary: light-dark(oklch(0.763402 0.163836 352.525), oklch(0.667398 0.165674 352.549));
-  --stage-art-tertiary: light-dark(oklch(0.70819 0.180285 311.949), oklch(0.609315 0.163722 306.315));
-  --stage-art-line: light-dark(oklch(0.952158 0.034194 336.179), oklch(0.945349 0.036045 341.433));
+  --stage-art-top: var(--delo-art-rose-top);
+  --stage-art-mid: var(--delo-art-rose-mid);
+  --stage-art-bottom: var(--delo-art-rose-bottom);
+  --stage-art-highlight: var(--delo-art-rose-highlight);
+  --stage-art-secondary: var(--delo-art-rose-secondary);
+  --stage-art-tertiary: var(--delo-art-rose-tertiary);
+  --stage-art-line: var(--delo-art-rose-line);
 }
 
 .backdrop[data-palette='grove'] {
-  --stage-art-top: light-dark(oklch(0.751465 0.112731 157.313), oklch(0.58719 0.09869 157.426));
-  --stage-art-mid: light-dark(oklch(0.567105 0.11099 158.859), oklch(0.454979 0.079031 159.756));
-  --stage-art-bottom: light-dark(oklch(0.367918 0.067635 160.558), oklch(0.297856 0.050355 161.167));
-  --stage-art-highlight: light-dark(oklch(0.976387 0.034353 161.456), oklch(0.952407 0.053872 158.44));
-  --stage-art-secondary: light-dark(oklch(0.80968 0.117071 158.817), oklch(0.732591 0.120606 155.853));
-  --stage-art-tertiary: light-dark(oklch(0.784102 0.108047 88.516), oklch(0.716282 0.116547 80.563));
-  --stage-art-line: light-dark(oklch(0.981098 0.027812 158.718), oklch(0.961577 0.035285 157.03));
-  --stage-night-top: light-dark(oklch(0.45805 0.079616 160.092), oklch(0.398632 0.065534 158.601));
-  --stage-night-mid: light-dark(oklch(0.368483 0.065631 162.719), oklch(0.290561 0.049694 160.456));
-  --stage-night-bottom: light-dark(oklch(0.264797 0.044397 168.088), oklch(0.210147 0.03173 169.818));
-  --stage-night-highlight: light-dark(oklch(0.912563 0.055173 158.974), oklch(0.866303 0.057526 156.796));
-  --stage-night-secondary: light-dark(oklch(0.665652 0.109731 156.599), oklch(0.586553 0.093722 157.365));
-  --stage-night-tertiary: light-dark(oklch(0.698651 0.103024 89.828), oklch(0.6364 0.101769 82.985));
-  --stage-night-line: light-dark(oklch(0.945336 0.041923 157.222), oklch(0.913292 0.035718 156.976));
+  --stage-art-top: var(--delo-art-grove-top);
+  --stage-art-mid: var(--delo-art-grove-mid);
+  --stage-art-bottom: var(--delo-art-grove-bottom);
+  --stage-art-highlight: var(--delo-art-grove-highlight);
+  --stage-art-secondary: var(--delo-art-grove-secondary);
+  --stage-art-tertiary: var(--delo-art-grove-tertiary);
+  --stage-art-line: var(--delo-art-grove-line);
+  --stage-night-top: var(--delo-art-grove-night-top);
+  --stage-night-mid: var(--delo-art-grove-night-mid);
+  --stage-night-bottom: var(--delo-art-grove-night-bottom);
+  --stage-night-highlight: var(--delo-art-grove-night-highlight);
+  --stage-night-secondary: var(--delo-art-grove-night-secondary);
+  --stage-night-tertiary: var(--delo-art-grove-night-tertiary);
+  --stage-night-line: var(--delo-art-grove-night-line);
 }
 
 .backdrop[data-palette='ocean'] {
-  --stage-art-top: light-dark(oklch(0.792993 0.088072 220.421), oklch(0.59663 0.089167 233.427));
-  --stage-art-mid: light-dark(oklch(0.590296 0.116841 243.184), oklch(0.461094 0.084904 243.478));
-  --stage-art-bottom: light-dark(oklch(0.409123 0.093718 247.98), oklch(0.294818 0.05947 250.526));
-  --stage-art-highlight: light-dark(oklch(0.971217 0.023008 213.615), oklch(0.952907 0.032224 221.27));
-  --stage-art-secondary: light-dark(oklch(0.788391 0.090856 215.684), oklch(0.732079 0.09296 224.414));
-  --stage-art-tertiary: light-dark(oklch(0.76441 0.099607 187.893), oklch(0.720885 0.095495 190.903));
-  --stage-art-line: light-dark(oklch(0.976025 0.019647 212.543), oklch(0.961039 0.027355 219.756));
+  --stage-art-top: var(--delo-art-ocean-top);
+  --stage-art-mid: var(--delo-art-ocean-mid);
+  --stage-art-bottom: var(--delo-art-ocean-bottom);
+  --stage-art-highlight: var(--delo-art-ocean-highlight);
+  --stage-art-secondary: var(--delo-art-ocean-secondary);
+  --stage-art-tertiary: var(--delo-art-ocean-tertiary);
+  --stage-art-line: var(--delo-art-ocean-line);
 }
 
 .backdrop[data-palette='ember'] {
-  --stage-art-top: light-dark(oklch(0.782439 0.118806 52.569), oklch(0.597533 0.120694 43.455));
-  --stage-art-mid: light-dark(oklch(0.62863 0.15922 39.401), oklch(0.437763 0.101287 34.86));
-  --stage-art-bottom: light-dark(oklch(0.404251 0.117664 30.424), oklch(0.264269 0.055858 26.548));
-  --stage-art-highlight: light-dark(oklch(0.962469 0.02774 70.95), oklch(0.929214 0.042638 55.801));
-  --stage-art-secondary: light-dark(oklch(0.815735 0.11904 53.659), oklch(0.705592 0.137369 43.176));
-  --stage-art-tertiary: light-dark(oklch(0.69361 0.159346 24.787), oklch(0.629583 0.158322 24.088));
-  --stage-art-line: light-dark(oklch(0.970313 0.02052 67.583), oklch(0.945058 0.033906 58.824));
-  --stage-night-top: light-dark(oklch(0.470236 0.102322 39.355), oklch(0.392352 0.081287 36.444));
-  --stage-night-mid: light-dark(oklch(0.345367 0.080697 33.217), oklch(0.271305 0.056352 31.135));
-  --stage-night-bottom: light-dark(oklch(0.227386 0.056077 27.437), oklch(0.182126 0.028154 27.774));
-  --stage-night-highlight: light-dark(oklch(0.903891 0.059281 56.181), oklch(0.851007 0.061294 53.805));
-  --stage-night-secondary: light-dark(oklch(0.641705 0.126508 44.376), oklch(0.560789 0.10645 42.953));
-  --stage-night-tertiary: light-dark(oklch(0.538694 0.129931 25.865), oklch(0.476228 0.106656 24.165));
-  --stage-night-line: light-dark(oklch(0.926348 0.046029 58.73), oklch(0.884931 0.046607 56.556));
+  --stage-art-top: var(--delo-art-ember-top);
+  --stage-art-mid: var(--delo-art-ember-mid);
+  --stage-art-bottom: var(--delo-art-ember-bottom);
+  --stage-art-highlight: var(--delo-art-ember-highlight);
+  --stage-art-secondary: var(--delo-art-ember-secondary);
+  --stage-art-tertiary: var(--delo-art-ember-tertiary);
+  --stage-art-line: var(--delo-art-ember-line);
+  --stage-night-top: var(--delo-art-ember-night-top);
+  --stage-night-mid: var(--delo-art-ember-night-mid);
+  --stage-night-bottom: var(--delo-art-ember-night-bottom);
+  --stage-night-highlight: var(--delo-art-ember-night-highlight);
+  --stage-night-secondary: var(--delo-art-ember-night-secondary);
+  --stage-night-tertiary: var(--delo-art-ember-night-tertiary);
+  --stage-night-line: var(--delo-art-ember-night-line);
 }
 
 .backdrop[data-palette='iris'] {
-  --stage-art-top: light-dark(oklch(0.738305 0.113454 298.926), oklch(0.57297 0.145973 295.185));
-  --stage-art-mid: light-dark(oklch(0.551826 0.159189 294.531), oklch(0.419499 0.13752 292.131));
-  --stage-art-bottom: light-dark(oklch(0.37147 0.133317 289.999), oklch(0.274235 0.095798 286.608));
-  --stage-art-highlight: light-dark(oklch(0.949472 0.029204 303.081), oklch(0.916698 0.047206 300.224));
-  --stage-art-secondary: light-dark(oklch(0.745085 0.125892 298.647), oklch(0.670994 0.13095 296.689));
-  --stage-art-tertiary: light-dark(oklch(0.73066 0.167815 340.964), oklch(0.679357 0.165376 340.439));
-  --stage-art-line: light-dark(oklch(0.960278 0.024064 306.969), oklch(0.940582 0.032921 299.076));
+  --stage-art-top: var(--delo-art-iris-top);
+  --stage-art-mid: var(--delo-art-iris-mid);
+  --stage-art-bottom: var(--delo-art-iris-bottom);
+  --stage-art-highlight: var(--delo-art-iris-highlight);
+  --stage-art-secondary: var(--delo-art-iris-secondary);
+  --stage-art-tertiary: var(--delo-art-iris-tertiary);
+  --stage-art-line: var(--delo-art-iris-line);
 }
 
 .backdrop:is([data-palette='rose'], [data-palette='ocean'], [data-palette='iris'], [data-palette='accent']) {
@@ -143,7 +143,7 @@
   --stage-night-highlight: var(--stage-art-highlight);
   --stage-night-secondary: color-mix(in oklch, var(--stage-art-secondary) 55%, var(--stage-night-mid));
   --stage-night-tertiary: color-mix(in oklch, var(--stage-art-tertiary) 60%, var(--stage-night-top));
-  --stage-night-line: color-mix(in oklch, var(--stage-art-line) 82%, oklch(1 0 0));
+  --stage-night-line: color-mix(in oklch, var(--stage-art-line) 82%, var(--delo-art-night-line-lift));
 }
 
 .backdrop:not([data-palette='blueprint']) {
@@ -157,13 +157,13 @@
 }
 
 .backdrop[data-palette='accent'] {
-  --stage-art-top: color-mix(in oklch, var(--dsw-alias-brand-primary) 70%, oklch(0.78 0.12 240));
-  --stage-art-mid: color-mix(in oklch, var(--dsw-alias-brand-primary) 80%, oklch(0.5 0.15 260));
-  --stage-art-bottom: color-mix(in oklch, var(--dsw-alias-brand-primary) 55%, oklch(0.3 0.1 265));
-  --stage-art-highlight: color-mix(in oklch, var(--dsw-alias-brand-primary) 20%, oklch(0.96 0.02 220));
-  --stage-art-secondary: color-mix(in oklch, var(--dsw-alias-brand-primary) 75%, oklch(0.8 0.1 235));
-  --stage-art-tertiary: color-mix(in oklch, var(--dsw-alias-brand-primary) 60%, oklch(0.68 0.17 275));
-  --stage-art-line: color-mix(in oklch, var(--dsw-alias-brand-primary) 12%, oklch(0.97 0.02 218));
+  --stage-art-top: color-mix(in oklch, var(--dsw-alias-brand-primary) 70%, var(--delo-art-accent-top));
+  --stage-art-mid: color-mix(in oklch, var(--dsw-alias-brand-primary) 80%, var(--delo-art-accent-mid));
+  --stage-art-bottom: color-mix(in oklch, var(--dsw-alias-brand-primary) 55%, var(--delo-art-accent-bottom));
+  --stage-art-highlight: color-mix(in oklch, var(--dsw-alias-brand-primary) 20%, var(--delo-art-accent-highlight));
+  --stage-art-secondary: color-mix(in oklch, var(--dsw-alias-brand-primary) 75%, var(--delo-art-accent-secondary));
+  --stage-art-tertiary: color-mix(in oklch, var(--dsw-alias-brand-primary) 60%, var(--delo-art-accent-tertiary));
+  --stage-art-line: color-mix(in oklch, var(--dsw-alias-brand-primary) 12%, var(--delo-art-accent-line));
 }
 
 /* Strength: the art quieter, or richer, than drawn. */
@@ -177,12 +177,34 @@
 
 /* The pill: T3 Code's environment badge, the art in a capsule at the brand row's end, left of the toggle. */
 .pill {
+  --pill-top: 26px;
+  --pill-end: 48px;
+  --pill-width: 36px;
+  --pill-height: 16px;
+
   position: absolute;
-  top: 26px;
-  right: 48px;
-  width: 36px;
-  height: 16px;
+  top: var(--pill-top);
+  right: var(--pill-end);
+  width: var(--pill-width);
+  height: var(--pill-height);
   overflow: hidden;
   border-radius: var(--dsw-radius-xl);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+
+/*
+ * The title's plate: a solid band under the brand row, so the light title and toggle read on any art. Its colour is
+ * set where it renders, from `TITLE_SCRIM_TOKEN`; the band spans the logo row's 44px of content.
+ */
+.scrim {
+  --scrim-height: 44px;
+
+  position: absolute;
+  top: var(--delo-space-4);
+  right: var(--delo-space-4);
+  left: var(--delo-space-4);
+  height: var(--scrim-height);
+  border-radius: var(--dsw-radius-md);
+  pointer-events: none;
+  user-select: none;
 }

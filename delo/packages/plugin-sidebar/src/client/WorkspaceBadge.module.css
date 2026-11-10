@@ -1,12 +1,12 @@
 /*
  * A Workspace's badge. Unchosen, T3 Code's project monogram: a tile rounded at 25%, the colour at 14% behind
- * monospace letters in the colour. The named colours are data: Tailwind's 600 step, and its 400 step in dark, as
- * T3 Code's project colours are. A chosen icon adds a shape (rounded, circle, square, hexagon) and a style
- * (soft, solid, outline).
+ * monospace letters in the colour. The named colours are in `badge-colors.css`. A chosen icon adds a shape (rounded,
+ * circle, square, hexagon) and a style (soft, solid, outline).
  */
 .badge {
-  --badge-color: light-dark(oklch(54.6% 0.245 262.881), oklch(70.7% 0.165 254.624));
+  --badge-color: var(--delo-badge-blue);
   --badge-size: 16px;
+  --badge-emoji-font: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 
   display: inline-flex;
   flex: none;
@@ -18,7 +18,7 @@
   border-radius: 25%;
   background-color: color-mix(in srgb, var(--badge-color) 14%, transparent);
   color: var(--badge-color);
-  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-family: var(--dsw-font-mono);
   user-select: none;
 }
 
@@ -50,15 +50,15 @@
 }
 
 .emoji {
-  font-family: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-family: var(--badge-emoji-font);
   font-size: calc(var(--badge-size) * 0.72);
   line-height: 1;
 }
 
-.badge[data-color='green'] { --badge-color: light-dark(oklch(62.7% 0.194 149.214), oklch(79.2% 0.209 151.711)); }
-.badge[data-color='amber'] { --badge-color: light-dark(oklch(66.6% 0.179 58.318), oklch(82.8% 0.189 84.429)); }
-.badge[data-color='violet'] { --badge-color: light-dark(oklch(54.1% 0.281 293.009), oklch(70.2% 0.183 293.541)); }
-.badge[data-color='red'] { --badge-color: light-dark(oklch(57.7% 0.245 27.325), oklch(70.4% 0.191 22.216)); }
-.badge[data-color='pink'] { --badge-color: light-dark(oklch(59.2% 0.249 0.584), oklch(71.8% 0.202 349.761)); }
-.badge[data-color='teal'] { --badge-color: light-dark(oklch(60% 0.118 184.704), oklch(77.7% 0.152 181.912)); }
-.badge[data-color='slate'] { --badge-color: light-dark(oklch(44.6% 0.043 257.281), oklch(70.4% 0.04 256.788)); }
+.badge[data-color='green'] { --badge-color: var(--delo-badge-green); }
+.badge[data-color='amber'] { --badge-color: var(--delo-badge-amber); }
+.badge[data-color='violet'] { --badge-color: var(--delo-badge-violet); }
+.badge[data-color='red'] { --badge-color: var(--delo-badge-red); }
+.badge[data-color='pink'] { --badge-color: var(--delo-badge-pink); }
+.badge[data-color='teal'] { --badge-color: var(--delo-badge-teal); }
+.badge[data-color='slate'] { --badge-color: var(--delo-badge-slate); }

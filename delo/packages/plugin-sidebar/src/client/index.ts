@@ -34,6 +34,7 @@ import type { DeloChatStates } from '@delo/plugin-chat-states/client'
 // Type-only: the ctx.deloStudio merge.
 import type {} from '@delo/plugin-theme/client'
 import { DEFAULT_SIDEBAR_SETTINGS, SIDEBAR_ROW_ID, type SidebarSettings } from '../config.ts'
+import { pruneWorkspaceIcons, withWorkspaceIcon } from '../workspace-icon.ts'
 import type { RowStateActions } from './ChatRow.tsx'
 import { FootLauncher } from './FootLauncher.tsx'
 import { HeaderArt, type HeaderArtInjected } from './HeaderArt.tsx'
@@ -55,9 +56,29 @@ export { GENERATIVE_SCENES, GenerativeArt, seededRandom, type GenerativeScene } 
 export { IconPicker, ICON_EMOJIS, type IconPickerProps, type IconPickerTarget } from './IconPicker.tsx'
 export { GLYPHS, WorkspaceBadge, WorkspaceIconsContext } from './WorkspaceBadge.tsx'
 export * from '../workspace-icon.ts'
-export { BlueprintArt, NightSkyArt, StageBackdrop, STAGE_PALETTES, STAGE_SCENES, type StagePalette, type StageScene } from './StageArt.tsx'
+export {
+  BlueprintArt, NightSkyArt, StageBackdrop, STAGE_PALETTES, STAGE_SCENES, TITLE_SCRIM_STYLE, TITLE_SCRIM_TOKEN, TitleScrim, type StagePalette, type StageScene,
+} from './StageArt.tsx'
 export { DRAG_DISTANCE, useListDrag, type DragView, type ListDrag, type ListDragOptions } from './drag.ts'
 export * from './sections.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The chat list's add-workspace affordance, present while the list is mounted. */
+    deloSidebar: DeloSidebar
+  }
+}
+
+/** What `ctx.deloSidebar` shares. */
+export interface DeloSidebar {
+  /**
+   * Whether the host can add a workspace through the list.
+   * @returns the owner's latest `canAddWorkspace`.
+   */
+  canAddWorkspace(): boolean
+  /** Start the owner's add-workspace flow, as the list's Add workspace button does. */
+  addWorkspace(): void
+}
 
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'deloSidebar'
@@ -226,7 +247,7 @@ export function applyStudio(ctx: Context): void {
 
   const art: HeaderArtInjected = { hooks: { settings } }
   ctx.effect(() => ctx.slots.inject('sidebar.backdrop', () => ctx.slots.register({ name: 'sidebar.backdrop', inject: () => art }, HeaderArt)), 'delo-sidebar: header art')
-  const section: SidebarSettingsInjected = { settings: form, useStockLook: () => ctx.deloStudio.useStockLook() }
+  const section: SidebarSettingsInjected = { settings: form }
   ctx.effect(() => ctx.configForms.whileServed([SIDEBAR_ROW_ID], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: SECTION.id, order: SECTION.order, label: () => t('settings.nav'), locale: NS, inject: () => section,
   }, SidebarSettingsSection))), 'delo-sidebar: Sidebar section')
@@ -265,10 +286,20 @@ export function applyStudio(ctx: Context): void {
     pin,
     unpin,
     setWorkspaceIcon: (workspaceId, icon) => {
-      const { [workspaceId]: _replaced, ...others } = settings.getSnapshot().workspaceIcons
-      form.set('workspaceIcons', icon === null ? others : { ...others, [workspaceId]: icon }).then((ok) => {
+      form.set('workspaceIcons', withWorkspaceIcon(settings.getSnapshot().workspaceIcons, workspaceId, icon)).then((ok) => {
         if (!ok) console.warn('delo sidebar: the workspace icon was not saved')
       }, (error: unknown) => { console.warn('delo sidebar: the workspace icon was not saved', error) })
+    },
+    attach: latest => ctx.provide('deloSidebar', {
+      canAddWorkspace: () => latest.current.canAddWorkspace,
+      addWorkspace: () => { latest.current.addWorkspace() },
+    }),
+    pruneIcons: (liveIds) => {
+      const pruned = pruneWorkspaceIcons(settings.getSnapshot().workspaceIcons, liveIds)
+      if (pruned === undefined) return
+      form.set('workspaceIcons', pruned).then((ok) => {
+        if (!ok) console.warn('delo sidebar: the icons of removed workspaces were not dropped')
+      }, (error: unknown) => { console.warn('delo sidebar: the icons of removed workspaces were not dropped', error) })
     },
     preference,
     undoLine,

@@ -5,7 +5,8 @@
  * (`apps/web/src/components/SidebarStageBackdrop.tsx`, MIT, © 2026 T3 Tools
  * Inc.), whose two scenes mark its nightly and development builds.
  */
-import { useId } from 'react'
+import { useId, type CSSProperties } from 'react'
+import './art-palettes.css'
 import css from './StageArt.module.css'
 import { GENERATIVE_SCENES, GenerativeArt } from './GenerativeArt.tsx'
 import type { ArtStrength } from '../config.ts'
@@ -351,6 +352,24 @@ export const STAGE_SCENES = ['night', 'blueprint', ...GENERATIVE_SCENES] as cons
 
 /** One scene. */
 export type StageScene = typeof STAGE_SCENES[number]
+
+/**
+ * The theme token the title's plate is filled with: a dark static grey, the same in both colour schemes, which the
+ * theme's palettes recolour. The sidebar sets its title and toggle in `--dsw-static-neutral-bluish-00` over any art, and
+ * that white reads on this grey at more than 4.5:1 in every palette.
+ */
+export const TITLE_SCRIM_TOKEN = '--dsw-static-neutral-bluish-850'
+
+/** The fill of the title's plate, for the plate and for a tile that previews the title on the art. */
+export const TITLE_SCRIM_STYLE: CSSProperties = { background: `var(${TITLE_SCRIM_TOKEN})` }
+
+/**
+ * The plate under the sidebar's title and toggle, so they never sit directly on the art.
+ * @returns the plate, hidden from assistive technology.
+ */
+export function TitleScrim() {
+  return <div className={css.scrim} data-title-scrim="" style={TITLE_SCRIM_STYLE} aria-hidden="true" />
+}
 
 /** The art palettes: T3 Code's Blueprint, Rose, Grove, Ocean, Ember and Iris, and the studio's accent. */
 export const STAGE_PALETTES = ['blueprint', 'rose', 'grove', 'ocean', 'ember', 'iris', 'accent'] as const

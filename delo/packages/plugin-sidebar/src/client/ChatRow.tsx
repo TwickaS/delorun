@@ -17,6 +17,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { cx } from './cx.ts'
+import { useTouchScreen } from './pointer.ts'
 import { memo, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import type { SidebarLocaleKey } from './locales.ts'
 import { shouldRecede, waitsOnPerson, type BadgeColor, type ChatStatus, type SidebarChat, type SidebarDropVerb, type SidebarSection } from './sections.ts'
@@ -306,6 +307,8 @@ function SnoozeButton({ id, states, open, setOpen, t }: {
 export const ChatRow = memo(function ChatRow(props: ChatRowProps) {
   const { chat, section, current, now, color, wokeAt, snoozedUntil, states, open, rename, unpin, openMenu, menuOpen, jumpLabel, inFolder, drag, t } = props
   const [snoozeOpen, setSnoozeOpen] = useState(false)
+  // On a touch screen Snooze and Settle are in the chat's menu, behind the "..." button, which has the 32px hit area.
+  const touch = useTouchScreen()
   const woke = wokeAt !== undefined
   const status = topStatus(chat, woke)
   const recede = shouldRecede({ status: chat.status, unread: chat.unread, woke, current })
@@ -439,7 +442,7 @@ export const ChatRow = memo(function ChatRow(props: ChatRowProps) {
                 : (
                   <>
                     <span className={css.trailIdle}>{trailing}</span>
-                    <span className={css.trailHover}><span className={css.hoverOnly}>{actions}</span>{more}</span>
+                    <span className={css.trailHover}>{!touch && <span className={css.hoverOnly}>{actions}</span>}{more}</span>
                   </>
                 ))}
             </span>
@@ -464,12 +467,14 @@ export const ChatRow = memo(function ChatRow(props: ChatRowProps) {
                   <>
                     <span className={css.trailIdle}>{statusOrAge}</span>
                     <span className={css.trailHover}>
-                      <span className={css.hoverOnly}>
-                        {states !== null && chat.status !== 'working' && (
-                          <SnoozeButton id={chat.id} states={states} open={snoozeOpen} setOpen={setSnoozeOpen} t={t} />
-                        )}
-                        {settleButton}
-                      </span>
+                      {!touch && (
+                        <span className={css.hoverOnly}>
+                          {states !== null && chat.status !== 'working' && (
+                            <SnoozeButton id={chat.id} states={states} open={snoozeOpen} setOpen={setSnoozeOpen} t={t} />
+                          )}
+                          {settleButton}
+                        </span>
+                      )}
                       {more}
                     </span>
                   </>

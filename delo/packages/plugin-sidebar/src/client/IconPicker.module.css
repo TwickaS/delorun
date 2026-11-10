@@ -1,7 +1,18 @@
-/* The workspace icon picker: the icon on a stage at the left, its choices at the right; one column on a phone. */
+/*
+ * The workspace icon picker: the icon on a stage at the left, its choices at the right; one column on a phone.
+ * Spacing, type sizes and corners are the studio's tokens; the lengths below are the picker's own geometry.
+ */
 .dialog {
-  width: min(720px, calc(100vw - 32px));
-  max-height: calc(100dvh - 48px);
+  --picker-width: 720px;
+  --picker-stage: 200px;
+  --picker-cell: 36px;
+  --picker-hit: 32px;
+  --picker-swatch: 22px;
+  --picker-option: 36px;
+  --picker-letters: 120px;
+
+  width: min(var(--picker-width), calc(100vw - var(--delo-space-9)));
+  max-height: calc(100dvh - var(--delo-space-8) * 2);
 }
 
 /* On a short screen the choices scroll and the footer stays. */
@@ -12,10 +23,10 @@
 
 .body {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: calc(24px * var(--dsh-density, 1));
+  grid-template-columns: var(--picker-stage) minmax(0, 1fr);
+  gap: var(--delo-space-8);
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--dsw-font-xs-13-font-size);
 }
 
 @media (width < 640px) {
@@ -28,9 +39,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(16px * var(--dsh-density, 1));
+  gap: var(--delo-space-6);
   min-width: 0;
-  padding: calc(24px * var(--dsh-density, 1)) 16px;
+  padding: var(--delo-space-8) var(--delo-space-6);
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-lg);
   background:
@@ -41,20 +52,20 @@
 
 .hero {
   display: flex;
-  padding: 12px;
+  padding: var(--delo-space-5);
 }
 
 /* The icon at the list's own size beside the Workspace's name, as a row of the sidebar shows it. */
 .inList {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--delo-space-3);
   max-width: 100%;
-  padding: 6px 10px;
+  padding: var(--delo-space-3) calc(var(--delo-space-4) + var(--delo-space-1));
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-layer-1));
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--dsw-font-xxs-12-font-size);
 }
 
 .inListTitle {
@@ -66,30 +77,36 @@
 .controls {
   display: flex;
   flex-direction: column;
-  gap: calc(18px * var(--dsh-density, 1));
+  gap: calc(var(--delo-space-6) + var(--delo-space-1));
   min-width: 0;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: calc(8px * var(--dsh-density, 1));
+  gap: var(--delo-space-4);
 }
 
 .label {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--dsw-font-xxs-12-font-size);
   font-weight: 500;
 }
 
 .letters {
-  width: min(120px, 100%);
+  width: min(var(--picker-letters), 100%);
+}
+
+/* The letters and emoji fields show the studio's focus ring while they hold focus. */
+.letters:focus-within {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: var(--delo-space-1);
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--picker-cell), 1fr));
+  gap: var(--delo-space-3);
 }
 
 .cell {
@@ -97,8 +114,8 @@
   align-items: center;
   justify-content: center;
   aspect-ratio: 1;
-  min-width: 32px;
-  min-height: 32px;
+  min-width: var(--picker-hit);
+  min-height: var(--picker-hit);
   border: 0.5px solid transparent;
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-base);
@@ -121,14 +138,14 @@
 
 .emojiCell {
   font-family: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-  font-size: 18px;
+  font-size: var(--dsw-font-m-18-font-size);
 }
 
 .swatches,
 .options {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--delo-space-4);
 }
 
 .swatch {
@@ -136,8 +153,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--picker-hit);
+  height: var(--picker-hit);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -152,8 +169,8 @@
 
 /* The "any colour" swatch shows a colour wheel until a custom colour is chosen. */
 .colorInput {
-  width: 22px;
-  height: 22px;
+  width: var(--picker-swatch);
+  height: var(--picker-swatch);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -187,15 +204,19 @@
 .option {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 12px 0 8px;
+  gap: var(--delo-space-4);
+  min-height: var(--picker-option);
+  padding: 0 var(--delo-space-5) 0 var(--delo-space-4);
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   cursor: pointer;
+}
+
+.optionPreview {
+  display: inline-flex;
 }
 
 .option[aria-checked='true'] {
@@ -208,7 +229,7 @@
 .swatch:focus-visible,
 .swatch:focus-within,
 .option:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-alias-brand-primary);
   outline-offset: 1px;
 }
 

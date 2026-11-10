@@ -6,6 +6,7 @@
  * @module @delo/plugin-sidebar/workspace-icon
  */
 import z from '@deepseek-ai/schemastery'
+import { MAX_WORKSPACE_ICONS } from './config.ts'
 
 /** What the icon shows. */
 export const ICON_KINDS = ['letters', 'glyph', 'emoji', 'pattern'] as const
@@ -153,4 +154,31 @@ export function readWorkspaceIcons(stored: Readonly<Record<string, unknown>>): R
     if (icon !== undefined) icons[workspaceId] = icon
   }
   return icons
+}
+
+/**
+ * The stored icons with one Workspace's icon set or cleared. A set icon becomes the newest entry, and the oldest
+ * entries beyond `MAX_WORKSPACE_ICONS` are dropped, so the stored value always passes the setting's bound.
+ * @param stored - the setting's value, oldest choice first.
+ * @param workspaceId - the Workspace.
+ * @param icon - its new icon, or null to return it to its monogram.
+ * @returns the new value.
+ */
+export function withWorkspaceIcon(stored: Readonly<Record<string, unknown>>, workspaceId: string, icon: WorkspaceIcon | null): Record<string, unknown> {
+  const { [workspaceId]: _replaced, ...others } = stored
+  const entries = Object.entries(icon === null ? others : { ...others, [workspaceId]: icon })
+  return Object.fromEntries(entries.slice(Math.max(0, entries.length - MAX_WORKSPACE_ICONS)))
+}
+
+/**
+ * The stored icons of the Workspaces that still exist. Call it only with the complete Workspace list, never with a list
+ * still loading, which would drop every icon.
+ * @param stored - the setting's value.
+ * @param liveIds - the ids of every Workspace that exists.
+ * @returns the value without the icons of removed Workspaces, or undefined when none is stale.
+ */
+export function pruneWorkspaceIcons(stored: Readonly<Record<string, unknown>>, liveIds: ReadonlySet<string>): Record<string, unknown> | undefined {
+  const entries = Object.entries(stored)
+  const kept = entries.filter(([workspaceId]) => liveIds.has(workspaceId))
+  return kept.length === entries.length ? undefined : Object.fromEntries(kept)
 }

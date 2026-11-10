@@ -109,7 +109,7 @@ export function IconPicker({ target, onSave, onClose, t }: IconPickerProps) {
           {icon.kind === 'letters' && (
             <label className={css.field}>
               <span className={css.label}>{t('icon.letters')}</span>
-              <Input className={LETTERS_CLASS} maxLength={3} value={icon.letters} placeholder={t('icon.letters.placeholder')}
+              <Input className={LETTERS_CLASS} aria-label={t('icon.letters')} maxLength={3} value={icon.letters} placeholder={t('icon.letters.placeholder')}
                 onChange={(event) => { change({ letters: event.currentTarget.value.slice(0, 3) }) }} />
             </label>
           )}
@@ -138,7 +138,7 @@ export function IconPicker({ target, onSave, onClose, t }: IconPickerProps) {
               </div>
               <label className={css.field}>
                 <span className={css.label}>{t('icon.emoji.other')}</span>
-                <Input className={LETTERS_CLASS} value={icon.emoji}
+                <Input className={LETTERS_CLASS} aria-label={t('icon.emoji.other')} value={icon.emoji}
                   onChange={(event) => { typeEmoji(event.currentTarget.value) }} />
               </label>
             </>
@@ -180,9 +180,10 @@ export function IconPicker({ target, onSave, onClose, t }: IconPickerProps) {
             <span className={css.label}>{t('icon.shape')}</span>
             <div className={css.options} role="radiogroup" aria-label={t('icon.shape')}>
               {ICON_SHAPES.map(shape => (
-                <button key={shape} type="button" role="radio" aria-checked={icon.shape === shape} className={css.option} onClick={() => { change({ shape }) }}>
-                  {badge({ ...icon, shape }, 24)}
-                  <span>{t(`icon.shape.${shape}`)}</span>
+                <button key={shape} type="button" role="radio" aria-checked={icon.shape === shape} aria-label={t(`icon.shape.${shape}`)}
+                  className={css.option} onClick={() => { change({ shape }) }}>
+                  <span aria-hidden="true" className={css.optionPreview}>{badge({ ...icon, shape }, 24)}</span>
+                  <span aria-hidden="true">{t(`icon.shape.${shape}`)}</span>
                 </button>
               ))}
             </div>
@@ -192,9 +193,10 @@ export function IconPicker({ target, onSave, onClose, t }: IconPickerProps) {
             <span className={css.label}>{t('icon.style')}</span>
             <div className={css.options} role="radiogroup" aria-label={t('icon.style')}>
               {ICON_STYLES.map(style => (
-                <button key={style} type="button" role="radio" aria-checked={icon.style === style} className={css.option} onClick={() => { change({ style }) }}>
-                  {badge({ ...icon, style }, 24)}
-                  <span>{t(`icon.style.${style}`)}</span>
+                <button key={style} type="button" role="radio" aria-checked={icon.style === style} aria-label={t(`icon.style.${style}`)}
+                  className={css.option} onClick={() => { change({ style }) }}>
+                  <span aria-hidden="true" className={css.optionPreview}>{badge({ ...icon, style }, 24)}</span>
+                  <span aria-hidden="true">{t(`icon.style.${style}`)}</span>
                 </button>
               ))}
             </div>

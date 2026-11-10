@@ -59,6 +59,12 @@ export type SidebarSources = {
   settings: HostObservable<SidebarSettings>
 }
 
+/** The seat owner's add-workspace affordance, as the list last received it. */
+export interface AddWorkspaceOwner {
+  readonly canAddWorkspace: boolean
+  readonly addWorkspace: () => void
+}
+
 /** What the list reads and does beyond its seat's owner props. */
 export type SidebarInjected = {
   hooks: SidebarSources
@@ -68,6 +74,14 @@ export type SidebarInjected = {
   readonly unpin: (id: SessionId) => void
   /** Save a Workspace's chosen icon, or null to return it to its monogram. */
   readonly setWorkspaceIcon: (workspaceId: string, icon: WorkspaceIcon | null) => void
+  /**
+   * Offer the owner's add-workspace affordance to other plugins while the list is mounted.
+   * @param owner - a ref holding the latest owner props, read when the affordance is used.
+   * @returns the function that withdraws the offer.
+   */
+  readonly attach: (owner: { readonly current: AddWorkspaceOwner }) => () => void
+  /** Drop the stored icons of Workspaces that no longer exist; called only once the Workspace list has loaded. */
+  readonly pruneIcons: (liveIds: ReadonlySet<string>) => void
   /** Read and keep one per-viewer preference, such as a shelf's folding; storage that refuses keeps the default. */
   readonly preference: { readonly read: (key: string) => string | null; readonly write: (key: string, value: string) => void }
   /** The last change the person can take back, which the foot's undo notice offers. */
@@ -120,11 +134,12 @@ export function Sidebar(props: SidebarProps) {
     list, workspaces, open, startSession, canAddWorkspace, addWorkspaceAnchor, addWorkspace, renameSession, renameWorkspace,
     deleteWorkspace, searchSessions, searchRequest, searchShortcut, openSessionMenu,
     useSessionStatus, useWorkspaces, useSnoozed, useSettled, useWoke, useKept, useAutoSettleDays, useSnoozedUntil, useChatStatesReady,
-    useMenuTarget, useSettings, pin, unpin, setWorkspaceIcon, preference, t,
+    useMenuTarget, useSettings, pin, unpin, setWorkspaceIcon, pruneIcons, attach, preference, t,
   } = props
   const statuses = useSessionStatus(state => state as ReadonlyMap<SessionId, ChatStatusFacts>)
   const pinnedIds = useWorkspaces(state => state.pinnedSessionIds)
   const archivedIds = useWorkspaces(state => state.archivedSessionIds)
+  const workspacesLoaded = useWorkspaces(state => state.phase) === 'ready'
   const snoozed = useSnoozed(map => map)
   const storedSettled = useSettled(map => map)
   const kept = useKept(map => map)
@@ -135,7 +150,16 @@ export function Sidebar(props: SidebarProps) {
   const settings = useSettings(value => value)
   const chatStatesReady = useChatStatesReady(ready => ready)
   const states = chatStatesReady ? props.states() : null
+  // The latest owner props, so another plugin that adds a workspace through the list never uses a stale callback.
+  const addOwner = useRef<AddWorkspaceOwner>({ canAddWorkspace, addWorkspace })
+  addOwner.current = { canAddWorkspace, addWorkspace }
+  useEffect(() => attach(addOwner), [attach])
   const icons = useMemo(() => readWorkspaceIcons(settings.workspaceIcons), [settings.workspaceIcons])
+  // Once the Workspace list is complete, icons of Workspaces that were removed are dropped; a list still loading prunes nothing.
+  const staleIcons = workspacesLoaded && Object.keys(settings.workspaceIcons).some(id => !workspaces.some(workspace => workspace.workspaceId === id))
+  useEffect(() => {
+    if (staleIcons) pruneIcons(new Set(workspaces.map(workspace => workspace.workspaceId)))
+  }, [staleIcons, workspaces, pruneIcons])
 
   // Ages move on once a minute.
   const [now, setNow] = useState(() => Date.now())
