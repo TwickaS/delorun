@@ -125,6 +125,13 @@ describe('the stylesheets of the sidebar', () => {
   })
 })
 
+describe('the update notice', () => {
+  it('sets the release note\'s label apart from the summary in weight, keeping the summary\'s colour', () => {
+    const label = BY_FILE('UpdateNotice.module.css').filter(declaration => declaration.selector === '.summaryLabel')
+    expect(label.map(declaration => [declaration.property, declaration.value])).toEqual([['font-weight', '500']])
+  })
+})
+
 describe('a row on a coarse pointer', () => {
   const coarse = BY_FILE('ChatRow.module.css').filter(declaration => declaration.atRules.includes('@media (pointer: coarse)'))
   const value = (selector: string, property: string): string | undefined => coarse.find(declaration => declaration.selector === selector && declaration.property === property)?.value
