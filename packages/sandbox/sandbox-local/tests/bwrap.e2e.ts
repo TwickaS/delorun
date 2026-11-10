@@ -245,3 +245,39 @@ describe.skipIf(!bwrapUsable)('sandbox-local: the protected home and denied sock
     await checkRootlessDockerDenied(provider, tempDir, (file) => { tempFiles.push(file) })
   })
 })
+
+const pythonUsable = spawnSync('python3', ['-c', 'import socket; socket.AF_VSOCK'], { timeout: 5_000, stdio: 'ignore' }).status === 0
+
+/**
+ * Prints, for a vsock, an IPv4 and a Unix socket, `created` or the errno name, then what `io_uring_setup` (425 on
+ * every architecture the filter names) returned, then one line of standard input. It creates sockets without
+ * connecting them.
+ */
+const SOCKET_PROBE = `
+import ctypes, errno, socket
+for family, name in ((socket.AF_VSOCK, 'vsock'), (socket.AF_INET, 'inet'), (socket.AF_UNIX, 'unix')):
+    try:
+        socket.socket(family, socket.SOCK_STREAM).close()
+        print(name, 'created')
+    except OSError as error:
+        print(name, errno.errorcode[error.errno])
+libc = ctypes.CDLL(None, use_errno=True)
+params = ctypes.create_string_buffer(120)
+print('io_uring', 'descriptor' if libc.syscall(425, 4, params) >= 0 else errno.errorcode[ctypes.get_errno()])
+print('stdin', input())
+`
+
+describe.skipIf(!bwrapUsable)('sandbox-local: the escape filter under real bwrap', () => {
+  // While an escape directory exists, the command keeps its other sockets, standard input and exit status.
+  it('vsock-socket-denied: while an escape directory exists, a command creates no vsock socket and sets up no io_uring', async (test) => {
+    if (!pythonUsable) return test.skip('python3 with AF_VSOCK is absent on this machine')
+    const escape = await tempDir(homedir())
+    const workdir = await tempDir(homedir())
+    const sandbox = await provider({ escapeSocketDirectories: [escape] })
+    const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: workdir }
+    const confined = await sandbox.confine(['python3', '-c', SOCKET_PROBE], policy)
+    const result = spawnSync(confined.argv[0] as string, confined.argv.slice(1), { timeout: 30_000, encoding: 'utf8', input: 'kept\n' })
+    expect(result.stdout, result.stderr).toBe('vsock EAFNOSUPPORT\ninet created\nunix created\nio_uring ENOSYS\nstdin kept\n')
+    expect((await runConfined(sandbox, 'exit 7', policy)).result.status).toBe(7)
+  })
+})

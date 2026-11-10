@@ -1,12 +1,14 @@
 /**
- * `wsl-interop-denied` and `wsl-interop-landlock-refused`: under WSL with interop enabled, a command confined by the
- * sandbox Delo's start configures cannot start a Windows program by any way interop is reached, and a workspace on a
- * Windows drive stays readable and writable. The ways: the program by its `/mnt/c` path, by bare name through `PATH`,
- * as a copy in the workspace, through `/init` called directly, with `WSL_INTEROP` naming each interop socket, a direct
- * connect to each socket, and the kernel's `WSLInterop` binfmt registration, which no writable `binfmt_misc` mount exposes. Under
+ * `wsl-interop-denied`, `wsl-vsock-denied` and `wsl-interop-landlock-refused`: under WSL with interop enabled, a
+ * command confined by the sandbox Delo's start configures cannot start a Windows program by any way interop is
+ * reached, and a workspace on a Windows drive stays readable and writable. The ways: the program by its `/mnt/c` path,
+ * by bare name through `PATH`, as a copy in the workspace, through `/init` called directly, with `WSL_INTEROP` naming
+ * each interop socket, a direct connect to each socket, and the kernel's `WSLInterop` binfmt registration, which no
+ * writable `binfmt_misc` mount exposes. Under bwrap the command also cannot create a vsock socket, the transport WSL's
+ * interop runs over, nor set up io_uring, whose requests create sockets the seccomp filter does not see. Under
  * Landlock, which cannot hide the sockets, the provider refuses the wrap. The harmless program is `whoami.exe`, which
- * prints the Windows account and exits. Each case skips by name with its reason on a machine without WSL interop or
- * without bwrap.
+ * prints the Windows account and exits; the vsock case only creates a socket and connects nothing. Each case skips by
+ * name with its reason on a machine without WSL interop or without bwrap.
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs'
@@ -108,7 +110,8 @@ async function provider(): Promise<LocalSandboxProvider> {
 async function confined(sandbox: LocalSandboxProvider, command: string, workspace: string) {
   const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: workspace }
   const wrapped = await sandbox.confine(['sh', '-c', command], policy)
-  expect(wrapped.argv[0]).toBe('bwrap')
+  // Under WSL the provider starts bwrap from a shell that hands it the escape filter.
+  expect(wrapped.argv).toContain('bwrap')
   return spawnSync(wrapped.argv[0] as string, wrapped.argv.slice(1), { encoding: 'utf8', timeout: 30_000, cwd: workspace })
 }
 
@@ -176,6 +179,34 @@ describe('wsl-interop-denied: a command the bwrap sandbox confines under WSL', {
     const result = await confined(sandbox, `printf kept > ${workspace}/file && cat ${workspace}/file`, workspace)
     expect(result.status, String(result.stderr)).toBe(0)
     expect(result.stdout).toBe('kept')
+  })
+})
+
+/** Creates a vsock socket and prints the marker only once it exists; it connects nothing. */
+const VSOCK = 'import socket; socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM); print("vsock-socket-created")'
+/** Calls `io_uring_setup` (425) and prints the marker only for a descriptor; otherwise exits with the errno. */
+const IO_URING = 'import ctypes; c = ctypes.CDLL(None, use_errno=True); b = ctypes.create_string_buffer(120); '
+  + 'print("io-uring-created") if c.syscall(425, 4, b) >= 0 else exit(ctypes.get_errno())'
+/** Creates an IPv4 and a Unix socket, which the filter leaves alone. */
+const OTHER_SOCKETS = 'import socket; socket.socket(socket.AF_INET, socket.SOCK_STREAM); socket.socket(socket.AF_UNIX); print("ok")'
+
+describe('wsl-vsock-denied: a command the bwrap sandbox confines under WSL', { timeout: 120_000 }, () => {
+  it('cannot create a vsock socket, the transport interop runs over, nor set up io_uring', async (test) => {
+    requireWsl(test, true)
+    if (spawnSync('python3', ['--version'], { stdio: 'ignore', timeout: 30_000 }).status !== 0) return test.skip('python3 is absent on this machine')
+    // The host itself offers vsock, so a refusal below is the filter's.
+    expect(spawnSync('python3', ['-c', VSOCK], { encoding: 'utf8', timeout: 30_000 }).stdout).toBe('vsock-socket-created\n')
+    const sandbox = await provider()
+    const workspace = directory(tmpdir(), 'dsh-interop-workspace-')
+    // The scripts hold double quotes and no `$`, backslash or backquote, so JSON quoting is shell quoting here.
+    const python = (script: string) => confined(sandbox, `python3 -c ${JSON.stringify(script)}`, workspace)
+    const vsock = await python(VSOCK)
+    refused(vsock, 'AF_VSOCK')
+    expect(String(vsock.stderr)).toContain('Address family not supported')
+    const ioUring = await python(IO_URING)
+    expect(ioUring.status, 'io_uring_setup').toBe(38)
+    expect(ioUring.stdout).toBe('')
+    expect((await python(OTHER_SOCKETS)).stdout).toBe('ok\n')
   })
 })
 

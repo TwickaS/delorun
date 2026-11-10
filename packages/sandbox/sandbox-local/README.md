@@ -49,7 +49,7 @@ Load the sandbox service and mount the provider; the defaults below are the sele
 | `protectedHomeReadable` | `[]` | Paths under `protectedHome`, relative to it, that confined commands may still read and execute; requires `protectedHome` |
 | `deniedSockets` | `[]` | Absolute Unix socket paths that confined commands cannot connect to, on runners that express the rule |
 | `deniedSocketDirectories` | `[]` | Absolute directories that hold only sockets confined commands cannot connect to, such as Docker Desktop's control sockets; bwrap hides each directory, Seatbelt denies each socket present at the wrap |
-| `escapeSocketDirectories` | `[]` | Absolute directories whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. Each is denied like a `deniedSocketDirectories` entry, and while one exists a wrap on a runner that cannot deny socket connects (Landlock, windows-acl) refuses with `SANDBOX_UNSUPPORTED_POLICY` instead of running the command. An entry that does not exist at a wrap denies and refuses nothing. |
+| `escapeSocketDirectories` | `[]` | Absolute directories whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. Each is denied like a `deniedSocketDirectories` entry, and while one exists a wrap on a runner that cannot deny socket connects (Landlock, windows-acl) refuses with `SANDBOX_UNSUPPORTED_POLICY` instead of running the command, and bwrap installs the [escape filter](#escape-socket-directories). An entry that does not exist at a wrap denies, filters and refuses nothing. |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-sandbox-local) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -95,6 +95,13 @@ A consumer passes absolute paths: the home, the entries under it that commands s
 
 The two socket directories are Docker Desktop's under WSL; `host-services/backend.sock` there is world-writable and controls the engine. With Docker Desktop on Linux the directory is `~/.docker/desktop`, and on macOS `~/Library/Containers/com.docker.docker/Data` and `~/.docker/run`, as absolute paths.
 
+<a id="escape-socket-directories"></a>
+### Escape socket directories
+
+An `escapeSocketDirectories` entry names a directory whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. At each wrap the provider checks whether one exists. While one does, bwrap hides it like a denied socket directory and starts under a seccomp filter, and Landlock and the Windows ACL runner refuse the wrap with `SANDBOX_UNSUPPORTED_POLICY`. Where none exists, every profile is unchanged.
+
+The filter is for the host such a directory belongs to: WSL also offers a virtual-machine (`AF_VSOCK`) transport to Windows, which no mount rule hides. It refuses `socket(AF_VSOCK, …)` with `EAFNOSUPPORT` and `io_uring_setup` with `ENOSYS`, because an io_uring request creates a socket without the `socket` call. It covers x86-64 (with x32 numbering), i386, AArch64 and 32-bit Arm, and allows every other call. A 32-bit process that creates a socket through `socketcall` is refused for every family, because the filter cannot read that call's arguments. The program is written instruction by instruction in [`src/seccomp.ts`](src/seccomp.ts). bwrap reads it from descriptor 3, so the wrap starts bwrap from `/bin/sh`, which writes the program into a pipe with its `printf` builtin and keeps the command's standard input and exit status. A kernel that refuses the filter makes bwrap exit with its own `bwrap:` diagnostic before the command runs, which consumers classify as a runner failure. A configured `runnerCommand` gets neither the filter nor the refusal.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -134,6 +141,7 @@ Each runner's kernel speaks its own denial dialect, carried on every wrap as `de
 | [`src/index.ts`](src/index.ts) | Plugin entry: runner chain selection, functional probes, per-call wrap, ACL grant lifecycle |
 | [`src/profiles.ts`](src/profiles.ts) | Per-platform profile builders: bwrap mounts, Landlock grants, Seatbelt SBPL, and each runner's protected-home rules |
 | [`src/mounts.ts`](src/mounts.ts) | Mount aliases from `/proc/self/mountinfo` and macOS firmlink spellings of the protected paths |
+| [`src/seccomp.ts`](src/seccomp.ts) | The escape filter's BPF program and the shell loader that hands it to bwrap |
 
 </details>
 
@@ -175,6 +183,7 @@ These limits define when the provider is a poor fit or needs special operational
 - **The protected home under Landlock** — Landlock grants reads by directory tree, so each wrap lists the directories on the way from `/` to the home and grants their other entries: those directories cannot be listed, an entry created in them after the wrap is unreadable, and an entry removed between the wrap and the launch makes the launcher refuse the run. A consumer that sees that runner failure retries the wrap once before reporting it. Landlock has no right for connecting to a pathname socket, so denied sockets and sockets under the home stay reachable there.
 - **Socket and alias coverage** — bwrap shadows a denied socket only when it exists at the wrap, and Seatbelt denies only the listed socket paths. Aliases on btrfs, bcachefs and overlayfs may go unfound (reported as `unknown`), and a filesystem that mirrors the home under another device, such as a FUSE mirror, is not detected. Aliases are found at each wrap, so a mount added while a command runs is not covered, and no runner covers a hard link made outside the sandbox to a file under the home, nor a bind mount of a home file that was deleted or replaced since, which still reaches its old contents.
 - **Sockets recreated after a wrap** — bwrap binds `/dev/null` over the socket file that exists at the wrap; a socket removed and created again at that path, such as after a Docker engine restart, is reachable from commands wrapped before. A consumer that keeps confined commands running for long, such as a terminal or a background job, must rewrap or stop them when a denied socket is recreated.
+- **Abstract Unix sockets** — no runner denies a connect to an abstract-namespace socket: the address lies in memory a seccomp filter cannot read, and hiding them would need a network namespace, which also removes network access. A program that listens on one is reachable from confined commands, with an escape directory or without.
 - **Runner selection is cached for the provider lifetime** — installing, removing, or repairing a runner requires reloading the plugin before selection changes.
 - **`runnerCommand` is an operator assertion** — a configured custom runner skips functional probes and is assumed to implement the bwrap-compatible profile honestly; if it is itself a Bash script, its interpreter startup runs before that script applies confinement.
 

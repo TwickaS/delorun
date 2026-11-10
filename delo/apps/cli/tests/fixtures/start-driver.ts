@@ -75,7 +75,9 @@ async function probeConfinement(ctx: Context): Promise<Record<string, unknown>> 
   const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: workspace }
   const confined = await sandbox.confine(argv, policy)
   const attempt = async (command: readonly string[]): Promise<unknown> => JSON.parse((await run(command[0] ?? '', command.slice(1), { encoding: 'utf8', timeout: 30_000 })).stdout.trim())
-  return { runner: confined.argv[0], confined: await attempt(confined.argv), unconfined: await attempt(argv) }
+  // Where an escape directory exists, bwrap is started from a shell that hands it the escape filter.
+  const runner = confined.argv.includes('bwrap') ? 'bwrap' : confined.argv[0]
+  return { runner, confined: await attempt(confined.argv), unconfined: await attempt(argv) }
 }
 
 try {

@@ -571,6 +571,29 @@ describe('escape socket directories', () => {
     expect(argv.join(' ')).toContain(`--tmpfs ${dir} --remount-ro ${dir}`)
   })
 
+  it('installs the vsock seccomp filter under bwrap while one exists, and leaves the invocation stock once it is gone', async () => {
+    const dir = escapeDirectory()
+    const { sandbox } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'linux', probeBwrap: () => true })
+    const filtered = (await sandbox.confine(['true'], WW)).argv
+    expect(filtered.slice(0, 2)).toEqual(['/bin/sh', '-c'])
+    const bwrap = filtered.slice(5, -4)
+    expect(bwrap[0]).toBe('bwrap')
+    expect(bwrap.join(' ')).toContain(`--tmpfs ${dir} --remount-ro ${dir}`)
+    expect(filtered.slice(-4)).toEqual(['--seccomp', '3', '--', 'true'])
+    rmSync(dir, { recursive: true, force: true })
+    const stock = (await sandbox.confine(['true'], WW)).argv
+    expect(stock[0]).toBe('bwrap')
+    expect(stock).not.toContain('--seccomp')
+  })
+
+  it('installs no filter on Seatbelt, which denies the sockets by path', async () => {
+    const dir = escapeDirectory()
+    const { sandbox } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'darwin', seatbeltExec: '/usr/bin/sandbox-exec' })
+    const { argv } = await sandbox.confine(['true'], WW)
+    expect(argv[0]).toBe('/usr/bin/sandbox-exec')
+    expect(argv).not.toContain('--seccomp')
+  })
+
   it('refuses a wrap on a runner that cannot deny socket connects while one exists, and wraps once it is gone', async () => {
     const dir = escapeDirectory()
     const launcher = fakeLauncher()

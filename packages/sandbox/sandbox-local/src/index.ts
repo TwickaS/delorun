@@ -50,6 +50,7 @@ import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { aliasCoverage, readMountTable } from './mounts.ts'
 import type { AliasCoverage } from './mounts.ts'
 import { RUNNER_PROTECTION, bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from './profiles.ts'
+import { withSeccompFilter } from './seccomp.ts'
 import type { LocalSandboxRunner, Protection, ProtectionSettings } from './profiles.ts'
 
 export { RUNNER_PROTECTION } from './profiles.ts'
@@ -121,7 +122,9 @@ export interface Config {
    * directory `/run/WSL`, whose sockets start Windows programs. Each is denied like a {@link deniedSocketDirectories}
    * entry, and a wrap on a runner that cannot deny socket connects ({@link RUNNER_PROTECTION}), such as Landlock,
    * refuses with `SANDBOX_UNSUPPORTED_POLICY` while one of them exists, instead of running a command that could leave
-   * the sandbox through it. An entry that does not exist at a wrap denies and refuses nothing.
+   * the sandbox through it. While one exists, bwrap also installs a seccomp filter that refuses `socket(AF_VSOCK, …)`
+   * and `io_uring_setup`, because the host of such a directory, such as WSL, also offers a vsock transport that no
+   * mount rule hides. An entry that does not exist at a wrap denies, filters and refuses nothing.
    */
   escapeSocketDirectories?: string[]
 }
@@ -497,13 +500,13 @@ export class LocalSandboxProvider extends SandboxProvider {
       })
     }
     const selected = this.selectRunner(policy.mode)
-    if (this.escapeSocketDirectories.length > 0 && !RUNNER_PROTECTION[selected.runner].socketConnect) {
-      const escape = this.escapeSocketDirectories.find(directory => existsSync(directory))
-      if (escape !== undefined) {
-        throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them`)
-      }
+    const escape = this.escapeSocketDirectories.find(directory => existsSync(directory))
+    if (escape !== undefined && !RUNNER_PROTECTION[selected.runner].socketConnect) {
+      throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them`)
     }
-    const runnerArgv = this.runnerArgv(selected.runner, policy, protection)
+    const profileArgv = this.runnerArgv(selected.runner, policy, protection)
+    // Where an escape directory exists, its host also offers vsock, which no mount rule hides.
+    const runnerArgv = escape !== undefined && selected.runner === 'bwrap' ? withSeccompFilter(profileArgv) : profileArgv
     return Promise.resolve<ConfinedArgv>({
       argv: [...runnerArgv, '--', ...argv],
       enforcement: selected.enforcement,
