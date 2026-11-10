@@ -3,7 +3,9 @@
  * local sandbox provider (row `sandbox`, `@deepseek-ai/dsh-sandbox-local`) receives the canonical Delo home as
  * `protectedHome`, C1's read exemptions as `protectedHomeReadable`, and as `deniedSockets` the update channel's and
  * the supervisor's sockets under `run/<profile>/`, the active Docker context's socket with its real path, and Docker
- * Desktop's macOS sockets under `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` when present. The
+ * Desktop's macOS sockets under `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` when present, and as
+ * `deniedSocketDirectories` WSL's interop directory `/run/WSL` when present, whose sockets let a command start Windows
+ * programs outside every Linux namespace. The
  * settings travel as an overlay patch the start writes to `run/<profile>/sandbox.patch.yml` and hands to upstream's
  * profile runner; the provider's other settings in the profile's own patch are kept, its own denied sockets included.
  * A patch that sets the runner itself (`runnerCommand`, `runnerFailureSignatures`) is refused: a non-empty runner
@@ -12,7 +14,7 @@
  *
  * @module @delo/cli/sandbox-protection
  */
-import { realpathSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import { realpath, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
@@ -37,6 +39,25 @@ export interface SandboxProtection {
   readonly protectedHomeReadable: readonly string[]
   /** The sockets confined commands cannot connect to. */
   readonly deniedSockets: readonly string[]
+  /** The directories every socket in which confined commands cannot connect to. */
+  readonly deniedSocketDirectories: readonly string[]
+}
+
+/**
+ * WSL's interop directory. Each `*_interop` socket in it accepts a request to start a Windows program, which the
+ * kernel's `WSLInterop` binfmt handler sends for any executable with a Windows header, by `/mnt/c/...` path, by bare
+ * name or as a copy anywhere; the Windows process runs outside every Linux namespace, mount rule and protected home,
+ * with the person's Windows account. The handler finds a socket here whether or not `WSL_INTEROP` is set.
+ */
+export const WSL_INTEROP_DIRECTORIES = ['/run/WSL'] as const
+
+/**
+ * The interop directories that exist on this machine.
+ * @param candidates - the directories to look for.
+ * @returns the existing directories.
+ */
+function interopDirectories(candidates: readonly string[]): string[] {
+  return candidates.filter(path => statSync(path, { throwIfNoEntry: false })?.isDirectory() === true)
 }
 
 /**
@@ -93,15 +114,20 @@ async function dockerDesktopSockets(osHome: string): Promise<string[]> {
  * @param profile - the CLI profile.
  * @param env - the launch environment.
  * @param osHome - the OS home directory, under which Docker Desktop for macOS keeps its sockets.
+ * @param interop - the WSL interop directories to deny when they exist.
  * @returns the settings.
  */
-export async function sandboxProtection(home: string, profile: string, env: Readonly<Record<string, string | undefined>>, osHome: string): Promise<SandboxProtection> {
+export async function sandboxProtection(
+  home: string, profile: string, env: Readonly<Record<string, string | undefined>>, osHome: string,
+  interop: readonly string[] = WSL_INTEROP_DIRECTORIES,
+): Promise<SandboxProtection> {
   const canonical = realpathSync.native(home)
   const sockets = [updateSocketPath(canonical, profile), supervisorSocketPath(canonical, profile), ...await dockerSockets(env), ...await dockerDesktopSockets(osHome)]
   return {
     protectedHome: canonical,
     protectedHomeReadable: [...READ_EXEMPTIONS],
     deniedSockets: [...new Set(sockets)],
+    deniedSocketDirectories: interopDirectories(interop),
   }
 }
 
@@ -152,12 +178,13 @@ export async function writeSandboxOverlay(home: string, profile: string, patchPa
     throw new CliError(EXIT.failed, `delorun: ${patchPath} configures the ${SANDBOX_ROW} row with ${runnerKeys.join(' and ')}; Delo's home protection requires the provider's built-in runner selection, so remove ${runnerKeys.join(' and ')} from that row`)
   }
   const listed = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [])
-  // The person's own denied sockets stay denied; the home is Delo's.
+  // The person's own denied sockets and directories stay denied; the home is Delo's.
   const config = {
     ...own,
     protectedHome: protection.protectedHome,
     protectedHomeReadable: [...protection.protectedHomeReadable],
     deniedSockets: [...new Set([...listed(own.deniedSockets), ...protection.deniedSockets])],
+    deniedSocketDirectories: [...new Set([...listed(own.deniedSocketDirectories), ...protection.deniedSocketDirectories])],
   }
   const path = sandboxOverlayPath(home, profile)
   await writeProtectedFile(path, stringify([{ id: SANDBOX_ROW, config }]))

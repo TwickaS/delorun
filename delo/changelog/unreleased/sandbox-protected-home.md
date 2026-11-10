@@ -8,3 +8,4 @@ section: Security
 - The model can no longer offer you a file from Delo's home as a deliverable: presenting a file inside the home, or through a link that leads into it, is refused before the file is looked at, as opening it already was. A session under full access can still present any file it reaches.
 - The sandbox records which of these rules each platform cannot enforce: Linux cannot block socket connections, and Windows does not limit reads.
 - The Linux sandbox launcher refuses a grant path that names a symbolic link in any part and does not run the command, so a path swapped for a link after it was checked cannot widen what a command may touch.
+- Under WSL, a command the agent runs in the sandbox can no longer start a Windows program, by its path, by name or as a copy, so it cannot step outside the sandbox through Windows. This holds where the sandbox uses bubblewrap; the fallback sandbox on systems without bubblewrap cannot block it.

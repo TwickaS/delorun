@@ -1,16 +1,16 @@
 /**
  * The provider settings the home process gives the CLI profile's sandbox: the canonical home, C1's read exemptions,
- * both channels' sockets, the Docker context's socket with its real path, and Docker Desktop's macOS sockets when
- * present; and the overlay that keeps the row's own plain settings and refuses expressions it cannot carry over.
+ * both channels' sockets, the Docker context's socket with its real path, Docker Desktop's macOS sockets when
+ * present, and WSL's interop directory when present; and the overlay that keeps the row's own plain settings and refuses expressions it cannot carry over.
  */
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { DOCKER_DESKTOP_SOCKETS, sandboxProtection, writeSandboxOverlay } from '../src/sandbox-protection.ts'
+import { DOCKER_DESKTOP_SOCKETS, sandboxProtection, WSL_INTEROP_DIRECTORIES, writeSandboxOverlay } from '../src/sandbox-protection.ts'
 
 let base: string | undefined
 const servers: Server[] = []
@@ -43,11 +43,12 @@ describe('the CLI profile\'s sandbox protection', () => {
     symlinkSync(engine, link)
     const linkedHome = join(base ?? '', 'linked-home')
     symlinkSync(home, linkedHome)
-    const protection = await sandboxProtection(linkedHome, 'default', { DOCKER_HOST: `unix://${link}`, DOCKER_CONFIG: join(base ?? '', 'no-config') }, osHome)
+    const protection = await sandboxProtection(linkedHome, 'default', { DOCKER_HOST: `unix://${link}`, DOCKER_CONFIG: join(base ?? '', 'no-config') }, osHome, [join(base ?? '', 'no-interop')])
     expect(protection).toEqual({
       protectedHome: home,
       protectedHomeReadable: [...READ_EXEMPTIONS],
       deniedSockets: [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock'), link, engine],
+      deniedSocketDirectories: [],
     })
   })
 
@@ -69,14 +70,32 @@ describe('the CLI profile\'s sandbox protection', () => {
     expect(deniedSockets).not.toContain(join(osHome, plain))
   })
 
+  it('denies WSL\'s interop directory when it exists, and only then', async () => {
+    const { home, osHome } = setUp()
+    const interop = join(base ?? '', 'run-wsl')
+    mkdirSync(interop)
+    writeFileSync(join(base ?? '', 'not-a-directory'), '')
+    const env = { DOCKER_CONFIG: join(base ?? '', 'no-config'), DOCKER_HOST: 'tcp://127.0.0.1:2375' }
+    const candidates = [interop, join(base ?? '', 'absent'), join(base ?? '', 'not-a-directory')]
+    expect((await sandboxProtection(home, 'default', env, osHome, candidates)).deniedSocketDirectories).toEqual([interop])
+    expect(WSL_INTEROP_DIRECTORIES).toEqual(['/run/WSL'])
+    const defaults = await sandboxProtection(home, 'default', env, osHome)
+    expect(defaults.deniedSocketDirectories).toEqual(existsSync('/run/WSL') ? ['/run/WSL'] : [])
+  })
+
   it('keeps the row\'s own plain settings in the overlay and refuses expressions it cannot carry over', async () => {
     const { home, osHome } = setUp()
-    const protection = await sandboxProtection(home, 'default', { DOCKER_CONFIG: join(base ?? '', 'no-config'), DOCKER_HOST: 'tcp://127.0.0.1:2375' }, osHome)
+    const interop = join(base ?? '', 'run-wsl')
+    mkdirSync(interop)
+    const protection = await sandboxProtection(home, 'default', { DOCKER_CONFIG: join(base ?? '', 'no-config'), DOCKER_HOST: 'tcp://127.0.0.1:2375' }, osHome, [interop])
     const patch = join(base ?? '', 'cordis.patch.yml')
-    writeFileSync(patch, '- id: sandbox\n  config:\n    deniedSockets: [/elsewhere.sock]\n    extra: 1\n')
+    writeFileSync(patch, '- id: sandbox\n  config:\n    deniedSockets: [/elsewhere.sock]\n    deniedSocketDirectories: [/elsewhere, ' + interop + ']\n    extra: 1\n')
     const overlay = await writeSandboxOverlay(home, 'default', patch, protection)
     const [entry] = parse(readFileSync(overlay, 'utf8')) as [{ id: string, config: Record<string, unknown> }]
-    expect(entry).toEqual({ id: 'sandbox', config: { extra: 1, protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS], deniedSockets: ['/elsewhere.sock', ...protection.deniedSockets] } })
+    expect(entry).toEqual({ id: 'sandbox', config: {
+      extra: 1, protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS], deniedSockets: ['/elsewhere.sock', ...protection.deniedSockets],
+      deniedSocketDirectories: ['/elsewhere', interop],
+    } })
     writeFileSync(patch, '- id: sandbox\n  config:\n    protectedHome: !!js process.env.HOME\n')
     await expect(writeSandboxOverlay(home, 'default', patch, protection)).rejects.toThrow(/with expressions/)
   })
@@ -93,6 +112,9 @@ describe('the CLI profile\'s sandbox protection', () => {
     writeFileSync(patch, '- id: sandbox\n  config:\n    probeTimeoutMs: 5000\n')
     const overlay = await writeSandboxOverlay(home, 'default', patch, protection)
     const [entry] = parse(readFileSync(overlay, 'utf8')) as [{ id: string, config: Record<string, unknown> }]
-    expect(entry).toEqual({ id: 'sandbox', config: { probeTimeoutMs: 5000, protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS], deniedSockets: protection.deniedSockets } })
+    expect(entry).toEqual({ id: 'sandbox', config: {
+      probeTimeoutMs: 5000, protectedHome: home, protectedHomeReadable: [...READ_EXEMPTIONS], deniedSockets: protection.deniedSockets,
+      deniedSocketDirectories: protection.deniedSocketDirectories,
+    } })
   })
 })

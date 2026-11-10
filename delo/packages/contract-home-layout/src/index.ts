@@ -240,10 +240,10 @@ export interface HomeLockRecord {
 }
 
 /** A confinement rule that Delo's sandbox profiles add to upstream's dialects. */
-export type ConfinementRule = 'home-write' | 'home-read' | 'token-read' | 'home-connect' | 'docker-connect'
+export type ConfinementRule = 'home-write' | 'home-read' | 'token-read' | 'home-connect' | 'docker-connect' | 'wsl-interop'
 
 /** The confinement rules, in the contract's order. */
-export const CONFINEMENT_RULES: readonly ConfinementRule[] = ['home-write', 'home-read', 'token-read', 'home-connect', 'docker-connect']
+export const CONFINEMENT_RULES: readonly ConfinementRule[] = ['home-write', 'home-read', 'token-read', 'home-connect', 'docker-connect', 'wsl-interop']
 
 /** A sandbox dialect, or `none` when commands run without one. */
 export type SandboxDialect = 'bwrap' | 'landlock' | 'seatbelt' | 'windows-acl' | 'none'
