@@ -1067,14 +1067,14 @@
     {
       "path": "packages/client/web/src/page-policy.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): new client-boot module. On a page with a nonced `<script>` it stamps that nonce on every `<style>` element `document.createElement` creates, so plugin and library styles apply under the policy, and puts zod in jitless mode, so zod never probes string evaluation. A page without a nonced script is unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
-      "sha256": "ec16900c9e4a83975592ee27815ffb16f699aa6a2dcff53bba7d11e9b64884c1"
+      "reason": "Reach listener Content Security Policy (C4): new client-boot module. On a page with a nonced `<script>` it stamps that nonce on every `<style>` element `document.createElement` creates, so plugin and library styles apply under the policy, and puts zod in jitless mode, so zod never probes string evaluation. A page without a nonced script is unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. Lead verdict (2026-11-10): kept after a re-entrancy guard; the sanitiser's own inert parse skips a second pass, and every string a plugin assigns to a sink is still sanitised.",
+      "sha256": "246b515accd1e9c3752e0cf93168e02392ac289da44997aa3d1e8fe1b9a0aed8"
     },
     {
       "path": "packages/client/web/tests/page-policy.client.spec.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): covers the page policy module. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
-      "sha256": "b1b21e3004a64019500f6ed24f86d40198ac0037e46aa40ca73554f605db114a"
+      "reason": "Reach listener Content Security Policy (C4): covers the page policy module. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. Lead verdict (2026-11-10): kept after a re-entrancy guard; the sanitiser's own inert parse skips a second pass, and every string a plugin assigns to a sink is still sanitised.",
+      "sha256": "fedb178a92940a035c832de5d6bc99dc22dc2b7306fe9e67f0292437d463e557"
     },
     {
       "path": "packages/client/web/tsdown.config.ts",
@@ -1535,8 +1535,8 @@
     {
       "path": "packages/web/web-fetch-http/src/provider.ts",
       "class": "security",
-      "reason": "web_fetch guard seam (A100): the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted; without it the provider is byte-identical to upstream.",
-      "sha256": "7a5832438dcaa38f50232ad764102457740a0467ccda9232f3f6337baa3b88aa"
+      "reason": "web_fetch guard seam: the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted, through `node:dns/promises` so the worker packer's stub serves the preview; without a guard the provider fetches as upstream does. Lead verdict: kept; the DNS module change resolves the same addresses and moves no refusal (2026-11-10).",
+      "sha256": "ecda656e43b1ec29af844a146d48f14411aa443db4cdc319ee831460e7df7b35"
     },
     {
       "path": "pnpm-workspace.yaml",
@@ -1897,6 +1897,24 @@
       "class": "security",
       "reason": "C1's vsock filter (`vsock`): a hand-written classic BPF program, the `struct sock_filter` bytes of a fixed instruction list assembled with forward jumps only, that refuses `socket(AF_VSOCK, …)` with EAFNOSUPPORT (reading only the family's low 32 bits, as the kernel does), `io_uring_setup` with ENOSYS, and on i386 and 32-bit Arm the `SYS_SOCKET` form of `socketcall`, on x86-64 (x32 numbers included), i386, AArch64 and Arm; it allows every other call of those and refuses every call of any other architecture with ENOSYS. `withSeccompFilter` starts bwrap from `/bin/sh`, which writes the program into a pipe on descriptor 9 with its `printf` builtin and passes `--seccomp 9`, keeping the command's standard input on 0 through descriptor 8, its exit status and its descriptors 3 to 7; a missing `printf` or a closed standard input exits 1 with a `bwrap:` line, the runner-failure signature. `vsockOffered` reads `/proc/net/protocols` for `AF_VSOCK` and counts an unreadable list as offered. Nothing is written to disk, and the parity composition is unchanged where the kernel offers no vsock. Lead verdict: approved, after an independent review and its fixes (2026-11-10).",
       "sha256": "469f19e8b89fa3665a4a8226bf0bd7aa52c972b7a232dbed6b6b9b17e4faa9d2"
+    },
+    {
+      "path": "packages/experimental/webworker-runtime/src/node/builtin_modules/mock/net.ts",
+      "class": "delo-feature",
+      "feature": "studio-seams",
+      "reason": "The WebWorker preview's `node:net` gains a constructible `BlockList` whose `check` throws, so Delorun's client connection module, which builds its loopback list while it loads, loads in the preview."
+    },
+    {
+      "path": "packages/experimental/webworker-runtime/src/transport/tunnel.ts",
+      "class": "delo-feature",
+      "feature": "studio-seams",
+      "reason": "The browser preview's tunnel reads a GET that a registered web resource owns through `WebServer.readResource` for the browser Peer, because a browser drops the Host header when it builds the request; paths no resource owns go through the route lane as upstream does. The preview worker only, never the Host."
+    },
+    {
+      "path": "packages/experimental/webworker-runtime/src/worker-host.ts",
+      "class": "delo-feature",
+      "feature": "studio-seams",
+      "reason": "The browser preview's worker mounts an authenticator that admits the browser Peer for requests that already passed the unchanged Host and Origin fence, so Delorun's fenced plugin bundles and client event stream load in the preview. The preview worker only, never the Host."
     }
   ],
   "retired": []
