@@ -7,6 +7,8 @@
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
+import { writeProtectedFile } from '@delo/home'
 import { Document, parse, parseDocument, stringify } from 'yaml'
 import { CliError, EXIT } from '../exit.ts'
 
@@ -17,28 +19,34 @@ export const CREDENTIALS_FILENAME = '.credentials.yaml'
 const CREDENTIALS_VERSION = 1
 
 /**
- * Store a model key under a credential reference in upstream's credentials document, at mode 0600. The value is
- * written only to that file and never reaches an error message.
- * @param home - the Delo home, which is upstream's `DSH_HOME`.
+ * Store a model key under a credential reference in upstream's credentials document, at mode 0600. The document is
+ * read and replaced while holding upstream's writer lock for it (`withFileLock`, the lock the Host's credentials
+ * provider takes), so a concurrent writer's change is not lost. The replacement goes through the protected-file
+ * writer: a temporary file with a random name, created exclusively at 0600 without following a symbolic link, flushed,
+ * renamed over the document, and the directory flushed. A stale or planted sibling file therefore never receives the
+ * key, and a crash before the rename leaves the document as it was. The value is written only to that file and never
+ * reaches an error message.
+ * @param home - the Delo home, which is upstream's `DSH_HOME`; it must exist.
  * @param name - the reference name, the environment variable the provider reads.
  * @param value - the key.
- * @throws {CliError} `EXIT.failed` when the existing document is not one upstream reads.
+ * @returns when the document is replaced.
+ * @throws {CliError} `EXIT.failed` when the existing document is not one upstream reads; it is left unchanged.
  */
-export function storeCredential(home: string, name: string, value: string): void {
+export async function storeCredential(home: string, name: string, value: string): Promise<void> {
   const path = join(home, CREDENTIALS_FILENAME)
-  const temporary = `${path}.tmp`
-  let document: Document
-  if (existsSync(path)) {
-    document = parseDocument(readFileSync(path, 'utf8'))
-    if (document.errors.length > 0 || !document.has('version')) {
-      throw new CliError(EXIT.failed, `delorun setup: ${path} is not a credentials document upstream reads; it was not changed`)
+  await withFileLock(path, async () => {
+    let document: Document
+    if (existsSync(path)) {
+      document = parseDocument(readFileSync(path, 'utf8'))
+      if (document.errors.length > 0 || !document.has('version')) {
+        throw new CliError(EXIT.failed, `delorun setup: ${path} is not a credentials document upstream reads; it was not changed`)
+      }
+    } else {
+      document = new Document({ version: CREDENTIALS_VERSION, refs: {} })
     }
-  } else {
-    document = new Document({ version: CREDENTIALS_VERSION, refs: {} })
-  }
-  document.setIn(['refs', name], value)
-  writeFileSync(temporary, document.toString(), { mode: 0o600 })
-  renameSync(temporary, path)
+    document.setIn(['refs', name], value)
+    await writeProtectedFile(path, document.toString())
+  })
 }
 
 /** One row of a profile patch: an upstream row's id and the config keys setup sets on it. */

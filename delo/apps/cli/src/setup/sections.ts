@@ -256,7 +256,7 @@ export const keySection: SetupSection = {
   apply(context, answers) {
     if (answers.modelProvider.credential.source === 'prompt') {
       if (context.secret === undefined) throw new CliError(EXIT.failed, 'delorun setup: the model key was not entered; run delorun setup in a terminal to finish')
-      storeCredential(context.home, SETUP_DEFAULT_CREDENTIAL_VARIABLE, context.secret)
+      return storeCredential(context.home, SETUP_DEFAULT_CREDENTIAL_VARIABLE, context.secret).then(() => undefined)
     }
     return Promise.resolve(undefined)
   },
