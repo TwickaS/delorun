@@ -432,7 +432,7 @@ export class RuntimeStore {
     if (fileSystem === undefined) return
     if (write === 'changed') {
       const record = await readIdentityRecord(this.paths.identityRecord(version))
-      const unchanged = record !== undefined && recordBound(record, this.binding(version, release, fileSystem)) && record.files.every((identity, index) => identity === examined.identities[index])
+      const unchanged = record !== undefined && recordBound(record, await this.binding(version, release, fileSystem)) && record.files.every((identity, index) => identity === examined.identities[index])
       if (unchanged) return
     }
     await this.refreshRecord(version, release, { identities: examined.identities, capturedAt }, Number(capturedAt / NS_PER_MS), fileSystem)
@@ -444,9 +444,17 @@ export class RuntimeStore {
    * @param release - its verified release files.
    * @param fileSystem - the installation's trusted file system.
    * @returns the binding.
+   * @throws {RuntimeStoreError} `RUNTIME_CHANGED` when the installation's directory cannot be read.
    */
-  private binding(version: RuntimeVersion, release: VerifiedRelease, fileSystem: number): RecordBinding {
-    return { version, platform: this.paths.platform, fileList: this.listDigest(release), manifest: release.manifestSha256, rootInode: String(lstatSync(this.paths.version(version), { bigint: true }).ino), fileSystem, length: release.files.files.length }
+  private async binding(version: RuntimeVersion, release: VerifiedRelease, fileSystem: number): Promise<RecordBinding> {
+    const directory = this.paths.version(version)
+    let stats
+    try {
+      stats = lstatSync(directory, { bigint: true })
+    } catch (error) {
+      throw new RuntimeStoreError('RUNTIME_CHANGED', directory, `runtime ${version} cannot be checked: ${(error as Error).message}`, await this.remediesFor(version), { cause: error })
+    }
+    return { version, platform: this.paths.platform, fileList: this.listDigest(release), manifest: release.manifestSha256, rootInode: String(stats.ino), fileSystem, length: release.files.files.length }
   }
 
   /**
@@ -464,7 +472,7 @@ export class RuntimeStore {
     const fileSystem = await trustedFileSystem(directory)
     if (fileSystem === undefined) return this.fullCheck(version, release, 'always')
     const record = await readIdentityRecord(this.paths.identityRecord(version))
-    if (record === undefined || !recordBound(record, this.binding(version, release, fileSystem)) || fullCheckDue(record, Date.now(), fullCheckDays)) return this.fullCheck(version, release, 'always')
+    if (record === undefined || !recordBound(record, await this.binding(version, release, fileSystem)) || fullCheckDue(record, Date.now(), fullCheckDays)) return this.fullCheck(version, release, 'always')
     const capturedAt = nowNs()
     const examined = await this.examine(version, release, { identities: record.files, capturedAt: BigInt(record.capturedAt) * NS_PER_MS })
     if (examined.hashed > 0) await this.refreshRecord(version, release, { identities: examined.identities, capturedAt }, record.fullCheckAt, fileSystem)
@@ -503,8 +511,11 @@ export class RuntimeStore {
     try {
       await withStoreLock(this.paths.lock, 0, () => this.writeRecord(version, release, recorded, fullCheckAt, fileSystem))
     } catch (error) {
-      // STORE_BUSY: another store operation holds the lock, which a start does not wait for.
-      this.options.logger.info('the runtime store left its runtime check unrecorded while another operation held store.lock', { err: error })
+      if (isStoreError(error, 'STORE_BUSY')) {
+        this.options.logger.info('the runtime store left its runtime check unrecorded while another operation held store.lock', { err: error })
+      } else {
+        this.options.logger.warn('the runtime store could not take store.lock to record its runtime check; the next start checks every file again', { err: error, data: { lock: this.paths.lock } })
+      }
     }
   }
 

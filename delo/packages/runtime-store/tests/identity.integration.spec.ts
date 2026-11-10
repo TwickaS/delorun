@@ -135,6 +135,21 @@ function replaceStatfs(replacement: (path: string) => Promise<{ readonly type: n
   })
 }
 
+/**
+ * Replace `node:fs`'s `lstatSync` for the spec.
+ * @param replacement - the replacement, given the real function.
+ */
+function replaceLstat(replacement: (real: typeof lstatSync) => typeof lstatSync): void {
+  const builtin = createRequire(import.meta.url)('node:fs') as { lstatSync: typeof lstatSync }
+  const real = builtin.lstatSync
+  builtin.lstatSync = replacement(real)
+  syncBuiltinESMExports()
+  onTestFinished(() => {
+    builtin.lstatSync = real
+    syncBuiltinESMExports()
+  })
+}
+
 describe('a start with a settled record', () => {
   it('hashes nothing and leaves the record when every identity matches', async () => {
     await settledInstall()
@@ -193,12 +208,52 @@ describe('a start with a settled record', () => {
     expect(after.capturedAt).toBeGreaterThan(before.capturedAt)
   })
 
+  it('re-hashes a file that reports another device than the installation, whose identity otherwise matches', async () => {
+    await settledInstall()
+    forgeRecord()
+    const target = file(TARGET)
+    replaceLstat(real => ((path: string, options?: object) => {
+      const stats = real(path, options as { bigint: true })
+      return path === target && typeof stats.dev === 'bigint' ? Object.assign(Object.create(Object.getPrototypeOf(stats) as object) as BigIntStats, stats, { dev: stats.dev + 1n }) : stats
+    }) as typeof lstatSync)
+    expect((await refusal(launch())).message).toContain(`${TARGET} (sha256)`)
+  })
+
   it('re-hashes a racy entry, whose change time is within 2 s of the capture, until a capture leaves it behind', async () => {
     await settledInstall()
     const record = forgeRecord()
     record.capturedAt = Number(lstatSync(file(TARGET), { bigint: true }).ctimeNs / 1_000_000n) + 1_000
     writeRecord(record)
     expect((await refusal(launch())).message).toContain(`${TARGET} (sha256)`)
+  })
+
+  it('logs a store.lock it cannot take for another reason than a holder at warn, and starts', async () => {
+    await settledInstall()
+    chmodSync(file('node/LICENSE'), 0o555)
+    const runtimes = join(fixture.home, 'runtimes')
+    chmodSync(runtimes, 0o500)
+    try {
+      await expect(launch()).resolves.toMatchObject({ version: V1 })
+    } finally {
+      chmodSync(runtimes, 0o700)
+    }
+    expect(fixture.logger.records.some(entry => entry.level === 'warn' && entry.msg.includes('could not take store.lock'))).toBe(true)
+    expect(fixture.logger.records.some(entry => entry.level === 'info')).toBe(false)
+  })
+
+  it('refuses with RUNTIME_CHANGED when the installation vanishes while the start binds its record', async () => {
+    await settledInstall()
+    const away = join(fixture.home, 'staging', 'away')
+    replaceStatfs(async () => {
+      chmodSync(installation(), 0o700)
+      renameSync(installation(), away)
+      return Promise.resolve({ type: 0xEF53 })
+    })
+    try {
+      expect((await refusal(launch())).message).toContain('cannot be checked')
+    } finally {
+      renameSync(away, installation())
+    }
   })
 
   it('leaves the record unwritten while another operation holds store.lock', async () => {
@@ -265,6 +320,7 @@ describe('the documented limit and the full hash', () => {
     ['older than the interval', (record: RecordJson) => { record.fullCheckAt = Date.now() - 8 * DAY_MS }, 7],
     ['later than the clock', (record: RecordJson) => { record.fullCheckAt = Date.now() + DAY_MS }, 7],
     ['any age, with an interval of 0', () => undefined, 0],
+    ['recent, with a capture time later than the clock', (record: RecordJson) => { record.fullCheckAt = Date.now() - 1_000; record.capturedAt = Date.now() + DAY_MS }, 7],
   ])('c02-start-periodic-full-hash: a last full pass %s makes the start hash every file', async (_case, change, days) => {
     await settledInstall()
     const record = forgeRecord()
@@ -279,6 +335,14 @@ describe('the documented limit and the full hash', () => {
     record.fullCheckAt = Date.now() - 8 * DAY_MS
     writeRecord(record)
     await expect(launch(30)).resolves.toMatchObject({ version: V1 })
+  })
+
+  it('c02-start-missing-record-hashes-every-file: without a record, a changed file stops the start', async () => {
+    await settledInstall()
+    rmSync(recordPath())
+    changeInPlace(TARGET)
+    expect((await refusal(launch())).message).toContain(`${TARGET} (sha256)`)
+    expect(existsSync(recordPath())).toBe(false)
   })
 
   it('a missing record makes the start hash every file and write a new record', async () => {

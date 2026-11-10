@@ -106,6 +106,8 @@ export interface HomeFixture {
   readonly token: string
   /** A file under the readable `runtimes/` entry. */
   readonly runtimeFile: string
+  /** A runtime identity record under `trust/runtime-files/`, outside every readable entry. */
+  readonly identityRecord: string
   /** A listening channel socket under `run/`, named short so the path fits macOS's 104-byte limit in a temp area. */
   readonly channelSocket: string
   /** A listening fixture ssh-agent socket outside the home. */
@@ -125,13 +127,15 @@ export interface HomeFixture {
 export async function homeFixture(directory: DirectoryFactory, base: string = homedir()): Promise<HomeFixture> {
   const root = realpathSync.native(await directory(base))
   const home = join(root, 'h')
-  for (const path of ['secrets/home-auth', 'run', 'runtimes/0.1.0', 'skills']) mkdirSync(join(home, path), { recursive: true, mode: 0o700 })
+  for (const path of ['secrets/home-auth', 'run', 'runtimes/0.1.0', 'skills', 'trust/runtime-files']) mkdirSync(join(home, path), { recursive: true, mode: 0o700 })
   const secret = join(home, 'secrets', 'home-auth', 'device.key')
   writeFileSync(secret, 'fixture-key\n', { mode: 0o600 })
   const token = join(home, 'run', 'start-token')
   writeFileSync(token, 'fixture-token\n', { mode: 0o600 })
   const runtimeFile = join(home, 'runtimes', '0.1.0', 'runtime.txt')
   writeFileSync(runtimeFile, 'runtime\n')
+  const identityRecord = join(home, 'trust', 'runtime-files', 'delorun-0.1.0-linux-x64.json')
+  writeFileSync(identityRecord, 'identity\n', { mode: 0o600 })
   const workspace = join(root, 'w')
   mkdirSync(workspace)
   const channelSocket = await listen(join(home, 'run', 'u.sock'))
@@ -144,7 +148,7 @@ export async function homeFixture(directory: DirectoryFactory, base: string = ho
     join(root, 'parent-alias', 'h', 'secrets', 'home-auth', 'device.key'),
     join(root, 'secrets-alias', 'home-auth', 'device.key'),
   ]
-  return { home, secret, token, runtimeFile, channelSocket, agentSocket, workspace, aliases }
+  return { home, secret, token, runtimeFile, identityRecord, channelSocket, agentSocket, workspace, aliases }
 }
 
 /**
@@ -171,6 +175,7 @@ export async function checkHomeReadDenied(make: ProviderFactory, directory: Dire
   const provider = await make(protectionConfig(fixture))
   expect(await probe(provider, atHome, 'read', fixture.secret)).not.toBe('ok')
   expect(await probe(provider, atHome, 'read', fixture.token)).not.toBe('ok')
+  expect(await probe(provider, atHome, 'read', fixture.identityRecord)).not.toBe('ok')
   expect(await probe(provider, atHome, 'list', join(fixture.home, 'secrets'))).not.toBe('ok')
   for (const alias of fixture.aliases) expect(await probe(provider, atHome, 'read', alias)).not.toBe('ok')
   expect(await probe(provider, atHome, 'read', fixture.runtimeFile)).toBe('ok')
@@ -178,8 +183,9 @@ export async function checkHomeReadDenied(make: ProviderFactory, directory: Dire
 }
 
 /**
- * Confined commands cannot create, change or delete a file under the home, in a read-only workspace at the OS home
- * and in a writable workspace beside the home, and the home's files stay unchanged.
+ * Confined commands cannot create, change or delete a file under the home, a runtime identity record under
+ * `trust/runtime-files/` included, in a read-only workspace at the OS home and in a writable workspace beside the
+ * home, and the home's files stay unchanged.
  * @param make - the provider factory.
  * @param directory - the fixture directory factory.
  * @param base - where the fixture is created; under the OS temporary directory the home lies inside a temp area
@@ -198,9 +204,13 @@ export async function checkHomeWriteDenied(make: ProviderFactory, directory: Dir
     expect(await probe(provider, policy, 'create', planted)).not.toBe('ok')
     expect(await probe(provider, policy, 'change', fixture.runtimeFile)).not.toBe('ok')
     expect(await probe(provider, policy, 'delete', fixture.secret)).not.toBe('ok')
+    expect(await probe(provider, policy, 'change', fixture.identityRecord)).not.toBe('ok')
+    expect(await probe(provider, policy, 'create', join(fixture.home, 'trust', 'runtime-files', 'planted.json'))).not.toBe('ok')
   }
   expect(existsSync(planted)).toBe(false)
+  expect(existsSync(join(fixture.home, 'trust', 'runtime-files', 'planted.json'))).toBe(false)
   expect(readFileSync(fixture.runtimeFile, 'utf8')).toBe('runtime\n')
+  expect(readFileSync(fixture.identityRecord, 'utf8')).toBe('identity\n')
   expect(readFileSync(fixture.secret, 'utf8')).toBe('fixture-key\n')
   // The writable workspace beside the home stays writable.
   expect(await probe(provider, policies[1]!, 'create', join(fixture.workspace, 'allowed'))).toBe('ok')

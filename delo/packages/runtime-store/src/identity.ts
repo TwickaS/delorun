@@ -35,11 +35,12 @@ const NS_PER_MS = 1_000_000n
 
 /**
  * The Linux file systems (`statfs` magic numbers) whose change times only the local kernel sets: ext2, ext3 and ext4
- * (one number), XFS, Btrfs, F2FS, tmpfs and overlayfs. Every other file system, macOS's and Windows' included, gets the
- * full hash at every start: NFS, SMB, FUSE, 9p and WSL's drvfs, and virtiofs report times another party chooses, and
- * NTFS lets a file's owner set its change time.
+ * (one number), XFS, Btrfs, F2FS and tmpfs. Every other file system, macOS's and Windows' included, gets the full hash
+ * at every start: NFS, SMB, FUSE, 9p and WSL's drvfs, and virtiofs report times another party chooses, NTFS lets a
+ * file's owner set its change time, and overlayfs reports its own type whatever its lower layers are, so an NFS or
+ * FUSE lower layer would pass for a local one.
  */
-const TRUSTED_FILE_SYSTEMS: ReadonlySet<number> = new Set([0xEF53, 0x58465342, 0x9123683E, 0xF2F52010, 0x01021994, 0x794C7630])
+const TRUSTED_FILE_SYSTEMS: ReadonlySet<number> = new Set([0xEF53, 0x58465342, 0x9123683E, 0xF2F52010, 0x01021994])
 
 const IDENTITY = /^\d+:\d+:\d+:\d+:\d+$/u
 const SHA256 = /^[0-9a-f]{64}$/u
@@ -204,14 +205,14 @@ export function recordBound(record: IdentityRecord, binding: RecordBinding): boo
 
 /**
  * Whether the pass that hashes every file is due: the interval has passed since the last one, or the clock reads
- * earlier than it.
+ * earlier than the last full pass or the record's capture time, either of which a clock set back leaves ahead of it.
  * @param record - the record.
  * @param now - the clock, in milliseconds since the epoch.
  * @param days - the interval in whole days; 0 makes it due at every start.
  * @returns true when the start hashes every file.
  */
 export function fullCheckDue(record: IdentityRecord, now: number, days: number): boolean {
-  return now < record.fullCheckAt || now - record.fullCheckAt >= days * 86_400_000
+  return now < Math.max(record.fullCheckAt, record.capturedAt) || now - record.fullCheckAt >= days * 86_400_000
 }
 
 /**
