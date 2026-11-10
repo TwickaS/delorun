@@ -139,7 +139,9 @@
 # service this row provides; without the row, a turn that starts during the
 # wait is counted and the wait lasts until it ends. `holdUntilChecked` makes
 # the first step of every turn wait until `delorun` has checked the booted
-# Host's rows and services (C19), so no turn starts before that check.
+# Host's rows and services (C19), so no turn starts before that check; a turn
+# that waits longer than `checkWaitSeconds` (60 by default) ends with
+# START_CHECK_PENDING, which says to start Delo with `delorun start`.
 - insert:
     - id: delo-update-gate
       name: '@delo/bundle-local/update-gate'

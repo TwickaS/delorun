@@ -10,9 +10,9 @@ import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deep
 import { createUserMessage, LlmAdapter, ToolCallId, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as UpdateGate from '../src/update-gate.ts'
-import { UPDATE_PENDING, UPDATE_PENDING_MESSAGE, UpdatePendingError } from '../src/update-gate.ts'
+import { START_CHECK_PENDING, startCheckPendingMessage, UPDATE_PENDING, UPDATE_PENDING_MESSAGE, UpdatePendingError } from '../src/update-gate.ts'
 
 const usage = { type: 'usage', usage: { inputTokens: 10, outputTokens: 5 } } as const
 
@@ -65,9 +65,10 @@ afterEach(async () => {
  * A loop with the plugin mounted, a scripted model and a `hold` tool that holds the gate.
  * @param enabled - the C16 switch.
  * @param holdUntilChecked - the start hold.
+ * @param checkWaitSeconds - the bound of the start hold's wait.
  * @returns the context, the agent, the adapter, a run helper and the held flag.
  */
-async function setup(enabled: boolean, holdUntilChecked = false) {
+async function setup(enabled: boolean, holdUntilChecked = false, checkWaitSeconds = 60) {
   const ctx = context = new Context()
   await mountAgentLoopTestDependencies(ctx)
   // A pre-step listener mounted before the gate: a refused turn must not reach it.
@@ -76,7 +77,7 @@ async function setup(enabled: boolean, holdUntilChecked = false) {
     reached.push(step)
     return next()
   })
-  const gate = ctx.plugin(UpdateGate, { enabled, holdUntilChecked })
+  const gate = ctx.plugin(UpdateGate, { enabled, holdUntilChecked, checkWaitSeconds })
   await gate
   const state = { held: false }
   ctx.tools.register(defineTool({
@@ -137,7 +138,7 @@ describe('the update gate with its switch on', () => {
   })
 
   it('is held while any attached source is held, and a detached source no longer counts', () => {
-    const service = new UpdateGate.UpdateTurnGateService(new Context(), { enabled: true, holdUntilChecked: false })
+    const service = new UpdateGate.UpdateTurnGateService(new Context(), { enabled: true, holdUntilChecked: false, checkWaitSeconds: 60 })
     expect(service.held).toBe(false)
     const quiet = service.attach(() => false)
     const busy = service.attach(() => true)
@@ -186,6 +187,58 @@ describe('the update gate\'s start hold', () => {
     expect(reached).toEqual([])
   })
 
+  it('ends a turn that waits past the bound as an error with the start-check message, without a model request', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { agent, adapter, reached, endings } = await setup(true, true, 5)
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Hello.' }], source: { kind: 'user' } }))
+      await vi.advanceTimersByTimeAsync(4999)
+      expect(endings()).toEqual([])
+      await vi.advanceTimersByTimeAsync(1)
+      await agent.whenIdle()
+      expect(endings()).toEqual([{ kind: 'error', error: { message: startCheckPendingMessage(5), code: 'UNKNOWN' } }])
+      expect(startCheckPendingMessage(5)).toContain('delorun start')
+      expect(startCheckPendingMessage(5).startsWith(`${START_CHECK_PENDING}: `)).toBe(true)
+      expect(adapter.requests).toBe(0)
+      expect(reached).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lets a turn through when the release comes before the bound, and the bound then never fires', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { ctx, agent, adapter, endings } = await setup(true, true, 5)
+      adapter.script.push(answer)
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Hello.' }], source: { kind: 'user' } }))
+      await vi.advanceTimersByTimeAsync(4000)
+      ctx.deloTurnGate.release()
+      await agent.whenIdle()
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(endings()).toEqual([{ kind: 'completed' }])
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('still ends an aborted turn while it waits, and clears the bound', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { agent, adapter, endings } = await setup(true, true, 5)
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Hello.' }], source: { kind: 'user' } }))
+      await vi.advanceTimersByTimeAsync(1000)
+      agent.cancel({ kind: 'user' })
+      await agent.whenIdle()
+      expect(adapter.requests).toBe(0)
+      expect(JSON.stringify(endings())).not.toContain(START_CHECK_PENDING)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('lets turns run at once when the hold is off, the plugin\'s default', async () => {
     const { agent, adapter, run, endings } = await setup(true, false)
     adapter.script.push(answer)
@@ -207,7 +260,19 @@ describe('the update gate with its switch off, the parity value', () => {
     expect(endings()).toEqual([{ kind: 'completed' }])
   })
 
+  it('bounds the wait to whole seconds from 1 to 3600 and refuses a value outside it at load', () => {
+    expect(UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: 1 }).checkWaitSeconds).toBe(1)
+    expect(UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: 3600 }).checkWaitSeconds).toBe(3600)
+    expect(() => UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: 0 })).toThrow()
+    expect(() => UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: 3601 })).toThrow()
+    expect(() => UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: -5 })).toThrow()
+    expect(() => UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: Number.NaN })).toThrow()
+    expect(() => UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: Number.POSITIVE_INFINITY })).toThrow()
+    expect(() => UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: Number.NEGATIVE_INFINITY })).toThrow()
+    expect(() => UpdateGate.Config({ enabled: true, holdUntilChecked: true, checkWaitSeconds: 1.5 })).toThrow()
+  })
+
   it('defaults the switch to off', () => {
-    expect(UpdateGate.Config()).toEqual({ enabled: false, holdUntilChecked: false })
+    expect(UpdateGate.Config()).toEqual({ enabled: false, holdUntilChecked: false, checkWaitSeconds: 60 })
   })
 })

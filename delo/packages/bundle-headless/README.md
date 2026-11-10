@@ -35,7 +35,7 @@ kind: "package-bundle"
 | `delo-schedule-consent` | [`@delo/plugin-schedule-consent`](../plugin-schedule-consent/README.md) | A scheduled follow-up that a person's own patch makes possible asks for consent, which no one answers, so it is refused |
 | `delo-permission-defaults` | [`@delo/plugin-permission-defaults`](../plugin-permission-defaults/README.md) | A switch to full access for a workspace without a recorded grant is refused |
 | `delo-fetch-guard` | [`@delo/plugin-fetch-guard`](../plugin-fetch-guard/README.md) | A fetch of a private, loopback or link-local address is refused |
-| `delo-update-gate` | `@delo/bundle-local/update-gate`, with `holdUntilChecked` | The first step of every turn waits until `delorun headless` has checked the booted Host's rows and services; no update or stop waits on a headless run's chats |
+| `delo-update-gate` | `@delo/bundle-local/update-gate`, with `holdUntilChecked` | The first step of every turn waits until `delorun headless` has checked the booted Host's rows and services; no update or stop waits on a headless run's chats; a turn that waits longer than `checkWaitSeconds` (60 by default) ends with `START_CHECK_PENDING` instead of waiting without a message |
 | `plugin-manager` | upstream's plugin management, `protectedPlugins` | The guard rows above and the sandbox rows cannot be disabled, reconfigured or removed through the `plugin_manager` tool, which full access runs without a prompt, as in [`@delo/bundle-local`](../bundle-local/README.md) |
 
 ## Refusals
