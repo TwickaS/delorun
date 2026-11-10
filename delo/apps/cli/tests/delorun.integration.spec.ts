@@ -9,7 +9,7 @@ import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environ
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
 import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES } from '@delo/contract-home-layout'
 import { HostNotStoppedError, sendHomeRequest, type LocalDeviceApproval } from '@delo/home-process'
-import { parse } from 'yaml'
+import { parse, stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
@@ -372,7 +372,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       atBoot.push(process.env[DEFAULT_WORKSPACE_ENV])
       return recording([]).runProfile(options)
     } }
-    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, watching)).toBeUndefined()
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, watching)).toBeUndefined()
     expect(atBoot).toHaveLength(1)
     // The documents lookup runs on this host, so the base is its documents folder or the fixture home.
     expect(atBoot[0]?.endsWith(join('Delo', 'default-workspace'))).toBe(true)
@@ -383,7 +383,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     const parsed: unknown = parse(readFileSync(patchPath, 'utf8'))
     const rows = Array.isArray(parsed) ? parsed : []
     writeFileSync(patchPath, stringify([...rows, { id: 'workspace-controller', config: { defaultWorkspaceDirectory: join(osHome, 'mine') } }]))
-    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context }, watching)).toBeUndefined()
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, watching)).toBeUndefined()
     expect(atBoot).toEqual([atBoot[0], undefined])
   })
 

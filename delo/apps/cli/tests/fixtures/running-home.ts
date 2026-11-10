@@ -39,6 +39,7 @@ export async function startRunningHome(home: string, profile: string, studio: st
     failedRows: () => [],
     rows: () => [],
     check: () => Promise.resolve({ passed: true }),
+    suspend: () => Promise.resolve(),
     close: () => Promise.resolve(),
   }
   const listeners: (() => void)[] = []
@@ -53,6 +54,8 @@ export async function startRunningHome(home: string, profile: string, studio: st
     redactor: new Redactor(),
     updates: undefined,
     supervisor: undefined,
+    preStart: () => Promise.resolve(),
+    onSignal: () => () => {},
     onExit: (listener) => { listeners.push(listener) },
     exit: () => {},
   })
