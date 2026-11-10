@@ -8,7 +8,8 @@
  *
  * @module @delo/cli/plugin-check
  */
-import { readFile, stat } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { evaluatePluginCompatibility, pluginCompatibilityWarning } from '@deepseek-ai/dsh-app-boot'
 import type { VersionOutput } from '@delo/contract-plugin-versions'
@@ -17,6 +18,7 @@ import { evaluatePluginAxes, type AxisDecision } from '@delo/update'
 import semver from 'semver'
 import { CliError, EXIT } from './exit.ts'
 import type { CommandContext, CommandResult } from './command.ts'
+import { printable } from './terminal-text.ts'
 import { versions } from './version.ts'
 
 /** The largest `package.json` the command reads; a larger file is refused unread. */
@@ -35,28 +37,57 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Read a regular file of at most `limit` bytes without following a symbolic link or waiting on a FIFO: the file is
+ * opened with `O_NOFOLLOW` and `O_NONBLOCK`, must be a regular file by the descriptor's own `fstat`, and at most
+ * `limit + 1` bytes are read, so a link to a device, a FIFO or an endless file cannot hang the command or exhaust its
+ * memory.
+ * @param path - the file.
+ * @param limit - the largest size accepted.
+ * @returns the file's text.
+ * @throws {Error} when the file is a link, not a regular file, larger than the limit, or cannot be read.
+ */
+export async function readRegularFile(path: string, limit: number): Promise<string> {
+  // Windows defines neither O_NOFOLLOW nor O_NONBLOCK; an undefined flag ORs as 0, and the fstat below still refuses
+  // anything but a regular file there.
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+  try {
+    if (!(await handle.stat()).isFile()) throw new Error('it is not a regular file')
+    const buffer = Buffer.alloc(limit + 1)
+    let length = 0
+    for (;;) {
+      const { bytesRead } = await handle.read(buffer, length, buffer.byteLength - length, null)
+      if (bytesRead === 0) break
+      length += bytesRead
+      if (length > limit) throw new Error(`it has more than ${String(limit)} bytes, the limit`)
+    }
+    return buffer.subarray(0, length).toString('utf8')
+  } finally {
+    await handle.close()
+  }
+}
+
+/**
  * Read a plugin's manifest without importing anything.
  * @param directory - the plugin's directory.
  * @returns the parsed `package.json`.
- * @throws {CliError} when the file is missing, larger than {@link PLUGIN_MANIFEST_LIMIT}, not JSON or not an object.
+ * @throws {CliError} when the file is missing, a link, not a regular file, larger than {@link PLUGIN_MANIFEST_LIMIT}, not
+ *   JSON or not an object.
  */
 async function readManifest(directory: string): Promise<Record<string, unknown>> {
   const path = join(directory, 'package.json')
   let text: string
   try {
-    const size = (await stat(path)).size
-    if (size > PLUGIN_MANIFEST_LIMIT) throw new Error(`it has ${String(size)} bytes, above the limit of ${String(PLUGIN_MANIFEST_LIMIT)}`)
-    text = await readFile(path, 'utf8')
+    text = await readRegularFile(path, PLUGIN_MANIFEST_LIMIT)
   } catch (error) {
-    throw new CliError(EXIT.failed, `delorun plugin check: ${path} cannot be read: ${messageOf(error)}`)
+    throw new CliError(EXIT.failed, `delorun plugin check: ${printable(path)} cannot be read: ${printable(messageOf(error))}`)
   }
   let value: unknown
   try {
     value = JSON.parse(text)
   } catch (error) {
-    throw new CliError(EXIT.failed, `delorun plugin check: ${path} is not JSON: ${messageOf(error)}`)
+    throw new CliError(EXIT.failed, `delorun plugin check: ${printable(path)} is not JSON: ${printable(messageOf(error))}`)
   }
-  if (!isObject(value)) throw new CliError(EXIT.failed, `delorun plugin check: ${path} is not a package manifest object`)
+  if (!isObject(value)) throw new CliError(EXIT.failed, `delorun plugin check: ${printable(path)} is not a package manifest object`)
   return value
 }
 
@@ -160,6 +191,7 @@ export async function runPluginCheck(args: readonly string[], context: CommandCo
     exit = EXIT.failed
   }
   lines.push(verdict, 'Within one Delo minor the DSH version stays the same; contract C21 states what each Delo version promises a plugin.')
-  context.stdout(`${lines.join('\n')}\n`)
+  // Every line can carry the manifest's own strings, so each is printed with the characters a terminal acts on escaped.
+  context.stdout(`${lines.map(printable).join('\n')}\n`)
   return exit
 }

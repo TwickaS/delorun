@@ -95,13 +95,14 @@ const QUICK_SCRIPT: readonly Answer[] = ['quick', 'prompt', TYPED_KEY, 'safer', 
 
 const QUICK_TRANSCRIPT = `? How do you want to set up Delorun?
 > Quick (the model key and how careful prompts are)
-  Full (also background running, the profile name and the port)
+  Full (also the release check, background running, the profile name and the port)
 = Quick
 # Privacy
   Delo has no telemetry of its own.
   DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.
   Sending feedback includes a session-log prefix, and it is sent only when you send feedback.
   Once a day, and at start when a day has passed, Delo checks whether a newer release exists: it fetches timestamp.json, and a new root file when Delo's signing keys change, from releases.delorun.com and the newest release's manifest and log record from GitHub. It sends nothing about this installation or its plugins; those hosts see this computer's address. Turn it off in Settings → Privacy.
+  Quick setup keeps the release check on. To turn it off before Delorun first starts, choose ← Back at the next question, then Full.
 ? Where does the DeepSeek API key come from?
 > Enter the key now (stored in the home's credentials document)
   Read DEEPSEEK_API_KEY from the environment at each start
@@ -210,12 +211,12 @@ describe('the way back', { timeout: TIMEOUT_MS }, () => {
   it('treats an empty key as "go back" and returns to the first screen, which has no back choice', async () => {
     expect(await interactive(['quick', 'prompt', '', 'quick', 'environment', 'safer', 'save', false])).toBe(EXIT.ok)
     expect(recording.asked.filter(question => question.startsWith('select: How do you want'))).toHaveLength(2)
-    const first = screen().split('? Where does')[0] ?? ''
+    const first = screen().split('# Privacy')[0] ?? ''
     expect(first).not.toContain('← Back')
   })
 
   it('lets the mode change after two steps back', async () => {
-    expect(await interactive(['quick', 'environment', BACK_CHOICE, BACK_CHOICE, 'full', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['quick', 'environment', BACK_CHOICE, BACK_CHOICE, 'full', 'on', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(recordOf().sections.find(record => record.id === 'profile')?.status).toBe('answered')
   })
 
@@ -282,13 +283,18 @@ describe('the key check', { timeout: TIMEOUT_MS }, () => {
 
 const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
 > Quick (the model key and how careful prompts are)
-  Full (also background running, the profile name and the port)
+  Full (also the release check, background running, the profile name and the port)
 = Full
 # Privacy
   Delo has no telemetry of its own.
   DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.
   Sending feedback includes a session-log prefix, and it is sent only when you send feedback.
   Once a day, and at start when a day has passed, Delo checks whether a newer release exists: it fetches timestamp.json, and a new root file when Delo's signing keys change, from releases.delorun.com and the newest release's manifest and log record from GitHub. It sends nothing about this installation or its plugins; those hosts see this computer's address. Turn it off in Settings → Privacy.
+? Check for new releases?
+> Yes (once a day Delo fetches signed release files from releases.delorun.com and GitHub; it sends nothing about this installation, and those hosts see this computer's address)
+  No (no release check request is made; turn it on later in Settings → Privacy or with delorun setup privacy)
+  ← Back
+= Yes
 ? Where does the DeepSeek API key come from?
 > Enter the key now (stored in the home's credentials document)
   Read DEEPSEEK_API_KEY from the environment at each start
@@ -315,6 +321,7 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
 = 4100
 # Review
   Setup: Full
+  Check for new releases: yes
   DeepSeek API key: read from DEEPSEEK_API_KEY at each start
   Prompts: Safer prompts
   Keep running in the background: no
@@ -335,7 +342,7 @@ Studio: http://127.0.0.1:4100/ (opened in your browser)
   delorun stop --profile work`
 
 describe('Full setup', { timeout: TIMEOUT_MS }, () => {
-  const FULL_SCRIPT: readonly Answer[] = ['full', 'environment', 'safer', 'no', 'no', 'work', '4100', 'save', true]
+  const FULL_SCRIPT: readonly Answer[] = ['full', 'on', 'environment', 'safer', 'no', 'no', 'work', '4100', 'save', true]
 
   it('asks the background and profile sections after Quick\'s, and shows them on the review', async () => {
     expect(await interactive(FULL_SCRIPT, { behaviour: { address: 'http://127.0.0.1:4100/' } })).toBe(EXIT.ok)
@@ -347,7 +354,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     expect(hasCliProfile(home, 'work')).toBe(true)
     expect(hasCliProfile(home, PROFILE)).toBe(false)
     expect(patchOf('work')).toContainEqual({ id: 'webserver', config: { host: '127.0.0.1', port: 4100, compression: 'gzip', compressionLevel: 1, compressionThresholdBytes: 1024 } })
-    expect(recordOf('work').sections.map(record => record.status)).toEqual(['seen', 'skipped', 'answered', 'answered', 'answered', 'answered', 'answered'])
+    expect(recordOf('work').sections.map(record => record.status)).toEqual(['answered', 'skipped', 'answered', 'answered', 'answered', 'answered', 'answered'])
     expect(readBackgroundAnswer(profileDirectory(home, 'work'))).toBe(false)
     expect(ending.started).toEqual(['foreground'])
     expect(ending.opened).toBe(1)
@@ -357,7 +364,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('keeps the default profile name and port without writing a port row', async () => {
-    expect(await interactive(['full', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['full', 'on', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(patchOf().map(row => row.id)).not.toContain('webserver')
     expect(recordOf().profile).toEqual({ name: null, port: null })
     expect(ending.started).toEqual(['background'])
@@ -367,7 +374,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     mkdirSync(profileDirectory(home, 'taken'), { recursive: true })
     writeFileSync(join(profileDirectory(home, 'taken'), 'package.json'), '{}\n')
     const portIsFree = (port: number): Promise<boolean> => Promise.resolve(port !== 4100)
-    expect(await interactive(['full', 'environment', 'safer', 'yes', 'no', 'taken', 'desktop', 'headless', 'a/b', 'work', '80', '4100', '4101', 'save', false], { portIsFree })).toBe(EXIT.ok)
+    expect(await interactive(['full', 'on', 'environment', 'safer', 'yes', 'no', 'taken', 'desktop', 'headless', 'a/b', 'work', '80', '4100', '4101', 'save', false], { portIsFree })).toBe(EXIT.ok)
     expect(screen()).toContain('! A profile named taken already exists.')
     expect(screen()).toContain('! Choose another name: "desktop" is reserved: it is the desktop app\'s own profile, which only the desktop app runs or changes.')
     expect(screen()).toContain('! Choose another name: "headless" is reserved: it is the profile `delorun headless` boots')
@@ -378,7 +385,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('goes back from the profile section to the background question', async () => {
-    expect(await interactive(['full', 'environment', 'safer', 'yes', 'no', 'work', '', BACK_CHOICE, 'no', 'no', 'other', '4200', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['full', 'on', 'environment', 'safer', 'yes', 'no', 'work', '', BACK_CHOICE, 'no', 'no', 'other', '4200', 'save', false])).toBe(EXIT.ok)
     expect(recordOf('other').profile).toEqual({ name: 'other', port: 4200 })
     expect(recordOf('other').background).toBe(false)
   })
@@ -539,7 +546,7 @@ describe('the section registry', () => {
     const registry = defaultRegistry()
     registry.register({
       ...stub('example'),
-      asks: true,
+      asks: () => true,
       ask: (io) => io.confirm('Example question?', false).then(answer => typeof answer === 'boolean' ? { answers: { background: answer }, status: 'answered' as const } : answer),
       review: answers => `Example: ${answers.background ? 'yes' : 'no'}`,
     }, { order: 16 })
@@ -666,7 +673,7 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
 
   it('prints a note a section returns from its writes, in a run and when the section runs again', async () => {
     const registry = defaultRegistry()
-    registry.register({ ...privacySection, id: 'extra', title: 'Extra', asks: true, ask: () => Promise.resolve({ answers: {}, status: 'answered' as const }), apply: () => Promise.resolve('The extra section wrote its file.') }, { order: 60 })
+    registry.register({ ...privacySection, id: 'extra', title: 'Extra', asks: () => true, ask: () => Promise.resolve({ answers: {}, status: 'answered' as const }), apply: () => Promise.resolve('The extra section wrote its file.') }, { order: 60 })
     expect(await interactive(['quick', 'environment', 'safer', 'save', false], { registry })).toBe(EXIT.ok)
     expect(screen()).toContain('The extra section wrote its file.')
     expect(recordOf().sections.find(record => record.id === 'extra')?.status).toBe('answered')
@@ -678,7 +685,8 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
 
   it('leaves a section without a review line off the review screen', async () => {
     const registry = defaultRegistry()
-    registry.register({ ...privacySection, id: 'quiet', title: 'Quiet', mode: 'quick', asks: true, ask: () => Promise.resolve({ answers: {}, status: 'answered' as const }) }, { order: 60 })
+    const { review: _review, ...withoutReview } = privacySection
+    registry.register({ ...withoutReview, id: 'quiet', title: 'Quiet', mode: 'quick', asks: () => true, ask: () => Promise.resolve({ answers: {}, status: 'answered' as const }) }, { order: 60 })
     expect(await interactive(['quick', 'environment', 'safer', 'save', false], { registry })).toBe(EXIT.ok)
     expect(screen()).toContain('# Review\n  Setup: Quick\n  DeepSeek API key: read from DEEPSEEK_API_KEY at each start\n  Prompts: Safer prompts\n?')
   })
@@ -692,8 +700,83 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
 
 describe('the way back inside the full sections', { timeout: TIMEOUT_MS }, () => {
   it('returns from the background question to the prompts question, and from the name to the background question', async () => {
-    expect(await interactive(['full', 'environment', 'safer', BACK_CHOICE, 'stock', 'yes', 'no', '', BACK_CHOICE, 'no', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['full', 'on', 'environment', 'safer', BACK_CHOICE, 'stock', 'yes', 'no', '', BACK_CHOICE, 'no', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(recordOf().prompts).toBe('stock')
     expect(recordOf().background).toBe(false)
+  })
+})
+
+describe('the release check', { timeout: TIMEOUT_MS }, () => {
+  /** The release-check row turned off, as Settings → Privacy saves it: the bundle's config restated with `enabled` off. */
+  const OFF_ROW = { id: 'delo-update-check', name: '@delo/bundle-local/update-check', config: { intervalHours: 24, timeoutSeconds: 15, enabled: false } }
+
+  it('Full asks whether to check, and No writes the row off as Settings → Privacy would and shows it on the review', async () => {
+    expect(await interactive(['full', 'off', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(patchOf()).toContainEqual(OFF_ROW)
+    expect(recordOf()).toMatchObject({ schemaVersion: 3, updateCheck: false })
+    expect(screen()).toContain('# Review\n  Setup: Full\n  Check for new releases: no\n')
+  })
+
+  it('Yes, the default, writes no row, and the way back leads from the key question to the release check and from it to the mode', async () => {
+    expect(await interactive(['full', BACK_CHOICE, 'full', 'off', BACK_CHOICE, 'on', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(recording.asked.filter(question => question === 'select: How do you want to set up Delorun?')).toHaveLength(2)
+    expect(recording.asked.filter(question => question === 'select: Check for new releases?')).toHaveLength(3)
+    expect(patchOf().map(row => row.id)).not.toContain('delo-update-check')
+    expect(recordOf()).toMatchObject({ updateCheck: true })
+  })
+
+  it('delorun setup privacy shows the note, turns the check off, and turns it on again by removing the row', async () => {
+    expect(await interactive(['quick', 'environment', 'safer', 'save', false])).toBe(EXIT.ok)
+    const prompts = patchOf()
+    const request = (answer: string): SetupRequest => ({
+      home, profile: PROFILE, env: {}, output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
+      form: { kind: 'interactive', prompter: scriptedPrompter([answer], recording) },
+    })
+    recording.screen.length = 0
+    expect(await runSection(request('off'), 'privacy')).toBe(EXIT.ok)
+    expect(patchOf()).toEqual([...prompts, OFF_ROW])
+    expect(recordOf()).toMatchObject({ updateCheck: false })
+    expect(recordOf().sections.find(record => record.id === 'privacy')?.status).toBe('answered')
+    expect(screen()).toContain('Delo has no telemetry of its own.')
+    expect(screen()).toContain('> Yes (once a day')
+    expect(screen()).toContain('Updated the privacy section of the profile default.')
+    recording.screen.length = 0
+    expect(await runSection(request('on'), 'privacy')).toBe(EXIT.ok)
+    expect(screen()).toContain('> No (no release check request is made')
+    expect(patchOf()).toEqual(prompts)
+    expect(recordOf()).toMatchObject({ updateCheck: true })
+  })
+
+  it('--no-update-check turns the check off in Quick, which says so, preselects No in Full, and applies to --yes and --config', async () => {
+    expect(await interactive(['quick', 'environment', 'safer', 'save', false], { noUpdateCheck: true })).toBe(EXIT.ok)
+    expect(screen()).toContain('  This setup turns the release check off, so Delorun makes no release check request.')
+    expect(screen()).not.toContain('Quick setup keeps the release check on.')
+    expect(patchOf()).toContainEqual(OFF_ROW)
+    rmSync(profileDirectory(home, PROFILE), { recursive: true })
+    recording.screen.length = 0
+    expect(await interactive(['full', 'off', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false], { noUpdateCheck: true })).toBe(EXIT.ok)
+    expect(screen()).toContain('  Yes (once a day')
+    expect(screen()).toContain('> No (no release check request is made')
+    for (const form of [{ kind: 'yes' }, { kind: 'config', path: join(osHome, 'on.json') }] as const) {
+      writeFileSync(join(osHome, 'on.json'), JSON.stringify({ schemaVersion: 3, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false, updateCheck: true }))
+      rmSync(profileDirectory(home, PROFILE), { recursive: true })
+      expect(await runSetup({ home, profile: PROFILE, env: { DEEPSEEK_API_KEY: 'env-key-value-10' }, form, noUpdateCheck: true, output: { stdout: () => undefined, stderr: () => undefined } })).toBe(EXIT.ok)
+      expect(patchOf()).toContainEqual(OFF_ROW)
+      expect(recordOf()).toMatchObject({ updateCheck: false })
+    }
+  })
+
+  it('reads a version-2 answers document and record as the check on, and records them as version 3', async () => {
+    const document = join(osHome, 'version-2.json')
+    writeFileSync(document, JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: false, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
+    expect(await runSetup({ home, profile: PROFILE, env: { DEEPSEEK_API_KEY: 'env-key-value-11' }, form: { kind: 'config', path: document }, output: { stdout: () => undefined, stderr: () => undefined } })).toBe(EXIT.ok)
+    expect(recordOf()).toMatchObject({ schemaVersion: 3, updateCheck: true })
+    const record = join(profileDirectory(home, PROFILE), 'setup-answers.json')
+    const version2: Record<string, unknown> = { ...JSON.parse(readFileSync(record, 'utf8')) as Record<string, unknown>, schemaVersion: 2 }
+    Reflect.deleteProperty(version2, 'updateCheck')
+    writeFileSync(record, JSON.stringify(version2))
+    const request: SetupRequest = { home, profile: PROFILE, env: {}, output: { stdout: () => undefined, stderr: () => undefined }, form: { kind: 'interactive', prompter: scriptedPrompter(['stock'], recording) } }
+    expect(await runSection(request, 'prompts')).toBe(EXIT.ok)
+    expect(recordOf()).toMatchObject({ schemaVersion: 3, updateCheck: true, background: false, prompts: 'stock' })
   })
 })

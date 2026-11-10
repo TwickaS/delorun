@@ -5,19 +5,20 @@
  * background start and `delorun update --check` print. No request leaves loopback.
  */
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { Context } from '@deepseek-ai/cordis'
 import { DELO_HOME_ENTRIES, DELO_LAUNCHER_ROOTS_ENV, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { SemanticVersion, UtcTimestamp } from '@delo/contract-release-manifest'
-import { UPDATE_CHECK_SCHEMA, type UpdateCheckRecord } from '@delo/contract-update-report'
+import { UPDATE_CHECK_FAILURES, UPDATE_CHECK_SCHEMA, type UpdateCheckRecord } from '@delo/contract-update-report'
 import * as UpdateCheck from '@delo/bundle-local/update-check'
 import { ensureHomeTree } from '@delo/home'
+import { InstallError } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
 import { RuntimeStore } from '@delo/runtime-store'
 import { envelope, fixtureRelease, NOW, releasePaths, type Fixture } from '../../../install/tests/support.ts'
@@ -25,7 +26,7 @@ import { EXIT } from '../../src/exit.ts'
 import { recordedLogTransport, runtimePlatformOf, type Publication } from '../../src/update/channel.ts'
 import { launcherAnchor, type LauncherAnchor } from '../../src/update/trusted-root.ts'
 import { runUpdate, updateCommand, type UpdateCheckDependencies } from '../../src/update/command.ts'
-import { checkedReleaseOf, checkForUpdate, countDisabled, noticeLine, noticeLines, noticeOf, withDeadline, readUpdateCheck, removeUpdateCheck, runningRelease, updateCheckPath, updateKind, writeUpdateCheck } from '../../src/update/notice.ts'
+import { checkedReleaseOf, checkForUpdate, countDisabled, failureOf, failureText, noticeLine, noticeLines, noticeOf, withDeadline, readUpdateCheck, removeUpdateCheck, runningRelease, updateCheckPath, updateKind, writeUpdateCheck } from '../../src/update/notice.ts'
 import { recordedNoticeLine, startNoticeLine, updateCheckSource, watchUpdates } from '../../src/update/notice-host.ts'
 import { checkUpdate } from '../../src/doctor/update.ts'
 import { fakeClosure, signedRelease, writeClosure } from './support.ts'
@@ -187,7 +188,7 @@ describe('the check', { timeout: 60_000 }, () => {
 
   it('records the verified release with its upstream version, its security mark and its summary', async () => {
     const record = await check()
-    expect(record).toEqual({ schema: UPDATE_CHECK_SCHEMA, checked: clock().toISOString(), verified: clock().toISOString(), newest: { delo: '0.2.0', dsh: '0.2.3', channel: 'stable', security: true, summary: SUMMARY } })
+    expect(record).toEqual({ schema: UPDATE_CHECK_SCHEMA, checked: clock().toISOString(), verified: clock().toISOString(), newest: { delo: '0.2.0', dsh: '0.2.3', channel: 'stable', security: true, summary: SUMMARY }, timestamp: 1 })
     expect(await readUpdateCheck(home, PROFILE)).toEqual(record)
     expect(readFileSync(updateCheckPath(home, PROFILE), 'utf8').endsWith('\n')).toBe(true)
   })
@@ -208,41 +209,95 @@ describe('the check', { timeout: 60_000 }, () => {
     const verified = await check()
     server.files.set('/timestamp.json', envelope(fixture.timestamp, [fixture.keys.targets]))
     const failed = await check()
-    expect(failed.failure).toMatch(/timestamp/u)
+    expect(failed.failure).toBe('unverified')
     expect(failed.newest).toEqual(verified.newest)
     expect(failed.verified).toBe(verified.verified)
     await removeUpdateCheck(home, PROFILE)
     const first = await check()
     expect(first.newest).toBeUndefined()
-    expect(first.failure).toBeDefined()
+    expect(first.failure).toBe('unverified')
     expect(await noticeOf(first, await runningRelease(home, platform, RUNNING, fixture.rootMetadata), () => Promise.reject(new Error('not read')))).toBeUndefined()
   })
 
   it('refuses a manifest that is not the one the timestamp names', async () => {
     server.files.set('/releases/0.2.0/delorun-0.2.0.manifest.json', Buffer.from('{"signed":{}}'))
-    expect((await check()).failure).toBeDefined()
+    expect((await check()).failure).toBe('unverified')
   })
 
   it('update-notice-deadline: ends a check whose host never answers at its deadline', async () => {
     server.silent = true
     const started = Date.now()
     const record = await check(300)
-    expect(record.failure).toBeDefined()
+    expect(record.failure).toBe('deadline')
     expect(Date.now() - started).toBeLessThan(5_000)
   })
 
   it('records a failure when the running release is not in the store', async () => {
     const record = await checkForUpdate({ home, profile: PROFILE, platform, running: brandString<RuntimeVersion>('9.9.9'), anchor, timeoutMs: 1_000, now: clock, publication })
-    expect(record.failure).toBeDefined()
+    expect(record.failure).toBe('running-release-unreadable')
+    expect(server.seen).toEqual([])
+  })
+
+  it('update-notice-unanchored: a Delo its launcher did not start reads no root, asks the channel nothing and records why', async () => {
+    const record = await checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor: launcherAnchor(home, {}), timeoutMs: 1_000, now: clock, publication })
+    expect(record.failure).toBe('running-release-unreadable')
     expect(server.seen).toEqual([])
   })
 
   it('uses this process\'s clock and contract C2\'s publication by default, through the fetch it is given', async () => {
     const asked: string[] = []
-    const record = await checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor, timeoutMs: 1_000, fetch: async (input) => { asked.push(String(input)); throw new Error('offline') } })
-    expect(asked).toEqual(['https://releases.delorun.com/timestamp.json'])
-    expect(record.failure).toContain('offline')
-    expect(Date.parse(record.checked)).toBeGreaterThan(NOW * 1000 - 400 * 86_400_000)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2027-03-01T12:00:00.000Z'))
+      const record = await checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor, timeoutMs: 1_000, fetch: async (input) => { asked.push(String(input)); throw new Error('offline') } })
+      expect(asked).toEqual(['https://releases.delorun.com/timestamp.json'])
+      expect(record.failure).toBe('unreachable')
+      expect(record.checked).toBe('2027-03-01T12:00:00.000Z')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('update-notice-regressed: refuses a channel that names an older timestamp or an older release than an earlier check verified, and keeps it', async () => {
+    const verified = await check()
+    await writeUpdateCheck(home, PROFILE, { ...verified, timestamp: 5 })
+    const older = await check()
+    expect(older.failure).toBe('regressed')
+    expect(older).toMatchObject({ newest: verified.newest, verified: verified.verified, timestamp: 5 })
+    await writeUpdateCheck(home, PROFILE, { ...verified, newest: { ...verified.newest!, delo: semantic('0.3.0') } })
+    const lower = await check()
+    expect(lower.failure).toBe('regressed')
+    expect(lower.newest?.delo).toBe('0.3.0')
+    await writeUpdateCheck(home, PROFILE, { ...verified, newest: { ...verified.newest!, delo: semantic('0.3.0'), channel: 'beta' } })
+    expect((await check()).failure).toBeUndefined()
+    const { timestamp: _timestamp, ...untimed } = verified
+    await writeUpdateCheck(home, PROFILE, untimed)
+    server.silent = true
+    const failed = await check(200)
+    expect(failed).toEqual({ ...untimed, checked: failed.checked, failure: 'deadline' })
+  })
+
+  it('update-notice-hostile-text: records a code, never the channel\'s text, and logs that text escaped', async () => {
+    const hostile = '\u001b]0;owned\u0007\u001b[2J'
+    server.files.set('/timestamp.json', envelope({ ...fixture.timestamp, [hostile]: hostile }, [fixture.keys.timestamp]))
+    const logged: string[] = []
+    const record = await checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor, timeoutMs: 10_000, now: clock, publication, log: (text) => { logged.push(text) } })
+    expect(UPDATE_CHECK_FAILURES).toContain(record.failure)
+    expect(readFileSync(updateCheckPath(home, PROFILE), 'utf8')).not.toContain('owned')
+    expect(logged).toHaveLength(1)
+    expect(logged[0]).not.toMatch(/[\u0000-\u001f\u007f]/u)
+    const doctor = await checkUpdate(home, PROFILE, { version: RUNNING, store: true }, () => platform, anchor.root)
+    expect(doctor.message).not.toMatch(/[\u0000-\u001f\u007f]|owned/u)
+  })
+
+  it('names each failure in Delo\'s own words, and an unknown error as Delo\'s own failure', () => {
+    for (const failure of UPDATE_CHECK_FAILURES) expect(failureText(failure)).toMatch(/^[ -~]+$/u)
+    expect(failureOf(new Error('anything'), false)).toBe('internal')
+    expect(failureOf(new Error('anything'), true)).toBe('deadline')
+    expect(failureOf(new InstallError('DOWNLOAD_REFUSED', 'http://example.invalid/', 'refused'), false)).toBe('download-refused')
+    expect(failureOf(new InstallError('RELEASE_LOG_FAILED', 'bundle', 'refused'), false)).toBe('log-bundle-invalid')
+    expect(failureOf(new InstallError('TRUST_STATE_INVALID', 'trust/timestamp.json', 'refused'), false)).toBe('trust-state-invalid')
+    expect(failureOf(new InstallError('NO_TRUSTED_ROOT', 'trust/root.json', 'refused'), false)).toBe('trust-state-invalid')
   })
 
   it('holds a request without a signal of its own to the deadline, and one with a signal to both', async () => {
@@ -310,7 +365,7 @@ describe('what the notice says', () => {
 
   it('prints the summary beneath the line when the release has one', () => {
     expect(noticeLines({ running, release, kind: 'patch', disables: 0 })).toHaveLength(1)
-    expect(noticeLines({ running, release: { ...release, summary: SUMMARY }, kind: 'patch', disables: 0 })[1]).toBe(`  ${SUMMARY}`)
+    expect(noticeLines({ running, release: { ...release, summary: SUMMARY }, kind: 'patch', disables: 0 })[1]).toBe(`  Release note: ${SUMMARY}`)
   })
 
   it('says how far a release moves', () => {
@@ -356,6 +411,36 @@ describe('in a running Host', { timeout: 60_000 }, () => {
     await on.fiber.dispose()
   })
 
+  it('update-notice-running-release-retried: reads the running release again after a read that failed', async () => {
+    await check()
+    const source = updateCheckSource({ home, profile: PROFILE, platform, running: RUNNING, anchor, line: () => {}, publication, now: clock })
+    const root = join(home, DELO_HOME_ENTRIES.trust, TRUST_FILES.root)
+    renameSync(root, `${root}.away`)
+    try {
+      await expect(source.read()).rejects.toThrow()
+    } finally {
+      renameSync(`${root}.away`, root)
+    }
+    expect((await source.read()).notice?.release.delo).toBe('0.2.0')
+    await writeUpdateCheck(home, PROFILE, { ...(await readUpdateCheck(home, PROFILE))!, failure: 'unreachable' })
+    expect(await source.read()).toMatchObject({ failed: true, notice: { release: { delo: '0.2.0' } } })
+  })
+
+  it('update-notice-record-unremovable: a record that cannot be removed is logged and the start goes on', async () => {
+    rmSync(updateCheckPath(home, PROFILE), { force: true })
+    mkdirSync(join(updateCheckPath(home, PROFILE), 'inside'), { recursive: true })
+    const logged: string[] = []
+    const off = new Context()
+    try {
+      await watchUpdates(off, { home, profile: PROFILE, platform, running: RUNNING, anchor, line: () => {}, publication, now: clock, log: (text) => { logged.push(text) } })
+      expect(logged).toEqual([expect.stringMatching(/^delo-update-check: the update check's record could not be removed: /u)])
+      await watchUpdates(off, { home, profile: PROFILE, platform, running: RUNNING, anchor, line: () => {}, publication, now: clock })
+    } finally {
+      await off.fiber.dispose()
+      rmSync(updateCheckPath(home, PROFILE), { recursive: true, force: true })
+    }
+  })
+
   it('gives a background start the recorded line, and nothing when the running release cannot be read', async () => {
     expect(await recordedNoticeLine(home, PROFILE, platform, RUNNING, anchor.root)).toBeUndefined()
     await check()
@@ -390,7 +475,7 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
 
   it('prints the notice and the summary, and starts no home process', async () => {
     expect(await update(['--check'])).toBe(EXIT.ok)
-    expect(output.stdout).toBe(`Delorun 0.2.0 is available (security fix on DSH 0.2.3; it would turn off 1 of your plugins). Run: delorun update\n  ${SUMMARY}\n`)
+    expect(output.stdout).toBe(`Delorun 0.2.0 is available (security fix on DSH 0.2.3; it would turn off 1 of your plugins). Run: delorun update\n  Release note: ${SUMMARY}\n`)
   })
 
   it('says the running release is the newest when the channel names it, and prints no summary a manifest lacks', async () => {
@@ -405,7 +490,7 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
   it('exits 1 naming the failure, and refuses outside the store and with --yes', async () => {
     server.files.delete('/timestamp.json')
     expect(await update(['--check'])).toBe(EXIT.failed)
-    expect(output.stderr).toMatch(/^delorun update --check: the check failed, so nothing is known about a newer release: /u)
+    expect(output.stderr).toBe('delorun update --check: the check failed, so nothing is known about a newer release: the release host did not answer, answered with an error, or sent a file larger than its limit\n')
     expect(await update(['--check'], false)).toBe(EXIT.failed)
     expect(output.stderr).toContain('does not run from the runtime store')
     await expect(update(['--check', '--yes'])).rejects.toMatchObject({ exit: EXIT.usage })
@@ -421,7 +506,7 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
     expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'warn', message: expect.stringContaining('Delorun 0.2.0 is available') })
     server.silent = true
     await check(200)
-    expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'warn', message: expect.stringContaining('failed, so the studio shows no notice') })
+    expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'warn', message: expect.stringContaining('failed, so the studio shows no notice: the check took longer than its deadline.') })
     await writeUpdateCheck(home, PROFILE, { schema: UPDATE_CHECK_SCHEMA, checked: brandString<UtcTimestamp>('2027-01-15T08:00:00.000Z'), newest: { delo: semantic('0.1.0'), dsh: semantic('0.2.2'), channel: 'stable', security: false } })
     expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: 'Delorun 0.1.0 is the newest release on the stable channel (checked 2027-01-15T08:00:00.000Z).' })
   })

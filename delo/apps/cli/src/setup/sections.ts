@@ -3,7 +3,7 @@
  * and the writes it produces, and the registry lists them in order. Quick runs the sections marked `quick`; Full runs
  * every section. Each section is also `delorun setup <id>`. Later packages add their sections through
  * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, key, prompts, background
- * and profile.
+ * and profile. Privacy shows the note in both modes and asks about the release check in Full.
  *
  * @module @delo/cli/setup/sections
  */
@@ -24,6 +24,7 @@ import { CliError, EXIT } from '../exit.ts'
 import type { KeyCheck } from './key-check.ts'
 import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
+import { writeUpdateCheckRow } from './update-check.ts'
 import { setPatchRow, storeCredential } from './writes.ts'
 import { systemTailscale } from '@delo/reach'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
@@ -89,8 +90,12 @@ export interface SetupSection {
   readonly title: string
   /** `quick` sections run in both modes, `full` sections only in Full. */
   readonly mode: SetupMode
-  /** Whether the section asks a question; a section that only shows a note is passed over when going back. */
-  readonly asks: boolean
+  /**
+   * Whether the section asks a question in a run of a mode; a section that only shows a note is passed over when going back.
+   * @param mode - the run's mode.
+   * @returns true when the section asks in that mode.
+   */
+  asks(mode: SetupMode): boolean
   /**
    * @param environment - what the section may look at.
    * @returns whether the section applies on this computer.
@@ -177,13 +182,19 @@ export function withRecord(records: readonly SectionRecord[], id: string, status
 }
 
 /**
- * The record of a run that asked nothing: the privacy note was shown, every other section took its default.
+ * The record of a run that asked nothing: a section that asks nothing in Quick shows only its note, which the run
+ * printed, and every other section took its default.
  * @param sections - every registered section.
  * @returns the record.
  */
 export function unattendedRecord(sections: readonly SetupSection[]): readonly SectionRecord[] {
-  return sections.map(section => ({ id: section.id, status: section.asks ? 'skipped' : 'seen' }))
+  return sections.map(section => ({ id: section.id, status: section.asks('quick') ? 'skipped' : 'seen' }))
 }
+
+/**
+ * @returns true: a section that asks in every mode it runs in.
+ */
+const asksWhenRun = (): boolean => true
 
 /**
  * The statements setup makes about privacy, from the Privacy section's copy.
@@ -193,18 +204,40 @@ export function statementLines(): string[] {
   return [en['statement.delo'], en['statement.optIns'], en['statement.feedback'], en['statement.updateCheck']]
 }
 
-/** The privacy section: the note, where the two upstream opt-ins are changed, and the update check and its switch. */
+/** The line Quick adds to the privacy note, by the release-check answer: Quick does not ask, so the line says how to reach the question before Delorun starts. */
+export const QUICK_UPDATE_CHECK_LINES: Readonly<Record<'on' | 'off', string>> = {
+  on: 'Quick setup keeps the release check on. To turn it off before Delorun first starts, choose ← Back at the next question, then Full.',
+  off: 'This setup turns the release check off, so Delorun makes no release check request.',
+}
+
+/**
+ * The privacy section: the note, where the two upstream opt-ins are changed, and the update check. Full, and
+ * `delorun setup privacy`, ask whether to check for new releases; turned off, the check's row is disabled before
+ * Delorun first starts, so no check request is made.
+ */
 export const privacySection: SetupSection = {
   id: 'privacy',
   title: 'Privacy',
   mode: 'quick',
-  asks: false,
+  asks: mode => mode === 'full',
   appliesTo: () => true,
-  ask(io) {
+  async ask(io, draft) {
+    if (draft.mode === 'quick') {
+      io.note([...statementLines(), QUICK_UPDATE_CHECK_LINES[draft.answers.updateCheck ? 'on' : 'off']].join('\n'), en.title)
+      return { answers: {}, status: 'seen' }
+    }
     io.note(statementLines().join('\n'), en.title)
-    return Promise.resolve({ answers: {}, status: 'seen' })
+    const check = await io.select('Check for new releases?', [
+      { value: 'on', label: 'Yes', hint: 'once a day Delo fetches signed release files from releases.delorun.com and GitHub; it sends nothing about this installation, and those hosts see this computer\'s address' },
+      { value: 'off', label: 'No', hint: 'no release check request is made; turn it on later in Settings → Privacy or with delorun setup privacy' },
+    ], draft.answers.updateCheck ? 'on' : 'off')
+    return check === BACK ? BACK : { answers: { updateCheck: check === 'on' }, status: 'answered' }
   },
-  apply: () => Promise.resolve(undefined),
+  review: answers => `Check for new releases: ${answers.updateCheck ? 'yes' : 'no'}`,
+  apply(context, answers) {
+    writeUpdateCheckRow(join(context.directory, 'cordis.patch.yml'), answers.updateCheck)
+    return Promise.resolve(undefined)
+  },
 }
 
 /**
@@ -234,7 +267,7 @@ export const keySection: SetupSection = {
   id: 'key',
   title: 'Model key',
   mode: 'quick',
-  asks: true,
+  asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft, environment) {
     const source = await io.select('Where does the DeepSeek API key come from?', [
@@ -271,7 +304,7 @@ export const promptsSection: SetupSection = {
   id: 'prompts',
   title: 'Prompts',
   mode: 'quick',
-  asks: true,
+  asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft) {
     const choice = await io.select<PromptsAnswer>('How should Delorun ask before it changes things?', [
@@ -292,7 +325,7 @@ export const backgroundSection: SetupSection = {
   id: 'background',
   title: 'Background',
   mode: 'full',
-  asks: true,
+  asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft) {
     const keep = await io.confirm('Keep Delorun running in the background after the terminal closes?', draft.answers.background)
@@ -331,7 +364,7 @@ export const profileSection: SetupSection = {
   id: 'profile',
   title: 'Profile name and port',
   mode: 'full',
-  asks: true,
+  asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft, environment) {
     let name: string | null = draft.answers.profile.name

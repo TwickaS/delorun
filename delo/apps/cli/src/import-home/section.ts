@@ -78,7 +78,7 @@ export function importSection(options: ImportSectionOptions): SetupSection {
     id: IMPORT_SECTION_ID,
     title: 'Import a DeepSeek Harness home',
     mode: 'quick',
-    asks: true,
+    asks: () => true,
     appliesTo(environment) {
       const source = stockHomeOf(environment.env)
       return source !== undefined && isDirectory(source) && !homeHasChats(environment.home)

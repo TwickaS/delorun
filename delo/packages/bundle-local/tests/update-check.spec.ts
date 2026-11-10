@@ -118,16 +118,40 @@ describe('the schedule', () => {
     expect(calls.check).toHaveLength(1)
   })
 
-  it('keeps its interval when the source fails, and logs why', async () => {
+  it('logs a source that throws, and counts it as a failed check', async () => {
     const { ctx } = await mount({ enabled: true })
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
     const reads: number[] = []
     ctx.deloUpdateCheck.attach({ read: async () => { reads.push(1); throw new Error('no record') }, check: async () => Promise.reject('offline') })
     await vi.advanceTimersByTimeAsync(0)
     expect(warn).toHaveBeenCalledWith('delo-update-check: the update check failed: no record')
-    await vi.advanceTimersByTimeAsync(24 * HOUR)
+    await vi.advanceTimersByTimeAsync(HOUR)
     expect(warn).toHaveBeenLastCalledWith('delo-update-check: the update check failed: offline')
     expect(reads).toHaveLength(1)
+  })
+
+  it('update-notice-retries-after-failure: tries a failed check again after one hour, then two, four, up to the interval, never more often than hourly', async () => {
+    const { ctx } = await mount({ enabled: true, intervalHours: 6 })
+    const started = Date.now()
+    const at: number[] = []
+    ctx.deloUpdateCheck.attach({
+      read: async () => ({ checked: started, failed: true }),
+      check: async () => { at.push((Date.now() - started) / HOUR); return { checked: Date.now(), failed: true } },
+    })
+    await vi.advanceTimersByTimeAsync(20 * HOUR)
+    expect(at).toEqual([1, 3, 7, 13, 19])
+  })
+
+  it('update-notice-wall-clock: checks at the first hourly wake after a sleep that passed the interval', async () => {
+    const { ctx } = await mount({ enabled: true })
+    const { source: attached, calls } = source({ checked: Date.now() }, { checked: Date.now() })
+    ctx.deloUpdateCheck.attach(attached)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls.check).toEqual([])
+    // The machine sleeps three days: the wall clock moves, the process's timers do not.
+    vi.setSystemTime(Date.now() + 72 * HOUR)
+    await vi.advanceTimersByTimeAsync(HOUR)
+    expect(calls.check).toHaveLength(1)
   })
 
   it('stops when detached, and refuses a second check while one is attached', async () => {

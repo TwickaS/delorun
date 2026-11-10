@@ -7,7 +7,7 @@ import { readAnswersDocument, yesAnswers } from '../../src/setup/answers.ts'
 import { CliError, EXIT } from '../../src/exit.ts'
 
 const BASE = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } },
   prompts: 'safer',
   background: true,
@@ -60,6 +60,19 @@ describe('the answers document', () => {
     expect(answers.sections).toEqual([])
   })
 
+  it('reads the release-check answer, on when the document leaves it out', () => {
+    expect(readAnswersDocument(write('absent.json', BASE)).updateCheck).toBe(true)
+    expect(readAnswersDocument(write('off.json', { ...BASE, updateCheck: false })).updateCheck).toBe(false)
+    expect(refusal(write('text.json', { ...BASE, updateCheck: 'no' }))).toContain('updateCheck is not a value the answers document accepts')
+  })
+
+  it('reads a version-2 document as version 3 with the check on, and refuses the release-check answer in one', () => {
+    const version2 = { ...BASE, schemaVersion: 2 }
+    expect(readAnswersDocument(write('version-2.json', version2))).toMatchObject({ schemaVersion: 3, updateCheck: true, prompts: 'safer' })
+    expect(refusal(write('version-2-off.json', { ...version2, updateCheck: false }))).toBe('delorun setup --config: updateCheck needs schemaVersion 3')
+    expect(refusal(write('version-2-unknown.json', { ...version2, apiKey: 'sk-SECRET-VALUE-81' }))).toContain('the document holds a field the answers document does not define')
+  })
+
   it('refuses a document that carries a removed question, naming the removed keys and no value', () => {
     for (const key of REMOVED_ANSWER_KEYS) {
       const message = refusal(write(`${key}.json`, { ...BASE, [key]: 'sk-SECRET-VALUE-77' }))
@@ -80,7 +93,8 @@ describe('the answers document', () => {
     const unknown = refusal(write('unknown.json', { ...BASE, apiKey: 'sk-SECRET-VALUE-78' }))
     expect(unknown).toContain('holds a field the answers document does not define')
     expect(unknown).not.toContain('sk-SECRET-VALUE-78')
-    expect(refusal(write('version.json', { ...BASE, schemaVersion: 1 }))).toContain('schemaVersion must be 2')
+    expect(refusal(write('version.json', { ...BASE, schemaVersion: 1 }))).toContain('schemaVersion must be 3, or 2 for an earlier document; setup refuses any other version')
+    expect(refusal(write('future.json', { ...BASE, schemaVersion: 4 }))).toContain('schemaVersion must be 3')
   })
 
   it('refuses reach, a prompted key, a sections record, a bad profile name and a port out of range', () => {

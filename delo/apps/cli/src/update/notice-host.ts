@@ -14,6 +14,8 @@ import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import type { UpdateCheckRecord } from '@delo/contract-update-report'
 import type { UpdateCheckSource, UpdateCheckState } from '@delo/bundle-local/update-check'
 import type { TrustedRootSource } from '@delo/runtime-store'
+import { messageOf } from '@delo/install'
+import { printable } from '../terminal-text.ts'
 import { runtimePlatformOf, type Publication } from './channel.ts'
 import { runtimeOfFile } from './runtime.ts'
 import { launcherAnchor, type LauncherAnchor } from './trusted-root.ts'
@@ -42,25 +44,50 @@ export interface UpdateWatchOptions {
   readonly publication?: Publication
   /** The clock; `Date` by default. */
   readonly now?: () => Date
+  /**
+   * Writes a failure the person does not need in the terminal to the home log; nowhere by default.
+   * @param text - the line, already escaped.
+   */
+  readonly log?: (text: string) => void
 }
 
 /**
  * The check `delorun` attaches to the Host's `deloUpdateCheck` service.
- * @param options - the home, the profile, the platform, the running version and the terminal line.
- * @returns the source: `read` answers from the record, `check` runs one check; both count the plugins at that moment.
+ * @param options - the home, the profile, the platform, the running version, the terminal line and the log.
+ * @returns the source: `read` answers from the record, `check` runs one check. The plugin count is computed once per
+ *   record, when a check writes one or a start reads one, and kept with it, so a studio's reads do not reread every
+ *   plugin manifest.
  */
 export function updateCheckSource(options: UpdateWatchOptions): UpdateCheckSource {
   let release: Promise<RunningRelease> | undefined
   let announced: string | undefined
+  let cached: { readonly key: string, readonly state: UpdateCheckState } | undefined
   const profile = profileReader(options.home, options.profile)
-  const stateOf = async (record: UpdateCheckRecord | undefined): Promise<UpdateCheckState> => {
+  const running = async (): Promise<RunningRelease> => {
     release ??= options.anchor.root().then(root => runningRelease(options.home, options.platform, options.running, root))
-    const notice = await noticeOf(record, await release, profile)
+    try {
+      return await release
+    } catch (error) {
+      // A read that failed, such as one racing an update's switch, is tried again next time rather than kept.
+      release = undefined
+      throw error
+    }
+  }
+  const stateOf = async (record: UpdateCheckRecord | undefined): Promise<UpdateCheckState> => {
+    const key = JSON.stringify(record ?? null)
+    if (cached?.key === key) return cached.state
+    const notice = await noticeOf(record, await running(), profile)
     if (notice !== undefined && announced !== notice.release.delo) {
       announced = notice.release.delo
       options.line(noticeLine(notice))
     }
-    return { ...record === undefined ? {} : { checked: Date.parse(record.checked) }, ...notice === undefined ? {} : { notice } }
+    const state: UpdateCheckState = {
+      ...record === undefined ? {} : { checked: Date.parse(record.checked) },
+      ...record?.failure === undefined ? {} : { failed: true },
+      ...notice === undefined ? {} : { notice },
+    }
+    cached = { key, state }
+    return state
   }
   return {
     read: async () => stateOf(await readUpdateCheck(options.home, options.profile)),
@@ -70,13 +97,20 @@ export function updateCheckSource(options: UpdateWatchOptions): UpdateCheckSourc
 
 /**
  * Attach the check to the booted Host's `deloUpdateCheck` service whenever the service is present, and remove the
- * profile's record when the booted Host has none, because the person switched the check off.
+ * profile's record when the booted Host has none, because the person switched the check off. Nothing here fails a
+ * start: a record that cannot be removed is logged and left.
  * @param ctx - the booted profile's root context, after its startup settled.
- * @param options - the home, the profile, the platform, the running version and the terminal line.
+ * @param options - the home, the profile, the platform, the running version, the terminal line and the log.
  * @returns once the record is removed or the attachment is registered; the attachment is an effect of `ctx`.
  */
 export async function watchUpdates(ctx: Context, options: UpdateWatchOptions): Promise<void> {
-  if (ctx.get('deloUpdateCheck') === undefined) await removeUpdateCheck(options.home, options.profile)
+  if (ctx.get('deloUpdateCheck') === undefined) {
+    try {
+      await removeUpdateCheck(options.home, options.profile)
+    } catch (error) {
+      options.log?.(`delo-update-check: the update check's record could not be removed: ${printable(messageOf(error))}`)
+    }
+  }
   const source = updateCheckSource(options)
   ctx.inject(['deloUpdateCheck'], (scope) => {
     scope.effect(() => scope.deloUpdateCheck.attach(source))

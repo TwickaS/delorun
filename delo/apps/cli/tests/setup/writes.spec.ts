@@ -6,7 +6,7 @@ import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import { CliError } from '../../src/exit.ts'
-import { setPatchRow, storeCredential } from '../../src/setup/writes.ts'
+import { setPatchRow, setRowFields, storeCredential, type InheritedRow } from '../../src/setup/writes.ts'
 
 // The protected-file writer's rename, replaceable per test to stop a write at the moment before the rename.
 vi.mock('node:fs/promises', async (original) => {
@@ -134,5 +134,37 @@ describe('the profile patch', () => {
     rmSync(path)
     setPatchRow(path, { id: 'b', config: { enabled: false } })
     expect(parse(readFileSync(path, 'utf8'))).toEqual([{ id: 'b', config: { enabled: false } }])
+  })
+})
+
+describe('a bundle row in the settings service\'s form', () => {
+  const INHERITED: InheritedRow = { id: 'checked', name: '@bundle/checked', config: { enabled: true, intervalHours: 24 } }
+
+  it('restates the inherited config with the field changed, and keeps a field the profile row already set', () => {
+    const path = join(directory, 'cordis.patch.yml')
+    setRowFields(path, INHERITED, { enabled: false })
+    expect(readFileSync(path, 'utf8')).toBe('- id: checked\n  name: "@bundle/checked"\n  config:\n    intervalHours: 24\n    enabled: false\n')
+    writeFileSync(path, '- id: checked\n  config:\n    intervalHours: 48\n    enabled: true\n- id: other\n')
+    setRowFields(path, INHERITED, { enabled: false })
+    expect(parse(readFileSync(path, 'utf8'))).toEqual([{ id: 'checked', config: { intervalHours: 48, enabled: false } }, { id: 'other' }])
+  })
+
+  it('leaves no config when the result equals the inherited one, keeping a row that sets other keys and every row it does not target', () => {
+    const path = join(directory, 'cordis.patch.yml')
+    writeFileSync(path, [
+      '- id: checked\n  disabled: false\n  config:\n    enabled: false',
+      '- id: checked\n  name: "@bundle/checked"\n  config:\n    intervalHours: 24\n    enabled: false',
+      '- id: checked\n  name: "@elsewhere/checked"\n  config:\n    enabled: false',
+      '- insert:\n    - id: checked\n      name: "@bundle/checked"',
+      '- other',
+      '',
+    ].join('\n'))
+    setRowFields(path, INHERITED, { enabled: true })
+    expect(parse(readFileSync(path, 'utf8'))).toEqual([
+      { id: 'checked', disabled: false },
+      { id: 'checked', name: '@elsewhere/checked', config: { enabled: false } },
+      { insert: [{ id: 'checked', name: '@bundle/checked' }] },
+      'other',
+    ])
   })
 })

@@ -168,4 +168,6 @@ Upstream's axis, its peer rule, `compatibility.json` and `dsh plugin allow-versi
 | `c17-exemption-needs-accept-risk` | WP3.8 | A grant without `--accept-risk`, or naming a Delo version other than the running one, is refused. |
 | `c17-stock-plugin-unaffected` | WP3.8 | A plugin without `engines.delo` installs and loads exactly as on stock DSH. |
 | `plugin-check-imports-no-code` | update-notice | `delorun plugin check` reads the manifest and runs none of the plugin's files. |
+| `plugin-check-refuses-special-files` | update-notice | A manifest that is a FIFO or a symbolic link is refused without waiting or following it. |
+| `plugin-check-escapes-manifest-text` | update-notice | The manifest's name and ranges print with terminal control characters escaped. |
 | `c17-version-output` | WP3.8 | `delorun --version` prints the two lines with the Delo and the DSH version. |

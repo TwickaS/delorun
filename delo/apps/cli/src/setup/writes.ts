@@ -1,12 +1,13 @@
 /**
  * The two stores a setup step writes: the model key in upstream's credentials document under the home, and the
  * per-profile `cordis.patch.yml` layer. Both merge into what is there, so a row or ref that setup does not own
- * stays as the person left it.
+ * stays as the person left it. A field the studio's settings also write is saved in the settings service's row form.
  *
  * @module @delo/cli/setup/writes
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { writeProtectedFile } from '@delo/home'
 import { Document, parse, parseDocument, stringify } from 'yaml'
@@ -68,14 +69,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /**
- * Merge one row into a profile's patch list, creating the file when it is absent. The file is rewritten as a
- * YAML list: setup owns the rows it sets, and a row it does not name keeps its values. Comments in the file do
- * not survive the rewrite.
- * @param path - the profile's `cordis.patch.yml`.
- * @param row - the row to set.
- * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list; it is left unchanged.
+ * Read a profile's patch list.
+ * @param path - the profile's `cordis.patch.yml`; an absent file is an empty list.
+ * @returns the rows.
+ * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list.
  */
-export function setPatchRow(path: string, row: PatchRow): void {
+function readPatchList(path: string): unknown[] {
   const text = existsSync(path) ? readFileSync(path, 'utf8') : ''
   let list: unknown
   try {
@@ -85,7 +84,30 @@ export function setPatchRow(path: string, row: PatchRow): void {
     throw new CliError(EXIT.failed, `delorun setup: ${path} is not a YAML patch list setup can read; it was not changed`)
   }
   if (!Array.isArray(list)) throw new CliError(EXIT.failed, `delorun setup: ${path} is not a patch list; it was not changed`)
-  const rows: unknown[] = list
+  return list
+}
+
+/**
+ * Replace a profile's patch list atomically at mode 0600.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @param rows - the rows.
+ */
+function writePatchList(path: string, rows: readonly unknown[]): void {
+  const temporary = `${path}.tmp`
+  writeFileSync(temporary, stringify(rows), { mode: 0o600 })
+  renameSync(temporary, path)
+}
+
+/**
+ * Merge one row into a profile's patch list, creating the file when it is absent. The file is rewritten as a
+ * YAML list: setup owns the rows it sets, and a row it does not name keeps its values. Comments in the file do
+ * not survive the rewrite.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @param row - the row to set.
+ * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list; it is left unchanged.
+ */
+export function setPatchRow(path: string, row: PatchRow): void {
+  const rows = readPatchList(path)
   const existing = rows.find(entry => isRecord(entry) && entry['id'] === row.id)
   if (isRecord(existing)) {
     const config = isRecord(existing['config']) ? existing['config'] : {}
@@ -93,7 +115,42 @@ export function setPatchRow(path: string, row: PatchRow): void {
   } else {
     rows.push({ id: row.id, config: { ...row.config } })
   }
-  const temporary = `${path}.tmp`
-  writeFileSync(temporary, stringify(rows), { mode: 0o600 })
-  renameSync(temporary, path)
+  writePatchList(path, rows)
+}
+
+/** A row as a bundle's patch inserts it: what a profile patch row of it is measured against. */
+export interface InheritedRow {
+  /** The row's entry id. */
+  readonly id: string
+  /** The row's plugin name. */
+  readonly name: string
+  /** The row's config as the bundle writes it. */
+  readonly config: Readonly<Record<string, unknown>>
+}
+
+/**
+ * Set config fields of a bundle's row in a profile's patch list the way upstream's settings service saves a form
+ * field: the profile row restates the row's whole config with its id and plugin name, because a patch row's config
+ * replaces the inherited one, and a config equal to the inherited one leaves no config on the row and drops a row
+ * left with only its id and name. Other rows keep their values; comments do not survive the rewrite.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @param inherited - the row as the bundle inserts it.
+ * @param fields - the config fields to set.
+ * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list; it is left unchanged.
+ */
+export function setRowFields(path: string, inherited: InheritedRow, fields: Readonly<Record<string, boolean | number | string>>): void {
+  const rows = readPatchList(path)
+  const targets = (entry: unknown): entry is Record<string, unknown> =>
+    isRecord(entry) && entry['id'] === inherited.id && !('insert' in entry) && (!('name' in entry) || entry['name'] === inherited.name)
+  const existing = rows.findLast(targets)
+  const current = existing !== undefined && isRecord(existing['config']) ? existing['config'] : inherited.config
+  const next = { ...Object.fromEntries(Object.entries(current).filter(([key]) => !Object.hasOwn(fields, key))), ...fields }
+  if (isDeepStrictEqual(next, inherited.config)) {
+    for (const entry of rows.filter(targets)) Reflect.deleteProperty(entry, 'config')
+    writePatchList(path, rows.filter(entry => !targets(entry) || Object.keys(entry).some(key => key !== 'id' && key !== 'name')))
+    return
+  }
+  if (existing === undefined) rows.push({ id: inherited.id, name: inherited.name, config: next })
+  else existing['config'] = next
+  writePatchList(path, rows)
 }

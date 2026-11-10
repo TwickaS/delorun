@@ -2,8 +2,9 @@
  * The `delo-update-check` row of `@delo/bundle-local`: when the update check runs and where its notice is served
  * (design `delo/docs/design/update-notice.md`). The row provides the `deloUpdateCheck` service, to which `delorun`
  * attaches the check itself once the profile has booted: the row decides when, the CLI decides how. With a source
- * attached, the row checks at once when the last check is at least {@link Config.intervalHours} old, then again each
- * interval while the Host runs, and serves the notice to the studio over the Connection Fetch route
+ * attached, the row checks at once when the last check is at least {@link Config.intervalHours} old; while the Host
+ * runs it wakes hourly and checks again once the wall clock shows the interval has passed, or sooner after a failure,
+ * and serves the notice to the studio over the Connection Fetch route
  * {@link UPDATE_NOTICE_PATH}.
  *
  * Every registration sits behind the C16 switch `update_check` ({@link Config.enabled}), off by default: off, the
@@ -31,8 +32,11 @@ export const name = 'delo-update-check'
 /** The interval and the deadline a row that sets neither runs with. */
 export const UPDATE_CHECK_DEFAULTS = { intervalHours: 24, timeoutSeconds: 15 } as const
 
-/** The longest interval: one timer must fire within it, and a timer's delay cannot pass 2^31 - 1 milliseconds. */
+/** The longest interval, 20 days. */
 export const MAX_INTERVAL_HOURS = 480
+
+/** How often a running Host wakes to compare the wall clock with the last check: hourly, never more often. */
+export const HOUR_MS = 3_600_000
 
 /** The plugin's configuration. */
 export interface Config {
@@ -59,6 +63,8 @@ export const Config: z<Config> = z.object({
 export interface UpdateCheckState {
   /** When the last check ran, in milliseconds since the epoch; absent before the first. */
   readonly checked?: number
+  /** Whether the last check failed, which brings the next one forward. */
+  readonly failed?: boolean
   /** The notice to show, or absent when no newer release is known. */
   readonly notice?: UpdateNotice
 }
@@ -94,8 +100,9 @@ export class UpdateCheckService extends Service {
   }
 
   /**
-   * Attach the check and start its schedule: one check at once when the last is at least the interval old, then one
-   * each interval. Nothing waits for a check.
+   * Attach the check and start its schedule: one check at once when the last is at least the interval old; then an
+   * hourly wake that checks when the wall clock shows the interval has passed since the last check, or, after a failed
+   * check, one hour, two, four and so on up to the interval. Nothing waits for a check.
    * @param source - the check.
    * @returns the disposer, which stops the schedule and detaches the source; a check in flight finishes unobserved.
    * @throws {Error} when a source is already attached; one Host runs one check.
@@ -103,29 +110,34 @@ export class UpdateCheckService extends Service {
   attach(source: UpdateCheckSource): () => void {
     if (this.source !== undefined) throw new Error(`${name}: a check is already attached`)
     this.source = source
-    const intervalMs = this.config.intervalHours * 3_600_000
+    const intervalMs = this.config.intervalHours * HOUR_MS
     let timer: ReturnType<typeof setTimeout> | undefined
     let stopped = false
-    const schedule = (checked: number | undefined): void => {
+    let checked: number | undefined
+    let failures = 0
+    const note = (state: UpdateCheckState): void => {
+      checked = state.checked
+      failures = state.failed === true ? failures + 1 : 0
+    }
+    // The wall clock decides, not the time this process slept through: a machine that slept past the interval checks
+    // at its next wake. A failed check is tried again sooner, one hour, then two, four and so on, up to the interval.
+    const due = (): boolean => checked === undefined || Date.now() - checked >= (failures === 0 ? intervalMs : Math.min(intervalMs, HOUR_MS * 2 ** (failures - 1)))
+    const tick = async (first: boolean): Promise<void> => {
+      try {
+        if (first) note(await source.read())
+        if (!stopped && due()) note(await source.check(this.config.timeoutSeconds * 1000))
+      } catch (error) {
+        // The source records its own failures; one that escapes is logged and counts as a failed check.
+        this.ctx.logger.warn(`${name}: the update check failed: ${error instanceof Error ? error.message : String(error)}`)
+        checked = Date.now()
+        failures++
+      }
       if (stopped) return
-      const delay = checked === undefined ? 0 : Math.max(0, checked + intervalMs - Date.now())
-      timer = setTimeout(() => { void run(true) }, delay)
+      timer = setTimeout(() => { void tick(false) }, HOUR_MS)
       // The schedule never keeps a Host that is otherwise stopping alive.
       timer.unref()
     }
-    const run = async (due: boolean): Promise<void> => {
-      let checked: number | undefined
-      try {
-        const state = due ? await source.check(this.config.timeoutSeconds * 1000) : await source.read()
-        checked = state.checked
-      } catch (error) {
-        // The source records its own failures; one that escapes is logged so the schedule keeps its interval.
-        this.ctx.logger.warn(`${name}: the update check failed: ${error instanceof Error ? error.message : String(error)}`)
-        checked = Date.now()
-      }
-      schedule(checked)
-    }
-    void run(false)
+    void tick(true)
     const dispose = (): void => {
       stopped = true
       if (timer !== undefined) clearTimeout(timer)

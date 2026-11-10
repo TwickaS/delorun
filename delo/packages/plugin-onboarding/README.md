@@ -64,7 +64,7 @@ The row `delo-onboarding` has four volatile fields ([`src/config.ts`](src/config
 - **Delegation consent.** Adding Claude Code or Codex asks for nothing beyond the press of Add, and Delo asks nothing before a delegated agent acts. The per-workspace consent for a first delegation is not built on this base, and the Agents step does not say it exists.
 - **Reach.** No plugin provides `ctx.deloReach` yet, so the Reach step never shows. The command it names, `delorun reach on tailscale`, belongs to the reach plugin.
 - **Folder chooser.** The page dialog that a browser-only host uses is a slot occupant that only the workspace UI renders, so onboarding reaches it through `ctx.deloSidebar` (typed structurally as `SidebarWorkspaceAdder`). Without that service such a host falls back to New Session. The folder the person picks may already be a workspace whose blank chat upstream reuses; that chat's dock mounts before `pending` and takes the prompts only if it mounts afterwards.
-- **Section names.** The terminal setup writes a `sections` record (schema version 2): one `{ id, status }` row per section it showed. The harness serves the ids whose status is `seen` or `answered`, and the flow leaves out a step whose id is among them; a `skipped` row covers nothing. Reach is decided by the reach answer and the `deloReach` service, not by this list.
+- **Section names.** The terminal setup writes a `sections` record (schema versions 2 and 3): one `{ id, status }` row per section it showed. The harness serves the ids whose status is `seen` or `answered`, and the flow leaves out a step whose id is among them; a `skipped` row covers nothing. Reach is decided by the reach answer and the `deloReach` service, not by this list.
 
 ## Tests
 

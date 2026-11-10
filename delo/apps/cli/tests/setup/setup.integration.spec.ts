@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { parse } from 'yaml'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import { composeEntries, loadProfile } from '@deepseek-ai/dsh-app-boot'
+import { INSTALL_ANCHOR } from '@deepseek-ai/dsh/profile-boot'
+import * as UpdateCheck from '@delo/bundle-local/update-check'
 import { ensureHomeTree, runDirectory } from '@delo/home'
 import { PROFILE_STEP, PROGRESS_FILENAME, readProgress, sectionStep, type SetupStep } from '../../src/setup/progress.ts'
 import { runSetup, type SetupForm, type SetupHooks } from '../../src/setup/index.ts'
@@ -202,5 +206,59 @@ describe('the run record', () => {
     expect(() => readProgress(runDir)).toThrow('is not a setup record; remove it to set up again')
     writeFileSync(join(runDir, PROGRESS_FILENAME), JSON.stringify({ version: 1, answers: { schemaVersion: 1, studioAdditions: true }, completed: [] }))
     expect(() => readProgress(runDir)).toThrow('is not a setup record; remove it to set up again')
+  })
+})
+
+describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
+  /**
+   * The release-check row as a start composes the profile: the bundles' layers, then the profile's own patch.
+   * @param root - the Delo home.
+   * @returns the composed row.
+   */
+  function composedUpdateCheckRow(root: string = home): ReturnType<typeof composeEntries>[number] | undefined {
+    const profile = loadProfile('delorun', PROFILE, INSTALL_ANCHOR, root)
+    expect(profile.skippedBundles).toEqual([])
+    return composeEntries([...profile.layers.map(layer => layer.patches), profile.patches]).find(row => row.id === 'delo-update-check')
+  }
+
+  /**
+   * Mount the release-check plugin with a row's config, as the Loader mounts the row.
+   * @param config - the composed row's config.
+   * @returns whether the row provided the check's service.
+   */
+  async function mountsCheck(config: UpdateCheck.Config | undefined): Promise<boolean> {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(UpdateCheck, UpdateCheck.Config(config))
+      return ctx.get('deloUpdateCheck') !== undefined
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  }
+
+  it('update-notice-off-at-first-start: a Full setup that turns the check off has the row off in the profile the first start composes, so no check mounts', async () => {
+    const atStart: { row?: ReturnType<typeof composedUpdateCheckRow> } = {}
+    const run = runSetup({
+      home, profile: PROFILE, output, env: {}, form: asked(['full', 'off', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false]),
+      keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
+      ending: { ...fakeEnding(ending), start: () => { atStart.row = composedUpdateCheckRow(); return Promise.resolve(0) } },
+    })
+    expect(await run).toBe(EXIT.ok)
+    expect(atStart.row).toEqual({ id: 'delo-update-check', name: '@delo/bundle-local/update-check', config: { intervalHours: 24, timeoutSeconds: 15, enabled: false } })
+    expect(await mountsCheck(atStart.row?.config)).toBe(false)
+  })
+
+  it('update-notice-off-at-first-start: --yes --no-update-check turns it off the same way, and a setup that keeps it on mounts the check', async () => {
+    const onHome = join(osHome, 'on', '.delo')
+    await ensureHomeTree(onHome, PROFILE)
+    expect(await setup({ kind: 'yes' }, undefined, undefined, onHome)).toBe(EXIT.ok)
+    const on = composedUpdateCheckRow(onHome)
+    expect(on?.config).toEqual({ enabled: true, intervalHours: 24, timeoutSeconds: 15 })
+    expect(await mountsCheck(on?.config)).toBe(true)
+
+    expect(await runSetup({ home, profile: PROFILE, output, env: { DEEPSEEK_API_KEY: KEY }, form: { kind: 'yes' }, noUpdateCheck: true })).toBe(EXIT.ok)
+    const off = composedUpdateCheckRow()
+    expect(off?.config).toEqual({ intervalHours: 24, timeoutSeconds: 15, enabled: false })
+    expect(await mountsCheck(off?.config)).toBe(false)
   })
 })

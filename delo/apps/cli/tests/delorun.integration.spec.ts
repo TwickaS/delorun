@@ -10,6 +10,7 @@ import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-
 import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { HostNotStoppedError, sendHomeRequest, type LocalDeviceApproval } from '@delo/home-process'
+import { resolveSurface } from '@delo/logs'
 import { parse } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
@@ -335,7 +336,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       ...recording([]),
       runProfile: async (options) => ({
         ...await recording([]).runProfile(options),
-        watchUpdates: (watch) => { watched.push(watch); watch.line('Delorun 0.1.1 is available'); return Promise.resolve() },
+        watchUpdates: (watch) => { watched.push(watch); watch.line('Delorun 0.1.1 is available'); watch.log?.('delo-update-check: the update check failed: logged'); return Promise.resolve() },
       }),
       runtime: () => ({ version: brandString<RuntimeVersion>('0.1.0'), store: true }),
       updates: () => ({ copies: { recover: () => Promise.resolve() }, store: { pointers: () => Promise.resolve({ current: brandString<RuntimeVersion>('0.1.0') }) } }) as never,
@@ -343,6 +344,8 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, fromStore)).toBeUndefined()
     expect(watched).toEqual([expect.objectContaining({ home: deloHome, profile: 'default', running: '0.1.0' })])
     expect(printed).toContain('Delorun 0.1.1 is available\n')
+    expect(printed.join('')).not.toContain('logged')
+    expect(readFileSync(resolveSurface({ kind: 'home', home: deloHome, profile: 'default' }).file, 'utf8')).toContain('the update check failed: logged')
     rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
   })
 

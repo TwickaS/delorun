@@ -1,6 +1,6 @@
 /**
  * Reads the terminal setup's answers record for the studio: whether reach is set up, and which sections the terminal
- * showed or asked (`sections`, schema version 2, rows of `{ id, status }`; a `skipped` row covers nothing). The file is
+ * showed or asked (`sections`, schema versions 2 and 3, rows of `{ id, status }`; a `skipped` row covers nothing). The file is
  * data from the profile directory, so only the fields onboarding uses are validated, the rest is never read into anything served, and a reason that is logged
  * never quotes the file.
  * @module @delo/plugin-onboarding/answers
@@ -23,7 +23,7 @@ const REACH_OFF = 'none'
 /** The statuses of a section the terminal put in front of the person: shown, or asked and answered. A `skipped` section took its default unseen. */
 const COVERED: readonly SectionStatus[] = ['seen', 'answered']
 
-/** The `sections` record of setup's answers document (schema version 2): one row per section the run showed, in order. */
+/** The `sections` record of setup's answers document (schema versions 2 and 3): one row per section the run showed, in order. */
 const SectionRecords = z.array(z.object({ id: z.string().regex(SECTION_NAME), status: z.enum(SECTION_STATUSES) })).max(MAX_SECTIONS)
 
 /** The fields used; other fields are tolerated and ignored. */

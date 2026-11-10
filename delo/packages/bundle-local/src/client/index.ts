@@ -22,7 +22,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the 'sidebar.brand.mark' and 'sidebar.brand.name' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import { SETUP_OPT_IN_ROWS } from '@delo/contract-setup-answers'
+import { SETUP_OPT_IN_ROWS, SETUP_UPDATE_CHECK_ROW } from '@delo/contract-setup-answers'
 import { DeloBrandMark, DeloBrandName } from './brand.tsx'
 import { acknowledgeNotice, DeloNotice, noticeAcknowledged, type DeloNoticeInjected } from './DeloNotice.tsx'
 import { DeloVersionRow, type DeloVersionRowInjected } from './DeloVersionRow.tsx'
@@ -86,10 +86,10 @@ export const PRIVACY_SECTION_ID = 'delo-privacy'
 /** The section's place in the Settings navigation: after upstream's Plugins section (15). */
 export const PRIVACY_SECTION_ORDER = 20
 
-/** The row of Delo's release check, whose `enabled` is C16 switch `update_check`. */
-export const UPDATE_CHECK_ROW = 'delo-update-check'
+/** The row of Delo's release check, whose `enabled` is C16 switch `update_check`; setup's `updateCheck` answer writes the same field. */
+export const UPDATE_CHECK_ROW = SETUP_UPDATE_CHECK_ROW
 
-/** The Host row each switch writes: the opt-ins from C11's answer-to-row mapping, and the release check's row. */
+/** The Host row each switch writes: the opt-ins and the release check from C11's answer-to-row mapping. */
 export const OPT_IN_ROWS: Readonly<Record<OptInId, string>> = {
   sessionLog: SETUP_OPT_IN_ROWS.sessionLogUpload,
   analytics: SETUP_OPT_IN_ROWS.desktopAnalytics,
