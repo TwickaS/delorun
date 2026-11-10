@@ -1795,6 +1795,18 @@
       "class": "delo-feature",
       "feature": "project-identity",
       "reason": "Adds Delo Run's copyright line under upstream's; upstream's MIT text and notice are unchanged."
+    },
+    {
+      "path": "packages/client/ui-workspace/src/client/notice-hold.ts",
+      "class": "delo-feature",
+      "feature": "studio-seams",
+      "reason": "Lets a first-run flow hold the default Workspace notice while it explains the missing default Workspace itself; with no hold registered every notice shows as in stock."
+    },
+    {
+      "path": "packages/client/web/src/boot-page.ts",
+      "class": "delo-feature",
+      "feature": "studio-seams",
+      "reason": "Reads the boot page wordmark from the page global dshBootWordmark that a host plugin sets; without it the page shows HARNESS as in stock."
     }
   ],
   "retired": []
