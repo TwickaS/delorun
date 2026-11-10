@@ -18,11 +18,15 @@ import { removeTree } from '../harness/roots.ts'
 import { PROFILE } from './home.ts'
 
 /** The parts of upstream's corpus modules the benchmark uses. */
-interface CorpusModules {
-  /** `corpus-shape.ts`: the anchor of a chat's length. */
-  readonly sessionShape: (rank: number, count: number) => { readonly anchor: number }
+export interface CorpusModules {
+  /** `corpus-shape.ts`: the anchor and turns of a chat's length. */
+  readonly sessionShape: (rank: number, count: number) => { readonly anchor: number, readonly turns: number }
   /** `synthetic-corpus.ts`: a chat's id. */
   readonly corpusSessionId: (rank: number) => string
+  /** `synthetic-corpus.ts`: a chat's stored header. */
+  readonly corpusHeader: (rank: number, count: number) => { readonly cwd?: string, readonly createdAt: number }
+  /** `synthetic-corpus.ts`: whether a chat is a subagent's. */
+  readonly subagentRank: (rank: number) => boolean
   /** `synthetic-corpus.ts`: the writer. */
   readonly SyntheticCorpusWriter: new () => {
     author(anchor: number): Promise<unknown>
@@ -45,7 +49,7 @@ export async function corpusModules(): Promise<CorpusModules> {
   // A non-literal specifier gives the module untyped; the interface above states the part used.
   const shape: Pick<CorpusModules, 'sessionShape'> = await import(CORPUS_MODULES.shape)
   const corpus: Omit<CorpusModules, 'sessionShape'> = await import(CORPUS_MODULES.corpus)
-  return { sessionShape: shape.sessionShape, corpusSessionId: corpus.corpusSessionId, SyntheticCorpusWriter: corpus.SyntheticCorpusWriter }
+  return { sessionShape: shape.sessionShape, corpusSessionId: corpus.corpusSessionId, corpusHeader: corpus.corpusHeader, subagentRank: corpus.subagentRank, SyntheticCorpusWriter: corpus.SyntheticCorpusWriter }
 }
 
 /**

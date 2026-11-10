@@ -1251,6 +1251,9 @@ importers:
       '@delo/update':
         specifier: workspace:*
         version: link:../../packages/update
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
