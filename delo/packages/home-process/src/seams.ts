@@ -15,6 +15,7 @@
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import type { StudioLink, UpdateJournal } from '@delo/contract-home-process'
 import type { ExchangeOptions, ResponseLine, UnsignedRequest } from './client.ts'
+import type { LocalDeviceApproval } from './devices-approve.ts'
 
 /** C1's two pointers. */
 export interface RuntimePointers {
@@ -317,6 +318,8 @@ export interface RunningHost {
    * @returns their ids and plugin names.
    */
   rows(): readonly BootRow[]
+  /** The local device approval, when the profile loads `@delo/home-auth`; `devices.approve` drives it. */
+  readonly devices?: LocalDeviceApproval
   /**
    * Contract C3's health check: H1 to H5 against the report's expectations, or H1 and H2 alone without them.
    * @param expect - what the report predicted, or `undefined` for a start whose record keeps no expectations, such

@@ -26,6 +26,11 @@ const request = z.discriminatedUnion('op', [
   z.strictObject({ ...base, op: z.literal('rollback'), args: z.strictObject({ ...drain, profileOnly: z.boolean() }) }),
   z.strictObject({ ...base, op: z.literal('stop'), args: z.strictObject({ mode: z.enum(['drain', 'cancel']) }) }),
   z.strictObject({ ...base, op: z.literal('studio.open-token'), args: z.strictObject({ port: z.number().int().min(1).max(65_535).optional() }).optional() }),
+  z.strictObject({
+    ...base,
+    op: z.literal('devices.approve'),
+    args: z.strictObject({ requestId: z.string().regex(/^[A-Za-z0-9_-]{22}$/).optional(), typedCode: z.string().regex(/^[0-9 -]{8,12}$/).optional() }),
+  }),
 ])
 
 /**

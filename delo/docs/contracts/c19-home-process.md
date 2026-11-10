@@ -105,6 +105,7 @@ Start at login is not built: `delorun start` and `delorun stop` take no `--at-lo
 The update channel is the socket [C1](c01-home-layout.md) places at `run/<profile>/update.sock`, or the named pipe [C1](c01-home-layout.md) names on Windows. It carries every request that reads or changes the home process's state.
 
 - **Callers.** It serves the person's `delorun` command, which reads the token file. The Host's update plugin, which would act for a studio session that the studio's own authentication admitted (upstream's loopback authentication, or C4's admission on a reach listener) and attach the token it holds in memory, is not built, so no studio action reaches the channel.
+- **The caller rule.** The token a request carries names its caller: the token file's names the person's own command, and the Host's channel token names the Host. Every operation accepts both, except `studio.open-token` and `devices.approve`, which the home process refuses for the Host's channel token before it reads anything else (`UNAUTHENTICATED` and `LOOPBACK_REQUIRED`), because the Host acts for sessions on every listener, reach sessions included ([C14](c14-oidc-passkeys.md#tailnet-membership)).
 - **The token check.** The first line of each connection is a request with the field `token`. The home process compares it in constant time with the current start's token. A missing, malformed, wrong or previous start's token receives `UNAUTHENTICATED`, and the connection closes; that response carries no other information.
 - **The Host's channel token.** The home process creates a second token at each start, holds it only in memory and gives it to the Host in the `UpdateChannelAccess` it receives at boot. The channel accepts it for every operation but `studio.open-token`, which receives `UNAUTHENTICATED` for it.
 - **Framing.** Each connection carries one request, encoded as one line of UTF-8 JSON of at most 16,384 bytes, and the response lines that answer it, each one JSON object followed by a newline. The home process closes the connection after the final response line.
@@ -124,6 +125,7 @@ Every request has the fields `v` (the protocol version, 1), `token`, `op` and, w
 | `rollback` | `wait` and `drainTimeoutS` as for `update.apply`; `profileOnly`: a boolean | as `update.apply`, with the target the update record's `from`; the final `outcome` is `rolled-back`, `aborted` or `failed` |
 | `stop` | `mode`: `drain` or `cancel` | progress lines, then one final line with `status` when it can be read, before the process exits |
 | `studio.open-token` | `port`, optional: a loopback port from 1 to 65535 that forwards to the studio | one line: `url`, the studio's loopback address, with `port` in place of the studio's own port when given, and a launch token that the Host mints for this request, and `oneTime`, whether that token works once within 60 seconds ([C4](c04-admission.md#launch-tokens)); `STUDIO_UNAVAILABLE`, with the reason, when no Host runs, the Host serves no studio, its studio listens on an address other than loopback, or it publishes the studio at a public URL |
+| `devices.approve` | none, or `requestId` and `typedCode` together | without arguments: opens [C5](c05-device-approval.md#approval-window)'s approval window, claiming a home without an owner for the local person, and answers one line with `closesAt` and `pending` once a request is pending or the window closed; with arguments: [C5](c05-device-approval.md#local-approval)'s local approval, answering one line with the approved `device` |
 
 - **Response lines.** Each line has `ok` (a boolean); a failed line has `error`, a code from [errors](#errors), and a progress line has `phase`, or, while `update.prepare` installs the target, `line`: one line of the install's progress with its newline, the same text the launcher prints while it installs a release. A report expires 600 seconds after `update.prepare` returns it; `update.apply` with an expired or unknown `reportId` fails with `REPORT_EXPIRED`. A request that fails in a way the home process does not report on the channel ends without a final line, the failure recorded in the home process's log; the requester treats the request's outcome as unknown, and `delorun update` says so and names `delorun logs home`.
 - **`failed`.** An `update.apply` or `rollback` that ends `failed` leaves a rollback the home process may not finish itself; the home process stops once the final line is sent, and the update record stays for the next start ([interrupted updates](#interrupted-updates)).
@@ -233,6 +235,9 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 | `STUDIO_UNAVAILABLE` | `studio.open-token` found no running Host, or a Host that cannot make a link for this computer; the line's `detail` says which |
 | `HOST_STOP_FAILED` | The Host's teardown for a switch failed or did not finish within `drainTimeoutS`; nothing was switched and the Host runs again |
 | `NO_RUNTIME_STORE` | At a start, an update record that is not `committed` exists and the process runs outside the runtime store, so it boots no Host; the person starts Delo through the launcher or runs `delorun recover` |
+| `LOOPBACK_REQUIRED` | `devices.approve` carried the Host's channel token |
+| `APPROVAL_FAILED` | The local approval was refused; the detail names [C5](c05-device-approval.md#errors)'s code, such as `APPROVAL_CODE_MISMATCH` |
+| `APPROVALS_UNAVAILABLE` | `devices.approve` reached a profile that does not load `@delo/home-auth` |
 
 ## Consumers
 
@@ -266,6 +271,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 9. The protection rests on confining the agent's commands. A process of the person's user outside the sandbox can run `delorun update` itself, and this contract claims no protection against it. No root-owned helper exists.
 10. A command reaches the update channel with the token only when it runs unconfined. A `danger-full-access` escalation is approved only through [C1](c01-home-layout.md)'s escalation prompt, which states that full access reaches Delo's home, its tokens, the Docker supervisor and the update channel.
 11. The channel gives a studio link only for `studio.open-token` with the start token, never for a request carrying the Host's channel token. Neither the response line nor the link is logged, and `delorun` prints the link only under `delorun open --print`.
+12. `devices.approve` is accepted only with the token the person's own command reads from the token file; the Host's channel token, which the home process holds only in memory, is refused for it.
 
 ### Denial tests
 
@@ -274,6 +280,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 | `update-waits-for-chat` | An update applied while a fixture chat's turn runs stays in `waiting` and leaves `current` unchanged until the turn ends; a new turn in that time is refused with `UPDATE_PENDING`; with `abort-if-busy` the update ends `aborted` with `CHATS_RUNNING` |
 | `update-channel-connect-denied` | On each dialect that enforces [C1](c01-home-layout.md)'s `home-connect`, a confined workspace command's connect to the update channel fails and it cannot read the start token |
 | `update-turn-refused-while-held` | With the chat gate held, a new turn ends with `UPDATE_PENDING` before any model request, a turn that was already running takes its next step, and with the switch `update_turn_refusal` off no turn is refused |
+| `the channel token cannot call devices.approve` | `devices.approve` with the Host's channel token is refused with `LOOPBACK_REQUIRED`, opens no window and approves nothing, while the same token's `status` succeeds and the person's token opens the window |
 | `update-channel-token-required` | A request with no token, with a wrong token and with the previous start's token each receives `UNAUTHENTICATED` and no other field |
 | `update-channel-landlock` | Under Landlock, a confined workspace command's connect to the update channel succeeds, its request fails with `UNAUTHENTICATED` because it cannot read the token, and `delorun verify` reports that state |
 | `update-channel-not-enforced-reported` | On a fixture dialect that cannot enforce [C1](c01-home-layout.md)'s rules, `delorun verify` reports them as `not-enforced` |

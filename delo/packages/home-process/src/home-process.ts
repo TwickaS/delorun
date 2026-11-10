@@ -55,6 +55,7 @@ import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted
 import type { BootRow, ChatGate, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
 import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
+import { approveDevices } from './devices-approve.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
 
 /** What a home process runs with; `delorun` supplies every value. */
@@ -129,7 +130,7 @@ export class HomeProcess implements HandshakeSubject {
   private state: HomeProcessState = 'starting'
   private lock: HomeLock | undefined
   private token: StartToken | undefined
-  /** The token the Host's requests carry, held only in memory; it cannot ask for a studio link. */
+  /** The token the Host's requests carry, held only in memory; it cannot ask for a studio link, approve or remove a device. */
   private hostToken: StartToken | undefined
   private channel: TokenSocket | undefined
   private host: RunningHost | undefined
@@ -558,6 +559,8 @@ export class HomeProcess implements HandshakeSubject {
         this.refuseOutsideRunning()
         if (this.handshake === undefined) throw new HomeProcessError('NO_UPDATE_RECORD', 'this build has no runtime store')
         return this.handshake.rollback(request.args.wait, request.args.drainTimeoutS, request.args.profileOnly, progress)
+      case 'devices.approve':
+        return approveDevices(request, check.callerOf(request.token), this.host?.devices)
       default: {
         const unknown: never = request
         throw new HomeProcessError('SCHEMA_VIOLATION', `unknown op ${String((unknown as { readonly op: unknown }).op)}`)

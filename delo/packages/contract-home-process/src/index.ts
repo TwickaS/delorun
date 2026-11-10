@@ -176,6 +176,24 @@ export interface StudioOpenTokenRequest extends RequestBase {
   }
 }
 
+/**
+ * The `devices.approve` request: C5's local approval at the home's own computer. Without arguments it opens the approval
+ * window and answers once a request is pending or the window closed; with `requestId` and `typedCode` it approves that
+ * request. Accepted only with the token the person's own `delorun` reads from the token file, and refused with
+ * `LOOPBACK_REQUIRED` for the Host's channel token, which acts for studio sessions on every listener.
+ */
+export interface DevicesApproveRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'devices.approve'
+  /** Arguments. */
+  readonly args: {
+    /** The pending request to approve. */
+    readonly requestId?: string
+    /** The 8-digit match code the person typed from the new device's screen. */
+    readonly typedCode?: string
+  }
+}
+
 /** Every request the update channel accepts; no request carries a path, an archive, a URL or a command. */
 export type UpdateChannelRequest =
   | StatusRequest
@@ -185,6 +203,7 @@ export type UpdateChannelRequest =
   | RollbackRequest
   | StopRequest
   | StudioOpenTokenRequest
+  | DevicesApproveRequest
 
 /** Error codes of this contract. */
 export type HomeProcessErrorCode =
@@ -210,6 +229,9 @@ export type HomeProcessErrorCode =
   | 'STUDIO_UNAVAILABLE'
   | 'HOST_STOP_FAILED'
   | 'NO_RUNTIME_STORE'
+  | 'LOOPBACK_REQUIRED'
+  | 'APPROVAL_FAILED'
+  | 'APPROVALS_UNAVAILABLE'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {

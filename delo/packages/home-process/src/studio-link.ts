@@ -12,6 +12,7 @@
 import type { StartToken } from '@delo/contract-home-layout'
 import type { StudioOpenTokenRequest } from '@delo/contract-home-process'
 import { StartTokenCheck } from '@delo/home'
+import type { ChannelCaller } from './devices-approve.ts'
 import { HomeProcessError } from './errors.ts'
 import type { RunningHost } from './seams.ts'
 
@@ -46,6 +47,15 @@ export class ChannelTokenCheck extends StartTokenCheck {
    */
   acceptsStart(candidate: unknown): boolean {
     return super.accepts(candidate)
+  }
+
+  /**
+   * The caller an accepted token names, which `devices.approve` and `devices.remove` read.
+   * @param candidate - the accepted request's token.
+   * @returns `person` for the start token, otherwise `host`.
+   */
+  callerOf(candidate: unknown): ChannelCaller {
+    return this.acceptsStart(candidate) ? 'person' : 'host'
   }
 }
 

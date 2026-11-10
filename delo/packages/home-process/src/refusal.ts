@@ -64,6 +64,12 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo did not switch releases: the studio host did not stop in time, and it runs again.', remedies: [again] }
     case 'NO_RUNTIME_STORE':
       return { lead: 'Delo did not start: an unfinished update needs the runtime store, and this delorun runs outside it.', remedies: ['Start Delo through the launcher the Delo home installs.', recoverStatus] }
+    case 'LOOPBACK_REQUIRED':
+      return { lead: 'The home process refused the device request: only the person\'s own delorun on this computer approves or removes devices.', remedies: [`Approve the device at this computer: delorun devices approve${profile}`] }
+    case 'APPROVAL_FAILED':
+      return { lead: 'Delo did not approve or cancel the device request.', remedies: [`Wait for the device's request again: delorun devices approve${profile}`] }
+    case 'APPROVALS_UNAVAILABLE':
+      return { lead: 'Delo did not change any device: the running profile does not load remote access.', remedies: [`Turn remote access on, then restart Delo: delorun reach on tailscale${profile}`] }
     case 'STUDIO_UNAVAILABLE':
       return { lead: 'Delo did not open the studio: the running home process could not make a sign-in link for this computer.', remedies: [`See whether Delo runs and where its studio listens: delorun status${profile}`] }
   }
