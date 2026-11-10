@@ -39,6 +39,8 @@ import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderPro
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, refuseSkippedDeloBundles, type BootedRow, type RowState } from './delo-bundles.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { readBackgroundAnswer } from './setup/background.ts'
+import { upstreamLinking } from './setup/index.ts'
+import { addStudioBundle } from './studio-bundle.ts'
 import { safeModeNotice, safeModeStart } from './safe-mode.ts'
 import { removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, writeSandboxOverlay } from './sandbox-protection.ts'
 import { checkHealth, inactiveRows, watchChats } from './update/host.ts'
@@ -47,6 +49,11 @@ import { checkStoredRuntime, storeUpdateSupport } from './update/store-support.t
 
 /** What the foreground start calls outside this module; specs replace them. */
 export interface StartDependencies {
+  /**
+   * Adds `@delo/bundle-studio` to a profile setup created before it existed ({@link addStudioBundle}); upstream's
+   * resolution and `dsh plugin add` by default.
+   */
+  readonly addStudioBundle: (home: string, profile: string, output: CommandOutput) => Promise<boolean>
   /** Loads the profile and reports its skipped bundles as upstream's boot does; upstream's `prepareProfile` by default. */
   readonly prepareProfile: (profile: string) => Promise<ResolvedProfileRuntime>
   /** Boots the profile; upstream's `runProfile` by default, with its rows and its shutdown. */
@@ -161,6 +168,7 @@ const HOME_LOG_LEVEL = 'info'
  */
 export function upstreamDependencies(): StartDependencies {
   return {
+    addStudioBundle: (home, profile, output) => addStudioBundle(home, profile, () => upstreamLinking(home, profile), (text) => { output.stderr(text) }),
     async prepareProfile(profile) {
       // Loaded after the launch variables are set, so upstream resolves the Delo home.
       const { INSTALL_ANCHOR, prepareProfile } = await import('@deepseek-ai/dsh/profile-boot')
@@ -266,6 +274,15 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * @throws {CliError} when the profile skipped a Delo bundle, fails to boot, or a row of a Delo bundle did not activate.
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
+  // A profile that cannot take the studio bundle still starts, in the stock look; its data is unchanged either way.
+  try {
+    if (await dependencies.addStudioBundle(request.home, request.profile, request.output)) {
+      request.output.stderr(`delorun: added Delo's studio look to the profile ${request.profile}; Settings → Appearance switches back to the stock look.\n`)
+    }
+  } catch (error) {
+    if (!(error instanceof CliError)) throw error
+    request.output.stderr(`delorun: the profile ${request.profile} starts in the stock look, because Delo's studio look could not be added: ${error.message}\n`)
+  }
   let resolvedProfile: ResolvedProfileRuntime
   try {
     resolvedProfile = await dependencies.prepareProfile(request.profile)

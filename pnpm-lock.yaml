@@ -1600,6 +1600,9 @@ importers:
 
   delo/packages/bundle-local:
     dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/dsh-official-bundles':
         specifier: workspace:*
         version: link:../../../packages/util/official-bundles
@@ -1643,9 +1646,6 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: workspace:*
         version: link:../../../packages/test-support/agent-loop-testkit
-      '@deepseek-ai/dsh-app-boot':
-        specifier: workspace:*
-        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../../packages/client/locale
@@ -1682,6 +1682,9 @@ importers:
       '@deepseek-ai/dsh-host-product-telemetry-otel':
         specifier: workspace:*
         version: link:../../../packages/host/product-telemetry-otel
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../../packages/llm/llm

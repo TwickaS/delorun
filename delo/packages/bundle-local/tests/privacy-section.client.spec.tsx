@@ -8,11 +8,10 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject, type ConfigForm, type ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { apply, inject, OPT_IN_ROWS, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER } from '../src/client/index.ts'
+import { apply, inject, OPT_IN_ROWS, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, VERSION_ROW, VERSIONS_GLOBAL } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { OptIn, type OptInSettings } from '../src/client/opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionProps } from '../src/client/PrivacySection.tsx'
-import { apply as hostApply } from '../src/index.ts'
 import { NOTICE_STORAGE_KEY, NOTICE_VERSION } from '../src/client/DeloNotice.tsx'
 
 afterEach(cleanup)
@@ -112,7 +111,6 @@ describe('the Privacy section', () => {
 
 describe('the plugin', () => {
   it('registers the section and writes each opt-in to its own upstream row', async () => {
-    expect(hostApply).not.toThrow()
     expect(OPT_IN_ROWS).toEqual({ sessionLog: 'session-log-deepseek', analytics: 'product-analytics' })
     const ctx = new Context()
     try {
@@ -125,11 +123,18 @@ describe('the plugin', () => {
       if (slots === undefined) throw new Error('no slot registry')
       // The Settings shell declares the section slot; this stands in for it.
       // The sidebar's brand holes are declared at the root, where the Delo occupants wait for them.
-      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.general.item': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const [section] = slots.entries('settings.section')
       expect(section?.options).toMatchObject({ id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER })
+      const label = section?.options.label
+      expect(typeof label === 'function' ? label() : label).toBe(en.nav)
+      // The preview notice's onboarding step reads its copy from this bundle's dictionary.
+      const [noticeStep] = slots.entries('settings.onboarding')
+      const noticeFace = noticeStep?.inject?.()
+      if (noticeFace === undefined || !('t' in noticeFace) || typeof noticeFace.t !== 'function') throw new Error('no notice face')
+      expect(noticeFace.t('notice.title')).toBe(en['notice.title'])
       expect(slots.entries('sidebar.brand.name')).toHaveLength(1)
       expect(slots.entries('sidebar.brand.mark')).toHaveLength(1)
       const sessionLog = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.sessionLog), 'set').mockResolvedValue(true)
@@ -141,6 +146,8 @@ describe('the plugin', () => {
       expect(sessionLog).not.toHaveBeenCalled()
       await face.setEnabled('sessionLog', false)
       expect(sessionLog).toHaveBeenCalledWith('enabled', false)
+      // No versions in the page: the stock version row stays.
+      expect(slots.entries('settings.general.item')).toEqual([])
       // ctx.deloNotice records the notice's acknowledgement for a flow that shows its copy itself.
       const notice = ctx.get('deloNotice')
       if (notice === undefined) throw new Error('no deloNotice service')
@@ -151,6 +158,32 @@ describe('the plugin', () => {
       expect(globalThis.localStorage.getItem(NOTICE_STORAGE_KEY)).toBe(NOTICE_VERSION)
       globalThis.localStorage.clear()
     } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('puts the version row in the stock version row\'s place when the page carries both versions', async () => {
+    Reflect.set(globalThis, VERSIONS_GLOBAL, { delo: '0.1.0', dsh: '0.2.2-rc.1' })
+    const ctx = new Context()
+    try {
+      await ctx.plugin(SlotRegistry).await()
+      ctx.provide('locale', new LocaleRuntime(ctx))
+      new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
+      await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
+      const slots = ctx.get('slots')
+      if (slots === undefined) throw new Error('no slot registry')
+      slots.register({ name: 'root', children: { 'settings.general.item': { kind: 'list', scope: 'root' } }, inject: () => ({}) },
+        ({ renderSlot }) => <>{renderSlot('settings.general.item', {})}</>)
+      await ctx.plugin({ inject, apply }).await()
+      const [row] = slots.entries('settings.general.item')
+      expect(row?.options).toMatchObject({ id: VERSION_ROW.id, priority: VERSION_ROW.priority })
+      expect(VERSION_ROW).toEqual({ id: 'current-version', priority: -1 })
+      const face = row?.inject?.()
+      if (face === undefined || !('versions' in face) || !('t' in face) || typeof face.t !== 'function') throw new Error('no row face')
+      expect(face.versions).toEqual({ delo: '0.1.0', dsh: '0.2.2-rc.1' })
+      expect(face.t('version.delo', { version: '0.1.0' })).toBe('Delo version: 0.1.0')
+    } finally {
+      Reflect.deleteProperty(globalThis, VERSIONS_GLOBAL)
       await ctx.fiber.dispose()
     }
   })

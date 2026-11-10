@@ -6,11 +6,11 @@ import { dirname, join, relative } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE } from '@delo/bundle-local/profile'
+import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { parse } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
-import { EXIT } from '../src/exit.ts'
+import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
 import { startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
@@ -209,6 +209,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
    */
   function recording(seen: { options: RunProfileOptions, dshHome: string | undefined }[], rows: readonly BootedRow[] = [], shutdowns: number[] = []): StartDependencies {
     return {
+      addStudioBundle: () => Promise.resolve(false),
       prepareProfile: upstreamDependencies().prepareProfile,
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
@@ -246,6 +247,38 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     manifest.dsh.profile.bundles.push(...names)
     writeFileSync(path, JSON.stringify(manifest))
   }
+
+  it('adds the studio bundle with upstream\'s plugin operation to a profile whose list lacks it, once', async () => {
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    const path = join(deloHome, 'profiles', 'default', 'package.json')
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as { dsh: { profile: { bundles: string[] } }, dependencies?: Record<string, string> }
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => name !== STUDIO_BUNDLE)
+    delete manifest.dependencies?.[STUDIO_BUNDLE]
+    writeFileSync(path, JSON.stringify(manifest))
+    const output = { ...context, stderr: () => undefined }
+    expect(await upstreamDependencies().addStudioBundle(deloHome, 'default', output)).toBe(true)
+    expect((JSON.parse(readFileSync(path, 'utf8')) as { dsh: { profile: { bundles: string[] } } }).dsh.profile.bundles).toContain(STUDIO_BUNDLE)
+    expect(await upstreamDependencies().addStudioBundle(deloHome, 'default', output)).toBe(false)
+  })
+
+  it('adds the studio look to a profile set up before it existed, and starts in the stock look when that fails', async () => {
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    const printed: string[] = []
+    const output = { ...context, stderr: (text: string) => void printed.push(text) }
+    const added: string[] = []
+    const upgrading: StartDependencies = { ...recording([]), addStudioBundle: (_home, profile) => { added.push(profile); return Promise.resolve(true) } }
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output }, upgrading)).toBeUndefined()
+    expect(added).toEqual(['default'])
+    expect(printed.join('')).toContain('delorun: added Delo\'s studio look to the profile default')
+    rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
+    printed.length = 0
+    const refusing: StartDependencies = { ...recording([]), addStudioBundle: () => Promise.reject(new CliError(EXIT.failed, 'pnpm exited 1')) }
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output }, refusing)).toBeUndefined()
+    expect(printed.join('')).toContain('delorun: the profile default starts in the stock look, because Delo\'s studio look could not be added: pnpm exited 1')
+    rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
+    const failing: StartDependencies = { ...recording([]), addStudioBundle: () => Promise.reject(new Error('disk gone')) }
+    await expect(startForeground({ home: deloHome, profile: 'default', open: false, output }, failing)).rejects.toThrow('disk gone')
+  })
 
   it('boots the CLI profile with DSH_HOME set to the Delo home, and a second start leaves one holder', async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)

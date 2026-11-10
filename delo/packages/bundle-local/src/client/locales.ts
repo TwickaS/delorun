@@ -23,6 +23,8 @@ export const en = {
   'confirm.cancel': 'Cancel',
   'confirm.close': 'Close',
   'failed': 'The setting was not saved, and it is unchanged.',
+  'version.delo': 'Delo version: {version}',
+  'version.dsh': 'DeepSeek Harness version: {version}',
 }
 
 /** A key of the section's dictionary. */
@@ -51,4 +53,6 @@ export const zh: typeof en = {
   'confirm.cancel': '取消',
   'confirm.close': '关闭',
   'failed': '设置未保存，保持不变。',
+  'version.delo': 'Delo 版本：{version}',
+  'version.dsh': 'DeepSeek Harness 版本：{version}',
 }

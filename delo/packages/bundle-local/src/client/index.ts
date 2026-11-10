@@ -19,11 +19,15 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { SETUP_OPT_IN_ROWS } from '@delo/contract-setup-answers'
 import { DeloBrandMark, DeloBrandName } from './brand.tsx'
 import { acknowledgeNotice, DeloNotice, noticeAcknowledged, type DeloNoticeInjected } from './DeloNotice.tsx'
+import { DeloVersionRow, type DeloVersionRowInjected } from './DeloVersionRow.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { OptIn, type OptInSettings } from './opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
+import { readVersions } from './versions.ts'
 
 export type { PrivacyLocaleKey } from './locales.ts'
+export type { DeloVersionRowInjected, DeloVersionRowProps } from './DeloVersionRow.tsx'
+export { readVersions, VERSIONS_GLOBAL, type DeloVersions } from './versions.ts'
 export type { OptInMutation, OptInSettings } from './opt-in.ts'
 export type { OptInId, PrivacySectionInjected, PrivacySectionProps } from './PrivacySection.tsx'
 
@@ -67,11 +71,18 @@ export const OPT_IN_ROWS: Readonly<Record<OptInId, string>> = {
   analytics: SETUP_OPT_IN_ROWS.desktopAnalytics,
 }
 
+/**
+ * The version row's id and rank: the stock row's id at a lower shadowing rank, so it renders in that row's place and
+ * keeps its place in grouped Settings.
+ */
+export const VERSION_ROW = { id: 'current-version', priority: -1 } as const
+
 /** Required services. */
 export const inject = ['slots', 'locale', 'configForms']
 
 /**
- * Register the Privacy section, the Delo sidebar brand, Delo's preview notice and `ctx.deloNotice`. All of them come from this bundle's `delo-privacy` row, which the parity composition leaves disabled,
+ * Register the Privacy section, the Delo sidebar brand, Delo's preview notice, `ctx.deloNotice` and, when the harness
+ * printed both versions into the page, the version row that names Delo's version and the DeepSeek Harness version. All of them come from this bundle's `delo-privacy` row, which the parity composition leaves disabled,
  * so upstream's brand and notice stay in the parity composition.
  * @param ctx - the browser plugin context.
  */
@@ -103,6 +114,15 @@ export function apply(ctx: Context): void {
     },
     setEnabled: (id, enabled) => optIns[id].setEnabled(enabled),
   })
+  const versions = readVersions()
+  if (versions !== undefined) {
+    ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item',
+      id: VERSION_ROW.id,
+      priority: VERSION_ROW.priority,
+      inject: (): DeloVersionRowInjected => ({ versions, t: (key, params) => t(key, params) }),
+    }, DeloVersionRow))
+  }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: PRIVACY_SECTION_ID,
