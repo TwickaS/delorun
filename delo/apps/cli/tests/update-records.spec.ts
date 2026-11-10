@@ -64,6 +64,7 @@ function declaredRecords(): Map<string, number> {
  */
 const DECLARATIONS: Readonly<Record<string, string | null>> = {
   'storage:delo_workspaces': 'storage:delo_workspaces',
+  'storage:delo_chat_states': 'storage:delo_chat_states',
   TRASH_ITEM_SCHEMA_VERSION: 'trash-item',
   'delo.profile-safety': 'profile-safety',
   'delo.safe-mode': 'safe-mode',
@@ -110,6 +111,7 @@ describe('c03-previous-release-reads-delorun-records', () => {
       'session-data-copy': versionOf(COPY_RECORD_SCHEMA),
       'data-restore-journal': versionOf(RESTORE_JOURNAL_SCHEMA),
       'storage:delo_workspaces': 1,
+      'storage:delo_chat_states': 1,
       'trash-item': 1,
     }
     expect(DELO_RECORDS).toEqual(written)

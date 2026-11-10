@@ -46,6 +46,8 @@ export const DELO_RECORDS: Readonly<Record<string, number>> = Object.freeze({
   'data-restore-journal': 1,
   /** The `delo_workspaces` storage domain under `storages/`, its `defineDomain` version (`@delo/plugin-workspaces`). */
   'storage:delo_workspaces': 1,
+  /** The `delo_chat_states` storage domain under `storages/`, its `defineDomain` version (`@delo/plugin-chat-states`). */
+  'storage:delo_chat_states': 1,
   /** `trash/items/<id>/item.json`, a trash item's record, at `TRASH_ITEM_SCHEMA_VERSION` (`@delo/trash`). */
   'trash-item': 1,
 })
