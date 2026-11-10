@@ -12,8 +12,8 @@ import type { UpdateJournal } from '@delo/contract-home-process'
 import { HomeProcessError, type ProfileSnapshots, type RollbackSteps, type SessionDataCopies, type UpdateSupport } from '@delo/home-process'
 import { readSafetyRecord, recordSnapshot, rollbackToSnapshot, withUpdate, writeSafetyRecord } from '@delo/profile-safety'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
-import { assertSoleDataUser, DataInUseError } from './data-users.ts'
-import { HomeRuntimeStore, isStoreError, readStoredRoot, type RuntimeChannel, type RuntimeStore } from '@delo/runtime-store'
+import { assertSoleDataUser, DataInUseError } from '../home-exclusion.ts'
+import { HomeRuntimeStore, isStoreError, readStoredRoot, type OpenUpdateChannel, type RuntimeStore } from '@delo/runtime-store'
 import { assertCopyFits, buildFromSources, discardCopy, keepOnlyCopy, isDataSafetyError, planDataCopy, readDataFormats, recoverDataCopies, rollbackUpdate, saveDataCopy, type ReportSources, type RollbackResult } from '@delo/update'
 
 /** What {@link homeUpdateSupport} needs. */
@@ -24,8 +24,8 @@ export interface UpdateSupportOptions {
   readonly profile: string
   /** C1's runtime store. */
   readonly store: RuntimeStore
-  /** The release channel. */
-  readonly channel: RuntimeChannel
+  /** Opens the release channel of one prepare. */
+  readonly openChannel: OpenUpdateChannel
   /** The report's sources. */
   readonly sources: ReportSources
   /** The clock; `() => new Date()` in a real run. */
@@ -133,14 +133,14 @@ export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | '
 
 /**
  * The home process's update support over the store, the channel and the report's sources.
- * @param options - the home, the profile, the store, the channel, the sources and the clock.
+ * @param options - the home, the profile, the store, the channel's opener, the sources and the clock.
  * @returns the support.
  */
 export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport {
   const store = new HomeRuntimeStore({
     store: options.store,
     profile: options.profile,
-    channel: options.channel,
+    openChannel: options.openChannel,
     report: { build: version => buildFromSources('cli-home', options.sources, version) },
   })
   return { store, snapshots: profileSnapshots(options.home, options.profile, options.now), copies: sessionDataCopies(options) }

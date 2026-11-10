@@ -1,30 +1,65 @@
 /**
- * The exclusive use of a home by `delorun trash`, `export` and `import`: the
- * home lock of every profile is held for the whole operation and released
- * afterwards, whatever the operation did; a profile whose home process runs,
- * or whose lock another process holds, refuses the command before it runs and
- * leaves no lock this process took. Each refusal spec fails when its check is
- * removed: the operation would run beside a live home process.
+ * The users of a home's shared stores. The exclusive use by `delorun trash`, `export` and `import`: the home lock of
+ * every profile is held for the whole operation and released afterwards, whatever the operation did; a profile whose
+ * home process runs, or whose lock another process holds, refuses the command before it runs and leaves no lock this
+ * process took. The shared use by `delorun headless`, the registrations under `run/data-users/`, and the refusals
+ * between the two and an update in progress. Each refusal spec fails when its check is removed: the operation would
+ * run beside a live home process, a live user of the stores, or an update mid-copy.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
-import { acquireHomeLock, newStartId, readHomeLock, runDirectory, type HolderAnswer } from '@delo/home'
-import { updateChannelProbe } from '@delo/home-process'
-import { CliError } from '../src/exit.ts'
-import { homeExclusion, withHomeExclusive, type HomeExclusion } from '../src/home-exclusion.ts'
+import { acquireHomeLock, ensureHomeTree, newStartId, readHomeLock, runDirectory, type HolderAnswer } from '@delo/home'
+import { journalPath, updateChannelProbe, writeJournal } from '@delo/home-process'
+import { CliError, EXIT } from '../src/exit.ts'
+import { main } from '../src/main.ts'
+import {
+  assertNoUpdateInProgress,
+  assertSoleDataUser,
+  DATA_USERS_DIRECTORY,
+  DataInUseError,
+  homeExclusion,
+  otherDataUsers,
+  registerDataUser,
+  useHomeShared,
+  withHomeExclusive,
+  type HomeExclusion,
+} from '../src/home-exclusion.ts'
 
 const RUNTIME = brandString<RuntimeVersion>('0.0.0')
 
 let home: string | undefined
+const children: ChildProcess[] = []
 
 afterEach(() => {
+  for (const child of children.splice(0)) child.kill('SIGKILL')
   if (home !== undefined) rmSync(home, { recursive: true, force: true })
   home = undefined
 })
+
+/**
+ * A live process that is not this one, killed after the spec.
+ * @returns its process id.
+ */
+function liveProcess(): number {
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' })
+  children.push(child)
+  return child.pid ?? 0
+}
+
+/**
+ * Write an update record of one profile in a phase.
+ * @param root - the home.
+ * @param phase - the phase.
+ */
+async function updateRecord(root: string, phase: 'snapshot' | 'committed' | 'rolling-back'): Promise<void> {
+  mkdirSync(runDirectory(root, 'default'), { recursive: true, mode: 0o700 })
+  await writeJournal(journalPath(root, 'default'), { from: brandString<RuntimeVersion>('1.0.0'), to: brandString<RuntimeVersion>('1.1.0'), previous: undefined, startedAt: '2026-11-10T12:00:00.000Z', dataDiffers: true, copy: true, targetStarted: false }, phase)
+}
 
 /**
  * A fresh home with run directories for some profiles.
@@ -120,6 +155,131 @@ describe('withHomeExclusive', () => {
     const refused = await withHomeExclusive({ home: root, profile: 'default', command: 'trash', instead: '' }, async () => undefined, leaving).then(() => undefined, (error: unknown) => error)
 
     expect((refused as CliError).message).toBe('delorun trash: Delo is running for the profile default and uses the stores this command changes; run delorun stop --profile default first')
+  })
+})
+
+describe('the registered users of the stores', () => {
+  it('lists another live user with its use, refuses beside it, and drops a dead one\'s registration', async () => {
+    const root = newHome()
+    expect(otherDataUsers(root)).toEqual([])
+    const release = registerDataUser(root, 'shared', 'headless')
+    expect(otherDataUsers(root)).toEqual([])
+    expect(() => { assertSoleDataUser(root) }).not.toThrow()
+    const pid = liveProcess()
+    const other = registerDataUser(root, 'exclusive', 'trash', pid)
+    expect(otherDataUsers(root)).toEqual([{ pid, mode: 'exclusive', command: 'trash' }])
+    expect(() => { assertSoleDataUser(root) }).toThrow(new DataInUseError(`process ${String(pid)} (delorun trash) uses the chat data; wait for it to end, then try again`))
+    children[0]?.kill('SIGKILL')
+    await new Promise(resolve => children[0]?.once('exit', resolve))
+    expect(otherDataUsers(root)).toEqual([])
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([String(process.pid)])
+    writeFileSync(join(root, 'run', DATA_USERS_DIRECTORY, 'not-a-pid'), '')
+    expect(otherDataUsers(root)).toEqual([])
+    other()
+    release()
+    release()
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual(['not-a-pid'])
+  })
+
+  it('reads a registration it cannot parse as an exclusive use by an unknown command', () => {
+    const root = newHome()
+    const pid = liveProcess()
+    mkdirSync(join(root, 'run', DATA_USERS_DIRECTORY), { recursive: true })
+    writeFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(pid)), `${String(pid)}\n`)
+    expect(otherDataUsers(root)).toEqual([{ pid, mode: 'exclusive', command: 'unknown' }])
+    writeFileSync(join(root, 'run', DATA_USERS_DIRECTORY, String(pid)), '{"mode":"reading","command":"headless"}\n')
+    expect(otherDataUsers(root)).toEqual([{ pid, mode: 'exclusive', command: 'unknown' }])
+  })
+
+  it('refuses while an update or rollback is in progress or a restore is unfinished, and not after a commit', async () => {
+    const root = newHome()
+    await assertNoUpdateInProgress(root)
+    await updateRecord(root, 'committed')
+    await assertNoUpdateInProgress(root)
+    await updateRecord(root, 'snapshot')
+    await expect(assertNoUpdateInProgress(root)).rejects.toThrow(/is snapshot/u)
+    await updateRecord(root, 'rolling-back')
+    await expect(assertNoUpdateInProgress(root)).rejects.toThrow(/is rolling-back/u)
+    await updateRecord(root, 'committed')
+    mkdirSync(join(root, 'data-copies'), { recursive: true })
+    writeFileSync(join(root, 'data-copies', 'restore.json'), '{}')
+    await expect(assertNoUpdateInProgress(root)).rejects.toThrow(/restore of the chat data is unfinished/u)
+  })
+})
+
+describe('useHomeShared', () => {
+  it('registers beside another shared user, and the release removes the registration', async () => {
+    const root = newHome()
+    registerDataUser(root, 'shared', 'headless', liveProcess())
+    const release = await useHomeShared(root, 'headless')
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toContain(String(process.pid))
+    release()
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).not.toContain(String(process.pid))
+  })
+
+  it('refuses while an exclusive user runs, and leaves no registration behind', async () => {
+    const root = newHome()
+    const pid = liveProcess()
+    registerDataUser(root, 'exclusive', 'import', pid)
+    await expect(useHomeShared(root, 'headless')).rejects.toThrow(new CliError(EXIT.failed, `delorun headless: process ${String(pid)} (delorun import) is changing the stores this command uses; wait for it to finish, and try again`))
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([String(pid)])
+  })
+
+  it('passes an error that is not a refusal through, and leaves no registration behind', async () => {
+    const root = newHome()
+    await updateRecord(root, 'snapshot')
+    writeFileSync(journalPath(root, 'default'), 'not a record')
+    await expect(useHomeShared(root, 'headless')).rejects.not.toBeInstanceOf(CliError)
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
+  })
+
+  it('delorun headless refuses while an update is in progress and leaves no registration behind', async () => {
+    const base = newHome()
+    const root = join(base, '.delo')
+    await ensureHomeTree(root, 'default')
+    await updateRecord(root, 'snapshot')
+    let stderr = ''
+    const code = await main(['headless', 'say hello'], { env: { ...process.env, HOME: base, DELO_HOME: root }, stdout: () => {}, stderr: (text) => { stderr += text } })
+    expect(code).toBe(EXIT.failed)
+    expect(stderr).toContain('delorun headless: an update of the profile default from Delo 1.0.0 to Delo 1.1.0 is snapshot')
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
+  })
+})
+
+describe('withHomeExclusive and the registered users', () => {
+  it('registers as the exclusive user while it runs, takes no lock in the users\' directory, and removes both after', async () => {
+    const root = newHome(['work'])
+    registerDataUser(root, 'shared', 'headless', 2 ** 30)
+    const seen = await withHomeExclusive({ home: root, profile: 'default', command: 'trash', instead: '' }, async () => ({
+      users: otherDataUsers(root, 0),
+      lock: readHomeLock(runDirectory(root, DATA_USERS_DIRECTORY)),
+    }), answering('answered'))
+
+    expect(seen).toEqual({ users: [{ pid: process.pid, mode: 'exclusive', command: 'trash' }], lock: undefined })
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
+    expect(readHomeLock(runDirectory(root, 'work'))).toBeUndefined()
+  })
+
+  it('refuses while delorun headless uses the stores, runs nothing, and leaves no lock or registration', async () => {
+    const root = newHome(['work'])
+    const pid = liveProcess()
+    registerDataUser(root, 'shared', 'headless', pid)
+    let ran = false
+
+    await expect(withHomeExclusive({ home: root, profile: 'default', command: 'export', instead: '' }, async () => { ran = true }, answering('answered'))).rejects.toThrow(new CliError(EXIT.failed, `delorun export: process ${String(pid)} (delorun headless) uses the chat data; wait for it to end, then try again`))
+
+    expect(ran).toBe(false)
+    expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([String(pid)])
+    expect(readHomeLock(runDirectory(root, 'work'))).toBeUndefined()
+  })
+
+  it('refuses while an update is in progress, and passes an error that is not a refusal through', async () => {
+    const root = newHome()
+    await updateRecord(root, 'snapshot')
+    await expect(withHomeExclusive({ home: root, profile: 'default', command: 'import', instead: '' }, async () => undefined, answering('answered'))).rejects.toThrow(new CliError(EXIT.failed, 'delorun import: an update of the profile default from Delo 1.0.0 to Delo 1.1.0 is snapshot; wait for it to end, or run delorun recover status'))
+    writeFileSync(journalPath(root, 'default'), 'not a record')
+    await expect(withHomeExclusive({ home: root, profile: 'default', command: 'import', instead: '' }, async () => undefined, answering('answered'))).rejects.not.toBeInstanceOf(CliError)
+    expect(readHomeLock(runDirectory(root, 'default'))).toBeUndefined()
   })
 })
 

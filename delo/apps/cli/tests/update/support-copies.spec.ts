@@ -12,7 +12,7 @@ import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { HomeProcessError } from '@delo/home-process'
 import { RuntimeStore } from '@delo/runtime-store'
 import { runtimePlatformOf } from '../../src/update/channel.ts'
-import { registerDataUser } from '../../src/update/data-users.ts'
+import { registerDataUser } from '../../src/home-exclusion.ts'
 import { sessionDataCopies } from '../../src/update/support.ts'
 
 const v = (text: string): RuntimeVersion => brandString<RuntimeVersion>(text)
@@ -38,7 +38,7 @@ describe('sessionDataCopies', () => {
 
   it('refuses a copy and a rollback while delorun headless uses the chat data', async () => {
     const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' })
-    const release = registerDataUser(home, child.pid)
+    const release = registerDataUser(home, 'shared', 'headless', child.pid)
     try {
       await expect(copies(home).plan()).rejects.toMatchObject({ code: 'CHATS_RUNNING' })
       await expect(copies(home).save(v('1.0.0'), v('1.1.0'))).rejects.toMatchObject({ code: 'CHATS_RUNNING' })

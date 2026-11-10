@@ -17,10 +17,12 @@ export {
   type HomeCommand,
   type HomeCommandMode,
   type HomeRuntimeStoreOptions,
+  type OpenUpdateChannel,
   type PreparePhase,
   type PreparedRuntime,
   type ReportedHealth,
   type RuntimeChannel,
+  type UpdateReleaseChannel,
   type UpdateReport,
   type UpdateReporter,
 } from './seam.ts'

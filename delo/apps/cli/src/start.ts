@@ -20,21 +20,19 @@
  * @module @delo/cli/start
  */
 import { spawn } from 'node:child_process'
-import { fstatSync, readFileSync, rmSync } from 'node:fs'
+import { rmSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, sep } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { brandString } from '@deepseek-ai/dsh-brand'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
-import { DELO_HOME_ENTRIES, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
-import { HANDOVER_FD, START_WAIT_MS } from '@delo/contract-home-process'
-import { CountingChatGate, HomeProcess, openHandoverPipe, openHomeLog, captureHomeOutput, queryHomeStatus, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type UpdateSupport } from '@delo/home-process'
+import { HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
+import { START_WAIT_MS } from '@delo/contract-home-process'
+import { CountingChatGate, HomeProcess, openHomeLog, captureHomeOutput, queryHomeStatus, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
-import { parseRuntimeVersion, readStoredRoot, RuntimeStore, type ChannelRelease, type ReleaseFileBytes, type RuntimeChannel } from '@delo/runtime-store'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
@@ -43,10 +41,9 @@ import { hasCliProfile, profileDirectory } from './profile.ts'
 import { readBackgroundAnswer } from './setup/background.ts'
 import { safeModeNotice, safeModeStart } from './safe-mode.ts'
 import { removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, writeSandboxOverlay } from './sandbox-protection.ts'
-import { homeReleaseChannel, runtimePlatformOf } from './update/channel.ts'
 import { checkHealth, inactiveRows, watchChats } from './update/host.ts'
-import { storeReportSources } from './update/sources.ts'
-import { homeUpdateSupport } from './update/support.ts'
+import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
+import { checkStoredRuntime, storeUpdateSupport } from './update/store-support.ts'
 
 /** What the foreground start calls outside this module; specs replace them. */
 export interface StartDependencies {
@@ -90,13 +87,6 @@ export interface StartDependencies {
   readonly handover: () => Promise<HandoverPipe | undefined>
 }
 
-/** The runtime a home process runs. */
-export interface RunningRuntime {
-  /** The version. */
-  readonly version: RuntimeVersion
-  /** Whether it runs from C1's runtime store, so updates and rollbacks apply. */
-  readonly store: boolean
-}
 
 /** A booted profile, as the start's audit of Delo's rows reads it. */
 export interface BootedProfile {
@@ -165,78 +155,6 @@ export interface StartRequest {
 const HOME_LOG_LEVEL = 'info'
 
 /**
- * The runtime a file of this package runs from: the store's version when the file lies under `<home>/runtimes/<version>/`,
- * otherwise this package's own version, as in a source checkout.
- * @param home - the resolved Delo home.
- * @param file - a file of this package.
- * @returns the version and whether it runs from the store.
- */
-export function runtimeOfFile(home: string, file: string): RunningRuntime {
-  const root = join(home, DELO_HOME_ENTRIES.runtimes) + sep
-  const version = file.startsWith(root) ? parseRuntimeVersion(file.slice(root.length).split(sep)[0] ?? '') : undefined
-  if (version !== undefined) return { version, store: true }
-  return { version: runningVersion(), store: false }
-}
-
-/**
- * This package's own version, which the home locks a CLI command takes record.
- * @returns the version in this package's manifest.
- */
-export function runningVersion(): RuntimeVersion {
-  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
-  return brandString<RuntimeVersion>(manifest.version)
-}
-
-/**
- * A release channel built on its first use, so a home process that never updates never reads the stored root chain.
- * @param create - builds the channel.
- * @returns the channel.
- */
-function lazyChannel(create: () => Promise<RuntimeChannel>): RuntimeChannel {
-  let channel: Promise<RuntimeChannel> | undefined
-  const get = (): Promise<RuntimeChannel> => (channel ??= create())
-  return {
-    resolve: async target => (await get()).resolve(target),
-    fill: async (release: ChannelRelease, directory: string): Promise<ReleaseFileBytes> => (await get()).fill(release, directory),
-  }
-}
-
-/**
- * The update support of a home process running from the store: C1's store of this machine's platform, the release
- * channel the running release names, the report's readers over the store and the profile, the profile history and the
- * session-data copies.
- * @param home - the resolved Delo home.
- * @param profile - the CLI profile.
- * @param running - the version this process runs.
- * @param logger - the home process's logger.
- * @returns the support.
- */
-export function storeUpdateSupport(home: string, profile: string, running: RuntimeVersion, logger: DeloLogger): UpdateSupport {
-  const platform = runtimePlatformOf(process.platform, process.arch)
-  const store = new RuntimeStore({ home, platform, logger })
-  const channel = lazyChannel(async () => {
-    const release = await store.checkRuntime(running, await readStoredRoot(home))
-    return homeReleaseChannel(home, platform, release.manifest.channel)
-  })
-  return homeUpdateSupport({ home, profile, store, channel, sources: storeReportSources({ home, profile, store, running }), now: () => new Date() })
-}
-
-/**
- * The handover pipe this process inherits as file descriptor 3 when an update started it as a successor (C19).
- * @returns the pipe, or `undefined` when descriptor 3 is not a socket or a pipe.
- */
-async function inheritedHandover(): Promise<HandoverPipe | undefined> {
-  let inherited = false
-  try {
-    const stat = fstatSync(HANDOVER_FD)
-    inherited = stat.isSocket() || stat.isFIFO()
-  } catch (_closed) {
-    // EBADF: nothing is open on descriptor 3, so this is a fresh start.
-  }
-  return inherited ? openHandoverPipe(HANDOVER_FD) : undefined
-}
-
-/**
  * The dependencies of a real start.
  * @returns upstream's profile preparation, profile runner and `.env` loader, the update channel's probe, the process's
  *   exit event and exit, and the output capture.
@@ -271,7 +189,7 @@ export function upstreamDependencies(): StartDependencies {
     captureOutput: log => captureHomeOutput(log.log, true),
     runtime: home => runtimeOfFile(home, fileURLToPath(import.meta.url)),
     updates: storeUpdateSupport,
-    handover: inheritedHandover,
+    handover: () => inheritedHandover(),
   }
 }
 
@@ -312,7 +230,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
       profile: request.profile,
       running,
       startId,
-      host: { boot: async () => bootProfile(handover === undefined ? request : { ...request, open: false }, dependencies, runtime.store ? running : undefined) },
+      host: { boot: async () => bootProfile(handover === undefined ? request : { ...request, open: false }, dependencies, runtime.store ? running : undefined, homeLog.logger) },
       probe: dependencies.probe(request.home, request.profile),
       logger: homeLog.logger,
       redactor: homeLog.redactor,
@@ -347,7 +265,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * @returns the running Host, whose running chats feed the home process's gate and whose health check is C3's.
  * @throws {CliError} when the profile skipped a Delo bundle, fails to boot, or a row of a Delo bundle did not activate.
  */
-async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined): Promise<RunningHost> {
+async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
   let resolvedProfile: ResolvedProfileRuntime
   try {
     resolvedProfile = await dependencies.prepareProfile(request.profile)
@@ -401,8 +319,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       studio: booted.studio,
       profileDir: join(request.home, 'profiles', request.profile),
       verifyRuntime: async () => {
-        if (stored === undefined) return
-        await new RuntimeStore({ home: request.home, platform: runtimePlatformOf(process.platform, process.arch), logger: { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} } }).checkRuntime(stored, await readStoredRoot(request.home))
+        if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger)
       },
     }, expect),
     close: async () => {

@@ -116,7 +116,7 @@ The check is made on the sizes that the central directory and the entry headers 
 
 An import keeps a journal beside its staging root that names each workspace before it is published. An import that a crash interrupts leaves its journal and staging root; the next import first withdraws every workspace the journal names and removes the staging root, which holds decoded chat content. A journal stays only when a withdrawal itself failed. The staging parent, the workspace store root and the directory that holds either must not be symbolic links, and a publication refuses a target that exists, even an empty directory a rename would replace.
 
-`delorun trash` restore and purge, `delorun export` and `delorun import` run while the command holds the home lock of every profile of the home, because every profile shares the stores they read and change. A profile whose home process runs refuses the command, and no home process starts while the command holds the locks.
+`delorun trash` restore and purge, `delorun export` and `delorun import` run while the command holds the home lock of every profile of the home, because every profile shares the stores they read and change. A profile whose home process runs refuses the command, and no home process starts while the command holds the locks. The command also registers as the exclusive user of the stores under `run/data-users/` ([C1](c01-home-layout.md)): it refuses while `delorun headless` or another user is registered, or an update, a rollback or a restore of a session-data copy is in progress, and `delorun headless` refuses while it runs.
 
 The import of a stock DeepSeek Harness home copies its plugins, settings and sessions into a new Delo home, and it never modifies the stock home.
 

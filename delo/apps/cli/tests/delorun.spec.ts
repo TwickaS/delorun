@@ -13,7 +13,8 @@ import { prepareHome, type CommandContext } from '../src/command.ts'
 import { EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
-import { runtimeOfFile, startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
+import { startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
+import { runtimeOfFile } from '../src/update/runtime.ts'
 
 const BIN = join(import.meta.dirname, '../src/bin.ts')
 const BUNDLE_LOCAL_DIR = new URL('.', import.meta.resolve('@delo/bundle-local/package.json')).pathname

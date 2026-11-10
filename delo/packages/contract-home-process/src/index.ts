@@ -213,6 +213,8 @@ export interface HomeStatus {
 export type UpdateChannelResponse =
   | { readonly ok: true, readonly status: HomeStatus }
   | { readonly ok: true, readonly phase: UpdatePhase }
+  /** One line of the target's install progress during `update.prepare`, as the launcher prints it, newline included. */
+  | { readonly ok: true, readonly line: string }
   | { readonly ok: true, readonly reportId: string, readonly report: unknown }
   | { readonly ok: true, readonly outcome: UpdateOutcome, readonly reason?: HomeProcessErrorCode }
   | { readonly ok: false, readonly error: HomeProcessErrorCode }

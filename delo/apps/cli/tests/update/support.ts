@@ -25,7 +25,8 @@ import {
 } from '@delo/contract-release-manifest'
 import { publicKeyEntry, signEnvelope } from '@delo/release/sign/envelope'
 import { toJsonValue } from '@delo/release/sign/json'
-import type { ChannelRelease, ReleaseFileBytes, RuntimeChannel } from '@delo/runtime-store'
+import { progressLines } from '@delo/install'
+import type { ChannelRelease, OpenUpdateChannel, ReleaseFileBytes, UpdateReleaseChannel } from '@delo/runtime-store'
 
 /** How one fake release's successor behaves. */
 export interface FakeBehaviour {
@@ -201,12 +202,16 @@ export function writeClosure(directory: string, files: Record<string, FakeFile>)
 }
 
 /**
- * A release channel over fake releases: it names the release the spec points it at and fills the staging directory
- * with its signed files, as `@delo/install`'s channel does after its checks.
+ * A release channel over fake releases: it names the release the spec points it at, writes the launcher's line for
+ * it, fills the staging directory with its signed files, as `@delo/install`'s channel does after its checks, and
+ * records each release the store installed.
  */
-export class FakeChannel implements RuntimeChannel {
+export class FakeChannel implements UpdateReleaseChannel {
   /** The release `resolve` names when no target is asked for. */
   next: RuntimeVersion
+  /** The releases the store installed, in order. */
+  readonly recorded: RuntimeVersion[] = []
+  private line: (text: string) => void = () => {}
 
   /**
    * @param root - the root the releases verify under.
@@ -219,8 +224,16 @@ export class FakeChannel implements RuntimeChannel {
     this.next = first
   }
 
+  /** Opens this channel for one prepare, writing its lines where the prepare asks. */
+  readonly open: OpenUpdateChannel = async (line) => {
+    this.line = line
+    return this
+  }
+
   async resolve(target: RuntimeVersion | undefined): Promise<ChannelRelease> {
-    return Promise.resolve({ version: target ?? this.next, root: this.root })
+    const version = target ?? this.next
+    for (const text of progressLines({ step: 'resolved', channel: 'stable', version: brandString<SemanticVersion>(version) })) this.line(text)
+    return Promise.resolve({ version, root: this.root })
   }
 
   async fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes> {
@@ -229,5 +242,9 @@ export class FakeChannel implements RuntimeChannel {
     const files = fakeClosure(release.version, behaviour)
     writeClosure(directory, files)
     return Promise.resolve(signedRelease(this.key, this.platform, release.version, files))
+  }
+
+  async recordInstalled(release: ChannelRelease): Promise<void> {
+    this.recorded.push(release.version)
   }
 }

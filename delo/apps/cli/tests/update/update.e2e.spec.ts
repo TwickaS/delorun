@@ -101,7 +101,7 @@ async function startHome(): Promise<Running> {
   const process_ = await HomeProcess.start({
     home, profile: PROFILE, running: current, startId: newStartId(), host: { boot: async () => Promise.resolve(host()) },
     probe: updateChannelProbe(home, PROFILE), logger: SILENT, redactor: new Redactor(),
-    updates: homeUpdateSupport({ home, profile: PROFILE, store, channel, sources: storeReportSources({ home, profile: PROFILE, store, running: current }), now: () => new Date() }),
+    updates: homeUpdateSupport({ home, profile: PROFILE, store, openChannel: channel.open, sources: storeReportSources({ home, profile: PROFILE, store, running: current }), now: () => new Date() }),
     supervisor: undefined,
     onExit: (listener) => { listeners.push(listener) },
     exit: (code) => { exits.push(code) },
@@ -152,6 +152,8 @@ describe('delorun update end to end', TIMEOUT, () => {
       expect(result.stderr).toBe('')
       expect(result.code).toBe(EXIT.ok)
       expect(result.stdout).toContain('Update from Delo 1.0.0 (DSH 0.2.2) to Delo 1.1.0')
+      expect(result.stdout).toContain('… checking\nResolving the release: the stable channel names 1.1.0.\n… installing\n')
+      expect(channel.recorded).toEqual([v('1.1.0')])
       expect(result.stdout).not.toContain('Chat data:')
       expect(result.stdout).toContain('Delo 1.1.0 runs now.')
       expect((await store.pointers()).current).toBe('1.1.0')

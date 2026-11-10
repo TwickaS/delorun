@@ -12,7 +12,7 @@ import {
   type FixtureFile,
   type FixtureHome,
 } from './support.ts'
-import { HomeRuntimeStore, RuntimeStoreError, type ChannelRelease, type PreparePhase, type ReleaseFileBytes } from '../src/index.ts'
+import { HomeRuntimeStore, RuntimeStoreError, type ChannelRelease, type OpenUpdateChannel, type PreparePhase, type ReleaseFileBytes } from '../src/index.ts'
 
 const V1 = version('0.1.0')
 const V2 = version('0.2.0')
@@ -48,6 +48,10 @@ function offered(release: RuntimeVersion, files: Record<string, FixtureFile>): O
 class FixtureChannel {
   /** The versions whose archive the channel filled, in order. */
   readonly fills: RuntimeVersion[] = []
+  /** The versions the store installed and the channel recorded, in order. */
+  readonly recorded: RuntimeVersion[] = []
+  /** Where the channel writes its install progress, as the prepare that opened it gave it. */
+  line: (text: string) => void = () => {}
   private readonly releases = new Map<RuntimeVersion, OfferedRelease>()
 
   /**
@@ -62,6 +66,7 @@ class FixtureChannel {
     const chosen = target ?? newest
     const release = chosen === undefined ? undefined : this.releases.get(chosen)
     if (release === undefined) throw new Error(`the channel has no release ${String(chosen)}`)
+    this.line(`Resolving the release: ${release.version}.\n`)
     return { version: release.version, root: release.root }
   }
 
@@ -71,6 +76,23 @@ class FixtureChannel {
     this.fills.push(release.version)
     writeClosure(directory, closureFiles(release.version))
     return found.bytes
+  }
+
+  async recordInstalled(release: ChannelRelease): Promise<void> {
+    this.recorded.push(release.version)
+  }
+}
+
+/**
+ * An opener of one fixture channel, which writes a line for each release it resolves.
+ * @param channel - the channel.
+ * @param lines - where the lines go; nowhere by default.
+ * @returns the opener.
+ */
+function opening(channel: FixtureChannel, lines: string[] = []): OpenUpdateChannel {
+  return async (line) => {
+    channel.line = (text) => { lines.push(text); line(text) }
+    return channel
   }
 }
 
@@ -118,12 +140,12 @@ describe('pointers', () => {
     await fixture.install(V1)
     await fixture.install(V2)
     await fixture.store.switchTo(V1, V2)
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel: new FixtureChannel(), report: new FixtureReporter() })
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(new FixtureChannel()), report: new FixtureReporter() })
     expect(await store.pointers()).toEqual({ current: V2, previous: V1 })
   })
 
   it('surfaces a store error with its code when current is missing, so the home process maps it', async () => {
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel: new FixtureChannel(), report: new FixtureReporter() })
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(new FixtureChannel()), report: new FixtureReporter() })
     await refused(store.pointers(), 'NO_ACTIVE_RUNTIME')
   })
 })
@@ -133,24 +155,28 @@ describe('prepare', () => {
     await fixture.install(V1)
     const channel = new FixtureChannel(offered(V2, closureFiles('0.2.0')))
     const phases: PreparePhase[] = []
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel, report: new FixtureReporter() })
-    const prepared = await store.prepare(undefined, phase => { phases.push(phase) })
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(channel), report: new FixtureReporter() })
+    const prepared = await store.prepare(undefined, phase => { phases.push(phase) }, () => {})
     expect(phases).toEqual(['checking', 'installing', 'reporting'])
     expect(prepared).toEqual({ version: V2, report: { for: V2 }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false })
     expect(await fixture.store.pointers()).toEqual({ current: V1 })
     expect(await fixture.store.checkRuntime(V2, fixture.root)).toMatchObject({ version: V2 })
   })
 
-  it('asks a channel that records installs to record the release once the store installed it, and not when nothing installs', async () => {
+  it('records the release through the channel once the store installed it, writes the channel\'s lines, and opens no channel for an intact target', async () => {
     await fixture.install(V1)
     const recorded: string[] = []
-    const channel = Object.assign(new FixtureChannel(offered(V2, closureFiles('0.2.0'))), {
-      recordInstalled: async (release: ChannelRelease) => { recorded.push(`${release.version} installed=${String(await isInstalledNow(release.version))}`) },
-    })
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel, report: new FixtureReporter() })
-    await store.prepare(undefined, () => {})
-    await store.prepare(undefined, () => {})
+    const channel = new FixtureChannel(offered(V2, closureFiles('0.2.0')))
+    channel.recordInstalled = async (release: ChannelRelease) => { recorded.push(`${release.version} installed=${String(await isInstalledNow(release.version))}`) }
+    let opened = 0
+    const written: string[] = []
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: async (line) => { opened++; return opening(channel)(line) }, report: new FixtureReporter() })
+    await store.prepare(undefined, () => {}, (text) => { written.push(text) })
+    await store.prepare(undefined, () => {}, () => {})
     expect(recorded).toEqual([`${V2} installed=true`])
+    expect(written).toEqual([`Resolving the release: ${V2}.\n`])
+    await store.prepare(V2, () => {}, () => {})
+    expect(opened).toBe(2)
   })
 
   it('skips the install of an installed target whose files match its manifest, and fetches again only once', async () => {
@@ -158,14 +184,14 @@ describe('prepare', () => {
     await fixture.install(V2)
     const channel = new FixtureChannel(offered(V2, closureFiles('0.2.0')))
     const reporter = new FixtureReporter()
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel, report: reporter })
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(channel), report: reporter })
     const phases: PreparePhase[] = []
-    const prepared = await store.prepare(V2, phase => { phases.push(phase) })
+    const prepared = await store.prepare(V2, phase => { phases.push(phase) }, () => {})
     expect(phases).toEqual(['checking', 'reporting'])
     expect(prepared.version).toBe(V2)
     expect(channel.fills).toEqual([])
     const again: PreparePhase[] = []
-    await store.prepare(undefined, phase => { again.push(phase) })
+    await store.prepare(undefined, phase => { again.push(phase) }, () => {})
     expect(again).toEqual(['checking', 'reporting'])
     expect(channel.fills).toEqual([])
     expect(reporter.reported).toEqual([V2, V2])
@@ -176,9 +202,9 @@ describe('prepare', () => {
     await fixture.install(V2)
     tamper(V2)
     const channel = new FixtureChannel(offered(V2, closureFiles('0.2.0')))
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel, report: new FixtureReporter() })
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(channel), report: new FixtureReporter() })
     const phases: PreparePhase[] = []
-    const prepared = await store.prepare(V2, phase => { phases.push(phase) })
+    const prepared = await store.prepare(V2, phase => { phases.push(phase) }, () => {})
     expect(phases).toEqual(['checking', 'installing', 'reporting'])
     expect(prepared.version).toBe(V2)
     expect(channel.fills).toEqual([V2])
@@ -192,8 +218,8 @@ describe('prepare', () => {
     const failing = new FixtureChannel(offered(V2, closureFiles('0.2.0')))
     failing.fill = () => Promise.reject(new Error('the download failed'))
     const before = await fixture.store.pointers()
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel: failing, report: new FixtureReporter() })
-    await expect(store.prepare(undefined, () => {})).rejects.toThrow('the download failed')
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(failing), report: new FixtureReporter() })
+    await expect(store.prepare(undefined, () => {}, () => {})).rejects.toThrow('the download failed')
     expect(await fixture.store.pointers()).toEqual(before)
     expect(existsSync(join(fixture.home, 'runtimes', V2))).toBe(false)
     expect(readdirSync(join(fixture.home, 'staging'))).toEqual([])
@@ -208,8 +234,8 @@ describe('prepare', () => {
       return Promise.resolve(release.bytes)
     }
     const before = await fixture.store.pointers()
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel: lying, report: new FixtureReporter() })
-    await refused(store.prepare(undefined, () => {}), 'INSTALL_VERIFY_FAILED')
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(lying), report: new FixtureReporter() })
+    await refused(store.prepare(undefined, () => {}, () => {}), 'INSTALL_VERIFY_FAILED')
     expect(await fixture.store.pointers()).toEqual(before)
     expect(existsSync(join(fixture.home, 'runtimes', V2))).toBe(false)
   })
@@ -219,10 +245,10 @@ describe('prepare', () => {
     const store = new HomeRuntimeStore({
       store: fixture.store,
       profile: 'default',
-      channel: new FixtureChannel(),
+      openChannel: opening(new FixtureChannel()),
       report: { build: () => Promise.resolve({ report: { disabled: ['notes'] }, health: { disabledPlugins: ['notes'], namedRows: [] }, dataDiffers: true }) },
     })
-    await expect(store.prepare(V1, () => {})).resolves.toEqual({ version: V1, report: { disabled: ['notes'] }, health: { disabledPlugins: ['notes'], namedRows: [] }, dataDiffers: true })
+    await expect(store.prepare(V1, () => {}, () => {})).resolves.toEqual({ version: V1, report: { disabled: ['notes'] }, health: { disabledPlugins: ['notes'], namedRows: [] }, dataDiffers: true })
   })
 })
 
@@ -235,7 +261,7 @@ describe('reportRollback', () => {
     await fixture.install(V1)
     await fixture.install(V2)
     await fixture.store.switchTo(V1, V2)
-    return new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel: new FixtureChannel(), report: new FixtureReporter() })
+    return new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(new FixtureChannel()), report: new FixtureReporter() })
   }
 
   it('reports the previous version after its start check passes', async () => {
@@ -259,7 +285,7 @@ describe('switching and restoring', () => {
   it('switches by the store atomic writes and restores the pointers read before an update', async () => {
     await fixture.install(V1)
     await fixture.install(V2)
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel: new FixtureChannel(), report: new FixtureReporter() })
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(new FixtureChannel()), report: new FixtureReporter() })
     const before = await store.pointers()
     await store.switchTo(V1, V2)
     expect(await store.pointers()).toEqual({ current: V2, previous: V1 })
@@ -272,7 +298,7 @@ describe('switching and restoring', () => {
 describe('homeCommand', () => {
   it('starts the runtime node on the CLI entry as the home process, for a successor and a fresh start', async () => {
     await fixture.install(V1)
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel: new FixtureChannel(), report: new FixtureReporter() })
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: opening(new FixtureChannel()), report: new FixtureReporter() })
     const expected = {
       command: join(fixture.home, 'runtimes', V1, 'node/bin/node'),
       args: [join(fixture.home, 'runtimes', V1, 'app/node_modules/@delo/cli/src/bin.js'), 'start', '--foreground', '--profile', 'default'],

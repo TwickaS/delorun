@@ -90,7 +90,7 @@ Every request has the fields `v` (the protocol version, 1), `token`, `op` and, w
 | `rollback` | `wait` and `drainTimeoutS` as for `update.apply`; `profileOnly`: a boolean | as `update.apply`, with the target the update record's `from`; the final `outcome` is `rolled-back`, `aborted` or `failed` |
 | `stop` | `mode`: `drain` or `cancel` | progress lines, then one final line before the process exits |
 
-- **Response lines.** Each line has `ok` (a boolean); a failed line has `error`, a code from [errors](#errors), and a progress line has `phase`. A report expires 600 seconds after `update.prepare` returns it; `update.apply` with an expired or unknown `reportId` fails with `REPORT_EXPIRED`.
+- **Response lines.** Each line has `ok` (a boolean); a failed line has `error`, a code from [errors](#errors), and a progress line has `phase`, or, while `update.prepare` installs the target, `line`: one line of the install's progress with its newline, the same text the launcher prints while it installs a release. A report expires 600 seconds after `update.prepare` returns it; `update.apply` with an expired or unknown `reportId` fails with `REPORT_EXPIRED`.
 - **`failed`.** An `update.apply` or `rollback` that ends `failed` leaves a rollback the home process may not finish itself; the home process stops once the final line is sent, and the update record stays for the next start ([interrupted updates](#interrupted-updates)).
 - **One at a time.** Only one update or rollback runs at a time; a second one fails with `UPDATE_IN_PROGRESS`.
 - **Detached requesters.** A requester that disconnects does not change a running update. `delorun status --follow` shows the phase of the update in progress.

@@ -171,10 +171,11 @@ export class FixtureStore implements RuntimeStore {
     return previous === undefined ? { current } : { current, previous }
   }
 
-  async prepare(target: RuntimeVersion | undefined, phase: (phase: 'checking' | 'installing' | 'reporting') => void): Promise<PreparedRuntime> {
+  async prepare(target: RuntimeVersion | undefined, phase: (phase: 'checking' | 'installing' | 'reporting') => void, line: (text: string) => void): Promise<PreparedRuntime> {
     phase('checking')
     if (target === undefined || !existsSync(join(this.home, 'runtimes', target, 'fixture.json'))) throw new HomeProcessError('VERIFY_FAILED', `no fixture release ${String(target)}`)
     phase('installing')
+    line(`Installing release ${target}.\n`)
     phase('reporting')
     return Promise.resolve(preparedFor(this.home, target))
   }

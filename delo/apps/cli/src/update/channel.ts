@@ -10,8 +10,8 @@
  * @module @delo/cli/update/channel
  */
 import { RUNTIME_PLATFORMS, type ReleaseChannel, type RuntimePlatform } from '@delo/contract-release-manifest'
-import { createTilesLogService, Downloader, LauncherChannel, readStoredRootBytes, readStoredRootChain } from '@delo/install'
-import type { RuntimeChannel } from '@delo/runtime-store'
+import { createTilesLogService, Downloader, LauncherChannel, progressLines, readStoredRootBytes, readStoredRootChain, type InstallProgress } from '@delo/install'
+import type { UpdateReleaseChannel } from '@delo/runtime-store'
 
 /** The release log's tiles origin, as the launcher reads it. */
 const RELEASE_LOG_TILES_ORIGIN = 'https://rekor.sigstore.dev'
@@ -34,19 +34,34 @@ export function runtimePlatformOf(platform: string, arch: string): RuntimePlatfo
 }
 
 /**
+ * The launcher's install lines for each step of an install, written one by one.
+ * @param line - writes one line.
+ * @returns the channel's progress listener.
+ */
+export function installLines(line: (text: string) => void): (event: InstallProgress) => void {
+  return (event) => {
+    for (const text of progressLines(event)) line(text)
+  }
+}
+
+/**
  * The release channel of this home.
  * @param home - the resolved Delo home, whose `trust/` holds the root chain an install verified.
  * @param platform - the runtime platform.
  * @param channel - the person's release channel.
+ * @param line - writes each line of the install's progress, the lines the launcher prints while it installs.
  * @returns the channel.
  * @throws {Error} when the home stores no verified root, so nothing anchors an update.
  */
-export async function homeReleaseChannel(home: string, platform: RuntimePlatform, channel: ReleaseChannel): Promise<RuntimeChannel> {
+export async function homeReleaseChannel(home: string, platform: RuntimePlatform, channel: ReleaseChannel, line: (text: string) => void): Promise<UpdateReleaseChannel> {
   const chain = await readStoredRootChain(home)
   const root = await readStoredRootBytes(home)
   const roots = chain.length > 0 ? chain : root === undefined ? [] : [root]
   if (roots.length === 0) throw new Error('this home stores no verified release root, so no update can be verified; reinstall Delo with its launcher')
   const downloader = new Downloader()
   const hosts = [new URL(RELEASE_LOG_TILES_ORIGIN).host, new URL(RELEASE_LOG_DISTRIBUTOR_ORIGIN).host]
-  return new LauncherChannel({ home, platform, roots, channel, log: createTilesLogService({ origin: RELEASE_LOG_TILES_ORIGIN, hosts, downloader }), downloader })
+  return new LauncherChannel({
+    home, platform, roots, channel, log: createTilesLogService({ origin: RELEASE_LOG_TILES_ORIGIN, hosts, downloader }), downloader,
+    progress: installLines(line),
+  })
 }

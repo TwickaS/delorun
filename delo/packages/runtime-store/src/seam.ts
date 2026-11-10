@@ -3,7 +3,7 @@
  * (`delo/packages/home-process/src/seams.ts`) over C1's {@link RuntimeStore}. {@link HomeRuntimeStore.prepare} runs
  * the update's `checking`, `installing` and `reporting` phases, {@link HomeRuntimeStore.reportRollback} reports the
  * rollback's target, and {@link HomeRuntimeStore.homeCommand} builds the command that starts a home process from an
- * installed runtime. The release channel and the report builder are options, because the launcher owns the download
+ * installed runtime. The release channel's opener and the report builder are options, because the launcher owns the download
  * (C1, "The npm launcher and the install script") and C3's report is `delo/packages/update`'s.
  *
  * @module @delo/runtime-store/seam
@@ -56,14 +56,31 @@ export interface RuntimeChannel {
    * @throws when the download or a check fails.
    */
   fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes>
-  /**
-   * Record that the store installed a release the channel resolved, so the install leaves C18's release-log check
-   * record. The packaging lane's `LauncherChannel.recordInstalled` implements it; a channel without it records nothing.
-   * @param release - the release the store installed.
-   * @returns when the record is written.
-   */
-  recordInstalled?(release: ChannelRelease): Promise<void>
 }
+
+/**
+ * The release channel of an update: a {@link RuntimeChannel} that also records each release the store installed, so
+ * the install leaves C18's release-log check record as the launcher's does. `@delo/install`'s `LauncherChannel`
+ * implements it.
+ */
+export interface UpdateReleaseChannel extends RuntimeChannel {
+  /**
+   * Record the release-log check state of a release the store installed; called after the store's install returned,
+   * so a release the store refused leaves no record.
+   * @param release - the release {@link RuntimeChannel.resolve} returned and the store installed.
+   * @returns when the record is written.
+   * @throws when the record cannot be written; the installed runtime stays.
+   */
+  recordInstalled(release: ChannelRelease): Promise<void>
+}
+
+/**
+ * Opens the release channel for one prepare, whose resolve, fill and record run on the one channel it returns.
+ * @param line - writes one line of the release's install progress for the person, as the launcher prints it.
+ * @returns the channel.
+ * @throws when the channel cannot be opened, such as a home that stores no verified release root.
+ */
+export type OpenUpdateChannel = (line: (text: string) => void) => Promise<UpdateReleaseChannel>
 
 /** What C3's health check holds a target to, as the report predicts it. */
 export interface ReportedHealth {
@@ -104,8 +121,8 @@ export interface HomeRuntimeStoreOptions {
   readonly store: RuntimeStore
   /** The CLI profile whose home process this store serves. */
   readonly profile: string
-  /** The release channel, which the launcher provides. */
-  readonly channel: RuntimeChannel
+  /** Opens the release channel of one prepare; `@delo/install`'s `LauncherChannel` in a real run. */
+  readonly openChannel: OpenUpdateChannel
   /** The report builder, which `delo/packages/update` provides. */
   readonly report: UpdateReporter
 }
@@ -192,25 +209,28 @@ export class HomeRuntimeStore {
    * that fails the start check is installed again, and an install never switches `current`.
    * @param target - the version, or `undefined` for the newest release.
    * @param phase - called as each phase starts; `installing` is skipped when nothing installs.
+   * @param line - writes each line of the release's install progress, as the launcher prints it; nothing is written
+   *   when the target is installed and intact.
    * @returns the prepared version.
    * @throws {RuntimeStoreError} `INSTALL_VERIFY_FAILED` when a check of the fetched release fails; `NO_ACTIVE_RUNTIME`
    *   when the store has no usable runtime; `STORE_BUSY` while another install, switch or removal holds the lock.
    */
-  async prepare(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void): Promise<PreparedRuntime> {
+  async prepare(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, line: (text: string) => void): Promise<PreparedRuntime> {
     phase('checking')
     let version: RuntimeVersion
     if (target !== undefined && await this.intact(target)) {
       version = target
     } else {
-      const resolved = await this.options.channel.resolve(target)
+      const channel = await this.options.openChannel(line)
+      const resolved = await channel.resolve(target)
       if (!await this.intact(resolved.version)) {
         phase('installing')
         await this.options.store.install({
           version: resolved.version,
           root: resolved.root,
-          fill: directory => this.options.channel.fill(resolved, directory),
+          fill: directory => channel.fill(resolved, directory),
         })
-        await this.options.channel.recordInstalled?.(resolved)
+        await channel.recordInstalled(resolved)
       }
       version = resolved.version
     }

@@ -30,7 +30,7 @@ import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { CliError, EXIT } from './exit.ts'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { removeSafeModeOverlay } from './safe-mode.ts'
-import { runtimeOfFile } from './start.ts'
+import { runtimeOfFile } from './update/runtime.ts'
 import { runtimePlatformOf } from './update/channel.ts'
 import { rollbackRecordedUpdate } from './update/support.ts'
 

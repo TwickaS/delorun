@@ -109,13 +109,14 @@ function finalLine(lines: readonly ResponseLine[], what: string): ResponseLine {
 }
 
 /**
- * Print each phase line as it arrives.
+ * Print each phase as it arrives, and each line of the target's install progress as the home process wrote it.
  * @param output - where the command writes.
  * @returns the listener.
  */
 function phases(output: CommandOutput): (line: ResponseLine) => void {
   return (line) => {
     if (line.ok && typeof line.phase === 'string') output.stdout(`… ${line.phase}\n`)
+    if (line.ok && typeof line.line === 'string') output.stdout(line.line)
   }
 }
 

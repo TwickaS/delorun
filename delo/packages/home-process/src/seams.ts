@@ -84,10 +84,11 @@ export interface RuntimeStore {
    * person's channel, install it unless it is installed and its files match its manifest, and compute the report.
    * @param target - the version, or `undefined` for the newest release.
    * @param phase - called as each phase starts.
+   * @param line - writes one line of the target's install progress, as the launcher prints it.
    * @returns the prepared version.
    * @throws {HomeProcessError} `VERIFY_FAILED` when a check fails.
    */
-  prepare(target: RuntimeVersion | undefined, phase: (phase: 'checking' | 'installing' | 'reporting') => void): Promise<PreparedRuntime>
+  prepare(target: RuntimeVersion | undefined, phase: (phase: 'checking' | 'installing' | 'reporting') => void, line: (text: string) => void): Promise<PreparedRuntime>
   /**
    * The `reporting` phase of a rollback: the report against an installed version, installing nothing.
    * @param target - the version `previous` names.

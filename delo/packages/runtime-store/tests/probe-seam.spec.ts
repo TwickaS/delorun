@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 /** A channel with fixed offers. */
-function channelOf(offers: Array<{ readonly release: string, readonly files?: Record<string, FixtureFile> }>): { resolve(target?: string): Promise<ChannelRelease>, fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes> } {
+function channelOf(offers: Array<{ readonly release: string, readonly files?: Record<string, FixtureFile> }>): { resolve(target?: string): Promise<ChannelRelease>, fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes>, recordInstalled(release: ChannelRelease): Promise<void> } {
   const map = new Map(offers.map(offer => [offer.release, releaseFiles(fixture.keys.targets, offer.release, offer.files ?? closureFiles(offer.release))]))
   return {
     async resolve(target) {
@@ -34,13 +34,14 @@ function channelOf(offers: Array<{ readonly release: string, readonly files?: Re
       writeClosure(directory, closureFiles(String(release.version)))
       return map.get(String(release.version))!
     },
+    async recordInstalled() {},
   }
 }
 
 const reporter = { build: async (version: unknown) => ({ report: { for: version }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false }) }
 
 function seam(channel: ReturnType<typeof channelOf>): HomeRuntimeStore {
-  return new HomeRuntimeStore({ store: fixture.store, profile: 'default', channel, report: reporter })
+  return new HomeRuntimeStore({ store: fixture.store, profile: 'default', openChannel: async () => channel, report: reporter })
 }
 
 describe('probe: homeCommand', () => {
@@ -87,7 +88,7 @@ describe('probe: errors across the seam', () => {
     const channel = channelOf([{ release: '0.1.0' }])
     const wrapped = { ...channel, resolve: async (target?: string) => { resolved += 1; return channel.resolve(target) } }
     const store = seam(wrapped)
-    const prepared = await store.prepare(V1, () => {})
+    const prepared = await store.prepare(V1, () => {}, () => {})
     expect(prepared.version).toBe(V1)
     expect(resolved).toBe(0)
   })
@@ -97,7 +98,7 @@ describe('probe: errors across the seam', () => {
     await fixture.install(V2)
     await fixture.store.switchTo(V1, V2)
     const store = seam(channelOf([{ release: '0.1.0' }]))
-    const prepared = await store.prepare(undefined, () => {})
+    const prepared = await store.prepare(undefined, () => {}, () => {})
     expect(prepared.version).toBe(V1)
     expect(await fixture.store.pointers()).toEqual({ current: V2, previous: V1 })
   })

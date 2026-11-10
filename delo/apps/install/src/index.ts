@@ -9,7 +9,7 @@
 export { bundleFileName, LauncherChannel, RELEASE_SOURCE, type LauncherChannelOptions, type ReleaseSource } from './channel.ts'
 export { Downloader, RELEASE_HOSTS, RELEASE_TIMINGS, type Downloaded, type DownloaderOptions, type DownloadTimings, type HostRule } from './download.ts'
 export { InstallError, isInstallError, messageOf, type InstallErrorCode, type InstallLayoutCode } from './errors.ts'
-export type { InstallProgress } from './progress.ts'
+export { formatSize, progressLines, type InstallerProgress, type InstallProgress } from './progress.ts'
 export { extractArchive, extractionPath, type ExtractRequest } from './extract.ts'
 export {
   readStoredRootBytes,
