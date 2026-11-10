@@ -83,10 +83,11 @@ export async function buildBase(repository: string, cache: string, commit: strin
   removeTree(building)
   mkdirSync(building, { recursive: true })
   log(`building the base closure of ${commit.slice(0, 12)} with the release recipe; this takes minutes`)
+  const shims = cycleTolerantPnpm(join(cache, 'build-shims'))
   const finished = await run({
     command: join(repository, 'node_modules/.bin/tsx'),
     args: [join(repository, 'delo/apps/release/src/build-closure.ts'), '--version', BASE_VERSION, '--out', building, '--platform', BENCH_PLATFORM, '--artifacts', 'existing', '--commit', commit],
-    env: process.env,
+    env: { ...process.env, PATH: `${shims}:${process.env.PATH ?? ''}` },
     cwd: repository,
     timeoutMs: 3_600_000,
     onLine: line => { log(`  ${line.text}`) },
@@ -95,6 +96,22 @@ export async function buildBase(repository: string, cache: string, commit: strin
   removeTree(target)
   renameSync(building, target)
   return { directory: target, version: BASE_VERSION }
+}
+
+/**
+ * A `pnpm` that runs the `pnpm` on `PATH` with workspace cycles allowed. The recipe's `pnpm --filter ./delo/packages/*
+ * run build` stops on the cycle through `@delo/release`, `@delo/runtime-closure` and `@delo/cli` (`ERR_PNPM_TASK_CYCLE`),
+ * though only packages outside the cycle have a build script; the recipe passes no variable through to its steps but
+ * `PATH`, so the benchmark's base build puts this first on it. A published release does not use it.
+ * @param directory - where to write it.
+ * @returns the directory to put first on `PATH`.
+ * @throws {Error} when no `pnpm` is on `PATH`.
+ */
+export function cycleTolerantPnpm(directory: string): string {
+  const pnpm = execFileSync('sh', ['-c', 'command -v pnpm'], { encoding: 'utf8' }).trim()
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(join(directory, 'pnpm'), `#!/bin/sh\npnpm_config_ignore_workspace_cycles=true exec '${pnpm}' "$@"\n`, { mode: 0o755 })
+  return directory
 }
 
 /**
