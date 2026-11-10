@@ -108,3 +108,10 @@ The specs fake `tailscale` and drive the fixed port over loopback. These have ne
 ## What is built so far
 
 Fundamentals F11, F12 and F13 name the built refusals ([fundamentals](../security/fundamentals.md)). Passkeys, OpenID Connect, the recovery kit, reset, alerts, the Funnel and relay providers and the loopback credential records are not built.
+
+Open follow-ups:
+
+- `@delo/reach` reads only the serve rule on its own address and port, so another serve port or a TCP forward to the listener port goes unnoticed, and it keeps serving after repeated unreadable `tailscale serve status` output.
+- The loopback credential records of rules 10 to 12.
+- The Gateway decides whether a non-owner Peer receives and may answer a forwarded waterfall on the global resource, not on the chat that raised it.
+- No shipped surface selects a workspace's full access yet; the full-access consent spec selects it from inside a chat's open turn, as the approval service requires.
