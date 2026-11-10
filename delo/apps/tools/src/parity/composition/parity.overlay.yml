@@ -26,7 +26,11 @@
 #   one_time_launch_tokens  the connection row carries the web bundle's
 #                           trustedHosts expression, which a row here would
 #                           erase; the bundle's patch of the row is left out,
-#                           so upstream's reusable launch token signs in.
+#                           so upstream's reusable launch token signs in;
+#   reach                   its row of @delo/bundle-local is restated disabled
+#                           below with home-auth's, so the parity composition
+#                           registers no reach provider and opens no remote
+#                           listener.
 #
 # The overlay also mounts @delo/bundle-local, the bundle Delo's CLI profiles
 # add after upstream's web template: the last blocks restate that bundle's

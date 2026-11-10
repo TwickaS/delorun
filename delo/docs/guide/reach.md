@@ -44,7 +44,7 @@ An approved phone can watch your chats, reply, start chats, approve ordinary pro
 
 It cannot grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; it cannot approve or remove devices, change remote access, or reset the home. Each of those needs you at your computer, and the phone shows "This needs you at your computer" with what it tried. Installing a plugin from the phone is therefore not possible.
 
-The limit is partial. A workspace that you already put on full access at your computer can still be driven from the phone, and a command there can do anything your user can do. What protects you is the phone's own lock, removing the device as soon as you lose it, and the sign-out after 12 hours without use; a session also ends 14 days after sign-in.
+The limit is partial. A workspace that you already put on full access at your computer can still be driven from the phone, and a command there can do anything your user can do. What protects you is the phone's own lock, removing the device when you lose it, and the sign-out after 12 hours without use; a session also ends 14 days after sign-in.
 
 ## Remove a device
 

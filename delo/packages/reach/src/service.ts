@@ -52,9 +52,9 @@ export interface Config {
 
 /** The plugin's configuration schema. */
 export const Config: schema<Config> = schema.object({
-  enabled: schema.boolean().default(false).description('C16 switch reach: whether the reach service mounts at all.'),
+  enabled: schema.boolean().description('C16 switch reach: whether the reach service mounts at all.').default(false),
   tailscalePrivate: schema.object({
-    enabled: schema.boolean().default(false).description('Whether this home is reachable on its Tailscale private address.'),
+    enabled: schema.boolean().description('Whether this home is reachable on its Tailscale private address.').default(false),
     address: schema.string().default('').description('This machine\'s https ts.net address, as delorun reach on tailscale writes it.'),
     servePort: schema.natural().default(DEFAULT_SERVE_PORT).description('The port Tailscale serves HTTPS on.'),
   }).default({ enabled: false, address: '', servePort: DEFAULT_SERVE_PORT }),
