@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-Updates stay manual: `delorun update` shows its report, asks, copies the chat data and rolls back on a failed health check. The update notice tells the person that a newer release exists. A running installation checks the release channel at start and on a schedule, verifies what it fetches as an update verifies it, and shows one line in the terminal and a quiet notice in the studio's sidebar. The notice names the kind of update, whether it is a security fix, how many installed plugins it would turn off, and the command to run; it applies nothing. Delo has one release stream, so a security fix is a release with a mark, and the release tool keeps such a fix a patch that leaves every plugin compatible. Delo's version and upstream's are two axes ([C17](../contracts/c17-plugin-versions.md)); [C21](../contracts/c21-delo-plugin-interface.md) states what a Delo version promises a plugin, and `delorun plugin check` shows an author what their declared ranges admit.
+Updates stay manual: `delorun update` shows its report, asks, copies the chat data and rolls back on a failed health check. The update notice tells the person that a newer release exists. A running installation checks the release channel at start and on a schedule, verifies what it fetches as an update verifies it, and shows one line in the terminal and a quiet notice in the studio's sidebar. The notice names the kind of update, whether it is a security fix, how many installed plugins it would turn off, and the command to run; it applies nothing. Delo has one release stream, so a security fix is a release with a mark, and the release tool keeps such a fix a patch that leaves every plugin compatible. Delo's version and upstream's are two axes ([C17](../contracts/c17-plugin-versions.md)); [C22](../contracts/c22-delo-plugin-interface.md) states what a Delo version promises a plugin, and `delorun plugin check` shows an author what their declared ranges admit.
 
 ## Contents
 
@@ -62,7 +62,7 @@ Updates stay manual: `delorun update` shows its report, asks, copies the chat da
 
 ### The patch rule
 
-18. Signing refuses a release whose version is a patch of an earlier release of the same major and minor, a non-pre-release tag `v<major>.<minor>.<patch>` below it, when its upstream version differs from that release's, when upstream's persistence schema or Delo's record versions differ, or when the plugin-facing interface inventory differs or names an interface the release no longer declares ([C21](../contracts/c21-delo-plugin-interface.md)). A release that moves the upstream base is therefore at least a minor, and a security fix ships as a patch that disables no plugin.
+18. Signing refuses a release whose version is a patch of an earlier release of the same major and minor, a non-pre-release tag `v<major>.<minor>.<patch>` below it, when its upstream version differs from that release's, when upstream's persistence schema or Delo's record versions differ, or when the plugin-facing interface inventory differs or names an interface the release no longer declares ([C22](../contracts/c22-delo-plugin-interface.md)). A release that moves the upstream base is therefore at least a minor, and a security fix ships as a patch that disables no plugin.
 
 ### Targeting Delo
 
@@ -103,4 +103,4 @@ Updates stay manual: `delorun update` shows its report, asks, copies the chat da
 
 ## What is built so far
 
-The rules above are built. The contract pages state them as built facts: the check, its record and the notice in [C3](../contracts/c03-update-report.md#update-check), the signed fields in [C2](../contracts/c02-release-manifest.md), the switch in [C16](../contracts/c16-parity-composition.md), the record's path in [C1](../contracts/c01-home-layout.md), and the promise, the patch rule and `delorun plugin check` in [C21](../contracts/c21-delo-plugin-interface.md) and [C17](../contracts/c17-plugin-versions.md). This page keeps the reasons the rules are as they are.
+The rules above are built. The contract pages state them as built facts: the check, its record and the notice in [C3](../contracts/c03-update-report.md#update-check), the signed fields in [C2](../contracts/c02-release-manifest.md), the switch in [C16](../contracts/c16-parity-composition.md), the record's path in [C1](../contracts/c01-home-layout.md), and the promise, the patch rule and `delorun plugin check` in [C22](../contracts/c22-delo-plugin-interface.md) and [C17](../contracts/c17-plugin-versions.md). This page keeps the reasons the rules are as they are.

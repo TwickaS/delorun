@@ -8,7 +8,7 @@ English | [中文](c17-plugin-versions.zh.md)
 
 ## Summary
 
-Delo has its own semantic version and builds on one upstream DSH version, so a plugin is checked on two axes. The upstream axis is unchanged: `engines.dsh` (or, without it, the plugin's `@deepseek-ai/dsh*` peer dependencies) is checked against the version of `@deepseek-ai/dsh-app-boot` by upstream's `evaluatePluginCompatibility`. The Delo axis is `engines.delo`, checked against Delo's version with the same rules. A plugin written for stock DSH declares no `engines.delo` and is compatible on the Delo axis. Each axis has its own exact-version exemption, which the person grants after a risk warning. Every refusal and every update-report line names both versions. [C21](c21-delo-plugin-interface.md) states what a Delo version promises a plugin that declares `engines.delo`, and `delorun plugin check` shows an author what their ranges admit before they install. The types live in [`@delo/contract-plugin-versions`](../../packages/contract-plugin-versions/README.md).
+Delo has its own semantic version and builds on one upstream DSH version, so a plugin is checked on two axes. The upstream axis is unchanged: `engines.dsh` (or, without it, the plugin's `@deepseek-ai/dsh*` peer dependencies) is checked against the version of `@deepseek-ai/dsh-app-boot` by upstream's `evaluatePluginCompatibility`. The Delo axis is `engines.delo`, checked against Delo's version with the same rules. A plugin written for stock DSH declares no `engines.delo` and is compatible on the Delo axis. Each axis has its own exact-version exemption, which the person grants after a risk warning. Every refusal and every update-report line names both versions. [C22](c22-delo-plugin-interface.md) states what a Delo version promises a plugin that declares `engines.delo`, and `delorun plugin check` shows an author what their ranges admit before they install. The types live in [`@delo/contract-plugin-versions`](../../packages/contract-plugin-versions/README.md).
 
 ## Status
 
@@ -86,7 +86,7 @@ Where the axes are checked:
 
 ## Checking a plugin before it is installed
 
-`delorun plugin check <directory>` reads a plugin's `package.json` without running any of its files and evaluates both axes against the running release with the installer's own functions, `evaluatePluginCompatibility` and `evaluateDeloRequirement`, and no exemption; the update report and the update check call the same ones. It prints what each declared range admits, what is undeclared, the `engines.delo` range that targets the running Delo minor, and whether the installer admits the plugin; [C21](c21-delo-plugin-interface.md#checking-a-plugin) states its output and exit codes. A plugin targets Delo with `engines.delo` alone: the Delo axis never overrides the upstream axis, and a plugin that uses upstream interfaces still declares `engines.dsh`.
+`delorun plugin check <directory>` reads a plugin's `package.json` without running any of its files and evaluates both axes against the running release with the installer's own functions, `evaluatePluginCompatibility` and `evaluateDeloRequirement`, and no exemption; the update report and the update check call the same ones. It prints what each declared range admits, what is undeclared, the `engines.delo` range that targets the running Delo minor, and whether the installer admits the plugin; [C22](c22-delo-plugin-interface.md#checking-a-plugin) states its output and exit codes. A plugin targets Delo with `engines.delo` alone: the Delo axis never overrides the upstream axis, and a plugin that uses upstream interfaces still declares `engines.dsh`.
 
 ## Exemptions
 
@@ -142,7 +142,7 @@ DSH 0.2.2
 - Upstream's app-boot hunk in `plugin-compatibility.ts` and `delo/apps/cli/src/version.ts` (WP3.8).
 - The pre-update report (WP3.4, [C3](c03-update-report.md)).
 - The catalogue corpus and badges (WP7.2, [C13](c13-catalogue-revocation.md)).
-- The update check's plugin count ([C3](c03-update-report.md#update-check)) and `delorun plugin check` ([C21](c21-delo-plugin-interface.md)).
+- The update check's plugin count ([C3](c03-update-report.md#update-check)) and `delorun plugin check` ([C22](c22-delo-plugin-interface.md)).
 
 ## Compatibility
 

@@ -66,7 +66,7 @@ describe('delorun plugin check', () => {
       'DSH axis: engines.dsh ">=0.2.2 <0.3.0" admits DSH 0.2.2; without engines.dsh every DSH peer must admit it, and engines.dsh alone decides when it is declared.',
       'Delo axis: engines.delo admits Delo 0.1.3.',
       'The installer admits it on this release.',
-      'Within one Delo minor the DSH version stays the same; contract C21 states what each Delo version promises a plugin.',
+      'Within one Delo minor the DSH version stays the same; contract C22 states what each Delo version promises a plugin.',
       '',
     ])
   })

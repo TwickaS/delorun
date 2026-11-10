@@ -1,8 +1,8 @@
 ---
-description: "Contract C21: what a Delo version promises a plugin: the interfaces the promise covers and their inventory, what a patch, a minor and a major release may change, the upstream base fixed within a minor, how versions before 1.0 are read, how a plugin targets Delo with engines.delo, and the release tool's patch rule."
+description: "Contract C22: what a Delo version promises a plugin: the interfaces the promise covers and their inventory, what a patch, a minor and a major release may change, the upstream base fixed within a minor, how versions before 1.0 are read, how a plugin targets Delo with engines.delo, and the release tool's patch rule."
 ---
 
-# C21 What a Delo version promises a plugin
+# C22 What a Delo version promises a plugin
 
 English
 
