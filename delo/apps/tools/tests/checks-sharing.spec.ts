@@ -85,6 +85,8 @@ describe('the sharing rules', () => {
     ])
     expect(policy.codeInputs(check('generated:notices', { command: ['tsx', 'scripts/gen.ts', 'scripts/other.ts'] }))).toEqual(['scripts/**'])
     expect(policy.codeInputs(check('tests:fork', { command: ['vitest', 'run'] }))).toEqual([])
+    // The packages a suite is narrowed to, and a spec file, are not code the command runs.
+    expect(policy.codeInputs(check('tests:fork', { command: ['vitest', 'run', 'delo/apps/tools/', 'delo/packages/trash/tests/a.spec.ts', 'delo/packages/trash/tests/b.test.tsx'] }))).toEqual([])
   })
 })
 

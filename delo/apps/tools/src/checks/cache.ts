@@ -265,7 +265,7 @@ export function createPassCache(options: PassCacheOptions): PassCache {
     const facts = {
       id,
       inputs: fingerprint(inputs),
-      code: fingerprint(options.policy.codeInputs(check)),
+      code: fingerprint(options.policy.codeInputs({ ...check, command })),
       state: options.policy.stateFiles(check).map(path => [path, contentId(options.root, path)]),
       lockfile: fingerprint([LOCKFILE]),
       installed,

@@ -121,8 +121,8 @@ export interface SharingPolicy {
   securityPackage(dir: string): boolean
   /**
    * The source files of the code the check's command runs, as globs, which join its key: the source and manifest of a
-   * Delo package a command argument lies in and of every Delo package it depends on, and `scripts/**` for upstream's
-   * scripts.
+   * Delo package a script argument of the command lies in and of every Delo package it depends on, and `scripts/**` for
+   * upstream's scripts. A directory or spec file the command is narrowed to is not code it runs.
    * @param check - the check.
    * @returns the globs, sorted.
    */
@@ -226,7 +226,9 @@ export function sharingPolicy(facts: SharingFacts): SharingPolicy {
     securityPackage: dir => facts.securityPackages.includes(dir),
     security: check => decide(check).security,
     codeInputs: (check) => {
-      const owned = check.command.flatMap(arg => facts.packages.filter(pkg => arg.startsWith(`${pkg.dir}/`)).map(pkg => pkg.dir))
+      // A script the command runs, not a directory or spec it narrows the run to.
+      const scripts = check.command.filter(arg => /\.[cm]?[jt]sx?$/.test(arg) && !/\.(?:spec|test)\.[cm]?[jt]sx?$/.test(arg))
+      const owned = scripts.flatMap(arg => facts.packages.filter(pkg => arg.startsWith(`${pkg.dir}/`)).map(pkg => pkg.dir))
       const globs = dependencyClosure(facts.packages, owned).flatMap(dir => [`${dir}/src/**`, `${dir}/package.json`])
       if (check.command.some(arg => arg.startsWith('scripts/'))) globs.push('scripts/**')
       return [...new Set(globs)].sort()

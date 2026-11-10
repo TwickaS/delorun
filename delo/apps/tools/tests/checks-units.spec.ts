@@ -246,6 +246,15 @@ describe('a run of a unitised suite', { timeout: 30_000 }, () => {
     expect(warnings[0]).toMatch(/^delo checks: the pass of tests:fork@delo\/packages\/a is not shared: Error: /)
   })
 
+  it('gives a package the same key whatever other packages the run is narrowed to, so another run shares it', () => {
+    const repo = makeRepo()
+    const cache = cacheFor(repo.root)
+    const narrow = suite(repo.fake, ['delo/packages/c'])
+    const wide = suite(repo.fake, SPEC_DIRS)
+    const unitC = (check: WithUnits<Planned>): Unit => (check.units ?? []).find(unit => unit.dir === 'delo/packages/c') ?? { dir: '', arg: '', inputs: [] }
+    expect(cache.unitKey(narrow, unitC(narrow))).toBe(cache.unitKey(wide, unitC(wide)))
+  })
+
   it('keeps a local package\'s pass in its worktree, keyed on HEAD', async () => {
     const tree: ForkTree = { ...TREE, packages: [...TREE.packages, pkg('delo/apps/tools')] }
     const repo = makeRepo()
