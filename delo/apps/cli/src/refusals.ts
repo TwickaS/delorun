@@ -14,6 +14,7 @@ import { HomeProcessError, homeProcessDescriber, HostNotStoppedError, hostStopFa
 import { installDescriber } from '@delo/install'
 import { logsDescriber, Redactor } from '@delo/logs'
 import { ProfileSafetyError, type ProfileSafetyRemedy } from '@delo/profile-safety'
+import { ReachError } from '@delo/reach'
 import { LogVerificationError } from '@delo/release-formats/log/bundle'
 import { TileError } from '@delo/release-formats/log/tiles'
 import { VerificationError } from '@delo/release-formats/sign/verify'
@@ -140,6 +141,7 @@ export const CLI_DESCRIBERS: readonly RefusalDescriber[] = [
     reason: codedReason(error.code, error.message),
     remedies: error.code === 'TRASH_ITEM_NOT_FOUND' ? [`See what the trash holds: delorun trash list${profileOption(context)}`] : [],
   })),
+  refusalDescriber(ReachError, error => ({ lead: 'Delo could not read or change what Tailscale serves for remote access.', reason: codedReason(error.code, error.detail), remedies: [] })),
   refusalDescriber(UpdatePendingError, error => ({ lead: 'Delo started no new turn: an update is waiting for running chats.', reason: error.message, remedies: ['Send it again once Delo is back.'] })),
   refusalDescriber(StartCheckPendingError, error => ({ lead: 'Delo started no new turn: its start check did not finish.', reason: error.message, remedies: ['Run delorun status and delorun logs to see what the start is doing.', 'Start Delo with delorun start, then send it again.'] })),
   refusalDescriber(VerificationError, error => ({ lead: 'Delo refused a release file that did not verify.', reason: error.message, remedies: ['See every check: delorun verify'] })),

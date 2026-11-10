@@ -11,6 +11,7 @@ import { UpdatePendingError } from '@delo/bundle-local/update-gate'
 import { describeFailure, homeLayoutDescriber, type Refusal } from '@delo/home'
 import { installDescriber } from '@delo/install'
 import { ProfileSafetyError, type ProfileSafetyRemedy } from '@delo/profile-safety'
+import { ReachError } from '@delo/reach'
 import { LogVerificationError } from '@delo/release-formats/log/bundle'
 import { TileError } from '@delo/release-formats/log/tiles'
 import { VerificationError } from '@delo/release-formats/sign/verify'
@@ -45,6 +46,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   TrashRequestError: 'raised by the studio\'s trash client in the browser',
   ChatStateRefusedError: PLUGIN,
   ChatStatesRequestError: 'raised by the studio\'s chat-states client in the browser',
+  HostRequestError: 'raised by the studio\'s devices client in the browser',
   TrashOperationError: PLUGIN,
   OwnerNotesError: PLUGIN,
   MainChatToolError: PLUGIN,
@@ -349,6 +351,10 @@ describe('a delorun refusal', () => {
     expect(refusalOf(new UpdateReportError('REPORT_TARGET_UNVERIFIED', 'the signature does not verify'))).toEqual({ lead: 'Delo made no update report: the release did not verify.', reason: 'REPORT_TARGET_UNVERIFIED: the signature does not verify', remedies: ['See every check: delorun verify'] })
     expect(refusalOf(new UpdateReportError('REPORT_VERSION_INVALID', 'x')).lead).toBe('Delo made no update report: the version is not a semantic version.')
     expect(refusalOf(new UpdateReportError('REPORT_DISPOSED'))).toEqual({ lead: 'Delo stopped before the update report was ready.', reason: 'REPORT_DISPOSED', remedies: [] })
+  })
+
+  it('reads a Tailscale refusal with its code and the detail that names what to do', () => {
+    expect(refusalOf(new ReachError('TAILSCALE_NOT_LOGGED_IN', 'Sign in to Tailscale, then run delorun reach on tailscale again'))).toEqual({ lead: 'Delo could not read or change what Tailscale serves for remote access.', reason: 'TAILSCALE_NOT_LOGGED_IN: Sign in to Tailscale, then run delorun reach on tailscale again', remedies: [] })
   })
 
   it('reads a held turn and the release package\'s verification failures', () => {
