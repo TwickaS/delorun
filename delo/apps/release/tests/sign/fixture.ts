@@ -138,7 +138,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   const repo = join(directory, 'repo')
   mkdirSync(repo)
   const env = { ...process.env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.test', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.test' }
-  const git = (args: readonly string[]): string => execFileSync('git', args, { cwd: repo, env, encoding: 'utf8' }).trim()
+  const git = (args: readonly string[]): string => execFileSync('git', args, { cwd: repo, env, encoding: 'utf8', timeout: 30_000 }).trim()
   git(['init', '-q', '-b', 'main'])
   writeFileSync(join(repo, 'README.md'), 'fixture\n')
   mkdirSync(join(repo, 'delo/apps/release'), { recursive: true })

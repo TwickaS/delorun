@@ -144,7 +144,7 @@ export interface ForkTree {
 
 /** The test runners' worker counts. */
 export interface Workers {
-  /** The fork suite's workers. */
+  /** The fork suite's unit workers; the integration phase takes at most {@link FORK_INTEGRATION_WORKERS} of them. */
   readonly fork: number
   /** The changed-upstream lane's workers, before its own cap. */
   readonly upstream: number
@@ -215,6 +215,17 @@ const SNAPSHOT_CONCURRENCY = 5
 export const UPSTREAM_CHANGED_SPEC_BUDGET = 150
 // The changed-upstream lane's workers: path-filtered runs measured well inside this beside the compilers.
 const UPSTREAM_CHANGED_WORKERS = 8
+/** The fork suite's unit phase: the `fork` and `fork-client` projects of `delo/vitest.config.ts`. */
+export const FORK_UNIT_ID = 'tests:fork'
+/** The fork suite's integration phase: the `fork-integration` project, after the unit phase. */
+export const FORK_INTEGRATION_ID = 'tests:fork:integration'
+/** Both phases of the fork suite, which the selection narrows alike. */
+const FORK_SUITE_IDS: ReadonlySet<string> = new Set([FORK_UNIT_ID, FORK_INTEGRATION_ID])
+/**
+ * The integration phase's most workers. Each worker's specs start git, Node and `tsx` children, so a worker uses
+ * more than one CPU; at this bound a fully loaded 22-CPU host ran the phase without a timeout, where 20 workers did not.
+ */
+export const FORK_INTEGRATION_WORKERS = 4
 // The web lane's CPUs: the artifact build runs eight gate workers, and the specs one browser at a time. The lane runs alone, so the figure sizes only its CPU budget.
 const WEB_LANE_CPUS = 8
 /** Paths whose change can affect every check: fork-wide test and compiler configuration and the dependency set. */
@@ -240,6 +251,9 @@ export const NOTICES_ID = 'generated:notices'
 
 /** The check that builds the Delo packages whose output is missing or older than their sources. */
 export const DELO_BUILD_ID = 'build:delo'
+
+/** The parity replay's negative control: a replay with a planted switch left on must fail. */
+export const PARITY_CONTROL_ID = 'parity-replay:control'
 
 /** The check that builds the host's native system addon, which upstream's suites load and git ignores. */
 export const NATIVE_CHECK_ID = 'generate:native'
@@ -459,16 +473,30 @@ function draft(tree: ForkTree, host: Host): Draft[] {
     // No tier selects it: a lane that loads the addon declares it as a need, and `--only generate:native` builds it alone.
     { id: NATIVE_CHECK_ID, group: 'generate', title: 'The host\'s native system addon, which upstream\'s suites load (`pnpm run build:native-system`)', cwd: '', command: ['pnpm', 'run', '--silent', 'build:native-system'], needs: [], tiers: [], cpus: 2 },
     {
-      id: 'tests:fork',
+      id: FORK_UNIT_ID,
       group: 'tests',
-      title: 'Every `delo/apps/*/tests` and `delo/packages/*/tests` spec (`delo/vitest.config.ts`)',
+      title: 'The unit and client component specs under `delo/apps/*/tests` and `delo/packages/*/tests` (`delo/vitest.config.ts`, projects `fork` and `fork-client`)',
       cwd: '',
-      command: [VITEST, 'run', '--config', FORK_CONFIG, `--maxWorkers=${String(workers.fork)}`],
+      // A narrowed run can reach a package whose specs are all integration specs, so a phase with none passes.
+      command: [VITEST, 'run', '--config', FORK_CONFIG, '--project', 'fork', '--project', 'fork-client', `--maxWorkers=${String(workers.fork)}`, '--passWithNoTests'],
       needs: upstreamSuiteNeeds,
       inputs: ['delo/**', ...UPSTREAM_CODE],
       env: TEST_ENV,
       tiers: ['changed', 'full'],
       cpus: workers.fork,
+    },
+    // After the unit phase, so its children never compete with the unit phase's workers for the CPUs.
+    {
+      id: FORK_INTEGRATION_ID,
+      group: 'tests',
+      title: 'The `*.integration.spec.ts` specs, which start git, Node and `tsx` children (`delo/vitest.config.ts`, project `fork-integration`)',
+      cwd: '',
+      command: [VITEST, 'run', '--config', FORK_CONFIG, '--project', 'fork-integration', `--maxWorkers=${String(Math.min(workers.fork, FORK_INTEGRATION_WORKERS))}`, '--passWithNoTests'],
+      needs: [...upstreamSuiteNeeds, FORK_UNIT_ID],
+      inputs: ['delo/**', ...UPSTREAM_CODE],
+      env: TEST_ENV,
+      tiers: ['changed', 'full'],
+      cpus: Math.min(workers.fork, FORK_INTEGRATION_WORKERS),
     },
     // Present only in a tree with Docker specs. The specs share the host's one engine, so they run one file at a time.
     ...tree.packages.some(pkg => pkg.dockerSpecs === true)
@@ -552,6 +580,18 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       needs: upstreamSuiteNeeds,
       tiers: ['changed', 'full'],
       cpus: SNAPSHOT_CONCURRENCY,
+    },
+    // The replay's negative control, which a spec does not nest: like the replay, it declares no inputs.
+    {
+      id: PARITY_CONTROL_ID,
+      mergeOnly: true,
+      group: 'parity',
+      title: 'C16\'s `parity replay refuses a model-visible switch left on`: one recorded headless scenario replayed with a planted overlay that leaves `profile_history` on must fail on the request header',
+      cwd: '',
+      command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/parity/composition/replay-control.ts'],
+      needs: upstreamSuiteNeeds,
+      tiers: ['changed', 'full'],
+      cpus: 1,
     },
   )
   return checks
@@ -764,7 +804,7 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
         const dir = packageDirOf(check.command[check.command.indexOf('-p') + 1] ?? '')
         if (dir !== undefined && reachedDirs.has(dir)) pick(check, touchedDirs.has(dir) ? `a change under ${dir}` : `${dir} depends on a changed package`)
       }
-    } else if (check.id === 'tests:fork' && (touchedDirs.size > 0 || forkWide.length > 0 || viaUpstream.length > 0)) {
+    } else if (FORK_SUITE_IDS.has(check.id) && (touchedDirs.size > 0 || forkWide.length > 0 || viaUpstream.length > 0)) {
       pick(check, selection.changed === undefined ? 'specs under the targets' : 'specs of the packages a change reaches, dependents included')
     } else if (check.id === DOCKER_CHECK_ID) {
       const docker = tree.packages.find(pkg => pkg.dockerSpecs === true && (forkWide.length > 0 || reachedDirs.has(pkg.dir)))
@@ -874,7 +914,7 @@ function narrowed(check: Check, selection: Selection, paths: readonly string[], 
     return dirs.length === 0 ? { ...check, declined: 'no upstream package changed' } : { ...check, command: [...check.command, ...dirs], scope: dirs }
   }
   if (check.id === DOCKER_CHECK_ID) return reachedDirs === undefined || reachedDirs.length === 0 ? check : { ...check, command: [...check.command, ...reachedDirs], scope: reachedDirs }
-  if (check.id !== 'tests:fork') return check
+  if (!FORK_SUITE_IDS.has(check.id)) return check
   if (selection.changed !== undefined) {
     return reachedDirs === undefined || reachedDirs.length === 0 ? check : { ...check, command: [...check.command, ...reachedDirs], scope: reachedDirs }
   }

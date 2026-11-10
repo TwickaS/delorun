@@ -82,7 +82,7 @@ afterEach(async () => {
 afterAll(() => {
   if (!dockerUp) return
   for (const home of homes) removeOwned(home)
-  spawnSync('docker', ['image', 'rm', TAG], { stdio: 'ignore' })
+  spawnSync('docker', ['image', 'rm', TAG], { stdio: 'ignore', timeout: 60_000 })
 }, DOCKER_MS)
 
 /**

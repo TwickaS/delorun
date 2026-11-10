@@ -124,4 +124,4 @@ node_modules/.bin/tsx delo/apps/npm-launcher/src/build.ts --root <root.json>... 
 
 ## Development
 
-The tests in `tests/` drive `runLauncher` with a stand-in store, channel and spawn, so no network is contacted and nothing is installed on the machine running them; `tests/build.spec.ts` builds and packs the launcher with a throwaway root. The end-to-end spec in [`@delo/release`](../release/README.md#local-release) installs a local release through a packed launcher. Run them with the repository's Vitest configuration: `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/npm-launcher`.
+The tests in `tests/` drive `runLauncher` with a stand-in store, channel and spawn, so no network is contacted and nothing is installed on the machine running them; `tests/build.integration.spec.ts` builds and packs the launcher with a throwaway root. The end-to-end spec in [`@delo/release`](../release/README.md#local-release) installs a local release through a packed launcher. Run them with the repository's Vitest configuration: `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/npm-launcher`.

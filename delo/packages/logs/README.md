@@ -57,17 +57,17 @@ The writer rotates before a write would take the active file past 10 MiB: `.3` t
 
 ## The denial suite
 
-[`tests/denial/`](tests/denial/denial.spec.ts) runs C20's denial tests over the reference surface, this package writing `home-default` and capturing a child process's output, and over every surface whose package is in the tree and depends on `@delo/logs`. [`tests/denial/surfaces.ts`](tests/denial/surfaces.ts) lists C20's surfaces with their owning packages. A surface whose package is absent or does not depend on `@delo/logs` is listed as a skipped test with its reason; a surface whose package depends on `@delo/logs` must add its `SurfaceDriver` there, or the suite fails.
+[`tests/denial/`](tests/denial/denial.integration.spec.ts) runs C20's denial tests over the reference surface, this package writing `home-default` and capturing a child process's output, and over every surface whose package is in the tree and depends on `@delo/logs`. [`tests/denial/surfaces.ts`](tests/denial/surfaces.ts) lists C20's surfaces with their owning packages. A surface whose package is absent or does not depend on `@delo/logs` is listed as a skipped test with its reason; a surface whose package depends on `@delo/logs` must add its `SurfaceDriver` there, or the suite fails.
 
 | C20 test | Spec | Runs over |
 | --- | --- | --- |
-| `log-canary-every-surface` | `denial.spec.ts` | each surface in the suite, rotated files included |
-| `log-canary-split` | `denial.spec.ts` | each surface in the suite |
-| `log-canary-patterns` | `denial.spec.ts` | each surface in the suite |
-| `log-rotation` | `denial.spec.ts` | size: each surface in the suite; age: the age check every surface runs |
-| `log-modes` | `denial.spec.ts` | each surface in the suite |
+| `log-canary-every-surface` | `denial.integration.spec.ts` | each surface in the suite, rotated files included |
+| `log-canary-split` | `denial.integration.spec.ts` | each surface in the suite |
+| `log-canary-patterns` | `denial.integration.spec.ts` | each surface in the suite |
+| `log-rotation` | `denial.integration.spec.ts` | size: each surface in the suite; age: the age check every surface runs |
+| `log-modes` | `denial.integration.spec.ts` | each surface in the suite |
 | `log-session-keys` | [`session-keys.spec.ts`](tests/denial/session-keys.spec.ts) | the Cordis exporter on upstream's production agent loop |
-| `log-purge-clear` | `denial.spec.ts` | the clear effect over each surface in the suite; purge itself is skipped until C8's purge is in the tree |
+| `log-purge-clear` | `denial.integration.spec.ts` | the clear effect over each surface in the suite; purge itself is skipped until C8's purge is in the tree |
 | `log-desktop-host-file` | skipped | waits for the desktop Host's log file |
 | `log-confined-write-denied` | skipped | waits for Delo's sandbox profiles for C1's `home-write` rule |
 

@@ -131,6 +131,7 @@ export interface RunResult {
  * @returns its exit status and output.
  */
 export function runEntry(entry: string, args: readonly string[], env: NodeJS.ProcessEnv = {}, cwd: string = REPO): RunResult {
-  const result = spawnSync(TSX, [join(REPO, 'delo/apps/release/src', entry), ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...env } })
+  const result = spawnSync(TSX, [join(REPO, 'delo/apps/release/src', entry), ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...env }, timeout: 50_000 })
+  if (result.status === null) throw new Error(`${entry} ended by signal ${String(result.signal)}: ${result.stderr}`)
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
 }

@@ -35,7 +35,7 @@ export function scratchRepo(test: TestContext): Scratch {
   const root = mkdtempSync(join(tmpdir(), 'delo-gate-'))
   test.onTestFinished(() => rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }))
   const env = gitEnv()
-  const run = (args: readonly string[]): string => execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim()
+  const run = (args: readonly string[]): string => execFileSync('git', args, { cwd: root, env, encoding: 'utf8', timeout: 30_000 }).trim()
   const write = (files: Record<string, string>): void => {
     for (const [file, text] of Object.entries(files)) {
       mkdirSync(dirname(join(root, file)), { recursive: true })
@@ -117,6 +117,8 @@ export function runTsx(cwd: string, script: string, args: readonly string[] = []
     cwd,
     encoding: 'utf8',
     env: { ...process.env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1', ...env },
+    timeout: 50_000,
   })
-  return { status: result.status ?? 1, output: `${result.stdout}${result.stderr}` }
+  if (result.status === null) throw new Error(`tsx ${script} ended by signal ${String(result.signal)}: ${result.stderr}`)
+  return { status: result.status, output: `${result.stdout}${result.stderr}` }
 }

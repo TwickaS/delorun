@@ -4,7 +4,7 @@
  * secret-shaped text is committed and no two runs share a value.
  */
 import type { LogRecord, SecretKind } from '@delo/contract-operational-logs'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -171,7 +171,24 @@ export interface PatternCanaries {
 }
 
 /**
- * New fake secrets for step 3's forms.
+ * The seed of the PEM body's lines. Random base64 often holds a run of 26 letters and digits 2 to 7, which the
+ * owner-code form reads as a code in either case, so a random body sometimes redacted as an owner code instead of
+ * a private key. The lines this seed derives hold no run of 16 such characters.
+ */
+const PEM_BODY_SEED = 'delo-logs-pem-body-484'
+
+/**
+ * One 64-character line of the PEM body, derived from {@link PEM_BODY_SEED}.
+ * @param index - the line's index.
+ * @returns the line.
+ */
+function pemBodyLine(index: number): string {
+  const digest = (suffix: string): Buffer => createHash('sha256').update(`${PEM_BODY_SEED}-${String(index)}${suffix}`).digest()
+  return Buffer.concat([digest(''), digest('-tail')]).subarray(0, 48).toString('base64')
+}
+
+/**
+ * New fake secrets for step 3's forms. The PEM body is the same in every call; the other canaries are new.
  * @returns the canaries.
  */
 export function patternCanaries(): PatternCanaries {
@@ -192,7 +209,7 @@ export function patternCanaries(): PatternCanaries {
     envSecret: randomFrom(ALNUM, 28),
     webhookPath: [randomFrom(ALNUM, 9), randomFrom(ALNUM, 24)].join('/'),
     credentialPath: ['/home', `ci-${randomFrom('abcdef0123456789', 8)}`, '.aws', 'credentials'].join('/'),
-    pemBody: Array.from({ length: 4 }, () => randomBytes(48).toString('base64')),
+    pemBody: Array.from({ length: 4 }, (_, index) => pemBodyLine(index)),
   }
 }
 

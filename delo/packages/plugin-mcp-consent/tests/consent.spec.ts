@@ -8,7 +8,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSy
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeloMcpConsent, Config, apply } from '../src/index.ts'
 import {
   AcceptanceStoreError,
@@ -76,13 +76,13 @@ describe('the mcpAddConsent provider', () => {
     root = mkdtempSync(join(tmpdir(), 'delo-mcp-consent-'))
     home = join(root, 'home')
     mkdirSync(home, { recursive: true })
-    process.env['DELO_HOME'] = home
+    vi.stubEnv('DELO_HOME', home)
     ctx = new Context()
     consent = new DeloMcpConsent(ctx)
   })
 
   afterEach(async () => {
-    delete process.env['DELO_HOME']
+    vi.unstubAllEnvs()
     await ctx.fiber.dispose()
     rmSync(root, { recursive: true, force: true })
   })
@@ -163,7 +163,7 @@ describe('the mcpAddConsent provider', () => {
   it('asks again when the home cannot be resolved', async () => {
     // Upstream's ~/.dsh under the real OS home is a home resolveDeloHome refuses (contract C1's HOME_IS_DSH_HOME),
     // so the review cannot read any store and asks again.
-    process.env['DELO_HOME'] = join(homedir(), '.dsh')
+    vi.stubEnv('DELO_HOME', join(homedir(), '.dsh'))
     await expect(consent.review(COMMAND)).resolves.toSatisfy((decision: { allow: boolean, reason: string }) =>
       decision.allow === false && decision.reason.startsWith('the Delo home could not be resolved'))
   })

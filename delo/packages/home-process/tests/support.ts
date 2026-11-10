@@ -65,8 +65,8 @@ export interface FixtureBehaviour {
   readonly disabled: readonly string[]
   /** The plugins the update report names as disabled. */
   readonly reportDisabled: readonly string[]
-  /** How long its boot takes, in milliseconds. */
-  readonly bootMs: number
+  /** A file whose creation lets its boot finish, so a spec can hold the phase that waits for the boot; none by default. */
+  readonly bootGate?: string
   /** Whether the update report to this version names a data change. */
   readonly dataDiffers?: boolean
   /** The rows its Host has at boot. */
@@ -107,7 +107,7 @@ export async function tempHome(parent: string = tmpdir()): Promise<TempHome> {
 export function installFixture(home: string, version: RuntimeVersion, behaviour: Partial<FixtureBehaviour> = {}): void {
   const directory = join(home, 'runtimes', version)
   mkdirSync(directory, { recursive: true, mode: 0o700 })
-  const whole: FixtureBehaviour = { healthy: true, disabled: [], reportDisabled: [], bootMs: 0, ...behaviour }
+  const whole: FixtureBehaviour = { healthy: true, disabled: [], reportDisabled: [], ...behaviour }
   writeFileSync(join(directory, 'fixture.json'), JSON.stringify(whole))
 }
 
@@ -364,7 +364,8 @@ export class FixtureHostRunner implements HostRunner {
 
   async boot(access: UpdateChannelAccess): Promise<RunningHost> {
     const behaviour = this.behaviour()
-    if (behaviour.bootMs > 0) await new Promise(resolve => setTimeout(resolve, behaviour.bootMs))
+    const gate = behaviour.bootGate
+    if (gate !== undefined) await until(() => existsSync(gate), 60_000, `the spec to create ${gate}`)
     const host = new FixtureHost(behaviour, access)
     this.booted.push(host)
     return host

@@ -43,7 +43,9 @@ const fibers: Array<Fiber> = []
 async function mount(guard: 'enabled' | FetchGuard): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(WebRuntime, { fetchProvider: LOCAL_FETCH_PROVIDER_ID })
-  await ctx.plugin(await import('@deepseek-ai/dsh-web-fetch-http'), { timeoutMs: 1_000 })
+  // The fetch's own budget, kept below the unit test's 10 s so a refused or hung fetch reports as the fetch's error; no
+  // case here waits for it, so it bounds only a loopback request that a busy machine delays.
+  await ctx.plugin(await import('@deepseek-ai/dsh-web-fetch-http'), { timeoutMs: 5_000 })
   if (guard === 'enabled') fibers.push(await ctx.plugin(await import('../src/index.ts'), { enabled: true }))
   else fibers.push(await ctx.plugin({ name: 'stub-guard', apply: sibling => sibling.provide('fetchGuard', guard as never) }))
   return ctx

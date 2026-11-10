@@ -88,15 +88,19 @@ async function raw(port: number, head: readonly string[], body = ''): Promise<Re
   let received = ''
   socket.setEncoding('utf8')
   socket.on('data', (chunk: string) => { received += chunk })
+  // The reply is read once its head and `Content-Length` bytes of body have arrived, or the server closed the socket.
+  const replied = new Promise<void>((resolve) => {
+    socket.once('close', () => { resolve() })
+    socket.on('data', () => {
+      const end = received.indexOf('\r\n\r\n')
+      if (end === -1) return
+      const length = /\r\ncontent-length: *(\d+)/i.exec(received.slice(0, end))?.[1]
+      if (length === undefined || Buffer.byteLength(received.slice(end + 4)) >= Number(length)) resolve()
+    })
+  })
   socket.write(`${head.join('\r\n')}\r\n\r\n${body}`)
-  await Promise.race([
-    new Promise((resolve) => { socket.once('close', resolve) }),
-    new Promise((resolve) => { socket.once('data', resolve) }),
-  ])
+  await replied
   socket.destroy()
-  for (let attempt = 0; attempt < 200 && !received.includes('\r\n\r\n'); attempt += 1) {
-    await new Promise((resolve) => { setTimeout(resolve, 5) })
-  }
   const split = received.indexOf('\r\n\r\n')
   const head_ = split === -1 ? received : received.slice(0, split)
   const rest = split === -1 ? '' : received.slice(split + 4)

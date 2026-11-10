@@ -25,7 +25,7 @@ const NONE: Selection = { targets: [], only: [], skip: [] }
  * suite that upstream's own gate runs after the whole build. The changed-upstream lane is upstream's unit gate, which
  * declares `needs: ['native-system']` in `scripts/run-gates.ts`.
  */
-const UPSTREAM_SUITE_LANES = ['tests:snapshots', 'tests:fork', 'parity-replay', 'tests:upstream-changed']
+const UPSTREAM_SUITE_LANES = ['tests:snapshots', 'tests:fork', 'tests:fork:integration', 'parity-replay', 'parity-replay:control', 'tests:upstream-changed']
 
 /**
  * A check's needs.

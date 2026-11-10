@@ -1,7 +1,7 @@
 /**
  * The pure parts of the clone's git hygiene: the options, the environment,
  * the token and URL checks, the credential helper's invocation, and the
- * redaction. No git process runs here; clone.spec.ts runs git.
+ * redaction. No git process runs here; clone.integration.spec.ts runs git.
  */
 import { describe, expect, it } from 'vitest'
 import { cloneEnvironment, cloneUrlProblem, GIT_ENV, GIT_OPTIONS, httpsRemote, redactClone, tokenGit, tokenProblem } from '../src/git.ts'

@@ -115,6 +115,8 @@ describe('step 3: listed forms', () => {
   it('redacts a key body whose BEGIN line the record does not hold', () => {
     const redactor = new Redactor()
     const body = patternCanaries().pemBody
+    // No line holds a run the owner-code form would read as a code.
+    for (const line of body) expect(line).not.toMatch(/[A-Za-z2-7]{16}/)
     // The body swallows the line after it, as a body's last, short line is part of the block.
     expect(redactor.text(`pasted:\n${body.join('\n')}\ndone`)).toBe('pasted:\n[redacted:private-key]')
     // One 64-character line is not evidence of a key: a capture may hold one without a body to go with it.
@@ -186,11 +188,15 @@ describe('step 4: errors', () => {
 // that starts a match — turns such a record into a denial of service: the shapes below took 490 s, 410 s and 13 s.
 // The bounds are generous on purpose, so a loaded host passes and a regression fails.
 describe('performance: step 3 stays linear in the length of the text', { timeout: 60_000 }, () => {
-  /** The elapsed milliseconds of a redaction. */
+  /**
+   * The CPU milliseconds a redaction used. CPU time, not wall-clock time: a busy machine deschedules the worker, which
+   * lengthens the wall clock without the redactor doing more work.
+   */
   function elapsed(text: string): { readonly elapsed: number; readonly redacted: string } {
-    const started = performance.now()
+    const started = process.cpuUsage()
     const redacted = new Redactor().text(text)
-    return { elapsed: performance.now() - started, redacted }
+    const used = process.cpuUsage(started)
+    return { elapsed: (used.user + used.system) / 1000, redacted }
   }
 
   it('redacts 1 MiB of path-like text in under 250 ms', () => {

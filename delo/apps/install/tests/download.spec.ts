@@ -277,8 +277,8 @@ describe('the other ways a download ends badly', () => {
   it('fails a body whose connection drops, as a download that stopped', async () => {
     const origin = await standIn((_, response) => {
       response.writeHead(200, { 'content-length': '100' })
-      response.write('x')
-      setTimeout(() => { response.destroy() }, 20)
+      // The connection closes once the headers and the first byte are handed to the socket, which delivers them first.
+      response.write('x', () => { response.destroy() })
     })
     const error = await refusal(new Downloader({ hosts: LOOPBACK, timings: { ...TIMINGS, stallMs: 5_000 } }).bytes(`${origin}/x`, 1_000), 'DOWNLOAD_FAILED')
     expect(error.detail).toContain('the download stopped')

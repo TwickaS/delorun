@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
-import { affectsParity, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
+import { affectsParity, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
 import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
@@ -81,6 +81,7 @@ describe('the catalog', () => {
 
   it('gives the fork suite its memory per worker, and the changed-upstream lane its own worker cap', () => {
     expect(CHECKS.find(check => check.id === 'tests:fork')?.memoryBytes).toBe(12 * 0.5 * GIB)
+    expect(CHECKS.find(check => check.id === 'tests:fork:integration')).toMatchObject({ cpus: FORK_INTEGRATION_WORKERS, memoryBytes: FORK_INTEGRATION_WORKERS * GIB })
     expect(CHECKS.find(check => check.id === 'tests:upstream-changed')).toMatchObject({ cpus: 8, command: [expect.stringContaining('vitest'), 'run', '--config', 'vitest.config.ts', '--maxWorkers=8', '--passWithNoTests'] })
     expect(CHECKS.find(check => check.id === 'tests:snapshots')).toMatchObject({ command: ['pnpm', 'run', '--silent', 'test:snapshot'], environment: { DSH_SNAPSHOT_MAX_CONCURRENCY: '5' }, cpus: 5, exclusive: true })
   })
@@ -121,13 +122,14 @@ describe('the catalog', () => {
     const stale = catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'] })
     expect(stale.find(check => check.id === 'build:artifacts')).toMatchObject({ command: ['pnpm', 'run', '--silent', 'build:artifacts'], needs: [], tiers: ['changed', 'full'] })
     expect(stale.find(check => check.id === 'build:artifacts')?.environment).toBeUndefined()
-    for (const id of ['tests:snapshots', 'tests:upstream-changed', 'tests:fork']) expect(stale.find(check => check.id === id)?.needs).toEqual(['generate:native', 'build:artifacts'])
+    for (const id of ['tests:snapshots', 'tests:upstream-changed', 'tests:fork', 'parity-replay:control']) expect(stale.find(check => check.id === id)?.needs).toEqual(['generate:native', 'build:artifacts'])
+    expect(stale.find(check => check.id === 'tests:fork:integration')?.needs).toEqual(['generate:native', 'build:artifacts', 'tests:fork'])
   })
 })
 
 describe('selection', () => {
   it('runs every default check with no target, and neither the changed-upstream lane nor the native build by a tier of its own', () => {
-    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'generated:notices', 'generate:native', 'tests:fork', 'tests:snapshots', 'parity-switches', 'parity-replay'])
+    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'generated:notices', 'generate:native', 'tests:fork', 'tests:fork:integration', 'tests:snapshots', 'parity-switches', 'parity-replay', 'parity-replay:control'])
     expect(CHECKS.find(check => check.id === 'generate:native')?.tiers).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['generate:native'] }))).toEqual(['generate:native'])
   })
@@ -140,9 +142,9 @@ describe('selection', () => {
 
   it('narrows a target to its package\'s programs and specs, its dependents\' programs, the boundary and the JSDoc check', () => {
     const plan = select(CHECKS, TREE, { ...NONE, targets: ['delo/packages/control-protocol/src/messages.ts'] })
-    expect(ids(plan)).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'generate:native', 'tests:fork'])
+    expect(ids(plan)).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'generate:native', 'tests:fork', 'tests:fork:integration'])
     expect(plan.find(check => check.id === 'typecheck:delo:cell')?.reason).toBe('delo/apps/cell depends on a changed package')
-    expect(plan.find(check => check.id === 'tests:fork')?.command.slice(-1)).toEqual(['delo/packages/control-protocol/'])
+    for (const id of ['tests:fork', 'tests:fork:integration']) expect(plan.find(check => check.id === id)?.command.slice(-1)).toEqual(['delo/packages/control-protocol/'])
   })
 
   it('offers the Docker lane only in a tree with Docker specs, and runs it on the packages a change reaches', () => {
@@ -160,6 +162,8 @@ describe('selection', () => {
   it('passes spec paths to the fork suite as they are', () => {
     const plan = select(CHECKS, TREE, { ...NONE, targets: ['delo/apps/control/tests/front.spec.ts'] })
     expect(plan.find(check => check.id === 'tests:fork')?.command.slice(-1)).toEqual(['delo/apps/control/tests/front.spec.ts'])
+    // The phase whose project holds no such spec passes with none.
+    expect(plan.find(check => check.id === 'tests:fork:integration')?.command.slice(-2)).toEqual(['--passWithNoTests', 'delo/apps/control/tests/front.spec.ts'])
   })
 
   it('runs the fork suite on the packages a change reaches, by directory, dependents included, and never with vitest\'s related-file selection', () => {
@@ -173,14 +177,15 @@ describe('selection', () => {
   })
 
   it('runs every fork spec for a fork-wide change, such as the checks runner\'s own sources', () => {
-    const fork = select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delo/apps/tools/src/checks/plan.ts'] } }).find(check => check.id === 'tests:fork')
-    expect(fork?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delo/vitest.config.ts', '--maxWorkers=12'])
+    const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['delo/apps/tools/src/checks/plan.ts'] } })
+    expect(plan.find(check => check.id === 'tests:fork')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delo/vitest.config.ts', '--project', 'fork', '--project', 'fork-client', '--maxWorkers=12', '--passWithNoTests'])
+    expect(plan.find(check => check.id === 'tests:fork:integration')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delo/vitest.config.ts', '--project', 'fork-integration', `--maxWorkers=${String(FORK_INTEGRATION_WORKERS)}`, '--passWithNoTests'])
   })
 
   it('checks every program when code outside every package changes, such as a build script', () => {
     const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'v5', paths: ['scripts/build.ts'] } })
     expect(ids(plan)).toEqual(expect.arrayContaining(['typecheck:delo:control', 'typecheck:delo:cell', 'typecheck:delo:providers', 'typecheck:delo:client-status']))
-    expect(plan.find(check => check.id === 'tests:fork')?.command.slice(-1)).toEqual(['--maxWorkers=12'])
+    expect(plan.find(check => check.id === 'tests:fork')?.command.slice(-2)).toEqual(['--maxWorkers=12', '--passWithNoTests'])
   })
 
   it('reaches only the fork packages that depend on a changed upstream package, directly or through upstream dependents', () => {
@@ -201,6 +206,9 @@ describe('selection', () => {
     expect(skipped.find(check => check.id === 'typecheck:delo:cell')?.needs).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['typecheck:delo'] })).filter(id => id.startsWith('typecheck:delo'))).toHaveLength(7)
     expect(ids(select(CHECKS, TREE, { ...NONE, skip: ['tests'] })).some(id => id.startsWith('tests:'))).toBe(false)
+    // `tests:fork` names both phases of the fork suite; the integration phase alone still runs after the unit phase.
+    expect(ids(select(CHECKS, TREE, { ...NONE, only: ['tests:fork'] }))).toEqual(['generate:native', 'tests:fork', 'tests:fork:integration'])
+    expect(ids(select(CHECKS, TREE, { ...NONE, only: ['tests:fork:integration'] }))).toEqual(['generate:native', 'tests:fork', 'tests:fork:integration'])
   })
 
   it('names the --only and --skip selectors that match no check, so a typo cannot select nothing and pass', () => {
@@ -221,13 +229,13 @@ describe('selection', () => {
 })
 
 describe('the gate tiers', () => {
-  const MERGE_ONLY = ['tests:snapshots', 'parity-replay']
+  const MERGE_ONLY = ['tests:snapshots', 'parity-replay', 'parity-replay:control']
   const dockerTree: ForkTree = { ...TREE, packages: TREE.packages.map(pkg => pkg.name === '@delo/providers' ? { ...pkg, dockerSpecs: true } : pkg) }
   const upstreamChange = { base: 'v5', paths: ['packages/core/session/src/index.ts'] }
 
   it('marks the replays, the web lane and the Docker lane merge-only, and no other check', () => {
     const marked = catalog(dockerTree, HOST).filter(check => check.mergeOnly === true).map(check => check.id)
-    expect(marked).toEqual(['tests:docker', 'tests:web-changed', 'tests:snapshots', 'parity-replay'])
+    expect(marked).toEqual(['tests:docker', 'tests:web-changed', 'tests:snapshots', 'parity-replay', 'parity-replay:control'])
   })
 
   it('leaves each merge-only check out of the agent tier and names it, and the merge tier selects it', () => {
@@ -240,7 +248,7 @@ describe('the gate tiers', () => {
       expect(merge).toContain(id)
     }
     expect(agent).toContain('parity-switches')
-    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'agent' })).toEqual(['tests:docker', 'tests:snapshots', 'parity-replay'])
+    expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'agent' })).toEqual(['tests:docker', 'tests:snapshots', 'parity-replay', 'parity-replay:control'])
     expect(leftForMerge(checks, dockerTree, { ...NONE, changed, tier: 'merge' })).toEqual([])
     expect(ids(select(checks, dockerTree, { ...NONE, changed }))).toEqual(merge)
   })
@@ -293,11 +301,18 @@ describe('the parity checks', () => {
     expect(CHECKS.find(check => check.id === 'parity-switches')?.command).toEqual(['node_modules/.bin/tsx', 'delo/apps/tools/src/parity/composition/check-parity-switches.ts'])
   })
 
+  it('run the replay\'s negative control as its own merge-only check with no inputs, after a stale build', () => {
+    const control = CHECKS.find(check => check.id === 'parity-replay:control')
+    expect(control).toMatchObject({ group: 'parity', mergeOnly: true, command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/parity/composition/replay-control.ts'], needs: ['generate:native'], cpus: 1, budget: { memoryGiB: 1.5 } })
+    expect(control?.inputs).toBeUndefined()
+    expect(control?.exclusive).toBeUndefined()
+  })
+
   it('run when Delo code or an upstream edit changes, and not for documentation alone or a narrowed target', () => {
     const parity = (paths: string[]) => ids(select(CHECKS, TREE, { ...NONE, changed: { base: 'b', paths } })).filter(id => id.startsWith('parity-'))
     for (const path of ['delo/packages/control-protocol/src/messages.ts', 'delo/apps/tools/src/parity/composition/parity.overlay.yml', 'packages/boot/plugin-manager/src/tools.ts', 'snapshots/session/text-turn/runtime.cordis.yml']) {
       expect(affectsParity(path)).toBe(true)
-      expect(parity([path])).toEqual(['parity-switches', 'parity-replay'])
+      expect(parity([path])).toEqual(['parity-switches', 'parity-replay', 'parity-replay:control'])
     }
     for (const path of ['delo/docs/contracts/c16-parity-composition.md', 'delo/apps/tools/README.i18n.yaml', 'docs/architecture.md']) expect(parity([path])).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, targets: ['delo/packages/control-protocol/src/messages.ts'] }))).not.toContain('parity-replay')
@@ -564,10 +579,11 @@ describe('the changed-upstream lane', () => {
 describe('ordering', () => {
   it('ranks a check by its own time and the longest chain waiting for it', () => {
     const plan = select(CHECKS, TREE, NONE)
-    const chain = criticalPath(plan, { 'typecheck:upstream': 30, 'typecheck:delo:cell': 8, 'tests:fork': 40 })
+    const chain = criticalPath(plan, { 'typecheck:upstream': 30, 'typecheck:delo:cell': 8, 'tests:fork': 40, 'tests:fork:integration': 90 })
     expect(chain.get('typecheck:delo:cell')).toBe(8)
     expect(chain.get('typecheck:upstream')).toBe(38)
-    expect(chain.get('tests:fork')).toBe(40)
+    expect(chain.get('tests:fork')).toBe(130)
+    expect(chain.get('tests:fork:integration')).toBe(90)
     expect(chain.get('boundary')).toBe(1)
   })
 })

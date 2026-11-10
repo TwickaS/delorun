@@ -218,9 +218,13 @@ describe('the OpenID Connect provider stand-in', () => {
       expect((await requestOverTls(`${standIn.issuer}/jwks`, { ca: standIn.ca })).status).toBe(200)
 
       standIn.nextResponse('/.well-known/openid-configuration', 'hang')
+      const before = standIn.requests.length
+      let settled = false
       const held = requestOverTls(`${standIn.issuer}/.well-known/openid-configuration`, { ca: standIn.ca })
-      const outcome = await Promise.race([held.then(() => 'answered', () => 'failed'), new Promise(resolve => { setTimeout(() => { resolve('held') }, 200) })])
-      expect(outcome).toBe('held')
+      void held.then(() => { settled = true }, () => { settled = true })
+      // The stand-in records a request before it answers it or holds it.
+      await expect.poll(() => standIn.requests.slice(before).map(request => request.path)).toEqual(['/.well-known/openid-configuration'])
+      expect(settled).toBe(false)
       await standIn.close()
       await expect(held).rejects.toThrow()
       running.splice(running.indexOf(standIn), 1)

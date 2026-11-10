@@ -32,11 +32,12 @@ The test lanes, by what they need:
 
 | Lane | Runs | Picked when |
 | --- | --- | --- |
-| `tests:fork` | Delo's specs against sources | its packages or their dependencies change |
+| `tests:fork` | Delo's unit and client component specs, 10 s per test | its packages or their dependencies change |
+| `tests:fork:integration` | Delo's `*.integration.spec.ts` specs, which start processes or write real file trees, after `tests:fork`, 60 s per test on at most 4 workers | its packages or their dependencies change |
 | `tests:snapshots` | upstream's recorded-session replay | upstream-owned code changes |
 | `tests:upstream-changed` | the specs of changed upstream packages and their direct dependents | an upstream package changes |
 
-A new spec goes in its package's `tests/` directory, which `tests:fork` runs.
+A new spec goes in its package's `tests/` directory. Name it `*.integration.spec.ts` when it runs git, Node or `tsx` children, a real profile, a release build or many durable writes to a real file tree; `gates:spec-lanes` refuses a unit spec that starts a process, and every `spawnSync` or `execFileSync` in a spec needs a `timeout`. `--only tests:fork` runs both phases.
 
 ## Read a failure
 

@@ -43,4 +43,4 @@ kind: "package-bundle"
 ## Tests
 
 - `delo/apps/tools/tests/parity/switches.spec.ts` holds the registry's default value of `studio_additions` to the theme row of this bundle's patch.
-- `delo/packages/bundle-local/tests/composition.spec.ts` composes a Delo CLI profile with this bundle and checks the rows it inserts.
+- `delo/packages/bundle-local/tests/composition.integration.spec.ts` composes a Delo CLI profile with this bundle and checks the rows it inserts.

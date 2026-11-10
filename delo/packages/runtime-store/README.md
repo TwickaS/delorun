@@ -96,7 +96,7 @@ A layout or protocol the launcher does not support fails with `RUNTIME_INCOMPATI
 
 ## Crash safety
 
-`tests/crash.spec.ts` ends a switching process with `SIGKILL` before each of the ten durable steps of a switch (creating, writing, flushing and renaming each pointer's temporary file, and flushing `runtimes/`) and after it. Before `current`'s rename, `current` names the old version; after it, the new one; in every case the version it names passes the start check, and the next switch and retention succeed over the dead process's `store.lock`. The same spec kills a process that switches in a loop at random moments, twelve times, with the same result.
+`tests/crash.integration.spec.ts` ends a switching process with `SIGKILL` before each of the ten durable steps of a switch (creating, writing, flushing and renaming each pointer's temporary file, and flushing `runtimes/`) and after it. Before `current`'s rename, `current` names the old version; after it, the new one; in every case the version it names passes the start check, and the next switch and retention succeed over the dead process's `store.lock`. The same spec kills a process that switches in a loop at random moments, twelve times, with the same result.
 
 ## Not covered
 

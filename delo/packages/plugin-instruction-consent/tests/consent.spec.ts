@@ -9,7 +9,7 @@ import { linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, wr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { classifyTarget, createCaseProbe, INSTRUCTION_FILE_NAMES, reviewNote } from '../src/classify.ts'
 import { apply, Config, InstructionConsent } from '../src/index.ts'
 
@@ -82,11 +82,11 @@ describe('the classifier', () => {
   })
 
   it('resolves the homes from this process when no environment is given', () => {
-    process.env['DSH_HOME'] = '/suite/home'
+    vi.stubEnv('DSH_HOME', '/suite/home')
     try {
       expect(classifyTarget('/suite/home/skills/x/SKILL.md')).toEqual({ kind: 'skill', root: 'home' })
     } finally {
-      delete process.env['DSH_HOME']
+      vi.unstubAllEnvs()
     }
   })
 })
@@ -132,15 +132,14 @@ describe('the writeConsent review', () => {
   let consent: InstructionConsent
 
   beforeEach(() => {
-    process.env['DSH_HOME'] = '/home/person/.delo'
-    process.env['DSH_AGENTS_HOME'] = '/home/person/.agents'
+    vi.stubEnv('DSH_HOME', '/home/person/.delo')
+    vi.stubEnv('DSH_AGENTS_HOME', '/home/person/.agents')
     ctx = new Context()
     consent = new InstructionConsent(ctx)
   })
 
   afterEach(async () => {
-    delete process.env['DSH_HOME']
-    delete process.env['DSH_AGENTS_HOME']
+    vi.unstubAllEnvs()
     await ctx.fiber.dispose()
   })
 

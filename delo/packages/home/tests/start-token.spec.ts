@@ -194,26 +194,35 @@ describe('the token channel listener', () => {
 
   it('keeps running a request whose caller has gone, and frees that caller\'s connection at once', async () => {
     const token = newStartToken()
-    let finish: (() => void) | undefined
-    let finished = false
+    const finishes: Array<() => void> = []
+    const finished: Array<Promise<void>> = []
+    let entered = Promise.withResolvers<void>()
     const socket = await listen(token, async (op) => {
       if (op === 'slow') {
-        await new Promise<void>((resolve) => { finish = resolve })
-        finished = true
+        const release = Promise.withResolvers<void>()
+        const done = Promise.withResolvers<void>()
+        finishes.push(release.resolve)
+        finished.push(done.promise)
+        entered.resolve()
+        await release.promise
+        done.resolve()
       }
       return { op }
     })
     for (let index = 0; index < 2; index += 1) {
+      entered = Promise.withResolvers<void>()
       const caller = connect(socket.socketPath)
+      const closed = new Promise((resolve) => { caller.once('close', resolve) })
       caller.write(`${JSON.stringify({ token, op: 'slow' })}\n`)
-      await new Promise(resolve => setTimeout(resolve, 50))
+      await entered.promise
       caller.destroy()
+      await closed
     }
-    await new Promise(resolve => setTimeout(resolve, 50))
-    expect(await exchange(socket.socketPath, `${JSON.stringify({ token, op: 'fast' })}\n`)).toEqual([{ ok: true, op: 'fast' }])
-    finish?.()
-    await new Promise(resolve => setTimeout(resolve, 20))
-    expect(finished).toBe(true)
+    // The listener sees each caller's close on its own side asynchronously; until then a new connection is BUSY.
+    await expect.poll(async () => exchange(socket.socketPath, `${JSON.stringify({ token, op: 'fast' })}\n`)).toEqual([{ ok: true, op: 'fast' }])
+    for (const finish of finishes) finish()
+    await Promise.all(finished)
+    expect(finished).toHaveLength(2)
   })
 
   it('replaces an earlier start\'s socket and removes only its own socket when it closes', async () => {

@@ -1,0 +1,10 @@
+# A planted parity overlay: the profile_history switch left on. The check
+# `parity-replay:control` passes only when the replay fails on it, because the
+# plugin_manager tool then offers the history actions that upstream's recorded
+# tool schemas do not hold.
+
+- id: tool-plugin-manager
+  name: '@deepseek-ai/dsh-plugin-manager/tools'
+  config:
+    readActionsExempt: false
+    profileHistory: true
