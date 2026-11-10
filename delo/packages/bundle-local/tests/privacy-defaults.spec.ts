@@ -155,9 +155,10 @@ describe('a Delo CLI profile', () => {
     expect(destinations).toContain('dsh-otel-collector.deepseeksvc.com')
     expect(destinations.filter(host => host?.includes('delo') === true)).toEqual([])
     const deloRows = rows.filter(row => strings([row.name]).some(name => name.startsWith('@delo/')))
-    expect(deloRows.map(row => row.id)).toEqual(LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id))
-    // The bundle's own browser half, each consent and guard plugin it mounts, its update gate, and the trash, which
-    // keeps everything local.
+    const studioRows = ['delo-theme', 'delo-settings-layout', 'delo-chat-states', 'delo-sidebar', 'delo-onboarding']
+    expect(deloRows.map(row => row.id)).toEqual([...LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id), ...studioRows])
+    // The bundle's own browser half, each consent and guard plugin it mounts, its update gate, the trash, which keeps everything local,
+    // and the studio plugins of @delo/bundle-studio.
     expect(deloRows.map(row => row.name)).toEqual([
       LOCAL_BUNDLE,
       '@delo/plugin-instruction-consent',
@@ -167,6 +168,11 @@ describe('a Delo CLI profile', () => {
       '@delo/plugin-fetch-guard',
       `${LOCAL_BUNDLE}/update-gate`,
       '@delo/plugin-trash',
+      '@delo/plugin-theme',
+      '@delo/plugin-settings-layout',
+      '@delo/plugin-chat-states',
+      '@delo/plugin-sidebar',
+      '@delo/plugin-onboarding',
     ])
   })
 })

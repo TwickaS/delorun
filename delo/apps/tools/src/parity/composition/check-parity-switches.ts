@@ -84,9 +84,12 @@ function listDir(root: string): (dir: string) => readonly string[] | undefined {
 /** The bundle whose rows name the module of every upstream entry the compositions share. */
 export const BASE_PATCH_PATH = 'packages/bundle/base/cordis.patch.yml'
 
+/** `@delo/bundle-studio`'s patch, which every Delo CLI profile lists after `@delo/bundle-local`'s. */
+export const STUDIO_BUNDLE_PATCH_PATH = 'delo/packages/bundle-studio/cordis.patch.yml'
+
 /** The keys the Delo rows of each composition set. */
 export interface CompositionSettings {
-  /** Delo's default composition: the rows of `@delo/bundle-local`'s patch. */
+  /** Delo's default composition: the rows of `@delo/bundle-local`'s and `@delo/bundle-studio`'s patches. */
   readonly shipped: readonly RowSetting[]
   /** The parity composition: the overlay's restatement of that bundle in its parity form, and the overlay's own rows. */
   readonly parity: readonly RowSetting[]
@@ -100,12 +103,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
  * @param read - reads a repository path.
  * @param overlay - the parsed parity overlay.
  * @returns the settings of each composition.
- * @throws Error when the base bundle's or the local bundle's patch cannot be read or parsed.
+ * @throws Error when the base bundle's, the local bundle's or the studio bundle's patch cannot be read or parsed.
  */
 export function compositionSettings(read: (path: string) => string, overlay: ParsedOverlay): CompositionSettings {
   const rowsOf = (patches: readonly Record<string, unknown>[]): Record<string, unknown>[] =>
     patches.flatMap(row => Array.isArray(row['insert']) ? row['insert'].filter(isRecord) : [row])
   const local = rowsOf(parsePatchFile(read(LOCAL_BUNDLE_PATCH_PATH), LOCAL_BUNDLE_PATCH_PATH))
+  const studio = rowsOf(parsePatchFile(read(STUDIO_BUNDLE_PATCH_PATH), STUDIO_BUNDLE_PATCH_PATH))
   const moduleOf = new Map([...rowsOf(parsePatchFile(read(BASE_PATCH_PATH), BASE_PATCH_PATH)), ...local]
     .flatMap(row => typeof row['id'] === 'string' && typeof row['name'] === 'string' ? [[row['id'], row['name']] as const] : []))
   const settings = (rows: readonly Record<string, unknown>[]): RowSetting[] => rows.flatMap((row) => {
@@ -114,7 +118,7 @@ export function compositionSettings(read: (path: string) => string, overlay: Par
     if (module === undefined || !isRecord(config)) return []
     return Object.entries(config).map(([key, value]) => ({ module, key, value }))
   })
-  return { shipped: settings(local), parity: settings([...rowsOf(overlay.localBundle), ...overlay.switches.map(row => ({ ...row }))]) }
+  return { shipped: settings([...local, ...studio]), parity: settings([...rowsOf(overlay.localBundle), ...overlay.switches.map(row => ({ ...row }))]) }
 }
 
 /**

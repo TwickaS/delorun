@@ -13,6 +13,7 @@ import { en, zh } from '../src/client/locales.ts'
 import { OptIn, type OptInSettings } from '../src/client/opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionProps } from '../src/client/PrivacySection.tsx'
 import { apply as hostApply } from '../src/index.ts'
+import { NOTICE_STORAGE_KEY, NOTICE_VERSION } from '../src/client/DeloNotice.tsx'
 
 afterEach(cleanup)
 
@@ -140,6 +141,15 @@ describe('the plugin', () => {
       expect(sessionLog).not.toHaveBeenCalled()
       await face.setEnabled('sessionLog', false)
       expect(sessionLog).toHaveBeenCalledWith('enabled', false)
+      // ctx.deloNotice records the notice's acknowledgement for a flow that shows its copy itself.
+      const notice = ctx.get('deloNotice')
+      if (notice === undefined) throw new Error('no deloNotice service')
+      globalThis.localStorage.clear()
+      expect(notice.acknowledged()).toBe(false)
+      notice.acknowledge()
+      expect(notice.acknowledged()).toBe(true)
+      expect(globalThis.localStorage.getItem(NOTICE_STORAGE_KEY)).toBe(NOTICE_VERSION)
+      globalThis.localStorage.clear()
     } finally {
       await ctx.fiber.dispose()
     }

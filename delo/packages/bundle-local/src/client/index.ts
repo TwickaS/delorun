@@ -18,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { SETUP_OPT_IN_ROWS } from '@delo/contract-setup-answers'
 import { DeloBrandMark, DeloBrandName } from './brand.tsx'
-import { DeloNotice, type DeloNoticeInjected } from './DeloNotice.tsx'
+import { acknowledgeNotice, DeloNotice, noticeAcknowledged, type DeloNoticeInjected } from './DeloNotice.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { OptIn, type OptInSettings } from './opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
@@ -26,6 +26,24 @@ import { PrivacySection, type OptInId, type PrivacySectionInjected } from './Pri
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { OptInMutation, OptInSettings } from './opt-in.ts'
 export type { OptInId, PrivacySectionInjected, PrivacySectionProps } from './PrivacySection.tsx'
+
+/** What `ctx.deloNotice` shares: the acknowledgement of Delo's preview notice on this browser. */
+export interface DeloNoticeService {
+  /**
+   * Whether this browser acknowledged the current notice version.
+   * @returns true once the current version is recorded.
+   */
+  acknowledged(): boolean
+  /** Record the current notice version on this browser, so the notice step completes without showing. */
+  acknowledge(): void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Delo's preview notice acknowledgement; a flow that shows the notice's copy itself records it here. */
+    deloNotice: DeloNoticeService
+  }
+}
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -53,12 +71,13 @@ export const OPT_IN_ROWS: Readonly<Record<OptInId, string>> = {
 export const inject = ['slots', 'locale', 'configForms']
 
 /**
- * Register the Privacy section, the Delo sidebar brand, Delo's preview notice. All of them come from this bundle's `delo-privacy` row, which the parity composition leaves disabled,
+ * Register the Privacy section, the Delo sidebar brand, Delo's preview notice and `ctx.deloNotice`. All of them come from this bundle's `delo-privacy` row, which the parity composition leaves disabled,
  * so upstream's brand and notice stay in the parity composition.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
   const t = ctx.locale.bind(NS)
+  ctx.provide('deloNotice', { acknowledged: () => noticeAcknowledged(), acknowledge: () => { acknowledgeNotice() } } satisfies DeloNoticeService)
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
       yield ctx.slots.register({ name: 'sidebar.brand.mark' }, DeloBrandMark)

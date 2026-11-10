@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PARITY_OVERLAY_PATH, PARITY_SWITCHES, type BuiltParitySwitch, type ParitySwitchEntry } from '@delo/contract-parity-composition'
-import { BASE_PATCH_PATH, compositionSettings, report, scanParity } from '../../src/parity/composition/check-parity-switches.ts'
+import { BASE_PATCH_PATH, compositionSettings, report, scanParity, STUDIO_BUNDLE_PATCH_PATH } from '../../src/parity/composition/check-parity-switches.ts'
 import { changedLines, contributionErrors, findContributions } from '../../src/parity/composition/contributions.ts'
 import { DEFAULT_PARITY, LOCAL_BUNDLE_PATCH_PATH, localBundleErrors, overlayErrors, parseOverlay, readOverlay } from '../../src/parity/composition/overlay.ts'
 import { presenceErrors, registryErrors, scenarioName, switchMarkers } from '../../src/parity/composition/switches.ts'
@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 /**
- * A fixture repository with an empty ledger, the real overlay, the local bundle's and the base bundle's patches and the given files.
+ * A fixture repository with an empty ledger, the real overlay, the local, studio and base bundles' patches and the given files.
  * @param files - repository paths and their contents.
  * @returns the fixture's root.
  */
@@ -35,6 +35,7 @@ function fixtureTree(files: Record<string, string>): string {
     [PARITY_OVERLAY_PATH]: readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'),
     [LOCAL_BUNDLE_PATCH_PATH]: readFileSync(join(ROOT, LOCAL_BUNDLE_PATCH_PATH), 'utf8'),
     [BASE_PATCH_PATH]: readFileSync(join(ROOT, BASE_PATCH_PATH), 'utf8'),
+    [STUDIO_BUNDLE_PATCH_PATH]: readFileSync(join(ROOT, STUDIO_BUNDLE_PATCH_PATH), 'utf8'),
     ...files,
   }
   for (const [path, text] of Object.entries(all)) {
@@ -117,7 +118,7 @@ describe('the real tree', () => {
     // A row may be restated per profile; one switch is still one claim. The consent plugins and the update gate are
     // inserted rows, which carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
-      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'scheduled_task_consent', 'update_turn_refusal',
+      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'scheduled_task_consent', 'studio_additions', 'update_turn_refusal',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
     expect(presenceErrors(registry, shipped, parity)).toEqual([])
@@ -323,7 +324,7 @@ describe('the parity overlay', () => {
     const rows = parseOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
-    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'preset_inspect', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions', 'update_turn_refusal'])
+    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'main_chat', 'mcp_add_consent', 'permission_defaults', 'preset_inspect', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions', 'update_turn_refusal'])
   })
 
   it('fails a switch left on, a key that is no switch, and a row that sets more than config', () => {

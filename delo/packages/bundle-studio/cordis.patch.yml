@@ -1,0 +1,30 @@
+# The @delo/bundle-studio patch: Delo's studio additions in Delo's CLI
+# profiles, after @delo/bundle-local (the order is DELO_PROFILE_BUNDLES in
+# @delo/bundle-local's src/profile.ts). The profile's own cordis.patch.yml
+# comes after it, so the Settings switch back to the stock look, which writes
+# the theme row's `studioAdditions`, wins over the value here.
+#
+# The theme row holds C16 switch `studio_additions`. Its Config default is
+# off, the parity value; this row turns it on, and `parity-switches` holds the
+# registry's default value to this row. While it is on, the theme provides the
+# browser service `deloStudio`; every other row here mounts a plugin whose
+# browser half requires that service, so the stock look unloads them all and
+# leaves upstream's studio. Their harness halves keep running: chat states
+# stay stored while the stock look is on.
+- insert:
+    - id: delo-theme
+      name: '@delo/plugin-theme'
+      config:
+        studioAdditions: true
+
+    - id: delo-settings-layout
+      name: '@delo/plugin-settings-layout'
+
+    - id: delo-chat-states
+      name: '@delo/plugin-chat-states'
+
+    - id: delo-sidebar
+      name: '@delo/plugin-sidebar'
+
+    - id: delo-onboarding
+      name: '@delo/plugin-onboarding'

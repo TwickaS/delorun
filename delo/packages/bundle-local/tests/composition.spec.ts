@@ -10,13 +10,22 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
-import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, LOCAL_ROWS, UPSTREAM_TEMPLATE } from '../src/profile.ts'
+import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, LOCAL_ROWS, STUDIO_BUNDLE, UPSTREAM_TEMPLATE } from '../src/profile.ts'
 // Relative: this package does not depend on the registry, and a test must not add a dependency.
 import { PARITY_SWITCHES } from '../../contract-parity-composition/src/index.ts'
 import { createTestHome, DELO_PROFILE, INSTALL_ANCHOR, PACKAGE_DIR, REPO, type TestHome } from './profiles.ts'
 
 /** The service the disabled `deepseek-account` row provided; no enabled row of a Delo CLI profile may require it. */
 const REMOVED_ACCOUNT_SERVICE = 'deepseekAccount'
+
+/** The studio plugins `@delo/bundle-studio` inserts, in its patch's order; the theme row holds the stock-look switch. */
+const STUDIO_ROWS = [
+  { id: 'delo-theme', name: '@delo/plugin-theme' },
+  { id: 'delo-settings-layout', name: '@delo/plugin-settings-layout' },
+  { id: 'delo-chat-states', name: '@delo/plugin-chat-states' },
+  { id: 'delo-sidebar', name: '@delo/plugin-sidebar' },
+  { id: 'delo-onboarding', name: '@delo/plugin-onboarding' },
+] as const
 
 /** The consent and guard rows this bundle mounts, with the row id each entry carries. */
 const MOUNTED_PLUGINS = [
@@ -156,8 +165,8 @@ beforeAll(() => { home = createTestHome() })
 afterAll(() => { home.remove() })
 
 describe('a Delo CLI profile', () => {
-  it('lists upstream\'s web template followed by this bundle', () => {
-    expect(DELO_PROFILE_BUNDLES).toEqual(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', LOCAL_BUNDLE])
+  it('lists upstream\'s web template followed by this bundle and the studio bundle', () => {
+    expect(DELO_PROFILE_BUNDLES).toEqual(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', LOCAL_BUNDLE, STUDIO_BUNDLE])
     expect(UPSTREAM_TEMPLATE).toBe('web')
   })
 
@@ -177,6 +186,16 @@ describe('a Delo CLI profile', () => {
     }
     const local = dump.rows.filter(({ label }) => writers(label).includes(LOCAL_BUNDLE)).map(({ row }) => row.id)
     expect(local).toEqual(LOCAL_ROWS.map(row => row.id))
+    const studio = dump.rows.filter(({ label }) => writers(label).includes(STUDIO_BUNDLE)).map(({ row }) => row.id)
+    expect(studio).toEqual(STUDIO_ROWS.map(row => row.id))
+  })
+
+  it('mounts every studio plugin, with the Delo look switched on in the theme row', () => {
+    const rows = home.rows(DELO_PROFILE)
+    for (const row of STUDIO_ROWS) {
+      expect(rows.filter(entry => entry.id === row.id && entry.disabled !== true && entry.name === row.name), row.id).toHaveLength(1)
+    }
+    expect(rows.find(entry => entry.id === 'delo-theme')?.config).toEqual({ studioAdditions: true })
   })
 
   it('composes no enabled DeepSeek account row and no DeepSeek host beyond the model API', () => {
@@ -240,7 +259,7 @@ describe('a Delo CLI profile', () => {
     const added = delo.slice(upstream.length).map(row => row.id)
     const listed = (kind: 'changed' | 'added'): (string | undefined)[] => LOCAL_ROWS.filter(row => row.kind === kind).map(row => row.id)
     expect(changed.sort()).toEqual(listed('changed').sort())
-    expect(added.sort()).toEqual(listed('added').sort())
+    expect(added.sort()).toEqual([...listed('added'), ...STUDIO_ROWS.map(row => row.id)].sort())
   })
 
   it('carries each listed row as the bundle declares it: changed rows with its field values, added rows enabled or disabled as written', () => {
