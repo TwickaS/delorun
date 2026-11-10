@@ -1,4 +1,5 @@
 ---
+area: Chats and workspaces
 section: Added
 ---
 
