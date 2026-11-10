@@ -1,5 +1,5 @@
 /**
- * `delorun plugin check <directory>` (contract C17, "Checking a plugin before it is installed"; contract C21): what a
+ * `delorun plugin check <directory>` (contract C17, "Checking a plugin before it is installed"; contract C22): what a
  * plugin's declared version ranges admit against the release that runs. It reads the plugin's `package.json` as JSON,
  * imports and runs none of its files, and decides both axes with `@delo/update`'s `evaluatePluginAxes`, which is
  * upstream's `evaluatePluginCompatibility` and `evaluateDeloRequirement`, the evaluation the installer, the start's
@@ -190,7 +190,7 @@ export async function runPluginCheck(args: readonly string[], context: CommandCo
     verdict = `The installer refuses it: ${messageOf(error)}.`
     exit = EXIT.failed
   }
-  lines.push(verdict, 'Within one Delo minor the DSH version stays the same; contract C21 states what each Delo version promises a plugin.')
+  lines.push(verdict, 'Within one Delo minor the DSH version stays the same; contract C22 states what each Delo version promises a plugin.')
   // Every line can carry the manifest's own strings, so each is printed with the characters a terminal acts on escaped.
   context.stdout(`${lines.map(printable).join('\n')}\n`)
   return exit
