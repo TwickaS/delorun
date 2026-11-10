@@ -50,7 +50,7 @@ import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { aliasCoverage, readMountTable } from './mounts.ts'
 import type { AliasCoverage } from './mounts.ts'
 import { RUNNER_PROTECTION, bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from './profiles.ts'
-import { withSeccompFilter } from './seccomp.ts'
+import { vsockOffered, withSeccompFilter } from './seccomp.ts'
 import type { LocalSandboxRunner, Protection, ProtectionSettings } from './profiles.ts'
 
 export { RUNNER_PROTECTION } from './profiles.ts'
@@ -122,9 +122,9 @@ export interface Config {
    * directory `/run/WSL`, whose sockets start Windows programs. Each is denied like a {@link deniedSocketDirectories}
    * entry, and a wrap on a runner that cannot deny socket connects ({@link RUNNER_PROTECTION}), such as Landlock,
    * refuses with `SANDBOX_UNSUPPORTED_POLICY` while one of them exists, instead of running a command that could leave
-   * the sandbox through it. While one exists, bwrap also installs a seccomp filter that refuses `socket(AF_VSOCK, …)`
-   * and `io_uring_setup`, because the host of such a directory, such as WSL, also offers a vsock transport that no
-   * mount rule hides. An entry that does not exist at a wrap denies, filters and refuses nothing.
+   * the sandbox through it. While one exists, bwrap also installs the seccomp filter it installs wherever the kernel
+   * offers virtual-machine sockets, which refuses `socket(AF_VSOCK, …)` and `io_uring_setup`. An entry that does not
+   * exist at a wrap denies and refuses nothing.
    */
   escapeSocketDirectories?: string[]
 }
@@ -182,6 +182,8 @@ export interface SandboxInternals {
   platform?: string
   /** Replaces the platform's chain wholesale (walk mechanics — e.g. probing a rung the product chains only reach unprobed). */
   chain?: readonly SelectedRunner['runner'][]
+  /** Replaces the check whether the kernel offers virtual-machine sockets, which decides bwrap's seccomp filter. */
+  vsockOffered?: () => boolean
   /** Replaces the functional `bwrap` probe (the Linux chain's first rung). */
   probeBwrap?: () => boolean
   /** Replaces the functional Landlock launcher probe (the Linux chain's second rung). */
@@ -505,8 +507,9 @@ export class LocalSandboxProvider extends SandboxProvider {
       throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them`)
     }
     const profileArgv = this.runnerArgv(selected.runner, policy, protection)
-    // Where an escape directory exists, its host also offers vsock, which no mount rule hides.
-    const runnerArgv = escape !== undefined && selected.runner === 'bwrap' ? withSeccompFilter(profileArgv) : profileArgv
+    // No mount rule hides virtual-machine sockets, the transport between a VM such as WSL and its host.
+    const filtered = selected.runner === 'bwrap' && (escape !== undefined || (this.internals.vsockOffered ?? vsockOffered)())
+    const runnerArgv = filtered ? withSeccompFilter(profileArgv) : profileArgv
     return Promise.resolve<ConfinedArgv>({
       argv: [...runnerArgv, '--', ...argv],
       enforcement: selected.enforcement,

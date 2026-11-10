@@ -110,7 +110,8 @@ describe('a confined command under the shipped composition\'s sandbox row', () =
     sandbox.internals = { probeLandlock: () => 'unusable' }
     const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: workspace }
     const confined = await sandbox.confine([process.execPath, '-e', READ, canary], policy)
-    expect(confined.argv[0]).toBe('bwrap')
+    // Where the kernel offers vsock, bwrap is started from the shell that hands it the seccomp filter.
+    expect(confined.argv).toContain('bwrap')
 
     // The confinement, not the host, denies the canary: the same command unconfined reads it.
     expect(await run([process.execPath, '-e', READ, canary])).toBe('ok')

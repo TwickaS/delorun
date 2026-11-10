@@ -227,7 +227,8 @@ describe('Python file sandbox', () => {
     let mapsSignalsToExitCodes = false
     vi.spyOn(ctx.sandbox, 'confine').mockImplementation(async (argv, policy, signal) => {
       const result = await confine(argv, policy, signal)
-      mapsSignalsToExitCodes = basename(result.argv[0]!) === 'bwrap'
+      // bwrap maps a signal to an exit status, also when the seccomp loader's shell starts it.
+      mapsSignalsToExitCodes = result.argv.some(arg => basename(arg) === 'bwrap')
       return result
     })
     const result = await run('while True: pass')

@@ -141,7 +141,8 @@ describe('supervisor-connect-denied through upstream\'s sandbox provider (bwrap)
   it.skipIf(!bwrapUsable)('a confined workspace command cannot connect to the supervisor socket or read the start token', async () => {
     const { home, socket, tokenFile, workspace, fixture } = await setUp()
     const prefix = await confinedPrefix(await provider('bwrap', home, socket), workspace)
-    expect(prefix[0]).toBe('bwrap')
+    // Where the kernel offers vsock, bwrap is started from the shell that hands it the seccomp filter.
+    expect(prefix).toContain('bwrap')
     expect(await run([...prefix, process.execPath, '-e', READ, fixture])).not.toBe('ok')
     const result = await attempt(prefix, socket, tokenFile)
     expect(result.read).not.toBe('ok')

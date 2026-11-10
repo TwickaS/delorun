@@ -11,7 +11,7 @@
  * name with its reason on a machine without WSL interop or without bwrap.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, type TestContext } from 'vitest'
@@ -190,6 +190,32 @@ const IO_URING = 'import ctypes; c = ctypes.CDLL(None, use_errno=True); b = ctyp
 /** Creates an IPv4 and a Unix socket, which the filter leaves alone. */
 const OTHER_SOCKETS = 'import socket; socket.socket(socket.AF_INET, socket.SOCK_STREAM); socket.socket(socket.AF_UNIX); print("ok")'
 
+/**
+ * Creates a vsock socket and sets up io_uring through the entries the native ones do not cover, on x86-64: the 32-bit
+ * `int 0x80` entry (`socket`, `socketcall(SYS_SOCKET)` and `io_uring_setup`) through eleven bytes of machine code in
+ * a page below 4 GiB, and the x32 `socket`. It prints, for each, `descriptor` or the errno name, and connects nothing.
+ */
+const COMPAT_ENTRIES = [
+  'import ctypes, errno',
+  'libc = ctypes.CDLL(None, use_errno=True)',
+  'libc.mmap.restype = ctypes.c_void_p',
+  'libc.mmap.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_long]',
+  // Readable, writable and executable; private, anonymous and below 4 GiB, so 32-bit pointers reach it.
+  'page = libc.mmap(None, 4096, 7, 0x62, -1, 0)',
+  // push rbx; mov eax, edi; mov ebx, esi; xchg edx, ecx; int 0x80; pop rbx; ret
+  "ctypes.memmove(page, bytes.fromhex('5389f889f387cacd805bc3'), 11)",
+  // socketcall's arguments: AF_VSOCK, SOCK_STREAM, protocol 0.
+  'ctypes.memmove(page + 64, (ctypes.c_uint32 * 3)(40, 1, 0), 12)',
+  'int80 = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint)(page)',
+  'libc.syscall.restype = ctypes.c_long',
+  "def name(r): return 'descriptor' if r >= 0 else errno.errorcode[-r]",
+  'x32 = libc.syscall(0x40000029, 40, 1, 0)',
+  "print('int80-socket', name(int80(359, 40, 1, 0)))",
+  "print('int80-socketcall', name(int80(102, 1, page + 64, 0)))",
+  "print('int80-io_uring', name(int80(425, 4, page + 128, 0)))",
+  "print('x32-socket', name(x32 if x32 >= 0 else -ctypes.get_errno()))",
+].join('\n')
+
 describe('wsl-vsock-denied: a command the bwrap sandbox confines under WSL', { timeout: 120_000 }, () => {
   it('cannot create a vsock socket, the transport interop runs over, nor set up io_uring', async (test) => {
     requireWsl(test, true)
@@ -207,6 +233,22 @@ describe('wsl-vsock-denied: a command the bwrap sandbox confines under WSL', { t
     expect(ioUring.status, 'io_uring_setup').toBe(38)
     expect(ioUring.stdout).toBe('')
     expect((await python(OTHER_SOCKETS)).stdout).toBe('ok\n')
+  })
+
+  it('cannot create one or set up io_uring through the 32-bit int 0x80 entry, socketcall or the x32 numbers', async (test) => {
+    requireWsl(test, true)
+    if (process.arch !== 'x64') return test.skip(`the 32-bit and x32 entries are x86-64's; this machine is ${process.arch}`)
+    if (spawnSync('python3', ['--version'], { stdio: 'ignore', timeout: 30_000 }).status !== 0) return test.skip('python3 is absent on this machine')
+    const workspace = directory(tmpdir(), 'dsh-interop-workspace-')
+    writeFileSync(join(workspace, 'compat.py'), COMPAT_ENTRIES)
+    // Unconfined, each 32-bit entry creates what it asks for, so a refusal below is the filter's; the x32 numbers
+    // answer ENOSYS where the kernel leaves them out.
+    const host = spawnSync('python3', [join(workspace, 'compat.py')], { encoding: 'utf8', timeout: 30_000 })
+    if (host.status !== 0) return test.skip(`the kernel has no 32-bit entry here: ${host.stderr || String(host.signal)}`)
+    expect(host.stdout).toMatch(/^int80-socket descriptor\nint80-socketcall descriptor\nint80-io_uring descriptor\nx32-socket (descriptor|ENOSYS)\n$/)
+    const confinedRun = await confined(await provider(), 'python3 compat.py', workspace)
+    expect(confinedRun.stdout, String(confinedRun.stderr))
+      .toBe('int80-socket EAFNOSUPPORT\nint80-socketcall EAFNOSUPPORT\nint80-io_uring ENOSYS\nx32-socket EAFNOSUPPORT\n')
   })
 })
 

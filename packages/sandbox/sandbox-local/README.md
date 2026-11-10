@@ -49,7 +49,7 @@ Load the sandbox service and mount the provider; the defaults below are the sele
 | `protectedHomeReadable` | `[]` | Paths under `protectedHome`, relative to it, that confined commands may still read and execute; requires `protectedHome` |
 | `deniedSockets` | `[]` | Absolute Unix socket paths that confined commands cannot connect to, on runners that express the rule |
 | `deniedSocketDirectories` | `[]` | Absolute directories that hold only sockets confined commands cannot connect to, such as Docker Desktop's control sockets; bwrap hides each directory, Seatbelt denies each socket present at the wrap |
-| `escapeSocketDirectories` | `[]` | Absolute directories whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. Each is denied like a `deniedSocketDirectories` entry, and while one exists a wrap on a runner that cannot deny socket connects (Landlock, windows-acl) refuses with `SANDBOX_UNSUPPORTED_POLICY` instead of running the command, and bwrap installs the [escape filter](#escape-socket-directories). An entry that does not exist at a wrap denies, filters and refuses nothing. |
+| `escapeSocketDirectories` | `[]` | Absolute directories whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. Each is denied like a `deniedSocketDirectories` entry, and while one exists a wrap on a runner that cannot deny socket connects (Landlock, windows-acl) refuses with `SANDBOX_UNSUPPORTED_POLICY` instead of running the command, and bwrap installs the [vsock filter](#escape-socket-directories-and-the-vsock-filter). An entry that does not exist at a wrap denies and refuses nothing. |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-sandbox-local) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -95,12 +95,23 @@ A consumer passes absolute paths: the home, the entries under it that commands s
 
 The two socket directories are Docker Desktop's under WSL; `host-services/backend.sock` there is world-writable and controls the engine. With Docker Desktop on Linux the directory is `~/.docker/desktop`, and on macOS `~/Library/Containers/com.docker.docker/Data` and `~/.docker/run`, as absolute paths.
 
-<a id="escape-socket-directories"></a>
-### Escape socket directories
+<a id="escape-socket-directories-and-the-vsock-filter"></a>
+### Escape socket directories and the vsock filter
 
-An `escapeSocketDirectories` entry names a directory whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. At each wrap the provider checks whether one exists. While one does, bwrap hides it like a denied socket directory and starts under a seccomp filter, and Landlock and the Windows ACL runner refuse the wrap with `SANDBOX_UNSUPPORTED_POLICY`. Where none exists, every profile is unchanged.
+An `escapeSocketDirectories` entry names a directory whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. At each wrap the provider checks whether one exists. While one does, bwrap hides it like a denied socket directory, and Landlock and the Windows ACL runner refuse the wrap with `SANDBOX_UNSUPPORTED_POLICY`.
 
-The filter is for the host such a directory belongs to: WSL also offers a virtual-machine (`AF_VSOCK`) transport to Windows, which no mount rule hides. It refuses `socket(AF_VSOCK, …)` with `EAFNOSUPPORT` and `io_uring_setup` with `ENOSYS`, because an io_uring request creates a socket without the `socket` call. It covers x86-64 (with x32 numbering), i386, AArch64 and 32-bit Arm, and allows every other call. A 32-bit process that creates a socket through `socketcall` is refused for every family, because the filter cannot read that call's arguments. The program is written instruction by instruction in [`src/seccomp.ts`](src/seccomp.ts). bwrap reads it from descriptor 3, so the wrap starts bwrap from `/bin/sh`, which writes the program into a pipe with its `printf` builtin and keeps the command's standard input and exit status. A kernel that refuses the filter makes bwrap exit with its own `bwrap:` diagnostic before the command runs, which consumers classify as a runner failure. A configured `runnerCommand` gets neither the filter nor the refusal.
+No mount rule hides virtual-machine (`AF_VSOCK`) sockets, the transport between a virtual machine such as WSL and its host. So bwrap starts every command under a seccomp filter wherever the kernel offers them, as `/proc/net/protocols` lists `AF_VSOCK` at the wrap, wherever an escape directory exists, and wherever that list cannot be read. The filter refuses `socket(AF_VSOCK, …)` with `EAFNOSUPPORT` and `io_uring_setup` with `ENOSYS`, because an io_uring request creates a socket without the `socket` call. It names x86-64 (with x32 numbering), i386, AArch64 and 32-bit Arm, allows every other call of those, and refuses every call of an architecture it does not name with `ENOSYS`. The program is written instruction by instruction in [`src/seccomp.ts`](src/seccomp.ts). Where neither condition holds, the bwrap invocation is unchanged.
+
+The filter changes more than vsock, on any virtual machine with vsock and not only under WSL:
+
+- A program that requires io_uring fails; one that falls back to ordinary calls runs.
+- A 32-bit program that creates sockets through the multiplexing `socketcall` call, as 32-bit glibc older than 2.23 does, cannot create any socket, because the filter cannot read that call's family.
+- On a host whose architecture the filter does not name, such as RISC-V, every confined command fails with a bwrap diagnostic instead of running without the filter.
+- bwrap reads the filter from descriptor 9, so the wrap starts bwrap from `/bin/sh`, which writes the program into a pipe with its `printf` builtin. The command's standard input, exit status and descriptors 3 to 7 pass through; a caller's descriptors 8 and 9 do not reach it.
+- The shell stays bwrap's parent, so when bwrap is killed by a signal the wrap reports exit status 128 plus the signal's number.
+- A missing `printf`, a closed standard input, and a kernel that refuses the filter each fail with a `bwrap:` diagnostic before the command runs, which consumers classify as a runner failure.
+
+Landlock applies no seccomp filter: under WSL it refuses every wrap because of `/run/WSL`, and on other virtual machines vsock and io_uring stay open to its commands. A configured `runnerCommand` gets neither the filter nor the refusal.
 
 -----
 
@@ -141,7 +152,7 @@ Each runner's kernel speaks its own denial dialect, carried on every wrap as `de
 | [`src/index.ts`](src/index.ts) | Plugin entry: runner chain selection, functional probes, per-call wrap, ACL grant lifecycle |
 | [`src/profiles.ts`](src/profiles.ts) | Per-platform profile builders: bwrap mounts, Landlock grants, Seatbelt SBPL, and each runner's protected-home rules |
 | [`src/mounts.ts`](src/mounts.ts) | Mount aliases from `/proc/self/mountinfo` and macOS firmlink spellings of the protected paths |
-| [`src/seccomp.ts`](src/seccomp.ts) | The escape filter's BPF program and the shell loader that hands it to bwrap |
+| [`src/seccomp.ts`](src/seccomp.ts) | The vsock filter's BPF program, the shell loader that hands it to bwrap, and the vsock check |
 
 </details>
 

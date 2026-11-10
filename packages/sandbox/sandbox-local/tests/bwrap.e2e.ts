@@ -87,7 +87,8 @@ describe.skipIf(!bwrapUsable)('sandbox-local: real bwrap confinement', () => {
     const workdir = await tempDir(tmpdir())
     const sandbox = await provider()
     const confined = await sandbox.confine(['true'], { mode: 'read-only', workspaceRoot: workdir })
-    expect(confined.argv[0]).toBe('bwrap')
+    // Where the kernel offers vsock, bwrap is started from the shell that hands it the seccomp filter.
+    expect(confined.argv).toContain('bwrap')
     expect(confined.enforcement).toBe('full')
     expect(confined.denialSignatures).toEqual(['read-only file system'])
   })
@@ -279,5 +280,16 @@ describe.skipIf(!bwrapUsable)('sandbox-local: the escape filter under real bwrap
     const result = spawnSync(confined.argv[0] as string, confined.argv.slice(1), { timeout: 30_000, encoding: 'utf8', input: 'kept\n' })
     expect(result.stdout, result.stderr).toBe('vsock EAFNOSUPPORT\ninet created\nunix created\nio_uring ENOSYS\nstdin kept\n')
     expect((await runConfined(sandbox, 'exit 7', policy)).result.status).toBe(7)
+  })
+
+  it('vsock-socket-denied: a command under the filter still writes to the descriptors 3 and 4 its caller passes it', async () => {
+    const escape = await tempDir(homedir())
+    const workdir = await tempDir(homedir())
+    const sandbox = await provider({ escapeSocketDirectories: [escape] })
+    const confined = await sandbox.confine(['sh', '-c', 'echo three >&3; echo four >&4'], { mode: 'read-only', workspaceRoot: workdir })
+    expect(confined.argv).toContain('--seccomp')
+    const result = spawnSync(confined.argv[0] as string, confined.argv.slice(1), { timeout: 30_000, stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'] })
+    expect(result.status, String(result.stderr)).toBe(0)
+    expect([String(result.output[3]), String(result.output[4])]).toEqual(['three\n', 'four\n'])
   })
 })

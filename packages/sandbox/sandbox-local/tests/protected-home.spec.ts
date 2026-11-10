@@ -70,7 +70,7 @@ async function provider(config: Config, internals: LocalSandboxProvider['interna
   contexts.push(ctx)
   await ctx.plugin(LocalSandboxProvider, config)
   const sandbox = ctx.sandbox as LocalSandboxProvider
-  sandbox.internals = { probeBwrap: () => true, ...internals }
+  sandbox.internals = { probeBwrap: () => true, vsockOffered: () => false, ...internals }
   return sandbox
 }
 

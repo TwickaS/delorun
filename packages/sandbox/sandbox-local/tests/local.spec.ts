@@ -35,7 +35,8 @@ async function setup(config: Config = {}, internals: LocalSandboxProvider['inter
   const ctx = new Context()
   await ctx.plugin(LocalSandboxProvider, config)
   const sandbox = ctx.sandbox as LocalSandboxProvider
-  sandbox.internals = internals
+  // Whether this host offers vsock decides bwrap's filter; each spec states it, the host does not.
+  sandbox.internals = { vsockOffered: () => false, ...internals }
   return { ctx, sandbox }
 }
 
@@ -579,11 +580,31 @@ describe('escape socket directories', () => {
     const bwrap = filtered.slice(5, -4)
     expect(bwrap[0]).toBe('bwrap')
     expect(bwrap.join(' ')).toContain(`--tmpfs ${dir} --remount-ro ${dir}`)
-    expect(filtered.slice(-4)).toEqual(['--seccomp', '3', '--', 'true'])
+    expect(filtered.slice(-4)).toEqual(['--seccomp', '9', '--', 'true'])
     rmSync(dir, { recursive: true, force: true })
     const stock = (await sandbox.confine(['true'], WW)).argv
     expect(stock[0]).toBe('bwrap')
     expect(stock).not.toContain('--seccomp')
+  })
+
+  it('installs the filter under bwrap wherever the kernel offers vsock, with no escape directory, and only there', async () => {
+    let offered = true
+    const { sandbox } = await setup({}, { platform: 'linux', probeBwrap: () => true, vsockOffered: () => offered })
+    expect((await sandbox.confine(['true'], WW)).argv.slice(-4)).toEqual(['--seccomp', '9', '--', 'true'])
+    offered = false
+    expect((await sandbox.confine(['true'], WW)).argv[0]).toBe('bwrap')
+  })
+
+  it('reads the host\'s protocol list when no spec states whether vsock is offered', async () => {
+    const { sandbox } = await setup({}, { platform: 'linux', probeBwrap: () => true })
+    delete sandbox.internals.vsockOffered
+    expect((await sandbox.confine(['true'], WW)).argv).toContain('bwrap')
+  })
+
+  it('leaves Landlock unfiltered where vsock is offered without an escape directory', async () => {
+    const launcher = fakeLauncher()
+    const { sandbox } = await setup({}, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'full', landlockLauncher: launcher, vsockOffered: () => true })
+    expect((await sandbox.confine(['true'], WW)).argv[0]).toBe(launcher)
   })
 
   it('installs no filter on Seatbelt, which denies the sockets by path', async () => {
