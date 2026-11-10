@@ -18,6 +18,18 @@ import { rootFile, throwawayKeys, type Keys } from '../sign/fixture.ts'
 import { LogStandIn, WitnessStandIn } from '../log/standin.ts'
 import { REPO, scratch, writeTree, type RunResult } from '../support.ts'
 
+/**
+ * Registers a cleanup that runs when its owner ends: a Vitest test context, or a benchmark run of
+ * `@delo/benchmarks`, which reuses these fixtures.
+ */
+export interface CleanupScope {
+  /**
+   * Run a function when the owner ends.
+   * @param fn - the cleanup.
+   */
+  onTestFinished(fn: () => void | Promise<void>): void
+}
+
 /** Throwaway keys of every role, the stand-in log and witness, and the root that lists them. */
 export interface Trust {
   readonly keys: Keys
@@ -59,7 +71,7 @@ export function keyFile(directory: string, name: string, key: KeyObject): string
  * @param options - how many checkpoint requests the log answers before its witness has cosigned.
  * @returns the log's origin and the endpoints `log-release.ts` takes.
  */
-export async function serveLog(test: TestContext, trusted: Trust, options: { readonly uncosignedPolls?: number } = {}): Promise<{ readonly origin: string, readonly endpoints: LogEndpoints }> {
+export async function serveLog(test: CleanupScope, trusted: Trust, options: { readonly uncosignedPolls?: number } = {}): Promise<{ readonly origin: string, readonly endpoints: LogEndpoints }> {
   let polls = 0
   const server = createServer((request, response) => {
     const chunks: Buffer[] = []
@@ -103,13 +115,15 @@ export async function closedPort(): Promise<number> {
 /**
  * Serve a directory of files read-only, as GitHub Pages and GitHub Releases serve a channel.
  * @param test - the running test.
- * @param directory - the directory to serve.
+ * @param directory - the directory to serve, or a function that names it at each request, so one origin can serve
+ *   one channel after another.
  * @returns the server's origin.
  */
-export async function serveChannel(test: TestContext, directory: string): Promise<string> {
+export async function serveChannel(test: CleanupScope, directory: string | (() => string)): Promise<string> {
   const server = createServer((request, response) => {
-    const path = join(directory, new URL(request.url ?? '/', 'http://stand-in').pathname)
-    if (!path.startsWith(directory) || !existsSync(path) || !statSync(path).isFile()) {
+    const root = typeof directory === 'string' ? directory : directory()
+    const path = join(root, new URL(request.url ?? '/', 'http://stand-in').pathname)
+    if (!path.startsWith(root) || !existsSync(path) || !statSync(path).isFile()) {
       response.writeHead(404).end()
       return
     }

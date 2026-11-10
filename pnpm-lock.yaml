@@ -1234,6 +1234,27 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  delo/apps/benchmarks:
+    dependencies:
+      '@deepseek-ai/dsh-benchmarks':
+        specifier: workspace:*
+        version: link:../../../benchmarks
+      '@delo/contract-update-report':
+        specifier: workspace:*
+        version: link:../../packages/contract-update-report
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../../packages/logs
+      '@delo/release':
+        specifier: workspace:*
+        version: link:../release
+      '@delo/update':
+        specifier: workspace:*
+        version: link:../../packages/update
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   delo/apps/cli:
     dependencies:
       '@clack/prompts':

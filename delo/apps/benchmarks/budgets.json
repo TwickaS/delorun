@@ -1,0 +1,5 @@
+{
+  "schema": "delo.benchmark-budgets/1",
+  "rule": "Each ceiling is four times the median measured on the recorded machine and load, at least one second, rounded up to two significant digits; see delo/docs/performance/README.md.",
+  "suites": {}
+}

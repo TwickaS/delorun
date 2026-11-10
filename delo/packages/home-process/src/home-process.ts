@@ -264,6 +264,7 @@ export class HomeProcess implements HandshakeSubject {
       let criterion: string | undefined
       try {
         home.host = await home.bootedHost()
+        options.logger.info('the Host booted on the new runtime; checking its health', { data: { to: handover.to } })
         const verdict = await home.host.check(handover.health)
         if (!verdict.passed) {
           options.logger.warn('the Host failed its health check on the new runtime', { data: { criterion: verdict.criterion, detail: verdict.detail } })

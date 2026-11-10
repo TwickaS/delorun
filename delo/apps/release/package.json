@@ -6,8 +6,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./closure/*": "./src/closure/*.ts",
     "./log/*": "./src/log/*.ts",
-    "./sign/*": "./src/sign/*.ts"
+    "./sign/*": "./src/sign/*.ts",
+    "./tests/*": "./tests/*.ts"
   },
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
