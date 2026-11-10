@@ -14,7 +14,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { parse, stringify } from 'yaml'
-import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import {
   HistoryUnavailableError,
@@ -29,6 +29,7 @@ import type { RestoreChanges } from '@delo/contract-update-report'
 import type { SemanticVersion } from '@delo/contract-release-manifest'
 import { isProfileSafetyError, ProfileSafetyError } from './errors.ts'
 import {
+  DELO_STATE_FILES,
   HOME_PATCH_COPY_FILENAME,
   HOME_PATCH_FILENAME,
   PROFILE_MANIFEST_FILENAME,
@@ -44,6 +45,35 @@ const runFile = promisify(execFile)
 
 /** How long one git run of the history may take. */
 export const HISTORY_TIMEOUT_MS = 30_000
+
+/** How long a profile change waits for upstream's profile writer lock: the plugin manager's own default wait. */
+export const PROFILE_LOCK_WAIT_MS = 120_000
+
+/**
+ * Run one change to a profile's files under upstream's profile writer lock, the `package.json` lock the Host's plugin
+ * manager holds while it installs, edits, records or restores, so a Delo snapshot, restore or rollback never interleaves
+ * with one. The lock is not reentrant: the operation must not take it again.
+ * @param profileDir - the profile directory.
+ * @param code - the refusal's code when the lock cannot be taken.
+ * @param operation - the change, run while holding the lock.
+ * @param waitMs - how long to wait for another holder; {@link PROFILE_LOCK_WAIT_MS} by default.
+ * @returns the operation's result; the lock releases on both outcomes.
+ * @throws {ProfileSafetyError} `code` when the lock cannot be taken in time, before the operation changes anything;
+ *   the operation's own error otherwise.
+ */
+export async function withProfileLock<T>(profileDir: string, code: 'SNAPSHOT_FAILED' | 'RESTORE_REFUSED' | 'RECOVER_REFUSED', operation: () => Promise<T>, waitMs: number = PROFILE_LOCK_WAIT_MS): Promise<T> {
+  let started = false
+  try {
+    return await withFileLock(join(profileDir, PROFILE_MANIFEST_FILENAME), () => {
+      started = true
+      return operation()
+    }, { waitMs })
+  } catch (error) {
+    if (started) throw error
+    const detail = `the profile's writer lock could not be taken, so another process may be changing this profile; nothing was changed. Wait for it to finish, then run the command again: ${error instanceof Error ? error.message : String(error)}`
+    throw new ProfileSafetyError(code, profileDir, detail, code === 'SNAPSHOT_FAILED' ? ['skip-update'] : [], [], { cause: error })
+  }
+}
 
 /** What {@link openHistory} needs. */
 export interface HistoryOptions {
@@ -181,8 +211,8 @@ export interface RestorePlan {
  */
 export async function planRestore(request: RestoreRequest): Promise<RestorePlan> {
   const history = request.history ?? openHistory(request)
-  const restored = await filesAt(history, request.version, request.profileDir)
   const current = currentFiles(request.profileDir)
+  const restored = keepUntrackedState(await filesAt(history, request.version, request.profileDir), current)
   const adjusted = adjustForRevoked(restored, request.revoked ?? [], request.profileDir)
   return {
     version: request.version,
@@ -207,7 +237,7 @@ export async function planRestore(request: RestoreRequest): Promise<RestorePlan>
  */
 export async function applyRestore(plan: RestorePlan, request: RestoreRequest): Promise<void> {
   const history = request.history ?? openHistory(request)
-  const restored = await filesAt(history, request.version, request.profileDir)
+  const restored = keepUntrackedState(await filesAt(history, request.version, request.profileDir), currentFiles(request.profileDir))
   const adjusted = adjustForRevoked(restored, request.revoked ?? [], request.profileDir)
   try {
     // Only the files the plan listed are written, so a plan the person approved is the set of changes they get.
@@ -252,6 +282,19 @@ export async function rollbackToSnapshot(request: Omit<RestoreRequest, 'version'
 export async function latestVersion(history: ProfileHistory): Promise<ProfileVersionId | undefined> {
   const [latest] = await history.list(1)
   return latest?.id
+}
+
+/**
+ * A version's files with the profile's current copy of each Delo state file the version does not hold
+ * ({@link DELO_STATE_FILES}), so a restore never removes Delo's state because an older version did not track it.
+ * @param restored - the version's files.
+ * @param current - the profile's files now.
+ * @returns the files to restore.
+ */
+function keepUntrackedState(restored: Map<string, string | undefined>, current: ReadonlyMap<string, string | undefined>): Map<string, string | undefined> {
+  const kept = new Map(restored)
+  for (const name of DELO_STATE_FILES) if (kept.get(name) === undefined) kept.set(name, current.get(name))
+  return kept
 }
 
 async function filesAt(history: ProfileHistory, version: ProfileVersionId, profileDir: string): Promise<Map<string, string | undefined>> {

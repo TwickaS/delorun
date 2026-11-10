@@ -18,6 +18,7 @@ import {
   openHistory,
   planRestore,
   rollbackToSnapshot,
+  withProfileLock,
   type RestorePlan,
   type RevokedPlugin,
 } from './snapshot.ts'
@@ -53,6 +54,8 @@ export interface RecoverRequest {
   readonly changedBy?: ProfileChangedBy
   /** The current time, for the marker's start time; now by default. */
   readonly now?: Date
+  /** How long a rollback or restore waits for the profile's writer lock; `PROFILE_LOCK_WAIT_MS` by default. */
+  readonly lockWaitMs?: number
 }
 
 /** A history version as `delorun recover` lists it. */
@@ -100,30 +103,29 @@ export async function recover(request: RecoverRequest): Promise<RecoverReport> {
     case 'status':
       return { action: 'status', ...lastUpdate === undefined ? {} : { lastUpdate }, ...safeMode === undefined ? {} : { safeMode }, versions, lines: statusLines(lastUpdate, safeMode, versions, record.ejected.map(entry => entry.name), record.disabled) }
     case 'rollback': {
-      const plan = await rollbackToSnapshot({
+      const { version } = request.action
+      const plan = await withProfileLock(request.profileDir, 'RECOVER_REFUSED', () => rollbackToSnapshot({
         profileDir: request.profileDir,
         homeDir: request.homeDir,
-        ...request.action.version === undefined ? {} : { version: request.action.version },
+        ...version === undefined ? {} : { version },
         ...request.revoked === undefined ? {} : { revoked: request.revoked },
         history,
-      })
+      }), request.lockWaitMs)
       return { action: 'rollback', ...lastUpdate === undefined ? {} : { lastUpdate }, versions, plan, lines: planLines('Rolled back', plan) }
     }
     case 'restore': {
-      const planned = await planRestore({
+      const restore = {
         profileDir: request.profileDir,
         homeDir: request.homeDir,
         version: request.action.version,
         ...request.revoked === undefined ? {} : { revoked: request.revoked },
         history,
-      })
-      await applyRestore(planned, {
-        profileDir: request.profileDir,
-        homeDir: request.homeDir,
-        version: request.action.version,
-        ...request.revoked === undefined ? {} : { revoked: request.revoked },
-        history,
-      })
+      }
+      const planned = await withProfileLock(request.profileDir, 'RESTORE_REFUSED', async () => {
+        const plan = await planRestore(restore)
+        await applyRestore(plan, restore)
+        return plan
+      }, request.lockWaitMs)
       return { action: 'restore', versions, plan: planned, lines: planLines(`Restored ${request.action.version}`, planned) }
     }
     case 'safe-mode': {

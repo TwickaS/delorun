@@ -104,6 +104,38 @@ describe.skipIf(!hasGit)('c03-restore-lists-changes', () => {
   })
 })
 
+describe.skipIf(!hasGit)('c03-restore-keeps-delo-state', () => {
+  it('keeps the exemptions, safety record and update report a version does not hold instead of removing them', async () => {
+    const profile = fixture({ bundles: ['@deepseek-ai/dsh-base', '@me/own-bundle'] })
+    try {
+      const history = openHistory({ profileDir: profile.profileDir })
+      const version = await recordSnapshot({
+        profileDir: profile.profileDir,
+        homeDir: profile.homeDir,
+        summary: 'Before update to Delo 1.0.1',
+        changedBy: { kind: 'person' },
+        history,
+      })
+      const later = {
+        'delo-compatibility.json': JSON.stringify({ '@delo/plugin@1.2.3': ['1.0.0'] }),
+        'delo-safety.json': JSON.stringify({ schema: 'delo.profile-safety/1', ejected: [], disabled: [] }),
+        'delo-update-report.json': JSON.stringify({ schema: 'delo.update-report/2' }),
+      }
+      for (const [name, text] of Object.entries(later)) writeFileSync(join(profile.profileDir, name), text)
+      changeProfile(profile.profileDir)
+      writeFileSync(join(profile.profileDir, 'delo-compatibility.json'), later['delo-compatibility.json'])
+      const plan = await planRestore({ profileDir: profile.profileDir, homeDir: profile.homeDir, version, history })
+      for (const name of Object.keys(later)) expect(plan.writes).not.toContain(name)
+      await applyRestore(plan, { profileDir: profile.profileDir, homeDir: profile.homeDir, version, history })
+      const after = readTree(profile.profileDir)
+      for (const [name, text] of Object.entries(later)) expect(after[name]).toBe(text)
+      expect(after['package.json']).toBe((await history.filesAt(version)).get('package.json'))
+    } finally {
+      profile.remove()
+    }
+  })
+})
+
 describe.skipIf(!hasGit)('c03-restore-revoked-stays-disabled', () => {
   it('brings a revoked bundle back without selecting it, and a revoked plugin with its row disabled and its reason recorded', async () => {
     const profile = fixture({

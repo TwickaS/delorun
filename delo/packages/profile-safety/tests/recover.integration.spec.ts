@@ -102,6 +102,31 @@ describe.skipIf(!hasGit)('recover', () => {
     }
   })
 
+  it('refuses a restore and a rollback while another process holds the profile\'s writer lock, changing nothing', async () => {
+    const profile = fixture({ profilePatch: [{ insert: [{ id: 'person-tools', name: '@me/tools-plugin' }] }] })
+    try {
+      const snapshot = await recordSnapshot({
+        profileDir: profile.profileDir,
+        homeDir: profile.homeDir,
+        summary: 'Before update to Delo 1.0.1',
+        changedBy: { kind: 'person' },
+      })
+      writeFileSync(join(profile.profileDir, 'cordis.patch.yml'), '[]\n')
+      // A live holder: this process's own pid, which the lock never takes over.
+      writeFileSync(join(profile.profileDir, 'package.json.lock'), `${process.pid}\n`)
+      const before = readTree(profile.profileDir)
+      for (const action of [{ kind: 'restore', version: snapshot }, { kind: 'rollback', version: snapshot }] as const) {
+        const failure = await recover({ profileDir: profile.profileDir, homeDir: profile.homeDir, profile: 'default', action, lockWaitMs: 50 }).catch((error: unknown) => error)
+        expect(failure).toBeInstanceOf(ProfileSafetyError)
+        expect((failure as ProfileSafetyError).code).toBe(action.kind === 'restore' ? 'RESTORE_REFUSED' : 'RECOVER_REFUSED')
+        expect((failure as ProfileSafetyError).refused).toBe(true)
+        expect(readTree(profile.profileDir)).toEqual(before)
+      }
+    } finally {
+      profile.remove()
+    }
+  })
+
   it('refuses safe mode without the installation\'s bundle list, which it cannot guess', async () => {
     const profile = fixture()
     try {

@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import type { UpdateJournal } from '@delo/contract-home-process'
 import { HomeProcessError, type ProfileSnapshots, type RollbackSteps, type SessionDataCopies, type UpdateSupport } from '@delo/home-process'
-import { historyGitProblem, readSafetyRecord, recordSnapshot, rollbackToSnapshot, withUpdate, writeSafetyRecord } from '@delo/profile-safety'
+import { historyGitProblem, readSafetyRecord, recordSnapshot, rollbackToSnapshot, withProfileLock, withUpdate, writeSafetyRecord } from '@delo/profile-safety'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { assertSoleDataUser, DataInUseError } from '../home-exclusion.ts'
 import { describeFailure, renderRefusal } from '@delo/home'
@@ -44,7 +44,7 @@ export interface UpdateSupportOptions {
 
 /**
  * The profile history an update saves and a rollback restores: C3's snapshot named for the update, with the report,
- * and Delo's record of the update in `delo-safety.json`.
+ * and Delo's record of the update in `delo-safety.json`. Both hold upstream's profile writer lock while they write.
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile.
  * @param now - the clock.
@@ -53,17 +53,17 @@ export interface UpdateSupportOptions {
 export function profileSnapshots(home: string, profile: string, now: () => Date): ProfileSnapshots & { restore(record: Pick<UpdateJournal, 'from' | 'to' | 'snapshot'>): Promise<void> } {
   const profileDir = join(home, 'profiles', profile)
   return {
-    async save(from, to, report) {
+    save: (from, to, report) => withProfileLock(profileDir, 'SNAPSHOT_FAILED', async () => {
       const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: `Before update to Delo ${to}`, changedBy: { kind: 'person' }, report })
       await writeSafetyRecord(profileDir, withUpdate(readSafetyRecord(profileDir), { from, to, at: now().toISOString(), state: 'applying', snapshot }))
       return snapshot
-    },
-    async restore(record) {
+    }),
+    restore: record => withProfileLock(profileDir, 'RECOVER_REFUSED', async () => {
       const update = readSafetyRecord(profileDir).update
       const version = record.snapshot ?? (update?.from === record.from && update.to === record.to ? update.snapshot : undefined)
       await rollbackToSnapshot({ profileDir, homeDir: home, ...version === undefined ? {} : { version: version as ProfileVersionId } })
       await writeSafetyRecord(profileDir, withUpdate(readSafetyRecord(profileDir), { from: record.from, to: record.to, at: now().toISOString(), state: 'rolled-back', ...version === undefined ? {} : { snapshot: version } }))
-    },
+    }),
   }
 }
 

@@ -46,6 +46,23 @@ it('starts with no versions, and saves the managed files as one only when they c
   expect(readFileSync(join(dir, HISTORY_DIR, 'info', 'exclude'), 'utf8')).toBe('/*\n!/package.json\n!/cordis.patch.yml\n')
 })
 
+it('admits every managed file of a caller that manages more files than the one that created the history, from its next version on', async () => {
+  writeFileSync(join(dir, 'package.json'), '{}\n')
+  writeFileSync(join(dir, 'extra.json'), '{"kept":true}\n')
+  const narrow = new ProfileHistory(dir, ['package.json'], 'git', 30_000)
+  const first = await narrow.record('First', { kind: 'person' })
+  const wide = new ProfileHistory(dir, ['package.json', 'extra.json'], 'git', 30_000)
+  writeFileSync(join(dir, 'package.json'), '{"v":2}\n')
+  const second = await wide.record('Second', { kind: 'person' })
+  expect(readFileSync(join(dir, HISTORY_DIR, 'info', 'exclude'), 'utf8')).toBe('/*\n!/package.json\n!/extra.json\n')
+  expect((await wide.filesAt(first!)).get('extra.json')).toBeUndefined()
+  expect((await wide.filesAt(second!)).get('extra.json')).toBe('{"kept":true}\n')
+  // The narrower caller never narrows the exclusions again.
+  writeFileSync(join(dir, 'package.json'), '{"v":3}\n')
+  await narrow.record('Third', { kind: 'person' })
+  expect(readFileSync(join(dir, HISTORY_DIR, 'info', 'exclude'), 'utf8')).toBe('/*\n!/package.json\n!/extra.json\n')
+})
+
 it('saves a removed file\'s absence, and keeps a one-line summary', async () => {
   const profile = history()
   writeFileSync(join(dir, 'package.json'), '{}\n')

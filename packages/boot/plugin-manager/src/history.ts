@@ -160,9 +160,16 @@ export class ProfileHistory {
     return files
   }
 
-  /** Create the git directory and its exclusions, which admit only the managed files, once. */
+  /**
+   * Create the git directory and its exclusions, which admit only the managed files, once. A history that exists already
+   * may have been created by a caller that manages fewer files; its exclusions then gain every managed file they do not
+   * admit, so this caller's files are part of every version from the next one on. Exclusions only ever widen.
+   */
   private async ensure(): Promise<void> {
-    if (existsSync(join(this.gitDir, 'HEAD'))) return
+    if (existsSync(join(this.gitDir, 'HEAD'))) {
+      await this.admitManagedFiles()
+      return
+    }
     try {
       await mkdir(join(this.gitDir, 'info'), { recursive: true, mode: 0o700 })
       await writeFile(join(this.gitDir, 'info', 'exclude'), ['/*', ...this.files.map(name => `!/${name}`), ''].join('\n'))
@@ -171,6 +178,25 @@ export class ProfileHistory {
     }
     // git init keeps the exclusions already written.
     await this.git(['init', '--quiet'])
+  }
+
+  /** Add to an existing history's exclusions every managed file they do not admit. */
+  private async admitManagedFiles(): Promise<void> {
+    const path = join(this.gitDir, 'info', 'exclude')
+    let lines: string[]
+    try {
+      lines = (await readFile(path, 'utf8')).split('\n').filter(line => line !== '')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new HistoryUnavailableError(`the history's exclusions cannot be read: ${(error as Error).message}`, { cause: error })
+      lines = ['/*']
+    }
+    const missing = this.files.filter(name => !lines.includes(`!/${name}`))
+    if (missing.length === 0) return
+    try {
+      await writeFile(path, [...lines, ...missing.map(name => `!/${name}`), ''].join('\n'))
+    } catch (error) {
+      throw new HistoryUnavailableError(`the history's exclusions cannot be written: ${(error as Error).message}`, { cause: error })
+    }
   }
 
   private async git(args: readonly [string, ...string[]], accepted: readonly number[] = [0]): Promise<GitRun> {
