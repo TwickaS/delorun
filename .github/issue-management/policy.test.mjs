@@ -156,45 +156,55 @@ const reviewedPull = (labels) => ({
   issues: new Map([[2, { priority: null }]]),
 })
 
-test('keeps only Bug, Feature, and Task Issue templates with used frontmatter', () => {
+test('keeps the Delo Issue forms and the Task template with used frontmatter', () => {
   const directory = new URL('../ISSUE_TEMPLATE/', import.meta.url)
-  assert.deepEqual(readdirSync(directory).sort(), ['bug.md', 'config.yml', 'feature.md', 'task.md'])
+  assert.deepEqual(readdirSync(directory).sort(), [
+    'brief.yml',
+    'bug_report.yml',
+    'config.yml',
+    'feature_request.yml',
+    'task.md',
+  ])
 
-  for (const file of ['bug.md', 'feature.md', 'task.md']) {
-    const source = readFileSync(new URL(file, directory), 'utf8')
-    const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? ''
-    const keys = frontmatter
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => line.slice(0, line.indexOf(':')))
-      .sort()
-    assert.deepEqual(keys, ['about', 'name', 'type'], file)
-    assert.match(source, /^## /m, file)
-    assert.match(source, /<!-- [^\n]+ -->/, file)
-    assert.doesNotMatch(source, /<details\b/i, file)
+  const source = readFileSync(new URL('task.md', directory), 'utf8')
+  const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? ''
+  const keys = frontmatter
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.slice(0, line.indexOf(':')))
+    .sort()
+  assert.deepEqual(keys, ['about', 'name', 'type'], 'task.md')
+  assert.match(source, /^## /m, 'task.md')
+  assert.match(source, /<!-- [^\n]+ -->/, 'task.md')
+  assert.doesNotMatch(source, /<details\b/i, 'task.md')
+
+  for (const file of ['bug_report.yml', 'feature_request.yml']) {
+    assert.match(readFileSync(new URL(file, directory), 'utf8'), /^type: (Bug|Feature)$/m, file)
   }
-  assert.equal(
-    readFileSync(new URL('config.yml', directory), 'utf8'),
-    'blank_issues_enabled: false\n',
+  const config = readFileSync(new URL('config.yml', directory), 'utf8')
+  assert.match(config, /^blank_issues_enabled: false$/m)
+  assert.deepEqual(
+    [...config.matchAll(/^ {2}- name: (.+)$/gm)].map(([, name]) => name),
+    ['Report a vulnerability', 'Ask a question'],
   )
 })
 
-test('keeps Feature Issues limited to motivation and behavior', () => {
+test('keeps Feature requests limited to the problem and the idea', () => {
   const source = readFileSync(
-    new URL('../ISSUE_TEMPLATE/feature.md', import.meta.url),
+    new URL('../ISSUE_TEMPLATE/feature_request.yml', import.meta.url),
     'utf8',
   )
   assert.deepEqual(
-    [...source.matchAll(/^## .+$/gm)].map(([heading]) => heading),
-    ['## Motivation', '## Behavior'],
+    [...source.matchAll(/^ {6}label: (.+)$/gm)].map(([, label]) => label),
+    ['The problem', 'The idea'],
   )
 })
 
-test('keeps Bug Issues limited to the problem report', () => {
-  const source = readFileSync(new URL('../ISSUE_TEMPLATE/bug.md', import.meta.url), 'utf8')
+test('keeps Bug reports limited to the problem report', () => {
+  const source = readFileSync(new URL('../ISSUE_TEMPLATE/bug_report.yml', import.meta.url), 'utf8')
   assert.deepEqual(
-    [...source.matchAll(/^## .+$/gm)].map(([heading]) => heading),
-    ['## Summary', '## Reproduction', '## Current behavior', '## Expected behavior', '## Environment'],
+    [...source.matchAll(/^ {6}label: (.+)$/gm)].map(([, label]) => label),
+    ['Version', 'Does stock DeepSeek Harness reproduce it?', 'Steps to reproduce', 'What happened', 'Logs'],
   )
 })
 
