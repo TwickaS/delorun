@@ -44,6 +44,8 @@ it.skipIf(webSnapshotMode() === 'record')('turns each upstream opt-in on alone a
     { id: 'llm-deepseek', config: { baseURL: server.baseURL, apiKeyEnv: key } },
     { id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } },
     // The analytics row mounts only in the desktop profile; here it mounts with an exporter whose collector is a closed local port.
+    // `delorun start` releases the update gate's start hold once the booted Host passes its check; this scaffold has no start.
+    { id: 'delo-update-gate', config: { holdUntilChecked: false } },
     { id: 'product-analytics', disabled: false },
     // The client analytics plugin waits for the account service, which the bundle turns off with the account surfaces.
     { id: 'deepseek-account', disabled: false },
