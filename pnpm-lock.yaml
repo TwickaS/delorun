@@ -1694,9 +1694,15 @@ importers:
       '@delo/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent
+      '@delo/plugin-mcp-consent':
+        specifier: workspace:*
+        version: link:../plugin-mcp-consent
       '@delo/plugin-permission-defaults':
         specifier: workspace:*
         version: link:../plugin-permission-defaults
+      '@delo/plugin-schedule-consent':
+        specifier: workspace:*
+        version: link:../plugin-schedule-consent
 
   delo/packages/bundle-local:
     dependencies:

@@ -3,11 +3,11 @@
  * `@delo/bundle-headless` linked into it ([headless bundle](./headless-bundle.ts)), booted through Delo's one
  * composition ([compose](./compose.ts)) instead of upstream's command line: its commands run under C1's sandbox
  * overlay, a safe-mode marker for the `headless` profile applies, and the booted Host is held to the invariants of the
- * sandbox row and of every row of the bundle, the fetch guard, the instruction write consent, the full-access consent
- * and the turn gate, which holds the task's first step until that check passes. A guard that asks a person refuses
- * here, because the profile composes no answerer. Full access, by `--permission-mode` or `DSH_PERMISSION_MODE`, is
- * refused before boot for a working directory whose full access the person has not granted in the studio
- * ({@link refuseUngrantedFullAccess}).
+ * sandbox row and of every row of the bundle, the fetch guard, the instruction write, MCP and schedule consents, the
+ * full-access consent and the turn gate, which holds the task's first step until that check passes. A guard that asks a
+ * person refuses here, because the profile composes no answerer. Full access for a working directory whose full access
+ * the person has not granted in the studio is refused by the full-access consent inside the Host; a request for it by
+ * `--permission-mode` or `DSH_PERMISSION_MODE` is also refused early, before boot ({@link refuseUngrantedFullAccess}).
  *
  * The profile and its layers are Delo's: the launcher options of upstream's `dsh` (`--profile`, `--patch`,
  * `--from-default-profile` and the configuration dumps) are refused, because each would boot another profile or add a
@@ -27,6 +27,7 @@ import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import type { CommandOutput, CommandResult } from './command.ts'
 import { assertDeloInvariants, composeDeloProfile, type ComposeDependencies } from './compose.ts'
 import { CliError, EXIT } from './exit.ts'
+import { isRecord, rowPatches, type PatchLayer } from './patch-layers.ts'
 import { runPreStartSteps, type PreStartStep } from './pre-start.ts'
 import type { BootedProfile } from './start.ts'
 
@@ -49,6 +50,13 @@ export interface HeadlessDependencies extends ComposeDependencies {
    * @returns the directory; `process.cwd()` in a real run.
    */
   readonly cwd: () => string
+  /**
+   * Registers the teardown the CLI's last-resort handler runs before it ends the process on a crash; the CLI's
+   * `registerFatalRelease` in a real run.
+   * @param teardown - disposes the booted Host.
+   * @returns the unregistration.
+   */
+  readonly fatalRelease: (teardown: () => Promise<void>) => () => void
 }
 
 /** What one headless run is given. */
@@ -66,37 +74,76 @@ export interface HeadlessRequest {
 /** Upstream's variable that sets the headless profile's sandbox mode, which only the launching environment may set. */
 export const PERMISSION_MODE_ENV = 'DSH_PERMISSION_MODE'
 
+/** The id of upstream's permission-preset row, whose `presets` map each preset name to a sandbox mode. */
+const PERMISSION_ROW = 'permission'
+
 /**
- * The full-access sources among a headless run's arguments and environment.
+ * A preset name or a sandbox mode as the comparison reads it: trimmed and case-folded, so a spelling that upstream
+ * would refuse as unknown still counts as asking for full access.
+ * @param value - the name or mode.
+ * @returns the folded value.
+ */
+function folded(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+/**
+ * The preset names that select full access in a composed profile: `danger-full-access`, and every preset that any
+ * layer's `permission` row maps to the `danger-full-access` sandbox mode, folded. A name that one layer maps to full
+ * access counts even when a later layer maps it elsewhere, so the early refusal errs towards refusing.
+ * @param layers - the composed profile's patch layers.
+ * @returns the folded names.
+ */
+export function fullAccessPresetNames(layers: readonly PatchLayer[]): ReadonlySet<string> {
+  const names = new Set<string>([FULL_ACCESS_PRESET])
+  for (const layer of layers) {
+    for (const row of rowPatches(layer.patches, PERMISSION_ROW)) {
+      const presets = isRecord(row.config) ? row.config.presets : undefined
+      if (!isRecord(presets)) continue
+      for (const [name, spec] of Object.entries(presets)) {
+        if (isRecord(spec) && typeof spec.sandbox === 'string' && folded(spec.sandbox) === FULL_ACCESS_PRESET) names.add(folded(name))
+      }
+    }
+  }
+  return names
+}
+
+/**
+ * The full-access sources among a headless run's arguments and environment: a `--permission-mode` preset that selects
+ * full access, and `DSH_PERMISSION_MODE` set to the full-access sandbox mode, each compared trimmed and case-folded.
  * @param args - the arguments after `headless`.
  * @param env - the launch environment.
+ * @param presets - the folded preset names that select full access ({@link fullAccessPresetNames}).
  * @returns how the run asks for full access: the option, the variable, both, or none.
  */
-export function fullAccessRequests(args: readonly string[], env: Readonly<Record<string, string | undefined>>): readonly string[] {
+export function fullAccessRequests(args: readonly string[], env: Readonly<Record<string, string | undefined>>, presets: ReadonlySet<string> = new Set([FULL_ACCESS_PRESET])): readonly string[] {
   const requests: string[] = []
   for (let at = 0; at < args.length; at++) {
     const argument = args[at]!
     if (argument === '--') break
     const value = argument === '--permission-mode' ? args[at + 1] : argument.startsWith('--permission-mode=') ? argument.slice('--permission-mode='.length) : undefined
-    if (value === FULL_ACCESS_PRESET) requests.push(`--permission-mode ${FULL_ACCESS_PRESET}`)
+    if (value !== undefined && presets.has(folded(value))) requests.push(`--permission-mode ${value.trim()}`)
   }
-  if (env[PERMISSION_MODE_ENV] === FULL_ACCESS_PRESET) requests.push(`${PERMISSION_MODE_ENV}=${FULL_ACCESS_PRESET}`)
+  const mode = env[PERMISSION_MODE_ENV]
+  if (mode !== undefined && folded(mode) === FULL_ACCESS_PRESET) requests.push(`${PERMISSION_MODE_ENV}=${mode.trim()}`)
   return requests
 }
 
 /**
- * Refuse full access for a working directory whose full access the person has not granted. The guard of
- * `@delo/plugin-permission-defaults` refuses the same switch inside the Host; this check runs before boot, so the run
- * stops with the workspace named and no task starts.
+ * Refuse early, before boot, a run that asks for full access in a working directory whose full access the person has
+ * not granted, so the run stops with the workspace named and no task starts. The enforcement is the guard of
+ * `@delo/plugin-permission-defaults` inside the Host, which refuses every switch to full access without a grant
+ * however it is asked for; this check only refuses the requests it can read from the arguments and environment.
  * @param home - the Delo home.
  * @param args - the arguments after `headless`.
  * @param env - the launch environment.
  * @param cwd - the working directory, the task's workspace.
+ * @param presets - the folded preset names that select full access ({@link fullAccessPresetNames}).
  * @throws {CliError} naming the request, the workspace and how to grant full access, when the store holds no grant for
  *   it or cannot be read.
  */
-export async function refuseUngrantedFullAccess(home: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, cwd: string): Promise<void> {
-  const requests = fullAccessRequests(args, env)
+export async function refuseUngrantedFullAccess(home: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, cwd: string, presets?: ReadonlySet<string>): Promise<void> {
+  const requests = fullAccessRequests(args, env, presets)
   if (requests.length === 0) return
   const workspace = workspaceKey(cwd)
   const read = await readPermissionStore(permissionStorePath(home))
@@ -142,10 +189,14 @@ export async function runHeadless(request: HeadlessRequest, dependencies: Headle
   mkdirSync(runDirectory(request.home, HEADLESS_PROFILE), { recursive: true, mode: PRIVATE_DIR_MODE })
   await runPreStartSteps(dependencies.preStartSteps, { home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', successor: false, output: request.output })
   const composed = await composeDeloProfile({ home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', output: request.output, env: request.env }, dependencies)
-  await refuseUngrantedFullAccess(request.home, request.args, request.env, dependencies.cwd())
+  await refuseUngrantedFullAccess(request.home, request.args, request.env, dependencies.cwd(), fullAccessPresetNames(composed.layers))
+  // A crash after boot ends the process through the CLI's last-resort handler, which first disposes the booted Host
+  // within its bound; the registration lasts as long as the run, which upstream's runner ends.
+  let current: BootedProfile | undefined
+  const unregister = dependencies.fatalRelease(async () => { await current?.dispose() })
   let booted: BootedProfile
   try {
-    booted = await dependencies.runProfile({
+    booted = current = await dependencies.runProfile({
       environment: dependencies.loadEnvironment(),
       profile: HEADLESS_PROFILE,
       resolvedProfile: composed.resolvedProfile,
@@ -153,6 +204,7 @@ export async function runHeadless(request: HeadlessRequest, dependencies: Headle
       args: request.args,
     })
   } catch (error) {
+    unregister()
     throw new CliError(EXIT.failed, `delorun headless: the ${HEADLESS_PROFILE} profile failed to start: ${error instanceof Error ? error.message : String(error)}`)
   }
   try {
@@ -163,6 +215,7 @@ export async function runHeadless(request: HeadlessRequest, dependencies: Headle
       // Upstream's runner owns this process: once `main` has reported the refusal in this turn of the event loop, its
       // bounded shutdown ends the process with a failure code, and the profile that may still run ends with it.
       if (failure instanceof HostNotStoppedError) setImmediate(() => { void booted.shutdown(EXIT.failed) })
+      else unregister()
       throw failure
     })
   }

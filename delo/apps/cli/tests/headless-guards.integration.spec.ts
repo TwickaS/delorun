@@ -34,7 +34,16 @@ interface DriverReport {
   readonly fetch?: Refusal
   readonly instructionWrite?: { readonly toolResults: readonly { readonly isError: boolean, readonly error?: { readonly name: string, readonly code: string } }[], readonly written: boolean }
   readonly fullAccess?: { readonly guardReason: string | null, readonly selection: Refusal, readonly modes: readonly string[] }
-  readonly turnGate?: { readonly present: boolean, readonly held: boolean, readonly releases: number, readonly modelRequests: number }
+  readonly turnGate?: {
+    readonly present: boolean
+    readonly held: boolean
+    readonly releases: number
+    readonly modelRequests: number
+    readonly beforeRelease: { readonly modelRequests: number, readonly turnStarts: number, readonly agentStatus: string, readonly gateHeld: boolean | undefined, readonly releases: number }
+  }
+  /** Set by mode `permission-mode`, written as upstream's runner ends the process. */
+  readonly exitCode?: number
+  readonly modeEvents?: readonly string[]
 }
 
 beforeAll(() => {
@@ -58,7 +67,7 @@ afterEach(() => {
  * @param mode - the driver's mode.
  * @returns its exit status, report and error output.
  */
-function headlessDriver(mode: 'probe' | 'disable-guard' | 'replace-guard'): { status: number | null, report: DriverReport, stderr: string } {
+function headlessDriver(mode: 'probe' | 'permission-mode' | 'disable-guard' | 'replace-guard'): { status: number | null, report: DriverReport, stderr: string } {
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DSH_|DELO_|NODE_PATH$|DEEPSEEK_)/.test(name)))
   const result = spawnSync(process.execPath, ['--import', TSX_LOADER, DRIVER, mode], {
     cwd: osHome, env: { ...inherited, HOME: osHome, USERPROFILE: osHome, DEEPSEEK_API_KEY: 'fixture-key' }, encoding: 'utf8', timeout: 150_000,
@@ -87,9 +96,21 @@ describe('the headless profile booted with upstream\'s real profile runner', { t
     expect(run.report.fullAccess?.selection).toMatchObject({ refused: true, name: 'SandboxModeRefusedError' })
     expect(run.report.fullAccess?.modes).not.toContain('danger-full-access')
 
+    // A turn started before the release waited at the gate: it was logged as started, and no model request was made.
+    expect(run.report.turnGate?.beforeRelease).toMatchObject({ turnStarts: 1, modelRequests: 0, agentStatus: 'running', gateHeld: false, releases: 0 })
+
     // The gate was released once, after the invariants; the turn then reached the model.
     expect(run.report.turnGate).toMatchObject({ present: true, held: false, releases: 1 })
     expect(run.report.turnGate?.modelRequests).toBeGreaterThan(0)
+  })
+
+  it('refuses --permission-mode danger-full-access inside the Host when the runner is called without Delo\'s pre-boot check', () => {
+    const run = headlessDriver('permission-mode')
+    // Upstream's runner reports the refusal and ends the process with a failure code; the session never took the mode.
+    expect(run.report.runnerCalls).toBe(1)
+    expect(run.report.exitCode).toBe(1)
+    expect(run.stderr).toMatch(/sandbox-mode switch refused: full access for the workspace .* needs one consent for that workspace first/)
+    expect(run.report.modeEvents).not.toContain('danger-full-access')
   })
 
   it.each([

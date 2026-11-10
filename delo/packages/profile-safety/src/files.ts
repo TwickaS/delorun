@@ -36,10 +36,11 @@ export const SAFETY_RECORD_SCHEMA = 'delo.profile-safety/1'
 export const DELO_COMPATIBILITY_FILENAME = 'delo-compatibility.json'
 
 /**
- * Delo's own state files in the profile history. A history version that does not hold one may come from before Delo
- * tracked it, as when upstream's plugin manager created the history with its own five files, so a restore keeps the
- * profile's current copy of such a file instead of removing it. The copy of the home patch is not among them: a version
- * without one restores no home patch.
+ * Delo's own state files in the profile history. A history version that does not hold one, when no version up to it
+ * held it either, comes from before the history tracked it, as when upstream's plugin manager created the history with
+ * its own five files, or before the file existed; a restore keeps the profile's current copy of such a file instead of
+ * removing it. A version written after the file was removed restores its absence. The copy of the home patch is not
+ * among them: a version without one restores no home patch.
  */
 export const DELO_STATE_FILES: readonly string[] = [DELO_COMPATIBILITY_FILENAME, SAFETY_RECORD_FILENAME, UPDATE_REPORT_FILENAME]
 

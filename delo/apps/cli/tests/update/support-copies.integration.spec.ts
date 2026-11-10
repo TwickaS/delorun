@@ -3,7 +3,7 @@
  * as contract C19's error code, and every other failure passes through unchanged.
  */
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -17,7 +17,11 @@ import { sessionDataCopies } from '../../src/update/support.ts'
 
 const v = (text: string): RuntimeVersion => brandString<RuntimeVersion>(text)
 let home: string
-beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'delo-support-')) })
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), 'delo-support-'))
+  // A home's CLI profile, whose writer lock a rollback holds.
+  mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
+})
 afterEach(() => { rmSync(home, { recursive: true, force: true }) })
 
 /**

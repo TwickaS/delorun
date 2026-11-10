@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
@@ -20,8 +21,10 @@ import { NO_APPROVED_CONTENT } from '../src/compose.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { cliRefusal } from '../src/refusals.ts'
-import { fullAccessRequests, HEADLESS_PROFILE, refuseLauncherOptions, type HeadlessDependencies } from '../src/headless.ts'
+import { fullAccessPresetNames, fullAccessRequests, HEADLESS_PROFILE, refuseLauncherOptions, type HeadlessDependencies } from '../src/headless.ts'
+import type { PatchLayer } from '../src/patch-layers.ts'
 import { headless, headlessCommand, headlessDependencies } from '../src/upstream.ts'
+import { installCliLastResort, registerFatalRelease } from '../src/last-resort.ts'
 import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts'
 import { composedBootRows, composedProviders } from './fixtures/composed-rows.ts'
 
@@ -58,8 +61,9 @@ afterEach(() => {
  * @param overrides - rows that replace the composed ones.
  * @returns the dependencies.
  */
-function recording(seen: RunProfileOptions[], stops: string[], overrides: readonly BootedRow[] = []): HeadlessDependencies {
+function recording(seen: RunProfileOptions[], stops: string[], overrides: readonly BootedRow[] = [], fatalRelease: HeadlessDependencies['fatalRelease'] = () => () => undefined): HeadlessDependencies {
   return {
+    fatalRelease,
     prepareProfile: upstreamDependencies().prepareProfile,
     approvedPluginContent: NO_APPROVED_CONTENT,
     preStartSteps: upstreamDependencies().preStartSteps,
@@ -92,6 +96,31 @@ describe('delorun headless', { timeout: 60_000 }, () => {
     expect(existsSync(join(deloHome, 'run', HEADLESS_PROFILE, 'sandbox.patch.yml'))).toBe(true)
     expect(exits).toHaveLength(1)
     exits[0]!()
+  })
+
+  it('disposes the booted Host within the bound when the run crashes after boot, then exits 1', async () => {
+    const emitter = new EventEmitter()
+    const exits: number[] = []
+    const uninstall = installCliLastResort(['headless', 'task'], { process: emitter, stderr: () => undefined, exit: (code) => { exits.push(code) } })
+    const stops: string[] = []
+    let unregister: (() => void) | undefined
+    try {
+      expect(await headless(['task'], context, recording([], stops, [], (teardown) => (unregister = registerFatalRelease(teardown))), () => undefined)).toBeUndefined()
+      emitter.emit('uncaughtException', new Error('the task crashed'))
+      await vi.waitFor(() => { expect(exits).toEqual([1]) })
+      expect(stops).toEqual(['dispose'])
+    } finally {
+      unregister?.()
+      uninstall()
+    }
+  })
+
+  it('leaves no crash teardown registered after a refused Host stopped', async () => {
+    let registered = 0
+    const fatalRelease: HeadlessDependencies['fatalRelease'] = () => { registered += 1; return () => { registered -= 1 } }
+    const refused = await headless(['task'], context, recording([], [], [{ id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'failed' }], fatalRelease), () => undefined).then(() => undefined, (failure: unknown) => failure)
+    expect(refused).toBeInstanceOf(CliError)
+    expect(registered).toBe(0)
   })
 
   it('refuses upstream\'s launcher options before anything runs', async () => {
@@ -164,7 +193,7 @@ describe('delorun headless', { timeout: 60_000 }, () => {
   it('is the command delorun runs, over upstream\'s runner', () => {
     expect(headlessCommand.name).toBe('headless')
     expect(headlessDependencies().cwd()).toBe(process.cwd())
-    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'loadEnvironment', 'preStartSteps', 'prepareProfile', 'runProfile'])
+    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'fatalRelease', 'loadEnvironment', 'preStartSteps', 'prepareProfile', 'runProfile'])
   })
 })
 
@@ -252,5 +281,21 @@ describe('delorun headless asking for full access', { timeout: 60_000 }, () => {
     expect(fullAccessRequests(['--permission-mode=workspace-write'], { DSH_PERMISSION_MODE: 'workspace-write' })).toEqual([])
     expect(fullAccessRequests(['--', '--permission-mode', FULL], {})).toEqual([])
     expect(fullAccessRequests(['task', '--', `--permission-mode=${FULL}`], {})).toEqual([])
+  })
+
+  it('reads a request trimmed and case-folded, in the option and in the variable', () => {
+    expect(fullAccessRequests(['--permission-mode', ` ${FULL.toUpperCase()} `], {})).toEqual([`--permission-mode ${FULL.toUpperCase()}`])
+    expect(fullAccessRequests(['task'], { DSH_PERMISSION_MODE: ` Danger-Full-Access\t` })).toEqual(['DSH_PERMISSION_MODE=Danger-Full-Access'])
+  })
+
+  it('counts a preset of the profile that selects the full-access sandbox mode, in any layer, and no other preset', () => {
+    const layers: PatchLayer[] = [
+      { source: 'base', patches: [{ insert: [{ id: 'permission', name: '@deepseek-ai/dsh-permission-presets', config: { presets: { 'workspace-write': { sandbox: 'workspace-write' } } } }] }] },
+      { source: 'profile', patches: [{ id: 'permission', config: { presets: { Yolo: { sandbox: ' DANGER-full-access' }, careful: { sandbox: 'read-only' } } } }] },
+    ]
+    const presets = fullAccessPresetNames(layers)
+    expect([...presets].sort()).toEqual([FULL, 'yolo'])
+    expect(fullAccessRequests(['--permission-mode', 'yolo'], {}, presets)).toEqual(['--permission-mode yolo'])
+    expect(fullAccessRequests(['--permission-mode=careful'], {}, presets)).toEqual([])
   })
 })

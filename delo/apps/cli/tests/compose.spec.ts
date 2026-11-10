@@ -23,12 +23,14 @@ import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 
 /** The rows of `@delo/bundle-headless`. */
-const HEADLESS_ROWS = ['delo-instruction-consent', 'delo-permission-defaults', 'delo-fetch-guard', 'delo-update-gate'] as const
+const HEADLESS_ROWS = ['delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent', 'delo-permission-defaults', 'delo-fetch-guard', 'delo-update-gate'] as const
 
 /** The services the headless bundle's rows provide and the row each comes from. */
 const HEADLESS_SERVICES = [
   ['fetchGuard', 'delo-fetch-guard'],
   ['writeConsent', 'delo-instruction-consent'],
+  ['mcpAddConsent', 'delo-mcp-consent'],
+  ['scheduleConsent', 'delo-schedule-consent'],
   ['sandboxModeGuard', 'delo-permission-defaults'],
   [TURN_GATE_SERVICE, 'delo-update-gate'],
 ] as const
@@ -339,6 +341,8 @@ describe('the headless profile', { timeout: 60_000 }, () => {
     expect(composed.required).toEqual([
       { id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local' },
       { id: 'delo-instruction-consent', name: '@delo/plugin-instruction-consent' },
+      { id: 'delo-mcp-consent', name: '@delo/plugin-mcp-consent' },
+      { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent' },
       { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults' },
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard' },
       { id: 'delo-update-gate', name: '@delo/bundle-local/update-gate' },

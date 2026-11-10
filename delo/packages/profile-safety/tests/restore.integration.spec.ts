@@ -5,7 +5,7 @@
  * denial tests `c03-restore-lists-changes` and `c03-restore-revoked-stays-disabled`.
  */
 import { execFileSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ProfileSafetyError } from '../src/errors.ts'
@@ -130,6 +130,25 @@ describe.skipIf(!hasGit)('c03-restore-keeps-delo-state', () => {
       const after = readTree(profile.profileDir)
       for (const [name, text] of Object.entries(later)) expect(after[name]).toBe(text)
       expect(after['package.json']).toBe((await history.filesAt(version)).get('package.json'))
+    } finally {
+      profile.remove()
+    }
+  })
+})
+
+describe.skipIf(!hasGit)('c03-restore-removes-removed-delo-state', () => {
+  it('removes a Delo state file again when the version restored was written after the file was removed', async () => {
+    const profile = fixture({ deloCompatibility: JSON.stringify({ '@delo/plugin@1.2.3': ['1.0.0'] }) })
+    try {
+      const history = openHistory({ profileDir: profile.profileDir })
+      await recordSnapshot({ profileDir: profile.profileDir, homeDir: profile.homeDir, summary: 'With exemptions', changedBy: { kind: 'person' }, history })
+      rmSync(join(profile.profileDir, 'delo-compatibility.json'))
+      const removed = await recordSnapshot({ profileDir: profile.profileDir, homeDir: profile.homeDir, summary: 'Without exemptions', changedBy: { kind: 'person' }, history })
+      writeFileSync(join(profile.profileDir, 'delo-compatibility.json'), JSON.stringify({ '@delo/plugin@2.0.0': ['1.0.0'] }))
+      const plan = await planRestore({ profileDir: profile.profileDir, homeDir: profile.homeDir, version: removed, history })
+      expect(plan.writes).toContain('delo-compatibility.json')
+      await applyRestore(plan, { profileDir: profile.profileDir, homeDir: profile.homeDir, version: removed, history })
+      expect(readTree(profile.profileDir)['delo-compatibility.json']).toBeUndefined()
     } finally {
       profile.remove()
     }

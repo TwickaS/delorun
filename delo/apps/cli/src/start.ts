@@ -281,21 +281,34 @@ export interface StartRequest {
 /** The level of the home process's log. */
 const HOME_LOG_LEVEL = 'info'
 
+/** Which of upstream's per-run process handlers its profile runner installs. */
+export interface UpstreamProcessHandlers {
+  /**
+   * Its SIGTERM and SIGINT handlers: false under a home process, whose one signal listener serves every Host it boots,
+   * and true for a one-shot run such as `delorun headless`, which upstream's runner ends.
+   */
+  readonly signals: boolean
+  /**
+   * Its fail-loud handlers. Always false under the CLI: the entry point's one last-resort handler reports a crash and
+   * ends the process after the teardown registered through `registerFatalRelease`, so the booted Host is disposed
+   * within the bound instead of after the CLI's handler already ended the process.
+   */
+  readonly failLoud: false
+}
+
 /**
  * Boot a profile with upstream's profile runner and read it as the start reads a booted profile, with H2's health route
  * on its web server ({@link serveHealth}).
  * @param options - the runner's options.
- * @param processHandlers - whether upstream's runner installs its own termination-signal and fail-loud handlers: false
- *   under a home process, whose one signal listener and the entry point's one last-resort handler serve every Host it
- *   boots, and true for a one-shot run such as `delorun headless`.
+ * @param handlers - which of upstream's per-run process handlers the runner installs.
  * @returns the booted profile.
  */
-export async function runUpstreamProfile(options: RunProfileOptions, processHandlers: boolean): Promise<BootedProfile> {
+export async function runUpstreamProfile(options: RunProfileOptions, handlers: UpstreamProcessHandlers): Promise<BootedProfile> {
   // Loaded after the launch variables are set, so upstream resolves the Delo home.
   const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
   // An installed Delo's plugin manager runs the pnpm its closure carries ([package manager](./package-manager.ts)).
   const packageManager = shippedPackageManager()
-  const { ctx, shutdown } = await runProfile({ ...options, signals: processHandlers, failLoud: processHandlers, ...packageManager === undefined ? {} : { packageManager } })
+  const { ctx, shutdown } = await runProfile({ ...options, signals: handlers.signals, failLoud: handlers.failLoud, ...packageManager === undefined ? {} : { packageManager } })
   serveHealth(ctx)
   return {
     rows: () => bootedRows(ctx),
@@ -351,7 +364,7 @@ export function upstreamDependencies(): StartDependencies {
     },
     // The home process's signal listener and the entry point's last-resort handler serve every Host it boots, so
     // upstream's runner installs neither per boot.
-    runProfile: options => runUpstreamProfile(options, false),
+    runProfile: options => runUpstreamProfile(options, { signals: false, failLoud: false }),
     loadEnvironment: () => loadDeloEnvironment(),
     probe: updateChannelProbe,
     onSignal: listenProcessSignals,

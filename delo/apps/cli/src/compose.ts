@@ -148,6 +148,8 @@ const GUARD_ROWS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = 
  */
 export const HEADLESS_ROW_VALUES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   'delo-instruction-consent': { enabled: true },
+  'delo-mcp-consent': { enabled: true },
+  'delo-schedule-consent': { enabled: true },
   'delo-permission-defaults': { enabled: true },
   ...GUARD_ROWS,
 }

@@ -354,7 +354,7 @@
       "path": "packages/boot/plugin-manager/src/history.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the profile's history, a git repository whose git directory is `.plugin-manager/history` and whose work tree is the profile, run with no system or global configuration, no hooks and no signing, writing files at mode 0600. Opening a history that exists adds to its exclusions every managed file they do not admit, so a history that upstream's five-file manager created also holds Delo's files from the next version on; exclusions only widen."
+      "reason": "Profile history and safe mode: the profile's history, a git repository whose git directory is `.plugin-manager/history` and whose work tree is the profile, run with no system or global configuration, no hooks and no signing, writing files at mode 0600. Opening a history that exists adds to its exclusions every managed file they do not admit, so a history that upstream's five-file manager created also holds Delo's files from the next version on; exclusions only widen, are replaced atomically, and regain their first line that excludes the rest of the profile when it is missing. `trackedBy` says whether any version up to one held a file, so Delo's restore tells a file the history did not track yet from one that was removed."
     },
     {
       "path": "packages/boot/plugin-manager/src/index.ts",

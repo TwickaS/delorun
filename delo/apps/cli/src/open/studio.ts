@@ -13,6 +13,7 @@ import { canOpenNativePath } from '@deepseek-ai/dsh-native-command'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { StudioLink } from '@delo/contract-home-process'
 import { sendHomeRequest } from '@delo/home-process'
+import { cliRedactor } from '../refusals.ts'
 
 /**
  * Run a command and report its exit code.
@@ -191,7 +192,7 @@ export function describeOpening(outcome: OpenOutcome, profile: string): string {
     case 'no-answer':
       return `The home process for the profile ${profile} is listening but did not answer in time; see delorun status${flag} and delorun logs${flag}.\n`
     case 'refused':
-      return `The home process for the profile ${profile} did not give a studio link (${outcome.code}${outcome.detail === undefined ? '' : `: ${outcome.detail}`}); see delorun status${flag}.\n`
+      return `The home process for the profile ${profile} did not give a studio link (${outcome.code}${outcome.detail === undefined ? '' : `: ${cliRedactor().text(outcome.detail)}`}); see delorun status${flag}.\n`
     default: {
       const unknown: never = outcome
       throw new Error(`unknown opening outcome ${JSON.stringify(unknown)}`)

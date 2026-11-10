@@ -212,7 +212,7 @@ export interface RestorePlan {
 export async function planRestore(request: RestoreRequest): Promise<RestorePlan> {
   const history = request.history ?? openHistory(request)
   const current = currentFiles(request.profileDir)
-  const restored = keepUntrackedState(await filesAt(history, request.version, request.profileDir), current)
+  const restored = await restoredFiles(history, request.version, request.profileDir, current)
   const adjusted = adjustForRevoked(restored, request.revoked ?? [], request.profileDir)
   return {
     version: request.version,
@@ -237,7 +237,7 @@ export async function planRestore(request: RestoreRequest): Promise<RestorePlan>
  */
 export async function applyRestore(plan: RestorePlan, request: RestoreRequest): Promise<void> {
   const history = request.history ?? openHistory(request)
-  const restored = keepUntrackedState(await filesAt(history, request.version, request.profileDir), currentFiles(request.profileDir))
+  const restored = await restoredFiles(history, request.version, request.profileDir, currentFiles(request.profileDir))
   const adjusted = adjustForRevoked(restored, request.revoked ?? [], request.profileDir)
   try {
     // Only the files the plan listed are written, so a plan the person approved is the set of changes they get.
@@ -285,21 +285,24 @@ export async function latestVersion(history: ProfileHistory): Promise<ProfileVer
 }
 
 /**
- * A version's files with the profile's current copy of each Delo state file the version does not hold
- * ({@link DELO_STATE_FILES}), so a restore never removes Delo's state because an older version did not track it.
- * @param restored - the version's files.
+ * A version's files to restore: for each Delo state file ({@link DELO_STATE_FILES}) that the version does not hold
+ * and that no version up to it ever held, because the history did not track it yet, the profile's current copy, so a
+ * restore never removes Delo's state for that reason alone. A state file that a version up to this one held and this
+ * one does not was removed, and the restore removes it again.
+ * @param history - the open history.
+ * @param version - the version.
+ * @param profileDir - the profile directory, for a refusal.
  * @param current - the profile's files now.
  * @returns the files to restore.
+ * @throws {ProfileSafetyError} `RESTORE_REFUSED` when the version cannot be read.
  */
-function keepUntrackedState(restored: Map<string, string | undefined>, current: ReadonlyMap<string, string | undefined>): Map<string, string | undefined> {
-  const kept = new Map(restored)
-  for (const name of DELO_STATE_FILES) if (kept.get(name) === undefined) kept.set(name, current.get(name))
-  return kept
-}
-
-async function filesAt(history: ProfileHistory, version: ProfileVersionId, profileDir: string): Promise<Map<string, string | undefined>> {
+async function restoredFiles(history: ProfileHistory, version: ProfileVersionId, profileDir: string, current: ReadonlyMap<string, string | undefined>): Promise<Map<string, string | undefined>> {
   try {
-    return await history.filesAt(version)
+    const files = await history.filesAt(version)
+    for (const name of DELO_STATE_FILES) {
+      if (files.get(name) === undefined && !(await history.trackedBy(version, name))) files.set(name, current.get(name))
+    }
+    return files
   } catch (error) {
     throw new ProfileSafetyError('RESTORE_REFUSED', profileDir, `profile version ${version} cannot be read: ${String(error)}`, ['repair-profile'], [], { cause: error })
   }

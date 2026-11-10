@@ -2,12 +2,18 @@
  * Test-only headless driver: runs `delorun headless` for the home's `headless` profile with upstream's real profile
  * preparation, bundle linking and profile runner, in this process under the isolated home the spawning spec sets up.
  * Delo's composition runs as in a real run, with one test overlay from the approved plugin content step that disables
- * upstream's `headless-runner` row, so no task runs. It prints one JSON line and exits.
+ * upstream's `headless-runner` row (except in mode `permission-mode`), so no task runs. It prints one JSON line and exits.
  *
  * Mode `probe` (the default): the booted Host's guards are asked in this process, and the line holds each outcome: a
  * fetch to a loopback address through the web seam's real HTTP provider, a `write` of an `AGENTS.md` that a scripted
  * model requests from the real file tool, a switch to full access for a workspace without a grant (the guard and the
  * preset service), and the turn gate.
+ *
+ * Mode `permission-mode`: the profile's `headless-runner` row stays enabled and the task's arguments carry
+ * `--permission-mode danger-full-access` for a workspace without a grant. Delo's pre-boot refusal is bypassed by
+ * adding the option to the arguments upstream's real runner receives, after `runHeadless`'s own check has passed
+ * without it, so the in-Host guard decides; the line, written when the runner ends the process, holds
+ * the `sandbox/mode` events appended and the exit code.
  *
  * Mode `disable-guard` or `replace-guard`: the overlay disables the `delo-fetch-guard` row or inserts it again with
  * another plugin; the line holds the composition's refusal and how many times upstream's profile runner was called.
@@ -27,7 +33,7 @@ import { CliError } from '../../src/exit.ts'
 import { runHeadless, type HeadlessDependencies } from '../../src/headless.ts'
 import { bootedRows, serviceProvider, upstreamDependencies, type BootedProfile } from '../../src/start.ts'
 
-type Mode = 'probe' | 'disable-guard' | 'replace-guard'
+type Mode = 'probe' | 'permission-mode' | 'disable-guard' | 'replace-guard'
 const mode = (process.argv[2] ?? 'probe') as Mode
 const output = { env: { ...process.env }, stdout: (text: string) => void process.stderr.write(text), stderr: (text: string) => void process.stderr.write(text) }
 const workspace = join(process.cwd(), 'workspace')
@@ -35,22 +41,28 @@ const { home } = await prepareHome(output, undefined)
 mkdirSync(workspace, { recursive: true })
 
 /** The test overlay of each mode, which applies before the sandbox overlay. */
-const OVERLAYS: Record<Mode, string> = {
+const OVERLAYS: Record<Exclude<Mode, 'permission-mode'>, string> = {
   probe: '- id: headless-runner\n  disabled: true\n',
   'disable-guard': '- id: headless-runner\n  disabled: true\n\n- id: delo-fetch-guard\n  disabled: true\n',
   'replace-guard': '- id: headless-runner\n  disabled: true\n\n- insert:\n    - id: delo-fetch-guard\n      name: \'@deepseek-ai/dsh-web-fetch-http\'\n',
 }
 
 let root: Context | undefined
+/** The probe's agent and scripted model, whose first turn starts before the gate is released. */
+let heldTurn: HeldTurn | undefined
 let runnerCalls = 0
+/** The `sandbox/mode` events the booted Host appended, in `permission-mode` mode. */
+const modeEvents: unknown[] = []
 let releases = 0
 const upstream = upstreamDependencies()
 const dependencies: HeadlessDependencies = {
   prepareProfile: upstream.prepareProfile,
   preStartSteps: upstream.preStartSteps,
   loadEnvironment: upstream.loadEnvironment,
+  fatalRelease: upstream.fatalRelease,
   cwd: () => process.cwd(),
   approvedPluginContent: () => {
+    if (mode === 'permission-mode') return Promise.resolve([])
     const file = join(home.path, 'run', 'headless-driver-overlay.patch.yml')
     writeFileSync(file, OVERLAYS[mode])
     return Promise.resolve([file])
@@ -58,8 +70,12 @@ const dependencies: HeadlessDependencies = {
   async runProfile(options) {
     runnerCalls += 1
     const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
-    const { ctx } = await runProfile({ ...options, signals: false, failLoud: false })
+    // The request Delo's pre-boot check never sees reaches upstream's runner, so only the in-Host guard decides.
+    const args = mode === 'permission-mode' ? ['--permission-mode', 'danger-full-access', ...options.args] : options.args
+    const { ctx } = await runProfile({ ...options, args, signals: false, failLoud: false })
     root = ctx
+    if (mode === 'probe') heldTurn = await startHeldTurn(ctx)
+    ctx.on('session/event', (_session, event) => { if (event.type === 'sandbox/mode') modeEvents.push(event.data.mode) })
     return {
       rows: () => bootedRows(ctx),
       providerOf: name => serviceProvider(ctx, name),
@@ -137,6 +153,35 @@ async function scriptedAgent(ctx: Context, target: string): Promise<{ agent: Age
   return { agent, adapter }
 }
 
+/** A turn started on the scripted model while the Host's turn gate is still closed. */
+interface HeldTurn {
+  readonly agent: Agent
+  readonly adapter: ScriptedAdapter
+  /** What the Host showed while the turn waited: the model requests made, and the turn starts logged. */
+  readonly beforeRelease: { readonly modelRequests: number, readonly turnStarts: number, readonly agentStatus: string, readonly gateHeld: boolean | undefined, readonly releases: number }
+}
+
+/** How long the started turn is given to reach the model, which it must not, while the gate is closed. */
+const HOLD_OBSERVATION_MS = 1_000
+
+/**
+ * Start a turn before the gate is released and observe that it does not reach the model.
+ * @param ctx - the booted root context, whose turn gate is still closed.
+ * @returns the agent, the scripted model and what was observed while the turn waited.
+ */
+async function startHeldTurn(ctx: Context): Promise<HeldTurn> {
+  const { agent, adapter } = await scriptedAgent(ctx, join(workspace, 'AGENTS.md'))
+  const started = Promise.withResolvers<void>()
+  const stop = ctx.on('session/event', (session, event) => { if (session === agent.session && event.type === 'turn/start') started.resolve() })
+  agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Update the instructions.' }], source: { kind: 'user' } }))
+  await started.promise
+  stop()
+  await new Promise(resolve => setTimeout(resolve, HOLD_OBSERVATION_MS))
+  const turnStarts = agent.session.ownEvents().filter(event => event.type === 'turn/start').length
+  const beforeRelease = { modelRequests: adapter.requests, turnStarts, agentStatus: agent.status, gateHeld: ctx.get('deloTurnGate')?.held, releases }
+  return { agent, adapter, beforeRelease }
+}
+
 /**
  * Ask every guard of the booted Host.
  * @param ctx - the booted root context.
@@ -144,26 +189,31 @@ async function scriptedAgent(ctx: Context, target: string): Promise<{ agent: Age
  */
 async function probe(ctx: Context): Promise<Record<string, unknown>> {
   const target = join(workspace, 'AGENTS.md')
-  const { agent, adapter } = await scriptedAgent(ctx, target)
+  const { agent, adapter, beforeRelease } = heldTurn!
   const fetch = await refusalOf(() => ctx.web.fetch({ url: 'http://127.0.0.1:9/' }))
   const guardReason = ctx.get('sandboxModeGuard')?.(agent.session, 'danger-full-access')
   const selection = await refusalOf(() => ctx.permissionPresets.set(agent.session, 'danger-full-access'))
   const modes = (): unknown[] => agent.session.ownEvents().flatMap(event => event.type === 'sandbox/mode' ? [event.data.mode] : [])
-  // The turn runs only because the gate was released; the model's write request reaches the file tool.
-  agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Update the instructions.' }], source: { kind: 'user' } }))
+  // The turn started before the release; it ran only because the gate was released, and the model's write request reaches the file tool.
   await agent.whenIdle()
   const results = agent.session.ownEvents().flatMap(event => event.type === 'tool/result' ? [event.data] : [])
   return {
     fetch,
     instructionWrite: { toolResults: results.map(({ message, error }) => ({ isError: message.isError === true, error })), written: existsSync(target) },
     fullAccess: { guardReason: guardReason ?? null, selection, modes: modes() },
-    turnGate: { present: ctx.get('deloTurnGate') !== undefined, held: ctx.get('deloTurnGate')?.held, releases, modelRequests: adapter.requests, turnEnds: agent.session.ownEvents().flatMap(event => event.type === 'turn/end' ? [event.data.reason] : []) },
+    turnGate: { present: ctx.get('deloTurnGate') !== undefined, beforeRelease, held: ctx.get('deloTurnGate')?.held, releases, modelRequests: adapter.requests, turnEnds: agent.session.ownEvents().flatMap(event => event.type === 'turn/end' ? [event.data.reason] : []) },
   }
 }
 
 try {
   const report: Record<string, unknown> = { outcome: 'booted' }
+  if (mode === 'permission-mode') {
+    // Upstream's runner ends the process once the task's refusal is reported; the line is written as it exits.
+    process.on('exit', code => { process.stdout.write(`${JSON.stringify({ ...report, runnerCalls, exitCode: code, modeEvents })}\n`) })
+  }
   await runHeadless({ home: home.path, args: ['probe task'], output, env: output.env }, dependencies)
+  // The runner is already at work; upstream's shutdown ends this process when it finishes.
+  if (mode === 'permission-mode') await new Promise<never>(() => {})
   if (mode === 'probe' && root !== undefined) Object.assign(report, await probe(root))
   process.stdout.write(`${JSON.stringify({ ...report, runnerCalls })}\n`)
   await root?.fiber.dispose()

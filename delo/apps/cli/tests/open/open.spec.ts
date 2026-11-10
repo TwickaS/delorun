@@ -278,6 +278,13 @@ describe('a home process\'s answer', TIMEOUT, () => {
 })
 
 describe('the opener', () => {
+  it('redacts a secret the home process\'s refusal detail quotes', () => {
+    const key = ['sk', '0123456789abcdef0123456789abcdef'].join('-')
+    const text = describeOpening({ kind: 'refused', code: 'STUDIO_UNAVAILABLE', detail: `the Host answered ${key}` }, 'default')
+    expect(text).toContain('STUDIO_UNAVAILABLE: the Host answered [redacted:provider-key]')
+    expect(text).not.toContain(key)
+  })
+
   it('runs a command and reports its exit code, 127 when it cannot start', async () => {
     expect(await spawnCommand(process.execPath, ['-e', 'process.exit(3)'], 'ignore')).toBe(3)
     expect(await spawnCommand(process.execPath, ['-e', ''])).toBe(0)

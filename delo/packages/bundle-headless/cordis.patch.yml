@@ -28,6 +28,19 @@
       config:
         enabled: true
 
+    # A new stdio MCP server or a scheduled follow-up asks for consent. The
+    # headless template mounts neither an MCP client nor a schedule runtime;
+    # these rows guard one that the person's own profile patch adds.
+    - id: delo-mcp-consent
+      name: '@delo/plugin-mcp-consent'
+      config:
+        enabled: true
+
+    - id: delo-schedule-consent
+      name: '@delo/plugin-schedule-consent'
+      config:
+        enabled: true
+
     # A full-access mode for a workspace whose full access the person has not
     # granted in the studio is refused; a recorded grant stands.
     - id: delo-permission-defaults
@@ -49,3 +62,22 @@
       config:
         enabled: true
         holdUntilChecked: true
+
+# Plugin management protects these guard rows and the sandbox rows as
+# `@delo/bundle-local` does in the CLI profile: the `plugin_manager` tool, which
+# runs without a prompt in full access, cannot disable a protected row, change
+# its settings, or deselect or remove a bundle that carries one, so a model in a
+# workspace with a full-access grant cannot turn a guard off for the rest of the
+# run. Upstream's base bundle gives the row no config, so `protectedPlugins` is
+# the only key.
+- id: plugin-manager
+  config:
+    protectedPlugins:
+      - '@delo/plugin-instruction-consent'
+      - '@delo/plugin-mcp-consent'
+      - '@delo/plugin-permission-defaults'
+      - '@delo/plugin-schedule-consent'
+      - '@delo/plugin-fetch-guard'
+      - '@delo/bundle-local/update-gate'
+      - '@deepseek-ai/dsh-sandbox-local'
+      - '@deepseek-ai/dsh-sandbox-policy'

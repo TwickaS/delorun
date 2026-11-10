@@ -40,30 +40,34 @@ export interface UpdateSupportOptions {
   readonly sources: ReportSources
   /** The clock; `() => new Date()` in a real run. */
   readonly now: () => Date
+  /** How long an update's snapshot and a rollback wait for the profile's writer lock; `PROFILE_LOCK_WAIT_MS` by default. */
+  readonly profileLockWaitMs?: number
 }
 
 /**
  * The profile history an update saves and a rollback restores: C3's snapshot named for the update, with the report,
- * and Delo's record of the update in `delo-safety.json`. Both hold upstream's profile writer lock while they write.
+ * and Delo's record of the update in `delo-safety.json`. `save` holds upstream's profile writer lock while it writes;
+ * `restore` runs inside {@link rollbackRecordedUpdate}, which holds that lock across the whole rollback.
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile.
  * @param now - the clock.
- * @returns the snapshots, whose `restore` brings back the version the update record names.
+ * @param lockWaitMs - how long `save` waits for the profile's writer lock; `PROFILE_LOCK_WAIT_MS` by default.
+ * @returns the snapshots, whose `restore` brings back the version the update record names; the caller holds the lock.
  */
-export function profileSnapshots(home: string, profile: string, now: () => Date): ProfileSnapshots & { restore(record: Pick<UpdateJournal, 'from' | 'to' | 'snapshot'>): Promise<void> } {
+export function profileSnapshots(home: string, profile: string, now: () => Date, lockWaitMs?: number): ProfileSnapshots & { restore(record: Pick<UpdateJournal, 'from' | 'to' | 'snapshot'>): Promise<void> } {
   const profileDir = join(home, 'profiles', profile)
   return {
     save: (from, to, report) => withProfileLock(profileDir, 'SNAPSHOT_FAILED', async () => {
       const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: `Before update to Delo ${to}`, changedBy: { kind: 'person' }, report })
       await writeSafetyRecord(profileDir, withUpdate(readSafetyRecord(profileDir), { from, to, at: now().toISOString(), state: 'applying', snapshot }))
       return snapshot
-    }),
-    restore: record => withProfileLock(profileDir, 'RECOVER_REFUSED', async () => {
+    }, lockWaitMs),
+    restore: async (record) => {
       const update = readSafetyRecord(profileDir).update
       const version = record.snapshot ?? (update?.from === record.from && update.to === record.to ? update.snapshot : undefined)
       await rollbackToSnapshot({ profileDir, homeDir: home, ...version === undefined ? {} : { version: version as ProfileVersionId } })
       await writeSafetyRecord(profileDir, withUpdate(readSafetyRecord(profileDir), { from: record.from, to: record.to, at: now().toISOString(), state: 'rolled-back', ...version === undefined ? {} : { snapshot: version } }))
-    }),
+    },
   }
 }
 
@@ -80,28 +84,31 @@ export async function assertHistoryGit(): Promise<void> {
 
 /**
  * Run C3's one rollback function over the home's copies and the profile history: refuse when git cannot run or while
- * another process uses the chat data, check that the version rolled back to is installed and passes its start check
- * before anything changes, then the caller's `rolling-back` mark, the data, the profile and the caller's runtime
- * switch.
- * @param options - the home, the profile, the store and the clock.
+ * another process uses the chat data, take upstream's profile writer lock, check that the version rolled back to is
+ * installed and passes its start check before anything changes, then the caller's `rolling-back` mark, the data, the
+ * profile and the caller's runtime switch. The lock is held from before the mark until the switch, so no
+ * plugin-manager change lands in the middle of the table and a lock that cannot be taken refuses before anything
+ * changed.
+ * @param options - the home, the profile, the store, the clock and the lock's wait.
  * @param record - the update record.
  * @param steps - whether only the profile goes back, the caller's runtime switch and its `rolling-back` mark.
  * @returns what the rollback did.
  * @throws {HomeProcessError} `GIT_UNAVAILABLE` when git cannot run; {@link DataSafetyError} `ROLLBACK_NEEDS_DATA_COPY`
- *   when the table refuses; {@link DataInUseError} while another process uses the chat data; the store's error when the
- *   version rolled back to is unusable; nothing has changed then.
+ *   when the table refuses; {@link DataInUseError} while another process uses the chat data; `ProfileSafetyError`
+ *   `RECOVER_REFUSED` when the profile's writer lock is not released in time; the store's error when the version rolled
+ *   back to is unusable; nothing has changed then.
  */
-export async function rollbackRecordedUpdate(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'root' | 'now'>, record: UpdateJournal, steps: RollbackSteps): Promise<RollbackResult> {
+export async function rollbackRecordedUpdate(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'root' | 'now' | 'profileLockWaitMs'>, record: UpdateJournal, steps: RollbackSteps): Promise<RollbackResult> {
   await assertHistoryGit()
   const snapshots = profileSnapshots(options.home, options.profile, options.now)
   if (!steps.profileOnly) assertSoleDataUser(options.home)
-  return rollbackUpdate({
+  return withProfileLock(join(options.home, 'profiles', options.profile), 'RECOVER_REFUSED', () => rollbackUpdate({
     home: options.home, record, profileOnly: steps.profileOnly, now: options.now(),
     preflight: async () => { await options.store.checkRuntime(record.from, await options.root()) },
     markRollingBack: steps.markRollingBack,
     restoreProfile: () => snapshots.restore(record),
     switchRuntime: steps.switchRuntime,
-  })
+  }), options.profileLockWaitMs)
 }
 
 /**
@@ -109,7 +116,7 @@ export async function rollbackRecordedUpdate(options: Pick<UpdateSupportOptions,
  * @param options - the home, the profile, the store and the clock.
  * @returns the copies.
  */
-export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'root' | 'now'>): SessionDataCopies {
+export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | 'profile' | 'store' | 'root' | 'now' | 'profileLockWaitMs'>): SessionDataCopies {
   const { home, store } = options
   const refusal = (error: unknown): unknown => {
     if (isDataSafetyError(error, 'DATA_COPY_NO_SPACE')) return new HomeProcessError('DATA_COPY_NO_SPACE', error.detail)
@@ -248,5 +255,5 @@ export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport 
     ...options.preLaunch === undefined ? {} : { preLaunch: options.preLaunch },
     report: { build: version => buildFromSources('cli-home', options.sources, version) },
   }, options.home)
-  return { store, snapshots: profileSnapshots(options.home, options.profile, options.now), copies: sessionDataCopies(options) }
+  return { store, snapshots: profileSnapshots(options.home, options.profile, options.now, options.profileLockWaitMs), copies: sessionDataCopies(options) }
 }

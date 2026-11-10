@@ -31,6 +31,8 @@ interface FakeSystem {
   readonly requests: Array<{ readonly request: UnsignedRequest, readonly options: ExchangeOptions | undefined }>
   /** Milliseconds since the stop began. */
   time: number
+  /** The lock reads, start identity reads and signals in the order they happened. */
+  readonly events: Array<'lock' | 'start' | StopSignal>
 }
 
 let deloHome: string
@@ -66,29 +68,39 @@ async function stop(args: readonly string[], options: {
   readonly record: HomeLockRecord
   readonly answer: (system: FakeSystem) => ResponseLine[]
   readonly onSignal?: (system: FakeSystem, signal: StopSignal) => void
+  /** Runs at every read of the clock, to change the system between two steps of the command. */
+  readonly onNow?: (system: FakeSystem) => void
 }): Promise<{ code: number | undefined, stdout: string, stderr: string, system: FakeSystem }> {
   const live: ReadonlyArray<[number, string | undefined]> = options.running === false ? [] : [[PID, options.record.processStart ?? START]]
-  const system: FakeSystem = { processes: new Map(live), lock: options.record, signals: [], requests: [], time: 0 }
+  const system: FakeSystem = { processes: new Map(live), lock: options.record, signals: [], requests: [], time: 0, events: [] }
   const dependencies: StopDependencies = {
     send: async (_home, _profile, request, exchange) => {
       system.requests.push({ request, options: exchange })
       return options.answer(system)
     },
     readLock: () => {
+      system.events.push('lock')
       if (system.lock instanceof Error) throw system.lock
       return system.lock
     },
     processes: {
       platform: options.platform ?? 'linux',
       exists: pid => system.processes.has(pid),
-      start: pid => system.processes.get(pid),
+      start: (pid) => {
+        system.events.push('start')
+        return system.processes.get(pid)
+      },
       pidNamespace: () => options.ownNamespace ?? NAMESPACE,
     },
     kill: (pid, signal) => {
+      system.events.push(signal)
       system.signals.push({ pid, signal, at: system.time })
       options.onSignal?.(system, signal)
     },
-    now: () => system.time,
+    now: () => {
+      options.onNow?.(system)
+      return system.time
+    },
     sleep: async (ms) => { system.time += ms },
   }
   let stdout = ''
@@ -247,6 +259,84 @@ describe('delorun stop --now', () => {
     expect(run.code).toBe(EXIT.failed)
     expect(run.system.signals).toEqual([])
     expect(run.stderr).toContain('the home process refused to stop: UPDATE_IN_PROGRESS')
+  })
+})
+
+describe('delorun stop --now, after a signal', () => {
+  it('reads a holder whose process id another process took after SIGTERM as gone, and sends it no SIGKILL', async () => {
+    let replaced = false
+    const run = await stop(['--now'], {
+      record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }),
+      answer: silent,
+      // The process id changes hands at the last clock read of the SIGTERM wait, after the wait saw the holder run.
+      onNow: (system) => {
+        if (replaced || system.time < STOP_TERM_GRACE_MS || system.signals.length === 0) return
+        replaced = true
+        system.processes.set(PID, `linux:${BOOT_ID}:2000`)
+      },
+    })
+    expect(replaced).toBe(true)
+    expect(run.code).toBe(EXIT.ok)
+    expect(run.system.signals.map(({ signal }) => signal)).toEqual(['SIGTERM'])
+    expect(run.stdout).toContain('Delo stopped for the profile default.')
+    expect(run.stderr).toBe('')
+  })
+
+  it('reads the lock first and checks the holder immediately before each signal', async () => {
+    const run = await stop(['--now'], { record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }), answer: silent, onSignal: exitsOn('SIGKILL') })
+    const events = run.system.events
+    for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
+      const at = events.indexOf(signal)
+      expect(events.slice(at - 2, at + 1)).toEqual(['lock', 'start', signal])
+    }
+  })
+
+  it('says after SIGKILL that commands Delorun started may still be running', async () => {
+    const run = await stop(['--now'], { record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }), answer: silent, onSignal: exitsOn('SIGKILL') })
+    expect(run.stdout).toContain('sent it SIGKILL.\nCommands Delorun started may still be running: a command started in its own systemd scope survives the home process')
+  })
+
+  it('does not say it after SIGTERM alone', async () => {
+    const run = await stop(['--now'], { record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }), answer: silent, onSignal: exitsOn('SIGTERM') })
+    expect(run.stdout).not.toContain('Commands Delorun started')
+  })
+})
+
+describe('delorun stop with a holder whose start identity cannot be read', () => {
+  it('sends the request, signals nothing and names the unreadable start identity once the home process does not answer', async () => {
+    const run = await stop(['--now'], {
+      record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }),
+      answer: (system) => {
+        // The process still exists, but reading its start identity fails now.
+        system.processes.set(PID, undefined)
+        return silent()
+      },
+    })
+    expect(run.code).toBe(EXIT.failed)
+    expect(run.system.requests).toHaveLength(1)
+    expect(run.system.signals).toEqual([])
+    expect(run.stderr).toContain(`Delo did not send it SIGTERM: the start identity of process ${String(PID)} cannot be read now`)
+    expect(run.stderr).toContain(`Check that process ${String(PID)} is delorun's home process before ending it yourself.`)
+  })
+})
+
+describe('delorun stop output from the home process', () => {
+  const KEY = ['sk', '0123456789abcdef0123456789abcdef'].join('-')
+
+  it('redacts a provider key in the error and the detail of a refused stop', async () => {
+    const run = await stop(['--now'], { record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }), answer: () => [{ ok: false, error: `BAD ${KEY}`, detail: `key ${KEY}` }] })
+    expect(run.code).toBe(EXIT.failed)
+    expect(run.stderr).toContain('the home process refused to stop: BAD [redacted:provider-key] (key [redacted:provider-key])')
+    expect(run.stderr).not.toContain(KEY)
+  })
+
+  it('redacts a provider key in the error of a stop request that fails', async () => {
+    const drain = await stop([], { record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }), answer: () => { throw new Error(`socket said ${KEY}`) } })
+    expect(drain.stderr).toContain('its update channel did not answer: socket said [redacted:provider-key]')
+    expect(drain.stderr).not.toContain(KEY)
+    const now = await stop(['--now'], { record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }), answer: () => { throw new Error(`socket said ${KEY}`) }, onSignal: exitsOn('SIGTERM') })
+    expect(now.stdout).toContain('(socket said [redacted:provider-key])')
+    expect(now.stdout).not.toContain(KEY)
   })
 })
 

@@ -10,7 +10,8 @@
  * record read at the start and `checkHolder` confirms the live process as that record's holder: same process id, same
  * start identity and the same pid namespace where one is recorded. Every other case, Windows included, where no start
  * identity exists, is refused without a signal and named on standard error. A home process that refuses the stop is
- * not signalled. A drain stop never signals.
+ * not signalled. A drain stop never signals. After a `SIGKILL` it says that commands Delorun started may still run. What
+ * the home process answers or fails with is redacted by `cliRedactor` before it is printed.
  *
  * @module @delo/cli/stop
  */
@@ -22,6 +23,7 @@ import { sendHomeRequest } from '@delo/home-process'
 import { EXIT, type ExitCode } from './exit.ts'
 import { parseOptions, type CliCommand, type CommandOutput } from './command.ts'
 import { selectProfile } from './profile.ts'
+import { cliRedactor } from './refusals.ts'
 
 /** How often a stop checks whether the home process has exited, in milliseconds. */
 const EXIT_POLL_MS = 100
@@ -67,6 +69,9 @@ export const SYSTEM_STOP_DEPENDENCIES: StopDependencies = {
   sleep: async (ms) => { await sleep(ms) },
 }
 
+/** What `stop` tells the person after `SIGKILL`: the home process cannot end the commands it started in their own scope. */
+const SURVIVORS_NOTE = 'Commands Delorun started may still be running: a command started in its own systemd scope survives the home process, so check for them before you start Delo again.\n'
+
 /** What the lock and the process table say about the process a `--now` stop would signal (a closed union). */
 type SignalTarget =
   | { readonly kind: 'confirmed' }
@@ -100,7 +105,8 @@ function unconfirmedText(reason: UnconfirmedHolder, record: HomeLockRecord, proc
 }
 
 /**
- * Whether the process a `--now` stop would signal is still the profile's lock holder.
+ * Whether the process a `--now` stop would signal is still the profile's lock holder. The lock is read first and the
+ * holder checked last, with no await before the caller's signal, so the check and the signal are adjacent.
  * @param record - the lock record read at the start.
  * @param directory - the profile's run directory.
  * @param dependencies - the lock reader and process table.
@@ -109,6 +115,13 @@ function unconfirmedText(reason: UnconfirmedHolder, record: HomeLockRecord, proc
  */
 function signalTarget(record: HomeLockRecord, directory: string, dependencies: StopDependencies, signalled: boolean): SignalTarget {
   const pid = String(record.pid)
+  let current: HomeLockRecord | undefined
+  let unreadable: Error | undefined
+  try {
+    current = dependencies.readLock(directory)
+  } catch (error) {
+    unreadable = error instanceof Error ? error : new Error(String(error))
+  }
   const check: HolderCheck = checkHolder(record, dependencies.processes)
   switch (check.kind) {
     case 'exited':
@@ -124,11 +137,8 @@ function signalTarget(record: HomeLockRecord, directory: string, dependencies: S
       throw new Error(`unknown holder check ${String(unknown)}`)
     }
   }
-  let current: HomeLockRecord | undefined
-  try {
-    current = dependencies.readLock(directory)
-  } catch (error) {
-    return { kind: 'refused', why: `the profile's lock cannot be read: ${error instanceof Error ? error.message : String(error)}`, check: `Check the lock file in ${directory}` }
+  if (unreadable !== undefined) {
+    return { kind: 'refused', why: `the profile's lock cannot be read: ${unreadable.message}`, check: `Check the lock file in ${directory}` }
   }
   if (current?.startId !== record.startId || current.pid !== record.pid) {
     return { kind: 'refused', why: `the profile's lock no longer names process ${pid}${current === undefined ? '' : `; it names process ${String(current.pid)}`}`, check: `Run delorun status to see whether Delo still runs` }
@@ -205,6 +215,7 @@ async function endBySignal(record: HomeLockRecord, directory: string, profile: s
       return EXIT.failed
     }
     output.stdout(signal === 'SIGTERM' ? `Process ${pid} ${failure}; sent it SIGTERM.\n` : `Process ${pid} had not exited ${String(STOP_TERM_GRACE_MS / 1000)} seconds after SIGTERM; sent it SIGKILL.\n`)
+    if (signal === 'SIGKILL') output.stdout(SURVIVORS_NOTE)
     if (await waitUntilGone(() => !gone(), waitMs, dependencies)) {
       output.stdout(`Process ${pid} exited after ${signal}. ${stopped}`)
       return EXIT.ok
@@ -244,7 +255,7 @@ export function createStopCommand(dependencies: StopDependencies): CliCommand {
           ...now ? { timeoutMs: STOP_NOW_ANSWER_MS } : {},
         })
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = cliRedactor().text(error instanceof Error ? error.message : String(error))
         if (now) return endBySignal(record, directory, profile, `did not answer the stop over its update channel (${message})`, context, dependencies)
         context.stderr(`delorun stop: process ${String(record.pid)} holds the profile's lock but its update channel did not answer: ${message}\n`)
         return EXIT.failed
@@ -252,7 +263,7 @@ export function createStopCommand(dependencies: StopDependencies): CliCommand {
       const final = lines.at(-1)
       if (now && final === undefined) return endBySignal(record, directory, profile, 'closed its update channel without answering the stop', context, dependencies)
       if (final?.ok !== true) {
-        context.stderr(`delorun stop: the home process refused to stop: ${String(final?.error ?? 'no answer')}${typeof final?.detail === 'string' ? ` (${final.detail})` : ''}\n`)
+        context.stderr(cliRedactor().text(`delorun stop: the home process refused to stop: ${String(final?.error ?? 'no answer')}${typeof final?.detail === 'string' ? ` (${final.detail})` : ''}\n`))
         return EXIT.failed
       }
       if (await waitUntilGone(() => holderRuns() && dependencies.readLock(directory)?.startId === record.startId, START_WAIT_MS, dependencies)) {

@@ -118,7 +118,7 @@ A parity run passes when `pnpm run test:snapshot` with the overlay exits 0 for e
 - `delo/apps/tools/src/parity/composition/`: the parity overlay, the replay lane, the static scan and the switch sweep.
 - `delo/apps/tools/src/run-checks.ts`: the `parity-replay` and `parity-switches` checks.
 - `delo/apps/tools/src/parity/release/`: the release tooling delivers the parity run on built release artifacts.
-- `@delo/plugin-theme`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`: packages that register switches; `@delo/bundle-studio` sets `studio_additions` in Delo's default composition, and `@delo/bundle-local`, which Delo's CLI profiles add, registers its own. `@delo/bundle-headless` mounts four of the switches' plugins in the `headless` profile and registers none.
+- `@delo/plugin-theme`, `@delo/plugin-main-chat`, `@delo/plugin-permission-defaults` and `@delo/plugin-fetch-guard`: packages that register switches; `@delo/bundle-studio` sets `studio_additions` in Delo's default composition, and `@delo/bundle-local`, which Delo's CLI profiles add, registers its own. `@delo/bundle-headless` mounts the switches' consent and guard plugins in the `headless` profile and registers none.
 - `packages/boot/doctor`, launched by `apps/cli`: the doctor's registration.
 - Upstream's `vitest.snapshot.config.ts`, the snapshot adapters listed in `snapshotAdapters`, and the `snapshot.yml` and replay layer files of each scenario, which the lane reads without changing them.
 

@@ -32,6 +32,7 @@ import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { CliError, EXIT } from './exit.ts'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { assertSoleDataUser, registerDataUser } from './home-exclusion.ts'
+import { cliRedactor } from './refusals.ts'
 import { removeSafeModeOverlay } from './safe-mode.ts'
 import { runtimeOfFile } from './update/runtime.ts'
 import { runtimePlatformOf } from './update/channel.ts'
@@ -230,7 +231,7 @@ async function rollbackLive(home: string, profile: string, profileOnly: boolean,
   })
   const final = lines.at(-1)
   if (final?.ok !== true) {
-    context.stderr(`delorun recover: ${String(final?.error ?? 'no answer')}${typeof final?.detail === 'string' ? `: ${final.detail}` : ''}\n`)
+    context.stderr(cliRedactor().text(`delorun recover: ${String(final?.error ?? 'no answer')}${typeof final?.detail === 'string' ? `: ${final.detail}` : ''}\n`))
     return EXIT.failed
   }
   if (final.outcome === 'rolled-back' && Array.isArray(final.lines)) for (const line of final.lines) context.stdout(`${String(line)}\n`)

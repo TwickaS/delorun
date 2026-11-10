@@ -124,6 +124,14 @@ describe('the permission_defaults switch', () => {
     expect(knobs(ctx, agent.session)).toMatchObject({ preset: FULL_ACCESS_PRESET, sandbox: FULL_ACCESS_PRESET, approval: 'never' })
   })
 
+  it('resolves only after the guard and the service are provided', async () => {
+    const { ctx } = await mounted({ enabled: false })
+    expect(ctx.get('sandboxModeGuard')).toBeUndefined()
+    await apply(ctx, { enabled: true })
+    expect(ctx.get('sandboxModeGuard')).toBeTypeOf('function')
+    expect(ctx.get('permissionDefaults')).toBeInstanceOf(PermissionDefaults)
+  })
+
   it('refuses to mount over another provider of the one guard slot', async () => {
     const ctx = new Context()
     try {

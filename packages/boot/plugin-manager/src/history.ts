@@ -7,7 +7,7 @@
  * made it. git runs with no system or global configuration and no hooks.
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import { devNull } from 'node:os'
 import { join } from 'node:path'
 import { execa } from 'execa'
@@ -161,9 +161,23 @@ export class ProfileHistory {
   }
 
   /**
+   * Whether a managed file was part of any version up to and including one: false when every version up to it was
+   * written before the history admitted the file, or before the file existed.
+   * @param id - the version.
+   * @param name - the managed file, relative to the profile.
+   * @returns true when a version at or before `id` added, changed or removed the file.
+   * @throws HistoryUnavailableError when git cannot run or the version is not one of the history's.
+   */
+  async trackedBy(id: ProfileVersionId, name: string): Promise<boolean> {
+    if (!(await this.holds(id))) throw new HistoryUnavailableError(`no profile version ${id}`)
+    return (await this.git(['log', '--max-count', '1', '--format=%H', id, '--', name])).stdout.trim() !== ''
+  }
+
+  /**
    * Create the git directory and its exclusions, which admit only the managed files, once. A history that exists already
    * may have been created by a caller that manages fewer files; its exclusions then gain every managed file they do not
-   * admit, so this caller's files are part of every version from the next one on. Exclusions only ever widen.
+   * admit, so this caller's files are part of every version from the next one on. Exclusions only ever widen, and the
+   * file is replaced whole, never left without its first line that excludes everything else in the profile.
    */
   private async ensure(): Promise<void> {
     if (existsSync(join(this.gitDir, 'HEAD'))) {
@@ -172,7 +186,7 @@ export class ProfileHistory {
     }
     try {
       await mkdir(join(this.gitDir, 'info'), { recursive: true, mode: 0o700 })
-      await writeFile(join(this.gitDir, 'info', 'exclude'), ['/*', ...this.files.map(name => `!/${name}`), ''].join('\n'))
+      await writeFileAtomic(join(this.gitDir, 'info', 'exclude'), ['/*', ...this.files.map(name => `!/${name}`), ''].join('\n'), { mode: 0o600 })
     } catch (error) {
       throw new HistoryUnavailableError(`the history directory cannot be made: ${(error as Error).message}`, { cause: error })
     }
@@ -180,7 +194,10 @@ export class ProfileHistory {
     await this.git(['init', '--quiet'])
   }
 
-  /** Add to an existing history's exclusions every managed file they do not admit. */
+  /**
+   * Add to an existing history's exclusions every managed file they do not admit, and put back the first line that
+   * excludes everything else when it is missing, so a lost or damaged file never lets a version hold the whole profile.
+   */
   private async admitManagedFiles(): Promise<void> {
     const path = join(this.gitDir, 'info', 'exclude')
     let lines: string[]
@@ -188,12 +205,14 @@ export class ProfileHistory {
       lines = (await readFile(path, 'utf8')).split('\n').filter(line => line !== '')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new HistoryUnavailableError(`the history's exclusions cannot be read: ${(error as Error).message}`, { cause: error })
-      lines = ['/*']
+      lines = []
     }
     const missing = this.files.filter(name => !lines.includes(`!/${name}`))
-    if (missing.length === 0) return
+    if (lines[0] === '/*' && missing.length === 0) return
+    // Later lines win, so the line that excludes everything comes first and every admission after it.
+    const next = ['/*', ...lines.filter(line => line !== '/*'), ...missing.map(name => `!/${name}`), '']
     try {
-      await writeFile(path, [...lines, ...missing.map(name => `!/${name}`), ''].join('\n'))
+      await writeFileAtomic(path, next.join('\n'), { mode: 0o600 })
     } catch (error) {
       throw new HistoryUnavailableError(`the history's exclusions cannot be written: ${(error as Error).message}`, { cause: error })
     }

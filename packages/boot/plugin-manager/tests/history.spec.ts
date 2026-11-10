@@ -63,6 +63,36 @@ it('admits every managed file of a caller that manages more files than the one t
   expect(readFileSync(join(dir, HISTORY_DIR, 'info', 'exclude'), 'utf8')).toBe('/*\n!/package.json\n!/extra.json\n')
 })
 
+it('puts back the line that excludes the rest of the profile when the exclusions lost it, so no other file is saved', async () => {
+  writeFileSync(join(dir, 'package.json'), '{}\n')
+  writeFileSync(join(dir, '.env'), 'DEEPSEEK_API_KEY=fixture\n')
+  const profile = history()
+  await profile.record('First', { kind: 'person' })
+  for (const damaged of ['', '!/package.json\n!/cordis.patch.yml\n']) {
+    writeFileSync(join(dir, HISTORY_DIR, 'info', 'exclude'), damaged)
+    writeFileSync(join(dir, 'package.json'), `{"v":${String(damaged.length)}}\n`)
+    const version = await profile.record('Changed', { kind: 'person' })
+    expect(readFileSync(join(dir, HISTORY_DIR, 'info', 'exclude'), 'utf8')).toBe('/*\n!/package.json\n!/cordis.patch.yml\n')
+    expect(execFileSync('git', ['--git-dir', join(dir, HISTORY_DIR), 'ls-tree', '--name-only', version!], { encoding: 'utf8', timeout: 30_000 })).toBe('package.json\n')
+  }
+})
+
+it('tells whether a file was part of any version up to one, which a version from before it was admitted is not', async () => {
+  writeFileSync(join(dir, 'package.json'), '{}\n')
+  writeFileSync(join(dir, 'extra.json'), '{}\n')
+  const narrow = new ProfileHistory(dir, ['package.json'], 'git', 30_000)
+  const before = await narrow.record('Before', { kind: 'person' })
+  const wide = new ProfileHistory(dir, ['package.json', 'extra.json'], 'git', 30_000)
+  writeFileSync(join(dir, 'package.json'), '{"v":2}\n')
+  const admitted = await wide.record('Admitted', { kind: 'person' })
+  rmSync(join(dir, 'extra.json'))
+  const removed = await wide.record('Removed', { kind: 'person' })
+  expect(await wide.trackedBy(before!, 'extra.json')).toBe(false)
+  expect(await wide.trackedBy(admitted!, 'extra.json')).toBe(true)
+  expect(await wide.trackedBy(removed!, 'extra.json')).toBe(true)
+  await expect(wide.trackedBy(brandString<ProfileVersionId>('0'.repeat(40)), 'extra.json')).rejects.toBeInstanceOf(HistoryUnavailableError)
+})
+
 it('saves a removed file\'s absence, and keeps a one-line summary', async () => {
   const profile = history()
   writeFileSync(join(dir, 'package.json'), '{}\n')
