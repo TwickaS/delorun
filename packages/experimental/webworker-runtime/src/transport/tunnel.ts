@@ -91,6 +91,12 @@ export interface TunnelSeams {
    * call the route lane refused with 401 or 403.
    */
   readonly directFetch: (request: Request) => Promise<Response>
+  /**
+   * Read a GET or HEAD request as a registered resource answers it for the page's own Peer, without an HTTP exchange
+   * and so without the Host, Origin and cookie fence a socket request passes: the worker serves only the page that
+   * spawned it. Resolves to `undefined` when no resource answers the path, and the route lane serves the request.
+   */
+  readonly readResource: (request: Request) => Promise<Response | undefined>
   /** Boot payload for `GET /__boot__`: the structured index injection table. */
   readonly bootPayload: () => unknown
   /** Archive for `GET /__assets__`: every package asset of the image, named by its unencoded `plugins/<package>/assets/<path>`. */
@@ -427,6 +433,9 @@ export class TunnelServer {
       if (path === '/__boot__') {  this.serveBoot(frame, sink); return }
       if (path === '/__assets__') {  this.servePackageAssets(frame, sink); return }
       if (path.startsWith(`${API_PREFIX}/`)) {  await this.serveApi(frame, routed, path, sink); return }
+      if (frame.method === 'GET' || frame.method === 'HEAD') {
+        if (await this.serveDirect(frame, sink, this.seams?.readResource)) return
+      }
       this.dispatch(routed, sink)
     } catch (reason) {
       sink.fail(reason instanceof Error ? reason.message : String(reason))
@@ -519,7 +528,18 @@ export class TunnelServer {
     })
   }
 
-  private async serveDirect(frame: TunnelRequestFrame, sink: ResponseSink): Promise<void> {
+  /**
+   * Answer a request on a lane that holds the page's Peer.
+   * @param frame - the page's request.
+   * @param sink - where the answer goes.
+   * @param lane - the seam that computes the response; the API fetch handler by default.
+   * @returns false when the lane declined the request, so nothing was written; true once answered.
+   */
+  private async serveDirect(
+    frame: TunnelRequestFrame,
+    sink: ResponseSink,
+    lane?: (request: Request) => Promise<Response | undefined>,
+  ): Promise<boolean> {
     if (this.seams === undefined) throw new Error('webworker tunnel: direct fetch requested before the host tree is serving')
     const controller = new AbortController()
     this.inFlight.set(frame.id, { abort: () => { controller.abort() } })
@@ -538,7 +558,11 @@ export class TunnelServer {
       body: frame.body === undefined || frame.method === 'GET' || frame.method === 'HEAD' ? null : frame.body,
       signal: controller.signal,
     })
-    const response = await this.seams.directFetch(request)
+    const response = await (lane ?? this.seams.directFetch)(request)
+    if (response === undefined) {
+      this.inFlight.delete(frame.id)
+      return false
+    }
     const responseHeaders: Record<string, string> = {}
     response.headers.forEach((value, key) => { responseHeaders[key] = value })
     // Event streams are the only responses the page consumes incrementally;
@@ -551,7 +575,7 @@ export class TunnelServer {
         headers: responseHeaders,
         body: buffer.byteLength === 0 ? undefined : new Uint8Array(buffer),
       })
-      return
+      return true
     }
     sink.head(response.status, responseHeaders)
     const reader = response.body.getReader()
@@ -575,5 +599,6 @@ export class TunnelServer {
     } finally {
       reader.releaseLock()
     }
+    return true
   }
 }

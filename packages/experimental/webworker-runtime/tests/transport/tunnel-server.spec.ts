@@ -20,6 +20,7 @@ function harness(): { server: TunnelServer; frames: TunnelOutboundFrame[] } {
 function seams(openStream: TunnelSeams['openStream']): TunnelSeams {
   return {
     directFetch: () => Promise.reject(new Error('fixture has no direct fetch')),
+    readResource: () => Promise.resolve(undefined),
     bootPayload: () => ({}),
     packageAssets: () => bytes(1, 2, 3),
     openStream,
@@ -64,6 +65,45 @@ describe('worker tunnel unary authentication', () => {
     if (frame?.t !== 'res' || frame.body === undefined) throw new Error('direct retry did not return one body')
     expect(new TextDecoder().decode(frame.body)).toBe('direct answer')
     expect(directFetch).toHaveBeenCalledOnce()
+  })
+})
+
+describe('worker tunnel resources', () => {
+  it('answers a GET a registered resource owns for the page\'s Peer, without the route lane', async () => {
+    const frames: TunnelOutboundFrame[] = []
+    const readResource = vi.fn(async (request: Request) => new Response(`resource ${new URL(request.url).pathname}`, { status: 200 }))
+    const server = new TunnelServer({
+      port: { postMessage: (frame) => { frames.push(frame) } },
+      requestListener: () => Promise.reject(new Error('the route lane must not run')),
+    })
+    server.serve({ ...seams(async () => (async function *(): AsyncGenerator { yield undefined })()), readResource })
+
+    server.handleMessage({ t: 'req', id: 21, method: 'GET', url: 'http://localhost/plugins/bundle.js', headers: {} })
+    await vi.waitFor(() => { expect(frames).toHaveLength(1) })
+    const [frame] = frames
+    if (frame?.t !== 'res' || frame.body === undefined) throw new Error('resource answer carried no body')
+    expect(new TextDecoder().decode(frame.body)).toBe('resource /plugins/bundle.js')
+    expect(readResource).toHaveBeenCalledOnce()
+  })
+
+  it('serves a GET no resource owns, and every other method, on the route lane', async () => {
+    const frames: TunnelOutboundFrame[] = []
+    const readResource = vi.fn(() => Promise.resolve(undefined))
+    const server = new TunnelServer({
+      port: { postMessage: (frame) => { frames.push(frame) } },
+      requestListener: () => Promise.resolve((_req, response) => {
+        const res = response as { writeHead(status: number): void; end(body: string): void }
+        res.writeHead(200)
+        res.end('route lane')
+      }),
+    })
+    server.serve({ ...seams(async () => (async function *(): AsyncGenerator { yield undefined })()), readResource })
+
+    server.handleMessage({ t: 'req', id: 22, method: 'GET', url: 'http://localhost/handler', headers: {} })
+    server.handleMessage({ t: 'req', id: 23, method: 'POST', url: 'http://localhost/handler', headers: {} })
+    await vi.waitFor(() => { expect(frames).toHaveLength(2) })
+    expect(frames.map(frame => frame.t === 'res' ? frame.status : 0)).toEqual([200, 200])
+    expect(readResource).toHaveBeenCalledOnce()
   })
 })
 

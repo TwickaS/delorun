@@ -242,6 +242,7 @@ export function createWorkerHost(options: WorkerHostOptions): WorkerHost {
         hostCtx.provide('profileContext', profile)
         hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, environment)
         installLogSink(hostCtx, require)
+        await installPageAdmission(hostCtx, require)
         // Package lookup without a runtime resolution: the Worker loader owns
         // module resolution, so only manifest lookup over the image applies.
         await hostCtx.plugin(appBoot.PluginPackages, {})
@@ -266,6 +267,8 @@ export function createWorkerHost(options: WorkerHostOptions): WorkerHost {
         throw new Error('webworker host: the tree activated without a typertGateway service')
       }
       const handler = connection.createSharedFetchHandler('/api')
+      const webServer = ctx.get('webServer') as { readResource(request: Request, peer: PeerScope): Promise<Response> } | undefined
+      if (webServer === undefined) throw new Error('webworker host: the tree activated without a webServer service')
       const usage = loader.usage()
       console.info(`webworker host: tree active (modules=${String(usage.modules)}, data overlays=${String(overlays.length)}, lazy archives=${String(manifest.lazy.length)}, direct lane=connection.createSharedFetchHandler, als causality=${options.alsCausality === undefined ? 'inert' : 'snapshot/restore'}, image lowering=${LOWERING_VERSION})`)
 
@@ -273,6 +276,10 @@ export function createWorkerHost(options: WorkerHostOptions): WorkerHost {
       const peer = connection.browserPeer
       tunnel.serve({
         directFetch: (request: Request) => handler.fetch(request, peer),
+        readResource: async (request: Request) => {
+          const response = await webServer.readResource(request, peer)
+          return response.status === 404 ? undefined : response
+        },
         bootPayload: () => readBootPayload(ctx, peer),
         packageAssets: () => packPackageAssets(mounted, root),
         openStream: (endpoint, payload, uplink, signal) =>
@@ -341,6 +348,40 @@ export function installLogSink(ctx: HostContext, require: (specifier: string) =>
     },
   }
   ctx.logger.exporter(exporter)
+}
+
+/**
+ * Mount the `authenticator` provider of a tree whose only caller is the page that spawned the worker.
+ * Connection's fence still checks Host and Origin of every request, and its cookie admission has no cookie to read:
+ * a browser-only worker has no socket, so every request that passes the fence speaks for the browser Peer. Without
+ * the provider, a fenced route such as the plugin bundles or the client event stream answers the page with 401.
+ * @param ctx - Host context, before any entry mounts.
+ * @param require - Image resolver, for cordis's `Service` base class.
+ * @returns when the provider is mounted.
+ */
+export async function installPageAdmission(ctx: HostContext, require: (specifier: string) => unknown): Promise<void> {
+  const { Service } = require('@deepseek-ai/cordis') as { Service: new (owner: HostContext, name: string) => { readonly ctx: HostContext } }
+  class PageAuthenticator extends Service {
+    constructor(owner: HostContext) {
+      super(owner, 'authenticator')
+    }
+
+    /**
+     * @returns the admission of the browser Peer.
+     */
+    admit(): { readonly kind: 'admitted'; readonly peer: PeerScope } {
+      const connection = this.ctx.get('connection') as HostConnectionHandle
+      return { kind: 'admitted', peer: connection.browserPeer }
+    }
+
+    /**
+     * @returns no policy: the worker opens no reach listener.
+     */
+    policy(): undefined {
+      return undefined
+    }
+  }
+  await ctx.plugin(PageAuthenticator)
 }
 
 /** Diagnostic prefix the launcher passes to app-boot; the Worker boots the same profile code. */
