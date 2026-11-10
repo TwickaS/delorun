@@ -152,7 +152,7 @@ export function apply(ctx: Context, config: Config): void {
   if (!config.enabled) return
   const service = new UpdateCheckService(ctx, config)
   ctx.inject(['connection'], (scope) => {
-    scope.connection.fetch.register({
+    scope.effect(() => scope.connection.fetch.register({
       path: UPDATE_NOTICE_PATH,
       methods: ['GET'],
       requestBody: 'buffered',
@@ -160,6 +160,6 @@ export function apply(ctx: Context, config: Config): void {
         const body: UpdateNoticeResponse = { notice: await service.notice() ?? null }
         return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
       },
-    })
+    }), `${name}: the notice route`)
   })
 }

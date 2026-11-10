@@ -159,7 +159,7 @@ async function readExemptions(profileDir: string, axis: VersionAxis): Promise<Ex
  * @param profileDir - the profile directory.
  * @param name - the package name.
  * @param spec - the dependency spec the profile writes.
- * @returns the plugin; with no requirements when its manifest cannot be read.
+ * @returns the plugin; with no manifest when its manifest cannot be read.
  */
 async function readPlugin(profileDir: string, name: string, spec: string): Promise<InstalledPluginFact> {
   let bytes = ''

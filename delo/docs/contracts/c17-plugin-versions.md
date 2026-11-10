@@ -80,13 +80,13 @@ Where the axes are checked:
 
 - at install, by the plugin manager, before the package is added;
 - at every start, by upstream's profile preflight (`prepareProfileEntries` in [`compatibility-preflight.ts`](../../../packages/boot/app-boot/src/compatibility-preflight.ts)), which disables an unmet row before the Loader imports it and prints one line to standard error naming the row and the reason; the studio shows no report;
-- before an update, against the target release's two versions, for the update report ([C3](c03-update-report.md));
+- before an update, against the target release's two versions, for the update report ([C3](c03-update-report.md)), by the same upstream functions with the target's versions, so the peer rule applies there too;
 - by the update check, against the channel's newest release's two versions, to count the installed plugins it would disable ([C3](c03-update-report.md#update-check));
 - in the catalogue corpus, which records the versions a badge ran ([C13](c13-catalogue-revocation.md#badge-record)).
 
 ## Checking a plugin before it is installed
 
-`delorun plugin check <directory>` reads a plugin's `package.json` without running any of its files and evaluates both axes against the running release with `evaluatePluginCompatibility` and no exemption, as the installer does. It prints what each declared range admits, what is undeclared, the `engines.delo` range that targets the running Delo minor, and whether the installer admits the plugin; [C21](c21-delo-plugin-interface.md#checking-a-plugin) states its output and exit codes. A plugin targets Delo with `engines.delo` alone: the Delo axis never overrides the upstream axis, and a plugin that uses upstream interfaces still declares `engines.dsh`.
+`delorun plugin check <directory>` reads a plugin's `package.json` without running any of its files and evaluates both axes against the running release with the installer's own functions, `evaluatePluginCompatibility` and `evaluateDeloRequirement`, and no exemption; the update report and the update check call the same ones. It prints what each declared range admits, what is undeclared, the `engines.delo` range that targets the running Delo minor, and whether the installer admits the plugin; [C21](c21-delo-plugin-interface.md#checking-a-plugin) states its output and exit codes. A plugin targets Delo with `engines.delo` alone: the Delo axis never overrides the upstream axis, and a plugin that uses upstream interfaces still declares `engines.dsh`.
 
 ## Exemptions
 

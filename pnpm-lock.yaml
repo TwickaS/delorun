@@ -3131,6 +3131,9 @@ importers:
 
   delo/packages/update:
     dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@delo/contract-plugin-versions':
         specifier: workspace:*
         version: link:../contract-plugin-versions

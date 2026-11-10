@@ -1,8 +1,9 @@
 /**
  * `delorun plugin check <directory>` (contract C17, "Checking a plugin before it is installed"; contract C21): what a
  * plugin's declared version ranges admit against the release that runs. It reads the plugin's `package.json` as JSON,
- * imports and runs none of its files, and decides both axes with upstream's `evaluatePluginCompatibility`, the
- * evaluation the installer and the start's preflight run, with no exemption. It prints, for each axis, what is
+ * imports and runs none of its files, and decides both axes with `@delo/update`'s `evaluatePluginAxes`, which is
+ * upstream's `evaluatePluginCompatibility` and `evaluateDeloRequirement`, the evaluation the installer, the start's
+ * preflight and the update report run, with no exemption. It prints, for each axis, what is
  * declared and whether this release meets it, what is undeclared, and the range that targets the running Delo minor.
  *
  * @module @delo/cli/plugin-check
@@ -12,6 +13,7 @@ import { join, resolve } from 'node:path'
 import { evaluatePluginCompatibility, pluginCompatibilityWarning } from '@deepseek-ai/dsh-app-boot'
 import type { VersionOutput } from '@delo/contract-plugin-versions'
 import { messageOf } from '@delo/install'
+import { evaluatePluginAxes, type AxisDecision } from '@delo/update'
 import semver from 'semver'
 import { CliError, EXIT } from './exit.ts'
 import type { CommandContext, CommandResult } from './command.ts'
@@ -68,51 +70,61 @@ export function targetRange(delo: string): string {
 }
 
 /**
- * Whether a version meets a range, as upstream decides it: prereleases take part, and an empty range is unmet.
- * @param version - the version.
- * @param range - the range.
- * @returns true when it is met.
+ * What a manifest declares on the DSH axis, for the line that says it is met: `engines.dsh`, or its DSH peers.
+ * @param manifest - the plugin's manifest.
+ * @returns the declaration as the line names it.
  */
-function meets(version: string, range: string): boolean {
-  return range.trim() !== '' && semver.satisfies(version, range, { includePrerelease: true })
+function dshDeclaration(manifest: Readonly<Record<string, unknown>>): string {
+  const engines = manifest['engines']
+  if (isObject(engines) && typeof engines['dsh'] === 'string') return `engines.dsh "${engines['dsh']}"`
+  // Called only for a met axis: without engines.dsh it was met by peers, which upstream read as an object of ranges.
+  const peers = Object.entries(manifest['peerDependencies'] as Readonly<Record<string, string>>)
+  return `its DSH peers (${peers.filter(([name]) => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')).map(([name, range]) => `${name} "${range}"`).join(', ')})`
 }
 
 /**
- * The lines about the upstream axis.
- * @param engines - the manifest's `engines` object, or an empty one.
- * @param manifest - the plugin's manifest, for its peer dependencies.
+ * The line about the upstream axis.
+ * @param decision - the axis's decision.
+ * @param manifest - the plugin's manifest, for what it declares.
  * @param dsh - the running DSH version.
- * @returns one line per declaration, or the line that says nothing is declared.
+ * @returns the line.
  */
-function dshLines(engines: Record<string, unknown>, manifest: Record<string, unknown>, dsh: string): string[] {
-  if (Object.hasOwn(engines, 'dsh')) {
-    const declared = engines['dsh']
-    if (typeof declared !== 'string') return ['DSH axis: engines.dsh is not a string, so it cannot be read.']
-    return [`DSH axis: engines.dsh "${declared}" ${meets(dsh, declared) ? 'admits' : 'does not admit'} DSH ${dsh}; it alone decides this axis, so peer dependencies are not read.`]
+function dshLine(decision: AxisDecision, manifest: Readonly<Record<string, unknown>>, dsh: string): string {
+  switch (decision.kind) {
+    case 'compatible':
+      return `DSH axis: ${dshDeclaration(manifest)} admits DSH ${dsh}; without engines.dsh every DSH peer must admit it, and engines.dsh alone decides when it is declared.`
+    case 'undeclared':
+    case 'none':
+      return `DSH axis: undeclared, so the plugin loads on any DSH. Declare "engines": { "dsh": "^${dsh}" }, or the range you test against, to state it.`
+    case 'unreadable':
+      return 'DSH axis: engines.dsh or a DSH peer is declared in a form Delo cannot read.'
+    case 'unmet':
+    case 'exempted':
+    case 'not-carried':
+      return `DSH axis: it requires DSH ${decision.requirement}, which DSH ${dsh} does not meet.`
   }
-  const declaredPeers = manifest['peerDependencies']
-  const peers = isObject(declaredPeers) ? Object.entries(declaredPeers).filter(([name]) => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')) : []
-  if (peers.length === 0) return [`DSH axis: undeclared, so the plugin loads on any DSH. Declare "engines": { "dsh": "^${dsh}" }, or the range you test against, to state it.`]
-  return peers.map(([name, range]) => {
-    if (typeof range !== 'string') return `DSH axis: peer ${name} is not a string, so it cannot be read.`
-    const admits = ['workspace:^', 'workspace:~', 'workspace:*'].includes(range) || meets(dsh, range)
-    return `DSH axis: peer ${name} "${range}" ${admits ? 'admits' : 'does not admit'} DSH ${dsh}; without engines.dsh every DSH peer must admit it.`
-  })
 }
 
 /**
  * The line about the Delo axis.
- * @param engines - the manifest's `engines` object, or an empty one.
+ * @param decision - the axis's decision.
  * @param delo - the running Delo version.
  * @returns the line.
  */
-function deloLine(engines: Record<string, unknown>, delo: string): string {
-  if (!Object.hasOwn(engines, 'delo')) {
-    return `Delo axis: undeclared, so the plugin loads on any Delo and Delo promises it nothing. To target Delorun ${delo} and its patches, declare "engines": { "delo": "${targetRange(delo)}" }.`
+function deloLine(decision: AxisDecision, delo: string): string {
+  switch (decision.kind) {
+    case 'none':
+    case 'undeclared':
+      return `Delo axis: undeclared, so the plugin loads on any Delo and Delo promises it nothing. To target Delorun ${delo} and its patches, declare "engines": { "delo": "${targetRange(delo)}" }.`
+    case 'unreadable':
+      return `Delo axis: engines.delo is declared in a form Delo cannot read, so Delo refuses the plugin. Declare a range such as "${targetRange(delo)}".`
+    case 'compatible':
+      return `Delo axis: engines.delo admits Delo ${delo}.`
+    case 'unmet':
+    case 'exempted':
+    case 'not-carried':
+      return `Delo axis: engines.delo "${decision.requirement}" does not admit Delo ${delo}.`
   }
-  const declared = engines['delo']
-  if (typeof declared !== 'string') return `Delo axis: engines.delo is not a string, so Delo cannot read it and refuses the plugin. Declare a range such as "${targetRange(delo)}".`
-  return `Delo axis: engines.delo "${declared}" ${meets(delo, declared) ? 'admits' : 'does not admit'} Delo ${delo}.`
 }
 
 /**
@@ -134,12 +146,12 @@ export async function runPluginCheck(args: readonly string[], context: CommandCo
     `${name}@${version}, read from ${join(directory, 'package.json')}; none of its files ran.`,
     `This is Delo ${running.delo} on DSH ${running.dsh}.`,
   ]
+  const axes = { from: running.dsh, to: running.dsh }
+  const decisions = evaluatePluginAxes(manifest, { dsh: axes, delo: { from: running.delo, to: running.delo } }, { dsh: {}, delo: {} }, `${name}@${version}`)
+  lines.push(dshLine(decisions.dsh, manifest, running.dsh), deloLine(decisions.delo, running.delo))
   let verdict: string
   let exit: CommandResult
   try {
-    const engines = manifest['engines'] ?? {}
-    if (isObject(engines)) lines.push(...dshLines(engines, manifest, running.dsh), deloLine(engines, running.delo))
-    else lines.push('engines is not an object, so neither axis can be read.')
     const issue = evaluatePluginCompatibility(manifest, {}, running.dsh, running.delo)
     verdict = issue === undefined ? 'The installer admits it on this release.' : `The installer refuses it on this release: ${pluginCompatibilityWarning(issue)}`
     exit = issue === undefined ? EXIT.ok : EXIT.failed

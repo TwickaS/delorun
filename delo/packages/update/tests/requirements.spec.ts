@@ -4,7 +4,7 @@
  * exemption files).
  */
 import { describe, expect, it } from 'vitest'
-import { evaluateRequirement, exempted, exemptionKey, satisfiesRange } from '../src/index.ts'
+import { evaluatePluginAxes, exempted, exemptionKey, requirementText, satisfiesRange } from '../src/index.ts'
 import { version } from './support.ts'
 
 /** The versions the default spec checks against: DSH 0.2.2 to 0.3.0, Delo 0.9.0 to 1.0.0. */
@@ -39,46 +39,76 @@ describe('exemptions', () => {
   })
 })
 
-describe('evaluateRequirement', () => {
+/** No exemption on either axis. */
+const NONE = { dsh: {}, delo: {} } as const
+
+/**
+ * Decide both axes of a plugin `plugin@1.0.0` whose manifest declares the given fields.
+ * @param fields - the manifest's fields besides its name and version.
+ * @param exemptions - both exemption files.
+ * @returns each axis's decision.
+ */
+function decide(fields: Readonly<Record<string, unknown>>, exemptions: Parameters<typeof evaluatePluginAxes>[2] = NONE) {
+  return evaluatePluginAxes({ name: 'plugin', version: '1.0.0', ...fields }, AXES, exemptions, 'plugin@1.0.0')
+}
+
+describe('evaluatePluginAxes', () => {
   it('changes nothing when the target meets the range', () => {
-    expect(evaluateRequirement('dsh', { kind: 'range', range: '^0.3.0' }, AXES.dsh, {}, 'plugin@1.0.0')).toEqual({ kind: 'compatible' })
+    expect(decide({ engines: { dsh: '^0.3.0' } }).dsh).toEqual({ kind: 'compatible' })
   })
 
   it('disables a plugin whose range the target does not meet', () => {
-    expect(evaluateRequirement('dsh', { kind: 'range', range: '^0.2.0' }, AXES.dsh, {}, 'plugin@1.0.0')).toEqual({ kind: 'unmet', requirement: '^0.2.0' })
+    expect(decide({ engines: { dsh: '^0.2.0' } }).dsh).toEqual({ kind: 'unmet', requirement: '^0.2.0' })
+  })
+
+  it('reads the DSH peers when engines.dsh is absent, as the start\'s preflight does', () => {
+    const peers = { '@deepseek-ai/dsh-agent': '^0.2.0', '@deepseek-ai/dsh-tools': 'workspace:*', 'react': '^18.0.0' }
+    expect(decide({ peerDependencies: peers }).dsh).toEqual({ kind: 'unmet', requirement: '^0.2.0 (peer @deepseek-ai/dsh-agent)' })
+    expect(decide({ peerDependencies: { '@deepseek-ai/dsh': '>=0.2.0' } }).dsh).toEqual({ kind: 'compatible' })
+    expect(decide({ engines: { dsh: '^0.3.0' }, peerDependencies: peers }).dsh).toEqual({ kind: 'compatible' })
+    expect(decide({ peerDependencies: { react: '^18.0.0' } }).dsh).toEqual({ kind: 'undeclared' })
+  })
+
+  it('names each unmet requirement as upstream reports it', () => {
+    expect(requirementText({ 'engines.dsh': '^0.2.0' })).toBe('^0.2.0')
+    expect(requirementText({ '@deepseek-ai/dsh-agent': '^0.2.0', '@deepseek-ai/dsh': '0.2.2' })).toBe('^0.2.0 (peer @deepseek-ai/dsh-agent), 0.2.2 (peer @deepseek-ai/dsh)')
   })
 
   it('keeps a plugin the person exempted for the exact target version', () => {
-    const record = { 'plugin@1.0.0': [version('0.3.0')] }
-    expect(evaluateRequirement('dsh', { kind: 'range', range: '^0.2.0' }, AXES.dsh, record, 'plugin@1.0.0')).toEqual({ kind: 'exempted', requirement: '^0.2.0', version: version('0.3.0') })
+    const record = { dsh: { 'plugin@1.0.0': [version('0.3.0')] }, delo: {} }
+    expect(decide({ engines: { dsh: '^0.2.0' } }, record).dsh).toEqual({ kind: 'exempted', requirement: '^0.2.0', version: version('0.3.0') })
   })
 
   it('disables a plugin whose exemption covers the version it runs today and not the target', () => {
-    const record = { 'plugin@1.0.0': [version('0.2.2')] }
-    expect(evaluateRequirement('dsh', { kind: 'range', range: '^0.2.0' }, AXES.dsh, record, 'plugin@1.0.0')).toEqual({ kind: 'not-carried', requirement: '^0.2.0', from: version('0.2.2'), to: version('0.3.0') })
+    const record = { dsh: { 'plugin@1.0.0': [version('0.2.2')] }, delo: {} }
+    expect(decide({ engines: { dsh: '^0.2.0' } }, record).dsh).toEqual({ kind: 'not-carried', requirement: '^0.2.0', from: version('0.2.2'), to: version('0.3.0') })
   })
 
   it('prefers the exemption that covers the target over the one that covers the version running now', () => {
-    const record = { 'plugin@1.0.0': [version('0.2.2'), version('0.3.0')] }
-    expect(evaluateRequirement('dsh', { kind: 'range', range: '^0.2.0' }, AXES.dsh, record, 'plugin@1.0.0').kind).toBe('exempted')
+    const record = { dsh: { 'plugin@1.0.0': [version('0.2.2'), version('0.3.0')] }, delo: {} }
+    expect(decide({ engines: { dsh: '^0.2.0' } }, record).dsh.kind).toBe('exempted')
   })
 
   it('does not treat an exemption for another installed version as covering this one', () => {
-    const record = { 'plugin@9.9.9': [version('0.3.0')] }
-    expect(evaluateRequirement('dsh', { kind: 'range', range: '^0.2.0' }, AXES.dsh, record, 'plugin@1.0.0').kind).toBe('unmet')
+    const record = { dsh: { 'plugin@9.9.9': [version('0.3.0')] }, delo: {} }
+    expect(decide({ engines: { dsh: '^0.2.0' } }, record).dsh.kind).toBe('unmet')
   })
 
-  it('reports a declaration it cannot read as unreadable whatever the target is', () => {
-    expect(evaluateRequirement('dsh', { kind: 'unreadable' }, AXES.dsh, { 'plugin@1.0.0': [version('0.3.0')] }, 'plugin@1.0.0')).toEqual({ kind: 'unreadable' })
+  it('reports a declaration upstream cannot read as unreadable whatever the target is', () => {
+    const record = { dsh: { 'plugin@1.0.0': [version('0.3.0')] }, delo: {} }
+    expect(decide({ engines: { dsh: 42 } }, record).dsh).toEqual({ kind: 'unreadable' })
+    expect(decide({ peerDependencies: { '@deepseek-ai/dsh-agent': 3 } }).dsh).toEqual({ kind: 'unreadable' })
+    expect(decide({ engines: { delo: ['^1.0.0'] } })).toEqual({ dsh: { kind: 'undeclared' }, delo: { kind: 'unreadable' } })
+    expect(decide({ engines: '^0.3.0' })).toEqual({ dsh: { kind: 'unreadable' }, delo: { kind: 'unreadable' } })
   })
 
   it('states that nothing is declared only on the DSH axis', () => {
-    expect(evaluateRequirement('dsh', { kind: 'none' }, AXES.dsh, {}, 'plugin@1.0.0')).toEqual({ kind: 'undeclared' })
-    expect(evaluateRequirement('delo', { kind: 'none' }, AXES.delo, {}, 'plugin@1.0.0')).toEqual({ kind: 'none' })
+    expect(decide({})).toEqual({ dsh: { kind: 'undeclared' }, delo: { kind: 'none' } })
   })
 
-  it('checks the Delo axis against the Delo the update installs', () => {
-    expect(evaluateRequirement('delo', { kind: 'range', range: '^0.10.0' }, AXES.delo, {}, 'plugin@1.0.0')).toEqual({ kind: 'unmet', requirement: '^0.10.0' })
-    expect(evaluateRequirement('delo', { kind: 'range', range: '^1.0.0' }, AXES.delo, {}, 'plugin@1.0.0')).toEqual({ kind: 'compatible' })
+  it('checks the Delo axis against the Delo the update installs, with its own exemptions', () => {
+    expect(decide({ engines: { delo: '^0.10.0' } }).delo).toEqual({ kind: 'unmet', requirement: '^0.10.0' })
+    expect(decide({ engines: { delo: '^1.0.0' } }).delo).toEqual({ kind: 'compatible' })
+    expect(decide({ engines: { delo: '^0.10.0' } }, { dsh: {}, delo: { 'plugin@1.0.0': [version('1.0.0')] } }).delo.kind).toBe('exempted')
   })
 })

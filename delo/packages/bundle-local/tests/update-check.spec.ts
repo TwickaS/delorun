@@ -50,9 +50,10 @@ async function mount(config: Partial<UpdateCheck.Config>) {
       },
     },
   } as never)
-  await ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false, ...config })
+  const fiber = ctx.plugin(UpdateCheck, { ...UPDATE_CHECK_DEFAULTS, enabled: false, ...config })
+  await fiber.await()
   onTestFinished(async () => { await ctx.fiber.dispose() })
-  return { ctx, routes }
+  return { ctx, routes, fiber }
 }
 
 /**
@@ -148,6 +149,28 @@ describe('the schedule', () => {
     detach()
     await vi.advanceTimersByTimeAsync(48 * HOUR)
     expect(calls).toEqual({ read: 1, check: [] })
+  })
+})
+
+describe('switching the check off in a running Host', () => {
+  it('stops the interval at once and serves no notice, and a check attached as delorun attaches it resumes when switched on', async () => {
+    const { ctx, routes, fiber } = await mount({ enabled: true, intervalHours: 1 })
+    const { source: attached, calls } = source({}, { checked: Date.now(), notice: NOTICE })
+    // Attached the way `delorun` attaches it: whenever the service is present.
+    ctx.inject(['deloUpdateCheck'], (scope) => { scope.effect(() => scope.deloUpdateCheck.attach(attached)) })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls.check).toHaveLength(1)
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.get('deloUpdateCheck')).toBeUndefined()
+    expect(routes.has(UPDATE_NOTICE_PATH)).toBe(false)
+    await vi.advanceTimersByTimeAsync(10 * HOUR)
+    expect(calls.check).toHaveLength(1)
+    await fiber.update({ ...UPDATE_CHECK_DEFAULTS, intervalHours: 1, enabled: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ctx.get('deloUpdateCheck')).toBeDefined()
+    expect(routes.has(UPDATE_NOTICE_PATH)).toBe(true)
+    expect(calls.check).toHaveLength(2)
   })
 })
 

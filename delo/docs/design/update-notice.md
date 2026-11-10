@@ -22,7 +22,7 @@ Updates stay manual: `delorun update` shows its report, asks, copies the chat da
 
 - `delorun update` asks the home process to resolve the channel's newest release through `@delo/install`'s `LauncherChannel`, which verifies the root chain, the timestamp, the manifest, the release-log bundle and the online log check ([C2](../contracts/c02-release-manifest.md), [C18](../contracts/c18-release-log.md)), installs it into the store and prints [C3](../contracts/c03-update-report.md)'s report. Nothing tells a person that a release exists until they run it.
 - The timestamp names each channel's current release and its manifest. The manifest states the release's Delo version and its upstream version, `dsh`. No signed file marks a security fix or carries a summary.
-- `@delo/update`'s `evaluateRequirement` decides each installed plugin's two axes against a target release, for the report.
+- `@delo/update` decides each installed plugin's two axes against a target release, for the report.
 - Upstream's `evaluatePluginCompatibility` decides both axes at install and at start. Nothing shows a plugin author what their ranges admit before they install.
 - The release tool signs any version the draft names. Nothing compares a release with the earlier releases of its minor.
 
@@ -33,7 +33,7 @@ Updates stay manual: `delorun update` shows its report, asks, copies the chat da
 1. The check is `checkForUpdate` in `delo/apps/cli/src/update/notice.ts`. It opens the home's channel as `delorun update` does: from the release roots of the launcher that started Delo, named in `DELO_LAUNCHER_ROOTS`, at the origins the installation recorded in `trust/channel.json`, through the same `LauncherChannel`. A Delo the launcher did not start has no anchored root, and its check fails without a request, and calls `LauncherChannel.newest`, which fetches `timestamp.json`, any newer root files, the channel's manifest and its release-log bundle, and verifies them with the functions an update uses: the root chain, the timestamp's signature, expiry and version against the stored timestamp, the manifest's digest against the timestamp and its targets signature, and the bundle's inclusion proof and witness cosignature. It runs no online log check, downloads no archive and writes nothing under `trust/`.
 2. A request carries no query, cookie, body or identifier. Nothing about the installed plugins leaves the machine.
 3. The result is the channel's newest release: its Delo version, its upstream version, whether its manifest marks it as a security fix, and its summary. A manifest without the mark is not a security fix; one without a summary has none.
-4. The plugin count is computed on the machine: each installed plugin of the profile is evaluated on both axes against the newest release's two versions with `evaluateRequirement`, through the same reduction the report uses, and the notice counts the plugins it would disable.
+4. The plugin count is computed on the machine: each installed plugin of the profile is evaluated on both axes against the newest release's two versions with the report's evaluation, which is upstream's installer and preflight evaluation with the newest release's versions, and the notice counts the plugins it would disable.
 5. The check has one deadline for all its requests, the row's `timeoutSeconds`. A failed or unverifiable check adds nothing to the notice and says nothing in it: the notice keeps showing the last verified release, if any, and `delorun doctor` names the failure.
 6. The result is written to `run/<profile>/update-check.json` ([C3](../contracts/c03-update-report.md#update-check)) with the time of the check: the newest verified release, when it was verified, and the last failure.
 
@@ -75,7 +75,6 @@ Updates stay manual: `delorun update` shows its report, asks, copies the chat da
 - The notice does not run the online log check. A release whose signed bundle verifies but which the log does not hold is noticed, and `delorun update` refuses it.
 - A host that withholds a newer release is noticed only when the timestamp expires; until then the notice shows the release the timestamp names.
 - A process running with the person's own access can write the record under `run/<profile>/` and so choose what the notice says; the record's reader refuses a summary with a control character, so it cannot rewrite the terminal.
-- The plugin count, like the update report, reads `engines.dsh` and not upstream's rule for a plugin without it, under which every `@deepseek-ai/dsh*` peer range must admit the running DSH. A plugin that states its upstream range only through peer dependencies is not counted when a release moves the base, though the start's preflight disables it.
 - The plugin count covers the version axes only. A revocation, a retired bundle or a profile row the update would change shows only in `delorun update`'s report.
 - The patch rule checks the inventory's names, not the interfaces' types. A change of an interface's behaviour within a patch is caught only by review.
 

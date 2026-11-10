@@ -62,8 +62,8 @@ describe('delorun plugin check', () => {
     expect(out.split('\n')).toEqual([
       expect.stringMatching(/^example@1\.4\.0, read from .*package\.json; none of its files ran\.$/u),
       'This is Delo 0.1.3 on DSH 0.2.2.',
-      'DSH axis: engines.dsh ">=0.2.2 <0.3.0" admits DSH 0.2.2; it alone decides this axis, so peer dependencies are not read.',
-      'Delo axis: engines.delo "^0.1.0" admits Delo 0.1.3.',
+      'DSH axis: engines.dsh ">=0.2.2 <0.3.0" admits DSH 0.2.2; without engines.dsh every DSH peer must admit it, and engines.dsh alone decides when it is declared.',
+      'Delo axis: engines.delo admits Delo 0.1.3.',
       'The installer admits it on this release.',
       'Within one Delo minor the DSH version stays the same; contract C21 states what each Delo version promises a plugin.',
       '',
@@ -73,7 +73,13 @@ describe('delorun plugin check', () => {
   it('says when engines.dsh does not admit the running DSH', async () => {
     const { exit, out } = await check(plugin({ name: 'old', version: '1.0.0', engines: { dsh: '^0.1.0' } }))
     expect(exit).toBe(EXIT.failed)
-    expect(out).toContain('DSH axis: engines.dsh "^0.1.0" does not admit DSH 0.2.2;')
+    expect(out).toContain('DSH axis: it requires DSH ^0.1.0, which DSH 0.2.2 does not meet.')
+  })
+
+  it('says which DSH peers admit the running DSH when engines.dsh is absent', async () => {
+    const { exit, out } = await check(plugin({ name: 'peered', version: '1.0.0', peerDependencies: { '@deepseek-ai/dsh-agent': '^0.2.0', 'react': '^18.0.0' } }))
+    expect(exit).toBe(EXIT.ok)
+    expect(out).toContain('DSH axis: its DSH peers (@deepseek-ai/dsh-agent "^0.2.0") admits DSH 0.2.2;')
   })
 
   it('names what is undeclared, and the range that targets the running Delo minor', async () => {
@@ -93,20 +99,19 @@ describe('delorun plugin check', () => {
   it('reads the DSH peers when engines.dsh is absent, as upstream does', async () => {
     const { exit, out } = await check(plugin({ name: 'peers', version: '1.0.0', peerDependencies: { '@deepseek-ai/dsh-agent': '^0.3.0', '@deepseek-ai/dsh-tools': 'workspace:*', 'react': '^18.0.0' } }))
     expect(exit).toBe(EXIT.failed)
-    expect(out).toContain('DSH axis: peer @deepseek-ai/dsh-agent "^0.3.0" does not admit DSH 0.2.2; without engines.dsh every DSH peer must admit it.')
-    expect(out).toContain('DSH axis: peer @deepseek-ai/dsh-tools "workspace:*" admits DSH 0.2.2;')
+    expect(out).toContain('DSH axis: it requires DSH ^0.3.0 (peer @deepseek-ai/dsh-agent), which DSH 0.2.2 does not meet.')
     expect(out).not.toContain('react')
     expect(out).toContain('The installer refuses it on this release: Plugin peers@1.0.0 is incompatible with dsh 0.2.2')
   })
 
   it('refuses declarations it cannot read', async () => {
-    expect((await check(plugin({ name: 'a', version: '1.0.0', engines: { delo: 1 } }))).out).toContain('Delo axis: engines.delo is not a string, so Delo cannot read it and refuses the plugin. Declare a range such as "^0.1.0".')
+    expect((await check(plugin({ name: 'a', version: '1.0.0', engines: { delo: 1 } }))).out).toContain('Delo axis: engines.delo is declared in a form Delo cannot read, so Delo refuses the plugin. Declare a range such as "^0.1.0".')
     const dsh = await check(plugin({ name: 'b', version: '1.0.0', engines: { dsh: 1 } }))
-    expect([dsh.exit, dsh.out.includes('DSH axis: engines.dsh is not a string, so it cannot be read.'), dsh.out.includes('The installer refuses it: ')]).toEqual([EXIT.failed, true, true])
+    expect([dsh.exit, dsh.out.includes('DSH axis: engines.dsh or a DSH peer is declared in a form Delo cannot read.'), dsh.out.includes('The installer refuses it: ')]).toEqual([EXIT.failed, true, true])
     const peer = await check(plugin({ name: 'c', version: '1.0.0', peerDependencies: { '@deepseek-ai/dsh': 3 } }))
-    expect(peer.out).toContain('DSH axis: peer @deepseek-ai/dsh is not a string, so it cannot be read.')
+    expect(peer.out).toContain('DSH axis: engines.dsh or a DSH peer is declared in a form Delo cannot read.')
     const engines = await check(plugin({ name: 'd', version: '1.0.0', engines: 'dsh' }))
-    expect([engines.exit, engines.out.includes('engines is not an object, so neither axis can be read.')]).toEqual([EXIT.failed, true])
+    expect([engines.exit, engines.out.includes('Delo axis: engines.delo is declared in a form Delo cannot read')]).toEqual([EXIT.failed, true])
     expect((await check(plugin({ engines: { delo: '^0.1.0' } }))).out).toContain('(no name)@(no version)')
   })
 

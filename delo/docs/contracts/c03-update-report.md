@@ -116,7 +116,7 @@ The report is stored in the snapshot's history version, so the history shows wha
 | `requirement-unreadable` | plugin | disabled | `<plugin> declares engines.<axis> in a form Delo cannot read.` |
 | `requirement-exempted` | plugin | kept | `<plugin> requires <DSH or Delo> <range>; your exemption for this exact version covers <version>.` |
 | `exemption-not-carried` | plugin | disabled | `<plugin> runs today under your exemption for <from version>; the exemption does not cover <to version>.` |
-| `requirement-undeclared` | plugin | kept | `<plugin> declares no DSH requirement, so its compatibility with DSH <to.dsh> is not stated.` |
+| `requirement-undeclared` | plugin | kept | `<plugin> declares no DSH requirement, so its compatibility with DSH <to.dsh> is not stated.` Given only when the plugin declares neither `engines.dsh` nor a `@deepseek-ai/dsh` or `@deepseek-ai/dsh-*` peer. |
 | `plugin-revoked` | plugin | disabled | `<plugin> is revoked: <reason>, <message>.` ([C13](c13-catalogue-revocation.md#revocation-list)) |
 | `manifest-unreadable` | plugin | kept | `Delo could not read <plugin>'s package.json; it cannot predict what the update does to it.` |
 | `bundle-retired` | bundle | removed | `<bundle> is retired in DSH <to.dsh> and leaves the bundle list.` (upstream's `RETIRED_BUNDLES`) |
@@ -130,6 +130,8 @@ The report is stored in the snapshot's history version, so the history shows wha
 The `bundle-skipped` items and the rows of bundle layers come from the bundle list the target would load: the template, or the profile's list without the retired bundles. Each bundle resolves from the target's install anchor first and the profile second, as upstream's profile load resolves it. The target skips a bundle that does not resolve, declares no `dsh.bundle`, lists `dsh.bundle.platforms` without this machine's platform, has a DSH requirement (`engines.dsh`, else its `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*` peers) that the target does not meet and no exact-version exemption covers, or has an `engines.delo` the target does not meet. The patch files a loaded bundle declares in `dsh.bundle.patch` are walked row by row, like the profile patch, and each row's `layer` is the bundle.
 
 For a mismatch on either version axis the report names both target versions, and its `actions` offer updating the plugin to a version that meets the target and, for the axis that is unmet, an exact-version exemption on the target version ([C17](c17-plugin-versions.md#exemptions)).
+
+Each plugin's two axes are decided by upstream's own evaluation, the functions the plugin installer and the start's preflight call (`evaluatePluginCompatibility` and `evaluateDeloRequirement`), with the target's DSH and Delo versions in place of the running ones and no exemption; the report then applies the exemption files per axis. On the DSH axis `engines.dsh` decides alone when it is declared; otherwise every `@deepseek-ai/dsh` or `@deepseek-ai/dsh-*` peer range must admit the target's DSH, a `workspace:` peer admitting any. An unmet peer is named in `<range>` as `<peer range> (peer <package>)`, so the report disables every plugin the next start would disable. A declaration upstream refuses to read, including a peer range that is not a string, is `requirement-unreadable`. The update check counts the plugins it would disable with the same evaluation, and `delorun plugin check` shows it for one plugin ([C17](c17-plugin-versions.md#checking-a-plugin-before-it-is-installed)).
 
 ## Verified and unverified
 
@@ -259,6 +261,7 @@ The report's `schema` names its major version; reason codes form a closed list i
 | `c03-pointer-swap-applies-the-table` | update | `delorun recover rollback` with no home process running applies the table; it never swaps the pointers alone. |
 | `c03-second-rollback-keeps-both-set-asides` | update | Two update-and-rollback rounds leave two set-aside directories. |
 | `c03-interrupted-restore-completes-before-a-host-starts` | update | A restore killed between its renames is completed at the next start before the Host boots. |
+| `c03-peer-requirement-excludes-target` | update-notice | A plugin that states its DSH range only through peers, one of which excludes the target, is `dsh-requirement-unmet` and disabled, with the requirement upstream's preflight reports for it. |
 | `update-notice-sends-no-identifier` | update-notice | Every request of a check is a bare `GET` of a channel file with no query, cookie, body, profile, plugin or running version. |
 | `update-notice-unverified-index-silent` | update-notice | A timestamp or manifest that does not verify records the failure and keeps the last verified release. |
 | `update-notice-replayed-timestamp-refused` | update-notice | A timestamp older than the stored one is refused. |

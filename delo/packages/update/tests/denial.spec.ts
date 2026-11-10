@@ -5,7 +5,8 @@
  * leaves the CLI home's version and state alone while both appear in the report.
  */
 import { describe, expect, it } from 'vitest'
-import { UpdateReportError, buildUpdateReport, confirmsWithoutAsking, reasonMessage } from '../src/index.ts'
+import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot'
+import { UpdateReportError, buildUpdateReport, confirmsWithoutAsking, disabledPluginNames, readInstalledPlugin, reasonMessage, requirementText } from '../src/index.ts'
 import { FROM, TO, input, installed, profile, reasonOf, status, target, unreadable, version } from './support.ts'
 
 /** A profile of one plugin whose `package.json` does not parse. */
@@ -34,16 +35,29 @@ describe('c03-unverified-metadata-shown', () => {
 
 describe('c03-delo-requirement-excludes-target', () => {
   it('names both target versions for a plugin whose engines.delo excludes the target', () => {
-    const report = buildUpdateReport(input({ profile: profile({ plugins: [{ name: 'bridge', version: version('0.5.0'), requirements: { dsh: { kind: 'range', range: '^0.3.0' }, delo: { kind: 'range', range: '^0.10.0' } } }] }) }))
+    const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('bridge', '0.5.0', { dsh: '^0.3.0', delo: '^0.10.0' })] }) }))
     expect(report.items).toMatchObject([{ kind: 'plugin', reason: 'delo-requirement-unmet', effect: 'disabled', verification: 'verified', detail: { axis: 'delo', requirement: '^0.10.0' }, actions: ['update-plugin', 'allow-version', 'keep-disabled'] }])
     expect(reasonMessage(report.items[0]!, report)).toBe('bridge requires Delo ^0.10.0; the update installs Delo 1.0.0.')
     expect(report.to.delo).toBe(TO.delo)
   })
 
   it('names both target versions for a DSH mismatch too', () => {
-    const report = buildUpdateReport(input({ profile: profile({ plugins: [{ name: 'calendar', version: version('2.0.0'), requirements: { dsh: { kind: 'range', range: '^0.2.0' }, delo: { kind: 'none' } } }] }) }))
+    const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('calendar', '2.0.0', { dsh: '^0.2.0' })] }) }))
     expect(reasonMessage(report.items[0]!, report)).toBe('calendar requires DSH ^0.2.0; Delo 1.0.0 runs DSH 0.3.0.')
     expect(reasonOf(report, 'calendar')).toBe('dsh-requirement-unmet')
+  })
+})
+
+describe('c03-peer-requirement-excludes-target', () => {
+  it('disables a plugin that states its DSH range only through peers, with the requirement upstream\'s preflight reports', () => {
+    const manifest = { name: 'peers-only', version: '1.0.0', peerDependencies: { '@deepseek-ai/dsh-agent': '^0.2.0', '@deepseek-ai/dsh-tools': 'workspace:*' } }
+    const report = buildUpdateReport(input({ profile: profile({ plugins: [readInstalledPlugin('peers-only', version('1.0.0'), JSON.stringify(manifest))] }) }))
+    const preflight = evaluatePluginCompatibility(manifest, {}, TO.dsh, undefined)
+    expect(preflight?.requirements).toEqual({ '@deepseek-ai/dsh-agent': '^0.2.0' })
+    expect(report.items).toMatchObject([{ kind: 'plugin', reason: 'dsh-requirement-unmet', effect: 'disabled', verification: 'verified', detail: { axis: 'dsh', requirement: requirementText(preflight!.requirements) } }])
+    expect(reasonMessage(report.items[0]!, report)).toBe('peers-only requires DSH ^0.2.0 (peer @deepseek-ai/dsh-agent); Delo 1.0.0 runs DSH 0.3.0.')
+    expect(disabledPluginNames(report)).toEqual(['peers-only'])
+    expect(confirmsWithoutAsking(report)).toBe(false)
   })
 })
 
