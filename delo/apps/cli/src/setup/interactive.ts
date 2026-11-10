@@ -1,141 +1,116 @@
 /**
- * The questions of `delorun setup` in a terminal (contract C11, "Questions"). The answers come back as one
- * {@link SetupAnswers}, the same value the `--yes` and `--config` forms produce, so the two forms write
- * identical profiles. Reach is not asked: its screen comes with contract C7's reach providers, and setup records
- * it as off.
+ * The questions of `delorun setup` in a terminal (contract C11, "Questions"). The first screen picks Quick or
+ * Full; then each registered section asks its question, with a way back to the previous one, and a review screen
+ * ends the run. The answers come back as one {@link SetupAnswers}, the same value the `--yes` and `--config`
+ * forms produce, so the three forms write identical profiles.
  *
  * @module @delo/cli/setup/interactive
  */
-import { en } from '@delo/bundle-local/statements'
-import {
-  SETUP_DEFAULTS,
-  SETUP_DEFAULT_CREDENTIAL_VARIABLE,
-  RESOURCE_PRESETS,
-  DOCKER_SHAPES,
-  type RuntimeAnswer,
-  type SetupAnswers,
-} from '@delo/contract-setup-answers'
-import type { AliasCoverage } from '@deepseek-ai/dsh-sandbox-local'
-import type { SandboxDialect } from './dialect.ts'
-import { dockerConnectEnforced } from './dialect.ts'
+import { SETUP_DEFAULTS, type SetupAnswers } from '@delo/contract-setup-answers'
+import { BACK, runSteps, type Back, type RunStep } from './steps.ts'
 import { SetupCancelled, type Prompter } from './prompts.ts'
-
-/** Contract C1's label for Docker mode on a system whose dialect cannot enforce `docker-connect`. */
-export const DOCKER_NOT_ENFORCED_LABEL = 'On this system, commands in native workspaces can connect to Docker, which can start containers with this computer\'s files mounted.'
+import { withRecord, type Draft, type SectionEnvironment, type SectionRegistry, type SetupMode, type SetupSection } from './sections.ts'
 
 /** What the interactive form returns: the answers, and the model key the person typed, which is never stored in them. */
 export interface InteractiveAnswers {
   /** The answers, the same value `--yes` and `--config` produce for the same choices. */
   readonly answers: SetupAnswers
-  /** The typed key, when the credential question chose a prompt; `undefined` otherwise. */
+  /** The typed key, when the key section took one; `undefined` otherwise. */
   readonly secret: string | undefined
 }
 
 /**
- * The statements setup makes before its questions and on the review screen, from the Privacy section's copy.
- * @returns one line per statement.
+ * @returns true: a step that always asks.
  */
-export function statementLines(): string[] {
-  return [en['statement.delo'], en['statement.optIns'], en['statement.feedback']]
+const alwaysAsks = (): boolean => true
+
+const MODE_LABELS: Readonly<Record<SetupMode, string>> = { quick: 'Quick', full: 'Full' }
+
+/**
+ * Whether a section is asked in a run.
+ * @param section - the section.
+ * @param draft - the answers so far, which carry the mode.
+ * @param environment - what the section may look at.
+ * @returns true when the mode includes the section and it applies on this computer.
+ */
+function isAsked(section: SetupSection, draft: Draft, environment: SectionEnvironment): boolean {
+  return (draft.mode === 'full' || section.mode === 'quick') && section.appliesTo(environment)
 }
 
 /**
- * Show the statements in a note.
- * @param prompter - the prompter that shows the note.
+ * The step of one section.
+ * @param section - the section.
+ * @param environment - what the section may look at.
+ * @returns the step: it records the section as skipped when it is not asked.
  */
-export function showStatements(prompter: Prompter): void {
-  prompter.note(statementLines().join('\n'), en.title)
+function askStep(section: SetupSection, environment: SectionEnvironment): RunStep<Draft> {
+  return {
+    asks: draft => section.asks && isAsked(section, draft, environment),
+    async run(io, draft) {
+      if (!isAsked(section, draft, environment)) {
+        return { ...draft, answers: { ...draft.answers, sections: withRecord(draft.answers.sections, section.id, 'skipped') } }
+      }
+      const given = await section.ask(io, draft, environment)
+      if (given === BACK) return BACK
+      return {
+        mode: draft.mode,
+        answers: { ...draft.answers, ...given.answers, sections: withRecord(draft.answers.sections, section.id, given.status) },
+        secret: given.secret ?? draft.secret,
+      }
+    },
+  }
+}
+
+/**
+ * The review screen's lines.
+ * @param draft - the answers.
+ * @param sections - every registered section.
+ * @returns one line for the mode and one per section that was asked and has a line.
+ */
+export function review(draft: Draft, sections: readonly SetupSection[]): string {
+  return [
+    `Setup: ${MODE_LABELS[draft.mode]}`,
+    ...sections
+      .filter(section => draft.answers.sections.find(record => record.id === section.id)?.status === 'answered')
+      .flatMap(section => section.review?.(draft.answers) ?? []),
+  ].join('\n')
 }
 
 /**
  * Ask every question and return the answers.
  * @param prompter - the prompter.
- * @param dialect - the system's sandbox dialect, which decides whether Docker mode carries its label.
- * @param dockerCoverage - whether the Docker socket's other mounts can be found; when not, Docker mode is labelled.
+ * @param registry - the sections.
+ * @param environment - what the sections may look at.
  * @returns the answers and the typed key.
  * @throws {SetupCancelled} when the person cancels a question or declines the review.
  */
-export async function askAnswers(prompter: Prompter, dialect: SandboxDialect, dockerCoverage: AliasCoverage): Promise<InteractiveAnswers> {
-  const credential = await prompter.select('Where does the DeepSeek API key come from?', [
-    { value: 'prompt', label: 'Enter the key now', hint: 'stored in the home\'s credentials document' },
-    { value: 'environment', label: `Read ${SETUP_DEFAULT_CREDENTIAL_VARIABLE} from the environment at each start` },
-  ], 'prompt')
-  let secret: string | undefined
-  if (credential === 'prompt') secret = await prompter.secret('DeepSeek API key')
-
-  const runtime = await askRuntime(prompter, dialect, dockerCoverage)
-
-  const studioAdditions = await prompter.confirm('Turn on the Delo additions to the studio?', SETUP_DEFAULTS.studioAdditions)
-  const helpSetUpModels = await prompter.confirm('Help me set up other models?', SETUP_DEFAULTS.helpSetUpModels)
-
-  prompter.note(en['analytics.confirm.body'], en['analytics.confirm.title'])
-  const desktopAnalytics = await prompter.confirm(`${en['analytics.confirm.title']} (no by default)`, SETUP_DEFAULTS.desktopAnalytics)
-  prompter.note(en['sessionLog.confirm.body'], en['sessionLog.confirm.title'])
-  const sessionLogUpload = await prompter.confirm(`${en['sessionLog.confirm.title']} (no by default)`, SETUP_DEFAULTS.sessionLogUpload)
-
-  const answers: SetupAnswers = {
-    ...SETUP_DEFAULTS,
-    modelProvider: {
-      id: SETUP_DEFAULTS.modelProvider.id,
-      credential: credential === 'prompt' ? { source: 'prompt' } : { source: 'environment', name: SETUP_DEFAULT_CREDENTIAL_VARIABLE },
+export async function askAnswers(prompter: Prompter, registry: SectionRegistry, environment: SectionEnvironment): Promise<InteractiveAnswers> {
+  const sections = registry.all()
+  const modeStep: RunStep<Draft> = {
+    asks: alwaysAsks,
+    async run(io, draft) {
+      const mode = await io.select<SetupMode>('How do you want to set up Delorun?', [
+        { value: 'quick', label: MODE_LABELS.quick, hint: 'the model key and how careful prompts are' },
+        { value: 'full', label: MODE_LABELS.full, hint: 'also background running, the profile name and the port' },
+      ], draft.mode)
+      // The mode question is the first step, so it offers no back choice.
+      return { ...draft, mode: mode as SetupMode }
     },
-    runtime,
-    studioAdditions,
-    helpSetUpModels,
-    desktopAnalytics,
-    sessionLogUpload,
   }
-  prompter.note(review(answers), 'Review')
-  showStatements(prompter)
-  const confirmed = await prompter.confirm('Save these answers and set up Delo?', true)
-  if (!confirmed) throw new SetupCancelled()
-  return { answers, secret }
-}
-
-/**
- * The runtime question: native, or Docker with a shape and a preset. Docker carries C1's label on a dialect that
- * cannot enforce `docker-connect`.
- * @param prompter - the prompter.
- * @param dialect - the system's sandbox dialect.
- * @param dockerCoverage - whether the Docker socket's other mounts can be found.
- * @returns the runtime answer.
- */
-async function askRuntime(prompter: Prompter, dialect: SandboxDialect, dockerCoverage: AliasCoverage): Promise<RuntimeAnswer> {
-  const kind = await prompter.select('Where do commands run?', [
-    { value: 'native', label: 'On this computer' },
-    { value: 'docker', label: 'In Docker containers', hint: dockerConnectEnforced(dialect, dockerCoverage) ? undefined : DOCKER_NOT_ENFORCED_LABEL },
-  ], 'native')
-  if (kind === 'native') return { kind: 'native' }
-  const shape = await prompter.select('Container shape', DOCKER_SHAPES.map(value => ({ value, label: value })), 'S2')
-  const preset = await prompter.select('Resource preset', RESOURCE_PRESETS.map(value => ({ value, label: value })), 'small')
-  return { kind: 'docker', shape, preset }
-}
-
-/**
- * The answers as the review screen lists them, without any credential value.
- * @param answers - the answers.
- * @returns one line per answer.
- */
-export function review(answers: SetupAnswers): string {
-  const credential = answers.modelProvider.credential.source === 'prompt'
-    ? 'key entered now'
-    : `read from ${answers.modelProvider.credential.name} at each start`
-  const runtime = answers.runtime.kind === 'native' ? 'native' : `docker, ${answers.runtime.shape}, ${answers.runtime.preset}`
-  return [
-    `DeepSeek API key: ${credential}`,
-    `Runtime: ${runtime}`,
-    `Delo additions to the studio: ${onOff(answers.studioAdditions)}`,
-    `Help me set up other models: ${onOff(answers.helpSetUpModels)}`,
-    `Desktop analytics: ${onOff(answers.desktopAnalytics)}`,
-    `DeepSeek session-log upload: ${onOff(answers.sessionLogUpload)}`,
-    'Reach from anywhere: off (set up later)',
-  ].join('\n')
-}
-
-/**
- * @param value - a switch.
- * @returns `on` or `off`.
- */
-function onOff(value: boolean): string {
-  return value ? 'on' : 'off'
+  const reviewStep: RunStep<Draft> = {
+    asks: alwaysAsks,
+    async run(io, draft): Promise<Draft | Back> {
+      io.note(review(draft, sections), 'Review')
+      const next = await io.select('Save these answers and set up Delorun?', [
+        { value: 'save', label: 'Save and set up' },
+        { value: 'cancel', label: 'Cancel', hint: 'nothing is written' },
+      ], 'save')
+      if (next === BACK) return BACK
+      if (next === 'cancel') throw new SetupCancelled()
+      return draft
+    },
+  }
+  const initial: Draft = { mode: 'quick', answers: SETUP_DEFAULTS, secret: undefined }
+  const done = await runSteps([modeStep, ...sections.map(section => askStep(section, environment)), reviewStep], initial, prompter)
+  return { answers: done.answers, secret: done.secret }
 }

@@ -7,7 +7,7 @@
  */
 
 /** Schema version of the answers document. Setup refuses any other value. */
-export const SETUP_ANSWERS_SCHEMA_VERSION = 1 as const
+export const SETUP_ANSWERS_SCHEMA_VERSION = 2 as const
 
 /** Provider id applied when the person accepts the provider question's default. */
 export const SETUP_DEFAULT_PROVIDER_ID = 'deepseek-official' as const
@@ -27,27 +27,10 @@ export const IDENTITY_FACTORS = ['passkey', 'oidc', 'tailnet'] as const
 /** One identity factor of {@link IDENTITY_FACTORS}. */
 export type IdentityFactor = (typeof IDENTITY_FACTORS)[number]
 
-/** Docker shapes that setup offers. */
-export const DOCKER_SHAPES = ['S2', 'S3'] as const
-
-/** One Docker shape of {@link DOCKER_SHAPES}. */
-export type DockerShape = (typeof DOCKER_SHAPES)[number]
-
-/** Resource presets. Their values are defined by the Docker runtime contract. */
-export const RESOURCE_PRESETS = ['small', 'balanced', 'large', 'advanced'] as const
-
-/** One resource preset of {@link RESOURCE_PRESETS}. */
-export type ResourcePreset = (typeof RESOURCE_PRESETS)[number]
-
 /** Where the model credential comes from. `prompt` is accepted only in the interactive form. */
 export type ModelCredential =
   | { readonly source: 'prompt' }
   | { readonly source: 'environment'; readonly name: string }
-
-/** The runtime answer: `native`, or `docker` with a shape and a resource preset. */
-export type RuntimeAnswer =
-  | { readonly kind: 'native' }
-  | { readonly kind: 'docker'; readonly shape: DockerShape; readonly preset: ResourcePreset }
 
 /** The reach answer. `identityFactor` is `null` exactly when `option` is `none`. */
 export interface ReachAnswer {
@@ -55,33 +38,62 @@ export interface ReachAnswer {
   readonly identityFactor: IdentityFactor | null
 }
 
+/** The prompts answers. `safer` keeps Delo's consent and permission defaults; `stock` sets them to upstream's behaviour. */
+export const PROMPTS_OPTIONS = ['safer', 'stock'] as const
+
+/** One prompts answer of {@link PROMPTS_OPTIONS}. */
+export type PromptsAnswer = (typeof PROMPTS_OPTIONS)[number]
+
+/** Port the studio listens on when the person does not choose one; upstream's Web profile default. */
+export const SETUP_DEFAULT_PORT = 3080 as const
+
+/** The profile section's answers: `null` keeps the profile the command line selected, and the default port. */
+export interface ProfileAnswer {
+  readonly name: string | null
+  readonly port: number | null
+}
+
+/** What the person did with a section: `seen` is shown with no question, `answered` was asked and answered, `skipped` took its default without being asked. */
+export const SECTION_STATUSES = ['seen', 'answered', 'skipped'] as const
+
+/** One status of {@link SECTION_STATUSES}. */
+export type SectionStatus = (typeof SECTION_STATUSES)[number]
+
+/** One row of the `sections` record: a section id and what happened to it in this run. */
+export interface SectionRecord {
+  readonly id: string
+  readonly status: SectionStatus
+}
+
 /** The answers document read by the interactive setup and by `--config`. */
 export interface SetupAnswers {
   readonly schemaVersion: typeof SETUP_ANSWERS_SCHEMA_VERSION
   readonly modelProvider: { readonly id: string; readonly credential: ModelCredential }
-  readonly studioAdditions: boolean
-  readonly runtime: RuntimeAnswer
+  readonly prompts: PromptsAnswer
+  readonly background: boolean
+  readonly profile: ProfileAnswer
   readonly reach: ReachAnswer
-  readonly helpSetUpModels: boolean
-  readonly sessionLogUpload: boolean
-  readonly desktopAnalytics: boolean
   readonly importStockHome: boolean
+  /** The sections this run showed, in order; the studio's onboarding leaves out what the terminal covered. */
+  readonly sections: readonly SectionRecord[]
 }
 
 /** The value setup applies to each question the person does not answer. */
 export const SETUP_DEFAULTS = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   modelProvider: { id: 'deepseek-official', credential: { source: 'prompt' } },
-  studioAdditions: true,
-  runtime: { kind: 'native' },
+  prompts: 'safer',
+  background: true,
+  profile: { name: null, port: null },
   reach: { option: 'none', identityFactor: null },
-  helpSetUpModels: false,
-  sessionLogUpload: false,
-  desktopAnalytics: false,
   importStockHome: false,
+  sections: [],
 } as const satisfies SetupAnswers
 
-/** Upstream profile row that each opt-in answer writes its `config.enabled` field to. */
+/** Keys that earlier answers documents carried and that setup no longer asks; a document holding one is refused. */
+export const REMOVED_ANSWER_KEYS = ['studioAdditions', 'runtime', 'helpSetUpModels', 'sessionLogUpload', 'desktopAnalytics'] as const
+
+/** Upstream profile row that each opt-in's `config.enabled` is written to; the Privacy section in Settings owns them. */
 export const SETUP_OPT_IN_ROWS = {
   sessionLogUpload: 'session-log-deepseek',
   desktopAnalytics: 'product-analytics',

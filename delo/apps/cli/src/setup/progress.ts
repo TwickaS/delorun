@@ -13,11 +13,20 @@ import type { SetupAnswers } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
 import { answersSchema } from './answers.ts'
 
-/** The steps setup runs, in order. A step writes the same values when it runs again. */
-export const SETUP_STEPS = ['profile', 'credential', 'profile-rows', 'desktop-row'] as const
+/** The step that creates the CLI profile; it runs before every section's writes. */
+export const PROFILE_STEP = 'profile'
 
-/** One step of {@link SETUP_STEPS}. */
-export type SetupStep = (typeof SETUP_STEPS)[number]
+/**
+ * The step of a section's writes.
+ * @param id - the section id.
+ * @returns the step name recorded in the run record.
+ */
+export function sectionStep(id: string): string {
+  return `section:${id}`
+}
+
+/** One step setup runs: {@link PROFILE_STEP}, then one {@link sectionStep} per section. A step writes the same values when it runs again. */
+export type SetupStep = string
 
 /** The run record. */
 export interface SetupProgress {
@@ -30,7 +39,7 @@ export interface SetupProgress {
 const progressSchema = z.strictObject({
   version: z.literal(1),
   answers: answersSchema,
-  completed: z.array(z.enum(SETUP_STEPS)),
+  completed: z.array(z.string()),
 })
 
 /** The run record's file name inside the profile's run directory. */

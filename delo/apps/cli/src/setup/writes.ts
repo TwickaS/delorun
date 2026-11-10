@@ -46,7 +46,7 @@ export interface PatchRow {
   /** The row's entry id. */
   readonly id: string
   /** The config keys to set; other keys already on the row stay. */
-  readonly config: Readonly<Record<string, boolean | string>>
+  readonly config: Readonly<Record<string, boolean | number | string>>
 }
 
 /**

@@ -8,15 +8,16 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This types-only package exports the answers document of `delorun setup`: its types, its defaults and the upstream profile rows that the two opt-in answers write. The interactive setup, the `--yes` and `--config` forms and the studio's consent screen import these definitions, so each default has one source. The specification is [contract C11](../../docs/contracts/c11-setup-answers.md).
+This types-only package exports the answers document of `delorun setup`: its types, its defaults, the keys earlier documents carried and setup no longer asks, and the upstream profile rows that the Privacy section's two opt-ins write. The interactive setup, the `--yes` and `--config` forms and the studio's consent screen import these definitions, so each default has one source. The specification is [contract C11](../../docs/contracts/c11-setup-answers.md).
 
 ## Exports
 
-- `SetupAnswers`, `RuntimeAnswer`, `ReachAnswer` and `ModelCredential`: the answer types.
-- `REACH_OPTIONS`, `IDENTITY_FACTORS`, `DOCKER_SHAPES` and `RESOURCE_PRESETS`, with the union types derived from each.
+- `SetupAnswers`, `ReachAnswer`, `ProfileAnswer`, `SectionRecord` and `ModelCredential`: the answer types.
+- `REACH_OPTIONS`, `IDENTITY_FACTORS`, `PROMPTS_OPTIONS` and `SECTION_STATUSES`, with the union types derived from each.
+- `REMOVED_ANSWER_KEYS`: the keys of earlier answers documents that `--config` refuses by name.
 - `SETUP_DEFAULTS`: the default value of every answer.
-- `SETUP_OPT_IN_ROWS`: the upstream row that each opt-in answer writes.
-- `SETUP_ANSWERS_SCHEMA_VERSION`, `SETUP_DEFAULT_PROVIDER_ID` and `SETUP_DEFAULT_CREDENTIAL_VARIABLE`: the schema version, the default provider id and the default credential variable.
+- `SETUP_OPT_IN_ROWS`: the upstream row that each opt-in on the Privacy section writes. Setup no longer asks either.
+- `SETUP_ANSWERS_SCHEMA_VERSION`, `SETUP_DEFAULT_PROVIDER_ID`, `SETUP_DEFAULT_CREDENTIAL_VARIABLE` and `SETUP_DEFAULT_PORT`: the schema version, the default provider id, the default credential variable and the studio's default port.
 
 ## Limits
 

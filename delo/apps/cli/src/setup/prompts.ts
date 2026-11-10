@@ -41,10 +41,21 @@ export interface Prompter {
   /**
    * Ask for a secret, shown masked.
    * @param message - the question.
-   * @returns the entered text, which is never empty.
+   * @param allowEmpty - whether an empty entry is accepted and returned as `''`; the step runner uses it for "go back".
+   * @returns the entered text; empty only when `allowEmpty` is true.
    * @throws {SetupCancelled} when the person cancels.
    */
-  secret(message: string): Promise<string>
+  secret(message: string, allowEmpty?: boolean): Promise<string>
+  /**
+   * Ask for a line of text.
+   * @param message - the question.
+   * @param initial - the text offered at first, returned when the person presses Enter on it.
+   * @param validate - a check of the entry; it returns the message to show, or `undefined` when the entry is accepted.
+   * @param allowEmpty - whether an empty entry is accepted, skipping `validate`; the step runner uses it for "go back".
+   * @returns the entered text.
+   * @throws {SetupCancelled} when the person cancels.
+   */
+  text(message: string, initial: string, validate: (value: string) => string | undefined, allowEmpty?: boolean): Promise<string>
   /**
    * Show text that needs no answer.
    * @param body - the text.
@@ -81,8 +92,18 @@ export function terminalPrompter(): Prompter {
     async confirm(message, initial) {
       return unwrap(await clack.confirm({ message, initialValue: initial }))
     },
-    async secret(message) {
-      return unwrap(await clack.password({ message, validate: value => ((value ?? '').trim() === '' ? 'Enter a key.' : undefined) }))
+    async secret(message, allowEmpty = false) {
+      return unwrap(await clack.password({ message, validate: value => (!allowEmpty && (value ?? '').trim() === '' ? 'Enter a key.' : undefined) }))
+    },
+    async text(message, initial, validate, allowEmpty = false) {
+      return unwrap(await clack.text({
+        message,
+        initialValue: initial,
+        validate: (value) => {
+          const entry = (value ?? '').trim()
+          return allowEmpty && entry === '' ? undefined : validate(entry)
+        },
+      }))
     },
     note(body, title) {
       clack.note(body, title)

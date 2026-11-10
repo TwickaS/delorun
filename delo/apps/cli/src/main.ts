@@ -5,7 +5,7 @@
  * | Command | What it does |
  * | --- | --- |
  * | `delorun [--profile <name>]` | runs setup on a home without the CLI profile; otherwise starts the home process in this terminal and opens the studio |
- * | `delorun setup [--profile <name>]` | setup's entry point ([setup](./setup/index.ts)) |
+ * | `delorun setup [<section>] [--profile <name>] [--list]` | setup, Quick or Full, or one section again ([setup](./setup/index.ts)) |
  * | `delorun start [--foreground] [--profile <name>]` | the home process in the background, or in this terminal ([start](./start.ts)) |
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
  * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
@@ -27,6 +27,7 @@ import { parseOptions, prepareHome, type CliCommand, type CommandContext, type C
 import { HomeLayoutError } from '@delo/home'
 import { hasCliProfile } from './profile.ts'
 import { runSetup, setupCommand } from './setup/index.ts'
+import { SetupCancelled } from './setup/prompts.ts'
 import { startCommand, startForeground } from './start.ts'
 import { statusCommand } from './status.ts'
 import { stopCommand } from './stop.ts'
@@ -109,12 +110,16 @@ export async function main(argv: readonly string[], context: CommandContext = {
  * @param error - the failure.
  * @param context - the output.
  * @returns its exit code.
- * @throws the error itself when it is neither a {@link CliError}, a {@link DeloVersionError} nor a {@link HomeLayoutError}.
+ * @throws the error itself when it is neither a {@link CliError}, a {@link SetupCancelled}, a {@link DeloVersionError} nor a {@link HomeLayoutError}.
  */
 function report(error: unknown, context: CommandContext): ExitCode {
   if (error instanceof CliError) {
     context.stderr(`${error.message}\n`)
     return error.exit
+  }
+  if (error instanceof SetupCancelled) {
+    context.stderr(`${error.message}\n`)
+    return EXIT.failed
   }
   if (error instanceof DeloVersionError) {
     context.stderr(`${error.message}\n`)

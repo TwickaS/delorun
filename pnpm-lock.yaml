@@ -1248,6 +1248,12 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-llm-deepseek':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm-deepseek
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:*
+        version: link:../../../packages/util/native-command
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager
@@ -1266,6 +1272,9 @@ importers:
       '@delo/contract-operational-logs':
         specifier: workspace:*
         version: link:../../packages/contract-operational-logs
+      '@delo/contract-parity-composition':
+        specifier: workspace:*
+        version: link:../../packages/contract-parity-composition
       '@delo/contract-plugin-versions':
         specifier: workspace:*
         version: link:../../packages/contract-plugin-versions
