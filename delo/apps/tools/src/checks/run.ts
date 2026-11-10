@@ -89,6 +89,12 @@ export interface UnitCounts {
   readonly shared: number
 }
 
+/**
+ * The checks that compile upstream's projects with `tsc -b` and write their emitted declarations, in the order they run:
+ * one at a time, so they never write the same files at once, and the later ones find the declarations the first emitted.
+ */
+export const DECLARATION_WRITERS: readonly string[] = ['typecheck:upstream', 'build:artifacts', 'gates:docs']
+
 /** The fields of Vitest's JSON report that a unitised run reads. */
 const VitestReport = z.object({ testResults: z.array(z.object({ name: z.string(), status: z.string() })) })
 
@@ -270,6 +276,8 @@ export async function runPlan(plan: readonly WithUnits<Planned>[], options: RunO
           continue
         }
         if (alone || (check.exclusive === true && running.size > 0)) continue
+        const writer = DECLARATION_WRITERS.indexOf(check.id)
+        if (writer >= 0 && (DECLARATION_WRITERS.slice(0, writer).some(id => plan.some(each => each.id === id) && !results.has(id)) || [...running.keys()].some(id => DECLARATION_WRITERS.includes(id)))) continue
         if (busy > 0 && busy + check.cpus > options.cpus) continue
         if (held > 0 && held + check.memoryBytes > options.memoryBytes) continue
         start(check, keyed.length === 0 ? undefined : { pending, counts })

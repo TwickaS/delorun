@@ -451,7 +451,8 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       title: `\`${program.config}\``,
       cwd: '',
       command: [TSC, '--noEmit', '-p', program.config, '--incremental', '--tsBuildInfoFile', `${cacheDir}/tsbuildinfo/${label}.tsbuildinfo`],
-      needs: ['typecheck:upstream'],
+      // A program can resolve a built Delo package to its emitted declarations, which a stale build lacks.
+      needs: ['typecheck:upstream', ...deloBuilt],
       inputs: FORK_CODE,
       tiers: ['changed', 'full'],
       cpus: 1,

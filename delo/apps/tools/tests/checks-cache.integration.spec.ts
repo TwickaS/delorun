@@ -15,7 +15,7 @@ import type { Planned } from '../src/checks/plan.ts'
 import { openSharedStore } from '../src/checks/shared-cache.ts'
 import { sharingPolicy } from '../src/checks/sharing.ts'
 import { runPlan, type Result } from '../src/checks/run.ts'
-import { cacheCounts, changeTier, main, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
+import { cacheCounts, changeTier, invocationDir, main, prePushBase, pushesTrunk, pushTier, TRUNK_REF, withoutSeparator } from '../src/run-checks.ts'
 
 const ZERO = '0'.repeat(40)
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -244,6 +244,18 @@ describe('when the cache serves a run', () => {
   })
 })
 
+describe('the checks that write upstream\'s declarations', { timeout: 30_000 }, () => {
+  it('run one at a time, the typecheck first, while the other checks run beside them', async () => {
+    const root = makeRepo()
+    const log = join(tempDir('delo-cache-writers-'), 'log')
+    const step = (id: string): Planned => markedCheck(id, log, { command: [process.execPath, '-e', `const fs = require('node:fs'); fs.appendFileSync(${JSON.stringify(log)}, 'start ${id}\\n'); setTimeout(() => fs.appendFileSync(${JSON.stringify(log)}, 'end ${id}\\n'), 300)`] })
+    await runWith(root, [step('gates:docs'), step('build:artifacts'), step('jsdoc'), step('typecheck:upstream')], undefined)
+    const lines = readFileSync(log, 'utf8').trim().split('\n').filter(line => !line.endsWith('jsdoc'))
+    expect(lines).toEqual(['start typecheck:upstream', 'end typecheck:upstream', 'start build:artifacts', 'end build:artifacts', 'start gates:docs', 'end gates:docs'])
+    expect(readFileSync(log, 'utf8').indexOf('start jsdoc')).toBeLessThan(readFileSync(log, 'utf8').indexOf('end typecheck:upstream'))
+  })
+})
+
 describe('how a run uses the cache', () => {
   const run = { preCommit: false, tier: 'agent' as const, only: [], noCache: false, noSharedCache: false, fullGate: false }
 
@@ -280,6 +292,14 @@ describe('the pre-push base', () => {
     expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${base}\n`, 'v5', false)).toBe(base)
     expect(prePushBase(root, `refs/heads/feature ${head} refs/heads/feature ${ZERO}\n`, 'v5', true)).toBeUndefined()
     expect(prePushBase(root, `refs/heads/other ${base} refs/heads/other ${ZERO}\n`, 'v5', false)).toBeUndefined()
+  })
+})
+
+describe('the paths a command line names', () => {
+  it('are relative to INIT_CWD only under a pnpm script, and to the run\'s own directory otherwise', () => {
+    expect(invocationDir({ npm_lifecycle_event: 'check', INIT_CWD: '/repo/delo' }, '/repo/delo/apps/tools')).toBe('/repo/delo')
+    expect(invocationDir({ INIT_CWD: '/elsewhere' }, '/repo')).toBe('/repo')
+    expect(invocationDir({ npm_lifecycle_event: 'check' }, '/repo')).toBe('/repo')
   })
 })
 

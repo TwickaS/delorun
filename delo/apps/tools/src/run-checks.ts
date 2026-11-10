@@ -57,8 +57,8 @@ import { parseArgs } from 'node:util'
 import { z } from 'zod'
 import { cacheUse, contentId, createPassCache, type PassCache, type SharedUse } from './checks/cache.ts'
 import { FUNDAMENTALS_INPUTS, GATES } from './checks/gates/index.ts'
-import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
-import { catalog, criticalPath, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, withSecurityPackages, type Budgets, type Check, type ForkPackage, type GateTier, type ForkTree, type Planned, type Program, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
+import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, removeScratch, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, workerCounts } from './checks/machine.ts'
+import { catalog, criticalPath, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { checksToRun, fitToGrant, runDemand } from './checks/demand.ts'
 import { isLightPlan, gatePriority } from './checks/run-queue.ts'
 import { machineBudget, nodeSlotHost, slotPaths } from './checks/slot-host.ts'
@@ -68,10 +68,10 @@ import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath,
 import { openSharedStore, sharedCacheDir } from './checks/shared-cache.ts'
 import { declarationReaders, securityPackageDirs, sharingPolicy } from './checks/sharing.ts'
 import { isForkSuite, suiteUnits, type WithUnits } from './checks/units.ts'
-import { readWebSpecs } from './checks/web.ts'
+import { excerpt } from './checks/failure.ts'
+import { readTree } from './checks/tree.ts'
 import { nodeWarning, pinnedNodeMajor } from './setup-worktree.ts'
 import { git, repositoryRoot, runGit } from './git.ts'
-import { MANIFEST_PATH, parseManifest } from './fork-boundary.ts'
 
 /** Where the runner keeps its state, relative to the repository root. */
 const CACHE_DIR = 'node_modules/.cache/delo-checks'
@@ -85,17 +85,6 @@ export const TRUNK_REF = `refs/heads/${DEFAULT_BASE}`
 const REPORT = `${CACHE_DIR}/report.json`
 /** Where each check's last duration is kept, for the order of the next run. */
 const DURATIONS = `${CACHE_DIR}/durations.json`
-
-/** The fields of a workspace package's `package.json` the plan reads, fork or upstream. */
-const manifestSchema = z.object({
-  name: z.string(),
-  dependencies: z.record(z.string(), z.string()).optional(),
-  devDependencies: z.record(z.string(), z.string()).optional(),
-  peerDependencies: z.record(z.string(), z.string()).optional(),
-  scripts: z.record(z.string(), z.string()).optional(),
-  exports: z.unknown().optional(),
-  files: z.array(z.string()).optional(),
-})
 
 /** The shape of `checks/budgets.json`. */
 const BudgetsFile = z.strictObject({
@@ -114,35 +103,6 @@ function list(values: readonly string[] | undefined): string[] {
   return (values ?? []).flatMap(value => value.split(',')).map(value => value.trim()).filter(value => value.length > 0)
 }
 
-/**
- * The fork's packages and programs, read from the tree.
- * @param root - the repository root.
- * @returns the packages, the tsconfig programs and upstream's packages.
- */
-function readTree(root: string): ForkTree {
-  const packages: ForkPackage[] = []
-  const programs: Program[] = []
-  for (const parent of ['delo/apps', 'delo/packages']) {
-    if (!existsSync(join(root, parent))) continue
-    for (const name of readdirSync(join(root, parent)).sort()) {
-      const dir = `${parent}/${name}`
-      if (!existsSync(join(root, dir, 'package.json'))) continue
-      const manifest = manifestSchema.parse(JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')))
-      const dependencies = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.peerDependencies })
-      const ownWorkspace = existsSync(join(root, dir, 'pnpm-workspace.yaml'))
-      const tests = join(root, dir, 'tests')
-      const dockerSpecs = existsSync(tests) && readdirSync(tests, { recursive: true, encoding: 'utf8' }).some(entry => entry.endsWith('.docker.spec.ts'))
-      packages.push({ name: manifest.name, dir, forkDependencies: dependencies.filter(dependency => dependency.startsWith('@delo/')), upstreamDependencies: dependencies.filter(dependency => dependency.startsWith('@deepseek-ai/')), ownWorkspace, dockerSpecs, buildOutputs: declaredBuildOutputs(manifest) })
-      if (ownWorkspace) continue
-      for (const file of readdirSync(join(root, dir)).filter(entry => /^tsconfig(\..+)?\.json$/.test(entry)).sort()) programs.push({ config: `${dir}/${file}` })
-    }
-  }
-  // A package holding a `security` ledger entry runs its direct dependents' specs in the merge tier whatever their number.
-  const patches = existsSync(join(root, MANIFEST_PATH)) ? parseManifest(readFileSync(join(root, MANIFEST_PATH), 'utf8')).patches : []
-  const upstream = withSecurityPackages(readUpstream(root), patches)
-  return { packages, programs, upstream, webSpecs: readWebSpecs(root, upstream) }
-}
-
 const SPEC = /\.(?:spec|test)\.[cm]?[jt]sx?$/
 
 /**
@@ -158,30 +118,6 @@ function forkSpecDirs(root: string): string[] {
       return existsSync(tests) && readdirSync(tests, { recursive: true, encoding: 'utf8' }).some(entry => SPEC.test(entry) && !entry.includes('node_modules'))
     })
   })
-}
-
-/**
- * Upstream's packages under `packages/<group>/` and `apps/`, with their upstream dependencies and spec counts.
- * @param root - the repository root.
- * @returns the packages, sorted by directory.
- */
-function readUpstream(root: string): UpstreamPackage[] {
-  const dirs: string[] = []
-  const children = (dir: string): string[] => existsSync(join(root, dir)) ? readdirSync(join(root, dir), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => `${dir}/${entry.name}`) : []
-  for (const group of children('packages')) dirs.push(...children(group))
-  dirs.push(...children('apps'))
-  const upstream: UpstreamPackage[] = []
-  for (const dir of dirs.sort()) {
-    if (!existsSync(join(root, dir, 'package.json'))) continue
-    const manifest = manifestSchema.parse(JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')))
-    const upstreamOnly = (names: readonly string[]): string[] => names.filter(dependency => dependency.startsWith('@deepseek-ai/'))
-    const dependencies = upstreamOnly(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.peerDependencies }))
-    const runtimeDependencies = upstreamOnly(Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies }))
-    const tests = join(root, dir, 'tests')
-    const specs = existsSync(tests) ? readdirSync(tests, { recursive: true, encoding: 'utf8' }).filter(entry => SPEC.test(entry)).length : 0
-    upstream.push({ name: manifest.name, dir, dependencies, runtimeDependencies, specs })
-  }
-  return upstream
 }
 
 /**
@@ -450,7 +386,7 @@ function writeReport(root: string, results: readonly Result[], sharedDir: string
     oomKills: memory?.oomKills ?? null,
     passCache: { ...cacheCounts(results), sharedDir: sharedDir ?? null },
     checks: results.map(result => ({
-      check: result.id, status: result.outcome, cached: result.cached === true, cacheSource: result.cacheSource ?? null, units: result.units ?? null, reason: result.detail ?? null, logPath: result.log === undefined ? null : relative(root, result.log),
+      check: result.id, status: result.outcome, cached: result.cached === true, cacheSource: result.cacheSource ?? null, units: result.units ?? null, firstFailure: result.outcome === 'failed' && result.log !== undefined ? excerpt(logTail(result.log, 2000)) : null, reason: result.detail ?? null, logPath: result.log === undefined ? null : relative(root, result.log),
       durationSeconds: Math.round(result.seconds * 10) / 10, peakBytes: result.peakBytes ?? null, oomKilled: result.oomKilled === true,
     })),
   }
@@ -487,6 +423,11 @@ function summarize(results: readonly Result[], milliseconds: number, root: strin
     console.log(`\n── ${failure.id}: ${failure.outcome === 'declined' ? 'declined, which fails the merge tier: ' : ''}${failure.detail ?? failure.outcome}${failure.log === undefined ? '' : ` (full log: ${relative(root, failure.log)})`}`)
     if (failure.log !== undefined) console.log(logTail(failure.log, 60))
   }
+  // The first failure of each failed check again, last, where a reader of the summary sees it without the log.
+  for (const failure of failures) {
+    const first = failure.log === undefined ? [] : excerpt(logTail(failure.log, 2000))
+    if (first.length > 0) console.log(`\n── first failure of ${failure.id}:\n${first.map(line => `   ${line}`).join('\n')}`)
+  }
   const memory = memoryReport()
   const count = (predicate: (result: Result) => boolean): number => results.filter(predicate).length
   const passed = count(result => result.outcome === 'passed' && result.cached !== true)
@@ -499,6 +440,18 @@ function summarize(results: readonly Result[], milliseconds: number, root: strin
   const named = failures.length === 0 ? '' : ` (${failures.map(failure => failure.id).join(', ')})`
   console.log(`\ndelo checks: ${String(passed)} passed, ${String(cached)} cached (${String(sources.local)} in this worktree, ${String(sources.shared)} shared), ${String(failures.length)} failed${named}, ${String(declined.length)} declined, ${String(skipped)} skipped in ${formatSeconds(milliseconds / 1000)}${peak}${oom}; report: ${REPORT}`)
   return failures.length === 0 ? 0 : 1
+}
+
+/**
+ * The directory a command line's paths are relative to. Under `pnpm run`, which runs a script in its package, it is
+ * `INIT_CWD`, where pnpm was invoked; a run started by any other means resolves its paths against its own directory, so an
+ * `INIT_CWD` an agent's shell kept from an earlier pnpm script does not move them.
+ * @param env - the environment the run starts with.
+ * @param cwd - the run's working directory.
+ * @returns the directory.
+ */
+export function invocationDir(env: NodeJS.ProcessEnv, cwd: string): string {
+  return env['npm_lifecycle_event'] !== undefined && env['INIT_CWD'] !== undefined ? env['INIT_CWD'] : cwd
 }
 
 /**
@@ -617,8 +570,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     pushBase = values['pre-push'] ? prePushBase(root, pushInput ?? '', values.base ?? DEFAULT_BASE, fullGate) : undefined
     const base = values.base ?? pushBase ?? DEFAULT_BASE
     changed = values.changed || values.base !== undefined || pushBase !== undefined ? { base, paths: changedPaths(root, base) } : undefined
-    // Under `pnpm --filter`, a script runs in its package; `INIT_CWD` is where it was invoked.
-    const targets = positionals.map(path => relative(root, resolve(process.env['INIT_CWD'] ?? process.cwd(), path)))
+    const targets = positionals.map(path => relative(root, resolve(invocationDir(env, process.cwd()), path)))
     const fullRun = changed === undefined && targets.length === 0
     gateTier = fullRun || fullGate ? undefined : changeTier(values.tier, pushInput, env)
     const selection = { targets, ...changed === undefined ? {} : { changed }, ...gateTier === undefined ? {} : { tier: gateTier }, only: list(values.only), skip: list(values.skip) }
@@ -739,7 +691,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
       console.log(`  ${MARK[result.outcome]} ${check.id}${timing}${memoryNote}${result.outcome === 'declined' ? ' declined' : ''}${detail}`)
     },
   })
-  rmSync(scratch, { recursive: true, force: true })
+  const leftScratch = removeScratch(scratch)
+  if (leftScratch !== undefined) console.warn(`delo checks: the temporary directory ${scratch} is left behind: ${leftScratch}`)
   writeDurations(root, durations, results)
   const ioAtEnd = ioPressure(name => readFileSync(name, 'utf8'))
   const machine = { waitedSeconds: Math.round((grant?.waitedMs ?? 0) / 100) / 10, slots: grant?.slots ?? null, ioPressureAtStart: ioAtStart ?? null, ioPressureAtEnd: ioAtEnd ?? null }

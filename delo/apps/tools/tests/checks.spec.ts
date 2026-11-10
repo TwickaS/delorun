@@ -3,12 +3,12 @@
  * what order, the pre-commit tier, the machine budget, and the runner's
  * ordering and failure handling.
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
-import { checkEnvironment, cgroupBudget, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
+import { checkEnvironment, cgroupBudget, removeScratch, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
 import { affectsParity, declaredBuildOutputs, declineUnansweredDocker, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
 import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
@@ -511,6 +511,9 @@ describe('the build of Delo\'s packages', () => {
     const alone = catalog(TREE, { ...HOST, staleDeloBuilds: stale })
     expect(alone.find(check => check.id === 'build:delo')?.needs).toEqual([])
     expect(alone.find(check => check.id === 'tests:fork')?.needs).toEqual(['generate:native', 'build:delo'])
+    // A program can read a built package's emitted declarations, which the stale build lacks until it has run.
+    expect(checks.find(check => check.id === 'typecheck:delo:control')?.needs).toEqual(['typecheck:upstream', 'build:delo'])
+    expect(CHECKS.find(check => check.id === 'typecheck:delo:control')?.needs).toEqual(['typecheck:upstream'])
   })
 })
 
@@ -654,6 +657,17 @@ describe('the machine budget', () => {
   it('hands checks no ambient NODE_ENV, so the invoking shell\'s value cannot pick React\'s production build in the client lane', () => {
     const env = checkEnvironment({ PATH: '/usr/bin', NODE_ENV: 'production', HOME: '/home/me' }, '/dev/shm/run')
     expect(env).not.toHaveProperty('NODE_ENV')
+  })
+
+  it('removes a scratch directory that a check left unreadable, and reports one it cannot remove', () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'delo-scratch-'))
+    mkdirSync(join(scratch, 'locked', 'inner'), { recursive: true })
+    writeFileSync(join(scratch, 'locked', 'inner', 'file'), 'x')
+    chmodSync(join(scratch, 'locked', 'inner'), 0o000)
+    chmodSync(join(scratch, 'locked'), 0o000)
+    expect(removeScratch(scratch)).toBeUndefined()
+    expect(existsSync(scratch)).toBe(false)
+    expect(removeScratch(scratch)).toMatch(/ENOENT/)
   })
 
   it('hands checks none of the variables that steer the runner, which the pass cache does not key', () => {

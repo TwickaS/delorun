@@ -1,6 +1,7 @@
 /**
- * One-command setup for a Delo checkout or worktree: the local hooks file, the install, the
- * hooks, the divergence ledger's merge driver and the Node major check. Run from the worktree's
+ * One-command setup for a Delo checkout or worktree: the local hooks file, the install and the
+ * documentation site's own install, the hooks, the divergence ledger's merge driver and the Node
+ * major check. Each step is safe to repeat. Run from the worktree's
  * root after `git worktree add`: `node delo/apps/tools/src/setup-worktree.ts`, or with tsx once
  * dependencies exist. It changes only git-ignored files and this clone's git configuration.
  *
@@ -67,9 +68,11 @@ export function setupWorktree(root: string): void {
   const hooksFile = join(root, LEFTHOOK_LOCAL)
   if (!existsSync(hooksFile)) writeFileSync(hooksFile, LEFTHOOK_LOCAL_CONTENT)
   step(root, 'pnpm', ['install', '--frozen-lockfile'])
+  // The documentation site is a workspace of its own with its own lockfile; the `docs-site` check refuses to run without it.
+  step(join(root, 'delo', 'apps'), 'pnpm', ['--dir', 'docs', 'install', '--frozen-lockfile'])
   step(root, 'node', ['scripts/install-lefthook.mjs'])
   step(root, 'git', ['config', 'merge.delo-ledger.driver', LEDGER_DRIVER])
-  console.log('setup-worktree: done; `pnpm check` runs the checks a change reaches')
+  console.log('setup-worktree: done: hooks file, install, documentation site install, hooks and ledger merge driver are in place; `pnpm check` runs the checks a change reaches')
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

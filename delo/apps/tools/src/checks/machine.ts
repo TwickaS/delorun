@@ -14,7 +14,7 @@
  * @module @delo/tools/checks/machine
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -146,6 +146,29 @@ export function memoryReport(): MemoryReport | undefined {
  */
 export function scratchDir(): string {
   return mkdtempSync(join(tmpdir(), 'delo-checks-'))
+}
+
+/**
+ * Remove a run's scratch directory, which a check may have left with directories it made unreadable or unwritable, such as
+ * a spec of a permission refusal that was interrupted. Each directory is made the owner's again before the removal; a
+ * removal that still fails is reported and does not end the run, whose results are already known.
+ * @param dir - the scratch directory.
+ * @returns undefined, or why the directory is left behind.
+ */
+export function removeScratch(dir: string): string | undefined {
+  const own = (path: string): void => {
+    if (!lstatSync(path).isDirectory()) return
+    chmodSync(path, 0o700)
+    for (const name of readdirSync(path)) own(join(path, name))
+  }
+  try {
+    own(dir)
+    rmSync(dir, { recursive: true, force: true })
+    return undefined
+  } catch (error) {
+    // EACCES or EPERM on a path the run's user cannot take back, or ENOENT when another process removed it first.
+    return String(error)
+  }
 }
 
 /**

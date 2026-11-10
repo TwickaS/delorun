@@ -9,7 +9,7 @@ The root [`AGENTS.md`](../../../AGENTS.md) states the rules: branches, the green
 
 ## Set up a worktree
 
-1. `node delo/apps/tools/src/setup-worktree.ts` at the worktree's root, on the Node major `.nvmrc` pins (`nvm use`). It writes the git-ignored `lefthook-local.yml` (`extends: [delo/lefthook.yml]`), runs `pnpm install --frozen-lockfile` and `node scripts/install-lefthook.mjs`, and sets the ledger merge driver (`merge.delo-ledger.driver`) in the clone's shared configuration, so a repeat run changes nothing. Without the hooks file none of Delo's hooks run, and without the driver git merges `delo/upstream-patches.json` as plain text, which conflicts on parallel edits.
+1. `node delo/apps/tools/src/setup-worktree.ts` at the worktree's root, on the Node major `.nvmrc` pins (`nvm use`). It writes the git-ignored `lefthook-local.yml` (`extends: [delo/lefthook.yml]`), runs `pnpm install --frozen-lockfile`, the documentation site's own install (`pnpm --dir docs install --frozen-lockfile` in `delo/apps`) and `node scripts/install-lefthook.mjs`, and sets the ledger merge driver (`merge.delo-ledger.driver`) in the clone's shared configuration, so a repeat run changes nothing. Without the hooks file none of Delo's hooks run, and without the driver git merges `delo/upstream-patches.json` as plain text, which conflicts on parallel edits.
 2. Confirm the hooks directory (`git rev-parse --git-path hooks`) holds `commit-msg`, `pre-commit` and `pre-push`.
 3. The first `pnpm check` is cold: upstream's typecheck and, when no runtime build exists, `build:artifacts`, which the runner starts by itself.
 
