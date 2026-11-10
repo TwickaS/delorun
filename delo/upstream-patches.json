@@ -1789,6 +1789,12 @@
       "class": "security",
       "reason": "`present` refuses a path under the sandbox provider's protected home, outside its readable entries, with `FS_SANDBOX_DENIED` before it inspects the path, as `read` does.",
       "sha256": "7b62dcc52dac4c684fdc723dabf42157a83c3a1e14b3ed8100719d24b51cc03f"
+    },
+    {
+      "path": "LICENSE",
+      "class": "delo-feature",
+      "feature": "project-identity",
+      "reason": "Adds Delo Run's copyright line under upstream's; upstream's MIT text and notice are unchanged."
     }
   ],
   "retired": []
