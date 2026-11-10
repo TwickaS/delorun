@@ -10,7 +10,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { HomeAuthService } from '@delo/home-auth'
 import { newStartToken } from '@delo/home'
@@ -127,7 +127,8 @@ describe('remote access from a second device', () => {
     const devices = localDeviceApproval(studio.ctx)
     await expect(approveDevices({ v: 1, token: newStartToken(), op: 'devices.approve', args: {} }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     const waiting = approveDevices({ v: 1, token: newStartToken(), op: 'devices.approve', args: {} }, 'person', devices)
-    await new Promise((resolve) => { setTimeout(resolve, 50) })
+    // The window opens asynchronously; under load a fixed delay is not enough, so wait for the home to report it.
+    await vi.waitFor(() => { expect(studio.ctx.homeAuth.approvalWindowOpenUntil()).toBeDefined() }, { timeout: 10_000 })
     const asked = await phone.send('POST', '/auth/device/request', request)
     expect(asked.status).toBe(201)
     const accepted = json(asked) as { requestId: string; homePublicKey: string; homeNonce: string }
