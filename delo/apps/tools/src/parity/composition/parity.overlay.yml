@@ -22,7 +22,7 @@
 #                           no row of the root tree mounts the plugin; the
 #                           parity composition leaves the fetchGuard service
 #                           unmounted, and the provider reads its absence per
-#                           hop and runs unguarded.
+#                           hop and runs unguarded;
 #   one_time_launch_tokens  the connection row carries the web bundle's
 #                           trustedHosts expression, which a row here would
 #                           erase; the bundle's patch of the row is left out,
