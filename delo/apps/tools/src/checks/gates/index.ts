@@ -10,6 +10,63 @@ import type { GateCheck } from '../types.ts'
 const TSX = 'node_modules/.bin/tsx'
 const GATE_DIR = 'delo/apps/tools/src/checks/gates'
 
+/**
+ * The inputs of `gates:fundamentals`: the fundamentals page, the gate's source, and every file an `enforced` row of the
+ * page names. The gate fails when the page names a file this list does not, so a pass is never reused after a named
+ * file changed.
+ */
+const FUNDAMENTALS_INPUTS = [
+  'delo/docs/security/fundamentals.md',
+  `${GATE_DIR}/fundamentals.ts`,
+  `${GATE_DIR}/index.ts`,
+  'delo/apps/cli/src/setup/answers.ts',
+  'delo/apps/cli/tests/setup/answers.spec.ts',
+  'delo/apps/install/src/channel.ts',
+  'delo/apps/install/src/extract.ts',
+  'delo/apps/install/src/verify.ts',
+  'delo/apps/install/tests/channel.spec.ts',
+  'delo/apps/install/tests/extract.spec.ts',
+  'delo/apps/npm-launcher/src/launcher.ts',
+  'delo/apps/npm-launcher/src/root.ts',
+  'delo/apps/npm-launcher/tests/launcher.spec.ts',
+  'delo/apps/release/src/sign/verify.ts',
+  'delo/apps/release/tests/sign/verify.spec.ts',
+  'delo/packages/archive/src/importer.ts',
+  'delo/packages/archive/tests/consent.spec.ts',
+  'delo/packages/bundle-local/cordis.patch.yml',
+  'delo/packages/bundle-local/tests/privacy-defaults.spec.ts',
+  'delo/packages/bundle-local/tests/protected-reads.spec.ts',
+  'delo/packages/home-auth/src/home-auth.ts',
+  'delo/packages/home-auth/src/routes.ts',
+  'delo/packages/home-auth/tests/owner-claim.spec.ts',
+  'delo/packages/home-auth/tests/routes.spec.ts',
+  'delo/packages/plugin-fetch-guard/src/guard.ts',
+  'delo/packages/plugin-fetch-guard/tests/guard.spec.ts',
+  'delo/packages/plugin-fetch-guard/tests/provider-guard.spec.ts',
+  'delo/packages/plugin-instruction-consent/src/index.ts',
+  'delo/packages/plugin-instruction-consent/tests/consent.spec.ts',
+  'delo/packages/plugin-mcp-consent/src/index.ts',
+  'delo/packages/plugin-trash/src/operations.ts',
+  'delo/packages/release-verify/src/online.ts',
+  'delo/packages/trash/src/service.ts',
+  'delo/packages/trash/tests/delete.spec.ts',
+  'delo/packages/trash/tests/purge.spec.ts',
+  'packages/deliverables/tool-present/src/index.ts',
+  'packages/deliverables/tool-present/tests/present.spec.ts',
+  'packages/fs/tool-fs-search/src/search-core.ts',
+  'packages/fs/tool-fs/src/consent.ts',
+  'packages/fs/tool-fs/src/read-target.ts',
+  'packages/fs/tool-fs/tests/integration.spec.ts',
+  'packages/fs/tool-fs/tests/tools.spec.ts',
+  'packages/mcp/mcp-client/src/index.ts',
+  'packages/mcp/mcp-client/tests/consent.spec.ts',
+  'packages/schedule/schedule/src/runtime.ts',
+  'packages/schedule/schedule/tests/consent.spec.ts',
+  'packages/schedule/tool-schedule/src/index.ts',
+  'packages/schedule/tool-schedule/tests/consent.spec.ts',
+  'packages/web/web-fetch-http/src/provider.ts',
+]
+
 /** The integration branch that pull requests merge into; the range gates compare against it by default. */
 export const RANGE_BASE = 'origin/v5'
 
@@ -80,5 +137,11 @@ export const GATES: readonly GateCheck[] = [
     title: 'Upstream documentation checks over delo/docs',
     command: [TSX, `${GATE_DIR}/docs.ts`],
     inputs: ['**/*.md', '**/*.i18n.yaml', 'scripts/**', 'packages/**', 'tsconfig*.json', `${GATE_DIR}/docs.ts`],
+  },
+  {
+    id: 'gates:fundamentals',
+    title: 'Each enforced security fundamental names code that exists and a test that exists with its exact title',
+    command: [TSX, `${GATE_DIR}/fundamentals.ts`],
+    inputs: FUNDAMENTALS_INPUTS,
   },
 ]

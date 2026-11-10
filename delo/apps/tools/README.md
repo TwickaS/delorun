@@ -105,6 +105,7 @@ It exits 1, with one line per failure, when the total growth in entries or in hu
 | `gates:changelog` | no | Each commit of the range that changes a product file adds a changelog fragment under `delo/changelog/unreleased/` or carries a reasoned `Changelog: none` trailer, and every fragment there parses. |
 | `gates:doc-times` | no | A line the range adds to a Markdown file under `delo/` carries no deadline, quarter, schedule estimate or promise of timing. |
 | `gates:docs` | no | Upstream's bilingual-pair, word-budget, hard-wrap, relative-link and TypeScript-fence checks over `delo/docs/`. The bilingual-pair check is report-only while authoring is English-only: its findings print, and its failure does not fail the gate ([translation command](#translation-command-specified-not-built)). |
+| `gates:fundamentals` | no | The table of [`delo/docs/security/fundamentals.md`](../../docs/security/fundamentals.md) has the columns ID, Fundamental, Status, Enforced by and Proven by; no id repeats and each is `F` and a number; each status is `enforced` or `designed`. For an `enforced` row, every named file exists and is one of the gate's declared inputs, and each named spec file holds an `it` or `test` call, `.each` and `.concurrent` included and skipped tests excluded, whose literal title or `.each` template equals the quoted title. A `designed` row's paths are not checked. It prints the number of fundamentals in each status. |
 
 The [gates workflow](../../../.github/workflows/gates.yml) runs each gate on pull requests and on pushes to `v5` and `main`, and passes each pull request's base or each push's previous tip as the range. Its personal-data step checks the lines the range adds and the commit metadata against the committed hashes only.
 
@@ -223,7 +224,7 @@ Each check has a budget, its resident memory at the peak and its CPUs, which the
 | Check | What it proves | Budget | Tier |
 | --- | --- | --- | --- |
 | `boundary` | Every difference from upstream is fork-owned, a ledger entry or a path rule ([`check-fork-boundary.ts`](src/check-fork-boundary.ts)) | 0.3 GiB, 1 CPU | `changed`, `full` |
-| `gates:*` | Each of the eight repository gates in [`checks/gates/index.ts`](src/checks/gates/index.ts); a gate marked `staged` also runs in `pre-commit` | 0.5 GiB, 1 CPU each | `changed`, `full`; a staged gate also `pre-commit` |
+| `gates:*` | Each repository gate in [`checks/gates/index.ts`](src/checks/gates/index.ts); a gate marked `staged` also runs in `pre-commit` | 0.5 GiB, 1 CPU each | `changed`, `full`; a staged gate also `pre-commit` |
 | `whitespace:staged` | No whitespace error in the staged changes (`git diff --cached --check`) | 0.1 GiB, 1 CPU | `pre-commit` |
 | `jsdoc` | Upstream's JSDoc rules over every export of the fork's `src` trees ([`check-jsdoc.ts`](src/check-jsdoc.ts)) | 1.5 GiB, 1 CPU | `changed`, `full` |
 | `typecheck:upstream` | Upstream's incremental typecheck (`pnpm run typecheck`), whose declarations the fork's programs read | 2.5 GiB, 2 CPUs | `changed`, `full` |
