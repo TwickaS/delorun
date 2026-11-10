@@ -1,0 +1,60 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "tests/**/*.client.spec.tsx",
+    "src/client",
+    "src/wire.ts",
+    "src/snooze.ts",
+    "src/config.ts",
+    "src/css-modules.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../packages/test-support/client-runtime"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../packages/api/workspace-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/locale/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/store"
+    },
+    {
+      "path": "../../../packages/client/ui-context-menu"
+    },
+    {
+      "path": "../../../packages/client/ui-layout"
+    },
+    {
+      "path": "../../../packages/client/ui-primitives"
+    },
+    {
+      "path": "../../../packages/client/ui-renderer"
+    },
+    {
+      "path": "../../../packages/client/ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-slots"
+    },
+    {
+      "path": "../../../packages/client/ui-workspace"
+    },
+    {
+      "path": "../../../packages/core/session"
+    }
+  ]
+}

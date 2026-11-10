@@ -1,0 +1,596 @@
+/*
+ * The chat list, after T3 Code's sidebar (MIT, © 2026 T3 Tools Inc.): a search row with icon buttons, then a scrolling
+ * list whose shelves the free space pushes to the bottom. Lengths are T3 Code's own; corners are the studio's radius tokens.
+ */
+.root {
+  /* T3 Code's sidebar icon colour: the muted label at 85% over the sidebar. */
+  --sidebar-icon: color-mix(in srgb, var(--dsw-alias-label-tertiary) 85%, var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base)));
+
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+}
+
+.search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-tertiary);
+  cursor: text;
+}
+
+@media (hover: hover) {
+  .search:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.search:focus-within {
+  background: var(--dsw-alias-interactive-bg-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary) 70%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+.searchIcon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--sidebar-icon);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  outline: none;
+  appearance: none;
+}
+
+.searchInput::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.searchInput::-webkit-search-cancel-button {
+  display: none;
+}
+
+.searchHint {
+  flex: none;
+  opacity: 0.7;
+}
+
+.search:focus-within .searchHint {
+  display: none;
+}
+
+.clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-xs);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .clear:hover {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.clearIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.headerActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.iconButton {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--sidebar-icon);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .iconButton:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.iconButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+.iconButton[aria-expanded='true'],
+.iconButtonOn {
+  color: var(--dsw-alias-label-primary);
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.menuIcon {
+  width: 14px;
+  height: 14px;
+}
+
+.scopeBadges {
+  display: flex;
+}
+
+.scopeBadges > * {
+  width: 14px;
+  height: 14px;
+}
+
+.scopeBadges > * + * {
+  margin-left: -6px;
+  box-shadow: 0 0 0 1.5px var(--dsw-alias-bg-base);
+}
+
+
+.scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* T3 Code's scroll fade: each end fades over up to 12px, as far as the list is scrolled past it. Only the mask's alpha counts. */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    var(--dsw-alias-label-primary) min(12px, var(--overflow-start, 0px)),
+    var(--dsw-alias-label-primary) calc(100% - min(12px, var(--overflow-end, 0px))),
+    transparent 100%
+  );
+}
+
+.scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.scroll:has(:focus-visible) {
+  mask-image: none;
+}
+
+.list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The marker under Pinned, as in T3 Code: no height and no line until a drag, which labels it. */
+.divider {
+  position: relative;
+  height: 0;
+  margin: 0 2px -1px;
+  list-style: none;
+  pointer-events: none;
+}
+
+.empty {
+  padding: 24px 8px;
+  color: color-mix(in srgb, var(--dsw-alias-label-tertiary) 80%, transparent);
+  font-size: 12px;
+  text-align: center;
+  list-style: none;
+}
+
+/* The first shelf takes the free space above it, so the shelves sit at the bottom of a short list. */
+.shelfItem {
+  list-style: none;
+}
+
+.shelfItem {
+  margin: 0 2px;
+}
+
+.firstShelf {
+  margin-top: auto;
+}
+
+/* T3 Code's collapsible section header: a 12px label, a rule hidden behind the count, the count and a chevron. */
+.shelfHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.shelfHeader:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 70%, transparent);
+}
+
+.shelfLabel {
+  flex: none;
+}
+
+.shelfRule {
+  flex: 1;
+  min-width: 8px;
+  height: 1px;
+  visibility: hidden;
+}
+
+.shelfCount {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chevronFolded {
+  transform: rotate(-90deg);
+}
+
+.more {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .more:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+/* Search results: badge, title and the matched message. */
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: color-mix(in srgb, var(--dsw-alias-label-primary) 80%, transparent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.result[data-highlight='true'] {
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-border-l3) 70%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+.resultText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.resultTitle,
+.resultSnippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resultTitle {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.resultSnippet {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.searchEmpty {
+  margin: 0;
+  padding: 24px 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+/* The hover-card group fills the scroll area so the shelves still sit at its bottom. */
+.group {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* A Workspace folder's header, in the folders view. */
+.folderItem {
+  list-style: none;
+}
+
+.folderItem:not(:first-child) {
+  margin-top: 4px;
+}
+
+.folder {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.folderHeader {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 34px 0 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .folderHeader:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.folderHeader:focus-visible,
+.folderNew:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+.folderChevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform 150ms ease;
+}
+
+.folderChevronOpen {
+  transform: rotate(90deg);
+}
+
+.folderName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderCount {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.folderDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.folderDot[data-dot='waiting'] {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.folderDot[data-dot='working'] {
+  background: var(--dsw-alias-label-deep-diving);
+}
+
+.folderNew {
+  position: absolute;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.folder:focus-within .folderNew {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .folder:hover .folderNew {
+    opacity: 1;
+  }
+}
+
+@media (hover: none) {
+  .folderNew {
+    opacity: 1;
+  }
+}
+
+@media (hover: hover) {
+  .folderNew:hover {
+    background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folderChevron {
+    transition: none;
+  }
+}
+
+/* An undrawn divider keeps its place in the drag order without taking space. */
+/* While a chat is dragged, the marker opens to label Pinned above a rule, T3 Code's drag boundary. */
+.divider[data-dragging='true'] {
+  height: 24px;
+}
+
+.boundary {
+  position: absolute;
+  inset-inline: 8px;
+  top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 16px;
+}
+
+.boundaryLabel {
+  flex: none;
+  color: color-mix(in srgb, var(--dsw-alias-label-primary) 80%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.boundaryRule {
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 25%, transparent);
+}
+
+.divider[data-target='true'] .boundaryLabel {
+  color: var(--dsw-alias-brand-primary);
+}
+
+.divider[data-target='true'] .boundaryRule {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 50%, transparent);
+}
+
+/* Hover swaps and hover cards rest while a drag is on. */
+.list[data-dragging='true'] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* The shelf header or pinned divider the dragged chat is over. */
+.shelfItem[data-over='true'] .shelfHeader {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+  color: var(--dsw-alias-brand-primary);
+}
+
+@media (pointer: coarse) {
+  .iconButton {
+    width: 32px;
+    height: 32px;
+  }
+
+  .shelfHeader {
+    height: 36px;
+  }
+}
+
+.shelfHeader:disabled {
+  cursor: default;
+}

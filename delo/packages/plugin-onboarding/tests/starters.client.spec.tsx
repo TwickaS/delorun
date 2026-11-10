@@ -1,0 +1,81 @@
+// @vitest-environment jsdom
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { sessionSnapshot } from '@deepseek-ai/dsh-client-test-runtime'
+import { SessionId } from '@deepseek-ai/dsh-session/types'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { en } from '../src/client/locales.ts'
+import { StarterPrompts, STARTERS, type StarterPromptsProps } from '../src/client/StarterPrompts.tsx'
+import { t } from './fixtures.client.ts'
+
+afterEach(cleanup)
+
+const CHAT = SessionId('chat-1')
+const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
+
+/** The chips in the input dock of one chat, over a store holding the chat that offers them. */
+function mount(options: { readonly offered?: string; readonly sessionId?: SessionId; readonly blank?: boolean; readonly draft?: string } = {}) {
+  const starter = createSnapshotStore(options.offered ?? CHAT)
+  const prefill = vi.fn()
+  const dismiss = vi.fn()
+  const element = (draft: string, blank = options.blank ?? true) => (
+    <StarterPrompts {...{
+      t, sessionId: options.sessionId ?? CHAT, session: { ...sessionSnapshot(CHAT), blank },
+      input: { draft, attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }, starter, prefill, dismiss,
+    } satisfies StarterPromptsProps} />
+  )
+  const view = render(element(options.draft ?? ''))
+  return { ...view, starter, prefill, dismiss, show: (draft: string, blank?: boolean) => { view.rerender(element(draft, blank)) } }
+}
+
+describe('the starter prompts', () => {
+  it('show three chips with their labels above the message box of the chat onboarding opened', () => {
+    mount()
+    expect(screen.getAllByRole('button', { name: /^(What can you|Plan a|Suggest a)/ }).map(each => each.textContent)).toEqual([
+      en['starter.1.label'], en['starter.2.label'], en['starter.3.label'],
+    ])
+    expect(STARTERS).toHaveLength(3)
+    expect(screen.getByRole('group', { name: en['starter.lead'] })).toBeTruthy()
+  })
+
+  it('write the prompt into the message box when a chip is pressed, and send nothing', async () => {
+    const { prefill } = mount()
+    await click(screen.getByRole('button', { name: en['starter.2.label'] }))
+    expect(prefill).toHaveBeenCalledExactlyOnceWith(CHAT, en['starter.2.prompt'])
+  })
+
+  it('stay while the box holds one of their own prompts, mark it, and let another replace it', async () => {
+    const { prefill } = mount({ draft: en['starter.2.prompt'] })
+    expect(screen.getByRole('button', { name: en['starter.2.label'] }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: en['starter.1.label'] }).getAttribute('aria-pressed')).toBe('false')
+    await click(screen.getByRole('button', { name: en['starter.1.label'] }))
+    expect(prefill).toHaveBeenCalledWith(CHAT, en['starter.1.prompt'])
+  })
+
+  it('go when the person types their own text, and come back if the box is emptied while the chat is still empty', () => {
+    const { show, container } = mount()
+    show('Fix the login bug')
+    expect(container.textContent).toBe('')
+    show('   ')
+    expect(screen.getAllByRole('button')).toHaveLength(4)
+  })
+
+  it('go once the chat has a message', () => {
+    const { container } = mount({ blank: false })
+    expect(container.textContent).toBe('')
+  })
+
+  it('show only in the chat that was opened, and not at all after they are dismissed or before onboarding opened one', () => {
+    expect(mount({ sessionId: SessionId('other') }).container.textContent).toBe('')
+    cleanup()
+    expect(mount({ offered: '' }).container.textContent).toBe('')
+  })
+
+  it('go when the chat that offers them changes, and the dismiss button asks to stop offering them', async () => {
+    const { starter, dismiss, container } = mount()
+    await click(screen.getByRole('button', { name: en['starter.dismiss'] }))
+    expect(dismiss).toHaveBeenCalledOnce()
+    await act(async () => { starter.set('') })
+    expect(container.textContent).toBe('')
+  })
+})

@@ -1,0 +1,394 @@
+/* The dialog: a rail of steps beside the current step on a wide window, and below the phone breakpoint a full-window
+   sheet whose steps collapse into a count and a bar. The footer stays at the bottom so its buttons are always reachable. */
+.dialog {
+  display: flex;
+  width: min(880px, 100%);
+  height: min(640px, 100%);
+  max-height: 100%;
+  padding: 0;
+  gap: 0;
+}
+
+.frame {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.rail {
+  flex: none;
+  width: 220px;
+  box-sizing: border-box;
+  padding: 28px 20px;
+  border-right: 0.5px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+  overflow-y: auto;
+}
+
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-sm);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.stepItem[data-state='current'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.stepItem[data-state='done'] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.stepDot {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.stepItem[data-state='current'] .stepDot {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.progress {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px 0;
+  padding-top: max(16px, var(--dsh-frame-overlay-top, 0px));
+}
+
+.count {
+  flex: none;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.bar {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-border-l2);
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--dsw-alias-brand-primary);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 28px 32px 16px;
+  overflow-y: auto;
+}
+
+.heading {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 28px;
+  outline: none;
+}
+
+.body {
+  min-width: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lead,
+.body p {
+  margin: 0;
+}
+
+.lead {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.copy {
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.copy p + p {
+  margin-top: 12px;
+}
+
+.text,
+.hint,
+.warning,
+.failure {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.text {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.hint {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.failure {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.warning {
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 4px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .chip:hover:not(:disabled) {
+    border-color: var(--dsw-alias-label-tertiary);
+  }
+}
+
+@media (pointer: coarse) {
+  .chip {
+    min-height: 44px;
+  }
+}
+
+.chip[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.chip:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+/* A palette chip: its light and dark pages side by side, each with a line in its text colour and a dot in its accent. */
+.swatch {
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--dsw-radius-xs);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+}
+
+.half {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  background: var(--half-page);
+}
+
+.line {
+  width: 14px;
+  height: 3px;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--half-text);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--half-accent);
+}
+
+.accentDot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--accent-light);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+}
+
+:global(body[data-ds-dark-theme]) .accentDot {
+  background-color: var(--accent-dark);
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.cardText {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.cardLead {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.status {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.status[data-tone='done'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.failedAction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.skip {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Below the Settings panel's breakpoint the dialog is the whole window. */
+@media (max-width: 767px) {
+  .dialog {
+    width: calc(100% + 48px);
+    height: calc(100% + 2 * max(24px, var(--dsh-frame-overlay-top, 24px)));
+    max-height: none;
+    margin: calc(-1 * max(24px, var(--dsh-frame-overlay-top, 24px))) -24px;
+    border-radius: 0;
+  }
+
+  .rail {
+    display: none;
+  }
+
+  .progress {
+    display: flex;
+  }
+
+  .scroll {
+    padding: 20px 20px 12px;
+  }
+
+  .footer {
+    padding: 12px 20px;
+  }
+}

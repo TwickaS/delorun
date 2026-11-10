@@ -1,0 +1,76 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "include": [
+    "src/client",
+    "src/config.ts",
+    "src/wire.ts",
+    "src/css-modules.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../packages/api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/api/session-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/api/workspace-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/boot/plugin-manager"
+    },
+    {
+      "path": "../../../packages/client/locale/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/store"
+    },
+    {
+      "path": "../../../packages/client/ui-conversation/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-plugin-manager/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-primitives"
+    },
+    {
+      "path": "../../../packages/client/ui-renderer"
+    },
+    {
+      "path": "../../../packages/client/ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-slots"
+    },
+    {
+      "path": "../../../packages/client/ui-theme/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-workspace"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/util/package-manifest"
+    },
+    {
+      "path": "../plugin-theme/tsconfig.client.json"
+    },
+    {
+      "path": "../bundle-local/tsconfig.client.json"
+    }
+  ]
+}

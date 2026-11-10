@@ -1,0 +1,402 @@
+/* Settings → Sidebar, laid out as Appearance is: one card, each setting a block, tiles across the card. */
+.section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 20px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: calc(14px * var(--dsh-density, 1));
+  min-width: 0;
+  padding: calc(20px * var(--dsh-density, 1)) 0;
+  transition: opacity 160ms ease;
+}
+
+.block + .block {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.block[data-muted='true'] {
+  opacity: 0.55;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(12px * var(--dsh-density, 1)) 24px;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row > .heading {
+  flex: 1 1 220px;
+}
+
+.title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.lead {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The header art's choices: one short row that scrolls sideways and snaps to a tile, its edges fading where more wait. */
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--dsh-density, 1));
+  min-width: 0;
+}
+
+.stripRow {
+  display: flex;
+  gap: calc(10px * var(--dsh-density, 1));
+  margin: -3px;
+  padding: 3px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 3px;
+  scrollbar-width: none;
+}
+
+.stripRow::-webkit-scrollbar {
+  display: none;
+}
+
+.stripRow[data-more-after='true'] {
+  mask-image: linear-gradient(to right, var(--dsw-alias-label-primary) calc(100% - 48px), transparent);
+}
+
+.stripRow[data-more-before='true'] {
+  mask-image: linear-gradient(to right, transparent, var(--dsw-alias-label-primary) 48px);
+}
+
+.stripRow[data-more-before='true'][data-more-after='true'] {
+  mask-image: linear-gradient(to right, transparent, var(--dsw-alias-label-primary) 48px, var(--dsw-alias-label-primary) calc(100% - 48px), transparent);
+}
+
+.stripRow > .tile {
+  flex: 0 0 136px;
+  gap: 8px;
+  padding: 6px 6px 8px;
+  scroll-snap-align: start;
+}
+
+.stripRow .preview {
+  aspect-ratio: 16 / 7;
+  gap: 5px;
+  padding: 7px 9px;
+}
+
+.stripRow .previewBrand {
+  font-size: 11px;
+  line-height: 14px;
+}
+
+/* The swipe bar: the track is the whole row, the thumb the part in view; drag the thumb or press the track. */
+.swipeBar {
+  position: relative;
+  height: 32px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.swipeBar::before,
+.swipeThumb {
+  position: absolute;
+  top: calc(50% - 3px);
+  height: 6px;
+  border-radius: var(--dsw-radius-xl);
+}
+
+.swipeBar::before {
+  content: '';
+  right: 0;
+  left: 0;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+}
+
+.swipeThumb {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 35%, transparent);
+  cursor: grab;
+  transition: background-color 120ms ease;
+}
+
+@media (hover: hover) {
+  .swipeBar:hover .swipeThumb {
+    background: var(--dsw-alias-brand-primary);
+  }
+}
+
+.swipeBar:active .swipeThumb {
+  background: var(--dsw-alias-brand-primary);
+  cursor: grabbing;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--dsh-density, 1));
+  min-width: 0;
+  padding: 8px 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+@media (hover: hover) {
+  .tile:hover:not(:disabled) {
+    border-color: var(--dsw-alias-label-tertiary);
+  }
+}
+
+.tile[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.tile:focus-visible,
+.swatch:focus-visible,
+.notch:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.tile:disabled,
+.swatch:disabled,
+.notch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* A miniature sidebar top: the art behind the brand, then three rows. */
+.preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  aspect-ratio: 16 / 9;
+  max-width: 100%;
+  padding: 10px 12px;
+  overflow: hidden;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base));
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+  isolation: isolate;
+}
+
+.preview > :first-child:not(.previewBrand) {
+  z-index: -1;
+}
+
+.previewBrand {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.preview:has(> :first-child:not(.previewBrand)) .previewBrand {
+  color: var(--dsw-static-neutral-bluish-00);
+}
+
+.previewRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.previewRows > span {
+  height: 6px;
+  border-radius: var(--dsw-radius-xl);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent);
+}
+
+.previewRows > span:nth-child(2) {
+  width: 80%;
+}
+
+.previewRows > span:nth-child(3) {
+  width: 60%;
+}
+
+.tileFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.tileLabel {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radio {
+  box-sizing: border-box;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+}
+
+.tile[aria-checked='true'] .radio {
+  border: 5px solid var(--dsw-alias-brand-primary);
+}
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pickerName {
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 3px;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.swatch[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.swatchArt {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 280px);
+  min-width: 0;
+}
+
+.sliderValue {
+  flex: none;
+  min-width: 52px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary);
+  text-align: right;
+}
+
+/* The notch buttons sit under the track at their widths; the slider shrinks and they move with it. */
+.sliderTrack {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 36px;
+}
+
+.sliderTrack input {
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.notch {
+  position: absolute;
+  top: 28px;
+  min-width: 32px;
+  min-height: 32px;
+  translate: -50% 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--dsw-radius-xs);
+  background: none;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.notch::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 5px;
+  background: currentColor;
+}
+
+.notch[aria-pressed='true'] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.credit {
+  margin: 0;
+  padding: 14px 0 16px;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .block,
+  .swipeThumb {
+    transition: none;
+  }
+}

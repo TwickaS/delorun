@@ -1,0 +1,30 @@
+/* The General row's layout follows upstream's preference rows: a text column, then the control. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--dsh-density, 1)) 16px;
+  padding: calc(16px * var(--dsh-density, 1)) 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.text {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.description {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}

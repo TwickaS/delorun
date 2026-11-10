@@ -1,0 +1,64 @@
+/*
+ * A Workspace's badge. Unchosen, T3 Code's project monogram: a tile rounded at 25%, the colour at 14% behind
+ * monospace letters in the colour. The named colours are data: Tailwind's 600 step, and its 400 step in dark, as
+ * T3 Code's project colours are. A chosen icon adds a shape (rounded, circle, square, hexagon) and a style
+ * (soft, solid, outline).
+ */
+.badge {
+  --badge-color: light-dark(oklch(54.6% 0.245 262.881), oklch(70.7% 0.165 254.624));
+  --badge-size: 16px;
+
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--badge-size);
+  height: var(--badge-size);
+  overflow: hidden;
+  border-radius: 25%;
+  background-color: color-mix(in srgb, var(--badge-color) 14%, transparent);
+  color: var(--badge-color);
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  user-select: none;
+}
+
+.badge[data-shape='circle'] { border-radius: 50%; }
+.badge[data-shape='square'] { border-radius: 12%; }
+.badge[data-shape='hexagon'] {
+  border-radius: 0;
+  clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%);
+}
+
+.badge[data-style='solid'] {
+  background-color: var(--badge-color);
+  color: var(--dsw-static-neutral-00);
+}
+
+.badge[data-style='outline'] {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 max(1px, calc(var(--badge-size) / 16)) var(--badge-color);
+}
+
+.badge[data-style='outline'][data-shape='hexagon'] {
+  background-color: color-mix(in srgb, var(--badge-color) 8%, transparent);
+  box-shadow: none;
+}
+
+.fill {
+  width: 100%;
+  height: 100%;
+}
+
+.emoji {
+  font-family: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: calc(var(--badge-size) * 0.72);
+  line-height: 1;
+}
+
+.badge[data-color='green'] { --badge-color: light-dark(oklch(62.7% 0.194 149.214), oklch(79.2% 0.209 151.711)); }
+.badge[data-color='amber'] { --badge-color: light-dark(oklch(66.6% 0.179 58.318), oklch(82.8% 0.189 84.429)); }
+.badge[data-color='violet'] { --badge-color: light-dark(oklch(54.1% 0.281 293.009), oklch(70.2% 0.183 293.541)); }
+.badge[data-color='red'] { --badge-color: light-dark(oklch(57.7% 0.245 27.325), oklch(70.4% 0.191 22.216)); }
+.badge[data-color='pink'] { --badge-color: light-dark(oklch(59.2% 0.249 0.584), oklch(71.8% 0.202 349.761)); }
+.badge[data-color='teal'] { --badge-color: light-dark(oklch(60% 0.118 184.704), oklch(77.7% 0.152 181.912)); }
+.badge[data-color='slate'] { --badge-color: light-dark(oklch(44.6% 0.043 257.281), oklch(70.4% 0.04 256.788)); }

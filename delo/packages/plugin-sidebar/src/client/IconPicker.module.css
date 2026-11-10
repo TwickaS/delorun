@@ -1,0 +1,217 @@
+/* The workspace icon picker: the icon on a stage at the left, its choices at the right; one column on a phone. */
+.dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+}
+
+/* On a short screen the choices scroll and the footer stays. */
+.scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: calc(24px * var(--dsh-density, 1));
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+@media (width < 640px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(16px * var(--dsh-density, 1));
+  min-width: 0;
+  padding: calc(24px * var(--dsh-density, 1)) 16px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  background:
+    radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent), transparent 70%),
+    var(--dsw-alias-bg-base);
+  align-self: start;
+}
+
+.hero {
+  display: flex;
+  padding: 12px;
+}
+
+/* The icon at the list's own size beside the Workspace's name, as a row of the sidebar shows it. */
+.inList {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.inListTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: calc(18px * var(--dsh-density, 1));
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--dsh-density, 1));
+}
+
+.label {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.letters {
+  width: min(120px, 100%);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 6px;
+}
+
+.cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 32px;
+  min-height: 32px;
+  border: 0.5px solid transparent;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .cell:hover {
+    color: var(--dsw-alias-label-primary);
+    border-color: var(--dsw-alias-border-l2, var(--dsw-alias-border-l1));
+  }
+}
+
+.cell[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, var(--dsw-alias-bg-base));
+}
+
+.emojiCell {
+  font-family: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 18px;
+}
+
+.swatches,
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.swatch[aria-checked='true'],
+.swatch[data-checked='true'] {
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-1), 0 0 0 3.5px var(--dsw-alias-label-primary);
+}
+
+/* The "any colour" swatch shows a colour wheel until a custom colour is chosen. */
+.colorInput {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 90deg,
+    var(--dsw-static-red-500),
+    var(--dsw-static-amber-500),
+    var(--dsw-static-green-500),
+    var(--dsw-static-blue-500),
+    var(--dsw-static-violet-600),
+    var(--dsw-static-red-500)
+  );
+  cursor: pointer;
+  appearance: none;
+}
+
+.colorInput::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.colorInput::-webkit-color-swatch {
+  border: 0;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.swatch[data-checked='true'] .colorInput::-webkit-color-swatch {
+  opacity: 1;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.option[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, var(--dsw-alias-bg-base));
+}
+
+.cell:focus-visible,
+.swatch:focus-visible,
+.swatch:focus-within,
+.option:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+.reset {
+  margin-right: auto;
+}

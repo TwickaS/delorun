@@ -1,0 +1,290 @@
+/**
+ * Settings → Sidebar: the header art as preview tiles drawn in the chosen
+ * palette, the palette swatches, the art's strength and style, the chat
+ * list's view, sort order and Working shelf, Ask before unpinning, the
+ * sidebar's width on a notched slider, and a way back to the stock look.
+ * @module @delo/plugin-sidebar/client/SettingsSection
+ */
+import { Button, SegmentedControl, Switch, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { useCallback, useLayoutEffect, useState, useSyncExternalStore, type PointerEvent, type ReactNode } from 'react'
+import {
+  ART_PALETTES, ART_STRENGTHS, ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, SIDEBAR_WIDTH, SORT_ORDERS,
+  type ArtPalette, type SidebarSettings,
+} from '../config.ts'
+import { StageBackdrop } from './StageArt.tsx'
+import { GENERATIVE_SCENES } from './GenerativeArt.tsx'
+import css from './SettingsSection.module.css'
+
+/** The scenes Shuffle redraws. */
+const GENERATIVE: ReadonlySet<string> = new Set(GENERATIVE_SCENES)
+
+/** What the section reads and writes. */
+export interface SidebarSettingsInjected {
+  /** The sidebar's settings, stored by the host half. */
+  readonly settings: ConfigForm<SidebarSettings>
+  /**
+   * Turn the Delo look off, which unloads this section with the rest of Delo's frame.
+   * @returns whether the look was turned off; false means the write was refused.
+   */
+  readonly useStockLook: () => Promise<boolean>
+}
+
+/** The section's props. */
+export type SidebarSettingsProps = PropsLocale<'deloSidebar'> & InjectFace<SidebarSettingsInjected>
+
+/** A palette's swatch: the blueprint drawn in it, cropped to a circle. */
+function swatch(palette: ArtPalette) {
+  return (
+    <span className={css.swatchArt} aria-hidden="true">
+      <StageBackdrop scene="blueprint" palette={palette} compact fade={false} />
+    </span>
+  )
+}
+
+/**
+ * A row of choices that scrolls sideways, as on a phone, with a bar under it that shows how much of the row is in
+ * view and where: drag its thumb, or press the bar, to move along. The row's edges fade where more choices wait.
+ * @param props - the id of the heading that names the choices, and the choices.
+ * @returns the strip.
+ */
+function SwipeStrip({ labelledBy, children }: { readonly labelledBy: string; readonly children: ReactNode }) {
+  const [row, setRow] = useState<HTMLDivElement | null>(null)
+  const [view, setView] = useState({ start: 0, size: 1 })
+  const measure = useCallback(() => {
+    if (row === null || row.scrollWidth === 0) return
+    setView({ start: row.scrollLeft / row.scrollWidth, size: Math.min(1, row.clientWidth / row.scrollWidth) })
+  }, [row])
+  useLayoutEffect(() => {
+    measure()
+    if (row === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(row)
+    return () => { observer.disconnect() }
+  }, [measure, row])
+  const press = (event: PointerEvent<HTMLDivElement>): void => {
+    const target = event.currentTarget
+    const track = target.getBoundingClientRect()
+    if (row === null || track.width === 0) return
+    const grab = event.target instanceof HTMLElement && event.target.dataset.thumb !== undefined
+      ? (event.clientX - track.left) / track.width - view.start
+      : view.size / 2
+    // Moving along the bar moves the row by the same share of its width.
+    const follow = (clientX: number): void => { row.scrollLeft = ((clientX - track.left) / track.width - grab) * row.scrollWidth }
+    follow(event.clientX)
+    target.setPointerCapture(event.pointerId)
+    const move = (moved: globalThis.PointerEvent): void => { follow(moved.clientX) }
+    const end = (): void => {
+      target.removeEventListener('pointermove', move)
+      target.removeEventListener('pointerup', end)
+      target.removeEventListener('pointercancel', end)
+    }
+    target.addEventListener('pointermove', move)
+    target.addEventListener('pointerup', end)
+    target.addEventListener('pointercancel', end)
+  }
+  const scrolls = view.size < 0.999
+  return (
+    <div className={css.strip}>
+      <div ref={setRow} className={css.stripRow} role="radiogroup" aria-labelledby={labelledBy} onScroll={measure}
+        data-more-before={scrolls && view.start > 0.001} data-more-after={scrolls && view.start + view.size < 0.999}>
+        {children}
+      </div>
+      {scrolls && (
+        <div className={css.swipeBar} aria-hidden="true" onPointerDown={press}>
+          <span className={css.swipeThumb} data-thumb="" style={{ left: `${String(view.start * 100)}%`, width: `${String(view.size * 100)}%` }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * One setting: its title and lead, with its control beside them, wrapping below on a narrow card.
+ * @param props - the heading's id, title and lead, the control, and whether the row is muted.
+ * @returns the row.
+ */
+function SettingRow({ id, title, lead, muted, children }: {
+  readonly id: string
+  readonly title: string
+  readonly lead: string
+  readonly muted?: boolean
+  readonly children: ReactNode
+}) {
+  return (
+    <section className={css.block} aria-labelledby={id} data-muted={muted}>
+      <div className={css.row}>
+        <div className={css.heading}>
+          <h3 id={id} className={css.title}>{title}</h3>
+          <p className={css.lead}>{lead}</p>
+        </div>
+        {children}
+      </div>
+    </section>
+  )
+}
+
+/**
+ * The width slider: any width in the range, with notches that snap within a step and buttons that jump to them.
+ * Dragging shows the width; the setting is saved when the slider is let go.
+ * @param props - the saved width, whether it is disabled, the label, the value and notch formats and the save.
+ * @returns the slider.
+ */
+function WidthSlider({ value, disabled, label, format, notchLabel, onCommit }: {
+  readonly value: number
+  readonly disabled: boolean
+  readonly label: string
+  readonly format: (px: number) => string
+  readonly notchLabel: (px: number) => string
+  readonly onCommit: (px: number) => void
+}) {
+  const [draft, setDraft] = useState<number | null>(null)
+  const shown = draft ?? value
+  const at = (px: number): string => `${String(((px - SIDEBAR_WIDTH.min) / (SIDEBAR_WIDTH.max - SIDEBAR_WIDTH.min)) * 100)}%`
+  const snap = (px: number): number => SIDEBAR_WIDTH.notches.find(notch => Math.abs(notch - px) <= SIDEBAR_WIDTH.step) ?? px
+  const commit = (): void => {
+    if (draft !== null && draft !== value) onCommit(draft)
+    setDraft(null)
+  }
+  return (
+    <div className={css.slider}>
+      <span className={css.sliderValue} aria-hidden="true">{format(shown)}</span>
+      <div className={css.sliderTrack}>
+        <input type="range" aria-label={label} aria-valuetext={format(shown)} disabled={disabled}
+          min={SIDEBAR_WIDTH.min} max={SIDEBAR_WIDTH.max} step={SIDEBAR_WIDTH.step} value={shown}
+          onChange={(event) => { setDraft(snap(Number(event.currentTarget.value))) }}
+          onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
+        {SIDEBAR_WIDTH.notches.map(notch => (
+          <button key={notch} type="button" className={css.notch} style={{ left: at(notch) }} disabled={disabled}
+            aria-pressed={value === notch} onClick={() => { if (value !== notch) onCommit(notch) }}>
+            {notchLabel(notch)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Render the section.
+ * @param props - the dictionary, the settings and the way back to the stock look.
+ * @returns the section.
+ */
+export function SidebarSettingsSection({ settings, useStockLook, t }: SidebarSettingsProps) {
+  const snapshot = useSyncExternalStore(listener => settings.subscribe(listener), () => settings.getSnapshot())
+  const current = snapshot.value ?? DEFAULT_SIDEBAR_SETTINGS
+  const disabled = !snapshot.writable
+  const [failed, setFailed] = useState(false)
+  // A refused or rejected write shows the notice; the next write clears it.
+  const attempt = (write: () => Promise<boolean>): void => {
+    setFailed(false)
+    void write().then((ok) => { if (!ok) setFailed(true) }, () => { setFailed(true) })
+  }
+  const save = <K extends keyof SidebarSettings>(field: K, value: SidebarSettings[K]): void => {
+    attempt(() => settings.set(field, value))
+  }
+  return (
+    <div className={css.section}>
+      {failed && <Toast text={t('settings.failed')} onDone={() => { setFailed(false) }} />}
+      <section className={css.block} aria-labelledby="delo-sidebar-art">
+        <div className={css.row}>
+          <div className={css.heading}>
+            <h3 id="delo-sidebar-art" className={css.title}>{t('settings.art')}</h3>
+            <p className={css.lead}>{t('settings.art.lead')}</p>
+          </div>
+          <Button variant="outline" disabled={disabled || !GENERATIVE.has(current.headerArt)}
+            onClick={() => { save('artSeed', 1 + Math.floor(Math.random() * (MAX_ART_SEED - 1))) }}>
+            {t('settings.art.shuffle')}
+          </Button>
+        </div>
+        <SwipeStrip labelledBy="delo-sidebar-art">
+          {HEADER_ARTS.map(art => (
+            <button key={art} type="button" role="radio" aria-checked={current.headerArt === art} aria-label={t(`settings.art.${art}`)}
+              className={css.tile} disabled={disabled}
+              onClick={() => { if (current.headerArt !== art) save('headerArt', art) }}>
+              <span className={css.preview}>
+                {art !== 'none' && <StageBackdrop scene={art} palette={current.artPalette} seed={current.artSeed} compact />}
+                <span className={css.previewBrand}>{t('settings.preview.brand')}</span>
+                <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
+              </span>
+              <span className={css.tileFoot}>
+                <span className={css.tileLabel}>{t(`settings.art.${art}`)}</span>
+                <span className={css.radio} aria-hidden="true" />
+              </span>
+            </button>
+          ))}
+        </SwipeStrip>
+      </section>
+
+      <section className={css.block} aria-labelledby="delo-sidebar-palette" data-muted={current.headerArt === 'none'}>
+        <div className={css.row}>
+          <div className={css.heading}>
+            <h3 id="delo-sidebar-palette" className={css.title}>{t('settings.palette')}</h3>
+            <p className={css.lead}>{t('settings.palette.lead')}</p>
+          </div>
+          <div className={css.picker}>
+            <span className={css.pickerName} aria-hidden="true">{t(`settings.palette.${current.artPalette}`)}</span>
+            <div className={css.swatches} role="radiogroup" aria-labelledby="delo-sidebar-palette">
+              {ART_PALETTES.map(palette => (
+                <button key={palette} type="button" role="radio" aria-checked={current.artPalette === palette}
+                  aria-label={t(`settings.palette.${palette}`)} title={t(`settings.palette.${palette}`)} className={css.swatch} disabled={disabled}
+                  onClick={() => { if (current.artPalette !== palette) save('artPalette', palette) }}>
+                  {swatch(palette)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <SettingRow id="delo-sidebar-strength" title={t('settings.strength')} lead={t('settings.strength.lead')} muted={current.headerArt === 'none'}>
+        <SegmentedControl id="delo-sidebar-strength-control" label={t('settings.strength')} value={current.artStrength} disabled={disabled}
+          options={ART_STRENGTHS.map(strength => ({ value: strength, label: t(`settings.strength.${strength}`) }))}
+          onChange={(strength) => { save('artStrength', strength) }} />
+      </SettingRow>
+
+      <SettingRow id="delo-sidebar-style" title={t('settings.style')} lead={t('settings.style.lead')} muted={current.headerArt === 'none'}>
+        <SegmentedControl id="delo-sidebar-style-control" label={t('settings.style')} value={current.artStyle} disabled={disabled}
+          options={ART_STYLES.map(style => ({ value: style, label: t(`settings.style.${style}`) }))}
+          onChange={(style) => { save('artStyle', style) }} />
+      </SettingRow>
+
+      <SettingRow id="delo-sidebar-view" title={t('settings.view')} lead={t('settings.view.lead')}>
+        <SegmentedControl id="delo-sidebar-view-control" label={t('settings.view')} value={current.view} disabled={disabled}
+          options={LIST_VIEWS.map(view => ({ value: view, label: t(`settings.view.${view}`) }))}
+          onChange={(view) => { save('view', view) }} />
+      </SettingRow>
+
+      <SettingRow id="delo-sidebar-sort" title={t('settings.sort')} lead={t('settings.sort.lead')}>
+        <SegmentedControl id="delo-sidebar-sort-control" label={t('settings.sort')} value={current.sort} disabled={disabled}
+          options={SORT_ORDERS.map(sort => ({ value: sort, label: t(`settings.sort.${sort}`) }))}
+          onChange={(sort) => { save('sort', sort) }} />
+      </SettingRow>
+
+      <SettingRow id="delo-sidebar-working" title={t('settings.working')} lead={t('settings.working.lead')}>
+        <Switch checked={current.workingShelf} disabled={disabled} label={t('settings.working')}
+          onChange={(checked) => { save('workingShelf', checked) }} />
+      </SettingRow>
+
+      <SettingRow id="delo-sidebar-unpin" title={t('settings.confirmUnpin')} lead={t('settings.confirmUnpin.lead')}>
+        <Switch checked={current.confirmUnpin} disabled={disabled} label={t('settings.confirmUnpin')}
+          onChange={(checked) => { save('confirmUnpin', checked) }} />
+      </SettingRow>
+
+      <SettingRow id="delo-sidebar-width" title={t('settings.width')} lead={t('settings.width.lead')}>
+        <WidthSlider value={current.width} disabled={disabled} label={t('settings.width')}
+          format={px => t('settings.width.value', { px: String(px) })} notchLabel={px => String(px)}
+          onCommit={(px) => { save('width', px) }} />
+      </SettingRow>
+
+      <SettingRow id="delo-sidebar-stock" title={t('settings.stock')} lead={t('settings.stock.lead')}>
+        <Button variant="outline" onClick={() => { attempt(useStockLook) }}>
+          {t('settings.stock.action')}
+        </Button>
+      </SettingRow>
+
+      <p className={css.credit}>{t('settings.credit')}</p>
+    </div>
+  )
+}
