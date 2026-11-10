@@ -95,7 +95,10 @@ const shouldFail = process.env.DSH_TEST_LEFTHOOK_FAIL === '1'
 if (!shouldFail) {
   const binary = join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'lefthook.cmd' : 'lefthook')
   const config = readFileSync(join(root, 'lefthook.yml'), 'utf8').trim()
-  const hook = \`#!/bin/sh\\n# root=\${root}\\n# binary=\${binary}\\n# config=\${config}\\nexit 0\\n\`
+  const header = \`#!/bin/sh\\n# root=\${root}\\n# binary=\${binary}\\n# config=\${config}\\n\`
+  // The tail of Lefthook's template: its search for a binary ends in the not-found branch when DSH_TEST_LEFTHOOK_MISSING=1.
+  const search = 'if [ "$DSH_TEST_LEFTHOOK_MISSING" != "1" ]; then\\n  exit 0\\nelse\\n  echo "Can\\'t find lefthook in PATH"\\nfi\\n'
+  const hook = header + (process.env.DSH_TEST_LEFTHOOK_BARE_TEMPLATE === '1' ? 'exit 0\\n' : search)
   for (const name of ['pre-commit', 'pre-merge-commit', 'pre-push']) writeFileSync(join(hooksPath, name), hook, { mode: 0o755 })
 }
 if (existsSync(running)) unlinkSync(running)
@@ -426,6 +429,48 @@ syncBuiltinESMExports()
     } finally {
       release()
       await Promise.allSettled([publishing, ...waiting === undefined ? [] : [waiting]])
+    }
+  })
+
+  // Windows runs these sh hooks through Git's own shell, which this spawn does not locate.
+  it.skipIf(process.platform === 'win32')('makes the pre-commit and pre-push hooks exit 1 with the fix when Lefthook cannot be found', async () => {
+    const fixture = createFixture()
+    const result = await runInstaller(fixture, fixture.main)
+    expect(result.status, result.stderr).toBe(0)
+    const hooks = hooksPath(fixture, fixture.main)
+    for (const name of ['pre-commit', 'pre-push']) {
+      const missing = spawnSync('sh', [join(hooks, name)], { cwd: fixture.main, encoding: 'utf8', env: { ...fixture.env, DSH_TEST_LEFTHOOK_MISSING: '1' } })
+      expect(missing.status, name).toBe(1)
+      expect(missing.stderr).toContain(`Can't find lefthook, so the ${name} checks cannot run; run pnpm install`)
+      expect(spawnSync('sh', [join(hooks, name)], { cwd: fixture.main, encoding: 'utf8', env: fixture.env }).status, name).toBe(0)
+    }
+    expect(readFileSync(join(hooks, 'pre-merge-commit'), 'utf8')).toContain('  echo "Can\'t find lefthook in PATH"\nfi\n')
+  })
+
+  it('refuses a Lefthook template whose gating hooks lack the not-found branch, and restores the hook path', async () => {
+    const fixture = createFixture()
+    const result = await runInstaller(fixture, fixture.main, { DSH_TEST_LEFTHOOK_BARE_TEMPLATE: '1' })
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('so a missing Lefthook would pass the hook')
+    expect(gitResult(fixture, fixture.main, ['config', '--worktree', '--get', 'core.hooksPath']).status).toBe(1)
+  })
+
+  it('finds the not-found branch in the hooks the installed Lefthook writes', async () => {
+    const fixture = createFixture()
+    const real = fileURLToPath(new URL('../node_modules/lefthook/bin/index.js', import.meta.url))
+    const binDirectory = join(fixture.main, 'node_modules/.bin')
+    if (process.platform === 'win32') {
+      writeFileSync(join(binDirectory, 'lefthook.cmd'), `@echo off\r\n"${process.execPath}" "${real}" %*\r\n`)
+    } else {
+      write(join(binDirectory, 'lefthook'), `#!/bin/sh\nexec "${process.execPath}" "${real}" "$@"\n`, 0o755)
+    }
+    write(join(fixture.main, 'lefthook.yml'), 'pre-commit:\n  jobs:\n    - run: "true"\npre-push:\n  jobs:\n    - run: "true"\n')
+    const result = await runInstaller(fixture, fixture.main)
+    expect(result.status, result.stderr).toBe(0)
+    for (const name of ['pre-commit', 'pre-push']) {
+      const hook = readFileSync(join(hooksPath(fixture, fixture.main), name), 'utf8')
+      expect(hook).toMatch(/echo "Can't find lefthook, so the [a-z-]+ checks cannot run; run pnpm install[^\n]*" >&2\n\s*exit 1\n/)
+      expect(hook).not.toContain('echo "Can\'t find lefthook in PATH"')
     }
   })
 

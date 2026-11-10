@@ -1879,6 +1879,12 @@
       "class": "security",
       "reason": "Keeps each Session's snapshot store in a per-Session private tree under the configured scratch root, checks it against every live Session's writable roots before each snapshot and copy (recording nothing on an overlap), verifies the tree's device and inode identities before every use, never captures a path the sandbox protects from the Session, and at disposal leaves a tree that no longer verifies in place with a warning instead of removing through it. Lead verdict: approved, after two independent reviews and their fixes (2026-11-10).",
       "sha256": "19eb52b3662a7547bc5ff5a8f0155424dc7e1ea125ce1732c428dcaac3735ab9"
+    },
+    {
+      "path": "scripts/install-lefthook.mjs",
+      "class": "security",
+      "reason": "Trunk gate: the installed pre-commit and pre-push hooks exit 1 and name the install command when they cannot find Lefthook, where Lefthook's own template exits 0 and passes a gate that never ran; the installer refuses a template that lacks that branch. Denial tests in scripts/install-lefthook.spec.ts fail without the change and pass with it, against the installed Lefthook's template too. Authorised by the coordinator (2026-11-10); the lead's review is pending.",
+      "sha256": "6e0656ba39aee1555446d0cdd7366cb3e675591768cc9618dfe8684763c2b118"
     }
   ],
   "retired": []

@@ -27,6 +27,10 @@ const INSTALL_LOCK_INITIALIZATION_TIMEOUT_MS = 5_000
 const INSTALL_LOCK_POLL_MS = 50
 const ALLOW_HOOKS_PATH_OVERRIDE = 'DSH_LEFTHOOK_ALLOW_HOOKS_PATH_OVERRIDE'
 const REPOSITORY_EXTENSION_PATTERN = '^extensions\\.'
+// Lefthook's hook template ends its search for a binary with this line and then exits 0, which would pass a gate
+// that never ran. The gating hooks print the fix and exit 1 instead.
+const LEFTHOOK_NOT_FOUND = 'echo "Can\'t find lefthook in PATH"'
+const GATING_HOOKS = ['pre-commit', 'pre-push']
 function errorCode(error) {
   return typeof error === 'object' && error !== null && 'code' in error
     ? error.code
@@ -574,6 +578,27 @@ function runLefthook(root, lefthook) {
   if (result.status !== 0) throw commandFailure(lefthook, args, result)
 }
 
+/** Make each gating hook exit 1 with the fix when it cannot find Lefthook, instead of exiting 0 unchecked. */
+function failGatingHooksWithoutLefthook(hooksPath) {
+  for (const name of GATING_HOOKS) {
+    const hookPath = join(hooksPath, name)
+    if (!existsSync(hookPath)) throw new Error(`Lefthook installed no ${name} hook in ${hooksPath}; lefthook.yml must define ${name}`)
+    const lines = readFileSync(hookPath, 'utf8').split('\n')
+    const index = lines.findIndex(line => line.trim() === LEFTHOOK_NOT_FOUND)
+    if (index < 0) {
+      throw new Error(`${hookPath} has no "${LEFTHOOK_NOT_FOUND}" line, so a missing Lefthook would pass the hook; update install-lefthook.mjs for this Lefthook version`)
+    }
+    const indent = /^\s*/.exec(lines[index])[0]
+    lines.splice(
+      index,
+      1,
+      `${indent}echo "Can't find lefthook, so the ${name} checks cannot run; run pnpm install (or node scripts/install-lefthook.mjs) and retry" >&2`,
+      `${indent}exit 1`,
+    )
+    writeFileSync(hookPath, lines.join('\n'), { mode: 0o755 })
+  }
+}
+
 function configSource(entry) {
   return `${entry.origin}: ${JSON.stringify(entry.value)}`
 }
@@ -720,6 +745,7 @@ async function main() {
         throw new Error('new worktree-local core.hooksPath did not become the effective direct worktree value')
       }
       runLefthook(root, lefthook)
+      failGatingHooksWithoutLefthook(hooksPath)
       updateOwnershipMarker(ownedHooksDirectory.markerPath, hooksPath)
     } catch (error) {
       const rollbackErrors = []
