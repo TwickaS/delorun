@@ -19,8 +19,8 @@
  * @module @delo/plugin-mcp-consent
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client/src/consent.ts'
-import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client/src/consent.ts'
+import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client'
+import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import schema from '@deepseek-ai/schemastery'
 import { resolveDeloHome } from '@delo/home'
 import {

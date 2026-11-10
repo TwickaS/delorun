@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { declareAnchorBundles, stampDeloVersion, transpileDeloPackages } from '../../src/closure/delo.ts'
+import { declareAnchorBundles, stampDeloVersion, transpileDeloPackage, transpileDeloPackages } from '../../src/closure/delo.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { scratch, writeTree } from '../support.ts'
 
@@ -61,6 +61,20 @@ describe('Delo packages in a closure', () => {
       'node_modules/@delo/broken/src/index.ts': 'export const = 1\n',
     })
     await expect(transpileDeloPackages(join(root, 'node_modules'))).rejects.toThrow(/@delo\/broken\/src\/index\.ts does not transpile/u)
+  })
+
+  it('refuses a source that imports a TypeScript file of another package, which a closure does not ship in a form Node runs', async (test) => {
+    const root = scratch(test)
+    writeTree(root, {
+      'node_modules/@delo/deep/package.json': JSON.stringify({ name: '@delo/deep', version: '0.0.0', exports: './src/index.ts' }),
+      'node_modules/@delo/deep/src/index.ts': "import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client/src/consent.ts'\nexport const consent = McpAddConsent\n",
+    })
+    await expect(transpileDeloPackages(join(root, 'node_modules'))).rejects.toThrow('@delo/deep/src/index.ts imports @deepseek-ai/dsh-mcp-client/src/consent.ts, which is TypeScript that Node does not run from node_modules')
+    writeTree(root, {
+      'node_modules/@delo/dynamic/package.json': JSON.stringify({ name: '@delo/dynamic', version: '0.0.0', exports: './src/index.ts' }),
+      'node_modules/@delo/dynamic/src/index.ts': "export const load = () => import('@x/y/src/z.ts')\n",
+    })
+    await expect(transpileDeloPackage(join(root, 'node_modules/@delo/dynamic'))).rejects.toThrow('imports @x/y/src/z.ts')
   })
 
   it('has the install anchor declare each Delo bundle at its staged version, and refuses a bundle the closure lacks', async (test) => {

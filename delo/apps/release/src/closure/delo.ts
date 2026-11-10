@@ -60,7 +60,8 @@ function rewriteEntries(value: unknown, removed: ReadonlySet<string>): unknown {
  * Transpile one Delo package in place.
  * @param directory - the staged package directory.
  * @returns the package-relative paths of the files transpiled.
- * @throws Error when a source does not transpile.
+ * @throws Error when a source does not transpile, or imports a TypeScript file by name, which the closure does not
+ * ship in a form Node runs.
  */
 export async function transpileDeloPackage(directory: string): Promise<string[]> {
   await rm(join(directory, 'tests'), { recursive: true, force: true })
@@ -71,6 +72,8 @@ export async function transpileDeloPackage(directory: string): Promise<string[]>
     const output = ts.transpileModule(await readFile(path, 'utf8'), { compilerOptions: TRANSPILE_OPTIONS, fileName: local, reportDiagnostics: true })
     const problems = output.diagnostics!.filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
     if (problems.length > 0) throw new Error(`${join(directory, local)} does not transpile: ${problems.map(problem => ts.flattenDiagnosticMessageText(problem.messageText, ' ')).join('; ')}`)
+    const sources = [...output.outputText.matchAll(/(?:from|import\()\s*['"]([^'"]+\.ts)['"]/gu)].map(match => match[1]!)
+    if (sources.length > 0) throw new Error(`${join(directory, local)} imports ${sources.join(', ')}, which is TypeScript that Node does not run from node_modules; import the package's published entry point instead`)
     await writeFile(`${path.slice(0, -'.ts'.length)}.js`, output.outputText)
     await rm(path)
     removed.add(`./${local}`)
