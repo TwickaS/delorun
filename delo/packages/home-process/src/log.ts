@@ -36,8 +36,22 @@ export interface HomeLogOptions {
 /** The name of the home process's logger in its records. */
 export const HOME_LOGGER = 'home-process'
 
+/** The home log this process opened, with its profile. */
+export interface OpenedHomeLog {
+  /** The log. */
+  readonly homeLog: HomeLog
+  /** The CLI profile whose `home-<profile>` surface it is. */
+  readonly profile: string
+}
+
 /**
- * Open the `home-<profile>` log.
+ * The home log this process opened last. A process opens at most one, as the home process of one profile; the
+ * last-resort report of `delorun` writes a fatal failure's full detail to it.
+ */
+let opened: OpenedHomeLog | undefined
+
+/**
+ * Open the `home-<profile>` log, which becomes this process's {@link openedHomeLog}.
  * @param options - the home, profile, start id, level and failure sink.
  * @returns the log, its redactor and the home process's logger.
  * @throws {HomeLayoutError} when the log directory or file is laxer than C1 allows.
@@ -53,7 +67,18 @@ export function openHomeLog(options: HomeLogOptions): HomeLog {
     onFailure: options.onFailure,
     now: Date.now,
   })
-  return { log, redactor, logger: log.logger(HOME_LOGGER) }
+  const homeLog = { log, redactor, logger: log.logger(HOME_LOGGER) }
+  opened = { homeLog, profile: options.profile }
+  return homeLog
+}
+
+/**
+ * The home log this process opened, which a closed log still is: a write after {@link SurfaceLog.close} reopens its
+ * file.
+ * @returns the log and its profile, or `undefined` when this process opened none.
+ */
+export function openedHomeLog(): OpenedHomeLog | undefined {
+  return opened
 }
 
 /**

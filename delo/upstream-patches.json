@@ -1890,7 +1890,7 @@
       "path": "apps/cli/src/profile-boot.ts",
       "class": "delo-feature",
       "feature": "home-process-signals",
-      "reason": "runProfile's optional signals flag, true by default, lets a caller that owns the process's termination signals boot a profile without the per-run SIGTERM and SIGINT handlers, so one handler stops the process across several Host boots in it."
+      "reason": "runProfile's optional signals and failLoud flags, both true by default, let a caller that owns the process's termination signals and its last-resort error handler boot a profile without the per-run SIGTERM and SIGINT handlers and fail-loud listeners, so one handler of each serves the process across several Host boots in it."
     },
     {
       "path": "packages/sandbox/sandbox-local/src/seccomp.ts",

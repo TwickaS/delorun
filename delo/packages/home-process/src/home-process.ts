@@ -4,10 +4,12 @@
  * the Docker supervisor when the machine is set up for Docker, runs the profile's Host in the same process and moves
  * the profile to another runtime only through the update handshake.
  *
- * A fresh start runs C19's start sequence in order and stops at the first failure, which it logs and throws. A
- * successor started by a handover boots its Host in `standby`, answers the predecessor and takes the lock, the
- * token and the channel only once the predecessor has handed the lock over. Whatever way the process ends, a `exit`
- * listener removes this start's token file and socket and releases the lock while each is still this start's.
+ * A fresh start runs C19's start sequence in order and stops at the first failure, which it logs and throws; its Host
+ * stops through a teardown that ends no process, and when that teardown fails or overruns, nothing rolls the data back
+ * or starts again and the lock stays held until the process ends ({@link HostNotStoppedError}). A successor started by
+ * a handover boots its Host in `standby`, answers the predecessor and takes the lock, the token and the channel only
+ * once the predecessor has handed the lock over. Whatever way the process ends, a `exit` listener removes this start's
+ * token file and socket and releases the lock while each is still this start's.
  *
  * From the moment a fresh start holds the lock, or a successor starts booting its Host, the process holds the one
  * listener for `SIGTERM` and `SIGINT` (`options.onSignal`): the first signal runs {@link HomeProcess.shutdown} with
@@ -46,6 +48,7 @@ import type { DeloLogger, Redactor } from '@delo/logs'
 import { listenUpdateChannel, updateSocketPath } from './channel.ts'
 import { exchangeLines } from './client.ts'
 import { HomeProcessError, isRollbackRefusal } from './errors.ts'
+import { hostStopFailure, HostNotStoppedError, REFUSED_HOST_STOP_S, stopHostWithin } from './host-stop.ts'
 import { startSuccessor, type HandoverPipe, type Successor } from './handover.ts'
 import { UpdateHandshake, type HandshakeSubject, type UpdateSupport } from './handshake.ts'
 import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted, readJournal, removeJournal, removeStash, writeJournal } from './journal.ts'
@@ -114,20 +117,11 @@ const SWITCH_PHASES: ReadonlySet<UpdateJournal['phase']> = new Set(['switching',
  *   still running then goes on, and no Host is in use.
  */
 async function suspendWithin(host: RunningHost, limitS: number): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const overrun = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => { reject(new HomeProcessError('HOST_STOP_FAILED', `the Host did not stop within ${String(limitS)} seconds; nothing was switched`)) }, limitS * 1000)
-  })
-  try {
-    await Promise.race([
-      host.suspend().catch((error: unknown) => {
-        throw new HomeProcessError('HOST_STOP_FAILED', `the Host's teardown failed (${error instanceof Error ? error.message : String(error)}); nothing was switched`)
-      }),
-      overrun,
-    ])
-  } finally {
-    clearTimeout(timer)
-  }
+  const outcome = await stopHostWithin(() => host.suspend(), limitS)
+  if (outcome.stopped) return
+  throw new HomeProcessError('HOST_STOP_FAILED', outcome.kind === 'overran'
+    ? `the Host did not stop within ${String(limitS)} seconds; nothing was switched`
+    : `the Host's teardown failed (${outcome.error instanceof Error ? outcome.error.message : String(outcome.error)}); nothing was switched`)
 }
 
 /** A running home process. */
@@ -232,7 +226,14 @@ export class HomeProcess implements HandshakeSubject {
       // A signal's shutdown has released this start's parts, the lock among them, so nothing may roll back here.
       if (home.stopped) throw error
       options.logger.error('the home process could not start', { err: error })
-      await home.closeStarted()
+      const failure = await home.closeStarted(error)
+      if (failure instanceof HostNotStoppedError) {
+        // A Host that may still run keeps the data in use: nothing rolls it back or starts again, and the lock stays
+        // held until the process ends. Without the signal listener, a signal ends the process as Node's default does.
+        home.stopSignals?.()
+        options.logger.error('a Host may still run, so no rollback or new start runs and the lock stays held until this process ends')
+        throw failure
+      }
       // The rollback runs while the lock is held, so no other start runs a Host on the data while it changes.
       await home.rollBackInterruptedUpdate()
       home.lock?.release()
@@ -270,6 +271,11 @@ export class HomeProcess implements HandshakeSubject {
         healthy = verdict.passed
       } catch (error) {
         options.logger.error('the Host did not boot on the new runtime', { err: error })
+        // The predecessor is told the check failed and boots its Host again, while this refused Host may still run.
+        if (error instanceof HostNotStoppedError) {
+          pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED' })
+          throw error
+        }
       }
       if (!healthy) {
         pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED', ...criterion === undefined ? {} : { criterion } })
@@ -290,9 +296,11 @@ export class HomeProcess implements HandshakeSubject {
     } catch (error) {
       if (home.stopped) throw error
       options.logger.error('the successor could not take over', { err: error })
-      await home.abandon()
+      const failure = await home.closeStarted(error)
+      // A Host that may still run keeps the data in use, so a lock this successor adopted stays held until it ends.
+      if (!(failure instanceof HostNotStoppedError)) home.lock?.release()
       home.stopSignals?.()
-      throw error
+      throw failure
     } finally {
       pipe.close()
     }
@@ -846,21 +854,26 @@ export class HomeProcess implements HandshakeSubject {
     if (this.token !== undefined) removeStartTokenFile(startTokenFile(this.options.home, this.options.profile), this.token)
   }
 
-  /** Undo a start that failed, keeping the lock: each part this start created goes, in the clean stop's order. */
-  private async closeStarted(): Promise<void> {
+  /**
+   * Undo a start that failed, keeping the lock: each part this start created goes, in the clean stop's order. The Host
+   * stops through its own teardown, which ends no process, within {@link REFUSED_HOST_STOP_S}, so the failed start's
+   * rollback and its report still run; a teardown that fails or overruns is logged and returned.
+   * @param error - why the start failed.
+   * @returns `error`, or a {@link HostNotStoppedError} carrying it when the Host's teardown did not finish.
+   */
+  private async closeStarted(error: unknown): Promise<unknown> {
     this.ended = true
-    await this.closeHost()
+    const host = this.host
+    this.host = undefined
+    const outcome = host === undefined ? undefined : await stopHostWithin(() => host.suspend(), REFUSED_HOST_STOP_S)
+    const failure = outcome === undefined || outcome.stopped || error instanceof HostNotStoppedError ? error : new HostNotStoppedError(error, outcome)
+    if (outcome !== undefined && !outcome.stopped) this.logger.error('the failed start\'s Host did not stop', { ...outcome.kind === 'failed' ? { err: outcome.error } : {}, data: { detail: hostStopFailure(outcome) } })
     this.removeToken()
     await this.channel?.close()
     this.channel = undefined
     await this.launched?.stop()
     this.launched = undefined
-  }
-
-  /** Undo a start that failed: each part this start created goes, then the lock. */
-  private async abandon(): Promise<void> {
-    await this.closeStarted()
-    this.lock?.release()
+    return failure
   }
 
   /** The exit listener: whatever ends the process, this start's token file, socket and lock go while each is its own. */

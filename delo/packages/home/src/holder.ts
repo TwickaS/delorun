@@ -216,20 +216,94 @@ export function holderIdentity(holder: { readonly processStart?: string | undefi
   return { ...processStart === undefined ? {} : { processStart }, ...pidNamespace === undefined ? {} : { pidNamespace } }
 }
 
+/** The processes a holder record is checked against: this operating system's, or a spec's stand-in. */
+export interface ProcessTable {
+  /** The operating system, which decides whether start identities can be read at all. */
+  readonly platform: NodeJS.Platform
+  /**
+   * Whether a process exists.
+   * @param pid - the process id.
+   * @returns false only when no process has the id.
+   */
+  exists(pid: number): boolean
+  /**
+   * A live process's start identity.
+   * @param pid - the process id.
+   * @returns the identity, or `undefined` when it cannot be read.
+   */
+  start(pid: number): string | undefined
+  /**
+   * The checking process's own pid namespace.
+   * @returns `pid:[<inode>]`, or `undefined` where it cannot be read.
+   */
+  pidNamespace(): string | undefined
+}
+
+/** This operating system's processes, read through {@link processExists}, {@link readProcessStart} and this process's pid namespace. */
+export const SYSTEM_PROCESS_TABLE: ProcessTable = {
+  platform: process.platform,
+  exists: processExists,
+  start: pid => readProcessStart(pid),
+  pidNamespace: ownPidNamespace,
+}
+
+/** The platforms {@link readProcessStart} reads a start identity on. */
+const START_IDENTITY_PLATFORMS: ReadonlySet<NodeJS.Platform> = new Set(['linux', 'darwin'])
+
+/** Why a holder whose process may run cannot be confirmed as the process that wrote its record. */
+export type UnconfirmedHolder =
+  /** The platform has no start identity reader, as on Windows, so a process that reuses the id cannot be told apart. */
+  | 'no-start-reader'
+  /** The record carries no start identity, written by an older Delo or where it could not be read. */
+  | 'no-start-identity'
+  /** The record names a pid namespace other than the checking process's, or the checking process's cannot be read. */
+  | 'other-namespace'
+  /** The live process's start identity cannot be read now. */
+  | 'start-unreadable'
+
+/**
+ * What a holder record names now (a closed union).
+ *
+ * - `confirmed`: a live process has the record's process id and start identity, in the record's pid namespace.
+ * - `exited`: no process has the id in the record's pid namespace.
+ * - `replaced`: a process has the id but another start identity, so the recorded process has exited.
+ * - `unconfirmed`: a process may run under the id, and whether it is the recorded one cannot be told, for `reason`.
+ */
+export type HolderCheck =
+  | { readonly kind: 'confirmed' }
+  | { readonly kind: 'exited' }
+  | { readonly kind: 'replaced' }
+  | { readonly kind: 'unconfirmed', readonly reason: UnconfirmedHolder }
+
+/**
+ * Check a recorded holder against the live processes. Only `confirmed` permits acting on the process, such as
+ * signalling it: every other outcome may name a process other than the one that wrote the record.
+ * @param holder - the recorded holder.
+ * @param table - the processes to check against; this operating system's by default.
+ * @returns what the record names now.
+ */
+export function checkHolder(holder: ProcessHolder, table: ProcessTable = SYSTEM_PROCESS_TABLE): HolderCheck {
+  if (holder.pidNamespace !== undefined && holder.pidNamespace !== table.pidNamespace()) return { kind: 'unconfirmed', reason: 'other-namespace' }
+  if (!table.exists(holder.pid)) return { kind: 'exited' }
+  if (!START_IDENTITY_PLATFORMS.has(table.platform)) return { kind: 'unconfirmed', reason: 'no-start-reader' }
+  if (holder.processStart === undefined) return { kind: 'unconfirmed', reason: 'no-start-identity' }
+  const live = table.start(holder.pid)
+  if (live === undefined) return { kind: 'unconfirmed', reason: 'start-unreadable' }
+  return live === holder.processStart ? { kind: 'confirmed' } : { kind: 'replaced' }
+}
+
 /**
  * Whether a recorded holder still runs: its process exists and, when the record carries a start identity that can be
  * read for the live process now, the two are equal. A record that names a pid namespace other than this process's, or
  * that names one while this process's cannot be read, is not judged: its process id names nothing here, so it reads as
  * alive.
  * @param holder - the recorded holder.
+ * @param table - the processes to check against; this operating system's by default.
  * @returns false when the process does not exist or is another process with the same id, in the record's pid namespace.
  */
-export function holderAlive(holder: ProcessHolder): boolean {
-  if (holder.pidNamespace !== undefined && holder.pidNamespace !== ownPidNamespace()) return true
-  if (!processExists(holder.pid)) return false
-  if (holder.processStart === undefined) return true
-  const live = readProcessStart(holder.pid)
-  return live === undefined || live === holder.processStart
+export function holderAlive(holder: ProcessHolder, table: ProcessTable = SYSTEM_PROCESS_TABLE): boolean {
+  const { kind } = checkHolder(holder, table)
+  return kind !== 'exited' && kind !== 'replaced'
 }
 
 /**

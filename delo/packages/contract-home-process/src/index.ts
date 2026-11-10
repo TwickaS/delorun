@@ -19,6 +19,15 @@ export const HOME_PROCESSES_PER_PROFILE = 1
 /** Longest wait of `delorun start` for `running`, in milliseconds. */
 export const START_WAIT_MS = 120_000
 
+/** Longest wait of `delorun stop --now` for the home process's final line, in milliseconds. */
+export const STOP_NOW_ANSWER_MS = 60_000
+
+/** Wait of `delorun stop --now` for a home process it sent `SIGTERM` to exit before it sends `SIGKILL`, in milliseconds. */
+export const STOP_TERM_GRACE_MS = 30_000
+
+/** Wait of `delorun stop --now` for a home process it sent `SIGKILL` to exit, in milliseconds. */
+export const STOP_KILL_WAIT_MS = 5_000
+
 /** Largest request line, in bytes. */
 export const REQUEST_MAX_BYTES = 16_384
 

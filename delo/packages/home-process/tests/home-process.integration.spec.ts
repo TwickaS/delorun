@@ -14,7 +14,7 @@ import { REQUEST_MAX_BYTES, type HomeStatus } from '@delo/contract-home-process'
 import { newStartId, processExists, readHomeLock, readStartTokenFile, runDirectory, startTokenFile, writeProtectedFile } from '@delo/home'
 import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { exchangeLines, journalPath, openHomeLog, queryHomeStatus, readJournal, sendHomeRequest, stashPath, updateSocketPath, writeJournal, type JournalledUpdate, type ResponseLine } from '../src/index.ts'
+import { exchangeLines, HostNotStoppedError, journalPath, openHomeLog, queryHomeStatus, readJournal, sendHomeRequest, stashPath, updateSocketPath, writeJournal, type JournalledUpdate, type ResponseLine } from '../src/index.ts'
 import { FixtureStore, installFixture, killLockHolder, MemoryLogger, PROFILE, readPointer, startHome, tempHome, text, until, V0, V1, V2, type InProcessHome, type StartParts, type TempHome } from './support.ts'
 
 let temp: TempHome | undefined
@@ -521,20 +521,24 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     expect(readPointer(home, 'current')).toBe(V2)
   })
 
-  it('a start rolls an interrupted update back while it still holds the home lock', async () => {
+  it('a start rolls an interrupted update back while it still holds the home lock, after stopping its Host through its own teardown', async () => {
     const home = await setUp({ healthy: false })
     await new FixtureStore(home, PROFILE).switchTo(V1, V2)
     await writeJournal(journalPath(home, PROFILE), { ...interrupted(), dataDiffers: false }, 'health-check')
     let holder: string | undefined = 'not called'
     let startId: string | undefined
+    let hosts: StartParts['hosts'] | undefined
     await expect(startHome(home, {
       running: V2,
       configure: (parts) => {
         startId = parts.startId
+        hosts = parts.hosts
         parts.copies.beforeRollback = () => { holder = readHomeLock(runDirectory(home, PROFILE))?.startId }
       },
     })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
     expect(holder).toBe(startId)
+    // `close` is the process-stop path, whose upstream bound may end the process before the rollback runs.
+    expect(hosts?.latest.stops).toEqual(['suspend'])
     await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the restart on the previous version')
   })
 
@@ -544,11 +548,12 @@ describe('home-killed-mid-switch', TIMEOUT, () => {
     await new FixtureStore(home, PROFILE).switchTo(V1, V2)
     await writeJournal(journalPath(home, PROFILE), { ...interrupted(), dataDiffers: false }, 'health-check')
     const logger = new MemoryLogger()
-    await expect(startHome(home, { running: V2, logger })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
+    let store: FixtureStore | undefined
+    await expect(startHome(home, { running: V2, logger, configure: (parts) => { store = parts.store } })).rejects.toMatchObject({ code: 'HEALTH_CHECK_FAILED' })
     expect(readPointer(home, 'current')).toBe(V1)
-    await until(() => logger.records.some(record => record.includes('failed its check before a start')), 5_000, 'the refusal in the log')
-    await new Promise(resolve => setTimeout(resolve, 1_000))
-    await expect(status(home)).rejects.toThrow()
+    // A failed start settles after its start again has run, so the refusal and the absent command are both final here.
+    expect(logger.records.some(record => record.includes('failed its check before a start'))).toBe(true)
+    expect(store?.commands).toEqual([])
   })
 
   it('a start after a home process killed in switching before current was written runs the previous version and removes the journal', async () => {
@@ -723,21 +728,18 @@ describe('a build without the runtime store', TIMEOUT, () => {
 })
 
 describe('host-teardown-bounded', TIMEOUT, () => {
-  it('an update whose Host takes 8 seconds to stop waits for it, keeps this process and commits', async () => {
+  it('an update whose Host is slow to stop waits for its teardown, keeps this process and commits', async () => {
     const home = await setUp()
-    let stopping: number | undefined
-    let stopped: number | undefined
-    const running = await start(home, {
-      hostSuspend: async () => {
-        stopping = Date.now()
-        await new Promise(resolve => setTimeout(resolve, 8_000))
-        stopped = Date.now()
-      },
-    })
+    let finish: (() => void) | undefined
+    const running = await start(home, { hostSuspend: async () => new Promise<void>((resolve) => { finish = resolve }) })
     const reportId = await prepare(home)
-    const lines = await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId, wait: 'drain', dataCopy: false } })
-    expect(final(lines)).toEqual({ ok: true, outcome: 'committed' })
-    expect(stopped! - stopping!).toBeGreaterThanOrEqual(7_900)
+    const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId, wait: 'drain', dataCopy: false } })
+    await until(() => finish !== undefined, 30_000, 'the Host\'s teardown to begin')
+    // While the teardown runs, nothing is switched and the process is not told to end.
+    expect(running.store?.switches).toEqual([])
+    expect(running.exits).toEqual([])
+    finish?.()
+    expect(final(await applying)).toEqual({ ok: true, outcome: 'committed' })
     expect(running.store?.switches).toEqual([`${V1}>${V2}`])
     await until(() => running.exits.length > 0, 5_000, 'the predecessor to end')
     // The process ends once, after the handover, never in the middle of the switch.
@@ -746,19 +748,59 @@ describe('host-teardown-bounded', TIMEOUT, () => {
     await until(() => existsSync(join(home, 'runtimes', 'retained.log')), 30_000, 'the retention at commit')
   })
 
-  it('a Host that does not stop within the bound, or whose teardown fails, is refused with HOST_STOP_FAILED and the process keeps running', async () => {
+  it('a switch waits for an 8-second teardown, refuses one that outlasts the bound or fails with HOST_STOP_FAILED, and keeps the process running', async () => {
     const home = await setUp()
-    let fail = false
-    const running = await start(home, { hostSuspend: () => (fail ? Promise.reject(new Error('a row did not dispose')) : new Promise<void>(() => {})) })
-    const began = Date.now()
-    await expect(running.process.suspend(1)).rejects.toMatchObject({ code: 'HOST_STOP_FAILED', detail: 'the Host did not stop within 1 seconds; nothing was switched' })
-    expect(Date.now() - began).toBeLessThan(5_000)
+    let teardown: 'slow' | 'never' | 'fail' = 'slow'
+    const running = await start(home, {
+      hostSuspend: async () => {
+        if (teardown === 'fail') throw new Error('a row did not dispose')
+        await new Promise<void>((resolve) => { if (teardown === 'slow') setTimeout(resolve, 8_000) })
+      },
+    })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      let slow: unknown = 'waiting'
+      void running.process.suspend(60).then(() => { slow = 'stopped' }, (error: unknown) => { slow = error })
+      await vi.advanceTimersByTimeAsync(7_999)
+      expect(slow).toBe('waiting')
+      await vi.advanceTimersByTimeAsync(1)
+      expect(slow).toBe('stopped')
+      await running.process.resume()
+      teardown = 'never'
+      let stuck: unknown = 'waiting'
+      void running.process.suspend(60).then(() => { stuck = 'stopped' }, (error: unknown) => { stuck = error })
+      await vi.advanceTimersByTimeAsync(59_999)
+      expect(stuck).toBe('waiting')
+      await vi.advanceTimersByTimeAsync(1)
+      expect(stuck).toMatchObject({ code: 'HOST_STOP_FAILED', detail: 'the Host did not stop within 60 seconds; nothing was switched' })
+    } finally {
+      vi.useRealTimers()
+    }
     await running.process.resume()
-    fail = true
+    teardown = 'fail'
     await expect(running.process.suspend(60)).rejects.toMatchObject({ code: 'HOST_STOP_FAILED', detail: 'the Host\'s teardown failed (a row did not dispose); nothing was switched' })
     await running.process.resume()
     expect(running.exits).toEqual([])
     expect((await status(home)).state).toBe('running')
+  })
+
+  it('a failed start whose Host does not stop rolls nothing back, starts nothing again and keeps the lock until the process ends', async () => {
+    const home = await setUp({ healthy: false })
+    await new FixtureStore(home, PROFILE).switchTo(V1, V2)
+    await writeJournal(journalPath(home, PROFILE), { ...interrupted(), dataDiffers: false }, 'health-check')
+    let parts: StartParts | undefined
+    const failure = await startHome(home, { running: V2, hostSuspend: async () => Promise.reject(new Error('a row did not dispose')), configure: (given) => { parts = given } }).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(HostNotStoppedError)
+    expect(failure).toMatchObject({ cause: { code: 'HEALTH_CHECK_FAILED' }, outcome: { stopped: false, kind: 'failed' } })
+    expect(parts?.hosts.latest.stops).toEqual(['suspend'])
+    expect(parts?.copies.calls.filter(call => call.startsWith('rollback'))).toEqual([])
+    expect(readPointer(home, 'current')).toBe(V2)
+    expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'health-check', targetStarted: true })
+    expect(parts?.store?.commands).toEqual([])
+    expect(readHomeLock(runDirectory(home, PROFILE))?.startId).toBe(parts?.startId)
+    // No signal listener is left that would swallow a signal while the Host may still run.
+    expect(parts?.signals.count).toBe(0)
+    expect(parts?.exits).toEqual([])
   })
 })
 

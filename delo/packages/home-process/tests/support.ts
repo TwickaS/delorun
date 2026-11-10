@@ -213,7 +213,11 @@ export class FixtureStore implements RuntimeStore {
     else rmSync(join(this.home, 'runtimes', 'previous'), { force: true })
   }
 
+  /** Every home command asked for, as `<mode>:<version>`: a start again after a rollback asks for `start`. */
+  readonly commands: string[] = []
+
   homeCommand(version: RuntimeVersion, mode: HomeCommandMode): HomeCommand {
+    this.commands.push(`${mode}:${version}`)
     return { command: process.execPath, args: ['--import', 'tsx/esm', ENTRY, mode, this.home, this.profile, version], cwd: REPOSITORY }
   }
 
@@ -355,6 +359,8 @@ export class FixtureCopies implements SessionDataCopies {
 export class FixtureHost implements RunningHost {
   readonly chats = new CountingChatGate()
   closed = false
+  /** How it was asked to stop, in order: `close` as the process stops, `suspend` through its own teardown. */
+  readonly stops: ('close' | 'suspend')[] = []
 
   private readonly behaviour: FixtureBehaviour
   readonly access: UpdateChannelAccess
@@ -404,11 +410,13 @@ export class FixtureHost implements RunningHost {
   }
 
   async close(): Promise<void> {
+    this.stops.push('close')
     this.closed = true
     return Promise.resolve()
   }
 
   async suspend(): Promise<void> {
+    this.stops.push('suspend')
     await this.behaviour.suspend?.()
     this.closed = true
   }

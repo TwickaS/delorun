@@ -14,13 +14,13 @@ import { join } from 'node:path'
 import { DELO_HOME_ENTRIES, DELO_PROFILE_ENV, PROFILE_NAME_PATTERN, profileNameProblem, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
-import { codedReason, profileOption, renderRefusal } from '@delo/home'
+import { codedReason, profileOption } from '@delo/home'
 import { messageOf, readStoredRootBytes, readStoredRootChain, trustFile, verifyStoredRoot } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
 import type { StartCheckResult } from '@delo/release-verify/start'
 import { RuntimeStoreError, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type RuntimePointers, type VerifiedRuntime } from '@delo/runtime-store'
 import type { LauncherProgress } from './progress.ts'
-import { LAUNCHER_EXIT, refusalFor, type RemedyContext } from './refusals.ts'
+import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal, type RemedyContext } from './refusals.ts'
 
 /** The runtime-store operations the launcher drives; `RuntimeStore` satisfies it. */
 export interface LauncherStore {
@@ -289,7 +289,7 @@ async function previousRollback(options: LauncherOptions): Promise<{ readonly pr
  */
 function rollbackRefusalText(options: Pick<LauncherOptions, 'args' | 'profile'>, error: RuntimeStoreError, current: RuntimeVersion, previous: RuntimeVersion): string {
   const command = ['delorun', ...options.args].join(' ')
-  return renderRefusal({
+  return renderLauncherRefusal({
     lead: `Delo did not run ${command}: release ${String(current)} failed its start check, so Delo ran no release.`,
     reason: codedReason(error.code, error.detail),
     remedies: [`Start release ${String(previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}${profileOption({ profile: options.profile })}`],

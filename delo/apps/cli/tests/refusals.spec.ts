@@ -3,9 +3,10 @@
  * class a fork package or app exports is either described by `delorun`'s describers or named, with the reason, as one
  * that never reaches `delorun`'s entry point.
  */
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 import { UpdatePendingError } from '@delo/bundle-local/update-gate'
 import { describeFailure, homeLayoutDescriber, type Refusal } from '@delo/home'
 import { installDescriber } from '@delo/install'
@@ -71,48 +72,178 @@ function sources(directory: string): string[] {
     .map(entry => join(entry.parentPath, entry.name))
 }
 
-/**
- * Every exported class of the fork's packages and apps that extends `Error`, a class whose name ends in `Error`, or
- * another such class.
- * @returns each class's name and the file that declares it.
- */
-function exportedErrorClasses(): ReadonlyArray<{ readonly name: string, readonly file: string }> {
-  const declared: Array<{ name: string, base: string, file: string }> = []
-  for (const group of ['packages', 'apps']) {
-    for (const member of readdirSync(join(FORK, group), { withFileTypes: true })) {
-      if (!member.isDirectory()) continue
-      const source = join(FORK, group, member.name, 'src')
-      let files: string[]
-      try {
-        files = sources(source)
-      } catch (error) {
-        // A member without `src/` (ENOENT) exports no source classes; any other failure stops the gate.
-        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') continue
-        throw error
-      }
-      for (const file of files) {
-        for (const match of readFileSync(file, 'utf8').matchAll(/^export (?:abstract )?class (\w+)(?:<[^>]*>)? extends (\w+)/gmu)) {
-          declared.push({ name: match[1]!, base: match[2]!, file: file.slice(FORK.length) })
-        }
-      }
-    }
-  }
-  const errors = new Set<string>()
-  let grew = true
-  while (grew) {
-    grew = false
-    for (const { name, base } of declared) {
-      if (!errors.has(name) && (base === 'Error' || base.endsWith('Error') || errors.has(base))) {
-        errors.add(name)
-        grew = true
-      }
-    }
-  }
-  return declared.filter(({ name }) => errors.has(name))
+/** A fork package or app: its directory, its name and its `exports` map. */
+interface Member {
+  readonly directory: string
+  readonly name: string
+  readonly exports: unknown
 }
 
+/**
+ * Every package and app of the fork.
+ * @returns each member with its manifest's name and `exports`.
+ */
+function members(): Member[] {
+  const found: Member[] = []
+  for (const group of ['packages', 'apps']) {
+    for (const entry of readdirSync(join(FORK, group), { withFileTypes: true })) {
+      const directory = join(FORK, group, entry.name)
+      if (!entry.isDirectory() || !existsSync(join(directory, 'package.json'))) continue
+      const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as { name: string, exports?: unknown }
+      found.push({ directory, name: manifest.name, exports: manifest.exports })
+    }
+  }
+  return found
+}
+
+/**
+ * The source pattern of one `exports` target: a `src/` module as it is, and a built `lib/` module or its declarations
+ * as the `src/` module they are built from. Any other target, such as a YAML file or locale JSON, names no module.
+ * @param target - the target, relative to the member, which may hold one `*`.
+ * @returns the source pattern relative to the member, or `undefined` for a target that names no module.
+ */
+function sourceTarget(target: string): string | undefined {
+  if (/^\.\/src\/.+\.tsx?$/u.test(target)) return target
+  const built = /^\.\/lib\/(?:types\/)?(.+)\.(?:d\.ts|js)$/u.exec(target)
+  return built === null ? undefined : `./src/${built[1]!}`
+}
+
+/**
+ * The source files a source pattern names, `.ts` or `.tsx`; a `*` matches any run of characters, `/` included.
+ * @param directory - the member's directory.
+ * @param pattern - the source pattern.
+ * @returns the files.
+ * @throws {Error} when the pattern names no file, which leaves an entry point unread.
+ */
+function patternFiles(directory: string, pattern: string): string[] {
+  const candidates = /\.tsx?$/u.test(pattern) ? [pattern] : [`${pattern}.ts`, `${pattern}.tsx`, `${pattern}/index.ts`]
+  const files = candidates.flatMap((candidate) => {
+    const absolute = join(directory, candidate)
+    if (!candidate.includes('*')) return existsSync(absolute) ? [absolute] : []
+    const [before, after] = absolute.split('*') as [string, string]
+    return sources(join(directory, 'src')).filter(file => file.startsWith(before) && file.endsWith(after))
+  })
+  if (files.length === 0) throw new Error(`${relative(FORK, directory)} exports ${pattern}, which names no source file`)
+  return files
+}
+
+/**
+ * A member's entry points, each `exports` subpath with the source files it maps to; a conditional target's `types`
+ * condition comes first.
+ * @param member - the member.
+ * @returns each subpath, as a package specifier, with its files.
+ */
+function entryPoints(member: Member): Array<{ readonly specifier: string, readonly files: readonly string[] }> {
+  if (typeof member.exports !== 'object' || member.exports === null) return []
+  const entries: Array<{ specifier: string, files: string[] }> = []
+  for (const [subpath, value] of Object.entries(member.exports as Record<string, unknown>)) {
+    const targets = typeof value === 'string' ? [value] : Object.entries(value as Record<string, string>).sort(([a], [b]) => Number(b === 'types') - Number(a === 'types')).map(([, target]) => target)
+    const pattern = targets.map(sourceTarget).find(found => found !== undefined)
+    if (pattern !== undefined) entries.push({ specifier: `${member.name}${subpath.slice(1)}`, files: patternFiles(member.directory, pattern) })
+  }
+  return entries
+}
+
+/** An exported error class: its name, as `describer.type.name` reads it, and the file that declares it. */
+interface ErrorClass {
+  readonly name: string
+  readonly file: string
+}
+
+/**
+ * Every exported error class of a set of modules, as TypeScript's checker resolves the modules' exports: `export
+ * class`, `export default class`, export lists with or without `as`, and re-exports, each class once under the name
+ * it declares. A class is an error class when its name ends in `Error`, or when it extends a built-in error class
+ * directly or through other classes; a base class the program cannot resolve, such as one from upstream, counts when
+ * its name ends in `Error`.
+ * @param files - every source file of the program, the modules and what they re-export from.
+ * @param modules - the modules whose exports are read.
+ * @param paths - the package specifiers the files import each other by, with their source files.
+ * @returns the classes.
+ */
+function exportedErrorClasses(files: readonly string[], modules: readonly string[], paths: Readonly<Record<string, readonly string[]>> = {}): ErrorClass[] {
+  const program = ts.createProgram([...files], {
+    noEmit: true,
+    noResolve: true,
+    types: [],
+    target: ts.ScriptTarget.ES2024,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    allowImportingTsExtensions: true,
+    jsx: ts.JsxEmit.Preserve,
+    paths: Object.fromEntries(Object.entries(paths).map(([specifier, targets]) => [specifier, [...targets]])),
+  })
+  const checker = program.getTypeChecker()
+  const resolved = (symbol: ts.Symbol): ts.Symbol => (symbol.flags & ts.SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol)
+  const classOf = (symbol: ts.Symbol): ts.ClassLikeDeclaration | undefined => {
+    for (const declaration of symbol.declarations ?? []) {
+      if (ts.isClassDeclaration(declaration)) return declaration
+      if (ts.isVariableDeclaration(declaration) && declaration.initializer !== undefined && ts.isClassExpression(declaration.initializer)) return declaration.initializer
+    }
+    return undefined
+  }
+  const isError = (declaration: ts.ClassLikeDeclaration, seen: Set<ts.ClassLikeDeclaration>): boolean => {
+    if (seen.has(declaration)) return false
+    seen.add(declaration)
+    const base = declaration.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword)?.types[0]?.expression
+    if (base === undefined) return false
+    const at = checker.getSymbolAtLocation(base)
+    const symbol = at === undefined ? undefined : resolved(at)
+    const inLibrary = symbol?.declarations?.some(declared => program.isSourceFileDefaultLibrary(declared.getSourceFile())) === true
+    if (inLibrary) return symbol!.name.endsWith('Error')
+    const baseClass = symbol === undefined ? undefined : classOf(symbol)
+    if (baseClass !== undefined) return baseClass.name?.text.endsWith('Error') === true || isError(baseClass, seen)
+    return base.getText().endsWith('Error')
+  }
+  const found = new Map<ts.ClassLikeDeclaration, ErrorClass>()
+  for (const module of modules) {
+    const source = program.getSourceFile(module)
+    if (source === undefined) throw new Error(`${module} is not in the program`)
+    const moduleSymbol = checker.getSymbolAtLocation(source)
+    // A file with no import or export is a script, which exports nothing.
+    if (moduleSymbol === undefined) continue
+    for (const exported of checker.getExportsOfModule(moduleSymbol)) {
+      const symbol = resolved(exported)
+      const declaration = classOf(symbol)
+      if (declaration === undefined || found.has(declaration)) continue
+      const name = declaration.name?.text ?? (ts.isVariableDeclaration(declaration.parent) ? declaration.parent.name.getText() : symbol.name)
+      if (name.endsWith('Error') || isError(declaration, new Set())) found.set(declaration, { name, file: relative(FORK, declaration.getSourceFile().fileName) })
+    }
+  }
+  return [...found.values()]
+}
+
+/**
+ * Every exported error class of the fork's packages and apps: the exports of each member's entry points, the
+ * `exports` subpaths mapped to their source files, and of every other module under `src/`.
+ * @returns the classes.
+ */
+function forkErrorClasses(): ErrorClass[] {
+  const all = members()
+  const entries = all.flatMap(entryPoints)
+  const files = [...new Set([...all.flatMap(member => existsSync(join(member.directory, 'src')) ? sources(join(member.directory, 'src')) : []), ...entries.flatMap(entry => entry.files)])]
+  return exportedErrorClasses(files, files, Object.fromEntries(entries.map(entry => [entry.specifier, entry.files])))
+}
+
+/** The gate's fixture: error classes exported only through forms a line-by-line text scan does not read. */
+const FIXTURE = fileURLToPath(new URL('fixtures/error-exports/', import.meta.url))
+
+describe('the gate\'s enumeration of exported error classes', () => {
+  it('reads export lists, renamed and default exports and re-exports through an entry point', () => {
+    const files = ['index.ts', 'named.ts', 'default.ts'].map(file => join(FIXTURE, file))
+    const names = exportedErrorClasses(files, [join(FIXTURE, 'index.ts')]).map(({ name }) => name).sort()
+    expect(names).toEqual(['DefaultFixtureFailure', 'FixtureFailure', 'NamedFixtureError'])
+  })
+
+  it('finds classes no `export class … extends` line declares', () => {
+    for (const file of ['index.ts', 'named.ts', 'default.ts']) {
+      expect(readFileSync(join(FIXTURE, file), 'utf8')).not.toMatch(/^export (?:abstract )?class \w+(?:<[^>]*>)? extends \w+/mu)
+    }
+  })
+})
+
 describe('the error classes the fork exports', () => {
-  const classes = exportedErrorClasses()
+  const classes = forkErrorClasses()
   const described = new Set(CLI_DESCRIBERS.map(describer => describer.type.name))
 
   it('finds the fork\'s error classes, each under one name', () => {
@@ -153,6 +284,14 @@ describe('a delorun refusal', () => {
     expect(cliRefusal(new CliError(EXIT.usage, 'delorun: unknown command "x"'), [])).toEqual({ text: 'delorun: unknown command "x"\n', exit: EXIT.usage })
     expect(cliRefusal(new SetupCancelled(), [])).toEqual({ text: 'delorun setup: cancelled\n', exit: EXIT.failed })
     expect(cliRefusal(new Error('boom'), [])).toEqual({ text: 'Delo stopped: boom\n', exit: EXIT.failed })
+  })
+
+  it('redacts a secret in a described error and in the message no describer knows', () => {
+    // A provider key in the form `@delo/logs`'s redactor specs use.
+    const key = ['sk', '0123456789abcdef0123456789abcdef'].join('-')
+    expect(cliRefusal(new Error(`the provider refused ${key}`), [])).toEqual({ text: 'Delo stopped: the provider refused [redacted:provider-key]\n', exit: EXIT.failed })
+    expect(cliRefusal(new TrashError('TRASH_RESTORE_CONFLICT', `the chat ${key} exists`), []).text).toBe('Delo did not change the trash.\nWhy: TRASH_RESTORE_CONFLICT: the chat [redacted:provider-key] exists\n')
+    expect(cliRefusal(new CliError(EXIT.usage, `delorun: unknown command "${key}"`), []).text).toBe('delorun: unknown command "[redacted:provider-key]"\n')
   })
 
   it('names the profile the command line named in its remedies', () => {

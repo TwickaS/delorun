@@ -26,8 +26,9 @@
  * upstream module runs (contract C17; [version](./version.ts)). Every command resolves the Delo home, `DELO_HOME` or `~/.delo`, and every
  * command but `status` creates its tree at mode 0700 and refuses a laxer one
  * before upstream code runs. A failed command prints what Delo did, why and what the person can do, in the refusal
- * format `delorun` shares with its npm launcher ([refusals](./refusals.ts)), and never a stack. Exit codes are
- * {@link EXIT}'s.
+ * format `delorun` shares with its npm launcher ([refusals](./refusals.ts)), redacted, and never a stack; a failure no
+ * command caught, after {@link main} returned included, prints the same way through the last-resort handler the
+ * [entry point](./bin.ts) installs. Exit codes are {@link EXIT}'s.
  *
  * @module @delo/cli
  */
@@ -118,8 +119,8 @@ export async function main(argv: readonly string[], context: CommandContext = {
     if (command === undefined) throw new CliError(EXIT.usage, `delorun: unknown command ${JSON.stringify(first)}\n\n${usage()}`)
     return await command.run(rest, context)
   } catch (error) {
-    // Every failure reaches the person in the refusal format, without a stack: `delorun` keeps no log of its own
-    // failures, so the message is all a person has.
+    // Every failure reaches the person in the refusal format, redacted and without a stack: `delorun` keeps no log of
+    // its own failures, so the message is all a person has.
     const refusal = cliRefusal(error, argv)
     context.stderr(refusal.text)
     return refusal.exit

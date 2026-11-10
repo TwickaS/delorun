@@ -85,7 +85,7 @@ export function preStartSteps(dependencies: PreStartDependencies): readonly PreS
       name: 'profile-migrations',
       kinds: ['cli'],
       run: async (context) => {
-        if (!context.successor) await runProfileMigrations(context.home, context.profile, dependencies.migrations(context))
+        if (!context.successor) await runProfileMigrations(context.home, context.profile, dependencies.migrations(context), context.output)
       },
     },
     { name: 'update-notice', kinds: ['cli', 'headless'], run: updateNoticeStep },

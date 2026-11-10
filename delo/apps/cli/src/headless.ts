@@ -16,6 +16,7 @@ import { mkdirSync } from 'node:fs'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { HEADLESS_PROFILE, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { runDirectory } from '@delo/home'
+import { HostNotStoppedError, refuseBootedHost } from '@delo/home-process'
 import type { CommandOutput, CommandResult } from './command.ts'
 import { assertDeloInvariants, composeDeloProfile, type ComposeDependencies } from './compose.ts'
 import { CliError, EXIT } from './exit.ts'
@@ -68,7 +69,10 @@ export function refuseLauncherOptions(args: readonly string[]): void {
  * @param dependencies - the profile preparation, the approved plugin content step, the environment loader and the runner.
  * @returns `undefined`: upstream's profile runner sets the exit code when the task ends.
  * @throws {CliError} when an argument is refused, the composition refuses, the profile fails to boot, or the booted
- *   rows break an invariant, which stops the profile first.
+ *   rows break an invariant, which first tears the profile down within `REFUSED_HOST_STOP_S`, without ending the
+ *   process.
+ * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran; upstream's bounded shutdown
+ *   then ends the process with {@link EXIT.failed} in the next turn of the event loop.
  */
 export async function runHeadless(request: HeadlessRequest, dependencies: HeadlessDependencies): Promise<CommandResult> {
   refuseLauncherOptions(request.args)
@@ -90,8 +94,13 @@ export async function runHeadless(request: HeadlessRequest, dependencies: Headle
   try {
     assertDeloInvariants(composed, booted)
   } catch (error) {
-    await booted.shutdown(EXIT.failed)
-    throw error
+    // The refused profile stops through its own teardown, which ends no process, so the refusal is reported.
+    await refuseBootedHost(() => booted.dispose(), error).catch((failure: unknown) => {
+      // Upstream's runner owns this process: once `main` has reported the refusal in this turn of the event loop, its
+      // bounded shutdown ends the process with a failure code, and the profile that may still run ends with it.
+      if (failure instanceof HostNotStoppedError) setImmediate(() => { void booted.shutdown(EXIT.failed) })
+      throw failure
+    })
   }
   booted.releaseTurns()
   return undefined

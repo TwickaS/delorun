@@ -2,16 +2,17 @@
  * What `delorun` prints when a command fails: `@delo/home`'s refusal format, the one the npm launcher shares. This
  * module composes the describer each package exports next to its errors, and describes the error classes of the
  * packages that do not depend on `@delo/home` (`@delo/profile-safety`, `@delo/update`, `@delo/trash`,
- * `@delo/bundle-local` and `@delo/release-formats`) and of `delorun` itself.
+ * `@delo/bundle-local` and `@delo/release-formats`) and of `delorun` itself. Every refusal passes `@delo/logs`'s redactor
+ * before it is printed; [last-resort](./last-resort.ts) reports a failure no command caught in the same format.
  *
  * @module @delo/cli/refusals
  */
 import { archiveDescriber, dshImportDescriber } from '@delo/archive'
 import { UpdatePendingError } from '@delo/bundle-local/update-gate'
-import { codedReason, describeFailure, homeLayoutDescriber, profileOption, refusalDescriber, renderRefusal, type Refusal, type RefusalContext, type RefusalDescriber } from '@delo/home'
-import { HomeProcessError, homeProcessDescriber } from '@delo/home-process'
+import { codedReason, describeFailure, homeLayoutDescriber, profileOption, refusalDescriber, renderRefusal, type Refusal, type RefusalContext, type RefusalDescriber, type TextRedactor } from '@delo/home'
+import { HomeProcessError, homeProcessDescriber, HostNotStoppedError, hostStopFailure, openedHomeLog } from '@delo/home-process'
 import { installDescriber } from '@delo/install'
-import { logsDescriber } from '@delo/logs'
+import { logsDescriber, Redactor } from '@delo/logs'
 import { ProfileSafetyError, type ProfileSafetyRemedy } from '@delo/profile-safety'
 import { LogVerificationError } from '@delo/release-formats/log/bundle'
 import { TileError } from '@delo/release-formats/log/tiles'
@@ -115,6 +116,12 @@ export const CLI_DESCRIBERS: readonly RefusalDescriber[] = [
   refusalDescriber(DeloVersionError, error => ({ lead: 'Delo could not read its own version.', reason: error.message, remedies: [] })),
   refusalDescriber(DataInUseError, error => ({ lead: 'Delo did not go ahead: another process uses the chat data.', reason: error.detail, remedies: ['Wait for it to end, then run the same command again.'] })),
   refusalDescriber(BundleReadError, error => ({ lead: `Delo could not read the metadata of the bundle ${error.bundle}.`, reason: codedReason(error.code, error.detail), remedies: [] })),
+  refusalDescriber(HostNotStoppedError, (error, context) => {
+    // The refusal reads as it would alone, and the teardown that did not finish joins its reason.
+    const refusal = describeFailure(error.cause, CLI_DESCRIBERS, context)
+    const teardown = `the refused Host ${hostStopFailure(error.outcome)} and may still run, so this process ends without rolling anything back or starting again`
+    return { ...refusal, reason: refusal.reason === undefined ? teardown : `${refusal.reason}; ${teardown}` }
+  }),
   homeLayoutDescriber,
   homeProcessDescriber,
   runtimeStoreDescriber,
@@ -155,13 +162,34 @@ export function namedProfile(argv: readonly string[]): string | undefined {
 }
 
 /**
+ * What a remedy may name for a command line.
+ * @param argv - the arguments after the script.
+ * @returns the profile the command line names, when it names one.
+ */
+export function refusalContext(argv: readonly string[]): RefusalContext {
+  const profile = namedProfile(argv)
+  return profile === undefined ? {} : { profile }
+}
+
+/** The redactor of a `delorun` process that opened no home log: `@delo/logs`'s listed secret forms. */
+export const PATTERN_REDACTOR: TextRedactor = new Redactor()
+
+/**
+ * The redactor a `delorun` refusal passes: the home log's, which also knows the secrets the home process registered,
+ * when this process opened one, and otherwise one with `@delo/logs`'s listed secret forms.
+ * @returns the redactor.
+ */
+export function cliRedactor(): TextRedactor {
+  return openedHomeLog()?.homeLog.redactor ?? PATTERN_REDACTOR
+}
+
+/**
  * The text and exit code of a failed `delorun` command.
  * @param error - the value the command threw.
  * @param argv - the arguments after the script, for the profile a remedy names.
- * @returns the text for standard error and {@link CliError}'s exit code, or `failed` for any other value.
+ * @returns the redacted text for standard error and {@link CliError}'s exit code, or `failed` for any other value.
  */
 export function cliRefusal(error: unknown, argv: readonly string[]): { readonly text: string, readonly exit: ExitCode } {
-  const profile = namedProfile(argv)
-  const refusal = describeFailure(error, CLI_DESCRIBERS, profile === undefined ? {} : { profile })
-  return { text: renderRefusal(refusal), exit: error instanceof CliError ? error.exit : EXIT.failed }
+  const refusal = describeFailure(error, CLI_DESCRIBERS, refusalContext(argv))
+  return { text: renderRefusal(refusal, cliRedactor()), exit: error instanceof CliError ? error.exit : EXIT.failed }
 }

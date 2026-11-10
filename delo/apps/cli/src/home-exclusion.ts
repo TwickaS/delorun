@@ -8,8 +8,11 @@
  * - **Exclusive use.** `delorun trash`, `delorun export` and `delorun import` take the home lock of every profile under
  *   `run/` for their whole operation, as a home process does, so no home process can start while they run and a
  *   profile whose home process runs refuses them. They also register under `run/data-users/<pid>` as exclusive users.
- * - **Shared use.** `delorun headless` writes chat data beside the home processes, so it registers under
- *   `run/data-users/<pid>` as a shared user.
+ *   `delorun recover rollback` with no home process running registers as an exclusive user while it holds its own
+ *   profile's home lock, unless it is profile-only ([recover](./recover.ts)).
+ * - **Shared use.** `delorun headless` writes chat data beside the home processes, and `delorun plugin` changes a
+ *   profile that an update snapshots and a rollback restores, so each registers under `run/data-users/<pid>` as a
+ *   shared user.
  * - **Refusals.** An exclusive user refuses while any other live process is registered; a shared user refuses while
  *   an exclusive user is registered; both refuse while an update or a rollback of any profile is between its snapshot
  *   and its end, or a restore of a session-data copy is unfinished. A home process refuses to start while an exclusive

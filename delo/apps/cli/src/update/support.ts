@@ -15,7 +15,7 @@ import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { assertSoleDataUser, DataInUseError } from '../home-exclusion.ts'
 import { describeFailure, renderRefusal } from '@delo/home'
 import { isInstallError } from '@delo/install'
-import { CLI_DESCRIBERS } from '../refusals.ts'
+import { CLI_DESCRIBERS, cliRedactor } from '../refusals.ts'
 import { HomeRuntimeStore, isStoreError, type HomeRuntimeStoreOptions, type OpenUpdateChannel, type RuntimeStore, type TrustedRootSource } from '@delo/runtime-store'
 import { assertCopyFits, buildFromSources, discardCopy, keepOnlyCopy, isDataSafetyError, planDataCopy, readDataFormats, rollbackUpdate, saveDataCopy, type ReportSources, type RollbackResult } from '@delo/update'
 
@@ -158,13 +158,14 @@ export function sessionDataCopies(options: Pick<UpdateSupportOptions, 'home' | '
 
 /**
  * The detail of a prepare's `VERIFY_FAILED` or `CHANNEL_UNREACHABLE` line: the refusal `delorun` prints for the same
- * failure, from the one refusal format with its remedies, so `delorun update` explains it as the launcher does.
+ * failure, from the one refusal format with its remedies and through the same redactor, so `delorun update` explains
+ * it as the launcher does.
  * @param error - the failure.
  * @param profile - the CLI profile, which a remedy's command names.
  * @returns the text, without its trailing newline.
  */
 export function prepareRefusal(error: unknown, profile: string): string {
-  return renderRefusal(describeFailure(error, CLI_DESCRIBERS, { profile })).trimEnd()
+  return renderRefusal(describeFailure(error, CLI_DESCRIBERS, { profile }), cliRedactor()).trimEnd()
 }
 
 /**

@@ -1,7 +1,9 @@
 /**
  * The one report format of Delo's command-line programs, `delorun` and its npm launcher: what Delo did, why, and what
  * the person can do. A typed error class reads as a {@link Refusal} through a {@link RefusalDescriber} its own package
- * exports; a program composes the describers of the packages it depends on, so this module imports none of them.
+ * exports; a program composes the describers of the packages it depends on, so this module imports none of them. The
+ * rendered text passes the program's redactor, and [last-resort](./last-resort.ts) reports a failure no command caught
+ * in the same format.
  *
  * @module @delo/home/refusal
  */
@@ -59,9 +61,23 @@ export function profileOption(context: RefusalContext): string {
 }
 
 /**
+ * What a rendered refusal passes before it reaches standard error: the program's `Redactor` from `@delo/logs`, the one
+ * Delo's operational logs use, so a refusal names no secret a log record would not name. This package declares the
+ * method it calls because `@delo/logs` depends on it.
+ */
+export interface TextRedactor {
+  /**
+   * The text with each secret it finds replaced by a `[redacted:<kind>]` marker.
+   * @param text - the rendered refusal.
+   * @returns the redacted text.
+   */
+  text(text: string): string
+}
+
+/**
  * The refusal for any value a program caught. The first describer whose class the value is an instance of describes
  * it, so a subclass's describer comes before its base class's. Any other value reads as `Delo stopped: <message>`,
- * with no stack and no remedy.
+ * with no stack and no remedy. The refusal holds the error's text as it is; {@link renderRefusal} redacts it.
  * @param error - the value thrown.
  * @param describers - the describers the program composes.
  * @param context - what a remedy may name.
@@ -76,15 +92,17 @@ export function describeFailure(error: unknown, describers: readonly RefusalDesc
 
 /**
  * A refusal as standard error shows it: the lead, then `Why: <reason>`, then `What you can do:` with one indented line
- * per remedy. Every line ends with a newline.
+ * per remedy, the whole text through the redactor. Every line ends with a newline. A program prints a refusal only
+ * through this function, so every lead, reason and remedy, the fallback's raw message included, is redacted.
  * @param refusal - the refusal.
- * @returns the text.
+ * @param redactor - the program's redactor.
+ * @returns the redacted text.
  */
-export function renderRefusal(refusal: Refusal): string {
+export function renderRefusal(refusal: Refusal, redactor: TextRedactor): string {
   const lines = [refusal.lead]
   if (refusal.reason !== undefined) lines.push(`Why: ${refusal.reason}`)
   if (refusal.remedies.length > 0) lines.push('What you can do:', ...refusal.remedies.map(remedy => `  ${remedy}`))
-  return lines.map(line => `${line}\n`).join('')
+  return redactor.text(lines.map(line => `${line}\n`).join(''))
 }
 
 /**

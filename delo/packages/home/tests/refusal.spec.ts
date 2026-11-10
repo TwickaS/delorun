@@ -1,6 +1,7 @@
 /**
- * The refusal format every Delo command-line program shares: the lead, `Why:` and `What you can do:` lines, the first
- * matching describer, the plain report of anything no describer names, and how a refused home reads.
+ * The refusal format every Delo command-line program shares: the lead, `Why:` and `What you can do:` lines through the
+ * program's redactor, the first matching describer, the plain report of anything no describer names, and how a refused
+ * home reads.
  */
 import { describe, expect, it } from 'vitest'
 import { codedReason, describeFailure, HomeLayoutError, homeLayoutDescriber, profileOption, refusalDescriber, renderRefusal } from '../src/index.ts'
@@ -8,10 +9,23 @@ import { codedReason, describeFailure, HomeLayoutError, homeLayoutDescriber, pro
 class BaseFailure extends Error {}
 class SubFailure extends BaseFailure {}
 
+/** A redactor that changes nothing, for the specs of the format itself. */
+const KEEP = { text: (text: string): string => text }
+
+/** A redactor that replaces the one secret these specs use, as `@delo/logs`'s redactor replaces a provider key. */
+const SECRET = ['sk', '0123456789abcdef0123456789abcdef'].join('-')
+const MARK = { text: (text: string): string => text.replaceAll(SECRET, '[redacted:provider-key]') }
+
 describe('a refusal', () => {
   it('renders the lead, the reason and one indented line per remedy', () => {
-    expect(renderRefusal({ lead: 'Delo did a thing.', reason: 'CODE: the detail', remedies: ['Do this.', 'Or that.'] })).toBe('Delo did a thing.\nWhy: CODE: the detail\nWhat you can do:\n  Do this.\n  Or that.\n')
-    expect(renderRefusal({ lead: 'Delo did a thing.', remedies: [] })).toBe('Delo did a thing.\n')
+    expect(renderRefusal({ lead: 'Delo did a thing.', reason: 'CODE: the detail', remedies: ['Do this.', 'Or that.'] }, KEEP)).toBe('Delo did a thing.\nWhy: CODE: the detail\nWhat you can do:\n  Do this.\n  Or that.\n')
+    expect(renderRefusal({ lead: 'Delo did a thing.', remedies: [] }, KEEP)).toBe('Delo did a thing.\n')
+  })
+
+  it('passes the lead, the reason and every remedy through the redactor', () => {
+    const text = renderRefusal({ lead: `lead ${SECRET}`, reason: `reason ${SECRET}`, remedies: [`remedy ${SECRET}`] }, MARK)
+    expect(text).toBe('lead [redacted:provider-key]\nWhy: reason [redacted:provider-key]\nWhat you can do:\n  remedy [redacted:provider-key]\n')
+    expect(renderRefusal(describeFailure(new Error(`the key ${SECRET} was refused`), []), MARK)).toBe('Delo stopped: the key [redacted:provider-key] was refused\n')
   })
 
   it('is described by the first describer whose class the error is an instance of', () => {
@@ -39,7 +53,7 @@ describe('a refused home', () => {
   it('names the path, C1\'s code with the detail, and the fix', () => {
     const error = new HomeLayoutError('SECRET_FILE_MODE', '/h/secrets/key', '/h/secrets/key has mode 0644', 'chmod 600 /h/secrets/key')
     expect(error.message).toBe('SECRET_FILE_MODE: /h/secrets/key has mode 0644; fix it with: chmod 600 /h/secrets/key')
-    expect(renderRefusal(describeFailure(error, [homeLayoutDescriber]))).toBe('Delo stopped before using /h/secrets/key.\nWhy: SECRET_FILE_MODE: /h/secrets/key has mode 0644\nWhat you can do:\n  Fix it with: chmod 600 /h/secrets/key\n')
+    expect(renderRefusal(describeFailure(error, [homeLayoutDescriber]), KEEP)).toBe('Delo stopped before using /h/secrets/key.\nWhy: SECRET_FILE_MODE: /h/secrets/key has mode 0644\nWhat you can do:\n  Fix it with: chmod 600 /h/secrets/key\n')
   })
 
   it('offers nothing when no fix exists', () => {

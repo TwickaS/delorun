@@ -78,6 +78,7 @@ Before an update changes anything, Delo shows a report of what the new release w
 
 - Chats written after an update that the person then rolls back with a copy are set aside, not merged into the restored data. The person brings them back by import.
 - A person who declines the copy cannot go back to the previous release after the target first starts; only the profile goes back.
+- A running desktop app is not counted as a user of the chat data ([C1](../contracts/c01-home-layout.md#what-this-does-not-prove)): nothing under the home shows that it runs, so an update's copy, restore or rollback can run while it writes the same stores. Rule 15 keeps the desktop app out of this procedure; the gap is accepted while the desktop app is not shipped.
 - Data a plugin keeps outside `sessions/` and `storages/` is not copied.
 - The copy is plain files under the home with the home's modes, like the data it copies; it is not encrypted.
 - The rename rules of Windows, where an open file cannot be renamed, are not covered.

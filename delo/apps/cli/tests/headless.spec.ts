@@ -10,11 +10,13 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { HostNotStoppedError } from '@delo/home-process'
 import { stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
+import { cliRefusal } from '../src/refusals.ts'
 import { HEADLESS_PROFILE, refuseLauncherOptions, type HeadlessDependencies } from '../src/headless.ts'
 import { headless, headlessCommand, headlessDependencies } from '../src/upstream.ts'
 import { upstreamDependencies } from '../src/start.ts'
@@ -44,11 +46,12 @@ afterEach(() => {
 /**
  * Dependencies whose runner records what it was given and mounts the composition, with rows replaced.
  * @param seen - collects the runner's options.
- * @param shutdowns - collects the exit codes of each shutdown.
+ * @param stops - collects each stop: `shutdown <code>` through upstream's process shutdown, `dispose` through the
+ *   profile's own teardown.
  * @param overrides - rows that replace the composed ones.
  * @returns the dependencies.
  */
-function recording(seen: RunProfileOptions[], shutdowns: number[], overrides: readonly BootedRow[] = []): HeadlessDependencies {
+function recording(seen: RunProfileOptions[], stops: string[], overrides: readonly BootedRow[] = []): HeadlessDependencies {
   return {
     prepareProfile: upstreamDependencies().prepareProfile,
     approvedPluginContent: NO_APPROVED_CONTENT,
@@ -61,8 +64,8 @@ function recording(seen: RunProfileOptions[], shutdowns: number[], overrides: re
         rows,
         providerOf: composedProviders(rows),
         releaseTurns: () => undefined,
-        shutdown: (code) => { shutdowns.push(code); return Promise.resolve() },
-        dispose: () => Promise.resolve(),
+        shutdown: (code) => { stops.push(`shutdown ${String(code)}`); return Promise.resolve() },
+        dispose: () => { stops.push('dispose'); return Promise.resolve() },
         watchChats: () => undefined,
         studio: () => undefined,
         studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
@@ -99,9 +102,25 @@ describe('delorun headless', { timeout: 60_000 }, () => {
     await expect(headless(['task'], context, recording(seen, []), () => undefined)).rejects.toThrow('sandbox is disabled')
     expect(seen).toEqual([])
     rmSync(join(deloHome, 'cordis.patch.yml'))
-    const shutdowns: number[] = []
-    await expect(headless(['task'], context, recording(seen, shutdowns, [{ id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'failed' }]), () => undefined)).rejects.toThrow('sandbox did not start (failed)')
-    expect(shutdowns).toEqual([EXIT.failed])
+    const stops: string[] = []
+    await expect(headless(['task'], context, recording(seen, stops, [{ id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'failed' }]), () => undefined)).rejects.toThrow('sandbox did not start (failed)')
+    // Upstream's process shutdown may end the process before `main` prints the refusal; the profile's teardown does not.
+    expect(stops).toEqual(['dispose'])
+  })
+
+  it('reports a refused Host whose teardown fails with the refusal, and hands the process to upstream\'s shutdown only after the report', async () => {
+    const stops: string[] = []
+    const base = recording([], stops, [{ id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'failed' }])
+    const stuck: HeadlessDependencies = { ...base, runProfile: async options => ({ ...await base.runProfile(options), dispose: async () => Promise.reject(new Error('a row did not dispose')) }) }
+    const failure = await headless(['task'], context, stuck, () => undefined).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(HostNotStoppedError)
+    const reported = cliRefusal(failure, ['headless', 'task'])
+    expect(reported.text).toContain('sandbox did not start (failed)')
+    expect(reported.text).toContain('the refused Host failed to stop (a row did not dispose) and may still run')
+    expect(reported.exit).toBe(EXIT.failed)
+    expect(stops).toEqual([])
+    await new Promise(resolve => setImmediate(resolve))
+    expect(stops).toEqual([`shutdown ${String(EXIT.failed)}`])
   })
 
   it('runs the pre-start steps for headless before it composes, and a refusing step stops it before any boot', async () => {

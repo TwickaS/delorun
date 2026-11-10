@@ -5,15 +5,15 @@
  * | Action | What it does |
  * | --- | --- |
  * | `status` (the default) | the profile's last update, its snapshot and history, safe mode, the update record, and every session-data copy and set-aside directory with its size |
- * | `rollback [--profile-only]` | goes back from the recorded update through C3's one rollback function and its table: through the home process when one runs, otherwise under the home lock here; `--profile-only` restores the profile snapshot and keeps the runtime |
+ * | `rollback [--profile-only]` | goes back from the recorded update through C3's one rollback function and its table: through the home process when one runs, otherwise under the home lock here and, unless `--profile-only`, as the only user of the shared stores; `--profile-only` restores the profile snapshot and keeps the runtime |
  * | `restore <version>` | brings back a named profile history version |
  * | `safe-mode [--reason <text>]`, `exit-safe-mode` | starts without third-party plugins, and ends it |
  * | `discard <path>` | removes one copy or set-aside directory `status` lists |
  *
  * A rollback, with or without a home process, refuses with C19's `GIT_UNAVAILABLE` before any step when git, which
- * restores the profile, cannot run. With no home process running it first completes an interrupted restore of a
- * session-data copy, then reads the update record and applies the table; it never swaps the runtime pointers on its
- * own.
+ * restores the profile, cannot run. A runtime rollback with no home process running then registers as an exclusive user
+ * of the shared stores, refuses while another process uses them, completes an interrupted restore of a session-data
+ * copy, then reads the update record and applies the table; it never swaps the runtime pointers on its own.
  *
  * @module @delo/cli/recover
  */
@@ -26,11 +26,12 @@ import { acquireHomeLock, newStartId, runDirectory } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
 import { journalPath, queryHomeStatus, readJournal, removeJournal, removeStash, sendHomeRequest, stashPath, updateChannelProbe, writeJournal } from '@delo/home-process'
 import { recover, type RecoverAction } from '@delo/profile-safety'
-import { isStoreError, RuntimeStore } from '@delo/runtime-store'
+import { isStoreError, RuntimeStore, type TrustedRootSource } from '@delo/runtime-store'
 import { discardKeptData, listKeptData, recoverDataCopies } from '@delo/update'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { CliError, EXIT } from './exit.ts'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
+import { assertSoleDataUser, registerDataUser } from './home-exclusion.ts'
 import { removeSafeModeOverlay } from './safe-mode.ts'
 import { runtimeOfFile } from './update/runtime.ts'
 import { runtimePlatformOf } from './update/channel.ts'
@@ -123,15 +124,24 @@ async function updateLines(home: string, profile: string): Promise<string[]> {
 
 /**
  * `rollback` with no home process: refuse with `GIT_UNAVAILABLE` before anything when git cannot run, then under the
- * home lock complete an interrupted restore, read the update record and apply C3's table, switching the pointers from
- * the record's target to its source.
+ * home lock read the update record and apply C3's table, switching the pointers from the record's target to its source.
+ *
+ * A runtime rollback restores the whole home's chat data and switches `current`, so from right after it takes the lock
+ * until it ends it is registered as an exclusive user of the shared stores ([home exclusion](./home-exclusion.ts)): it
+ * refuses while any other process is registered, another profile's home process included, and a home process that
+ * starts while it runs refuses. Only then does it complete an interrupted restore of a session-data copy. A profile-only
+ * rollback reads and writes only this profile's files, which its home lock covers, so it registers nothing and leaves
+ * an interrupted restore to the next start, whose pre-start step completes it.
  * @param home - the Delo home.
  * @param profile - the CLI profile.
  * @param profileOnly - restore only the profile snapshot.
  * @param context - the output.
+ * @param root - the stored root the version rolled back to is checked under.
  * @returns the exit code.
+ * @throws {HomeProcessError} `GIT_UNAVAILABLE` when git cannot run; {@link DataInUseError} for a runtime rollback
+ *   while another process uses the chat data; nothing has changed then.
  */
-async function rollbackOffline(home: string, profile: string, profileOnly: boolean, context: CommandContext): Promise<CommandResult> {
+export async function rollbackOffline(home: string, profile: string, profileOnly: boolean, context: CommandContext, root: TrustedRootSource): Promise<CommandResult> {
   await assertHistoryGit()
   const store = new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger: SILENT })
   const current = await store.pointers().then(pointers => pointers.current, (error: unknown) => {
@@ -140,8 +150,13 @@ async function rollbackOffline(home: string, profile: string, profileOnly: boole
     throw error
   })
   const lock = await acquireHomeLock({ runDirectory: runDirectory(home, profile), runtime: current ?? runtimeOfFile(home, fileURLToPath(import.meta.url)).version, probe: updateChannelProbe(home, profile), startId: newStartId() })
+  let release = (): void => {}
   try {
-    await recoverDataCopies(home)
+    if (!profileOnly) {
+      release = registerDataUser(home, 'exclusive', 'recover')
+      assertSoleDataUser(home)
+      await recoverDataCopies(home)
+    }
     const path = journalPath(home, profile)
     const record = await readJournal(path)
     // The record's target runs, or `current` is unreadable, or a rollback that began is to be completed.
@@ -162,7 +177,7 @@ async function rollbackOffline(home: string, profile: string, profileOnly: boole
       else await store.switchTo(record.to, record.from)
     }
     const markRollingBack = (): Promise<void> => writeJournal(path, { ...record, previous: record.previous }, 'rolling-back')
-    const result = await rollbackRecordedUpdate({ home, profile, store, root: launcherAnchor(home, context.env).root, now: () => new Date() }, record, { profileOnly, switchRuntime, markRollingBack })
+    const result = await rollbackRecordedUpdate({ home, profile, store, root, now: () => new Date() }, record, { profileOnly, switchRuntime, markRollingBack })
     // A profile-only rollback keeps the running release, which ends the update and the previous update's way back;
     // a runtime rollback's record goes once the version rolled back to starts healthy.
     if (profileOnly) {
@@ -173,6 +188,7 @@ async function rollbackOffline(home: string, profile: string, profileOnly: boole
     if (!profileOnly) context.stdout(`Start Delo with delorun start; the rollback completes once Delo ${record.from} starts healthy.\n`)
     return EXIT.ok
   } finally {
+    release()
     lock.release()
   }
 }
@@ -239,7 +255,9 @@ export const recoverCommand: CliCommand = {
     const { home, profile } = await prepareHome(context, profileFlag)
     switch (action.kind) {
       case 'rollback':
-        return await (await homeRunning(home.path, profile) ? rollbackLive : rollbackOffline)(home.path, profile, action.profileOnly, context)
+        return await homeRunning(home.path, profile)
+          ? await rollbackLive(home.path, profile, action.profileOnly, context)
+          : await rollbackOffline(home.path, profile, action.profileOnly, context, launcherAnchor(home.path, context.env).root)
       case 'discard':
         return await discard(home.path, profile, action.path, context)
       default:

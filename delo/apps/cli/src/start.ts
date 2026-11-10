@@ -30,7 +30,7 @@ import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh
 import { assertDeloInvariants, composeDeloProfile, NO_APPROVED_CONTENT, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
 import { HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import { START_WAIT_MS } from '@delo/contract-home-process'
-import { CountingChatGate, HomeProcess, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
+import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
@@ -53,6 +53,7 @@ import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/
 import { checkStoredRuntime, storeUpdateSupport } from './update/store-support.ts'
 import { launcherAnchor } from './update/trusted-root.ts'
 import { loadDeloEnvironment } from './launch-environment.ts'
+import { registerFatalRelease } from './last-resort.ts'
 
 /**
  * Adds `@delo/bundle-studio` to a profile setup created before it existed ({@link addStudioBundle}).
@@ -75,6 +76,14 @@ export interface StartDependencies {
   readonly probe: (home: string, profile: string) => HolderProbe
   /** Routes this process's termination signals to the home process, which owns the one handler. */
   readonly onSignal: HomeProcessOptions['onSignal']
+  /**
+   * Registers the teardown that the process's one last-resort handler ([last-resort](./last-resort.ts)), installed by
+   * the entry point, awaits before its fatal exit, across every Host the home process boots; {@link registerFatalRelease}
+   * by default.
+   * @param release - disposes the current Host.
+   * @returns the disposer that unregisters it.
+   */
+  readonly fatalRelease: (release: () => Promise<void>) => () => void
   /** Registers a listener for this process's exit. */
   readonly onExit: (listener: () => void) => void
   /** Ends the process after a stop or a handover. */
@@ -261,16 +270,17 @@ const HOME_LOG_LEVEL = 'info'
  * Boot a profile with upstream's profile runner and read it as the start reads a booted profile, with H2's health route
  * on its web server ({@link serveHealth}).
  * @param options - the runner's options.
- * @param signals - whether upstream's runner installs its own termination-signal handlers: false under a home process,
- *   which owns them, and true for a one-shot run such as `delorun headless`.
+ * @param processHandlers - whether upstream's runner installs its own termination-signal and fail-loud handlers: false
+ *   under a home process, whose one signal listener and the entry point's one last-resort handler serve every Host it
+ *   boots, and true for a one-shot run such as `delorun headless`.
  * @returns the booted profile.
  */
-export async function runUpstreamProfile(options: RunProfileOptions, signals: boolean): Promise<BootedProfile> {
+export async function runUpstreamProfile(options: RunProfileOptions, processHandlers: boolean): Promise<BootedProfile> {
   // Loaded after the launch variables are set, so upstream resolves the Delo home.
   const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
   // An installed Delo's plugin manager runs the pnpm its closure carries ([package manager](./package-manager.ts)).
   const packageManager = shippedPackageManager()
-  const { ctx, shutdown } = await runProfile({ ...options, signals, ...packageManager === undefined ? {} : { packageManager } })
+  const { ctx, shutdown } = await runProfile({ ...options, signals: processHandlers, failLoud: processHandlers, ...packageManager === undefined ? {} : { packageManager } })
   serveHealth(ctx)
   return {
     rows: () => bootedRows(ctx),
@@ -301,8 +311,9 @@ export function upstreamAddStudioBundle(home: string, profile: string, output: C
 
 /**
  * The dependencies of a real start.
- * @returns no approved plugin content, the real pre-start steps, upstream's profile preparation, profile runner and
- *   `.env` loader, the update channel's probe, the process's exit event and exit, and the output capture.
+ * @returns no approved plugin content, the real pre-start steps, upstream's profile preparation, profile runner,
+ *   `.env` loader, the last-resort handler's teardown, the update channel's probe, the process's exit event and exit,
+ *   and the output capture.
  */
 export function upstreamDependencies(): StartDependencies {
   return {
@@ -313,11 +324,13 @@ export function upstreamDependencies(): StartDependencies {
       const { INSTALL_ANCHOR, prepareProfile } = await import('@deepseek-ai/dsh/profile-boot')
       return { profile: prepareProfile(profile), installAnchor: INSTALL_ANCHOR }
     },
-    // The home process owns this process's signals across Host boots, so upstream's runner installs none.
+    // The home process's signal listener and the entry point's last-resort handler serve every Host it boots, so
+    // upstream's runner installs neither per boot.
     runProfile: options => runUpstreamProfile(options, false),
     loadEnvironment: () => loadDeloEnvironment(),
     probe: updateChannelProbe,
     onSignal: listenProcessSignals,
+    fatalRelease: registerFatalRelease,
     onExit(listener) {
       process.on('exit', listener)
     },
@@ -345,6 +358,8 @@ export function upstreamDependencies(): StartDependencies {
  * @throws {CliError} when the home has no CLI profile, the profile skipped a Delo bundle, a row of a Delo bundle did not
  *   activate, or the profile fails to boot.
  * @throws {HomeLayoutError} `HOME_UNRESPONSIVE` when the lock's holder lives but does not answer.
+ * @throws {HostNotStoppedError} when a refused or failed start's Host did not stop; the process then ends with
+ *   {@link EXIT.failed} in the next turn of the event loop, once the refusal has been reported.
  */
 export async function startForeground(request: StartRequest, dependencies: StartDependencies = upstreamDependencies()): Promise<CommandResult> {
   if (!hasCliProfile(request.home, request.profile)) {
@@ -363,6 +378,10 @@ export async function startForeground(request: StartRequest, dependencies: Start
     homeLog.log.close()
   }
   const runtime = dependencies.runtime(request.home)
+  // The last-resort handler's fatal exit disposes the latest Host this process booted.
+  let current: BootedProfile | undefined
+  const unregisterRelease = dependencies.fatalRelease(async () => { await current?.dispose() })
+  const tracked: StartDependencies = { ...dependencies, runProfile: async options => (current = await dependencies.runProfile(options)) }
   try {
     const running = handover?.handover.to ?? runtime.version
     const options: HomeProcessOptions = {
@@ -371,7 +390,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
       running,
       startId,
       host: {
-        boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, dependencies, runtime.store ? running : undefined, homeLog.logger),
+        boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, tracked, runtime.store ? running : undefined, homeLog.logger),
       },
       preStart: () => runPreStartSteps(dependencies.preStartSteps, { home: request.home, profile: request.profile, kind: 'cli', successor: handover !== undefined, output: request.output }),
       probe: dependencies.probe(request.home, request.profile),
@@ -387,6 +406,13 @@ export async function startForeground(request: StartRequest, dependencies: Start
     else await HomeProcess.takeOver(options, handover)
   } catch (error) {
     closeLog()
+    unregisterRelease()
+    if (error instanceof HostNotStoppedError) {
+      // `main` reports the refusal in this turn of the event loop; the process then ends, and the Host that may still
+      // run on the profile's data ends with it.
+      setImmediate(() => { dependencies.exit(EXIT.failed) })
+      throw error
+    }
     if (!(error instanceof HomeLayoutError) || error.code !== 'HOME_RUNNING') throw error
     const holder = readHomeLock(runDirectory(request.home, request.profile))
     request.output.stdout(`Delo is already running for the profile ${request.profile}${holder === undefined ? '' : ` (process ${String(holder.pid)}, started ${holder.startedAt})`}.\n`)
@@ -411,7 +437,9 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * @param logger - the home process's logger.
  * @returns the running Host, whose running chats feed the home process's gate and whose health check is C3's.
  * @throws {CliError} when the profile skipped a Delo bundle, fails to boot, a row of a Delo bundle did not activate, or
- *   the composed or booted profile breaks an invariant.
+ *   the composed or booted profile breaks an invariant; a refused Host is first torn down within the home process's
+ *   bound, without ending the process.
+ * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
   const composed = await composeDeloProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env }, {
@@ -440,9 +468,12 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)
     assertDeloInvariants(composed, booted)
   } catch (error) {
-    await booted.shutdown(EXIT.failed)
-    await removeSandboxOverlay(request.home, request.profile)
-    throw error
+    // The refused Host stops through its own teardown, which ends no process, so the home process's failed start runs.
+    await refuseBootedHost(() => booted.dispose(), error).catch(async (failure: unknown) => {
+      // The overlay stays while the refused Host may still run.
+      if (!(failure instanceof HostNotStoppedError)) await removeSandboxOverlay(request.home, request.profile)
+      throw failure
+    })
   }
   booted.releaseTurns()
   return runningHost(booted, request, async () => {

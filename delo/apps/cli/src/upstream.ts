@@ -1,14 +1,22 @@
 /**
- * Upstream's profile commands that `delorun` offers: `delorun plugin …` runs upstream's `dsh` command line in this
- * process unchanged, with the Delo home as `DSH_HOME` and an installed Delo's own pnpm
+ * Upstream's profile commands that `delorun` offers: `delorun plugin …` runs upstream's `dsh plugin` command line in
+ * this process unchanged, with the Delo home as `DSH_HOME` and an installed Delo's own pnpm
  * ([package manager](./package-manager.ts)); upstream's parser refuses the desktop app's profile for
  * `plugin`, as it does for `dsh`. `delorun headless …` boots upstream's `headless` profile through Delo's composition
  * ([headless](./headless.ts)), not through upstream's command line.
  *
- * `delorun headless` writes chat data beside the home process, so it registers itself as a shared user of the home's
- * stores first and refuses while `delorun trash`, `export` or `import` runs, or an update, a rollback or a restore of
- * the chat data is in progress ([home exclusion](./home-exclusion.ts)); an update's copy and restore, and those
- * commands, refuse while it runs.
+ * `delorun plugin` boots no Host and has no composition: no sandbox overlay, no sandbox invariants and no pre-start
+ * steps. Under upstream's profile file lock it runs pnpm in the profile directory with the person's arguments and this
+ * process's environment, unconfined, and then records the bundle list in the profile's `package.json`; pnpm runs a
+ * dependency's install scripts only when the profile's `pnpm-workspace.yaml` allows its build, and runs whatever a
+ * pnpm command such as `exec` or `dlx` names. The bundle check reads each new bundle's manifest and patch files and
+ * imports no plugin code.
+ *
+ * Both commands register as shared users of the home's stores first and refuse while `delorun trash`, `export`,
+ * `import` or an offline `delorun recover rollback` runs, or an update, a rollback or a restore of the chat data is in
+ * progress ([home exclusion](./home-exclusion.ts)); an update's prepare, copy, restore and rollback, and those
+ * commands, refuse while either runs. `delorun headless` writes chat data beside the home processes; `delorun plugin`
+ * changes a profile that an update snapshots and a rollback restores.
  *
  * @module @delo/cli/upstream
  */
@@ -30,17 +38,37 @@ async function runUpstreamCli(argv: readonly string[]): Promise<void> {
   await runCli(packageManager === undefined ? { argv } : { argv, packageManager })
 }
 
+/**
+ * Run `delorun plugin`: register as a shared user of the home's stores, then run upstream's `dsh plugin` with these
+ * arguments. Upstream's command line ends the process when the package operation ends, so the registration's release
+ * also runs at this process's exit.
+ * @param args - the arguments after `plugin`.
+ * @param context - the environment and output.
+ * @param runUpstream - runs upstream's command line; {@link runUpstreamCli} by default.
+ * @param onExit - registers the shared registration's release for this process's exit.
+ * @returns `undefined`: upstream's command line sets the exit code.
+ * @throws {CliError} while an exclusive user runs or an update, a rollback or a restore is in progress; upstream's
+ *   command line has not run then.
+ */
+export async function plugin(args: readonly string[], context: CommandContext, runUpstream: (argv: readonly string[]) => Promise<void> = runUpstreamCli, onExit: (listener: () => void) => void = (listener) => { process.once('exit', listener) }): Promise<CommandResult> {
+  // Upstream's parser reads `--profile` under its own, looser rule, so every value it could read is held to C1's first.
+  selectCommandProfile('plugin', args, context.env)
+  const { home } = await prepareHome(context, undefined)
+  const release = await useHomeShared(home.path, 'plugin')
+  onExit(release)
+  try {
+    await runUpstream(['plugin', ...args])
+  } finally {
+    release()
+  }
+  return undefined
+}
+
 /** `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management. */
 export const pluginCommand: CliCommand = {
   name: 'plugin',
   summary: 'Manage a profile\'s plugins, as dsh plugin does',
-  async run(args, context) {
-    // Upstream's parser reads `--profile` under its own, looser rule, so every value it could read is held to C1's first.
-    selectCommandProfile('plugin', args, context.env)
-    await prepareHome(context, undefined)
-    await runUpstreamCli(['plugin', ...args])
-    return undefined
-  },
+  run: (args, context) => plugin(args, context),
 }
 
 /**

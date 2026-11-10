@@ -264,6 +264,12 @@ export interface RunProfileOptions {
    * A caller that owns the process's signals passes false and stops the run through the returned shutdown itself.
    */
   signals?: boolean | undefined
+  /**
+   * Whether this run installs `installFailLoud`'s process handlers, whose fatal exit first disposes this run's tree;
+   * true by default. A caller that boots several profiles in one process passes false and installs one pair itself,
+   * so the handlers do not accumulate across boots.
+   */
+  failLoud?: boolean | undefined
 }
 
 /**
@@ -313,9 +319,11 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       process.on('SIGTERM', () => { interrupt(0) })
       process.on('SIGINT', () => { interrupt(130) })
     }
-    installFailLoud(NAME, process, async () => {
-      await app.current?.fiber.dispose()
-    })
+    if (options.failLoud !== false) {
+      installFailLoud(NAME, process, async () => {
+        await app.current?.fiber.dispose()
+      })
+    }
 
     const rootConfig = join(composed.profile.dir, PROFILE_ROOT_FILENAME)
     const profileContext: ProfileContext = {

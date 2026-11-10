@@ -2,17 +2,22 @@
  * `delorun recover`: the command contract C3 offers beside the studio's update screen. The specs run it in-process
  * against a fixture home, so what they assert is what a person sees and which files changed.
  */
+import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:net'
+import { createInterface } from 'node:readline'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { RuntimeVersion } from '@delo/contract-home-layout'
+import { DATA_USERS_DIRECTORY, type RuntimeVersion } from '@delo/contract-home-layout'
 import { journalPath, updateSocketPath, writeJournal } from '@delo/home-process'
 import { parseRuntimeVersion, RuntimeStoreError, type LaunchCommand } from '@delo/runtime-store'
 import { ensureHomeTree, writeNewStartToken } from '@delo/home'
+import type { CommandContext } from '../src/command.ts'
 import { EXIT } from '../src/exit.ts'
+import { DataInUseError } from '../src/home-exclusion.ts'
 import { main } from '../src/main.ts'
+import { rollbackOffline } from '../src/recover.ts'
 import { runLauncher } from '../../npm-launcher/src/launcher.ts'
 import { fixtureRelease } from '../../install/tests/support.ts'
 
@@ -26,6 +31,9 @@ function release(text: string): RuntimeVersion {
   if (parsed === undefined) throw new Error(`${text} is not a release version`)
   return parsed
 }
+
+const REPOSITORY = join(import.meta.dirname, '../../../..')
+const HOME_PROCESS_USER = join(import.meta.dirname, 'fixtures/home-process-user.ts')
 
 let osHome: string
 let deloHome: string
@@ -179,6 +187,105 @@ describe('a rollback that reaches a root', () => {
     expect(readFileSync(path, 'utf8')).toBe(before)
     expect(existsSync(join(deloHome, 'run', 'default', 'home.lock'))).toBe(false)
   })
+})
+
+describe('a rollback with no home process running beside another profile\'s home process', () => {
+  const children: ChildProcess[] = []
+  const quiet: CommandContext = { env: {}, stdout: () => undefined, stderr: () => undefined }
+
+  afterEach(async () => {
+    await Promise.all(children.splice(0).map(child => new Promise<void>((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null) { resolve(); return }
+      child.once('exit', () => { resolve() })
+      child.kill('SIGKILL')
+    })))
+  })
+
+  /**
+   * Start a process that registers as the home process of `work`, as `delorun start` registers one.
+   * @returns the process, its exit and its standard error so far.
+   */
+  function otherHomeProcess(): { readonly child: ChildProcess, readonly registered: Promise<void>, readonly exited: Promise<number | null>, readonly stderr: () => string } {
+    const child = spawn(process.execPath, ['--import', 'tsx/esm', HOME_PROCESS_USER, deloHome, 'work'], { cwd: REPOSITORY, stdio: ['pipe', 'pipe', 'pipe'] })
+    children.push(child)
+    let stderr = ''
+    child.stderr!.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8') })
+    const exited = new Promise<number | null>((resolve) => { child.once('exit', resolve) })
+    const registered = new Promise<void>((resolve, reject) => {
+      void exited.then((code) => { reject(new Error(`the registered process exited with ${String(code)}: ${stderr}`)) })
+      createInterface({ input: child.stdout! }).once('line', () => { resolve() })
+    })
+    // A spec whose process is refused never awaits its registration.
+    registered.catch(() => undefined)
+    return { child, registered, exited, stderr: () => stderr }
+  }
+
+  /**
+   * Record a committed update of `default`, which applies because no runtime is installed.
+   * @returns the record's path and its text.
+   */
+  async function committedUpdate(): Promise<{ readonly path: string, readonly text: string }> {
+    const path = journalPath(deloHome, 'default')
+    mkdirSync(join(deloHome, 'run', 'default'), { recursive: true, mode: 0o700 })
+    await writeJournal(path, { from: release('0.1.0'), to: release('0.2.0'), previous: undefined, startedAt: '2026-11-01T00:00:00.000Z', dataDiffers: false, copy: false, targetStarted: true }, 'committed')
+    return { path, text: readFileSync(path, 'utf8') }
+  }
+
+  /**
+   * This process's registration as a user of the shared stores, when it has one.
+   * @returns whether it is registered.
+   */
+  function registered(): boolean {
+    return existsSync(join(deloHome, 'run', DATA_USERS_DIRECTORY, String(process.pid)))
+  }
+
+  it('makes a home process that starts while it runs refuse, naming it, and releases its registration', async () => {
+    const record = await committedUpdate()
+    let starter: { registered: boolean, code: number | null, stderr: string } | undefined
+    // The root is read between the check for other users and the `rolling-back` mark.
+    const root = async (): Promise<never> => {
+      const other = otherHomeProcess()
+      const outcome = await Promise.race([
+        other.exited.then(code => ({ registered: false, code })),
+        // Its exit settles the race through `exited`.
+        other.registered.then(() => ({ registered: true, code: null }), () => new Promise<never>(() => undefined)),
+      ])
+      starter = { ...outcome, stderr: other.stderr() }
+      throw new Error('stopped before the mark')
+    }
+    await expect(rollbackOffline(deloHome, 'default', false, quiet, root)).rejects.toThrow('stopped before the mark')
+    expect(starter?.registered).toBe(false)
+    expect(starter?.code).not.toBe(0)
+    expect(starter?.stderr).toContain(`delorun start: process ${String(process.pid)} (delorun recover) is changing the stores this command uses`)
+    expect(readFileSync(record.path, 'utf8')).toBe(record.text)
+    expect(registered()).toBe(false)
+  }, 30_000)
+
+  it('refuses while a home process registered before it runs, before it completes an interrupted restore, and changes nothing', async () => {
+    const record = await committedUpdate()
+    const other = otherHomeProcess()
+    await other.registered
+    // A restore journal that does not read: completing it first would fail with DATA_RESTORE_INCONSISTENT instead.
+    mkdirSync(join(deloHome, 'data-copies'), { recursive: true, mode: 0o700 })
+    writeFileSync(join(deloHome, 'data-copies', 'restore.json'), '{}')
+    const root = (): Promise<never> => Promise.reject(new Error('the root is not read before the refusal'))
+    const refused = rollbackOffline(deloHome, 'default', false, quiet, root)
+    await expect(refused).rejects.toBeInstanceOf(DataInUseError)
+    await expect(refused).rejects.toThrow(`the home process of the profile work (process ${String(other.child.pid)}) uses the chat data; wait for it to end, or stop it with delorun stop --profile work, then try again`)
+    expect(readFileSync(record.path, 'utf8')).toBe(record.text)
+    expect(readFileSync(join(deloHome, 'data-copies', 'restore.json'), 'utf8')).toBe('{}')
+    expect(registered()).toBe(false)
+  }, 30_000)
+
+  it('restores only the profile with --profile-only beside it, registering nothing', async () => {
+    await committedUpdate()
+    const other = otherHomeProcess()
+    await other.registered
+    const root = (): Promise<never> => Promise.reject(new Error('a profile-only rollback reads no root'))
+    // The fixture profile has no history, so the profile step itself refuses.
+    await expect(rollbackOffline(deloHome, 'default', true, quiet, root)).rejects.toMatchObject({ code: 'RECOVER_REFUSED' })
+    expect(registered()).toBe(false)
+  }, 30_000)
 })
 
 describe('the launcher\'s rollback after the current runtime failed its start check', () => {

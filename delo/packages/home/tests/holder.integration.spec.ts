@@ -1,7 +1,7 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readlinkSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { currentHolder, darwinProcessStart, holderAlive, holderIdentity, holderOf, linuxProcessStart, parseHolder, readPidNamespace, readProcessStart } from '../src/index.ts'
+import { checkHolder, currentHolder, darwinProcessStart, holderAlive, holderIdentity, holderOf, linuxProcessStart, parseHolder, readPidNamespace, readProcessStart, SYSTEM_PROCESS_TABLE, type ProcessTable } from '../src/index.ts'
 
 const BOOT_ID = '6f1e3c52-8a1b-4d6e-9c0f-1234567890ab'
 
@@ -128,6 +128,27 @@ describe('holders', () => {
     const own = readProcessStart(process.pid)!
     expect(holderAlive({ pid: process.pid, processStart: own, pidNamespace })).toBe(true)
     expect(holderAlive({ pid: process.pid, processStart: own.replace(/\d+$/u, digits => String(Number(digits) + 1)), pidNamespace })).toBe(false)
+  })
+
+  it('are confirmed only when a live process has the recorded id and start identity, in the recorded pid namespace', () => {
+    const start = `linux:${BOOT_ID}:99`
+    const table = (platform: NodeJS.Platform, live: string | undefined, exists = true): ProcessTable => ({ platform, exists: () => exists, start: () => live, pidNamespace: () => 'pid:[2]' })
+    expect(checkHolder({ pid: 7, processStart: start, pidNamespace: 'pid:[2]' }, table('linux', start))).toEqual({ kind: 'confirmed' })
+    expect(checkHolder({ pid: 7, processStart: start }, table('linux', start))).toEqual({ kind: 'confirmed' })
+    expect(checkHolder({ pid: 7, processStart: start }, table('linux', `linux:${BOOT_ID}:100`))).toEqual({ kind: 'replaced' })
+    expect(checkHolder({ pid: 7, processStart: start }, table('linux', start, false))).toEqual({ kind: 'exited' })
+    expect(checkHolder({ pid: 7 }, table('linux', start))).toEqual({ kind: 'unconfirmed', reason: 'no-start-identity' })
+    expect(checkHolder({ pid: 7, processStart: start }, table('linux', undefined))).toEqual({ kind: 'unconfirmed', reason: 'start-unreadable' })
+    expect(checkHolder({ pid: 7, processStart: start, pidNamespace: 'pid:[1]' }, table('linux', start))).toEqual({ kind: 'unconfirmed', reason: 'other-namespace' })
+    expect(checkHolder({ pid: 7, processStart: start }, table('win32', start))).toEqual({ kind: 'unconfirmed', reason: 'no-start-reader' })
+    expect(checkHolder({ pid: 7 }, table('win32', undefined, false))).toEqual({ kind: 'exited' })
+  })
+
+  it('are checked against this operating system\'s processes by default', () => {
+    expect(SYSTEM_PROCESS_TABLE.platform).toBe(process.platform)
+    expect(SYSTEM_PROCESS_TABLE.pidNamespace()).toBe(readPidNamespace())
+    expect(checkHolder(currentHolder()).kind).toBe(readProcessStart(process.pid) === undefined ? 'unconfirmed' : 'confirmed')
+    expect(checkHolder({ pid: deadPid() })).toEqual({ kind: 'exited' })
   })
 
   it('parse from a record: a positive integer pid and an optional well-formed start identity', () => {

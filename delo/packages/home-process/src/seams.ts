@@ -281,7 +281,8 @@ export interface HostRunner {
    * Boot the Host.
    * @param access - the Host's way to the update channel.
    * @returns the running Host.
-   * @throws when the profile does not boot.
+   * @throws when the profile does not boot; a `HostNotStoppedError` when a check refused the booted Host and its
+   *   teardown did not finish, so it may still run in this process.
    */
   boot(access: UpdateChannelAccess): Promise<RunningHost>
 }
@@ -329,9 +330,9 @@ export interface RunningHost {
    */
   close(): Promise<void>
   /**
-   * Stop the Host and keep this process, for an update's or a rollback's switch: afterwards this process boots another
-   * Host or hands over to a successor. It never ends the process, however long the teardown takes; the home process
-   * bounds the wait.
+   * Stop the Host and keep this process, for an update's or a rollback's switch or after a failed start: afterwards
+   * this process boots another Host, hands over to a successor, or finishes the failed start. It never ends the
+   * process, however long the teardown takes; the home process bounds the wait.
    * @returns when it has stopped.
    * @throws when the teardown fails.
    */
