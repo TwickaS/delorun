@@ -437,13 +437,13 @@
     {
       "path": "packages/client/connection/src/rpc-host.ts",
       "class": "security",
-      "reason": "Admission seam (C4): `admit` returns the dispatcher's Peer for a request a reach listener dispatched and refuses one it admitted as pre-login; a loopback request keeps the Host/Origin fence and then goes to the loaded authenticator provider, or to `builtinAdmission`, upstream's cookie admission unchanged, when none is loaded. `authorizeIndex` answers a reach request by its dispatcher's admission. `ctx.connection` gains `builtinAdmission` and `openReachListener`. A provider's `setCookie` reaches the RPC-channel response, `closeReachConnections` ends the reach connections of a session or device, and with a provider loaded the loopback index is admitted by it and the launch-token exchange at the root and `/connect` runs only while its loopback policy accepts the token. `isReachPeer` reports whether a Peer was admitted on a reach listener. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `ctx.connection.oneTimeLaunchTokens` reports the mode, the reach state consumes the tokens a reach request presents, `/connect` and index requests refused by the fence or a provider policy consume theirs, and `consumeStrayLaunchTokens` consumes those of any other loopback request. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10).",
+      "reason": "Admission seam (C4): `admit` returns the dispatcher's Peer for a request a reach listener dispatched and refuses one it admitted as pre-login; a loopback request keeps the Host/Origin fence and then goes to the loaded authenticator provider, or to `builtinAdmission`, upstream's cookie admission unchanged, when none is loaded. `authorizeIndex` answers a reach request by its dispatcher's admission. `ctx.connection` gains `builtinAdmission` and `openReachListener`. A provider's `setCookie` reaches the RPC-channel response, `closeReachConnections` ends the reach connections of a session or device, and with a provider loaded the loopback index is admitted by it and the launch-token exchange at the root and `/connect` runs only while its loopback policy accepts the token. `isReachPeer` reports whether a Peer was admitted on a reach listener. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `ctx.connection.oneTimeLaunchTokens` reports the mode, the reach state consumes the tokens a reach request presents, `/connect` and index requests refused by the fence or a provider policy consume theirs, and `consumeStrayLaunchTokens` consumes those of any other loopback request. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). The shared Fetch handler asks an exact route's optional `admitPeer(request, peer)` hook before admitting a non-owner Peer and answers 403 unless it returns true; a route without the hook keeps upstream's owner-only behaviour.",
       "sha256": "4a4504d5c529406aef23fbdaad4a939fac0b7ec9af021ff7e3fbd189935f8412"
     },
     {
       "path": "packages/client/connection/src/rpc.ts",
       "class": "security",
-      "reason": "Admission seam (C4): `PeerAdmission`'s admitted result carries the provider's `setCookie`, and `ConnectionIndexResponse` may offer `setHeader`, through which an admitted loopback index response receives it. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `HostConnectionHandle.oneTimeLaunchTokens` reports whether `authenticatedUrl` mints a one-time token per call. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10).",
+      "reason": "Admission seam (C4): `PeerAdmission`'s admitted result carries the provider's `setCookie`, and `ConnectionIndexResponse` may offer `setHeader`, through which an admitted loopback index response receives it. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `HostConnectionHandle.oneTimeLaunchTokens` reports whether `authenticatedUrl` mints a one-time token per call. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). An exact Fetch route may declare `admitPeer(request, peer)`, the hook through which it admits a non-owner Peer; a route without it keeps upstream's owner-only behaviour.",
       "sha256": "6bab2896cfa4ceabf80bf2531e8bf47021f90932a2737d002c24974a6dea0344"
     },
     {
@@ -1685,7 +1685,7 @@
     {
       "path": "packages/client/file-upload/src/index.ts",
       "class": "security",
-      "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. Lead verdict: pending; no lead review of this change is recorded yet. The raw upload route declares the `admitPeer` hook, which admits a non-owner Peer only for the Session remote access lets it upload to; without the hook the route keeps upstream's owner-only behaviour.",
       "sha256": "113fd54d90ec0f66410f47b278e3502f541285ecf2ac82f810404b4847c970eb"
     },
     {
@@ -1951,6 +1951,12 @@
       "class": "security",
       "reason": "The raw upload route admits a non-owner Peer only when remote access allows `fileUploads/upload` on the Session the query names; without remote access or a Session it refuses, and owner behaviour is upstream's.",
       "sha256": "6e1cbdd6574e45876d195bcb2e20e9584a91dbfb2a41f3eeb5df82587a35beaf"
+    },
+    {
+      "path": "packages/api/remote-access/src/index.ts",
+      "class": "security",
+      "reason": "The snapshot's grants group a policy's bindings by resource once, in first-binding order, instead of comparing every binding with every other, so a snapshot is linear in the bindings; the grants are the same, which a spec checks against the earlier computation on generated policies.",
+      "sha256": "7adf0db37907a2834d62345d4bbe9216c0b872176fbaa09961f49825836ad56c"
     }
   ],
   "retired": []

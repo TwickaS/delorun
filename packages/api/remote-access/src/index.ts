@@ -63,6 +63,12 @@ interface ErasedBinding {
   }): RemoteAccessDecision
 }
 
+/** The bindings of one policy on one resource, in binding order. */
+interface ResourceGroup {
+  readonly resource: RemoteAccessResource
+  readonly bindings: ErasedBinding[]
+}
+
 /** One registered policy with the principal kind it serves. */
 interface PolicyEntry {
   readonly kind: string
@@ -357,19 +363,31 @@ export class RemoteAccessService extends TypertRemoteService {
     if (entry === undefined) return []
     const bindings = this.bindingsOf(entry, principal, 'a snapshot')
     if (bindings === undefined) return []
+    // One pass groups the bindings by resource in first-binding order, so the snapshot is linear in the bindings; a
+    // group holds exactly the bindings `evaluate` would match on its resource, in their order.
+    const groups = new Map<string, Map<unknown, ResourceGroup>>()
+    const ordered: ResourceGroup[] = []
+    for (const binding of bindings) {
+      const byId = groups.get(binding.resource.kind) ?? new Map<unknown, ResourceGroup>()
+      groups.set(binding.resource.kind, byId)
+      const id: unknown = Reflect.get(binding.resource, 'id')
+      let group = byId.get(id)
+      if (group === undefined) {
+        group = { resource: binding.resource, bindings: [] }
+        byId.set(id, group)
+        ordered.push(group)
+      }
+      group.bindings.push(binding)
+    }
     const grants: RemoteAccessGrant[] = []
-    const seen: RemoteAccessResource[] = []
-    for (const { resource } of bindings) {
-      if (seen.some(other => sameResource(other, resource))) continue
-      seen.push(resource)
+    for (const { resource, bindings: own } of ordered) {
       const candidates = new Set<RemoteAccessAction>()
-      for (const binding of bindings) {
-        if (!sameResource(binding.resource, resource)) continue
+      for (const binding of own) {
         for (const action of binding.role.actions) {
           if (!action.startsWith('event:')) candidates.add(action)
         }
       }
-      const actions = [...candidates].filter(action => this.evaluate(entry, bindings, action, resource, undefined).kind === 'allow').sort()
+      const actions = [...candidates].filter(action => this.evaluate(entry, own, action, resource, undefined).kind === 'allow').sort()
       if (actions.length > 0) grants.push(Object.freeze({ resource, actions: Object.freeze(actions) }))
     }
     return grants

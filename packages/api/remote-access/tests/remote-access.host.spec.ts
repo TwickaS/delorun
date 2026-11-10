@@ -617,3 +617,90 @@ describe('remoteAccess/follow', () => {
     access.invalidate()
   })
 })
+
+describe('the snapshot grants', () => {
+  /** A seeded linear congruential generator, so a failing case can be replayed. */
+  function generator(seed: number): () => number {
+    let state = seed >>> 0
+    return () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+      return state / 0x1_0000_0000
+    }
+  }
+
+  const ACTIONS = ['notes/read', 'notes/write', 'notes/list', 'notes/drop', 'event:notes/changed', 'event:notes/asked'] as const
+
+  /** A policy with duplicated resources, overlapping roles, refusing and throwing conditions, built from one seed. */
+  function generated(seed: number): RemoteAccessPolicy<Guest> {
+    const random = generator(seed)
+    const resources: RemoteAccessResource[] = [GLOBAL, ROOM, ROOM2, DESK, { kind: 'test-shelf', id: 'r3' }]
+    const bindings: RemoteAccessBinding[] = []
+    const count = Math.floor(random() * 12)
+    for (let index = 0; index < count; index += 1) {
+      const resource = resources[Math.floor(random() * resources.length)] ?? GLOBAL
+      const actions = ACTIONS.filter(() => random() < 0.5)
+      const role = { name: `role-${String(index)}`, resource: resource.kind, actions }
+      const roll = random()
+      const refused = ACTIONS[Math.floor(random() * ACTIONS.length)]
+      const condition: RemoteAccessCondition<typeof resource.kind> | undefined = roll < 0.4
+        ? undefined
+        : roll < 0.9
+          ? request => (request.action === refused ? { kind: 'deny', reason: 'generated' } : { kind: 'allow' })
+          : () => { throw new Error('generated failure') }
+      bindings.push({ role, resource, ...(condition === undefined ? {} : { condition }) } as RemoteAccessBinding)
+    }
+    return { bindings: () => bindings }
+  }
+
+  /** The grants as the quadratic computation before the per-resource index produced them, kept here as the reference. */
+  function referenceGrants(policy: RemoteAccessPolicy<Guest>): readonly RemoteAccessGrant[] {
+    const bindings = policy.bindings(GUEST)
+    const same = (left: RemoteAccessResource, right: RemoteAccessResource): boolean =>
+      left.kind === right.kind && Reflect.get(left, 'id') === Reflect.get(right, 'id')
+    const allows = (action: string, resource: RemoteAccessResource): boolean | 'failed' => {
+      for (const binding of bindings) {
+        if (!same(binding.resource, resource) || !binding.role.actions.includes(action as never)) continue
+        if (binding.condition === undefined) return true
+        let decision: { readonly kind: string }
+        try {
+          const condition = binding.condition as (request: { action: string; resource: RemoteAccessResource }) => { readonly kind: string }
+          decision = condition({ action, resource })
+        } catch {
+          return 'failed'
+        }
+        if (decision.kind === 'allow') return true
+      }
+      return false
+    }
+    const grants: RemoteAccessGrant[] = []
+    const seen: RemoteAccessResource[] = []
+    for (const { resource } of bindings) {
+      if (seen.some(other => same(other, resource))) continue
+      seen.push(resource)
+      const candidates = new Set<string>()
+      for (const binding of bindings) {
+        if (!same(binding.resource, resource)) continue
+        for (const action of binding.role.actions) if (!action.startsWith('event:')) candidates.add(action)
+      }
+      const actions = [...candidates].filter(action => allows(action, resource) === true).sort()
+      if (actions.length > 0) grants.push({ resource, actions })
+    }
+    return grants
+  }
+
+  it('are the reference computation\'s grants on 500 generated policies', async () => {
+    const { ctx, access } = await setup()
+    vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    for (let seed = 1; seed <= 500; seed += 1) {
+      const policy = generated(seed)
+      const dispose = access.registerPolicy('test-guest', policy)
+      try {
+        const snapshot = access.snapshotFor(GUEST)
+        // Pins the per-resource index: grouping that dropped, merged or reordered a binding changes some seed's grants.
+        expect(snapshot.owner ? [] : snapshot.grants, `seed ${String(seed)}`).toEqual(referenceGrants(policy))
+      } finally {
+        dispose()
+      }
+    }
+  })
+})
