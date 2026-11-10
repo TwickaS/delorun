@@ -1,4 +1,5 @@
 ---
+area: Install and update
 section: Added
 ---
 
