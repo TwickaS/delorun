@@ -62,13 +62,19 @@ function useInertRoot(): void {
 /** The steps, the current one and the buttons. */
 function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly record: SetupRecord }): ReactNode {
   const { t, progress, extra, services: fixed, startChat, complete, settings, explicit, record } = props
+  const { reach: reachFace, start } = fixed
   useInertRoot()
   const added = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
+  const reach = useSyncExternalStore(reachFace.subscribe, reachFace.getSnapshot)
+  const target = useSyncExternalStore(start.target.subscribe, start.target.getSnapshot)
+  const [choosing, setChoosing] = useState(false)
+  // The default workspace is looked up when the dialog opens, so the Start step already knows what its button does.
+  useEffect(() => { start.resolve() }, [start])
   const { plugins } = settings
   const services = useMemo<StepServices>(() => ({ ...fixed, t, plugins }), [fixed, t, plugins])
   // The notice screen is decided once: acknowledging it must not remove it from under Back.
   const [notice] = useState(() => (!explicit && fixed.notice !== undefined && !fixed.notice.acknowledged() ? fixed.notice : undefined))
-  const steps = useMemo(() => buildSteps({ services, record, extra: added, notice }), [services, record, added, notice])
+  const steps = useMemo(() => buildSteps({ services, record, extra: added, reach, notice }), [services, record, added, reach, notice])
   const [index, setIndex] = useState(() => (notice === undefined ? Math.max(0, steps.findIndex(each => each.id === settings.step)) : 0))
   const current = Math.min(index, steps.length - 1)
   // The list is never empty: the last step is always built.
@@ -89,14 +95,27 @@ function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingS
     complete()
   }
   const last = current === steps.length - 1
+  // Without a default workspace the last button chooses a folder first, and a closed chooser keeps the dialog open.
+  const choosesFolder = last && target.kind === 'none'
   const next = (): void => {
     step.onContinue?.()
     if (!last) {
       go(current + 1)
       return
     }
-    finish()
-    void startChat()
+    if (!choosesFolder) {
+      finish()
+      void startChat()
+      return
+    }
+    setChoosing(true)
+    void start.chooseFolder().then((choice) => {
+      setChoosing(false)
+      if (choice.kind === 'cancelled') return
+      finish()
+      if (choice.kind === 'in-page') start.openInPage()
+      else void startChat(choice.kind === 'chosen' ? choice.workspaceId : undefined)
+    })
   }
   const title = (step.heading ?? step.title)()
   return (
@@ -126,7 +145,7 @@ function Flow(props: OnboardingStepEntryProps & { readonly settings: OnboardingS
             {step.id !== STEPS.notice.id && <Button variant="ghost" className={css.skip} onClick={finish}>{t('skip')}</Button>}
             <span className={css.spacer} />
             {current > 0 && <Button variant="ghost" onClick={() => { go(current - 1) }}>{t('back')}</Button>}
-            <Button variant="primary" onClick={next}>{t(last ? 'start' : 'continue')}</Button>
+            <Button variant="primary" disabled={choosing} onClick={next}>{t(choosesFolder ? 'chooseFolder' : last ? 'start' : 'continue')}</Button>
           </footer>
         </div>
       </div>

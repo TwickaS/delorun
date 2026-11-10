@@ -4,8 +4,8 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: calc(8px * var(--dsh-density, 1)) 16px;
-  padding: calc(16px * var(--dsh-density, 1)) 0;
+  gap: var(--delo-space-4) var(--delo-space-6);
+  padding: var(--delo-space-6) 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -13,18 +13,18 @@
   display: flex;
   flex: 1 1 220px;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--delo-space-2);
   min-width: 0;
 }
 
 .title {
-  font-size: 14px;
-  line-height: 22px;
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
   color: var(--dsw-alias-label-primary);
 }
 
 .description {
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-secondary);
 }

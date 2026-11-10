@@ -157,18 +157,24 @@ function BundleAction({ view, services, name }: { readonly view: BundleView | un
     case 'restart':
       return <span className={css.status} data-tone="done">{t('bundle.restart')}</span>
     case 'unavailable':
-      return <span className={css.status}>{t('bundle.unavailable')}</span>
+      return <PluginsAction status={t('bundle.unavailable')} services={services} />
     case 'failed':
-      return (
-        <span className={css.failedAction}>
-          <span className={css.status}>{t('bundle.failed')}</span>
-          <Button variant="outline" size="sm" onClick={() => { bundles.openPlugins() }}>{t('bundle.open')}</Button>
-        </span>
-      )
+      return <PluginsAction status={t('bundle.failed')} services={services} tone="failed" />
     /* v8 ignore next 2 -- closed-union default only defends future widening of BundleState */
     default:
       return assertNever(state)
   }
+}
+
+/** A status with the button that opens Plugins, for a bundle the buttons here cannot add. */
+function PluginsAction({ status, services, tone }: { readonly status: string; readonly services: StepServices; readonly tone?: 'failed' }): ReactNode {
+  const { t, bundles } = services
+  return (
+    <span className={css.failedAction}>
+      <span className={css.status} data-tone={tone}>{status}</span>
+      <Button variant="outline" size="sm" onClick={() => { bundles.openPlugins() }}>{t('bundle.open')}</Button>
+    </span>
+  )
 }
 
 /**
@@ -212,7 +218,8 @@ function useRefresh(services: StepServices, names: readonly string[]): void {
 }
 
 /**
- * The Claude Code and Codex delegation bundles, offered with what running them means. Reading where they stand never adds them.
+ * The Claude Code and Codex delegation bundles, offered with what running them means. Reading where they stand never
+ * adds them; a bundle this installation does not include is shown as such, with a way to Plugins.
  * @param props - the services.
  * @returns the step body.
  */
@@ -261,7 +268,7 @@ export function PluginsStep({ services }: StepProps): ReactNode {
 }
 
 /**
- * Reach, explained: where it is set up, what the options are, and that it can wait.
+ * Reach, where it can be turned on: what it does, the command that turns it on at the computer, and what a phone cannot do.
  * @param props - the services.
  * @returns the step body.
  */
@@ -271,23 +278,27 @@ export function ReachStep({ services }: StepProps): ReactNode {
     <div className={css.stack}>
       <p className={css.lead}>{t('reach.lead')}</p>
       <p className={css.text}>{t('reach.where')}</p>
-      <p className={css.text}>{t('reach.options')}</p>
+      <p className={css.text}><code className={css.command}>{t('reach.command')}</code></p>
+      <p className={css.text}>{t('reach.limits')}</p>
       <p className={css.hint}>{t('reach.skip')}</p>
     </div>
   )
 }
 
 /**
- * The last screen: what its button does.
+ * The last screen: where its button opens the chat, and what the chat offers. With no default workspace it says so and
+ * the button chooses a folder.
  * @param props - the services.
  * @returns the step body.
  */
 export function StartStep({ services }: StepProps): ReactNode {
-  const { t } = services
+  const { t, start } = services
+  const target = useSyncExternalStore(start.target.subscribe, start.target.getSnapshot)
+  const point = target.kind === 'default' ? t('start.point.default') : target.kind === 'none' ? t('start.point.none') : undefined
   return (
     <div className={css.stack}>
-      <p className={css.lead}>{t('start.lead')}</p>
-      <p className={css.text}>{t('start.point')}</p>
+      <p className={css.lead}>{t(`start.lead.${target.kind}`)}</p>
+      {point !== undefined && <p className={css.text}>{point}</p>}
       <p className={css.hint}>{t('start.later')}</p>
     </div>
   )

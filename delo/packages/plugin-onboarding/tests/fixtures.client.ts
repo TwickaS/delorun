@@ -8,7 +8,8 @@ import { DEFAULT_SETTINGS, type OnboardingSettings } from '../src/config.ts'
 import type { BundleInstaller, BundleView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
 import type { ThemeSettings } from '@delo/plugin-theme'
-import type { LanguageFace, NoticeFace, SchemeFace, SchemePreference, StepServices } from '../src/client/types.ts'
+import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { FolderChoice, LanguageFace, NoticeFace, ReachFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices } from '../src/client/types.ts'
 
 /** This plugin's copy. */
 export const t: StepServices['t'] = makeTranslate(en)
@@ -100,6 +101,26 @@ export function installerFake(views: Readonly<Record<string, BundleView>> = {}) 
   return { installer, store, refresh, install, openPlugins }
 }
 
+/** A workspace id the specs use as the default workspace. */
+export const DEFAULT_WORKSPACE = 'workspace-1' as WorkspaceId
+
+/** A reach face over a store: the state `ctx.deloReach` gives, changeable. */
+export function reachFace(initial: ReachState = 'unavailable') {
+  const store = createSnapshotStore<ReachState>(initial)
+  const face: ReachFace = { getSnapshot: store.getSnapshot, subscribe: store.subscribe }
+  return { face, set: store.set }
+}
+
+/** A start face over a store, recording the dialog opening it and the folder chosen. */
+export function startFace(initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE }, choice: FolderChoice = { kind: 'cancelled' }) {
+  const store = createSnapshotStore<StartTarget>(initial)
+  const resolve = vi.fn()
+  const chooseFolder = vi.fn((): Promise<FolderChoice> => Promise.resolve(choice))
+  const openInPage = vi.fn()
+  const face: StartFace = { target: store, resolve, chooseFolder, openInPage }
+  return { face, set: store.set, resolve, chooseFolder, openInPage }
+}
+
 /** Step services with every part faked; each can be replaced. */
 export function stepServices(change: Partial<StepServices> = {}): StepServices & { readonly spies: ReturnType<typeof installerFake> } {
   const bundles = installerFake()
@@ -111,6 +132,8 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
     scheme: schemeFace().face,
     look: { settings: theme.form, useStockLook: () => Promise.resolve(true) },
     bundles: bundles.installer,
+    reach: reachFace().face,
+    start: startFace().face,
     resolveText: text => (typeof text === 'string' ? text : text.en),
     spies: bundles,
     ...change,

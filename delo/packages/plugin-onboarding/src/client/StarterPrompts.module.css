@@ -3,35 +3,35 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 0 16px;
+  gap: var(--delo-space-4);
+  padding: 0 var(--delo-space-6);
 }
 
 .lead {
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .chips {
   display: flex;
   flex: 1;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--delo-space-4);
   min-width: 0;
 }
 
 .chip {
   min-height: 32px;
   box-sizing: border-box;
-  padding: 4px 12px;
+  padding: var(--delo-space-2) var(--delo-space-5);
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   text-align: left;
   cursor: pointer;
 }
@@ -62,8 +62,8 @@
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 16px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-base-16-font-size);
   line-height: 1;
   cursor: pointer;
 }

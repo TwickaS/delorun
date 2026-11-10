@@ -12,6 +12,7 @@ interface Row {
   installTarget?: { spec: string; version: string }
   error?: { code: string; message: string }
   readOnlyReason?: string
+  installed?: boolean
   meta?: { title?: string | { en: string }; description?: string }
 }
 
@@ -43,6 +44,9 @@ describe('where a listed bundle stands', () => {
     ['cannot be changed through the profile patch', row({ name: 'a', readOnlyReason: 'management-required' }), 'failed'],
     ['is a catalog entry the installation cannot fetch', row({ name: 'a', availability: 'missing' }), 'unavailable'],
     ['is a catalog entry with an install target', row({ name: 'a', availability: 'missing', installTarget: { spec: 'a@1', version: '1' } }), 'available'],
+    ['is a catalog entry whose install target could not be worked out, as in a source checkout without its build', row({ name: 'a', availability: 'missing', error: { code: 'operation-error', message: 'built runtime is missing' } }), 'unavailable'],
+    ['is a catalog entry this platform cannot run', row({ name: 'a', availability: 'missing', installTarget: { spec: 'a@1', version: '1' }, error: { code: 'unsupported-platform', message: 'x' } }), 'unavailable'],
+    ['is recorded by the profile but its files are gone', row({ name: 'a', availability: 'missing', installed: true, installTarget: { spec: 'a@1', version: '1' } }), 'failed'],
     ['ships with the installation and is switched on', row({ name: 'a', enabled: true }), 'installed'],
     ['ships with the installation and is switched off', row({ name: 'a' }), 'available'],
     ['is installed in the profile and switched off', row({ name: 'a', availability: 'profile' }), 'available'],

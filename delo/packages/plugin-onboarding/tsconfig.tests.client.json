@@ -79,6 +79,9 @@
     },
     {
       "path": "../bundle-local/tsconfig.client.json"
+    },
+    {
+      "path": "../plugin-sidebar/tsconfig.client.json"
     }
   ]
 }

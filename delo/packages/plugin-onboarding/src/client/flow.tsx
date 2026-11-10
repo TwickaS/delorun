@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react'
 import type { SetupRecord } from '../wire.ts'
 import { AgentsStep, LookStep, NoticeStep, PluginsStep, ReachStep, StartStep } from './steps.tsx'
-import type { NoticeFace, OnboardingStep, StepServices } from './types.ts'
+import type { NoticeFace, OnboardingStep, ReachState, StepServices } from './types.ts'
 
 /** One step of the flow, built-in or added by a plugin. */
 export interface FlowStep {
@@ -44,6 +44,8 @@ export interface FlowInput {
   readonly record: SetupRecord
   /** The steps other plugins added. */
   readonly extra: readonly OnboardingStep[]
+  /** Whether `ctx.deloReach` says reach can be turned on here; the reach step shows only when it is available and not set up. */
+  readonly reach: ReachState
   /** The preview notice when its screen applies: it exists, this browser has not acknowledged it and onboarding was not reopened. */
   readonly notice: NoticeFace | undefined
 }
@@ -53,7 +55,7 @@ export interface FlowInput {
  * @param input - the services and what decides which steps apply.
  * @returns the steps, ascending by order.
  */
-export function buildSteps({ services, record, extra, notice }: FlowInput): FlowStep[] {
+export function buildSteps({ services, record, extra, reach, notice }: FlowInput): FlowStep[] {
   const { t, plugins } = services
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const built: FlowStep[] = []
@@ -71,7 +73,7 @@ export function buildSteps({ services, record, extra, notice }: FlowInput): Flow
   if (plugins.length > 0 && !covered(STEPS.plugins.id)) {
     built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep services={services} /> })
   }
-  if (!record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <ReachStep services={services} /> })
+  if (reach === 'available' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <ReachStep services={services} /> })
   built.push({ ...STEPS.start, title: () => t('step.start'), render: () => <StartStep services={services} /> })
   const added = extra.map((step): FlowStep => ({ id: step.id, order: step.order, title: step.title, render: next => { const Body = step.component; return <Body next={next} /> } }))
   return [...built, ...added].sort((a, b) => a.order - b.order)

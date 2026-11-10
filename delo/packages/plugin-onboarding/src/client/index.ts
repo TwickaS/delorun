@@ -1,8 +1,10 @@
 /**
  * Delo's onboarding, studio half: the first minute of the studio as one flow ending in a chat. It is one step of
  * upstream's `settings.onboarding` flow, placed before every other step, so upstream's coordinator decides when it may
- * show. The steps are the preview notice, language and look, agents, recommended plugins and reach; the last button
- * opens a new chat in the default workspace, whose empty state offers starter prompts that write into the message box.
+ * show. The steps are the preview notice, language and look, agents, recommended plugins and, where `ctx.deloReach`
+ * says reach is available and not set up, reach; the last button opens a new chat in the default workspace, whose empty
+ * state offers starter prompts that write into the message box. Where no default workspace resolves, the button
+ * chooses a folder first.
  * It loads only while the Delo look is on (the `deloStudio` service exists), so the stock look keeps the preview
  * notice's own step. `ctx.deloOnboarding` lets other Delo plugins add steps.
  * @module @delo/plugin-onboarding/client
@@ -33,15 +35,19 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@delo/bundle-local/client'
 // Type-only: the ctx.deloStudio merge and the 'settings.deloAppearance' dictionary.
 import type {} from '@delo/plugin-theme/client'
+// Type-only: the ctx.deloSidebar merge.
+import type {} from '@delo/plugin-sidebar/client'
 import type { ThemeSettings } from '@delo/plugin-theme'
-import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
+import { ONBOARDING_ROW_ID, PENDING_STARTERS, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
 import { NO_RECORD, SETUP_RECORD_PATH, SetupRecord } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
-import type { DeloOnboarding, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StaticServices } from './types.ts'
+import type {
+  DeloOnboarding, DeloReach, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, ReachFace, ReachState, SchemePreference, SidebarWorkspaceAdder, StartFace, StartTarget, StaticServices,
+} from './types.ts'
 
 export { createBundleInstaller, stateOf } from './bundles.ts'
 export type { BundleInstaller, BundleState, BundleView } from './bundles.ts'
@@ -50,14 +56,16 @@ export type { OnboardingLocaleKey } from './locales.ts'
 export type { ShowAgainInjected, ShowAgainRowProps } from './ShowAgainRow.tsx'
 export type { StarterInjected, StarterPromptsProps } from './StarterPrompts.tsx'
 export type {
-  AppearanceTranslate, DeloOnboarding, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep, OnboardingStepProps, SchemeFace, SchemePreference,
-  StaticServices, StepServices,
+  AppearanceTranslate, DeloOnboarding, DeloReach, FolderChoice, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep, OnboardingStepProps, ReachFace, ReachState,
+  SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Delo's onboarding, for other Delo plugins' setup steps. */
     deloOnboarding: DeloOnboarding
+    /** Reach, where this installation can turn it on; provided by the reach plugin, absent otherwise. */
+    deloReach: DeloReach
   }
 }
 
@@ -80,11 +88,16 @@ export const SHOW_AGAIN_ROW = { id: ONBOARDING_ROW_ID, order: 50 } as const
 /** The starter prompts' place in the input dock: just above the message box. */
 export const STARTER_ENTRY = { id: 'delo-onboarding.starters', order: 10 } as const
 
+const CHECKING: StartTarget = { kind: 'checking' }
+const OTHER: StartTarget = { kind: 'other' }
+const NONE: StartTarget = { kind: 'none' }
+
 /**
- * Services every registration needs. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on,
- * is injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
+ * Services every registration needs. `settingsShell` is the Settings shell's, which also hosts the onboarding step and
+ * is provided under every look. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on, is
+ * injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
  */
-export const inject = ['slots', 'locale', 'configForms', 'theme']
+export const inject = ['slots', 'locale', 'configForms', 'theme', 'settingsShell']
 
 /**
  * Read what the terminal setup recorded from the harness. Any failure leaves every step in the flow.
@@ -140,6 +153,14 @@ export function applyStudio(ctx: Context): void {
       acknowledge: () => { service.acknowledge() },
     }
   }
+  const reach: ReachFace = {
+    getSnapshot: (): ReachState => {
+      const service = ctx.get('deloReach')
+      if (service === undefined) return 'unavailable'
+      return service.setUp() ? 'set-up' : 'available'
+    },
+    subscribe: listener => ctx.on('internal/service', (name: string) => { if (name === 'deloReach') listener() }),
+  }
   const services = (): StaticServices => ({
     notice: notice(),
     language: {
@@ -158,21 +179,76 @@ export function applyStudio(ctx: Context): void {
     },
     appearance: ctx.locale.bind('settings.deloAppearance'),
     bundles: createBundleInstaller(ctx),
+    reach,
+    start,
     resolveText: text => ctx.locale.resolveText(text),
   })
 
+  /** Where the chat opens; the dialog starts resolving it when it opens, and the last button waits for it. */
+  const startTarget = createSnapshotStore<StartTarget>(CHECKING)
+  let resolution: Promise<StartTarget> | undefined
   /**
-   * Open a new chat in the default workspace and keep it as the one whose empty state offers starter prompts. Where
-   * the default workspace cannot be resolved, the workspace UI's own New Session choice applies and no prompts follow.
+   * Ask for the default workspace, which the host creates only while it holds no workspace and no chat and otherwise reuses.
+   * @returns where the chat opens; it never rejects.
    */
-  const startChat = async (): Promise<void> => {
-    const workspace = ctx.get('uiWorkspace')
-    if (workspace === undefined) return
-    let target: WorkspaceId | undefined
+  const resolveTarget = async (): Promise<StartTarget> => {
+    const workspaces = ctx.get('workspaces')
+    if (workspaces === undefined) return OTHER
     try {
-      target = (await ctx.get('workspaces')?.initializeDefault())?.workspaceId
+      const view = await workspaces.initializeDefault()
+      if (view !== undefined) return { kind: 'default', workspaceId: view.workspaceId }
     } catch (error) {
       console.warn('delo onboarding: the default workspace was not resolved', error)
+    }
+    return workspaces.list.getSnapshot().items.length > 0 ? OTHER : NONE
+  }
+  const resolve = (): Promise<StartTarget> => {
+    startTarget.set(CHECKING)
+    const run = resolveTarget()
+    resolution = run
+    void run.then((target) => { if (resolution === run) startTarget.set(target) })
+    return run
+  }
+  // Delo's sidebar provides `ctx.deloSidebar` while its list is mounted; onboarding needs only its add-workspace flow.
+  const sidebar = (): SidebarWorkspaceAdder | undefined => ctx.get('deloSidebar')
+  const inPage = (): FolderChoice => (sidebar()?.canAddWorkspace() === true ? { kind: 'in-page' } : { kind: 'unavailable' })
+  const chooseFolder = async (): Promise<FolderChoice> => {
+    const workspace = ctx.get('uiWorkspace')
+    const workspaces = ctx.get('workspaces')
+    if (workspace === undefined || workspaces === undefined) return inPage()
+    let path: string | null
+    try {
+      path = await workspace.pickDirectory()
+    } catch (error) {
+      // A host that picks folders in a page dialog has no native chooser; the sidebar's add-workspace flow has that dialog.
+      console.warn('delo onboarding: the native folder chooser did not open', error)
+      return inPage()
+    }
+    if (path === null) return { kind: 'cancelled' }
+    try {
+      return { kind: 'chosen', workspaceId: (await workspaces.create({ path })).workspaceId }
+    } catch (error) {
+      console.warn('delo onboarding: the folder was not added', error)
+      return { kind: 'unavailable' }
+    }
+  }
+  const openInPage = (): void => {
+    writeProgress('starterSession', PENDING_STARTERS)
+    sidebar()?.addWorkspace()
+  }
+  const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, openInPage }
+
+  /**
+   * Open a new chat and keep it as the one whose empty state offers starter prompts. Without a workspace the person
+   * chose or a default one, the workspace UI's own New Session choice applies and no prompts follow.
+   */
+  const startChat = async (chosen?: WorkspaceId): Promise<void> => {
+    const workspace = ctx.get('uiWorkspace')
+    if (workspace === undefined) return
+    let target = chosen
+    if (target === undefined) {
+      const resolved = await (resolution ?? resolve())
+      target = resolved.kind === 'default' ? resolved.workspaceId : undefined
     }
     if (target === undefined) {
       workspace.startSession()
@@ -198,6 +274,7 @@ export function applyStudio(ctx: Context): void {
       // Keyboard-less devices keep their keyboard down until the person taps the box.
       if (window.matchMedia('(pointer: fine)').matches) input.focus()
     },
+    bind: (sessionId) => { writeProgress('starterSession', sessionId) },
     dismiss: () => { writeProgress('starterSession', '') },
   }
   ctx.effect(() => ctx.configForms.whileServed([ONBOARDING_ROW_ID], () => {

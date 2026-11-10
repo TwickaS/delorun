@@ -8,7 +8,7 @@ import {
   apply, Config, DEFAULT_SETTINGS, inject, MAX_ANSWERS_BYTES, name, NO_RECORD, ONBOARDING_ROW_ID, readSetupRecord, RECOMMENDED_LIMIT,
   SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
 } from '../src/index.ts'
-import { THEME_ROW_ID } from '../src/config.ts'
+import { PENDING_STARTERS, THEME_ROW_ID } from '../src/config.ts'
 import { THEME_ROW_ID as THEME_ROW } from '../../plugin-theme/src/config.ts'
 import { REACH_OPTIONS } from '../../contract-setup-answers/src/index.ts'
 
@@ -60,6 +60,7 @@ describe('the configuration', () => {
   })
 
   it('accepts scoped and plain package names and a session id', () => {
+    expect(plain({ starterSession: PENDING_STARTERS }).starterSession).toBe('pending')
     expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', step: 'thinking.reader', done: true }))
       .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', step: 'thinking.reader', done: true })
   })

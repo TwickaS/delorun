@@ -21,12 +21,61 @@ function mount(options: { readonly offered?: string; readonly sessionId?: Sessio
   const element = (draft: string, blank = options.blank ?? true) => (
     <StarterPrompts {...{
       t, sessionId: options.sessionId ?? CHAT, session: { ...sessionSnapshot(CHAT), blank },
-      input: { draft, attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }, starter, prefill, dismiss,
+      input: { draft, attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }, starter, prefill, dismiss, bind: vi.fn(),
     } satisfies StarterPromptsProps} />
   )
   const view = render(element(options.draft ?? ''))
   return { ...view, starter, prefill, dismiss, show: (draft: string, blank?: boolean) => { view.rerender(element(draft, blank)) } }
 }
+
+describe('the starter prompts while they are pending', () => {
+  const OLDER = SessionId('older')
+
+  /** One dock instance, as the conversation mounts it for the chat it shows. */
+  function dock(options: { readonly offered: string; readonly blank?: boolean }) {
+    const starter = createSnapshotStore(options.offered)
+    const bind = vi.fn()
+    const element = (sessionId: SessionId, blank = options.blank ?? true) => (
+      <StarterPrompts {...{
+        t, sessionId, session: { ...sessionSnapshot(sessionId), blank },
+        input: { draft: '', attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }, starter, prefill: vi.fn(), dismiss: vi.fn(), bind,
+      } satisfies StarterPromptsProps} />
+    )
+    const view = render(element(OLDER))
+    return { ...view, starter, bind, show: (sessionId: SessionId, blank?: boolean) => { view.rerender(element(sessionId, blank)) } }
+  }
+
+  it('go to an empty chat whose dock mounts while they are pending, and show no chips until then', () => {
+    const { bind, container } = dock({ offered: 'pending' })
+    expect(bind).toHaveBeenCalledExactlyOnceWith(OLDER)
+    expect(container.textContent).toBe('')
+  })
+
+  it('do not go to a chat that already has a message', () => {
+    const { bind } = dock({ offered: 'pending', blank: false })
+    expect(bind).not.toHaveBeenCalled()
+  })
+
+  it('do not go to the chat that was open when they became pending, but to the next empty chat that opens', async () => {
+    const { starter, bind, show } = dock({ offered: '' })
+    await act(async () => { starter.set('pending') })
+    expect(bind).not.toHaveBeenCalled()
+    show(CHAT, false)
+    expect(bind).not.toHaveBeenCalled()
+    show(CHAT)
+    expect(bind).toHaveBeenCalledExactlyOnceWith(CHAT)
+  })
+
+  it('treat the chat open at the next pending as older again after they were bound', async () => {
+    const { starter, bind, show } = dock({ offered: 'pending' })
+    expect(bind).toHaveBeenCalledOnce()
+    await act(async () => { starter.set(OLDER) })
+    show(CHAT)
+    await act(async () => { starter.set('') })
+    await act(async () => { starter.set('pending') })
+    expect(bind).toHaveBeenCalledOnce()
+  })
+})
 
 describe('the starter prompts', () => {
   it('show three chips with their labels above the message box of the chat onboarding opened', () => {

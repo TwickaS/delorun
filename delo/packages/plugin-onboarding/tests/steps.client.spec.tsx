@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_BUNDLES, AgentsStep, LookStep, NoticeStep, PluginsStep, ReachStep, StartStep } from '../src/client/steps.tsx'
 import { en } from '../src/client/locales.ts'
 import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
-import { installerFake, languageFace, liveForm, noticeFace, schemeFace, stepServices, THEME } from './fixtures.client.ts'
+import { DEFAULT_WORKSPACE, installerFake, languageFace, liveForm, noticeFace, schemeFace, startFace, stepServices, THEME } from './fixtures.client.ts'
+import type { StartTarget } from '../src/client/types.ts'
 import type { ThemeSettings } from '@delo/plugin-theme'
 
 afterEach(cleanup)
@@ -163,7 +164,7 @@ describe('the agents step', () => {
     ['is being added', 'installing', en['bundle.adding']],
     ['is added', 'installed', en['bundle.added']],
     ['is added but waits for a restart', 'restart', en['bundle.restart']],
-    ['is not offered by the installation', 'unavailable', en['bundle.unavailable']],
+    ['is not included in the installation', 'unavailable', en['bundle.unavailable']],
     ['could not be added', 'failed', en['bundle.failed']],
   ])('shows the state of a bundle that %s and no Add button', (_, state, text) => {
     const [claude] = AGENT_BUNDLES
@@ -171,6 +172,28 @@ describe('the agents step', () => {
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} />)
     expect(screen.getAllByText(text).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: en['bundle.add'] })).toBeNull()
+  })
+
+  it('shows a bundle the installation does not include as a normal state with a way to Plugins, never as an error', async () => {
+    const [claude, codex] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'unavailable' }, [codex.name]: { state: 'unavailable' } })
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} />)
+    expect(screen.getAllByText('Not included in this installation')).toHaveLength(2)
+    expect(document.body.textContent).not.toContain(en['bundle.failed'])
+    expect(document.querySelector('[data-tone="failed"]')).toBeNull()
+    const opens = screen.getAllByRole('button', { name: 'Open Plugins' })
+    expect(opens).toHaveLength(2)
+    await click(opens[0] as HTMLElement)
+    expect(fake.openPlugins).toHaveBeenCalledOnce()
+  })
+
+  it('shows a bundle that failed to be added as an error that Plugins can finish', async () => {
+    const [claude] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'failed' } })
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} />)
+    expect(document.querySelector('[data-tone="failed"]')?.textContent).toBe(en['bundle.failed'])
+    await click(screen.getByRole('button', { name: 'Open Plugins' }))
+    expect(fake.openPlugins).toHaveBeenCalledOnce()
   })
 
   it('shows Checking until a bundle is first read, and opens Plugins for a bundle that could not be added', async () => {
@@ -200,19 +223,41 @@ describe('the recommended plugins step', () => {
   })
 })
 
-describe('the reach and start steps', () => {
-  it('explain reach without a command line: where it is set up, the options, and that it can wait', () => {
+describe('the reach step', () => {
+  it('says what reach does for a phone, the command that turns it on at the computer, and what a phone session cannot do', () => {
     render(<ReachStep services={stepServices()} />)
-    expect(document.body.textContent).toContain('You set it up at the computer that runs Delo, in a terminal, never from this window.')
-    expect(document.body.textContent).toContain('None of them uses Delo\'s servers.')
+    expect(document.body.textContent).toContain('open this studio from your phone')
+    expect(document.body.textContent).toContain('Turn it on at the computer that runs Delo, in a terminal, never from this window:')
+    expect(screen.getByText('delorun reach on tailscale').tagName).toBe('CODE')
+    expect(document.body.textContent).toContain('A phone session cannot grant full access or approve devices.')
     expect(document.body.textContent).toContain('You can skip this')
     expect(screen.queryByRole('button')).toBeNull()
-    expect(document.body.textContent).not.toMatch(/delorun/)
   })
 
-  it('say that the last button opens a chat whose starting prompts only write into the message box', () => {
-    render(<StartStep services={stepServices()} />)
-    expect(document.body.textContent).toContain('Delo opens a new chat in your default workspace.')
-    expect(document.body.textContent).toContain('you read it, change it if you like, and send it yourself')
+  it('names no relay, no Tailscale option list and no other way to reach', () => {
+    render(<ReachStep services={stepServices()} />)
+    expect(document.body.textContent).not.toMatch(/relay|domain|public/i)
+    for (const [key, text] of Object.entries(en)) if (key.startsWith('reach.')) expect(text).not.toMatch(/relay|中继/i)
+  })
+})
+
+describe('the start step', () => {
+  it.each<readonly [string, StartTarget, readonly string[], readonly string[]]>([
+    ['is looking for the default workspace', { kind: 'checking' }, [en['start.lead.checking']], [en['start.point.default'], en['start.point.none']]],
+    ['has the default workspace', { kind: 'default', workspaceId: DEFAULT_WORKSPACE }, [en['start.lead.default'], 'you read it, change it if you like, and send it yourself'], [en['start.point.none']]],
+    ['finds no default workspace but others', { kind: 'other' }, [en['start.lead.other']], [en['start.point.default'], en['start.point.none']]],
+    ['finds no workspace', { kind: 'none' }, ['Delo could not set up a default workspace on this computer.', 'Choose a folder to work in.'], [en['start.point.default']]],
+  ])('says what the chat is when it %s', (_, target, shown, absent) => {
+    render(<StartStep services={stepServices({ start: startFace(target).face })} />)
+    for (const text of shown) expect(document.body.textContent).toContain(text)
+    for (const text of absent) expect(document.body.textContent).not.toContain(text)
+    expect(document.body.textContent).toContain(en['start.later'])
+  })
+
+  it('changes its words when the lookup settles', async () => {
+    const start = startFace({ kind: 'checking' })
+    render(<StartStep services={stepServices({ start: start.face })} />)
+    await act(async () => { start.set({ kind: 'none' }) })
+    expect(document.body.textContent).toContain(en['start.lead.none'])
   })
 })

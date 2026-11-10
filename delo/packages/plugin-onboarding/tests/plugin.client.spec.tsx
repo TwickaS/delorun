@@ -1,17 +1,22 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  apply, inject, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type OnboardingInjected, type OnboardingStep, type StarterInjected, type ShowAgainInjected,
+  apply, inject, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  type StarterInjected, type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { NO_RECORD, SETUP_RECORD_PATH } from '../src/wire.ts'
 import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../src/config.ts'
-import { liveForm, settings, THEME } from './fixtures.client.ts'
+import { liveForm, settings, t, THEME } from './fixtures.client.ts'
 
 afterEach(() => {
+  cleanup()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -24,7 +29,7 @@ interface Registered {
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() }
 
 /** Every service the plugin reads, faked, with the studio look on unless asked otherwise. */
-async function harness(options: { readonly studio?: boolean; readonly provide?: Record<string, unknown> } = {}) {
+async function harness(options: { readonly studio?: boolean; readonly provide?: Record<string, unknown>; readonly late?: Record<string, unknown>; readonly progress?: OnboardingSettings } = {}) {
   const ctx = new Context()
   const dictionaries = new Map<string, unknown>()
   const bound: string[] = []
@@ -48,7 +53,7 @@ async function harness(options: { readonly studio?: boolean; readonly provide?: 
       return () => { entries.delete(key) }
     },
   } as never)
-  const progress = liveForm<OnboardingSettings>(settings())
+  const progress = liveForm<OnboardingSettings>(options.progress ?? settings())
   const theme = liveForm(THEME)
   ctx.provide('configForms', {
     get: (id: string) => (id === ONBOARDING_ROW_ID ? progress.form : id === THEME_ROW_ID ? theme.form : (() => { throw new Error(`unexpected row ${id}`) })()),
@@ -67,8 +72,14 @@ async function harness(options: { readonly studio?: boolean; readonly provide?: 
   const useStockLook = vi.fn(() => Promise.resolve(true))
   const deloStudio = options.studio === false ? undefined : { useStockLook }
   if (deloStudio !== undefined) ctx.provide('deloStudio', deloStudio as never)
-  for (const [name, value] of Object.entries(options.provide ?? {})) ctx.provide(name as never, value as never)
+  const provided = { ...options.late === undefined ? { settingsShell: { openOnboarding: vi.fn() } } : {}, ...options.provide }
+  for (const [name, value] of Object.entries(provided)) ctx.provide(name as never, value as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })
+  // A service that arrives after this plugin was loaded, as the Settings shell's own plugin does.
+  if (options.late !== undefined) {
+    const later = ctx.plugin({ apply: (scope: Context) => { for (const [name, value] of Object.entries(options.late ?? {})) scope.provide(name as never, value as never) } })
+    await later.await()
+  }
   await fiber.await()
   return { ctx, fiber, dictionaries, bound, entries, progress, theme, served, setLocale, localeListeners, useStockLook, preference }
 }
@@ -217,6 +228,42 @@ describe('the services the dialog draws with', () => {
   })
 })
 
+describe('the reach service', () => {
+  it('is unavailable until a reach plugin provides ctx.deloReach, then available or set up, and follows it as it comes and goes', async () => {
+    const { entries, served, ctx } = await harness()
+    served.on()
+    const { reach } = face<OnboardingInjected>(entries, STEP_KEY).services
+    const changed = vi.fn()
+    const off = reach.subscribe(changed)
+    expect(reach.getSnapshot()).toBe('unavailable')
+    let setUp = false
+    const plugin = ctx.plugin({ apply: (scope: Context) => { scope.provide('deloReach', { available: true, setUp: () => setUp } as never) } })
+    await plugin.await()
+    expect(changed).toHaveBeenCalled()
+    expect(reach.getSnapshot()).toBe('available')
+    setUp = true
+    expect(reach.getSnapshot()).toBe('set-up')
+    changed.mockClear()
+    await plugin.dispose()
+    expect(changed).toHaveBeenCalled()
+    expect(reach.getSnapshot()).toBe('unavailable')
+    off()
+    changed.mockClear()
+    ctx.emit('internal/service' as never, 'something-else' as never)
+    expect(changed).not.toHaveBeenCalled()
+  })
+
+  it('ignores other services coming and going', async () => {
+    const { entries, served, ctx } = await harness()
+    served.on()
+    const changed = vi.fn()
+    face<OnboardingInjected>(entries, STEP_KEY).services.reach.subscribe(changed)
+    const other = ctx.plugin({ apply: (scope: Context) => { scope.provide('somethingElse' as never, {} as never) } })
+    await other.await()
+    expect(changed).not.toHaveBeenCalled()
+  })
+})
+
 describe('the setup record', () => {
   const stubFetch = (response: () => Response | Promise<Response>) => {
     const fetch = vi.fn(async (_path: string, _init?: RequestInit) => response())
@@ -245,21 +292,33 @@ describe('the setup record', () => {
   })
 })
 
-describe('opening the first chat', () => {
+describe('the default workspace and the first chat', () => {
   const WORKSPACE = 'workspace-1'
 
-  async function chat(options: { readonly workspaces?: unknown; readonly uiWorkspace?: unknown | null } = {}) {
+  interface ChatOptions {
+    readonly workspaces?: unknown
+    readonly uiWorkspace?: unknown | null
+    readonly items?: readonly unknown[]
+    readonly sidebar?: { readonly canAdd: boolean }
+  }
+
+  async function chat(options: ChatOptions = {}) {
     const openWorkspace = vi.fn(async (_id: string, beforeOpen?: (sessionId: string) => void) => { beforeOpen?.('session-9') })
     const startSession = vi.fn()
+    const pickDirectory = vi.fn(async (): Promise<string | null> => '/work/folder')
     const initializeDefault = vi.fn(async () => ({ workspaceId: WORKSPACE }))
+    const create = vi.fn(async (_input: { path: string }) => ({ workspaceId: 'workspace-7' }))
     const provide: Record<string, unknown> = {}
-    if (options.uiWorkspace !== null) provide.uiWorkspace = options.uiWorkspace ?? { openWorkspace, startSession }
-    if (options.workspaces === undefined) provide.workspaces = { initializeDefault }
-    else if (options.workspaces !== 'absent') provide.workspaces = options.workspaces
+    const addWorkspace = vi.fn()
+    if (options.sidebar !== undefined) provide.deloSidebar = { canAddWorkspace: () => options.sidebar?.canAdd === true, addWorkspace }
+    if (options.uiWorkspace !== null) provide.uiWorkspace = options.uiWorkspace ?? { openWorkspace, startSession, pickDirectory }
+    const list = { getSnapshot: () => ({ items: options.items ?? [] }) }
+    if (options.workspaces === undefined) provide.workspaces = { initializeDefault, create, list }
+    else if (options.workspaces !== 'absent') provide.workspaces = { list, ...options.workspaces as object }
     const made = await harness({ provide })
     made.served.on()
-    const { startChat } = face<OnboardingInjected>(made.entries, STEP_KEY)
-    return { ...made, startChat, openWorkspace, startSession, initializeDefault }
+    const injected = face<OnboardingInjected>(made.entries, STEP_KEY)
+    return { ...made, injected, startChat: injected.startChat, start: injected.services.start, openWorkspace, startSession, pickDirectory, initializeDefault, create, addWorkspace }
   }
 
   it('opens a new chat in the default workspace and remembers it as the one that offers starter prompts', async () => {
@@ -270,24 +329,60 @@ describe('opening the first chat', () => {
     expect(progress.value()?.starterSession).toBe('session-9')
   })
 
+  it('looks the default workspace up once when the dialog asks up front and the last button then opens it', async () => {
+    const { start, startChat, initializeDefault, openWorkspace } = await chat()
+    expect(start.target.getSnapshot()).toEqual({ kind: 'checking' })
+    start.resolve()
+    await flush()
+    expect(start.target.getSnapshot()).toEqual({ kind: 'default', workspaceId: WORKSPACE })
+    await startChat()
+    expect(initializeDefault).toHaveBeenCalledOnce()
+    expect(openWorkspace).toHaveBeenCalledOnce()
+  })
+
   it('does nothing where the studio has no workspace navigation', async () => {
     const { startChat, progress } = await chat({ uiWorkspace: null })
     await startChat()
     expect(progress.set).not.toHaveBeenCalled()
   })
 
-  it.each<readonly [string, unknown, number]>([
-    ['cannot be resolved', { initializeDefault: async () => undefined }, 0],
-    ['is not offered by this studio', 'absent', 0],
-    ['fails to resolve', { initializeDefault: async () => { throw new Error('host down') } }, 1],
-  ])('falls back to the workspace UI\'s own New Session when the default workspace %s, and offers no starter prompts', async (_, workspaces, warnings) => {
+  it('opens the workspace the person chose without asking for the default one', async () => {
+    const { startChat, openWorkspace, initializeDefault, progress } = await chat()
+    await startChat('workspace-7' as never)
+    expect(initializeDefault).not.toHaveBeenCalled()
+    expect(openWorkspace).toHaveBeenCalledWith('workspace-7', expect.any(Function))
+    expect(progress.value()?.starterSession).toBe('session-9')
+  })
+
+  it.each<readonly [string, ChatOptions, string, number]>([
+    ['cannot be resolved and others exist', { workspaces: { initializeDefault: async () => undefined }, items: [{}] }, 'other', 0],
+    ['cannot be resolved and none exist', { workspaces: { initializeDefault: async () => undefined } }, 'none', 0],
+    ['fails to resolve and none exist', { workspaces: { initializeDefault: async () => { throw new Error('system Documents directory is unavailable') } } }, 'none', 1],
+    ['fails to resolve but others exist', { workspaces: { initializeDefault: async () => { throw new Error('host down') } }, items: [{}] }, 'other', 1],
+    ['is not offered by this studio', { workspaces: 'absent' }, 'other', 0],
+  ])('knows up front when the default workspace %s, falls back to the workspace UI\'s own New Session, and offers no starter prompts', async (_, options, kind, warnings) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { startChat, startSession, openWorkspace, progress } = await chat({ workspaces })
+    const { start, startChat, startSession, openWorkspace, progress } = await chat(options)
+    start.resolve()
+    await flush()
+    expect(start.target.getSnapshot()).toEqual({ kind })
     await startChat()
     expect(startSession).toHaveBeenCalledOnce()
     expect(openWorkspace).not.toHaveBeenCalled()
     expect(progress.set).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledTimes(warnings)
+  })
+
+  it('keeps the newest lookup when an older one settles last', async () => {
+    const answers: ((value: { workspaceId: string } | undefined) => void)[] = []
+    const { start } = await chat({ workspaces: { initializeDefault: () => new Promise((resolve) => { answers.push(resolve) }) } })
+    start.resolve()
+    start.resolve()
+    answers[1]?.({ workspaceId: 'newer' })
+    await flush()
+    answers[0]?.(undefined)
+    await flush()
+    expect(start.target.getSnapshot()).toEqual({ kind: 'default', workspaceId: 'newer' })
   })
 
   it('warns, and leaves the workspace UI\'s notice to the person, when the chat is refused', async () => {
@@ -296,6 +391,137 @@ describe('opening the first chat', () => {
     const { startChat } = await chat({ uiWorkspace: refusing })
     await startChat()
     expect(warn).toHaveBeenCalledOnce()
+  })
+
+  describe('choosing a folder', () => {
+    it('adds the folder the host\'s chooser returns as a workspace', async () => {
+      const { start, pickDirectory, create } = await chat()
+      expect(await start.chooseFolder()).toEqual({ kind: 'chosen', workspaceId: 'workspace-7' })
+      expect(pickDirectory).toHaveBeenCalledOnce()
+      expect(create).toHaveBeenCalledExactlyOnceWith({ path: '/work/folder' })
+    })
+
+    it('changes nothing when the chooser is closed', async () => {
+      const { start, pickDirectory, create } = await chat()
+      pickDirectory.mockResolvedValueOnce(null)
+      expect(await start.chooseFolder()).toEqual({ kind: 'cancelled' })
+      expect(create).not.toHaveBeenCalled()
+    })
+
+    it.each<readonly [string, (made: Awaited<ReturnType<typeof chat>>) => void]>([
+      ['the chooser cannot run', made => made.pickDirectory.mockRejectedValueOnce(new Error('directory picker failed'))],
+      ['the folder cannot be added', made => made.create.mockRejectedValueOnce(new Error('not a directory'))],
+    ])('reports the choice as unavailable, with a warning, when %s', async (_, fail) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const made = await chat()
+      fail(made)
+      expect(await made.start.chooseFolder()).toEqual({ kind: 'unavailable' })
+      expect(warn).toHaveBeenCalledOnce()
+    })
+
+    it.each<readonly [string, ChatOptions]>([
+      ['workspace navigation', { uiWorkspace: null }],
+      ['the workspace service', { workspaces: 'absent' }],
+    ])('is unavailable without %s', async (_, options) => {
+      const { start } = await chat(options)
+      expect(await start.chooseFolder()).toEqual({ kind: 'unavailable' })
+    })
+
+    it('uses the native chooser when the host has one, even when the sidebar could add a workspace', async () => {
+      const { start, addWorkspace } = await chat({ sidebar: { canAdd: true } })
+      expect(await start.chooseFolder()).toEqual({ kind: 'chosen', workspaceId: 'workspace-7' })
+      expect(addWorkspace).not.toHaveBeenCalled()
+    })
+
+    it.each<readonly [string, ChatOptions, (made: Awaited<ReturnType<typeof chat>>) => void]>([
+      ['the native chooser cannot pick', { sidebar: { canAdd: true } }, made => made.pickDirectory.mockRejectedValueOnce(new Error('directory picker failed'))],
+      ['there is no workspace navigation', { sidebar: { canAdd: true }, uiWorkspace: null }, () => {}],
+    ])('hands over to the sidebar\'s in-page flow when %s', async (_, options, setup) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const made = await chat(options)
+      setup(made)
+      expect(await made.start.chooseFolder()).toEqual({ kind: 'in-page' })
+    })
+
+    it('stays unavailable when the native chooser cannot pick and the sidebar cannot add a workspace', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const made = await chat({ sidebar: { canAdd: false } })
+      made.pickDirectory.mockRejectedValueOnce(new Error('directory picker failed'))
+      expect(await made.start.chooseFolder()).toEqual({ kind: 'unavailable' })
+    })
+
+    it('keeps the starter prompts pending, then starts the sidebar\'s add-workspace flow', async () => {
+      const { start, addWorkspace, progress } = await chat({ sidebar: { canAdd: true } })
+      start.openInPage()
+      expect(progress.value()?.starterSession).toBe('pending')
+      expect(addWorkspace).toHaveBeenCalledOnce()
+    })
+
+    it('does not fail where the sidebar went away before the flow could start', async () => {
+      const { start } = await chat()
+      expect(() => { start.openInPage() }).not.toThrow()
+    })
+  })
+})
+
+describe('a fresh home with no default workspace', () => {
+  it('says so on the Start step, lets the person choose a folder, and then opens a chat there that offers the starter prompts', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ reachSetUp: false }), { status: 200 })))
+    const openWorkspace = vi.fn(async (_id: string, beforeOpen?: (sessionId: string) => void) => { beforeOpen?.('session-9') })
+    const pickDirectory = vi.fn(async (): Promise<string | null> => '/work/folder')
+    const create = vi.fn(async () => ({ workspaceId: 'workspace-7' }))
+    const workspaces = {
+      initializeDefault: async () => { throw new Error('system Documents directory is unavailable') },
+      create, list: { getSnapshot: () => ({ items: [] }) },
+    }
+    const made = await harness({ provide: { workspaces, uiWorkspace: { openWorkspace, startSession: vi.fn(), pickDirectory } } })
+    made.served.on()
+    const Step = made.entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
+    render(<Step t={t} {...face<OnboardingInjected>(made.entries, STEP_KEY)} explicit complete={vi.fn()} />)
+    await act(async () => { await flush() })
+    for (let n = 0; n < 2; n++) await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.continue })) })
+    expect(document.body.textContent).toContain('Delo could not set up a default workspace on this computer.')
+    expect(screen.queryByRole('button', { name: en.start })).toBeNull()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.chooseFolder })) })
+    await act(async () => { await flush() })
+    expect(pickDirectory).toHaveBeenCalledOnce()
+    expect(create).toHaveBeenCalledExactlyOnceWith({ path: '/work/folder' })
+    expect(openWorkspace).toHaveBeenCalledExactlyOnceWith('workspace-7', expect.any(Function))
+    expect(made.progress.value()).toMatchObject({ done: true, starterSession: 'session-9' })
+  })
+})
+
+describe('Show again', () => {
+  /** The Settings shell as the general-settings plugin provides it: a store that drives the explicitly opened onboarding step. */
+  function shell() {
+    const requested = createSnapshotStore<string | undefined>(undefined)
+    return { requested, service: { open: vi.fn(), openSection: vi.fn(), openOnboarding: (id: string) => { requested.set(id) } } }
+  }
+
+  it('opens the onboarding dialog explicitly, from its first screen, through the Settings shell that loads after the plugin', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ reachSetUp: false }), { status: 200 })))
+    const { requested, service } = shell()
+    const { entries, served } = await harness({ progress: settings({ done: true }), late: { settingsShell: service } })
+    served.on()
+    const Row = entries.get(ROW_KEY)?.component as ComponentType<ShowAgainRowProps>
+    const Step = entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
+    const rowFace = face<ShowAgainInjected>(entries, ROW_KEY)
+    const stepFace = face<OnboardingInjected>(entries, STEP_KEY)
+    function Settings() {
+      const open = useSyncExternalStore(requested.subscribe, requested.getSnapshot)
+      return (
+        <>
+          <Row t={t} {...rowFace} />
+          {open === ONBOARDING_STEP.id && <Step t={t} {...stepFace} explicit complete={() => { requested.set(undefined) }} />}
+        </>
+      )
+    }
+    render(<Settings />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['row.show'] })) })
+    await act(async () => { await flush() })
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.look'])
   })
 })
 
@@ -359,6 +585,12 @@ describe('the starter prompts\' services', () => {
     const none = await starters()
     none.face.prefill(CHAT, 'x')
     expect(input.setDraft).not.toHaveBeenCalled()
+  })
+
+  it('take the chat that opens while they are pending', async () => {
+    const { face: services, progress } = await starters()
+    services.bind(CHAT)
+    expect(progress.set).toHaveBeenCalledWith('starterSession', CHAT)
   })
 
   it('stop offering the prompts when dismissed, and warn if that cannot be saved', async () => {

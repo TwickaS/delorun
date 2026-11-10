@@ -1,12 +1,14 @@
 /**
  * Starter prompts in the empty state of the first chat onboarding opens: a few chips above the message box. A chip
  * writes its prompt into the message box and sends nothing; the person reads it, changes it and sends it. The chips
- * show only for that chat, only while it has no message, and only while the box holds nothing the person typed.
+ * show only for that chat, only while it has no message, and only while the box holds nothing the person typed. While
+ * the prompts are `pending`, the first empty chat whose dock mounts after that takes them; a chat already open then does not.
  */
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
+import { PENDING_STARTERS } from '../config.ts'
 import css from './StarterPrompts.module.css'
 
 /** The starter prompts, by the number their copy is keyed with. */
@@ -16,7 +18,7 @@ export const STARTERS = [1, 2, 3] as const
 export interface StarterInjected {
   /** The chat whose empty state offers the prompts. */
   readonly starter: {
-    /** @returns the session id, or empty for none. */
+    /** @returns the session id, `pending` while the prompts wait for the next empty chat that opens, or empty for none. */
     getSnapshot(): string
     /**
      * @param listener - called after each change.
@@ -30,6 +32,11 @@ export interface StarterInjected {
    * @param text - the prompt.
    */
   readonly prefill: (sessionId: SessionId, text: string) => void
+  /**
+   * Offer the prompts in a chat, replacing `pending`.
+   * @param sessionId - the chat.
+   */
+  readonly bind: (sessionId: SessionId) => void
   /** Stop offering the prompts. */
   readonly dismiss: () => void
 }
@@ -42,8 +49,15 @@ export type StarterPromptsProps = Pick<PropsRuntime<'conversation.input.dock'>, 
  * @param props - the dock's owner state, this plugin's copy and the services.
  * @returns the chips, or nothing.
  */
-export function StarterPrompts({ t, sessionId, session, input, starter, prefill, dismiss }: StarterPromptsProps): ReactNode {
+export function StarterPrompts({ t, sessionId, session, input, starter, prefill, bind, dismiss }: StarterPromptsProps): ReactNode {
   const offered = useSyncExternalStore(useCallback(listener => starter.subscribe(listener), [starter]), () => starter.getSnapshot())
+  // The chat open when the prompts became pending is an older chat; chats that open after that, or a dock that mounted
+  // while they were pending, may take them.
+  const arrived = useRef<{ readonly pendingAtMount: boolean; older: SessionId | undefined }>({ pendingAtMount: offered === PENDING_STARTERS, older: undefined })
+  if (offered !== PENDING_STARTERS) arrived.current = { pendingAtMount: false, older: undefined }
+  else if (!arrived.current.pendingAtMount && arrived.current.older === undefined) arrived.current.older = sessionId
+  const takes = offered === PENDING_STARTERS && sessionId !== arrived.current.older && session.blank
+  useEffect(() => { if (takes) bind(sessionId) }, [takes, bind, sessionId])
   if (offered === '' || offered !== sessionId || !session.blank) return null
   const prompts = STARTERS.map(number => ({ number, label: t(`starter.${number}.label`), prompt: t(`starter.${number}.prompt`) }))
   // Text the person typed is theirs; a starter's own text still lets another starter replace it.

@@ -21,7 +21,7 @@
   flex: none;
   width: 220px;
   box-sizing: border-box;
-  padding: 28px 20px;
+  padding: var(--delo-space-8) var(--delo-space-7);
   border-right: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-layer-1);
   overflow-y: auto;
@@ -30,7 +30,7 @@
 .stepList {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--delo-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -39,13 +39,13 @@
 .stepItem {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--delo-space-4);
   min-height: 36px;
-  padding: 0 8px;
+  padding: 0 var(--delo-space-4);
   border-radius: var(--dsw-radius-sm);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .stepItem[data-state='current'] {
@@ -66,7 +66,7 @@
   height: 20px;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
-  font-size: 11px;
+  font-size: var(--dsw-font-xxxs-11-font-size);
   line-height: 1;
 }
 
@@ -86,15 +86,15 @@
 .progress {
   display: none;
   align-items: center;
-  gap: 12px;
-  padding: 16px 24px 0;
-  padding-top: max(16px, var(--dsh-frame-overlay-top, 0px));
+  gap: var(--delo-space-5);
+  padding: var(--delo-space-6) var(--delo-space-8) 0;
+  padding-top: max(var(--delo-space-6), var(--dsh-frame-overlay-top, 0px));
 }
 
 .count {
   flex: none;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -115,15 +115,15 @@
 .scroll {
   flex: 1;
   min-height: 0;
-  padding: 28px 32px 16px;
+  padding: var(--delo-space-8) var(--delo-space-9) var(--delo-space-6);
   overflow-y: auto;
 }
 
 .heading {
-  margin: 0 0 16px;
-  font-size: 20px;
+  margin: 0 0 var(--delo-space-6);
+  font-size: var(--dsw-font-l-20-font-size);
   font-weight: 500;
-  line-height: 28px;
+  line-height: var(--dsw-font-l-20-line-height);
   outline: none;
 }
 
@@ -134,7 +134,7 @@
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--delo-space-7);
 }
 
 .lead,
@@ -143,27 +143,27 @@
 }
 
 .lead {
-  font-size: 14px;
-  line-height: 22px;
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
   color: var(--dsw-alias-label-secondary);
 }
 
 .copy {
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
   color: var(--dsw-alias-label-secondary);
 }
 
 .copy p + p {
-  margin-top: 12px;
+  margin-top: var(--delo-space-5);
 }
 
 .text,
 .hint,
 .warning,
 .failure {
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
 }
 
 .text {
@@ -171,7 +171,7 @@
 }
 
 .hint {
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .failure {
@@ -179,7 +179,7 @@
 }
 
 .warning {
-  padding: 12px 14px;
+  padding: var(--delo-space-5) var(--delo-space-6);
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-1);
@@ -189,35 +189,35 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--delo-space-4);
 }
 
 .label {
-  font-size: 13px;
+  font-size: var(--dsw-font-xs-13-font-size);
   font-weight: 500;
-  line-height: 20px;
+  line-height: var(--dsw-font-xs-13-line-height);
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--delo-space-4);
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--delo-space-4);
   min-height: 36px;
   box-sizing: border-box;
-  padding: 4px 12px;
+  padding: var(--delo-space-2) var(--delo-space-5);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   cursor: pointer;
 }
 
@@ -260,8 +260,8 @@
 .half {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px;
+  gap: var(--delo-space-2);
+  padding: var(--delo-space-3);
   background: var(--half-page);
 }
 
@@ -295,7 +295,7 @@
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--delo-space-5);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -306,8 +306,8 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 16px;
-  padding: 14px 16px;
+  gap: var(--delo-space-5) var(--delo-space-6);
+  padding: var(--delo-space-6);
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
@@ -320,21 +320,21 @@
 
 .cardTitle {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--dsw-font-s-14-font-size);
   font-weight: 500;
-  line-height: 22px;
+  line-height: var(--dsw-font-s-14-line-height);
 }
 
 .cardLead {
-  margin: 2px 0 0;
-  font-size: 13px;
-  line-height: 20px;
+  margin: var(--delo-space-1) 0 0;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-secondary);
 }
 
 .status {
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -342,19 +342,23 @@
   color: var(--dsw-alias-state-success-primary);
 }
 
+.status[data-tone='failed'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
 .failedAction {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--delo-space-4) var(--delo-space-5);
 }
 
 .footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
+  gap: var(--delo-space-4);
+  padding: var(--delo-space-5) var(--delo-space-8);
   border-top: 0.5px solid var(--dsw-alias-border-l1);
 }
 
@@ -366,7 +370,18 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* Below the Settings panel's breakpoint the dialog is the whole window. */
+/* The command to run in a terminal. */
+.command {
+  padding: var(--delo-space-1) var(--delo-space-3);
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--dsw-font-xs-13-font-size);
+  user-select: all;
+}
+
+/* Below the Settings panel's breakpoint the dialog is the whole window; its offsets undo the modal's own 24px padding. */
 @media (max-width: 767px) {
   .dialog {
     width: calc(100% + 48px);
@@ -385,10 +400,10 @@
   }
 
   .scroll {
-    padding: 20px 20px 12px;
+    padding: var(--delo-space-7) var(--delo-space-7) var(--delo-space-5);
   }
 
   .footer {
-    padding: 12px 20px;
+    padding: var(--delo-space-5) var(--delo-space-7);
   }
 }

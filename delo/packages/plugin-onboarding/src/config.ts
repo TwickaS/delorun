@@ -22,7 +22,10 @@ export const RECOMMENDED_LIMIT = 8
 /** The id of a step, which `step` keeps: lower-case letters, digits, dots and hyphens. */
 export const STEP_ID = /^[a-z0-9.-]{0,64}$/
 
-/** A session id as the routes and the settings keep it, or empty for none. */
+/** The `starterSession` value that means the starter prompts wait for the next empty chat that opens. */
+export const PENDING_STARTERS = 'pending'
+
+/** A session id as the routes and the settings keep it, `pending` ({@link PENDING_STARTERS}), or empty for none. */
 export const SESSION_KEY = /^[A-Za-z0-9._:-]{0,200}$/
 
 /** The row's settings as the studio reads them. */
@@ -31,7 +34,7 @@ export interface OnboardingSettings {
   done: boolean
   /** The step they reached, by id; empty before the first and after the last. */
   step: string
-  /** The chat whose empty state offers starter prompts; empty for none. */
+  /** The chat whose empty state offers starter prompts; `pending` until the next empty chat opens; empty for none. */
   starterSession: string
   /** Packages the recommended-plugins step offers; the step is left out when the list is empty. */
   plugins: string[]

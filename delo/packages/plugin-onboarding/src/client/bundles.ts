@@ -15,8 +15,9 @@ type InstallOptions = NonNullable<Parameters<PluginManager['installBundle']>[1]>
 
 /**
  * Where one offered bundle stands for this profile. `checking` is before the plugin manager answers; `available` is
- * the only state a button can add from; `unavailable` is a bundle this installation does not offer; `failed` is a
- * bundle the plugin manager cannot change or could not be asked, which Plugins finishes.
+ * the only state a button can add from; `unavailable` is a bundle this installation does not include or cannot
+ * install, which is not an error; `failed` is a bundle the plugin manager cannot change, could not be asked, or failed
+ * to add, which Plugins finishes.
  */
 export type BundleState = 'checking' | 'available' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed'
 
@@ -50,14 +51,20 @@ export interface BundleInstaller {
 }
 
 /**
- * Where a listed bundle stands.
+ * Where a listed bundle stands. A catalog entry the installation cannot install (no install target, or a target error
+ * such as an unbuilt checkout or an unsupported platform) is `unavailable`, a normal state; `failed` is only a bundle
+ * the profile holds but cannot change or read.
  * @param bundle - the plugin manager's row, or undefined when it lists none by that name.
  * @returns the state before any action.
  */
 export function stateOf(bundle: BundleInfo | undefined): BundleState {
   if (bundle === undefined) return 'unavailable'
+  if (bundle.availability === 'missing') {
+    // A profile that records the dependency but lost its files is broken, not absent from the installation.
+    if (bundle.installed) return 'failed'
+    return bundle.installTarget === undefined || bundle.error !== undefined ? 'unavailable' : 'available'
+  }
   if (bundle.error !== undefined || bundle.readOnlyReason !== undefined) return 'failed'
-  if (bundle.availability === 'missing') return bundle.installTarget === undefined ? 'unavailable' : 'available'
   return bundle.enabled ? 'installed' : 'available'
 }
 
