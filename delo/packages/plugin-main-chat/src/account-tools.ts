@@ -5,19 +5,19 @@
  * `workspace_instructions_write`, `workspace_note` and
  * `workspace_note_remove`.
  *
- * Approval: the tools whose change outlasts the turn ({@link ALWAYS_ASK}:
- * writing a workspace's `AGENTS.md` or its owner notes, an import, a restore
- * and a trash) ask the person through upstream's approval service in every
- * turn, whatever the turn read, because untrusted text reaches a turn
- * through fetched pages, files and other workspaces' `AGENTS.md` as well as
- * other chats. `workspace_create` asks in a turn that read another chat's or
- * workspace's text: `chat_read`, `chat_search` and `workspace_instructions`
- * record {@link READ_RECORD}, and a report the turn took in is a
- * `delo-main-chat` message. The question is asked from inside the tool
- * call's own execution, so no `tools/pre-execute` listener can let the
- * change through unasked, and only `allowed-once` lets it run. Each question
- * carries the `workspace-management` grant marker, so a Host may keep its
- * granting answer for the home's own computer.
+ * Approval: every account tool that changes something ({@link ALWAYS_ASK}:
+ * creating a workspace, writing a workspace's `AGENTS.md` or its owner notes,
+ * an import, a restore and a trash) asks the person through upstream's
+ * approval service in every turn, whatever the turn read, because untrusted
+ * text reaches a turn through fetched pages, files and other workspaces'
+ * `AGENTS.md` as well as other chats. The question says so when the turn read
+ * another chat's or workspace's text: `chat_read`, `chat_search` and
+ * `workspace_instructions` record {@link READ_RECORD}, and a report the turn
+ * took in is a `delo-main-chat` message. The question is asked from inside
+ * the tool call's own execution, so no `tools/pre-execute` listener can let
+ * the change through unasked, and only `allowed-once` lets it run. Each
+ * question carries the `workspace-management` grant marker, so a Host may
+ * keep its granting answer for the home's own computer.
  *
  * @module @delo/plugin-main-chat/account-tools
  */
@@ -42,7 +42,7 @@ declare module '@deepseek-ai/dsh-session' {
 
 /** The account tools that ask the person in every turn, whatever the turn read: each makes a change that outlasts the turn. */
 export const ALWAYS_ASK: ReadonlySet<string> = new Set([
-  'workspace_instructions_write', 'workspace_import', 'workspace_restore', 'workspace_trash', 'workspace_note', 'workspace_note_remove',
+  'workspace_create', 'workspace_instructions_write', 'workspace_import', 'workspace_restore', 'workspace_trash', 'workspace_note', 'workspace_note_remove',
 ])
 
 /** The bounds of the account tools. */
@@ -100,11 +100,10 @@ export function accountTools(ctx: Context, root: string, limits: AccountLimits, 
     return found
   }
 
-  // Ask the person before a change: always for ALWAYS_ASK, otherwise when the turn read text that can carry instructions.
+  // Ask the person before a change of an ALWAYS_ASK tool, naming a read of text that can carry instructions.
   const confirm = async (exec: ToolRunContext, change: { readonly en: string, readonly zh: string }): Promise<void> => {
     const agent = mainChatOnly(exec)
     const guarded = readThisTurn(agent.session)
-    if (!ALWAYS_ASK.has(exec.name) && !guarded) return
     const approval = ctx.get('approval')
     const why = guarded ? ' This turn read another chat or workspace, whose text can carry instructions.' : ''
     const outcome = approval === undefined
@@ -153,7 +152,7 @@ export function accountTools(ctx: Context, root: string, limits: AccountLimits, 
   return [
     defineTool({
       name: 'workspace_create',
-      description: 'Create an empty workspace in a new folder. In a turn that read another chat or a workspace\'s AGENTS.md it asks the person first.',
+      description: 'Create an empty workspace in a new folder. It always asks the person first.',
       parameters: {
         folder: { type: 'string', required: true, description: 'The new folder\'s name: a letter or digit, then up to 99 letters, digits, ., _ or -.' },
         title: { type: 'string', description: 'The workspace\'s title. Defaults to the folder\'s name.' },

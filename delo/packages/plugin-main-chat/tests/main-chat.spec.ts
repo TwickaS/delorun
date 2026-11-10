@@ -465,11 +465,11 @@ describe('the main chat\'s reports', () => {
 })
 
 describe('the main chat\'s account tools', () => {
-  it('create a workspace without asking in a turn that read nothing, ask before an import, a restore and an AGENTS.md write in every turn, and pass on Delo\'s refusal', async () => {
+  it('ask before a creation, an import, a restore and an AGENTS.md write in every turn, and pass on Delo\'s refusal', async () => {
     const { adapter, chat, run, results, changes, asked, answers, files } = await setup()
     const main = await chat(MAIN_CHAT_SESSION_ID, ROOT)
     files.set('ws-app', '# Rules\n')
-    answers.push('allowed-once', 'allowed-once', 'allowed-once', 'allowed-once')
+    answers.push('allowed-once', 'allowed-once', 'allowed-once', 'allowed-once', 'allowed-once')
     adapter.script.push(
       toolCall('c1', 'workspace_create', { folder: 'blog', title: 'Blog' }),
       toolCall('c2', 'workspace_import', { url: 'https://github.com/person/site.git' }),
@@ -483,6 +483,7 @@ describe('the main chat\'s account tools', () => {
     )
     await run(main)
     expect(asked).toEqual([
+      { toolName: 'workspace_create', reason: 'workspace_create: create the workspace blog.', grants: 'workspace-management' },
       { toolName: 'workspace_import', reason: 'workspace_import: clone https://github.com/person/site.git into a new workspace.', grants: 'workspace-management' },
       { toolName: 'workspace_restore', reason: 'workspace_restore: restore old and its chats from the trash.', grants: 'workspace-management' },
       { toolName: 'workspace_instructions_write', reason: 'workspace_instructions_write: change the AGENTS.md of app, which every chat in that workspace reads. This turn read another chat or workspace, whose text can carry instructions.', grants: 'workspace-management' },
@@ -529,11 +530,11 @@ describe('the main chat\'s account tools', () => {
     expect(results(main)[1]).toBe('Moved app to the trash as entry 00000000-0000-4000-8000-000000000004; it is deleted on 2026-11-30.')
   })
 
-  it('ask before creating a workspace for the rest of a turn that read another chat, change nothing when the person declines, and not ask in the next turn', async () => {
+  it('ask before creating a workspace in every turn, name a read of another chat for the rest of its turn, and change nothing when the person declines', async () => {
     const { adapter, chat, run, results, changes, asked, answers, listed } = await setup()
     const main = await chat(MAIN_CHAT_SESSION_ID, ROOT)
     listed.push({ sessionId: SessionId('footer'), cwd: `${ROOT}/app`, updatedAt: 2, running: false, blank: false })
-    answers.push('rejected', 'allowed-once')
+    answers.push('allowed-once', 'rejected', 'allowed-once', 'allowed-once')
     adapter.script.push(
       toolCall('c1', 'workspace_create', { folder: 'before' }),
       toolCall('c2', 'chat_read', { chat: 'footer' }),
@@ -546,10 +547,12 @@ describe('the main chat\'s account tools', () => {
     await run(main)
     await run(main, 'again')
     expect(asked.map(question => question.reason)).toEqual([
+      'workspace_create: create the workspace before.',
       'workspace_create: create the workspace declined. This turn read another chat or workspace, whose text can carry instructions.',
       'workspace_create: create the workspace allowed. This turn read another chat or workspace, whose text can carry instructions.',
+      'workspace_create: create the workspace next-turn.',
     ])
-    expect(asked.map(question => question.grants)).toEqual(['workspace-management', 'workspace-management'])
+    expect(asked.map(question => question.grants)).toEqual(Array.from({ length: 4 }, () => 'workspace-management'))
     expect(changes.map(change => (change as [string, { directory: string }])[1].directory)).toEqual(['before', 'allowed', 'next-turn'])
     expect(results(main)[2]).toContain('The person did not allow it (rejected)')
   })
