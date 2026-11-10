@@ -13,8 +13,8 @@ describe('isTrustedApiRequest', () => {
     // reads (EventSource, images, navigations), so a rebound-origin GET is
     // markerless and its response readable: no marker shortcut may exist.
     expect(isTrustedApiRequest(request({ host: '127.0.0.1:3080' }), [])).toBe(true)
-    expect(isTrustedApiRequest(request({ host: '192.168.1.5:3080' }), ['192.168.1.5'])).toBe(true)
-    expect(isTrustedApiRequest(request({ host: '192.168.1.5:3080' }), [])).toBe(false)
+    expect(isTrustedApiRequest(request({ host: '192.0.2.5:3080' }), ['192.0.2.5'])).toBe(true)
+    expect(isTrustedApiRequest(request({ host: '192.0.2.5:3080' }), [])).toBe(false)
     expect(isTrustedApiRequest(request({ host: 'harness.example' }), [])).toBe(false)
     expect(isTrustedApiRequest(request({}), [])).toBe(false)
   })
@@ -203,7 +203,7 @@ describe('isTrustedApiRequest', () => {
     // browser sends its credentialed POST without a preflight, and the Origin
     // fence is blind when no Origin arrives.
     expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'same-site' })).toBe(false)
-    expect(call({ host: '127.0.0.1:3080' })).toBe(false)
+    expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-origin' })).toBe(false)
     // Either account of the origin satisfies the rule.
     expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'same-origin' })).toBe(true)
     expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'none' })).toBe(true)
@@ -220,8 +220,30 @@ describe('isTrustedApiRequest', () => {
     }, [])).toBe(true)
     // An unreported target counts as the channel this fence guards, and an
     // absolute one resolves to its path.
-    expect(isTrustedApiRequest({ headers: { host: '127.0.0.1:3080' }, method: 'POST' }, [])).toBe(false)
-    expect(call({ host: '127.0.0.1:3080' }, 'http://127.0.0.1:3080/api/goals/set')).toBe(false)
+    expect(isTrustedApiRequest({ headers: { host: '127.0.0.1:3080', 'sec-fetch-site': 'same-site' }, method: 'POST' }, [])).toBe(false)
+    expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'same-site' }, 'http://127.0.0.1:3080/api/goals/set')).toBe(false)
+  })
+
+  it('lets a caller with no browser markers reach only a destination a browser would have marked', () => {
+    const post = (host: string, trustedHosts: readonly string[] = [], bindHost?: string, protocol: 'http:' | 'https:' = 'http:'): boolean =>
+      isTrustedApiRequest({ headers: { host }, method: 'POST', url: '/api/goals/set' }, trustedHosts, bindHost, protocol)
+    // A script, curl or the Desktop forwarder states no origin; a Fetch-Metadata browser
+    // always marks a request to loopback, so the absence names a caller that is no such page.
+    expect(post('127.0.0.1:3080')).toBe(true)
+    expect(post('localhost:3080')).toBe(true)
+    expect(isTrustedApiRequest({ headers: { host: '127.0.0.1:3080' }, method: 'POST' }, [])).toBe(true)
+    // An HTTPS destination is marked too.
+    expect(post('harness.internal', ['harness.internal'], undefined, 'https:')).toBe(true)
+    // A browser withholds the markers from other plain-HTTP destinations, and a
+    // no-referrer form post withholds Origin as well, so the same request may be forged.
+    expect(post('harness.internal', ['harness.internal'])).toBe(false)
+    expect(post('192.0.2.5:3080', [], '192.0.2.5')).toBe(false)
+    // A caller that states a cross-origin account is refused wherever it connects.
+    const forged = (headers: Record<string, string>): boolean =>
+      isTrustedApiRequest({ headers, method: 'POST', url: '/api/goals/set' }, [])
+    expect(forged({ host: '127.0.0.1:3080', origin: 'http://evil.example' })).toBe(false)
+    expect(forged({ host: '127.0.0.1:3080', origin: 'null' })).toBe(false)
+    expect(forged({ host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-site' })).toBe(false)
   })
 
   it('accepts a cross-site arrival only where the route declares one, and only for a navigation', () => {

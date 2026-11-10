@@ -98,18 +98,37 @@ function isApiTarget(url: string | undefined): boolean {
 
 /**
  * Whether the request must carry a browser's own account of its origin: a
- * state-changing request on the `/api` channel. Browsers label every fetch
- * with Fetch-Metadata and attach `Origin` to every non-GET request, so a
- * missing `Origin` with no marker names a caller this page is not — and
- * `same-site` names another origin on the same site, which for a loopback
- * listener is another local port whose page the browser sends credentialed
- * requests for without a preflight. The Origin fence is blind when `Origin`
- * is absent, so the marker has to decide.
+ * state-changing request on the `/api` channel. A browser that attaches
+ * Fetch-Metadata labels every fetch, and `same-site` names another origin on
+ * the same site, which for a loopback listener is another local port whose
+ * page the browser sends credentialed requests for without a preflight. The
+ * Origin fence is blind when `Origin` is absent, so a present marker has to
+ * decide. A request with neither `Origin` nor a marker is settled by
+ * {@link isBrowserMarkedDestination}.
  */
 function needsOriginAccount(request: ConnectionTrustRequest): boolean {
   const method = request.method?.toUpperCase()
   if (method === undefined || BODYLESS_METHODS.has(method)) return false
   return isApiTarget(request.url)
+}
+
+/**
+ * Whether a request that states neither `Origin` nor Fetch-Metadata may come
+ * from a non-browser caller (an SDK script, curl, the Desktop forwarder), which
+ * has no origin to state. A browser attaches Fetch-Metadata to every request it
+ * sends to a potentially trustworthy destination, loopback or HTTPS, so a
+ * missing marker there names a caller that is not a Fetch-Metadata browser.
+ * To any other destination a browser withholds the markers, and a no-referrer
+ * form post withholds `Origin` too, so such a request is indistinguishable
+ * from a forged one and stays refused. A browser without Fetch-Metadata
+ * support is not told apart from a script: the cookie is `SameSite=Strict`, so
+ * only a page on another local port could ride it.
+ * @param hostUrl - the parsed `Host` authority, already accepted by the Host fence.
+ * @param protocol - listener protocol.
+ * @returns true when the destination is one a Fetch-Metadata browser always marks.
+ */
+function isBrowserMarkedDestination(hostUrl: URL, protocol: 'http:' | 'https:'): boolean {
+  return protocol === 'https:' || isLoopbackHostname(hostUrl.hostname)
 }
 
 /** Whether a request is a browser document navigation, whose response the initiator's page cannot read. */
@@ -199,7 +218,8 @@ function isBindAddressAuthority(hostUrl: URL, bindHost: string | undefined): boo
  * @param protocol - listener protocol for default Host ports; HTTP when no Web carrier is mounted.
  * @param options - route-level allowances; the defaults apply every check.
  * @returns true when the Host is ours (loopback, the bind address, or trusted), it appears
- *   exactly once, and any attached browser markers are same-origin.
+ *   exactly once, and any attached browser markers are same-origin. A state-changing `/api`
+ *   request with no markers at all passes only toward loopback or an HTTPS listener.
  */
 export function isTrustedApiRequest(
   request: ConnectionTrustRequest,
@@ -237,7 +257,8 @@ export function isTrustedApiRequest(
   const origin = header(request.headers, 'origin')
   if (origin !== undefined && !isSameAuthorityOrigin(origin, host)) return false
   if (!needsOriginAccount(request)) return true
-  return origin !== undefined || site === 'same-origin' || site === 'none'
+  if (origin !== undefined || site === 'same-origin' || site === 'none') return true
+  return site === undefined && isBrowserMarkedDestination(hostUrl, protocol)
 }
 
 /**
